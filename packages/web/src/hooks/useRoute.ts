@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "preact/compat";
 import { parseUrl, urlOf, type UrlState } from "../route.ts";
+import {
+  dialogDepth,
+  dismissSteps,
+  isAppEntry,
+  pushedState,
+  replacedState,
+} from "../history-entry.ts";
 import { playScreenTransition, screenMove } from "../screen-transition.ts";
 
 /**
@@ -27,13 +34,15 @@ export interface RouteControls {
   push: (next: UrlState) => void;
   /** Move to `next`, overwriting this entry. */
   replace: (next: UrlState) => void;
-  /** Return to the entry `next` was pushed from, or replace when there is
-   * none (see {@link canGoBack}). */
+  /** Return to the screen `next` names by walking the history back — the
+   * entry it was pushed from, which for the settings dialog is below every
+   * page opened inside it — or replace when there is none (see
+   * {@link canGoBack}). */
   dismiss: (next: UrlState) => void;
 }
 
 /**
- * Marker the entries this app pushes carry in `history.state`.
+ * Whether the current entry was pushed by this app (see history-entry.ts).
  *
  * `history.back()` is only safe when the entry behind is one the app made:
  * a page opened straight from a link sits on an entry of the app's own, and
@@ -42,18 +51,8 @@ export interface RouteControls {
  * (a push only happens from within the app), so its marker is the whole
  * answer.
  */
-const APP_ENTRY = "lumisca";
-
-function entryState(): unknown {
-  const current = globalThis.history.state as
-    | Record<string, unknown>
-    | null;
-  return current?.[APP_ENTRY];
-}
-
-/** Whether the current entry was pushed by this app (see {@link APP_ENTRY}). */
 export function canGoBack(): boolean {
-  return entryState() === true;
+  return isAppEntry(globalThis.history.state);
 }
 
 export function useRoute(): RouteControls {
@@ -88,18 +87,29 @@ export function useRoute(): RouteControls {
   // this point — client.tsx strips the token from the address bar before the
   // app mounts, so by the time a move happens there is usually nothing left.
   //
-  // Only a PUSH marks the entry. A replace keeps whatever state the entry
-  // already had: it is the entry the page was loaded on (nothing behind it),
-  // and marking it would claim there is a screen to go back to.
+  // Only a PUSH creates a place to come back to, so only a push marks the
+  // entry. A replace keeps the marker the entry already had: it is the same
+  // entry, the page was loaded on or the app pushed earlier. What both write
+  // is the dialog's depth (history-entry.ts): closing the settings dialog
+  // must walk back over every page it opened, and the address alone cannot
+  // say how many that is.
   const move = useCallback((next: UrlState, replace: boolean) => {
     playScreenTransition(screenMove(shown.current, next), () => {
       const url = urlOf(next);
       if (location.pathname !== url) {
         const target = `${url}${location.search}`;
         if (replace) {
-          globalThis.history.replaceState(globalThis.history.state, "", target);
+          globalThis.history.replaceState(
+            replacedState(globalThis.history.state, next),
+            "",
+            target,
+          );
         } else {
-          globalThis.history.pushState({ [APP_ENTRY]: true }, "", target);
+          globalThis.history.pushState(
+            pushedState(globalThis.history.state, next),
+            "",
+            target,
+          );
         }
       }
       // `flushSync` commits this before the transition's second snapshot: the
@@ -116,7 +126,13 @@ export function useRoute(): RouteControls {
     if (canGoBack()) {
       // `popstate` restores the state from the restored path — and decides
       // the direction of the move, which is why nothing is set here.
-      globalThis.history.back();
+      //
+      // The settings dialog is more than one entry deep once its pages were
+      // picked; closing it reaches the screen it covered in one move, so the
+      // sheet's exit and the screen behind agree (history-entry.ts).
+      const steps = dismissSteps(dialogDepth(globalThis.history.state), next);
+      if (steps === 1) globalThis.history.back();
+      else globalThis.history.go(-steps);
       return;
     }
     move(next, true);
