@@ -17,25 +17,26 @@ export const EMPTY_DRAFT: TabDraft = { input: "", images: [], files: [] };
  * remounts on every switch (it is keyed by the active tab), so anything
  * it held locally would be lost — the drafts live here instead, keyed by
  * tab key, and are fed back into the view when the tab is shown again.
- * A tab that is closed discards its draft; a key that was never listed
- * (the draft screen is visible before the restore has opened its tab) does
- * not: only keys that dropped OUT of the tab list since the last change
- * are pruned, so drafts survive "open a session, come back" as long as
- * their tab was not closed. */
-export function useDrafts(tabs: readonly string[]) {
+ *
+ * `openKeys` is the sessions this page has open, not the strip it draws: the
+ * strip holds the draft tab only while `/code` is the screen (see useTabs),
+ * and navigating to a session must not throw away what was typed on the
+ * new-session screen. A key that drops out of `openKeys` was closed — its
+ * draft goes with it. */
+export function useDrafts(openKeys: readonly string[]) {
   const [drafts, setDrafts] = useState<ReadonlyMap<string, TabDraft>>(
     () => new Map(),
   );
-  // The previous tab list, to tell closed tabs apart from tabs that are
-  // simply not open yet (e.g. the draft screen before the draft tab is
-  // opened: its draft is keyed by DRAFT_TAB, which never was in the list).
-  const prevTabsRef = useRef<string[]>([]);
+  // The previous open set, to tell a closed tab apart from a key that was
+  // never listed: the draft screen's own key (DRAFT_TAB) is not a session and
+  // has no entry to drop out of, so its draft survives every tab switch.
+  const prevKeysRef = useRef<string[]>([]);
 
   // Drop the drafts of tabs that were closed since the last change.
   useEffect(() => {
-    const prev = prevTabsRef.current;
-    prevTabsRef.current = [...tabs];
-    const closed = prev.filter((t) => !tabs.includes(t));
+    const prev = prevKeysRef.current;
+    prevKeysRef.current = [...openKeys];
+    const closed = prev.filter((t) => !openKeys.includes(t));
     if (closed.length === 0) return;
     setDrafts((current) => {
       let changed = false;
@@ -45,7 +46,7 @@ export function useDrafts(tabs: readonly string[]) {
       }
       return changed ? next : current;
     });
-  }, [tabs]);
+  }, [openKeys]);
 
   /** Update part of a tab's draft (creates the entry on the first edit;
    * keeps the existing map when nothing changed so unrelated renders do

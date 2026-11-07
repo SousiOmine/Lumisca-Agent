@@ -19,16 +19,18 @@ import {
   type Workspace,
 } from "../types.ts";
 import type { ComposerModel } from "../components/Composer.tsx";
-import { DRAFT_TAB, splitTabKey, tabKey } from "../tabs.ts";
+import { splitTabKey, tabKey } from "../tabs.ts";
 import { summarizeContextUsage } from "@lumisca/core/shared";
 
 export interface UseSessionActionsOptions {
-  setTabs: Dispatch<SetStateAction<string[]>>;
-  setActiveTab: Dispatch<SetStateAction<string | null>>;
   setViews: Dispatch<SetStateAction<Map<string, SessionView>>>;
   setViewError: (key: string, error: unknown) => void;
   /** Key of the active tab; its peer half routes thinking-level updates. */
   activeTab: string | null;
+  /** A session was created and its first prompt was sent. The caller
+   * navigates to the new session's address: the URL is what says which
+   * session is open, so a started session is a move, not a state change. */
+  onCreated: (key: string) => void;
 }
 
 /** Session operations of the App: creating a session from the draft tab,
@@ -36,20 +38,18 @@ export interface UseSessionActionsOptions {
  * and updating a model's thinking level (a per-model server setting that
  * every view of the same peer+model reflects). */
 export function useSessionActions(
-  { setTabs, setActiveTab, setViews, setViewError, activeTab }:
-    UseSessionActionsOptions,
+  { setViews, setViewError, activeTab, onCreated }: UseSessionActionsOptions,
 ) {
   // Serial number for model switches: a stale response is discarded.
   const modelChangeSeq = useRef(0);
 
-  /** Create a session from the draft tab and send the first prompt. The
-   * session runs on this server: a remote workspace is not offered on the
-   * new session screen any more (the desktop title bar picks the machine,
-   * one server at a time). A chat workspace starts a "simple chat" session:
-   * no workspaceId is sent, so the server creates it in its folder-less chat
-   * workspace. `mode` marks the first prompt as a mode prompt (e.g. plan
-   * mode): the server stores a ModeMessage (short text + badge) instead of a
-   * plain user message. */
+  /** Create a session and send the first prompt. The session runs on this
+   * server: a remote workspace is not offered on the new session screen any
+   * more (the desktop title bar picks the machine, one server at a time). A
+   * chat workspace starts a "simple chat" session: no workspaceId is sent, so
+   * the server creates it in its folder-less chat workspace. `mode` marks the
+   * first prompt as a mode prompt (e.g. plan mode): the server stores a
+   * ModeMessage (short text + badge) instead of a plain user message. */
   const startSession = useCallback(
     async (
       workspace: Workspace,
@@ -65,34 +65,32 @@ export function useSessionActions(
           : {}),
       });
       const key = tabKey("", session.id);
-      setTabs((prev) => {
-        if (prev.includes(DRAFT_TAB)) {
-          return prev.map((t) => (t === DRAFT_TAB ? key : t));
-        }
-        return [...prev, key];
+      const view = emptyView(session, {
+        messages: [],
+        older: null,
+        usage: summarizeContextUsage([]),
       });
-      setActiveTab(key);
       setViews((prev) => {
         const next = new Map(prev);
         // A new session has no transcript and nothing to count: the run's
-        // messages and their usage arrive as events.
-        next.set(
-          key,
-          emptyView(session, {
-            messages: [],
-            older: null,
-            usage: summarizeContextUsage([]),
-          }),
-        );
+        // messages and their usage arrive as events. Its view is placed
+        // here, BEFORE the navigation below: the address reaches the tab
+        // strip on the next render, and a tab whose view is missing would
+        // read the session it just created.
+        next.set(key, view);
         return next;
       });
+      // The address is what opens the session (see useTabs): the tab strip
+      // and the body both follow it, so the session appears as a result of
+      // this move rather than beside it.
+      onCreated(key);
       // Both failures leave this function as a rejection: the caller keeps
       // the text it was about to send (the composer restores it), and the
       // view shows why. Swallowing them here is what made a failed first
       // prompt lose the draft.
       await sessionApi(key).prompt(text.trim(), images, mode);
     },
-    [setTabs, setActiveTab, setViews],
+    [setViews, onCreated],
   );
 
   const prompt = useCallback(

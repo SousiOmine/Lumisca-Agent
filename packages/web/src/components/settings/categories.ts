@@ -21,35 +21,35 @@ import type { AppMode, MessageKey } from "@lumisca/core/shared";
  * rule can be reasoned about — and tested — without a DOM.
  */
 
-/** Every category of the dialog. */
-export type SettingsCategory =
-  | "general"
-  | "appearance"
-  | "providers"
-  | "models"
-  | "mcp"
-  | "personalize"
-  | "prompts"
-  | "servers"
-  | "security"
-  | "computerUse"
-  | "routines";
+/** Every category of the dialog, in reading order.
+ *
+ * The list is a value as well as a type: a category id is part of a URL
+ * (route.ts), and parsing one back needs to ask whether it names a category.
+ * Deriving the union from the array keeps the two from drifting — a category
+ * added to the type but not the array would be unreachable by URL. */
+export const SETTINGS_CATEGORIES = [
+  "general",
+  "appearance",
+  "providers",
+  "models",
+  "mcp",
+  "personalize",
+  "prompts",
+  "servers",
+  "security",
+  "computerUse",
+  "routines",
+] as const;
 
-/**
- * The categories both modes have. Only these may be opened from outside
- * (`initialCategory`), because the dialog cannot honour a page the current
- * mode does not have: typing the prop this way makes that a compile error
- * instead of a blank page.
- */
-export type CommonSettingsCategory =
-  | "general"
-  | "appearance"
-  | "providers"
-  | "models"
-  | "mcp"
-  | "personalize"
-  | "servers"
-  | "security";
+export type SettingsCategory = (typeof SETTINGS_CATEGORIES)[number];
+
+/** Whether `value` names a category: the question a URL's path segment asks,
+ * where the answer may be anything a reader (or a typo) put there. */
+export function isSettingsCategory(
+  value: string,
+): value is SettingsCategory {
+  return (SETTINGS_CATEGORIES as readonly string[]).includes(value);
+}
 
 /** What a category applies to: both modes, or exactly one of them. */
 export type SettingsScope = "common" | AppMode;
@@ -98,22 +98,4 @@ export function modeLabelKey(mode: AppMode): MessageKey {
   return mode === "code"
     ? "chat.modeSelect.code.title"
     : "chat.modeSelect.stella.title";
-}
-
-/**
- * Which screen the dialog shows when it opens.
- *
- * A caller that names a category (the model picker opens プロバイダー, the
- * connection picker 接続先サーバー) gets that page at any width: it is where
- * the reader was sent. Opened without one — the app menu — the dialog lands
- * on 一般 where the navigation sits beside the page, and on the category list
- * in the stepped layout, where the page would otherwise hide the very list
- * that is the only way to another category.
- */
-export function initialView(
-  category: CommonSettingsCategory | null,
-  stepped: boolean,
-): { category: SettingsCategory; showPage: boolean } {
-  if (category !== null) return { category, showPage: true };
-  return { category: "general", showPage: !stepped };
 }

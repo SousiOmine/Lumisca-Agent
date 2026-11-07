@@ -1000,12 +1000,10 @@ Deno.test("stella API: the first agent list creates the starter agent", async ()
     const first = await json(base, "/api/stella/agents");
     const body = await first.json() as {
       agents: Array<{ id: string; name: string; role: string }>;
-      defaultAgentId: string | null;
     };
     // A fresh installation has someone to talk to: an empty sidebar in front
     // of a disabled composer would be a wall in front of the whole mode.
     assertEquals(body.agents.length, 1);
-    assertEquals(body.defaultAgentId, body.agents[0]!.id);
     assert(body.agents[0]!.name.length > 0, JSON.stringify(body));
     assert(body.agents[0]!.role.length > 0, JSON.stringify(body));
 
@@ -1022,10 +1020,8 @@ Deno.test("stella API: the first agent list creates the starter agent", async ()
     const restored = await json(base, "/api/stella/agents");
     const after = await restored.json() as {
       agents: Array<{ id: string }>;
-      defaultAgentId: string | null;
     };
     assertEquals(after.agents.length, 1);
-    assertEquals(after.defaultAgentId, after.agents[0]!.id);
   } finally {
     server.shutdown();
     void core.close();
@@ -1208,10 +1204,8 @@ Deno.test("stella API: agents are listed, renamed and deleted with their convers
     const initial = await json(base, "/api/stella/agents");
     const starter = await initial.json() as {
       agents: Array<{ id: string; name: string }>;
-      defaultAgentId: string | null;
     };
     assertEquals(starter.agents.length, 1);
-    assertEquals(starter.defaultAgentId, starter.agents[0]!.id);
 
     const created = await json(base, "/api/stella/agents", {
       method: "POST",
@@ -1222,11 +1216,8 @@ Deno.test("stella API: agents are listed, renamed and deleted with their convers
     const listed = await json(base, "/api/stella/agents");
     const body = await listed.json() as {
       agents: Array<{ id: string; name: string }>;
-      defaultAgentId: string | null;
     };
     assertEquals(body.agents.length, 2);
-    // The agent just created is the one a fresh screen opens.
-    assertEquals(body.defaultAgentId, agent.id);
 
     // A duplicate name is refused (the sidebar would be ambiguous).
     const duplicate = await json(base, "/api/stella/agents", {

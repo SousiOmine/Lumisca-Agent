@@ -36,7 +36,7 @@ import type {
 const AGENT_LIST_REFRESH_MS = 30_000;
 
 /**
- * stella mode's state: the agents, which one is being talked to, and that
+ * stella mode's state: the agents, which one the address names, and that
  * agent's conversation.
  *
  * The conversation has its own endpoints and its own event stream (see
@@ -45,6 +45,11 @@ const AGENT_LIST_REFRESH_MS = 30_000;
  * panels). What it keeps is the conversation's own state — the entries, the
  * streaming text, the run state and what is blocking it — advanced by the
  * pure reducer in stella-state.ts.
+ *
+ * WHICH conversation is open is not this hook's to decide: the address names
+ * the agent (`/stella/a/<id>`), and choosing another is a navigation the App
+ * makes. The hook reads the conversation the address names and drops it when
+ * the address moves on.
  *
  * The machine is not part of this hook's API because it is not part of the
  * user's: the server starts it when the conversation is requested, and the one
@@ -57,11 +62,10 @@ export type StellaHook = {
    * it lands, so without this the sidebar says "no agent yet" over a list
    * that is on its way — a line the reader reads and believes. */
   agentsLoading: boolean;
+  /** The agent whose conversation the address names, or null on the list.
+   * An input (the URL is where the choice lives), not something this hook
+   * decides: switching agents is a navigation. */
   activeAgentId: string | null;
-  select: (id: string) => void;
-  /** Return to the list of agents (a phone's back button); the conversation
-   * stays on the server and is re-read on the next selection. */
-  clearSelection: () => void;
   /** The active agent's conversation, or null before it is open. */
   conversation: StellaConversationState | null;
   /** The conversation's session id (the key its published images are stored
@@ -106,7 +110,10 @@ export type StellaHook = {
   replaceAgent: (agent: StellaAgent) => void;
 };
 
-export function useStella(enabled: boolean): StellaHook {
+export function useStella(
+  enabled: boolean,
+  activeAgentId: string | null,
+): StellaHook {
   // Failure text is written in the language the app is in when it happens
   // (the hook holds strings, not failure objects).
   const t = useT();
@@ -116,7 +123,6 @@ export function useStella(enabled: boolean): StellaHook {
    * the very first paint already says "reading" instead of flashing the
    * empty state for a frame. */
   const [agentsSettled, setAgentsSettled] = useState(false);
-  const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [conversation, setConversation] = useState<
     StellaConversationState | null
   >(null);
@@ -146,29 +152,22 @@ export function useStella(enabled: boolean): StellaHook {
     );
   }, []);
 
-  // The agent list. Read when stella becomes the mode and after a change;
-  // The agent list. Read when stella becomes the mode, after a change, and on
-  // the refresh timer below; the last-used agent is the default, so reopening
-  // the app resumes the conversation the user actually had.
+  // The agent list: read when stella becomes the mode, after a change, and on
+  // the refresh timer below. Nothing here picks a conversation — the address
+  // does (see the module comment), so a list that arrives decides only what
+  // the sidebar draws.
   useEffect(() => {
     if (!enabled) {
       setAgents([]);
       setAgentsSettled(false);
-      setActiveAgentId(null);
       return;
     }
     let disposed = false;
     void (async () => {
       try {
-        const { agents: list, defaultAgentId } = await api.getStellaAgents();
+        const { agents: list } = await api.getStellaAgents();
         if (disposed) return;
         setAgents(list.slice().sort(compareAgentRows));
-        setActiveAgentId((current) => {
-          if (current !== null && list.some((a) => a.id === current)) {
-            return current;
-          }
-          return defaultAgentId ?? list[0]?.id ?? null;
-        });
         setError(null);
       } catch (failure) {
         if (!disposed) setError(describeError(failure, t));
@@ -337,28 +336,14 @@ export function useStella(enabled: boolean): StellaHook {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, activeAgentId, conversation !== null]);
 
-  // Switching agents drops the previous conversation's state (the
-  // conversation itself stays on the server; coming back re-reads it).
-  const select = useCallback((id: string) => {
-    // The same agent picked again is not a switch: leaving the state alone
-    // keeps the open conversation (and its stream) where it is.
-    if (id === activeAgentId) return;
+  // The address moved to another conversation (or back to the list): drop
+  // the previous one's state. The conversation itself stays on the server, so
+  // returning to it re-reads it — which is also what keeps a stale transcript
+  // from appearing under another agent's name.
+  useEffect(() => {
     setConversation(null);
     setSessionId(null);
-    setActiveAgentId(id);
   }, [activeAgentId]);
-
-  /** Go back to the list of agents (a phone's conversation screen's back
-   * button). The conversation is not deleted — it lives on the server — so
-   * the next selection re-reads it. A `null` agent is exactly the state this
-   * hook starts in ("nobody chosen yet"), which is why no separate flag is
-   * needed: on a wide screen the list is always visible anyway, and on a
-   * narrow one this is what returns to it. */
-  const clearSelection = useCallback(() => {
-    setConversation(null);
-    setSessionId(null);
-    setActiveAgentId(null);
-  }, []);
 
   // Leaving stella mode drops the conversation's state.
   useEffect(() => {
@@ -497,8 +482,6 @@ export function useStella(enabled: boolean): StellaHook {
     // content away to say nothing new.
     agentsLoading: enabled && !agentsSettled,
     activeAgentId,
-    select,
-    clearSelection,
     conversation,
     loadOlder,
     loadingOlder,

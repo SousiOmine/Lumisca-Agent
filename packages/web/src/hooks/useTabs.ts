@@ -12,20 +12,16 @@ import {
   type SessionSnapshot,
 } from "../api.ts";
 import { applyRunState } from "../events.ts";
-import { DRAFT_TAB, withDraftTab } from "../tabs.ts";
+import { DRAFT_TAB } from "../tabs.ts";
 import { emptyView, type SessionView, type TodoPhase } from "../types.ts";
 
-/** localStorage keys for restoring the open tabs after a restart. */
-const TABS_KEY = "lumisca.tabs";
-const ACTIVE_TAB_KEY = "lumisca.activeTab";
-
-/** View state for a restored tab: every piece of live state comes from the
- * snapshot (the same instant as its transcript), so a failure or a question
- * that happened without a connected UI is not silently hidden, a title
- * generated meanwhile is shown, and a run that is still going does not
- * render as finished — its `agent_start` is never replayed (see
+/** View state for a tab opened from a snapshot: every piece of live state
+ * comes from the snapshot (the same instant as its transcript), so a failure
+ * or a question that happened without a connected UI is not silently hidden,
+ * a title generated meanwhile is shown, and a run that is still going does
+ * not render as finished — its `agent_start` is never replayed (see
  * applyRunState). */
-function restoreView(
+function viewOf(
   info: SessionInfoDto,
   snapshot: SessionSnapshot,
   todos: TodoPhase[] = [],
@@ -40,19 +36,56 @@ function restoreView(
   return applyRunState(v, snapshot.running);
 }
 
-/** Open tabs + active tab: restore after a restart, persist on change,
- * and the close operations (single, to-right, to-left, others). The strip
- * never goes empty: with no session tab left it holds the draft tab. The
- * views map is owned by useSessionEvents; the tab logic only adds/removes
- * entries. */
+/** What the tab strip and the chat body read of the open tabs. */
+export interface TabsControls {
+  /** The sessions this page has open, in the order they were opened. Not the
+   * strip: the draft tab is not a session (it is the `/code` screen), so a
+   * caller that prunes per-session state uses this list, and one that draws
+   * the bar uses `strip`. */
+  open: string[];
+  /** The strip: `open`, plus the draft tab while `/code` is the screen. */
+  strip: string[];
+  /** The address names a session whose view is not here yet: the body shows
+   * the wait rather than the new-session screen, which would otherwise flash
+   * under the address of a session. */
+  loading: boolean;
+  /** Drop tabs (the closes), telling their sessions about it. The caller
+   * navigates away from the shown session FIRST: closing the tab the address
+   * names would leave the URL pointing at a screen that is gone. */
+  closeTabs: (ids: string[], keepRunning?: ReadonlySet<string>) => void;
+  /** Put a session in the strip whose view the caller already has (a session
+   * it just created): the address reaches the strip on the next render, and
+   * without this the session would be read back from the server the moment
+   * it appears there. */
+  adopt: (key: string) => void;
+}
+
+/**
+ * The open tabs, and the one the address bar names.
+ *
+ * The address IS the open tab: `/code/s/<id>` shows that session and `/code`
+ * shows the draft. Moving between tabs is therefore a navigation, and the
+ * strip is written to match — a session the address names but the page has
+ * never drawn is read here, with the same three requests a restored tab
+ * always needed (info, transcript snapshot, todo plan).
+ *
+ * Nothing is restored from `localStorage`: the URL already says what to open,
+ * and a stored set would be a second answer to the same question — one that
+ * silently overrode the address the reader had just typed or pasted.
+ *
+ * `activeTab` is an input, not a state. The strip is still a list (the
+ * reader's way back to what they opened in this page), but its contents
+ * follow the address rather than deciding it.
+ */
 export function useTabs(
   setViews: Dispatch<SetStateAction<Map<string, SessionView>>>,
   /** Seed the revision marker of a tab from the snapshot it was built from
-   * (see useSessionEvents.seedRevision): a restored tab must watch for lost
-   * frames from the snapshot it started with, not from its next full sync. */
+   * (see useSessionEvents.seedRevision): a tab opened from a snapshot must
+   * watch for lost frames from the snapshot it started with, not from its
+   * next full sync. */
   seedRevision: (key: string, rev: number) => void,
   /** Fetch and merge one tab's panel snapshots (see
-   * useSessionEvents.resyncPanels). A tab reopened on a session whose run is
+   * useSessionEvents.resyncPanels). A tab opened on a session whose run is
    * still going needs them: a run left going by "close and keep running" can
    * have sub-agent tasks and background commands that no event has described
    * to this page yet. */
@@ -61,101 +94,77 @@ export function useTabs(
    * useSessionEvents.forgetRevisions): the map is only ever added to, so a
    * page that opens and closes many tabs must drop what it no longer reads. */
   forgetRevisions: (keys: Iterable<string>) => void,
-) {
+  /** The tab key the route names, or null for the draft screen. */
+  activeTab: string | null,
+  /** The session could not be opened (it was deleted, or the peer that owns
+   * it does not answer). The App takes the reader back to the mode's top: an
+   * address naming a screen this page cannot draw is not a screen. */
+  onUnopenable: (key: string) => void,
+): TabsControls {
+  /** The sessions this page has open, in the order they were opened. */
   const [tabs, setTabs] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<string | null>(null);
-  const restoredRef = useRef(false);
+  /** Reads in flight, by key. A re-render of the same address must not read
+   * the same session twice; a ref rather than state, because the guard is
+   * not something to draw. */
+  const pending = useRef(new Set<string>());
+  /** Sessions whose read failed. The address may keep naming one (a stale
+   * bookmark, a peer that went away) for a render or two, and remembering
+   * the failure is what keeps the fallback from being attempted on every
+   * render. Cleared when the address stops naming a session, so a later
+   * visit tries again — the session may have been reopened since. */
+  const failed = useRef(new Set<string>());
 
-  // Restore the tabs that were open before a restart.
-  useEffect(() => {
-    let disposed = false;
-    const restore = async () => {
-      let ids: string[] = [];
-      let active: string | null = null;
+  const onUnopenableRef = useRef(onUnopenable);
+  onUnopenableRef.current = onUnopenable;
+
+  /** Read one session into a tab, or do nothing when it is already there. */
+  const open = useCallback((key: string) => {
+    if (key === DRAFT_TAB || pending.current.has(key)) return;
+    pending.current.add(key);
+    void (async () => {
       try {
-        ids = JSON.parse(localStorage.getItem(TABS_KEY) ?? "[]");
-        active = localStorage.getItem(ACTIVE_TAB_KEY);
+        const [info, snapshot, todo] = await Promise.all([
+          sessionApi(key).getSession(),
+          sessionApi(key).getMessages(),
+          sessionApi(key).getTodo(),
+        ]);
+        setTabs((prev) => (prev.includes(key) ? prev : [...prev, key]));
+        setViews((prev) => {
+          const next = new Map(prev);
+          next.set(key, viewOf(info, snapshot, todo.todos));
+          return next;
+        });
+        // The tab starts watching for lost frames from this snapshot.
+        seedRevision(key, snapshot.rev);
+        if (snapshot.running) resyncPanels(key);
       } catch {
-        // Unreadable storage: there is nothing to restore. The strip below
-        // still gets its draft tab.
+        // The session is gone, or its peer does not answer. The App
+        // navigates to the mode's top, which clears the markers below.
+        failed.current.add(key);
+        onUnopenableRef.current(key);
+      } finally {
+        pending.current.delete(key);
       }
-      const restoredViews = new Map<string, SessionView>();
-      // Restored tabs whose run is still going: their panel snapshots are
-      // not in the transcript snapshot and no event has described them to
-      // this page yet (see the resyncPanels call below).
-      const running: string[] = [];
-      await Promise.all(ids.map(async (id) => {
-        try {
-          // GET /sessions/:id (not /open) for the info: the messages
-          // endpoint already opens the session, and the response carries
-          // the last run error so a failed run is visible after a restart.
-          // The todo plan is fetched alongside too — todo events are only
-          // emitted on mutations, so a fresh page must restore it here —
-          // and the transcript snapshot carries the run state.
-          const [info, snapshot, todo] = await Promise.all([
-            sessionApi(id).getSession(),
-            sessionApi(id).getMessages(),
-            sessionApi(id).getTodo(),
-          ]);
-          restoredViews.set(id, restoreView(info, snapshot, todo.todos));
-          if (snapshot.running) running.push(id);
-          // The tab starts watching for lost frames from this snapshot.
-          seedRevision(id, snapshot.rev);
-        } catch {
-          // The session no longer exists; skip it.
-        }
-      }));
-      if (disposed) return;
-      restoredRef.current = true;
-      // Keep the saved order: Promise.all resolves out of order, so filter
-      // the original ids instead of collecting in completion order. With no
-      // tab left to restore, the strip holds the draft tab rather than
-      // nothing.
-      const restoredTabs = withDraftTab(
-        ids.filter((id) => restoredViews.has(id)),
-      );
-      setTabs(restoredTabs);
-      setViews((prev) => new Map([...prev, ...restoredViews]));
-      setActiveTab(
-        active && restoredTabs.includes(active)
-          ? active
-          : (restoredTabs.at(-1) ?? null),
-      );
-      // Fill in the panels of the tabs that are still running (see
-      // resyncPanels). The reconnect resync may have run before these views
-      // existed — this page never saw the events of a run that kept going
-      // while it was closed — so a tab restored on a live run asks here.
-      for (const key of running) resyncPanels(key);
-    };
-    restore();
-    return () => {
-      disposed = true;
-    };
+    })();
+    // The three callbacks are the App's own (stable); the ref carries the
+    // one value that changes.
   }, [setViews, seedRevision, resyncPanels]);
 
-  // Persist the open tabs so they can be restored after a restart.
+  // The address names the session: open it unless the strip already holds
+  // it. A tab the strip holds keeps its live state — reading it again would
+  // throw away the events that streamed since — so only a session this page
+  // has never drawn is read.
   useEffect(() => {
-    if (!restoredRef.current) return;
-    try {
-      localStorage.setItem(
-        TABS_KEY,
-        JSON.stringify(tabs.filter((t) => t !== DRAFT_TAB)),
-      );
-      if (activeTab && activeTab !== DRAFT_TAB) {
-        localStorage.setItem(ACTIVE_TAB_KEY, activeTab);
-      } else {
-        localStorage.removeItem(ACTIVE_TAB_KEY);
-      }
-    } catch {
-      // ignore storage failures
+    if (activeTab === null || activeTab === DRAFT_TAB) {
+      // The address no longer names a session, so nothing is left to retry
+      // against: a later visit reads the session afresh.
+      failed.current.clear();
+      return;
     }
-  }, [tabs, activeTab]);
-
-  /** Open (or focus) the draft "new session" tab. */
-  const openDraftTab = useCallback(() => {
-    setTabs((prev) => (prev.includes(DRAFT_TAB) ? prev : [...prev, DRAFT_TAB]));
-    setActiveTab(DRAFT_TAB);
-  }, []);
+    if (tabs.includes(activeTab)) return;
+    if (failed.current.has(activeTab)) return;
+    open(activeTab);
+  }, [activeTab, tabs, open]);
 
   /** Close the given tabs: drop the tabs and their views, and tell the
    * owning server about the sessions among them — except the ones named in
@@ -163,9 +172,7 @@ export function useTabs(
    * going keeps working on the server (the tab is gone, the session stays
    * open, and reopening it from the session history rejoins the run). The
    * App asks before it takes the `POST /close` route for a running tab (see
-   * CloseTabsDialog). When the active tab is among the closed ones, fall
-   * back to the last remaining tab (kept in the existing order); closing
-   * the last tab leaves the draft tab, so the strip never empties. */
+   * CloseTabsDialog) and navigates away from the shown one first. */
   const closeTabs = useCallback((
     ids: string[],
     keepRunning?: ReadonlySet<string>,
@@ -177,61 +184,25 @@ export function useTabs(
       }
     }
     forgetRevisions(ids);
-    const nextTabs = withDraftTab(tabs.filter((id) => !toClose.has(id)));
-    setTabs(nextTabs);
+    setTabs((prev) => prev.filter((id) => !toClose.has(id)));
     setViews((prev) => {
       const next = new Map(prev);
       for (const id of ids) next.delete(id);
       return next;
     });
-    setActiveTab((current) =>
-      current && nextTabs.includes(current)
-        ? current
-        : (nextTabs.at(-1) ?? null)
-    );
-  }, [tabs, setViews]);
+  }, [setViews, forgetRevisions]);
 
-  /** Reopen a previously closed session in a tab: load its info, transcript
-   * snapshot (messages + run state) and todo plan (the same data the
-   * restart restore fetches) and open the tab; an already-open session is
-   * just focused. A session whose run is still going — one left running by
-   * "close and keep running" — additionally asks for its panel snapshots,
-   * which the transcript snapshot does not carry and no event has described
-   * to this page yet. */
-  const reopenSession = useCallback(async (key: string) => {
-    if (tabs.includes(key)) {
-      setActiveTab(key);
-      return;
-    }
-    try {
-      const [info, snapshot, todo] = await Promise.all([
-        sessionApi(key).getSession(),
-        sessionApi(key).getMessages(),
-        sessionApi(key).getTodo(),
-      ]);
-      setTabs((prev) => (prev.includes(key) ? prev : [...prev, key]));
-      setViews((prev) => {
-        const next = new Map(prev);
-        next.set(key, restoreView(info, snapshot, todo.todos));
-        return next;
-      });
-      seedRevision(key, snapshot.rev);
-      setActiveTab(key);
-      if (snapshot.running) resyncPanels(key);
-    } catch (error) {
-      // The session was deleted (or the owning peer is unreachable) since
-      // the list was built; never crash over a stale entry.
-      console.error(error);
-    }
-  }, [tabs, setTabs, setViews, setActiveTab, seedRevision, resyncPanels]);
+  const adopt = useCallback((key: string) => {
+    setTabs((prev) => (prev.includes(key) ? prev : [...prev, key]));
+  }, []);
 
-  return {
-    tabs,
-    setTabs,
-    activeTab,
-    setActiveTab,
-    openDraftTab,
-    closeTabs,
-    reopenSession,
-  };
+  const atTop = activeTab === null || activeTab === DRAFT_TAB;
+  // The draft tab is in the strip while the draft is the screen, at the end:
+  // that is where "+" has always put it, and where a started session's tab
+  // appears. A session being read is not in the strip yet — `loading` says
+  // why the body is empty, and the tab arrives with its view.
+  const strip = atTop ? [...tabs, DRAFT_TAB] : [...tabs];
+  const loading = !atTop && !tabs.includes(activeTab);
+
+  return { open: tabs, strip, loading, closeTabs, adopt };
 }

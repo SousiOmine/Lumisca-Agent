@@ -241,7 +241,7 @@ export function stellaRoutes(core: StellaApi): Hono {
 
   // --- agents (the agent of each conversation) -----------------------------
 
-  /** The sidebar's rows, plus which agent a fresh screen opens.
+  /** The sidebar's rows.
    *
    * A row carries what its conversation last said (see
    * shared/stella-preview.ts): a list of agents that says who they are but
@@ -249,22 +249,19 @@ export function stellaRoutes(core: StellaApi): Hono {
    * did not, and only the store knows what was said in a conversation nobody
    * has open.
    *
-   * `defaultAgentId` answers a different question from the order the client
-   * draws: it is the agent last TALKED TO, which is where a reopened app
-   * lands, while the rows are ordered by when each conversation last spoke
-   * (see compareAgentRows) — a routine that posts overnight moves a row
-   * without deciding what the user opens.
+   * Which conversation a client opens is the client's address, not this
+   * list's answer: `/stella/a/<id>` names it, and the app stores the last
+   * mode a bare `/` resolves to. A `defaultAgentId` here said the same thing a
+   * second time — and said it for every client, which the mode's own choice
+   * deliberately does not (see shared/app-mode.ts).
    *
    * Reading the list is also what guarantees the installation has at least
    * one agent: a first run would otherwise open stella mode onto an empty
    * sidebar and a disabled composer, which is a wall in front of the one
    * thing the mode exists for (see ensureStellaAgent). */
   app.get("/stella/agents", (c) => {
-    const starter = core.ensureStellaAgent();
-    return c.json({
-      agents: core.listStellaAgentSummaries(),
-      defaultAgentId: starter.id,
-    });
+    core.ensureStellaAgent();
+    return c.json({ agents: core.listStellaAgentSummaries() });
   });
 
   /** Create an agent. `name` and `role` are both optional: creating one is

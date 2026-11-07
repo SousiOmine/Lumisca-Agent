@@ -11,43 +11,60 @@ import type { StellaStatus } from "../types.ts";
  * own, and switching in one never reaches the other. */
 const MODE_KEY = "lumisca.appMode";
 
-/** Read the stored mode. An unset or unrecognised value is "not chosen"
- * (the selection screen), never a silent default. */
-function storedMode(): AppMode | null {
+/**
+ * The mode a bare `/` resolves to: the one this client showed last, or null
+ * when it has never chosen.
+ *
+ * The stored value is not what the app SHOWS — the URL is (route.ts) — but
+ * what the address every launch starts from means. `/` is what the desktop
+ * shell and an installed PWA open, so storing the choice is what makes "start
+ * where I left off" work without putting a mode in the start URL (which the
+ * manifest may not carry a capability in, and which a bare link should not
+ * force anyway).
+ */
+export function storedMode(): AppMode | null {
   const raw = localStorage.getItem(MODE_KEY);
   return isAppMode(raw) ? raw : null;
 }
 
+/** Remember the mode this client is showing, for the next bare `/`. */
+export function rememberMode(mode: AppMode): void {
+  try {
+    localStorage.setItem(MODE_KEY, mode);
+  } catch {
+    // A storage that refuses writes (private mode, a full quota) costs the
+    // reader only the remembered start screen: the address still says which
+    // mode this page shows.
+  }
+}
+
 /**
- * The mode this client shows, and what the server it talks to can do.
+ * What the server can do for stella mode, and the one refusal a mode choice
+ * has to make.
  *
- * The two facts have different homes. The mode belongs to the CLIENT
- * (localStorage): it describes a view, so the desktop window may be in code
- * mode while a browser on the same server is in stella mode, and neither may
- * flip the other. The machine's status belongs to the SERVER and is re-read
- * after every switch and — in stella mode — on a slow interval, because the
- * machine starts itself when a conversation needs it: the client has to learn
- * when it is up (to connect the screen) and when a first-run build is still
- * going. Nothing polls in code mode.
+ * The mode itself belongs to the URL (route.ts): `/code` and `/stella` say
+ * which mode this page shows, so this hook takes the mode it was given
+ * rather than owning it. What stays here is the SERVER's half — whether a
+ * machine can run at all, and how it is doing — polled while stella is the
+ * mode, because the machine starts itself when a conversation needs it and
+ * the client has to learn when it is up.
  *
- * Picking stella is refused where the server says it cannot run: a mode whose
- * whole premise is a virtual machine has no honest degraded form, and the
- * refusal is shown where the choice was made.
+ * `choose` is what the chooser calls: it refuses stella where the server
+ * cannot run it (a mode whose whole premise is a virtual machine has no
+ * honest degraded form). Navigating is the caller's — the URL is where the
+ * answer is written.
  */
-export function useAppMode(): {
-  /** The mode this client shows, or null until it picks one (the selection
-   * screen). */
-  mode: AppMode | null;
+export function useAppMode(mode: AppMode | null): {
   /** What this server can do for stella mode, and how its machine is doing.
    * null while the first read is in flight. */
   status: StellaStatus | null;
   error: string | null;
-  setMode: (mode: AppMode) => Promise<void>;
+  /** Validate `next`; rejects when the server refuses it. */
+  choose: (next: AppMode) => Promise<void>;
   /** Re-read the machine's status (the poll, and after a switch). */
   reload: () => Promise<void>;
 } {
   const [status, setStatus] = useState<StellaStatus | null>(null);
-  const [mode, setModeState] = useState<AppMode | null>(storedMode);
   const [error, setError] = useState<string | null>(null);
   // Guards against a stale response: the machine's status is polled and
   // changed by the user, and the slower answer must not overwrite the newer.
@@ -78,12 +95,12 @@ export function useAppMode(): {
   // useVisibleInterval): the machine cannot be watched while nobody looks.
   useVisibleInterval(() => void reload(), mode === "stella" ? 3_000 : NEVER);
 
-  const setMode = useCallback(async (next: AppMode) => {
+  const choose = useCallback(async (next: AppMode) => {
     setError(null);
     if (next === "stella") {
       // The verdict is read now rather than reused: a machine that appeared
       // since the last poll (podman installed) must not be refused from a
-      // stale answer, and a refused mode must never be stored.
+      // stale answer, and a mode the server refuses is never rememberable.
       try {
         const current = await api.getStellaStatus();
         setStatus(current);
@@ -95,9 +112,7 @@ export function useAppMode(): {
         throw failure;
       }
     }
-    localStorage.setItem(MODE_KEY, next);
-    setModeState(next);
   }, []);
 
-  return { mode, status, error, setMode, reload };
+  return { status, error, choose, reload };
 }

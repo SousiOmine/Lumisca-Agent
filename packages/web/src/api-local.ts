@@ -300,13 +300,13 @@ export const api = {
    * read here. */
   getStellaStatus: () => request<StellaStatus>("/api/stella/status"),
   /** The sidebar's rows of stella mode — each agent with what its
-   * conversation last said — and which one a fresh screen opens. The server
-   * answers in its "most recently used" order; the client orders the rows by
-   * when each conversation last spoke (see compareAgentRows). */
+   * conversation last said. The server answers in its "most recently used"
+   * order; the client orders the rows by when each conversation last spoke
+   * (see compareAgentRows). Which conversation is open comes from the
+   * address (`/stella/a/<id>`), not from this list. */
   getStellaAgents: () =>
     request<{
       agents: StellaAgentSummary[];
-      defaultAgentId: string | null;
     }>("/api/stella/agents"),
   createStellaAgent: (name: string, role: string) =>
     request<StellaAgent>("/api/stella/agents", {

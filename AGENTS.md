@@ -116,6 +116,29 @@ Deno は公開から 24 時間以内のバージョンを既定では導入し�
 - **接続先はタイトルバーのドロップダウンだけ**（`components/ConnectionPicker.tsx`）。新規セッション画面にはサーバー選択を置きません。表示名はシェルが `settings.json` の `lastRemote` に記録して `state` で返します。設定画面の一覧は編集用で、行は畳んだ状態が既定、名前が空のまま URL を入れたらホスト名を補完します（`packages/web/src/connections.ts`）。
 - **自分自身とは連携しない**: `connections` の各項目へ `/ws` を張って中継しますが、自分自身なら中継しません。判定は `/api/health` の `instanceId` です（tailnet 名や LAN アドレス経由の自分は URL では見分けられません）。中継済みのフレームを再中継しないのも同じ理由で、破るとエコーで CPU とメモリを食い尽くします（`packages/server/federation.ts`）。
 
+### 画面の URL
+
+画面はすべて URL を持ちます（`packages/web/src/route.ts`）。URL が「いまどの画面か」の唯一の答えです。
+
+| 画面 | URL |
+| --- | --- |
+| モード選択（未選択） | `/` |
+| code mode のトップ（新規セッション） | `/code` |
+| このサーバーのセッション | `/code/s/<sessionId>` |
+| ピアのセッション | `/code/p/<peerId>/s/<sessionId>` |
+| stella のエージェント一覧 | `/stella` |
+| stella の会話 | `/stella/a/<agentId>` |
+| 設定 | `<画面>/settings` / `<画面>/settings/<category>` |
+
+- **`route.ts` は純粋関数だけ**。`parseUrl` と `urlOf` が往復し、DOM に触れません。`hooks/useRoute.ts` だけが `history` を触ります。
+- **設定はモードの下**。カテゴリの集合はモードごとに違う（`categories.ts` の `scope`）ので、モードを持たない `/settings` はどのモードの設定か答えられません。閉じると開いた画面へ戻ります（`history.back()`。履歴が無ければ `replace`）。
+- **`/` は解決先**。デスクトップシェルとインストールした PWA が開く URL なので、`localStorage` の `lumisca.appMode` に解決し、`replace` で `/code` か `/stella` に置き換えます。未選択ならモード選択画面のままです。
+- **URL はモードを決める**。`/stella` を開けば保存値が code でも stella になります。stella を使えないサーバーでは理由を出して `/code` に倒し、そのstella は保存しません。
+- **戻るで画面が戻る**。タブ切り替え、セッションを開く、設定の開閉、設定カテゴリの変更がそれぞれ履歴になります。ただし `POST /close` は × で閉じたときだけです（戻るは画面を移るだけで、実行は止めません）。
+- **存在しない画面はモードのトップへ**。消えたセッション・消えたエージェント・知らないカテゴリは、エラー画面ではなく使える画面に倒します（このアプリに 404 ページはありません）。
+- **`/code` の状態は URL のタブだけ**。以前の「開いていたタブをすべて `localStorage` から復元」は廃止しました（URL が同じ問いに答えるため）。タブバーはこのページが開いたセッションの一覧です。
+- **ドラフトはセッションの集合で管理**。`/code` の下書きは、セッションへ移っても消えません（`useDrafts` は `useTabs` の `open` をキーにします）。
+
 ### リモート接続での応答
 
 - **差分はセッション単位でまとめる**: `/ws` と stella の会話ストリームは `message_delta` / `delta` を 16 ms 分まとめて 1 フレームにします（`packages/core/shared/ws-batch.ts`）。キーがセッション id なのは、1 本のソケットが複数タブのイベントを運ぶからです。ツール開始・確定・終了は遅延させず、送る前に保留分を flush します。
@@ -139,7 +162,7 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 
 ### 会話
 
-- **相手は常に 1 人以上**: `GET /api/stella/agents` の初回読み出しでスターターを作ります（`LumiscaCore.ensureStellaAgent`）。全員を削除しても次の読み出しで戻ります。
+- **相手は常に 1 人以上**: `GET /api/stella/agents` の初回読み出しでスターターを作ります（`LumiscaCore.ensureStellaAgent`）。全員を削除しても次の読み出しで戻ります。応答は `{ agents }` だけで、どの会話を開くかは返しません——それは URL（`/stella/a/<id>`）が答えます。
 - **一覧の行は最新の発言**: 2 行目は会話と同じ射影（`shared/stella-preview.ts` の `previewOf`）、並びも最新メッセージの時刻です。開いていない会話にはストリームが無いので、一覧は 30 秒ごとに読み直します（`useVisibleInterval`）。
 - **話す手段は本文と `send_chat`**: 本文はそのまま返信になり、`send_chat` がカード・ファイル・途中経過を添えます（`packages/core/tools/send-chat.ts`）。黙るターンは `NO_RESPONSE` だけを書きます（`packages/core/agent/silent-reply.ts`）。`text`・`card`・`paths` は 1 回で 1 つのメッセージになり、少なくとも 1 つ必要です。
 - **モデルの切り替え**: `POST /api/stella/conversations/:agentId/model`（`provider` と `modelId` が必須、実行中は 409）。切り替えてもシステムプロンプトは変わりません。モデル名は context メッセージとして公開します（`packages/core/agent/model-context.ts`）。

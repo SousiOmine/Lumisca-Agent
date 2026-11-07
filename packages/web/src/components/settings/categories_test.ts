@@ -1,10 +1,10 @@
 import { assertEquals } from "@std/assert";
 import type { AppMode } from "@lumisca/core/shared";
 import {
-  type CommonSettingsCategory,
-  initialView,
+  isSettingsCategory,
   modeLabelKey,
   navGroups,
+  SETTINGS_CATEGORIES,
   type SettingsNavEntry,
 } from "./categories.ts";
 
@@ -90,21 +90,16 @@ Deno.test("modeLabelKey names the mode the dialog describes", () => {
   assertEquals(modeLabelKey("stella"), "chat.modeSelect.stella.title");
 });
 
-Deno.test("the shared categories the dialog can be opened on are a subset", () => {
-  // `initialCategory` is typed with the shared union: every member must be a
-  // category, and a mode-only one must not be (a page the current mode does
-  // not have would open empty). This is the compile-time list, checked against
-  // the runtime grouping so the two cannot drift.
-  const shared: CommonSettingsCategory[] = [
-    "general",
-    "appearance",
-    "providers",
-    "models",
-    "mcp",
-    "personalize",
-    "servers",
-    "security",
-  ];
+Deno.test("navGroups lists every shared category in both modes", () => {
+  // The scopes decide which categories a mode shows: the common ones appear
+  // in both, and a mode's own appear in that one only. The URL parser relies
+  // on the same table (route.ts accepts exactly these segments), so a
+  // category that is missing here would be a page no address could name.
+  const shared = SETTINGS_CATEGORIES.filter((id) =>
+    id === "general" || id === "appearance" || id === "providers" ||
+    id === "models" || id === "mcp" || id === "personalize" ||
+    id === "servers" || id === "security"
+  );
   const entries = shared.map((id) => entry(id, "common"));
   for (const mode of MODES) {
     assertEquals(
@@ -117,29 +112,13 @@ Deno.test("the shared categories the dialog can be opened on are a subset", () =
   }
 });
 
-Deno.test("initialView: a named category opens its page at any width", () => {
-  // The caller sent the reader somewhere (the model picker opens プロバイダー):
-  // landing on the list would make them ask for it a second time.
-  assertEquals(initialView("providers", true), {
-    category: "providers",
-    showPage: true,
-  });
-  assertEquals(initialView("servers", false), {
-    category: "servers",
-    showPage: true,
-  });
-});
-
-Deno.test("initialView: no category means the list only when stepped", () => {
-  // The app menu opens the settings as such. Beside the page the navigation
-  // lists every category already; in the stepped layout the page would hide
-  // that list, which is the only way to reach another category.
-  assertEquals(initialView(null, false), {
-    category: "general",
-    showPage: true,
-  });
-  assertEquals(initialView(null, true), {
-    category: "general",
-    showPage: false,
-  });
+Deno.test("isSettingsCategory accepts the table and refuses anything else", () => {
+  // The URL's category segment is checked with this: a name it does not know
+  // leaves the dialog open on its first page rather than 404-ing a bookmark.
+  for (const id of SETTINGS_CATEGORIES) {
+    assertEquals(isSettingsCategory(id), true, id);
+  }
+  for (const other of ["", "General", "general ", "Providers", "nope"]) {
+    assertEquals(isSettingsCategory(other), false, other);
+  }
 });

@@ -102,6 +102,28 @@ Deno.test("server serves the app shell", async () => {
     assertEquals(fallback.status, 200);
     assertEquals((await fallback.text()).includes('id="root"'), true);
 
+    // Every screen the client addresses answers with the shell too: a
+    // bookmark or a shared link is opened by the browser directly, and the
+    // app renders the screen from the path (see packages/web/src/route.ts).
+    for (
+      const path of [
+        "/code",
+        "/code/s/0f6a1d1e-0000-4000-8000-000000000000",
+        "/code/p/1b2c3d4e-0000-4000-8000-000000000000/s/0f6a1d1e-0000-4000-8000-000000000000",
+        "/stella",
+        "/stella/a/1b2c3d4e-0000-4000-8000-000000000000",
+        "/code/s/0f6a1d1e-0000-4000-8000-000000000000/settings/providers",
+      ]
+    ) {
+      const deep = await fetch(`${base}${path}`);
+      assertEquals(deep.status, 200, path);
+      assertEquals(
+        (await deep.text()).includes('id="root"'),
+        true,
+        path,
+      );
+    }
+
     // API must not be shadowed.
     const health = await fetch(`${base}/api/health`);
     assertEquals(health.status, 200);

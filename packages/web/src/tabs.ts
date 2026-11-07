@@ -67,13 +67,6 @@ export function closeTargets(
   return op === "toRight" ? tabs.slice(index + 1) : tabs.slice(0, index);
 }
 
-/** The tab strip to show for `tabs`: with nothing left to show it holds the
- * draft tab, so closing the last tab leaves a new-session tab (the same one
- * the "+" button opens) instead of an empty strip. */
-export function withDraftTab(tabs: readonly string[]): string[] {
-  return tabs.length === 0 ? [DRAFT_TAB] : [...tabs];
-}
-
 /** `%` → `%25` first, then `:` → `%3A`, so an id that already reads as an
  * escape sequence cannot decode into a separator. */
 function escapePeerId(peerId: string): string {

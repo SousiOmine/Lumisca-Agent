@@ -43,6 +43,11 @@ export interface StellaModeScreenProps {
   files: PendingFile[];
   onFilesChange: (files: PendingFile[]) => void;
   onAgentChanged: (agent: StellaAgent) => void;
+  /** Open an agent's conversation. A navigation: the address names the
+   * conversation (`/stella/a/<id>`), which is what makes a conversation
+   * reloadable and linkable. The way back to the list is the title bar's
+   * (StellaTitleBarHeader.onBack), which the App draws. */
+  onSelectAgent: (id: string) => void;
   onOpenSettings: () => void;
   /** Whether the reader wants the machine's screen open. Owned by the App
    * because the toggle that flips it lives in the title bar, which is drawn
@@ -63,6 +68,7 @@ export function StellaModeScreen({
   files,
   onFilesChange,
   onAgentChanged,
+  onSelectAgent,
   onOpenSettings,
   screenOpen,
   onScreenOpenChange,
@@ -79,7 +85,7 @@ export function StellaModeScreen({
         agents={stella.agents}
         loading={stella.agentsLoading}
         activeId={stella.activeAgentId}
-        onSelect={stella.select}
+        onSelect={onSelectAgent}
         onChanged={stella.reloadAgents}
         onAgentChanged={onAgentChanged}
         running={conversation?.running === true}

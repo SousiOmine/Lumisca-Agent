@@ -259,6 +259,13 @@ export const chat = {
     ja: "エージェント一覧に戻る",
     en: "Back to the agents",
   },
+  /** An address named stella mode on a server whose machine cannot run. The
+   * mode is refused rather than shown degraded (see App.tsx): the sentence
+   * explains why the reader landed on code mode instead. */
+  "chat.stella.refused": {
+    ja: "stella モードはこのサーバーで使えません: {reason}",
+    en: "stella mode cannot run on this server: {reason}",
+  },
   "chat.stella.agents.new": { ja: "新しいエージェント", en: "New agent" },
   "chat.stella.agents.name": { ja: "名前", en: "Name" },
   /** Both fields are optional, and the form has to say so: a field that looks

@@ -1,4 +1,4 @@
-import { useState } from "preact/compat";
+import { useEffect, useState } from "preact/compat";
 import type { ReactNode } from "preact/compat";
 import {
   IconBookmark,
@@ -39,8 +39,6 @@ import { WebSearchPanel } from "./settings/WebSearchPanel.tsx";
 import { GeneralPanel } from "./settings/GeneralPanel.tsx";
 import { SettingsPage } from "./settings/SettingsPage.tsx";
 import {
-  type CommonSettingsCategory,
-  initialView,
   modeLabelKey,
   navGroups,
   type SettingsCategory,
@@ -50,10 +48,7 @@ import type { UpdateControls } from "../hooks/useUpdateStatus.ts";
 import type { PushControls } from "../hooks/usePush.ts";
 import type { Locale, ThemeSetting } from "../types.ts";
 
-export type {
-  CommonSettingsCategory,
-  SettingsCategory,
-} from "./settings/categories.ts";
+export type { SettingsCategory } from "./settings/categories.ts";
 
 interface SettingsModalProps {
   theme: ThemeSetting;
@@ -71,11 +66,13 @@ interface SettingsModalProps {
   onNotifyEnabledChange: (enabled: boolean) => void;
   /** PWA notifications (Web Push) of this device. */
   push: PushControls;
-  /** The category the dialog opens on. Only a shared one: the caller does not
-   * know which mode this client shows, and a page of the other mode would
-   * open empty. `null` opens without picking one: 一般 where both columns
-   * fit, the category list where they do not. */
-  initialCategory: CommonSettingsCategory | null;
+  /** The page the address names, or null when it names none (`…/settings`:
+   * the app menu's way in). The dialog does not choose it — picking another
+   * page is a navigation (see `onOpenCategory`), which is what makes every
+   * category linkable and the back button walk through them. */
+  category: SettingsCategory | null;
+  /** Move to another category (a navigation: the address names the page). */
+  onOpenCategory: (category: SettingsCategory | null) => void;
   /** The routines of the active stella agent (empty in code mode, which has
    * no agent), plus which agent they belong to. */
   routines: ReturnType<typeof useRoutines>;
@@ -93,7 +90,7 @@ interface PanelContext {
   props: SettingsModalProps;
   /** Switch to another category (a panel's "open the provider settings" link
    * reaches across). */
-  openCategory: (id: CommonSettingsCategory) => void;
+  openCategory: (id: SettingsCategory) => void;
   /** The providers category's own navigation state. */
   providersView: ProvidersView;
   setProvidersView: (view: ProvidersView) => void;
@@ -392,7 +389,8 @@ export function SettingsModal({
   notifyEnabled,
   onNotifyEnabledChange,
   push,
-  initialCategory,
+  category,
+  onOpenCategory,
   routines,
   routineAgent,
   mode,
@@ -400,23 +398,42 @@ export function SettingsModal({
 }: SettingsModalProps) {
   const t = useT();
   const stepped = useMediaQuery(COMPACT_QUERY);
-  /** Read once, at mount: a resize must not throw the reader out of the page
-   * they opened or opened from the list themselves. */
-  const [start] = useState(() => initialView(initialCategory, stepped));
-  const [category, setCategory] = useState<SettingsCategory>(start.category);
-  /** In the stepped layout: whether the page (rather than the list) is shown. */
-  const [showPage, setShowPage] = useState(start.showPage);
+  // On a narrow window the navigation and the page are two screens: the
+  // dialog opens on the list when the address names no page (the app menu's
+  // way in), and on the page when it names one (a link into a category).
+  // Read once, at mount — a resize must not throw the reader out of the page
+  // they are on.
+  const [showPage, setShowPage] = useState(stepped && category !== null);
+  /** The page being shown. Without one in the address this is the dialog's
+   * own: 一般 beside the navigation, the first screen of the list. The
+   * reader's clicks move it, and move the address with it (openCategory). */
+  const [shown, setShown] = useState<SettingsCategory>(category ?? "general");
   const [providersView, setProvidersView] = useState<ProvidersView>({
     kind: "list",
   });
   const userProviders = useUserProviders();
   const groups = navGroups(CATEGORIES, mode);
-  const entry = CATEGORIES.find((candidate) => candidate.id === category);
+  const entry = CATEGORIES.find((candidate) => candidate.id === shown);
 
+  // The address is the page: a link, a back or a forward moves it, and this
+  // follows. It is also where a category change lands, since the click goes
+  // through onOpenCategory.
+  useEffect(() => {
+    if (category === null) return;
+    setShown(category);
+    setShowPage(true);
+    // A category change drops the previous category's own screens (a
+    // provider detail does not exist in the MCP list).
+    setProvidersView({ kind: "list" });
+  }, [category]);
+
+  /** Move to another category. The navigation is the address's (see
+   * SettingsModalProps.onOpenCategory); this only resets the category's own
+   * screens, which a new category cannot keep. */
   const openCategory = (id: SettingsCategory) => {
-    setCategory(id);
     setProvidersView({ kind: "list" });
     setShowPage(true);
+    onOpenCategory(id);
   };
 
   const panels: PanelContext = {
@@ -434,7 +451,8 @@ export function SettingsModal({
       notifyEnabled,
       onNotifyEnabledChange,
       push,
-      initialCategory,
+      category,
+      onOpenCategory,
       routines,
       routineAgent,
       mode,
@@ -489,7 +507,7 @@ export function SettingsModal({
                   </h3>
                   {group.entries.map((navEntry) => {
                     const item = navEntry as SettingsCategoryEntry;
-                    const active = category === navEntry.id;
+                    const active = shown === navEntry.id;
                     return (
                       <button
                         type="button"
