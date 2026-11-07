@@ -69,9 +69,11 @@ import type { PendingQuestion } from "./tools/ask.ts";
 import {
   COMPUTER_USE_ENABLED_KEY,
   CONNECTIONS_KEY,
+  DEFAULT_MODEL_KEY,
   LANGUAGE_KEY,
   type Locale,
   parseCompactionPolicyInput,
+  parseModelPreference,
   resolveLocale,
   type SavedPrompt,
 } from "./shared/mod.ts";
@@ -1885,6 +1887,22 @@ export class LumiscaCore {
         );
       }
       return { provider, modelId };
+    }
+    // The user's own default first: a new conversation starts on the model
+    // they chose, not on whatever was used last. A default that names a model
+    // this installation cannot reach (a provider removed since, a retired
+    // id) is skipped rather than obeyed — it would otherwise make every new
+    // session fail on a setting the user cannot see from here.
+    const preferred = parseModelPreference(
+      this.settings.get(DEFAULT_MODEL_KEY),
+    );
+    if (
+      preferred !== undefined &&
+      this.models.getModel(preferred.provider, preferred.modelId) !==
+        undefined &&
+      await this.models.hasConfiguredAuth(preferred.provider)
+    ) {
+      return { provider: preferred.provider, modelId: preferred.modelId };
     }
     const latest = this.sessions.list()[0];
     if (

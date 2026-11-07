@@ -6,6 +6,7 @@ import {
   useState,
 } from "preact/compat";
 import {
+  DEFAULT_MODEL_KEY,
   FAST_MODEL_KEY,
   IMAGE_MODEL_KEY,
   parseModelPreference,
@@ -72,6 +73,11 @@ export function ModelPreferencePanel(
   // Localized ROWS, built inside the component so t() is available.
   const localizedRows = useMemo<ModelPrefRow[]>(() => [
     {
+      key: DEFAULT_MODEL_KEY,
+      label: t("settings.model.defaultModel"),
+      description: t("settings.model.defaultModelDesc"),
+    },
+    {
       key: FAST_MODEL_KEY,
       label: t("settings.model.fastModel"),
       description: t("settings.model.fastModelDesc"),
@@ -91,6 +97,9 @@ export function ModelPreferencePanel(
   useEffect(() => {
     if (!settingsState.loaded || settingsState.error !== null) return;
     setValues({
+      [DEFAULT_MODEL_KEY]: parseModelPreference(
+        settingsState.values[DEFAULT_MODEL_KEY],
+      ),
       [FAST_MODEL_KEY]: parseModelPreference(
         settingsState.values[FAST_MODEL_KEY],
       ),

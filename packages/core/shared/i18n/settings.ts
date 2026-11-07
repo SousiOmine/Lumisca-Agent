@@ -566,6 +566,16 @@ export const settings = {
     ja: "セッションの会話とは別に、裏方の処理を担当するモデルです。",
     en: "Models that run the background work, apart from the session's own.",
   },
+  "settings.model.defaultModel": {
+    ja: "既定のモデル",
+    en: "Default model",
+  },
+  "settings.model.defaultModelDesc": {
+    ja:
+      "新しい会話を始めるときに選ばれるモデルです。stella のエージェントもこのモデルで会話を始めます。未設定なら、最後に使ったモデルを使います。",
+    en:
+      "The model a new conversation starts on. A stella agent's conversation starts on it too. Unset → the model used last.",
+  },
   "settings.model.fastModel": { ja: "高速モデル", en: "Fast model" },
   "settings.model.fastModelDesc": {
     ja:

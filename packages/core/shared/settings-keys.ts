@@ -19,6 +19,17 @@ export const THEME_KEY = "theme";
  * stores the result, so the value is never ambiguous afterwards. */
 export const LANGUAGE_KEY = "language";
 
+/** Settings-table key for the model a new conversation starts on, when the
+ * user has not just chosen one. It is the picker's default selection — for a
+ * new code session, for a stella agent's conversation, and for every other
+ * surface that asks "which model" without an answer already in hand. The
+ * value is the JSON of a {@link ModelPreference}.
+ *
+ * Unset is not "no default": the resolver falls back to the last session's
+ * model and then to the first enabled provider's first model, which is what
+ * an installation without a preference has always done. */
+export const DEFAULT_MODEL_KEY = "model_default";
+
 /** Settings-table key for the fast/cheap auxiliary model. Configured in
  * the settings dialog's model section, separate from the per-session model
  * chosen in the chatbox picker. */

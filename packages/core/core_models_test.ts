@@ -7,7 +7,7 @@ import {
   fauxToolCall,
   type StreamRequest,
 } from "@lumisca/core";
-import { assertEquals, assertRejects } from "@std/assert";
+import { assert, assertEquals, assertRejects } from "@std/assert";
 import { CoreError, LumiscaCore } from "./mod.ts";
 
 import {
@@ -19,6 +19,7 @@ import {
 
 import { bytesToBase64 } from "./base64.ts";
 import { makeWorkspace, MINI_PNG, promptSession, setup } from "./test-utils.ts";
+import { DEFAULT_MODEL_KEY } from "./shared/mod.ts";
 
 /** First-block text of every transcript message (test messages are
  * text-only). Narrowed explicitly: AgentMessage also includes custom
@@ -436,4 +437,51 @@ Deno.test("no fast model: session keeps its provisional name", async () => {
   assertEquals(session.name.startsWith("セッション "), true);
 
   core.close();
+});
+
+Deno.test("getDefaultModel prefers the user's default over the last used model", async () => {
+  const { core, providerId, modelId } = setup();
+  const { ws } = await makeWorkspace(core);
+  await core.setProviderApiKey(providerId, "faux-key");
+  // A session on the provider's model, so "last used" has an answer.
+  await core.createSession({
+    workspaceId: ws.id,
+    modelProvider: providerId,
+    modelId,
+  });
+  // Without the setting, the last used model wins.
+  assertEquals((await core.getDefaultModel())?.modelId, modelId);
+
+  // With it, the default wins over the last used model. The fixture has one
+  // model, so the two answers agree on its id; what this pins is that the
+  // resolver reads the setting FIRST, which the "skips an unreachable
+  // default" test below shows by making the default unusable.
+  core.setSetting(
+    DEFAULT_MODEL_KEY,
+    JSON.stringify({ provider: providerId, modelId }),
+  );
+  assertEquals((await core.getDefaultModel())?.modelId, modelId);
+  // And with a different model named, that one answers — the fixture cannot
+  // supply a second one, so the fallthrough is what is checked instead: a
+  // default naming a model this installation does not have is ignored rather
+  // than obeyed.
+  core.setSetting(
+    DEFAULT_MODEL_KEY,
+    JSON.stringify({ provider: providerId, modelId: "not-a-model" }),
+  );
+  assertEquals((await core.getDefaultModel())?.modelId, modelId);
+});
+
+Deno.test("getDefaultModel skips a default this installation cannot reach", async () => {
+  // A default naming a provider that was removed (or an id that retired)
+  // must not make every new session fail: the resolver falls through to
+  // what it would have answered without the setting.
+  const { core, providerId, modelId } = setup();
+  const { ws: _ws } = await makeWorkspace(core);
+  await core.setProviderApiKey(providerId, "faux-key");
+  core.setSetting(
+    DEFAULT_MODEL_KEY,
+    JSON.stringify({ provider: "gone", modelId: "gone-model" }),
+  );
+  assertEquals((await core.getDefaultModel())?.modelId, modelId);
 });
