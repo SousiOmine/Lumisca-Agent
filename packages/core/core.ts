@@ -910,9 +910,10 @@ export class LumiscaCore {
   }
 
   /** Enable or disable computer use (the settings toggle). The flag decides
-   * which tools every session gets, so the open sessions are rebuilt — the
-   * same contract as every other capability change (refused with `conflict`
-   * while a session is streaming). Enabling on a machine without a host
+   * which tools every session is offered, so the open sessions follow it: an
+   * idle one is rebuilt, and a streaming one keeps its run and has its
+   * discoverable tools reseeded in place (see
+   * SessionPool.applyCapabilityChange). Enabling on a machine without a host
    * throws `unavailable` with that machine's reason: accepting the toggle
    * there would advertise tools that cannot run.
    *
@@ -928,7 +929,7 @@ export class LumiscaCore {
         throw new CoreError(verdict.reason, "unavailable");
       }
     }
-    this.pool.applyChange(this.sessions.list(), () => {
+    this.pool.applyCapabilityChange(this.sessions.list(), () => {
       this.settings.set(COMPUTER_USE_ENABLED_KEY, enabled ? "1" : "");
     });
   }

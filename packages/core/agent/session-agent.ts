@@ -1097,6 +1097,14 @@ export class SessionAgent {
     this.mcp.replace(attachment);
   }
 
+  /** Attach the tool_search / tool_call pair if the session's registry now
+   * holds tools and this agent does not have the pair yet. Called after a
+   * capability reseed that filled an empty registry (see
+   * AgentFactory.reseedDiscoverable). */
+  ensureSearchTools(): void {
+    this.mcp.ensureSearchTools();
+  }
+
   async waitForIdle(): Promise<void> {
     await this.agent.waitForIdle();
   }

@@ -23,7 +23,7 @@ import { VISUALS_DIR_NAME } from "./mod.ts";
 import { LumiscaDb } from "./mod.ts";
 import { COMPACTION_KEEP_RECENT_PERCENT_KEY } from "./shared/settings-keys.ts";
 import { SCHEMA_VERSION } from "./db/schema.ts";
-import { LANGUAGE_KEY, TOOL_SEARCH } from "./shared/mod.ts";
+import { LANGUAGE_KEY, TOOL_SEARCH, TOOL_SKILL } from "./shared/mod.ts";
 
 import { DATE_PROVIDER } from "./agent/date-context.ts";
 
@@ -34,6 +34,7 @@ import {
   promptSession,
   removeDirRetry,
   setup,
+  toolText,
 } from "./test-utils.ts";
 
 /** First-block text of every transcript message (test messages are
@@ -1062,31 +1063,81 @@ Deno.test("computer use: a recheck never replaces an attached host", async () =>
   }
 });
 
-Deno.test("computer use: toggling while a session streams is refused", async () => {
+Deno.test("computer use: toggling while a session streams reaches it without a rebuild", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
-  core.setComputerHost({ available: true, host: new FakeComputerHost() });
+  const host = new FakeComputerHost();
+  core.setComputerHost({ available: true, host });
   try {
     const session = await core.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
     });
+    const agent = core.getAgent(session.id)!;
+    // A slow answer keeps the session streaming while the toggle is flipped:
+    // the case a user hits by turning the feature on during a run.
     faux.setResponses([
       async () => {
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        await new Promise((resolve) => setTimeout(resolve, 300));
         return fauxAssistantMessage("slow");
       },
     ]);
     core.startPrompt(session.id, "go");
-    await assertRejects(
-      () => core.setComputerUseEnabled(true),
-      Error,
-      "already running",
+    while (!agent.isStreaming) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    // The toggle is stored and the run is left alone: the same agent, still
+    // streaming. Refusing it (conflict) would make the setting unusable
+    // exactly while it matters.
+    await core.setComputerUseEnabled(true);
+    assertEquals(core.isComputerUseEnabled(), true);
+    assertEquals(core.getAgent(session.id), agent);
+    assertEquals(agent.isStreaming, true);
+    // The tools are seeded into the session's registry, so the run finds
+    // them without one being rebuilt.
+    const found = toolText(
+      await agent.agent.state.tools.find((t) => t.name === TOOL_SEARCH)!
+        .execute("search", { query: "computer" }, undefined),
     );
-    await core.getAgent(session.id)!.waitForIdle();
-    // The refused toggle stored nothing.
+    assert(found.includes("computer_screenshot"), found);
+    // The skill catalog follows on the next turn (it republishes when it
+    // changed): the agent may drive the machine, so the guide is offered.
+    assertEquals(
+      core.listSkills(ws.id).some((s) => s.name === "computer-use"),
+      true,
+    );
+    // The session's own skill tool reads the gate per call, so the guide is
+    // loadable in the run that is already going.
+    const skillTool = agent.agent.state.tools.find((t) =>
+      t.name === TOOL_SKILL
+    )!;
+    await skillTool.execute("s", { name: "computer-use" }, undefined);
+
+    await agent.waitForIdle();
+
+    // Disabling is the same contract in the other direction, and takes the
+    // tools away from the registry the pair reads.
+    faux.setResponses([
+      async () => {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        return fauxAssistantMessage("slow again");
+      },
+    ]);
+    core.startPrompt(session.id, "go again");
+    while (!agent.isStreaming) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    await core.setComputerUseEnabled(false);
     assertEquals(core.isComputerUseEnabled(), false);
+    assertEquals(core.getAgent(session.id), agent);
+    const listing = toolText(
+      await agent.agent.state.tools.find((t) => t.name === TOOL_SEARCH)!
+        .execute("search", { query: "computer" }, undefined),
+    );
+    assertEquals(listing.includes("computer_screenshot"), false, listing);
+    await agent.waitForIdle();
   } finally {
     core.close();
   }

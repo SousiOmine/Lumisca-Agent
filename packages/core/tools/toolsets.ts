@@ -58,8 +58,13 @@ export interface ToolFactoryOptions {
   /** Whether the session may drive this machine's screen, mouse and
    * keyboard (a computer host is attached AND the user enabled the
    * feature). Gates the built-in computer-use skill the same way.
-   * Omitted/undefined → the skill is not advertised. */
-  computerAvailable?: boolean;
+   * Omitted/undefined → the skill is not advertised.
+   *
+   * A getter rather than a value, unlike `browserAvailable`: the toggle can
+   * be flipped while a session runs, and the run is not rebuilt for it (see
+   * SessionPool.applyCapabilityChange). A captured boolean would keep
+   * advertising (or hiding) the skill until the next open. */
+  computerAvailable?: () => boolean;
   /** Whether this session's main agent holds the MCP administration tools
    * (`mcp_add` / `mcp_remove` / `mcp_list`, seeded by the session pool).
    * Gates the built-in mcp-servers skill the same way: a session that cannot
@@ -114,7 +119,7 @@ export function createCodingTools(
   const skills = () =>
     sessionSkills(workspace.folders, {
       browserAvailable: options.browserAvailable,
-      computerAvailable: options.computerAvailable,
+      computerAvailable: options.computerAvailable?.(),
       mcpAdmin: options.mcpAdmin,
       // The coding set has the file tools the guide teaches.
       skillAuthoring: true,
@@ -290,7 +295,7 @@ export function createChatTools(
       skills: () =>
         sessionSkills([], {
           browserAvailable: options.browserAvailable,
-          computerAvailable: options.computerAvailable,
+          computerAvailable: options.computerAvailable?.(),
           // A chat session can add an MCP server too: the config is
           // app-level, so it needs no workspace.
           mcpAdmin: options.mcpAdmin,

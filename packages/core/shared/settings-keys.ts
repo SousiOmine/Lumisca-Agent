@@ -47,8 +47,9 @@ export const WEB_SEARCH_KEY = "web_search";
 /** Settings-table key for computer use (the agent driving this machine's
  * screen, mouse and keyboard). "1" enables it; unset (or any other value)
  * = disabled — the feature is opt-in, because a run can click and type
- * anywhere on the machine. The flag decides which tools a session gets, so
- * changing it rebuilds the open sessions (see LumiscaCore.setComputerUseEnabled). */
+ * anywhere on the machine. The flag decides which tools a session is
+ * offered, so changing it reaches the open sessions at once (see
+ * LumiscaCore.setComputerUseEnabled). */
 export const COMPUTER_USE_ENABLED_KEY = "computer_use_enabled";
 
 /** Settings-table key for the Wayland screen-sharing permission (the

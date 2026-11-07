@@ -22,6 +22,9 @@ interface TeardownLog {
   mcpRefreshed: number;
   /** Those reconnects that also reloaded the credentials (a sign-in). */
   mcpCredentials: number;
+  /** In-place capability reseeds (a toggle applied to a running session,
+   * which may not be rebuilt). */
+  reseeded: number;
 }
 
 function log(): TeardownLog {
@@ -32,6 +35,7 @@ function log(): TeardownLog {
     mcpClosed: 0,
     mcpRefreshed: 0,
     mcpCredentials: 0,
+    reseeded: 0,
   };
 }
 
@@ -125,6 +129,9 @@ function makePool(options: { streaming?: boolean } = {}): {
       teardown.mcpRefreshed++;
       if (options.reloadCredentials === true) teardown.mcpCredentials++;
     },
+    reseedDiscoverable(): void {
+      teardown.reseeded++;
+    },
   } as unknown as AgentFactory;
   return { pool: new SessionPool(deps, factory), teardown };
 }
@@ -216,6 +223,44 @@ Deno.test("pool.applyChange with no open sessions only runs the mutation", () =>
   });
   assertEquals(mutated, true);
   assertEquals(teardown.agentClosed, 0);
+});
+
+Deno.test("pool.applyCapabilityChange stores while a session streams", () => {
+  const { pool, teardown } = makePool({ streaming: true });
+  const session = sessionInfo("s1");
+  pool.open(session, WORKSPACE, []);
+
+  let mutated = false;
+  pool.applyCapabilityChange([session], () => {
+    mutated = true;
+  });
+  // The toggle is the user's edit: a running session must not cost them it...
+  assertEquals(mutated, true);
+  // ...and its agent is never replaced mid-run (that would duplicate the
+  // rows of the run in flight): its discoverable tools are reseeded instead.
+  assertEquals(teardown.agentClosed, 0);
+  assertEquals(teardown.reseeded, 1);
+});
+
+Deno.test("pool.applyCapabilityChange rebuilds idle sessions", () => {
+  const { pool, teardown } = makePool();
+  const session = sessionInfo("s1");
+  pool.open(session, WORKSPACE, []);
+
+  pool.applyCapabilityChange([session], () => {});
+  assertEquals(teardown.agentClosed, 1);
+  assertEquals(teardown.reseeded, 0);
+});
+
+Deno.test("pool.applyCapabilityChange with no open sessions only runs the mutation", () => {
+  const { pool, teardown } = makePool();
+  let mutated = false;
+  pool.applyCapabilityChange([sessionInfo("closed")], () => {
+    mutated = true;
+  });
+  assertEquals(mutated, true);
+  assertEquals(teardown.agentClosed, 0);
+  assertEquals(teardown.reseeded, 0);
 });
 
 Deno.test("pool.applyMcpConfigChange stores while a session streams", () => {

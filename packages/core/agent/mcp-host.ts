@@ -85,7 +85,7 @@ export class McpAttachmentHost {
     // The pool may already have seeded the registry with browser-lab tools:
     // attach the pair on every path, not just when discovery yields MCP
     // tools, so they are searchable from the first prompt.
-    this.#ensureSearchTools();
+    this.ensureSearchTools();
     if (attachment.done) {
       this.#addTools(attachment.getTools());
       this.#resolve();
@@ -120,14 +120,18 @@ export class McpAttachmentHost {
   #addTools(tools: Tool[]): void {
     if (this.registries === null) return;
     this.registries.addShared(tools);
-    this.#ensureSearchTools();
+    this.ensureSearchTools();
   }
 
   /** Attach the tool_search / tool_call pair when the main registry holds
    * tools. Idempotent, and the prompt is not touched: the pair's contract
    * reaches the model as a context message, so the provider's cached prefix
-   * never changes under a running session. */
-  #ensureSearchTools(): void {
+   * never changes under a running session.
+   *
+   * Public because a capability reseeded in place can fill a registry that
+   * was empty when the agent opened (see AgentFactory.reseedDiscoverable):
+   * the pair is then the only way the new tools reach the model. */
+  ensureSearchTools(): void {
     if (this.registries === null || this.registries.main.isEmpty) return;
     addToolsToAgent(
       this.agent,

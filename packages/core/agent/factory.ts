@@ -124,8 +124,11 @@ interface SessionWhere {
   chatOnly: boolean;
   /** The browser lab is attached to this server (gates its tools and skill). */
   browserAvailable: boolean;
-  /** Computer use is available AND enabled (gates its tools and skill). */
-  computerAvailable: boolean;
+  /** Whether computer use is available AND enabled (gates its tools and
+   * skill). A getter, not a value: the settings toggle reaches a running
+   * session without rebuilding it (see SessionPool.applyCapabilityChange),
+   * so a value captured at open would go stale exactly where it matters. */
+  computerAvailable: () => boolean;
   /** The user's web-search provider, when one is configured. */
   webSearch: SearchProvider | undefined;
   /** The app-level MCP config this agent may change, or undefined when the
@@ -369,14 +372,17 @@ export class AgentFactory {
     // rather than in the tools, so the skill catalog and the capability flags
     // a sub-agent inherits agree with the tool set.
     const browser = this.deps.browser?.();
-    const computer = stella === undefined ? this.deps.computer?.() : undefined;
     return {
       stella,
       backends,
       chat: workspace.chat,
       chatOnly,
       browserAvailable: browser !== undefined,
-      computerAvailable: computer !== undefined,
+      // Read per call rather than captured: the toggle is applied to a
+      // running session in place, and the skill catalog re-reads this on
+      // every turn (see seedDiscoverableTools for the tools themselves).
+      computerAvailable: () =>
+        stella === undefined && this.deps.computer?.() !== undefined,
       // The user's web-search provider. Resolved once per open (the tools
       // hold it, so a rebuild picks up a changed default) and undefined when
       // the user has not configured one; the tools are then simply absent.
@@ -385,6 +391,35 @@ export class AgentFactory {
       // by hand without it simply gets neither the tools nor the guide.
       mcpAdmin: this.deps.mcpAdmin?.(),
     };
+  }
+
+  /**
+   * Bring one open session's discoverable tools onto its current
+   * capabilities without replacing its agent. Used when the change is a
+   * capability toggle the pool could not express as a rebuild (the session
+   * is streaming): the run keeps the tool set it started with, and what the
+   * session can find through tool_search follows the toggle.
+   *
+   * Every family is reseeded, not only the one that changed, so this path
+   * and `open` cannot disagree: both answer "which tools does where this
+   * session works imply" with the same function.
+   */
+  reseedDiscoverable(
+    session: SessionInfo,
+    workspace: Workspace,
+    resources: SessionResources,
+  ): void {
+    const registries = resources.registries;
+    if (registries === undefined) return;
+    const where = this.resolveWhere(session, workspace);
+    this.seedDiscoverableTools(where, registries);
+    // The sub-agent hub reads these gates when it builds a sub-agent's skill
+    // tool, so one spawned after the toggle follows it; the ones already
+    // running keep the gate they were started with (their run is not
+    // replaced, the same as the main agent's tool set).
+    resources.tasks?.setBrowserAvailable(where.browserAvailable);
+    resources.tasks?.setComputerAvailable(where.computerAvailable());
+    resources.agent?.ensureSearchTools();
   }
 
   /**
@@ -409,7 +444,7 @@ export class AgentFactory {
     } else {
       registries.removeShared(BROWSER_TOOL_NAMES);
     }
-    if (where.computerAvailable) {
+    if (where.computerAvailable()) {
       registries.addShared(
         createComputerTools({ resolveHost: () => this.deps.computer?.() }),
       );
@@ -560,7 +595,7 @@ export class AgentFactory {
       // the language their reports come back in — re-read on every open.
       tasks.setMcp(mcp, resources.registries!.subagent);
       tasks.setBrowserAvailable(where.browserAvailable);
-      tasks.setComputerAvailable(where.computerAvailable);
+      tasks.setComputerAvailable(where.computerAvailable());
       tasks.setWebSearch(where.webSearch);
       tasks.setLanguage(this.deps.getLanguage());
     } else {
@@ -697,7 +732,7 @@ export class AgentFactory {
     registries: SessionToolRegistries,
     model: Model<Api>,
   ): ContextProvider[] {
-    const { stella, chat, browserAvailable, computerAvailable } = where;
+    const { stella, chat, browserAvailable } = where;
     return [
       // What the catalog IS depends on where the session works: a workspace
       // session discovers `.agents/skills`, and a stella session discovers
@@ -710,7 +745,7 @@ export class AgentFactory {
           : () =>
             sessionSkills(workspace.folders, {
               browserAvailable,
-              computerAvailable,
+              computerAvailable: where.computerAvailable(),
               // A chat session has no tool hub, so it cannot start one.
               subagents: !chat,
               // This catalog is the main agent's: it holds the MCP

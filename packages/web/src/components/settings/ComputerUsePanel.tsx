@@ -10,9 +10,10 @@ import { useT } from "../../i18n.ts";
  * screen and drives its mouse and keyboard. The feature is opt-in, because
  * a run can then click and type anywhere on the machine.
  *
- * The flag decides which tools a session is given, so the server rebuilds
- * the open sessions when it changes: a change while a session runs is
- * refused (409) and the toggle rolls back to the stored value. A server whose
+ * The flag decides which tools every session is offered, so the server
+ * brings the open sessions onto it: an idle one is rebuilt, and a running
+ * one keeps its run and has the tools reseeded in place (the new tools are
+ * found through tool_search from the next turn on). A server whose
  * environment cannot offer the feature answers 503 and its message is shown
  * here like any other failure. */
 export function ComputerUsePanel() {

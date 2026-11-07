@@ -19,9 +19,10 @@ export interface SettingsApi {
    * any key that is not a declared preference. */
   setUserSetting(key: string, value: string): void;
   /** Enable or disable computer use. Not a plain setting write: the flag
-   * decides which tools every session gets, so the core validates that this
-   * machine has a host and rebuilds the open sessions (refused while one is
-   * streaming). */
+   * decides which tools every session is offered, so the core validates that
+   * this machine has a host and brings the open sessions onto the new value
+   * (an idle one is rebuilt; a running one keeps its run and has its
+   * discoverable tools reseeded in place). */
   setComputerUseEnabled(enabled: boolean): Promise<void>;
   getPersonalization(): { path: string; content: string };
   setPersonalization(content: string): void;
@@ -58,8 +59,8 @@ export function settingRoutes(core: SettingsApi): Hono {
     if (key === COMPUTER_USE_ENABLED_KEY) {
       // A capability toggle, not a plain value: the core asks the machine
       // again (503 with its reason when the desktop still cannot be driven)
-      // and rebuilds the open sessions, so the tools appear or disappear
-      // immediately.
+      // and brings the open sessions onto it, so the tools appear or
+      // disappear immediately — a running session included.
       await core.setComputerUseEnabled(value === "1");
       return c.json({ ok: true });
     }

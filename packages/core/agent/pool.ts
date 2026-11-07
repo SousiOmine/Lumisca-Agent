@@ -6,6 +6,7 @@ import type { Workspace } from "../types/workspace.ts";
 import type { BackgroundCommandInfo } from "../tools/background.ts";
 import type { PendingQuestion } from "../tools/ask.ts";
 import type { TaskInfo } from "../shared/mod.ts";
+import { errorMessage } from "../shared/misc.ts";
 import type { SessionAgent } from "./session-agent.ts";
 import { AgentFactory } from "./factory.ts";
 import type { SessionPoolDeps, SessionResources } from "./deps.ts";
@@ -187,6 +188,55 @@ export class SessionPool {
     mutate();
     for (const session of sessions) {
       this.rebuild(session);
+    }
+  }
+
+  /** Apply a capability change (which tools a session is offered) to the
+   * listed sessions. The mutation runs unconditionally — it is the user's
+   * edit, and refusing to store it because some session happens to be
+   * running would lose that edit — and the sessions follow it: an idle one
+   * is rebuilt, a streaming one keeps its agent (replacing it would
+   * duplicate the rows of the run in flight, see rebuild) and has its
+   * discoverable tools reseeded in place instead.
+   *
+   * The distinction from applyChange is only possible because these tools
+   * live in the session's registry rather than in the agent's own tool set
+   * (see AgentFactory.seedDiscoverableTools): the run keeps the tools it
+   * started with, and what it can find through tool_search follows. */
+  applyCapabilityChange(sessions: SessionInfo[], mutate: () => void): void {
+    mutate();
+    for (const session of sessions) {
+      const resources = this.sessions.get(session.id);
+      // A session that is not open picks the capability up when it is opened.
+      if (resources?.agent === undefined) continue;
+      if (resources.agent.isStreaming) {
+        this.reseedInPlace(session, resources);
+        continue;
+      }
+      this.rebuild(session);
+    }
+  }
+
+  /** Reseed one streaming session's discoverable tools without touching its
+   * agent. A failure is reported on the session rather than thrown at the
+   * caller: the setting is already stored, and failing the whole call would
+   * show the user a failed change that did happen. */
+  private reseedInPlace(
+    session: SessionInfo,
+    resources: SessionResources,
+  ): void {
+    try {
+      this.factory.reseedDiscoverable(
+        session,
+        this.deps.requireWorkspace(session.workspaceId),
+        resources,
+      );
+    } catch (error) {
+      const message = `Could not apply the change to this session: ${
+        errorMessage(error)
+      }`;
+      resources.lastError = message;
+      this.deps.emit({ type: "session_error", sessionId: session.id, message });
     }
   }
 
