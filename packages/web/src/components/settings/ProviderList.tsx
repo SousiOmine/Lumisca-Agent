@@ -109,7 +109,7 @@ export function ProviderList({
       action={
         <button type="button" className="btn" onClick={onAdd}>
           <IconPlus size={14} />
-          {t("settings.provider.addProvider")}
+          {t("common.add")}
         </button>
       }
     >

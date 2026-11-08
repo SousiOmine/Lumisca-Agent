@@ -111,7 +111,7 @@ export function WebSearchPanel() {
           onClick={() => setDialog({ kind: "add" })}
         >
           <IconPlus size={14} />
-          {t("settings.webSearch.add")}
+          {t("common.add")}
         </button>
       }
     >

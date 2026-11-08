@@ -217,10 +217,7 @@ export function ModelPreferencePanel(
   const openRowDef = localizedRows.find((r) => r.key === openRow);
 
   return (
-    <SettingsSection
-      title={t("settings.model.auxTitle")}
-      description={t("settings.model.auxDescription")}
-    >
+    <SettingsSection>
       {localizedRows.map((row) => {
         const value = values[row.key];
         return (

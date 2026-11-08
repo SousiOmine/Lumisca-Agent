@@ -42,7 +42,6 @@ import { GeneralPanel } from "./settings/GeneralPanel.tsx";
 import { SettingsPage } from "./settings/SettingsPage.tsx";
 import {
   modeLabelKey,
-  navGroups,
   type SettingsCategory,
   type SettingsNavEntry,
 } from "./settings/categories.ts";
@@ -130,8 +129,8 @@ type ProvidersView =
   | { kind: "editUser"; providerId: string };
 
 /**
- * The navigation table, in reading order: the shared entries first, then the
- * mode's own.
+ * The navigation table, in reading order. Both modes draw this whole table:
+ * what a category acts on differs by mode, but which pages exist does not.
  *
  * Each entry carries its page: navigation and body used to be two separate
  * lists (a `SettingsCategory` union, this array, and an eleven-branch
@@ -139,21 +138,20 @@ type ProvidersView =
  * three places and a forgotten one was not a type error. One table cannot
  * drift from itself.
  *
- * `scope` answers "does this mean anything in the other mode?", and what
- * decides it is what the SERVER does with the value, not what looks related:
+ * Three entries act on one mode's machinery. They are shown in both modes
+ * anyway, and each says what it needs when that is missing:
  *
  * - `/prompt` is code mode's: only code mode's composers carry the slash menu
- *   (stella's conversation has one box and no commands), so a prompt list
- *   there could never be recalled.
+ *   (stella's conversation has one box and no commands), so the prompt list
+ *   there is a list nothing recalls.
  * - Computer use drives THIS machine's screen; a stella session is given the
  *   virtual machine's own screen tools instead (agent/factory.ts).
  * - Routines schedule a request on a stella agent's conversation, and code
- *   mode has no such conversation.
+ *   mode has no such conversation ("pick an agent" is what the panel says).
  */
 const CATEGORIES: readonly SettingsCategoryEntry[] = [
   {
     id: "general",
-    scope: "common",
     labelKey: "settings.nav.general",
     icon: <IconSettings size={18} />,
     render: ({ props }) => (
@@ -179,7 +177,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
   },
   {
     id: "appearance",
-    scope: "common",
     labelKey: "settings.nav.appearance",
     icon: <IconPalette size={18} />,
     render: ({ props }) => (
@@ -192,7 +189,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
   },
   {
     id: "providers",
-    scope: "common",
     labelKey: "settings.nav.providers",
     icon: <IconPlugConnected size={18} />,
     render: ({ providersView, setProvidersView, userProviders }) => {
@@ -290,7 +286,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
   },
   {
     id: "models",
-    scope: "common",
     labelKey: "settings.nav.models",
     icon: <IconBrain size={18} />,
     render: ({ openCategory }) => (
@@ -305,28 +300,24 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
   },
   {
     id: "mcp",
-    scope: "common",
     labelKey: "settings.nav.mcp",
     icon: <IconServer size={18} />,
     render: () => <McpList />,
   },
   {
     id: "personalize",
-    scope: "common",
     labelKey: "settings.nav.personalize",
     icon: <IconUser size={18} />,
     render: () => <PersonalizePanel />,
   },
   {
     id: "servers",
-    scope: "common",
     labelKey: "settings.nav.servers",
     icon: <IconWorld size={18} />,
     render: () => <ConnectionList />,
   },
   {
     id: "security",
-    scope: "common",
     labelKey: "settings.nav.security",
     icon: <IconShield size={18} />,
     // The command check guards every bash / eval call, so both modes have it.
@@ -337,21 +328,18 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
   },
   {
     id: "computerUse",
-    scope: "code",
     labelKey: "settings.nav.computerUse",
     icon: <IconPointer size={18} />,
     render: () => <ComputerUsePanel />,
   },
   {
     id: "prompts",
-    scope: "code",
     labelKey: "settings.nav.prompts",
     icon: <IconBookmark size={18} />,
     render: () => <SavedPromptsPanel />,
   },
   {
     id: "stellaModel",
-    scope: "stella",
     labelKey: "settings.nav.stellaModel",
     icon: <IconBrain size={18} />,
     // The conversation's model, not the app's: a stella chat is one ongoing
@@ -371,7 +359,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
   },
   {
     id: "routines",
-    scope: "stella",
     // The panel's own heading names the category: one wording for one thing,
     // in the navigation and on the page.
     labelKey: "panels.routine.title",
@@ -398,14 +385,12 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
  * The settings dialog: a navigation of categories on the left, one page on the
  * right.
  *
- * Three decisions shape it.
+ * Two decisions shape it.
  *
- * The categories are grouped by what they apply to — the settings both modes
- * share, then the ones only this mode has — so a switch never appears where it
- * does nothing, and the group heading says why it is absent from the other
- * mode. (The dialog knew the same fact before, as a per-category `mode` field,
- * but drew every visible entry in one flat list, where a shared preference and
- * the mode's own were indistinguishable.)
+ * Every category is in the list in both modes, as one sequence. Splitting it
+ * by mode hid the other mode's pages rather than their effect: a reader in
+ * stella mode could not learn that 画面操作 existed without switching, and the
+ * mode a value acts on is the panel's to say (see the table above).
  *
  * A category is a page: its title stays at the top while the body scrolls
  * (SettingsPage). A long category used to scroll its own title away, and
@@ -445,7 +430,6 @@ export function SettingsModal({
     kind: "list",
   });
   const userProviders = useUserProviders();
-  const groups = navGroups(CATEGORIES, mode);
   const entry = CATEGORIES.find((candidate) => candidate.id === shown);
   // Which of the two screens the narrow layout is showing. On a wide window
   // both fit, so this is always the page. On a narrow one it is the address's
@@ -535,35 +519,25 @@ export function SettingsModal({
 
           <div className="settings-body" data-view={view}>
             <nav className="settings-nav" aria-label={t("common.settings")}>
-              {groups.map((group) => (
-                <div key={group.scope} className="settings-nav-group">
-                  <h3 className="settings-nav-heading">
-                    {group.scope === "common"
-                      ? t("settings.nav.common")
-                      : t("settings.nav.onlyInMode", { mode: modeName })}
-                  </h3>
-                  {group.entries.map((navEntry) => {
-                    const item = navEntry as SettingsCategoryEntry;
-                    const active = shown === navEntry.id;
-                    return (
-                      <button
-                        type="button"
-                        key={navEntry.id}
-                        className={`settings-nav-item${
-                          active ? " active" : ""
-                        }`}
-                        aria-current={active ? "page" : undefined}
-                        onClick={() => openCategory(navEntry.id)}
-                      >
-                        {item.icon}
-                        <span className="settings-nav-label">
-                          {t(navEntry.labelKey)}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              ))}
+              <div className="settings-nav-group">
+                {CATEGORIES.map((navEntry) => {
+                  const active = shown === navEntry.id;
+                  return (
+                    <button
+                      type="button"
+                      key={navEntry.id}
+                      className={`settings-nav-item${active ? " active" : ""}`}
+                      aria-current={active ? "page" : undefined}
+                      onClick={() => openCategory(navEntry.id)}
+                    >
+                      {navEntry.icon}
+                      <span className="settings-nav-label">
+                        {t(navEntry.labelKey)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </nav>
 
             <div className="settings-content">

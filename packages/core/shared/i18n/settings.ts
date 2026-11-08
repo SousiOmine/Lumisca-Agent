@@ -11,12 +11,6 @@ import type { LocalizedText } from "./types.ts";
  */
 export const settings = {
   // --- dialog chrome (SettingsModal) ----------------------------------------
-  /** The navigation's first group: preferences that mean the same thing in
-   * both modes. */
-  "settings.nav.common": { ja: "共通", en: "Shared" },
-  /** Heading of the navigation group that holds the current mode's own
-   * preferences (`{mode}` is the mode's name: "code mode" / "stella mode"). */
-  "settings.nav.onlyInMode": { ja: "{mode} のみ", en: "{mode} only" },
   "settings.nav.general": { ja: "一般", en: "General" },
   "settings.nav.appearance": { ja: "外観", en: "Appearance" },
   "settings.nav.personalize": { ja: "カスタマイズ", en: "Personalization" },
@@ -43,13 +37,12 @@ export const settings = {
   "settings.nav.computerUse": { ja: "画面操作", en: "Screen control" },
   "settings.nav.security": { ja: "セキュリティ", en: "Security" },
   /** Tooltip of the chip in the dialog header that names the mode this
-   * client shows. The mode is a per-client choice, so the dialog says which
-   * one it is describing. */
+   * client shows. The mode is a per-client choice, and the same pages open in
+   * both — the chip says which mode's sessions the values act on. */
   "settings.dialog.modeTitle": {
     ja:
-      "この画面は {mode} の設定です。モードごとに効く設定は「{mode} のみ」に並びます。",
-    en:
-      'These are the {mode} settings. Preferences that only work in one mode sit under "{mode} only".',
+      "この画面は {mode} の設定です。設定の項目はどちらのモードでも同じです。",
+    en: "These are the {mode} settings. Every item appears in both modes.",
   },
 
   // --- appearance panel -----------------------------------------------------
@@ -68,10 +61,6 @@ export const settings = {
   // `settings.language.*` keys below are read by the general panel (the
   // language is a general preference, not a settings category of its own).
   "settings.language.label": { ja: "言語", en: "Language" },
-  "settings.language.description": {
-    ja: "画面の表示言語と、新しいセッションが回答する言語を切り替えます。",
-    en: "Switch the display language and the language new sessions answer in.",
-  },
   "settings.language.option.ja": { ja: "日本語", en: "Japanese" },
   "settings.language.option.en": { ja: "English", en: "English" },
   "settings.language.saveFailed": {
@@ -136,18 +125,6 @@ export const settings = {
   "settings.general.serverInfo": { ja: "サーバー情報", en: "Server info" },
   "settings.general.appInfo": { ja: "アプリ情報", en: "App info" },
   "settings.general.autoUpdate": { ja: "自動アップデート", en: "Auto-update" },
-  "settings.general.autoUpdateDesc": {
-    ja:
-      "アプリ起動時および定期的に更新を確認し、バックグラウンドで最新版をダウンロードします。",
-    en:
-      "Checks for updates on launch and periodically, downloading the latest version in the background.",
-  },
-  "settings.general.autoUpdateDescServer": {
-    ja:
-      "アプリ起動時および定期的に更新を確認し、バックグラウンドで最新版をダウンロードします。次回起動時に自動適用されます。",
-    en:
-      "Checks for updates on launch and periodically, downloading the latest version in the background. Applied automatically on the next restart.",
-  },
   "settings.general.autoRestart": {
     ja: "適用時に自動で再起動",
     en: "Auto-restart on apply",
@@ -211,10 +188,6 @@ export const settings = {
       "このサイトの通知がブラウザでブロックされています。ブラウザのサイト設定から許可してください。",
     en:
       "Notifications are blocked for this site. Allow them in your browser's site settings.",
-  },
-  "settings.general.pushUnsupported": {
-    ja: "このブラウザでは PWA 通知を使えません",
-    en: "This browser cannot use PWA notifications",
   },
   "settings.general.pushFailed": {
     ja: "通知を有効にできませんでした: {error}",
@@ -312,17 +285,15 @@ export const settings = {
   },
   "settings.provider.noProviders": {
     ja:
-      "登録されたプロバイダーがありません。「プロバイダーを追加」ボタンから設定してください。",
-    en: 'No providers registered. Use the "Add provider" button to set one up.',
+      "登録されたプロバイダーがありません。「追加」ボタンから設定してください。",
+    en: 'No providers registered. Use the "Add" button to set one up.',
   },
   /** One-line explanation under the AI provider heading, mirroring the
    * search section's own description: the two sections are one list of
-   * services, so each says what its keys are for. */
+   * services, so each says what it is for and nothing else. */
   "settings.provider.aiDescription": {
-    ja:
-      "エージェントが応答の生成に使用する AI プロバイダーです。API キーまたはアカウント連携で設定します。",
-    en:
-      "The AI providers the agent uses to generate replies. Configure each with an API key or an account login.",
+    ja: "エージェントが応答の生成に使用する AI プロバイダーです。",
+    en: "The AI providers the agent uses to generate replies.",
   },
   "settings.provider.configured": { ja: "設定済み", en: "Configured" },
   "settings.provider.notConfigured": { ja: "未設定", en: "Not configured" },
@@ -574,30 +545,23 @@ export const settings = {
   },
 
   // --- model preference panel -----------------------------------------------
-  "settings.model.auxTitle": {
-    ja: "補助モデル",
-    en: "Auxiliary models",
-  },
-  "settings.model.auxDescription": {
-    ja: "セッションの会話とは別に、裏方の処理を担当するモデルです。",
-    en: "Models that run the background work, apart from the session's own.",
-  },
   "settings.model.defaultModel": {
     ja: "既定のモデル",
     en: "Default model",
   },
   "settings.model.defaultModelDesc": {
-    ja:
-      "新しい会話を始めるときに選ばれるモデルです。stella のエージェントもこのモデルで会話を始めます。未設定なら、最後に使ったモデルを使います。",
-    en:
-      "The model a new conversation starts on. A stella agent's conversation starts on it too. Unset → the model used last.",
+    ja: "新しい会話を始めるときに選ばれるモデル。",
+    en: "The model chosen when a new conversation starts.",
   },
-  "settings.model.fastModel": { ja: "高速モデル", en: "Fast model" },
+  "settings.model.fastModel": {
+    ja: "サブタスクで使用するモデル",
+    en: "Model for sub-tasks",
+  },
   "settings.model.fastModelDesc": {
     ja:
-      "タスク本体とは別に、高速・低コストな補助処理（要約・サブタスクなど）で使用するモデルです。",
+      "タスク本体とは別に、高速・低コストな補助処理（要約・サブタスクなど）で使用するモデル。",
     en:
-      "A fast, low-cost model used for auxiliary tasks (summarization, sub-tasks, etc.), separate from the main task.",
+      "A fast, low-cost model for auxiliary tasks (summarization, sub-tasks, etc.), separate from the main task.",
   },
   "settings.model.imageAnalysisModel": {
     ja: "画像分析モデル",
@@ -605,9 +569,8 @@ export const settings = {
   },
   "settings.model.imageAnalysisModelDesc": {
     ja:
-      "メインモデルが画像認識に未対応の場合に、代替として画像の解析・読み取りを担当するモデルです。",
-    en:
-      "When the main model does not support image recognition, this model handles image analysis as a fallback.",
+      "メインモデルが画像認識に未対応の場合に、代替として画像の解析・読み取りを担当するモデル。",
+    en: "The model that analyzes and reads images when the main model cannot.",
   },
   // --- context compaction ---------------------------------------------------
   /** Heading of the compaction group in the settings dialog's model
@@ -886,9 +849,9 @@ export const settings = {
   },
   "settings.security.fastModelMissing": {
     ja:
-      "高速モデルが未設定です。有効にするには「モデル設定」で高速モデルを指定してください。",
+      "サブタスクで使用するモデルが未設定です。有効にするには「モデル設定」で「サブタスクで使用するモデル」を指定してください。",
     en:
-      'No fast model is configured. Please set a "Fast model" in "Models" first.',
+      'No model for sub-tasks is configured. Set "Model for sub-tasks" in "Models" to enable this.',
   },
   "settings.security.approvedCommands": {
     ja: "承認済みコマンド",
@@ -914,20 +877,13 @@ export const settings = {
   "settings.webSearch.title": { ja: "Web検索", en: "Web search" },
   "settings.webSearch.description": {
     ja:
-      "エージェントが Web 検索やページの閲覧に使用する検索プロバイダーを設定します。利用するプロバイダーを 1 つ既定として選択してください。",
+      "エージェントが Web 検索やページの閲覧に使用する検索プロバイダーを設定します。",
     en:
-      "Configure the search provider used by the agent for web searches and fetching pages. Select one provider as the default.",
+      "Configure the search provider used by the agent for web searches and fetching pages.",
   },
   "settings.webSearch.empty": {
     ja: "検索プロバイダーが登録されていません。",
     en: "No search provider is configured yet.",
-  },
-  /** The list's own button (the dialog's confirm button uses
-   * `settings.webSearch.form.add`, which is the same words in a narrower
-   * place). */
-  "settings.webSearch.add": {
-    ja: "追加",
-    en: "Add",
   },
   "settings.webSearch.makeDefault": { ja: "既定にする", en: "Make default" },
   "settings.webSearch.defaultBadge": { ja: "既定", en: "Default" },

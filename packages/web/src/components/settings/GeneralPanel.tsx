@@ -58,10 +58,7 @@ function LanguageItem(
   const t = useT();
   return (
     <>
-      <SettingRow
-        label={t("settings.language.label")}
-        description={t("settings.language.description")}
-      >
+      <SettingRow label={t("settings.language.label")}>
         <Select
           label={t("settings.language.label")}
           value={language}
@@ -93,19 +90,13 @@ function formatBytes(bytes: number | null): string {
  * runs in, this one notifies every phone and laptop the app was installed on.
  *
  * The row disappears where the channel cannot exist (an insecure origin, the
- * desktop shell's loopback page, a browser without the Push API) and says why
- * where it exists but was refused. */
+ * desktop shell's loopback page, a browser without the Push API): a row that
+ * can only say "not here" is a switch the reader cannot use and a reason they
+ * did not ask for. Where the channel exists but was refused, it stays and
+ * says why, because that one the reader can fix. */
 function PushNotificationsItem({ push }: { push: PushControls }) {
   const t = useT();
-  if (push.state === "unsupported") {
-    return (
-      <SettingRow label={t("settings.general.pushNotifications")}>
-        <span className="update-desc">
-          {t("settings.general.pushUnsupported")}
-        </span>
-      </SettingRow>
-    );
-  }
+  if (push.state === "unsupported") return null;
   return (
     <>
       <SettingRow
@@ -282,12 +273,7 @@ export function GeneralPanel(
 
       {supported && (
         <>
-          <SettingRow
-            label={t("settings.general.autoUpdate")}
-            description={server
-              ? t("settings.general.autoUpdateDescServer")
-              : t("settings.general.autoUpdateDesc")}
-          >
+          <SettingRow label={t("settings.general.autoUpdate")}>
             <Toggle
               checked={status.autoUpdate}
               onChange={onSetAuto}

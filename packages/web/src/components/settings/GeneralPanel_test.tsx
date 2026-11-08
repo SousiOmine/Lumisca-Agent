@@ -6,6 +6,7 @@ import type {
   UpdateSource,
 } from "../../hooks/useUpdateStatus.ts";
 import type { UpdateStatus } from "../../shell.ts";
+import type { PushControls } from "../../hooks/usePush.ts";
 import { GeneralPanel } from "./GeneralPanel.tsx";
 
 function status(overrides: Partial<UpdateStatus> = {}): UpdateStatus {
@@ -36,6 +37,7 @@ function panel(
   update: UpdateStatus | null,
   source: UpdateSource | null = "server",
   failure: UpdateFailureKind | null = null,
+  pushState: PushControls["state"] = "unsupported",
 ): string {
   return renderToString(
     createElement(GeneralPanel, {
@@ -55,7 +57,7 @@ function panel(
       notifyEnabled: false,
       onNotifyEnabledChange: () => {},
       push: {
-        state: "unsupported",
+        state: pushState,
         error: null,
         tested: false,
         toggle: () => {},
@@ -112,4 +114,11 @@ Deno.test("before the first answer the panel says it is asking", () => {
   // The poll starts on mount; claiming "no updater" in that first moment is
   // what made an installed app look unsupported on every visit.
   assertStringIncludes(panel(null, null, null), "アップデートを確認中");
+});
+
+Deno.test("the PWA notification row is drawn only where the channel exists", () => {
+  // "This browser cannot use PWA notifications" is a switch the reader cannot
+  // use and an explanation they did not ask for; the row is left out instead.
+  assertEquals(panel(status()).includes("PWA 通知"), false);
+  assertStringIncludes(panel(status(), "server", null, "on"), "PWA 通知");
 });
