@@ -1,6 +1,6 @@
 [package]
 name = "lumisca-desktop"
-version = "0.10.19"
+version = "0.10.20"
 description = "Lumisca Agent desktop shell"
 edition = "2021"
 
