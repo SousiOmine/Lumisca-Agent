@@ -141,6 +141,14 @@ export const chrome = {
     en: "Installing will restart the app.",
   },
   "chrome.update.restartNow": { ja: "今すぐ再起動", en: "Restart now" },
+  "chrome.update.installing": {
+    ja: "v{version} をインストールしています…",
+    en: "Installing v{version}…",
+  },
+  "chrome.update.installingButton": {
+    ja: "インストール中…",
+    en: "Installing…",
+  },
   "chrome.update.installNow": {
     ja: "今すぐインストール",
     en: "Install now",

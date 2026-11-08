@@ -189,6 +189,10 @@ export interface UpdateStatus {
   progress: number | null;
   downloaded: number | null;
   total: number | null;
+  /** Standalone updater only: the staged package is being put in place. The
+   * install takes seconds and nothing else in the status moves meanwhile, so
+   * the UI shows it as "installing…" with the action unavailable. */
+  installing?: boolean;
   ready: boolean;
   error: string | null;
   /** What the running process reports. After an update the files on disk are

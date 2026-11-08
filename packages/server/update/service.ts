@@ -81,6 +81,10 @@ export interface UpdateStatus {
   progress: number | null;
   downloaded: number | null;
   total: number | null;
+  /** The staged package is being put in place: files are being replaced
+   * next to the running binary. The server keeps serving the old version
+   * until the restart, so `currentVersion` does not move here. */
+  installing: boolean;
   /** A verified package is staged and can be installed. */
   ready: boolean;
   /** The files on disk are a different version than the running process. */
@@ -212,6 +216,7 @@ export class UpdateService {
       progress: null,
       downloaded: null,
       total: null,
+      installing: false,
       ready: false,
       applied: false,
       appliedVersion: null,
@@ -474,7 +479,10 @@ export class UpdateService {
     const staged = this.#staged;
     if (staged === null || this.#status.restartPending) return this.status();
     this.#busy = "applying";
-    this.#patch({ error: null });
+    // Reported before the first await so a poll (or another page) sees the
+    // install while the files are being replaced: it takes seconds and the
+    // status is the only thing the UI has to go on.
+    this.#patch({ installing: true, error: null });
     try {
       const result = await applyStagedUpdate({
         environment: this.#environment,
@@ -484,6 +492,7 @@ export class UpdateService {
       });
       this.#staged = null;
       this.#patch({
+        installing: false,
         downloading: false,
         ready: false,
         downloaded: null,
@@ -592,6 +601,10 @@ export class UpdateService {
     this.#patch({
       checking: false,
       downloading: false,
+      // Cleared here rather than in apply()'s `finally`: a return value is
+      // built before `finally` runs, so a status taken there would still
+      // claim the install is in flight.
+      installing: false,
       restarting: false,
       error: message,
     });

@@ -57,6 +57,7 @@ LLM との接続には Vercel AI SDK（`ai` および `@ai-sdk/*`）を使用し
 - **デスクトップの更新マニフェスト**: `latest.json` の URL は直リンク（`releases/download/<tag>/<name>`）へ書き換えます。`api.github.com` の URL はレート制限に当たり、403 で更新のダウンロードが失敗します。書き換えは `scripts/rewrite-updater-json.ts` と `.github/workflows/rewrite-updater-json.yml` です。
 - **動作条件**: サーバーの自己更新は、パッケージ済みバイナリかつ `LUMISCA_DESKTOP` 未設定のときだけ動きます。
 - **再起動制御**: `LUMISCA_UPDATE_RESTART`（`self` / `supervisor` / `none`）で決まります。
+- **適用中は `installing` を返す**: ファイルの置き換えは数秒かかり、その間ほかの状態は動きません。画面はこれで「インストール中…」を出してボタンを止めます。解除は `#fail` と成功時の `#patch` で行い、`apply()` の `finally` では行いません——戻り値は `finally` より先に作られるため、「インストール中のまま」の応答が返ります。
 - **事前検証**: アーカイブの整合性は `scripts/check-server-archive.ts` で確かめます。
 
 ## 3. Linux 常駐（systemd ユーザーユニット）

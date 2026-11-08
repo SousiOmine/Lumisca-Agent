@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "preact/compat";
-import { IconDownload, IconRefresh, IconX } from "@tabler/icons-preact";
+import {
+  IconDownload,
+  IconLoader2,
+  IconRefresh,
+  IconX,
+} from "@tabler/icons-preact";
 import type { UpdateControls } from "../hooks/useUpdateStatus.ts";
 import { useT } from "../i18n.ts";
 
@@ -12,6 +17,11 @@ import { useT } from "../i18n.ts";
  * Two shapes share the strip: the desktop shell installs and restarts the
  * app in one step, while a standalone server installs the files first and
  * takes effect at the next start (the restart is its own decision).
+ *
+ * Installing is a state of its own: replacing the files takes seconds and
+ * nothing else moves until it ends, so the strip says so and takes the
+ * button away. Without it the click looks ignored until the restart offer
+ * appears.
  */
 export function UpdateBanner({ update }: { update: UpdateControls }) {
   const t = useT();
@@ -19,8 +29,9 @@ export function UpdateBanner({ update }: { update: UpdateControls }) {
   const status = update.status;
   const server = update.source === "server";
   const restartPending = server && status?.restartPending === true;
-  const ready = status?.ready === true && !restartPending;
-  const actionable = ready || restartPending;
+  const installing = status?.installing === true;
+  const ready = status?.ready === true && !restartPending && !installing;
+  const actionable = ready || restartPending || installing;
 
   // Re-show the banner when the state moves on (a finished download, an
   // applied update), but not on every poll that keeps it there.
@@ -28,6 +39,8 @@ export function UpdateBanner({ update }: { update: UpdateControls }) {
   useEffect(() => {
     const current = !actionable
       ? null
+      : installing
+      ? `install:${status?.latestVersion}`
       : restartPending
       ? `restart:${status?.appliedVersion}`
       : `ready:${status?.latestVersion}`;
@@ -37,6 +50,7 @@ export function UpdateBanner({ update }: { update: UpdateControls }) {
     previousRef.current = current;
   }, [
     actionable,
+    installing,
     restartPending,
     status?.appliedVersion,
     status?.latestVersion,
@@ -56,7 +70,9 @@ export function UpdateBanner({ update }: { update: UpdateControls }) {
     : canRestart
     ? t("chrome.update.restartNote")
     : t("chrome.update.nextStart");
-  const text = restartPending
+  const text = installing
+    ? t("chrome.update.installing", { version: status?.latestVersion ?? "" })
+    : restartPending
     ? t("chrome.update.downloaded", { version: status?.appliedVersion ?? "" }) +
       restartText
     : server
@@ -65,9 +81,19 @@ export function UpdateBanner({ update }: { update: UpdateControls }) {
 
   return (
     <div className="update-banner">
-      {restartPending ? <IconRefresh size={16} /> : <IconDownload size={16} />}
+      {installing
+        ? <IconLoader2 size={16} className="spin" />
+        : restartPending
+        ? <IconRefresh size={16} />
+        : <IconDownload size={16} />}
       <span className="update-banner-text">{text}</span>
-      {restartPending
+      {installing
+        ? (
+          <button type="button" className="btn push" disabled>
+            {t("chrome.update.installingButton")}
+          </button>
+        )
+        : restartPending
         ? canRestart && (
           <button type="button" className="btn push" onClick={update.restart}>
             {t("chrome.update.restartNow")}

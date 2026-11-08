@@ -150,6 +150,7 @@ export const settings = {
   },
   "settings.general.restart": { ja: "再起動", en: "Restart" },
   "settings.general.install": { ja: "インストール", en: "Install" },
+  "settings.general.installing": { ja: "インストール中…", en: "Installing…" },
   "settings.general.download": { ja: "ダウンロード", en: "Download" },
   "settings.general.installNote": {
     ja: "インストールするとアプリが再起動します。",

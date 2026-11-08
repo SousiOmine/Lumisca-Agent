@@ -363,6 +363,68 @@ Deno.test("a package staged by a previous run is ready to install", async () => 
   });
 });
 
+Deno.test("the status reports the install while the files are being replaced", async () => {
+  await withTempDir("lumisca-service-", async (dir) => {
+    await seedInstall(dir);
+    const fixture = await packageFixture();
+    // Hold the version check (the last step of an apply) so the state can be
+    // read from the middle of the install.
+    let release!: (version: string) => void;
+    const gate = new Promise<string>((resolve) => {
+      release = resolve;
+    });
+    const { service } = harness(dir, {
+      fixture,
+      settings: { [UPDATE_AUTO_KEY]: "0" },
+      versionCheck: () => gate,
+    });
+    await service.check();
+    await service.download();
+    assertEquals(service.status().ready, true);
+
+    const applying = service.apply();
+    await waitFor(() => service.status().installing);
+    // Replacing the files takes seconds and nothing else in the status moves
+    // while it runs: this flag is all the UI has to show that the install
+    // button did something.
+    assertEquals(service.status().installing, true);
+    assertEquals(service.status().ready, true, "the package is still staged");
+
+    release(NEXT);
+    const status = await applying;
+    assertEquals(status.installing, false);
+    assertEquals(status.applied, true);
+    assertEquals(status.restartPending, true);
+  });
+});
+
+Deno.test("a failed install clears the installing flag", async () => {
+  await withTempDir("lumisca-service-", async (dir) => {
+    await seedInstall(dir);
+    const fixture = await packageFixture();
+    const { service } = harness(dir, {
+      fixture,
+      settings: { [UPDATE_AUTO_KEY]: "0" },
+      // A binary reporting another version than the manifest: the apply
+      // refuses it and keeps the old files.
+      versionCheck: () => Promise.resolve("0.0.1"),
+    });
+    await service.check();
+    await service.download();
+
+    const status = await service.apply();
+    // The returned status is built before apply()'s `finally` runs, so a
+    // flag cleared there would still read "installing" here.
+    assertEquals(status.installing, false);
+    assertEquals(status.error?.includes("バージョンが一致しません"), true);
+    assertEquals(status.applied, false);
+    assertEquals(
+      await Deno.readTextFile(join(dir, BINARY)),
+      `binary-${CURRENT}`,
+    );
+  });
+});
+
 Deno.test("a staged package that is no longer newer is dropped", async () => {
   await withTempDir("lumisca-service-", async (dir) => {
     const fixture = await packageFixture();
@@ -545,6 +607,7 @@ Deno.test("the status payload is JSON-serializable and complete", async () => {
       "downloaded",
       "downloading",
       "error",
+      "installing",
       "latestVersion",
       "progress",
       "ready",

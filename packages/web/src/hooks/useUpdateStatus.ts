@@ -7,10 +7,16 @@ import {
   type UpdateStatus,
 } from "../shell.ts";
 
-/** Poll interval while a check/download is in flight (progress bar) vs
- * idle (the update banner may appear at any time). */
+/** Poll interval while a check/download/install is in flight (progress bar,
+ * "installing…") vs idle (the update banner may appear at any time). */
 const BUSY_POLL_MS = 1_000;
 const IDLE_POLL_MS = 60_000;
+
+/** Whether an action is in flight, i.e. the state will move on its own. A
+ * fast poll is what puts that movement (and the end of it) on screen. */
+function isBusy(status: UpdateStatus): boolean {
+  return status.checking || status.downloading || status.installing === true;
+}
 
 /** Which updater reported the state: the desktop shell (the app the user
  * launched) or the standalone server hosting this page. */
@@ -71,7 +77,7 @@ export function useUpdateStatus(active: boolean): UpdateControls {
           setStatus(next);
           setSource("shell");
           setError(null);
-          busyRef.current = next.checking || next.downloading;
+          busyRef.current = isBusy(next);
         } catch (failure) {
           // Bridge unreachable or the shell refused: keep the last status
           // but say why it may be stale, then retry on the next interval.
@@ -88,7 +94,7 @@ export function useUpdateStatus(active: boolean): UpdateControls {
           setStatus(next);
           setSource("server");
           setError(null);
-          busyRef.current = next.checking || next.downloading;
+          busyRef.current = isBusy(next);
         } catch {
           if (cancelled) return;
           setStatus(null);

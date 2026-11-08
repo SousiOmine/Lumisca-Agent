@@ -197,8 +197,13 @@ export function GeneralPanel(
     : Math.round(status.progress * 100);
   const restartPending = server && status.restartPending === true;
   const canRestart = restartPending && status.restartMode !== "none";
+  // Replacing the files takes seconds and moves nothing else in the status:
+  // without this the panel looks frozen after the install click.
+  const installing = status.installing === true;
   const statusText = status.checking
     ? t("settings.general.checkingUpdate")
+    : installing
+    ? t("settings.general.installing")
     : restartPending
     ? (canRestart
       ? status.restartMode === "supervisor"
@@ -302,6 +307,12 @@ export function GeneralPanel(
                           {t("settings.general.checkForUpdate")}
                         </button>
                       )
+                      : installing
+                      ? (
+                        <button type="button" className="btn push" disabled>
+                          {t("settings.general.installing")}
+                        </button>
+                      )
                       : restartPending
                       ? canRestart
                         ? (
@@ -365,7 +376,7 @@ export function GeneralPanel(
               )}
           </div>
 
-          {status.ready && (
+          {status.ready && !installing && (
             <p className="settings-note">
               {server
                 ? t("settings.general.installNoteServer")

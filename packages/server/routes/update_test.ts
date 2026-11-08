@@ -20,6 +20,7 @@ function status(overrides: Partial<UpdateStatus> = {}): UpdateStatus {
     progress: null,
     downloaded: null,
     total: null,
+    installing: false,
     ready: false,
     applied: false,
     appliedVersion: null,
