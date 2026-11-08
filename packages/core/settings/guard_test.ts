@@ -1,12 +1,20 @@
-import { assertEquals } from "@std/assert";
-import { filterExposedSettings, protectedKeyReason } from "./guard.ts";
-import { CREDENTIAL_KEY_PREFIX } from "./credentials.ts";
+import { assertEquals, assertThrows } from "@std/assert";
+import { CoreError } from "../errors.ts";
 import { MCP_OAUTH_KEY_PREFIX } from "../mcp/oauth.ts";
 import { APP_MCP_SETTINGS_KEY, CONNECTIONS_KEY } from "../shared/mod.ts";
 import {
+  DEFAULT_MODEL_KEY,
+  FAST_MODEL_KEY,
+  IMAGE_MODEL_KEY,
   PUSH_SUBSCRIPTIONS_KEY,
   PUSH_VAPID_KEY,
 } from "../shared/settings-keys.ts";
+import { CREDENTIAL_KEY_PREFIX } from "./credentials.ts";
+import {
+  assertMutableKey,
+  filterExposedSettings,
+  protectedKeyReason,
+} from "./guard.ts";
 
 Deno.test("the settings guard hides every credential category", () => {
   for (
@@ -40,4 +48,26 @@ Deno.test("filterExposedSettings drops the protected entries only", () => {
     ["theme", "dark"],
   ]);
   assertEquals([...filterExposedSettings(all).keys()], ["locale", "theme"]);
+});
+
+// Regression: the settings dialog's model rows are written through the
+// generic settings surface, and `model_default` was added to the dialog
+// without its declaration here. Nothing else caught it, because the tests
+// that set a default model write with `setSetting`, which skips this check —
+// the failure only appeared in the browser as "保存に失敗しました: Unknown
+// setting: model_default".
+Deno.test("the model rows of the settings dialog are writable", () => {
+  for (const key of [DEFAULT_MODEL_KEY, FAST_MODEL_KEY, IMAGE_MODEL_KEY]) {
+    // Throws (and so fails this test) when the key is missing from the
+    // allow-list.
+    assertMutableKey(key);
+  }
+});
+
+Deno.test("a key the client invented is refused", () => {
+  assertThrows(
+    () => assertMutableKey("model_mine"),
+    CoreError,
+    "Unknown setting",
+  );
 });

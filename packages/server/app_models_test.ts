@@ -162,6 +162,53 @@ Deno.test("settings API refuses to write credentials", async () => {
   }
 });
 
+Deno.test("settings API writes the model preferences the dialog offers", async () => {
+  // Regression: the dialog's "default model" row writes
+  // `PUT /api/settings/model_default`, and the key was missing from the
+  // core's allow-list — the row failed only in the browser. This walks the
+  // same path the client does, which the resolver tests skip (they write
+  // with setSetting, the service path that has no allow-list).
+  const { core, server, faux, base } = await setup();
+  try {
+    await core.setProviderApiKey(faux.provider.id, "faux-key");
+    const pref = { provider: faux.provider.id, modelId: faux.getModel().id };
+    const value = JSON.stringify(pref);
+
+    const res = await json(base, "/api/settings/model_default", {
+      method: "PUT",
+      body: JSON.stringify({ value }),
+    });
+    assertEquals(res.status, 200);
+
+    const settings = await (await fetch(`${base}/api/settings`))
+      .json() as Record<string, string>;
+    assertEquals(settings.model_default, value);
+
+    // The write is what a new conversation reads.
+    const resolved = await (await fetch(`${base}/api/sessions/default-model`))
+      .json() as { provider: string; modelId: string };
+    assertEquals(resolved.provider, pref.provider);
+    assertEquals(resolved.modelId, pref.modelId);
+
+    // Clearing the row (the dialog sends "") is a write too.
+    const cleared = await json(base, "/api/settings/model_default", {
+      method: "PUT",
+      body: JSON.stringify({ value: "" }),
+    });
+    assertEquals(cleared.status, 200);
+
+    // An invented key is still refused rather than persisted.
+    const invented = await json(base, "/api/settings/model_mine", {
+      method: "PUT",
+      body: JSON.stringify({ value: value }),
+    });
+    assertEquals(invented.status, 400);
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
 Deno.test("personalize API reads and writes AGENTS.md next to the settings file", async () => {
   const dir = await Deno.makeTempDir({ prefix: "lumisca-pers-" });
   const core = LumiscaCore.open(

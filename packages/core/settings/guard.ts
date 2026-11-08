@@ -8,6 +8,7 @@ import {
   COMPACTION_RESERVE_PERCENT_KEY,
   COMPUTER_USE_ENABLED_KEY,
   CONNECTIONS_KEY,
+  DEFAULT_MODEL_KEY,
   FAST_MODEL_KEY,
   IMAGE_MODEL_KEY,
   LANGUAGE_KEY,
@@ -105,6 +106,8 @@ export function filterExposedSettings(
 const MUTABLE_KEYS: ReadonlySet<string> = new Set([
   THEME_KEY,
   LANGUAGE_KEY,
+  // The model section of the settings dialog: one row per key.
+  DEFAULT_MODEL_KEY,
   FAST_MODEL_KEY,
   IMAGE_MODEL_KEY,
   COMPUTER_USE_ENABLED_KEY,
