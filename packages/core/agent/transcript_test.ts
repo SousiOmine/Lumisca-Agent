@@ -87,6 +87,29 @@ Deno.test("transcript store: an insert translates the view position", () => {
   }
 });
 
+Deno.test("transcript store: an insertion at the end is counted, not written twice", () => {
+  const { db, repo } = setup(3);
+  try {
+    // The idle compaction appends its checkpoint after the last message: the
+    // row is written immediately, so the persisted prefix grows with it.
+    const store = new TranscriptStore("s1", repo, 3, 0);
+    const view = repo.list("s1").map((row) => row.message);
+    store.insertAt(view.length, checkpoint("summary", 4));
+    view.push(checkpoint("summary", 4));
+    assertEquals(store.persistedCount, 4);
+    // The next turn's persist must not write that checkpoint a second time.
+    view.push({ role: "user", content: "next", timestamp: 5 } as AgentMessage);
+    store.persist(view);
+    assertEquals(repo.count("s1", "all"), 5);
+    assertEquals(
+      repo.list("s1").map((row) => row.role),
+      ["user", "user", "user", "checkpoint", "user"],
+    );
+  } finally {
+    db.close();
+  }
+});
+
 Deno.test("transcript store: a rewind beyond the view re-reads it", () => {
   const { db, repo } = setup(5);
   try {

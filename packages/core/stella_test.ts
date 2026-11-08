@@ -1497,7 +1497,6 @@ Deno.test("stella conversation: only stella sessions condense an idle history", 
     assertEquals(agent.idleCompaction, {
       afterMs: 30 * 60 * 1000,
       minTokens: 50_000,
-      keepTokens: 20_000,
     });
 
     // Every other session keeps the pressure check alone.

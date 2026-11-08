@@ -96,22 +96,21 @@ function withTrailingPart(
   return text.length === 0 ? part : `${text}\n\n${part}`;
 }
 
-/** When and how much an idle conversation is condensed (see
+/** When an idle conversation is condensed (see
  * SessionAgentOptions.idleCompaction and compactAfterIdle).
  *
- * The retention is an absolute count, not the policy's share of the window:
- * the trigger is absolute, and a share that exceeds it (20% of a 1M window
- * is 200k) would leave the span selector with nothing to cut, turning the
- * check into a no-op on exactly the models whose requests cost the most. */
+ * The whole model view is condensed: nothing stays verbatim. The retention
+ * budgets of the other paths protect a request that is being answered, and
+ * an idle conversation has none — its last unit is a finished reply. Keeping
+ * that tail would send a completed turn's tool traffic, and on a model that
+ * requires its reasoning blocks replayed, its thinking, as the context of
+ * the next message: the same cost the idle check exists to avoid. */
 export interface IdleCompaction {
   /** Silence since the newest message that arms the check. */
   afterMs: number;
   /** Only condense when the projected context is at least this large: a
    * short conversation has nothing worth a summarization call. */
   minTokens: number;
-  /** The newest this many tokens stay verbatim. Must stay below
-   * `minTokens`, or the check can never free anything. */
-  keepTokens: number;
 }
 
 export interface SessionAgentOptions {
@@ -420,22 +419,19 @@ export class SessionAgent {
       onCompacted: (result, message) => {
         // The position travels as an identity: clients hold a window of the
         // transcript and cannot resolve an index into it (see ClientEvent).
+        // The idle compaction appends its checkpoint after the last message
+        // (see IdleCompaction), so there is nothing to anchor the row to —
+        // and no client of that path draws checkpoints (stella's stream
+        // drops them; the next snapshot carries the row).
         const before = this.agent.state.messages[result.index + 1];
-        if (before === undefined) {
-          // The checkpoint closed the transcript: there is no message after
-          // it, and no client can place it without one. Compaction only
-          // ever cuts before a retained unit, so this is a bug rather than a
-          // case to paper over.
-          throw new Error(
-            "Compaction inserted a checkpoint after the transcript's end",
-          );
+        if (before !== undefined) {
+          this.emit({
+            type: "messages_checkpoint",
+            sessionId: this.sessionId,
+            before: messageIdentityOf(before),
+            message,
+          });
         }
-        this.emit({
-          type: "messages_checkpoint",
-          sessionId: this.sessionId,
-          before: messageIdentityOf(before),
-          message,
-        });
         // The span the checkpoint just summarized is no longer read by
         // anyone (the model starts at the checkpoint, and a client never
         // receives tool traffic at all), so its payload is dropped now —
@@ -445,18 +441,6 @@ export class SessionAgent {
     });
     this.contextProviders = options.contextProviders ?? [];
     this.idleCompaction = options.idleCompaction ?? null;
-    // A retention at or above the floor leaves the span selector with
-    // nothing to cut: the check would fire after every silence and free
-    // nothing. Refuse the pair instead of running it.
-    if (
-      this.idleCompaction !== null && this.idleCompaction.minTokens > 0 &&
-      this.idleCompaction.keepTokens >= this.idleCompaction.minTokens
-    ) {
-      throw new Error(
-        `idle compaction: keepTokens (${this.idleCompaction.keepTokens}) ` +
-          `must stay below minTokens (${this.idleCompaction.minTokens})`,
-      );
-    }
     this.pruneCondensed = options.pruneCondensed === true;
     this.onFreedBytes = options.onFreedBytes;
     // Reopening a conversation is the repair point for a process that died
@@ -1562,12 +1546,12 @@ export class SessionAgent {
    * The rule's floor keeps short conversations out of it: below `minTokens`
    * a summarization call saves nothing worth having, so the check returns
    * without asking the model. Above it the check runs below the pressure
-   * threshold (the manual `/compact` path), not as the forced one: nothing
-   * was rejected, so the newest work stays verbatim — `keepTokens` of it,
-   * an absolute count because the trigger is absolute (see IdleCompaction).
-   * A history that needs no condensing costs no request — the span selector
-   * refuses a head that holds nothing but an earlier checkpoint — and the
-   * timer is not re-armed, so it is asked once per silence.
+   * threshold and condenses the WHOLE model view — the record replaces
+   * everything up to the last message, which no request is waiting on
+   * (see IdleCompaction). A history that needs no condensing costs no
+   * request — the span selector refuses a head that holds nothing but an
+   * earlier checkpoint — and the timer is not re-armed, so it is asked once
+   * per silence.
    *
    * A run that started meanwhile owns the transcript: it cancelled this
    * timer at its start, and this path re-checks. Its own end arms a new one.
@@ -1583,7 +1567,8 @@ export class SessionAgent {
     const newest = messages.at(-1)?.timestamp;
     try {
       const result = await this.compactor.compactNow(messages, {
-        keepRecentTokens: rule.keepTokens,
+        // Zero: keep no tail (see IdleCompaction).
+        keepRecentTokens: 0,
         canCommit: () =>
           !this.closed && !this.isStreaming &&
           this.agent.state.messages.length === length &&

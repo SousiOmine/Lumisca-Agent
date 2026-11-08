@@ -88,14 +88,12 @@ const STELLA_AGENT_TOOL_NAMES = [TOOL_IDENTITY, TOOL_AGENT_CREATE];
  * condensed before the user comes back, and long enough that stepping away
  * mid-conversation does not cost the verbatim history. The 50k floor keeps
  * short conversations out of it: a summarization call over a few thousand
- * tokens saves nothing worth having. The 20k tail is absolute rather than
- * the policy's share of the window — the trigger is absolute, and 20% of a
- * 1M window (200k) would exceed it, leaving the span selector with nothing
- * to cut on exactly the models whose requests cost the most. */
+ * tokens saves nothing worth having. The check condenses the whole view —
+ * no tail — because nothing is being answered while the conversation sits
+ * idle, so there is no request to keep recent work for. */
 const STELLA_IDLE_COMPACTION = {
   afterMs: 30 * 60 * 1000,
   minTokens: 50_000,
-  keepTokens: 20_000,
 } as const;
 
 /** Module logger (debug-gated): attachment rebuilds are the first thing

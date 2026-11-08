@@ -73,22 +73,15 @@ export class TranscriptStore {
    * the caller splices it there afterwards (a failed write leaves memory
    * untouched and the two cannot diverge).
    *
-   * The whole-transcript position is `base + index`; an insertion at or
-   * before the view's start moves the base, because the view then begins one
-   * message later in the transcript. */
+   * The caller inserts at or before the first view message without a row: the
+   * pressure cut keeps the newest unit (which a run may not have written
+   * yet), and the idle path runs only while nothing is streaming, so its cut
+   * is the end of a fully persisted view. The row is persisted, and the count
+   * grows with it. */
   insertAt(index: number, message: AgentMessage): void {
     const persistedBefore = this.count;
     this.repo.insertAt(this.sessionId, this.base + index, message);
-    if (index === 0) {
-      // A checkpoint spliced in FRONT of the whole view (a compaction whose
-      // cut is before it): the row is now the view's first, so the base
-      // stays and the count grows with it.
-      this.count = persistedBefore + 1;
-      return;
-    }
-    this.count = index < persistedBefore
-      ? persistedBefore + 1
-      : persistedBefore;
+    this.count = persistedBefore + 1;
   }
 
   /** The caller rewound: everything from view position `cut` on was dropped

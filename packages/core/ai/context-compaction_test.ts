@@ -528,6 +528,44 @@ Deno.test("compactNow condenses below the threshold on demand", async () => {
   assertEquals(messages.at(-1)!.role, "toolResult");
 });
 
+Deno.test("selectCompactionSpan: a zero retention condenses the whole view", () => {
+  const messages = conversation(3, 4_000);
+  const budgets = {
+    contextWindow: 10_000,
+    thresholdTokens: 2_000,
+    keepRecentTokens: 0,
+    summaryMaxTokens: 100,
+  };
+  // No tail: the checkpoint lands after the last message, so the model's
+  // view is the record alone.
+  const span = selectCompactionSpan(messages, 0, budgets)!;
+  assertEquals([span.start, span.cutIndex, span.count], [
+    0,
+    messages.length,
+    messages.length,
+  ]);
+  // A view that is one unit is still compactable when nothing is retained.
+  const single = [user("x".repeat(4_000))];
+  const one = selectCompactionSpan(single, 0, budgets)!;
+  assertEquals([one.start, one.cutIndex, one.count], [0, 1, 1]);
+});
+
+Deno.test("compactNow with zero retention appends the checkpoint after the view", async () => {
+  const messages = conversation(2, 4_000);
+  const { compactor, inserts } = compactorFor(messages, {
+    policy: { reservePercent: 20, keepRecentPercent: 1 },
+  });
+  const result = await compactor.compactNow(messages, {
+    keepRecentTokens: 0,
+  });
+  assertEquals(result !== null, true);
+  assertEquals(inserts.length, 1);
+  assertEquals(messages.at(-1)!.role, "checkpoint");
+  assertEquals(result!.index, messages.length - 1);
+  assertEquals(result!.summarized, messages.slice(0, -1));
+  assertEquals(contextStart(messages), messages.length - 1);
+});
+
 Deno.test("compactNow does nothing when no safe span exists", async () => {
   const messages: AgentMessage[] = [user("only")];
   const { compactor, requests, inserts } = compactorFor(messages);

@@ -225,19 +225,27 @@ export function transcriptUnits(
 
 /**
  * Select the head to summarize: the oldest units of the model's view,
- * stopping where the retained tail reaches its token budget. The newest unit
- * is always retained, so a compaction can never remove the work in
- * progress — the model must keep answering the most recent request.
+ * stopping where the retained tail reaches its token budget.
  *
- * `force` ignores the retention budget and reduces as far as one span can
- * (still keeping the newest unit) — the overflow recovery path, where the
- * alternative is a request the provider already rejected.
+ * A zero retention keeps no tail at all: the whole view becomes the head and
+ * the checkpoint lands after the last message. That is the idle path (see
+ * SessionAgentOptions.idleCompaction): nothing is being answered while the
+ * conversation sits idle, so there is no request in progress to keep, and a
+ * tail would send the finished turn's tool traffic and reasoning blocks as
+ * the context of the next one.
+ *
+ * Any other retention keeps at least the newest unit, so a compaction made
+ * while the conversation is active can never remove the work in progress —
+ * the model must keep answering the most recent request. `force` ignores the
+ * retention budget and reduces as far as one span can (still keeping the
+ * newest unit) — the overflow recovery path, where the alternative is a
+ * request the provider already rejected.
  *
  * Two spans are refused in every mode, because summarizing them would churn
  * checkpoints without reducing a request:
  *
  * - one that holds nothing but an earlier checkpoint (a previous compaction
- *   that already covered everything up to the retained tail), and
+ *   that already covered everything), and
  * - one too small to free anything (below {@link MINIMUM_SPAN_TOKENS}).
  */
 export function selectCompactionSpan(
@@ -247,22 +255,30 @@ export function selectCompactionSpan(
   force = false,
 ): CompactionSpan | null {
   const units = transcriptUnits(messages, start);
-  if (units.length < 2) return null;
-  // Walk the tail backwards: keep the newest unit, then extend while the
-  // retention budget is not met. Everything before the cut is summarized.
-  let cutUnit = units.length - 1;
-  let retainedTokens = units[cutUnit]!.tokens;
-  while (!force && cutUnit > 0 && retainedTokens < budgets.keepRecentTokens) {
-    cutUnit--;
-    retainedTokens += units[cutUnit]!.tokens;
+  if (units.length === 0) return null;
+  // Where the retained tail starts, as a unit index; `units.length` means no
+  // tail. Zero retention is its own case rather than a budget that happens to
+  // be small: the budget's floor of one unit is a promise to a request being
+  // answered, which the idle path does not have.
+  let cutUnit = units.length;
+  if (force) {
+    cutUnit = units.length - 1;
+  } else if (budgets.keepRecentTokens > 0) {
+    let retainedTokens = 0;
+    while (cutUnit > 0 && retainedTokens < budgets.keepRecentTokens) {
+      cutUnit--;
+      retainedTokens += units[cutUnit]!.tokens;
+    }
   }
   if (cutUnit <= 0) return null;
   const first = units[0]!;
-  const cut = units[cutUnit]!;
+  const cutIndex = cutUnit < units.length
+    ? units[cutUnit]!.index
+    : messages.length;
   let headTokens = 0;
   for (let i = 0; i < cutUnit; i++) headTokens += units[i]!.tokens;
   let hasSourceMessage = false;
-  for (let i = first.index; i < cut.index; i++) {
+  for (let i = first.index; i < cutIndex; i++) {
     if (messages[i]!.role !== "checkpoint") {
       hasSourceMessage = true;
       break;
@@ -270,11 +286,11 @@ export function selectCompactionSpan(
   }
   if (!hasSourceMessage) return null;
   if (headTokens < MINIMUM_SPAN_TOKENS) return null;
-  const count = cut.index - first.index;
+  const count = cutIndex - first.index;
   if (count <= 0) return null;
   return {
     start: first.index,
-    cutIndex: cut.index,
+    cutIndex,
     count,
     headTokens,
   };

@@ -11,7 +11,8 @@
  * - **Retention**: the newest `keepRecentTokens` tokens stay verbatim; the
  *   cut lands on a unit boundary (an assistant message together with the
  *   tool results that follow it), so a call is never separated from its
- *   result.
+ *   result. A retention of zero condenses the whole view — the idle path,
+ *   which runs between requests (see selectCompactionSpan).
  * - **Non-destructive**: nothing is deleted. The checkpoint is INSERTED at
  *   the cut, and the model's view becomes "from the newest checkpoint
  *   onward" (see {@link contextStart}). The transcript, the database and
@@ -317,7 +318,8 @@ export class ContextCompactor {
       canCommit?: () => boolean;
       /** Retention override for this one call: the newest this many tokens
        * stay verbatim instead of the policy's share of the window. The idle
-       * check passes an absolute count because its trigger is absolute (see
+       * check passes 0 — it condenses the whole model view, because no
+       * request is in progress to keep (see
        * SessionAgentOptions.idleCompaction). Omitted → the policy's share. */
       keepRecentTokens?: number;
     } = {},
