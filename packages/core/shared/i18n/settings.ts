@@ -11,6 +11,8 @@ import type { LocalizedText } from "./types.ts";
  */
 export const settings = {
   // --- dialog chrome (SettingsModal) ----------------------------------------
+  /** The navigation's first group: preferences that act on both modes. */
+  "settings.nav.common": { ja: "共通", en: "Shared" },
   "settings.nav.general": { ja: "一般", en: "General" },
   "settings.nav.appearance": { ja: "外観", en: "Appearance" },
   "settings.nav.personalize": { ja: "カスタマイズ", en: "Personalization" },
@@ -36,15 +38,6 @@ export const settings = {
   "settings.nav.prompts": { ja: "保存済みプロンプト", en: "Saved prompts" },
   "settings.nav.computerUse": { ja: "画面操作", en: "Screen control" },
   "settings.nav.security": { ja: "セキュリティ", en: "Security" },
-  /** Tooltip of the chip in the dialog header that names the mode this
-   * client shows. The mode is a per-client choice, and the same pages open in
-   * both — the chip says which mode's sessions the values act on. */
-  "settings.dialog.modeTitle": {
-    ja:
-      "この画面は {mode} の設定です。設定の項目はどちらのモードでも同じです。",
-    en: "These are the {mode} settings. Every item appears in both modes.",
-  },
-
   // --- appearance panel -----------------------------------------------------
   "settings.appearance.theme.label": { ja: "テーマ設定", en: "Theme" },
   "settings.appearance.theme.light": { ja: "ライト", en: "Light" },

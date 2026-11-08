@@ -1,24 +1,25 @@
 import type { AppMode, MessageKey } from "@lumisca/core/shared";
 
 /**
- * The settings dialog's navigation model: which categories exist.
+ * The settings dialog's navigation model: which categories exist, and what
+ * each one's values act on.
  *
- * The two modes show the same set of pages. They used to be split into two
- * groups (shared, then the current mode's own) with a heading naming each,
- * and nothing on the page told a reader that the other group existed at all:
- * 画面操作 could only be found by switching to code mode first, and ルーチン
- * by switching back. The mode still matters, but only to what a value does —
- * not to which switches the reader may see. A page that acts on one mode's
- * machinery says so itself (ルーチン lists the open agent's conversation,
- * 画面操作 drives this machine, which only code mode's sessions use).
+ * Both modes show every category: hiding a page hid the page, never the
+ * effect, and a reader in stella mode could not learn that 画面操作 existed
+ * without switching modes first. What a reader does need to see is which
+ * pages change something in this mode — a routine only exists in a stella
+ * conversation, computer use only drives this machine for code mode's
+ * sessions — so the navigation groups the entries by that and names each
+ * group. The grouping is the same in both modes; only the group a reader is
+ * working in differs.
  *
- * The categories also stay apart by subject: one category never held both a
+ * The categories also stay apart by subject: one page never held both a
  * mode's own setting and a shared one (the old セキュリティ carried the
  * command check next to computer use, so half of that page did nothing after
  * a mode switch with nothing on screen saying which half).
  *
  * Everything here is data and pure functions: the entries' screens live in
- * SettingsModal (they need the dialog's props), while the table can be
+ * SettingsModal (they need the dialog's props), while the grouping can be
  * reasoned about — and tested — without a DOM.
  */
 
@@ -53,15 +54,47 @@ export function isSettingsCategory(
   return (SETTINGS_CATEGORIES as readonly string[]).includes(value);
 }
 
-/** One navigation entry: its identity and its label (a catalogue key, so the
- * navigation follows the app language). */
+/** What a category's values act on: both modes, or exactly one of them. */
+export type SettingsScope = "common" | AppMode;
+
+/** One navigation entry: its identity, what its values act on, and its label
+ * (a catalogue key, so the navigation follows the app language). */
 export interface SettingsNavEntry {
   id: SettingsCategory;
+  scope: SettingsScope;
   /** The navigation label. */
   labelKey: MessageKey;
 }
 
-/** The catalogue key naming a mode (the dialog's mode chip). */
+/** The entries of one group of the navigation. */
+export interface SettingsNavGroup {
+  scope: SettingsScope;
+  entries: readonly SettingsNavEntry[];
+}
+
+/**
+ * The navigation's groups, in reading order: what both modes share, then
+ * code mode's own, then stella's. A group with no entry is dropped, so a
+ * missing one costs no heading.
+ *
+ * There is no mode parameter: both modes draw every group (see the module
+ * comment). The order inside a group is the caller's — the table in
+ * SettingsModal is the reading order of the dialog, and sorting would put
+ * 一般 somewhere in the middle of it.
+ */
+export function navGroups(
+  entries: readonly SettingsNavEntry[],
+): SettingsNavGroup[] {
+  const scopes: readonly SettingsScope[] = ["common", "code", "stella"];
+  return scopes
+    .map((scope) => ({
+      scope,
+      entries: entries.filter((entry) => entry.scope === scope),
+    }))
+    .filter((group) => group.entries.length > 0);
+}
+
+/** The catalogue key naming a mode (the heading of that mode's group). */
 export function modeLabelKey(mode: AppMode): MessageKey {
   return mode === "code"
     ? "chat.modeSelect.code.title"

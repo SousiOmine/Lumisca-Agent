@@ -811,7 +811,6 @@ export function App({ initialData }: AppProps): ReactElement {
               setThinkingLevel: stella.setThinkingLevel,
             }
             : null}
-          mode={mode}
           onClose={closeSettings}
         />
       )}
