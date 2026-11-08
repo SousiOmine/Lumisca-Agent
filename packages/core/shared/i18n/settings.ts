@@ -80,11 +80,26 @@ export const settings = {
   },
 
   // --- general panel --------------------------------------------------------
-  "settings.general.autoUpdateUnavailable": {
+  "settings.general.serverAddress": { ja: "接続先", en: "Server" },
+  "settings.general.updateNoUpdater": {
     ja:
-      "この環境では自動アップデートを利用できません。デスクトップアプリまたは正規パッケージからご利用ください。",
+      "このサーバーには更新機能がありません（開発実行、またはデスクトップアプリが管理するサーバーです）。",
     en:
-      "Auto-update is not available in this environment. Please use the desktop app or an official package.",
+      "This server has no updater (it is a development run, or a server the desktop app manages).",
+  },
+  "settings.general.updateUnauthorized": {
+    ja:
+      "サーバーの認証が切れています。このページを読み込み直して、もう一度お試しください。",
+    en:
+      "The server refused this page's credential. Reload the page and try again.",
+  },
+  "settings.general.updateUnreachable": {
+    ja: "サーバーに接続できないため、更新状態を取得できませんでした。",
+    en: "Could not read the update state: the server could not be reached.",
+  },
+  "settings.general.updateReadFailed": {
+    ja: "サーバーの更新状態を取得できませんでした: {error}",
+    en: "Could not read the server's update state: {error}",
   },
   "settings.general.checkingUpdate": {
     ja: "アップデートを確認中…",

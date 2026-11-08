@@ -161,6 +161,7 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
         status={props.update.status}
         source={props.update.source}
         bridgeError={props.update.error}
+        failure={props.update.failure}
         language={props.language}
         languageError={props.languageError}
         onLanguageChange={props.onLanguageChange}

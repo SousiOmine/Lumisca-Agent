@@ -167,9 +167,21 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   // apart from a healthy one. `instanceId` identifies this running server:
   // the federation client probes it to recognise this hub registered under
   // another of its URLs (see federation.ts).
+  //
+  // `buildId` is the client build this process serves, so a page that has
+  // been open since before an update can notice that its bundle has been
+  // replaced (packages/web/src/hooks/useBuildWatch.ts; see Assets.buildId).
+  // It is omitted rather than failing the answer when the build cannot be
+  // read: liveness is exactly what a caller must be able to ask about.
   app.get(
     "/api/health",
-    (c) => c.json({ ok: true, now: Date.now(), instanceId }),
+    async (c) =>
+      c.json({
+        ok: true,
+        now: Date.now(),
+        instanceId,
+        buildId: await assets.buildId().catch(() => undefined),
+      }),
   );
 
   // --- page and static assets ----------------------------------------------

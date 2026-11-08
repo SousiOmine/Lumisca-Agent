@@ -149,6 +149,13 @@ export interface InitialData {
    * load (see server/app.ts and shared/i18n). The page renders in it from
    * the first paint. */
   language: Locale;
+  /** The client build this page was served with (see Assets.buildId on the
+   * server). `/api/health` reports the build the server serves now; when the
+   * two differ, this page is running a bundle the server has replaced, and it
+   * offers to reload (packages/web/src/hooks/useBuildWatch.ts). Absent from a
+   * server that predates the field — then there is nothing to compare, and
+   * the page simply never offers it. */
+  buildId?: string;
 }
 
 // ---- async ----------------------------------------------------------------

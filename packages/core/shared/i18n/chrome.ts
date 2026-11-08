@@ -155,6 +155,15 @@ export const chrome = {
   },
   "chrome.update.dismiss": { ja: "閉じる", en: "Dismiss" },
 
+  // --- stale client banner -------------------------------------------------
+  // The server serves a newer client than this page loaded. An installed app
+  // (no address bar, no reload of its own) otherwise keeps the old bundle.
+  "chrome.build.stale": {
+    ja: "この画面は古い版のままです。再読み込みすると新しい版になります。",
+    en: "This screen is running an older version. Reload to get the new one.",
+  },
+  "chrome.build.reload": { ja: "再読み込み", en: "Reload" },
+
   // --- server down banner --------------------------------------------------
   "chrome.serverDown.crashed": {
     ja: "ローカルサーバーが終了しました（終了コード: {code}）",

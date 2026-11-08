@@ -23,7 +23,9 @@ import { useT } from "../i18n.ts";
  * button away. Without it the click looks ignored until the restart offer
  * appears.
  */
-export function UpdateBanner({ update }: { update: UpdateControls }) {
+export function UpdateBanner(
+  { update, stale }: { update: UpdateControls; stale: boolean },
+) {
   const t = useT();
   const [dismissed, setDismissed] = useState(false);
   const status = update.status;
@@ -55,6 +57,26 @@ export function UpdateBanner({ update }: { update: UpdateControls }) {
     status?.appliedVersion,
     status?.latestVersion,
   ]);
+
+  // A replaced bundle outranks everything else this strip can say: the newer
+  // version is already on the server, and what is missing is this page's copy
+  // of the client. Only a reload fetches it, and an installed app has no
+  // address bar and no reload of its own — this button is the one way to ask.
+  if (stale) {
+    return (
+      <div className="update-banner">
+        <IconRefresh size={16} />
+        <span className="update-banner-text">{t("chrome.build.stale")}</span>
+        <button
+          type="button"
+          className="btn push"
+          onClick={() => location.reload()}
+        >
+          {t("chrome.build.reload")}
+        </button>
+      </div>
+    );
+  }
 
   if (!actionable || dismissed) return null;
 

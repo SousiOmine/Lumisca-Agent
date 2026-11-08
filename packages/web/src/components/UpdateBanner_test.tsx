@@ -39,14 +39,20 @@ function controls(overrides: Partial<UpdateControls> = {}): UpdateControls {
     install: () => {},
     restart: () => {},
     setAutoRestart: () => {},
+    restartRequested: false,
     error: null,
+    failure: null,
     ...overrides,
   };
 }
 
-function banner(overrides: Partial<UpdateControls> = {}): string {
+function banner(
+  overrides: Partial<UpdateControls> = {},
+  stale = false,
+): string {
   return renderToString(createElement(UpdateBanner, {
     update: controls(overrides),
+    stale,
   }));
 }
 
@@ -96,4 +102,16 @@ Deno.test("a restart the operator has to do offers no button", () => {
 Deno.test("nothing to install renders nothing", () => {
   const html = banner({ status: status({ available: false, ready: false }) });
   assertEquals(html, "");
+});
+
+Deno.test("a replaced client bundle offers the reload and outranks the install", () => {
+  // The newer version is already on the server; what is missing is this
+  // page's copy of the client, and an installed app has no address bar and no
+  // reload of its own. Nothing else the strip could say applies, and it must
+  // not be dismissible: it is the only way to finish the update there.
+  const html = banner({}, true);
+  assertStringIncludes(html, "再読み込み");
+  assertStringIncludes(html, "古い版");
+  assertEquals(html.includes("今すぐインストール"), false);
+  assertEquals(html.includes("閉じる"), false);
 });

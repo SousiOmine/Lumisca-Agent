@@ -1,5 +1,8 @@
 import type { UpdateStatus } from "../../shell.ts";
-import type { UpdateSource } from "../../hooks/useUpdateStatus.ts";
+import type {
+  UpdateFailureKind,
+  UpdateSource,
+} from "../../hooks/useUpdateStatus.ts";
 import type { PushControls } from "../../hooks/usePush.ts";
 import { LOCALES, type MessageKey } from "@lumisca/core/shared";
 import { useT } from "../../i18n.ts";
@@ -15,6 +18,8 @@ interface GeneralPanelProps {
   source: UpdateSource | null;
   /** Last bridge/API failure, if any (the status may be stale). */
   bridgeError: string | null;
+  /** Why the server's updater could not be read, when that is what failed. */
+  failure: UpdateFailureKind | null;
   /** The app language and the persist failure of the last change. */
   language: Locale;
   languageError: string | null;
@@ -153,6 +158,7 @@ export function GeneralPanel(
     status,
     source,
     bridgeError,
+    failure,
     language,
     languageError,
     onLanguageChange,
@@ -179,13 +185,43 @@ export function GeneralPanel(
     />
   );
 
+  // Which server this page is talking to. An installed app cannot show its
+  // address, and "the update is unavailable" is otherwise indistinguishable
+  // from "you are looking at a different installation than you think".
+  const host = globalThis.location?.host ?? "";
+  const addressItem = host === "" ? null : (
+    <div className="update-item">
+      <div className="update-info">
+        <span className="update-label">
+          {t("settings.general.serverAddress")}
+        </span>
+        <span className="update-desc">{host}</span>
+      </div>
+    </div>
+  );
+
+  // Why there are no controls. Each reason is a different problem with a
+  // different answer, so the panel says which one it is instead of one
+  // sentence for all of them; before a first answer arrives it says that it
+  // is asking, rather than claiming there is no updater.
+  const unavailableNote = failure === "no-updater"
+    ? t("settings.general.updateNoUpdater")
+    : failure === "unauthorized"
+    ? t("settings.general.updateUnauthorized")
+    : failure === "unreachable"
+    ? t("settings.general.updateUnreachable")
+    : failure === "failed"
+    ? t("settings.general.updateReadFailed", { error: bridgeError ?? "" })
+    : bridgeError === null
+    ? t("settings.general.checkingUpdate")
+    : t("settings.general.shellUnreachable") + bridgeError;
+
   if (status === null) {
     return (
       <div className="settings-pane">
         {languageItem}
-        <p className="settings-note">
-          {t("settings.general.autoUpdateUnavailable")}
-        </p>
+        {addressItem}
+        <p className="settings-note">{unavailableNote}</p>
       </div>
     );
   }
@@ -241,6 +277,8 @@ export function GeneralPanel(
         </div>
         <span className="mono">v{status.currentVersion}</span>
       </div>
+
+      {addressItem}
 
       {supported && (
         <>
@@ -399,11 +437,19 @@ export function GeneralPanel(
       )}
 
       {status.error && <div className="error-text">{status.error}</div>}
-      {bridgeError && (
+      {
+        /* A shell failure and a server failure are different sentences: the
+          bridge's "cannot communicate with the desktop shell" would be
+          wrong here, where the server itself is what did not answer. */
+      }
+      {bridgeError !== null && failure === null && (
         <div className="error-text" role="alert">
           {t("settings.general.shellUnreachable")}
           {bridgeError}
         </div>
+      )}
+      {failure !== null && (
+        <div className="error-text" role="alert">{unavailableNote}</div>
       )}
 
       {source === "shell" && (

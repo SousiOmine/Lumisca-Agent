@@ -27,6 +27,10 @@ export interface HealthBody {
   /** A uuid chosen when the process started: the same server reached through
    * another address answers with the same id. */
   instanceId: string;
+  /** The client build the answering process serves (Assets.buildId). Absent
+   * from a server that predates the field; nothing here needs it, but it is
+   * part of the shape a page compares against its own bundle. */
+  buildId?: string;
 }
 
 export interface HealthProbeOptions {
@@ -73,6 +77,7 @@ export async function probeHealth(
       ok: body.ok === true,
       now: typeof body.now === "number" ? body.now : 0,
       instanceId: body.instanceId,
+      ...(typeof body.buildId === "string" ? { buildId: body.buildId } : {}),
     };
   } catch {
     // Not listening, refused, timed out, or not JSON: all the same answer.

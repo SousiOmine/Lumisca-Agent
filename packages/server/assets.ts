@@ -179,6 +179,9 @@ export class Assets {
   /** Memoized embedded manifest (undefined = not read yet, or the last read
    * failed and the next request may try again). */
   private manifestCache: AssetsManifest | undefined = undefined;
+  /** Memoized {@link buildId}; null until a read succeeds (a failed build is
+   * retried, like the client map). */
+  private buildIdCache: string | null = null;
 
   constructor(
     private readonly repoRoot: string,
@@ -245,6 +248,36 @@ export class Assets {
   async getClientFile(name: string): Promise<AssetFile | undefined> {
     const client = await this.getClient();
     return Object.hasOwn(client, name) ? client[name] : undefined;
+  }
+
+  /** Identity of the client build this process serves.
+   *
+   * The page embeds it (`/assets/initial-data.js`) and `/api/health` reports
+   * it. That pair is how a page notices that the server it talks to is no
+   * longer the one whose bundle it loaded: an installed PWA has no address
+   * bar and no reload button, and its window keeps the bundle it loaded for
+   * as long as the OS lets it live, so without this the app can run a client
+   * from months ago (see packages/web/src/hooks/useBuildWatch.ts).
+   *
+   * It names the build THIS PROCESS serves, not the files on disk: an applied
+   * update replaces the files in place while this process keeps answering
+   * from the copy it started with (see `embedded()`), so the value changes
+   * exactly when the restarted server starts answering — which is also the
+   * moment a page needs a new bundle.
+   */
+  async buildId(): Promise<string> {
+    if (this.buildIdCache === null) {
+      const client = await this.getClient();
+      const entry = Object.hasOwn(client, "app.js")
+        ? client["app.js"]
+        : undefined;
+      // A build without the entry chunk is broken anyway; the fallback only
+      // keeps the value total for the health answer.
+      this.buildIdCache = entry === undefined
+        ? contentEtag(Object.keys(client).sort().join("\n"))
+        : entry.etag;
+    }
+    return this.buildIdCache;
   }
 
   private buildClient(): Promise<Record<string, AssetFile>> {

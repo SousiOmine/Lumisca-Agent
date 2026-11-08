@@ -267,6 +267,8 @@ https（`tailscale serve` など）で開いた端末から、ページを PWA �
 - **アイコンは `packages/web/public/pwa/` の PNG を `assets.json` に base64 で埋め込みます**（`PWA_ICON_FILES`）。宣言する `sizes` は実ファイルと一致させてください（`app_assets_test.ts` が照合）。`icon-maskable-512.png` は円形マスクで切られないよう、内容を 70% に縮めています。
 - **Service Worker は https のページでのみ登録**します（`packages/web/src/pwa.ts`）。デスクトップの `http://127.0.0.1` は secure context なので、スキームの判定がそのまま除外になります。キャッシュは `/assets/*.js`（`initial-data.js` を除く）、`/pwa/*`、`/favicon.png`、manifest だけで、network-first です。ページ・`/api`・`/ws` には触りません。
 - **`public/sw.js` のキャッシュ方針を変えたら `CACHE_NAME` を上げてください**。`/sw.js` は `max-age=0, must-revalidate` で配ります。
+- **クライアントの版ずれは `buildId` で検出**します。`Assets.buildId()`（`app.js` の ETag）を `GET /api/health` と `initial-data.js` の両方に載せ、`hooks/useBuildWatch.ts` が可視の間 60 秒ごと＋復帰時に比べ、違えば `UpdateBanner` が再読み込みを促します。インストールした PWA にはアドレスバーも再読み込みもなく、開いたときのバンドルを保ち続けるためです（サーバー単体アップデートより前のクライアントは、ブラウザで開いても更新の操作を出せませんでした）。片方だけに載せると検出できないので、`app_assets_test.ts` が両者の一致を検査します。自動で読み直さないのは実行中のセッションを切らないためで、このページから再起動したときだけ自動になります。
+- **更新状態を取得できなかった理由は分類して出します**（`hooks/useUpdateStatus.ts` の `classifyUpdateFailure`）。404 は「このサーバーには更新機能がない」、401/403 は認証切れ、通信失敗は到達不可で、それぞれ別の文面です。一つの「この環境では利用できません」に潰すと、更新できるサーバーでもデスクトップアプリへ誘導してしまいます。
 - **standalone の余白**: viewport は `viewport-fit=cover`、余白は `env(safe-area-inset-*)` で戻します（`layout.css` の `.app`、全画面 `.modal`、`.mp-popover`）。`packages/server/render.ts` と `packages/web/index.html` の viewport は揃えたままにしてください。
 - **確認**: `app_assets_test.ts` と `app_security_test.ts` が通ること。実機は Chrome の DevTools → Application → Manifest で、警告が出ないことを見ます。
 

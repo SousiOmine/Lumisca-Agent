@@ -1,7 +1,10 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
-import type { UpdateSource } from "../../hooks/useUpdateStatus.ts";
+import type {
+  UpdateFailureKind,
+  UpdateSource,
+} from "../../hooks/useUpdateStatus.ts";
 import type { UpdateStatus } from "../../shell.ts";
 import { GeneralPanel } from "./GeneralPanel.tsx";
 
@@ -30,14 +33,16 @@ function status(overrides: Partial<UpdateStatus> = {}): UpdateStatus {
 }
 
 function panel(
-  update: UpdateStatus,
-  source: UpdateSource = "server",
+  update: UpdateStatus | null,
+  source: UpdateSource | null = "server",
+  failure: UpdateFailureKind | null = null,
 ): string {
   return renderToString(
     createElement(GeneralPanel, {
       status: update,
       source,
       bridgeError: null,
+      failure,
       language: "ja",
       languageError: null,
       onLanguageChange: () => {},
@@ -83,4 +88,28 @@ Deno.test("an applied update shows the restart", () => {
   );
   assertStringIncludes(html, ">再起動<");
   assertEquals(html.includes("インストール中…"), false);
+});
+
+Deno.test("no updater says which reason it is", () => {
+  // One sentence ("auto-update is not available in this environment") used
+  // to answer a 404, a 401 and an unreachable server alike, and sent the
+  // reader to the desktop app for a server that simply had no updater.
+  assertStringIncludes(
+    panel(null, null, "no-updater"),
+    "このサーバーには更新機能がありません",
+  );
+  assertStringIncludes(
+    panel(null, null, "unauthorized"),
+    "認証が切れています",
+  );
+  assertStringIncludes(
+    panel(null, null, "unreachable"),
+    "接続できない",
+  );
+});
+
+Deno.test("before the first answer the panel says it is asking", () => {
+  // The poll starts on mount; claiming "no updater" in that first moment is
+  // what made an installed app look unsupported on every visit.
+  assertStringIncludes(panel(null, null, null), "アップデートを確認中");
 });

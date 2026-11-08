@@ -140,7 +140,22 @@ Deno.test("server serves the app shell", async () => {
   // API must not be shadowed.
   const health = await fetch(`${base}/api/health`);
   assertEquals(health.status, 200);
-  assertEquals((await health.json()).ok, true);
+  const healthBody = await health.json();
+  assertEquals(healthBody.ok, true);
+
+  // The build id ties a page to the client it was served with: the health
+  // answer reports the entry chunk's validator, and the page's own bootstrap
+  // carries the same value. `useBuildWatch` compares the two, which is how a
+  // page the server has moved past (an installed PWA never reloads on its
+  // own) learns that it is stale.
+  const entry = await fetch(`${base}/assets/app.js`);
+  const entryEtag = entry.headers.get("etag");
+  assert(entryEtag !== null, "the entry chunk must carry a validator");
+  assertEquals(healthBody.buildId, entryEtag);
+  assertEquals(
+    dataText.includes(`"buildId":${JSON.stringify(entryEtag)}`),
+    true,
+  );
 });
 
 Deno.test("token-required page renders in the request's language", async () => {

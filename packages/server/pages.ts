@@ -58,10 +58,14 @@ export function registerPages(
   assets: Assets,
   options: { token?: string },
 ): { renderPage: (c: Context) => Promise<Response> } {
-  const initialData = (language: Locale): InitialData => ({
+  const initialData = async (language: Locale): Promise<InitialData> => ({
     workspaces: core.listWorkspaces(),
     theme: themeOf(core),
     language,
+    // The build this page was served with: `/api/health` reports the one the
+    // server serves now, and the difference is how an installed PWA (no
+    // address bar, no reload) learns that its bundle has been replaced.
+    buildId: await assets.buildId(),
   });
 
   /** Render the app shell for one request (also the SPA fallback). */
@@ -95,10 +99,11 @@ export function registerPages(
   };
 
   app.get("/", (c) => renderPage(c));
-  app.get("/assets/initial-data.js", (c) => {
+  app.get("/assets/initial-data.js", async (c) => {
     // `<` is escaped so the JSON can never close the script tag.
-    const safeData = JSON.stringify(initialData(languageForRequest(core, c)))
-      .replace(/</g, "\\u003c");
+    const safeData = JSON.stringify(
+      await initialData(languageForRequest(core, c)),
+    ).replace(/</g, "\\u003c");
     const tokenLine = options.token
       ? `\nwindow.__LUMISCA_TOKEN__ = ${JSON.stringify(options.token)};`
       : "";

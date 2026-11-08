@@ -18,6 +18,7 @@ import { useLanguage } from "./hooks/useLanguage.ts";
 import { useWorkspaces } from "./hooks/useWorkspaces.ts";
 import { useSessionEvents } from "./hooks/useSessionEvents.ts";
 import { useServerHealth } from "./hooks/useServerHealth.ts";
+import { useBuildWatch } from "./hooks/useBuildWatch.ts";
 import { useUpdateStatus } from "./hooks/useUpdateStatus.ts";
 import { useNarrowViewport } from "./hooks/useMediaQuery.ts";
 import { useSessionActions } from "./hooks/useSessionActions.ts";
@@ -277,6 +278,17 @@ export function App({ initialData }: AppProps): ReactElement {
   // server's when this page runs outside the shell); polled here and shared
   // with the settings panel and the update banner below.
   const update = useUpdateStatus(true);
+  // Whether the server has moved on from the client bundle this page loaded.
+  // Fast enough to notice the successor answering once this page asked for a
+  // restart — that answer is the moment this page reloads.
+  const build = useBuildWatch(initialData?.buildId, {
+    restartPending: update.restartRequested,
+  });
+  useEffect(() => {
+    // The restart this page asked for has finished: the new server serves a
+    // new client, and this page would keep describing the previous release.
+    if (build.stale && update.restartRequested) location.reload();
+  }, [build.stale, update.restartRequested]);
   const {
     startSession,
     prompt,
@@ -647,7 +659,7 @@ export function App({ initialData }: AppProps): ReactElement {
       </TitleBar>
       {/* Everything below the title bar. */}
       <div className="app-body">
-        <UpdateBanner update={update} />
+        <UpdateBanner update={update} stale={build.stale} />
         <ServerDownBanner health={serverHealth} />
         {loadError && (
           <div className="msg">
