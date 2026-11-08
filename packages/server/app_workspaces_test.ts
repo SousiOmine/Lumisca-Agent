@@ -1604,7 +1604,10 @@ Deno.test("routine routes: list, enable, run and remove", async () => {
   const { core, server, base } = await setup();
   try {
     // Routines belong to a stella agent, so one has to exist first.
-    const agent = core.createStellaAgent({ name: "Runner", role: "test" });
+    const agent = await core.createStellaAgent({
+      name: "Runner",
+      role: "test",
+    });
     const list = await json(base, `/api/stella/agents/${agent.id}/routines`);
     assertEquals(list.status, 200);
     assertEquals((await list.json() as { routines: unknown[] }).routines, []);

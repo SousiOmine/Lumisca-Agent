@@ -15,7 +15,7 @@ function fakeCore(received: { name: string; role: string }[]): StellaApi {
   return {
     createStellaAgent: (input: { name: string; role: string }) => {
       received.push(input);
-      return {
+      return Promise.resolve({
         id: `a${received.length}`,
         name: input.name,
         role: input.role,
@@ -24,7 +24,7 @@ function fakeCore(received: { name: string; role: string }[]): StellaApi {
         model: null,
         createdAt: 0,
         updatedAt: 0,
-      };
+      });
     },
   } as unknown as StellaApi;
 }

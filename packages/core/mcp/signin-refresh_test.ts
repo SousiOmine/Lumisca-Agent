@@ -80,7 +80,7 @@ Deno.test("E2E: a stella conversation reaches an MCP server after signing in", a
     vncPort: () => Promise.resolve(49153),
   } as never);
   try {
-    const agent = core.createStellaAgent({ name: "Aide", role: "help" });
+    const agent = await core.createStellaAgent({ name: "Aide", role: "help" });
     const session = await core.getOrCreateStellaSession(agent.id);
     const body = JSON.stringify({ mcpServers: { probe: { url: mcp.url } } });
     const status = () =>

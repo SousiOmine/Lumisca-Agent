@@ -48,8 +48,12 @@ export interface StellaApi {
   listStellaAgentSummaries(): StellaAgentSummary[];
   /** Create the starter agent a fresh installation talks to, unless one
    * already exists. Returns the agent a client opens. */
-  ensureStellaAgent(): StellaAgent;
-  createStellaAgent(input: { name: string; role: string }): StellaAgent;
+  ensureStellaAgent(): Promise<StellaAgent>;
+  /** Create an agent: its row, and its working folder with MEMORY.md in it
+   * when the machine is up (see LumiscaCore.createStellaAgent). */
+  createStellaAgent(
+    input: { name: string; role: string },
+  ): Promise<StellaAgent>;
   /** Change an agent's name, its picture and/or its model, in one call: the
    * sidebar's edit dialog saves them together, and a request that stored one
    * but refused the other would leave the user with half of what they asked
@@ -307,8 +311,8 @@ export function stellaRoutes(core: StellaApi): Hono {
    * one agent: a first run would otherwise open stella mode onto an empty
    * sidebar and a disabled composer, which is a wall in front of the one
    * thing the mode exists for (see ensureStellaAgent). */
-  app.get("/stella/agents", (c) => {
-    core.ensureStellaAgent();
+  app.get("/stella/agents", async (c) => {
+    await core.ensureStellaAgent();
     return c.json({ agents: core.listStellaAgentSummaries() });
   });
 
@@ -323,7 +327,7 @@ export function stellaRoutes(core: StellaApi): Hono {
     // maps to 409 — the client shows it as "that name is taken" rather than
     // as a typo. Re-mapping it here would only re-derive the same table.
     return c.json(
-      core.createStellaAgent({
+      await core.createStellaAgent({
         name: optionalString(body?.name, "name"),
         role: optionalString(body?.role, "role"),
       }),

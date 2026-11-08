@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
+import { assert, assertEquals, assertRejects } from "@std/assert";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "./ai/faux.ts";
 import { NO_RESPONSE } from "./agent/silent-reply.ts";
 import { LumiscaCore } from "./core.ts";
@@ -19,6 +19,8 @@ import { CoreError } from "./errors.ts";
 import { MINI_PNG, promptSession, withTempDir } from "./test-utils.ts";
 import { DEFAULT_AGENT_NAME } from "./stella/agents.ts";
 import { SessionAttachmentStore } from "./session/attachments.ts";
+import { AGENT_MEMORY_FILE, vmMemoryPath } from "./vm/agent-memory.ts";
+import { vmAgentDir } from "./vm/contract.ts";
 
 /**
  * stella mode at the core level: the mode switch, the single conversation and
@@ -34,7 +36,14 @@ import { SessionAttachmentStore } from "./session/attachments.ts";
  * to resolve a default model). */
 async function stellaCore(status: VmStatus): Promise<LumiscaCore> {
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider]);
+  // A scripted exec seam: the machine is a stub, so no `podman` is spawned
+  // (creating an agent now prepares its folder, which would otherwise be a
+  // real process per test).
+  const core = LumiscaCore.forTesting(
+    [faux.provider],
+    () => ({}),
+    recordingRunner(),
+  );
   core.models.models.setProvider(faux.provider);
   await core.setProviderApiKey(faux.provider.id, "faux-key");
   core.setStellaVm(fakeVm(status));
@@ -56,6 +65,33 @@ const NO_PODMAN: VmStatus = {
   vncPort: null,
   reason: "podman: command not found",
 };
+
+/** An exec seam that records every command and answers success, for the tests
+ * that ask what crossed into the machine. */
+function recordingRunner() {
+  const calls: string[][] = [];
+  return {
+    calls,
+    run: (command: readonly string[]) => {
+      calls.push([...command]);
+      return Promise.resolve({
+        exitCode: 0,
+        stdout: "",
+        stderr: "",
+        truncated: false,
+        timedOut: false,
+      });
+    },
+    runBytes: () =>
+      Promise.resolve({
+        exitCode: 0,
+        stdout: new Uint8Array(),
+        stderr: "",
+        truncated: false,
+        timedOut: false,
+      }),
+  };
+}
 
 Deno.test("stella availability: no machine attached reports its own reason", async () => {
   const core = LumiscaCore.forTesting([fauxProvider().provider]);
@@ -106,13 +142,13 @@ Deno.test("stella agents: the starter agent exists once and is the default", asy
   const core = await stellaCore(RUNNING);
   try {
     assertEquals(core.listStellaAgents(), []);
-    const starter = core.ensureStellaAgent();
+    const starter = await core.ensureStellaAgent();
     // A name and a role: the agent's prompt is built from them, so neither
     // may be blank.
     assert(starter.name.length > 0, starter.name);
     assert(starter.role.length > 0, starter.role);
     // A second call returns the same row (the list is the check).
-    assertEquals(core.ensureStellaAgent().id, starter.id);
+    assertEquals((await core.ensureStellaAgent()).id, starter.id);
     assertEquals(core.listStellaAgents().map((a) => a.id), [starter.id]);
   } finally {
     await core.close();
@@ -122,9 +158,59 @@ Deno.test("stella agents: the starter agent exists once and is the default", asy
 Deno.test("stella agents: a user's own agent is never replaced by the starter", async () => {
   const core = await stellaCore(RUNNING);
   try {
-    const mine = core.createStellaAgent({ name: "Mine", role: "My work." });
-    assertEquals(core.ensureStellaAgent().id, mine.id);
+    const mine = await core.createStellaAgent({
+      name: "Mine",
+      role: "My work.",
+    });
+    assertEquals((await core.ensureStellaAgent()).id, mine.id);
     assertEquals(core.listStellaAgents().length, 1);
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella agents: creating one prepares its folder and memory file", async () => {
+  // The file the system prompt names is made as the agent is CREATED, not at
+  // its first message: an agent that has never spoken still has one.
+  const faux = fauxProvider();
+  const runner = recordingRunner();
+  const core = LumiscaCore.forTesting([faux.provider], () => ({}), runner);
+  core.models.models.setProvider(faux.provider);
+  await core.setProviderApiKey(faux.provider.id, "faux-key");
+  core.setStellaVm(fakeVm(RUNNING));
+  try {
+    const agent = await core.createStellaAgent({ name: "Keeper", role: "r" });
+    const memory = runner.calls.filter((command) =>
+      command.includes(vmMemoryPath(agent.id))
+    );
+    assertEquals(memory.length, 1, JSON.stringify(runner.calls));
+    const [call] = memory;
+    assert(call !== undefined);
+    // The folder travels as the same command's argument: one round trip, and
+    // bash has somewhere to start before the agent's first message.
+    assert(call.includes(vmAgentDir(agent.id)), JSON.stringify(call));
+    assert(
+      call.some((arg) => arg.endsWith(`/${AGENT_MEMORY_FILE}`)),
+      JSON.stringify(call),
+    );
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella agents: a stopped machine prepares the folder at the first open", async () => {
+  // Creating an agent does not start the machine — that is the first
+  // conversation's job — so nothing is attempted here and the open path makes
+  // the folder (and MEMORY.md) later.
+  const faux = fauxProvider();
+  const runner = recordingRunner();
+  const core = LumiscaCore.forTesting([faux.provider], () => ({}), runner);
+  core.models.models.setProvider(faux.provider);
+  await core.setProviderApiKey(faux.provider.id, "faux-key");
+  core.setStellaVm(fakeVm({ state: "stopped", vncPort: null, reason: "" }));
+  try {
+    await core.createStellaAgent({ name: "Later", role: "r" });
+    assertEquals(runner.calls, []);
   } finally {
     await core.close();
   }
@@ -133,7 +219,7 @@ Deno.test("stella agents: a user's own agent is never replaced by the starter", 
 Deno.test("stella conversation: created once and kept out of the session lists", async () => {
   const core = await stellaCore(RUNNING);
   try {
-    core.createStellaAgent({ name: "Aide", role: "Help with the work." });
+    await core.createStellaAgent({ name: "Aide", role: "Help with the work." });
     const first = await core.getOrCreateStellaSession();
     assertEquals(first.stella, true);
     // A second call returns the same conversation: stella has one.
@@ -151,8 +237,8 @@ Deno.test("stella conversation: created once and kept out of the session lists",
 Deno.test("stella conversation: each agent has its own", async () => {
   const core = await stellaCore(RUNNING);
   try {
-    const first = core.createStellaAgent({ name: "First", role: "r" });
-    const second = core.createStellaAgent({ name: "Second", role: "r" });
+    const first = await core.createStellaAgent({ name: "First", role: "r" });
+    const second = await core.createStellaAgent({ name: "Second", role: "r" });
     const a = await core.getOrCreateStellaSession(first.id);
     const b = await core.getOrCreateStellaSession(second.id);
     // Two agents, two conversations. A shared row would make them one person
@@ -185,7 +271,7 @@ Deno.test("stella conversation: opens on the agent's own model", async () => {
   // exists: a user picking a model must not have to open one first.
   const core = await twoModelStellaCore();
   try {
-    const agent = core.createStellaAgent({ name: "Aide", role: "r" });
+    const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
     await core.updateStellaAgent(agent.id, {
       model: { provider: "faux", modelId: "other" },
     });
@@ -200,7 +286,7 @@ Deno.test("stella conversation: opens on the agent's own model", async () => {
 Deno.test("stella conversation: an unset model follows the app's default", async () => {
   const core = await twoModelStellaCore();
   try {
-    const agent = core.createStellaAgent({ name: "Aide", role: "r" });
+    const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
     const session = await core.getOrCreateStellaSession(agent.id);
     // Whatever the default resolves to, it is not the agent's to choose.
     assert(session.modelId === "faux" || session.modelId === "other");
@@ -217,7 +303,7 @@ Deno.test("stella conversation: the dialog's model choice moves the conversation
   // run reads.
   const core = await twoModelStellaCore();
   try {
-    const agent = core.createStellaAgent({ name: "Aide", role: "r" });
+    const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
     const session = await core.getOrCreateStellaSession(agent.id);
     const fallback = session.modelId;
     const chosen = fallback === "faux" ? "other" : "faux";
@@ -246,7 +332,7 @@ Deno.test("stella conversation: the dialog's model choice moves the conversation
 Deno.test("stella conversation: a model the catalog does not have is refused", async () => {
   const core = await twoModelStellaCore();
   try {
-    const agent = core.createStellaAgent({ name: "Aide", role: "r" });
+    const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
     await assertRejects(
       () =>
         core.updateStellaAgent(agent.id, {
@@ -265,7 +351,7 @@ Deno.test("stella conversation: a model the catalog does not have is refused", a
 Deno.test("stella conversation: deleting an agent takes its conversation", async () => {
   const core = await stellaCore(RUNNING);
   try {
-    const agent = core.createStellaAgent({ name: "Gone", role: "r" });
+    const agent = await core.createStellaAgent({ name: "Gone", role: "r" });
     const session = await core.getOrCreateStellaSession(agent.id);
     await core.deleteStellaAgent(agent.id);
     assertEquals(core.getSession(session.id), undefined);
@@ -278,7 +364,7 @@ Deno.test("stella conversation: deleting an agent takes its conversation", async
 Deno.test("stella agents: an icon is stored, replaced and cleared as one file", async () => {
   const core = await stellaCore(RUNNING);
   try {
-    const agent = core.createStellaAgent({ name: "Aide", role: "r" });
+    const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
     assertEquals(agent.icon, "");
 
     const first = await core.updateStellaAgent(agent.id, {
@@ -322,7 +408,7 @@ Deno.test("stella agents: an icon is stored, replaced and cleared as one file", 
 Deno.test("stella agents: deleting an agent drops its icon files", async () => {
   const core = await stellaCore(RUNNING);
   try {
-    const agent = core.createStellaAgent({ name: "Gone", role: "r" });
+    const agent = await core.createStellaAgent({ name: "Gone", role: "r" });
     const withIcon = await core.updateStellaAgent(agent.id, {
       icon: { bytes: MINI_PNG, extension: ".png" },
     });
@@ -367,7 +453,7 @@ Deno.test("stella agents: a patch for a missing agent is refused", async () => {
 Deno.test("stella agents: an icon that is not an image is refused by the core", async () => {
   const core = await stellaCore(RUNNING);
   try {
-    const agent = core.createStellaAgent({ name: "Aide", role: "r" });
+    const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
     const error = await assertRejects(
       () =>
         core.updateStellaAgent(agent.id, {
@@ -389,8 +475,8 @@ Deno.test("stella agents: an icon that is not an image is refused by the core", 
 Deno.test("stella agents: a rename is checked like a creation", async () => {
   const core = await stellaCore(RUNNING);
   try {
-    const first = core.createStellaAgent({ name: "First", role: "r" });
-    core.createStellaAgent({ name: "Second", role: "r" });
+    const first = await core.createStellaAgent({ name: "First", role: "r" });
+    await core.createStellaAgent({ name: "Second", role: "r" });
 
     // The sidebar's rule is the same in both directions: two rows the user
     // cannot tell apart (compared case-insensitively).
@@ -425,7 +511,7 @@ Deno.test("stella agents: a rename is checked like a creation", async () => {
 Deno.test("stella agents: a name and a picture land together", async () => {
   const core = await stellaCore(RUNNING);
   try {
-    const agent = core.createStellaAgent({ name: "Old", role: "r" });
+    const agent = await core.createStellaAgent({ name: "Old", role: "r" });
     const updated = await core.updateStellaAgent(agent.id, {
       name: "New",
       icon: { bytes: MINI_PNG, extension: ".png" },
@@ -455,7 +541,7 @@ Deno.test("stella agents: a name and a picture land together", async () => {
 Deno.test("stella conversation: its system prompt is the machine's, not the name", async () => {
   const core = await stellaCore(RUNNING);
   try {
-    const agent = core.createStellaAgent({
+    const agent = await core.createStellaAgent({
       name: "Aide",
       role: "You keep notes and check facts.",
     });
@@ -507,7 +593,7 @@ Deno.test("stella conversation: an agent without a role still gets the opening l
     // The create form's role is optional, so this is a normal agent: it gets
     // the shared opening line and nothing after it on that line (no dangling
     // space, no empty quotation marks).
-    const agent = core.createStellaAgent({ name: "Quiet", role: "" });
+    const agent = await core.createStellaAgent({ name: "Quiet", role: "" });
     const session = await core.getOrCreateStellaSession(agent.id);
     const prompt = session.systemPrompt ?? "";
     assert(
@@ -721,11 +807,15 @@ Deno.test("stella tool set: every preloaded tool has a guideline section", () =>
  * nothing is listening to. */
 async function stellaConversation(name: string) {
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = LumiscaCore.forTesting(
+    [faux.provider],
+    () => ({}),
+    recordingRunner(),
+  );
   core.models.models.setProvider(faux.provider);
   await core.setProviderApiKey(faux.provider.id, "faux-key");
   core.setStellaVm(fakeVm(RUNNING));
-  const agent = core.createStellaAgent({ name, role: "r" });
+  const agent = await core.createStellaAgent({ name, role: "r" });
   const session = await core.getOrCreateStellaSession(agent.id);
   return { faux, core, agent, session };
 }
@@ -1061,7 +1151,7 @@ Deno.test("stella conversation: history_search reads the message after a prune",
 Deno.test("stella conversation: history_search never reads another agent's rows", async () => {
   const { faux, core, session: sessionA } = await stellaConversation("First");
   try {
-    const second = core.createStellaAgent({ name: "Second", role: "r" });
+    const second = await core.createStellaAgent({ name: "Second", role: "r" });
     const sessionB = await core.getOrCreateStellaSession(second.id);
 
     // The word is said to the first agent only.
@@ -1159,7 +1249,7 @@ Deno.test("stella conversation: the identity a write produces reaches the next r
 Deno.test("stella conversation: each agent's identity is its own", async () => {
   const { faux, core, session: sessionA } = await stellaConversation("One");
   try {
-    const second = core.createStellaAgent({ name: "Two", role: "r" });
+    const second = await core.createStellaAgent({ name: "Two", role: "r" });
     const sessionB = await core.getOrCreateStellaSession(second.id);
 
     faux.setResponses([
@@ -1240,7 +1330,7 @@ Deno.test("stella conversation: a skill in the machine reaches the published cat
   await core.setProviderApiKey(faux.provider.id, "faux-key");
   core.setStellaVm(fakeVm(RUNNING));
   try {
-    const agent = core.createStellaAgent({
+    const agent = await core.createStellaAgent({
       name: "Keeper",
       role: "Keep notes.",
     });
@@ -1308,8 +1398,11 @@ Deno.test("stella conversation: two agents do not share their own skills", async
   await core.setProviderApiKey(faux.provider.id, "faux-key");
   core.setStellaVm(fakeVm(RUNNING));
   try {
-    const first = core.createStellaAgent({ name: "First", role: "One." });
-    const second = core.createStellaAgent({ name: "Second", role: "Two." });
+    const first = await core.createStellaAgent({ name: "First", role: "One." });
+    const second = await core.createStellaAgent({
+      name: "Second",
+      role: "Two.",
+    });
     byDir.set(`/home/agent/agents/${first.id}/.agents/skills`, [{
       name: "only-for-first",
       description: "First's own skill.",
@@ -1371,20 +1464,20 @@ Deno.test("stella agents: an unnamed agent gets a free default name", async () =
     // The user did not fill the form in. Creating must still work, and the
     // second unnamed agent must not be refused as "that name is taken" for a
     // name the user never wrote.
-    const first = core.createStellaAgent({ name: "", role: "" });
+    const first = await core.createStellaAgent({ name: "", role: "" });
     assertEquals(first.name, DEFAULT_AGENT_NAME);
     assertEquals(first.role, "");
 
-    const second = core.createStellaAgent({ name: "   ", role: "" });
+    const second = await core.createStellaAgent({ name: "   ", role: "" });
     assertEquals(second.name, `${DEFAULT_AGENT_NAME} 2`);
 
     // A name the user DID write keeps the duplicate rule.
-    core.createStellaAgent({ name: "Notes", role: "" });
-    assertThrows(
+    await core.createStellaAgent({ name: "Notes", role: "" });
+    await assertRejects(
       () => core.createStellaAgent({ name: "Notes", role: "" }),
       Error,
     );
-    assertThrows(
+    await assertRejects(
       () => core.createStellaAgent({ name: "notes", role: "" }),
       Error,
     );
@@ -1484,7 +1577,7 @@ Deno.test("stella agents: a row says what its conversation last said", async () 
 
     // An agent whose conversation was never opened says nothing: nothing has
     // been said in it, and a row must not invent a line.
-    const quiet = core.createStellaAgent({ name: "Quiet", role: "r" });
+    const quiet = await core.createStellaAgent({ name: "Quiet", role: "r" });
     const quietRow = core.listStellaAgentSummaries().find((item) =>
       item.id === quiet.id
     );
@@ -1571,4 +1664,21 @@ Deno.test("stella prompt: text beside a tool call is not delivered", async () =>
   // A file is attached by the tool, not by writing it or naming it.
   assert(prompt.includes("send_chat's `paths`"), prompt);
   assert(prompt.includes("never tell the user a file was sent"), prompt);
+});
+
+Deno.test("stella prompt: MEMORY.md is where the agent keeps what it must remember", async () => {
+  // Three rules in one paragraph, and all three are the user's: write down
+  // what should outlive the run (without being asked), read what an earlier
+  // run may have written, and keep the file short enough to search. The
+  // prompt is the only place a convention about a FILE can be stated — no
+  // tool description of `read` or `write` can say "keep your own notes here".
+  const { buildStellaSystemPrompt } = await import("./tools/system-prompt.ts");
+  const prompt = buildStellaSystemPrompt({
+    agent: { role: "調べもの" },
+    workdir: "/home/agent/agents/a1",
+  });
+  assert(prompt.includes(AGENT_MEMORY_FILE), prompt);
+  assert(prompt.includes("without being asked"), prompt);
+  assert(prompt.includes("may have written something there already"), prompt);
+  assert(prompt.includes("delete what is no longer true"), prompt);
 });

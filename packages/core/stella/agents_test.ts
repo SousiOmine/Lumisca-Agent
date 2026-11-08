@@ -378,7 +378,7 @@ async function agentToolFixture(
   options: {
     files?: Record<string, string | Uint8Array>;
     /** Replaces the core's create, for the tests about its own rules. */
-    create?: (input: { name: string; role: string }) => StellaAgent;
+    create?: (input: { name: string; role: string }) => Promise<StellaAgent>;
   } = {},
 ): Promise<{
   tool: ReturnType<typeof createAgentCreateTool>;
@@ -405,7 +405,7 @@ async function agentToolFixture(
     files: new HostFileBackend(new Sandbox([root])),
     create: options.create ?? ((input) => {
       created.push(input);
-      return {
+      return Promise.resolve({
         id: `a${created.length}`,
         name: input.name,
         role: input.role,
@@ -414,7 +414,7 @@ async function agentToolFixture(
         model: null,
         createdAt: 0,
         updatedAt: 0,
-      };
+      });
     }),
   });
   return {

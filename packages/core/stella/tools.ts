@@ -44,9 +44,11 @@ const createSchema = object({
 });
 
 export interface AgentCreateOptions {
-  /** Create the agent and return it. Throws (conflict) for a taken name —
-   * the core owns that rule, so the route and this tool cannot disagree. */
-  create(input: { name: string; role: string }): StellaAgent;
+  /** Create the agent and return it once it is ready — its row, and (when the
+   * machine is up) its working folder with MEMORY.md in it. Rejects (conflict)
+   * for a taken name — the core owns that rule, so the route and this tool
+   * cannot disagree. */
+  create(input: { name: string; role: string }): Promise<StellaAgent>;
   /** The session's file backend: `role_file` resolves against it, so a role
    * file is exactly a file this agent may read. */
   files: FileBackend;
@@ -157,7 +159,7 @@ export function createAgentCreateTool(
           "invalid",
         );
       }
-      const agent = create({ name: params.name, role });
+      const agent = await create({ name: params.name, role });
       // Saying where the role came from is what lets the model tell the user
       // which file was used; the file itself is not kept anywhere.
       const origin = source === undefined

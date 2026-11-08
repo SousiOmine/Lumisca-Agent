@@ -13,7 +13,8 @@ import type { StellaStatus } from "../shared/wire.ts";
 import { discoverVmSkills } from "./skills.ts";
 import { builtinSkills } from "../skills/builtin/mod.ts";
 import type { SkillDef } from "../skills/discover.ts";
-import { VM_SKILLS_DIR, vmAgentDir } from "./contract.ts";
+import { VM_SKILLS_DIR } from "./contract.ts";
+import { ensureAgentMemory } from "./agent-memory.ts";
 
 /** Everything the stella machine holds between calls: the manager, the exec
  * seams built over it, the cached availability verdict and the skill catalog.
@@ -207,13 +208,12 @@ export class StellaMachine {
     return this.#vm;
   }
 
-  /** Create the agent's working folder inside the machine (idempotent). */
-  async ensureAgentDir(agentId: string): Promise<void> {
+  /** Create the agent's working folder inside the machine and leave an empty
+   * MEMORY.md in it (idempotent: an existing file is never emptied). */
+  async ensureAgentFolder(agentId: string): Promise<void> {
     const exec = this.exec();
     if (exec === undefined) return;
-    await exec(["mkdir", "-p", "--", vmAgentDir(agentId)], {
-      timeoutMs: 30_000,
-    });
+    await ensureAgentMemory(exec, agentId);
   }
 
   /** Re-read one agent's skill catalog: the agent's own skills, the

@@ -153,7 +153,7 @@ arm();
 // (creating any session resolves a default model, which requires one).
 await core.setProviderApiKey(faux.provider.id, "faux-key");
 // A starter agent, so the stella screen has someone to talk to in the demo.
-core.createStellaAgent({
+await core.createStellaAgent({
   name: "Aide",
   role: "A general helper for this machine.",
 });

@@ -104,7 +104,7 @@ export class StellaMachines {
       ): Promise<{ provider: string; modelId: string }>;
       createStellaAgent(
         input: { name: string; role: string },
-      ): import("../stella/agents.ts").StellaAgent;
+      ): Promise<import("../stella/agents.ts").StellaAgent>;
       ensureStellaReady(
         onProgress?: (progress: VmProgress) => void,
       ): Promise<void>;
@@ -180,7 +180,7 @@ export class StellaMachines {
     // trips the user waited for.
     await Promise.all([
       this.primeStellaSkills(agent.id),
-      this.deps.machine.ensureAgentDir(agent.id),
+      this.deps.machine.ensureAgentFolder(agent.id),
     ]);
     this.deps.agents.touch(agent.id);
     if (existing !== undefined) {
@@ -263,6 +263,21 @@ export class StellaMachines {
    */
   async getStellaStatus(): Promise<StellaStatus> {
     return await this.deps.machine.status();
+  }
+
+  /**
+   * Create one agent's working folder and its MEMORY.md now, when the machine
+   * is up.
+   *
+   * Called as the agent is created, so the file the system prompt promises is
+   * there before the agent's first turn. Creating an agent does not START the
+   * machine: a container that is not running is brought up by the first
+   * conversation (see getOrCreateStellaSession), and that path prepares the
+   * folder too, so a stopped machine only moves the work to that moment.
+   */
+  async prepareAgentFolder(agentId: string): Promise<void> {
+    if (!(await this.deps.machine.isRunning())) return;
+    await this.deps.machine.ensureAgentFolder(agentId);
   }
 
   /** The hand-over hub of one session (see vm/handover.ts): created on

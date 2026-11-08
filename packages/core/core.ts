@@ -547,8 +547,7 @@ export class LumiscaCore {
       requireWorkspace: (id) => this.requireWorkspace(id),
       resolveDefaultModel: (provider, modelId) =>
         this.resolveDefaultModel(provider, modelId),
-      createStellaAgent: (input) =>
-        this.services.stellaAgents.createStellaAgent(input),
+      createStellaAgent: (input) => this.createStellaAgent(input),
       ensureStellaReady: (onProgress) =>
         this.services.stellaMachines.ensureStellaReady(onProgress),
     });
@@ -1253,16 +1252,46 @@ export class LumiscaCore {
     return this.services.stellaAgents.listStellaAgentSummaries();
   }
 
-  ensureStellaAgent(): StellaAgent {
-    return this.services.stellaAgents.ensureStellaAgent();
+  /**
+   * The agent a fresh installation talks to, created on the first read.
+   *
+   * Asynchronous because creating one also prepares its working folder and
+   * MEMORY.md (see prepareStellaAgentFolder); an agent that already exists
+   * answers without touching the machine.
+   */
+  async ensureStellaAgent(): Promise<StellaAgent> {
+    const before = this.services.stellaAgents.listStellaAgents().length;
+    const agent = this.services.stellaAgents.ensureStellaAgent();
+    if (before === 0) await this.prepareStellaAgentFolder(agent.id);
+    return agent;
   }
 
   getStellaAgent(id: string): StellaAgent | undefined {
     return this.services.stellaAgents.getStellaAgent(id);
   }
 
-  createStellaAgent(input: { name: string; role: string }): StellaAgent {
-    return this.services.stellaAgents.createStellaAgent(input);
+  /**
+   * Create an agent, and prepare its working folder in the machine.
+   *
+   * Asynchronous for that second half only: the row is a database write, but
+   * the folder and MEMORY.md are files inside the machine, and the file the
+   * system prompt names should exist before the agent's first turn. The row is
+   * written first because the folder is named after the agent's id; the folder
+   * is skipped when the machine is not running, and the first conversation
+   * prepares it then (see StellaMachines.prepareAgentFolder).
+   */
+  async createStellaAgent(
+    input: { name: string; role: string },
+  ): Promise<StellaAgent> {
+    const agent = this.services.stellaAgents.createStellaAgent(input);
+    await this.prepareStellaAgentFolder(agent.id);
+    return agent;
+  }
+
+  /** One agent's folder and memory file in the machine, when the machine is
+   * up. Both creation paths above go through this, so neither can forget. */
+  private prepareStellaAgentFolder(agentId: string): Promise<void> {
+    return this.services.stellaMachines.prepareAgentFolder(agentId);
   }
 
   /**

@@ -44,7 +44,9 @@ ${folders}
  * their contracts, and a prompt that listed them would change whenever the
  * set did. `send_chat` is the exception: which of its two channels reaches
  * the user is a rule about the conversation, not about the tool, so no tool
- * description can state it.
+ * description can state it. MEMORY.md is named for the same reason: that the
+ * file exists and is meant to be kept short and organized is a convention
+ * about the conversation, not a contract of `read` or `write`.
  */
 export function buildStellaSystemPrompt(
   options: {
@@ -83,6 +85,14 @@ a shell, a browser and a screen, and nothing outside it. Your folder is
 ${workdir}, where file tools resolve paths and bash starts. You are
 \`${VM_USER}\` with passwordless \`sudo\`. Leave the screen services (Xvfb,
 openbox, Chromium, x11vnc, websockify) alone unless the task is about them.
+
+Your folder holds MEMORY.md, where you keep notes for later runs: write
+there, with the ordinary file tools, what you should remember next time —
+how this user wants things done, what you set up, where you put it —
+without being asked, and read it before work that may depend on an earlier
+run, because you may have written something there already. Keep it short
+enough to find things in: regroup it, and delete what is no longer true,
+rather than appending until nothing can be found.
 
 Your reply is the message the user reads: the text of the run's last
 message, and nothing else. Text written in a message that also calls a tool

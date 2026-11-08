@@ -43,7 +43,7 @@ Deno.test("stella live: a tool call runs inside the machine", {
 
     // A fresh core has no counterpart yet: stella has no default agent
     // (the first run asks the user to name one), so the test makes its own.
-    const counterpart = core.createStellaAgent({
+    const counterpart = await core.createStellaAgent({
       name: "Live Check",
       role: "Verifies that tools run inside the machine.",
     });
@@ -130,7 +130,7 @@ Deno.test(
       core.setStellaVm(vm);
       await core.getStellaAvailability();
 
-      const counterpart = core.createStellaAgent({
+      const counterpart = await core.createStellaAgent({
         name: "History Reader",
         role: "Looks back at earlier turns.",
       });
@@ -180,7 +180,7 @@ Deno.test(
       await core.setProviderApiKey(faux.provider.id, "faux-key");
       core.setStellaVm(vm);
       await core.getStellaAvailability();
-      const agent = core.createStellaAgent({
+      const agent = await core.createStellaAgent({
         name: "Live Worker",
         role: "Writes files where it is asked to.",
       });
@@ -246,6 +246,62 @@ Deno.test(
     } finally {
       await runInMachine(["rm", "-rf", "/home/agent/agents/live-other"])
         .catch(() => {});
+      await core.close();
+    }
+  },
+);
+
+Deno.test(
+  "stella live: MEMORY.md is there from creation and survives reopening",
+  {
+    ignore: !(await machineReady()),
+  },
+  async () => {
+    const vm = createVmManager({ containerDir });
+    const faux = fauxProvider();
+    const core = LumiscaCore.forTesting([faux.provider]);
+    try {
+      await core.setProviderApiKey(faux.provider.id, "faux-key");
+      core.setStellaVm(vm);
+      await core.getStellaAvailability();
+      // Creating an agent does not start the machine, so the machine is up
+      // first — this is the case where creation prepares the folder.
+      await core.ensureStellaReady();
+
+      const agent = await core.createStellaAgent({
+        name: "Live Memory",
+        role: "Keeps notes for later runs.",
+      });
+      // Made with the agent, before it has ever spoken.
+      const path = `${vmAgentDir(agent.id)}/MEMORY.md`;
+      assertEquals(await runInMachine(["cat", path]), "");
+
+      // The agent writes to it the way it is told to: the file tools.
+      const session = await core.getOrCreateStellaSession(agent.id);
+      faux.setResponses([
+        fauxAssistantMessage([
+          fauxToolCall("write", {
+            path: "MEMORY.md",
+            content: "- the user writes in Japanese\n",
+          }),
+        ], { stopReason: "toolUse" }),
+        fauxAssistantMessage("noted"),
+      ]);
+      await promptSession(core, session.id, "remember that");
+      assertEquals(
+        await runInMachine(["cat", path]),
+        "- the user writes in Japanese\n",
+      );
+
+      // Reopening the conversation prepares the folder again — this is the
+      // regression that would cost the notes: `: >` without the guard.
+      core.closeSession(session.id);
+      await core.getOrCreateStellaSession(agent.id);
+      assertEquals(
+        await runInMachine(["cat", path]),
+        "- the user writes in Japanese\n",
+      );
+    } finally {
       await core.close();
     }
   },

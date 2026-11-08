@@ -191,6 +191,15 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 - **パスの境界**: 相対パスと `bash` の基点は `/home/agent/agents/<agent id>`、境界は `/home/agent` です（`packages/core/vm/fs.ts` の `resolveVmPath`）。変えるときは `packages/core/tools/system-prompt.ts` も合わせてください。
 - **ファイルの送受信**: ユーザーへは `send_chat` の `paths`（code mode は `chat_attach`）で送ります。上限は `attachFiles()` の 1 箇所で、1 件 4 MiB・1 回 10 件・合計 16 MiB、累計に上限はありません。ユーザーからの添付はマシンの中に書き（`packages/core/vm/uploads.ts`）、メッセージは参照と表示名・サイズだけを持ちます。表示はマシンから読み、消えていれば 404 です。
 
+### 記憶（MEMORY.md）
+
+エージェントは自分の作業フォルダに `MEMORY.md` を持ち、`read` / `write` / `edit` で読み書きします。専用のツールはありません（`identity` とは別物です。あちらは DB の行で、毎ターン context メッセージとして届きます）。
+
+- **用意するのは 2 か所**: 作成時（`LumiscaCore.createStellaAgent` → `StellaMachines.prepareAgentFolder`）と、会話を開くとき（`getOrCreateStellaSession`）です。作成時にマシンが止まっていれば何もしません——エージェントの作成がコンテナの起動を要求してはいけないためです。
+- **`[ -e ]` ガードを外さない**: 開くたびに走るので、無条件に `: >` すると記憶が毎回消えます。コマンドは `packages/core/vm/agent-memory.ts` の 1 箇所だけで、`stella_live_test.ts` が「開き直しても消えない」を固定しています。
+- **文面とファイル名は別々に持つ**: 文面は `packages/core/tools/system-prompt.ts`、名前は `AGENT_MEMORY_FILE` です。`vm/agent-memory_test.ts` が両者の一致を検査します。
+- **作成は非同期**: フォルダを触るため `createStellaAgent` / `ensureStellaAgent` は `Promise` を返します。`agent_create` ツールも同じ経路を通るので、ツールから作ったエージェントにもファイルができます。
+
 ### 画面
 
 - **パネルは既定で閉じる**: 開閉はヘッダーのトグルで、送信で勝手に開き直しません。`vm_ask_user` の受け渡し中だけは必ず開きます。
