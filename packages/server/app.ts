@@ -168,18 +168,34 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   // the federation client probes it to recognise this hub registered under
   // another of its URLs (see federation.ts).
   //
-  // `buildId` is the client build this process serves, so a page that has
-  // been open since before an update can notice that its bundle has been
-  // replaced (packages/web/src/hooks/useBuildWatch.ts; see Assets.buildId).
-  // It is omitted rather than failing the answer when the build cannot be
-  // read: liveness is exactly what a caller must be able to ask about.
+  // Nothing here is awaited, and in particular the client build is NOT
+  // reported here. Its first read after a start runs esbuild — measured
+  // 740ms on an idle machine, several seconds on a loaded CI runner — while
+  // every caller of this route allows it a few seconds (a federation peer
+  // probe gives up at 3s, the desktop shell's startup check at 3s). Waiting
+  // for the bundle made liveness cost as much as a full frontend build, and
+  // a live peer was reported as down when the machine was busy. The build id
+  // has its own route (`/api/build`), asked for by the one client that
+  // compares it.
   app.get(
     "/api/health",
-    async (c) =>
+    (c) =>
       c.json({
         ok: true,
         now: Date.now(),
         instanceId,
+      }),
+  );
+
+  /** The client build this process serves (see Assets.buildId). Split from
+   * `/api/health` because the two questions have different budgets: "is this
+   * machine up" is asked with seconds to spare and must not wait for a
+   * frontend build; "has the bundle been replaced" is asked once a minute by
+   * an open page, which can afford to wait for the first build. */
+  app.get(
+    "/api/build",
+    async (c) =>
+      c.json({
         buildId: await assets.buildId().catch(() => undefined),
       }),
   );

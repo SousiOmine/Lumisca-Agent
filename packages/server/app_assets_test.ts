@@ -142,16 +142,28 @@ Deno.test("server serves the app shell", async () => {
   assertEquals(health.status, 200);
   const healthBody = await health.json();
   assertEquals(healthBody.ok, true);
+  // Liveness answers on its own: asking it never starts a frontend build.
+  // It used to carry the build id, which meant the first health probe after
+  // a start paid for esbuild (740ms idle, seconds on a busy runner) while
+  // its callers allow it 3 seconds — a live federated peer was reported as
+  // down, which is what failed CI on the slower runners.
+  assertEquals(
+    Object.hasOwn(healthBody, "buildId"),
+    false,
+    "liveness must not wait for the client build",
+  );
 
-  // The build id ties a page to the client it was served with: the health
-  // answer reports the entry chunk's validator, and the page's own bootstrap
+  // The build id ties a page to the client it was served with: the build
+  // route reports the entry chunk's validator, and the page's own bootstrap
   // carries the same value. `useBuildWatch` compares the two, which is how a
   // page the server has moved past (an installed PWA never reloads on its
   // own) learns that it is stale.
   const entry = await fetch(`${base}/assets/app.js`);
   const entryEtag = entry.headers.get("etag");
   assert(entryEtag !== null, "the entry chunk must carry a validator");
-  assertEquals(healthBody.buildId, entryEtag);
+  const build = await fetch(`${base}/api/build`);
+  assertEquals(build.status, 200);
+  assertEquals((await build.json()).buildId, entryEtag);
   assertEquals(
     dataText.includes(`"buildId":${JSON.stringify(entryEtag)}`),
     true,

@@ -48,8 +48,12 @@ export interface BuildWatch {
  * server update — or after months of releases — the page can still be running
  * a client from before the features it is looking for existed. Nothing inside
  * the old bundle can fix that, so the server names the build it serves
- * (`/api/health`'s `buildId`, see Assets.buildId) and this hook compares it
+ * (`/api/build`'s `buildId`, see Assets.buildId) and this hook compares it
  * with the one the page was served with (`__INITIAL_DATA__.buildId`).
+ *
+ * The build id has a route of its own rather than riding on `/api/health`:
+ * that route answers liveness, which several callers ask with a 3-second
+ * budget, and computing the id runs a frontend build (see app.ts).
  *
  * The check runs on the visible-page cadence and once every time the page
  * comes back, which is exactly when an installed app is looked at again.
@@ -62,9 +66,9 @@ export function useBuildWatch(
   const loaded = loadedBuildId ?? "";
   useVisibleInterval(
     () => {
-      void request<{ buildId?: string }>("/api/health").then(
-        (health) => {
-          if (buildMoved(loaded, health.buildId)) setStale(true);
+      void request<{ buildId?: string }>("/api/build").then(
+        (build) => {
+          if (buildMoved(loaded, build.buildId)) setStale(true);
         },
         // A failed read says nothing about the build: the server may be
         // restarting, which the next tick (or the one after it) will see.
