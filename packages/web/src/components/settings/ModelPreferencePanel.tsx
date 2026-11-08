@@ -32,16 +32,15 @@ interface ModelPrefRow {
   description: string;
   /** Restrict the picker to models that accept image input. */
   imageOnly?: boolean;
-  /** Show the model's stored thinking level (used by the sub-agents that
-   * run on this model). */
+  /** Offer the model's thinking-strength slider in the picker. */
   thinking?: boolean;
 }
 
-/** Settings → モデル: the auxiliary model preferences (fast model, image
- * analysis model). Configured here in the settings dialog, separate from
- * the per-session model chosen in the chatbox picker. The fast model runs
- * the sub-agents (the task tool) and generates session titles; its
- * thinking level is the sub-agents' reasoning level. */
+/** Settings → モデル: the stored model preferences. Configured here in the
+ * settings dialog, separate from the per-session model chosen in the
+ * chatbox picker. The default model starts new conversations; the fast
+ * model runs the sub-agents (the task tool) and generates session titles.
+ * Each row's thinking level is the stored per-model reasoning level. */
 export function ModelPreferencePanel(
   { onOpenProviders }: { onOpenProviders: () => void },
 ) {
@@ -66,8 +65,8 @@ export function ModelPreferencePanel(
   >({});
   const [savingLevel, setSavingLevel] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
-  // Model catalog of this server (settings are always local); the fast
-  // model's thinking level is derived from it below.
+  // Model catalog of this server (settings are always local); each row's
+  // thinking level is derived from it below.
   const { modelsByProvider, reload: reloadModels } = useProviderModels();
 
   // Localized ROWS, built inside the component so t() is available.
@@ -76,6 +75,7 @@ export function ModelPreferencePanel(
       key: DEFAULT_MODEL_KEY,
       label: t("settings.model.defaultModel"),
       description: t("settings.model.defaultModelDesc"),
+      thinking: true,
     },
     {
       key: FAST_MODEL_KEY,
