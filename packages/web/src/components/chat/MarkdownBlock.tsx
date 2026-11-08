@@ -33,12 +33,14 @@ export const MarkdownBlock = memo(function MarkdownBlock(
   return (
     <>
       <div onClick={onClick} dangerouslySetInnerHTML={{ __html: html }} />
-      {open !== null && (
-        <Lightbox
-          src={openFullSize(open)}
-          onClose={() => setOpen(null)}
-        />
-      )}
+      {
+        /* Rendered even when closed: the overlay stays up while it shrinks
+          (see Lightbox). */
+      }
+      <Lightbox
+        src={open === null ? null : openFullSize(open)}
+        onClose={() => setOpen(null)}
+      />
     </>
   );
 });

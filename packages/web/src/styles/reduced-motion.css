@@ -92,8 +92,11 @@
 
   /* Popovers and dialogs are anchored to something; the scale is what says
    * "this came from here", and it is also what makes a reduced-motion reader
-   * dizzy. They open with the fade alone. */
+   * dizzy. They open with the fade alone. The picture viewer is one of them:
+   * the viewer's own scale is the movement, and the fade is what is left. */
   .modal,
+  .lightbox,
+  .lightbox-image,
   .app-menu,
   .tab-context-menu,
   .mention-popover,
@@ -136,6 +139,8 @@
   .stella-titlebar-avatar,
   .stella-screen-toggle,
   .msg-action-btn,
+  /* A zoom a click takes: the picture still arrives at the new size, it just
+   * gets there at once. Pinches and pans never had a transition. */ .lightbox-image[data-zoom-smooth="true"],
   /* The columns trading width when the machine's screen opens: a layout that
    * slides is motion like any other, and a reader who asked for less of it
    * wants the space to be there, not to watch it arrive. */ .stella-pane,

@@ -1,8 +1,9 @@
 /**
  * The enlarged picture. What a server-side render can pin: the overlay is a
- * dialog, it names what it shows, and the picture inside it is not itself the
- * thing that closes it (a click that falls through would close it the instant
- * it opened).
+ * dialog, it names what it shows, the picture inside it is a drag target of
+ * the viewer rather than of the browser, and a closed viewer draws nothing (it
+ * keeps itself mounted while it shrinks, so "closed" is the empty document,
+ * not a remembered picture).
  */
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { renderToString } from "preact-render-to-string";
@@ -38,4 +39,22 @@ Deno.test("Lightbox: an alt is carried to the picture", () => {
   // picture, not just that a picture opened.
   assertStringIncludes(html, 'aria-label="screenshot.png"');
   assertEquals(html.includes("画像の拡大表示"), false);
+});
+
+Deno.test("Lightbox: a closed viewer is not on the page", () => {
+  initLocale("ja");
+  // Every message renders one (the overlay keeps itself up while it shrinks),
+  // so a closed viewer has to cost nothing.
+  const html = renderToString(<Lightbox src={null} onClose={() => {}} />);
+  assertEquals(html, "");
+});
+
+Deno.test("Lightbox: the picture is not draggable by the browser", () => {
+  initLocale("ja");
+  const html = renderToString(
+    <Lightbox src="/x.png" onClose={() => {}} />,
+  );
+  // The browser's own image drag would take the pan away from the viewer's
+  // pointer handlers (see Lightbox.tsx).
+  assertStringIncludes(html, 'draggable="false"');
 });

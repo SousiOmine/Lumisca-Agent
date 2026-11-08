@@ -48,13 +48,15 @@ export function PromptFiles({
           ))}
         </div>
       )}
-      {open !== null && (
-        <Lightbox
-          src={srcOf(open, false)}
-          alt={open.name}
-          onClose={() => setOpen(null)}
-        />
-      )}
+      {
+        /* Rendered even when closed: the overlay stays up while it shrinks
+          (see Lightbox). */
+      }
+      <Lightbox
+        src={open === null ? null : srcOf(open, false)}
+        alt={open?.name}
+        onClose={() => setOpen(null)}
+      />
       {others.length > 0 && (
         <ul className="msg-files">
           {others.map((file) => (

@@ -39,15 +39,16 @@ export function AttachmentCard({
           onOpen={() => setOpen(attachment)}
         />
       ))}
-      {open !== null && (
-        <Lightbox
-          // `preview=0` is the original: the point of opening it is to see
-          // what the thumbnail could not show.
-          src={`${base}${open.name}?preview=0`}
-          alt={open.displayName}
-          onClose={() => setOpen(null)}
-        />
-      )}
+      {
+        /* Rendered even when closed: the overlay stays up while it shrinks
+          (see Lightbox). `preview=0` is the original — the point of opening
+          it is to see what the thumbnail could not show. */
+      }
+      <Lightbox
+        src={open === null ? null : `${base}${open.name}?preview=0`}
+        alt={open?.displayName}
+        onClose={() => setOpen(null)}
+      />
     </div>
   );
 }

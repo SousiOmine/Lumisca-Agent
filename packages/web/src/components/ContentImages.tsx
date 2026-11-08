@@ -33,12 +33,14 @@ export function ContentImages({
           />
         ))}
       </div>
-      {open !== null && sources[open] !== undefined && (
-        <Lightbox
-          src={sources[open]!}
-          onClose={() => setOpen(null)}
-        />
-      )}
+      {
+        /* Rendered even when closed: the overlay stays up while it shrinks
+          (see Lightbox). */
+      }
+      <Lightbox
+        src={open === null ? null : sources[open] ?? null}
+        onClose={() => setOpen(null)}
+      />
     </>
   );
 }

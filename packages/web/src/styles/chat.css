@@ -236,6 +236,20 @@
   /* The picture is the content; a scrollbar here would be about the page
    * behind it. */
   overflow: hidden;
+  /* A gesture on the picture is the zoom (see Lightbox): the browser's own
+   * page zoom and scrolling would otherwise take the pinch and the wheel. */
+  touch-action: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  /* Entrances are CSS and do NOT fill: a filled animation would hold
+   * `opacity` and win over the exit motion.ts plays on the same element. */
+  animation: lum-fade var(--lum-dur-mid) var(--lum-ease-out);
+}
+
+/* Leaving: the overlay keeps its place until motion.ts has finished the exit,
+ * and stops answering clicks so a second press cannot close it twice. */
+.lightbox[data-exiting="true"] {
+  pointer-events: none;
 }
 
 .lightbox-image {
@@ -246,7 +260,27 @@
    * screenshot inside). */
   object-fit: contain;
   border-radius: var(--radius);
+  /* The shape the dialogs arrive in (`.modal`): a slight scale-up under a
+   * fade, so the picture is placed rather than switched on. */
+  animation: lum-pop var(--lum-dur-mid) var(--lum-ease-out);
+  /* Clicking the picture is the zoom rather than the way out: closer while it
+   * fits, back to the whole picture while it is enlarged, and a hand while it
+   * is being panned (Lightbox writes `data-zoom` and `data-drag`). */
+  cursor: zoom-in;
+}
+
+.lightbox-image[data-zoom="in"] {
   cursor: zoom-out;
+}
+
+.lightbox-image[data-drag="true"] {
+  cursor: grabbing;
+}
+
+/* A zoom that is not following a finger (a click's step) travels; a pan does
+ * not, so the component writes this attribute only for the click. */
+.lightbox-image[data-zoom-smooth="true"] {
+  transition: transform var(--lum-dur-fast) var(--lum-ease-out);
 }
 
 /* ---- files a prompt brought into the machine ------------------------------ */
