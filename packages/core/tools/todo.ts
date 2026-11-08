@@ -189,9 +189,15 @@ function normalizePlan(
 }
 
 /** Build the tool that records the agent's plan for multi-step work. Each
- * call sends the entire plan and replaces the previous one; the UI shows it
- * in a progress panel, updated live. */
-export function createTodoTool(hub: TodoHub): Tool<typeof todoSchema> {
+ * call sends the entire plan and replaces the previous one.
+ *
+ * `panel` says whether this session draws the plan in a progress panel: only
+ * there does the description promise that the user sees it. A stella
+ * conversation has no panel, and its model must not send the user to one. */
+export function createTodoTool(
+  hub: TodoHub,
+  options: { panel: boolean },
+): Tool<typeof todoSchema> {
   return {
     name: TOOL_TODO,
     label: "Todo",
@@ -199,7 +205,8 @@ export function createTodoTool(hub: TodoHub): Tool<typeof todoSchema> {
       "Record and update the task list. Send the ENTIRE plan on every call: " +
       "it replaces the previous one. Tasks default to `pending`; the other " +
       "statuses are `in_progress`, `completed`, `abandoned` and `blocked`. " +
-      "An empty `phases` clears the plan. The user sees it live in the UI.",
+      "An empty `phases` clears the plan." +
+      (options.panel ? " The user sees it live in the UI." : ""),
     parameters: todoSchema,
     execute: (_toolCallId, params): Promise<ToolResult> => {
       const phases = normalizePlan(params.phases ?? []);

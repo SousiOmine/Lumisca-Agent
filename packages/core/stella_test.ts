@@ -9,6 +9,7 @@ import { createVmTools } from "./vm/tools.ts";
 import { createHistorySearchTool } from "./session/history.ts";
 import { STELLA_PROMPT_SECTIONS } from "./tools/prompt-sections.ts";
 import { BackgroundProcessManager } from "./tools/background.ts";
+import { TodoHub } from "./tools/todo.ts";
 import { TaskHub } from "./tools/task-hub.ts";
 import type { StreamFn } from "./ai/types.ts";
 import type { WindowPage } from "./session/transcript-window.ts";
@@ -450,6 +451,7 @@ Deno.test("stella tool set: eval is absent, the screen tools present", () => {
     skills: () => [],
     screen: createVmTools({ screen }),
     history: createHistorySearchTool({ entries: () => [] }),
+    todo: new TodoHub("s1", () => {}),
     sendChat: {
       store: new SessionAttachmentStore(
         Deno.makeTempDirSync({ prefix: "lumisca-stella-attach-" }),
@@ -491,10 +493,13 @@ Deno.test("stella tool set: eval is absent, the screen tools present", () => {
   // them as options at all.
   assertEquals(names.includes("identity"), false);
   assertEquals(names.includes("agent_create"), false);
-  // ask is absent for the same reason todo is: stella's conversation has no
-  // panel that could show the question, and a blocked run has no way back.
+  // todo is preloaded even though the conversation has no progress panel:
+  // the plan is how a run remembers a request with more than one part (see
+  // createStellaTools), not something the panel was for.
+  assert(names.includes("todo"), names.join(", "));
+  // ask is absent: stella's conversation has no panel that could show the
+  // question, and a blocked run has no way back.
   assertEquals(names.includes("ask"), false);
-  assertEquals(names.includes("todo"), false);
   // visual and chat_attach are gone: the conversation's only channel is
   // send_chat, which carries the words, a card and files in one call. An
   // image goes with the message rather than being published and linked.
@@ -530,6 +535,7 @@ Deno.test("stella tool set: every preloaded tool has a guideline section", () =>
     skills: () => [],
     screen: createVmTools({ screen }),
     history: createHistorySearchTool({ entries: () => [] }),
+    todo: new TodoHub("s1", () => {}),
     sendChat: {
       store: new SessionAttachmentStore(
         Deno.makeTempDirSync({ prefix: "lumisca-stella-sections-" }),
@@ -568,6 +574,7 @@ Deno.test("stella tool set: every preloaded tool has a guideline section", () =>
     "async_bash_kill",
     "skill",
     "send_chat",
+    "todo",
     "history_search",
     "web_search",
     "web_fetch",
@@ -608,15 +615,11 @@ Deno.test("stella tool set: every preloaded tool has a guideline section", () =>
       `${discoverable} must be discoverable, not preloaded`,
     );
   }
-  // `todo` is the one coding tool a stella session does not get: its plan is
-  // shown in a progress panel, and this mode's conversation has none.
-  assertEquals(
-    stellaTools.includes("todo"),
-    false,
-    "stella must not build todo",
-  );
-  // `ask` goes with it: the same conversation has no panel to answer it in,
-  // and a blocking question would leave the run waiting for nothing.
+  // `todo` is built without a panel: the plan is the run's memory of a
+  // request with more than one part, not something the conversation draws.
+  assertEquals(stellaTools.includes("todo"), true, "stella must build todo");
+  // `ask` is still absent: the same conversation has no panel to answer it
+  // in, and a blocking question would leave the run waiting for nothing.
   assertEquals(stellaTools.includes("ask"), false, "stella must not ask");
 });
 
@@ -670,6 +673,50 @@ Deno.test("stella conversation: history_search is preloaded and reads its own ro
     const text = lastHistoryResult(core, session.id);
     assert(text.includes("Found 1 message(s)"), text);
     assert(text.includes("The code word is pelican."), text);
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella conversation: todo keeps a plan the conversation does not draw", async () => {
+  const { faux, core, session } = await stellaConversation("Planner");
+  try {
+    // The tool is preloaded (the factory hands the session's hub to the
+    // tool set), so a run with two requests does not have to find it first.
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxToolCall("todo", {
+          phases: [{
+            name: "修正",
+            tasks: [
+              { name: "余白を直す", status: "in_progress" },
+              { name: "色を直す" },
+            ],
+          }],
+        }),
+      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage("両方直します。"),
+    ]);
+    await promptSession(core, session.id, "余白と色を直して");
+
+    // The plan belongs to the session, so it is there after the turn...
+    const plan = core.getTodo(session.id);
+    assertEquals(plan.map((phase) => phase.name), ["修正"]);
+    assertEquals(
+      plan[0]!.tasks.map((task) => [task.name, task.status]),
+      [["余白を直す", "in_progress"], ["色を直す", "pending"]],
+    );
+
+    // ...and it stays out of the conversation: no tool row and no plan, only
+    // what was said. The projection drops the call and its result.
+    const page = core.readStellaConversation(session.id, {})!;
+    assertEquals(
+      page.items.map((entry) => [entry.role, entry.text]),
+      [
+        ["user", "余白と色を直して"],
+        ["assistant", "両方直します。"],
+      ],
+    );
   } finally {
     await core.close();
   }

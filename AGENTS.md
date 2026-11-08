@@ -184,7 +184,7 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 
 ### ツール
 
-- **集合**: ファイル、シェル、画面、意味の層、`send_chat`、`history_search`、`skill`、サブエージェントがプリロードされます。`ask` と `todo` はありません。`identity` と `agent_create` は main レジストリ経由で `tool_search` から見つけさせます。`agent_create` の役割は `role` か `role_file`（マシン内のファイル）で渡し、UTF-8 でない・空・20,000 文字超は拒否します。
+- **集合**: ファイル、シェル、画面、意味の層、`send_chat`、`history_search`、`skill`、`todo`、サブエージェントがプリロードされます。`todo` の計画は画面に出しません（依頼が複数あるときに、まだやっていないことを覚えておくためのもので、パネルのためではありません）。`ask` はありません。`identity` と `agent_create` は main レジストリ経由で `tool_search` から見つけさせます。`agent_create` の役割は `role` か `role_file`（マシン内のファイル）で渡し、UTF-8 でない・空・20,000 文字超は拒否します。
 - **`eval` は渡さない**: サーバープロセス内で JavaScript を実行するため、VM の外へ出る経路になります。VM 内でコードを動かすときは `bash` から `node` を使います。サブエージェントにも渡しません（`SubagentRuntime.eval` が `false`）。
 - **レジストリの分離**: セッションは `main` と `subagent` の 2 つを持ちます（`packages/core/tools/registries.ts`）。MCP・browser-lab・computer・`pdf_read_pages` は両方に入り、`identity` / `agent_create` / `routine_*` は main だけです。
 - **パスの境界**: 相対パスと `bash` の基点は `/home/agent/agents/<agent id>`、境界は `/home/agent` です（`packages/core/vm/fs.ts` の `resolveVmPath`）。変えるときは `packages/core/tools/system-prompt.ts` も合わせてください。

@@ -1,4 +1,4 @@
-import { assertEquals, assertThrows } from "@std/assert";
+import { assert, assertEquals, assertThrows } from "@std/assert";
 import type { TodoPhase } from "../shared/mod.ts";
 import type { ClientEvent } from "../types/event.ts";
 import { createTodoTool, formatTodoCounts, TodoHub } from "./todo.ts";
@@ -60,7 +60,7 @@ async function errorOf(
 
 Deno.test("todo sets the whole plan, defaults statuses, and emits a snapshot", async () => {
   const { hub, events } = makeHub();
-  const tool = createTodoTool(hub);
+  const tool = createTodoTool(hub, { panel: true });
   const result = await run(tool, {
     phases: [
       {
@@ -90,7 +90,7 @@ Deno.test("todo sets the whole plan, defaults statuses, and emits a snapshot", a
 
 Deno.test("todo replaces the previous plan on every call", async () => {
   const { hub, events } = makeHub();
-  const tool = createTodoTool(hub);
+  const tool = createTodoTool(hub, { panel: true });
   await run(tool, { phases: [{ name: "A", tasks: [{ name: "a1" }] }] });
   const before = events.length;
   const result = await run(tool, {
@@ -109,7 +109,7 @@ Deno.test("todo replaces the previous plan on every call", async () => {
 
 Deno.test("todo keeps ids stable for unchanged phases and tasks", async () => {
   const { hub } = makeHub();
-  const tool = createTodoTool(hub);
+  const tool = createTodoTool(hub, { panel: true });
   await run(tool, {
     phases: [{ name: "A", tasks: [{ name: "a1" }, { name: "a2" }] }],
   });
@@ -140,7 +140,7 @@ Deno.test("todo keeps ids stable for unchanged phases and tasks", async () => {
 
 Deno.test("todo ids are never reused after a plan is cleared", async () => {
   const { hub } = makeHub();
-  const tool = createTodoTool(hub);
+  const tool = createTodoTool(hub, { panel: true });
   await run(tool, { phases: [{ name: "A", tasks: [{ name: "a1" }] }] });
   await run(tool, { phases: [] });
   await run(tool, { phases: [{ name: "A", tasks: [{ name: "a1" }] }] });
@@ -151,7 +151,7 @@ Deno.test("todo ids are never reused after a plan is cleared", async () => {
 
 Deno.test("todo carries parallel in_progress tasks", async () => {
   const { hub } = makeHub();
-  const tool = createTodoTool(hub);
+  const tool = createTodoTool(hub, { panel: true });
   await run(tool, {
     phases: [{
       name: "A",
@@ -170,7 +170,7 @@ Deno.test("todo carries parallel in_progress tasks", async () => {
 
 Deno.test("todo clearing the plan reports it and emits an empty snapshot", async () => {
   const { hub, events } = makeHub();
-  const tool = createTodoTool(hub);
+  const tool = createTodoTool(hub, { panel: true });
   await run(tool, { phases: [{ name: "A", tasks: [{ name: "a1" }] }] });
   const result = await run(tool, { phases: [] });
   assertEquals(lastTodo(events), []);
@@ -180,7 +180,7 @@ Deno.test("todo clearing the plan reports it and emits an empty snapshot", async
 
 Deno.test("todo accepts every status and trims names", async () => {
   const { hub } = makeHub();
-  const tool = createTodoTool(hub);
+  const tool = createTodoTool(hub, { panel: true });
   await run(tool, {
     phases: [{
       name: " 実装 ",
@@ -203,7 +203,7 @@ Deno.test("todo accepts every status and trims names", async () => {
 
 Deno.test("todo rejects malformed plans", async () => {
   const { hub } = makeHub();
-  const tool = createTodoTool(hub);
+  const tool = createTodoTool(hub, { panel: true });
   assertThrows(
     () => run(tool, { phases: [{ name: "", tasks: [{ name: "A" }] }] }),
     Error,
@@ -268,5 +268,18 @@ Deno.test("formatTodoCounts reports the statuses in use", () => {
   assertEquals(
     formatTodoCounts(phases),
     "Updated todo list: 1 pending, 1 in progress, 1 completed, 1 blocked.",
+  );
+});
+
+Deno.test("todo promises the panel only where there is one", () => {
+  const { hub } = makeHub();
+  const withPanel = createTodoTool(hub, { panel: true }).description;
+  const withoutPanel = createTodoTool(hub, { panel: false }).description;
+  // The panel is code mode's; a stella conversation has none, and its model
+  // must not send the user to one. Nothing else about the tool changes.
+  assert(withPanel.includes("sees it live in the UI"), withPanel);
+  assertEquals(
+    withoutPanel,
+    withPanel.replace(" The user sees it live in the UI.", ""),
   );
 });

@@ -626,7 +626,9 @@ export class AgentFactory {
       // screen and semantic tools, and the machine's own skill catalog.
       // `eval` is deliberately absent (see createStellaTools), and so are
       // `ask` (no panel to answer it) and `visual`/`chat_attach` (replaced by
-      // send_chat, the conversation's only way to speak).
+      // send_chat, the conversation's only way to speak). `todo` is there
+      // without a panel: its plan is the run's memory of a request with more
+      // than one part.
       return createStellaTools({
         backends,
         cwd: stella.cwd,
@@ -640,6 +642,7 @@ export class AgentFactory {
           sessionId: session.id,
         },
         history: stella.historyTool,
+        todo: hubs.todo,
         task: hubs.tasks,
         safety: this.deps.commandSafety,
         webSearch: where.webSearch,

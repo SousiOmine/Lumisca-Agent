@@ -153,7 +153,9 @@ export function createCodingTools(
       : undefined,
     createSkillTool({ skills }),
     options.ask !== undefined ? createAskTool(options.ask) : undefined,
-    options.todo !== undefined ? createTodoTool(options.todo) : undefined,
+    options.todo !== undefined
+      ? createTodoTool(options.todo, { panel: true })
+      : undefined,
     options.task?.parentTools(),
   ];
   return rows.flatMap((row) => row === undefined ? [] : [row].flat());
@@ -183,10 +185,12 @@ export function createCodingTools(
  * - `history_search` is preloaded: the conversation outlives any one
  *   context window, and the turns a checkpoint condensed away are still in
  *   the message store — but the agent has to know it can ask for them.
- * - `todo` is absent. Its plan is shown in a progress panel, and stella's
- *   conversation has no panels (the agent says what it is doing by sending a
- *   message), so the tool would collect a plan nobody reads — one more schema
- *   on every request and one more round trip per plan change.
+ * - `todo` is here even though the conversation has no progress panel: the
+ *   plan is not FOR the panel, it is how a run remembers the parts of a
+ *   request it has not done yet. A long conversation condenses its history
+ *   away, and the requests still outstanding go with it — the run then stops
+ *   after the first one it finished. The description says the plan is
+ *   recorded, not shown.
  * - `ask` is absent too. A conversation whose person is watching the machine
  *   answers in words or with a card; a blocking question the server shows in
  *   a panel would be a surface this mode does not have, and it would leave
@@ -235,6 +239,10 @@ export function createStellaTools(options: {
    * tool is not built (a caller without a message store has nothing to
    * search). */
   history?: Tool;
+  /** The todo hub backing the `todo` tool (see ToolFactoryOptions.todo).
+   * Omitted → the tool is not built. There is no progress panel in this
+   * mode, so the tool's description does not promise one. */
+  todo?: TodoHub;
   /** The user's web-search provider (see ToolFactoryOptions.webSearch). */
   webSearch?: SearchProvider;
   background?: BackgroundProcessManager;
@@ -265,6 +273,9 @@ export function createStellaTools(options: {
       ? createSendChatTool({ files, ...options.sendChat })
       : undefined,
     options.history,
+    options.todo !== undefined
+      ? createTodoTool(options.todo, { panel: false })
+      : undefined,
     options.webSearch !== undefined
       ? createWebSearchTools(options.webSearch)
       : undefined,
@@ -308,7 +319,9 @@ export function createChatTools(
         }),
     }),
     options.ask !== undefined ? createAskTool(options.ask) : undefined,
-    options.todo !== undefined ? createTodoTool(options.todo) : undefined,
+    options.todo !== undefined
+      ? createTodoTool(options.todo, { panel: true })
+      : undefined,
   ];
   return rows.flatMap((row) => row === undefined ? [] : [row].flat());
 }
