@@ -366,6 +366,7 @@ export function useSessionEvents(
         next.set(id, {
           ...v,
           streamingText: "",
+          liveTools: [],
           runningTools: new Map(),
           thinkingStartAt: undefined,
         });

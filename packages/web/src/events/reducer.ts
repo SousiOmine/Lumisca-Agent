@@ -3,7 +3,12 @@ import {
   subtractContextUsage,
   withLatestContextUsage,
 } from "@lumisca/core/shared";
-import type { AgentMessage, ClientEvent, SessionView } from "../types.ts";
+import type {
+  AgentMessage,
+  ClientEvent,
+  SessionView,
+  ToolCallBlock,
+} from "../types.ts";
 import { messageKey } from "./identity.ts";
 import { sameGoal } from "./equality.ts";
 
@@ -71,6 +76,65 @@ function applyMessage(
   return { ...view, messages: upsertMessage(view.messages, message), usage };
 }
 
+/** The tool calls an assistant message carries, in the order the model wrote
+ * them. Those are the transcript's own rows for the calls, and the ones a
+ * live row is replaced by. */
+function toolCallsOf(message: AgentMessage): ToolCallBlock[] {
+  if (message.role !== "assistant") return [];
+  return message.content.filter(
+    (block): block is ToolCallBlock => block.type === "toolCall",
+  );
+}
+
+/** Whether the loaded window already draws `toolCallId`. The faux transport
+ * runs a step's tool calls AFTER announcing the assistant message (the SDK
+ * executes them inside the stream, a test double does not), so its
+ * `tool_start` follows the row it belongs to; a second row would draw the
+ * same call twice. */
+function holdsToolCall(
+  messages: readonly AgentMessage[],
+  toolCallId: string,
+): boolean {
+  return messages.some((message) =>
+    toolCallsOf(message).some((call) => call.id === toolCallId)
+  );
+}
+
+/** `args` travel as `unknown` (the event's wire type); a tool line reads a
+ * record. */
+function toolArguments(args: unknown): Record<string, unknown> {
+  return typeof args === "object" && args !== null && !Array.isArray(args)
+    ? args as Record<string, unknown>
+    : {};
+}
+
+/** The live rows with a call added, or refreshed when the same call is
+ * announced twice (the SDK's execution and the fallback both reporting it).
+ * The returned array is the old one when nothing changed. */
+function withLiveTool(
+  liveTools: ToolCallBlock[],
+  call: ToolCallBlock,
+): ToolCallBlock[] {
+  const index = liveTools.findIndex((tool) => tool.id === call.id);
+  if (index === -1) return [...liveTools, call];
+  const next = [...liveTools];
+  next[index] = call;
+  return next;
+}
+
+/** The live rows minus the calls the arriving message now draws itself. */
+function withoutToolCalls(
+  liveTools: ToolCallBlock[],
+  message: AgentMessage,
+): ToolCallBlock[] {
+  const calls = toolCallsOf(message);
+  if (calls.length === 0) return liveTools;
+  const replaced = new Set(calls.map((call) => call.id));
+  return liveTools.some((tool) => replaced.has(tool.id))
+    ? liveTools.filter((tool) => !replaced.has(tool.id))
+    : liveTools;
+}
+
 /** Whether `message` belongs before the newest message the view holds. A
  * timestamp comparison is what the transcript's order is: messages are
  * stamped when they are created, and the view always holds the last one. */
@@ -95,11 +159,14 @@ export function applyEvent(
   switch (event.type) {
     case "agent_start":
       // A new run starts: a stale error from the previous run is gone, and
-      // any question left over from it can no longer be answered.
+      // any question left over from it can no longer be answered. A live
+      // tool row from a run that ended without its message is not this
+      // run's either.
       return {
         ...view,
         error: undefined,
         pendingQuestions: [],
+        liveTools: [],
         agentStartedAt: Date.now(),
         agentEndedAt: undefined,
         thinkingStartAt: undefined,
@@ -139,19 +206,39 @@ export function applyEvent(
       // with the final copy (append when the start event was missed).
       // Assistant messages get the same treatment so a resync race cannot
       // append a duplicate.
+      // The calls the message carries are drawn from it from now on, so
+      // their live rows go (see tool_start).
+      const liveTools = withoutToolCalls(view.liveTools, event.message);
       // Clear thinking indicator once the message is complete.
       const applied = applyMessage(view, event.message);
-      if (applied === null) return null;
+      if (applied === null) {
+        // The message belongs to a window this view does not hold, but its
+        // calls just left the live rows: leaving them would draw a call the
+        // transcript already has.
+        return liveTools === view.liveTools ? null : { ...view, liveTools };
+      }
       return {
         ...applied,
         streamingText: "",
         thinkingStartAt: undefined,
+        liveTools,
       };
     }
     case "tool_start": {
+      // The run is executing this call now. Its assistant message arrives
+      // only when the step ends, which is after the tool returned, so the
+      // row is drawn from here until that message replaces it.
       const runningTools = new Map(view.runningTools);
       runningTools.set(event.toolCallId, event.toolName);
-      return { ...view, runningTools };
+      const liveTools = holdsToolCall(view.messages, event.toolCallId)
+        ? view.liveTools
+        : withLiveTool(view.liveTools, {
+          type: "toolCall",
+          id: event.toolCallId,
+          name: event.toolName,
+          arguments: toolArguments(event.args),
+        });
+      return { ...view, runningTools, liveTools };
     }
     case "tool_end": {
       const runningTools = new Map(view.runningTools);
@@ -332,6 +419,7 @@ export function applyEvent(
         usage: withLatestContextUsage(usage, messages),
         removed,
         streamingText: "",
+        liveTools: [],
         runningTools: new Map(),
         pendingQuestions: [],
         error: undefined,
@@ -369,12 +457,16 @@ export function applyEvent(
       };
     }
     case "agent_end":
-      return view.agentStartedAt === undefined && view.liveCard === null
+      // The run ended (a stop may leave a call that never reported its end):
+      // nothing is live any more.
+      return view.agentStartedAt === undefined && view.liveCard === null &&
+          view.liveTools.length === 0
         ? null
         : {
           ...view,
           pendingQuestions: [],
           liveCard: null,
+          liveTools: [],
           agentEndedAt: Date.now(),
         };
     case "session_renamed":

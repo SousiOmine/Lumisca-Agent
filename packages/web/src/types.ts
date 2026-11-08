@@ -180,6 +180,12 @@ export interface SessionView {
    * arrived, or null. A card is drawn while it is written (see card_delta);
    * the finished tool result carries the whole card and clears it. */
   liveCard: { toolCallId: string; markup: string } | null;
+  /** Tool calls that are executing right now, as the transcript's tail
+   * draws them. An assistant message arrives only when its step ends — the
+   * SDK runs the step's tools inside the stream — so a row taken from the
+   * message alone appears after the tool has already finished. `tool_start`
+   * adds the call here, and the `message_end` carrying it removes it. */
+  liveTools: ToolCallBlock[];
   runningTools: Map<string, string>; // toolCallId -> toolName
   /** Questions the agent asked (ask tool) that are still waiting for the
    * user's answers; rendered above the composer, cleared when the tool
@@ -238,6 +244,7 @@ export function emptyView(
     usage: window.usage,
     streamingText: "",
     liveCard: null,
+    liveTools: [],
     runningTools: new Map(),
     pendingQuestions: [],
     todos: [],

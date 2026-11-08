@@ -377,6 +377,7 @@ export function ChatView(
         pinToken={pinToken}
         streamingText={view.streamingText}
         liveCard={view.liveCard}
+        liveTools={view.liveTools}
         runningTools={view.runningTools}
         running={isRunning}
         agentEndedAt={view.agentEndedAt}

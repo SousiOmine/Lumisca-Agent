@@ -153,6 +153,7 @@ Deno は公開から 24 時間以内のバージョンを既定では導入し�
   - **高さは `grid-template-rows: 0fr ⇄ 1fr`**: 測った `height` を書くと、ストリーミングで伸びる中身に対して次のフレームには古くなります。`1fr` はブラウザが中身から答え続けます。`width` / `height` は今までどおり動かしません。
   - **`overflow: hidden` は `collapse-inner` に**: 本体の `max-height` / `overflow-y`（進捗の行はその中でスクロールします）を保つためです。`collapse > .collapse-inner > *` がフェードを持つので、内側の面に `opacity` のアニメを足さないでください。
   - **運動を減らす設定では止める**: `reduced-motion.css` が `.collapse` の `transition` を `none` にします。高さは動きそのものです。
+- **実行中のツール行は `tool_start` から描く**: AI SDK は 1 ステップのツールをストリームの中で実行するので、toolCall ブロックを持つ assistant メッセージ（`message_end`）はツールが終わった後に届きます。メッセージだけを描くと、行は仕事が済んでから現れます。`SessionView.liveTools` が `tool_start` で行を足し、その呼び出しを含むメッセージの `message_end` で消します（`components/Transcript.tsx` がストリーミング本文の直下に描きます）。消し忘れると行が二重に出ます。faux プロバイダだけは順序が逆（メッセージが先、`executeTools` が後）なので、読み込み済みの履歴に同じ id があるときは足しません。
 
 ### リモート接続での応答
 

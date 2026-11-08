@@ -9,6 +9,7 @@ import { buildTurns, ConversationTurn } from "./chat/ConversationTurn.tsx";
 import { CardView } from "./chat/CardView.tsx";
 import { ErrorBanner } from "./chat/ErrorBanner.tsx";
 import { MarkdownBlock } from "./chat/MarkdownBlock.tsx";
+import { ToolCall } from "./ToolCall.tsx";
 import { useTranscriptScroll } from "../hooks/useTranscriptScroll.ts";
 
 interface TranscriptProps {
@@ -28,6 +29,10 @@ interface TranscriptProps {
   streamingText: string;
   /** The card a `chat_attach` call is writing right now, or null. */
   liveCard: { toolCallId: string; markup: string } | null;
+  /** Tool calls executing right now (see SessionView.liveTools), drawn as
+   * the transcript's tail until the assistant message carrying them
+   * arrives. */
+  liveTools: SessionView["liveTools"];
   runningTools: SessionView["runningTools"];
   /** True while a run is active (the last turn then renders as running). */
   running: boolean;
@@ -83,6 +88,7 @@ export function Transcript(
     hasOlder,
     streamingText,
     liveCard,
+    liveTools,
     runningTools,
     running,
     agentEndedAt,
@@ -153,7 +159,8 @@ export function Transcript(
             {t("chat.history.loadingOlder")}
           </p>
         )}
-        {messages.length === 0 && streamingText.length === 0 && (
+        {messages.length === 0 && streamingText.length === 0 &&
+          liveTools.length === 0 && (
           <div className="chat-empty">
             <div className="chat-empty-inner">{empty}</div>
           </div>
@@ -176,11 +183,32 @@ export function Transcript(
         {liveCard !== null && (
           <CardView markup={liveCard.markup} streaming onSend={onCardSend} />
         )}
-        {streamingText.length > 0 && (
+        {(streamingText.length > 0 || liveTools.length > 0) && (
           <div className="msg">
             <div className="msg-body markdown">
-              <MarkdownBlock text={streamingText} visualBase={visualBase} />
-              <span className="cursor" />
+              {streamingText.length > 0 && (
+                <>
+                  <MarkdownBlock text={streamingText} visualBase={visualBase} />
+                  {
+                    /* The step's text is finished once a tool of that step
+                     * runs: a caret would claim it is still being written. */
+                  }
+                  {liveTools.length === 0 && <span className="cursor" />}
+                </>
+              )}
+              {
+                /* The calls of the step that is running, drawn from the
+                 * tool_start events: their assistant message only arrives
+                 * once the step (and its tools) ended, so a row taken from
+                 * the message alone appears after the work is done. */
+              }
+              {liveTools.map((toolCall, index) => (
+                <ToolCall
+                  key={toolCall.id || `live-${index}`}
+                  toolCall={toolCall}
+                  running={runningTools.has(toolCall.id)}
+                />
+              ))}
             </div>
           </div>
         )}

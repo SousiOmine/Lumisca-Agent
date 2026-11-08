@@ -17,6 +17,7 @@ import {
   sameTodoPlan,
 } from "./events.ts";
 import { summarizeContextUsage } from "@lumisca/core/shared";
+import { fauxAssistantMessage, fauxToolCall } from "@lumisca/core";
 import type { SessionSnapshot } from "@lumisca/core/shared";
 import {
   type AgentMessage,
@@ -67,6 +68,7 @@ function view(overrides: Partial<SessionView> = {}): SessionView {
     usage: summarizeContextUsage([]),
     streamingText: "",
     liveCard: null,
+    liveTools: [],
     runningTools: new Map(),
     pendingQuestions: [],
     todos: [],
@@ -208,6 +210,135 @@ Deno.test("events: tool start/end track running tools", () => {
     v,
   )!;
   assertEquals(v.runningTools.size, 0);
+});
+
+/** An assistant message carrying one tool call, as the transcript stores it
+ * once a step ends. */
+function assistantWithCall(
+  id: string,
+  name: string,
+  args: Record<string, unknown>,
+  timestamp = 500,
+): AgentMessage {
+  return fauxAssistantMessage([fauxToolCall(name, args, id)], {
+    timestamp,
+  }) as AgentMessage;
+}
+
+Deno.test("events: a tool call is drawn from tool_start, before its message lands", () => {
+  // The AI SDK runs a step's tools inside the stream, so the assistant
+  // message carrying the call arrives only after the tool returned. The row
+  // has to exist while the tool runs — that is what tool_start reports.
+  let v = view();
+  v = applyEvent(
+    {
+      type: "tool_start",
+      sessionId: "s1",
+      toolCallId: "t1",
+      toolName: "bash",
+      args: { command: "sleep 10" },
+    },
+    v,
+  )!;
+  assertEquals(v.liveTools, [{
+    type: "toolCall",
+    id: "t1",
+    name: "bash",
+    arguments: { command: "sleep 10" },
+  }]);
+
+  // The tool returned, but its message has not landed: the row stays (the
+  // spinner stops, the message replaces the row).
+  v = applyEvent(
+    { type: "tool_end", sessionId: "s1", toolCallId: "t1", toolName: "bash" },
+    v,
+  )!;
+  assertEquals(v.liveTools.length, 1);
+
+  // The message carrying the call is the transcript's own row from now on.
+  v = applyEvent(
+    {
+      type: "message_end",
+      sessionId: "s1",
+      message: assistantWithCall("t1", "bash", { command: "sleep 10" }),
+    },
+    v,
+  )!;
+  assertEquals(v.liveTools, []);
+  assertEquals(v.messages.length, 1);
+});
+
+Deno.test("events: a tool_start behind its own row adds no second one", () => {
+  // Test doubles (the faux provider) do not execute tools inside the stream:
+  // the assistant message is announced first and the fallback runs the calls
+  // afterwards, so its tool_start follows the row it belongs to. A second
+  // row would draw the same call twice.
+  let v = view({
+    messages: [assistantWithCall("t1", "bash", { command: "ls" }, 100)],
+  });
+  v = applyEvent(
+    {
+      type: "tool_start",
+      sessionId: "s1",
+      toolCallId: "t1",
+      toolName: "bash",
+      args: { command: "ls" },
+    },
+    v,
+  )!;
+  assertEquals(v.liveTools, []);
+  // The spinner still follows the event: the message alone cannot say the
+  // call is running.
+  assertEquals(v.runningTools.get("t1"), "bash");
+});
+
+Deno.test("events: a repeated tool_start keeps one live row", () => {
+  const call = {
+    type: "tool_start",
+    sessionId: "s1",
+    toolCallId: "t1",
+    toolName: "bash",
+    args: { command: "ls" },
+  } as const;
+  let v = applyEvent(call, view())!;
+  v = applyEvent(call, v)!;
+  assertEquals(v.liveTools.length, 1);
+});
+
+Deno.test("events: a run that ends without its message leaves no live row", () => {
+  // A stop can end the run before the step's assistant message is written:
+  // the row must not outlive the run that started it.
+  const call = {
+    type: "tool_start",
+    sessionId: "s1",
+    toolCallId: "t1",
+    toolName: "bash",
+    args: { command: "sleep 60" },
+  } as const;
+  let v = applyEvent({ type: "agent_start", sessionId: "s1" }, view())!;
+  v = applyEvent(call, v)!;
+  v = applyEvent({ type: "agent_end", sessionId: "s1" }, v)!;
+  assertEquals(v.liveTools, []);
+});
+
+Deno.test("events: rewinding the transcript clears live tool rows", () => {
+  const prompt = message("user", 100);
+  let v = view({ messages: [prompt] });
+  v = applyEvent(
+    {
+      type: "tool_start",
+      sessionId: "s1",
+      toolCallId: "t1",
+      toolName: "bash",
+      args: { command: "ls" },
+    },
+    v,
+  )!;
+  v = applyEvent(
+    { type: "messages_truncated", sessionId: "s1", removed: [prompt] },
+    v,
+  )!;
+  assertEquals(v.liveTools, []);
 });
 
 Deno.test("events: a live tool result is stored, so the tool line can pair it", () => {
