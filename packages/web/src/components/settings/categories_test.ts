@@ -74,7 +74,6 @@ Deno.test("every category is named once, in the table's order", () => {
     "security",
     "computerUse",
     "prompts",
-    "stellaModel",
     "routines",
   ]);
 });

@@ -173,6 +173,7 @@ function row(
     id,
     name: id,
     icon: "",
+    model: null,
     createdAt: 0,
     updatedAt: 0,
     preview: at === null ? null : { kind: "text", text: id, at },

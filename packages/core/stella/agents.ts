@@ -19,6 +19,13 @@ import type { StellaAgentSummaryBase } from "../shared/stella-preview.ts";
  * is presentation, not identity: it is stored as a name the icon store
  * generated (stella/icons.ts) and never reaches the model.
  *
+ * So is its model: `model` records which model the user wants this agent's
+ * conversation to run on (null = the app's default). It is stored on the
+ * agent rather than only on the conversation because the conversation may
+ * not exist yet, and a user choosing a model in the edit dialog must not
+ * have to open the conversation first. The conversation row is still what
+ * the run reads — the two are written together.
+ *
  * Its NAME is presentation too: it labels the sidebar row and the
  * conversation's header, and nothing else. The model is never told it (see
  * buildStellaSystemPrompt), which is what makes renaming an agent something
@@ -55,6 +62,12 @@ export interface StellaAgent extends StellaAgentSummaryBase {
    * (shared/agent-avatar.ts). Never part of the model's context: it is how
    * the agent looks, not who it is. */
   icon: string;
+  /** The model this agent's conversation runs on, or null for the app's
+   * default model. The conversation row still carries the pair it actually
+   * runs on (`sessions.model_provider`/`model_id`) — this is the user's
+   * choice for that conversation, written by the edit dialog and applied to
+   * the row in the same call (see LumiscaCore.updateStellaAgent). */
+  model: { provider: string; modelId: string } | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -77,17 +90,26 @@ export interface AgentRepo {
   list(): StellaAgent[];
   get(id: string): StellaAgent | undefined;
   create(input: { name: string; role: string; id?: string }): StellaAgent;
-  /** Replace the agent's name and/or its picture, in one row write. Both are
-   * presentation (see the module comment), so neither moves the row: a
-   * rename and a new picture are not "talking to" the agent, and `updated_at`
-   * is what orders the sidebar.
+  /** Replace the agent's name, its picture and/or its model, in one row
+   * write. All three are presentation (see the module comment), so none
+   * moves the row: a rename and a new picture are not "talking to" the
+   * agent, and `updated_at` is what orders the sidebar.
    *
    * `icon` is a name the icon store generated (stella/icons.ts), or "" for
-   * no picture; omitted leaves the current one. The name is trimmed and
-   * length-checked here, so the route, the tool and every other caller share
-   * one rule. An unknown id fails loudly: a picture or a name recorded for
-   * nobody is a file nothing shows. */
-  update(id: string, patch: { name?: string; icon?: string }): void;
+   * no picture; omitted leaves the current one. `model` omitted leaves the
+   * current choice alone, null returns the agent to the app's default model,
+   * and a pair replaces it. The name is trimmed and length-checked here, so
+   * the route, the tool and every other caller share one rule. An unknown id
+   * fails loudly: a picture or a name recorded for nobody is a file nothing
+   * shows. */
+  update(
+    id: string,
+    patch: {
+      name?: string;
+      icon?: string;
+      model?: { provider: string; modelId: string } | null;
+    },
+  ): void;
   /** Replace the agent's identity (its own text). Trimmed and length-checked
    * here, so the tool and every other caller share one rule. An empty string
    * clears it. */
@@ -107,6 +129,8 @@ interface AgentRow {
   role: string;
   identity?: string | null;
   icon?: string | null;
+  model_provider?: string | null;
+  model_id?: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -118,6 +142,11 @@ function toAgent(row: AgentRow): StellaAgent {
     role: row.role,
     identity: row.identity ?? "",
     icon: row.icon ?? "",
+    // Both columns or neither: a half-written pair is not a model, and a
+    // conversation built from it would fail to open.
+    model: row.model_provider && row.model_id
+      ? { provider: row.model_provider, modelId: row.model_id }
+      : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -178,6 +207,32 @@ export function normalizeAgentName(name: string): string {
   return trimmed;
 }
 
+/**
+ * Normalize the model an agent's conversation should run on.
+ *
+ * `null` means "the app's default model" and passes through: clearing the
+ * choice is a real choice, and it must not become an empty provider id that
+ * the conversation would then fail to open with. A pair is trimmed and both
+ * halves are required — `{provider: "x", modelId: ""}` describes a request,
+ * not a model. Whether the pair names a model the catalog HAS is checked by
+ * the caller that can read the catalog (LumiscaCore.updateStellaAgent); this
+ * function only sees a string.
+ */
+export function normalizeAgentModel(
+  model: { provider: string; modelId: string } | null,
+): { provider: string; modelId: string } | null {
+  if (model === null) return null;
+  const provider = model.provider.trim();
+  const modelId = model.modelId.trim();
+  if (provider.length === 0 || modelId.length === 0) {
+    throw new CoreError(
+      "A model needs both a provider and a model id.",
+      "invalid",
+    );
+  }
+  return { provider, modelId };
+}
+
 export function createAgentRepo(db: LumiscaDb): AgentRepo {
   const listStmt = db.db.prepare(
     // `created_at` then `rowid` make the order total: two agents created in
@@ -195,11 +250,12 @@ export function createAgentRepo(db: LumiscaDb): AgentRepo {
     "UPDATE stella_agents SET identity = ?, updated_at = ? WHERE id = ?",
   );
   const updateStmt = db.db.prepare(
-    // One statement for both display fields: the two travel together from
-    // the edit dialog, and a rename that landed while the picture failed
-    // would leave the user with half of what they asked for. `updated_at` is
+    // One statement for all three: they travel together from the edit
+    // dialog, and a rename that landed while the picture failed would leave
+    // the user with half of what they asked for. `updated_at` is
     // deliberately absent — see AgentRepo.update.
-    "UPDATE stella_agents SET name = ?, icon = ? WHERE id = ?",
+    "UPDATE stella_agents SET name = ?, icon = ?, model_provider = ?, " +
+      "model_id = ? WHERE id = ?",
   );
   const deleteStmt = db.db.prepare("DELETE FROM stella_agents WHERE id = ?");
   // "Most recently used" has to be a strict order, and a millisecond clock is
@@ -238,6 +294,7 @@ export function createAgentRepo(db: LumiscaDb): AgentRepo {
         role,
         identity: "",
         icon: "",
+        model: null,
         createdAt: now,
         updatedAt: now,
       };
@@ -245,7 +302,7 @@ export function createAgentRepo(db: LumiscaDb): AgentRepo {
 
     update(id: string, patch): void {
       // The current row is read first: a patch names only what changed, and
-      // one statement writes both fields (see updateStmt).
+      // one statement writes all three fields (see updateStmt).
       const current = this.get(id);
       if (current === undefined) {
         throw new CoreError(`Agent not found: ${id}`, "not_found");
@@ -254,11 +311,26 @@ export function createAgentRepo(db: LumiscaDb): AgentRepo {
         ? current.name
         : normalizeAgentName(patch.name);
       const icon = patch.icon ?? current.icon;
+      const model = patch.model === undefined
+        ? current.model
+        : normalizeAgentModel(patch.model);
       // A patch that changes nothing is not an error, and it is also not a
       // write: an edit dialog opened and saved untouched must not touch the
       // row (a future column would otherwise be stamped by a no-op).
-      if (name === current.name && icon === current.icon) return;
-      updateStmt.run(name, icon, id);
+      if (
+        name === current.name && icon === current.icon &&
+        model?.provider === current.model?.provider &&
+        model?.modelId === current.model?.modelId
+      ) {
+        return;
+      }
+      updateStmt.run(
+        name,
+        icon,
+        model?.provider ?? null,
+        model?.modelId ?? null,
+        id,
+      );
     },
 
     writeIdentity(id: string, content: string): void {

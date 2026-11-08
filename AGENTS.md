@@ -106,9 +106,9 @@ Deno は公開から 24 時間以内のバージョンを既定では導入し�
 
 - **共通**: 一般 / 外観 / プロバイダー / モデル設定 / MCPサーバー / カスタマイズ / 接続先サーバー / セキュリティ
 - **code mode**: 画面操作 / 保存済みプロンプト
-- **stella mode**: モデル / ルーチン
+- **stella mode**: ルーチン
 
-モード専用の意味を持つものは、足りないものを画面で言います。`/prompt` は code mode のコンポーザにしかなく、computer use はこのマシンの画面を動かし、ルーチンは stella のエージェントの会話にしかありません。パネルはどちらのモードでも開け、対象が無ければその旨を出します（ルーチンは「エージェントを選択すると…」、モデルは「エージェントを選ぶと…」）。
+モード専用の意味を持つものは、足りないものを画面で言います。`/prompt` は code mode のコンポーザにしかなく、computer use はこのマシンの画面を動かし、ルーチンは stella のエージェントの会話にしかありません。パネルはどちらのモードでも開け、対象が無ければその旨を出します（ルーチンは「エージェントを選択すると…」）。
 
 - **カテゴリは 1 枚のページ**（`settings/SettingsPage.tsx`）。見出し（名前）と本文を分け、本文だけをスクロールさせます。中から開く画面は 1 段低い `settings/SettingsSubHeader.tsx` を持ち、`modal-header` を重ねません。900px 以下では一覧とページを 1 枚ずつ出します（`.settings-body[data-view]`）。
 - **プロバイダーは 1 画面に 2 種類**を同じ部品（`settings/SettingsSection.tsx` と `settings/ProviderRow.tsx`）で並べます。AI プロバイダーと Web 検索を分けると、検索側を見落とします。ページ名がそのまま節名になる画面では節の見出しを省きます。
@@ -179,7 +179,7 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 - **一覧の行は最新の発言**: 2 行目は会話と同じ射影（`shared/stella-preview.ts` の `previewOf`）、並びも最新メッセージの時刻です。開いていない会話にはストリームが無いので、一覧は 30 秒ごとに読み直します（`useVisibleInterval`）。
 - **話す手段は本文と `send_chat`**: 本文はそのまま返信になり、`send_chat` がカード・ファイル・途中経過を添えます（`packages/core/tools/send-chat.ts`）。黙るターンは `NO_RESPONSE` だけを書きます（`packages/core/agent/silent-reply.ts`）。`text`・`card`・`paths` は 1 回で 1 つのメッセージになり、少なくとも 1 つ必要です。
 - **カードだけは書きながら出る**: モデルが `send_chat` の引数を流している間、`card_delta` が届き、画面は `parseUiMarkupPartial` で閉じたブロックまで描きます。断片の切り出しは `packages/core/ai/tool-args-field.ts`、まとめは stella のイベントストリームの `delta` チャネルです。本文はターンの終わりに一度に届きます。
-- **モデルの切り替え**: `POST /api/stella/conversations/:agentId/model`（`provider` と `modelId` が必須、実行中は 409）。切り替えてもシステムプロンプトは変わりません。モデル名は context メッセージとして公開します（`packages/core/agent/model-context.ts`）。
+- **モデルはエージェントごと**: 選択はエージェントの編集ダイアログで行い、`PATCH /api/stella/agents/:id` の `model`（`null` は既定、省略は変更なし）で保存します。未設定ならアプリの既定モデル（設定 → モデル設定）を使います。選択はそのエージェントの会話の `sessions` 行にも同じ呼び出しで書き込まれます。会話が実行中でも拒否せず、保存したうえでその実行が終わってから適用します（`SessionCatalog.setSessionModel`。code mode の `POST /api/sessions/:id/model` も同じです）——実行中のモデルを差し替えると run の行が二重になり、待たせるのは実行と関係のない要求を断ることになるためです。会話のモデルだけを切り替えるルートはありません——2 つの入口があると、どちらが正しいかが決まらなくなります。切り替えてもシステムプロンプトは変わりません。モデル名は context メッセージとして公開します（`packages/core/agent/model-context.ts`）。
 - **identity**: `role` とは別に、`identity` ツールで自分の役割と知識を書けます（`stella_agents.identity`、`packages/core/stella/identity.ts`）。context メッセージとして届き、反映は次のターンからです。
 
 ### ツール
@@ -211,9 +211,9 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 - **空いた領域は次の起動で返す**: `close()` がマーカーを書き（`packages/core/db/vacuum.ts` の `vacuumMarkerPath`）、次の起動時にファイルを作り直します（`vacuumOnStartup`、`packages/server/mod.ts`）。`node:sqlite` は `VACUUM` を使えないため、全行コピーと rename です。
 - **`history_search`**: 検索するのは会話の射影（画面に出るもの）だけで、結果はローカル日時付き、`from` / `to` で期間を切れます。ツール名・引数・結果は出ません。
 
-### 名前とアイコン
+### 名前・アイコン・モデル
 
-- **1 つのダイアログで変える**（`packages/web/src/components/stella/AgentEditDialog.tsx`）。`PATCH /api/stella/agents/:id` に `{ name?, icon? }` を送り、`icon` 省略は変更なし、`null` は頭文字、`{data, mimeType}` は差し替えです。名前を先に検証する（空名・長すぎる名前は 400、重複名は 409）ので、弾かれたときに画像は書かれません。
+- **1 つのダイアログで変える**（`packages/web/src/components/stella/AgentEditDialog.tsx`）。`PATCH /api/stella/agents/:id` に `{ name?, icon?, model? }` を送り、`icon` 省略は変更なし、`null` は頭文字、`{data, mimeType}` は差し替え、`model` 省略は変更なし、`null` は既定のモデルです。名前を先に検証し（空名・長すぎる名前は 400、重複名は 409）、モデルはカタログにあるかを確かめてから書き込みます。弾かれたときに画像も名前も書かれません。
 - **並びは動かさない**: 改名も差し替えも `updated_at` を触りません。「最後に話した順」のままです。
 - **`role` は編集できない**: 作成時のシステムプロンプトに入っており、後から変えても既存の会話に届きません。名前もプロンプトには入りません（`packages/core/tools/system-prompt.ts`）。プロンプト自体はセッションを開くたびに導出し直され、保存値と違えば書き換わるので（`packages/core/agent/factory.ts` の `ensureSystemPrompt`）、新しい版でプロンプトを変えれば既存の会話にも届きます。
 - **アイコン**: 保存先は DB 隣の `.lumisca-agent-icons/<agent id>/`（`packages/core/stella/icons.ts`）。未設定なら名前の頭文字を `agent id` から導いた色の上に描きます（`packages/core/shared/agent-avatar.ts`）。PNG / JPEG / GIF / WebP / BMP の 512 KiB までで、SVG は置けません。

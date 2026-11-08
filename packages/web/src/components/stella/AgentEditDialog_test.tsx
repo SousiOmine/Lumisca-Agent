@@ -8,16 +8,17 @@ import { AgentEditDialog } from "./AgentEditDialog.tsx";
 /**
  * The agent edit form: what it offers, and what it deliberately does not.
  *
- * The dialog is the only place a name or a picture can be changed, so what is
- * checked here is the promise it makes: both fields are there, they are saved
- * together, and the role (which the agent works from and which a rename must
- * not touch) has no field at all.
+ * The dialog is the only place an agent's name, picture or model can be
+ * changed, so what is checked here is the promise it makes: the fields are
+ * there, they are saved together, and the role (which the agent works from and
+ * which a rename must not touch) has no field at all.
  */
 
 const agent: StellaAgentSummary = {
   id: "a1",
   name: "Aide",
   icon: "",
+  model: null,
   createdAt: 0,
   updatedAt: 0,
   preview: null,
@@ -70,4 +71,25 @@ Deno.test("AgentEditDialog: saving is one action for both fields", () => {
   // The picture's own controls are secondary (choose / reset), never primary:
   // choosing a file is not a commit.
   assertEquals((html.match(/btn primary/g) ?? []).length, 1);
+});
+
+Deno.test("AgentEditDialog: an agent without a model follows the default", () => {
+  const html = render();
+  // Unset is a state to show, not an empty row: the sentence the user needs
+  // is that this agent runs on whatever the app's default model is.
+  assertStringIncludes(html, "既定のモデル");
+  // Nothing to return to, so no control that does it (the same rule as the
+  // picture's reset).
+  assertEquals(html.includes("既定に戻す"), false);
+});
+
+Deno.test("AgentEditDialog: a chosen model is shown and can be cleared", () => {
+  const html = render({
+    ...agent,
+    model: { provider: "faux", modelId: "large" },
+  });
+  assertStringIncludes(html, "faux/large");
+  // Returning to the default is how a user undoes the choice — the dialog
+  // must offer it without deleting the agent.
+  assertStringIncludes(html, "既定に戻す");
 });

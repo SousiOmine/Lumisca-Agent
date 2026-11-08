@@ -40,7 +40,6 @@ export const SETTINGS_CATEGORIES = [
   "security",
   "computerUse",
   "prompts",
-  "stellaModel",
   "routines",
 ] as const;
 

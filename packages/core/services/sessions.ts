@@ -95,6 +95,10 @@ export interface CreateSessionInput {
  * does not have to know whether a model came from settings or a catalog.
  */
 export class SessionCatalog {
+  /** Sessions whose model change arrived while a run was in flight: their
+   * agent is rebuilt as that run ends (see releasePendingRebuild). */
+  private readonly pendingModelRebuilds = new Set<string>();
+
   constructor(
     private readonly deps: {
       sessions: SessionRepo;
@@ -230,6 +234,9 @@ export class SessionCatalog {
 
   async closeSession(id: string): Promise<void> {
     await this.deps.pool.close(id);
+    // A change that was waiting for a run has nothing left to apply: the row
+    // already carries it, and the next open reads the row.
+    this.pendingModelRebuilds.delete(id);
     // The session's in-memory state (and with it the revision count) is
     // gone: a client still holding the old count sees a difference and
     // re-reads the snapshot — the right reaction, since the reopened agent
@@ -242,6 +249,7 @@ export class SessionCatalog {
     // drop the persisted row synchronously so the session is synchronously
     // gone for callers that do not await.
     const closing = this.deps.pool.delete(id);
+    this.pendingModelRebuilds.delete(id);
     this.deps.sessions.delete(id);
     this.deps.forget(id);
     await closing;
@@ -484,7 +492,19 @@ export class SessionCatalog {
     return result?.summarized.length;
   }
 
-  /** Switch the model used by a session (persisted). */
+  /**
+   * Switch the model used by a session (persisted).
+   *
+   * The row is written at once, so a session that is not open — or a server
+   * that restarts before the next run — opens on the new model. An open,
+   * idle agent is rebuilt in the same call.
+   *
+   * A run in flight keeps the model it started with and the change is applied
+   * as that run ends ({@link releasePendingRebuild}). Refusing instead would
+   * answer "no" to a request that has nothing to do with the run, and
+   * rebuilding now would replace the agent under a loop that is still
+   * executing (and duplicate the rows of the run in flight).
+   */
   setSessionModel(id: string, provider: string, modelId: string): void {
     const session = this.deps.sessions.get(id);
     if (!session) {
@@ -496,12 +516,40 @@ export class SessionCatalog {
         "not_found",
       );
     }
-    this.deps.pool.applyChange(
-      [{ ...session, modelProvider: provider, modelId }],
-      () => {
-        this.deps.sessions.updateModel(id, provider, modelId);
-      },
-    );
+    this.deps.sessions.updateModel(id, provider, modelId);
+    const updated = { ...session, modelProvider: provider, modelId };
+    const agent = this.deps.pool.get(id);
+    // Closed: the next open builds from the row that was just written.
+    if (agent === undefined) return;
+    if (agent.isStreaming) {
+      this.pendingModelRebuilds.add(id);
+      return;
+    }
+    this.deps.pool.rebuild(updated);
+  }
+
+  /**
+   * The run of `id` has ended: rebuild its agent if a model change waited for
+   * it.
+   *
+   * Deferred by a microtask because the caller is the `agent_end` event, which
+   * the running agent emits from its own teardown; rebuilding closes that
+   * agent, so it happens after the emission has returned.
+   */
+  releasePendingRebuild(id: string): void {
+    if (!this.pendingModelRebuilds.delete(id)) return;
+    queueMicrotask(() => {
+      // Re-read the row: the choice the user settled on, not the one that
+      // was pending when a run started.
+      const session = this.deps.sessions.get(id);
+      if (session === undefined) return;
+      if (this.deps.pool.get(id)?.isStreaming) {
+        // Another run started first; its end releases this one.
+        this.pendingModelRebuilds.add(id);
+        return;
+      }
+      this.deps.pool.rebuild(session);
+    });
   }
 
   /** Rename a session (persisted) and notify clients. */

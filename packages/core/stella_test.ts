@@ -169,6 +169,99 @@ Deno.test("stella conversation: each agent has its own", async () => {
   }
 });
 
+/** A core whose provider offers two models, so "the agent's own choice" and
+ * "the app's default" can be told apart. */
+async function twoModelStellaCore(): Promise<LumiscaCore> {
+  const faux = fauxProvider({ models: [{ id: "faux" }, { id: "other" }] });
+  const core = LumiscaCore.forTesting([faux.provider]);
+  core.models.models.setProvider(faux.provider);
+  await core.setProviderApiKey(faux.provider.id, "faux-key");
+  core.setStellaVm(fakeVm(RUNNING));
+  return core;
+}
+
+Deno.test("stella conversation: opens on the agent's own model", async () => {
+  // The choice is made in the agent's edit dialog, before the conversation
+  // exists: a user picking a model must not have to open one first.
+  const core = await twoModelStellaCore();
+  try {
+    const agent = core.createStellaAgent({ name: "Aide", role: "r" });
+    await core.updateStellaAgent(agent.id, {
+      model: { provider: "faux", modelId: "other" },
+    });
+    const session = await core.getOrCreateStellaSession(agent.id);
+    assertEquals(session.modelProvider, "faux");
+    assertEquals(session.modelId, "other");
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella conversation: an unset model follows the app's default", async () => {
+  const core = await twoModelStellaCore();
+  try {
+    const agent = core.createStellaAgent({ name: "Aide", role: "r" });
+    const session = await core.getOrCreateStellaSession(agent.id);
+    // Whatever the default resolves to, it is not the agent's to choose.
+    assert(session.modelId === "faux" || session.modelId === "other");
+    assertEquals(core.getStellaAgent(agent.id)?.model, null);
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella conversation: the dialog's model choice moves the conversation", async () => {
+  // The regression this pins: the model used to be settable only from the
+  // settings dialog, which needed an open conversation. The choice lives on
+  // the agent now, and the conversation row follows it — the row is what the
+  // run reads.
+  const core = await twoModelStellaCore();
+  try {
+    const agent = core.createStellaAgent({ name: "Aide", role: "r" });
+    const session = await core.getOrCreateStellaSession(agent.id);
+    const fallback = session.modelId;
+    const chosen = fallback === "faux" ? "other" : "faux";
+
+    await core.updateStellaAgent(agent.id, {
+      model: { provider: "faux", modelId: chosen },
+    });
+    assertEquals(core.getSession(session.id)?.modelId, chosen);
+    // The choice is on the agent too, so the sidebar's row (and the dialog
+    // that reads it) shows it without opening the conversation.
+    assertEquals(core.getStellaAgent(agent.id)?.model?.modelId, chosen);
+    assertEquals(
+      core.listStellaAgentSummaries()[0]?.model?.modelId,
+      chosen,
+    );
+
+    // Clearing it returns the conversation to the app's default model.
+    await core.updateStellaAgent(agent.id, { model: null });
+    assertEquals(core.getSession(session.id)?.modelId, fallback);
+    assertEquals(core.getStellaAgent(agent.id)?.model, null);
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella conversation: a model the catalog does not have is refused", async () => {
+  const core = await twoModelStellaCore();
+  try {
+    const agent = core.createStellaAgent({ name: "Aide", role: "r" });
+    await assertRejects(
+      () =>
+        core.updateStellaAgent(agent.id, {
+          model: { provider: "faux", modelId: "retired" },
+        }),
+      CoreError,
+      "Model not found",
+    );
+    // Nothing was written: a refused save leaves the row as it was.
+    assertEquals(core.getStellaAgent(agent.id)?.model, null);
+  } finally {
+    await core.close();
+  }
+});
+
 Deno.test("stella conversation: deleting an agent takes its conversation", async () => {
   const core = await stellaCore(RUNNING);
   try {

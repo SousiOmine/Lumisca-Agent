@@ -19,6 +19,7 @@ function agent(
     id,
     name: id === "a1" ? "Aide" : id,
     icon: "",
+    model: null,
     createdAt: 0,
     updatedAt: 0,
     preview,

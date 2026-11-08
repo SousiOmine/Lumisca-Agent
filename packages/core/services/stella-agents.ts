@@ -156,17 +156,17 @@ export class StellaAgentBook {
   }
 
   /**
-   * Change what an agent is CALLED and what it LOOKS like, and return the
-   * updated row.
+   * Change what an agent is CALLED, what it LOOKS like, and which model its
+   * conversation runs on, then return the updated row.
    *
-   * One entry point for both because they are one act: the sidebar's edit
-   * dialog saves a name and a picture together, and a request that stored one
-   * but refused the other would leave the user with half of what they asked
-   * for (and with a dialog that has to explain which half).
+   * One entry point for all three because they are one act: the sidebar's
+   * edit dialog saves them together, and a request that stored one but
+   * refused the other would leave the user with half of what they asked for
+   * (and with a dialog that has to explain which half).
    *
    * The name is validated FIRST — before a single byte is written — so a
    * taken or empty name costs nothing. Neither change touches `updated_at`:
-   * it orders the sidebar by "who was talked to last", and renaming an agent
+   * it orders the sidebar by "who was talked to last", and editing an agent
    * is not talking to it (see AgentRepo.update).
    *
    * `icon` is:
@@ -181,12 +181,19 @@ export class StellaAgentBook {
    * `extension` is the stored format (`.png`, `.jpg`, …); the route derives it
    * from what the browser reported, and the store verifies the bytes actually
    * are that format rather than trusting the name.
+   *
+   * `model` is `undefined` for "leave it", `null` for "the app's default
+   * model", or the pair to run on. Only the ROW is written here: applying the
+   * pair to the agent's conversation needs the model catalog and the running
+   * conversation, which this book does not have (see
+   * LumiscaCore.updateStellaAgent, its only caller).
    */
   async updateStellaAgent(
     id: string,
     patch: {
       name?: string;
       icon?: { bytes: Uint8Array; extension: string } | null;
+      model?: { provider: string; modelId: string } | null;
     },
   ): Promise<StellaAgent> {
     const agent = this.deps.agents.get(id);
@@ -197,11 +204,18 @@ export class StellaAgentBook {
       ? undefined
       : normalizeAgentName(patch.name);
     if (name !== undefined) this.requireUnusedAgentName(name, id);
+    const model = patch.model;
+    const fields = {
+      ...(name === undefined ? {} : { name }),
+      ...(model === undefined ? {} : { model }),
+    };
 
     // Back to the initial: the row stops naming the file, then the file goes.
-    // Nothing else in this patch can fail after that.
+    // Nothing else in this patch can fail after that. The row is written even
+    // when the agent had no picture, because the same patch may carry a name
+    // or a model (a no-op write is skipped by AgentRepo.update).
     if (patch.icon === null) {
-      if (agent.icon !== "") this.deps.agents.update(id, { icon: "" });
+      this.deps.agents.update(id, { ...fields, icon: "" });
       await this.deps.icons.remove(id, agent.icon);
     } else if (patch.icon !== undefined) {
       const stored = await this.deps.icons.put(
@@ -210,12 +224,9 @@ export class StellaAgentBook {
         patch.icon.extension,
       );
       try {
-        // Name and picture in one row write: the dialog sent one request, so
-        // the row changes once.
-        this.deps.agents.update(id, {
-          ...(name === undefined ? {} : { name }),
-          icon: stored,
-        });
+        // Name, picture and model in one row write: the dialog sent one
+        // request, so the row changes once.
+        this.deps.agents.update(id, { ...fields, icon: stored });
       } catch (error) {
         // The row refused the name (the agent was deleted while the bytes
         // were written): the file has no owner now, so it goes with the
@@ -226,8 +237,8 @@ export class StellaAgentBook {
       if (agent.icon !== "" && agent.icon !== stored) {
         await this.deps.icons.remove(id, agent.icon);
       }
-    } else if (name !== undefined) {
-      this.deps.agents.update(id, { name });
+    } else if (name !== undefined || model !== undefined) {
+      this.deps.agents.update(id, fields);
     }
 
     const updated = this.deps.agents.get(id);

@@ -118,6 +118,7 @@ import type { StellaRuntime } from "./vm/runtime.ts";
 import {
   type AgentRepo,
   createAgentRepo,
+  normalizeAgentModel,
   type StellaAgent,
 } from "./stella/agents.ts";
 import { AGENT_ICONS_DIR_NAME, AgentIconStore } from "./stella/icons.ts";
@@ -1008,6 +1009,12 @@ export class LumiscaCore {
         // ignore sink failures
       }
     }
+    // A model change made while a run was in flight is applied once that run
+    // has ended (see SessionCatalog.setSessionModel): the clients have been
+    // told the run is over, and the next run is the first that can use it.
+    if (event.type === "agent_end") {
+      this.services.sessions.releasePendingRebuild(event.sessionId);
+    }
   }
 
   /** How many events this server has emitted for the session over the life
@@ -1258,14 +1265,93 @@ export class LumiscaCore {
     return this.services.stellaAgents.createStellaAgent(input);
   }
 
-  updateStellaAgent(
+  /**
+   * Change an agent's name, picture and/or model.
+   *
+   * The model is validated here rather than in the agent book, and before a
+   * single byte is written: the book cannot see the catalog, and a save that
+   * stored the name and refused the model would leave the dialog explaining
+   * which half happened.
+   *
+   * A conversation with a run in flight is not an error: the choice is stored
+   * and applied when that run ends (SessionCatalog.setSessionModel). The
+   * dialog can be used at any time, and the answer to "show me this from the
+   * next run" is the same as for an idle conversation.
+   *
+   * Afterwards the conversation row follows the choice (see
+   * applyStellaAgentModel). An agent whose conversation does not exist yet
+   * simply opens on it later (see StellaMachines.getOrCreateStellaSession).
+   */
+  async updateStellaAgent(
     id: string,
     patch: {
       name?: string;
       icon?: { bytes: Uint8Array; extension: string } | null;
+      model?: { provider: string; modelId: string } | null;
     },
   ): Promise<StellaAgent> {
-    return this.services.stellaAgents.updateStellaAgent(id, patch);
+    const agent = this.stellaAgents.get(id);
+    if (agent === undefined) {
+      throw new CoreError(`Agent not found: ${id}`, "not_found");
+    }
+    const model = patch.model === undefined
+      ? undefined
+      : normalizeAgentModel(patch.model);
+    if (
+      model !== undefined && model !== null &&
+      this.models.getModel(model.provider, model.modelId) === undefined
+    ) {
+      throw new CoreError(
+        `Model not found: ${model.provider}/${model.modelId}`,
+        "not_found",
+      );
+    }
+    const updated = await this.services.stellaAgents.updateStellaAgent(id, {
+      ...patch,
+      ...(model === undefined ? {} : { model }),
+    });
+    if (model !== undefined) await this.applyStellaAgentModel(id, model);
+    return updated;
+  }
+
+  /**
+   * Point an agent's conversation at `model` (null = the app's default).
+   *
+   * The conversation's row is what a run reads, so the choice is written
+   * there as well as on the agent — immediately, and for an idle agent the
+   * rebuild happens now. A run in flight keeps its model and the change lands
+   * as the run ends (see SessionCatalog.setSessionModel). An agent without a
+   * conversation has nothing to point: its row is created from the agent's
+   * choice when the conversation is first opened.
+   */
+  private async applyStellaAgentModel(
+    agentId: string,
+    model: { provider: string; modelId: string } | null,
+  ): Promise<void> {
+    const session = this.sessions.getByAgent(agentId);
+    if (session === undefined) return;
+    let wanted = model;
+    if (wanted === null) {
+      try {
+        wanted = await this.resolveDefaultModel(undefined, undefined);
+      } catch {
+        // Nothing is configured to run on, so there is no default to move to.
+        // The conversation keeps the model it has; the agent's own field
+        // already says "default", which is what applies once one exists.
+        return;
+      }
+    }
+    if (
+      session.modelProvider === wanted.provider &&
+      session.modelId === wanted.modelId
+    ) {
+      return;
+    }
+    this.services.sessions.setSessionModel(
+      session.id,
+      wanted.provider,
+      wanted.modelId,
+    );
   }
 
   resolveStellaAgentIcon(

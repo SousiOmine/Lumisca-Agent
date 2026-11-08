@@ -385,15 +385,6 @@
   flex: none;
 }
 
-/* the model picker popover inside the settings dialog: fixed so it is not
-   clipped by the scrolling settings content. Position and size come from the
-   measured room (hooks/usePopoverPlacement.ts), shared with the composer's
-   picker through `.mp-popover`. */
-.model-pref-popover {
-  z-index: 60;
-  border-radius: var(--radius-lg);
-}
-
 /* Two-pane settings modal: the category navigation on the left, one page on
  * the right. The dialog itself does not scroll: the page's body does
  * (.settings-page-body), so a category's title and the way out stay put. */

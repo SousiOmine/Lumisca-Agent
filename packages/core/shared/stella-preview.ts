@@ -195,6 +195,11 @@ export interface StellaAgentSummaryBase {
   name: string;
   /** The icon store's file name, or "" when the agent has no picture. */
   icon: string;
+  /** The model this agent's conversation runs on, or null to use the app's
+   * default model. The edit dialog reads it from here: the agent list is the
+   * only read a client has before a conversation is opened, and choosing the
+   * model must not require opening one. */
+  model: { provider: string; modelId: string } | null;
   /** When the user last talked to it (the "most recently used" order). */
   updatedAt: number;
   /** When the agent was created: the last tie-break of the row order, so two

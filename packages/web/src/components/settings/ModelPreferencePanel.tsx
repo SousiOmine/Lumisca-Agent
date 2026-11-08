@@ -1,10 +1,4 @@
-import {
-  createPortal,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "preact/compat";
+import { useEffect, useMemo, useRef, useState } from "preact/compat";
 import {
   DEFAULT_MODEL_KEY,
   FAST_MODEL_KEY,
@@ -13,8 +7,6 @@ import {
   serializeModelPreference,
 } from "@lumisca/core/shared";
 import type { ModelPreference, ThinkingLevel } from "@lumisca/core/shared";
-import { useClickOutside } from "../../hooks/useClickOutside.ts";
-import { usePopoverPlacement } from "../../hooks/usePopoverPlacement.ts";
 import { settingsStore, useSettings } from "../../settingsStore.ts";
 import { useT } from "../../i18n.ts";
 import { thinkingLevelLabel } from "../../format.ts";
@@ -23,7 +15,7 @@ import {
   setModelThinkingLevel,
   useProviderModels,
 } from "../../providers.ts";
-import { ModelPicker } from "../ModelPicker.tsx";
+import { ModelPickerPopover } from "../ModelPickerPopover.tsx";
 import { SettingsSection } from "./SettingsSection.tsx";
 
 interface ModelPrefRow {
@@ -64,7 +56,6 @@ export function ModelPreferencePanel(
     Record<string, ThinkingLevel>
   >({});
   const [savingLevel, setSavingLevel] = useState(false);
-  const popoverRef = useRef<HTMLDivElement>(null);
   // Model catalog of this server (settings are always local); each row's
   // thinking level is derived from it below.
   const { modelsByProvider, reload: reloadModels } = useProviderModels();
@@ -138,21 +129,6 @@ export function ModelPreferencePanel(
     }
     return out;
   }, [modelsByProvider, values, levelOverrides, localizedRows]);
-
-  // Close on outside click, Escape and window blur. A scroll does not close it:
-  // the placement follows the trigger while the settings content scrolls
-  // (hooks/usePopoverPlacement.ts), so closing on scroll would undo that.
-  useClickOutside(popoverRef, () => setOpenRow(null), openRow !== null, {
-    onBlur: true,
-    within: anchor,
-  });
-
-  /** Where the open row's picker goes: measured against the button that opened
-   * it (hooks/usePopoverPlacement.ts) and limited to the room that is there, so
-   * a window too short for the popover shrinks it instead of pushing half of
-   * it off the screen. Re-measured on resize, which also re-decides whether
-   * the three panes fit. */
-  const placement = usePopoverPlacement(anchor, openRow !== null, "below");
 
   /** Open a row's picker; the same row's button closes it again (the button is
    * itself inside the popover's click-outside area, so the toggle has to live
@@ -276,44 +252,33 @@ export function ModelPreferencePanel(
         );
       })}
 
-      {
-        /* Portaled to the body: the settings modal clips overflowing
-          descendants (overflow: hidden), which would cut off the wide
-          three-pane picker. The measured placement keeps it inside the
-          viewport (z-index sits above the modal backdrop). */
-      }
-      {openRow !== null && openRowDef && placement !== null && createPortal(
-        <div
-          className="mp-popover model-pref-popover"
-          style={placement.style}
-          ref={popoverRef}
-        >
-          <ModelPicker
-            value={values[openRow] ?? null}
-            imageOnly={openRowDef.imageOnly}
-            stacked={!placement.panes}
-            roomHeight={placement.height}
-            onClose={() => setOpenRow(null)}
-            onSelect={(provider, modelId) =>
-              save(openRow, { provider, modelId })}
-            onOpenSettings={() => {
-              setOpenRow(null);
-              onOpenProviders();
-            }}
-            thinkingValue={openRowDef.thinking
-              ? levelsByRow[openRow]?.current
-              : undefined}
-            thinkingLevels={openRowDef.thinking
-              ? levelsByRow[openRow]?.supported
-              : undefined}
-            onThinkingChange={openRowDef.thinking
-              ? (level) => void changeLevel(values[openRow], level)
-              : undefined}
-            thinkingDisabled={savingLevel || saving !== null}
-          />
-        </div>,
-        document.body,
-      )}
+      <ModelPickerPopover
+        anchor={anchor}
+        open={openRow !== null && openRowDef !== undefined}
+        value={openRow === null ? null : values[openRow] ?? null}
+        imageOnly={openRowDef?.imageOnly}
+        onClose={() => setOpenRow(null)}
+        onSelect={(provider, modelId) => {
+          if (openRow === null) return;
+          void save(openRow, { provider, modelId });
+        }}
+        onOpenSettings={() => {
+          setOpenRow(null);
+          onOpenProviders();
+        }}
+        thinkingValue={openRowDef?.thinking
+          ? levelsByRow[openRow ?? ""]?.current
+          : undefined}
+        thinkingLevels={openRowDef?.thinking
+          ? levelsByRow[openRow ?? ""]?.supported
+          : undefined}
+        onThinkingChange={openRowDef?.thinking
+          ? (level) => {
+            if (openRow !== null) void changeLevel(values[openRow], level);
+          }
+          : undefined}
+        thinkingDisabled={savingLevel || saving !== null}
+      />
 
       {loadError && (
         <div className="error-text">

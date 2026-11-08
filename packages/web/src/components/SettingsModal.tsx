@@ -27,9 +27,7 @@ import { ModelPreferencePanel } from "./settings/ModelPreferencePanel.tsx";
 import { CompactionSettings } from "./settings/CompactionSettings.tsx";
 import { McpList } from "./settings/McpList.tsx";
 import { RoutinePanel } from "./settings/RoutinePanel.tsx";
-import { StellaModelPanel } from "./settings/StellaModelPanel.tsx";
 import type { useRoutines } from "../hooks/useRoutines.ts";
-import type { StellaHook } from "../hooks/useStella.ts";
 import { ConnectionList } from "./settings/ConnectionList.tsx";
 import { PersonalizePanel } from "./settings/PersonalizePanel.tsx";
 import { SavedPromptsPanel } from "./settings/SavedPromptsPanel.tsx";
@@ -83,15 +81,6 @@ interface SettingsModalProps {
    * no agent), plus which agent they belong to. */
   routines: ReturnType<typeof useRoutines>;
   routineAgent: string | null;
-  /** The open conversation, for the model category: its model and thinking
-   * strength are the conversation's, not the app's. Null in code mode, which
-   * has no such conversation. */
-  stella:
-    | Pick<
-      StellaHook,
-      "conversation" | "setModel" | "setThinkingLevel"
-    >
-    | null;
   onClose: () => void;
 }
 
@@ -348,26 +337,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     render: () => <SavedPromptsPanel />,
   },
   {
-    id: "stellaModel",
-    scope: "stella",
-    labelKey: "settings.nav.stellaModel",
-    icon: <IconBrain size={18} />,
-    // The conversation's model, not the app's: a stella chat is one ongoing
-    // thread, so switching is a setting rather than a per-message choice
-    // (see StellaModelPanel).
-    render: ({ props, openCategory }) => (
-      <StellaModelPanel
-        conversation={props.stella?.conversation ?? null}
-        onModelChange={(provider, modelId) =>
-          props.stella?.setModel(provider, modelId) ?? Promise.resolve()}
-        onThinkingLevelChange={(level) => {
-          void props.stella?.setThinkingLevel(level);
-        }}
-        onOpenProviders={() => openCategory("providers")}
-      />
-    ),
-  },
-  {
     id: "routines",
     scope: "stella",
     // The panel's own heading names the category: one wording for one thing,
@@ -427,7 +396,6 @@ export function SettingsModal({
   onBackToList,
   routines,
   routineAgent,
-  stella,
   onClose,
 }: SettingsModalProps) {
   const t = useT();
@@ -489,7 +457,6 @@ export function SettingsModal({
       onBackToList,
       routines,
       routineAgent,
-      stella,
       onClose,
     },
     providersView,

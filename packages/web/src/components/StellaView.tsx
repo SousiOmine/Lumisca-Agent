@@ -242,10 +242,11 @@ export function StellaView(
               ? t("chat.stella.noAgent")
               : t("chat.stella.placeholder")}
             // No model line here. A stella conversation is one ongoing
-            // chat, so its model is set once in the settings dialog rather
-            // than chosen per message (see settings/StellaModelPanel): a
-            // control the user changes rarely does not deserve a row of
-            // every screen. The escape from a retired model is there too.
+            // chat, so its model belongs to the AGENT and is set once in the
+            // agent's edit dialog (AgentEditDialog) rather than chosen per
+            // message: a control the user changes rarely does not deserve a
+            // row of every screen. The escape from a retired model is there
+            // too.
             model={conversation?.model ?? null}
             onModelSelect={() => {}}
             modelBar="none"

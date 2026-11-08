@@ -175,6 +175,16 @@
   border-radius: var(--radius);
 }
 
+/* A picker opened from inside a DIALOG (the settings' model rows, the agent
+ * edit dialog): fixed and portaled to the body so the dialog's scrolling does
+ * not clip it, and above the dialog's backdrop. Position and size still come
+ * from the measured room (hooks/usePopoverPlacement.ts) through
+ * `.mp-popover`. */
+.mp-popover-dialog {
+  z-index: 60;
+  border-radius: var(--radius-lg);
+}
+
 /* ---- model picker: cascading three-pane layout --------------------------- */
 
 /* The panel's height is the measured room (see `.mp-popover`): the model list

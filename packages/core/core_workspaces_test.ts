@@ -7,7 +7,7 @@ import {
   fauxText,
   fauxToolCall,
 } from "@lumisca/core";
-import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
+import { assert, assertEquals, assertRejects } from "@std/assert";
 import type { AgentMessage } from "./mod.ts";
 import { LumiscaCore } from "./mod.ts";
 import { VISUALS_DIR_NAME } from "./mod.ts";
@@ -150,7 +150,7 @@ Deno.test("tools block file access outside the workspace", async () => {
   await removeDirRetry(outside);
 });
 
-Deno.test("model switch and workspace update are refused while streaming", async () => {
+Deno.test("a model switch is stored while streaming; a workspace update waits", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   const extra = await makeRealTempDir("lumisca-extra-");
@@ -169,11 +169,12 @@ Deno.test("model switch and workspace update are refused while streaming", async
   ]);
   core.startPrompt(session.id, "go");
 
-  assertThrows(
-    () => core.setSessionModel(session.id, providerId, modelId),
-    Error,
-    "already running",
-  );
+  // A model switch is not a reason to say no: the row is written now and the
+  // agent is rebuilt as the run ends (SessionCatalog.setSessionModel).
+  core.setSessionModel(session.id, providerId, modelId);
+  assertEquals(core.getSession(session.id)!.modelId, modelId);
+  // A workspace edit is still refused: it changes the prompt and the tools the
+  // running loop is already using.
   await assertRejects(
     () => core.updateWorkspace(ws.id, { folders: [root, extra] }),
     Error,
@@ -182,8 +183,6 @@ Deno.test("model switch and workspace update are refused while streaming", async
 
   await core.getAgent(session.id)!.waitForIdle();
 
-  // After the run finishes, both succeed.
-  core.setSessionModel(session.id, providerId, modelId);
   const updated = await core.updateWorkspace(ws.id, { folders: [root, extra] });
   assertEquals(updated.folders.length, 2);
 

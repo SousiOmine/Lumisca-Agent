@@ -199,7 +199,11 @@ export class StellaMachines {
         this.deps.sessions.get(existing.id) ?? existing,
       );
     }
-    const model = await this.deps.resolveDefaultModel(undefined, undefined);
+    // The agent's own model, or the app's default when it has none: the
+    // choice lives on the agent so it can be made before the conversation
+    // exists.
+    const model = agent.model ??
+      await this.deps.resolveDefaultModel(undefined, undefined);
     const workspace = this.deps.chatWorkspace();
     const session = this.deps.sessions.create({
       workspaceId: workspace.id,

@@ -50,16 +50,20 @@ export interface StellaApi {
    * already exists. Returns the agent a client opens. */
   ensureStellaAgent(): StellaAgent;
   createStellaAgent(input: { name: string; role: string }): StellaAgent;
-  /** Change an agent's name and/or its picture, in one call: the sidebar's
-   * edit dialog saves both together, and a request that stored one but
-   * refused the other would leave the user with half of what they asked
+  /** Change an agent's name, its picture and/or its model, in one call: the
+   * sidebar's edit dialog saves them together, and a request that stored one
+   * but refused the other would leave the user with half of what they asked
    * for. `icon` undefined → unchanged, null → back to the initial,
-   * `{ bytes, extension }` → a new picture. */
+   * `{ bytes, extension }` → a new picture; `model` undefined → unchanged,
+   * null → the app's default model, a pair → the model to run on (the core
+   * also moves the agent's existing conversation to it, now or as its
+   * current run ends). */
   updateStellaAgent(
     id: string,
     patch: {
       name?: string;
       icon?: { bytes: Uint8Array; extension: string } | null;
+      model?: { provider: string; modelId: string } | null;
     },
   ): Promise<StellaAgent>;
   deleteStellaAgent(id: string): Promise<void>;
@@ -118,8 +122,9 @@ export interface StellaApi {
   ): Promise<PromptFileRef[]>;
   abort(sessionId: string): void;
   rewind(sessionId: string, timestamp: number): Promise<void>;
-  /** Switch the conversation's model (persisted). Refused while the
-   * conversation is streaming. */
+  /** Part of the shared conversation API's type, not of this surface: a
+   * conversation's model is its agent's, so the model route is not mounted
+   * here (see ConversationRoutesOptions.modelRoute). */
   setSessionModel(
     sessionId: string,
     provider: string,
@@ -203,6 +208,39 @@ function parseIconPatch(
     );
   }
   return { bytes: decodeBase64(data), extension };
+}
+
+/**
+ * The model patch of an agent edit: `{provider, modelId}` sets the choice,
+ * `null` returns the agent to the app's default model, and an absent key
+ * means "leave it alone" (the dialog saves only what changed).
+ *
+ * Only the shape is checked here. Whether the pair names a model this
+ * installation can select is the core's question — it is the one that can
+ * read the catalog, and it must answer before the row changes.
+ */
+function parseModelPatch(
+  value: unknown,
+): { provider: string; modelId: string } | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== "object") {
+    throw new AppError("model must be an object or null", 400);
+  }
+  const body = value as { provider?: unknown; modelId?: unknown };
+  // Trimmed before the emptiness check: a body of {"provider": "  "}
+  // describes the request, so it is a 400 here rather than an id no catalog
+  // has, which the core would refuse with a confusing 404.
+  const provider = requireNonEmptyString(body.provider, "model.provider")
+    .trim();
+  const modelId = requireNonEmptyString(body.modelId, "model.modelId").trim();
+  if (provider === "" || modelId === "") {
+    throw new AppError(
+      "model.provider and model.modelId must not be blank",
+      400,
+    );
+  }
+  return { provider, modelId };
 }
 
 /**
@@ -293,33 +331,41 @@ export function stellaRoutes(core: StellaApi): Hono {
     );
   });
 
-  /** Change what an agent is called and what it looks like.
+  /** Change what an agent is called, what it looks like and which model its
+   * conversation runs on.
    *
-   * One route for both because they are one act: the sidebar's edit dialog
-   * saves a name and a picture together. The body names only what changed —
-   * an absent `name` or `icon` leaves that field alone, and `"icon": null`
-   * returns the agent to its initial. The picture is the same shape a
-   * prompt's images take (`base64` + `mimeType`), and its content type
-   * decides the stored format; the store then checks the bytes really are
-   * that format, because a browser reports a type from the file's name.
+   * One route for all three because they are one act: the sidebar's edit
+   * dialog saves them together. The body names only what changed — an absent
+   * `name`, `icon` or `model` leaves that field alone, `"icon": null`
+   * returns the agent to its initial, and `"model": null` returns it to the
+   * app's default model (`{provider, modelId}` sets one). The picture is the
+   * same shape a prompt's images take (`base64` + `mimeType`), and its
+   * content type decides the stored format; the store then checks the bytes
+   * really are that format, because a browser reports a type from the file's
+   * name.
    *
-   * What comes back is the updated agent: the client draws the new name and
-   * icon and needs no second read. Validation is the core's (an empty or
-   * taken name is a 400/409, an unknown agent a 404), so the route and the
-   * agent's own tools cannot disagree about what a valid name is. */
+   * What comes back is the updated agent: the client draws the new name,
+   * icon and model and needs no second read. Validation is the core's (an
+   * empty or taken name is a 400/409, an unknown agent or model a 404), so
+   * the route and the agent's own tools cannot disagree about what a valid
+   * choice is. A conversation with a run in flight is not refused: the model
+   * is stored and applied when that run ends. */
   app.patch("/stella/agents/:id", async (c) => {
     const body = await parseBody<{
       name?: unknown;
       icon?: unknown;
+      model?: unknown;
     }>(c);
     const name = body?.name === undefined
       ? undefined
       : requireNonEmptyString(body.name, "name");
     const icon = parseIconPatch(body?.icon);
+    const model = parseModelPatch(body?.model);
     return c.json(
       await core.updateStellaAgent(c.req.param("id"), {
         ...(name === undefined ? {} : { name }),
         icon,
+        model,
       }),
     );
   });
@@ -411,11 +457,13 @@ export function stellaRoutes(core: StellaApi): Hono {
   /** Stop the run. */
   // Stop, answer and rewind are the handlers a session shares
   // (routes/conversation.ts): only the path and how an id is resolved differ
-  // between a conversation and a code-mode session.
+  // between a conversation and a code-mode session. The model route is not
+  // among them: a conversation's model is its agent's (see the agent edit
+  // dialog), so there is nothing here to switch.
   conversationRoutes(app, core, {
     base: "/stella/conversations/:agentId",
     resolve: (c) => requireConversation(c.req.param("agentId")!).id,
-    modelResponse: "ok",
+    modelRoute: false,
   });
 
   /** The user finished at the screen (`vm_ask_user`): the blocked run

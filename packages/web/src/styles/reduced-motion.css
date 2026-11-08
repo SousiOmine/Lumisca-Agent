@@ -102,7 +102,7 @@
   .ctx-popover,
   .mp-popover,
   .model-popover,
-  .model-pref-popover,
+  .mp-popover-dialog,
   .select-popover,
   .connection-picker-popover {
     animation-name: lum-fade-only;

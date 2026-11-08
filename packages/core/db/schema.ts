@@ -281,6 +281,16 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
   // "never checked" (or the state was lost), and the next check is a
   // baseline — it records and does not fire (see vm/watch.ts).
   (db) => addColumnIfMissing(db, "routines", "watch_state", "TEXT"),
+  // Each stella agent's own model: the pair its conversation runs on, chosen
+  // beside the name and the picture. NULL in both columns means "use the
+  // app's default model" — the state a new agent starts in, and what a user
+  // returns to by clearing the choice. The conversation still stores the
+  // pair it runs on (`sessions`), so this is the user's intent and that row
+  // is what the run uses; the edit dialog writes both in one call.
+  (db) => {
+    addColumnIfMissing(db, "stella_agents", "model_provider", "TEXT");
+    addColumnIfMissing(db, "stella_agents", "model_id", "TEXT");
+  },
 ];
 
 /** The `user_version` a fully migrated database carries: one per migration

@@ -1,13 +1,15 @@
 /**
  * The handlers a code-mode session and a stella conversation share.
  *
- * Both surfaces let the user send a prompt, stop a run, answer an ask, rewind
- * and switch the model. The route prefix and how a request's id is resolved
- * differ (`/sessions/:id` finds a session row, `/stella/conversations/:agentId`
- * finds the agent's conversation); everything after that is the same call on
- * the core. Written twice, the two copies drifted in their validation and
- * their doc comments (`answer` parsed its body in one and hand-validated it in
- * the other), and a rule added to one was not added to the other.
+ * Both surfaces let the user send a prompt, stop a run, answer an ask and
+ * rewind. Switching the model is code mode's alone: a stella conversation's
+ * model belongs to its agent (see ConversationRoutesOptions.modelRoute). The
+ * route prefix and how a request's id is resolved differ (`/sessions/:id`
+ * finds a session row, `/stella/conversations/:agentId` finds the agent's
+ * conversation); everything after that is the same call on the core. Written
+ * twice, the two copies drifted in their validation and their doc comments
+ * (`answer` parsed its body in one and hand-validated it in the other), and a
+ * rule added to one was not added to the other.
  *
  * The builder takes the two things that vary and installs the five routes:
  *
@@ -36,11 +38,12 @@ export interface ConversationApi {
    * the store. */
   openSession(id: string): unknown;
   rewind(id: string, timestamp: number): Promise<void>;
+  /** Read by the `/model` route, which only a code-mode session mounts (see
+   * ConversationRoutesOptions.modelRoute). */
   setSessionModel(id: string, provider: string, modelId: string): void;
   answerQuestion(id: string, toolCallId: string, answers: AskAnswer[]): void;
-  /** A code-mode session's model change answers the session record; a
-   * conversation's answers `{ ok: true }`. The route keeps that difference,
-   * because it is what each client already reads. */
+  /** What a model change answers with: the session record, which a code-mode
+   * tab repaints its picker from. */
   getSession(id: string): unknown;
 }
 
@@ -50,10 +53,13 @@ export interface ConversationRoutesOptions {
   /** The session id a request names, or a thrown AppError when it names
    * nothing. */
   resolve(context: Context): string;
-  /** What a model change answers. `session` returns the session record (a
-   * code-mode tab repaints the picker from it); `ok` returns `{ ok: true }`
-   * (a conversation reads its model from the next snapshot). */
-  modelResponse: "session" | "ok";
+  /** Whether to install the `/model` route. A code-mode session answers its
+   * session record (the tab repaints the picker from it). A stella
+   * conversation does not install it: its model is the AGENT's choice, set in
+   * the agent edit dialog (PATCH /stella/agents/:id), which moves the
+   * conversation row in the same call — a second route writing that row would
+   * leave the two disagreeing. */
+  modelRoute: boolean;
 }
 
 /** Install the shared session/conversation routes on `app`. */
@@ -94,25 +100,29 @@ export function conversationRoutes(
     return c.json({ ok: true });
   });
 
-  /** Switch the model the session runs on. */
-  app.post(path("/model"), async (c) => {
-    const body = requireBody(
-      await parseBody<{ provider?: unknown; modelId?: unknown }>(c),
-    );
-    // Trimmed before the emptiness check: a body of {"provider": "  "}
-    // describes the request, so it is a 400 here rather than an id no catalog
-    // has, which the core would refuse with a confusing 404.
-    const provider = requireNonEmptyString(body.provider, "provider").trim();
-    const modelId = requireNonEmptyString(body.modelId, "modelId").trim();
-    if (provider === "" || modelId === "") {
-      throw new AppError("provider and modelId must not be blank", 400);
-    }
-    const id = options.resolve(c);
-    core.setSessionModel(id, provider, modelId);
-    return options.modelResponse === "session"
-      ? c.json(core.getSession(id))
-      : c.json({ ok: true });
-  });
+  /** Switch the model the session runs on (code mode only — see
+   * modelRoute). A run in flight is not refused: the choice is stored and the
+   * agent follows it once that run ends (SessionCatalog.setSessionModel), so
+   * the answer is the session record with the new model — what the next run
+   * will use. */
+  if (options.modelRoute) {
+    app.post(path("/model"), async (c) => {
+      const body = requireBody(
+        await parseBody<{ provider?: unknown; modelId?: unknown }>(c),
+      );
+      // Trimmed before the emptiness check: a body of {"provider": "  "}
+      // describes the request, so it is a 400 here rather than an id no
+      // catalog has, which the core would refuse with a confusing 404.
+      const provider = requireNonEmptyString(body.provider, "provider").trim();
+      const modelId = requireNonEmptyString(body.modelId, "modelId").trim();
+      if (provider === "" || modelId === "") {
+        throw new AppError("provider and modelId must not be blank", 400);
+      }
+      const id = options.resolve(c);
+      core.setSessionModel(id, provider, modelId);
+      return c.json(core.getSession(id));
+    });
+  }
 }
 
 /** Throw the 404 a route owes when an id names nothing (kept out of the

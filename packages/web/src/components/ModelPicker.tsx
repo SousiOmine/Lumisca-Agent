@@ -42,7 +42,10 @@ export interface ModelPickerProps {
     modelId: string,
     info?: ModelInfo,
   ) => void;
-  /** Open the provider settings (the "設定画面" link). */
+  /** Open the provider settings (the "設定画面" link at the foot of the
+   * provider list). Omitted → no link: a caller with no settings screen to
+   * reach from where it is (the agent edit dialog) must not offer one that
+   * does nothing. */
   onOpenSettings?: () => void;
   /** Close the picker. Rendered as a close button on the stepped layout,
    * where the picker covers its own trigger (a sheet on a phone) and a tap
@@ -283,15 +286,24 @@ export function ModelPicker({
               <IconChevronRight size={14} className="mp-chevron" />
             </button>
           ))}
-          <div className="mp-sep" />
-          <button
-            type="button"
-            className="mp-manage"
-            onClick={onOpenSettings}
-          >
-            <IconSettings size={14} />
-            <span>{t("chrome.modelPicker.settingsLink")}</span>
-          </button>
+          {
+            /* Only when there is somewhere to go: the agent edit dialog has no
+              settings screen to open from inside it, and a link that does
+              nothing is one more thing to read. */
+          }
+          {onOpenSettings !== undefined && (
+            <>
+              <div className="mp-sep" />
+              <button
+                type="button"
+                className="mp-manage"
+                onClick={onOpenSettings}
+              >
+                <IconSettings size={14} />
+                <span>{t("chrome.modelPicker.settingsLink")}</span>
+              </button>
+            </>
+          )}
         </div>
       )}
 

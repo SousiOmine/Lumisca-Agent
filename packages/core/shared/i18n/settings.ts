@@ -19,21 +19,6 @@ export const settings = {
   "settings.nav.servers": { ja: "接続先サーバー", en: "Servers" },
   "settings.nav.providers": { ja: "プロバイダー", en: "Providers" },
   "settings.nav.models": { ja: "モデル設定", en: "Models" },
-  "settings.nav.stellaModel": { ja: "モデル", en: "Model" },
-  "settings.stellaModel.title": {
-    ja: "この会話のモデル",
-    en: "This conversation's model",
-  },
-  "settings.stellaModel.note": {
-    ja:
-      "エージェントとの会話は1つながりなので、モデルは会話ごとに決まります。切り替えると次の実行から適用されます。",
-    en:
-      "A conversation with an agent is one thread, so the model belongs to it. A switch applies from the next run.",
-  },
-  "settings.stellaModel.noAgent": {
-    ja: "エージェントを選ぶとモデルを設定できます",
-    en: "Pick an agent to set its model",
-  },
   "settings.nav.mcp": { ja: "MCPサーバー", en: "MCP servers" },
   "settings.nav.prompts": { ja: "保存済みプロンプト", en: "Saved prompts" },
   "settings.nav.computerUse": { ja: "画面操作", en: "Screen control" },

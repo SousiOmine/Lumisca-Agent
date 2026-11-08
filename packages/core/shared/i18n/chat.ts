@@ -282,16 +282,16 @@ export const chat = {
   "chat.stella.agents.create": { ja: "作成", en: "Create" },
   "chat.stella.agents.creating": { ja: "作成中…", en: "Creating…" },
   /** The row's menu (the ⋮ on an agent), and the dialog it opens. What can be
-   * changed is what the user chose: the label and the picture. The role is
-   * fixed at creation (it is the agent's working instruction), so this
-   * dialog deliberately has no field for it. */
+   * changed is what the user chose: the label, the picture and the model. The
+   * role is fixed at creation (it is the agent's working instruction), so
+   * this dialog deliberately has no field for it. */
   "chat.stella.agents.menu": {
     ja: "{name} のメニュー",
     en: "Menu for {name}",
   },
   "chat.stella.agents.edit": {
-    ja: "名前とアイコンを編集",
-    en: "Edit name and icon",
+    ja: "名前・アイコン・モデルを編集",
+    en: "Edit name, icon and model",
   },
   "chat.stella.agents.editTitle": {
     ja: "「{name}」を編集",
@@ -309,6 +309,24 @@ export const chat = {
   "chat.stella.agents.iconReset": {
     ja: "デフォルトに戻す",
     en: "Back to the initial",
+  },
+  /** The model the agent's conversation runs on. It is the AGENT's choice
+   * (not one made per message), and leaving it unset follows the app's
+   * default model — the model settings page. */
+  "chat.stella.agents.model": { ja: "モデル", en: "Model" },
+  "chat.stella.agents.modelDefault": {
+    ja: "既定のモデル",
+    en: "Default model",
+  },
+  "chat.stella.agents.modelUseDefault": {
+    ja: "既定に戻す",
+    en: "Use the default",
+  },
+  "chat.stella.agents.modelHint": {
+    ja:
+      "このエージェントの会話が使うモデルです。未設定なら既定のモデルを使います。",
+    en:
+      "The model this agent's conversation runs on. Unset means the app's default model.",
   },
   "chat.stella.agents.deleteTitle": {
     ja: "「{name}」を削除しますか？",

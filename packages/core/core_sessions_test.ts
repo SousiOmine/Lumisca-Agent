@@ -898,6 +898,60 @@ Deno.test("thinking level change while streaming applies from the next run witho
   core.close();
 });
 
+/** Poll until `check` holds, or fail the test. */
+async function waitUntil(
+  check: () => boolean,
+  what: string,
+): Promise<void> {
+  const deadline = Date.now() + 3_000;
+  while (!check()) {
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
+Deno.test("model change while streaming is stored and applied as the run ends", async () => {
+  // The regression this pins: switching the model while the session ran was a
+  // 409 ("Session is already running"), so a user who wanted the next message
+  // answered by another model had to wait and try again. The choice is stored
+  // at once and the agent is rebuilt when the run ends — never refused, and
+  // never replaced under a loop that is still executing.
+  const faux = fauxProvider({
+    models: [{ id: "faux" }, { id: "other" }],
+  });
+  const core = LumiscaCore.forTesting([faux.provider]);
+  const { ws } = await makeWorkspace(core);
+  const session = await core.createSession({
+    workspaceId: ws.id,
+    modelProvider: faux.provider.id,
+    modelId: "faux",
+  });
+  const running = core.getAgent(session.id)!;
+  faux.setResponses([
+    async () => {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      return fauxAssistantMessage("slow reply");
+    },
+  ]);
+  core.startPrompt(session.id, "go");
+
+  // No error, and the row already carries the choice...
+  core.setSessionModel(session.id, faux.provider.id, "other");
+  assertEquals(core.getSession(session.id)!.modelId, "other");
+  // ...while the agent the run belongs to is left alone.
+  assertEquals(core.getAgent(session.id), running);
+
+  await running.waitForIdle();
+  // The rebuild follows the end of the run (it is emitted from the run's own
+  // teardown, so it happens just after).
+  await waitUntil(
+    () => core.getAgent(session.id) !== running,
+    "the agent to be rebuilt with the new model",
+  );
+  assertEquals(core.getSession(session.id)!.modelId, "other");
+  core.close();
+});
+
 Deno.test("a run's transcript order is also its timestamp order", async () => {
   // The clients keep a window of the transcript and identify messages by role
   // + timestamp (see MessageIdentity): a view drops a live message older than

@@ -367,7 +367,7 @@ export function sessionRoutes(core: SessionApi): Hono {
   conversationRoutes(app, core, {
     base: "/sessions/:id",
     resolve: (c) => requireSession(c.req.param("id")!).id,
-    modelResponse: "session",
+    modelRoute: true,
   });
 
   /** Condense the session's older history into a checkpoint on demand (the

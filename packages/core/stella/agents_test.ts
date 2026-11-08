@@ -293,6 +293,48 @@ Deno.test("agents: name and icon travel in one write", () => {
   }
 });
 
+Deno.test("agents: the model starts unset and is set, kept and cleared", () => {
+  const { db, repo } = setup();
+  try {
+    const agent = repo.create({ name: "Aide", role: "r" });
+    // Unset is the app's default model, not a missing value to fill in.
+    assertEquals(agent.model, null);
+    repo.update(agent.id, { model: { provider: "faux", modelId: "large" } });
+    assertEquals(repo.get(agent.id)?.model, {
+      provider: "faux",
+      modelId: "large",
+    });
+    // A patch that names only the name (or only the picture) leaves the
+    // model alone: the dialog saves what changed.
+    repo.update(agent.id, { name: "Renamed" });
+    assertEquals(repo.get(agent.id)?.model?.modelId, "large");
+    // null returns the agent to the default, which is a state the row can
+    // hold — the columns go back to NULL, not to "" / "".
+    repo.update(agent.id, { model: null });
+    assertEquals(repo.get(agent.id)?.model, null);
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("agents: a half-written model is refused", () => {
+  // A pair with one empty half describes a request, not a model: storing it
+  // would leave the conversation unable to open.
+  const { db, repo } = setup();
+  try {
+    const agent = repo.create({ name: "Aide", role: "r" });
+    assertThrows(
+      () =>
+        repo.update(agent.id, { model: { provider: "faux", modelId: "  " } }),
+      Error,
+      "both a provider and a model id",
+    );
+    assertEquals(repo.get(agent.id)?.model, null);
+  } finally {
+    db.close();
+  }
+});
+
 Deno.test("agents: a renamed agent is trimmed and length-checked", () => {
   const { db, repo } = setup();
   try {
@@ -369,6 +411,7 @@ async function agentToolFixture(
         role: input.role,
         identity: "",
         icon: "",
+        model: null,
         createdAt: 0,
         updatedAt: 0,
       };

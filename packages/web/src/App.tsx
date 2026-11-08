@@ -802,15 +802,6 @@ export function App({ initialData }: AppProps): ReactElement {
           onBackToList={backToSettingsList}
           routines={routines}
           routineAgent={routineAgentName}
-          // The stella conversation's model is set in the dialog, not in the
-          // composer: one ongoing chat does not switch models per message.
-          stella={mode === "stella"
-            ? {
-              conversation: stella.conversation,
-              setModel: stella.setModel,
-              setThinkingLevel: stella.setThinkingLevel,
-            }
-            : null}
           onClose={closeSettings}
         />
       )}

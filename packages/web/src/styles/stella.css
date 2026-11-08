@@ -574,6 +574,44 @@
   display: none;
 }
 
+/* The model field of the agent edit dialog: the choice in effect, the two
+ * actions on it, and — only while it is open — the picker. It reads as one
+ * more field of the form, so it repeats `.agent-icon-field`'s caption and
+ * hint rather than inventing a second look. */
+.agent-model-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.agent-model-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.agent-model-value {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.agent-model-value .mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-model-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .stella-note {
   font-size: 11.5px;
   color: var(--text-dim);

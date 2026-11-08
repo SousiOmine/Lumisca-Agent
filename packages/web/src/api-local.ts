@@ -174,7 +174,8 @@ export const sessionRoutes = {
       body: JSON.stringify({ toolCallId, answers }),
     }),
   /** Switch the session's model; the route answers the plain session record
-   * (unlike getSession, it carries no last run error). */
+   * (unlike getSession, it carries no last run error). A switch made while a
+   * run is in flight is stored at once and takes effect from the next run. */
   updateSessionModel: (
     peerId: string,
     sessionId: string,
@@ -314,16 +315,19 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ name, role }),
     }),
-  /** Change an agent's name and/or its picture, in one request: the edit
-   * dialog saves both together. An omitted field is left alone, `icon: null`
-   * returns the agent to its initial, and `icon: { data, mimeType }` sets a
-   * new picture (`data` is base64, with or without its data-URL header).
-   * Answers the updated agent, so the client needs no second read. */
+  /** Change an agent's name, its picture and/or its model, in one request:
+   * the edit dialog saves them together. An omitted field is left alone,
+   * `icon: null` returns the agent to its initial, `icon: { data, mimeType }`
+   * sets a new picture (`data` is base64, with or without its data-URL
+   * header), `model: null` returns the agent to the app's default model and
+   * `model: { provider, modelId }` sets its own. Answers the updated agent,
+   * so the client needs no second read. */
   updateStellaAgent: (
     id: string,
     patch: {
       name?: string;
       icon?: { data: string; mimeType: string } | null;
+      model?: { provider: string; modelId: string } | null;
     },
   ) =>
     request<StellaAgent>(`/api/stella/agents/${encodeURIComponent(id)}`, {
