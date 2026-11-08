@@ -712,6 +712,72 @@ Deno.test("the composer draws one frame, and its buttons are one size", async ()
   );
 });
 
+Deno.test("the composer field grows to twelve lines and then scrolls", async () => {
+  // The field follows the message (hooks/useAutoGrow.ts writes its height
+  // from `scrollHeight`) up to a ceiling the sheet owns. Two things break the
+  // growth without breaking anything a type check sees: a fixed `height`
+  // (the field never moves), and a ceiling in pixels (the three sizes the
+  // field takes would each need their own number, and the new-session one
+  // would keep a different idea of "too tall").
+  const css = await Deno.readTextFile(
+    new URL("./styles/composer.css", import.meta.url),
+  );
+  const field = cssRules(css).filter((rule) =>
+    rule.selector.includes(".input-box")
+  );
+  const shared = field.find((rule) =>
+    rule.selector.includes(".input-box:focus-visible")
+  );
+  assertEquals(shared !== undefined, true, "the shared field rule is missing");
+  const body = shared!.body;
+
+  // The height comes from the content, never from the sheet.
+  assertEquals(
+    /(^|[;{\s])height:/.test(body),
+    false,
+    "a fixed height stops the field from following its text",
+  );
+  // Twelve whole lines of the field's own type (`1lh` follows all three
+  // font sizes), plus the padding inside the border-box.
+  assertEquals(
+    /max-height:\s*min\(\s*calc\(\s*12lh\s*\+/.test(body),
+    true,
+    "the ceiling must be twelve lines of the field's own type",
+  );
+  // …and the screen, because the input area never takes height back from the
+  // composer: an unbounded field on a short window (a phone with the
+  // keyboard open) puts the send button outside the pane.
+  assertEquals(
+    /calc\(\s*var\(--app-height\)\s*\*\s*0\.45\s*\)/.test(body),
+    true,
+    "the ceiling must also answer to the window's height",
+  );
+  // Past the ceiling the field scrolls rather than growing, and the gutter is
+  // reserved so the scrollbar cannot narrow the text into more lines.
+  assertEquals(/overflow-y:\s*auto/.test(body), true, "it must scroll");
+  assertEquals(
+    /scrollbar-gutter:\s*stable/.test(body),
+    true,
+    "the scrollbar must not re-wrap the text",
+  );
+  assertEquals(/resize:\s*none/.test(body), true, "no drag handle");
+
+  // The new-session field only raises the floor: the same ceiling applies,
+  // and a drag handle would be undone by the next keystroke.
+  const large = field.find((rule) => rule.selector === ".input-box.large");
+  assertEquals(large !== undefined, true, ".input-box.large must exist");
+  assertEquals(
+    /max-height/.test(large!.body),
+    false,
+    ".input-box.large must take the shared ceiling, not its own",
+  );
+  assertEquals(
+    /resize/.test(large!.body),
+    false,
+    ".input-box.large must not offer a resize handle",
+  );
+});
+
 Deno.test("the machine's screen fills the window without reflowing it", async () => {
   // The pane grows from its column to the whole viewport. `position: fixed`
   // is what makes that possible without re-parenting the element (a new

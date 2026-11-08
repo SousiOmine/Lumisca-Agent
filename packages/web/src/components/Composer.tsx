@@ -39,6 +39,7 @@ import {
   useSlashMenu,
 } from "../hooks/useSlashMenu.ts";
 import { useAttachments } from "../hooks/useAttachments.ts";
+import { useAutoGrow } from "../hooks/useAutoGrow.ts";
 import {
   type SlashCommand,
   type SlashCommandItem,
@@ -179,6 +180,10 @@ export function Composer({
   // as a 400 after the composer had already been emptied.
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pickerRef = useRef<HTMLInputElement>(null);
+  // The field grows with the message up to the twelve lines the stylesheet
+  // allows (composer.css); the sheet owns the ceiling, this only fits the
+  // text.
+  useAutoGrow(textareaRef, value);
   /** Message lookup of the app language (the composer's own labels). */
   const t = useT();
   // Latest images, read inside the async FileReader callback so a burst of

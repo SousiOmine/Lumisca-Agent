@@ -435,15 +435,38 @@
   font-size: 13px;
   line-height: 1.6;
   min-height: 48px;
-  max-height: 200px;
+  /* Twelve lines of this field's own type, then it scrolls: the height comes
+   * from the content (hooks/useAutoGrow.ts), and this is what stops it.
+   * `1lh` is one line of the element's own type, so the ceiling follows the
+   * three sizes the field takes (13px here, 14px in the new-session view,
+   * 16px on a touch device) the way the padding above does, and it counts
+   * the padding inside the box because the box is border-box.
+   * The second term is the screen: the input area never takes height back
+   * from the composer (`.input-composer` is `flex: none`), so a field taller
+   * than the window would push the send button out of the pane. On a phone
+   * `--app-height` follows the visual viewport, so this shrinks while the
+   * software keyboard is open. */
+  max-height: min(
+    calc(12lh + (var(--input-attach-size) - 1lh) / 2 + 2px),
+    calc(var(--app-height) * 0.45)
+  );
+  overflow-y: auto;
+  /* A scrollbar that appears once the field reaches its ceiling would narrow
+   * the text, which re-wraps it into more lines, which keeps the scrollbar:
+   * the gutter is reserved from the start instead. */
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
 }
 
+/* The new-session field starts taller (it is the screen's one thing to do),
+ * and grows to the same twelve lines: its type is larger, so the `1lh`
+ * ceiling above is larger too. It has no drag handle — the field follows the
+ * text, and a size the reader set by hand would be overwritten by the next
+ * keystroke. */
 .input-box.large {
-  resize: vertical;
   font-size: 14px;
   line-height: 1.65;
   min-height: 130px;
-  max-height: 360px;
 }
 
 .input-row {
