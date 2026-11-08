@@ -1416,3 +1416,19 @@ Deno.test("stella prompt: the reply is the message, silence is asked for", async
   // …and the tool is described as the second channel, not the first.
   assert(prompt.includes("send_chat carries what a reply cannot"), prompt);
 });
+
+Deno.test("stella prompt: text beside a tool call is not delivered", async () => {
+  // A regression fixed here: the prompt said only that "your reply is the
+  // message", so an agent that wrote "I sent the screenshot" next to a bash
+  // call believed it had said so, and reported it as delivered hours later
+  // when nothing had been sent. The rule the projection enforces has to be
+  // in the prompt too, because the model cannot tell a dropped message from
+  // a shown one any other way.
+  const { buildStellaSystemPrompt } = await import("./tools/system-prompt.ts");
+  const prompt = buildStellaSystemPrompt({ agent: { role: "調べもの" } });
+  assert(prompt.includes("also calls a tool"), prompt);
+  assert(prompt.includes("the user never sees it"), prompt);
+  // A file is attached by the tool, not by writing it or naming it.
+  assert(prompt.includes("send_chat's `paths`"), prompt);
+  assert(prompt.includes("never tell the user a file was sent"), prompt);
+});

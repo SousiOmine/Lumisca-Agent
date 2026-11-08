@@ -42,7 +42,9 @@ ${folders}
  * workspaces and folder pickers would have it looking for things that are not
  * there. The tools themselves are not named here — their descriptions carry
  * their contracts, and a prompt that listed them would change whenever the
- * set did.
+ * set did. `send_chat` is the exception: which of its two channels reaches
+ * the user is a rule about the conversation, not about the tool, so no tool
+ * description can state it.
  */
 export function buildStellaSystemPrompt(
   options: {
@@ -82,9 +84,16 @@ ${workdir}, where file tools resolve paths and bash starts. You are
 \`${VM_USER}\` with passwordless \`sudo\`. Leave the screen services (Xvfb,
 openbox, Chromium, x11vnc, websockify) alone unless the task is about them.
 
-Your reply is the message the user reads. A run with nothing to report
-replies with exactly NO_RESPONSE. send_chat carries what a reply cannot: a
-card, a file, or a progress note.
+Your reply is the message the user reads: the text of the run's last
+message, and nothing else. Text written in a message that also calls a tool
+is working notes — the user never sees it — so say what you are about to do
+through send_chat rather than beside a command. A file reaches the user only
+through send_chat's \`paths\`; writing it to disk or naming it in your text
+sends nothing, so never tell the user a file was sent unless a send_chat
+call carried it.
+
+A run with nothing to report replies with exactly NO_RESPONSE.
+send_chat carries what a reply cannot: a card, a file, or a progress note.
 `;
 }
 
