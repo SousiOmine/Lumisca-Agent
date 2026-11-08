@@ -116,6 +116,7 @@ Deno は公開から 24 時間以内のバージョンを既定では導入し�
 - **設定の行は面を塗らない**。`SettingRow` や `.setting-card` / `.provider-row` は下線で区切った行です。
 - **能力のトグルは実行中のセッションにも効く**（computer use など）。設定への保存は実行中のセッションがあっても必ず行います（`SessionPool.applyCapabilityChange`）。待機中のセッションは再構築し、実行中のセッションはエージェントを差し替えず（差し替えると run の行が二重になる）ツールレジストリと能力フラグだけをその場で更新します。ツールはプリロードされずレジストリにだけ入るので、これで追従できます。能力の値は開いた時点で捕捉せず getter で渡してください（`SessionWhere.computerAvailable`、`ToolFactoryOptions.computerAvailable`）。値で持つとスキル一覧が次の open まで古いままになります。
 - **接続先はタイトルバーのドロップダウンだけ**（`components/ConnectionPicker.tsx`）。新規セッション画面にはサーバー選択を置きません。表示名はシェルが `settings.json` の `lastRemote` に記録して `state` で返します。設定画面の一覧は編集用で、行は畳んだ状態が既定、名前が空のまま URL を入れたらホスト名を補完します（`packages/web/src/connections.ts`）。
+- **新規セッション画面のモデルは既定モデルに書く**: ピッカーの選択は `packages/web/src/defaultModel.ts` の `rememberDefaultModel` で `model_default` に保存します。あの画面はタブ切り替えのたびに作り直され、リロードでも消えるので、コンポーネントの state だけに持たせると選んだモデルが次の表示で既定に戻ります。失敗は画面に出す（黙って落とすと、次に開いたときに既定へ戻った理由が分かりません）。設定画面の「既定のモデル」の行と同じ値なので、片方だけ変えると 2 つの画面が食い違います。`settingsStore` が未読のうちに書くと「表全体を読んだ」ことになり設定パネルが他の値を未設定と表示するので、`rememberDefaultModel` は先に読みます。
 - **自分自身とは連携しない**: `connections` の各項目へ `/ws` を張って中継しますが、自分自身なら中継しません。判定は `/api/health` の `instanceId` です（tailnet 名や LAN アドレス経由の自分は URL では見分けられません）。中継済みのフレームを再中継しないのも同じ理由で、破るとエコーで CPU とメモリを食い尽くします（`packages/server/federation.ts`）。
 
 ### 画面の URL

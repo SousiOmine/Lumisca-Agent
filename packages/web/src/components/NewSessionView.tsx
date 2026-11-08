@@ -12,6 +12,7 @@ import { useSavedPrompts } from "../hooks/useSavedPrompts.ts";
 import { useSkills } from "../hooks/useSkills.ts";
 import { useAsyncEffect } from "../hooks/useAsync.ts";
 import { describeError, useT } from "../i18n.ts";
+import { rememberDefaultModel } from "../defaultModel.ts";
 import { setModelThinkingLevel } from "../providers.ts";
 import {
   buildSlashCommands,
@@ -153,19 +154,32 @@ export function NewSessionView(
   const [defaultModelError, setDefaultModelError] = useState<string | null>(
     null,
   );
+  /** Why the pick could not be written as the default model. The session
+   * still starts on it, so this is not a reason to block the start — but
+   * the choice will not be back after a reload, and the user must be able
+   * to tell that from a save that worked. */
+  const [defaultModelSaveError, setDefaultModelSaveError] = useState<
+    string | null
+  >(null);
+
   /** Whether the server answered that it has no model to offer, i.e. no
    * provider is configured. Only that definitive answer blocks starting a
    * session: an unanswered or failed fetch leaves the draft working as
    * before (the server resolves its own default). */
   const [noDefaultModel, setNoDefaultModel] = useState(false);
 
-  // Show the last used model (the one a session without an explicit model
-  // would get) right away instead of leaving the picker to choose on click.
-  // A selection the user already made is never overwritten by the late
-  // response. Re-read when the settings dialog closes (`settingsVersion`):
-  // registering a provider there makes the server resolve a model, and
-  // removing a key takes it away again.
+  // Show the model a session without an explicit choice would get right
+  // away, instead of leaving the picker to choose on click. Re-read when the
+  // settings dialog closes (`settingsVersion`): registering a provider there
+  // makes the server resolve a model, removing a key takes it away, and the
+  // dialog's "default model" row writes the setting the picker below writes,
+  // so a default changed there must reach a draft that is already open.
+  //
+  // `modelTouched` keeps a response that was already in flight from
+  // overwriting a pick made while it ran; re-reading is a new round, so the
+  // flag is cleared first — the value it brings now IS that pick.
   useAsyncEffect(async (isStale) => {
+    modelTouched.current = false;
     try {
       const m = await api.getDefaultModel();
       if (isStale()) return;
@@ -377,6 +391,12 @@ export function NewSessionView(
                 {t("chat.newSession.defaultModelError")} {defaultModelError}
               </div>
             )}
+            {defaultModelSaveError !== null && (
+              <div className="error-text" role="alert">
+                {t("chat.newSession.defaultModelSaveFailed")}{" "}
+                {defaultModelSaveError}
+              </div>
+            )}
             {noModelToStart && (
               <div className="settings-note" role="status">
                 <span>{t("chat.newSession.noProvider")}</span>
@@ -421,6 +441,13 @@ export function NewSessionView(
                   modelId,
                   thinkingLevel: info?.thinkingLevel,
                   thinkingLevels: info?.thinkingLevels,
+                });
+                setDefaultModelSaveError(null);
+                // The pick is also this app's default model, so the next
+                // visit to this screen (tab switch, reload) starts on it
+                // without the user choosing again.
+                rememberDefaultModel(provider, modelId).catch((error) => {
+                  setDefaultModelSaveError(describeError(error, t));
                 });
               }}
               thinkingLevel={model?.thinkingLevel}

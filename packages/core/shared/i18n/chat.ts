@@ -153,6 +153,10 @@ export const chat = {
     ja: "デフォルトのモデルを取得できませんでした:",
     en: "Could not fetch the default model:",
   },
+  "chat.newSession.defaultModelSaveFailed": {
+    ja: "選んだモデルを既定として保存できませんでした:",
+    en: "Could not save the chosen model as the default:",
+  },
   "chat.newSession.noProvider": {
     ja:
       "プロバイダーが未設定のため、モデルを選べません。設定画面でAPIキーを登録してください。",
