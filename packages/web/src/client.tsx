@@ -2,6 +2,7 @@ import { Component } from "preact/compat";
 import { createRoot } from "preact/compat/client";
 import { DEFAULT_LOCALE } from "@lumisca/core/shared";
 import { App } from "./App.tsx";
+import { installFileDropGuard } from "./drop-guard.ts";
 import { initLocale, t } from "./i18n.ts";
 import { registerServiceWorker } from "./pwa.ts";
 import type { InitialData } from "./types.ts";
@@ -29,6 +30,11 @@ initLocale(globalThis.__INITIAL_DATA__?.language ?? DEFAULT_LOCALE);
 // desktop shell). Fire and forget: the registration is asynchronous, adds
 // nothing the app waits for, and reports its own failures (see pwa.ts).
 registerServiceWorker();
+
+// A file dropped outside the composer must not replace the app with the file
+// (see drop-guard.ts). Installed once, before the first render, so a drop
+// during startup is already covered.
+installFileDropGuard(document);
 
 /**
  * The last net under the app: a throw in a component's render unmounts the

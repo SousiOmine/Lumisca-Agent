@@ -123,9 +123,10 @@ interface ComposerProps {
   images?: PendingImage[];
   onImagesChange?: (images: PendingImage[]) => void;
   /** Non-image files attached for the next send. Only a session with a
-   * machine to put them in sends them (stella); the composer offers the
-   * drop target regardless and the server refuses by name, so a mode that
-   * cannot take files says so instead of losing them. */
+   * machine to put them in sends them (stella): leaving `onFilesChange` out
+   * says this mode has no such machine, and a file dropped or picked for it
+   * is then refused with the reason instead of disappearing (see
+   * useAttachments). */
   files?: PendingFile[];
   onFilesChange?: (files: PendingFile[]) => void;
   /** Context usage for the meter + popover above the footer (undefined

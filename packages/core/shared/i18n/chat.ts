@@ -95,8 +95,8 @@ export const chat = {
    * types, so the field would otherwise have no label at all to announce. */
   "chat.composer.label": { ja: "メッセージ入力", en: "Message" },
   "chat.composer.image.remove": { ja: "添付画像を削除", en: "Remove image" },
-  /** Attaching without a drag: the picker button, and the two ways a pick
-   * can be refused before anything is sent. */
+  /** Attaching without a drag: the picker button, and the ways a pick can be
+   * refused before anything is sent. */
   "chat.composer.attach.pick": {
     ja: "ファイルを添付",
     en: "Attach files",
@@ -114,6 +114,14 @@ export const chat = {
   "chat.composer.attach.readFailed": {
     ja: "「{name}」を読み取れませんでした",
     en: 'Could not read "{name}"',
+  },
+  /** A file that is not a picture, dropped in a mode with no machine to put
+   * it in (code mode): the tools work on the user's own folders, so there is
+   * nowhere for the bytes to go. */
+  "chat.composer.attach.imageOnly": {
+    ja: "「{name}」は添付できません。このモードで添付できるのは画像だけです",
+    en:
+      '"{name}" cannot be attached: only pictures can be attached in this mode',
   },
   "chat.composer.mention.noMatch": {
     ja: "一致するファイルが見つかりません",

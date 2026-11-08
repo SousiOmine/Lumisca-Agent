@@ -13,6 +13,17 @@
 const BRIDGE = globalThis.__LUMISCA_BRIDGE__;
 const statusEl = document.getElementById("status");
 
+// The window has no address bar, and the shell hands file drops to the page
+// (tauri.conf.json: dragDropEnabled is false, so the main window's HTML5 drag
+// and drop works). A file dropped on the splash would otherwise navigate the
+// window to that file, with no way back to the app. The app page has the same
+// guard (packages/web/src/drop-guard.ts).
+for (const type of ["dragover", "drop"]) {
+  document.addEventListener(type, (event) => {
+    if (event.dataTransfer?.types?.includes("Files")) event.preventDefault();
+  });
+}
+
 /** Whether the shell remembers a remote server (reported by `state`):
  * decides whether a failure offers "retry that server" or only the local
  * one. */

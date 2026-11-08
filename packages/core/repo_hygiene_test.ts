@@ -169,6 +169,31 @@ Deno.test("a packaged install directory carries no version", async () => {
   }
 });
 
+/**
+ * The desktop window hands file drops to the page.
+ *
+ * Tauri's own drag-drop handler replaces the webview's HTML5 one when it is
+ * enabled (the default), so a window created without `dragDropEnabled: false`
+ * receives no `drop` event at all: dragging a file onto the composer did
+ * nothing, and nothing on the page could tell why. The page's half of the
+ * arrangement is drop-guard.ts (the drops it does not handle must not
+ * navigate the window away from the app).
+ */
+Deno.test("the desktop window lets the page handle file drops", async () => {
+  const config = JSON.parse(
+    await Deno.readTextFile(
+      new URL("packages/desktop/src-tauri/tauri.conf.json", ROOT),
+    ),
+  ) as {
+    app?: { windows?: Array<{ label?: string; dragDropEnabled?: boolean }> };
+  };
+  const main = config.app?.windows?.find((window) => window.label === "main");
+  assert(main !== undefined, "tauri.conf.json defines no main window");
+  // Omitted, the key defaults to true — the broken behaviour — so only an
+  // explicit false passes.
+  assertEquals(main.dragDropEnabled, false);
+});
+
 Deno.test("every i18n catalogue key is referenced by some source", async () => {
   // The catalogue test (shared/i18n_test.ts) proves the entries are
   // complete and translated; nothing proves they are still used, so a key

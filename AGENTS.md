@@ -46,6 +46,7 @@ LLM との接続には Vercel AI SDK（`ai` および `@ai-sdk/*`）を使用し
 - **macOS のウィンドウ操作は OS のもの**: `tauri.macos.conf.json` は `decorations: true` + `titleBarStyle: "overlay"` で、信号機はネイティブのものを使います。透明なタイトルバーはページの上に 28pt 重なり、その中のページ要素はクリックを受け取れません。帯は `.app.macos` の上余白の下から始め、上余白に `.macos-titlebar-drag` を置きます（左 78px は空ける）。ドラッグとダブルクリックはブリッジへ送ります。Windows / Linux はフレームレスのままページが描きます。
 - **帯を描くかはブリッジの応答で決めない**: どちらの作法かは初期化スクリプトの `__LUMISCA_PLATFORM__` が答え、帯の有無は `inDesktopShell()` が決めます（`packages/web/src/shell.ts`）。`state` の読み出し失敗で帯を落とすと、`decorations: false` の窓は閉じることも動かすこともできなくなります。モード選択画面（`App.tsx` の `mode === null`）も同じ帯を持ちます。モードは `localStorage` でオリジンごとなので、リモート接続の初回は必ずこの画面から始まるためです。
 - **帯の中身は `.titlebar-controls` に場所を譲る**: 帯は横 1 行の flex で、右端の `.titlebar-controls`（接続先・メニュー・3 ボタン）は `flex: none` です。帯へ入る中身（タブバー、stella の `.stella-titlebar-strip`）は `flex: 1` と `min-width: 0` を持ち、幅を独占してはいけません。`width: 100%` を書くと controls が右端の外へ押し出され、`decorations: false` の窓は**閉じるボタンだけを失って、ドラッグは効くまま**になります（stella モードで実際に起きた。`packages/web/src/styles_test.ts` が固定）。`width: 100%` が要るのは、素のブラウザで帯が無く `.app` の縦積みの子になる場合だけです。
+- **ファイルのドロップはページが受ける**: main ウィンドウは `tauri.conf.json` で `dragDropEnabled: false` です。既定の `true` では Tauri のネイティブ D&D が WebView の HTML5 D&D を置き換え、コンポーザへのドロップが DOM に届きません（画像も含めて）。Tauri の `DragDropEvent` は使っていません。有効にした分の穴は `packages/web/src/drop-guard.ts` が塞ぎます——コンポーザ以外へファイルを落としても、ウィンドウがそのファイルへ遷移して戻れなくなります。スプラッシュ（`frontend/splash.js`）も同じガードを持ちます。`repo_hygiene_test.ts` が `false` を固定しています。
 
 ## 2. 自動アップデート
 
