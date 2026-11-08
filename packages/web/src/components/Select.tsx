@@ -1,3 +1,4 @@
+import type { ComponentChildren } from "preact";
 import { useRef, useState } from "preact/compat";
 import { IconCheck, IconChevronDown } from "@tabler/icons-preact";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
@@ -20,6 +21,22 @@ interface SelectProps<T extends string> {
   /** Renders the control full width (forms) instead of hugging its content
    * (a row's trailing control). */
   block?: boolean;
+  /**
+   * Side the list opens on, default "below".
+   *
+   * "above" is for a trigger on the bottom edge of the window — the model
+   * picker's thinking control in the composer's footer — where a list under
+   * it would be off-screen. The scrollable screens this control otherwise
+   * lives in (the settings body, a dialog) leave room below.
+   */
+  placement?: "below" | "above";
+  /** Leading glyph inside the trigger, before the current value (a category
+   * icon). Part of the trigger so the whole control stays one click target. */
+  icon?: ComponentChildren;
+  /** Called when the list opens, so a caller that already has another
+   * popover open can close it: two lists floating over one composer is one
+   * list too many. */
+  onOpen?: () => void;
 }
 
 /**
@@ -48,6 +65,9 @@ export function Select<T extends string>({
   onChange,
   disabled = false,
   block = false,
+  placement = "below",
+  icon,
+  onOpen,
 }: SelectProps<T>) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -60,12 +80,20 @@ export function Select<T extends string>({
       <button
         type="button"
         className={`select-trigger${open ? " open" : ""}`}
-        onClick={() => setOpen((shown) => !shown)}
+        onClick={() => {
+          if (open) {
+            setOpen(false);
+            return;
+          }
+          onOpen?.();
+          setOpen(true);
+        }}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={label}
         disabled={disabled}
       >
+        {icon !== undefined && <span className="select-icon">{icon}</span>}
         <span className="select-value">{current?.label ?? value}</span>
         <span className={`select-chevron${open ? " open" : ""}`}>
           <IconChevronDown size={14} />
@@ -73,7 +101,12 @@ export function Select<T extends string>({
       </button>
 
       {open && (
-        <div className="select-popover" role="listbox" aria-label={label}>
+        <div
+          className="select-popover"
+          data-placement={placement}
+          role="listbox"
+          aria-label={label}
+        >
           {options.map((option) => (
             <button
               key={option.value}

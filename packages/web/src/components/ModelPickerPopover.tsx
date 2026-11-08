@@ -1,5 +1,5 @@
 import { createPortal, type RefObject, useRef } from "preact/compat";
-import type { ModelInfo, ThinkingLevel } from "../types.ts";
+import type { ModelInfo } from "../types.ts";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { usePopoverPlacement } from "../hooks/usePopoverPlacement.ts";
 import { ModelPicker } from "./ModelPicker.tsx";
@@ -9,20 +9,15 @@ export interface ModelPickerPopoverProps {
    * `open`, because the placement is measured from its rectangle. */
   anchor: RefObject<HTMLButtonElement | null>;
   open: boolean;
-  /** The model in effect, or null when the caller's subject has none (the
-   * picker then opens on the provider list). */
+  /** The model in effect, or null when the caller's subject has none. */
   value: { provider: string; modelId: string } | null;
   onSelect: (provider: string, modelId: string, info?: ModelInfo) => void;
-  /** Close it (outside click, Escape, window blur, or the panel's own ×). */
+  /** Close it (a pick, an outside click, Escape, window blur). */
   onClose: () => void;
-  /** Offer the link to the provider settings. Omitted where there is no
-   * settings screen to reach from that dialog (see ModelPicker). */
+  /** Offer the row that opens the provider settings. Omitted where there is
+   * no settings screen to reach from that dialog (see ModelPicker). */
   onOpenSettings?: () => void;
   imageOnly?: boolean;
-  thinkingValue?: ThinkingLevel;
-  thinkingLevels?: ThinkingLevel[];
-  onThinkingChange?: (level: ThinkingLevel) => void;
-  thinkingDisabled?: boolean;
 }
 
 /**
@@ -57,15 +52,9 @@ export function ModelPickerPopover(props: ModelPickerPopoverProps) {
       <ModelPicker
         value={props.value}
         imageOnly={props.imageOnly}
-        stacked={!placement.panes}
-        roomHeight={placement.height}
         onClose={props.onClose}
         onSelect={props.onSelect}
         onOpenSettings={props.onOpenSettings}
-        thinkingValue={props.thinkingValue}
-        thinkingLevels={props.thinkingLevels}
-        onThinkingChange={props.onThinkingChange}
-        thinkingDisabled={props.thinkingDisabled}
       />
     </div>,
     document.body,

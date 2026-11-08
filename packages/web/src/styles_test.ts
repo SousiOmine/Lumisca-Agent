@@ -796,38 +796,30 @@ Deno.test("stella's list and conversation stack before they stop fitting", async
   );
 });
 
-Deno.test("the model picker's panel is the size it measured", async () => {
-  // The panel carried only a max-height once, so it was as tall as its
-  // contents: switching to a provider with fewer models shrank the pane, and
-  // (anchored at its bottom, opening upward) pulled the provider and model
-  // lists down with it. The height is the room measured per opening, so the
-  // contents never decide the size; the model list scrolls instead.
-  const css = await Deno.readTextFile(
+Deno.test("the model picker's panel is capped by the room it measured", () => {
+  // The height is a cap, not a size: the panel is one column whose list
+  // scrolls (it used to be a fixed height, which left an empty box under a
+  // two-model catalogue). A `height` here would bring that box back, and an
+  // uncapped panel would run past the screen — the room is measured per
+  // opening by hooks/usePopoverPlacement.ts.
+  return Deno.readTextFile(
     new URL("./styles/model-picker.css", import.meta.url),
-  );
-  const rules = cssRules(css);
-  const panel = rules.find((rule) =>
-    rule.selector === ".mp-popover" && rule.media === null
-  );
-  assertEquals(panel !== undefined, true, ".mp-popover must be placed");
-  assertEquals(
-    /height:\s*var\(--mp-space\)/.test(panel!.body),
-    true,
-    "the panel must take the measured height, not its content's",
-  );
-
-  // The phone's sheet keeps its own band: it is pinned to the visible bottom
-  // edge, where the room above the trigger means nothing.
-  const sheet = rules.find((rule) =>
-    rule.selector === ".mp-popover" &&
-    rule.media?.includes("max-width: 600px") === true
-  );
-  assertEquals(sheet !== undefined, true, "the phone sheet must be placed");
-  assertEquals(
-    /height:\s*var\(--mp-sheet-space\)/.test(sheet!.body),
-    true,
-    "the sheet must keep its definite height",
-  );
+  ).then((css) => {
+    const panel = cssRules(css).find((rule) =>
+      rule.selector === ".mp-popover" && rule.media === null
+    );
+    assertEquals(panel !== undefined, true, ".mp-popover must be placed");
+    assertEquals(
+      /max-height:\s*var\(--mp-space\)/.test(panel!.body),
+      true,
+      "the panel must be capped by the measured room",
+    );
+    assertEquals(
+      /(^|[^-])height:\s*var\(--mp-space\)/.test(panel!.body),
+      false,
+      "the panel must shrink to its contents below the cap",
+    );
+  });
 });
 
 /** The canvas colour a theme's block declares (`--bg`), or undefined when

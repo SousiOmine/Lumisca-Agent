@@ -591,6 +591,11 @@ export const settings = {
     en: "Failed to load settings: {error}",
   },
   "settings.model.unset": { ja: "未設定", en: "Not set" },
+  "settings.model.changeNamed": {
+    ja: "「{name}」を変更",
+    en: 'Change "{name}"',
+  },
+  "settings.model.clear": { ja: "解除", en: "Clear" },
 
   // --- mcp list -------------------------------------------------------------
   "settings.mcp.configConflict": {

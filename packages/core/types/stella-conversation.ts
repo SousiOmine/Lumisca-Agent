@@ -102,7 +102,7 @@ export interface StellaConversationSnapshot {
    * app default has changed since. */
   model: { provider: string; modelId: string };
   /** The thinking level the conversation's model runs at, and the levels it
-   * supports. The composer's model line shows a strength rail beside the
+   * supports. The composer's model line shows a strength control beside the
    * model when there is more than one level, the same as code mode's: a
    * stella conversation is where a long, multi-step request is most likely
    * to need one.

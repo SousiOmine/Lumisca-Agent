@@ -327,6 +327,10 @@
 
 /* model preference rows (fast model / image analysis model) */
 .model-pref-item {
+  /* One height for the row's two controls (the model field and the thinking
+   * dropdown): side by side, they have to be as tall as each other whatever
+   * their contents are. Both rules below read this value. */
+  --model-pref-control-height: 30px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -356,32 +360,76 @@
   color: var(--text-faint);
 }
 
-.model-pref-value {
+/* The model pair is the row's control: clicking it opens the picker. It is
+ * drawn as a field (border, fill, chevron) so it reads as something to press
+ * rather than as text, and it can shrink — a long `provider/model` ellipsizes
+ * instead of pushing the row's other controls out. */
+.model-pref-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: var(--model-pref-control-height);
+  padding: 0 8px 0 10px;
   font-size: 12.5px;
-  color: var(--text-dim);
-  white-space: nowrap;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  color: var(--text);
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-align: left;
 }
 
-.model-pref-value .mono {
-  color: var(--text);
+.model-pref-picker:hover:not(:disabled),
+.model-pref-picker.open {
+  border-color: var(--border-strong);
+}
+
+.model-pref-picker:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.model-pref-picker .mono {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-pref-picker .chevron {
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--text-faint);
+  transition: transform var(--lum-dur-fast) var(--lum-ease-out);
+}
+
+.model-pref-picker .chevron.open {
+  transform: rotate(180deg);
 }
 
 .model-pref-unset {
   font-style: italic;
+  color: var(--text-dim);
 }
 
-/* Stored thinking level readout next to the fast model id (the slider
- * itself lives in the picker's third pane). */
-.model-pref-level {
-  color: var(--text-faint);
+/* The row's thinking-strength control (components/ThinkingLevelSelect.tsx):
+ * a control of its own beside the model, not a readout — it belongs to the
+ * model, so it can be changed without reopening the picker. */
+.model-pref-item .thinking-select {
+  flex: none;
 }
 
-.model-pref-actions {
-  display: flex;
-  gap: 6px;
+.model-pref-item .thinking-select .select-trigger {
+  height: var(--model-pref-control-height);
+  /* Vertical padding off: the height above decides, so the two controls are
+   * level (the touch rule for `.select-trigger` sets a padding that would
+   * otherwise win by source order; this selector is more specific). */
+  padding-block: 0;
+}
+
+/* Clears the row's preference (back to "not set"). */
+.model-pref-clear {
   flex: none;
 }
 
@@ -1016,7 +1064,19 @@ button.provider-row-body:hover .provider-row-chevron {
     width: 100%;
   }
 
-  .model-pref-actions {
+  /* The row wraps into two lines: the label and its explanation take the
+   * first, and the three controls share the second — on one line the text
+   * column was squeezed to a few characters while the controls kept their
+   * width. */
+  .model-pref-info {
+    flex-basis: 100%;
+  }
+
+  .model-pref-picker {
+    flex: 1 1 auto;
+  }
+
+  .model-pref-clear {
     margin-left: auto;
   }
 
@@ -1032,6 +1092,11 @@ button.provider-row-body:hover .provider-row-chevron {
 /* The navigation rows and the saved-prompt textarea (16px: iOS Safari zooms
  * the page for a smaller field, see base.css). */
 @media (hover: none), (pointer: coarse) {
+  /* A fingertip chooses these too, so both grow together. */
+  .model-pref-item {
+    --model-pref-control-height: 38px;
+  }
+
   .settings-nav-item {
     padding: 12px;
   }
@@ -1189,6 +1254,13 @@ button.provider-row-body:hover .provider-row-chevron {
   cursor: default;
 }
 
+.select-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--text-faint);
+}
+
 .select-value {
   flex: 1;
   min-width: 0;
@@ -1224,6 +1296,13 @@ button.provider-row-body:hover .provider-row-chevron {
   border-radius: var(--radius);
   box-shadow: 0 8px 24px var(--shadow);
   animation: lum-rise-small var(--lum-dur-fast) var(--lum-ease-out) both;
+}
+
+/* Opening upward: the trigger sits on the window's bottom edge (the
+ * composer's footer), where a list below it would be off-screen. */
+.select-popover[data-placement="above"] {
+  top: auto;
+  bottom: calc(100% + 4px);
 }
 
 .select-option {

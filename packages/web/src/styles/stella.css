@@ -592,12 +592,21 @@
   flex-wrap: wrap;
 }
 
+/* The model and its thinking-strength control. `center`, not `baseline`: the
+ * second item is a dropdown button, and a button aligned to a text baseline
+ * sits off the line. They wrap because a long `provider/model-id` would
+ * otherwise squeeze the control to a few pixels. */
 .agent-model-value {
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   min-width: 0;
   font-size: 13px;
+}
+
+.agent-model-value .thinking-select {
+  flex: none;
 }
 
 .agent-model-value .mono {

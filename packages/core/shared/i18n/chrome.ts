@@ -258,12 +258,11 @@ export const chrome = {
     ja: "推論強度（思考レベル）",
     en: "Thinking strength",
   },
-  // Stepped layout (a phone, or a window too short for the three panes): the
-  // first screen lists the providers, then its header names the provider whose
-  // models are shown and walks back.
-  "chrome.modelPicker.chooseProvider": {
-    ja: "プロバイダーを選択",
-    en: "Select a provider",
+  // The section above the providers' own: the models this device picked
+  // last, so a model switched to often is one row away.
+  "chrome.modelPicker.recent": {
+    ja: "最近使ったモデル",
+    en: "Recent models",
   },
 
   // --- workspace picker ----------------------------------------------------

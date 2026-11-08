@@ -14,8 +14,8 @@ export type ThinkingLevel =
   | "max";
 
 /** Thinking levels weakest-first ("off" first). Single source of truth for
- * the strength order; the web slider sorts supported levels with this, and
- * `models/thinking.ts` sorts with it. The DISPLAY names live in the UI
+ * the strength order; the web thinking control sorts supported levels with
+ * this, and `models/thinking.ts` sorts with it. The DISPLAY names live in the UI
  * catalogue (`common.thinking.*`), not here: the level ids are the wire
  * values, the labels are language-dependent. */
 export const THINKING_LEVEL_ORDER: readonly ThinkingLevel[] = [

@@ -114,21 +114,17 @@
     animation: none;
   }
 
-  .tls-value {
-    animation: none;
-  }
-
   /* Transform-only transitions (a chevron turning, a toggle's knob, a button
    * pressing in) have no opacity to fall back on: they stop moving. */
   .btn,
   .icon-btn,
   .input-composer,
   .ctx-bar-fill,
-  .tls-fill,
   .tool-line-chevron,
   .notification-line-chevron,
   .agent-activity-chevron,
   .model-switch .chevron,
+  .model-pref-picker .chevron,
   .workspace-picker-chevron,
   .connection-picker-chevron,
   .setting-card-chevron,

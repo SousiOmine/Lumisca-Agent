@@ -6,40 +6,36 @@ import { useLayoutEffect, useState } from "preact/compat";
  * It used to be a card hung above its trigger by CSS (`bottom: 100%`) at a
  * fixed size, and the settings copy was clamped only after it had been laid
  * out. That holds only while the window is both tall and wide: a short window
- * pushed the card past the top of the screen (its first provider rows were
- * cut off), a narrow one pushed its right edge out, and a window short enough
- * could not show it at all. The room is measured here, per opening, against
- * the *visual* viewport — so the software keyboard, which shrinks the visual
+ * pushed the card past the top of the screen (its first rows were cut off), a
+ * narrow one pushed its right edge out, and a window short enough could not
+ * show it at all. The room is measured here, per opening, against the
+ * *visual* viewport — so the software keyboard, which shrinks the visual
  * viewport without resizing the page on iOS, counts as "no room" too.
+ *
+ * The panel is one column of sections on every screen (components/
+ * ModelPicker.tsx), so the only question left here is a rectangle: the width
+ * a list of model ids needs and the height the room allows. Nothing in it
+ * decides between layouts.
  */
 
-/** Width the popover takes when the viewport allows it. The default of
- * `--mp-width` (styles/tokens.css) matches. */
-export const POPOVER_PREFERRED_WIDTH = 640;
-/** Height the popover takes when the viewport allows it: the three panes at
- * their comfortable size. The default of `--mp-space` matches. */
-export const POPOVER_PREFERRED_HEIGHT = 380;
+/** Width the popover takes when the viewport allows it: wide enough for a
+ * `provider/model-id` line in the recent section plus its context-window
+ * figure, and no wider — a list of ids does not need a page's width. The
+ * default of `--mp-width` (styles/tokens.css) matches. */
+export const POPOVER_PREFERRED_WIDTH = 340;
+/** Height the popover takes when the viewport allows it: the search field,
+ * the feet, and about twelve rows. The panel shrinks to its contents below
+ * this (styles/model-picker.css caps it), so a short catalog does not leave
+ * an empty box; the default of `--mp-space` matches. */
+export const POPOVER_PREFERRED_HEIGHT = 420;
 /** Room below which the preferred side is given up when the other one has
  * more to offer, and below which neither side is used at all (the panel fills
- * the visible area): under this the panes are a sliver rather than a list. */
+ * the visible area): under this the list is a sliver rather than a list. */
 export const POPOVER_MIN_HEIGHT = 220;
 /** Distance kept from the visible area's edges. */
 export const POPOVER_MARGIN = 8;
 /** Distance kept from the anchor (the trigger). */
 export const POPOVER_GAP = 6;
-/** Narrowest the three panes get by; narrower shows one pane at a time, and
- * also a phone (whose sheet is deliberately not wide enough for three columns:
- * provider, model id and its metadata side by side would leave the id
- * ellipsized to a few characters). */
-export const PANES_MIN_WIDTH = 600;
-/** Shortest the three panes get by. Low on purpose: in the three-pane layout
- * only the model list needs height (the thinking bar is a column), while the
- * stepped layout spends a header and a horizontal thinking rail before the list
- * gets any — so the panes keep winning far into "short window" territory. */
-export const PANES_MIN_HEIGHT = 200;
-/** Tallest the sheet grows to. It still shrinks to the visible area; the cap
- * only keeps a tall phone from turning it into a full-screen page. */
-export const SHEET_MAX_HEIGHT = 620;
 
 /** The side the caller would like to open on. `"below"` is for a trigger near
  * the top of the screen (the settings list). */
@@ -164,16 +160,6 @@ export function fitPopover(
   };
 }
 
-/**
- * Whether the picker shows its three panes side by side. Below either size the
- * panes become screens instead: stacking all three in one column leaves the
- * provider strip and the model list too short to read (a phone used to get a
- * 23px strip under a 500px list).
- */
-export function fitsPanes(fit: PopoverFit): boolean {
-  return fit.width >= PANES_MIN_WIDTH && fit.height >= PANES_MIN_HEIGHT;
-}
-
 /** The visible area, or the whole window where the visual viewport API is
  * missing (older embedded webviews). */
 export function visibleArea(): PopoverViewport {
@@ -209,20 +195,18 @@ function appChromeHeight(): number {
 }
 
 /** The custom properties the popover is drawn with (styles/model-picker.css
- * reads them). They are variables rather than final lengths so the narrow
- * layout can still own its placement: a phone turns the same element into a
- * sheet pinned to the visible bottom and sides, and the sheet covers its own
- * trigger, which an anchor-relative position cannot express. */
+ * reads them). Variables rather than inline lengths so the stylesheet can
+ * still say what gives way: the panel caps its height at `--mp-space` and
+ * scrolls its list inside it. */
 export type PopoverStyle = Record<string, string>;
 
 const round = (value: number) => `${Math.round(value)}px`;
 
-/** One measurement: the placement, and whether the three panes fit. */
+/** One measurement: the placement and the room it was given. */
 export interface PopoverPlacement {
   style: PopoverStyle;
-  panes: boolean;
-  /** The height the panel takes, in pixels. The picker drops its optional
-   * parts (the thinking rail) when even that is tiny. */
+  /** The height the panel may take, in pixels: its cap, not its size (the
+   * panel shrinks to its contents below it). */
   height: number;
 }
 
@@ -234,7 +218,6 @@ export function measurePlacement(
   anchor: PopoverAnchor,
   viewport: PopoverViewport,
   layoutHeight: number,
-  layoutWidth: number,
   prefer: PopoverSide,
   chrome = 0,
 ): PopoverPlacement {
@@ -247,15 +230,7 @@ export function measurePlacement(
     height: Math.max(0, viewport.height - chrome),
   };
   const fit = fitPopover({ anchor, viewport: below, layoutHeight, prefer });
-  // The sheet's usable band: the room between the margins inside `below` (the
-  // window's bar and the software keyboard are already out of it).
-  const sheetRoom = Math.max(0, below.height - 2 * POPOVER_MARGIN);
-  // A window too short for either side gets the whole visible area, so the
-  // three-pane layout is not forced there: the stepped one owns the small
-  // panel (its header is the only way back out of a covered screen).
-  const panes = fitsPanes(fit) && !fit.fills;
   return {
-    panes,
     height: fit.height,
     style: {
       "--mp-left": round(fit.left),
@@ -263,19 +238,6 @@ export function measurePlacement(
       "--mp-bottom": fit.bottom === null ? "auto" : round(fit.bottom),
       "--mp-width": round(fit.width),
       "--mp-space": round(fit.height),
-      // The sheet's edges. They count from the layout viewport's edges, so the
-      // part of the page the keyboard covers is added back (0 without a
-      // keyboard), and a pinch-zoom pan is followed.
-      "--mp-view-left": round(viewport.left + POPOVER_MARGIN),
-      "--mp-view-right": round(
-        Math.max(0, layoutWidth - viewport.left - viewport.width) +
-          POPOVER_MARGIN,
-      ),
-      "--mp-view-bottom": round(
-        Math.max(0, layoutHeight - (viewport.top + viewport.height)) +
-          POPOVER_MARGIN,
-      ),
-      "--mp-sheet-space": round(Math.min(SHEET_MAX_HEIGHT, sheetRoom)),
     },
   };
 }
@@ -289,7 +251,6 @@ function placementOf(
     { top: rect.top, bottom: rect.bottom, left: rect.left },
     visibleArea(),
     document.documentElement.clientHeight,
-    document.documentElement.clientWidth,
     prefer,
     appChromeHeight(),
   );
@@ -300,7 +261,7 @@ function samePlacement(
   b: PopoverPlacement | null,
 ): boolean {
   if (a === null || b === null) return a === b;
-  if (a.panes !== b.panes || a.height !== b.height) return false;
+  if (a.height !== b.height) return false;
   const keys = Object.keys(a.style);
   return keys.length === Object.keys(b.style).length &&
     keys.every((key) => a.style[key] === b.style[key]);

@@ -233,9 +233,9 @@ export const common = {
     ja: "「{name}」でエラーが発生しました",
     en: '"{name}" stopped with an error',
   },
-  /** Reasoning-effort level names (the composer's badge, the model picker's
-   * slider and the model-preference rows). The ids stay the wire values
-   * (core/shared/providers.ts), only the labels are translated. */
+  /** Reasoning-effort level names (the composer's control beside the model,
+   * the agent edit dialog and the model-preference rows). The ids stay the
+   * wire values (core/shared/providers.ts), only the labels are translated. */
   "common.thinking.off": { ja: "オフ", en: "Off" },
   "common.thinking.minimal": { ja: "最小", en: "Minimal" },
   "common.thinking.low": { ja: "低", en: "Low" },

@@ -135,8 +135,8 @@ export const chat = {
   },
   "chat.composer.modelSelect": { ja: "モデルを選択", en: "Select model" },
   "chat.composer.modelSwitchTitle": {
-    ja: "モデル・推論強度の選択",
-    en: "Select model and thinking level",
+    ja: "モデルを変更",
+    en: "Change model",
   },
   "chat.composer.providerUnconfigured": {
     ja:

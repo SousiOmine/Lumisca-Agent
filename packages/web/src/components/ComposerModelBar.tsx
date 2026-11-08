@@ -1,8 +1,8 @@
 import { createPortal, type RefObject } from "preact/compat";
-import { IconBrain, IconChevronRight } from "@tabler/icons-preact";
+import { IconChevronRight } from "@tabler/icons-preact";
 import { ModelPicker } from "./ModelPicker.tsx";
+import { ThinkingLevelSelect } from "./ThinkingLevelSelect.tsx";
 import type { ModelInfo, ThinkingLevel } from "../types.ts";
-import { thinkingLevelLabel } from "../format.ts";
 import { useT } from "../i18n.ts";
 import type { PopoverPlacement } from "../hooks/usePopoverPlacement.ts";
 
@@ -41,8 +41,15 @@ export interface ComposerModelBarProps {
 }
 
 /**
- * The row under the composer that names the session's model and opens the
- * picker.
+ * The row under the composer that names the session's model and its thinking
+ * strength, as two controls.
+ *
+ * They were one button with the level written beside the model id, so
+ * changing the strength opened the model picker — a panel the size of a
+ * catalogue for a value with four choices. The model is a pill of its own and
+ * the strength an app-drawn dropdown beside it (the same control the
+ * language setting uses, components/Select.tsx), each opening only what it
+ * names.
  *
  * Split out of Composer.tsx: the trigger, the portal and the placement
  * plumbing have nothing to do with typing, and they were the only part of
@@ -50,11 +57,10 @@ export interface ComposerModelBarProps {
  * a narrow layout can size it against the viewport, see
  * hooks/usePopoverPlacement).
  *
- * The trigger stays a button that reports what will answer: provider/model in
- * mono, the thinking level beside it when the model has levels. The picker
- * itself stays open after a selection — the thinking pane follows the newly
- * chosen model, so strength can be tuned in the same opening — and closes on
- * an outside click or Escape.
+ * The picker closes on a pick (the panel no longer has a second pane that
+ * follows the new model). The strength's list closes on a choice too; opening
+ * it closes the model panel, because two floating lists over one footer is
+ * one too many.
  */
 export function ComposerModelBar({
   mode,
@@ -73,9 +79,10 @@ export function ComposerModelBar({
 }: ComposerModelBarProps) {
   const t = useT();
   if (mode === "none") return null;
-  // Only models that can actually think (more than just "off") get the level
-  // label; the options are the levels the model supports.
-  const canThink = (thinkingLevels?.length ?? 0) > 1;
+  // Only models that can actually think (more than just "off") get the
+  // control, and only where the caller can persist a change.
+  const levels = thinkingLevels ?? [];
+  const canThink = levels.length > 1 && onThinkingLevelChange !== undefined;
 
   return (
     <div className="model-switch-bar" ref={triggerRef}>
@@ -94,16 +101,21 @@ export function ComposerModelBar({
             ? `${model.provider}/${model.modelId}`
             : t("chat.composer.modelSelect")}
         </span>
-        {canThink && (
-          <span className="model-thinking-label">
-            <IconBrain size={12} />
-            <span>{thinkingLevelLabel(thinkingLevel ?? "off", t)}</span>
-          </span>
-        )}
         <span className={`chevron${open ? " open" : ""}`}>
           <IconChevronRight size={13} />
         </span>
       </button>
+      {canThink && (
+        <ThinkingLevelSelect
+          value={thinkingLevel ?? "off"}
+          levels={levels}
+          onChange={(level) => onThinkingLevelChange?.(level)}
+          placement="above"
+          onOpen={() => {
+            if (open) onOpenChange(false);
+          }}
+        />
+      )}
       {open && placement !== null && createPortal(
         <div
           className="mp-popover model-popover"
@@ -113,8 +125,6 @@ export function ComposerModelBar({
           <ModelPicker
             value={model}
             peerId={peerId}
-            stacked={!placement.panes}
-            roomHeight={placement.height}
             onClose={() => onOpenChange(false)}
             onSelect={(provider, modelId, info) => {
               onModelSelect(provider, modelId, info);
@@ -123,9 +133,6 @@ export function ComposerModelBar({
               onOpenChange(false);
               onOpenSettings?.();
             }}
-            thinkingValue={thinkingLevel}
-            thinkingLevels={thinkingLevels}
-            onThinkingChange={onThinkingLevelChange}
           />
         </div>,
         document.body,

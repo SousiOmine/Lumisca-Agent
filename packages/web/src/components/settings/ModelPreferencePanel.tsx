@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "preact/compat";
+import { IconChevronDown } from "@tabler/icons-preact";
 import {
   DEFAULT_MODEL_KEY,
   FAST_MODEL_KEY,
@@ -9,13 +10,13 @@ import {
 import type { ModelPreference, ThinkingLevel } from "@lumisca/core/shared";
 import { settingsStore, useSettings } from "../../settingsStore.ts";
 import { useT } from "../../i18n.ts";
-import { thinkingLevelLabel } from "../../format.ts";
 import {
   errorText,
   setModelThinkingLevel,
   useProviderModels,
 } from "../../providers.ts";
 import { ModelPickerPopover } from "../ModelPickerPopover.tsx";
+import { ThinkingLevelSelect } from "../ThinkingLevelSelect.tsx";
 import { SettingsSection } from "./SettingsSection.tsx";
 
 interface ModelPrefRow {
@@ -175,13 +176,10 @@ export function ModelPreferencePanel(
         pref ? serializeModelPreference(pref) : "",
       );
       setValues((prev) => ({ ...prev, [rowKey]: pref }));
-      // Keep the picker open after a model pick so the thinking pane can
-      // be tuned for the new model in the same opening (it closes on
-      // outside click / Escape / scroll). Clearing from the row button
-      // never has the popover open, so nothing changes there.
-      // A picked model brings its own levels: refresh the catalog (a
-      // fresh fetch also covers a provider configured during this
-      // session).
+      // A picked model brings its own levels: refresh the catalog (a fresh
+      // fetch also covers a provider configured during this session). The
+      // row's thinking select follows that catalog, so the levels it offers
+      // must be the ones of the model that was just saved.
       reloadModels();
     } catch (e) {
       setSaveError(errorText(e));
@@ -202,7 +200,19 @@ export function ModelPreferencePanel(
               <span className="model-pref-label">{row.label}</span>
               <span className="model-pref-desc">{row.description}</span>
             </div>
-            <div className="model-pref-value">
+            {
+              /* The pair IS the control: it reads as the row's value and
+              opens the picker, so the row needs no separate edit button. */
+            }
+            <button
+              type="button"
+              className={`model-pref-picker${
+                openRow === row.key ? " open" : ""
+              }`}
+              aria-label={t("settings.model.changeNamed", { name: row.label })}
+              disabled={saving === row.key}
+              onClick={(e) => openPicker(row.key, e.currentTarget)}
+            >
               {!loaded && !loadError
                 ? (
                   <span className="model-pref-unset">
@@ -211,43 +221,37 @@ export function ModelPreferencePanel(
                 )
                 : value
                 ? (
-                  <>
-                    <span className="mono">
-                      {value.provider}/{value.modelId}
-                    </span>
-                    {row.thinking && levelsByRow[row.key] && (
-                      <span className="model-pref-level">
-                        {thinkingLevelLabel(levelsByRow[row.key]!.current, t)}
-                      </span>
-                    )}
-                  </>
+                  <span className="mono">
+                    {value.provider}/{value.modelId}
+                  </span>
                 )
                 : (
                   <span className="model-pref-unset">
                     {t("settings.model.unset")}
                   </span>
                 )}
-            </div>
-            <div className="model-pref-actions">
+              <span className={`chevron${openRow === row.key ? " open" : ""}`}>
+                <IconChevronDown size={14} />
+              </span>
+            </button>
+            {row.thinking && levelsByRow[row.key] && (
+              <ThinkingLevelSelect
+                value={levelsByRow[row.key]!.current}
+                levels={levelsByRow[row.key]!.supported}
+                onChange={(level) => void changeLevel(value, level)}
+                disabled={savingLevel || saving !== null}
+              />
+            )}
+            {value && (
               <button
                 type="button"
-                className="btn small"
+                className="btn small model-pref-clear"
                 disabled={saving === row.key}
-                onClick={(e) => openPicker(row.key, e.currentTarget)}
+                onClick={() => save(row.key, undefined)}
               >
-                {t("common.edit")}
+                {t("settings.model.clear")}
               </button>
-              {value && (
-                <button
-                  type="button"
-                  className="btn small"
-                  disabled={saving === row.key}
-                  onClick={() => save(row.key, undefined)}
-                >
-                  {t("common.cancel")}
-                </button>
-              )}
-            </div>
+            )}
           </div>
         );
       })}
@@ -266,18 +270,6 @@ export function ModelPreferencePanel(
           setOpenRow(null);
           onOpenProviders();
         }}
-        thinkingValue={openRowDef?.thinking
-          ? levelsByRow[openRow ?? ""]?.current
-          : undefined}
-        thinkingLevels={openRowDef?.thinking
-          ? levelsByRow[openRow ?? ""]?.supported
-          : undefined}
-        onThinkingChange={openRowDef?.thinking
-          ? (level) => {
-            if (openRow !== null) void changeLevel(values[openRow], level);
-          }
-          : undefined}
-        thinkingDisabled={savingLevel || saving !== null}
       />
 
       {loadError && (

@@ -99,16 +99,21 @@
    * composer stays above it. The default must stay a length: the shell
    * (`.app`, layout.css) reads it unconditionally. */
   --app-height: 100dvh;
-  /* Fill factor (0..1) of the thinking-strength slider, written per render
-   * by the component (see ThinkingLevelSlider). The zero here keeps the
-   * calc() that reads it valid. */
-  --tls-fill: 0;
   /* Hue (0..359) of a stella agent's avatar, written per render by the
    * component and derived from the agent's id (shared/agent-avatar.ts). It is
    * the ONE hue in the UI — everything else is the achromatic ramp — which is
    * what makes "who you are talking to" readable at a glance. The zero keeps
    * the hsl() that reads it valid when nothing has set it. */
   --agent-avatar-hue: 0;
+  /* Heights of the two control pairs that sit side by side — the composer's
+   * model pill and thinking dropdown, and the model settings row's two
+   * controls. The containers that hold each pair declare them
+   * (styles/model-picker.css, styles/settings.css) and the narrow/touch rules
+   * raise them together, so the two controls of a pair cannot drift apart
+   * (they did: the dropdown was a pixel taller than the pill). These
+   * defaults are the desktop sizes. */
+  --model-bar-control-height: 28px;
+  --model-pref-control-height: 30px;
   /* Values a component writes into its own element per render (styles_test.ts
    * requires every referenced variable to be declared here, and an inline
    * `left`/`width` could not be overridden by a narrow-layout rule — a
@@ -123,15 +128,11 @@
    * the picker escapes the chat pane's clipping and the composer's card
    * transform; every value is overridden per opening, and these defaults are
    * only a guide for the stylesheet's own reading. */
-  --mp-left: calc(50vw - 320px);
+  --mp-left: calc(50vw - 170px);
   --mp-top: auto;
-  --mp-bottom: calc(50dvh - 190px);
-  --mp-width: min(640px, calc(100vw - 16px));
-  --mp-space: 380px;
-  --mp-view-left: 8px;
-  --mp-view-right: 8px;
-  --mp-view-bottom: 8px;
-  --mp-sheet-space: min(620px, calc(100dvh - 64px));
+  --mp-bottom: calc(50dvh - 210px);
+  --mp-width: min(340px, calc(100vw - 16px));
+  --mp-space: 420px;
   /* ---- motion -----------------------------------------------------------
    *
    * Three curves, each with one job, and a duration scale. A rule picks the

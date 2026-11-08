@@ -1,27 +1,39 @@
-/* model-picker.css — model switch, thinking, context meter, model picker.
+/* model-picker.css — model switch, thinking select, context meter, model picker.
  * Cascade position 10/15: order is defined by ../styles.css (@import order).
  * See ./README.md before adding new files. */
 
-/* ---- model switch ----------------------------------------------------------- */
+/* ---- model switch (composer footer) ------------------------------------- */
 
+/* Two controls, one row: the model (a pill that opens the picker) and the
+ * thinking strength (an app-drawn dropdown beside it). They used to be one
+ * button with the level written inside, which made changing a four-choice
+ * value open a catalogue. */
 .model-switch-bar {
+  /* One height for both controls. They sit side by side and read as a single
+   * row, so the pill and the dropdown must be as tall as each other whatever
+   * their contents are: written as one value here, the two rules below cannot
+   * drift apart (they did — the icon and the chevron made the dropdown a
+   * pixel taller, and padding guesswork would only move the gap around). */
+  --model-bar-control-height: 28px;
   position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  min-width: 0;
 }
 
 .model-switch {
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  min-width: 0;
+  height: var(--model-bar-control-height);
   font-size: 12px;
   color: var(--text-dim);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
-  padding: 5px 10px;
-  max-width: 100%;
+  padding: 0 10px;
 }
 
 .model-switch:hover {
@@ -38,6 +50,7 @@
 .model-switch .chevron {
   display: grid;
   place-items: center;
+  flex: none;
   transition: transform var(--lum-dur-mid) var(--lum-ease-in-out);
 }
 
@@ -45,15 +58,51 @@
   transform: rotate(90deg);
 }
 
-/* Thinking-strength readout inside the unified model switch: brain icon +
- * current level name, separated from the model id. */
-.model-thinking-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding-left: 7px;
-  border-left: 1px solid var(--border);
-  white-space: nowrap;
+/* Thinking strength beside the model switch.
+ *
+ * The shape of the settings' dropdown (a filled field) belongs in a form;
+ * on the composer's footer the two controls have to read as one row of small
+ * buttons, so the trigger loses its fill and border and takes the same pill
+ * as the model switch. It is still components/Select.tsx — one control, one
+ * opening behaviour, one list. */
+.thinking-select {
+  flex: none;
+  min-width: 0;
+}
+
+.model-switch-bar .thinking-select .select-trigger {
+  gap: 6px;
+  height: var(--model-bar-control-height);
+  /* Vertical padding off: the height above decides, so the two controls
+   * stay level with each other and with their own contents. */
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--text-dim);
+  background: transparent;
+  border-color: transparent;
+  border-radius: var(--radius-pill);
+}
+
+.model-switch-bar .thinking-select .select-trigger:hover:not(:disabled),
+.model-switch-bar .thinking-select .select-trigger.open {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.model-switch-bar .thinking-select .select-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+/* The value hugs its label: the row has three controls and the model id
+ * already takes what room there is. */
+.model-switch-bar .thinking-select .select-value {
+  flex: none;
+}
+
+.model-switch-bar .thinking-select .select-popover {
+  min-width: 132px;
 }
 
 /* ---- context usage meter (composer footer) ------------------------------ */
@@ -143,24 +192,27 @@
   background: var(--error);
 }
 
-/* The picker panel. Placed by hooks/usePopoverPlacement.ts from the trigger's
- * rectangle and the visible area, so both panels (the composer's and the
- * settings list's) go through one rule: `position: fixed` escapes the chat
- * pane's `overflow: hidden` (the composer sits at its bottom edge, and a taller
- * panel used to be cut off there) and the cards' transform, which would
- * otherwise become the containing block. One of top/bottom is always `auto` —
- * a panel opened upward is anchored at its bottom, so the panel stays next to
- * the trigger. Width and height are both the size measured for this opening,
- * never the content's: sized by its contents, the panel shrank when the chosen
- * provider had fewer models, and anchored at its bottom it pulled every row
- * down with it. What does not fit scrolls in the pane that owns it. */
+/* ---- the picker panel ---------------------------------------------------- */
+
+/* Placed by hooks/usePopoverPlacement.ts from the trigger's rectangle and the
+ * visible area, so both panels (the composer's and the settings list's) go
+ * through one rule: `position: fixed` escapes the chat pane's `overflow:
+ * hidden` (the composer sits at its bottom edge, and a taller panel used to be
+ * cut off there) and the cards' transform, which would otherwise become the
+ * containing block. One of top/bottom is always `auto` — a panel opened upward
+ * is anchored at its bottom, so the panel stays next to the trigger. The width
+ * is the size measured for this opening, never the content's.
+ *
+ * The height is a CAP, not a size: the panel is one column whose list scrolls,
+ * and a two-model catalogue should not open a 420px empty box. The cap is the
+ * room measured for this opening, so the list never runs past the screen. */
 .mp-popover {
   position: fixed;
   top: var(--mp-top);
   bottom: var(--mp-bottom);
   left: var(--mp-left);
   width: var(--mp-width);
-  height: var(--mp-space);
+  max-height: var(--mp-space);
   display: flex;
   flex-direction: column;
   background: var(--surface);
@@ -185,143 +237,71 @@
   border-radius: var(--radius-lg);
 }
 
-/* ---- model picker: cascading three-pane layout --------------------------- */
-
-/* The panel's height is the measured room (see `.mp-popover`): the model list
- * is the part that scrolls, and the panes keep their own headers in view. */
+/* The panel's one column: the search field and the settings row keep their
+ * height, the sections scroll between them. */
 .model-picker {
   display: flex;
-  min-height: 0;
+  flex-direction: column;
   flex: 1;
-  overflow: hidden;
+  min-height: 0;
 }
 
 /* The two dead ends (no provider configured, the catalog fetch failed): a note
- * in place of the panes, with the header's close button above it. */
+ * in place of the list, with the settings row under it. */
 .mp-notice {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   padding: 10px;
   overflow-y: auto;
 }
 
-/* left column: provider list */
-.mp-providers {
-  display: flex;
-  flex-direction: column;
-  width: 180px;
-  min-width: 140px;
-  border-right: 1px solid var(--border);
-  padding: 4px;
-  overflow-y: auto;
-}
-
-.mp-provider {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 7px 8px;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-}
-
-.mp-provider:hover {
-  background: var(--surface-2);
-}
-
-.mp-provider.active {
-  background: var(--surface-3);
-  color: var(--text);
-  font-weight: 500;
-}
-
-.mp-provider-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mp-check {
-  color: var(--accent);
-  flex: none;
-}
-
-.mp-chevron {
-  color: var(--text-faint);
-  flex: none;
-  opacity: 0;
-  transition: opacity var(--lum-dur-fast) var(--lum-ease-out);
-}
-
-.mp-provider:hover .mp-chevron,
-.mp-provider.active .mp-chevron {
-  opacity: 1;
-}
-
-.mp-sep {
-  height: 1px;
-  margin: 2px 4px;
-  background: var(--border);
-}
-
-.mp-manage {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 7px 8px;
-  border-radius: var(--radius-sm);
-  font-size: 12.5px;
-  color: var(--text-dim);
-  text-align: left;
-}
-
-.mp-manage:hover {
-  background: var(--surface-2);
-  color: var(--text);
-}
-
-/* right column: model list */
-.mp-models {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  padding: 4px;
-}
-
 .mp-model-search {
-  width: 100%;
-  /* The list scrolls, never the field: in a short panel a shrinking field
-   * would take the caret with it. */
   flex: none;
-  margin-bottom: 4px;
+  margin: 6px 6px 2px;
   font-size: 12.5px;
   padding: 5px 8px;
 }
 
 .mp-loading {
-  padding: 8px;
+  flex: none;
+  padding: 6px 10px;
   font-size: 12px;
   color: var(--text-faint);
 }
 
-/* The model list is the one pane that scrolls; on a very short panel the
- * search field is what makes the list usable, so it never shrinks away either
- * (both keep their own height, the list takes the remainder). */
+/* The one scrolling part: a catalogue of dozens of models is read by
+ * scrolling this, while the search field and the foot stay where they are. */
 .mp-model-list {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
+  padding: 0 4px 4px;
+}
+
+.mp-group + .mp-group {
+  margin-top: 2px;
+  border-top: 1px solid var(--border);
+}
+
+/* A section's heading stays at the list's top edge while its rows scroll
+ * past: in a list this long, which provider a row belongs to is the one thing
+ * the row itself does not say. Sticky inside `.mp-model-list` (the scroll
+ * container), with the surface behind it so rows pass under, not through. */
+.mp-group-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 6px 8px 4px;
+  background: var(--surface);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .mp-model {
@@ -364,404 +344,56 @@
   gap: 4px;
 }
 
+.mp-check {
+  color: var(--accent);
+  flex: none;
+}
+
 .mp-empty {
-  padding: 8px;
+  padding: 10px 8px;
   font-size: 12px;
   color: var(--text-faint);
 }
 
-/* right column: thinking strength. Fixed width and always rendered — for
- * models without thinking support it stays a borderless empty margin
- * (no divider, no heading), so switching models never changes the
- * popover size. */
-.mp-thinking {
-  flex: none;
-  width: 96px;
-  border-left: 1px solid var(--border);
-  padding: 8px 6px;
+/* The foot of the panel: the way to the provider settings. A row of the
+ * panel rather than a list item, because it answers a different question
+ * than the list above it. */
+.mp-manage {
   display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.mp-thinking.empty {
-  border-left: none;
-}
-
-.mp-thinking-head {
-  font-size: 11.5px;
-  color: var(--text-faint);
-  text-align: center;
-  padding: 2px 0 6px;
+  align-items: center;
+  gap: 6px;
   flex: none;
-}
-
-.mp-thinking-empty {
-  flex: 1;
-  min-height: 0;
-}
-
-/* ---- thinking strength slider -------------------------------------------- */
-
-.tls {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  flex: 1;
-  min-height: 0;
-}
-
-.tls-body {
-  display: flex;
-  justify-content: center;
-  flex: 1;
-  min-height: 140px;
-  align-items: stretch;
-}
-
-.tls-track-wrap {
-  position: relative;
-  flex: none;
-  width: 48px;
-  display: flex;
-  justify-content: center;
-}
-
-/* full-length rail behind the native input */
-.tls-track-wrap::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 12px;
-  bottom: 12px;
-  width: 14px;
-  transform: translateX(-50%);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-}
-
-/* filled portion, anchored at the bottom (weakest level) */
-.tls-fill {
-  position: absolute;
-  left: 50%;
-  bottom: 12px;
-  width: 14px;
-  transform: translateX(-50%);
-  height: calc((100% - 24px) * var(--tls-fill, 0));
-  min-height: 14px;
-  background: var(--accent-soft);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-pill);
-  pointer-events: none;
-  transition: height var(--lum-dur-mid) var(--lum-ease-in-out);
-}
-
-.tls-range {
-  writing-mode: vertical-lr;
-  direction: rtl;
-  width: 48px;
-  height: 100%;
-  min-height: 140px;
-  margin: 0;
-  padding: 0;
-  background: transparent;
-  appearance: none;
-  -webkit-appearance: none;
-  cursor: pointer;
-  position: relative;
-  /* The global input style (base.css) puts a bordered box on every
-   * input — here it would render as a stray frame around the whole
-   * bar, so it is fully reset (only the custom rail stays visible). */
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-  /* No frame at rest: the rail, the fill and the level name are what say
-   * "this is a slider". The focus ring is drawn by the rule below. */
-  outline: none;
-}
-
-/* Focus has to be visible here: the slider is a rail whose fill and tick dot
- * look the same whether or not it has focus, so the ring is the only cue a
- * keyboard reader gets. It is drawn outside the input's box (an outline
- * paints without taking room) and the box is the 48px interaction area
- * around the rail, which the panes leave room for around it.
- * `:focus-visible` also beats the global `input:focus-visible` of base.css,
- * so a pointer press still lands without a frame. */
-.tls-range:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.tls-range::-webkit-slider-runnable-track {
-  background: transparent;
-}
-
-.tls-range::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  /* Invisible knob: dragging still grabs here, but the position is shown
-   * by the fill, the active tick dot and the name below — no black dot. */
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: transparent;
-  border: 2px solid transparent;
-  box-shadow: none;
-}
-
-.tls-range::-moz-range-track {
-  background: transparent;
-}
-
-.tls-range::-moz-range-thumb {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: transparent;
-  border: 2px solid transparent;
-  box-shadow: none;
-}
-
-.tls-range:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-/* current level name, below the slider. Remounted on every change
- * (keyed by level in the component) so the fade replays per switch. */
-.tls-value {
-  flex: none;
-  margin-top: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
-  text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-height: 1.5em;
-  animation: lum-fade var(--lum-dur-fast) var(--lum-ease-out);
-}
-
-/* ---- stepped layout ------------------------------------------------------- */
-
-/* `.stacked` is set from the measured room (hooks/usePopoverPlacement.ts), not
- * from a media query: what matters is the space the panel actually got, not
- * the window's width. It is the phone, and any window too short or too narrow
- * for three panes. The panes become screens: providers, then that provider's
- * models with the thinking bar underneath. All three in one column (the old
- * phone layout) left the provider strip 23px tall and the list short. */
-.model-picker.stacked {
-  flex-direction: column;
-  min-height: 0;
-}
-
-/* One screen at a time. The panes keep their content height (`flex-basis:
- * auto`) and only shrink when the panel reaches the room it was given: a
- * `flex-basis: 0` here would make an auto-height sheet collapse the list to
- * nothing, because the free space it distributes is measured from the items'
- * hypothetical sizes — which would be zero. Whatever does not fit scrolls
- * inside the pane that owns it (min-height: 0 is what lets a flex item shrink
- * below its content). */
-.model-picker.stacked > .mp-providers,
-.model-picker.stacked > .mp-models {
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-.model-picker.stacked > .mp-providers {
-  width: auto;
-  border-right: none;
-}
-
-.model-picker.stacked > .mp-models {
-  overflow: hidden;
-}
-
-/* The thinking bar spans the panel under the list, as a horizontal rail: a
- * fixed 96px column would be a stamp at the left edge, and a vertical bar
- * under the list would take the list's room. */
-.model-picker.stacked > .mp-thinking {
-  width: auto;
+  width: 100%;
   padding: 8px 10px;
-  border-left: none;
   border-top: 1px solid var(--border);
-}
-
-.model-picker.stacked > .mp-thinking.empty {
-  border-top: none;
-  padding: 0;
-}
-
-.model-picker.stacked .tls-body {
-  min-height: 0;
-}
-
-.model-picker.stacked .tls-track-wrap {
-  width: 100%;
-  height: 40px;
-}
-
-.model-picker.stacked .tls-track-wrap::before {
-  left: 12px;
-  right: 12px;
-  top: 50%;
-  bottom: auto;
-  width: auto;
-  height: 14px;
-  transform: translateY(-50%);
-}
-
-.model-picker.stacked .tls-fill {
-  left: 12px;
-  top: 50%;
-  bottom: auto;
-  width: calc((100% - 24px) * var(--tls-fill, 0));
-  min-width: 14px;
-  height: 14px;
-  transform: translateY(-50%);
-}
-
-.model-picker.stacked .tls-range {
-  writing-mode: horizontal-tb;
-  /* left = weakest (the vertical bar runs bottom-up with `direction: rtl`;
-   * a horizontal one reads left to right). */
-  direction: ltr;
-  width: 100%;
-  height: 40px;
-  min-height: 0;
-}
-
-.model-picker.stacked .tls-value {
-  margin-top: 4px;
-}
-
-/* The header carries the step: the provider's name and a way back, or the
- * first screen's title, plus the close button (the sheet covers its trigger,
- * so a tap outside is not the way out). */
-.mp-header {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: none;
-  padding: 6px 6px 6px 8px;
-  border-bottom: 1px solid var(--border);
-}
-
-.mp-header-title {
-  flex: 1;
-  min-width: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.mp-header-back {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex: 1;
-  min-width: 0;
-  padding: 4px 6px 4px 2px;
-  border-radius: var(--radius-sm);
-  color: var(--text);
+  font-size: 12.5px;
+  color: var(--text-dim);
   text-align: left;
 }
 
-/* The back control reads as the header's title, not as a button: its own
- * arrow says the row goes back. */
-.mp-header-back:hover {
+.mp-manage:hover {
   background: var(--surface-2);
-}
-
-.mp-header-back .mp-header-title {
-  flex: 1;
-  font-weight: 600;
-}
-
-.mp-header-btn {
-  flex: none;
-  color: var(--text-dim);
-}
-
-/* Touch: the header's two controls are the only way in and out of the steps,
- * so they take the fingertip height. */
-@media (hover: none), (pointer: coarse) {
-  .mp-header {
-    padding: 4px 4px 4px 6px;
-  }
-
-  .mp-header-back,
-  .mp-header-btn {
-    min-height: 40px;
-  }
-}
-
-/* ---- narrow windows ------------------------------------------------------- */
-
-/* Phone: the panel becomes a sheet pinned to the visible bottom, spanning the
- * screen. The three panes do not fit side by side on any phone, so the layout
- * is always stepped there; a sheet is also what the thumb expects at the
- * bottom of the screen. Its edges come from the measured visible area, so the
- * software keyboard pushes the sheet up instead of covering it. */
-@media (max-width: 600px) {
-  .mp-popover {
-    /* A phone gets a sheet on the visible bottom edge: the measured position
-     * (above or below the composer) means nothing when the panel covers the
-     * screen. Its height is the band the visible area leaves (with a phone-sized
-     * cap), not the room measured above the trigger: every layout takes a
-     * definite height, and this one is simply taller. `--mp-sheet-space` already
-     * excludes the window's bar and the software keyboard. */
-    top: auto;
-    bottom: var(--mp-view-bottom);
-    left: var(--mp-view-left);
-    width: auto;
-    right: var(--mp-view-right);
-    height: var(--mp-sheet-space);
-    max-height: var(--mp-sheet-space);
-    border-radius: var(--radius) var(--radius) 0 0;
-    border-bottom: none;
-    /* The sheet sits on the screen's own bottom edge: keep its last row out
-     * from under the home indicator (layout.css carries the same inset for
-     * the app's own frame). */
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-  }
-
-  /* The thinking rail joins the model screen under the list (the `.stacked`
-   * rules above already place it there; the sheet only narrows the padding). */
-  .mp-thinking {
-    padding: 6px 10px 8px;
-  }
-
-  .tls-value {
-    margin-top: 4px;
-  }
+  color: var(--text);
 }
 
 /* ---- touch devices -------------------------------------------------------- */
 
-/* The model and provider rows are chosen with a fingertip, and the search
- * field uses 16px so iOS Safari does not zoom the page when it takes focus
- * (base.css). */
+/* A fingertip does the choosing, so the rows and the search field grow (16px
+ * on the field: iOS Safari zooms the page for a smaller one, see base.css). */
 @media (hover: none), (pointer: coarse) {
+  /* A fingertip chooses these too, so both grow together. */
+  .model-switch-bar {
+    --model-bar-control-height: 34px;
+  }
+
   .mp-model,
-  .mp-provider,
   .mp-manage {
     padding: 10px 8px;
   }
 
-  /* The provider's chevron is revealed on hover on a desktop; a touch screen
-   * never hovers, so the active entry keeps it (it marks the provider whose
-   * models are listed below). */
-  .mp-chevron {
-    opacity: 1;
-  }
-
   .mp-model-search {
     font-size: 16px;
+    padding: 7px 8px;
   }
 
   .ctx-meter {
@@ -769,29 +401,38 @@
   }
 }
 
-/* ---- phone ---------------------------------------------------------------- */
+/* ---- narrow windows ------------------------------------------------------- */
 
-/* The picker's three columns are chosen with a thumb on a phone, so every
- * row grows to a fingertip and its two text steps grow by one. The sheet is
- * taller than the desktop panel (see the phone block above), which leaves
- * room for the larger rows. */
+/* Phone: the same column, with the rows and the two controls grown to a
+ * thumb. Nothing changes place — the panel is anchored above the composer on
+ * both, and its list scrolls on both. */
 @media (max-width: 600px) {
-  .mp-model,
-  .mp-provider,
-  .mp-manage {
-    padding: 12px 10px;
+  .model-switch-bar {
+    --model-bar-control-height: 36px;
+  }
+
+  .model-switch-bar .model-switch,
+  .model-switch-bar .thinking-select .select-trigger {
+    font-size: 13px;
+  }
+
+  .mp-model {
     font-size: 14px;
+  }
+
+  .mp-group-head {
+    font-size: 11.5px;
   }
 
   .mp-model-meta {
-    font-size: 12.5px;
+    font-size: 12px;
   }
 
-  .mp-provider-name {
-    font-size: 14px;
+  .mp-manage {
+    font-size: 13.5px;
   }
 
-  .mp-header-title {
-    font-size: 14px;
+  .ctx-meter {
+    padding: 8px;
   }
 }

@@ -16,6 +16,7 @@ import type {
 import { Modal } from "../Modal.tsx";
 import { Field } from "../Field.tsx";
 import { ModelPickerPopover } from "../ModelPickerPopover.tsx";
+import { ThinkingLevelSelect } from "../ThinkingLevelSelect.tsx";
 import { AgentAvatar } from "./AgentAvatar.tsx";
 
 export interface AgentEditDialogProps {
@@ -77,7 +78,7 @@ export function AgentEditDialog(
   const [model, setModel] = useState<ModelChoice | null>(agent.model);
   const [picking, setPicking] = useState(false);
   /** The thinking level this dialog just set, keyed by model. The catalog's
-   * copy is stale until its next refetch, so this keeps the rail where the
+   * copy is stale until its next refetch, so this keeps the control where the
    * user left it without pretending the stored value changed. */
   const [level, setLevel] = useState<
     { key: string; level: ThinkingLevel } | null
@@ -101,7 +102,7 @@ export function AgentEditDialog(
   const defaultModel = parseModelPreference(useSetting(DEFAULT_MODEL_KEY));
 
   // The model actually in effect: the draft, or the default it falls back
-  // to. Its thinking rail is the one to show — the level belongs to the
+  // to. Its thinking select is the one to show — the level belongs to the
   // model, so it is the same control the composer and the model settings
   // offer for that model.
   const { modelsByProvider } = useProviderModels();
@@ -114,6 +115,9 @@ export function AgentEditDialog(
   const levelKey = effective === null
     ? ""
     : `${effective.provider}/${effective.modelId}`;
+  // The levels the model in effect supports: more than one is a choice worth
+  // showing (a model with only "off" has nothing to choose).
+  const supportedLevels = info?.thinkingLevels ?? [];
 
   const choose = async (file: File) => {
     setError(null);
@@ -135,8 +139,8 @@ export function AgentEditDialog(
   /** Persist the thinking level of the model in effect.
    *
    * Not part of the save: the level belongs to the MODEL (it applies to
-   * every conversation on it), so it is written the moment the rail moves,
-   * exactly as the composer and the model settings do. */
+   * every conversation on it), so it is written the moment the control
+   * commits, exactly as the composer and the model settings do. */
   const changeLevel = async (next: ThinkingLevel) => {
     if (effective === null) return;
     setSavingLevel(true);
@@ -291,6 +295,16 @@ export function AgentEditDialog(
                         {model.provider}/{model.modelId}
                       </span>
                     )}
+                  {effective !== null && supportedLevels.length > 1 && (
+                    <ThinkingLevelSelect
+                      value={level?.key === levelKey
+                        ? level.level
+                        : info?.thinkingLevel ?? "off"}
+                      levels={supportedLevels}
+                      onChange={(next) => void changeLevel(next)}
+                      disabled={busy || savingLevel}
+                    />
+                  )}
                 </div>
                 <div className="agent-model-actions">
                   <button
@@ -329,12 +343,6 @@ export function AgentEditDialog(
                   setModel({ provider, modelId });
                   setPicking(false);
                 }}
-                thinkingValue={level?.key === levelKey
-                  ? level.level
-                  : info?.thinkingLevel}
-                thinkingLevels={info?.thinkingLevels}
-                onThinkingChange={(next) => void changeLevel(next)}
-                thinkingDisabled={busy || savingLevel}
               />
             </div>
             {error !== null && (

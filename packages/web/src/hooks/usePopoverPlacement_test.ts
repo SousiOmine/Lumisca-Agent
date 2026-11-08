@@ -1,11 +1,9 @@
 import { assertEquals } from "@std/assert";
 import {
   fitPopover,
-  fitsPanes,
   measurePlacement,
-  PANES_MIN_HEIGHT,
-  PANES_MIN_WIDTH,
   POPOVER_MARGIN,
+  POPOVER_MIN_HEIGHT,
   POPOVER_PREFERRED_HEIGHT,
   POPOVER_PREFERRED_WIDTH,
   type PopoverAnchor,
@@ -18,6 +16,10 @@ import {
  * exactly why it is worth pinning down: the two bugs it replaced (a panel
  * hanging off the top of a short window, a panel running off the right edge of
  * a narrow one) were each a single number nobody had written down.
+ *
+ * The panel is one column on every screen (components/ModelPicker.tsx), so
+ * nothing here picks between layouts any more: the width is the one a list of
+ * model ids needs, and the height is the cap the room allows.
  */
 
 /** The window of a desktop screen, in client coordinates. */
@@ -51,8 +53,8 @@ Deno.test("fitPopover: a roomy window gets the preferred size above the trigger"
 
 Deno.test("fitPopover: a short window shrinks the panel instead of cutting it off", () => {
   // 420px tall: the composer sits at the bottom and there is no room for the
-  // full 380px pane stack above it. The old CSS kept the height and let the
-  // first provider rows leave the screen.
+  // full 420px list above it. The old CSS kept the height and let the first
+  // rows leave the screen.
   const short: PopoverViewport = { left: 0, top: 0, width: 900, height: 420 };
   const result = fit({ top: 271, bottom: 300, left: 44 }, short);
   assertEquals(result.side, "above");
@@ -65,7 +67,7 @@ Deno.test("fitPopover: a short window shrinks the panel instead of cutting it of
 
 Deno.test("fitPopover: a trigger with no room above opens below instead", () => {
   // A settings list row near the top of a short window: 40px above it cannot
-  // hold the panes, while everything below is free.
+  // hold the panel, while everything below is free.
   const anchor: PopoverAnchor = { top: 60, bottom: 88, left: 120 };
   const result = fit(anchor, desktop, "below");
   assertEquals(result.side, "below");
@@ -93,16 +95,17 @@ Deno.test("fitPopover: the preferred side is kept unless the other is better", (
   assertEquals(fit(anchorNearBottom, cramped).side, "above");
 });
 
-Deno.test("fitPopover: a narrow window keeps the panel inside it", () => {
-  // The trigger sits at x=44 in a 600px-wide window: the full 640px panel
-  // would run 84px past the right edge (the old CSS did exactly that).
-  const narrow: PopoverViewport = { left: 0, top: 0, width: 600, height: 700 };
+Deno.test("fitPopover: the preferred width is given up before the panel leaves the window", () => {
+  // A phone 300px wide: the preferred width would run past both edges, so the
+  // panel takes the room between the margins and pins to the left one.
+  const narrow: PopoverViewport = { left: 0, top: 0, width: 300, height: 700 };
   const result = fit({ top: 400, bottom: 430, left: 44 }, narrow);
-  assertEquals(result.width, 600 - 2 * POPOVER_MARGIN);
+  assertEquals(result.width, 300 - 2 * POPOVER_MARGIN);
   assertEquals(result.left, POPOVER_MARGIN);
-  // A trigger near the right edge is pulled back by its own width.
-  const right = fit({ top: 400, bottom: 430, left: 500 }, narrow);
-  assertEquals(right.left, 600 - POPOVER_MARGIN - right.width);
+  // A window that has room for the preferred width keeps the trigger's left
+  // edge: the panel is small enough to sit beside it.
+  const roomy: PopoverViewport = { left: 0, top: 0, width: 600, height: 700 };
+  assertEquals(fit({ top: 400, bottom: 430, left: 200 }, roomy).left, 200);
 });
 
 Deno.test("fitPopover: the panel never leaves the visible area", () => {
@@ -136,43 +139,6 @@ Deno.test("fitPopover: the visible area replaces the window while the keyboard i
   assertEquals(behind.bottom, 544 - (544 - POPOVER_MARGIN) + 6);
 });
 
-Deno.test("fitsPanes: three panes need both a width and a height", () => {
-  const wide = fit(composerSwitch, desktop);
-  assertEquals(fitsPanes(wide), true);
-  // A phone sheet (374px wide): three columns would ellipsize the model id.
-  const phone = fit(
-    { top: 700, bottom: 730, left: 8 },
-    { left: 0, top: 0, width: 390, height: 844 },
-  );
-  assertEquals(phone.width < PANES_MIN_WIDTH, true);
-  assertEquals(fitsPanes(phone), false);
-  // Wide but too short: the panes keep the model list as the only scrolling
-  // part, so they still beat the stepped layout — until even 200px is gone.
-  const short = fit(
-    { top: 300, bottom: 330, left: 8 },
-    { left: 0, top: 0, width: 844, height: 390 },
-  );
-  assertEquals(fitsPanes(short), true);
-  const tiny = fit(
-    { top: 150, bottom: 180, left: 8 },
-    { left: 0, top: 0, width: 844, height: 190 },
-  );
-  assertEquals(fitsPanes(tiny), false);
-  // Exactly at the floor counts as fitting: the thresholds are inclusive.
-  assertEquals(
-    fitsPanes({
-      side: "above",
-      fills: false,
-      left: 0,
-      top: null,
-      bottom: 100,
-      width: PANES_MIN_WIDTH,
-      height: PANES_MIN_HEIGHT,
-    }),
-    true,
-  );
-});
-
 Deno.test("measurePlacement: the window's bar stays clear", () => {
   // A short window: the panel keeps under the title bar instead of covering
   // the tabs. (900x600 with the bar: 560px of visible room, so the panel is
@@ -182,13 +148,12 @@ Deno.test("measurePlacement: the window's bar stays clear", () => {
     { top: 300, bottom: 330, left: 44 },
     room,
     600,
-    900,
     "above",
     40,
   );
   const topEdge = (style: Record<string, string>) =>
     // The panel opens upward, so its top edge is the layout height minus the
-    // bottom offset minus the height it takes.
+    // bottom offset minus the height it may take.
     600 - Number.parseFloat(style["--mp-bottom"] ?? "0") -
     Number.parseFloat(style["--mp-space"] ?? "0");
   assertEquals(withBar.style["--mp-top"], "auto");
@@ -201,7 +166,6 @@ Deno.test("measurePlacement: the window's bar stays clear", () => {
     { top: 300, bottom: 330, left: 44 },
     room,
     600,
-    900,
     "above",
     0,
   );
@@ -218,41 +182,47 @@ Deno.test("measurePlacement: the window's bar stays clear", () => {
     { top: 271, bottom: 300, left: 44 },
     { left: 0, top: 0, width: 900, height: 420 },
     420,
-    900,
     "above",
     40,
   );
   assertEquals(tiny.style["--mp-top"], "48px");
   assertEquals(tiny.style["--mp-bottom"], "8px");
   assertEquals(tiny.style["--mp-space"], "364px");
-  assertEquals(tiny.panes, false);
 });
 
-Deno.test("measurePlacement: the sheet's edges follow the visible area", () => {
-  // Landscape phone: the sheet is bottom-anchored with 8px margins, and its
-  // height cap leaves the title bar visible.
-  const placement = measurePlacement(
-    { top: 700, bottom: 730, left: 8 },
-    { left: 0, top: 0, width: 390, height: 844 },
-    844,
-    390,
+Deno.test("measurePlacement: the width is the measured one, capped by the viewport", () => {
+  // The stylesheet reads `--mp-width` and `--mp-left`; both come from the
+  // measurement, so a narrow window cannot end up with a panel wider than it.
+  const wide = measurePlacement(
+    { top: 700, bottom: 730, left: 200 },
+    { left: 0, top: 0, width: 1200, height: 800 },
+    800,
     "above",
-    40,
   );
-  assertEquals(placement.style["--mp-view-left"], "8px");
-  assertEquals(placement.style["--mp-view-right"], "8px");
-  assertEquals(placement.style["--mp-view-bottom"], "8px");
-  // 844 visible - 40 bar - 2 * 8 margins = 788, capped at the token's 620.
-  assertEquals(placement.style["--mp-sheet-space"], "620px");
+  assertEquals(wide.style["--mp-width"], `${POPOVER_PREFERRED_WIDTH}px`);
+  assertEquals(wide.style["--mp-left"], "200px");
 
-  // With the keyboard open the sheet's bottom edge moves up by its height.
-  const keyboard = measurePlacement(
-    { top: 300, bottom: 330, left: 8 },
-    { left: 0, top: 0, width: 390, height: 500 },
-    844,
-    390,
+  const narrow = measurePlacement(
+    { top: 700, bottom: 730, left: 200 },
+    { left: 0, top: 0, width: 320, height: 800 },
+    800,
     "above",
-    40,
   );
-  assertEquals(keyboard.style["--mp-view-bottom"], "352px");
+  assertEquals(narrow.style["--mp-width"], `${320 - 2 * POPOVER_MARGIN}px`);
+  assertEquals(narrow.style["--mp-left"], `${POPOVER_MARGIN}px`);
+});
+
+Deno.test("fitPopover: a room under the minimum fills the visible area", () => {
+  // Neither side holds a panel worth showing: rather than a sliver of a list,
+  // the panel takes the whole visible area (the stepped layout's header used
+  // to be the only way out; outside-click and Escape are that now).
+  const result = fit(
+    { top: 100, bottom: 129, left: 30 },
+    { left: 0, top: 0, width: 600, height: 180 },
+    "above",
+  );
+  assertEquals(result.fills, true);
+  assertEquals(result.top, POPOVER_MARGIN);
+  assertEquals(result.height, 180 - 2 * POPOVER_MARGIN);
+  assertEquals(result.height < POPOVER_MIN_HEIGHT, true);
 });

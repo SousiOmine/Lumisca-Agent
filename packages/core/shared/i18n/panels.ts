@@ -186,12 +186,6 @@ export const panels = {
     en: "Session history",
   },
 
-  // --- thinking level slider -----------------------------------------------
-  "panels.thinking.ariaLabel": {
-    ja: "推論強度（思考レベル）",
-    en: "Thinking level",
-  },
-
   // --- tool rows -----------------------------------------------------------
   // The one-line summary a tool call shows in the transcript. The wording is
   // the app's, not the model's: a row the user reads should follow the app
