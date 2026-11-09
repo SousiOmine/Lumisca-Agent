@@ -106,7 +106,15 @@ export interface MachineWatchDeps {
  * The status comes from curl's `-w` on stdout, so an HTTP error is still an
  * observation (a watch on "the status is 200" must fire on a 500), while a
  * transport failure throws — `runWatch` turns that into a problem, not a
- * change. */
+ * change.
+ *
+ * The directory is created here, in the same shell, rather than assumed:
+ * `files.writeText` makes its parent folder, but curl writes the body
+ * itself, and the tool-output directory exists only after some tool has
+ * spilled something. On a machine that has not, every HTTP check failed with
+ * curl's exit 23 ("Failure writing output to destination") and the watch
+ * never fired. `umask 077` matches the spiller: a fetched page can be an
+ * internal one, and it is removed a moment later. */
 export function machineWatchFetch(deps: MachineWatchDeps): typeof fetch {
   const impl = async (input: unknown): Promise<Response> => {
     const url = input instanceof Request
@@ -115,11 +123,12 @@ export function machineWatchFetch(deps: MachineWatchDeps): typeof fetch {
       ? input.href
       : String(input);
     const root = (deps.files.roots[0] ?? "/").replace(/[\\/]+$/, "");
-    const bodyPath =
-      `${root}/.lumisca-tool-output/watch-${crypto.randomUUID()}.body`;
+    const bodyDir = `${root}/.lumisca-tool-output`;
+    const bodyPath = `${bodyDir}/watch-${crypto.randomUUID()}.body`;
     try {
       const result = await deps.runner.run(
-        `curl -sS -L --compressed --max-time ${HTTP_TIMEOUT_SEC} ` +
+        `mkdir -p ${shellQuote(bodyDir)} && umask 077 && ` +
+          `curl -sS -L --compressed --max-time ${HTTP_TIMEOUT_SEC} ` +
           `--max-redirs 5 --max-filesize ${HTTP_MAX_FETCH_BYTES} ` +
           `-o ${shellQuote(bodyPath)} -w '%{http_code}' -- ${shellQuote(url)}`,
         {

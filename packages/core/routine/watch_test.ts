@@ -13,6 +13,9 @@ import {
 import { machineWatchFetch, parseWatchState, runWatch } from "../vm/watch.ts";
 import type { CommandRunner } from "../tools/command-backend.ts";
 import type { FileBackend } from "../tools/file-backend.ts";
+import { HostCommandRunner } from "../tools/host/command-runner.ts";
+import { HostFileBackend } from "../tools/host/files.ts";
+import { Sandbox } from "../workspace/sandbox.ts";
 
 function watch(
   source: Extract<RoutineSchedule, { kind: "watch" }>["source"],
@@ -378,4 +381,41 @@ Deno.test("runWatch: an http check through the machine fetch compares like any o
     }),
   });
   assertEquals(changed.changed, true);
+});
+
+/** A folder with nothing in it yet: no tool has spilled an output here, so
+ * the tool-output directory the fetch writes into does not exist. That is
+ * the state of a machine nobody has filled the terminal of, and it is the
+ * ordinary first check of an http watch. */
+Deno.test({
+  name: "machineWatchFetch: works before any tool has spilled an output",
+  // Real curl and a real shell: the fake runner above writes the body
+  // itself and cannot see that a directory is missing.
+  ignore: Deno.build.os === "windows",
+  fn: async () => {
+    const root = await Deno.makeTempDir({ prefix: "lumisca-watch-" });
+    const server = Deno.serve(
+      { port: 0, onListen: () => {} },
+      () => new Response("deploy ok", { status: 200 }),
+    );
+    try {
+      const port = (server.addr as Deno.NetAddr).port;
+      const fetched = await machineWatchFetch({
+        runner: new HostCommandRunner(),
+        files: new HostFileBackend(new Sandbox([root])),
+        workdir: root,
+      })(`http://127.0.0.1:${port}/deploy`);
+      assertEquals(fetched.status, 200);
+      assertEquals(await fetched.text(), "deploy ok");
+      // Nothing is left in the folder: the body file is removed, and the
+      // directory that was created is empty.
+      assertEquals(
+        [...Deno.readDirSync(root)].filter((entry) => entry.isFile).length,
+        0,
+      );
+    } finally {
+      await server.shutdown();
+      await Deno.remove(root, { recursive: true });
+    }
+  },
 });
