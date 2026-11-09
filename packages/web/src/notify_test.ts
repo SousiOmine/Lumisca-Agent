@@ -2,6 +2,7 @@ import { assert, assertEquals } from "@std/assert";
 import { createTranslator } from "@lumisca/core/shared";
 import {
   buildAgentEndNotification,
+  buildHandoverNotification,
   buildQuestionNotification,
   isNotifyEnabled,
   setNotifyEnabled,
@@ -99,6 +100,38 @@ Deno.test("buildQuestionNotification handles no questions", () => {
   assert(body.includes("質問"), `body still asks for input: ${body}`);
   // Without a gist no separator is left behind.
   assertEquals(body.endsWith("あります"), true);
+});
+
+Deno.test("buildHandoverNotification names the session and the reason", () => {
+  const { title, body } = buildHandoverNotification(
+    "Aide",
+    "The login form needs a password only you know",
+    ja,
+  );
+  assertEquals(title, "Lumisca");
+  assert(body.includes("「Aide」"), body);
+  assert(body.includes("画面の操作を待っています"), body);
+  assert(body.includes("password only you know"), body);
+});
+
+Deno.test("buildHandoverNotification follows the language", () => {
+  assertEquals(
+    buildHandoverNotification("Aide", "a password", en).body,
+    '"Aide" is waiting for you at the screen: a password',
+  );
+  assertEquals(
+    buildHandoverNotification("Aide", "パスワード", ja).body,
+    "「Aide」が画面の操作を待っています：パスワード",
+  );
+});
+
+Deno.test("buildHandoverNotification folds whitespace and caps the reason", () => {
+  // The reason is a sentence the model wrote for a banner, not a paragraph
+  // a toast can hold.
+  const { body } = buildHandoverNotification("Aide", "  needs\n\na  ", ja);
+  assert(body.endsWith("：needs a"), body);
+  const long = buildHandoverNotification("Aide", "あ".repeat(300), ja).body;
+  assert(!long.includes("あ".repeat(121)), "reason is cut at 120 chars");
 });
 
 Deno.test("shouldNotifyFromState matrix", () => {

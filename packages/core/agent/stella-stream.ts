@@ -215,6 +215,7 @@ function handoverOf(handover: StellaHandover | null): StellaHandover | null {
     toolCallId: handover.toolCallId,
     reason: handover.reason,
     instructions: handover.instructions,
+    expiresAt: handover.expiresAt,
   };
 }
 
@@ -264,6 +265,7 @@ export function stellaEventsOf(event: ClientEvent): StellaEvent[] {
           toolCallId: event.toolCallId,
           reason: event.reason,
           instructions: event.instructions,
+          expiresAt: event.expiresAt,
         }),
       }];
     case "handover_end":

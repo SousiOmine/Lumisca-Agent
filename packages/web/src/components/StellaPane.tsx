@@ -6,7 +6,8 @@ import {
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/compat";
 import { errorMessage } from "@lumisca/core/shared";
 import { token } from "../api-client.ts";
-import { useT } from "../i18n.ts";
+import { useLocale, useT } from "../i18n.ts";
+import { formatClockTime } from "../format.ts";
 import { EASE_OUT, EXIT_SECONDS, play } from "../motion.ts";
 import { useNarrowViewport, useReducedMotion } from "../hooks/useMediaQuery.ts";
 import type { StellaHandover } from "../types.ts";
@@ -103,6 +104,7 @@ export function StellaPane({
   onExitDone,
 }: StellaPaneProps) {
   const t = useT();
+  const locale = useLocale();
   const hostRef = useRef<HTMLDivElement>(null);
   const paneRef = useRef<HTMLElement>(null);
   const reduceMotion = useReducedMotion();
@@ -384,6 +386,11 @@ export function StellaPane({
               {handover.instructions}
             </p>
           )}
+          <p className="stella-handover-deadline">
+            {t("chat.stella.handover.deadline", {
+              time: formatClockTime(handover.expiresAt, locale),
+            })}
+          </p>
           <div className="stella-handover-actions">
             <input
               type="text"

@@ -25,12 +25,15 @@ import {
   type Tool,
   type ToolResult,
 } from "../tools/schema.ts";
-import type { HandoverHub } from "./handover.ts";
+import { HANDOVER_TIMEOUT_MS, type HandoverHub } from "./handover.ts";
 
 /** Longest reason / instructions accepted. These are read by the user in a
  * banner above the screen, not stored as a document. */
 export const MAX_HANDOVER_REASON_CHARS = 500;
 export const MAX_HANDOVER_INSTRUCTION_CHARS = 1_000;
+
+/** The deadline as the model is told it, in whole minutes. */
+const TIMEOUT_MINUTES = Math.round(HANDOVER_TIMEOUT_MS / 60_000);
 
 const askUserSchema: SchemaObject<{
   reason: SchemaString;
@@ -61,10 +64,12 @@ export function createVmAskUserTool(
       "Hand the machine's screen to the user and stop until they finish. " +
       "Use this when a step needs a person: a password, a verification " +
       "code, a CAPTCHA, a consent dialog you cannot read. The user drives " +
-      "the machine in the browser and presses a button when done; then this " +
-      "tool returns. While it waits, do not click or type. The result says " +
-      "what the user did, in their words — take a vm_screenshot afterwards " +
-      "to see the screen yourself.",
+      "the machine in the browser and presses a button when done; then " +
+      "this tool returns. If nobody comes within " +
+      `${TIMEOUT_MINUTES} minutes it returns without an answer, so you do ` +
+      "not wait forever. While it waits, do not click or type. The result " +
+      "says what the user did, in their words — take a vm_screenshot " +
+      "afterwards to see the screen yourself.",
     parameters: askUserSchema,
     execute: (_id, params, signal): Promise<ToolResult> => {
       const reason = params.reason.trim();
@@ -105,7 +110,23 @@ export function createVmAskUserTool(
           ? null
           : instructions,
         signal,
-      ).then((note) => {
+      ).then((outcome) => {
+        if (outcome.kind === "timed_out") {
+          return {
+            content: [{
+              type: "text" as const,
+              text: "The user did not come to the screen within " +
+                `${TIMEOUT_MINUTES} minutes, so the hand-over ended on its ` +
+                "own and you may continue. They may be at the screen right " +
+                "now, so do not take the pointer back to finish this step: " +
+                "do what you can without them, try another way, or stop and " +
+                "say what you still need. Calling this tool again starts a " +
+                "new wait.",
+            }],
+            details: { timedOut: true },
+          };
+        }
+        const note = outcome.note;
         const text = note.trim().length === 0
           ? "The user finished at the screen. Take a vm_screenshot to see " +
             "the result before continuing."

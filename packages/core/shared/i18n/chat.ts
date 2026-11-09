@@ -435,6 +435,12 @@ export const chat = {
   },
   "chat.stella.handover.done": { ja: "完了", en: "Done" },
   "chat.stella.handover.finishing": { ja: "送信中…", en: "Sending…" },
+  /** When the wait ends by itself: the agent resumes without the user, so
+   * saying when keeps a late return from looking like a lost run. */
+  "chat.stella.handover.deadline": {
+    ja: "この待機は {time} までです（過ぎるとエージェントは自動で再開します）",
+    en: "This wait ends at {time} (the agent resumes on its own)",
+  },
   "chat.composer.image.alt": { ja: "添付画像", en: "Attachment" },
   "chat.stella.machine.screenFailed": {
     ja: "画面に接続できませんでした: {reason}",

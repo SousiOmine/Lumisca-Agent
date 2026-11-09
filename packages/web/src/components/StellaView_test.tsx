@@ -101,12 +101,16 @@ Deno.test("StellaView: a hand-over draws the pane whatever the caller chose", ()
         toolCallId: "t1",
         reason: "ログインが必要です",
         instructions: "パスワードを入力してください",
+        expiresAt: Date.now() + 15 * 60_000,
       },
     },
   });
   // The run is blocked on this pane, so it is drawn regardless of the user's
   // choice, and there is nothing to close it into.
   assertStringIncludes(html, "stella-pane");
+  // The bar says when the wait ends by itself: a user who returns after the
+  // deadline finds the run already moving and needs to have been told (#36).
+  assertStringIncludes(html, "stella-handover-deadline");
 });
 
 Deno.test("StellaView: a failed send leaves the conversation on screen", () => {

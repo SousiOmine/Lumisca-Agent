@@ -106,13 +106,18 @@ export type ClientEvent =
   /** The agent handed the machine's screen to the user (`vm_ask_user`) and
    * the run is blocked until they finish. Clients make the screen pane
    * interactive while it lasts; the resync snapshot carries the same
-   * pending handover (`handover` events are never replayed). */
+   * pending handover (`handover` events are never replayed).
+   *
+   * `expiresAt` is when the wait ends on its own (epoch ms): the hub closes
+   * the hand-over and hands the run back a "the user did not come" result,
+   * so an absent user never parks the conversation for good. */
   | {
     type: "handover";
     sessionId: string;
     toolCallId: string;
     reason: string;
     instructions: string | null;
+    expiresAt: number;
   }
   /** The handover ended (the user finished, the run was aborted, or the
    * session closed). `note` is what the user reported doing, empty when

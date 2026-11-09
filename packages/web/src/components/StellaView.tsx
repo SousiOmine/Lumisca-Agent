@@ -276,6 +276,7 @@ export function StellaView(
             toolCallId: handover.toolCallId,
             reason: handover.reason,
             instructions: handover.instructions,
+            expiresAt: handover.expiresAt,
           }}
           onFinishHandover={onFinishHandover}
           // The pane's own × means the same thing as the header's toggle. A

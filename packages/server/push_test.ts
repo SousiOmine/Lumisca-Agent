@@ -2,7 +2,11 @@ import { assert, assertEquals } from "@std/assert";
 import { createInMemorySettingsRepo } from "../core/settings/repo.ts";
 import { PushSubscriptions } from "../core/notify/subscriptions.ts";
 import { toBase64Url } from "@lumisca/core/shared";
-import { buildPushNotification, createPushNotifier } from "./push.ts";
+import {
+  buildPushNotification,
+  createPushNotifier,
+  isNotifiable,
+} from "./push.ts";
 
 /** A fake core: the events it emits are the ones a test drives, and the
  * subscriptions are the real store's. */
@@ -116,6 +120,42 @@ Deno.test("a question is urgent and replaces the completion toast", () => {
   // The gist of the first question is what the toast shows.
   assert(question.message.body.includes("選択"), question.message.body);
   assertEquals(core, core);
+});
+
+Deno.test("a hand-over is urgent and carries the reason", () => {
+  // The run is blocked AT THE SCREEN and only the user can release it. A
+  // notification that says nothing about why is one the user cannot act
+  // on, and one that is not urgent is a run that waits for the deadline.
+  const event = {
+    type: "handover" as const,
+    sessionId: "s1",
+    toolCallId: "t1",
+    reason: "ログインフォームには本人しか知らないパスワードが必要です",
+    instructions: null,
+    expiresAt: Date.now() + 15 * 60_000,
+  };
+  const handover = buildPushNotification(event, "リファクタ", "ja");
+  const finished = buildPushNotification(
+    { type: "agent_end", sessionId: "s1" },
+    "リファクタ",
+    "ja",
+  );
+  assertEquals(handover.urgency, "high");
+  // Same tag as the completion: the request replaces that toast instead of
+  // stacking on it.
+  assertEquals(handover.message.tag, finished.message.tag);
+  assert(handover.message.body.includes("リファクタ"));
+  assert(
+    handover.message.body.includes("本人しか知らないパスワード"),
+    handover.message.body,
+  );
+
+  const english = buildPushNotification(event, "Refactor", "en");
+  assert(
+    english.message.body.includes("waiting for you at the screen"),
+    english.message.body,
+  );
+  assertEquals(isNotifiable(event), true);
 });
 
 Deno.test("an error notification names the session", () => {

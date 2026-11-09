@@ -150,10 +150,20 @@ Deno.test("applyStellaEvent: questions and the hand-over replace wholesale", () 
     toolCallId: "t2",
     reason: "ログイン",
     instructions: null,
+    expiresAt: 1_700_000_000_000,
   };
   current = applyStellaEvent(current, { type: "handover", handover })!;
   assertEquals(current.handover, handover);
   assertEquals(applyStellaEvent(current, { type: "handover", handover }), null);
+  // A re-delivered request with a DIFFERENT deadline is a different wait:
+  // the pane's countdown must follow it rather than keep the old one.
+  assertEquals(
+    applyStellaEvent(current, {
+      type: "handover",
+      handover: { ...handover, expiresAt: 1_700_000_900_000 },
+    })?.handover?.expiresAt,
+    1_700_000_900_000,
+  );
   current = applyStellaEvent(current, { type: "handover", handover: null })!;
   assertEquals(current.handover, null);
 });

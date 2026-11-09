@@ -227,6 +227,13 @@ export const common = {
     en: '"{name}" has a question{detail}',
   },
   "notify.questionDetail": { ja: "：{gist}", en: ": {gist}" },
+  /** A run blocked at the screen (`vm_ask_user`): only the user can release
+   * it, so this notification is the one that says the app needs them now. */
+  "notify.handover": {
+    ja: "「{name}」が画面の操作を待っています{detail}",
+    en: '"{name}" is waiting for you at the screen{detail}',
+  },
+  "notify.handoverDetail": { ja: "：{gist}", en: ": {gist}" },
   /** A run that stopped with an error (Web Push; the desktop shell shows the
    * same sentence for its own notifications). */
   "notify.sessionError": {

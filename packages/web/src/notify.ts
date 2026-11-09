@@ -7,11 +7,12 @@ import type { AskQuestion } from "./types.ts";
 /** Background agent-event notifications (desktop only).
  *
  * The agent loop lives in the server process; its events reach this page
- * over the WebSocket. When a run ends (`agent_end`) or the agent asks a
- * question (the ask tool) while the main window has no focus — minimized,
- * behind another app, on another virtual desktop — the event would
- * otherwise go unnoticed, so it is forwarded to the desktop shell, which
- * shows it as an OS notification (plus a taskbar flash).
+ * over the WebSocket. When a run ends (`agent_end`), the agent asks a
+ * question (the ask tool), or it hands the machine's screen over
+ * (`vm_ask_user`) while the main window has no focus — minimized, behind
+ * another app, on another virtual desktop — the event would otherwise go
+ * unnoticed, so it is forwarded to the desktop shell, which shows it as an
+ * OS notification (plus a taskbar flash).
  *
  * Visibility comes from the shell bridge (`window/state`): the DOM
  * `document.hidden` check alone cannot see a virtual-desktop switch,
@@ -30,6 +31,10 @@ const WINDOW_STATE_TIMEOUT_MS = 1500;
 
 const MAX_NAME_CHARS = 60;
 const MAX_QUESTION_CHARS = 80;
+/** How much of a hand-over reason a toast carries. The agent writes up to
+ * 500 characters for the model; the first sentence is what says whether the
+ * user has to come now. */
+const MAX_HANDOVER_CHARS = 120;
 /** How much of the finished run's reply the notification carries. One line of
  * a toast: enough to judge whether opening the app is worth it, short enough
  * to read without expanding it. */
@@ -116,6 +121,25 @@ export function buildQuestionNotification(
   return {
     title: "Lumisca",
     body: tr("notify.question", {
+      name: sessionLabel(sessionName, tr),
+      detail,
+    }),
+  };
+}
+
+/** Display text for a screen hand-over: the run is blocked at the machine
+ * until the user acts, so the reason is what the toast leads with. Pure
+ * (unit-tested). */
+export function buildHandoverNotification(
+  sessionName: string,
+  reason: string,
+  tr: Translator = t,
+): { title: string; body: string } {
+  const gist = truncate(reason.replace(/\s+/g, " ").trim(), MAX_HANDOVER_CHARS);
+  const detail = gist === "" ? "" : tr("notify.handoverDetail", { gist });
+  return {
+    title: "Lumisca",
+    body: tr("notify.handover", {
       name: sessionLabel(sessionName, tr),
       detail,
     }),
@@ -213,5 +237,19 @@ export function maybeNotifyQuestion(
     sessionName,
     true,
     (name) => buildQuestionNotification(name, questions),
+  );
+}
+
+/** Notify that the run handed the machine's screen to the user. Call when a
+ * `handover` begins (never when it ends, and not on a snapshot resync: the
+ * user is in the app by then). Urgent for the same reason as a question. */
+export function maybeNotifyHandover(
+  sessionName: SessionName,
+  reason: string,
+): Promise<void> {
+  return maybeNotify(
+    sessionName,
+    true,
+    (name) => buildHandoverNotification(name, reason),
   );
 }

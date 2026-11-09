@@ -280,7 +280,7 @@ function sameHandover(
   if (a === b) return true;
   if (a === null || b === null) return false;
   return a.toolCallId === b.toolCallId && a.reason === b.reason &&
-    a.instructions === b.instructions;
+    a.instructions === b.instructions && a.expiresAt === b.expiresAt;
 }
 
 /** An empty conversation (the sidebar can be shown before one is open). The

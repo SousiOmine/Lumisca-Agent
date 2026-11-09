@@ -405,6 +405,7 @@ Deno.test("stellaEventsOf: an ask and a hand-over are the run's own state", () =
       toolCallId: "vm_1",
       reason: "password",
       instructions: null,
+      expiresAt: 1_700_000_000_000,
     }),
     [{
       type: "handover",
@@ -412,6 +413,9 @@ Deno.test("stellaEventsOf: an ask and a hand-over are the run's own state", () =
         toolCallId: "vm_1",
         reason: "password",
         instructions: null,
+        // The deadline is part of the request: a conversation that
+        // reconnects mid-wait draws it from the snapshot.
+        expiresAt: 1_700_000_000_000,
       },
     }],
   );

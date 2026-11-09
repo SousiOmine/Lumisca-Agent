@@ -8,7 +8,7 @@ import {
 import { api } from "../api.ts";
 import { connectStellaEvents, stellaApi } from "../api-stella.ts";
 import { describeError, useT } from "../i18n.ts";
-import { maybeNotifyAgentEnd } from "../notify.ts";
+import { maybeNotifyAgentEnd, maybeNotifyHandover } from "../notify.ts";
 import {
   applyStellaEvent,
   prependOlderEntries,
@@ -276,6 +276,10 @@ export function useStella(
     /** The last thing the agent said in this run: the notification's body,
      * because "finished" alone does not say whether it is worth opening. */
     let lastReply = "";
+    /** The hand-over already announced: a duplicate `handover` event (the
+     * same request seen twice) must not notify twice. Tool call ids are
+     * unique, so the id alone tells "the same request" from a new one. */
+    let notifiedHandover: string | null = null;
     const reconnect = createReconnectScheduler({ stopped: () => closed });
 
     const resync = async () => {
@@ -305,10 +309,22 @@ export function useStella(
           // A run's end is the moment a user who is looking elsewhere needs
           // to hear about it. Code mode does this in its own event handler;
           // stella's stream is a different one, so a routine's result was
-          // silent here (#41).
+          // silent here (#41). A hand-over is the same need from the other
+          // side: the run is blocked AT THE SCREEN, and only the user can
+          // release it.
           if (event.type === "agent_start") wasRunning = true;
           if (event.type === "entry" && event.entry.role === "assistant") {
             lastReply = event.entry.text;
+          }
+          if (
+            event.type === "handover" && event.handover !== null &&
+            event.handover.toolCallId !== notifiedHandover
+          ) {
+            notifiedHandover = event.handover.toolCallId;
+            void maybeNotifyHandover(
+              conversationRef.current?.agentName ?? "",
+              event.handover.reason,
+            );
           }
           if (event.type === "agent_end") {
             if (wasRunning) {

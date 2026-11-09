@@ -985,6 +985,14 @@
   white-space: pre-wrap;
 }
 
+/* When the wait ends on its own. Quieter than the reason: it is a fact
+ * about the wait, not something the user has to do. */
+.stella-handover-deadline {
+  margin: 0;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
 .stella-handover-actions {
   display: flex;
   gap: 6px;

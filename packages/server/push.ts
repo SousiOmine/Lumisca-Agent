@@ -22,6 +22,11 @@ const MAX_NAME_CHARS = 60;
 /** Longest question text taken from the ask tool's first question. */
 const MAX_QUESTION_CHARS = 80;
 
+/** Longest hand-over reason taken from `vm_ask_user`. The agent explains
+ * the request to the MODEL in up to 500 characters; a toast carries the
+ * beginning of it, which is what says whether opening the app is urgent. */
+const MAX_HANDOVER_CHARS = 120;
+
 /** What `push` events send: the message, and how the push service should
  * treat it (a blocked run wakes the device). */
 export interface PushNotification {
@@ -33,15 +38,18 @@ export interface PushNotification {
  * tool traffic, `session_created`) is the UI's alone. */
 export type NotifiableEvent = Extract<
   ClientEvent,
-  { type: "agent_end" | "question" | "session_error" }
+  { type: "agent_end" | "question" | "session_error" | "handover" }
 >;
 
-/** Whether the event is one the installed app is notified about. */
+/** Whether the event is one the installed app is notified about. A
+ * hand-over is included: the run is blocked at the screen, and the user is
+ * the only one who can release it — a message nobody sees is a run that
+ * waits until the deadline. */
 export function isNotifiable(
   event: ClientEvent,
 ): event is NotifiableEvent {
   return event.type === "agent_end" || event.type === "question" ||
-    event.type === "session_error";
+    event.type === "session_error" || event.type === "handover";
 }
 
 /** The notification one notifiable event produces. `name` is the session's
@@ -93,6 +101,25 @@ export function buildPushNotification(
         },
         urgency: "normal",
       };
+    case "handover": {
+      const gist = Array.from(event.reason.trim()).slice(0, MAX_HANDOVER_CHARS)
+        .join("");
+      return {
+        message: {
+          title: "Lumisca",
+          body: tr("notify.handover", {
+            name,
+            detail: gist === "" ? "" : tr("notify.handoverDetail", { gist }),
+          }),
+          // The same tag as the completion: the request replaces the
+          // "finished" toast of the same session instead of stacking on it.
+          tag: `session:${event.sessionId}`,
+        },
+        // The run is blocked at the screen until the user acts (or the
+        // deadline passes), so the device is woken.
+        urgency: "high",
+      };
+    }
   }
 }
 
@@ -110,11 +137,12 @@ export interface PushNotifierCore {
 /** Notifications this server sends to installed PWAs.
  *
  * The events are the ones the desktop shell notifies on
- * (web/src/notify.ts): a run ended, the agent asked something, a run stopped
- * with an error. What differs is who decides whether to show them — the
- * service worker does, by looking for a visible client of this app — because
- * a server-side "is the page in front?" would have to model every device's
- * focus and would be wrong as soon as two are open.
+ * (web/src/notify.ts): a run ended, the agent asked something, the screen
+ * was handed over, a run stopped with an error. What differs is who decides
+ * whether to show them — the service worker does, by looking for a visible
+ * client of this app — because a server-side "is the page in front?" would
+ * have to model every device's focus and would be wrong as soon as two are
+ * open.
  *
  * Only this server's own events: a federated peer's arrive through
  * `fed.subscribe`, not `core.subscribe`, and the subscriptions stored here
@@ -191,14 +219,9 @@ export function createPushNotifier(
 
   const detach = core.subscribe((event) => {
     if (disposed) return;
-    // Only the three events with a notification; everything else (deltas, tool
+    // Only the events with a notification; everything else (deltas, tool
     // traffic, `session_created`, which carries no id at all) is the UI's.
-    if (
-      event.type !== "agent_end" && event.type !== "question" &&
-      event.type !== "session_error"
-    ) {
-      return;
-    }
+    if (!isNotifiable(event)) return;
     const built = buildPushNotification(
       event,
       nameOf(event.sessionId),

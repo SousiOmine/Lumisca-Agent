@@ -76,6 +76,9 @@ export interface StellaHandover {
   toolCallId: string;
   reason: string;
   instructions: string | null;
+  /** When the wait ends on its own (epoch ms). The pane says when, so a
+   * user who returns late knows the run resumed without them. */
+  expiresAt: number;
 }
 
 /** Everything a client needs to draw a conversation from nothing: the
