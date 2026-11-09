@@ -4,6 +4,7 @@ import { createRoutineRepo, type RoutineRepo } from "./repo.ts";
 import { createRoutineScheduler, type RoutineRunner } from "./scheduler.ts";
 import { createRoutineTools } from "./tools.ts";
 import { ROUTINES_PER_AGENT_MAX } from "../shared/routine.ts";
+import { formatLocalDateTime } from "../shared/misc.ts";
 
 /**
  * Routines at the repository / scheduler / tool level.
@@ -225,6 +226,176 @@ Deno.test("routine scheduler: a due routine runs and advances first", async () =
   }
 });
 
+Deno.test("routine scheduler: a one-off runs once and removes itself", async () => {
+  const { repo: routines, close } = repo();
+  const fake = runner();
+  try {
+    const created = routines.create({
+      agentId: AGENT,
+      name: "Send the notes",
+      prompt: "send the release notes",
+      schedule: { kind: "once", at: "2026-11-12 09:00" },
+    });
+    // Due now: the test does not wait for the stored minute.
+    routines.update(created.id, { nextRunAt: Date.now() - 1_000 });
+    const scheduler = createRoutineScheduler({
+      repo: routines,
+      runner: fake,
+      tickMs: 10_000,
+      catchUpDelayMs: 5,
+    });
+    scheduler.start();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assertEquals(fake.started.length, 1);
+    // The slot was emptied (and the row switched off) BEFORE the run: the
+    // next tick cannot fire it again while the run is still going.
+    assertEquals(routines.get(created.id)?.nextRunAt, null);
+    assertEquals(routines.get(created.id)?.enabled, false);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assertEquals(fake.started.length, 1);
+
+    fake.release();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    // The row is gone once the run it started has ended.
+    assertEquals(routines.get(created.id), undefined);
+    scheduler.close();
+  } finally {
+    close();
+  }
+});
+
+Deno.test("routine scheduler: a one-off that came due while off runs late", async () => {
+  const { repo: routines, close } = repo();
+  const fake = runner();
+  try {
+    // The stored time is a minute that has already passed: what a machine
+    // that was off at the time finds when it comes back.
+    const created = routines.create({
+      agentId: AGENT,
+      name: "Missed while off",
+      prompt: "do the late one",
+      schedule: {
+        kind: "once",
+        at: formatLocalDateTime(Date.now() - 3_600_000),
+      },
+    });
+    assertEquals(created.nextRunAt! <= Date.now(), true);
+
+    const scheduler = createRoutineScheduler({
+      repo: routines,
+      runner: fake,
+      tickMs: 10_000,
+      catchUpDelayMs: 5,
+    });
+    scheduler.start();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assertEquals(fake.started.length, 1);
+    fake.release();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assertEquals(routines.get(created.id), undefined);
+    scheduler.close();
+  } finally {
+    close();
+  }
+});
+
+Deno.test("routine scheduler: a disabled one-off does not run", async () => {
+  const { repo: routines, close } = repo();
+  const fake = runner();
+  try {
+    const created = routines.create({
+      agentId: AGENT,
+      name: "Turned off",
+      prompt: "p",
+      schedule: {
+        kind: "once",
+        at: formatLocalDateTime(Date.now() + 3_600_000),
+      },
+    });
+    routines.update(created.id, { enabled: false, nextRunAt: null });
+    const scheduler = createRoutineScheduler({
+      repo: routines,
+      runner: fake,
+      tickMs: 10_000,
+      catchUpDelayMs: 5,
+    });
+    scheduler.start();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assertEquals(fake.started, []);
+    assertEquals(routines.get(created.id)?.enabled, false);
+    scheduler.close();
+  } finally {
+    close();
+  }
+});
+
+Deno.test("routine scheduler: a one-off stopped while waiting keeps its row", async () => {
+  const { repo: routines, close } = repo();
+  const fake = runner({ busy: true });
+  try {
+    const created = routines.create({
+      agentId: AGENT,
+      name: "Wait then stop",
+      prompt: "p",
+      schedule: {
+        kind: "once",
+        at: formatLocalDateTime(Date.now() + 3_600_000),
+      },
+    });
+    routines.update(created.id, { nextRunAt: Date.now() - 1_000 });
+    const scheduler = createRoutineScheduler({
+      repo: routines,
+      runner: fake,
+      tickMs: 10_000,
+      catchUpDelayMs: 5,
+      slotPollMs: 5,
+    });
+    scheduler.start();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    // Waiting for the conversation: nothing has run yet.
+    assertEquals(fake.started, []);
+    scheduler.stop(created.id);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    // A run that never started does not consume the one-off: the row stays,
+    // with the reason nobody can see anywhere else.
+    const left = routines.get(created.id);
+    assertEquals(left?.lastStatus, "stopped");
+    assertEquals(left?.lastDetail, "Stopped before it started");
+    scheduler.close();
+  } finally {
+    close();
+  }
+});
+
+Deno.test("routine scheduler: run now uses up a one-off", async () => {
+  const { repo: routines, close } = repo();
+  const fake = runner();
+  try {
+    const created = routines.create({
+      agentId: AGENT,
+      name: "Run it early",
+      prompt: "p",
+      schedule: {
+        kind: "once",
+        at: formatLocalDateTime(Date.now() + 3_600_000),
+      },
+    });
+    const scheduler = createRoutineScheduler({
+      repo: routines,
+      runner: fake,
+    });
+    const running = scheduler.runNow(created.id);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assertEquals(fake.started.length, 1);
+    fake.release();
+    await running;
+    // Running it before its time is still the one run it had.
+    assertEquals(routines.get(created.id), undefined);
+  } finally {
+    close();
+  }
+});
+
 Deno.test("routine scheduler: a busy conversation is waited for, not skipped", async () => {
   const { repo: routines, close } = repo();
   const fake = runner({ busy: true });
@@ -381,6 +552,50 @@ Deno.test("routine tools: create, list, update, delete and run", async () => {
 
     await byName.get("routine_delete")!.execute("c5", { id } as never);
     assertEquals(routines.get(id), undefined);
+  } finally {
+    close();
+  }
+});
+
+Deno.test("routine tools: a one-off in the past is refused", async () => {
+  const { repo: routines, close } = repo();
+  try {
+    const scheduler = createRoutineScheduler({
+      repo: routines,
+      runner: runner(),
+    });
+    const tools = createRoutineTools({
+      repo: routines,
+      scheduler,
+      agentId: AGENT,
+    });
+    const create = tools.find((tool) => tool.name === "routine_create")!;
+    const past = formatLocalDateTime(Date.now() - 60_000);
+    assertThrows(
+      () =>
+        create.execute("c1", {
+          name: "Too late",
+          prompt: "p",
+          schedule: { kind: "once", at: past },
+        } as never),
+      Error,
+      "already passed",
+    );
+    // Nothing was written for the refused request.
+    assertEquals(routines.listOf(AGENT).length, 0);
+
+    const future = formatLocalDateTime(Date.now() + 3_600_000);
+    const created = await create.execute("c2", {
+      name: "Later today",
+      prompt: "p",
+      schedule: { kind: "once", at: future },
+    } as never);
+    const text = created.content.map((block) =>
+      block.type === "text" ? block.text : ""
+    ).join("");
+    assertEquals(text.includes(`once at ${future}`), true);
+    // The model is told the routine will not stay in the list.
+    assertEquals(text.includes("removed from the list"), true);
   } finally {
     close();
   }

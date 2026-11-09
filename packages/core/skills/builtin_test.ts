@@ -93,7 +93,7 @@ Deno.test("builtinSkills advertises the stella-only skills for a stella session"
   const routinesGuide = await loadSkillContent(routines);
   assert(routinesGuide.includes("routine_create"));
   assert(routinesGuide.includes("tool_search"));
-  for (const shape of ["daily", "weekly", "every", "watch"]) {
+  for (const shape of ["daily", "weekly", "every", "once", "watch"]) {
     assert(
       routinesGuide.includes(`"${shape}"`),
       `the guide names the ${shape} schedule`,

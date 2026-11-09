@@ -31,7 +31,7 @@ import {
   TOOL_ROUTINE_RUN,
   TOOL_ROUTINE_UPDATE,
 } from "../shared/mod.ts";
-import { formatLocalDateTime } from "../shared/misc.ts";
+import { formatLocalDateTime, parseLocalDateTime } from "../shared/misc.ts";
 import {
   integer,
   object,
@@ -45,10 +45,13 @@ import type { RoutineRepo } from "./repo.ts";
 import type { RoutineRunState, RoutineScheduler } from "./scheduler.ts";
 
 /** Description of the schedule argument, shared by the two tools that take
- * one: the four accepted shapes. */
+ * one. */
 const SCHEDULE_DESCRIPTION = '{"kind":"daily","time":"08:30"}, ' +
   '{"kind":"weekly","days":[1,5],"time":"18:00"} (1 = Monday), ' +
-  '{"kind":"every","minutes":30}, or {"kind":"watch","everyMinutes":10,' +
+  '{"kind":"every","minutes":30}, ' +
+  '{"kind":"once","at":"2026-11-12 09:00"} (one run at that local date and ' +
+  "time; the routine removes itself from the list after it has run), or " +
+  '{"kind":"watch","everyMinutes":10,' +
   '"source":{...}}. A watch runs only when its source changed: ' +
   '{"kind":"http","url":"https://...","expect":{"status":200}} or ' +
   '{"expect":{"includes":"..."}} or {"expect":{"hash":true}}, ' +
@@ -58,10 +61,17 @@ const SCHEDULE_DESCRIPTION = '{"kind":"daily","time":"08:30"}, ' +
   "the model, so it costs nothing when nothing changed. A JSON string of " +
   "the same object is accepted too";
 
+/** The accepted shapes as a refusal lists them. One wording for both tools,
+ * so the description and the error cannot describe different sets. */
+const SCHEDULE_SHAPES = '{"kind":"daily","time":"08:30"}, ' +
+  '{"kind":"weekly","days":[1,5],"time":"18:00"}, ' +
+  '{"kind":"every","minutes":30}, or {"kind":"once","at":"2026-11-12 ' +
+  '09:00"}.';
+
 /** The schedule argument: an object whose shape
  * {@link usableSchedule} checks (it owns the wording, so one validator
- * answers for both tools). Its properties stay open because the three
- * shapes have different keys. */
+ * answers for both tools). Its properties stay open because the shapes have
+ * different keys. */
 const scheduleSchema = object({}, {
   additionalProperties: true,
   description: SCHEDULE_DESCRIPTION,
@@ -144,8 +154,8 @@ export function watchSourceText(
 }
 
 /** The schedule in words: "daily at 08:30", "weekly on Mon, Fri at 18:00",
- * "every 30 minutes". The model reads this, so it is short and unambiguous
- * (and never a locale-dependent date format). */
+ * "every 30 minutes", "once at 2026-11-12 09:00". The model reads this, so
+ * it is short and unambiguous (and never a locale-dependent date format). */
 export function scheduleText(schedule: RoutineSchedule): string {
   switch (schedule.kind) {
     case "watch": {
@@ -165,6 +175,8 @@ export function scheduleText(schedule: RoutineSchedule): string {
     }
     case "every":
       return `every ${schedule.minutes} minutes`;
+    case "once":
+      return `once at ${schedule.at}`;
   }
 }
 
@@ -183,10 +195,7 @@ function usableSchedule(value: unknown): RoutineSchedule {
       raw = JSON.parse(raw);
     } catch {
       throw new CoreError(
-        `The schedule is not valid JSON: ${value}. Use ` +
-          '{"kind":"daily","time":"08:30"}, ' +
-          '{"kind":"weekly","days":[1,5],"time":"18:00"}, or ' +
-          '{"kind":"every","minutes":30}.',
+        `The schedule is not valid JSON: ${value}. Use ${SCHEDULE_SHAPES}`,
         "invalid",
       );
     }
@@ -194,14 +203,28 @@ function usableSchedule(value: unknown): RoutineSchedule {
   const problem = scheduleProblem(raw);
   if (problem !== null) {
     throw new CoreError(
-      `The schedule cannot be used (${problem}). Use ` +
-        '{"kind":"daily","time":"08:30"}, ' +
-        '{"kind":"weekly","days":[1,5],"time":"18:00"}, or ' +
-        '{"kind":"every","minutes":30}.',
+      `The schedule cannot be used (${problem}). Use ${SCHEDULE_SHAPES}`,
       "invalid",
     );
   }
   return raw as RoutineSchedule;
+}
+
+/** Why a one-off time cannot be scheduled, or null. A time that has already
+ * passed would start on the next tick — "do it now" spelled as a routine
+ * that disappears from the list — so the tool refuses it and says what to do
+ * instead. A stored past time stays valid: that is how a one-off whose hour
+ * came while the server was off runs when it comes back. */
+function pastOneOffProblem(
+  schedule: RoutineSchedule,
+  now: number,
+): string | null {
+  if (schedule.kind !== "once") return null;
+  const at = parseLocalDateTime(schedule.at);
+  return at !== null && at <= now
+    ? `the one-off time ${schedule.at} has already passed; pick a later ` +
+      "time, or do the work now instead of scheduling it"
+    : null;
 }
 
 export interface RoutineToolsOptions {
@@ -277,11 +300,14 @@ export function createRoutineTools(options: RoutineToolsOptions): Tool[] {
     name: TOOL_ROUTINE_CREATE,
     label: "Routine Create",
     description:
-      "Schedule a request to run in this conversation on a recurring " +
-      "schedule. Each run is an ordinary turn with `prompt` as the user's " +
+      "Schedule a request to run in this conversation: on a schedule that " +
+      "repeats, when a source changes, or once at a given local date and " +
+      "time. Each run is an ordinary turn with `prompt` as the user's " +
       "message, so the agent can use every tool it normally has. Times are " +
       "the machine's local time; `weekly` days are 1 = Monday … 7 = Sunday. " +
-      `At most ${ROUTINES_PER_AGENT_MAX} routines per conversation; ` +
+      "A `once` routine runs a single time and is removed from the list " +
+      `after that run. At most ${ROUTINES_PER_AGENT_MAX} routines per ` +
+      "conversation; " +
       '"every" runs from ' +
       `${MIN_EVERY_MINUTES} to ${MAX_EVERY_MINUTES} minutes apart.`,
     parameters: createSchema,
@@ -309,6 +335,8 @@ export function createRoutineTools(options: RoutineToolsOptions): Tool[] {
         );
       }
       const schedule = usableSchedule(params.schedule);
+      const stale = pastOneOffProblem(schedule, Date.now());
+      if (stale !== null) throw new CoreError(stale, "invalid");
       const existing = repo.listOf(agentId);
       if (existing.length >= ROUTINES_PER_AGENT_MAX) {
         throw new CoreError(
@@ -325,6 +353,7 @@ export function createRoutineTools(options: RoutineToolsOptions): Tool[] {
         );
       }
       const routine = repo.create({ agentId, name, prompt, schedule });
+      const oneOff = routine.schedule.kind === "once";
       return Promise.resolve({
         content: [{
           type: "text",
@@ -335,7 +364,10 @@ export function createRoutineTools(options: RoutineToolsOptions): Tool[] {
                 ? "(none)"
                 : formatLocal(routine.nextRunAt)
             } (local time).\n` +
-            "The result of each run appears in this conversation.",
+            (oneOff
+              ? "It runs once and is then removed from the list; its result " +
+                "stays in this conversation."
+              : "The result of each run appears in this conversation."),
         }],
         details: { id: routine.id, nextRunAt: routine.nextRunAt },
       });
@@ -414,6 +446,10 @@ export function createRoutineTools(options: RoutineToolsOptions): Tool[] {
       const schedule = params.schedule === undefined
         ? undefined
         : usableSchedule(params.schedule);
+      if (schedule !== undefined) {
+        const stale = pastOneOffProblem(schedule, Date.now());
+        if (stale !== null) throw new CoreError(stale, "invalid");
+      }
       const enabled = params.enabled === undefined
         ? undefined
         : params.enabled !== 0;

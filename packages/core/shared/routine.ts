@@ -6,24 +6,34 @@
  * the same run a typed prompt starts — so everything the agent can do while
  * the user is watching, it can do while nobody is.
  *
- * The schedule is deliberately three shapes and nothing more (`daily`,
- * `weekly`, `every`): a cron expression is a language to learn, and every
- * real request so far has been one of them. Times are the server's local
- * time, because that is the clock the user reads; there is no timezone
- * setting, since a machine runs in one place.
+ * The schedule is deliberately a short list of shapes and nothing more
+ * (`daily`, `weekly`, `every`, `once`, `watch`): a cron expression is a
+ * language to learn, and every real request so far has been one of them.
+ * Times are the server's local time, because that is the clock the user
+ * reads; there is no timezone setting, since a machine runs in one place.
+ *
+ * `once` is the shape that has no next occurrence: it names a single local
+ * date and time, and the routine is gone once that run has happened (see
+ * routine/scheduler.ts). It is a shape rather than "a daily that switches
+ * itself off" because the two answer different questions — a daily has a
+ * next run by definition, and the scheduler's whole rule is that the next
+ * run is advanced before the current one starts.
  *
  * This module is frontend-safe (pure): the web bundle reads the limits and
  * renders the schedule labels through it, and the server computes the next
  * run from the same code, so the two can never disagree about when a
  * routine fires.
  */
+import { parseLocalDateTime } from "./misc.ts";
 
-/** When a routine runs. Times are `HH:MM` in the server's local time;
- * `days` is 1 = Monday … 7 = Sunday. */
+/** When a routine runs. Times are the server's local time: `HH:MM` for the
+ * repeating shapes, `YYYY-MM-DD HH:MM` for `once`; `days` is 1 = Monday …
+ * 7 = Sunday. */
 export type RoutineSchedule =
   | { kind: "daily"; time: string }
   | { kind: "weekly"; days: number[]; time: string }
   | { kind: "every"; minutes: number }
+  | { kind: "once"; at: string }
   | { kind: "watch"; everyMinutes: number; source: WatchSource };
 
 /** What a `watch` routine looks at between runs.
@@ -137,6 +147,11 @@ export function parseSchedule(value: unknown): RoutineSchedule | null {
       ? { kind: "every", minutes }
       : null;
   }
+  if (kind === "once") {
+    const at = raw.at;
+    if (typeof at !== "string" || onceAtProblem(at) !== null) return null;
+    return { kind: "once", at };
+  }
   if (kind === "watch") {
     // The validator owns the rules (one wording for one check), so reading a
     // stored value is the same question asked in the opposite direction.
@@ -193,11 +208,26 @@ export function scheduleProblem(value: unknown): string | null {
         ? null
         : `minutes must be a whole number from ${MIN_EVERY_MINUTES} to ` +
           `${MAX_EVERY_MINUTES}`;
+    case "once":
+      return onceAtProblem(raw.at);
     case "watch":
       return watchProblem(raw);
     default:
-      return 'kind must be "daily", "weekly", "every" or "watch"';
+      return 'kind must be "daily", "weekly", "every", "once" or "watch"';
   }
+}
+
+/** Why a `once` schedule's `at` cannot be used, or null. `at` is the text
+ * `formatLocalDateTime` writes, so a time read back from `routine_list` can
+ * be written straight into a schedule. */
+function onceAtProblem(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return 'at must be "YYYY-MM-DD HH:MM" in local time, e.g. ' +
+      '"2026-11-12 09:00"';
+  }
+  return parseLocalDateTime(value) === null
+    ? `at must be a real "YYYY-MM-DD HH:MM" local time, got "${value}"`
+    : null;
 }
 
 /** Why a stored `watch` schedule cannot be used, or null. The message goes to
@@ -305,6 +335,12 @@ function timeParts(time: string): [number, number] {
  *
  * `every` is plain elapsed time from the instant it is asked about, which
  * is what "every 30 minutes" means to a user.
+ *
+ * `once` is the exception to "strictly after": it has a single instant and
+ * no next one, so it answers with that instant even when it is already past.
+ * Answering "past" is what lets a machine that was off at the time run the
+ * request when it comes back. Nothing uses the answer to advance a one-off
+ * — the scheduler clears its slot instead (see routine/scheduler.ts).
  */
 export function nextRunAt(schedule: RoutineSchedule, from: number): number {
   switch (schedule.kind) {
@@ -335,6 +371,16 @@ export function nextRunAt(schedule: RoutineSchedule, from: number): number {
     }
     case "every":
       return from + schedule.minutes * 60_000;
+    case "once": {
+      const at = parseLocalDateTime(schedule.at);
+      if (at === null) {
+        // A validated schedule always parses (parseSchedule and
+        // scheduleProblem refuse the rest). Throwing keeps a value that
+        // reached memory some other way from firing at a guessed time.
+        throw new Error(`Unreadable one-off time: "${schedule.at}"`);
+      }
+      return at;
+    }
     case "watch":
       // The CHECK runs on this cadence; whether a run follows is decided by
       // what the check saw (see vm/watch.ts). The interval is the same
@@ -364,6 +410,8 @@ export function scheduleKey(schedule: RoutineSchedule): string {
       ]);
     case "every":
       return JSON.stringify(["every", schedule.minutes]);
+    case "once":
+      return JSON.stringify(["once", schedule.at]);
     case "watch":
       return JSON.stringify([
         "watch",

@@ -21,10 +21,17 @@
  *   that could not run at all is not a run: it waits longer than its own
  *   interval (see WATCH_RETRY_MS) and records that in its own columns, so a
  *   machine that is down never looks like a routine that keeps failing.
+ * - **A one-off is consumed by its run.** A `once` routine has no next
+ *   occurrence, so the run that starts is also the routine's last: the row
+ *   is removed when the run ends. Keeping it would leave a row that either
+ *   fires again (if its slot survived) or claims a next run it can never
+ *   have.
  *
  * The scheduler never runs a routine that is disabled, unreadable, or gone:
  * every step re-reads the row, because the user can delete or disable it
- * while a run is queued.
+ * while a run is queued. The one exception is the one-off described above:
+ * its slot is emptied (and the row switched off) BEFORE its run starts, so
+ * "switched off" is what a one-off looks like while it runs.
  */
 import type { Routine } from "../shared/routine.ts";
 import { nextRunAt } from "../shared/routine.ts";
@@ -136,7 +143,9 @@ export interface RoutineScheduler {
    * agent's own run and stopping it would cut a half-finished answer. */
   close(): void;
   /** Run a routine now, without moving its schedule. Waits for a busy
-   * conversation like a scheduled run does. */
+   * conversation like a scheduled run does. A one-off is used up by it: the
+   * row is removed when the run ends, since there would be nothing left for
+   * its time to do. */
   runNow(id: string): Promise<void>;
   /** Whether a run of this routine is in flight, INCLUDING one still waiting
    * for the conversation (see stateOf for the distinction). */
@@ -181,6 +190,23 @@ export function createRoutineScheduler(
     const at = now();
     const due = repo.due(at);
     for (const routine of due) {
+      // A one-off has no next slot to advance to, so emptying it IS the
+      // advance: without it the row stays due for as long as the run lasts
+      // and fires again on the next tick. Switching it off in the same write
+      // is what makes a process that dies mid-run leave a row that cannot
+      // fire, rather than one that repeats.
+      if (routine.schedule.kind === "once") {
+        try {
+          repo.update(routine.id, { nextRunAt: null, enabled: false });
+        } catch {
+          // The row vanished between the query and here; nothing to run.
+          continue;
+        }
+        const oneOff = repo.get(routine.id);
+        if (oneOff === undefined) continue;
+        void run(oneOff);
+        continue;
+      }
       // Advance first (see the module comment): the stored row must already
       // point past this run before anything can ask again.
       try {
@@ -265,9 +291,13 @@ export function createRoutineScheduler(
    * while one is already waiting are dropped (their next run is already
    * scheduled), because six occurrences of a five-minute routine released at
    * once would start six runs of the same request. A wait that lasts longer
-   * than `queueMaxWaitMs` gives up instead of holding the slot for ever. */
+   * than `queueMaxWaitMs` gives up instead of holding the slot for ever.
+   *
+   * A `once` routine is removed once this run ends (see the module comment). */
   async function run(routine: Routine): Promise<void> {
     const id = routine.id;
+    // Read before the run: by the time this returns, the row may be gone.
+    const oneOff = routine.schedule.kind === "once";
     // Already waiting: this occurrence is one too many, and the next is
     // scheduled anyway.
     if (queued.has(id)) return;
@@ -323,6 +353,25 @@ export function createRoutineScheduler(
       const left = (running.get(id) ?? 0) - 1;
       if (left <= 0) running.delete(id);
       else running.set(id, left);
+      // Only a run that STARTED consumes a one-off: a run that was stopped
+      // while waiting, or that gave up, never happened, and the row stays
+      // (with its reason) for the user to see or run.
+      if (started && oneOff) removeOneOff(id);
+    }
+  }
+
+  /** Drop a one-off whose run has ended. Called after the outcome was
+   * recorded, so a deletion that fails leaves a row that says what happened
+   * and has nothing left to fire. */
+  function removeOneOff(id: string): void {
+    try {
+      repo.delete(id);
+    } catch (error) {
+      log(
+        `routine ${id}: could not remove the one-off after its run (${
+          errorMessage(error)
+        })`,
+      );
     }
   }
 
@@ -398,7 +447,8 @@ export function createRoutineScheduler(
         throw new CoreError(`Routine not found: ${id}`, "not_found");
       }
       // The schedule is deliberately left alone: "run it now" is a look at
-      // what it would do, not a rescheduling.
+      // what it would do, not a rescheduling. A one-off is still used up by
+      // the run (see run()).
       await run(routine);
     },
 

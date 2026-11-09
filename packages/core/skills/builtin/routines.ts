@@ -33,11 +33,16 @@ and call them with tool_call.
 - "Every morning at 8, check the deploy."
 - "Tell me when the deploy page changes."
 - "Run this every 30 minutes."
+- "Tomorrow at 9, send me the release notes."
 
 Not the answer when the user wants it once, now (do the work), or wants to be
 reminded of a fixed text (that is a calendar, not this). Offer a routine,
 describe what it will do, and create it in the same turn when the request is
 clear. If the time or the condition is ambiguous, ask before creating.
+
+A single future request is a \`once\` routine. A one-off time that has already
+passed is not a routine at all: do the work now, and say that is what you
+did.
 
 ## The schedule shapes
 
@@ -47,7 +52,16 @@ Sunday. Intervals are whole minutes from 5 to 1440.
 - \`{"kind":"daily","time":"08:30"}\`
 - \`{"kind":"weekly","days":[1,5],"time":"18:00"}\`
 - \`{"kind":"every","minutes":30}\`
+- \`{"kind":"once","at":"2026-11-12 09:00"}\`
 - \`{"kind":"watch","everyMinutes":10,"source":{...}}\`
+
+\`once\` names a date as well as a time (\`YYYY-MM-DD HH:MM\`, the machine's
+own clock): "tomorrow at 9" is \`at\` with tomorrow's date written out, not a
+\`daily\`. It runs a single time and then removes itself from the list; the
+result stays in this conversation. Running it earlier with \`routine_run\`, or
+with "Run now" in the settings list, uses it up the same way — say so if the
+user asks before its time. A time that has already passed is refused; a time
+that came while the machine was off runs when it starts again.
 
 A \`watch\` is checked by the server without asking you: it reads one thing
 and starts a run only when that thing changed. It costs nothing when nothing
@@ -93,6 +107,8 @@ decides is worth reporting.
    fresh baseline for a watch, so changing what is watched does not fire a
    run for the difference.
 5. tool_call "routine_run" to run it once now, without moving the schedule.
+   A \`once\` routine is used up by that run, so it is not a way to try one
+   out.
 6. tool_call "routine_delete" to remove it; its past runs stay in the
    conversation. Confirm with the user first — this cannot be undone.
 
@@ -117,9 +133,9 @@ export function routinesSkill(): SkillDef {
     name: "routines",
     description:
       "Requests this conversation runs on a schedule by itself: daily, " +
-      "weekly, every N minutes, or when something changes (a URL, a file, a " +
-      "command). The routine tools are not preloaded — find them with " +
-      "tool_search.",
+      "weekly, every N minutes, once at a given date and time, or when " +
+      "something changes (a URL, a file, a command). The routine tools are " +
+      "not preloaded — find them with tool_search.",
     source: "builtin",
     read: (relativePath) => {
       if (relativePath !== undefined) {

@@ -96,6 +96,10 @@ export const panels = {
     ja: "{minutes} 分ごと",
     en: "Every {minutes} minutes",
   },
+  "panels.routine.schedule.once": {
+    ja: "{at} に 1 回",
+    en: "Once at {at}",
+  },
   "panels.routine.schedule.watch": {
     ja: "{minutes} 分ごとに確認し、{what} が変わったら実行",
     en: "Check every {minutes} minutes, run when {what} changes",

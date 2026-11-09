@@ -12,6 +12,7 @@ import {
   ROUTINE_NAME_MAX_CHARS,
   ROUTINES_PER_AGENT_MAX,
 } from "../shared/routine.ts";
+import { formatLocalDateTime } from "../shared/misc.ts";
 
 /** Monday 2026-10-26 09:00 local time (a fixed instant for the schedule
  * arithmetic; the tests build dates with local setters so the machine's
@@ -117,6 +118,52 @@ Deno.test("routine schedule: an interval counts from the instant asked", () => {
   const schedule: RoutineSchedule = { kind: "every", minutes: 30 };
   const from = local(2026, 10, 26, 9, 0);
   assertEquals(nextRunAt(schedule, from), from + 30 * 60_000);
+});
+
+Deno.test("routine schedule: a one-off is one local date and time", () => {
+  // The stored text is what the list and `routine_list` show, so a value
+  // read back from either can be written into a schedule unchanged.
+  const schedule: RoutineSchedule = { kind: "once", at: "2026-11-12 09:00" };
+  assertEquals(
+    parseSchedule({ kind: "once", at: "2026-11-12 09:00" }),
+    schedule,
+  );
+  assertEquals(
+    formatLocalDateTime(nextRunAt(schedule, local(2026, 11, 10, 9, 0))),
+    "2026-11-12 09:00",
+  );
+  // A past instant answers with itself: that is how a one-off whose hour
+  // came while the machine was off runs when it comes back.
+  assertEquals(
+    nextRunAt(schedule, local(2026, 11, 20, 9, 0)),
+    local(2026, 11, 12, 9, 0),
+  );
+  assertEquals(scheduleKey(schedule), scheduleKey({ ...schedule }));
+  assertEquals(
+    scheduleKey(schedule) ===
+      scheduleKey({ kind: "once", at: "2026-11-12 09:01" }),
+    false,
+  );
+});
+
+Deno.test("routine schedule: a one-off must be a real minute", () => {
+  assertEquals(scheduleProblem({ kind: "once", at: "2026-11-12 09:00" }), null);
+  for (
+    const at of [
+      "2026-11-12", // no time
+      "2026-11-12T09:00", // not the stored shape
+      "2026-11-12 9:00", // not zero-padded
+      "2026-11-12 24:00", // no such hour
+      "2026-02-30 09:00", // `Date` would roll this over into March
+      "",
+    ]
+  ) {
+    assertEquals(parseSchedule({ kind: "once", at }), null, at);
+    assertEquals(scheduleProblem({ kind: "once", at }) !== null, true, at);
+  }
+  // A missing `at` is refused instead of read as "now".
+  assertEquals(parseSchedule({ kind: "once" }), null);
+  assertEquals(scheduleProblem({ kind: "once" }) !== null, true);
 });
 
 Deno.test("routine limits are the documented ones", () => {

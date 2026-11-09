@@ -70,6 +70,10 @@ export function scheduleLabel(schedule: RoutineSchedule, t: Translate): string {
       return t("panels.routine.schedule.every", {
         minutes: String(schedule.minutes),
       });
+    case "once":
+      // The stored text already reads as the machine's clock
+      // (`YYYY-MM-DD HH:MM`), like the bare `08:30` the daily shape shows.
+      return t("panels.routine.schedule.once", { at: schedule.at });
     case "watch":
       return t("panels.routine.schedule.watch", {
         minutes: String(schedule.everyMinutes),

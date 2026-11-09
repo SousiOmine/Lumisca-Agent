@@ -220,7 +220,7 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 
 ### 履歴と自動実行
 
-- **ルーチン**: `daily` / `weekly` / `every` / `watch` の 4 種類だけで、cron は扱いません。次回時刻は保存値ではなく `packages/core/shared/routine.ts` の `nextRunAt` で計算し、実行前に進めます。
+- **ルーチン**: `daily` / `weekly` / `every` / `once` / `watch` の 5 種類だけで、cron は扱いません。`once` は `YYYY-MM-DD HH:MM` のローカル日時を 1 つ持ち、次が無いので「進める」代わりに実行前に枠を空けて無効にし、走り終えたら行を削除します（走らなかった待機・見送りは理由付きで残ります。時刻が過ぎたまま起動した場合は遅れて実行）。次回時刻は保存値ではなく `packages/core/shared/routine.ts` の `nextRunAt` で計算し、実行前に進めます。
 - **確認と実行は別**: `watch` の確認は推論を呼ばない別の事実で、`watch_checked_at` / `watch_error` に書きます（`last_run_at` / `last_status` は実行だけ）。マシンが動いていない確認は 15 分後に送り直し、ルーチンは止めません。観測値は監視対象の変更と有効化のやり直しで捨てます（`repo.ts` の `update`）。
 - **待機は 1 本・1 時間**: 会話が空くまで待つのは設計どおりですが、積み上げません（`scheduler.ts` の `queued`）。上限を超えたら実行せずに `skipped` として理由を残します。`RoutineView.queued` は画面の「待機中」です。
 - **ルーチンのプロンプトは描かない**: 実行は利用者のプロンプトとして届きますが、本文はルーチンの指示（作成時にエージェントが書いた定型の依頼）なので、会話には出しません（stella は `stella-state.ts` の `transcriptEntries`、code mode は `MessageRow` が落とします）。`StellaEntry.routine` の名前は識別・カーソル・一覧の 2 行目のために射影・圧縮の記録まで通し続けてください（stella の会話には描かないので、一覧の 2 行目だけがルーチン名を出します）。

@@ -80,6 +80,32 @@ export function formatLocalDateTime(at: number | Date): string {
   }`;
 }
 
+/** The inverse of {@link formatLocalDateTime}: `YYYY-MM-DD HH:MM` on the
+ * machine's clock as epoch ms, or null when the text is not that shape or
+ * names an instant the calendar does not have.
+ *
+ * The existence check is the point: `Date` rolls February 30th over into
+ * March, so accepting the text would silently fire a routine on a different
+ * day than the one written. */
+export function parseLocalDateTime(text: string): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/.exec(text);
+  if (match === null) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hours = Number(match[4]);
+  const minutes = Number(match[5]);
+  const date = new Date(year, month - 1, day, hours, minutes, 0, 0);
+  if (
+    date.getFullYear() !== year || date.getMonth() !== month - 1 ||
+    date.getDate() !== day || date.getHours() !== hours ||
+    date.getMinutes() !== minutes
+  ) {
+    return null;
+  }
+  return date.getTime();
+}
+
 /** `YYYY-MM-DD` on the machine's clock (local time, not UTC). */
 export function formatLocalDate(at: number | Date): string {
   const date = typeof at === "number" ? new Date(at) : at;
