@@ -861,6 +861,32 @@ Deno.test("stella conversation: history_search is preloaded and reads its own ro
   }
 });
 
+Deno.test("stella conversation: the background-command tools are preloaded", async () => {
+  // Regression (issue #30): the factory built the background manager only
+  // for non-chat workspaces, and stella's row lives in the chat one; the
+  // tool set also lost the hub when the registries were split. Together they
+  // removed async_bash from every stella conversation. Opened through the
+  // factory, not built by hand, so either missing wire fails this test.
+  const { core, session } = await stellaConversation("Builder");
+  try {
+    const names = core.getAgent(session.id)!.toolNames;
+    for (
+      const expected of [
+        "async_bash",
+        "async_bash_status",
+        "async_bash_kill",
+      ]
+    ) {
+      assert(
+        names.includes(expected),
+        `missing ${expected}: ${names.join(", ")}`,
+      );
+    }
+  } finally {
+    await core.close();
+  }
+});
+
 Deno.test("stella conversation: todo keeps a plan the conversation does not draw", async () => {
   const { faux, core, session } = await stellaConversation("Planner");
   try {

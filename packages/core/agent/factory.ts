@@ -493,9 +493,11 @@ export class AgentFactory {
     mcp: McpAttachment,
   ): SessionHubs {
     // Commands die with the session (pool close/delete/closeAll → killAll),
-    // not with the agent. A chat session never builds it (no async_bash).
+    // not with the agent. A chat-only session never builds it (no
+    // async_bash); a stella conversation does, even though its row lives in
+    // the chat workspace — it works in the machine, which has a spawner.
     let background = resources.background;
-    if (!where.chat && background === undefined) {
+    if (!where.chatOnly && background === undefined) {
       background = new BackgroundProcessManager({
         sessionId: session.id,
         emit: (event) => this.deps.emit(event),
@@ -642,6 +644,10 @@ export class AgentFactory {
         history: stella.historyTool,
         todo: hubs.todo,
         task: hubs.tasks,
+        // Long builds and dev servers are the machine's work too: the
+        // manager spawns them through the machine's spawner (setsid), so a
+        // run does not have to wait inside one bash call.
+        background: hubs.background,
         safety: this.deps.commandSafety,
         webSearch: where.webSearch,
       });
