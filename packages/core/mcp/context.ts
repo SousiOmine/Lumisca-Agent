@@ -28,8 +28,9 @@ export const MCP_TOOLS_PROVIDER = "mcp";
  * that is not in the tools' own descriptions. */
 export const ON_DEMAND_TOOLS_NOTE =
   "On-demand tools: tools beyond the preloaded set (MCP servers, " +
-  "extensions, the browser lab) are found with tool_search and run with " +
-  "tool_call; `mcp__` tools can access resources outside the workspace.";
+  "extensions, the browser lab, and this session's own tools such as routines " +
+  "and identity) are found with tool_search and run with tool_call; `mcp__` " +
+  "tools can access resources outside the workspace.";
 
 /** The system-prompt form of the note, for agents without context
  * providers (sub-agents). */

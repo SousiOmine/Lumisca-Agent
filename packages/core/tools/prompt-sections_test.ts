@@ -250,6 +250,22 @@ Deno.test("a bullet rides on its tool, and never names one that is absent", () =
   );
 });
 
+Deno.test("the routines bullet offers the option, and only in stella", () => {
+  // The routine tools are discoverable, so nothing else would tell the agent
+  // that "every morning" can be scheduled rather than done once (#39).
+  const stella = renderPromptSections(STELLA_PROMPT_SECTIONS, [TOOL_READ]);
+  assert(stella.includes("routine tools"), stella);
+  assert(stella.includes("`routines` skill"), stella);
+  // A code-mode session has no conversation to schedule in.
+  assertEquals(
+    renderPromptSections(CODING_PROMPT_SECTIONS, [TOOL_READ])
+      .includes("routine tools"),
+    false,
+  );
+  // The how is the skill's job: the bullet does not restate the shapes.
+  assertEquals(stella.includes("everyMinutes"), false);
+});
+
 Deno.test("the send_chat bullet rides on the tool, and only in stella", () => {
   // What the tool's description cannot say from inside one call: that the
   // wait itself is the problem. The bullet must appear with the tool and

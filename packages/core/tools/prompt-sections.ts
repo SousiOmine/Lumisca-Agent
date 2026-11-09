@@ -325,6 +325,21 @@ const SEND_CHAT_SECTION: PromptSection = {
     "from waiting blind.",
 };
 
+/** That a routine exists as an option at all. The routine tools are
+ * discoverable, so nothing about them is in the agent's view until it looks —
+ * without this line an agent asked for "every morning" does the work once and
+ * forgets, which is what the settings screen promised it would not do. The
+ * how lives in the skill the agent reads when it decides to act. */
+const ROUTINES_SECTION: PromptSection = {
+  name: "routine:offer",
+  order: ORDER.tool + 160,
+  text:
+    "- A request to happen at a time or whenever something changes " +
+    "(\"every morning\",\n  \"tell me when the deploy page changes\") can be " +
+    "a routine of this conversation:\n  find the routine tools with " +
+    "tool_search and follow the `routines` skill.",
+};
+
 const TASK_SECTION: PromptSection = {
   name: "tool:task",
   order: ORDER.tool + 130,
@@ -485,6 +500,7 @@ export const STELLA_PROMPT_SECTIONS: readonly PromptSection[] = [
   VM_LAUNCH_SECTION,
   VM_ASK_USER_SECTION,
   SEND_CHAT_SECTION,
+  ROUTINES_SECTION,
   NOTIFICATION_SECTION,
   SUBAGENT_MESSAGE_SECTION,
   QUALITY_SECTION,

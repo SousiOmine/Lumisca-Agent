@@ -57,6 +57,7 @@ Deno.test("builtinSkills advertises the stella-only skills for a stella session"
     "desktop-apps",
     "agent-create",
     "identity",
+    "routines",
   ]);
 
   // Each guide teaches the tool_search → tool_call path, because neither
@@ -84,11 +85,32 @@ Deno.test("builtinSkills advertises the stella-only skills for a stella session"
   // failed.
   assert(identityGuide.includes("next run"));
 
-  // A code-mode session has no agents to manage: neither skill is offered.
+  // The routine guide is what makes the discoverable routine tools findable
+  // at all: it must name the search path and every schedule shape the tools
+  // accept, because the agent has to build the argument itself.
+  const routines = skills[3]!;
+  assert(routines.description.includes("tool_search"));
+  const routinesGuide = await loadSkillContent(routines);
+  assert(routinesGuide.includes("routine_create"));
+  assert(routinesGuide.includes("tool_search"));
+  for (const shape of ["daily", "weekly", "every", "watch"]) {
+    assert(
+      routinesGuide.includes(`"${shape}"`),
+      `the guide names the ${shape} schedule`,
+    );
+  }
+  // A run nobody watches may end silently; the guide is where that is said.
+  assert(routinesGuide.includes("NO_RESPONSE"));
+
+  // A code-mode session has no agents to manage and no routines of its own:
+  // none of these skills is offered.
   assertEquals(
     builtinSkills({ browser: false, computer: false, subagents: false }).some((
       s,
-    ) => s.name === "agent-create" || s.name === "identity"),
+    ) =>
+      s.name === "agent-create" || s.name === "identity" ||
+      s.name === "routines"
+    ),
     false,
   );
 });

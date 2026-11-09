@@ -6,6 +6,7 @@ import { agentCreateSkill } from "./agent-create.ts";
 import { codingAgentsSkill } from "./coding-agents.ts";
 import { identitySkill } from "./identity.ts";
 import { mcpServersSkill } from "./mcp-servers.ts";
+import { routinesSkill } from "./routines.ts";
 import { skillAuthoringSkill } from "./skill-authoring.ts";
 
 /**
@@ -73,6 +74,10 @@ export function builtinSkills(context: BuiltinContext): SkillDef[] {
     // them the default over reading coordinates off a picture.
     ...(context.stella === true ? [desktopAppsSkill()] : []),
     ...(context.stella === true ? [agentCreateSkill(), identitySkill()] : []),
+    // The routines belong to an agent's conversation, and the tools that
+    // create them are discoverable — this is the only thing that tells the
+    // agent they exist at all (#39).
+    ...(context.stella === true ? [routinesSkill()] : []),
     ...(context.mcpAdmin === true ? [mcpServersSkill()] : []),
     // Skills are written with the file tools, so the guide follows them: no
     // file tools (a chat session) → nothing to teach about writing files.
