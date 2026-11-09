@@ -182,7 +182,7 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 - **一覧の行は最新の発言**: 2 行目は会話と同じ射影（`shared/stella-preview.ts` の `previewOf`）、並びも最新メッセージの時刻です。開いていない会話にはストリームが無いので、一覧は 30 秒ごとに読み直します（`useVisibleInterval`）。
 - **話す手段は本文と `send_chat`**: 本文はそのまま返信になり、`send_chat` がカード・ファイル・途中経過を添えます（`packages/core/tools/send-chat.ts`）。黙るターンは `NO_RESPONSE` だけを書きます（`packages/core/agent/silent-reply.ts`）。`text`・`card`・`paths` は 1 回で 1 つのメッセージになり、少なくとも 1 つ必要です。
 - **カードだけは書きながら出る**: モデルが `send_chat` の引数を流している間、`card_delta` が届き、画面は `parseUiMarkupPartial` で閉じたブロックまで描きます。断片の切り出しは `packages/core/ai/tool-args-field.ts`、まとめは stella のイベントストリームの `delta` チャネルです。本文はターンの終わりに一度に届きます。
-- **モデルはエージェントごと**: 選択はエージェントの編集ダイアログで行い、`PATCH /api/stella/agents/:id` の `model`（`null` は既定、省略は変更なし）で保存します。未設定ならアプリの既定モデル（設定 → モデル設定）を使います。選択はそのエージェントの会話の `sessions` 行にも同じ呼び出しで書き込まれます。会話が実行中でも拒否せず、保存したうえでその実行が終わってから適用します（`SessionCatalog.setSessionModel`。code mode の `POST /api/sessions/:id/model` も同じです）——実行中のモデルを差し替えると run の行が二重になり、待たせるのは実行と関係のない要求を断ることになるためです。会話のモデルだけを切り替えるルートはありません——2 つの入口があると、どちらが正しいかが決まらなくなります。切り替えてもシステムプロンプトは変わりません。モデル名は context メッセージとして公開します（`packages/core/agent/model-context.ts`）。
+- **モデルはエージェントごと**: 選択はエージェントの編集ダイアログで行い、`PATCH /api/stella/agents/:id` の `model`（`null` は既定、省略は変更なし）で保存します。未設定ならアプリの既定モデル（設定 → モデル設定）を使います。選択はそのエージェントの会話の `sessions` 行にも同じ呼び出しで書き込まれます。会話が実行中でも拒否せず、保存したうえでその実行が終わってから適用します（`SessionService.setSessionModel`。code mode の `POST /api/sessions/:id/model` も同じです）——実行中のモデルを差し替えると run の行が二重になり、待たせるのは実行と関係のない要求を断ることになるためです。会話のモデルだけを切り替えるルートはありません——2 つの入口があると、どちらが正しいかが決まらなくなります。切り替えてもシステムプロンプトは変わりません。モデル名は context メッセージとして公開します（`packages/core/agent/model-context.ts`）。
 - **identity**: `role` とは別に、`identity` ツールで自分の役割と知識を書けます（`stella_agents.identity`、`packages/core/stella/identity.ts`）。context メッセージとして届き、反映は次のターンからです。
 
 ### ツール
@@ -198,7 +198,7 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 
 エージェントは自分の作業フォルダに `MEMORY.md` を持ち、`read` / `write` / `edit` で読み書きします。専用のツールはありません（`identity` とは別物です。あちらは DB の行で、毎ターン context メッセージとして届きます）。
 
-- **用意するのは 2 か所**: 作成時（`LumiscaCore.createStellaAgent` → `StellaMachines.prepareAgentFolder`）と、会話を開くとき（`getOrCreateStellaSession`）です。作成時にマシンが止まっていれば何もしません——エージェントの作成がコンテナの起動を要求してはいけないためです。
+- **用意するのは 2 か所**: 作成時（`LumiscaCore.createStellaAgent` → `StellaMachineService.prepareAgentFolder`）と、会話を開くとき（`getOrCreateStellaSession`）です。作成時にマシンが止まっていれば何もしません——エージェントの作成がコンテナの起動を要求してはいけないためです。
 - **`[ -e ]` ガードを外さない**: 開くたびに走るので、無条件に `: >` すると記憶が毎回消えます。コマンドは `packages/core/vm/agent-memory.ts` の 1 箇所だけで、`stella_live_test.ts` が「開き直しても消えない」を固定しています。
 - **文面とファイル名は別々に持つ**: 文面は `packages/core/tools/system-prompt.ts`、名前は `AGENT_MEMORY_FILE` です。`vm/agent-memory_test.ts` が両者の一致を検査します。
 - **作成は非同期**: フォルダを触るため `createStellaAgent` / `ensureStellaAgent` は `Promise` を返します。`agent_create` ツールも同じ経路を通るので、ツールから作ったエージェントにもファイルができます。

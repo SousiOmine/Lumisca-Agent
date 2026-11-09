@@ -1,6 +1,6 @@
 /** Error-message helper (see shared/mod.ts for the frontend-safe contract). */
 import type { ThemeSetting } from "./settings-keys.ts";
-import type { Workspace } from "../types/workspace.ts";
+import type { Workspace } from "../domain/workspace.ts";
 import {
   DEFAULT_LOCALE,
   type Locale,

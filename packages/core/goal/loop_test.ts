@@ -1,14 +1,11 @@
+import { fakeModel } from "../test-utils.ts";
 import { assertEquals } from "@std/assert";
 import { fauxAssistantMessage } from "@lumisca/core";
-import type { Api, AssistantMessageEventStream, Model } from "@lumisca/core";
+import type { AssistantMessageEventStream } from "@lumisca/core";
 import type { AgentMessage, StreamFn } from "@lumisca/core";
-import type { ClientEvent } from "../types/event.ts";
+import type { ClientEvent } from "../domain/event.ts";
 import type { GoalInfo } from "../shared/goal.ts";
 import { runGoalLoop } from "./loop.ts";
-
-function fakeModel(): Model<Api> {
-  return { id: "fast", name: "fast" } as unknown as Model<Api>;
-}
 
 /** A streamFn serving one canned judge reply per call (text_delta). */
 function judgeStream(replies: string[]): StreamFn {

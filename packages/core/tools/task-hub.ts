@@ -19,7 +19,7 @@ import type { McpAttachment } from "../mcp/attachment.ts";
 import { addToolsToAgent, registryToolPair } from "../mcp/tools.ts";
 import { withOnDemandToolsNote } from "../mcp/context.ts";
 import type { ToolRegistry } from "./registry.ts";
-import type { NotificationPayload } from "../types/notification.ts";
+import type { NotificationPayload } from "../domain/notification.ts";
 import type {
   SubagentStatus,
   SubagentType,
@@ -27,7 +27,7 @@ import type {
   ThinkingLevel,
 } from "../shared/mod.ts";
 import { DEFAULT_LOCALE, type Locale } from "../shared/mod.ts";
-import type { ClientEvent } from "../types/event.ts";
+import type { ClientEvent } from "../domain/event.ts";
 import { createBashTool } from "./bash.ts";
 import { createEvalTool } from "./eval.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
@@ -51,7 +51,7 @@ import {
   lastAssistantText,
   subagentSystemPrompt,
 } from "./subagent-format.ts";
-import { notificationMessage } from "../types/notification.ts";
+import { notificationMessage } from "../domain/notification.ts";
 import type { Subagent } from "./subagent-registry.ts";
 import { type SubagentHub, SubagentRegistry } from "./subagent-registry.ts";
 import {

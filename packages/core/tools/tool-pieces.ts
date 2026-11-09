@@ -10,7 +10,7 @@
  * the pieces out leaves one direction — toolsets.ts imports the pieces, the
  * hub imports the pieces, and the pieces import neither.
  */
-import type { Workspace } from "../types/workspace.ts";
+import type { Workspace } from "../domain/workspace.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 import { HostFileBackend } from "./host/files.ts";
 import { HostCommandRunner } from "./host/command-runner.ts";

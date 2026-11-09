@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import type { Workspace } from "../types/workspace.ts";
+import type { Workspace } from "../domain/workspace.ts";
 import { BUILD_ARTIFACT_DIRS, walkEntries } from "./walk.ts";
 
 /** One entry in a workspace file listing, for @-mention suggestions.

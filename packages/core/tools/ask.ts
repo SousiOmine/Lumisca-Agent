@@ -1,6 +1,11 @@
 import { CoreError } from "../errors.ts";
-import { type AskAnswer, type AskQuestion, TOOL_ASK } from "../shared/mod.ts";
-import type { ClientEvent } from "../types/event.ts";
+import {
+  type AskAnswer,
+  type AskQuestion,
+  type AskTurn,
+  TOOL_ASK,
+} from "../shared/mod.ts";
+import type { ClientEvent } from "../domain/event.ts";
 import {
   array,
   boolean,
@@ -22,13 +27,10 @@ interface PendingAsk {
 }
 
 /** One ask still waiting for the user's answers, as the resync snapshot
- * carries it (the web's PendingQuestion is the same pair). A `question`
- * event is never replayed, so a client that (re)connects while a run is
- * blocked on an ask has no other way to learn about it. */
-export interface PendingQuestion {
-  toolCallId: string;
-  questions: AskQuestion[];
-}
+ * carries it. A `question` event is never replayed, so a client that
+ * (re)connects while a run is blocked on an ask has no other way to learn
+ * about it. */
+export type PendingQuestion = AskTurn;
 
 /**
  * Owns the questions the agent asked (via the ask tool) in one session.

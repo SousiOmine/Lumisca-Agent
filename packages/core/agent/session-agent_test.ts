@@ -16,7 +16,7 @@ import type {
   BackgroundProcessManager,
 } from "../tools/background.ts";
 import { object, type Tool } from "../tools/schema.ts";
-import type { ClientEvent } from "../types/event.ts";
+import type { ClientEvent } from "../domain/event.ts";
 import type { NotificationMessage } from "../ai/types.ts";
 import { MAX_EMPTY_RESPONSE_RETRIES } from "../ai/retry-policy.ts";
 import { SessionAgent } from "./session-agent.ts";

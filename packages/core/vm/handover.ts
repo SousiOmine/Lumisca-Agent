@@ -25,7 +25,7 @@
  */
 import { CoreError } from "../errors.ts";
 import { abortError } from "../shared/misc.ts";
-import type { ClientEvent } from "../types/event.ts";
+import type { ClientEvent } from "../domain/event.ts";
 
 /** How long the agent waits at the screen before it continues without the
  * user. Long enough for a password reset or a CAPTCHA in another window,

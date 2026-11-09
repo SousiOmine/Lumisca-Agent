@@ -40,17 +40,8 @@ function samePrompts(
   });
 }
 
-/** Replace the list and read it back from the server, so every screen sees
- * the stored order and the server's validation, not the caller's guess. */
-export async function saveSavedPrompts(
-  write: () => Promise<unknown>,
-): Promise<void> {
-  await write();
-  await store.reload();
-}
-
 /** The saved prompts for a component; reads once, then stays in step with
- * every write through {@link saveSavedPrompts}. */
+ * every write's reload. */
 export function useSavedPrompts(): {
   prompts: SavedPrompt[];
   error: string | null;

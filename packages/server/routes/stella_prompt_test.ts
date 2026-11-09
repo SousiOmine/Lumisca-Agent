@@ -1,3 +1,4 @@
+import { stellaApiStub } from "./test-stubs.ts";
 /**
  * The conversation's prompt takes the same attachments code mode's prompt
  * does, and puts them where the agent can reach them.
@@ -23,7 +24,7 @@ interface Received {
 
 /** The slice of the core the prompt route touches, recording what it gets. */
 function fakeCore(received: Received): StellaApi {
-  return {
+  return stellaApiStub({
     getStellaAgent: () => ({
       id: "a1",
       name: "Aide",
@@ -74,7 +75,7 @@ function fakeCore(received: Received): StellaApi {
       received.images.push(images);
       if (files !== undefined) received.saved = files;
     },
-  } as unknown as StellaApi;
+  });
 }
 
 function setup(): { app: ReturnType<typeof stellaRoutes>; received: Received } {

@@ -1,7 +1,7 @@
 import { CoreError } from "../errors.ts";
 import type { TodoPhase, TodoStatus } from "../shared/mod.ts";
 import { TOOL_TODO } from "../shared/mod.ts";
-import type { ClientEvent } from "../types/event.ts";
+import type { ClientEvent } from "../domain/event.ts";
 import {
   array,
   object,

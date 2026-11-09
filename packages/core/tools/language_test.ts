@@ -4,7 +4,7 @@ import { TOOL_READ, TOOL_TODO } from "../shared/tool-names.ts";
 import { outputLanguageBullet, outputLanguageSentence } from "./language.ts";
 import { buildChatSystemPrompt, buildSystemPrompt } from "./system-prompt.ts";
 import { subagentSystemPrompt } from "./subagent-format.ts";
-import type { Workspace } from "../types/workspace.ts";
+import type { Workspace } from "../domain/workspace.ts";
 
 /** A folder-less workspace for prompt tests. */
 const workspace: Workspace = {

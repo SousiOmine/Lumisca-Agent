@@ -1,6 +1,6 @@
 import { assertEquals, assertRejects } from "@std/assert";
 import { HandoverHub } from "./handover.ts";
-import type { ClientEvent } from "../types/event.ts";
+import type { ClientEvent } from "../domain/event.ts";
 
 /**
  * The screen hand-over: the wait, the events clients follow, and the ways it

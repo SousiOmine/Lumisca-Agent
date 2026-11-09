@@ -1,11 +1,11 @@
 import type { AgentMessage, Api, Model, StreamFn } from "../ai/types.ts";
-import type { ClientEvent } from "../types/event.ts";
+import type { ClientEvent } from "../domain/event.ts";
 import type { GoalInfo } from "../shared/goal.ts";
 import { DEFAULT_LOCALE, type Locale, translate } from "../shared/mod.ts";
 import type { GoalStore } from "../goal/loop.ts";
 import { finishGoal, runGoalLoop } from "../goal/loop.ts";
 import { DEFAULT_MAX_GOAL_ITERATIONS } from "../modes/goal.ts";
-import type { ModePrompt } from "../types/mode-message.ts";
+import type { ModePrompt } from "../domain/mode-message.ts";
 
 /** Collaborators the goal runner needs from the session agent. */
 export interface GoalRunnerDeps {

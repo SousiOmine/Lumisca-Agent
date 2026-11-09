@@ -1,3 +1,4 @@
+import { fakeModel } from "../test-utils.ts";
 import { assertEquals } from "@std/assert";
 import {
   createAssistantMessageEventStream,
@@ -11,14 +12,10 @@ import type {
 } from "@lumisca/core";
 import type { AgentMessage, StreamFn } from "@lumisca/core";
 import { AskHub } from "../tools/ask.ts";
-import type { ClientEvent } from "../types/event.ts";
+import type { ClientEvent } from "../domain/event.ts";
 import type { GoalInfo } from "../shared/goal.ts";
 import { SessionAgent } from "./session-agent.ts";
 import { WORK_COMPACTION_STYLE } from "../ai/compaction-style.ts";
-
-function fakeModel(): Model<Api> {
-  return { id: "test", name: "test" } as unknown as Model<Api>;
-}
 
 interface GoalStoreState {
   goal: GoalInfo | undefined;
@@ -94,7 +91,7 @@ function makeGoalAgent(
   return new SessionAgent({
     sessionId: "s1",
     systemPrompt: "You are a test agent.",
-    model: fakeModel(),
+    model: fakeModel("test"),
     tools: [],
     streamFn,
     compactionStyle: WORK_COMPACTION_STYLE,
@@ -134,7 +131,7 @@ function makeGoalAgent(
     },
     askHub: new AskHub("s1", () => {}),
     renameSession: () => {},
-    fastModel: fakeModel(),
+    fastModel: fakeModel("test"),
     goalStore: memoryGoalStore(state),
   });
 }

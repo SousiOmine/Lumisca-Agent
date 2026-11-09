@@ -1,3 +1,4 @@
+import { stellaApiStub } from "./test-stubs.ts";
 /**
  * Creating an agent with an empty form. The regression this pins: the form's
  * two free-text answers were required, and the server's route refused an
@@ -12,7 +13,7 @@ import type { StellaApi } from "./stella.ts";
 /** Only the create route matters here; it must receive what the client sent,
  * norm, untouched, so the core's rule is the only one in play. */
 function fakeCore(received: { name: string; role: string }[]): StellaApi {
-  return {
+  return stellaApiStub({
     createStellaAgent: (input: { name: string; role: string }) => {
       received.push(input);
       return Promise.resolve({
@@ -26,7 +27,7 @@ function fakeCore(received: { name: string; role: string }[]): StellaApi {
         updatedAt: 0,
       });
     },
-  } as unknown as StellaApi;
+  });
 }
 
 async function create(

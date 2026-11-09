@@ -1,5 +1,5 @@
 import type { LumiscaDb } from "../db/mod.ts";
-import type { SessionInfo } from "../types/session.ts";
+import type { SessionInfo } from "../domain/session.ts";
 import type { GoalInfo, GoalStatus } from "../shared/goal.ts";
 import { DEFAULT_MAX_GOAL_ITERATIONS } from "../modes/goal.ts";
 

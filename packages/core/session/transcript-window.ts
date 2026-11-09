@@ -1,5 +1,5 @@
 import type { AgentMessage } from "../ai/types.ts";
-import type { MessageIdentity } from "../types/event.ts";
+import type { MessageIdentity } from "../domain/event.ts";
 
 /**
  * Reading a transcript one window at a time.

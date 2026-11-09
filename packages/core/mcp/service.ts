@@ -2,8 +2,8 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { CoreError, errorMessage } from "../errors.ts";
 import { atomicWriteTextFileSync } from "../fs.ts";
-import type { SessionInfo } from "../types/session.ts";
-import type { Workspace } from "../types/workspace.ts";
+import type { SessionInfo } from "../domain/session.ts";
+import type { Workspace } from "../domain/workspace.ts";
 import type { SettingsRepo } from "../settings/repo.ts";
 import {
   APP_MCP_SOURCE,

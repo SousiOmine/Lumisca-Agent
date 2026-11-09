@@ -1,5 +1,5 @@
-import type { SessionInfo } from "../types/session.ts";
-import type { ClientEvent } from "../types/event.ts";
+import type { SessionInfo } from "../domain/session.ts";
+import type { ClientEvent } from "../domain/event.ts";
 import type { AgentRepo } from "../stella/agents.ts";
 import type { SessionRepo } from "../session/repo.ts";
 import type { MessageRepo } from "../session/messages.ts";
@@ -12,10 +12,11 @@ import type { VmManager, VmProgress } from "../vm/container.ts";
 import type { StellaAvailability } from "../vm/availability.ts";
 import type { StellaStatus } from "../shared/wire.ts";
 import type { SkillDef } from "../skills/discover.ts";
-import type { Workspace } from "../types/workspace.ts";
+import type { Workspace } from "../domain/workspace.ts";
 import type { Locale } from "../shared/mod.ts";
 import { CoreError, errorMessage } from "../errors.ts";
-import { HandoverHub } from "../vm/handover.ts";
+import type { HandoverRegistry } from "../vm/handover-registry.ts";
+import { StellaSkillCache } from "../stella/skill-cache.ts";
 import { vmAgentDir } from "../vm/contract.ts";
 import { VmFileBackend } from "../vm/fs.ts";
 import {
@@ -35,12 +36,9 @@ import {
   createIdentityTool,
 } from "../stella/identity.ts";
 import { stellaEntryOf } from "../agent/stella-stream.ts";
-import type { StellaEntry } from "../types/stella-conversation.ts";
+import type { StellaEntry } from "../domain/stella-conversation.ts";
 import type { AgentMessage } from "../ai/types.ts";
 import type { IdentityTarget } from "../stella/identity.ts";
-
-/** How long a stella skill catalog stays usable for opening a conversation. */
-const STELLA_SKILLS_TTL_MS = 30_000;
 
 /** The conversation entries a set of stored rows projects to, oldest first —
  * the same projection the conversation endpoints serve. */
@@ -63,22 +61,12 @@ function entriesOf(messages: readonly AgentMessage[]): StellaEntry[] {
  *
  * Extracted from LumiscaCore together with the conversation-opening path: they
  * are one question ("where does a stella conversation work") and were 490
- * lines of the facade. The agent REGISTRY stayed in `StellaAgentBook`; this is
+ * lines of the facade. The agent REGISTRY stayed in `StellaAgentService`; this is
  * the machine side.
  */
-export class StellaMachines {
-  /** The catalog read of each agent, with the machine that read it and when.
-   * Keyed by agent id: a stella agent's own skills live in its folder, so
-   * every agent has its own list (only the machine-wide folder is shared).
-   * Opening a conversation re-reads a list only when it is cold or older
-   * than {@link STELLA_SKILLS_TTL_MS}: the read crosses into the machine
-   * (`podman exec`), and a conversation opened from a phone over a slow link
-   * must not wait for a list that has not changed. */
-  private skillsCache = new Map<string, {
-    machine: VmManager | undefined;
-    at: number;
-    pending: Promise<void> | undefined;
-  }>();
+export class StellaMachineService {
+  /** The catalog of each agent, as last read (see StellaSkillCache). */
+  private readonly skills = new StellaSkillCache();
 
   constructor(
     private readonly deps: {
@@ -89,9 +77,8 @@ export class StellaMachines {
       pool: SessionPool;
       routineRepo: RoutineRepo;
       routineScheduler: RoutineScheduler;
-      /** Per-session hand-over hubs, owned by the facade so its close path can
-       * drop them (`forgetSession`). */
-      handoverHubs: Map<string, HandoverHub>;
+      /** Per-session hand-over hubs; the core's close path forgets them. */
+      handovers: HandoverRegistry;
       decorateSession(session: SessionInfo): SessionInfo;
       deleteSession(id: string): Promise<void>;
       emit(event: ClientEvent): void;
@@ -105,9 +92,6 @@ export class StellaMachines {
       createStellaAgent(
         input: { name: string; role: string },
       ): Promise<import("../stella/agents.ts").StellaAgent>;
-      ensureStellaReady(
-        onProgress?: (progress: VmProgress) => void,
-      ): Promise<void>;
     },
   ) {}
 
@@ -134,7 +118,7 @@ export class StellaMachines {
   // --- stella agents (the agent of each conversation) -----------------------
 
   /** The agents in the sidebar, most recently used first. */
-  // --- stella agents (delegated to StellaAgentBook) -------------------------
+  // --- stella agents (delegated to StellaAgentService) -------------------------
 
   /** The agents in the sidebar, most recently used first. */
   async getOrCreateStellaSession(agentId?: string): Promise<SessionInfo> {
@@ -171,7 +155,7 @@ export class StellaMachines {
     // the factory refuses (never a stella agent with host tools). Every
     // caller that wants a conversation wants the machine, so this starts it
     // rather than making the client ask.
-    await this.deps.ensureStellaReady();
+    await this.ensureStellaReady();
     // The two steps that follow run together because neither depends on the
     // other and both cross into the container (`podman exec`): the skill
     // catalog the factory cannot await (it builds the tools synchronously)
@@ -283,17 +267,9 @@ export class StellaMachines {
   /** The hand-over hub of one session (see vm/handover.ts): created on
    * first use and dropped on close, so a torn-down session leaves nothing
    * waiting. */
-  /** The hand-over hub of a session, created on demand.
-   *
-   * A hub exists per session that ever asked for the screen, and it lives as
-   * long as the session does: the facade's close/forget path calls
-   * `forgetSession`, which is what keeps the map bounded. */
-  private handoverFor(sessionId: string): HandoverHub {
-    const existing = this.deps.handoverHubs.get(sessionId);
-    if (existing !== undefined) return existing;
-    const hub = new HandoverHub(sessionId, (event) => this.deps.emit(event));
-    this.deps.handoverHubs.set(sessionId, hub);
-    return hub;
+  /** The hand-over hub of a session (created on first use). */
+  private handoverFor(sessionId: string) {
+    return this.deps.handovers.for(sessionId);
   }
 
   /** The runtime a stella session's tools run on, or undefined for every
@@ -384,13 +360,12 @@ export class StellaMachines {
 
   /** Re-read one stella agent's skill catalog. Awaited before its session
    * opens, so the agent's skill tool starts with a current list. */
-  async refreshStellaSkills(agentId: string): Promise<void> {
-    await this.deps.machine.refreshSkills(agentId);
-    this.skillsCache.set(agentId, {
-      machine: this.deps.machine.get(),
-      at: Date.now(),
-      pending: undefined,
-    });
+  refreshStellaSkills(agentId: string): Promise<void> {
+    return this.skills.refresh(
+      agentId,
+      this.deps.machine.get(),
+      () => this.deps.machine.refreshSkills(agentId),
+    );
   }
 
   /**
@@ -407,23 +382,11 @@ export class StellaMachines {
    * queue two `podman exec`s for the same list. Another agent has another
    * folder, hence another entry.
    */
-  private async primeStellaSkills(agentId: string): Promise<void> {
-    const machine = this.deps.machine.get();
-    let cache = this.skillsCache.get(agentId);
-    if (cache === undefined || cache.machine !== machine) {
-      // A replaced machine means a replaced catalog; nothing to reuse.
-      cache = { machine, at: 0, pending: undefined };
-      this.skillsCache.set(agentId, cache);
-    }
-    if (cache.pending !== undefined) {
-      await cache.pending;
-      return;
-    }
-    if (cache.at !== 0 && Date.now() - cache.at < STELLA_SKILLS_TTL_MS) {
-      return;
-    }
-    const pending = this.refreshStellaSkills(agentId);
-    cache.pending = pending;
-    await pending;
+  private primeStellaSkills(agentId: string): Promise<void> {
+    return this.skills.prime(
+      agentId,
+      this.deps.machine.get(),
+      () => this.deps.machine.refreshSkills(agentId),
+    );
   }
 }

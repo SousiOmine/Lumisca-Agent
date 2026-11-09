@@ -1,20 +1,9 @@
+import { fakeModel } from "../test-utils.ts";
 import { assertEquals, assertRejects } from "@std/assert";
 import { fauxAssistantMessage } from "@lumisca/core";
-import type {
-  Api,
-  AssistantMessageEventStream,
-  Model,
-  StreamRequest,
-} from "@lumisca/core";
+import type { AssistantMessageEventStream, StreamRequest } from "@lumisca/core";
 import type { StreamFn } from "@lumisca/core";
 import { cleanTitle, TitleGenerator } from "./title-generation.ts";
-
-function fakeModel(): Model<Api> {
-  return {
-    id: "fast",
-    name: "fast",
-  } as unknown as Model<Api>;
-}
 
 /** A stream function that yields one text_delta (or an error event). */
 function fakeStreamFn(
@@ -55,7 +44,7 @@ Deno.test("cleanTitle strips quotes, collapses whitespace, caps at 30 chars", ()
 Deno.test("generateTitle returns the cleaned model output", async () => {
   const calls: StreamRequest[] = [];
   const generator = new TitleGenerator(
-    fakeModel(),
+    fakeModel("fast"),
     fakeStreamFn('"Fix login bug"', {}, (c) => calls.push(c)),
   );
 
@@ -71,7 +60,7 @@ Deno.test("generateTitle returns the cleaned model output", async () => {
 
 Deno.test("generateTitle throws on stream errors", async () => {
   const generator = new TitleGenerator(
-    fakeModel(),
+    fakeModel("fast"),
     fakeStreamFn("", { fail: true }),
   );
   await assertRejects(
@@ -82,7 +71,7 @@ Deno.test("generateTitle throws on stream errors", async () => {
 });
 
 Deno.test("generateTitle throws when the model returns no text", async () => {
-  const generator = new TitleGenerator(fakeModel(), fakeStreamFn("   "));
+  const generator = new TitleGenerator(fakeModel("fast"), fakeStreamFn("   "));
   await assertRejects(
     () => generator.generateTitle("hi"),
     Error,

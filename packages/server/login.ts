@@ -169,7 +169,7 @@ export class LoginSession {
 
   private notify(event: AuthNotice): void {
     if (this.settled) return;
-    // The core's AuthEvent and the frontend-safe ProviderLoginEvent have
+    // The core's AuthNotice and the frontend-safe ProviderLoginEvent have
     // identical shapes (minus nothing), so a pass-through cast suffices.
     this.events.push(event as ProviderLoginEvent);
   }

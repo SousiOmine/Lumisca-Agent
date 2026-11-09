@@ -14,7 +14,7 @@ import {
   estimateMessageTokens,
   estimateTextTokens,
 } from "../shared/token-estimate.ts";
-import { toLlmMessages } from "../types/notification.ts";
+import { toLlmMessages } from "../domain/notification.ts";
 import type { CompactionBudgets } from "./compaction-policy.ts";
 
 const log = createLogger("compaction");

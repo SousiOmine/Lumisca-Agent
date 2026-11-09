@@ -16,7 +16,7 @@
  * receives a turn's narration cannot leak it into a conversation the agent
  * was not addressing.
  */
-import type { AskQuestion } from "../shared/interaction.ts";
+import type { AskTurn } from "../shared/interaction.ts";
 import type { AttachmentRef, PromptFileRef } from "../shared/attachments.ts";
 import type { ThinkingLevel } from "../shared/providers.ts";
 
@@ -66,10 +66,7 @@ export interface StellaEntry {
 }
 
 /** A pending ask (the `ask` tool): the questions the run is blocked on. */
-export interface StellaQuestion {
-  toolCallId: string;
-  questions: AskQuestion[];
-}
+export type StellaQuestion = AskTurn;
 
 /** The screen hand-over the run waits on (`vm_ask_user`). */
 export interface StellaHandover {

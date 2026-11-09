@@ -36,9 +36,9 @@ export {
   suggestWorkspaceFiles,
   type WorkspaceFileEntry,
 } from "./workspace/files.ts";
-export type { Workspace } from "./types/workspace.ts";
-export type { SessionInfo } from "./types/session.ts";
-export type { ClientEvent } from "./types/event.ts";
+export type { Workspace } from "./domain/workspace.ts";
+export type { SessionInfo } from "./domain/session.ts";
+export type { ClientEvent } from "./domain/event.ts";
 export type {
   AgentMessage,
   Api,
@@ -68,9 +68,9 @@ export type {
   StellaEvent,
   StellaHandover,
   StellaQuestion,
-} from "./types/stella-conversation.ts";
+} from "./domain/stella-conversation.ts";
 export { stellaEventsOf } from "./agent/stella-stream.ts";
-export type { ModePrompt } from "./types/mode-message.ts";
+export type { ModePrompt } from "./domain/mode-message.ts";
 export { createAssistantMessageEventStream } from "./ai/event-stream.ts";
 export type { AssistantMessageEventStream } from "./ai/types.ts";
 export {

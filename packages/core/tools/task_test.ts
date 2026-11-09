@@ -24,9 +24,9 @@ import {
   TOOL_CALL,
   TOOL_SEARCH,
 } from "../shared/mod.ts";
-import type { ClientEvent } from "../types/event.ts";
-import type { NotificationPayload } from "../types/notification.ts";
-import type { Workspace } from "../types/workspace.ts";
+import type { ClientEvent } from "../domain/event.ts";
+import type { NotificationPayload } from "../domain/notification.ts";
+import type { Workspace } from "../domain/workspace.ts";
 import type { SkillDef } from "../skills/discover.ts";
 import { ToolRegistry } from "./registry.ts";
 import { SessionToolRegistries } from "./registries.ts";

@@ -2,7 +2,7 @@ import { assert, assertEquals } from "@std/assert";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { Api, Model, StreamFn } from "../ai/types.ts";
-import type { Workspace } from "../types/workspace.ts";
+import type { Workspace } from "../domain/workspace.ts";
 import { SessionAttachmentStore } from "../session/attachments.ts";
 import { SessionVisualStore } from "../session/visuals.ts";
 import { AskHub } from "./ask.ts";

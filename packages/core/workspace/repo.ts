@@ -1,5 +1,5 @@
 import type { LumiscaDb } from "../db/mod.ts";
-import type { Workspace } from "../types/workspace.ts";
+import type { Workspace } from "../domain/workspace.ts";
 
 /** Extra creation options of a workspace row. Kept as an options object so
  * callers never mix positional boolean/number arguments. */

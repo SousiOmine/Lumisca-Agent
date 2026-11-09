@@ -1,3 +1,4 @@
+import { sameAsks } from "@lumisca/core/shared";
 import {
   type MergeRules,
   mergeWindow,
@@ -239,7 +240,7 @@ export function applyStellaEvent(
         : { ...state, entries, liveCard: null };
     }
     case "questions":
-      return sameQuestions(event.questions, state.questions) ? null : {
+      return sameAsks(event.questions, state.questions) ? null : {
         ...state,
         questions: event.questions,
       };
@@ -251,26 +252,6 @@ export function applyStellaEvent(
     case "error":
       return { ...state, error: event.message, liveCard: null };
   }
-}
-
-/** Equality for a question list: a `question` event replaces the whole list
- * for the run (stella asks one at a time), so identity of the tool call plus
- * the questions' ids is enough to tell "the same ask" from a new one. */
-function sameQuestions(
-  a: readonly StellaQuestion[],
-  b: readonly StellaQuestion[],
-): boolean {
-  if (a === b) return true;
-  if (a.length !== b.length) return false;
-  return a.every((q, index) => {
-    const other = b[index];
-    return other !== undefined &&
-      q.toolCallId === other.toolCallId &&
-      q.questions.length === other.questions.length &&
-      q.questions.every((question, i) =>
-        question.id === other.questions[i]?.id
-      );
-  });
 }
 
 function sameHandover(

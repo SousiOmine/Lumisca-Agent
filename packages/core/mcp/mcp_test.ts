@@ -19,7 +19,7 @@ import {
   type SettingsRepo,
 } from "../settings/repo.ts";
 import { makeRealTempDir, removeDirRetry } from "../test-utils.ts";
-import type { Workspace } from "../types/workspace.ts";
+import type { Workspace } from "../domain/workspace.ts";
 
 // --- config -----------------------------------------------------------------
 

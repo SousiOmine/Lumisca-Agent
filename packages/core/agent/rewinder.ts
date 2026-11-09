@@ -5,7 +5,7 @@ import type { GoalRunner } from "./goal-runner.ts";
 import type { RetryManager } from "./retry-manager.ts";
 import type { TranscriptStore } from "./transcript.ts";
 import { messageIdentityOf } from "../session/transcript-window.ts";
-import type { MessageIdentity } from "../types/event.ts";
+import type { MessageIdentity } from "../domain/event.ts";
 
 /** What a rewind needs from its session: the live transcript and the pieces
  * that hold state derived from it. Everything else (the event stream, the

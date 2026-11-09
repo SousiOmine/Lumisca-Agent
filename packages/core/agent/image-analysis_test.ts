@@ -1,10 +1,9 @@
+import { fakeModel } from "../test-utils.ts";
 import { assertEquals } from "@std/assert";
 import { fauxAssistantMessage } from "@lumisca/core";
 import type {
-  Api,
   AssistantMessageEventStream,
   ImageContent,
-  Model,
   StreamRequest,
   TextContent,
 } from "@lumisca/core";
@@ -21,13 +20,6 @@ const TEXT_MARKER: TextContent = {
   type: "text",
   text: "[image: pic.png (5 bytes)]",
 };
-
-function fakeModel(): Model<Api> {
-  return {
-    id: "vision",
-    name: "vision",
-  } as unknown as Model<Api>;
-}
 
 /** A stream function that yields one text_delta (or an error event). */
 function fakeStreamFn(
@@ -60,7 +52,7 @@ function fakeStreamFn(
 Deno.test("analyzeContent replaces image blocks with analysis text", async () => {
   const calls: StreamRequest[] = [];
   const analyzer = new ImageAnalyzer(
-    fakeModel(),
+    fakeModel("vision"),
     fakeStreamFn("DESC", {}, (c) => calls.push(c)),
   );
 
@@ -86,7 +78,7 @@ Deno.test("analyzeContent replaces image blocks with analysis text", async () =>
 Deno.test("analyzeContent caches per image (no re-analysis across turns)", async () => {
   let callCount = 0;
   const analyzer = new ImageAnalyzer(
-    fakeModel(),
+    fakeModel("vision"),
     fakeStreamFn("DESC", {}, () => callCount++),
   );
 
@@ -99,7 +91,7 @@ Deno.test("analyzeContent caches per image (no re-analysis across turns)", async
 
 Deno.test("analyzeContent falls back to the original content on failure", async () => {
   const analyzer = new ImageAnalyzer(
-    fakeModel(),
+    fakeModel("vision"),
     fakeStreamFn("", { fail: true }),
   );
 
@@ -112,7 +104,7 @@ Deno.test("analyzeContent falls back to the original content on failure", async 
 Deno.test("analyzeContent without images never calls the model", async () => {
   let callCount = 0;
   const analyzer = new ImageAnalyzer(
-    fakeModel(),
+    fakeModel("vision"),
     fakeStreamFn("DESC", {}, () => callCount++),
   );
 

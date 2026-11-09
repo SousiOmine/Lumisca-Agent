@@ -1,3 +1,4 @@
+import { stellaApiStub } from "./test-stubs.ts";
 /**
  * The shared session builder's mounted paths.
  *
@@ -51,17 +52,14 @@ const SESSION = {
 function fakeCore(seen: string[]): StellaApi {
   const agentOf = (id: string) => id === AGENT.id ? AGENT : undefined;
   const sessionOf = (id: string) => id === AGENT.id ? SESSION : undefined;
-  return {
+  return stellaApiStub({
     getStellaAgent: agentOf,
     findStellaSession: sessionOf,
-    listStellaAgents: () => [AGENT],
     ensureStellaAgent: () => Promise.resolve(AGENT),
     createStellaAgent: () => Promise.resolve(AGENT),
-    updateStellaAgent: () => AGENT,
+    updateStellaAgent: () => Promise.resolve(AGENT),
     deleteStellaAgent: () => Promise.resolve(),
-    resolveStellaAgentIcon: () => undefined,
     getStellaStatus: () => Promise.resolve({} as never),
-    getStellaAvailability: () => Promise.resolve({ available: true } as never),
     getSession: (id: string) => id === SESSION.id ? SESSION : undefined,
     getSessionLastError: () => undefined,
     getSessionRevision: () => 0,
@@ -92,14 +90,7 @@ function fakeCore(seen: string[]): StellaApi {
       seen.push("handover");
     },
     readStellaConversation: () => undefined,
-    getSessionUsage: () => ({}) as never,
-    getTodo: () => [],
-    getTasks: () => [],
-    getBackground: () => [],
-    getGoal: () => undefined,
-    cancelGoal: () => {},
-    resolvePromptUpload: () => Promise.resolve(undefined),
-  } as unknown as StellaApi;
+  });
 }
 
 Deno.test("the shared builder owns rewind, not a second handler", async () => {

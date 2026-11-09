@@ -1,10 +1,9 @@
+import { fakeModel } from "../test-utils.ts";
 import { assert, assertEquals } from "@std/assert";
 import type {
   AgentEvent,
   AgentMessage,
   AgentTool,
-  Api,
-  Model,
   StreamFn,
   ToolResultMessage,
 } from "./types.ts";
@@ -12,10 +11,6 @@ import { Agent } from "./agent.ts";
 import { createAssistantMessageEventStream } from "./event-stream.ts";
 import { fauxAssistantMessage, fauxToolCall } from "./faux.ts";
 import { contentText } from "../shared/mod.ts";
-
-function fakeModel(): Model<Api> {
-  return { id: "m", name: "m" } as unknown as Model<Api>;
-}
 
 /** One scheduler turn: lets the run reach the stream function. */
 function tick(): Promise<void> {

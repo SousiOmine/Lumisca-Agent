@@ -5,7 +5,7 @@ import { ToolRegistry } from "../tools/registry.ts";
 import { createToolSearchTool } from "../tools/search-tool.ts";
 import { createToolCallTool } from "../tools/call-tool.ts";
 import { createChatTools, createCodingTools } from "../tools/mod.ts";
-import type { Workspace } from "../types/workspace.ts";
+import type { Workspace } from "../domain/workspace.ts";
 import { TOOL_PDF_READ_PAGES } from "../shared/mod.ts";
 import { findCanvasIcuDataFile } from "./icu-data.ts";
 import { HostFileBackend } from "../tools/host/files.ts";

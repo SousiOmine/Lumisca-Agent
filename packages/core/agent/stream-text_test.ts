@@ -1,18 +1,13 @@
+import { fakeModel } from "../test-utils.ts";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import {
-  type Api,
   type AssistantMessageEventStream,
   fauxAssistantMessage,
-  type Model,
   type StreamRequest,
 } from "@lumisca/core";
 import type { StreamFn } from "@lumisca/core";
 import { RATE_LIMIT_BASE_DELAY_MS, RetryAbortError } from "../ai/rate-limit.ts";
 import { streamText } from "../ai/stream.ts";
-
-function fakeModel(): Model<Api> {
-  return { id: "m", name: "m" } as unknown as Model<Api>;
-}
 
 /** A stream function whose call N yields the Nth outcome: {fail} emits an
  * error event with that message, otherwise a single text_delta("hi"). */

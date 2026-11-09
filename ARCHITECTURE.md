@@ -62,7 +62,7 @@ stella の会話は「どのセッションを開くか」ではなく「誰と�
 
 エージェントは自分の作業フォルダに `MEMORY.md` を持ちます（`vm/agent-memory.ts`）。`identity` との違いは、誰が読むタイミングを決めるかです。`identity` は毎ターン context メッセージとして届きますが、`MEMORY.md` はモデルが `read` / `write` / `edit` で必要なときに読み書きします。記憶は使うほど大きくなるので、毎リクエストに載せると、使わない回までトークンを払うことになります。
 
-- **用意するのは 2 か所**: エージェントの作成時（`LumiscaCore.createStellaAgent` → `StellaMachines.prepareAgentFolder`）と、会話を開くとき（`getOrCreateStellaSession`）です。作成時にマシンが止まっていれば何もしません——エージェントの作成がコンテナの起動を要求してはいけないためです。開くたびにも走るのは、すでにあるエージェントと、フォルダを消されたエージェントのためです。
+- **用意するのは 2 か所**: エージェントの作成時（`LumiscaCore.createStellaAgent` → `StellaMachineService.prepareAgentFolder`）と、会話を開くとき（`getOrCreateStellaSession`）です。作成時にマシンが止まっていれば何もしません——エージェントの作成がコンテナの起動を要求してはいけないためです。開くたびにも走るのは、すでにあるエージェントと、フォルダを消されたエージェントのためです。
 - **既存のファイルは消さない**: コマンドは `[ -e ]` で存在を確かめてから作ります。開くたびに走るので、無条件の `: >` だと記憶が毎回空になります（`stella_live_test.ts` が固定）。
 - **名前は 2 か所にある**: 文面は `tools/system-prompt.ts`、ファイル名は `AGENT_MEMORY_FILE` です。片方だけ変えると存在しないファイルを名指しすることになるので、`vm/agent-memory_test.ts` が一致を検査します。
 - **プロンプトが言うのは 3 つ**: 覚えておくべきことは頼まれなくても書く、前に書いたかもしれないので読む、長くなると探せなくなるので整理して不要な行は消す。ツールの `description` は 1 回の呼び出しの契約しか語れないので、この規約はプロンプトにしか置けません。
@@ -213,7 +213,7 @@ stella の会話でエージェントの発言になるのは 2 つです。タ�
   接続先（ピア）ごとのプロバイダーとモデルは `modelCatalog.ts` が一元管理します。画面遷移やタブ切り替えで再フェッチしないため、モデルの変更は必ずこのストアへ反映してください（`applyModelEnabled` や `setModelEnabled`）。ローカルステートに持つと、画面遷移で変更が失われます。ワークスペース一覧は `GET /api/workspaces`（表示中のサーバー自身）から取得し、初回データ（`initial-data.js`）は API の応答で置き換わります（`hooks/useWorkspaces.ts`）。ほかのマシンで作業するときは接続先ピッカーで切り替えます。一覧を混ぜると、新規セッション画面にもサーバー選択が必要になり、同じ問いに 2 箇所で答えることになります。既存のセッションは他マシンのものも一覧に出るので、`GET /api/fed/peers` と `/api/fed/:peerId/*` は残しています。
 
 - **モードごとに変わる表示はデータの違いとして表す**  
-  stella の会話は、code mode のセッションと別のエンドポイント・別の型・別のイベントストリームを持ちます（`/api/stella/conversations/:agentId/*` と `…/events`、`packages/core/types/stella-conversation.ts`、`agent/stella-stream.ts`）。会話に届くのはユーザー発言と返信だけで、`context`、ツールを呼ぶ前のナレーション、ツール呼び出しと結果、通知、圧縮チェックポイントはモデルの履歴に留まります。したがって表示側に「隠す」フラグはなく、取捨はサーバーの配信境界（`stellaEventsOf` / `stellaEntryOf`）で 1 回だけ行います。会話のページが数える行（`messages.ts` の `CONVERSATION_ROWS_SQL`）は、この射影がエントリにする行と同じ集合でなければなりません。片方だけ変えると、表示済みの発言がスナップショットで消えます。
+  stella の会話は、code mode のセッションと別のエンドポイント・別の型・別のイベントストリームを持ちます（`/api/stella/conversations/:agentId/*` と `…/events`、`packages/core/domain/stella-conversation.ts`、`agent/stella-stream.ts`）。会話に届くのはユーザー発言と返信だけで、`context`、ツールを呼ぶ前のナレーション、ツール呼び出しと結果、通知、圧縮チェックポイントはモデルの履歴に留まります。したがって表示側に「隠す」フラグはなく、取捨はサーバーの配信境界（`stellaEventsOf` / `stellaEntryOf`）で 1 回だけ行います。会話のページが数える行（`messages.ts` の `CONVERSATION_ROWS_SQL`）は、この射影がエントリにする行と同じ集合でなければなりません。片方だけ変えると、表示済みの発言がスナップショットで消えます。
 
   stella の会話には「作業中／作業完了」の見出しも、ツール行も、todo・タスク・バックグラウンドのパネルもありません。実行中は、本文が流れ始めるまで点（`RunningIndicator`）だけで示します。`todo` ツール自体はあります（`createStellaTools`）。計画はパネルのためではなく、依頼が複数あるときに「まだやっていないこと」を覚えておくためのもので、長い会話は履歴が畳まれて残りの依頼が薄れるためです。`todo` イベントは `stellaEventsOf` が落とすので、会話のストリームには流れません。`async_bash` も同じで、VM の中で長い処理を待たずに走らせるツール自体はありますが（完了は `[Background command ...]` の通知としてモデルに届き、会話の射影はそれを落とします）、パネルはありません。
 
@@ -278,6 +278,12 @@ stella の会話でエージェントの発言になるのは 2 つです。タ�
 
 - **`LumiscaCore` とエージェント管理**  
   `LumiscaCore` はシステム全体のファサードとコンポジションルートです。コンストラクタで協調動作する各コンポーネントを初期化し、テスト時にはモックへ差し替えられます。エージェント周りは `SessionAgent`（本体）、`RetryManager`（リトライ制御）、`GoalRunner`（ゴール自律実行）、`SessionPool`（ライフサイクル管理）で、`TranscriptStore` がメッセージの永続化とメモリ上の履歴の整合性を持ちます。新規セッションのモデルは「明示指定、設定の既定モデル（`model_default`）、直近のモデル、設定済みプロバイダーの最初の有効モデル」の順で決め、設定が済んでいないプロバイダーは自動選択しません。新規セッション画面のピッカーは選んだモデルをこの `model_default` に書きます——あの画面はタブ切り替えのたびに作り直され（`App.tsx` は `ChatView` と `NewSessionView` を三項で切り替えます）、リロードでも消えるので、コンポーネントの状態に置くと選んだモデルが次の表示で既定に戻ります。同じ値を設定画面の「既定のモデル」の行が読み書きするため、2 つの画面が別々の値を持つことはありません。
+
+- **サービスの組み立ては `bootstrap.ts` の 1 か所**  
+  `createCoreServices` がリポジトリ、ストア、イベントハブからサービスを葉の順に組み立てます。`LumiscaCore` は結果を保持して委譲するだけです。セッションは `services/sessions.ts` の `SessionService` が入口で、実装はライフサイクル（`session-lifecycle.ts`）、状態（`session-state.ts`）、履歴（`session-transcript.ts`）、ファイル（`session-assets.ts`）、スキル（`session-skills.ts`）、実行（`session-runs.ts`）に分かれます。ファサードに状態を戻すと、初期化順の循環が型キャストで隠れます。
+
+- **イベントの配信と改訂番号は `events/hub.ts`**  
+  `EventHub` が購読者とセッションごとの改訂番号を持ちます。`agent_end` のあとに待っていたモデル変更を適用するような「イベントに反応する政策」は、配信の choke point に書き込まず、購読者として登録します。
 
 - **プロバイダーの OAuth ログイン（ChatGPT サブスクリプション / `models/chatgpt/`）**  
   ChatGPT Plus/Pro などのサブスクリプションで OpenAI のモデルを使えるようにします。プロバイダー id は `openai-codex`、表示名は `ChatGPT` です。認証結果は通常の credential store に `OAuthCredential`（access / refresh / `expiresAt` / `accountId`）として保存します。モデル一覧はアカウントごとに異なるため models.dev にはなく、ログイン時に認証付きで `GET /backend-api/codex/models` を取得して設定（`chatgpt_models`）に保存します。取得に失敗したらログイン自体を失敗させます。モデルの無いプロバイダーは使えず、推測した一覧はプランに無いモデルを並べるためです。
@@ -367,7 +373,8 @@ stella の会話でエージェントの発言になるのは 2 つです。タ�
 ## 5. 依存関係および実装上の留意点
 
 - **`sucrase`**: TypeScript を JavaScript に変換する用途に限定します。
-- **`@napi-rs/canvas`**: PDF の描画専用です。実行には `--allow-ffi` 権限が必要です。
+- **`@napi-rs/canvas`**: PDF の描画専用です。実行には `--allow-ffi` 権限が必要です。ネイティブモジュールなので、ほかの依存と同じく完全なバージョンで固定します。
+- **`node:sqlite` は同期的**: データベースの読み書きはイベントループを止めます。単一ユーザーのローカル利用を前提に、書き込みは短く、全行走査は起動時と圧縮時に限ります。長い走査を要求の途中に足すと、同じプロセスが運ぶ WebSocket のイベント配信まで待たされます。
 - **`preact/compat`**: Web UI 全体で React 互換レイヤーとして使います。
 - **ブラウザラボの実装**: デスクトップのブラウザラボは独立したウィンドウで表示します。ページの操作と待機はクロスプラットフォームで共通化し、画面キャプチャだけ各 OS のネイティブ API を呼びます。
 - **Rust の排他制御**: スレッド間のロックは、すべて `lib.rs` の `LockRecover::lock_recover()` を経由します。Poison 状態からの復旧を一元化し、パニックによる無応答を防ぎます。

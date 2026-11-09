@@ -1,4 +1,4 @@
-import type { ClientEvent } from "../types/event.ts";
+import type { ClientEvent } from "../domain/event.ts";
 import type { AgentIconStore } from "../stella/icons.ts";
 import type { AgentRepo, StellaAgent } from "../stella/agents.ts";
 import { DEFAULT_AGENT_NAME, normalizeAgentName } from "../stella/agents.ts";
@@ -24,7 +24,7 @@ import { CoreError } from "../errors.ts";
  * case-insensitively — "Researcher" and "researcher" are one row in the
  * sidebar) and a name nobody chose (the default, then "Agent 2", …).
  */
-export class StellaAgentBook {
+export class StellaAgentService {
   constructor(
     private readonly deps: {
       agents: AgentRepo;

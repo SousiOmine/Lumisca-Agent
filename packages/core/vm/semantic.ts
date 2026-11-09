@@ -50,13 +50,6 @@ const HELPER_OUTPUT_LIMIT = 4 * 1024 * 1024;
 /** Waits are bounded so a condition that never holds cannot hold the run. */
 const MAX_WAIT_MS = 30_000;
 
-/** The three tool names of the semantic family, for the session pool. */
-export const SEMANTIC_TOOL_NAMES: readonly string[] = [
-  TOOL_VM_FIND,
-  TOOL_VM_DO,
-  TOOL_VM_WAIT,
-];
-
 const findSchema = object({
   app: string(
     "The application to read, by the name it has on the accessibility bus: " +

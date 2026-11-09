@@ -4,7 +4,7 @@ import { CoreError } from "../errors.ts";
 import { createMessageRepo } from "../session/messages.ts";
 import type { AgentMessage } from "../ai/types.ts";
 import { stellaEntryOf } from "../agent/stella-stream.ts";
-import type { StellaEntry } from "../types/stella-conversation.ts";
+import type { StellaEntry } from "../domain/stella-conversation.ts";
 import { TOOL_HISTORY_SEARCH } from "../shared/mod.ts";
 import { toolText } from "../test-utils.ts";
 import { createHistorySearchTool, MAX_HISTORY_LIMIT } from "./history.ts";

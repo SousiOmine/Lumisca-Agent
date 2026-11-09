@@ -3,11 +3,12 @@ import { MIN_VACUUM_BYTES, vacuumMarkerPath } from "./db/vacuum.ts";
 import { createLogger } from "./log.ts";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import type { ClientEvent } from "./types/event.ts";
+import type { ClientEvent } from "./domain/event.ts";
+import { EventHub } from "./events/hub.ts";
 import type { AgentMessage } from "./ai/types.ts";
-import type { SessionInfo } from "./types/session.ts";
-import type { StellaEntry } from "./types/stella-conversation.ts";
-import type { Workspace } from "./types/workspace.ts";
+import type { SessionInfo } from "./domain/session.ts";
+import type { StellaEntry } from "./domain/stella-conversation.ts";
+import type { Workspace } from "./domain/workspace.ts";
 import {
   createFileSettingsRepo,
   createInMemorySettingsRepo,
@@ -49,7 +50,7 @@ import type {
   ImageContent,
   Model,
 } from "./ai/types.ts";
-import type { ModePrompt } from "./types/mode-message.ts";
+import type { ModePrompt } from "./domain/mode-message.ts";
 import { ModelManager } from "./models/mod.ts";
 import type { EnvReader } from "./models/custom.ts";
 import type {
@@ -67,7 +68,6 @@ import type { CompactionPolicyInput } from "./shared/mod.ts";
 import type { BackgroundCommandInfo } from "./tools/background.ts";
 import type { PendingQuestion } from "./tools/ask.ts";
 import {
-  COMPUTER_USE_ENABLED_KEY,
   CONNECTIONS_KEY,
   DEFAULT_MODEL_KEY,
   LANGUAGE_KEY,
@@ -80,14 +80,11 @@ import {
 import { systemLanguageTags } from "./locale.ts";
 import { CoreError, errorMessage } from "./errors.ts";
 import { createWorkspaceRepo } from "./workspace/repo.ts";
-import { WorkspaceService } from "./workspaces.ts";
+import { WorkspaceService } from "./services/workspaces.ts";
+import { type CoreServices, createCoreServices } from "./bootstrap.ts";
+import { ComputerUseService } from "./services/computer.ts";
 import { ModelService } from "./services/models.ts";
-import { type DefaultModel, SessionCatalog } from "./services/sessions.ts";
-import { StellaAgentBook } from "./services/stella-agents.ts";
-import { StellaMachines } from "./services/stella-machines.ts";
-import { WebSearchConfigService } from "./services/webSearch.ts";
-import { McpConfigService } from "./services/mcp.ts";
-import { WorkspaceConfigService } from "./services/workspaces.ts";
+import type { DefaultModel, SessionService } from "./services/sessions.ts";
 import { PersonalizationService } from "./personalization.ts";
 import { SavedPromptsService } from "./saved-prompts.ts";
 import { createSessionRepo, type SessionRepo } from "./session/repo.ts";
@@ -130,7 +127,8 @@ import {
   type RoutineRunner,
   type RoutineScheduler,
 } from "./routine/scheduler.ts";
-import { HandoverHub, type PendingHandover } from "./vm/handover.ts";
+import type { PendingHandover } from "./vm/handover.ts";
+import { HandoverRegistry } from "./vm/handover-registry.ts";
 import { checkRoutine } from "./routine/check.ts";
 import { vmAgentDir } from "./vm/contract.ts";
 import type { PromptFileRef, Routine } from "./shared/mod.ts";
@@ -204,9 +202,6 @@ export class LumiscaCore {
   private readonly pool: SessionPool;
   /** The extracted areas of this facade (see services/). */
   private readonly modelService: ModelService;
-  private readonly webSearchConfig: WebSearchConfigService;
-  private readonly mcpConfig: McpConfigService;
-  private readonly workspaceConfig: WorkspaceConfigService;
   private readonly mcp: McpService;
   /** Where the sessions' published visuals live (the images an agent shows
    * inside its reply — see session/visuals.ts). Shared with the session pool
@@ -232,18 +227,10 @@ export class LumiscaCore {
    * undefined in plain server mode — the agent then gets no browser
    * tools. Attached by the server (server/mod.ts) before sessions open. */
   private browserBackend: BrowserBackend | undefined;
-  /** Computer-use host (this machine's screen, mouse and keyboard), or
-   * undefined when no host could be attached. Attached by the server
-   * (server/mod.ts) before sessions open; whether sessions may actually
-   * drive it is the settings toggle (isComputerUseEnabled). */
-  private computerHost: ComputerHost | undefined;
-  /** Why there is no host on this machine (the platform, a missing
-   * display, ...). Reported when the user tries to enable the feature, so
-   * the settings dialog can say what is wrong instead of failing silently. */
-  private computerUnavailableReason: string | undefined;
-  /** How to ask this machine again whether it can be driven. Set by the
-   * server, which owns the platform probe; see recheckComputerHost. */
-  private computerHostProbe: (() => Promise<ComputerHostResult>) | undefined;
+  /** Computer-use host, its probe and the user's toggle (see
+   * services/computer.ts). The server attaches the host before sessions
+   * open; whether sessions may actually drive it is the stored setting. */
+  private readonly computer: ComputerUseService;
   /** Global skills directory override (see SessionPoolDeps): tests pass an
    * empty list so a fixture's skill catalog never depends on the machine
    * the tests run on. */
@@ -253,27 +240,16 @@ export class LumiscaCore {
    * sandbox and the guide's text name the same folder; empty when this
    * machine has no config home, and for a test (which passes []). */
   private readonly appSkillDirs: string[];
-  private readonly listeners = new Set<(event: ClientEvent) => void>();
-  /** Per-session count of the events this core has emitted; see
-   * getSessionRevision. Entries are dropped with their session. */
-  private readonly sessionRevisions = new Map<string, number>();
+  /** Event fan-out and per-session revision counters (see events/hub.ts). */
+  private readonly events = new EventHub();
   /** The virtual machine of stella mode: the manager, its exec seams, the
    * availability verdict and the skill catalog. Attached by the server once
    * it knows where the container files live. */
   private readonly stella: StellaMachine;
-  /** Hand-over hubs per session (see handoverFor). Dropped with the
-   * session. */
-  private readonly handoverHubs = new Map<string, HandoverHub>();
-  /** The stella skill catalog already read, with the machine that read it
-   * and when. Opening a conversation re-reads the catalog only when this is
-   * cold or older than STELLA_SKILLS_TTL_MS: the read crosses into the
-   * machine (`podman exec`), and a conversation opened from a phone over a
-   * slow link must not wait for a list that has not changed. */
-  private stellaSkills: {
-    machine: VmManager | undefined;
-    at: number;
-    pending: Promise<void> | undefined;
-  } = { machine: undefined, at: 0, pending: undefined };
+  /** Hand-over hubs per session. Dropped with the session. */
+  private readonly handovers = new HandoverRegistry((event) =>
+    this.events.emit(event)
+  );
 
   private constructor(
     db: LumiscaDb,
@@ -335,6 +311,12 @@ export class LumiscaCore {
     this.db = db;
     this.settings = settings;
     this.credentials = createDbCredentialStore(this.settings);
+    this.computer = new ComputerUseService({
+      getSetting: (key) => this.settings.get(key),
+      setSetting: (key, value) => this.settings.set(key, value),
+      applyCapabilityChange: (mutate) =>
+        this.pool.applyCapabilityChange(this.sessions.list(), mutate),
+    });
     this.models = overrides.models ??
       new ModelManager(this.credentials, this.settings, overrides.env);
     this.personalization = overrides.personalization ??
@@ -498,8 +480,6 @@ export class LumiscaCore {
       refreshSessionMcp: (sessions) => this.pool.refreshMcp(sessions),
     });
     this.modelService = new ModelService(this.models);
-    this.webSearchConfig = new WebSearchConfigService(this.webSearch);
-    this.mcpConfig = new McpConfigService(this.mcp);
     this.workspaces = overrides.workspaces ??
       new WorkspaceService(createWorkspaceRepo(db), {
         listSessions: (workspaceId) => this.sessions.list(workspaceId),
@@ -510,87 +490,45 @@ export class LumiscaCore {
         // directly (the pool alone would leave the assets behind).
         deleteSession: (id) => this.deleteSession(id),
       });
-    this.workspaceConfig = new WorkspaceConfigService(this.workspaces);
-    this.services = {
-      sessions: undefined as unknown as SessionCatalog,
-      stellaAgents: undefined as unknown as StellaAgentBook,
-      stellaMachines: undefined as unknown as StellaMachines,
-      models: this.modelService,
-      webSearch: this.webSearchConfig,
-      mcp: this.mcpConfig,
-      workspaces: this.workspaceConfig,
-    };
-    // The session catalog reads its collaborators through the facade
-    // (`sessions`, `pool`, `messages`, `visuals`, `attachments`, `stella`),
-    // which are all assigned above; it is built last for that reason.
-    const self = this as unknown as {
-      services: {
-        sessions: SessionCatalog;
-        stellaAgents: StellaAgentBook;
-        stellaMachines: StellaMachines;
-      };
-    };
-    self.services.stellaMachines = new StellaMachines({
+    this.services = createCoreServices({
       machine: this.stella,
       agents: this.stellaAgents,
       sessions: this.sessions,
       messages: this.messages,
       pool: this.pool,
-      routineRepo: this.routines,
+      routines: this.routines,
       routineScheduler: this.routineScheduler,
-      handoverHubs: this.handoverHubs,
-      decorateSession: (session) => this.decorateSession(session),
-      deleteSession: (id) => this.deleteSession(id),
-      emit: (event) => this.emit(event),
-      language: () => this.getLanguage(),
-      chatWorkspace: () => this.getOrCreateChatWorkspace(),
-      requireWorkspace: (id) => this.requireWorkspace(id),
-      resolveDefaultModel: (provider, modelId) =>
-        this.resolveDefaultModel(provider, modelId),
-      createStellaAgent: (input) => this.createStellaAgent(input),
-      ensureStellaReady: (onProgress) =>
-        this.services.stellaMachines.ensureStellaReady(onProgress),
-    });
-    self.services.stellaAgents = new StellaAgentBook({
-      agents: this.stellaAgents,
+      handovers: this.handovers,
       icons: this.agentIcons,
-      sessions: this.sessions,
-      messages: this.messages,
-      deleteSession: (id) => this.deleteSession(id),
-      language: () => this.getLanguage(),
-      emit: (event) => this.emit(event),
-    });
-    self.services.sessions = new SessionCatalog({
-      sessions: this.sessions,
-      messages: this.messages,
-      pool: this.pool,
       visuals: this.visuals,
       attachments: this.attachments,
-      stella: this.stella,
-      models: {
-        getModel: (provider, modelId) =>
-          this.models.getModel(provider, modelId),
-        getSessionModel: (provider, modelId) =>
-          this.models.getSessionModel(provider, modelId),
-        thinkingState: (provider, modelId, model) =>
-          this.models.thinkingState(provider, modelId, model),
-        getThinkingLevel: (provider, modelId) =>
-          this.models.getThinkingLevel(provider, modelId),
-      },
-      requireModel: (provider, modelId) => this.requireModel(provider, modelId),
-      requireWorkspace: (id) => this.requireWorkspace(id),
+      models: this.models,
+      workspaces: this.workspaces,
+      modelService: this.modelService,
+      webSearch: this.webSearch,
+      mcp: this.mcp,
+      decorateSession: (session) => this.decorateSession(session),
+      emit: (event) => this.emit(event),
+      language: () => this.getLanguage(),
       chatWorkspace: () => this.getOrCreateChatWorkspace(),
+      requireWorkspace: (id) => this.requireWorkspace(id),
       resolveDefaultModel: (provider, modelId) =>
         this.resolveDefaultModel(provider, modelId),
-      decorate: (session) => this.decorateSession(session),
-      emit: (event) => this.emit(event),
+      requireModel: (provider, modelId) => this.requireModel(provider, modelId),
       forget: (id) => this.forgetSession(id),
-      language: () => this.getLanguage(),
       browserAvailable: () => this.browserBackend !== undefined,
-      computerAvailable: () => this.computerHostForSession() !== undefined,
+      computerAvailable: () => this.computer.hostForSession() !== undefined,
       globalSkillDirs: this.globalSkillDirs,
       appSkillDirs: this.appSkillDirs,
-      stellaSkills: (agentId) => this.stella.skills(agentId),
+    });
+    // A model change made while a run was in flight is applied once that run
+    // has ended: the clients have been told the run is over, and the next run
+    // is the first that can use the model. The rebuild is deferred, so its
+    // position in the fan-out does not matter.
+    this.events.subscribe((event) => {
+      if (event.type === "agent_end") {
+        this.services.sessions.releasePendingRebuild(event.sessionId);
+      }
     });
   }
 
@@ -688,8 +626,8 @@ export class LumiscaCore {
     // two maps do not hold the same keys (a hand-over hub exists without
     // ever emitting an event), so the union is what gets forgotten.
     const forgotten = new Set([
-      ...this.sessionRevisions.keys(),
-      ...this.handoverHubs.keys(),
+      ...this.events.sessionIds(),
+      ...this.handovers.sessionIds(),
     ]);
     for (const sessionId of forgotten) this.forgetSession(sessionId);
     // The machine is this application's; leaving it running would keep a
@@ -868,179 +806,69 @@ export class LumiscaCore {
     return this.browserBackend;
   }
 
-  // --- computer use (this machine's screen, mouse and keyboard) ------------
+  // --- computer use (delegated to ComputerUseService) ----------------------
 
   /** Attach (or detach, with an unavailable result) the computer-use host.
    * The server does this once at startup; the seeded tools resolve the host
    * at execute time, so a later detach fails their next call with a clear
-   * error. Whether sessions may use it at all is the settings toggle — see
-   * setComputerUseEnabled.
-   *
-   * A server started by systemd runs before the desktop session does (the
-   * unit is pulled in by `default.target`, the desktop arrives a few seconds
-   * later), so "there is no host" is a verdict about the machine AT THIS
-   * MOMENT and not a property of the machine. `recheckComputerHost` asks
-   * again when it matters; the reason below is kept only as the last known
-   * answer (what the settings toggle reports when the machine still has no
-   * host). */
+   * error. */
   setComputerHost(result: ComputerHostResult): void {
-    this.computerHost = result.available ? result.host : undefined;
-    this.computerUnavailableReason = result.available
-      ? undefined
-      : result.reason;
+    this.computer.setHost(result);
   }
 
-  /** Ask the machine again whether it can be driven, and adopt the answer.
-   * The server sets the probe at startup: it is the only layer that knows
-   * how to reach this machine's desktop (see `attachComputerHost` in
-   * server/mod.ts).
-   *
-   * Without a probe the startup verdict is final. That is the honest
-   * behaviour for a core built without a server (tests, an embedding), and
-   * it keeps a recheck from silently succeeding on a machine nobody looked
-   * at. */
+  /** Set how to ask this machine again (the server's platform probe). */
   setComputerHostProbe(probe: () => Promise<ComputerHostResult>): void {
-    this.computerHostProbe = probe;
+    this.computer.setProbe(probe);
   }
 
-  /** Ask again whether this machine can be driven, replacing the startup
-   * verdict. The settings toggle runs this before refusing to enable: a
-   * server started by systemd runs before the desktop session does (the unit
-   * is pulled in by `default.target`, the desktop arrives a few seconds
-   * later), so the startup verdict can be stale on a machine that has a
-   * desktop right now. */
-  async recheckComputerHost(): Promise<ComputerHostResult> {
-    const probe = this.computerHostProbe;
-    if (probe === undefined) {
-      return this.computerHost === undefined
-        ? {
-          available: false,
-          reason: this.computerUnavailableReason ??
-            "computer use is not available on this machine",
-        }
-        : { available: true, host: this.computerHost };
-    }
-    const result = await probe();
-    if (result.available) {
-      // A host from the startup verdict is kept: it is the same machine, and
-      // replacing it would drop a screen-sharing session the agent may be
-      // using. A machine that only became drivable now gets the new host.
-      if (this.computerHost === undefined) {
-        this.setComputerHost(result);
-      } else if (result.host !== this.computerHost) {
-        result.host.close();
-      }
-      return { available: true, host: this.computerHost! };
-    }
-    this.computerUnavailableReason = result.reason;
-    return result;
+  /** Ask this machine again whether it can be driven (see
+   * ComputerUseService.recheck). */
+  recheckComputerHost(): Promise<ComputerHostResult> {
+    return this.computer.recheck();
   }
 
   /** The attached host, if this machine has one (regardless of the toggle). */
   getComputerHost(): ComputerHost | undefined {
-    return this.computerHost;
+    return this.computer.getHost();
   }
 
-  /** Whether the user enabled computer use (the settings toggle; "1" = on,
-   * anything else = off, including unset — the feature is opt-in because a
-   * run can click and type anywhere on the machine). */
+  /** Whether the user enabled computer use (the settings toggle). */
   isComputerUseEnabled(): boolean {
-    return this.settings.get(COMPUTER_USE_ENABLED_KEY) === "1";
+    return this.computer.isEnabled();
   }
 
-  /** Enable or disable computer use (the settings toggle). The flag decides
-   * which tools every session is offered, so the open sessions follow it: an
-   * idle one is rebuilt, and a streaming one keeps its run and has its
-   * discoverable tools reseeded in place (see
-   * SessionPool.applyCapabilityChange). Enabling on a machine without a host
-   * throws `unavailable` with that machine's reason: accepting the toggle
-   * there would advertise tools that cannot run.
-   *
-   * Enabling asks the machine again first (recheckComputerHost): the startup
-   * verdict was made before this process had a desktop to talk to when
-   * systemd started it at boot, and a user who turns the feature on now is
-   * looking at a desktop that is running. A machine that still cannot be
-   * driven answers with its own reason, so the dialog says what is wrong. */
-  async setComputerUseEnabled(enabled: boolean): Promise<void> {
-    if (enabled) {
-      const verdict = await this.recheckComputerHost();
-      if (!verdict.available) {
-        throw new CoreError(verdict.reason, "unavailable");
-      }
-    }
-    this.pool.applyCapabilityChange(this.sessions.list(), () => {
-      this.settings.set(COMPUTER_USE_ENABLED_KEY, enabled ? "1" : "");
-    });
+  /** Enable or disable computer use; open sessions follow the change. */
+  setComputerUseEnabled(enabled: boolean): Promise<void> {
+    return this.computer.setEnabled(enabled);
   }
 
-  /** The host a session may drive: attached only when this machine has one
-   * AND the user enabled the feature. Read at agent open (which tools a
-   * session gets) and at every tool call, so disabling stops an
-   * already-seeded session on its next call. */
+  /** The host a session may drive (attached AND enabled). */
   private computerHostForSession(): ComputerHost | undefined {
-    return this.isComputerUseEnabled() ? this.computerHost : undefined;
+    return this.computer.hostForSession();
   }
 
   /** Subscribe to agent events. Returns an unsubscribe function. */
   subscribe(listener: (event: ClientEvent) => void): () => void {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
+    return this.events.subscribe(listener);
   }
 
+  /** Hand an event to every subscriber and count it (see EventHub). */
   private emit(event: ClientEvent): void {
-    // One choke point for every session event (the agent, the ask/todo
-    // hubs, the background manager and the task hub all emit through here),
-    // so the revision below counts each of them exactly once.
-    if ("sessionId" in event) {
-      const sessionId = event.sessionId;
-      this.sessionRevisions.set(
-        sessionId,
-        (this.sessionRevisions.get(sessionId) ?? 0) + 1,
-      );
-    }
-    for (const listener of this.listeners) {
-      try {
-        listener(event);
-      } catch {
-        // ignore sink failures
-      }
-    }
-    // A model change made while a run was in flight is applied once that run
-    // has ended (see SessionCatalog.setSessionModel): the clients have been
-    // told the run is over, and the next run is the first that can use it.
-    if (event.type === "agent_end") {
-      this.services.sessions.releasePendingRebuild(event.sessionId);
-    }
+    this.events.emit(event);
   }
 
-  /** How many events this server has emitted for the session over the life
-   * of the process (0 when none, or after the session was closed and
-   * reopened). The count travels with every frame of the event stream and
-   * with the session snapshot, so a client can tell "I have seen
-   * everything" from "I missed something": the stream is ordered and
-   * reliable while it is up, so a jump in the count means frames were lost,
-   * and a count behind the server's means the view is stale. The web's
-   * revision probe uses it to re-read the snapshot only when needed (see
-   * useSessionEvents).
-   *
-   * This is a *delivery* check, not a content check: it cannot see state
-   * that changed without an event (the snapshot's completeness is what
-   * covers those). */
+  /** See EventHub.getSessionRevision. */
   getSessionRevision(id: string): number {
-    return this.sessionRevisions.get(id) ?? 0;
+    return this.events.getSessionRevision(id);
   }
 
-  /** Drop every per-session structure this core keeps outside the pool.
-   *
-   * The revision counter and the hand-over hub both live as long as their
-   * session and are keyed by its id; without this they accumulate for the
-   * life of the process (a server opened for days on a workstation opens
-   * hundreds of sessions). One function so a new per-session map has one
-   * place to be cleaned up: the close path, the delete path and the
-   * shutdown path all come through here. */
+  /** Drop every per-session structure this core keeps outside the pool
+   * (the revision counter and the hand-over hub). The close path, the delete
+   * path and the shutdown path all come through here, so a new per-session
+   * map has one place to be cleaned up. */
   private forgetSession(sessionId: string): void {
-    this.sessionRevisions.delete(sessionId);
-    this.handoverHubs.delete(sessionId);
+    this.events.forgetSession(sessionId);
+    this.handovers.forget(sessionId);
   }
 
   // --- settings -----------------------------------------------------------
@@ -1236,7 +1064,7 @@ export class LumiscaCore {
     return this.push.vapidKeys();
   }
 
-  // --- stella agents (delegated to StellaAgentBook) -------------------------
+  // --- stella agents (delegated to StellaAgentService) -------------------------
 
   /** The agents in the sidebar, most recently used first. */
   listStellaAgents(): StellaAgent[] {
@@ -1244,7 +1072,7 @@ export class LumiscaCore {
   }
 
   /** The sidebar's rows: the agents, each with what its conversation last
-   * said (see StellaAgentBook.listStellaAgentSummaries). */
+   * said (see StellaAgentService.listStellaAgentSummaries). */
   listStellaAgentSummaries(): StellaAgentSummary[] {
     return this.services.stellaAgents.listStellaAgentSummaries();
   }
@@ -1275,7 +1103,7 @@ export class LumiscaCore {
    * system prompt names should exist before the agent's first turn. The row is
    * written first because the folder is named after the agent's id; the folder
    * is skipped when the machine is not running, and the first conversation
-   * prepares it then (see StellaMachines.prepareAgentFolder).
+   * prepares it then (see StellaMachineService.prepareAgentFolder).
    */
   async createStellaAgent(
     input: { name: string; role: string },
@@ -1300,13 +1128,13 @@ export class LumiscaCore {
    * which half happened.
    *
    * A conversation with a run in flight is not an error: the choice is stored
-   * and applied when that run ends (SessionCatalog.setSessionModel). The
+   * and applied when that run ends (SessionService.setSessionModel). The
    * dialog can be used at any time, and the answer to "show me this from the
    * next run" is the same as for an idle conversation.
    *
    * Afterwards the conversation row follows the choice (see
    * applyStellaAgentModel). An agent whose conversation does not exist yet
-   * simply opens on it later (see StellaMachines.getOrCreateStellaSession).
+   * simply opens on it later (see StellaMachineService.getOrCreateStellaSession).
    */
   async updateStellaAgent(
     id: string,
@@ -1346,7 +1174,7 @@ export class LumiscaCore {
    * The conversation's row is what a run reads, so the choice is written
    * there as well as on the agent — immediately, and for an idle agent the
    * rebuild happens now. A run in flight keeps its model and the change lands
-   * as the run ends (see SessionCatalog.setSessionModel). An agent without a
+   * as the run ends (see SessionService.setSessionModel). An agent without a
    * conversation has nothing to point: its row is created from the agent's
    * choice when the conversation is first opened.
    */
@@ -1391,7 +1219,7 @@ export class LumiscaCore {
     return this.services.stellaAgents.deleteStellaAgent(id);
   }
 
-  // --- the stella machine (delegated to StellaMachines) --------------------
+  // --- the stella machine (delegated to StellaMachineService) --------------------
 
   /** Attach the stella machine (the server does this at start-up, once it
    * has resolved where the container files live). Detach with undefined. */
@@ -1433,17 +1261,9 @@ export class LumiscaCore {
     return this.services.stellaMachines.refreshStellaSkills(agentId);
   }
 
-  /** The runtime a stella session's tools run on (see StellaMachines). */
+  /** The runtime a stella session's tools run on (see StellaMachineService). */
   private stellaRuntimeFor(session: SessionInfo): StellaRuntime | undefined {
     return this.services.stellaMachines.stellaRuntimeFor(session);
-  }
-
-  private handoverFor(sessionId: string): HandoverHub {
-    const existing = this.handoverHubs.get(sessionId);
-    if (existing !== undefined) return existing;
-    const hub = new HandoverHub(sessionId, (event) => this.emit(event));
-    this.handoverHubs.set(sessionId, hub);
-    return hub;
   }
 
   /** The pending hand-over of a session (the resync snapshot carries it so a
@@ -1500,7 +1320,7 @@ export class LumiscaCore {
 
   // --- MCP configuration ----------------------------------------------------
 
-  // --- sessions (delegated to SessionCatalog) ------------------------------
+  // --- sessions (delegated to SessionService) ------------------------------
 
   /** The model a new session would get, with its thinking control data. */
   getDefaultModel(): Promise<DefaultModel | null> {
@@ -1554,7 +1374,7 @@ export class LumiscaCore {
   resolveSessionAttachment(
     sessionId: string,
     name: string,
-  ): ReturnType<SessionCatalog["resolveSessionAttachment"]> {
+  ): ReturnType<SessionService["resolveSessionAttachment"]> {
     return this.services.sessions.resolveSessionAttachment(sessionId, name);
   }
 
@@ -1739,15 +1559,7 @@ export class LumiscaCore {
    * The delegating methods below stay so an existing caller keeps working;
    * new code should reach through here.
    */
-  readonly services: {
-    readonly sessions: SessionCatalog;
-    readonly stellaAgents: StellaAgentBook;
-    readonly stellaMachines: StellaMachines;
-    readonly models: ModelService;
-    readonly webSearch: WebSearchConfigService;
-    readonly mcp: McpConfigService;
-    readonly workspaces: WorkspaceConfigService;
-  };
+  readonly services: CoreServices;
 
   // --- the extracted areas ------------------------------------------------
   //
@@ -1757,98 +1569,98 @@ export class LumiscaCore {
 
   // workspaces
   async createWorkspace(name: string, folders: string[]): Promise<Workspace> {
-    return await this.services.workspaces.createWorkspace(name, folders);
+    return await this.workspaces.create(name, folders);
   }
 
   listWorkspaces(): Workspace[] {
-    return this.services.workspaces.listWorkspaces();
+    return this.workspaces.list();
   }
 
   getWorkspace(id: string): Workspace | undefined {
-    return this.services.workspaces.getWorkspace(id);
+    return this.workspaces.get(id);
   }
 
   async updateWorkspace(
     id: string,
     input: { name?: string; folders?: string[] },
   ): Promise<Workspace> {
-    return await this.services.workspaces.updateWorkspace(id, input);
+    return await this.workspaces.update(id, input);
   }
 
   deleteWorkspace(id: string): Promise<void> {
-    return this.services.workspaces.deleteWorkspace(id);
+    return this.workspaces.delete(id);
   }
 
   // web search
   getWebSearchSettings(): WebSearchSettingsView {
-    return this.services.webSearch.getWebSearchSettings();
+    return this.webSearch.view();
   }
 
   addWebSearchProvider(
     input: { id: string; apiKey: string },
   ): WebSearchSettingsView {
-    return this.services.webSearch.addWebSearchProvider(input);
+    return this.webSearch.add(input);
   }
 
   updateWebSearchProvider(
     id: string,
     input: { apiKey: string },
   ): WebSearchSettingsView {
-    return this.services.webSearch.updateWebSearchProvider(id, input);
+    return this.webSearch.update(id, input);
   }
 
   removeWebSearchProvider(id: string): WebSearchSettingsView {
-    return this.services.webSearch.removeWebSearchProvider(id);
+    return this.webSearch.remove(id);
   }
 
   setDefaultWebSearchProvider(id: string | null): WebSearchSettingsView {
-    return this.services.webSearch.setDefaultWebSearchProvider(id);
+    return this.webSearch.setDefault(id);
   }
 
   testWebSearchProvider(input: {
     id: string;
     apiKey: string | null;
   }): Promise<WebSearchTestView> {
-    return this.services.webSearch.testWebSearchProvider(input);
+    return this.webSearch.test(input);
   }
 
   // MCP configuration
   getAppMcpInfo(): McpInfo {
-    return this.services.mcp.getAppMcpInfo();
+    return this.mcp.getAppMcpInfo();
   }
 
   setAppMcpConfig(text: string): McpInfo {
-    return this.services.mcp.setAppMcpConfig(text);
+    return this.mcp.setAppMcpConfig(text);
   }
 
   getMcpInfo(workspaceId: string): McpInfo {
-    return this.services.mcp.getMcpInfo(workspaceId);
+    return this.mcp.getMcpInfo(workspaceId);
   }
 
   setMcpConfig(workspaceId: string, text: string): McpInfo {
-    return this.services.mcp.setMcpConfig(workspaceId, text);
+    return this.mcp.setMcpConfig(workspaceId, text);
   }
 
   testMcpServer(text: string): Promise<McpTestResult> {
-    return this.services.mcp.testMcpServer(text);
+    return this.mcp.testServer(text);
   }
 
   startMcpAuth(text: string, redirectUri: string): Promise<McpAuthSnapshot> {
-    return this.services.mcp.startMcpAuth(text, redirectUri);
+    return this.mcp.startAuth(text, redirectUri);
   }
 
   getMcpAuth(sessionId: string): McpAuthSnapshot | undefined {
-    return this.services.mcp.getMcpAuth(sessionId);
+    return this.mcp.getAuth(sessionId);
   }
 
   cancelMcpAuth(sessionId: string): boolean {
-    return this.services.mcp.cancelMcpAuth(sessionId);
+    return this.mcp.cancelAuth(sessionId);
   }
 
   completeMcpAuth(
     input: { state: string; code?: string; error?: string },
   ): Promise<McpAuthSnapshot | undefined> {
-    return this.services.mcp.completeMcpAuth(input);
+    return this.mcp.completeAuth(input);
   }
 
   // models

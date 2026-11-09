@@ -9,7 +9,7 @@ import {
 import { base64ToBytes, bytesToBase64 } from "../base64.ts";
 import { createChatTools, createCodingTools } from "../tools/mod.ts";
 import { ToolRegistry } from "../tools/registry.ts";
-import type { Workspace } from "../types/workspace.ts";
+import type { Workspace } from "../domain/workspace.ts";
 import type {
   ActionResult,
   BrowserBackend,

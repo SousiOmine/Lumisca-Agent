@@ -1,3 +1,4 @@
+import { stellaApiStub } from "./test-stubs.ts";
 /**
  * Choosing an agent's model from its edit dialog.
  *
@@ -35,7 +36,7 @@ interface Received {
 }
 
 function fakeCore(received: Received[]): StellaApi {
-  return {
+  return stellaApiStub({
     updateStellaAgent: (
       id: string,
       patch: Received["patch"],
@@ -43,7 +44,7 @@ function fakeCore(received: Received[]): StellaApi {
       received.push({ id, patch });
       return Promise.resolve({ ...AGENT, ...patch, icon: "" });
     },
-  } as unknown as StellaApi;
+  });
 }
 
 async function patch(body: unknown, received: Received[]) {

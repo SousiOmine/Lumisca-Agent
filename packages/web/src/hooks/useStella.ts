@@ -16,7 +16,7 @@ import {
   stellaStateOf,
 } from "../stella-state.ts";
 import { compareAgentRows, previewOf, samePreview } from "@lumisca/core/shared";
-import { createReconnectScheduler } from "../reconnect.ts";
+import { createStreamController } from "./useStreamController.ts";
 import { NEVER, useVisibleInterval } from "./useVisibleInterval.ts";
 import { startRevisionProbe } from "./useRevisionProbe.ts";
 import type {
@@ -24,6 +24,7 @@ import type {
   PendingImage,
   StellaAgent,
   StellaAgentSummary,
+  StellaEvent,
 } from "../types.ts";
 
 /** How often the agent list is re-read while the page is visible.
@@ -268,7 +269,6 @@ export function useStella(
   useEffect(() => {
     if (!enabled || activeAgentId === null || conversation === null) return;
     let closed = false;
-    let close: (() => void) | undefined;
     /** Whether a run was under way when the last event arrived. A duplicate
      * `agent_end` (the same run's end seen twice) must not notify twice, and
      * a resynced snapshot is the truth about it. */
@@ -280,7 +280,6 @@ export function useStella(
      * same request seen twice) must not notify twice. Tool call ids are
      * unique, so the id alone tells "the same request" from a new one. */
     let notifiedHandover: string | null = null;
-    const reconnect = createReconnectScheduler({ stopped: () => closed });
 
     const resync = async () => {
       try {
@@ -298,62 +297,57 @@ export function useStella(
       }
     };
 
-    const connect = () => {
-      if (closed) return;
-      close = connectStellaEvents(
-        activeAgentId,
+    const stream = createStreamController<StellaEvent>({
+      stopped: () => closed,
+      connect: ({ onEvent, onClose, onOpen }) =>
+        connectStellaEvents(activeAgentId, onEvent, onClose, onOpen),
+      onEvent: (event) => {
         // Every event of a conversation is a whole message or a change of
         // what the run is waiting on: there is no streamed text to buffer,
         // so each one is applied as it arrives.
-        (event) => {
-          // A run's end is the moment a user who is looking elsewhere needs
-          // to hear about it. Code mode does this in its own event handler;
-          // stella's stream is a different one, so a routine's result was
-          // silent here (#41). A hand-over is the same need from the other
-          // side: the run is blocked AT THE SCREEN, and only the user can
-          // release it.
-          if (event.type === "agent_start") wasRunning = true;
-          if (event.type === "entry" && event.entry.role === "assistant") {
-            lastReply = event.entry.text;
-          }
-          if (
-            event.type === "handover" && event.handover !== null &&
-            event.handover.toolCallId !== notifiedHandover
-          ) {
-            notifiedHandover = event.handover.toolCallId;
-            void maybeNotifyHandover(
+        // A run's end is the moment a user who is looking elsewhere needs
+        // to hear about it. Code mode does this in its own event handler;
+        // stella's stream is a different one, so a routine's result was
+        // silent here (#41). A hand-over is the same need from the other
+        // side: the run is blocked AT THE SCREEN, and only the user can
+        // release it.
+        if (event.type === "agent_start") wasRunning = true;
+        if (event.type === "entry" && event.entry.role === "assistant") {
+          lastReply = event.entry.text;
+        }
+        if (
+          event.type === "handover" && event.handover !== null &&
+          event.handover.toolCallId !== notifiedHandover
+        ) {
+          notifiedHandover = event.handover.toolCallId;
+          void maybeNotifyHandover(
+            conversationRef.current?.agentName ?? "",
+            event.handover.reason,
+          );
+        }
+        if (event.type === "agent_end") {
+          if (wasRunning) {
+            wasRunning = false;
+            void maybeNotifyAgentEnd(
               conversationRef.current?.agentName ?? "",
-              event.handover.reason,
+              lastReply,
             );
           }
-          if (event.type === "agent_end") {
-            if (wasRunning) {
-              wasRunning = false;
-              void maybeNotifyAgentEnd(
-                conversationRef.current?.agentName ?? "",
-                lastReply,
-              );
-            }
-            lastReply = "";
-          }
-          setConversation((current) => {
-            if (current === null) return current;
-            return applyStellaEvent(current, event) ?? current;
-          });
-        },
-        () => {
-          if (closed) return;
-          void resync();
-          reconnect.schedule(connect);
-        },
-        () => {
-          reconnect.reset();
-          void resync();
-        },
-      );
-    };
-
-    connect();
+          lastReply = "";
+        }
+        setConversation((current) => {
+          if (current === null) return current;
+          return applyStellaEvent(current, event) ?? current;
+        });
+      },
+      onClose: () => {
+        void resync();
+      },
+      onOpen: () => {
+        void resync();
+      },
+    });
+    stream.connect();
     // The conversation has a revision counter of its own; a probe compares it
     // with what this view has seen (see useRevisionProbe).
     let probe: number | undefined;
@@ -372,9 +366,8 @@ export function useStella(
 
     return () => {
       closed = true;
-      reconnect.cancel();
+      stream.close();
       stopProbe();
-      close?.();
     };
     // `conversation === null` gates the first connection: there is no
     // stream before there is a conversation. Re-running on every state

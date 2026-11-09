@@ -6,8 +6,8 @@ import { McpOAuthStore } from "./oauth.ts";
 import { McpService } from "./service.ts";
 import { startFakeAuthServer, startFakeMcpServer } from "./fake-http.ts";
 import { APP_MCP_SETTINGS_KEY } from "../shared/settings-keys.ts";
-import type { SessionInfo } from "../types/session.ts";
-import type { Workspace } from "../types/workspace.ts";
+import type { SessionInfo } from "../domain/session.ts";
+import type { Workspace } from "../domain/workspace.ts";
 
 /** The callback path of a server reached at its own origin — the shape the
  * route builds (see routes/mcp.ts). */

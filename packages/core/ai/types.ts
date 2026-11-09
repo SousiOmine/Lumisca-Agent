@@ -548,9 +548,6 @@ export type AuthNotice = {
   [key: string]: unknown;
 };
 
-/** Alias kept for the server login bridge. */
-export type AuthEvent = AuthNotice;
-
 /** Bridges one login flow to whoever drives the UI. */
 export interface AuthInteraction {
   /** Prompt the user for input (a secret/plain value, or a select option

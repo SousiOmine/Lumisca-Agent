@@ -8,7 +8,7 @@ import {
   revisionGap,
   type SnapshotParts,
 } from "../events.ts";
-import { createReconnectScheduler } from "../reconnect.ts";
+import { createStreamController } from "./useStreamController.ts";
 import { startRevisionProbe } from "./useRevisionProbe.ts";
 import { keysForPeer, tabKey } from "../tabs.ts";
 import { maybeNotifyAgentEnd, maybeNotifyQuestion } from "../notify.ts";
@@ -500,14 +500,12 @@ export function useSessionEvents(
 
   useEffect(() => {
     let disposed = false;
-    const reconnect = createReconnectScheduler({ stopped: () => disposed });
     let syncTimer: ReturnType<typeof setInterval> | undefined;
-    let disconnect: (() => void) | undefined;
     // Whether the event stream is currently connected. While it is up the
     // events are the live source; while it is down a short-interval sync
-    // covers everything (see syncState). The flags live in this effect's
-    // closure — it runs once (all callbacks are stable) — and are updated
-    // from the connectEvents onOpen/onClose callbacks.
+    // covers everything (see syncState). The flag lives in this effect's
+    // closure — it runs once (all callbacks are stable) — and is updated
+    // from the stream's open/close callbacks.
     let connected = false;
 
     const stopSyncTimer = () => {
@@ -540,25 +538,36 @@ export function useSessionEvents(
       disposed: () => disposed,
     });
 
-    /** Cancel any pending reconnect and close the existing socket, so
-     * connect() always starts from a clean slate (prevents double-open). */
-    const cleanup = () => {
-      reconnect.cancel();
-      disconnect?.();
-      disconnect = undefined;
-    };
-
-    /** Schedule the next reconnect with exponential backoff (see
-     * reconnect.ts: both event streams share the rule). */
-    const scheduleReconnect = () => {
-      reconnect.schedule(connect);
-    };
+    // One socket at a time, with the shared reconnect rule (reconnect.ts).
+    // A close re-syncs and lets the controller schedule the retry; an open
+    // re-syncs again and stops the fallback interval — the stream is the
+    // live source once more.
+    const stream = createStreamController({
+      stopped: () => disposed,
+      connect: ({ onEvent, onClose, onOpen }) =>
+        connectEvents(onEvent, onClose, onOpen),
+      onEvent: handleEvent,
+      onClose: () => {
+        connected = false;
+        // The server may be gone (not just the socket): arm the desktop
+        // health monitor so its banner can classify and offer restart.
+        options.onConnectionLost?.();
+        startSyncTimer();
+        resync();
+      },
+      onOpen: () => {
+        connected = true;
+        stopSyncTimer();
+        options.onConnectionOpen?.();
+        resync();
+      },
+    });
 
     // Opportunistic sync: a run that finishes entirely inside a disconnect
     // window — or a todo mutation whose snapshot event was lost — would
     // otherwise only appear at the next reconnect. While connected the WS
-    // delivers the events, so a tab returning to the foreground is the
-    // only moment a missed state gets re-synced (the interval covers the
+    // delivers the events, so a tab returning to the foreground is the only
+    // moment a missed state gets re-synced (the interval covers the
     // disconnected case).
     const onVisibility = () => {
       if (document.visibilityState !== "visible") return;
@@ -566,52 +575,17 @@ export function useSessionEvents(
       // buffered before it hid is still pending, and must land before the
       // resync below compares the view with the server's snapshot.
       flushDeltas();
-      if (connected) {
-        syncState();
-      } else {
-        // Tab returns to foreground while disconnected: try to reconnect
-        // immediately instead of waiting for the backoff timer.
-        reconnect.cancel();
-        connect();
-      }
+      if (connected) syncState();
+      // Tab returns to foreground while disconnected: try to reconnect
+      // immediately instead of waiting for the backoff timer.
+      else stream.connect();
     };
     document.addEventListener("visibilitychange", onVisibility);
-
-    const connect = () => {
-      // Ensure any existing connection and pending reconnect are torn down
-      // before opening a new one, so the socket is always singular.
-      cleanup();
-      if (disposed) return;
-      disconnect = connectEvents(
-        handleEvent,
-        () => {
-          // On close: clear stuck state and re-sync, then reconnect.
-          if (disposed) return;
-          connected = false;
-          // The server may be gone (not just the socket): arm the desktop
-          // health monitor so its banner can classify and offer restart.
-          options.onConnectionLost?.();
-          startSyncTimer();
-          resync();
-          scheduleReconnect();
-        },
-        () => {
-          // On (re)open: re-sync state (events emitted while the socket
-          // was down are merged in) and stop the fallback interval — the
-          // stream is the live source again. Reset the backoff counter.
-          connected = true;
-          reconnect.reset();
-          stopSyncTimer();
-          options.onConnectionOpen?.();
-          resync();
-        },
-      );
-    };
-    connect();
+    stream.connect();
 
     return () => {
       disposed = true;
-      cleanup();
+      stream.close();
       stopSyncTimer();
       stopProbe();
       // Text buffered for the next frame must land before the views are

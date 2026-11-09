@@ -1,6 +1,6 @@
 import { CoreError } from "../errors.ts";
 import type { MessageWindow } from "../session/messages.ts";
-import type { StellaEntry } from "../types/stella-conversation.ts";
+import type { StellaEntry } from "../domain/stella-conversation.ts";
 import { TOOL_HISTORY_SEARCH } from "../shared/mod.ts";
 import { formatLocalDateTime } from "../shared/misc.ts";
 import {

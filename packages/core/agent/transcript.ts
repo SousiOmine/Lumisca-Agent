@@ -1,7 +1,7 @@
 import type { AgentMessage } from "../ai/types.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import { messageIdentityOf } from "../session/transcript-window.ts";
-import type { MessageIdentity } from "../types/event.ts";
+import type { MessageIdentity } from "../domain/event.ts";
 
 /**
  * The persisted part of a session's transcript, and where it sits in the

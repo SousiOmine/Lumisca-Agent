@@ -21,7 +21,7 @@ import type {
   BackgroundSpawner,
   BackgroundSpawnInput,
 } from "./background-backend.ts";
-import type { ClientEvent } from "../types/event.ts";
+import type { ClientEvent } from "../domain/event.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 import { LumiscaCore } from "../mod.ts";
 import { decodeUtf8 } from "../shared/mod.ts";

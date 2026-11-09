@@ -1,3 +1,4 @@
+import { sameAsks } from "@lumisca/core/shared";
 import type {
   BackgroundView,
   GoalInfo,
@@ -24,15 +25,15 @@ export function sameTodoPlan(a: TodoPhase[], b: TodoPhase[]): boolean {
 }
 
 /** True when two pending-question lists are identical: the same asks in the
- * same order. A pending ask's questions never change (they are fixed when
- * the tool asks), so the tool call ids are the whole identity — the resync
- * replaces the list and must not re-render a tab whose asks are unchanged. */
+ * same order, with the same questions. A pending ask's questions never
+ * change while it waits (they are fixed when the tool asks), so the tool call
+ * and the question ids are the whole identity — a resync that re-sends the
+ * same list must not re-render a tab. */
 export function sameQuestions(
   a: PendingQuestion[],
   b: PendingQuestion[],
 ): boolean {
-  if (a.length !== b.length) return false;
-  return a.every((entry, i) => entry.toolCallId === b[i]!.toolCallId);
+  return sameAsks(a, b);
 }
 
 /** Whether an event's revision skips past what this view has seen: the

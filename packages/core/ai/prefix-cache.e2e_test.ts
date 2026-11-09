@@ -21,7 +21,7 @@ import { assert } from "@std/assert";
 import { Agent } from "./agent.ts";
 import { createStreamFn } from "./stream.ts";
 import { languageModelFor } from "./lang-model.ts";
-import { toLlmMessages } from "../types/notification.ts";
+import { toLlmMessages } from "../domain/notification.ts";
 import type {
   AgentTool,
   Api,

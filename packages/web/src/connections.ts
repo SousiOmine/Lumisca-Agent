@@ -39,11 +39,6 @@ function sameEntries(
   });
 }
 
-/** Re-read the registry (a no-op while a read is already in flight). */
-export function reloadConnections(): Promise<void> {
-  return store.reload();
-}
-
 /** Replace the whole registry and reflect the server's answer. The server
  * stores the list it was given, so the write's own list is what every screen
  * should show — reading it back would be a second round trip for the same

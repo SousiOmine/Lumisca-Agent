@@ -1,8 +1,8 @@
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import type { Model } from "../ai/types.ts";
 import { CoreError } from "../errors.ts";
-import type { SessionInfo } from "../types/session.ts";
-import type { Workspace } from "../types/workspace.ts";
+import type { SessionInfo } from "../domain/session.ts";
+import type { Workspace } from "../domain/workspace.ts";
 import type { AgentFactory } from "./factory.ts";
 import {
   SessionPool,

@@ -4,7 +4,7 @@ import {
   buildSystemPrompt,
   sessionSkills,
 } from "./mod.ts";
-import type { Workspace } from "../types/workspace.ts";
+import type { Workspace } from "../domain/workspace.ts";
 import {
   TOOL_ASK,
   TOOL_ASYNC_BASH,

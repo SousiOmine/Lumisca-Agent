@@ -1,6 +1,6 @@
 import type { Api, Model } from "../ai/types.ts";
 import type { AgentMessage, StreamFn } from "../ai/types.ts";
-import type { ClientEvent } from "../types/event.ts";
+import type { ClientEvent } from "../domain/event.ts";
 import type { GoalInfo } from "../shared/goal.ts";
 import { DEFAULT_LOCALE, type Locale, translate } from "../shared/mod.ts";
 import { GoalJudge, lastAssistantOutput } from "./judge.ts";

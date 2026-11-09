@@ -1,6 +1,6 @@
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import type { TodoPhase } from "../shared/mod.ts";
-import type { ClientEvent } from "../types/event.ts";
+import type { ClientEvent } from "../domain/event.ts";
 import { createTodoTool, formatTodoCounts, TodoHub } from "./todo.ts";
 import { toolText } from "../test-utils.ts";
 

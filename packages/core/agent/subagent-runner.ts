@@ -20,7 +20,7 @@ import { ContextCompactor } from "../ai/context-compaction.ts";
 import { WORK_COMPACTION_STYLE } from "../ai/compaction-style.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import type { ThinkingLevel } from "../shared/mod.ts";
-import { toLlmMessages } from "../types/notification.ts";
+import { toLlmMessages } from "../domain/notification.ts";
 
 /** What one sub-agent's agent is built from. */
 export interface SubagentAgentInit {

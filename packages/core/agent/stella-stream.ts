@@ -37,13 +37,13 @@ import type { AgentMessage } from "../ai/types.ts";
 import { chatMessageOfDetails } from "../shared/chat-message.ts";
 import { assistantTextVerdict } from "./silent-reply.ts";
 import { TOOL_SEND_CHAT } from "../shared/tool-names.ts";
-import type { ClientEvent } from "../types/event.ts";
+import type { ClientEvent } from "../domain/event.ts";
 import type {
   StellaEntry,
   StellaEvent,
   StellaHandover,
   StellaQuestion,
-} from "../types/stella-conversation.ts";
+} from "../domain/stella-conversation.ts";
 
 /** A message that carries content blocks: the three conversational roles. */
 type ContentMessage = Extract<

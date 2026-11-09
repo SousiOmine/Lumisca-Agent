@@ -1,5 +1,5 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
-import type { ClientEvent } from "../types/event.ts";
+import type { ClientEvent } from "../domain/event.ts";
 import { AskHub, createAskTool } from "./ask.ts";
 import { toolText } from "../test-utils.ts";
 

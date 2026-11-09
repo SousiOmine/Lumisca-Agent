@@ -18,7 +18,7 @@ import { TodoHub } from "./tools/todo.ts";
 import { TaskHub } from "./tools/task-hub.ts";
 import type { StreamFn } from "./ai/types.ts";
 import type { WindowPage } from "./session/transcript-window.ts";
-import type { StellaEntry } from "./types/stella-conversation.ts";
+import type { StellaEntry } from "./domain/stella-conversation.ts";
 import type { VmScreen } from "./vm/screen.ts";
 import { CoreError } from "./errors.ts";
 import { MINI_PNG, promptSession, withTempDir } from "./test-utils.ts";

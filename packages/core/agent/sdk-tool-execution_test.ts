@@ -5,7 +5,7 @@ import { createAssistantMessageEventStream } from "../ai/event-stream.ts";
 import { fauxAssistantMessage, fauxToolCall } from "../ai/faux.ts";
 import { languageModelFor } from "../ai/lang-model.ts";
 import { bytesToBase64 } from "../base64.ts";
-import { MINI_PNG, withTempDir } from "../test-utils.ts";
+import { fakeModel, MINI_PNG, withTempDir } from "../test-utils.ts";
 import type {
   AgentEvent,
   AgentMessage,
@@ -24,15 +24,6 @@ import { toAgentTool } from "../tools/pi-adapter.ts";
 import { object, string, type Tool } from "../tools/schema.ts";
 import { contentText } from "../shared/mod.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
-
-function fakeModel(): Model<Api> {
-  return {
-    id: "m",
-    name: "m",
-    api: "openai-completions",
-    provider: "faux",
-  } as unknown as Model<Api>;
-}
 
 const echoSchema = object({ text: string("Text to echo") });
 
@@ -117,7 +108,7 @@ Deno.test("SDK-executed tools keep their args and are not re-executed", async ()
   const agent = new Agent({
     initialState: {
       systemPrompt: "test",
-      model: fakeModel(),
+      model: fakeModel("m", { api: "openai-completions", provider: "faux" }),
       tools: [toAgentTool(countingEchoTool(counter))],
       thinkingLevel: "off",
     },
@@ -192,7 +183,7 @@ Deno.test("tool calls without SDK results still run via the fallback", async () 
   const agent = new Agent({
     initialState: {
       systemPrompt: "test",
-      model: fakeModel(),
+      model: fakeModel("m", { api: "openai-completions", provider: "faux" }),
       tools: [toAgentTool(countingEchoTool(counter))],
       thinkingLevel: "off",
     },
@@ -317,7 +308,7 @@ Deno.test("the tool result keeps its details for the UI and stays text for the m
   const agent = new Agent({
     initialState: {
       systemPrompt: "test",
-      model: fakeModel(),
+      model: fakeModel("m", { api: "openai-completions", provider: "faux" }),
       tools: [editTool],
       thinkingLevel: "off",
     },
@@ -370,7 +361,7 @@ Deno.test("a stop during an SDK-executed tool leaves a session that still runs",
   const agent = new Agent({
     initialState: {
       systemPrompt: "test",
-      model: fakeModel(),
+      model: fakeModel("m", { api: "openai-completions", provider: "faux" }),
       tools: [stuck],
       thinkingLevel: "off",
     },

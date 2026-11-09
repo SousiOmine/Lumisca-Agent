@@ -30,23 +30,18 @@ import { useTabs } from "./hooks/useTabs.ts";
 import { useTabClose } from "./hooks/useTabClose.ts";
 import { EMPTY_DRAFT, useDrafts } from "./hooks/useDrafts.ts";
 import { TabBar, type TabSummary } from "./components/TabBar.tsx";
-import { CloseTabsDialog } from "./components/CloseTabsDialog.tsx";
 import { TitleBar } from "./components/TitleBar.tsx";
 import { MacosTitleBarDrag } from "./components/MacosTitleBarDrag.tsx";
 import { AppMenu } from "./components/AppMenu.tsx";
 import { ChatView } from "./components/ChatView.tsx";
 import { NewSessionView } from "./components/NewSessionView.tsx";
-import { RecentSessionsModal } from "./components/RecentSessionsModal.tsx";
-import {
-  type SettingsCategory,
-  SettingsModal,
-} from "./components/SettingsModal.tsx";
+import type { SettingsCategory } from "./components/SettingsModal.tsx";
+import { AppDialogs } from "./components/AppDialogs.tsx";
 import { UpdateBanner } from "./components/UpdateBanner.tsx";
 import { ServerDownBanner } from "./components/ServerDownBanner.tsx";
-import { ModeGate, ModeGateDialog } from "./components/ModeGate.tsx";
+import { ModeGate } from "./components/ModeGate.tsx";
 import { StellaModeScreen } from "./components/StellaModeScreen.tsx";
 import { StellaTitleBarHeader } from "./components/stella/StellaTitleBarHeader.tsx";
-import { AgentEditDialog } from "./components/stella/AgentEditDialog.tsx";
 import { rememberMode, storedMode, useAppMode } from "./hooks/useAppMode.ts";
 import { useStella } from "./hooks/useStella.ts";
 import { usePush } from "./hooks/usePush.ts";
@@ -785,69 +780,72 @@ export function App({ initialData }: AppProps): ReactElement {
             />
           )}
       </div>
-      {settingsOpen && settingsRoute !== null && (
-        <SettingsModal
-          theme={theme}
-          themeError={themeError}
-          onThemeChange={setTheme}
-          language={language}
-          languageError={languageError}
-          onLanguageChange={setLanguage}
-          update={update}
-          notifyEnabled={notifyEnabled}
-          onNotifyEnabledChange={handleNotifyEnabledChange}
-          push={push}
-          category={settingsRoute.category}
-          onOpenCategory={openSettingsAt}
-          onBackToList={backToSettingsList}
-          routines={routines}
-          routineAgent={routineAgentName}
-          onClose={closeSettings}
-        />
-      )}
-      {showRecent && (
-        <RecentSessionsModal
-          // Every session tab this page has open; the draft tab is not a
-          // session (it is the new-session screen, which every closed
-          // session's re-open leaves anyway).
-          openKeys={new Set(openSessions)}
-          onOpen={(key) => {
-            goToTab(key);
-            setShowRecent(false);
-          }}
-          onClose={closeRecent}
-        />
-      )}
-      {pendingClose !== null && (
-        <CloseTabsDialog
-          names={pendingClose.names}
-          onCancel={tabClose.cancel}
-          onStopAndClose={() => tabClose.resolve(false)}
-          onKeepRunning={() => tabClose.resolve(true)}
-        />
-      )}
-      {stellaActive && stellaAgent !== undefined && editingStellaAgent && (
-        <AgentEditDialog
-          agent={stellaAgent}
-          onChanged={(updated) => {
-            stella.replaceAgent(updated);
-            setEditingStellaAgent(false);
-          }}
-          onClose={() => setEditingStellaAgent(false)}
-        />
-      )}
-      {showModeSelect && (
-        <ModeGateDialog
-          status={machineStatus}
-          mode={mode}
-          error={appMode.error}
-          choose={async (next) => {
-            await chooseMode(next);
-            setShowModeSelect(false);
-          }}
-          onClose={closeModeSelect}
-        />
-      )}
+      <AppDialogs
+        settings={settingsOpen && settingsRoute !== null
+          ? {
+            theme,
+            themeError,
+            onThemeChange: setTheme,
+            language,
+            languageError,
+            onLanguageChange: setLanguage,
+            update,
+            notifyEnabled,
+            onNotifyEnabledChange: handleNotifyEnabledChange,
+            push,
+            category: settingsRoute.category,
+            onOpenCategory: openSettingsAt,
+            onBackToList: backToSettingsList,
+            routines,
+            routineAgent: routineAgentName,
+            onClose: closeSettings,
+          }
+          : null}
+        recent={showRecent
+          ? {
+            // Every session tab this page has open; the draft tab is not a
+            // session (it is the new-session screen, which every closed
+            // session's re-open leaves anyway).
+            openKeys: new Set(openSessions),
+            onOpen: (key) => {
+              goToTab(key);
+              setShowRecent(false);
+            },
+            onClose: closeRecent,
+          }
+          : null}
+        close={pendingClose !== null
+          ? {
+            names: pendingClose.names,
+            onCancel: tabClose.cancel,
+            onStopAndClose: () => tabClose.resolve(false),
+            onKeepRunning: () => tabClose.resolve(true),
+          }
+          : null}
+        agentEdit={stellaActive && stellaAgent !== undefined &&
+            editingStellaAgent
+          ? {
+            agent: stellaAgent,
+            onChanged: (updated) => {
+              stella.replaceAgent(updated);
+              setEditingStellaAgent(false);
+            },
+            onClose: () => setEditingStellaAgent(false),
+          }
+          : null}
+        modeGate={showModeSelect
+          ? {
+            status: machineStatus,
+            mode,
+            error: appMode.error,
+            choose: async (next) => {
+              await chooseMode(next);
+              setShowModeSelect(false);
+            },
+            onClose: closeModeSelect,
+          }
+          : null}
+      />
     </div>
   );
 }

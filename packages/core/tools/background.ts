@@ -25,9 +25,9 @@ import type { FileBackend } from "./file-backend.ts";
 import { safetyBlockResult } from "./safety.ts";
 import { MAX_TOOL_OUTPUT } from "./truncate.ts";
 import { CoreError } from "../errors.ts";
-import type { NotificationPayload } from "../types/notification.ts";
+import type { NotificationPayload } from "../domain/notification.ts";
 import type { NotificationStatus } from "../ai/types.ts";
-import type { ClientEvent } from "../types/event.ts";
+import type { ClientEvent } from "../domain/event.ts";
 
 /** Concurrent background commands per session. Bounds resource usage; the
  * agent is told to wait or kill when the limit is reached. Only running

@@ -8,7 +8,7 @@ import {
   type StellaAgentSummary,
   type StellaPreview,
 } from "./mod.ts";
-import type { StellaEntry } from "../types/stella-conversation.ts";
+import type { StellaEntry } from "../domain/stella-conversation.ts";
 
 /**
  * The second line of an agent's sidebar row.

@@ -1,4 +1,4 @@
-import type { Workspace } from "../types/workspace.ts";
+import type { Workspace } from "../domain/workspace.ts";
 import type { SkillDef } from "../skills/discover.ts";
 import {
   fileTools,

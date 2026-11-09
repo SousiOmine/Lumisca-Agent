@@ -29,6 +29,36 @@ export interface AskAnswer {
   values: string[];
 }
 
+/** One pending ask: the questions a run is blocked on, keyed by the tool
+ * call that asked them. Code mode's `PendingQuestion` and stella's
+ * `StellaQuestion` are the same pair, so the shape and its comparison live
+ * once. */
+export interface AskTurn {
+  toolCallId: string;
+  questions: AskQuestion[];
+}
+
+/** True when two pending-ask lists are identical. A pending ask's questions
+ * never change while it waits (they are fixed when the tool asks), so the
+ * tool call and the question ids are the whole identity: a resync that
+ * re-sends the same list must not re-render the view. */
+export function sameAsks(
+  a: readonly AskTurn[],
+  b: readonly AskTurn[],
+): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  return a.every((turn, index) => {
+    const other = b[index];
+    return other !== undefined &&
+      turn.toolCallId === other.toolCallId &&
+      turn.questions.length === other.questions.length &&
+      turn.questions.every((question, i) =>
+        question.id === other.questions[i]?.id
+      );
+  });
+}
+
 /** State of one todo task (the `todo` tool). `in_progress` marks work the
  * agent is doing now; several tasks may carry it when work genuinely runs in
  * parallel. */

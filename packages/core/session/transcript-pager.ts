@@ -3,7 +3,9 @@ import { CoreError } from "../errors.ts";
 import type { MessageRepo, StoredMessage, TranscriptRows } from "./messages.ts";
 import {
   identityCursor,
+  MAX_TRANSCRIPT_WINDOW_ITEMS,
   messageIdentityOf,
+  TRANSCRIPT_WINDOW_ITEMS,
   type WindowQuery,
 } from "./transcript-window.ts";
 
@@ -40,13 +42,6 @@ import {
  * was unbounded: opening a conversation would have cost its longest turn.
  */
 
-/** Items one read returns when the caller names no count. */
-export const TRANSCRIPT_PAGE_ITEMS = 40;
-
-/** Most items one read returns: a client-sized window must not be able to
- * ask for the whole transcript again. */
-export const MAX_TRANSCRIPT_PAGE_ITEMS = 200;
-
 /** How far back a page looks for the row that begins its turn.
  *
  * A turn is a prompt plus the replies it produced, so a group or two of rows
@@ -60,7 +55,7 @@ export const MAX_TRANSCRIPT_PAGE_ITEMS = 200;
  * dropping it (see the web's buildTurns). The alternative is what this
  * budget exists to avoid: opening a conversation costs its whole longest
  * turn. */
-const BOUNDARY_LOOKBACK = MAX_TRANSCRIPT_PAGE_ITEMS * 2;
+const BOUNDARY_LOOKBACK = MAX_TRANSCRIPT_WINDOW_ITEMS * 2;
 
 /** What one read answers. */
 export interface TranscriptPage<T> {
@@ -98,8 +93,8 @@ export function readTranscriptPage<T>(
 ): TranscriptPage<T> {
   const limit = pageLimit(
     query.limit,
-    rules.pageItems ?? TRANSCRIPT_PAGE_ITEMS,
-    rules.maxPageItems ?? MAX_TRANSCRIPT_PAGE_ITEMS,
+    rules.pageItems ?? TRANSCRIPT_WINDOW_ITEMS,
+    rules.maxPageItems ?? MAX_TRANSCRIPT_WINDOW_ITEMS,
   );
   const rows = rules.rows;
   const older = query.older ?? null;

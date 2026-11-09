@@ -1,4 +1,4 @@
-import type { Workspace } from "../types/workspace.ts";
+import type { Workspace } from "../domain/workspace.ts";
 /** The machine's home, the folder its agents work in, and the account the
  * tools run as.
  *

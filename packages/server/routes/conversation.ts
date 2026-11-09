@@ -102,7 +102,7 @@ export function conversationRoutes(
 
   /** Switch the model the session runs on (code mode only — see
    * modelRoute). A run in flight is not refused: the choice is stored and the
-   * agent follows it once that run ends (SessionCatalog.setSessionModel), so
+   * agent follows it once that run ends (SessionService.setSessionModel), so
    * the answer is the session record with the new model — what the next run
    * will use. */
   if (options.modelRoute) {

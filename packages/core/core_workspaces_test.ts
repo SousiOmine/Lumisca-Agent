@@ -170,7 +170,7 @@ Deno.test("a model switch is stored while streaming; a workspace update waits", 
   core.startPrompt(session.id, "go");
 
   // A model switch is not a reason to say no: the row is written now and the
-  // agent is rebuilt as the run ends (SessionCatalog.setSessionModel).
+  // agent is rebuilt as the run ends (SessionService.setSessionModel).
   core.setSessionModel(session.id, providerId, modelId);
   assertEquals(core.getSession(session.id)!.modelId, modelId);
   // A workspace edit is still refused: it changes the prompt and the tools the

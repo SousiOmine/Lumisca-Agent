@@ -3,9 +3,9 @@ import type { Api, Model } from "../ai/types.ts";
 import type { Tool } from "../tools/schema.ts";
 import type { StellaRuntime } from "../vm/runtime.ts";
 import type { ContextProvider } from "../ai/context-providers.ts";
-import type { ClientEvent } from "../types/event.ts";
-import type { SessionInfo } from "../types/session.ts";
-import type { Workspace } from "../types/workspace.ts";
+import type { ClientEvent } from "../domain/event.ts";
+import type { SessionInfo } from "../domain/session.ts";
+import type { Workspace } from "../domain/workspace.ts";
 import {
   createChatTools,
   createCodingTools,

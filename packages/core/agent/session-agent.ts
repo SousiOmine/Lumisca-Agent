@@ -4,6 +4,7 @@ import type {
   AgentMessage,
   Api,
   AssistantMessage,
+  CheckpointMessage,
   ImageContent,
   Message,
   Model,
@@ -11,21 +12,15 @@ import type {
   StreamFn,
   TextContent,
 } from "../ai/types.ts";
-import { CoreError, errorMessage } from "../errors.ts";
+import { errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";
 import { RetryManager } from "./retry-manager.ts";
 import { GoalRunner } from "./goal-runner.ts";
-import type { ClientEvent } from "../types/event.ts";
-import { ToolArgsField } from "../ai/tool-args-field.ts";
+import type { ClientEvent } from "../domain/event.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import { TranscriptStore } from "./transcript.ts";
 import { messageIdentityOf } from "../session/transcript-window.ts";
-import {
-  type PromptFileRef,
-  type ThinkingLevel,
-  TOOL_CHAT_ATTACH,
-  TOOL_SEND_CHAT,
-} from "../shared/mod.ts";
+import type { PromptFileRef, ThinkingLevel } from "../shared/mod.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
 import { McpAttachmentHost } from "./mcp-host.ts";
 import { Rewinder } from "./rewinder.ts";
@@ -34,6 +29,7 @@ import type { Tool } from "../tools/schema.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
 import type { SessionToolRegistries } from "../tools/registries.ts";
 import type { AskHub, PendingQuestion } from "../tools/ask.ts";
+import { InterruptionHub } from "./interruption-hub.ts";
 import type { HandoverHub, PendingHandover } from "../vm/handover.ts";
 import type { AskAnswer } from "../shared/mod.ts";
 import {
@@ -47,41 +43,36 @@ import type {
   BackgroundProcessManager,
 } from "../tools/background.ts";
 import { formatBackgroundNotification } from "../tools/background.ts";
-import { notificationMessage } from "../types/notification.ts";
+import { notificationMessage } from "../domain/notification.ts";
 import type { TaskHub } from "../tools/task-hub.ts";
-import type { NotificationPayload } from "../types/notification.ts";
-import { toLlmMessages } from "../types/notification.ts";
+import type { NotificationPayload } from "../domain/notification.ts";
+import { toLlmMessages } from "../domain/notification.ts";
 import type { ContextProvider } from "../ai/context-providers.ts";
 import { contextMessage } from "../ai/context-providers.ts";
-import type { ModePrompt } from "../types/mode-message.ts";
-import { buildModeMessage } from "../types/mode-message.ts";
+import type { ModePrompt } from "../domain/mode-message.ts";
+import { buildModeMessage } from "../domain/mode-message.ts";
 import { ImageAnalyzer } from "./image-analysis.ts";
 import { TitleGenerator } from "./title-generation.ts";
+import { TitleScheduler } from "./title-scheduler.ts";
+import { type RoutineDropHost, RoutineRun } from "./routine-run.ts";
+import { CardStreams, translateRunEvent } from "./run-events.ts";
 import type { GoalInfo } from "../shared/goal.ts";
 import type { GoalStore } from "../goal/loop.ts";
 import {
   type CompactionResult,
-  ContextCompactor,
   contextStart,
 } from "../ai/context-compaction.ts";
 import type { CompactionStyle } from "../ai/compaction-style.ts";
+import {
+  CompactionController,
+  type IdleCompaction,
+} from "./compaction-controller.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import { ROUTINE_SILENCE_GUIDANCE } from "./routine-guidance.ts";
-import { assistantTextVerdict } from "./silent-reply.ts";
-import { contentText } from "../shared/content.ts";
 
 /** Module logger (debug-gated): title-generation misses and other
  * best-effort failures land here instead of vanishing silently. */
 const log = createLogger("session-agent");
-
-/** The text of a message's content blocks, joined (what the conversation
- * shows for it). */
-function textOfMessage(message: { content: unknown }): string {
-  const content = message.content;
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return contentText(content as Array<{ type: string; text?: string }>);
-}
 
 /** `text` with `part` after it, separated by a blank line; undefined when
  * there is nothing to append (so a message without a model-only part keeps
@@ -94,23 +85,6 @@ function withTrailingPart(
     return text.length === 0 ? undefined : text;
   }
   return text.length === 0 ? part : `${text}\n\n${part}`;
-}
-
-/** When an idle conversation is condensed (see
- * SessionAgentOptions.idleCompaction and compactAfterIdle).
- *
- * The whole model view is condensed: nothing stays verbatim. The retention
- * budgets of the other paths protect a request that is being answered, and
- * an idle conversation has none — its last unit is a finished reply. Keeping
- * that tail would send a completed turn's tool traffic, and on a model that
- * requires its reasoning blocks replayed, its thinking, as the context of
- * the next message: the same cost the idle check exists to avoid. */
-export interface IdleCompaction {
-  /** Silence since the newest message that arms the check. */
-  afterMs: number;
-  /** Only condense when the projected context is at least this large: a
-   * short conversation has nothing worth a summarization call. */
-  minTokens: number;
 }
 
 export interface SessionAgentOptions {
@@ -228,7 +202,7 @@ export class SessionAgent {
   /** The card each tool call is writing, while its arguments stream (see the
    * tool_input_delta case). Cleared when the call is complete — the finished
    * message carries the whole card. */
-  private readonly cardStreams = new Map<string, ToolArgsField>();
+  private readonly cards = new CardStreams();
   /** The tool names this session was built with (see the `toolNames`
    * accessor). */
   private readonly toolNamesOfSession: string[];
@@ -248,7 +222,7 @@ export class SessionAgent {
   private readonly imageAnalyzer: ImageAnalyzer | null;
   /** Generates the session title from the first user message (null when
    * no fast model is configured). */
-  private readonly titleGenerator: TitleGenerator | null;
+  private readonly titleScheduler: TitleScheduler;
   /** The app language this agent was built with: the language of the text
    * the core generates into the transcript (goal notices, compaction
    * checkpoints) and of the session's title (see SessionAgentOptions). */
@@ -262,21 +236,15 @@ export class SessionAgent {
   /** Owns the vacant-response / rate-limit retry state (budgets, parked
    * restarts, abort epochs). */
   private readonly retry: RetryManager;
-  /** Condenses the history when a request would exceed the model's window
-   * (the DeepSeek Harness's compaction seam; see context-compaction.ts).
-   * Runs before every LLM request of a run and after a provider-confirmed
-   * overflow. */
-  private readonly compactor: ContextCompactor;
+  /** Condenses the history (see CompactionController). */
+  private readonly compaction: CompactionController;
   /** Owns the autonomous goal loop (start / cancel / rewind-cancel /
    * per-turn judging). Null when the goal loop is disabled. */
   private readonly goals: GoalRunner | null;
   private readonly renameSession: (name: string) => void;
-  /** Question hub backing the ask tool; rejects pending asks when the run
-   * ends or the session closes (see rejectPendingAsks). */
-  private readonly askHub: AskHub;
-  /** Handover hub backing `vm_ask_user`; cancelled with the run and the
-   * session (see cancelHandover). */
-  private readonly handoverHub: HandoverHub | null;
+  /** The ask questions and the screen hand-over: both are released when the
+   * run ends (see InterruptionHub). */
+  private readonly interruptions: InterruptionHub;
   /** Task hub backing the task / task_output / send_message tools; this
    * agent is its delivery target for sub-agent notifications while the
    * session is open (deregistered on close). */
@@ -292,26 +260,32 @@ export class SessionAgent {
   /** Set by close(): completion notifications of killed background
    * commands must not reach the discarded agent. */
   private closed = false;
-  /** Title generation runs once per session, concurrently with the first
-   * run; this guards against re-triggering (e.g. after a failed first run
-   * that left the transcript unpersisted). */
-  private titleGenerated = false;
-  /** The routine whose run is in flight (see runningRoutineId). */
-  private activeRoutineId: string | null = null;
+  /** The routine in flight and the removal of a silent one. */
+  private readonly routineRuns = new RoutineRun();
+  private readonly routineHost: RoutineDropHost = {
+    messages: () => this.agent.state.messages,
+    baseIndex: () => this.transcript.baseIndex,
+    forgetFrom: (messages, from) => this.transcript.forgetFrom(messages, from),
+    truncateFrom: (position) => this.transcript.truncateFrom(position),
+    rebaseContexts: (messages) => this.rebaseContexts(messages),
+    emitTruncated: (removed) =>
+      this.emit({
+        type: "messages_truncated",
+        sessionId: this.sessionId,
+        removed,
+      }),
+  };
   /** The idle-compaction rule of this conversation (see
-   * SessionAgentOptions.idleCompaction); null → the idle path is off. The
-   * constructor's option is the only input, and the value is what decides
-   * whether a timer exists at all, so it is readable rather than inferred
-   * from the timer. */
-  readonly idleCompaction: IdleCompaction | null;
+   * CompactionController); null → the idle path is off. */
+  get idleCompaction(): IdleCompaction | null {
+    return this.compaction.idle;
+  }
+
   /** Whether rows behind a checkpoint lose their payload (see
    * SessionAgentOptions.pruneCondensed and session/prune.ts). */
   private readonly pruneCondensed: boolean;
   /** What a prune freed in the store (see SessionAgentOptions.onFreedBytes). */
   private readonly onFreedBytes: ((bytes: number) => void) | undefined;
-  /** The pending idle compaction (see armIdleCompaction); null when none is
-   * armed. */
-  private idleTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: SessionAgentOptions) {
     this.sessionId = options.sessionId;
@@ -324,8 +298,10 @@ export class SessionAgent {
     this.toolRegistry = options.toolRegistry ?? null;
     this.onEvent = options.onEvent;
     this.renameSession = options.renameSession;
-    this.askHub = options.askHub;
-    this.handoverHub = options.handoverHub ?? null;
+    this.interruptions = new InterruptionHub(
+      options.askHub,
+      options.handoverHub ?? null,
+    );
 
     // A vision-capable main model passes images through as-is; only a
     // text-only model with an analysis model configured needs rewriting.
@@ -333,10 +309,16 @@ export class SessionAgent {
         !(options.model.input ?? []).includes("image")
       ? new ImageAnalyzer(options.imageAnalysisModel, options.streamFn)
       : null;
-    this.titleGenerator = options.fastModel !== undefined
+    const titleGenerator = options.fastModel !== undefined
       ? new TitleGenerator(options.fastModel, options.streamFn)
       : null;
     this.language = options.language ?? DEFAULT_LOCALE;
+    this.titleScheduler = new TitleScheduler({
+      titleGenerator,
+      language: this.language,
+      renameSession: this.renameSession,
+      hasNoPersistedMessages: () => this.transcript.persistedCount === 0,
+    });
     this.retry = new RetryManager(options.rateLimitRetrySleep);
     const goalStore = options.goalStore ?? null;
     this.goals = goalStore === null ? null : new GoalRunner({
@@ -374,7 +356,7 @@ export class SessionAgent {
       streamFn: options.streamFn,
       sessionId: options.sessionId,
       convertToLlm: (messages) => this.convertToLlm(messages),
-      beforeStep: (signal) => this.compactBeforeStep(signal),
+      beforeStep: (signal) => this.compaction.beforeStep(signal),
       ...(options.onRequestShape !== undefined
         ? { onRequest: options.onRequestShape }
         : {}),
@@ -404,43 +386,29 @@ export class SessionAgent {
     // tools, so a mid-session model or tool change is reflected without
     // rebuilding it; the checkpoint is inserted at the cut and the model's
     // view starts there (nothing is deleted).
-    this.compactor = new ContextCompactor({
-      model: options.model,
-      systemPrompt: () => this.agent.state.systemPrompt,
-      tools: () => this.agent.state.tools,
-      streamFn: options.streamFn,
-      sessionId: options.sessionId,
-      style: options.compactionStyle,
-      language: this.language,
-      ...(options.compactionPolicy !== undefined
-        ? { policy: options.compactionPolicy }
-        : {}),
-      insert: (index, message) => this.insertHistory(index, message),
-      onCompacted: (result, message) => {
-        // The position travels as an identity: clients hold a window of the
-        // transcript and cannot resolve an index into it (see ClientEvent).
-        // The idle compaction appends its checkpoint after the last message
-        // (see IdleCompaction), so there is nothing to anchor the row to —
-        // and no client of that path draws checkpoints (stella's stream
-        // drops them; the next snapshot carries the row).
-        const before = this.agent.state.messages[result.index + 1];
-        if (before !== undefined) {
-          this.emit({
-            type: "messages_checkpoint",
-            sessionId: this.sessionId,
-            before: messageIdentityOf(before),
-            message,
-          });
-        }
-        // The span the checkpoint just summarized is no longer read by
-        // anyone (the model starts at the checkpoint, and a client never
-        // receives tool traffic at all), so its payload is dropped now —
-        // while the conversation is being condensed anyway.
-        this.pruneCondensedRows();
+    this.compaction = new CompactionController(
+      {
+        sessionId: this.sessionId,
+        messages: () => this.agent.state.messages,
+        isStreaming: () => this.isStreaming,
+        isClosed: () => this.closed,
+        insertHistory: (index, message) => this.insertHistory(index, message),
+        publishContexts: () => this.publishContexts(),
+        onCompacted: (index, message) =>
+          this.announceCheckpoint(index, message),
       },
-    });
+      {
+        model: options.model,
+        systemPrompt: () => this.agent.state.systemPrompt,
+        tools: () => this.agent.state.tools,
+        streamFn: options.streamFn,
+        style: options.compactionStyle,
+        language: this.language,
+        policy: options.compactionPolicy,
+        idle: options.idleCompaction ?? null,
+      },
+    );
     this.contextProviders = options.contextProviders ?? [];
-    this.idleCompaction = options.idleCompaction ?? null;
     this.pruneCondensed = options.pruneCondensed === true;
     this.onFreedBytes = options.onFreedBytes;
     // Reopening a conversation is the repair point for a process that died
@@ -453,7 +421,7 @@ export class SessionAgent {
     // A conversation reopened after a long silence is condensed right away
     // (the gap started before this process opened it); otherwise the timer
     // is armed for the first run's end.
-    this.armIdleCompaction();
+    this.compaction.armIdle();
   }
 
   /** Drop the payload of every row behind the newest checkpoint (see
@@ -629,7 +597,7 @@ export class SessionAgent {
     if (this.rewinder.busy) await this.rewinder.settle();
     if (this.closed) return { failure: null };
     if (options.firstMessageText !== undefined) {
-      this.maybeGenerateTitle(options.firstMessageText);
+      this.titleScheduler.maybeGenerate(options.firstMessageText);
     }
     // The delivery fact the announcement carries must describe the delivery
     // below: a prompt delivered while a run is active is queued into that
@@ -660,7 +628,7 @@ export class SessionAgent {
     if (options.mode !== undefined) this.startGoalIfNeeded(options.mode);
     this.resetRetryState();
     if (options.routine !== undefined) {
-      this.activeRoutineId = options.routine.id;
+      this.routineRuns.begin(options.routine.id);
     }
     let failure: string | null = null;
     // Where the routine's own prompt will sit: the view's length now, since
@@ -679,7 +647,7 @@ export class SessionAgent {
         message: failure,
       });
     } finally {
-      this.activeRoutineId = null;
+      this.routineRuns.end();
     }
     // A routine that found nothing to report must leave the conversation
     // exactly as it found it. The model says so with the silence sentinel
@@ -692,30 +660,13 @@ export class SessionAgent {
     if (
       options.routine !== undefined && failure === null &&
       promptIndex !== undefined &&
-      this.runWasSilent(promptIndex)
+      this.routineRuns.wasSilent(this.agent.state.messages, promptIndex)
     ) {
-      this.dropRunFrom(promptIndex);
+      this.routineRuns.drop(this.routineHost, promptIndex);
     }
     await this.resumeAfterErrorRun();
     if (options.runGoalLoop !== false) await this.maybeRunGoalLoop();
     return { failure };
-  }
-
-  /** Kick off title generation on the first prompt of a fresh session (no
-   * history): it runs concurrently with the run and replaces the
-   * provisional "Session <date>" name once ready. Shared by every prompt
-   * path (the awaited `prompt` and the web/HTTP `promptWhileRunning`) — missing
-   * this would leave web sessions with their provisional name forever.
-   * Guarded so it triggers at most once per session, even after a failed
-   * first run that left the transcript unpersisted. */
-  private maybeGenerateTitle(firstMessage: string): void {
-    if (
-      !this.titleGenerated && this.titleGenerator !== null &&
-      this.transcript.persistedCount === 0
-    ) {
-      this.titleGenerated = true;
-      void this.generateTitle(firstMessage);
-    }
   }
 
   /**
@@ -753,62 +704,8 @@ export class SessionAgent {
    * skipped: it is what is about to be removed, not something the run said.
    * Prose after it means the routine reported something, and an error row
    * means it failed: both leave the run in the transcript. */
-  private runWasSilent(from: number): boolean {
-    const messages = this.agent.state.messages;
-    if (from < 0 || messages.length <= from + 1) return false;
-    for (let i = from + 1; i < messages.length; i++) {
-      const message = messages[i];
-      if (message === undefined) continue;
-      if (message.role === "assistant") {
-        if (message.stopReason === "toolUse") continue;
-        const verdict = assistantTextVerdict(textOfMessage(message));
-        if (verdict.kind === "message") return false;
-        continue;
-      }
-      if (
-        message.role === "notification" || message.role === "context" ||
-        message.role === "checkpoint"
-      ) {
-        continue;
-      }
-      if (message.role === "toolResult") {
-        // A send_chat that went out is the routine speaking, whatever the
-        // assistant's own text says.
-        if (message.toolName === TOOL_SEND_CHAT && !message.isError) {
-          return false;
-        }
-        continue;
-      }
-      // A user row after the prompt is a steer the user sent mid-run: that
-      // is a conversation, so nothing is removed.
-      if (message.role === "user") return false;
-    }
-    return true;
-  }
-
-  /** Remove the transcript rows from whole-transcript position `from` on —
-   * a silent routine's prompt and what it produced — and tell clients which
-   * ones went away, so a window that already drew them drops them. */
-  private dropRunFrom(from: number): void {
-    const messages = this.agent.state.messages;
-    const storePosition = this.transcript.baseIndex + from;
-    messages.splice(from);
-    this.transcript.forgetFrom(messages, from);
-    const removed = this.transcript.truncateFrom(storePosition);
-    this.rebaseContexts(messages);
-    if (removed.length > 0) {
-      this.emit({
-        type: "messages_truncated",
-        sessionId: this.sessionId,
-        removed,
-      });
-    }
-  }
-
-  /** The routine whose run is in flight, or null for any other run. The
-   * scheduler checks this before stopping anything. */
   runningRoutineId(): string | null {
-    return this.activeRoutineId;
+    return this.routineRuns.runningId();
   }
 
   /** Send a user prompt even while a run is active (fire-and-forget; the
@@ -845,7 +742,7 @@ export class SessionAgent {
     files?: PromptFileRef[],
   ): void {
     // The first prompt of a session names it, whichever path delivered it.
-    this.maybeGenerateTitle(mode ? mode.shortText : text);
+    this.titleScheduler.maybeGenerate(mode ? mode.shortText : text);
     // Decided before the message is built: the stamp must describe the
     // delivery below, and the condition is the one deliverPrompt re-checks.
     const steered = this.joinsActiveRun();
@@ -968,24 +865,6 @@ export class SessionAgent {
     await this.runPrompt(instruction, undefined, { runGoalLoop: false });
   }
 
-  /** Best-effort title generation from the first user message. Failures
-   * (and empty text) leave the provisional name in place; the run is
-   * never affected. */
-  private async generateTitle(firstMessage: string): Promise<void> {
-    const text = firstMessage.trim();
-    if (!text) return;
-    try {
-      const title = await this.titleGenerator!.generateTitle(
-        text,
-        this.language,
-      );
-      this.renameSession(title);
-    } catch (error) {
-      // Keep the provisional name; the failure is only visible on debug.
-      log.debug(`title generation failed: ${errorMessage(error)}`);
-    }
-  }
-
   /** A background command finished: inject its completion notification
    * into the agent loop so the agent can react (see injectNotification).
    *
@@ -1072,8 +951,7 @@ export class SessionAgent {
   }
 
   abort(): void {
-    this.rejectPendingAsks();
-    this.cancelHandover();
+    this.interruptions.endRun();
     this.retry.abort();
     // An abort also stops the autonomous goal loop: the user must be able
     // to interrupt a running goal at any time. The goal is cleared so the
@@ -1109,7 +987,7 @@ export class SessionAgent {
    * the blocked run continue. The answers are validated against the
    * pending questions; throws when the ask is gone or malformed. */
   answerQuestion(toolCallId: string, answers: AskAnswer[]): void {
-    this.askHub.answer(toolCallId, answers);
+    this.interruptions.answerQuestion(toolCallId, answers);
   }
 
   /** The hand-over this session is still waiting on, for the resync
@@ -1117,25 +995,13 @@ export class SessionAgent {
    * (re)connects while the run is blocked on the screen has no other way
    * to learn that it may take over. */
   getPendingHandover(): PendingHandover | null {
-    return this.handoverHub?.pendingHandover() ?? null;
+    return this.interruptions.pendingHandover();
   }
 
   /** Let the blocked run continue after the user finished at the screen.
    * Throws when nothing is waiting (the HTTP layer answers 409). */
   finishHandover(note: string, toolCallId?: string): void {
-    if (this.handoverHub === null) {
-      throw new CoreError(
-        "This session has no screen hand-over",
-        "unavailable",
-      );
-    }
-    this.handoverHub.finish(note, toolCallId);
-  }
-
-  /** Cancel a pending hand-over (the run ended, or the session closes).
-   * Idempotent. */
-  private cancelHandover(): void {
-    this.handoverHub?.cancelAll();
+    this.interruptions.finishHandover(note, toolCallId);
   }
 
   /** The questions this session is still waiting on (the ask tool), for the
@@ -1143,15 +1009,7 @@ export class SessionAgent {
    * (re)connects while the run is blocked on an ask has no other way to
    * learn about it — and the run stays blocked until someone answers. */
   getPendingQuestions(): PendingQuestion[] {
-    return this.askHub.pendingQuestions();
-  }
-
-  /** Reject every pending ask. The run that asked them is ending or the
-   * session is closing, so the tool promises must settle — otherwise a
-   * torn-down run would leave them hanging (and the UI's question panel
-   * would never clear). Idempotent: safe to call from every teardown path. */
-  private rejectPendingAsks(): void {
-    this.askHub.rejectAll();
+    return this.interruptions.pendingQuestions();
   }
 
   /** Undo the transcript from a user message (or a mode message — a
@@ -1189,12 +1047,12 @@ export class SessionAgent {
    * with the pool (its server processes serve the sub-agents too). */
   close(): void {
     this.closed = true;
-    this.disarmIdleCompaction();
+    this.compaction.disarmIdle();
     // Stop the goal loop without clearing the persisted goal: reopening
     // the session shows the goal again via the resync endpoint, but does
     // not auto-resume the loop.
     this.goals?.stopLoop();
-    this.rejectPendingAsks();
+    this.interruptions.endRun();
     this.retry.abort();
     this.agent.abort();
     this.backgroundUnsubscribe?.();
@@ -1242,104 +1100,23 @@ export class SessionAgent {
   }
 
   private handleEvent(event: AgentEvent): void {
-    switch (event.type) {
-      case "agent_start":
-        // The vacant-response counter is reset where runs start from
-        // outside (prompt / promptWhileRunning / injectNotification), not
-        // here: a silent-error restart is a new run but the SAME
-        // exchange, and its retries must keep counting toward the limit.
-        // The conversation is in use: an idle compaction must not splice a
-        // checkpoint into the transcript a run is working on.
-        this.disarmIdleCompaction();
-        this.emit({ type: "agent_start", sessionId: this.sessionId });
-        break;
-      case "message_start":
-        this.emit({
-          type: "message_start",
-          sessionId: this.sessionId,
-          message: event.message,
-        });
-        break;
-      case "message_update": {
-        const ev = event.assistantMessageEvent;
-        if (ev.type === "text_delta") {
-          this.emit({
-            type: "message_delta",
-            sessionId: this.sessionId,
-            delta: ev.delta,
-          });
-        }
-        break;
-      }
-      case "message_end":
-        this.emit({
-          type: "message_end",
-          sessionId: this.sessionId,
-          message: event.message,
-        });
-        this.reportModelError(event.message);
-        this.transcript.persist(this.agent.state.messages);
-        break;
-      case "tool_input_delta": {
-        // A card is drawn while the model writes it. Only the two tools that
-        // carry one are read, and only the `card` field: the rest of the
-        // arguments (the reply's words, file paths) is not shown until the
-        // call is complete.
-        if (
-          event.toolName !== TOOL_SEND_CHAT &&
-          event.toolName !== TOOL_CHAT_ATTACH
-        ) break;
-        let reader = this.cardStreams.get(event.toolCallId);
-        if (reader === undefined) {
-          reader = new ToolArgsField("card");
-          this.cardStreams.set(event.toolCallId, reader);
-        }
-        const piece = reader.push(event.delta);
-        if (piece === null) break;
-        this.emit({
-          type: "card_delta",
-          sessionId: this.sessionId,
-          toolCallId: event.toolCallId,
-          delta: piece,
-        });
-        break;
-      }
-      case "tool_execution_start":
-        this.cardStreams.delete(event.toolCallId);
-        this.emit({
-          type: "tool_start",
-          sessionId: this.sessionId,
-          toolCallId: event.toolCallId,
-          toolName: event.toolName,
-          args: event.args,
-        });
-        break;
-      case "tool_execution_end":
-        this.cardStreams.delete(event.toolCallId);
-        this.emit({
-          type: "tool_end",
-          sessionId: this.sessionId,
-          toolCallId: event.toolCallId,
-          toolName: event.toolName,
-        });
-        break;
-      case "turn_end":
-        this.handleTurnEnd(event.message);
-        break;
-      case "agent_end":
-        // The run ended (normally or aborted); any ask that is still
-        // pending can never be answered within this run, and a hand-over
-        // that is still waiting has nothing left to wait for.
-        this.rejectPendingAsks();
-        this.cancelHandover();
-        this.emit({ type: "agent_end", sessionId: this.sessionId });
-        // The gap since the newest LLM call starts here: a conversation
-        // left alone is condensed when it fills (see armIdleCompaction).
-        this.armIdleCompaction();
-        break;
-      default:
-        break;
+    // The two ends of a run have a step around the events: an idle
+    // compaction must not splice a checkpoint into a run that is working,
+    // and the gap since the newest LLM call starts when the run ends.
+    if (event.type === "agent_start") this.compaction.disarmIdle();
+    if (event.type === "agent_end") this.interruptions.endRun();
+    const translated = translateRunEvent(event, this.sessionId, this.cards);
+    for (const published of translated.events) this.emit(published);
+    if (translated.modelError !== undefined) {
+      this.reportModelError(translated.modelError);
     }
+    if (translated.persist === true) {
+      this.transcript.persist(this.agent.state.messages);
+    }
+    if (translated.turnEnded !== undefined) {
+      this.handleTurnEnd(translated.turnEnded);
+    }
+    if (event.type === "agent_end") this.compaction.armIdle();
   }
 
   /** Surface a model-stream failure to the user. An assistant message that
@@ -1424,7 +1201,7 @@ export class SessionAgent {
    * than paying for a request that will be rejected again. */
   private async resumeAfterErrorRun(): Promise<void> {
     if (this.retry.hasPendingOverflow) {
-      const result = await this.compactForOverflow();
+      const result = await this.compaction.compactForOverflow();
       if (result === null) {
         this.retry.clearPendingRestart();
         return;
@@ -1437,165 +1214,35 @@ export class SessionAgent {
    * recovery path). Returns null when nothing could be replaced — a failed
    * summarization or no safe span — which is the signal that the retry
    * cannot help. */
-  private async compactForOverflow(): Promise<CompactionResult | null> {
-    try {
-      const result = await this.compactor.compactIfNeeded(
-        this.agent.state.messages,
-        { force: true },
-      );
-      if (result !== null) this.republishContextsAfter(result);
-      return result;
-    } catch (error) {
-      log.warn(
-        `session ${this.sessionId}: overflow compaction failed: ${
-          errorMessage(error)
-        }`,
-      );
-      return null;
-    }
-  }
-
-  /** Pre-step hook of the agent loop: condense the history before a request
-   * that would exceed the model's window is derived from it. Running here
-   * (rather than only when a run ends) is what keeps a tool-heavy turn from
-   * growing past the window mid-turn.
-   *
-   * A compaction that removed context publications republishes them: the
-   * provider would otherwise keep an anchor to a message that is no longer
-   * in the history and never send the value again. */
-  private async compactBeforeStep(signal: AbortSignal): Promise<void> {
-    if (this.closed || signal.aborted) return;
-    try {
-      const result = await this.compactor.compactIfNeeded(
-        this.agent.state.messages,
-      );
-      if (result !== null) this.republishContextsAfter(result);
-    } catch (error) {
-      // A failed replacement must not kill the run: the request then goes
-      // out with the history it had (the same outcome as a failed
-      // summarization).
-      log.warn(
-        `session ${this.sessionId}: compaction failed: ${errorMessage(error)}`,
-      );
-    }
-  }
-
-  /** Condense the history on demand (the manual `/compact` path; pi's
-   * `/compact [instructions]`). Resolves with what was summarized, or
-   * undefined when no safe span existed or the summarization failed — the
-   * transcript is then unchanged either way. */
-  async compactNow(
+  /** Condense the history on demand (the manual `/compact` path). Resolves
+   * with what was summarized, or undefined when no safe span existed or the
+   * summarization failed — the transcript is then unchanged either way. */
+  compactNow(
     instructions?: string,
   ): Promise<CompactionResult | undefined> {
-    if (this.closed) return undefined;
-    const result = await this.compactor.compactNow(
-      this.agent.state.messages,
-      { instructions },
-    );
-    if (result !== null) this.republishContextsAfter(result);
-    return result ?? undefined;
+    return this.compaction.compactNow(instructions);
   }
 
-  /** (Re)arm the idle compaction (see SessionAgentOptions.idleCompaction).
-   * Called when the agent is built and whenever a run ends, so the timer
-   * always measures the gap since the newest LLM call — a conversation in
-   * use is never condensed behind the user's back, and one that was left
-   * alone is condensed while nobody is waiting for an answer.
-   *
-   * The gap is measured from the transcript's newest message, not from the
-   * moment this is called: a conversation reopened in a new process (or
-   * after a restart) may already have been silent for longer than the
-   * period, and its history is just as expensive to send. The timer is armed
-   * per silence (built + end of each run) and is never re-armed by its own
-   * check, so a history that needs no condensing is not asked about again
-   * until the conversation is used.
-   *
-   * The timer does not hold the process open: a server that shuts down (or
-   * a test that finishes) must not wait for it. */
-  private armIdleCompaction(): void {
-    this.disarmIdleCompaction();
-    const rule = this.idleCompaction;
-    if (this.closed || rule === null) return;
-    const newest = this.agent.state.messages.at(-1)?.timestamp;
-    if (newest === undefined) return;
-    const timer = setTimeout(
-      () => {
-        this.idleTimer = null;
-        void this.compactAfterIdle(rule);
-      },
-      Math.max(0, newest + rule.afterMs - Date.now()),
-    );
-    Deno.unrefTimer(timer);
-    this.idleTimer = timer;
-  }
-
-  private disarmIdleCompaction(): void {
-    if (this.idleTimer === null) return;
-    clearTimeout(this.idleTimer);
-    this.idleTimer = null;
-  }
-
-  /** The idle timer fired: condense the history even below the pressure
-   * threshold, once the projection is large enough to be worth it.
-   *
-   * This is the counterpart of the pressure check: a conversation picked up
-   * again after a silence pays for its whole history as input on the next
-   * request, and a history near the window would have its checkpoint spliced
-   * in while the user waits. Condensing during the silence avoids both.
-   *
-   * The rule's floor keeps short conversations out of it: below `minTokens`
-   * a summarization call saves nothing worth having, so the check returns
-   * without asking the model. Above it the check runs below the pressure
-   * threshold and condenses the WHOLE model view — the record replaces
-   * everything up to the last message, which no request is waiting on
-   * (see IdleCompaction). A history that needs no condensing costs no
-   * request — the span selector refuses a head that holds nothing but an
-   * earlier checkpoint — and the timer is not re-armed, so it is asked once
-   * per silence.
-   *
-   * A run that started meanwhile owns the transcript: it cancelled this
-   * timer at its start, and this path re-checks. Its own end arms a new one.
-   */
-  private async compactAfterIdle(rule: IdleCompaction): Promise<void> {
-    if (this.closed || this.isStreaming) return;
-    const messages = this.agent.state.messages;
-    if (this.compactor.measure(messages) < rule.minTokens) return;
-    // The summarization call takes a while, and the conversation can be
-    // picked up in the middle of it: the checkpoint may only land on the
-    // transcript this check selected.
-    const length = messages.length;
-    const newest = messages.at(-1)?.timestamp;
-    try {
-      const result = await this.compactor.compactNow(messages, {
-        // Zero: keep no tail (see IdleCompaction).
-        keepRecentTokens: 0,
-        canCommit: () =>
-          !this.closed && !this.isStreaming &&
-          this.agent.state.messages.length === length &&
-          this.agent.state.messages.at(-1)?.timestamp === newest,
+  /** A checkpoint landed: tell clients (anchored by identity) and drop the
+   * summarized payloads. The idle path appends its checkpoint after the last
+   * message, so there is nothing to anchor the row to — and no client of that
+   * path draws checkpoints (stella's stream drops them; the next snapshot
+   * carries the row). */
+  private announceCheckpoint(index: number, message: CheckpointMessage): void {
+    const before = this.agent.state.messages[index + 1];
+    if (before !== undefined) {
+      this.emit({
+        type: "messages_checkpoint",
+        sessionId: this.sessionId,
+        before: messageIdentityOf(before),
+        message,
       });
-      if (result !== null) this.republishContextsAfter(result);
-    } catch (error) {
-      // A failed idle compaction leaves the transcript as it was; the
-      // conversation simply keeps the history it had.
-      log.warn(
-        `session ${this.sessionId}: idle compaction failed: ${
-          errorMessage(error)
-        }`,
-      );
     }
-  }
-
-  /** After a compaction: publish the context updates that the re-anchoring
-   * queued. Only a compaction that summarized a context publication can
-   * queue one (a provider whose snapshot is no longer in the model's view
-   * must re-establish its value); everything else is already anchored. */
-  private republishContextsAfter(result: CompactionResult): void {
-    const lostProvider = result.summarized.some(
-      (message) => message.role === "context",
-    );
-    if (!lostProvider) return;
-    this.publishContexts();
+    // The span the checkpoint just summarized is no longer read by anyone
+    // (the model starts at the checkpoint, and a client never receives tool
+    // traffic at all), so its payload is dropped now — while the conversation
+    // is being condensed anyway.
+    this.pruneCondensedRows();
   }
 
   /** Insert `message` at `index`: the row first (a failed write leaves

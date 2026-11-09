@@ -30,7 +30,7 @@
  * every refresh. The fold is presentational (markers and emphasis), so what
  * remains is what a reader would have seen emphasised in the bubble.
  */
-import type { StellaEntry } from "../types/stella-conversation.ts";
+import type { StellaEntry } from "../domain/stella-conversation.ts";
 
 /** What a sidebar row says under the name.
  *

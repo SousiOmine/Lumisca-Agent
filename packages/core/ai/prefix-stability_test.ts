@@ -1,3 +1,4 @@
+import { fakeModel } from "../test-utils.ts";
 /**
  * Prefix stability: the property the provider's prompt cache depends on.
  *
@@ -18,21 +19,15 @@ import { assert, assertEquals } from "@std/assert";
 import { Agent } from "./agent.ts";
 import { createAssistantMessageEventStream } from "./event-stream.ts";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "./faux.ts";
-import { toLlmMessages } from "../types/notification.ts";
+import { toLlmMessages } from "../domain/notification.ts";
 import type {
   AgentMessage,
   AgentTool,
-  Api,
   AssistantMessage,
-  Model,
   RequestShape,
   StreamFn,
   StreamRequest,
 } from "./types.ts";
-
-function fakeModel(): Model<Api> {
-  return { id: "m", name: "m" } as unknown as Model<Api>;
-}
 
 /** One request exactly as the transport receives it. */
 interface RecordedRequest {

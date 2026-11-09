@@ -1,8 +1,8 @@
 import type { AgentMessage } from "../ai/types.ts";
 import { CoreError } from "../errors.ts";
 import type { ThinkingLevel, TodoPhase } from "../shared/mod.ts";
-import type { SessionInfo } from "../types/session.ts";
-import type { Workspace } from "../types/workspace.ts";
+import type { SessionInfo } from "../domain/session.ts";
+import type { Workspace } from "../domain/workspace.ts";
 import type { BackgroundCommandInfo } from "../tools/background.ts";
 import type { PendingQuestion } from "../tools/ask.ts";
 import type { TaskInfo } from "../shared/mod.ts";

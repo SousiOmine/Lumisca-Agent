@@ -8,7 +8,7 @@
 import { realpathSync } from "node:fs";
 import { CoreError } from "./errors.ts";
 import { LumiscaCore } from "./core.ts";
-import type { ImageContent } from "./ai/types.ts";
+import type { Api, ImageContent, Model } from "./ai/types.ts";
 import { fauxProvider } from "./ai/faux.ts";
 
 /**
@@ -319,4 +319,17 @@ export function unusedPort(): number {
   throw new Error(
     `unusedPort: every port in ${UNUSED_PORT_FIRST}-${UNUSED_PORT_LAST} is held`,
   );
+}
+
+/**
+ * A model stand-in for tests that never reach a provider: only the fields the
+ * caller reads are real, and the SDK shape is faked. `id` is what assertions
+ * compare; `extra` carries the api/provider fields a test that inspects the
+ * request needs.
+ */
+export function fakeModel(
+  id = "m",
+  extra: Record<string, unknown> = {},
+): Model<Api> {
+  return { id, name: id, ...extra } as unknown as Model<Api>;
 }
