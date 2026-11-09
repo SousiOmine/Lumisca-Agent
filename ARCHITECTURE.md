@@ -257,6 +257,8 @@ stella の会話でエージェントの発言になるのは 2 つです。タ�
 
   作成用のツールはありません。スキルはフォルダと `SKILL.md` なので、エージェントはファイルツールで書き、削除だけ `bash` の `rm` で行います（`skills/builtin/skill-authoring.ts` が置き場所と規則を教え、ファイルツールを持つセッションにだけ広告します）。
 
+  サブエージェントの `skill` ツールは、セッションが渡すカタログ（`SubagentRuntime.skills`）を読みます。stella ではマシン内のカタログをそのまま渡すのではなく、サブエージェントが持たないツールを教える組み込み（`agent-create`、`identity`、`routines`、`mcp-servers`、`desktop-apps`、`skill-authoring`）を落とします（`tool-pieces.ts` の `subagentSkills`）。サブエージェントは context provider を持たないので、開始時に同じ `<available_skills>` の一覧を context メッセージとして 1 件だけ積みます（`task-hub.ts` の `spawn`）。名前を知らせずに `skill` ツールだけを持たせると、カタログを直しても使えません。
+
 - **入力欄は内容に合わせて伸び、12 行で止まる**  
   コンポーザのテキスト欄は入力した行数に応じて高さを変え、12 行で頭打ちにして内側でスクロールさせます。高さは `hooks/useAutoGrow.ts` が `height: auto` に戻してから `scrollHeight` を書いて決めます。CSS の `field-sizing: content` を使わないのは、Safari が 26.2 まで対応しておらず、macOS のデスクトップは WKWebView で動くためです。上限はシート側の `max-height` が持つので、フックは 12 行という値を知りません。
 

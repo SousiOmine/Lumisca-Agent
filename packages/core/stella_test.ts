@@ -1,5 +1,10 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
-import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "./ai/faux.ts";
+import {
+  fauxAssistantMessage,
+  fauxProvider,
+  fauxText,
+  fauxToolCall,
+} from "./ai/faux.ts";
 import { NO_RESPONSE } from "./agent/silent-reply.ts";
 import { LumiscaCore } from "./core.ts";
 import type { VmManager, VmStatus } from "./vm/container.ts";
@@ -1382,6 +1387,86 @@ Deno.test("stella conversation: a skill in the machine reaches the published cat
         "vm-notes: How notes are kept inside the machine.",
       ),
       published.body,
+    );
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella conversation: a sub-agent loads a skill from the machine", async () => {
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting(
+    [faux.provider],
+    () => ({}),
+    vmSkillsRunner([{
+      name: "vm-notes",
+      description: "How notes are kept inside the machine.",
+    }]),
+  );
+  core.models.models.setProvider(faux.provider);
+  await core.setProviderApiKey(faux.provider.id, "faux-key");
+  core.setStellaVm(fakeVm(RUNNING));
+  try {
+    const agent = await core.createStellaAgent({
+      name: "Keeper",
+      role: "Keep notes.",
+    });
+    const session = await core.getOrCreateStellaSession(agent.id);
+    const parent = core.getAgent(session.id)!;
+    const taskTool = parent.agent.state.tools.find((tool) =>
+      tool.name === "task"
+    );
+    assert(taskTool !== undefined, "the stella agent must have the task tool");
+
+    // The sub-agent starts with the catalog as a context message, and the
+    // catalog is the machine's: the skill the agent wrote is loadable, the
+    // main-only guides (agent-create, ...) are not offered.
+    faux.setResponses([
+      (context) => {
+        const text = JSON.stringify(context);
+        assert(
+          text.includes("vm-notes: How notes are kept inside the machine."),
+          text,
+        );
+        assert(!text.includes("agent-create"), text);
+        return fauxAssistantMessage([
+          fauxText("Reading the machine's skill."),
+          fauxToolCall("skill", { name: "vm-notes" }),
+        ]);
+      },
+      (context) => {
+        const text = JSON.stringify(context);
+        assert(
+          text.includes("Body."),
+          `the skill body must reach the sub-agent: ${text}`,
+        );
+        return fauxAssistantMessage("Loaded vm-notes from the machine.");
+      },
+      // The completion notification is injected into the parent's idle
+      // transcript, which starts a turn of its own.
+      fauxAssistantMessage("Noted."),
+    ]);
+    await taskTool.execute(
+      "task",
+      {
+        subagent_type: "general",
+        description: "スキル確認",
+        prompt: "Load vm-notes",
+      },
+      undefined,
+    );
+    const deadline = Date.now() + 15_000;
+    while (
+      core.getTasks(session.id).every((task) => task.status !== "finished")
+    ) {
+      if (Date.now() > deadline) {
+        throw new Error("timed out waiting for the sub-agent");
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assertEquals(
+      core.getTasks(session.id)[0]?.text,
+      "Loaded vm-notes from the machine.",
     );
   } finally {
     await core.close();

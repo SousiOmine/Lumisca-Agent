@@ -79,11 +79,11 @@ function codingToolNames(): string[] {
     task: new TaskHub({
       sessionId: "s1",
       resolveRuntime: () => ({
-        workspace,
         backends: hostBackends(workspace),
         model: { id: "m", name: "m" } as unknown as Model<Api>,
         thinkingLevel: "off",
         eval: true,
+        skills: () => [],
       }),
       streamFn: (() => {
         throw new Error("no sub-agent run in this test");

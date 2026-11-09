@@ -92,6 +92,42 @@ export function sessionSkills(
   });
 }
 
+/** The part of a session's skill catalog a sub-agent may load.
+ *
+ * A sub-agent is a worker, not the agent that owns the conversation: it
+ * cannot reach main-only tools (`identity`, `agent_create`, the routines,
+ * MCP administration), has no screen tools, and does not write skills. Every
+ * built-in that teaches one of those would point at a tool the sub-agent
+ * does not have, so only the built-ins whose context the sub-agent shares
+ * survive. Skills from disk (its own, the machine's, the user's) pass
+ * through untouched — the parent's catalog is the only one that can name
+ * them, and the caller's getter keeps them current.
+ *
+ * `browserAvailable` / `computerAvailable` are the session's gates: a
+ * sub-agent reaches the browser-lab and computer-use tools through the
+ * session's tool registry, so their guides still apply. `subagents` gates
+ * the coding-agents guide the same way the tool hub does.
+ */
+export function subagentSkills(
+  catalog: readonly SkillDef[],
+  options: {
+    browserAvailable?: boolean;
+    computerAvailable?: boolean;
+    subagents: boolean;
+  },
+): SkillDef[] {
+  const allowed = new Set(
+    builtinSkills({
+      browser: options.browserAvailable === true,
+      computer: options.computerAvailable === true,
+      subagents: options.subagents,
+    }).map((skill) => skill.name),
+  );
+  return catalog.filter((skill) =>
+    skill.source !== "builtin" || allowed.has(skill.name)
+  );
+}
+
 /** The sandboxed file tool set: read, write, edit, list_dir. The core of
  * every coding tool set (main agent and general sub-agents share it, so new
  * tools cannot drift between the two). Searching is the shell's job: bash

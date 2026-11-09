@@ -43,6 +43,7 @@ import { createPdfTools, PDF_TOOL_NAMES } from "../pdf/tools.ts";
 import {
   hostBackends,
   sessionSkills,
+  subagentSkills,
   type ToolBackends,
 } from "../tools/toolsets.ts";
 import { CoreError } from "../errors.ts";
@@ -411,12 +412,6 @@ export class AgentFactory {
     if (registries === undefined) return;
     const where = this.resolveWhere(session, workspace);
     this.seedDiscoverableTools(where, registries);
-    // The sub-agent hub reads these gates when it builds a sub-agent's skill
-    // tool, so one spawned after the toggle follows it; the ones already
-    // running keep the gate they were started with (their run is not
-    // replaced, the same as the main agent's tool set).
-    resources.tasks?.setBrowserAvailable(where.browserAvailable);
-    resources.tasks?.setComputerAvailable(where.computerAvailable());
     resources.agent?.ensureSearchTools();
   }
 
@@ -533,13 +528,37 @@ export class AgentFactory {
       const runtimeResolver = () => {
         const fast = this.deps.getFastModelInfo();
         const workspace = this.deps.requireWorkspace(session.workspaceId);
+        // The catalog a sub-agent may load: the session's, minus the guides
+        // whose tools a sub-agent does not have. A stella conversation's
+        // catalog lives inside the machine, so only its runtime can name the
+        // skills; the filter keeps the main-only guides out either way.
+        const stella = where.stella;
+        const skills = stella !== undefined
+          ? () =>
+            subagentSkills(stella.skills(), {
+              browserAvailable: where.browserAvailable,
+              computerAvailable: where.computerAvailable(),
+              // A sub-agent has no hub of its own: the guide that teaches
+              // the task tool has no reader here.
+              subagents: false,
+            })
+          : () =>
+            sessionSkills(workspace.folders, {
+              browserAvailable: where.browserAvailable,
+              computerAvailable: where.computerAvailable(),
+              ...(this.deps.appSkillDirs !== undefined
+                ? { appSkillDirs: this.deps.appSkillDirs }
+                : {}),
+              ...(this.deps.globalSkillDirs !== undefined
+                ? { globalDirs: this.deps.globalSkillDirs }
+                : {}),
+            });
         // `eval` runs in the server process, so a stella session's
         // sub-agents must not have it (its tools all run inside the
         // machine; see generalTools).
-        const evalTool = where.stella === undefined;
+        const evalTool = stella === undefined;
         if (fast !== undefined) {
           return {
-            workspace,
             backends: where.backends,
             model: fast.model,
             thinkingLevel: this.deps.getThinkingLevel(
@@ -547,10 +566,10 @@ export class AgentFactory {
               fast.modelId,
             ),
             eval: evalTool,
+            skills,
           };
         }
         return {
-          workspace,
           backends: where.backends,
           model: this.deps.requireModel(
             session.modelProvider,
@@ -561,6 +580,7 @@ export class AgentFactory {
             session.modelId,
           ),
           eval: evalTool,
+          skills,
         };
       };
       if (tasks === undefined) {
@@ -571,22 +591,6 @@ export class AgentFactory {
           safety: this.deps.commandSafety,
           language: this.deps.getLanguage(),
           compactionPolicy: () => this.deps.getCompactionPolicy(),
-          // The same skill directories the main agent discovers from: a
-          // sub-agent must not read a different catalog (and, in a test,
-          // must not fall back to the developer's own home).
-          ...((this.deps.appSkillDirs !== undefined ||
-              this.deps.globalSkillDirs !== undefined)
-            ? {
-              skillDirs: {
-                ...(this.deps.appSkillDirs !== undefined
-                  ? { appSkillDirs: this.deps.appSkillDirs }
-                  : {}),
-                ...(this.deps.globalSkillDirs !== undefined
-                  ? { globalSkillDirs: this.deps.globalSkillDirs }
-                  : {}),
-              },
-            }
-            : {}),
           emit: (event: ClientEvent) => this.deps.emit(event),
         });
         resources.tasks = tasks;
@@ -595,11 +599,11 @@ export class AgentFactory {
       }
       // The sub-agents share the session's MCP attachment (their own
       // registry holds the shared tools the discovery merges in), the
-      // capability gates (the built-in skills their skill tool offers) and
-      // the language their reports come back in — re-read on every open.
+      // language their reports come back in, and the web-search provider —
+      // re-read on every open. The skill catalog and the capability gates
+      // travel with the runtime resolver instead: they are what the runtime
+      // (the machine or this workspace) answers for.
       tasks.setMcp(mcp, resources.registries!.subagent);
-      tasks.setBrowserAvailable(where.browserAvailable);
-      tasks.setComputerAvailable(where.computerAvailable());
       tasks.setWebSearch(where.webSearch);
       tasks.setLanguage(this.deps.getLanguage());
     } else {

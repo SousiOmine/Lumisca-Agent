@@ -28,7 +28,6 @@ import type {
 } from "../shared/mod.ts";
 import { DEFAULT_LOCALE, type Locale } from "../shared/mod.ts";
 import type { ClientEvent } from "../types/event.ts";
-import type { Workspace } from "../types/workspace.ts";
 import { createBashTool } from "./bash.ts";
 import { createEvalTool } from "./eval.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
@@ -38,10 +37,12 @@ import type { Tool } from "./schema.ts";
 import {
   fileTools,
   readOnlyInvestigationTools,
-  sessionSkills,
   type ToolBackends,
 } from "./tool-pieces.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
+import type { SkillDef } from "../skills/discover.ts";
+import { createSkillCatalogProvider } from "../skills/catalog.ts";
+import { contextMessage } from "../ai/context-providers.ts";
 import { createSkillTool } from "../skills/tool.ts";
 import { createWebSearchTools } from "./web.ts";
 import type { SearchProvider } from "../websearch/types.ts";
@@ -74,58 +75,15 @@ const PARENT_ALIASES = ["parent", "main"] as const;
  * best-effort miss, not a session failure. */
 const log = createLogger("task");
 
-/** The skill directories a sub-agent's catalog is built from (see
- * `sessionSkills`): the mode's shared folder and the user's global one.
- * Taken from the core so a sub-agent's catalog is the main agent's catalog
- * minus the guides it must not advertise — not a discovery of its own that
- * could disagree (and, in a test, would read the developer's home). */
-interface SubagentSkillDirs {
-  appSkillDirs?: string[];
-  globalSkillDirs?: string[];
-}
-
-/** The skill tool of a sub-agent: same discovery as the main agent, without
- * the skill-authoring guide (a sub-agent is a worker; its parent writes the
- * skills) and resolved per call so a skill that appeared mid-session is
- * loadable. */
-function subagentSkillTool(
-  workspace: Workspace,
-  browserAvailable: boolean,
-  computerAvailable: boolean,
-  dirs: SubagentSkillDirs,
-): Tool {
-  return createSkillTool({
-    skills: () =>
-      sessionSkills(workspace.folders, {
-        browserAvailable,
-        computerAvailable,
-        ...(dirs.appSkillDirs !== undefined
-          ? { appSkillDirs: dirs.appSkillDirs }
-          : {}),
-        ...(dirs.globalSkillDirs !== undefined
-          ? { globalDirs: dirs.globalSkillDirs }
-          : {}),
-      }),
-  });
-}
-
 /** Read-only investigation tools of the `explore` sub-agent. */
 function exploreTools(
-  workspace: Workspace,
   backends: ToolBackends,
   safety: CommandSafety | undefined,
-  browserAvailable: boolean,
-  computerAvailable: boolean,
-  dirs: SubagentSkillDirs,
+  skills: () => SkillDef[],
 ): Tool[] {
   return [
     ...readOnlyInvestigationTools(backends.files, backends.runner, safety),
-    subagentSkillTool(
-      workspace,
-      browserAvailable,
-      computerAvailable,
-      dirs,
-    ),
+    createSkillTool({ skills }),
   ];
 }
 
@@ -143,14 +101,11 @@ function exploreTools(
  * hand it out — not even to a sub-agent. The runtime says which it is (see
  * SubagentRuntime.eval); there is no default, so a caller has to decide. */
 function generalTools(
-  workspace: Workspace,
   backends: ToolBackends,
   evalTool: boolean,
   safety: CommandSafety | undefined,
-  browserAvailable: boolean,
-  computerAvailable: boolean,
   webSearch: SearchProvider | undefined,
-  dirs: SubagentSkillDirs,
+  skills: () => SkillDef[],
 ): Tool[] {
   return [
     ...fileTools(backends.files),
@@ -161,20 +116,21 @@ function generalTools(
     }),
     ...(evalTool ? [createEvalTool({ safety })] : []),
     ...(webSearch === undefined ? [] : createWebSearchTools(webSearch)),
-    subagentSkillTool(
-      workspace,
-      browserAvailable,
-      computerAvailable,
-      dirs,
-    ),
+    createSkillTool({ skills }),
   ];
 }
 
-/** The runtime a new sub-agent spawns into: the workspace (its skill catalog
- * and project files), the tool backends the session runs on (this machine or
- * the stella VM), the model, and its stored thinking level. */
+/** The runtime a new sub-agent spawns into: the tool backends the session
+ * runs on (this machine or the stella VM), the model, its stored thinking
+ * level, and the skill catalog its `skill` tool may load.
+ *
+ * The catalog is the session's, not a discovery of the hub's: a stella
+ * conversation's skills live inside the machine, and only the runtime knows
+ * how to read them. A getter because the coding set re-discovers on every
+ * call (a skill written mid-session is loadable by the next call); a stella
+ * session returns the catalog it read when the conversation opened, exactly
+ * like the main agent's own skill tool does. */
 export interface SubagentRuntime {
-  workspace: Workspace;
   backends: ToolBackends;
   model: Model<Api>;
   thinkingLevel: ThinkingLevel;
@@ -182,6 +138,10 @@ export interface SubagentRuntime {
    * inside the stella machine: the tool runs in the server process, which
    * is exactly the boundary that mode exists to hold. */
   eval: boolean;
+  /** The catalog the sub-agent may load: the session's catalog minus the
+   * guides whose tools a sub-agent does not have (see
+   * tool-pieces.subagentSkills). */
+  skills: () => SkillDef[];
 }
 
 /** Where the parent (main) agent receives injected notifications. Set by
@@ -219,10 +179,6 @@ export interface TaskHubOptions {
   /** Sleep before a retry backoff (injectable for tests, like
    * SessionAgent's rateLimitRetrySleep). Defaults to the real timer. */
   backoffSleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
-  /** The skill directories sub-agents discover from (see
-   * SubagentSkillDirs). Taken from the core's resolved values so a
-   * sub-agent's catalog matches the main agent's in tests too. */
-  skillDirs?: SubagentSkillDirs;
   emit: (event: ClientEvent) => void;
 }
 
@@ -267,21 +223,10 @@ export class TaskHub {
     ms: number,
     signal?: AbortSignal,
   ) => Promise<void>;
-  /** Whether the session has a browser backend attached (set by the pool on
-   * every open). Gates the built-in web-browser skill in the sub-agent tool
-   * sets, matching the main agent's tool set and prompt listing. */
-  private browserAvailable = false;
-  /** Whether the session may drive this machine (set by the pool on every
-   * open, like browserAvailable). Gates the built-in computer-use skill in
-   * the sub-agent tool sets. */
-  private computerAvailable = false;
-  /** The user's web-search provider (set by the pool on every open, like the
-   * gates above). A `general` sub-agent searches the web exactly like the
-   * main agent does; omitted → no web tools in its set. */
+  /** The user's web-search provider (set by the pool on every open). A
+   * `general` sub-agent searches the web exactly like the main agent does;
+   * omitted → no web tools in its set. */
   private webSearch: SearchProvider | undefined;
-  /** The skill directories sub-agents discover from (fixed for the core's
-   * lifetime, so it is a constructor value rather than a per-open setter). */
-  private readonly skillDirs: SubagentSkillDirs;
   /** The session's tool registry (set by the pool on every open): holds
    * every discoverable tool (MCP tools, browser-lab tools, future
    * extensions) whose definitions stay out of the LLM context. General
@@ -303,7 +248,6 @@ export class TaskHub {
     this.language = options.language ?? DEFAULT_LOCALE;
     this.compactionPolicy = options.compactionPolicy;
     this.backoffSleep = options.backoffSleep ?? sleepAbortable;
-    this.skillDirs = options.skillDirs ?? {};
     this.emit = options.emit;
   }
 
@@ -319,19 +263,6 @@ export class TaskHub {
    * were started with). */
   setLanguage(language: Locale): void {
     this.language = language;
-  }
-
-  /** Set whether the session has a browser backend attached (called on
-   * every session open/rebuild like setRuntimeResolver, so the gate never
-   * holds a stale value across attach/detach). */
-  setBrowserAvailable(browserAvailable: boolean): void {
-    this.browserAvailable = browserAvailable;
-  }
-
-  /** Set whether the session may drive this machine (called on every
-   * session open/rebuild like setBrowserAvailable). */
-  setComputerAvailable(computerAvailable: boolean): void {
-    this.computerAvailable = computerAvailable;
   }
 
   /** Set the user's web-search provider (called on every session
@@ -467,22 +398,16 @@ export class TaskHub {
     const tools = [
       ...(type === "general"
         ? generalTools(
-          runtime.workspace,
           runtime.backends,
           runtime.eval,
           this.safety,
-          this.browserAvailable,
-          this.computerAvailable,
           this.webSearch,
-          this.skillDirs,
+          runtime.skills,
         )
         : exploreTools(
-          runtime.workspace,
           runtime.backends,
           this.safety,
-          this.browserAvailable,
-          this.computerAvailable,
-          this.skillDirs,
+          runtime.skills,
         )),
       ...searchable,
       ...this.agentTools(id, depth, canDelegate),
@@ -497,6 +422,14 @@ export class TaskHub {
     const systemPrompt = searchable.length > 0
       ? withOnDemandToolsNote(basePrompt)
       : basePrompt;
+    // A sub-agent's transcript is memory-only and nothing republishes its
+    // context, so the skill catalog is seeded once, at spawn, in the same
+    // shape the main agent publishes. Without it the `skill` tool points at
+    // a listing the sub-agent never received.
+    const catalog = createSkillCatalogProvider({ skills: runtime.skills });
+    const messages = catalog.next().map((update) =>
+      contextMessage(catalog.name, update, Date.now())
+    );
     // The agent is built by the agent layer (agent/subagent-runner.ts): this
     // hub owns the delegation protocol, not how an agent is assembled.
     const { agent, compactor } = createSubagentAgent(
@@ -504,6 +437,7 @@ export class TaskHub {
         id,
         model: runtime.model,
         systemPrompt,
+        messages,
         tools: tools.map(toAgentTool),
         thinkingLevel: runtime.thinkingLevel,
         streamFn: this.streamFn,

@@ -189,6 +189,7 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 
 - **集合**: ファイル、シェル、バックグラウンド実行（`async_bash` / `async_bash_status` / `async_bash_kill`。VM 内で `setsid` で動き、完了は通知としてモデルに届きます。パネルはありません）、画面、意味の層、`send_chat`、`history_search`、`skill`、`todo`、サブエージェントがプリロードされます。`todo` の計画は画面に出しません（依頼が複数あるときに、まだやっていないことを覚えておくためのもので、パネルのためではありません）。`ask` はありません。`identity` と `agent_create`、`routine_*` は main レジストリ経由で `tool_search` から見つけさせます。ルーチンは組み込みスキル `routines` が教えます（`packages/core/skills/builtin/routines.ts`）。`agent_create` の役割は `role` か `role_file`（マシン内のファイル）で渡し、UTF-8 でない・空・20,000 文字超は拒否します。
 - **`eval` は渡さない**: サーバープロセス内で JavaScript を実行するため、VM の外へ出る経路になります。VM 内でコードを動かすときは `bash` から `node` を使います。サブエージェントにも渡しません（`SubagentRuntime.eval` が `false`）。
+- **サブエージェントのスキル**: `skill` ツールが読むカタログはセッションが渡します（`SubagentRuntime.skills`）。stella はマシン内のカタログ（`stella.skills()`）から、サブエージェントが持たないツールを教える組み込みを落としたもの、code mode はワークスペースのディスカバリです。開始時に `<available_skills>` 一覧も context メッセージとして 1 件渡します（`packages/core/tools/task-hub.ts` の `spawn`）。VM の画面ツールはサブエージェントに渡しません。
 - **レジストリの分離**: セッションは `main` と `subagent` の 2 つを持ちます（`packages/core/tools/registries.ts`）。MCP・browser-lab・computer・`pdf_read_pages` は両方に入り、`identity` / `agent_create` / `routine_*` は main だけです。
 - **パスの境界**: 相対パスと `bash` の基点は `/home/agent/agents/<agent id>`、境界は `/home/agent` です（`packages/core/vm/fs.ts` の `resolveVmPath`）。変えるときは `packages/core/tools/system-prompt.ts` も合わせてください。
 - **ファイルの送受信**: ユーザーへは `send_chat` の `paths`（code mode は `chat_attach`）で送ります。上限は `attachFiles()` の 1 箇所で、1 件 4 MiB・1 回 10 件・合計 16 MiB、累計に上限はありません。ユーザーからの添付はマシンの中に書き（`packages/core/vm/uploads.ts`）、メッセージは参照と表示名・サイズだけを持ちます。表示はマシンから読み、消えていれば 404 です。
@@ -270,8 +271,9 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 - **置き場所は 4 つ**: ワークスペースの `.agents/skills`、Lumisca 用フォルダ（`<config home>/lumisca-agent/skills`）、`~/.agents/skills`（読み取りのみ）、組み込みです。stella ではエージェント自身の `.agents/skills` とマシン共通の `/home/agent/.agents/skills` で、ホストの Lumisca 用フォルダは読みません。
 - **Lumisca 用フォルダは追加ルート**: `Sandbox` の `extraRoots` に入り、絶対パスでだけ届きます。フォルダ名による相対パス解決には参加しないので、リポジトリに `skills/` があっても曖昧になりません。退避先の `roots[0]` はワークスペースのままです。
 - **`skill` ツールは一覧を毎回引き直す**: カタログ provider と同じディスカバリを呼ぶので、書いたスキルを同じ run で読めます。固定配列に戻すと「一覧には出るが `Unknown skill`」になります。
+- **サブエージェントも同じカタログを読む**: サブエージェントの `skill` ツールはセッションが渡すカタログ（`SubagentRuntime.skills`）を使います。stella ではエージェント自身とマシン共通のスキルがそのまま読め、開始時の一覧にも出ます。main 専用ツール（`identity` / `agent_create` / `routine_*` / MCP 管理）と画面操作を教える組み込みは落とします（`tool-pieces.ts` の `subagentSkills`）。ディレクトリを渡すのは factory の runtime resolver までで、task-hub はもう探索しません。
 - **ガイドの広告条件**: ファイルツールを持つセッションだけです（`BuiltinContext.skillAuthoring`）。stella では共通フォルダのパスをマシン側のものにして渡します。
-- **テストの隔離**: `LumiscaCore.forTesting` は `appSkillDirs: []` を渡します。配線するときは `globalSkillDirs` と同じく core → pool → toolsets / task-hub へ通してください。
+- **テストの隔離**: `LumiscaCore.forTesting` は `appSkillDirs: []` を渡します。配線するときは `globalSkillDirs` と同じく core → pool → toolsets（と factory の runtime resolver）へ通してください。
 
 ## 12. PWA（インストール）
 

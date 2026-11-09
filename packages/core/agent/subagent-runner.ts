@@ -28,6 +28,10 @@ export interface SubagentAgentInit {
   id: string;
   model: Model<Api>;
   systemPrompt: string;
+  /** Messages the sub-agent starts with. The only producer is the skill
+   * catalog seed (see TaskHub.spawn): a sub-agent has no context providers
+   * of its own, and the `skill` tool's names have to arrive some way. */
+  messages: AgentMessage[];
   /** The sub-agent's tool set, already converted to the runtime's type. */
   tools: AgentTool[];
   thinkingLevel: ThinkingLevel;
@@ -64,6 +68,7 @@ export function createSubagentAgent(
       systemPrompt: init.systemPrompt,
       model: init.model,
       tools: init.tools,
+      messages: init.messages,
       thinkingLevel: init.thinkingLevel,
     },
     streamFn: init.streamFn,

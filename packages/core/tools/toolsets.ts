@@ -27,6 +27,7 @@ export {
   hostBackends,
   readOnlyInvestigationTools,
   sessionSkills,
+  subagentSkills,
   type ToolBackends,
 } from "./tool-pieces.ts";
 

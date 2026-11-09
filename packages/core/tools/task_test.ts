@@ -27,6 +27,7 @@ import {
 import type { ClientEvent } from "../types/event.ts";
 import type { NotificationPayload } from "../types/notification.ts";
 import type { Workspace } from "../types/workspace.ts";
+import type { SkillDef } from "../skills/discover.ts";
 import { ToolRegistry } from "./registry.ts";
 import { SessionToolRegistries } from "./registries.ts";
 import { object, type Tool } from "./schema.ts";
@@ -75,11 +76,11 @@ function makeHub(
   const hub = new TaskHub({
     sessionId: "session-1",
     resolveRuntime: () => ({
-      workspace: makeWorkspace(root),
       backends: hostBackends(makeWorkspace(root)),
       model,
       thinkingLevel: "off",
       eval: true,
+      skills: () => [],
     }),
     streamFn,
     backoffSleep,
@@ -95,7 +96,9 @@ const instantSleep = () => Promise.resolve();
 /** A hub whose sub-agents stream from the scripted faux responses. `eval`
  * says whether they get the eval tool — false is the stella case (the tool
  * runs in the server process, outside the machine). */
-function makeScriptedHub(options: { eval?: boolean } = {}) {
+function makeScriptedHub(
+  options: { eval?: boolean; skills?: () => SkillDef[] } = {},
+) {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
   const model = core.models.getModel(faux.provider.id, faux.getModel().id)!;
@@ -105,11 +108,11 @@ function makeScriptedHub(options: { eval?: boolean } = {}) {
   const hub = new TaskHub({
     sessionId: "session-1",
     resolveRuntime: () => ({
-      workspace: makeWorkspace(root),
       backends: hostBackends(makeWorkspace(root)),
       model,
       thinkingLevel: "off",
       eval: options.eval ?? true,
+      skills: options.skills ?? (() => []),
     }),
     streamFn,
     emit: (event) => events.push(event),
@@ -355,11 +358,11 @@ Deno.test("the sub-agent runtime is resolved at spawn time", () => {
     hub.setRuntimeResolver(() => {
       resolutions++;
       return {
-        workspace: makeWorkspace(root),
         backends: hostBackends(makeWorkspace(root)),
         model,
         thinkingLevel: level,
         eval: true,
+        skills: () => [],
       };
     });
     hub.spawn("session-1", 0, "explore", "調査", "Do research");
@@ -1206,6 +1209,67 @@ Deno.test("a code-mode sub-agent keeps eval", async () => {
     hub.close();
   }
 });
+
+Deno.test("a sub-agent's skill tool reads the catalog the runtime supplies", async () => {
+  const { faux, hub } = makeScriptedHub({
+    skills: () => [memorySkill("vm-notes")],
+  });
+  try {
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxText("Loading the skill."),
+        fauxToolCall("skill", { name: "vm-notes" }),
+      ]),
+      (context) => {
+        const text = JSON.stringify(context);
+        assert(
+          text.includes("Body of vm-notes."),
+          `the skill body should reach the sub-agent: ${text}`,
+        );
+        return fauxAssistantMessage("Loaded vm-notes.");
+      },
+    ]);
+    hub.spawn("session-1", 0, "general", "スキル確認", "Load vm-notes");
+    await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
+    assertEquals(hub.list()[0]!.text, "Loaded vm-notes.");
+  } finally {
+    hub.close();
+  }
+});
+
+Deno.test("a sub-agent starts with the skill catalog listing", async () => {
+  // Without the listing the `skill` tool names a catalog the sub-agent has
+  // never seen: it would have to guess a skill name or call it to be told.
+  const { faux, hub } = makeScriptedHub({
+    skills: () => [memorySkill("vm-notes")],
+  });
+  try {
+    faux.setResponses([
+      (context) => {
+        const text = JSON.stringify(context);
+        assert(text.includes("<available_skills>"), text);
+        assert(text.includes("vm-notes"), text);
+        return fauxAssistantMessage("Catalog seen.");
+      },
+    ]);
+    hub.spawn("session-1", 0, "explore", "一覧確認", "List your skills");
+    await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
+    assertEquals(hub.list()[0]!.text, "Catalog seen.");
+  } finally {
+    hub.close();
+  }
+});
+
+/** A skill that exists only in memory: what the runtime hands over, with no
+ * directory to discover (a stella skill reads through the machine's exec). */
+function memorySkill(name: string): SkillDef {
+  return {
+    name,
+    description: `The ${name} skill.`,
+    source: "app",
+    read: () => Promise.resolve(`# ${name}\n\nBody of ${name}.`),
+  };
+}
 
 Deno.test("a sub-agent's tool_search never finds a stella agent's own tools", async () => {
   const { faux, hub } = makeScriptedHub();
