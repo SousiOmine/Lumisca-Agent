@@ -59,7 +59,13 @@ export type ClientEvent =
     toolCallId: string;
     delta: string;
   }
-  | { type: "agent_end"; sessionId: string }
+  /** The run ended (it replied, stopped, or was aborted). `reply` is the
+   * beginning of what this run said to the user — the text a notification
+   * shows in place of "finished", capped by the core (see
+   * agent/run-reply.ts). Absent for a run that said nothing: a silent turn
+   * (`NO_RESPONSE`), a run that ended before replying, or a message that
+   * carried only a card or files. */
+  | { type: "agent_end"; sessionId: string; reply?: string }
   | { type: "session_error"; sessionId: string; message: string }
   /** The transcript was rewound from a user message onward. `removed` is
    * the exact list of messages deleted (memory + database); clients drop

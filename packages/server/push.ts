@@ -27,6 +27,19 @@ const MAX_QUESTION_CHARS = 80;
  * beginning of it, which is what says whether opening the app is urgent. */
 const MAX_HANDOVER_CHARS = 120;
 
+/** Longest reply a notification carries. One line of a toast: enough to
+ * judge whether opening the app is worth it, short enough to read without
+ * expanding it. The same cap the desktop notification applies (see
+ * web/src/notify.ts), so the two describe one run the same way. */
+const MAX_DETAIL_CHARS = 120;
+
+/** Text as one line, capped: a reply is markdown that can be a document,
+ * and a toast has room for its first sentence. */
+function oneLine(text: string | undefined, max: number): string {
+  const folded = (text ?? "").replace(/\s+/g, " ").trim();
+  return Array.from(folded).slice(0, max).join("");
+}
+
 /** What `push` events send: the message, and how the push service should
  * treat it (a blocked run wakes the device). */
 export interface PushNotification {
@@ -52,9 +65,13 @@ export function isNotifiable(
     event.type === "session_error" || event.type === "handover";
 }
 
-/** The notification one notifiable event produces. `name` is the session's
- * display name (already resolved and capped by the caller). Pure, so the
- * wording of every event is asserted without a push service. */
+/** The notification one notifiable event produces. `name` is the display
+ * name already resolved and capped by the caller. Pure, so the wording of
+ * every event is asserted without a push service.
+ *
+ * The name is the TITLE and the message is the body: a phone shows the title
+ * in bold, and the conversation it is about is what the user has to
+ * recognize first. `notify.push.*` carries no name for that reason. */
 export function buildPushNotification(
   event: NotifiableEvent,
   name: string,
@@ -63,15 +80,21 @@ export function buildPushNotification(
   const tr = (key: MessageKey, params?: { [name: string]: string }) =>
     translate(language, key, params);
   switch (event.type) {
-    case "agent_end":
+    case "agent_end": {
+      // The reply is the body: "finished" alone does not say whether opening
+      // the app is worth it, and a routine's result IS the answer. A run
+      // that said nothing the user can read (a silent turn, a card or files
+      // without words) falls back to saying it finished.
+      const reply = oneLine(event.reply, MAX_DETAIL_CHARS);
       return {
         message: {
-          title: "Lumisca",
-          body: tr("notify.agentFinished", { name }),
+          title: name,
+          body: reply === "" ? tr("notify.push.finished") : reply,
           tag: `session:${event.sessionId}`,
         },
         urgency: "normal",
       };
+    }
     case "question": {
       const first = event.questions[0];
       const gist = Array.from(
@@ -79,9 +102,8 @@ export function buildPushNotification(
       ).slice(0, MAX_QUESTION_CHARS).join("");
       return {
         message: {
-          title: "Lumisca",
-          body: tr("notify.question", {
-            name,
+          title: name,
+          body: tr("notify.push.question", {
             detail: gist === "" ? "" : tr("notify.questionDetail", { gist }),
           }),
           // The same tag as the completion: the answer prompt replaces the
@@ -95,8 +117,8 @@ export function buildPushNotification(
     case "session_error":
       return {
         message: {
-          title: "Lumisca",
-          body: tr("notify.sessionError", { name }),
+          title: name,
+          body: tr("notify.push.error"),
           tag: `session:${event.sessionId}`,
         },
         urgency: "normal",
@@ -106,9 +128,8 @@ export function buildPushNotification(
         .join("");
       return {
         message: {
-          title: "Lumisca",
-          body: tr("notify.handover", {
-            name,
+          title: name,
+          body: tr("notify.push.handover", {
             detail: gist === "" ? "" : tr("notify.handoverDetail", { gist }),
           }),
           // The same tag as the completion: the request replaces the
@@ -123,11 +144,35 @@ export function buildPushNotification(
   }
 }
 
+/** The name a notification is titled with, capped.
+ *
+ * A stella conversation is an agent talking, so it is notified under the
+ * AGENT's name: that is the name the user chose and the one the
+ * conversation's header shows. The session row carries it too, but a
+ * conversation opened before stella stopped generating titles still holds a
+ * title made from its first message, and renaming the agent does not reach
+ * the row — reading the agent is what cannot go stale. Code mode has no
+ * agent, so its session's name is the answer there.
+ *
+ * Pure, so the rule is asserted without a push service. */
+export function notificationName(
+  session: SessionInfo | undefined,
+  agent: { name: string } | undefined,
+  language: Locale,
+): string {
+  const name = (agent?.name ?? session?.name ?? "").trim();
+  const label = name === "" ? translate(language, "notify.sessionName") : name;
+  return Array.from(label).slice(0, MAX_NAME_CHARS).join("");
+}
+
 /** The slice of the core the notifier needs. Narrow rather than the whole
  * core, so a test can drive it with the events it emits. */
 export interface PushNotifierCore {
   subscribe(listener: (event: ClientEvent) => void): () => void;
   getSession(id: string): SessionInfo | undefined;
+  /** A stella agent, for the name a conversation is notified under: the
+   * user names the agent, and the conversation is that agent talking. */
+  getStellaAgent(id: string): { name: string } | undefined;
   getLanguage(): Locale;
   listPushSubscriptions(): PushSubscriptionRecord[];
   pushVapidKeys(): Promise<VapidKeys>;
@@ -167,15 +212,15 @@ export function createPushNotifier(
 ): PushNotifier {
   let disposed = false;
 
-  /** The display name of a session, capped. A stella agent's conversation
-   * carries the agent's name already (the session is created with it), so one
-   * read covers both modes. */
+  /** The display name a notification is titled with (see
+   * notificationName): the agent's for a stella conversation, the session's
+   * name for everything else. */
   const nameOf = (sessionId: string): string => {
-    const name = core.getSession(sessionId)?.name.trim() ?? "";
-    const label = name === ""
-      ? translate(core.getLanguage(), "notify.sessionName")
-      : name;
-    return Array.from(label).slice(0, MAX_NAME_CHARS).join("");
+    const session = core.getSession(sessionId);
+    const agent = session?.agentId === undefined
+      ? undefined
+      : core.getStellaAgent(session.agentId);
+    return notificationName(session, agent, core.getLanguage());
   };
 
   const deliver = async (

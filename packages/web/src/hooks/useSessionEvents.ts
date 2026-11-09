@@ -455,7 +455,9 @@ export function useSessionEvents(
           // notify twice: the first end stamps agentEndedAt, and only a
           // new agent_start clears it for the next run.
           if (view?.agentEndedAt === undefined) {
-            void maybeNotifyAgentEnd(name);
+            // The run carries what it said, so the toast says it too (the
+            // same body the installed app's notification has).
+            void maybeNotifyAgentEnd(name, event.reply);
           }
         } else {
           // Same dedup contract as the reducer's pendingQuestions: a

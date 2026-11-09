@@ -236,6 +236,11 @@ export class AgentFactory {
       contextProviders,
       imageAnalysisModel: this.deps.getImageAnalysisModel(),
       fastModel: this.deps.getFastModel(),
+      // A stella conversation is named by its agent, and the user chose that
+      // name: a generated title would contradict the header it is shown
+      // under. Code mode has no other name, so its first prompt still
+      // names the session.
+      titleGeneration: where.stella === undefined,
       language: this.deps.getLanguage(),
       compactionPolicy: () => this.deps.getCompactionPolicy(),
       // A stella conversation remembers the conversation (the record the

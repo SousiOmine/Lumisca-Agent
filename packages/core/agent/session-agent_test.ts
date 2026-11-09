@@ -72,6 +72,11 @@ function makeAgent(
     /** History to open the agent with (a conversation that already has one:
      * the idle timer measures the gap since its newest message). */
     messages?: AgentMessage[];
+    /** A fast model, so the first prompt can name the session (see
+     * TitleScheduler) — unless `titleGeneration` says otherwise. */
+    fastModel?: SessionAgentOptions["fastModel"];
+    titleGeneration?: SessionAgentOptions["titleGeneration"];
+    renameSession?: SessionAgentOptions["renameSession"];
   } = {},
 ): SessionAgent {
   return new SessionAgent({
@@ -1863,4 +1868,126 @@ Deno.test("runRoutine: a run that narrates through tools and then stays silent l
   // The narration and the tool results are the model's record, and the
   // sentinel is silence: the conversation is back to what it was.
   assertEquals(agent.messages.length, 0);
+});
+
+// ---- the reply a notification carries (see RunReply) ----------------------
+
+Deno.test("agent_end carries what the run said", async () => {
+  // The PWA notification shows the answer instead of "finished": a routine's
+  // result, or a long reply, is the case the words matter for.
+  const events: ClientEvent[] = [];
+  const agent = makeAgent(
+    streamSequence([fauxAssistantMessage("3 件直しました。")]),
+    [],
+    (event) => events.push(event),
+  );
+
+  await agent.prompt("直して");
+
+  const ends = events.filter((e) => e.type === "agent_end");
+  assertEquals(ends.length, 1);
+  const end = ends[0]!;
+  assertEquals(
+    end.type === "agent_end" ? end.reply : undefined,
+    "3 件直しました。",
+  );
+});
+
+Deno.test("a silent run's agent_end carries no reply", async () => {
+  // Silence is deliberate (silent-reply.ts): a notification must not print
+  // the sentinel as an answer.
+  const events: ClientEvent[] = [];
+  const agent = makeAgent(
+    streamSequence([fauxAssistantMessage(NO_RESPONSE)]),
+    [],
+    (event) => events.push(event),
+  );
+
+  await agent.prompt("check the deploy");
+
+  const end = events.find((e) => e.type === "agent_end");
+  assert(end !== undefined);
+  assertEquals(end.type === "agent_end" ? end.reply : "missing", undefined);
+});
+
+Deno.test("the reply belongs to the run that said it", async () => {
+  // A second run that says nothing must not repeat the first one's answer:
+  // that is the notification a user reads as "it said the same thing again".
+  const events: ClientEvent[] = [];
+  const agent = makeAgent(
+    streamSequence([
+      fauxAssistantMessage("一つ目"),
+      fauxAssistantMessage(NO_RESPONSE),
+    ]),
+    [],
+    (event) => events.push(event),
+  );
+
+  await agent.prompt("first");
+  await agent.prompt("second");
+
+  const replies = events
+    .filter((e) => e.type === "agent_end")
+    .map((e) => (e.type === "agent_end" ? e.reply : undefined));
+  assertEquals(replies, ["一つ目", undefined]);
+});
+
+Deno.test("titleGeneration: false sends no title request and renames nothing", async () => {
+  // A stella conversation is named by its agent: generating a title would
+  // spend a request to contradict the name the user chose.
+  let calls = 0;
+  const streamFn: StreamFn = () => {
+    calls++;
+    const stream = createAssistantMessageEventStream();
+    const message = fauxAssistantMessage("了解しました。");
+    stream.push({ type: "start", partial: message });
+    stream.end(message);
+    return stream;
+  };
+  const renamed: string[] = [];
+  const agent = makeAgent(streamFn, [], () => {}, {
+    fastModel: { id: "fast", name: "fast" } as unknown as Model<Api>,
+    titleGeneration: false,
+    renameSession: (name) => renamed.push(name),
+  });
+
+  await agent.prompt("最初のプロンプト");
+
+  assertEquals(renamed, []);
+  // One call: the answer. A title request would have been a second.
+  assertEquals(calls, 1);
+});
+
+Deno.test("an abort with no run to end announces nothing", async () => {
+  // Closing a session aborts it, and a stop can land just after a run
+  // finished. `agent_end` means a run ended, so an idle abort must not
+  // produce one: the PWA's notification would report a run that finished —
+  // showing the previous run's answer — that never started.
+  const events: ClientEvent[] = [];
+  const agent = makeAgent(
+    streamSequence([fauxAssistantMessage("前の返信")]),
+    [],
+    (event) => events.push(event),
+  );
+
+  await agent.prompt("first");
+  agent.abort();
+  await agent.waitForIdle();
+
+  assertEquals(events.filter((e) => e.type === "agent_end").length, 1);
+});
+
+Deno.test("closing a session with a run in flight announces nothing", async () => {
+  // The × on a tab closes the session, which aborts the run: the tab that
+  // asked is gone, and nothing about it belongs in a notification.
+  const { streamFn, calls } = abortAwareStreamFn(["held"]);
+  const events: ClientEvent[] = [];
+  const agent = makeAgent(streamFn, [], (event) => events.push(event));
+
+  agent.promptWhileRunning("go");
+  await waitFor(() => calls() === 1, "the first model call");
+  agent.close();
+  await agent.waitForIdle();
+
+  assertEquals(events.filter((e) => e.type === "agent_end").length, 0);
 });

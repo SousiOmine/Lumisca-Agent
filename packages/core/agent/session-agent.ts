@@ -56,6 +56,7 @@ import { TitleGenerator } from "./title-generation.ts";
 import { TitleScheduler } from "./title-scheduler.ts";
 import { type RoutineDropHost, RoutineRun } from "./routine-run.ts";
 import { CardStreams, translateRunEvent } from "./run-events.ts";
+import { RunReply } from "./run-reply.ts";
 import type { GoalInfo } from "../shared/goal.ts";
 import type { GoalStore } from "../goal/loop.ts";
 import {
@@ -108,8 +109,13 @@ export interface SessionAgentOptions {
    * `model` cannot see them (see ImageAnalyzer). */
   imageAnalysisModel?: Model<Api>;
   /** The configured fast model: generates the session title from the
-   * first user message (see TitleGenerator). */
+   * first user message (see TitleGenerator), and judges a goal's turns. */
   fastModel?: Model<Api>;
+  /** Whether the first prompt names the session (see TitleScheduler).
+   * Omitted → yes. A stella conversation's name is its agent's, which the
+   * user chose: a generated title would contradict the header and cost a
+   * request per agent to do it. */
+  titleGeneration?: boolean;
   /** Session-bound goal persistence (the sessions table, via the pool).
    * Undefined in tests and sessions without goal support: the goal loop
    * is then disabled and goal mode behaves like a plain prompt. */
@@ -203,6 +209,9 @@ export class SessionAgent {
    * tool_input_delta case). Cleared when the call is complete — the finished
    * message carries the whole card. */
   private readonly cards = new CardStreams();
+  /** What this run last said to the user, for the `agent_end` notification
+   * (see RunReply). */
+  private readonly reply = new RunReply();
   /** The tool names this session was built with (see the `toolNames`
    * accessor). */
   private readonly toolNamesOfSession: string[];
@@ -309,7 +318,8 @@ export class SessionAgent {
         !(options.model.input ?? []).includes("image")
       ? new ImageAnalyzer(options.imageAnalysisModel, options.streamFn)
       : null;
-    const titleGenerator = options.fastModel !== undefined
+    const titleGenerator = options.fastModel !== undefined &&
+        options.titleGeneration !== false
       ? new TitleGenerator(options.fastModel, options.streamFn)
       : null;
     this.language = options.language ?? DEFAULT_LOCALE;
@@ -1092,6 +1102,10 @@ export class SessionAgent {
   }
 
   private emit(event: ClientEvent): void {
+    // A closed session has no surface: closing it aborts the run, and an
+    // `agent_end` published from here would arrive after the tab that closed
+    // it is gone — as a notification about a run nobody is watching.
+    if (this.closed) return;
     try {
       this.onEvent(event);
     } catch {
@@ -1103,9 +1117,23 @@ export class SessionAgent {
     // The two ends of a run have a step around the events: an idle
     // compaction must not splice a checkpoint into a run that is working,
     // and the gap since the newest LLM call starts when the run ends.
-    if (event.type === "agent_start") this.compaction.disarmIdle();
+    if (event.type === "agent_start") {
+      this.compaction.disarmIdle();
+      // A reply belongs to the run that said it: `agent_end` carries what
+      // this run last told the user, and a stale one would put an answer the
+      // user already read in a notification. `agent_end` consumes it (at the
+      // end of this method), so an end that closes no run — a session's abort
+      // — says nothing.
+      this.reply.reset();
+    }
     if (event.type === "agent_end") this.interruptions.endRun();
-    const translated = translateRunEvent(event, this.sessionId, this.cards);
+    if (event.type === "message_end") this.reply.observe(event.message);
+    const translated = translateRunEvent(
+      event,
+      this.sessionId,
+      this.cards,
+      event.type === "agent_end" ? this.reply.gist() : undefined,
+    );
     for (const published of translated.events) this.emit(published);
     if (translated.modelError !== undefined) {
       this.reportModelError(translated.modelError);
@@ -1116,7 +1144,10 @@ export class SessionAgent {
     if (translated.turnEnded !== undefined) {
       this.handleTurnEnd(translated.turnEnded);
     }
-    if (event.type === "agent_end") this.compaction.armIdle();
+    if (event.type === "agent_end") {
+      this.reply.reset();
+      this.compaction.armIdle();
+    }
   }
 
   /** Surface a model-stream failure to the user. An assistant message that

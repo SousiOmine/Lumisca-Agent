@@ -246,14 +246,18 @@ export class Agent {
    * is cleared, the queues dropped, `agent_end` emitted) and the turn that
    * was in flight is settled later, whenever its call finally returns.
    *
-   * `agent_end` is emitted immediately either way: the session agent's
-   * teardown (pending asks, hand-overs) hangs off it, and the client's run
-   * state follows it. */
+   * `agent_end` is emitted immediately when a run was live: the session
+   * agent's teardown (pending asks, hand-overs) hangs off it, and the
+   * client's run state follows it. An idle agent's abort ends no run, so it
+   * announces nothing: closing a session aborts one, and a run that ends
+   * without ever having started becomes a notification about nothing. */
   abort(): void {
+    // Read before settling: settling is what clears the flag.
+    const ending = this.state.isStreaming;
     this.abortRequested = true;
     this.abortController.abort();
     this.settleAbandonedRun();
-    this.emit({ type: "agent_end" });
+    if (ending) this.emit({ type: "agent_end" });
   }
 
   /** Close the session of a run that is being abandoned outside a turn

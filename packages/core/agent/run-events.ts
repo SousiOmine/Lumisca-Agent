@@ -54,6 +54,9 @@ export function translateRunEvent(
   event: AgentEvent,
   sessionId: string,
   cards: CardStreams,
+  /** What the run has said so far (see RunReply): carried by `agent_end` so
+   * a notification can show an answer instead of just "finished". */
+  reply?: string,
 ): TranslatedRunEvent {
   switch (event.type) {
     case "agent_start":
@@ -116,6 +119,12 @@ export function translateRunEvent(
     case "turn_end":
       return { events: [], turnEnded: event.message };
     case "agent_end":
-      return { events: [{ type: "agent_end", sessionId }] };
+      return {
+        events: [{
+          type: "agent_end",
+          sessionId,
+          ...(reply === undefined || reply.length === 0 ? {} : { reply }),
+        }],
+      };
   }
 }

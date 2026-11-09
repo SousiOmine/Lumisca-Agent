@@ -6,22 +6,35 @@ import {
   buildPushNotification,
   createPushNotifier,
   isNotifiable,
+  notificationName,
 } from "./push.ts";
 
 /** A fake core: the events it emits are the ones a test drives, and the
- * subscriptions are the real store's. */
+ * subscriptions are the real store's. "s1" is a code-mode session; "s2" is a
+ * stella conversation whose session row carries a title generated from its
+ * first message (the state a conversation opened by an older build is in). */
 function harness() {
   const settings = createInMemorySettingsRepo();
   const store = new PushSubscriptions(settings);
   const listeners = new Set<(event: never) => void>();
   let language: "ja" | "en" = "ja";
+  const sessions: Record<string, unknown> = {
+    s1: { id: "s1", name: "リファクタ" },
+    s2: {
+      id: "s2",
+      name: "最初のメッセージの題名",
+      stella: true,
+      agentId: "a1",
+    },
+  };
   const core = {
     subscribe(listener: (event: never) => void) {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    getSession: (id: string) =>
-      id === "s1" ? { name: "リファクタ" } as never : undefined,
+    getSession: (id: string) => sessions[id] as never,
+    getStellaAgent: (id: string) =>
+      id === "a1" ? { name: "朝の番人" } as never : undefined,
     getLanguage: () => language,
     listPushSubscriptions: () => store.list(),
     pushVapidKeys: () => store.vapidKeys(),
@@ -116,7 +129,9 @@ Deno.test("a question is urgent and replaces the completion toast", () => {
   );
   assertEquals(question.urgency, "high");
   assertEquals(question.message.tag, finished.message.tag);
-  assert(question.message.body.includes("リファクタ"));
+  // The phone shows the title in bold: the conversation is what the user
+  // has to recognize first.
+  assertEquals(question.message.title, "リファクタ");
   // The gist of the first question is what the toast shows.
   assert(question.message.body.includes("選択"), question.message.body);
   assertEquals(core, core);
@@ -144,7 +159,7 @@ Deno.test("a hand-over is urgent and carries the reason", () => {
   // Same tag as the completion: the request replaces that toast instead of
   // stacking on it.
   assertEquals(handover.message.tag, finished.message.tag);
-  assert(handover.message.body.includes("リファクタ"));
+  assertEquals(handover.message.title, "リファクタ");
   assert(
     handover.message.body.includes("本人しか知らないパスワード"),
     handover.message.body,
@@ -158,7 +173,7 @@ Deno.test("a hand-over is urgent and carries the reason", () => {
   assertEquals(isNotifiable(event), true);
 });
 
-Deno.test("an error notification names the session", () => {
+Deno.test("an error notification is titled with the name", () => {
   const japanese = buildPushNotification(
     { type: "session_error", sessionId: "s1", message: "boom" },
     "リファクタ",
@@ -169,8 +184,83 @@ Deno.test("an error notification names the session", () => {
     "Refactor",
     "en",
   );
-  assertEquals(japanese.message.body, "「リファクタ」でエラーが発生しました");
-  assertEquals(english.message.body, '"Refactor" stopped with an error');
+  assertEquals(japanese.message.title, "リファクタ");
+  assertEquals(japanese.message.body, "エラーが発生しました");
+  assertEquals(english.message.title, "Refactor");
+  assertEquals(english.message.body, "Stopped with an error");
+});
+
+Deno.test("a finished run carries its reply", () => {
+  // "Finished" alone does not say whether opening the app is worth it: the
+  // answer is what the notification is for.
+  const finished = buildPushNotification(
+    {
+      type: "agent_end",
+      sessionId: "s2",
+      reply: "## デプロイは緑\n\n問題はありません。",
+    },
+    "朝の番人",
+    "ja",
+  );
+  assertEquals(finished.message.title, "朝の番人");
+  // One line: a toast has room for the first sentence, not for markdown
+  // blocks.
+  assertEquals(finished.message.body, "## デプロイは緑 問題はありません。");
+  assertEquals(finished.urgency, "normal");
+});
+
+Deno.test("a finished run with nothing to show says it finished", () => {
+  // A silent turn, or a message that carried only a card or files: there are
+  // no words to put in the body, so the wording says the run is done.
+  for (const reply of [undefined, "", "   \n "]) {
+    const finished = buildPushNotification(
+      reply === undefined
+        ? { type: "agent_end", sessionId: "s1" }
+        : { type: "agent_end", sessionId: "s1", reply },
+      "リファクタ",
+      "ja",
+    );
+    assertEquals(finished.message.body, "処理が完了しました");
+  }
+});
+
+Deno.test("a long reply is cut to one line of a toast", () => {
+  const finished = buildPushNotification(
+    { type: "agent_end", sessionId: "s1", reply: "あ".repeat(300) },
+    "リファクタ",
+    "ja",
+  );
+  assertEquals(Array.from(finished.message.body).length, 120);
+});
+
+Deno.test("a stella conversation is notified under its agent's name", () => {
+  // The session row can hold a title generated from the first message (an
+  // older conversation) or a name the agent no longer has; the agent is what
+  // the user recognizes, and the header shows it too.
+  const { core } = harness();
+  assertEquals(
+    notificationName(
+      core.getSession("s2"),
+      core.getStellaAgent("a1"),
+      "ja",
+    ),
+    "朝の番人",
+  );
+  // An agent that cannot be read (deleted, or a build that had no agents)
+  // falls back to the row rather than losing the name.
+  assertEquals(
+    notificationName(core.getSession("s2"), undefined, "ja"),
+    "最初のメッセージの題名",
+  );
+  // Code mode has no agent: the session's own name.
+  assertEquals(
+    notificationName(core.getSession("s1"), undefined, "ja"),
+    "リファクタ",
+  );
+  // A session nobody can name is still named by the catalogue, not blank:
+  // the title is the only thing a phone shows in bold.
+  assertEquals(notificationName(undefined, undefined, "ja"), "セッション");
+  assertEquals(notificationName(undefined, undefined, "en"), "Session");
 });
 
 Deno.test("a gone endpoint is forgotten after one failure", async () => {

@@ -231,6 +231,7 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 
 - **1 つのダイアログで変える**（`packages/web/src/components/stella/AgentEditDialog.tsx`）。`PATCH /api/stella/agents/:id` に `{ name?, icon?, model? }` を送り、`icon` 省略は変更なし、`null` は頭文字、`{data, mimeType}` は差し替え、`model` 省略は変更なし、`null` は既定のモデルです。名前を先に検証し（空名・長すぎる名前は 400、重複名は 409）、モデルはカタログにあるかを確かめてから書き込みます。弾かれたときに画像も名前も書かれません。
 - **並びは動かさない**: 改名も差し替えも `updated_at` を触りません。「最後に話した順」のままです。
+- **会話の名前はエージェント名**: stella の会話では最初のメッセージからのタイトル生成を行いません（`SessionAgentOptions.titleGeneration`、`factory.ts`）。会話のセッション名は作成時のエージェント名のままで、通知もエージェントの行から名前を読みます。古い会話は開くときに名前をエージェント名へ戻します（`getOrCreateStellaSession`）。
 - **`role` は編集できない**: 作成時のシステムプロンプトに入っており、後から変えても既存の会話に届きません。名前もプロンプトには入りません（`packages/core/tools/system-prompt.ts`）。プロンプト自体はセッションを開くたびに導出し直され、保存値と違えば書き換わるので（`packages/core/agent/factory.ts` の `ensureSystemPrompt`）、新しい版でプロンプトを変えれば既存の会話にも届きます。
 - **アイコン**: 保存先は DB 隣の `.lumisca-agent-icons/<agent id>/`（`packages/core/stella/icons.ts`）。未設定なら名前の頭文字を `agent id` から導いた色の上に描きます（`packages/core/shared/agent-avatar.ts`）。PNG / JPEG / GIF / WebP / BMP の 512 KiB までで、SVG は置けません。
 
@@ -293,6 +294,9 @@ https（`tailscale serve` など）で開いた端末から、ページを PWA �
 
 インストールした PWA に、実行完了・質問・画面の受け渡し・エラーを OS 通知で届けます（`packages/server/push.ts`、`packages/core/notify/`）。
 
+- **タイトルは名前、本文は中身**: 通知の title はエージェント名（code mode はセッション名）、body は何が起きたかです（`push.ts` の `notificationName` と `buildPushNotification`）。実行完了の body は**その run が言ったことの冒頭**（120 文字に畳んで切る）で、言うことが無かった run（`NO_RESPONSE`、カードやファイルだけ）だけ「処理が完了しました」に落とします。返信は `agent_end` が運びます（`packages/core/agent/run-reply.ts`。会話に出るものと同じ規則 `stellaEntryOf` で拾うので、ツール前のナレーションは入りません）。DB から読み直さないのは、何も言わなかった run が前の run の返信を繰り返すためです。デスクトップ通知（`packages/web/src/notify.ts`）は名前を本文に置く従来の文面のままで、返信の冒頭だけが両方に入ります。
+- **stella はエージェント名で通知する**: 会話のセッション名ではなく `stella_agents.name` を読みます。会話の名前はエージェントのもので、stella では最初のメッセージからのタイトル生成を行いません（`SessionAgentOptions.titleGeneration`。古い会話は開くときに名前を戻します）。ヘッダーと通知が同じ名前を出すためです。
+- **run の無い `agent_end` を出さない**: セッションを閉じると `agent.abort()` が走りますが、`agent_end` は走っていた run があるときだけ出します（`ai/agent.ts` の `abort`）。閉じただけで「完了しました」を届けないためです。閉じたセッションはどのイベントも出しません（`SessionAgent.emit`）。ここを外すと、×でタブを閉じるたびに通知が届きます。
 - **可視判定は Service Worker が持つ**（`public/sw.js` の `push`）。`clients.matchAll({ type: "window", includeUncontrolled: true })` に `visibilityState === "visible"` の窓があれば何も出しません。サーバー側に presence を持たせると、複数端末のフォーカスを当てる必要が出て必ずずれます。
 - **暗号は WebCrypto だけで書く**（`packages/core/notify/web-push.ts`）。VAPID の ES256、RFC 8291 の AES128GCM、HKDF の 2 段です。依存は増やさないでください。本文は必ず `0x02` 区切りで終わらせます（無いとブラウザがレコードを終端できず、黙って捨てます）。往復は `packages/core/notify/web-push_test.ts` がブラウザ側の手順で復号して確かめます。
 - **鍵と購読は settings.jsonc**（`push_vapid` / `push_subscriptions`）。DB マイグレーションはありません。両方とも `settings/guard.ts` の `protectedKeyReason` で汎用設定 API から遮断しています。

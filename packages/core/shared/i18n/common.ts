@@ -234,11 +234,24 @@ export const common = {
     en: '"{name}" is waiting for you at the screen{detail}',
   },
   "notify.handoverDetail": { ja: "：{gist}", en: ": {gist}" },
-  /** A run that stopped with an error (Web Push; the desktop shell shows the
-   * same sentence for its own notifications). */
-  "notify.sessionError": {
-    ja: "「{name}」でエラーが発生しました",
-    en: '"{name}" stopped with an error',
+  // --- PWA notifications (server/push.ts) -----------------------------------
+  // The installed app's notifications put the name in the TITLE, where a
+  // phone shows it in bold, and the message in the BODY. So the wording here
+  // names no one: the same sentence under a title would say it twice.
+  /** A run that ended without saying anything the notification can show (a
+   * silent turn, or a message that carried only a card or files). */
+  "notify.push.finished": { ja: "処理が完了しました", en: "Finished" },
+  "notify.push.question": {
+    ja: "質問があります{detail}",
+    en: "Has a question{detail}",
+  },
+  "notify.push.handover": {
+    ja: "画面の操作を待っています{detail}",
+    en: "Is waiting for you at the screen{detail}",
+  },
+  "notify.push.error": {
+    ja: "エラーが発生しました",
+    en: "Stopped with an error",
   },
   /** Reasoning-effort level names (the composer's control beside the model,
    * the agent edit dialog and the model-preference rows). The ids stay the
