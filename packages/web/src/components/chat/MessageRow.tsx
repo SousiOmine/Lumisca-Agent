@@ -70,6 +70,14 @@ export function MessageRow({
     );
   }
 
+  // A routine's run is delivered as the user's prompt, but its text is the
+  // routine's standing instruction — written down when the routine was
+  // created, not typed by the user. The transcript draws what the run
+  // answered, not the order that started it. The message stays in the
+  // history — a turn is grouped by it (see buildTurns), and hiding it here
+  // rather than dropping it there keeps that grouping and the turn's timing.
+  if (message.role === "user" && message.routine !== undefined) return null;
+
   if (message.role === "user") {
     const text = contentText(message.content);
     const imageBlocks = contentImages(message.content);
@@ -78,11 +86,6 @@ export function MessageRow({
         text={text}
         images={imageBlocks}
         timestamp={message.timestamp}
-        {
-          // A routine's run is stored as the user's prompt: the bubble says
-          // who asked, so a scheduled request is not read as their own words.
-          ...(message.routine === undefined ? {} : { routine: message.routine })
-        }
         onRewind={onRewind ?? (() => {})}
       />
     );

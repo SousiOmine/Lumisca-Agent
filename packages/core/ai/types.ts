@@ -118,8 +118,10 @@ export interface UserMessage {
    * the transport reads role and content only (see toCoreMessages). */
   steered?: boolean;
   /** Set on a prompt a routine started (see shared/routine.ts): the
-   * routine's name. The UI shows it above the bubble, so the user can tell
-   * a scheduled request from something they typed. Never provider-facing. */
+   * routine's name. The conversation does not draw the prompt (its text is
+   * the routine's instruction plus guidance for the model), so this name is
+   * never read as the user's words; it identifies the run, and it is what the
+   * agent list names. Never provider-facing. */
   routine?: string;
   /** Files and pictures the user attached to this prompt, already written
    * into the machine (see vm/uploads.ts). The conversation draws them under

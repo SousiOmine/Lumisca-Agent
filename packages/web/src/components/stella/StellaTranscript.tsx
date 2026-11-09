@@ -4,7 +4,11 @@ import { useTranscriptScroll } from "../../hooks/useTranscriptScroll.ts";
 import { useLocale, useT } from "../../i18n.ts";
 import { formatDaySeparator, startOfDay } from "../../format.ts";
 import { RunningIndicator } from "../chat/RunningIndicator.tsx";
-import { entryKey, type StellaConversationState } from "../../stella-state.ts";
+import {
+  entryKey,
+  type StellaConversationState,
+  transcriptEntries,
+} from "../../stella-state.ts";
 import { AgentAvatar } from "./AgentAvatar.tsx";
 import { CardView } from "../chat/CardView.tsx";
 import { type MessageAuthor, StellaMessage } from "./StellaMessage.tsx";
@@ -64,7 +68,15 @@ export function StellaTranscript({
   // and keeps the entry the reader was looking at in place.
   const t = useT();
   const locale = useLocale();
-  const first = conversation.entries[0];
+  // The prompt a routine ran is not drawn (see transcriptEntries). Everything
+  // below derives from the drawn list, not from the state: a hidden row would
+  // otherwise open a day separator above nothing, break the avatar runs, and
+  // give the scroll anchor a key that is not in the document.
+  const entries = useMemo(
+    () => transcriptEntries(conversation.entries),
+    [conversation.entries],
+  );
+  const first = entries[0];
   const { scrollRef } = useTranscriptScroll({
     onReachTop: () => conversation.older !== null && onLoadOlder(),
     loadingOlder,
@@ -79,8 +91,8 @@ export function StellaTranscript({
   // re-renders on tokens (the run's status), and entryKey rebuilds a string
   // per entry from its attachments and files.
   const keys = useMemo(
-    () => conversation.entries.map((entry) => entryKey(entry)),
-    [conversation.entries],
+    () => entries.map((entry) => entryKey(entry)),
+    [entries],
   );
   const entering = useArrivals(keys);
 
@@ -98,16 +110,16 @@ export function StellaTranscript({
             {t("chat.history.loadingOlder")}
           </p>
         )}
-        {conversation.entries.length === 0 && !conversation.running && (
+        {entries.length === 0 && !conversation.running && (
           <p className="stella-loading" role="status">
             {t("chat.stella.transcript.empty")}
           </p>
         )}
-        {conversation.entries.map((entry, index) => {
+        {entries.map((entry, index) => {
           const day = startOfDay(entry.timestamp);
           const newDay = day !== previousDay;
           previousDay = day;
-          const previous = conversation.entries[index - 1];
+          const previous = entries[index - 1];
           // A run of the agent's messages reads as one answer: the face and
           // the gap belong to the first of the run only.
           const showAvatar = entry.role !== "user" &&

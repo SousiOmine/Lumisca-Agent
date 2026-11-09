@@ -781,13 +781,6 @@
   letter-spacing: 0.03em;
 }
 
-/* The routine label sits ABOVE the bubble rather than in the actions row:
- * who asked is part of reading the message, not an action on it. */
-.msg-routine-badge {
-  align-self: flex-end;
-  margin-bottom: 2px;
-}
-
 /* ---- system notifications (compact rows) --------------------------------- */
 
 .notification-timeline {

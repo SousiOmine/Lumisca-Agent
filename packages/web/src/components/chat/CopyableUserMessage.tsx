@@ -6,7 +6,6 @@ import {
 import { useCopy } from "../../hooks/useSave.ts";
 import { useT } from "../../i18n.ts";
 import { ContentImages } from "../ContentImages.tsx";
-import { RoutineBadge } from "./RoutineBadge.tsx";
 import type { UserMessageImage } from "./types.ts";
 
 /** A user message with its action row: rewind (restore to the composer)
@@ -21,16 +20,12 @@ export function CopyableUserMessage({
   timestamp,
   modeLabel,
   rewindText,
-  routine,
   onRewind,
 }: {
   text: string;
   images: UserMessageImage[];
   timestamp: number;
   modeLabel?: string;
-  /** The routine whose run asked for this prompt, when the user did not type
-   * it (see RoutineBadge). */
-  routine?: string;
   /** Text restored to the composer by the rewind action; defaults to
    * `text` (the bubble content). */
   rewindText?: string;
@@ -50,7 +45,6 @@ export function CopyableUserMessage({
 
   return (
     <div className="msg-user-wrap">
-      {routine !== undefined && <RoutineBadge name={routine} />}
       <div className="msg user">
         <div className="msg-body">
           {images.length > 0 && <ContentImages images={images} />}

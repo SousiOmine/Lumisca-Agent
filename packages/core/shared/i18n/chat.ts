@@ -457,12 +457,6 @@ export const chat = {
   /** The icon-only buttons under a message. Both are given a name: a screen
    * reader would otherwise read two anonymous "button"s. */
   "chat.message.rewind": { ja: "入力欄に戻す", en: "Restore to composer" },
-  /** Above a bubble whose prompt a ROUTINE asked, so the words are not read
-   * as something the user typed. */
-  "chat.message.routine": {
-    ja: "ルーチン「{name}」から",
-    en: 'From routine "{name}"',
-  },
   "chat.message.copy": { ja: "コピー", en: "Copy" },
   "chat.message.copied": { ja: "コピーしました", en: "Copied" },
   /** A list that failed to load, said where it was needed: the empty state

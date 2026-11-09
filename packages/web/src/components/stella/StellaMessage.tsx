@@ -10,7 +10,6 @@ import { formatClockTime } from "../../format.ts";
 import { useCopy } from "../../hooks/useSave.ts";
 import type { StellaEntry } from "../../types.ts";
 import { PromptFiles } from "./PromptFiles.tsx";
-import { RoutineBadge } from "../chat/RoutineBadge.tsx";
 import { AttachmentCard } from "../chat/AttachmentCard.tsx";
 import { MarkdownBlock } from "../chat/MarkdownBlock.tsx";
 import { CardView } from "../chat/CardView.tsx";
@@ -43,7 +42,9 @@ export interface MessageAuthor {
  * with it, and the files. There is no work log and no tool row to draw,
  * because none ever arrives — a turn's narration is dropped by the same
  * projection, so a bubble is always something the agent addressed to the
- * user.
+ * user. A routine's prompt is never drawn either, and it does not reach
+ * here: the transcript filters it out (see transcriptEntries in
+ * stella-state.ts).
  */
 export function StellaMessage({
   entry,
@@ -134,7 +135,6 @@ function UserBubble({
   const t = useT();
   return (
     <div className="msg-user-wrap">
-      {entry.routine !== undefined && <RoutineBadge name={entry.routine} />}
       <div className="msg user">
         <div className="msg-body">
           {entry.text && <p className="msg-user-text">{entry.text}</p>}

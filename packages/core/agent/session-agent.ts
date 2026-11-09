@@ -683,15 +683,18 @@ export class SessionAgent {
    * Run a routine's prompt to completion and report how it went.
    *
    * A routine's run is awaited by the scheduler (it needs the outcome to
-   * record it) and it carries the routine's name on the message, so the user
-   * sees which routine spoke. The failure is ALSO returned, not only emitted:
+   * record it) and it carries the routine's name on the message, which is how
+   * the run is told apart from the same words typed. The conversation itself
+   * does not draw the prompt — its text is the routine's standing
+   * instruction — so the name reaches the user through the
+   * agent list instead. The failure is ALSO returned, not only emitted:
    * the run's failure belongs on the routine's row (the settings list shows
    * it), while the transcript keeps its own error row from the normal path.
    *
    * The silence guidance goes in `modelOnly`: it tells the model that this
-   * run may end without saying anything (see routine-guidance.ts), and the
-   * user reading the transcript sees the routine's own instruction, not that
-   * sentence about the run.
+   * run may end without saying anything (see routine-guidance.ts), and it is
+   * never drawn: neither that sentence nor the prompt it qualifies is part of
+   * the conversation.
    */
   async runRoutine(
     text: string,

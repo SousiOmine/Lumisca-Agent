@@ -7,6 +7,7 @@ import {
   prependOlderEntries,
   type StellaConversationState,
   stellaStateOf,
+  transcriptEntries,
 } from "./stella-state.ts";
 
 function entry(
@@ -420,4 +421,18 @@ Deno.test("entryKey: a routine's prompt and the same words typed differ", () => 
     entryKey(typed) !==
       entryKey({ ...typed, routine: "毎朝の確認" }),
   );
+});
+
+Deno.test("transcriptEntries: a routine's prompt is not drawn", () => {
+  // The words are the routine's instruction plus guidance written for the
+  // model, so the transcript shows only what the run answered. The entry is
+  // kept in the state (identity, the agent list's second line), which is why
+  // the filter happens on the way to the drawing.
+  const typed = { ...entry("user", "確認して", 1) };
+  const prompt = { ...entry("user", "毎朝の確認をして", 2), routine: "毎朝" };
+  const reply = entry("assistant", "異常なし", 3);
+  assertEquals(transcriptEntries([typed, prompt, reply]), [typed, reply]);
+  // An entry with nothing to skip is returned in the same order.
+  assertEquals(transcriptEntries([typed, reply]), [typed, reply]);
+  assertEquals(transcriptEntries([]), []);
 });

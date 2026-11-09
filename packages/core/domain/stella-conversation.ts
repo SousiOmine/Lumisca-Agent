@@ -55,11 +55,12 @@ export interface StellaEntry {
    * longer has it. Empty for the agent's entries. */
   files: PromptFileRef[];
   /** The routine whose run asked this (its name), when the user did not
-   * type the message. The entry is still the user's side of the
-   * conversation — the run is delivered as a prompt — but the client must
-   * say who asked: a request the user scheduled is not a sentence they wrote,
-   * and drawing it as their own words puts it in their mouth. Absent for
-   * everything they typed. */
+   * type the message. Its text is the routine's standing instruction — the
+   * request the agent wrote down when the routine was created — so a client
+   * must NOT draw the entry as the user's words: a request they scheduled is
+   * not a sentence they wrote. The name still travels — it is part of the
+   * entry's identity, and it is what the agent list's second line says.
+   * Absent for everything they typed. */
   routine?: string;
   /** Epoch ms, from the message itself: rewind names a message by it. */
   timestamp: number;

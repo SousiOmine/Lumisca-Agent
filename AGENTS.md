@@ -223,7 +223,7 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 - **ルーチン**: `daily` / `weekly` / `every` / `watch` の 4 種類だけで、cron は扱いません。次回時刻は保存値ではなく `packages/core/shared/routine.ts` の `nextRunAt` で計算し、実行前に進めます。
 - **確認と実行は別**: `watch` の確認は推論を呼ばない別の事実で、`watch_checked_at` / `watch_error` に書きます（`last_run_at` / `last_status` は実行だけ）。マシンが動いていない確認は 15 分後に送り直し、ルーチンは止めません。観測値は監視対象の変更と有効化のやり直しで捨てます（`repo.ts` の `update`）。
 - **待機は 1 本・1 時間**: 会話が空くまで待つのは設計どおりですが、積み上げません（`scheduler.ts` の `queued`）。上限を超えたら実行せずに `skipped` として理由を残します。`RoutineView.queued` は画面の「待機中」です。
-- **ルーチンの発言は利用者の発言ではない**: `StellaEntry.routine` が名前を持ち、吹き出しの上に `RoutineBadge` を出します（stella とコードモード共通）。射影・カーソル・プレビュー・圧縮の記録まで名前を通してください。
+- **ルーチンのプロンプトは描かない**: 実行は利用者のプロンプトとして届きますが、本文はルーチンの指示（作成時にエージェントが書いた定型の依頼）なので、会話には出しません（stella は `stella-state.ts` の `transcriptEntries`、code mode は `MessageRow` が落とします）。`StellaEntry.routine` の名前は識別・カーソル・一覧の 2 行目のために射影・圧縮の記録まで通し続けてください（stella の会話には描かないので、一覧の 2 行目だけがルーチン名を出します）。
 - **放置された会話の圧縮**: 最後のメッセージから 30 分たったとき、モデルの視界が 50k トークン以上なら畳みます（`SessionAgentOptions.idleCompaction`、定数は `packages/core/agent/factory.ts` の `STELLA_IDLE_COMPACTION`）。視界はすべて畳み、尻尾は残しません（idle 中に答えているリクエストは無いためです）。要約中に会話が動いたら挿入せずに捨てます（`ContextCompactor.compactNow` の `canCommit`）。畳んだ区間のペイロードは落としますが（`packages/core/session/prune.ts`）、行は消しません。
 - **履歴は遅延読み込み**: メモリに載せるのはモデルの視界（最新チェックポイント以降）だけです（`MessageRepo.listModelView`）。画面の遡りは `packages/core/session/transcript-pager.ts` がストアから引きます。**ページが数える行（`CONVERSATION_ROWS_SQL`）は、射影（`stellaEntryOf`）がエントリにする行と同じ集合でなければなりません**。片方だけ変えると、画面に出ていた発言が再読み込みで消えます。
 - **空いた領域は次の起動で返す**: `close()` がマーカーを書き（`packages/core/db/vacuum.ts` の `vacuumMarkerPath`）、次の起動時にファイルを作り直します（`vacuumOnStartup`、`packages/server/mod.ts`）。`node:sqlite` は `VACUUM` を使えないため、全行コピーと rename です。

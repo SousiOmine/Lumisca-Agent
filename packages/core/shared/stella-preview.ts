@@ -8,8 +8,10 @@
  * the conversation was last OPENED, which is a fact about the reader, not
  * about the conversation.
  *
- * What the line may show is exactly what the conversation shows, and that is
- * the whole rule: the entry a client draws (see the core's
+ * What the line may show is what the conversation shows, with one exception: a
+ * routine's prompt is named here although the conversation does not draw it
+ * (see previewOf). Otherwise the rule is whole: the entry a client draws (see
+ * the core's
  * agent/stella-stream.ts) — the user's words and the agent's reply (its final
  * text, and what `send_chat` sent with it). Its narration, tool calls, their
  * output and the context publications the model runs on are not part of it. The server
@@ -73,7 +75,9 @@ export const PREVIEW_TEXT_CHARS = 200;
 export function previewOf(entry: StellaEntry): StellaPreview | null {
   // A routine's request is not something the user said (see #37): the row
   // names the routine rather than putting the scheduled words in their
-  // mouth.
+  // mouth. The conversation itself does not draw the prompt at all (it is the
+  // routine's standing instruction), so this line is where the routine stays
+  // visible.
   if (entry.routine !== undefined) {
     return { kind: "routine", name: entry.routine, at: entry.timestamp };
   }

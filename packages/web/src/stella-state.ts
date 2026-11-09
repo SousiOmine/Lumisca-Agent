@@ -188,6 +188,27 @@ export function entryKey(entry: StellaEntry): string {
   }:${entry.routine ?? ""}:${entry.text}`;
 }
 
+/** The entries a conversation draws, in order: every entry but a routine's
+ * prompt.
+ *
+ * A routine's run is delivered as the user's prompt, but its text is the
+ * instruction the agent wrote down when the routine was created — a standing
+ * order, not a sentence the user typed. Drawing it in the reader's own bubble
+ * credits them with a request they never made, so the transcript skips the
+ * entry and shows only what the run answered. The entry stays in the state:
+ * it is the identity of that run (see entryKey) and it is what the agent
+ * list's second line names, so it must keep arriving.
+ *
+ * The caller must derive the transcript from this list rather than skipping
+ * rows while rendering: the day separators, the avatar runs and the scroll
+ * anchor all read "the entry before this one", and a skipped row would leave
+ * a separator with nothing under it or an anchor that is not in the document. */
+export function transcriptEntries(
+  entries: readonly StellaEntry[],
+): StellaEntry[] {
+  return entries.filter((entry) => entry.routine === undefined);
+}
+
 /** Insert or replace an entry at its existing position (dedup by key), or
  * append it. The position is kept so a later copy of the same message cannot
  * reorder the conversation. */

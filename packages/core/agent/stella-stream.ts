@@ -102,8 +102,10 @@ export function stellaEntryOf(message: AgentMessage): StellaEntry | null {
       const files = message.role === "mode" ? [] : message.files ?? [];
       if (text.length === 0 && files.length === 0) return null;
       // A routine's run is delivered as a prompt, so it sits on the user's
-      // side — but it is not something the user said. The name travels with
-      // the entry so the client can say who asked (see StellaEntry.routine).
+      // side — but it is not something the user said, and a client does not
+      // draw it. The name travels with the entry anyway: it is how the run is
+      // told apart from the same words typed (see entryKey) and what the agent
+      // list's second line shows (see StellaEntry.routine).
       const routine = message.role === "mode" ? undefined : message.routine;
       return {
         role: "user",
