@@ -53,6 +53,19 @@ const SLOT_POLL_MS = 2_000;
  * watch interval the user can pick (the floor is five). */
 const WATCH_RETRY_MS = 15 * 60_000;
 
+/** How long a run waits for its conversation to be free before giving up.
+ * "Waited for, not skipped" must not turn into "piled up for ever": a
+ * conversation blocked on a hand-over does not free itself until the user
+ * comes back, while the routine's own interval keeps producing occurrences.
+ * An hour is long enough that a normal run ends first, and short enough that
+ * the result still describes what the user asked about. */
+const DEFAULT_QUEUE_MAX_WAIT_MS = 60 * 60_000;
+
+/** What a waiting run records when it is dropped. Stored as the routine's
+ * detail, so the settings list says what happened instead of nothing. */
+const QUEUE_GAVE_UP_DETAIL =
+  "The conversation stayed busy for an hour, so this run was skipped";
+
 /** The seam the scheduler needs from the session layer: start a run in an
  * agent's conversation and know whether one is already running. Kept narrow
  * so the scheduler can be tested without a core. */
@@ -104,8 +117,18 @@ export interface RoutineSchedulerOptions {
   tickMs?: number;
   /** Delay before the first tick (tests shorten it along with tickMs). */
   catchUpDelayMs?: number;
+  /** How long a run waits for a free conversation (tests shorten it). */
+  queueMaxWaitMs?: number;
+  /** How often a waiting run asks again (tests shorten it). */
+  slotPollMs?: number;
   log?: (message: string) => void;
 }
+
+/** Where a routine's run is right now. `queued` is a run that is waiting for
+ * the conversation and has produced nothing yet; the settings list draws it
+ * differently from `running`, because a run that waits and never starts is
+ * not something the user can see working. */
+export type RoutineRunState = "idle" | "queued" | "running";
 
 export interface RoutineScheduler {
   start(): void;
@@ -115,9 +138,13 @@ export interface RoutineScheduler {
   /** Run a routine now, without moving its schedule. Waits for a busy
    * conversation like a scheduled run does. */
   runNow(id: string): Promise<void>;
-  /** Whether a run of this routine is in flight (including one waiting for
-   * the conversation to be free). */
+  /** Whether a run of this routine is in flight, INCLUDING one still waiting
+   * for the conversation (see stateOf for the distinction). */
   isRunning(id: string): boolean;
+  /** Whether this routine's run is waiting for a free conversation. */
+  isQueued(id: string): boolean;
+  /** Where this routine's run is: idle, waiting, or running. */
+  stateOf(id: string): RoutineRunState;
   /** Stop a running routine's run. Only stops the run this routine started;
    * a user's own run is never touched. */
   stop(id: string): void;
@@ -130,11 +157,17 @@ export function createRoutineScheduler(
   const now = options.now ?? (() => Date.now());
   const tickMs = options.tickMs ?? DEFAULT_TICK_MS;
   const catchUpDelayMs = options.catchUpDelayMs ?? CATCH_UP_DELAY_MS;
+  const queueMaxWaitMs = options.queueMaxWaitMs ?? DEFAULT_QUEUE_MAX_WAIT_MS;
+  const slotPollMs = options.slotPollMs ?? SLOT_POLL_MS;
   const log = options.log ?? (() => {});
 
-  /** Routine id → how many runs of it are in flight (a manual run plus a
-   * scheduled one is two). */
+  /** Routine id → how many of its runs are actually running (the wait is
+   * over and the agent was asked). */
   const running = new Map<string, number>();
+  /** Routine id → when its ONE waiting run started waiting. The bound lives
+   * here rather than in the database: a queued run is this process's memory,
+   * like `running`. */
+  const queued = new Map<string, number>();
   /** Routines whose in-flight run the user asked to stop. */
   const stopped = new Set<string>();
   /** Routines whose QUEUED run the user asked to stop (it never started). */
@@ -226,32 +259,44 @@ export function createRoutineScheduler(
     }
   }
 
-  /** Start one run of `routine`, waiting for a free conversation. */
+  /** Start one run of `routine`, waiting for a free conversation.
+   *
+   * At most ONE run of a routine waits at a time: occurrences that come due
+   * while one is already waiting are dropped (their next run is already
+   * scheduled), because six occurrences of a five-minute routine released at
+   * once would start six runs of the same request. A wait that lasts longer
+   * than `queueMaxWaitMs` gives up instead of holding the slot for ever. */
   async function run(routine: Routine): Promise<void> {
     const id = routine.id;
-    running.set(id, (running.get(id) ?? 0) + 1);
+    // Already waiting: this occurrence is one too many, and the next is
+    // scheduled anyway.
+    if (queued.has(id)) return;
+    queued.set(id, now());
     let started = false;
     try {
-      // Wait for the conversation to be free. Never skip: a routine the
-      // user scheduled must not silently do nothing because they were
-      // typing (see the module comment).
+      // Wait for the conversation to be free. Never skip silently: a routine
+      // the user scheduled must not do nothing because they were typing (see
+      // the module comment) — it waits, and says so.
       while (runner.isRunning(routine.agentId)) {
         if (cancelled.delete(id)) {
-          record(id, {
-            status: "stopped",
-            detail: "Stopped before it started",
-          });
+          recordNote(id, "stopped", "Stopped before it started");
           return;
         }
         if (repo.get(id) === undefined) return;
-        await sleep(SLOT_POLL_MS);
+        if (now() - (queued.get(id) ?? now()) >= queueMaxWaitMs) {
+          recordNote(id, "skipped", QUEUE_GAVE_UP_DETAIL);
+          return;
+        }
+        await sleep(slotPollMs);
       }
       if (cancelled.delete(id)) {
-        record(id, { status: "stopped", detail: "Stopped before it started" });
+        recordNote(id, "stopped", "Stopped before it started");
         return;
       }
       if (repo.get(id) === undefined) return;
       started = true;
+      queued.delete(id);
+      running.set(id, (running.get(id) ?? 0) + 1);
       const outcome = await runner.run(routine.agentId, routine.prompt, {
         id,
         name: routine.name,
@@ -274,9 +319,29 @@ export function createRoutineScheduler(
       });
     } finally {
       if (!started) stopped.delete(id);
-      const left = (running.get(id) ?? 1) - 1;
+      queued.delete(id);
+      const left = (running.get(id) ?? 0) - 1;
       if (left <= 0) running.delete(id);
       else running.set(id, left);
+    }
+  }
+
+  /** Record an outcome that is NOT a run: the prompt never reached the
+   * agent (it was stopped while waiting, or the wait gave up). `last_run_at`
+   * must not move for it — the settings list would then name a time at which
+   * nothing ran. */
+  function recordNote(
+    id: string,
+    status: "stopped" | "skipped",
+    detail: string,
+  ): void {
+    if (repo.get(id) === undefined) return;
+    try {
+      repo.recordNote(id, { status, detail });
+    } catch (error) {
+      log(
+        `routine ${id}: could not record the outcome (${errorMessage(error)})`,
+      );
     }
   }
 
@@ -338,12 +403,22 @@ export function createRoutineScheduler(
     },
 
     isRunning(id: string): boolean {
-      return (running.get(id) ?? 0) > 0;
+      return (running.get(id) ?? 0) > 0 || queued.has(id);
+    },
+
+    isQueued(id: string): boolean {
+      return queued.has(id);
+    },
+
+    stateOf(id: string): RoutineRunState {
+      if ((running.get(id) ?? 0) > 0) return "running";
+      return queued.has(id) ? "queued" : "idle";
     },
 
     stop(id: string): void {
       const routine = repo.get(id);
-      if (routine === undefined || !running.has(id)) return;
+      if (routine === undefined) return;
+      if (!running.has(id) && !queued.has(id)) return;
       stopped.add(id);
       cancelled.add(id);
       // Only the run this routine started is stopped: the runner checks the

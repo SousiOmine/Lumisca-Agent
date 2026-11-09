@@ -135,7 +135,9 @@ export const panels = {
   "panels.routine.status.error": { ja: "失敗", en: "failed" },
   "panels.routine.status.stopped": { ja: "停止", en: "stopped" },
   "panels.routine.status.running": { ja: "実行中", en: "Running" },
+  "panels.routine.status.skipped": { ja: "見送り", en: "skipped" },
   "panels.routine.disabled": { ja: "停止中", en: "Disabled" },
+  "panels.routine.queued": { ja: "待機中", en: "Waiting" },
   "panels.routine.next": { ja: "次回 {when}", en: "next {when}" },
   "panels.routine.last": {
     ja: "前回 {when} {status}",

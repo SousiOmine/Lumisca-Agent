@@ -1625,10 +1625,14 @@ Deno.test("routine routes: list, enable, run and remove", async () => {
       base,
       `/api/stella/agents/${agent.id}/routines`,
     );
-    assertEquals(
-      (await afterCreate.json() as { routines: unknown[] }).routines.length,
-      1,
-    );
+    const createdList = await afterCreate.json() as {
+      routines: { running: boolean; queued: boolean }[];
+    };
+    assertEquals(createdList.routines.length, 1);
+    // The list separates "a run is going" from "a run is waiting for the
+    // conversation": both are in flight, and only one is working.
+    assertEquals(createdList.routines[0]!.running, false);
+    assertEquals(createdList.routines[0]!.queued, false);
 
     const disabled = await json(base, `/api/routines/${routine.id}`, {
       method: "PATCH",

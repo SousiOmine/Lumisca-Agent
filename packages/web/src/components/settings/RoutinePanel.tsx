@@ -143,6 +143,8 @@ function statusKey(status: RoutineStatus | null): MessageKey | null {
       return "panels.routine.status.error";
     case "stopped":
       return "panels.routine.status.stopped";
+    case "skipped":
+      return "panels.routine.status.skipped";
     default:
       return null;
   }
@@ -186,10 +188,12 @@ export function RoutinePanel({
   const [confirming, setConfirming] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // Poll while a run is going: that is the one fact that changes without a
-  // request from this screen.
+  // Poll while a run is going OR waiting: both change without a request
+  // from this screen (a queued run starts when the conversation frees), and
+  // a list that showed "waiting" for ever would be worse than one that
+  // catches up.
   const hasRunning = useMemo(
-    () => routines.some((routine) => routine.running),
+    () => routines.some((routine) => routine.running || routine.queued),
     [routines],
   );
   const refreshRef = useRef(onRefresh);
@@ -251,6 +255,9 @@ export function RoutinePanel({
       <ul className="routine-list">
         {routines.map((routine) => {
           const status = statusKey(routine.lastStatus);
+          // A waiting run and a running one are both "in flight" for the
+          // actions below, but only one of them is working.
+          const inFlight = routine.running || routine.queued;
           return (
             <li
               key={routine.id}
@@ -262,6 +269,11 @@ export function RoutinePanel({
                   {routine.running && (
                     <span className="routine-badge running">
                       {t("panels.routine.status.running")}
+                    </span>
+                  )}
+                  {routine.queued && (
+                    <span className="routine-badge">
+                      {t("panels.routine.queued")}
                     </span>
                   )}
                   {!routine.enabled && (
@@ -327,7 +339,7 @@ export function RoutinePanel({
                 )}
               </div>
               <div className="routine-actions">
-                {routine.running
+                {inFlight
                   ? (
                     <button
                       type="button"

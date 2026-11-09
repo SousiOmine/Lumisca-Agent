@@ -86,8 +86,9 @@ export const MAX_WATCH_MINUTES = 1_440;
 
 /** How the last run ended. `running` is never stored — it is read from the
  * scheduler's memory — but the view type carries it so the UI has one
- * status field. */
-export type RoutineStatus = "ok" | "error" | "stopped";
+ * status field. `skipped` is a run that waited for the conversation and gave
+ * up before it started: nothing was run, and the row says why. */
+export type RoutineStatus = "ok" | "error" | "stopped" | "skipped";
 
 /** Longest routine name. Shown in a list row, not a document. */
 export const ROUTINE_NAME_MAX_CHARS = 60;
@@ -433,5 +434,10 @@ export interface Routine {
  * because the route and the panel both name it — see shared/wire.ts's note. */
 export interface RoutineView extends Routine {
   agentName: string;
+  /** A run is going right now (the prompt reached the agent). */
   running: boolean;
+  /** A run is waiting for the conversation to be free. Distinct from
+   * `running` because a waiting run can sit there for a while, and the user
+   * needs to know that is what they are looking at. */
+  queued: boolean;
 }

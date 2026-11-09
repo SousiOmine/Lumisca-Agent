@@ -749,9 +749,17 @@ export class LumiscaCore {
   }
 
   /** Whether a run of this routine is in flight (the settings list's
-   * "running now"). Never persisted: it describes this process. */
+   * "running now"). Never persisted: it describes this process. A queued run
+   * counts as in flight — its prompt is going to run — and `isRoutineQueued`
+   * says whether that is what it is doing. */
   isRoutineRunning(id: string): boolean {
     return this.routineScheduler.isRunning(id);
+  }
+
+  /** Whether this routine's run is still waiting for its conversation to be
+   * free (the settings list draws it apart from "running"). */
+  isRoutineQueued(id: string): boolean {
+    return this.routineScheduler.isQueued(id);
   }
 
   /** Run a routine now, without moving its schedule. Resolves when the run

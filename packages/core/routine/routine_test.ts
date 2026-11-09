@@ -44,17 +44,22 @@ function runner(
   stopped: string[];
   checks: string[];
   release: () => void;
+  setBusy: (value: boolean) => void;
 } {
   const started: string[] = [];
   const stopped: string[] = [];
   const checks: string[] = [];
-  const busy = options.busy === true;
+  let busy = options.busy === true;
   let release: () => void = () => {};
   return {
     started,
     stopped,
     checks,
     release: () => release(),
+    /** Free the conversation (or block it again) mid-test. */
+    setBusy: (value: boolean) => {
+      busy = value;
+    },
     isRunning: () => busy,
     run: async (agentId, prompt, routine) => {
       started.push(`${agentId}:${routine.name}:${prompt}`);
@@ -236,12 +241,21 @@ Deno.test("routine scheduler: a busy conversation is waited for, not skipped", a
       runner: fake,
       tickMs: 10_000,
       catchUpDelayMs: 5,
+      slotPollMs: 5,
     });
     scheduler.start();
     await new Promise((resolve) => setTimeout(resolve, 40));
     // Still waiting: nothing started while the conversation is busy.
     assertEquals(fake.started.length, 0);
     assertEquals(scheduler.isRunning(created.id), true);
+    // Free the conversation: the waiting run starts, and finishes, so the
+    // test leaves nothing polling a database it is about to close.
+    fake.setBusy(false);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assertEquals(fake.started.length, 1);
+    fake.release();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assertEquals(routines.get(created.id)?.lastStatus, "ok");
     scheduler.close();
   } finally {
     close();
@@ -723,6 +737,156 @@ Deno.test("scheduler: a check that cannot run backs off without recording a run"
     assertEquals(row.lastStatus, null);
     assertEquals(row.watchError, "the machine is not running");
     assert(row.watchCheckedAt !== undefined);
+  } finally {
+    close();
+  }
+});
+
+Deno.test("scheduler: a busy conversation keeps ONE waiting run, not six", async () => {
+  // The regression from #38: every occurrence queued its own wait, so when
+  // the conversation freed, six runs of the same request started at once.
+  const { repo: routines, close } = repo();
+  try {
+    const created = routines.create({
+      agentId: AGENT,
+      name: "Every five",
+      prompt: "p",
+      schedule: { kind: "every", minutes: 5 },
+    });
+    let clock = Date.now();
+    routines.update(created.id, { nextRunAt: clock - 1_000 });
+
+    let busy = true;
+    const started: string[] = [];
+    const fake: RoutineRunner = {
+      isRunning: () => busy,
+      run: () => {
+        started.push("run");
+        return Promise.resolve({ failure: null });
+      },
+      stop: () => {},
+      check: () =>
+        Promise.resolve({
+          kind: "same",
+          state: { kind: "file", mtimeMs: 1, hash: null },
+        }),
+    };
+    const scheduler = createRoutineScheduler({
+      repo: routines,
+      runner: fake,
+      now: () => clock,
+      tickMs: 5,
+      catchUpDelayMs: 5,
+      slotPollMs: 5,
+    });
+    scheduler.start();
+    // Thirty minutes of a five-minute routine: six occurrences.
+    for (let minute = 0; minute < 30; minute++) {
+      clock += 60_000;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    assertEquals(started, [], "nothing runs while the conversation is busy");
+    assertEquals(scheduler.stateOf(created.id), "queued");
+    assertEquals(scheduler.isQueued(created.id), true);
+
+    // Free the conversation: ONE run starts, not the six occurrences.
+    busy = false;
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    assertEquals(started, ["run"]);
+    assertEquals(scheduler.stateOf(created.id), "idle");
+    scheduler.close();
+  } finally {
+    close();
+  }
+});
+
+Deno.test("scheduler: a wait that lasts too long gives up without recording a run", async () => {
+  const { repo: routines, close } = repo();
+  try {
+    const created = routines.create({
+      agentId: AGENT,
+      name: "Every five",
+      prompt: "p",
+      schedule: { kind: "every", minutes: 5 },
+    });
+    let clock = Date.now();
+    routines.update(created.id, { nextRunAt: clock - 1_000 });
+    const busyRunner: RoutineRunner = {
+      isRunning: () => true,
+      run: () => Promise.reject(new Error("must not run")),
+      stop: () => {},
+      check: () =>
+        Promise.resolve({
+          kind: "same",
+          state: { kind: "file", mtimeMs: 1, hash: null },
+        }),
+    };
+    const scheduler = createRoutineScheduler({
+      repo: routines,
+      runner: busyRunner,
+      now: () => clock,
+      tickMs: 5,
+      catchUpDelayMs: 5,
+      slotPollMs: 5,
+      queueMaxWaitMs: 60_000,
+    });
+    scheduler.start();
+    // The wait has to be under way before the clock jumps: the give-up is
+    // measured from when this run started waiting.
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assertEquals(scheduler.stateOf(created.id), "queued");
+    clock += 120_000;
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    const row = routines.get(created.id)!;
+    assertEquals(row.lastStatus, "skipped");
+    assert(row.lastDetail !== null && row.lastDetail.includes("skipped"));
+    assertEquals(row.lastRunAt, null, "a run that never started has no time");
+    assertEquals(scheduler.stateOf(created.id), "idle");
+    scheduler.close();
+  } finally {
+    close();
+  }
+});
+
+Deno.test("scheduler: stopping a waiting run records it without a run time", async () => {
+  const { repo: routines, close } = repo();
+  try {
+    const created = routines.create({
+      agentId: AGENT,
+      name: "Every five",
+      prompt: "p",
+      schedule: { kind: "every", minutes: 5 },
+    });
+    routines.update(created.id, { nextRunAt: Date.now() - 1_000 });
+    const busyRunner: RoutineRunner = {
+      isRunning: () => true,
+      run: () => Promise.reject(new Error("must not run")),
+      stop: () => {},
+      check: () =>
+        Promise.resolve({
+          kind: "same",
+          state: { kind: "file", mtimeMs: 1, hash: null },
+        }),
+    };
+    const scheduler = createRoutineScheduler({
+      repo: routines,
+      runner: busyRunner,
+      tickMs: 5,
+      catchUpDelayMs: 5,
+      slotPollMs: 5,
+    });
+    scheduler.start();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assertEquals(scheduler.stateOf(created.id), "queued");
+    scheduler.stop(created.id);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const row = routines.get(created.id)!;
+    assertEquals(row.lastStatus, "stopped");
+    assertEquals(row.lastRunAt, null);
+    assertEquals(scheduler.stateOf(created.id), "idle");
+    scheduler.close();
   } finally {
     close();
   }

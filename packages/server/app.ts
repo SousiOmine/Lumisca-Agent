@@ -230,6 +230,7 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
     routineRoutes({
       listRoutinesOf: (agentId) => core.listRoutinesOf(agentId),
       isRoutineRunning: (id) => core.isRoutineRunning(id),
+      isRoutineQueued: (id) => core.isRoutineQueued(id),
       runRoutineNow: (id) => core.runRoutineNow(id),
       stopRoutine: (id) => core.stopRoutine(id),
       getRoutineRepo: () => core.getRoutineRepo(),

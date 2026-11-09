@@ -18,6 +18,7 @@ import { AppError, parseBody, requireBoolean } from "./util.ts";
 export interface RoutineApi {
   listRoutinesOf(agentId: string): Routine[];
   isRoutineRunning(id: string): boolean;
+  isRoutineQueued(id: string): boolean;
   runRoutineNow(id: string): Promise<void>;
   stopRoutine(id: string): void;
   getRoutineRepo(): {
@@ -49,7 +50,8 @@ export function routineRoutes(core: RoutineApi): Hono {
   const app = new Hono();
 
   /** The list of one agent's routines, newest last (creation order), with
-   * the running flag from the scheduler. */
+   * the scheduling flags from the scheduler: `running` (the prompt reached
+   * the agent) and `queued` (it is waiting for the conversation). */
   const listOf = (agentId: string): { routines: RoutineView[] } => {
     const agent = core.listStellaAgents().find((item) => item.id === agentId);
     if (agent === undefined) {
@@ -60,6 +62,7 @@ export function routineRoutes(core: RoutineApi): Hono {
         ...routine,
         agentName: agent.name,
         running: core.isRoutineRunning(routine.id),
+        queued: core.isRoutineQueued(routine.id),
       })),
     };
   };

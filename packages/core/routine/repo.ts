@@ -95,7 +95,8 @@ function parseJsonOrUndefined(value: string): unknown {
 }
 
 function statusOf(value: string | null): RoutineStatus | null {
-  return value === "ok" || value === "error" || value === "stopped"
+  return value === "ok" || value === "error" || value === "stopped" ||
+      value === "skipped"
     ? value
     : null;
 }
@@ -152,6 +153,12 @@ export interface RoutineRepo {
   due(at: number): Routine[];
   /** Record how a run ended and when the next one is. */
   recordRun(id: string, result: RoutineRunResult): void;
+  /** Record an outcome that is not a run (a waiting run that was stopped or
+   * gave up): the status and the reason only, never `last_run_at`. */
+  recordNote(
+    id: string,
+    note: { status: RoutineStatus; detail: string | null },
+  ): void;
   /** Record what a `watch` check observed, why it could not observe
    * anything, and when the next check is. The run's record (`last_run_at`
    * and `last_status`) is untouched: a check is not a run. */
@@ -197,6 +204,9 @@ export function createRoutineRepo(db: LumiscaDb): RoutineRepo {
     `UPDATE routines SET last_run_at = ?, last_status = ?, last_detail = ?,
        next_run_at = ?
      WHERE id = ?`,
+  );
+  const noteStmt = db.db.prepare(
+    "UPDATE routines SET last_status = ?, last_detail = ? WHERE id = ?",
   );
   const watchStmt = db.db.prepare(
     `UPDATE routines SET
@@ -341,6 +351,13 @@ export function createRoutineRepo(db: LumiscaDb): RoutineRepo {
         result.nextRunAt,
         id,
       );
+    },
+
+    recordNote(
+      id: string,
+      note: { status: RoutineStatus; detail: string | null },
+    ): void {
+      noteStmt.run(note.status, note.detail, id);
     },
 
     recordWatch(id: string, result: RoutineWatchResult): void {
