@@ -17,7 +17,10 @@
  *   runs a minute late: the user scheduled it and expects the result.
  * - **Nothing is retried.** A failed run records its reason for the settings
  *   list and waits for the next scheduled time. Silently retrying a failing
- *   request would spend the user's tokens on it every few minutes.
+ *   request would spend the user's tokens on it every few minutes. A check
+ *   that could not run at all is not a run: it waits longer than its own
+ *   interval (see WATCH_RETRY_MS) and records that in its own columns, so a
+ *   machine that is down never looks like a routine that keeps failing.
  *
  * The scheduler never runs a routine that is disabled, unreadable, or gone:
  * every step re-reads the row, because the user can delete or disable it
@@ -25,7 +28,7 @@
  */
 import type { Routine } from "../shared/routine.ts";
 import { nextRunAt } from "../shared/routine.ts";
-import type { RoutineRepo } from "./repo.ts";
+import type { RoutineRepo, RoutineWatchResult } from "./repo.ts";
 import { CoreError, errorMessage } from "../errors.ts";
 import { sleep } from "../shared/misc.ts";
 
@@ -42,6 +45,13 @@ const CATCH_UP_DELAY_MS = 60_000;
 
 /** How often a run waiting for a busy conversation asks again. */
 const SLOT_POLL_MS = 2_000;
+
+/** How long a check that cannot run at all waits before looking again. A
+ * machine that is down answers the same thing every time, and every check
+ * costs a process inside the container: repeating it at the routine's own
+ * interval is work with a known answer. Fifteen minutes is longer than any
+ * watch interval the user can pick (the floor is five). */
+const WATCH_RETRY_MS = 15 * 60_000;
 
 /** The seam the scheduler needs from the session layer: start a run in an
  * agent's conversation and know whether one is already running. Kept narrow
@@ -162,13 +172,15 @@ export function createRoutineScheduler(
   /** One look at a watch routine: check, record what was seen, and start a
    * run only if the answer is "changed".
    *
-   * The check is not counted as a run (see isRunning), so the settings list
-   * keeps saying what the last RUN did while the checks go on underneath. A
-   * failed check is recorded in the routine's detail and is not a change: a
-   * machine that is down must not fire the routine. */
+   * The check is not a run, and is recorded as its own thing: its outcome
+   * goes into the routine's check columns, so a machine that is down cannot
+   * make the settings list say the routine failed, and the "last run" line
+   * keeps describing the last run the user actually got. A check that could
+   * not run at all (no machine, no conversation) backs off instead of asking
+   * the same dead end every interval; the routine stays enabled, because
+   * stopping a routine the user scheduled is the user's decision. */
   async function checkOnce(routine: Routine): Promise<void> {
     if (routine.schedule.kind !== "watch") return;
-    const id = routine.id;
     let outcome: WatchCheck;
     try {
       outcome = await runner.check(routine);
@@ -176,33 +188,42 @@ export function createRoutineScheduler(
       outcome = { kind: "error", problem: errorMessage(error) };
     }
     const at = now();
-    const next = nextRunAt(routine.schedule, at);
     if (outcome.kind === "unsupported") {
-      // Nothing will ever be observed here: say so on the row instead of
-      // retrying every few minutes for ever.
-      record(id, { status: "error", detail: outcome.problem });
+      recordCheck(routine, {
+        state: undefined,
+        nextRunAt: at + WATCH_RETRY_MS,
+        checkedAt: at,
+        error: outcome.problem,
+      });
       return;
     }
-    try {
-      repo.recordWatch(
-        id,
-        outcome.state === undefined ? routine.watchState : outcome.state,
-        next,
-      );
-    } catch (error) {
-      log(`routine ${id}: could not record the check (${errorMessage(error)})`);
-    }
-    if (outcome.kind === "error") {
-      // The observation failed; keep the previous baseline (the check never
-      // saw a new value) so the next successful one still compares.
-      record(id, { status: "error", detail: outcome.problem });
-      return;
-    }
-    if (outcome.kind === "same") return;
-    // Changed: run it. The row's next check was already advanced above.
-    const current = repo.get(id);
+    // A check that could not observe keeps the previous baseline (it never
+    // saw a new value), so the next successful one still compares.
+    recordCheck(routine, {
+      state: outcome.kind === "error" ? undefined : outcome.state,
+      nextRunAt: nextRunAt(routine.schedule, at),
+      checkedAt: at,
+      error: outcome.kind === "error" ? outcome.problem : null,
+    });
+    if (outcome.kind !== "changed") return;
+    // Changed: run it. The row's next check was already advanced by the tick.
+    const current = repo.get(routine.id);
     if (current === undefined) return;
     void run(current);
+  }
+
+  /** Write one check's record. A failure here belongs to the row, not to the
+   * run: nothing about the routine's run was decided by it. */
+  function recordCheck(routine: Routine, result: RoutineWatchResult): void {
+    try {
+      repo.recordWatch(routine.id, result);
+    } catch (error) {
+      log(
+        `routine ${routine.id}: could not record the check (${
+          errorMessage(error)
+        })`,
+      );
+    }
   }
 
   /** Start one run of `routine`, waiting for a free conversation. */

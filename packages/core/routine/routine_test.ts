@@ -584,7 +584,12 @@ Deno.test("scheduler: a check that could not answer does not fire the run", asyn
     scheduler.close();
 
     assertEquals(fake.started, []);
-    assertEquals(routines.get(created.id)!.lastStatus, "error");
+    // The check's own record says why; the run's says nothing (it never ran).
+    const row = routines.get(created.id)!;
+    assertEquals(row.watchError, "offline");
+    assertEquals(row.watchCheckedAt !== undefined, true);
+    assertEquals(row.lastStatus, null);
+    assertEquals(row.lastRunAt, null);
   } finally {
     close();
   }
@@ -607,7 +612,11 @@ Deno.test("routine repo: changing what a watch watches drops the baseline", () =
       },
     });
     const baseline = { kind: "file", mtimeMs: 1, hash: null };
-    routines.recordWatch(created.id, baseline, Date.now() + 300_000);
+    routines.recordWatch(created.id, {
+      state: baseline,
+      nextRunAt: Date.now() + 300_000,
+      checkedAt: Date.now(),
+    });
     assertEquals(routines.get(created.id)?.watchState, baseline);
 
     // A name is not the watch: the baseline survives.
@@ -654,17 +663,66 @@ Deno.test("routine repo: switching a routine back on drops the baseline", () => 
         source: { kind: "file", path: "a.log", compare: "mtime" },
       },
     });
-    routines.recordWatch(
-      created.id,
-      { kind: "file", mtimeMs: 1, hash: null },
-      0,
-    );
+    routines.recordWatch(created.id, {
+      state: { kind: "file", mtimeMs: 1, hash: null },
+      nextRunAt: 0,
+      checkedAt: 0,
+    });
     routines.update(created.id, { enabled: false, nextRunAt: null });
     const resumed = routines.update(created.id, {
       enabled: true,
       nextRunAt: Date.now() + 300_000,
     });
     assertEquals(resumed.watchState, undefined);
+  } finally {
+    close();
+  }
+});
+
+Deno.test("scheduler: a check that cannot run backs off without recording a run", async () => {
+  // The regression from #33: a stopped machine was asked every interval and
+  // every failure was written as if the routine had run and failed, so the
+  // list said "last failed a moment ago" about a routine that never ran.
+  const { repo: routines, close } = repo();
+  try {
+    const created = routines.create({
+      agentId: AGENT,
+      name: "Watch the log",
+      prompt: "p",
+      schedule: {
+        kind: "watch",
+        everyMinutes: 5,
+        source: { kind: "file", path: "app.log", compare: "mtime" },
+      },
+    });
+    let clock = Date.now();
+    routines.update(created.id, { nextRunAt: clock - 1_000 });
+    const fake = promptRunner({
+      check: { kind: "unsupported", problem: "the machine is not running" },
+    });
+    const scheduler = createRoutineScheduler({
+      repo: routines,
+      runner: fake,
+      now: () => clock,
+      tickMs: 5,
+      catchUpDelayMs: 5,
+    });
+    scheduler.start();
+    // An hour of minutes: twelve intervals at the routine's own cadence.
+    for (let minute = 0; minute < 60; minute++) {
+      clock += 60_000;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    scheduler.close();
+
+    // One look per fifteen minutes at most, not one per interval.
+    assert(fake.checks.length <= 5, `${fake.checks.length} checks in an hour`);
+    const row = routines.get(created.id)!;
+    assertEquals(row.enabled, true, "a check that cannot run is not a stop");
+    assertEquals(row.lastRunAt, null);
+    assertEquals(row.lastStatus, null);
+    assertEquals(row.watchError, "the machine is not running");
+    assert(row.watchCheckedAt !== undefined);
   } finally {
     close();
   }

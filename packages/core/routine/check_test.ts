@@ -79,7 +79,11 @@ Deno.test("checkRoutine: the stored observation is the baseline it compares", as
     );
     assertEquals(first.kind, "same", "the first look is a baseline");
     assert(first.kind === "same");
-    routines.recordWatch(created.id, first.state, Date.now() + 300_000);
+    routines.recordWatch(created.id, {
+      state: first.state,
+      nextRunAt: Date.now() + 300_000,
+      checkedAt: Date.now(),
+    });
 
     const reRead = routines.get(created.id)!;
     assert(reRead.watchState !== undefined, "the observation was stored");
@@ -113,7 +117,11 @@ Deno.test("checkRoutine: two routines on one source keep their own baselines", a
       prompt: "p",
       schedule: fileWatch,
     });
-    routines.recordWatch(a.id, { kind: "file", mtimeMs: 1, hash: null }, 0);
+    routines.recordWatch(a.id, {
+      state: { kind: "file", mtimeMs: 1, hash: null },
+      nextRunAt: 0,
+      checkedAt: 0,
+    });
 
     const deps = (at: string) => ({
       runner: runnerOf([`${at}\n`]),

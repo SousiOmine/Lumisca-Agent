@@ -36,6 +36,8 @@ interface RoutineRow {
   last_status: string | null;
   last_detail: string | null;
   watch_state: string | null;
+  watch_checked_at: number | null;
+  watch_error: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -71,6 +73,12 @@ function toRoutine(row: RoutineRow): Routine {
     ...(row.watch_state === null || row.watch_state === undefined
       ? {}
       : { watchState: parseJsonOrUndefined(row.watch_state) }),
+    ...(row.watch_checked_at === null || row.watch_checked_at === undefined
+      ? {}
+      : { watchCheckedAt: row.watch_checked_at }),
+    ...(row.watch_error === null || row.watch_error === undefined
+      ? {}
+      : { watchError: row.watch_error }),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -109,6 +117,19 @@ export interface UpdateRoutineInput {
   nextRunAt?: number | null;
 }
 
+/** What one `watch` check left behind. */
+export interface RoutineWatchResult {
+  /** What the next check compares against; undefined keeps the stored one
+   * (a check that failed observed nothing new). */
+  state: unknown;
+  /** When the next check is due (epoch ms). */
+  nextRunAt: number;
+  /** When this check ran (epoch ms). */
+  checkedAt: number;
+  /** Why it could not answer, or null/undefined when it did. */
+  error?: string | null;
+}
+
 export interface RoutineRunResult {
   lastRunAt: number;
   lastStatus: RoutineStatus;
@@ -131,14 +152,16 @@ export interface RoutineRepo {
   due(at: number): Routine[];
   /** Record how a run ended and when the next one is. */
   recordRun(id: string, result: RoutineRunResult): void;
-  /** Record what a `watch` check observed, and when the next check is. The
-   * run's status is untouched: a check is not a run. */
-  recordWatch(id: string, state: unknown, nextRunAt: number): void;
+  /** Record what a `watch` check observed, why it could not observe
+   * anything, and when the next check is. The run's record (`last_run_at`
+   * and `last_status`) is untouched: a check is not a run. */
+  recordWatch(id: string, result: RoutineWatchResult): void;
 }
 
 const COLUMNS =
   "id, agent_id, name, prompt, schedule, enabled, next_run_at, last_run_at, " +
-  "last_status, last_detail, watch_state, created_at, updated_at";
+  "last_status, last_detail, watch_state, watch_checked_at, watch_error, " +
+  "created_at, updated_at";
 
 export function createRoutineRepo(db: LumiscaDb): RoutineRepo {
   const listStmt = db.db.prepare(
@@ -155,12 +178,13 @@ export function createRoutineRepo(db: LumiscaDb): RoutineRepo {
     `SELECT ${COLUMNS} FROM routines WHERE agent_id = ? AND name = ?`,
   );
   const insertStmt = db.db.prepare(
-    `INSERT INTO routines (${COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO routines (${COLUMNS})
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const updateStmt = db.db.prepare(
     `UPDATE routines SET name = ?, prompt = ?, schedule = ?, enabled = ?,
        next_run_at = ?, last_run_at = ?, last_status = ?, last_detail = ?,
-       watch_state = ?, updated_at = ?
+       watch_state = ?, watch_checked_at = ?, watch_error = ?, updated_at = ?
      WHERE id = ?`,
   );
   const deleteStmt = db.db.prepare("DELETE FROM routines WHERE id = ?");
@@ -175,7 +199,10 @@ export function createRoutineRepo(db: LumiscaDb): RoutineRepo {
      WHERE id = ?`,
   );
   const watchStmt = db.db.prepare(
-    `UPDATE routines SET watch_state = ?, next_run_at = ? WHERE id = ?`,
+    `UPDATE routines SET
+       watch_state = COALESCE(?, watch_state),
+       next_run_at = ?, watch_checked_at = ?, watch_error = ?
+     WHERE id = ?`,
   );
 
   const rowOf = (id: string): RoutineRow | undefined =>
@@ -222,6 +249,8 @@ export function createRoutineRepo(db: LumiscaDb): RoutineRepo {
         JSON.stringify(input.schedule),
         1,
         next,
+        null,
+        null,
         null,
         null,
         null,
@@ -281,6 +310,8 @@ export function createRoutineRepo(db: LumiscaDb): RoutineRepo {
         current.last_status,
         current.last_detail,
         watchState,
+        retargeted || resumed ? null : current.watch_checked_at,
+        retargeted || resumed ? null : current.watch_error,
         Date.now(),
         id,
       );
@@ -312,10 +343,12 @@ export function createRoutineRepo(db: LumiscaDb): RoutineRepo {
       );
     },
 
-    recordWatch(id: string, state: unknown, next: number): void {
+    recordWatch(id: string, result: RoutineWatchResult): void {
       watchStmt.run(
-        state === undefined ? null : JSON.stringify(state),
-        next,
+        result.state === undefined ? null : JSON.stringify(result.state),
+        result.nextRunAt,
+        result.checkedAt,
+        result.error ?? null,
         id,
       );
     },

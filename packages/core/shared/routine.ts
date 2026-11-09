@@ -416,6 +416,13 @@ export interface Routine {
    * undefined for a routine that watches nothing, or one that has not been
    * checked since it was saved. Schedule routines never carry one. */
   watchState?: unknown;
+  /** When the last `watch` check ran (epoch ms), or undefined when it never
+   * did. A check is not a run: this and {@link watchError} are the check's
+   * own record, while `lastRunAt` / `lastStatus` stay about runs. */
+  watchCheckedAt?: number;
+  /** Why the last check could not answer — a machine that is down, an
+   * address that did not respond — or undefined when it answered. */
+  watchError?: string;
   createdAt: number;
   updatedAt: number;
 }

@@ -293,8 +293,35 @@ export function RoutinePanel({
                       </span>
                     </>
                   )}
+                  {
+                    /* A check is not a run: its own line keeps "last run"
+                      honest while a stopped machine keeps being checked. */
+                  }
+                  {routine.watchCheckedAt !== undefined && (
+                    <>
+                      <span>·</span>
+                      <span
+                        className={routine.watchError === undefined
+                          ? undefined
+                          : "error-text"}
+                      >
+                        {routine.watchError === undefined
+                          ? t("panels.routine.checked", {
+                            when: formatWhen(routine.watchCheckedAt, locale),
+                          })
+                          : t("panels.routine.checkFailed", {
+                            when: formatWhen(routine.watchCheckedAt, locale),
+                          })}
+                      </span>
+                    </>
+                  )}
                 </div>
                 <p className="routine-prompt">{routine.prompt}</p>
+                {routine.watchError !== undefined && (
+                  <p className="routine-detail error-text">
+                    {routine.watchError}
+                  </p>
+                )}
                 {routine.lastDetail !== null && (
                   <p className="routine-detail">{routine.lastDetail}</p>
                 )}

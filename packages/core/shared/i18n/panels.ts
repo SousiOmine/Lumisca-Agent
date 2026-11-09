@@ -141,6 +141,14 @@ export const panels = {
     ja: "前回 {when} {status}",
     en: "last {when} {status}",
   },
+  "panels.routine.checked": {
+    ja: "確認 {when}",
+    en: "checked {when}",
+  },
+  "panels.routine.checkFailed": {
+    ja: "確認 {when} に失敗",
+    en: "check failed at {when}",
+  },
   "panels.routine.run": { ja: "今すぐ実行", en: "Run now" },
   "panels.routine.stop": { ja: "停止", en: "Stop" },
   "panels.routine.enable": { ja: "有効にする", en: "Enable" },

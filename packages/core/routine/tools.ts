@@ -84,6 +84,14 @@ function describeRoutine(routine: Routine, running: boolean): string {
         routine.lastDetail === null ? "" : ` (${routine.lastDetail})`
       }`,
   ];
+  // The check is not a run, so it is said separately: a stopped machine is
+  // not a routine that keeps failing (see scheduler.ts).
+  if (routine.watchCheckedAt !== undefined) {
+    parts.push(`last check ${formatLocal(routine.watchCheckedAt)}`);
+  }
+  if (routine.watchError !== undefined) {
+    parts.push(`check failed: ${routine.watchError}`);
+  }
   if (running) parts.push("running now");
   return `- ${parts.join("; ")}`;
 }

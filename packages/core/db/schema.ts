@@ -291,6 +291,16 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
     addColumnIfMissing(db, "stella_agents", "model_provider", "TEXT");
     addColumnIfMissing(db, "stella_agents", "model_id", "TEXT");
   },
+  // What a `watch` routine's CHECKS did, kept apart from what its RUNS did.
+  // A check is not a run: it makes no inference call and produces no answer,
+  // so writing it into `last_run_at` / `last_status` made the settings list
+  // say "failed a moment ago" about a routine that had never run, and made a
+  // machine that is down look like a routine that keeps failing. NULL means
+  // nothing was checked yet / the last check answered.
+  (db) => {
+    addColumnIfMissing(db, "routines", "watch_checked_at", "INTEGER");
+    addColumnIfMissing(db, "routines", "watch_error", "TEXT");
+  },
 ];
 
 /** The `user_version` a fully migrated database carries: one per migration
