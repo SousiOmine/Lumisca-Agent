@@ -437,7 +437,11 @@
   gap: 8px;
   flex: 1;
   min-width: 0;
-  padding: 0 6px;
+  /* The face and the name sit on the list's row edge, not on the pane's box
+   * edge: a row steps in by its own left padding, so the strip adds it
+   * (12px + 8px = 20px). The narrower layouts state their own sum — see the
+   * 900px and phone blocks, where the shell and the rows change. */
+  padding: 0 calc(var(--app-inset) + 8px);
 }
 
 .stella-titlebar-name {
@@ -923,6 +927,12 @@
     padding: 8px;
   }
 
+  /* 8px of shell margin + the row's 8: the list's row edge, which the strip
+   * keeps the face and the name on as the columns become one. */
+  .stella-titlebar {
+    padding: 0 16px;
+  }
+
   .stella {
     flex-direction: column;
   }
@@ -1155,6 +1165,12 @@
  * chat's body gains, so switching modes does not change the reading size;
  * the controls a thumb reaches for keep a fingertip's square. */
 @media (max-width: 600px) {
+  /* The shell's margin is 0 here and the rows take 10px of their own (below),
+   * so the strip's content starts at that 10 to stay on the list's row edge. */
+  .stella-titlebar {
+    padding: 0 10px;
+  }
+
   .stella-agent-name {
     padding: 12px 10px;
     font-size: 15px;

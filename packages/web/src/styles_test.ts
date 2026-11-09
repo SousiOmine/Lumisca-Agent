@@ -973,6 +973,58 @@ Deno.test("the window controls keep the right edge of the title bar", async () =
   assertEquals(tabbar.get("flex"), "1");
 });
 
+Deno.test("the tab bar insets its cards like the sheet below it", async () => {
+  // Regression: the bar kept a gutter of its own after the tabs became cards
+  // on the canvas, so the selected tab's left edge sat short of the chat
+  // sheet's — the one surface directly under it. Card and sheet take the same
+  // margin, so the two edges are one line.
+  const chrome = await Deno.readTextFile(
+    new URL("./styles/chrome.css", import.meta.url),
+  );
+  const chat = await Deno.readTextFile(
+    new URL("./styles/chat.css", import.meta.url),
+  );
+  assertEquals(
+    declarations(cssRules(chrome), ".tabbar").get("padding"),
+    "0 var(--app-inset)",
+  );
+  assertEquals(
+    declarations(cssRules(chat), ".chat").get("margin"),
+    "var(--app-inset)",
+    "the reference edge the tab bar lines up with",
+  );
+});
+
+Deno.test("stella's strip starts where the list's rows do", async () => {
+  // The strip carries the agent's face and name above the list that repeats
+  // the same pair row by row. The row's box is one margin in from the pane,
+  // and the row steps in by its own padding, so the strip's content has to
+  // take both: a gutter of its own left the two left edges a few pixels
+  // apart. The shell's and the rows' narrower values (stella.css: the stacked
+  // columns, the phone) carry their own strip rule beside them.
+  const stella = await Deno.readTextFile(
+    new URL("./styles/stella.css", import.meta.url),
+  );
+  const rules = cssRules(stella);
+  assertEquals(
+    declarations(rules, ".stella-titlebar").get("padding"),
+    "0 calc(var(--app-inset) + 8px)",
+  );
+  assertEquals(
+    declarations(rules, ".stella-shell").get("padding"),
+    "var(--app-inset)",
+    "the pane margin the rows sit in",
+  );
+  // The 8px the strip adds is the row's own left padding: the two numbers
+  // are one sum, so a row that steps in or out must move the strip with it.
+  const row = declarations(rules, ".stella-agent-name").get("padding") ?? "";
+  assertEquals(
+    row.split(/\s+/).at(-1),
+    "8px",
+    "the list row's left padding is what the strip adds",
+  );
+});
+
 Deno.test("a screen transition slides on a phone and fades elsewhere", async () => {
   // The two halves of the screen-transition contract (<htmldata-vt> is written
   // by screen-transition.ts). A direction that reached the wide layout would

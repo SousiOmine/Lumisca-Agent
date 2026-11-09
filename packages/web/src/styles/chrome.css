@@ -262,7 +262,12 @@
   display: flex;
   align-items: stretch;
   gap: 4px;
-  padding: 0 6px;
+  /* A tab is a card on the canvas (radius, hairline, shadow), so its edge
+   * belongs where the chat sheet's is: the bar insets its cards by the same
+   * margin every floating surface below uses. The 600px block further down
+   * keeps its own 4px, because there the sheet is edge to edge and only the
+   * card needs air. */
+  padding: 0 var(--app-inset);
   background: var(--bg);
   height: var(--tab-height);
   overflow-x: auto;
