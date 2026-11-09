@@ -42,7 +42,7 @@ import {
 } from "../tools/schema.ts";
 import { CoreError } from "../errors.ts";
 import type { RoutineRepo } from "./repo.ts";
-import type { RoutineScheduler } from "./scheduler.ts";
+import type { RoutineRunState, RoutineScheduler } from "./scheduler.ts";
 
 /** Description of the schedule argument, shared by the two tools that take
  * one: the four accepted shapes. */
@@ -70,7 +70,10 @@ const scheduleSchema = object({}, {
 /** One routine as the model reads it: one line per routine, with the facts
  * needed to change it (the id) and to judge it (when it runs next, how the
  * last run ended). */
-function describeRoutine(routine: Routine, running: boolean): string {
+function describeRoutine(
+  routine: Routine,
+  runState: RoutineRunState,
+): string {
   const parts = [
     `${routine.name} (id ${routine.id})`,
     scheduleText(routine.schedule),
@@ -92,7 +95,12 @@ function describeRoutine(routine: Routine, running: boolean): string {
   if (routine.watchError !== undefined) {
     parts.push(`check failed: ${routine.watchError}`);
   }
-  if (running) parts.push("running now");
+  // "Waiting" is not "running": a run held back by a busy conversation has
+  // produced nothing yet, and saying it is running would hide that.
+  if (runState === "running") parts.push("running now");
+  if (runState === "queued") {
+    parts.push("waiting for the conversation to be free");
+  }
   return `- ${parts.join("; ")}`;
 }
 
@@ -357,10 +365,7 @@ export function createRoutineTools(options: RoutineToolsOptions): Tool[] {
           type: "text",
           text: routines
             .map((routine) =>
-              describeRoutine(
-                routine,
-                scheduler.isRunning(routine.id),
-              )
+              describeRoutine(routine, scheduler.stateOf(routine.id))
             )
             .join("\n"),
         }],

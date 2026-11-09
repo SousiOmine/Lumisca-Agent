@@ -25,12 +25,16 @@ import type {
 export const MCP_TOOLS_PROVIDER = "mcp";
 
 /** The model-facing note: what the pair is for and the one boundary fact
- * that is not in the tools' own descriptions. */
+ * that is not in the tools' own descriptions.
+ *
+ * It names categories, never individual tools: the same note reaches a
+ * sub-agent, whose registry holds none of the session's own tools, and naming
+ * one would send it looking for something it cannot find. */
 export const ON_DEMAND_TOOLS_NOTE =
   "On-demand tools: tools beyond the preloaded set (MCP servers, " +
-  "extensions, the browser lab, and this session's own tools such as routines " +
-  "and identity) are found with tool_search and run with tool_call; `mcp__` " +
-  "tools can access resources outside the workspace.";
+  "extensions, the browser lab, and tools this session owns) are found with " +
+  "tool_search and run with tool_call; `mcp__` tools can access resources " +
+  "outside the workspace.";
 
 /** The system-prompt form of the note, for agents without context
  * providers (sub-agents). */
