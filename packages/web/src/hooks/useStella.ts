@@ -8,6 +8,7 @@ import {
 import { api } from "../api.ts";
 import { connectStellaEvents, stellaApi } from "../api-stella.ts";
 import { describeError, useT } from "../i18n.ts";
+import { maybeNotifyAgentEnd } from "../notify.ts";
 import {
   applyStellaEvent,
   prependOlderEntries,
@@ -132,6 +133,12 @@ export function useStella(
    * rather than reading the same page twice. The state is what the transcript
    * reads to keep the reader's position until the page lands. */
   const olderInFlight = useRef(false);
+  /** The newest conversation, for the event stream: a notification names the
+   * agent, and the callback that runs must not read a stale render. */
+  const conversationRef = useRef<StellaConversationState | null>(null);
+  useEffect(() => {
+    conversationRef.current = conversation;
+  }, [conversation]);
   const [loadingOlder, setLoadingOlder] = useState(false);
 
   const reloadAgents = useCallback(() => {
@@ -262,6 +269,13 @@ export function useStella(
     if (!enabled || activeAgentId === null || conversation === null) return;
     let closed = false;
     let close: (() => void) | undefined;
+    /** Whether a run was under way when the last event arrived. A duplicate
+     * `agent_end` (the same run's end seen twice) must not notify twice, and
+     * a resynced snapshot is the truth about it. */
+    let wasRunning = false;
+    /** The last thing the agent said in this run: the notification's body,
+     * because "finished" alone does not say whether it is worth opening. */
+    let lastReply = "";
     const reconnect = createReconnectScheduler({ stopped: () => closed });
 
     const resync = async () => {
@@ -270,6 +284,7 @@ export function useStella(
         // Merged, not replaced: the client may hold windows the reader paged
         // back to, and the snapshot is only the newest one (see stellaStateOf).
         if (!closed) {
+          wasRunning = snapshot.running;
           setConversation((current) =>
             stellaStateOf(snapshot, current ?? undefined)
           );
@@ -287,6 +302,24 @@ export function useStella(
         // what the run is waiting on: there is no streamed text to buffer,
         // so each one is applied as it arrives.
         (event) => {
+          // A run's end is the moment a user who is looking elsewhere needs
+          // to hear about it. Code mode does this in its own event handler;
+          // stella's stream is a different one, so a routine's result was
+          // silent here (#41).
+          if (event.type === "agent_start") wasRunning = true;
+          if (event.type === "entry" && event.entry.role === "assistant") {
+            lastReply = event.entry.text;
+          }
+          if (event.type === "agent_end") {
+            if (wasRunning) {
+              wasRunning = false;
+              void maybeNotifyAgentEnd(
+                conversationRef.current?.agentName ?? "",
+                lastReply,
+              );
+            }
+            lastReply = "";
+          }
           setConversation((current) => {
             if (current === null) return current;
             return applyStellaEvent(current, event) ?? current;

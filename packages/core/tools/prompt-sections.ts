@@ -333,9 +333,8 @@ const SEND_CHAT_SECTION: PromptSection = {
 const ROUTINES_SECTION: PromptSection = {
   name: "routine:offer",
   order: ORDER.tool + 160,
-  text:
-    "- A request to happen at a time or whenever something changes " +
-    "(\"every morning\",\n  \"tell me when the deploy page changes\") can be " +
+  text: "- A request to happen at a time or whenever something changes " +
+    '("every morning",\n  "tell me when the deploy page changes") can be ' +
     "a routine of this conversation:\n  find the routine tools with " +
     "tool_search and follow the `routines` skill.",
 };

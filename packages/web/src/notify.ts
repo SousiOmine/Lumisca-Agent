@@ -30,6 +30,10 @@ const WINDOW_STATE_TIMEOUT_MS = 1500;
 
 const MAX_NAME_CHARS = 60;
 const MAX_QUESTION_CHARS = 80;
+/** How much of the finished run's reply the notification carries. One line of
+ * a toast: enough to judge whether opening the app is worth it, short enough
+ * to read without expanding it. */
+const MAX_DETAIL_CHARS = 120;
 
 /** Whether background notifications are enabled. Defaults to on; the
  * settings UI persists the choice under ENABLED_KEY. Never throws. */
@@ -66,18 +70,32 @@ function sessionLabel(name: string, tr: Translator): string {
 }
 
 /** Display text for a finished run. Pure (unit-tested; `tr` defaults to the
- * app language at call time). */
+ * app language at call time).
+ *
+ * `detail` is the beginning of what the run said: "finished" alone does not
+ * tell the user whether it is worth opening the app, and a routine's result
+ * is exactly the case where the answer is in the words. It comes after `tr`
+ * because that is where every existing call site already passes its
+ * translator. */
 export function buildAgentEndNotification(
   sessionName: string,
   tr: Translator = t,
+  detail?: string,
 ): {
   title: string;
   body: string;
 } {
-  return {
-    title: "Lumisca",
-    body: tr("notify.agentFinished", { name: sessionLabel(sessionName, tr) }),
-  };
+  const head = tr("notify.agentFinished", {
+    name: sessionLabel(sessionName, tr),
+  });
+  // One line: a reply can be a document, and its first paragraph is what a
+  // toast has room for. Whitespace is folded so a markdown reply does not
+  // arrive as a stack of empty lines.
+  const gist = truncate(
+    (detail ?? "").replace(/\s+/g, " ").trim(),
+    MAX_DETAIL_CHARS,
+  );
+  return { title: "Lumisca", body: gist === "" ? head : `${head}\n${gist}` };
 }
 
 /** Display text for an ask-tool question. The first question carries the
@@ -171,9 +189,17 @@ async function maybeNotify(
   }
 }
 
-/** Notify that a session's run ended. Call on every `agent_end` event. */
-export function maybeNotifyAgentEnd(sessionName: SessionName): Promise<void> {
-  return maybeNotify(sessionName, false, buildAgentEndNotification);
+/** Notify that a session's run ended. Call on every `agent_end` event;
+ * `detail` is the start of the reply when the caller has it. */
+export function maybeNotifyAgentEnd(
+  sessionName: SessionName,
+  detail?: string,
+): Promise<void> {
+  return maybeNotify(
+    sessionName,
+    false,
+    (name) => buildAgentEndNotification(name, t, detail),
+  );
 }
 
 /** Notify that the agent asked the user a question. Call on every

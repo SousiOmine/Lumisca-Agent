@@ -79,9 +79,7 @@ function recordPart(message: AgentMessage): string | undefined {
   // words. Without the name the record would say the user asked for the
   // routine's request, which is a fact about them that never happened.
   const who = entry.role === "user"
-    ? entry.routine === undefined
-      ? "User"
-      : `User (routine "${entry.routine}")`
+    ? entry.routine === undefined ? "User" : `User (routine "${entry.routine}")`
     : "Assistant";
   return `[${formatLocalDateTime(entry.timestamp)}] ${who}\n${
     stellaEntryText(entry)

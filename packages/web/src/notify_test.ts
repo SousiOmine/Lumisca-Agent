@@ -47,6 +47,29 @@ Deno.test("buildAgentEndNotification truncates long names", () => {
   assert(!body.includes("あ".repeat(61)), "name is cut at 60 chars");
 });
 
+Deno.test("buildAgentEndNotification carries the start of the reply", () => {
+  // "Finished" alone does not say whether opening the app is worth it — the
+  // reason a routine's result needs a body (#41).
+  const { body } = buildAgentEndNotification(
+    "Morning check",
+    ja,
+    "## デプロイは緑\n\n問題はありません",
+  );
+  assertEquals(
+    body,
+    "「Morning check」の処理が完了しました\n## デプロイは緑 問題はありません",
+  );
+  // A silent run has nothing to add, so the body is what it always was.
+  assertEquals(
+    buildAgentEndNotification("Morning check", ja, "  ").body,
+    "「Morning check」の処理が完了しました",
+  );
+  // A whole document is cut to one toast's worth.
+  const long = buildAgentEndNotification("S", ja, "あ".repeat(500)).body;
+  assert(long.endsWith("あ"));
+  assertEquals(Array.from(long.split("\n")[1] ?? "").length, 120);
+});
+
 Deno.test("buildQuestionNotification prefers the header", () => {
   const { body } = buildQuestionNotification("S", [
     question({ header: "確認", question: "本文" }),
