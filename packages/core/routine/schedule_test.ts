@@ -3,6 +3,7 @@ import {
   nextRunAt,
   parseSchedule,
   type RoutineSchedule,
+  scheduleKey,
   scheduleProblem,
 } from "../shared/routine.ts";
 import {
@@ -136,5 +137,69 @@ Deno.test("routine limits are the documented ones", () => {
   assertEquals(
     scheduleProblem({ kind: "every", minutes: MAX_EVERY_MINUTES + 1 }) !== null,
     true,
+  );
+});
+
+Deno.test("routine schedule: the same meaning has the same key", () => {
+  // An update compares keys to tell a retarget from a re-save: a schedule
+  // written in another order (or with its days listed backwards) is the same
+  // watch, and its baseline must survive.
+  const monday: RoutineSchedule = {
+    kind: "weekly",
+    days: [1, 5],
+    time: "18:00",
+  };
+  const listedAnotherWay: RoutineSchedule = {
+    kind: "weekly",
+    days: [5, 1],
+    time: "18:00",
+  };
+  assertEquals(scheduleKey(monday), scheduleKey(listedAnotherWay));
+
+  const watch = {
+    kind: "watch",
+    everyMinutes: 10,
+    source: {
+      kind: "http",
+      url: "https://example.com",
+      expect: { status: 200 },
+    },
+  } as const;
+  const writtenAnotherWay = {
+    source: {
+      expect: { status: 200 },
+      url: "https://example.com",
+      kind: "http",
+    },
+    everyMinutes: 10,
+    kind: "watch",
+  } as RoutineSchedule;
+  assertEquals(scheduleKey(watch), scheduleKey(writtenAnotherWay));
+
+  // A different condition is a different watch.
+  assertEquals(
+    scheduleKey(watch) === scheduleKey({
+      kind: "watch",
+      everyMinutes: 10,
+      source: {
+        kind: "http",
+        url: "https://example.com",
+        expect: { status: 500 },
+      },
+    }),
+    false,
+  );
+  // Two sources that would read as one line keep their own identity.
+  assertEquals(
+    scheduleKey({
+      kind: "watch",
+      everyMinutes: 10,
+      source: { kind: "file", path: "a", compare: "hash" },
+    }) === scheduleKey({
+      kind: "watch",
+      everyMinutes: 10,
+      source: { kind: "file", path: "a", compare: "mtime" },
+    }),
+    false,
   );
 });

@@ -342,6 +342,61 @@ export function nextRunAt(schedule: RoutineSchedule, from: number): number {
   }
 }
 
+/** A stable name for what a schedule MEANS: two values that would fire the
+ * routine the same way give the same key, whatever order their fields were
+ * written in. An update uses it to tell "the same watch" from a new one —
+ * comparing the stored JSON text would call a schedule changed because a key
+ * moved, and would throw away a baseline that is still valid.
+ *
+ * Unknown extra fields are deliberately not part of the key: they are
+ * refused before they are stored (`scheduleProblem`), and a value that
+ * reached the database another way describes nothing the check reads. */
+export function scheduleKey(schedule: RoutineSchedule): string {
+  switch (schedule.kind) {
+    case "daily":
+      return JSON.stringify(["daily", schedule.time]);
+    case "weekly":
+      return JSON.stringify([
+        "weekly",
+        [...schedule.days].sort((a, b) => a - b),
+        schedule.time,
+      ]);
+    case "every":
+      return JSON.stringify(["every", schedule.minutes]);
+    case "watch":
+      return JSON.stringify([
+        "watch",
+        schedule.everyMinutes,
+        watchSourceKey(schedule.source),
+      ]);
+  }
+}
+
+/** The watched source as a comparable value: the fields the check reads, in
+ * a fixed order (see {@link scheduleKey}). */
+function watchSourceKey(source: WatchSource): unknown[] {
+  switch (source.kind) {
+    case "http":
+      return [
+        "http",
+        source.url,
+        source.method ?? "GET",
+        source.expect.status ?? null,
+        source.expect.includes ?? null,
+        source.expect.hash === true,
+      ];
+    case "file":
+      return ["file", source.path, source.compare];
+    case "command":
+      return [
+        "command",
+        source.command,
+        source.expect.exitCode ?? null,
+        source.expect.includes ?? null,
+      ];
+  }
+}
+
 /** One stored routine, as every layer above the database sees it. */
 export interface Routine {
   id: string;

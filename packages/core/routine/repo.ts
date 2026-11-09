@@ -20,6 +20,7 @@ import {
   type Routine,
   type RoutineSchedule,
   type RoutineStatus,
+  scheduleKey,
 } from "../shared/mod.ts";
 import { CoreError } from "../errors.ts";
 
@@ -159,7 +160,7 @@ export function createRoutineRepo(db: LumiscaDb): RoutineRepo {
   const updateStmt = db.db.prepare(
     `UPDATE routines SET name = ?, prompt = ?, schedule = ?, enabled = ?,
        next_run_at = ?, last_run_at = ?, last_status = ?, last_detail = ?,
-       updated_at = ?
+       watch_state = ?, updated_at = ?
      WHERE id = ?`,
   );
   const deleteStmt = db.db.prepare("DELETE FROM routines WHERE id = ?");
@@ -251,9 +252,19 @@ export function createRoutineRepo(db: LumiscaDb): RoutineRepo {
           "conflict",
         );
       }
-      const schedule = patch.schedule ??
-        (parseSchedule(JSON.parse(current.schedule)) ?? UNREADABLE_SCHEDULE);
-      const enabled = patch.enabled ?? current.enabled === 1;
+      const stored = toRoutine(current);
+      const schedule = patch.schedule ?? stored.schedule;
+      const enabled = patch.enabled ?? stored.enabled;
+      // A baseline belongs to what was watched. A new schedule means the
+      // stored observation describes something else (another file, another
+      // page, another condition), and switching the routine back on means
+      // the watched thing may have moved while nobody looked: in both cases
+      // the next check must record a baseline instead of comparing against a
+      // value it never saw for this watch.
+      const retargeted = patch.schedule !== undefined &&
+        scheduleKey(patch.schedule) !== scheduleKey(stored.schedule);
+      const resumed = enabled && !stored.enabled;
+      const watchState = retargeted || resumed ? null : current.watch_state;
       // The caller decides the next run when it changed anything that
       // affects it (a schedule edit, a toggle); otherwise the stored value
       // survives the update untouched.
@@ -269,6 +280,7 @@ export function createRoutineRepo(db: LumiscaDb): RoutineRepo {
         current.last_run_at,
         current.last_status,
         current.last_detail,
+        watchState,
         Date.now(),
         id,
       );

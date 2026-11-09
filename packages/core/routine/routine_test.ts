@@ -589,3 +589,83 @@ Deno.test("scheduler: a check that could not answer does not fire the run", asyn
     close();
   }
 });
+
+Deno.test("routine repo: changing what a watch watches drops the baseline", () => {
+  // The stored observation belongs to the watched thing. Carried across a
+  // retarget it would compare a new file against an old one, and the first
+  // look at the new file would fire the routine (see check.ts).
+  const { repo: routines, close } = repo();
+  try {
+    const created = routines.create({
+      agentId: AGENT,
+      name: "Watch the log",
+      prompt: "p",
+      schedule: {
+        kind: "watch",
+        everyMinutes: 5,
+        source: { kind: "file", path: "a.log", compare: "mtime" },
+      },
+    });
+    const baseline = { kind: "file", mtimeMs: 1, hash: null };
+    routines.recordWatch(created.id, baseline, Date.now() + 300_000);
+    assertEquals(routines.get(created.id)?.watchState, baseline);
+
+    // A name is not the watch: the baseline survives.
+    const renamed = routines.update(created.id, { name: "Renamed" });
+    assertEquals(renamed.watchState, baseline);
+
+    // The same schedule written again (same meaning) is not a retarget.
+    const same = routines.update(created.id, {
+      schedule: {
+        kind: "watch",
+        everyMinutes: 5,
+        source: { kind: "file", path: "a.log", compare: "mtime" },
+      },
+    });
+    assertEquals(same.watchState, baseline);
+
+    // Another file is.
+    const retargeted = routines.update(created.id, {
+      schedule: {
+        kind: "watch",
+        everyMinutes: 5,
+        source: { kind: "file", path: "b.log", compare: "mtime" },
+      },
+    });
+    assertEquals(retargeted.watchState, undefined);
+  } finally {
+    close();
+  }
+});
+
+Deno.test("routine repo: switching a routine back on drops the baseline", () => {
+  // While it was off nobody looked: the watched thing may have moved, and
+  // comparing against the old value would fire a run for a change the user
+  // never asked to be told about.
+  const { repo: routines, close } = repo();
+  try {
+    const created = routines.create({
+      agentId: AGENT,
+      name: "Watch the log",
+      prompt: "p",
+      schedule: {
+        kind: "watch",
+        everyMinutes: 5,
+        source: { kind: "file", path: "a.log", compare: "mtime" },
+      },
+    });
+    routines.recordWatch(
+      created.id,
+      { kind: "file", mtimeMs: 1, hash: null },
+      0,
+    );
+    routines.update(created.id, { enabled: false, nextRunAt: null });
+    const resumed = routines.update(created.id, {
+      enabled: true,
+      nextRunAt: Date.now() + 300_000,
+    });
+    assertEquals(resumed.watchState, undefined);
+  } finally {
+    close();
+  }
+});
