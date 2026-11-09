@@ -20,6 +20,8 @@ interface Received {
   images: unknown[];
   uploads: { name: string; bytes: Uint8Array }[][];
   saved: PromptFileRef[];
+  /** What the route asked for, in order: the machine, the uploads, the run. */
+  order: string[];
 }
 
 /** The slice of the core the prompt route touches, recording what it gets. */
@@ -47,10 +49,18 @@ function fakeCore(received: Received): StellaApi {
       createdAt: 0,
       updatedAt: 0,
     }),
+    // Sending asks first: a conversation that is already open never passes
+    // through the open endpoint again, so nothing else would notice a machine
+    // that stopped since.
+    ensureStellaReady: () => {
+      received.order.push("ready");
+      return Promise.resolve();
+    },
     savePromptUploads: (
       _sessionId: string,
       uploads: readonly { name: string; bytes: Uint8Array }[],
     ) => {
+      received.order.push("upload");
       received.uploads.push(uploads.map((file) => ({
         name: file.name,
         bytes: file.bytes,
@@ -71,6 +81,7 @@ function fakeCore(received: Received): StellaApi {
       _mode?: unknown,
       files?: PromptFileRef[],
     ) => {
+      received.order.push("prompt");
       received.texts.push(text);
       received.images.push(images);
       if (files !== undefined) received.saved = files;
@@ -84,6 +95,7 @@ function setup(): { app: ReturnType<typeof stellaRoutes>; received: Received } {
     images: [],
     uploads: [],
     saved: [],
+    order: [],
   };
   const app = stellaRoutes(fakeCore(received));
   // The same error table the app mounts (app.ts's onError): a route mounted
@@ -108,6 +120,25 @@ Deno.test("stella prompt: a picture is written into the machine, not the message
   assertEquals(received.uploads.length, 1);
   assertEquals(received.uploads[0]![0]!.name, "image-1.png");
   assertEquals(received.saved[0]!.ref, "uploads/1-ab/00-image-1.png");
+});
+
+Deno.test("stella prompt: the machine is made ready before the run", async () => {
+  // The machine is stopped or crashes while the conversation is open, and
+  // nothing else on this path would start it again (see ARCHITECTURE.md):
+  // every tool would answer podman's "container state improper". The uploads
+  // are written inside the machine too, so the order is ready → upload →
+  // prompt.
+  const { app, received } = setup();
+  const response = await app.request("/stella/conversations/a1/prompt", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      text: "これを見て",
+      images: [{ data: "aGVsbG8=", mimeType: "image/png" }],
+    }),
+  });
+  assertEquals(response.status, 200);
+  assertEquals(received.order, ["ready", "upload", "prompt"]);
 });
 
 Deno.test("stella prompt: an image with no text is a prompt", async () => {

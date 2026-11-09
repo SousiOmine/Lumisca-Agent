@@ -675,6 +675,16 @@ export function createVmManager(options: VmManagerOptions): VmManager {
         VM_CONTAINER_NAME,
         "--label",
         VM_MANAGED_LABEL,
+        // A machine that dies by itself (a crashed X server, a browser the
+        // kernel killed) has to come back without anyone asking: nothing
+        // polls the container, and the only path that starts it is opening a
+        // conversation, so a dead machine otherwise stayed dead while every
+        // tool answered "container state improper" (see ARCHITECTURE.md).
+        // `unless-stopped` is the one policy that does not resurrect a
+        // machine `podman stop` ended on purpose — that is how the app's own
+        // shutdown keeps it down.
+        "--restart",
+        "unless-stopped",
         // The container's uid 1000 is mapped onto this host user, so files
         // the agent writes inside are this user's own — and files it must not
         // touch (the host's) are not reachable at all, because nothing is

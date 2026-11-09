@@ -1073,6 +1073,13 @@ Deno.test("the home volume is mounted on every container the machine makes", asy
         !create!.includes(VM_WORKDIR + ":"),
       `nothing of the host may be mounted: ${create}`,
     );
+    // A machine that died on its own is brought back by podman, not by
+    // whoever happens to open a conversation next. `unless-stopped` keeps
+    // the app's explicit `podman stop` final.
+    assert(
+      create!.includes("--restart unless-stopped"),
+      `the machine must restart after a crash: ${create}`,
+    );
   } finally {
     await Deno.remove(dir, { recursive: true });
   }

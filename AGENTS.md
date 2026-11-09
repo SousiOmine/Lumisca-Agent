@@ -173,6 +173,8 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 - **必要環境**: Linux と rootless podman だけです。`podman --version` が通っても起動できるとは限らないので、素のイメージを 1 回起動して確かめ（`VM_PROBE_IMAGE`）、失敗すれば `podman_unusable` として提示を断ります。
 - **イメージ**: `packages/core/vm/container/Containerfile` から初回起動時にビルドします。配布物では `scripts/build-server.ts` が `stella-container/` をバイナリの隣へ同梱し、`packages/server/paths.ts` が場所を解決します。定義のダイジェストを `lumisca.container-digest` ラベルに焼き、ずれていればイメージを作り直します（`/home/agent` は `podman cp` で退避して戻します）。
 - **契約値**: 画面サイズ（1280x800）、DISPLAY、uid/gid、作業ディレクトリ、パスワード無し `sudo` は `packages/core/vm/contract.ts` と Containerfile / entry.sh の両方にあります。起動時に実コンテナと突き合わせ（`sudo -n true` を含む）、ずれていれば起動を失敗させます。
+- **落ちたマシンは podman が戻す**: `podman create` に `--restart=unless-stopped` を渡します。マシンは会話を開くときにしか起動されないので、自前で死んだコンテナは止まったままになり、全ツールが `container state improper` を返していました。`podman stop` は手動停止として扱われるため、アプリの終了（`LumiscaCore.close()`）で止めたマシンは戻りません。送信とルーチン実行は起動を確かめてから走ります（`ensureStellaReady`）。
+- **本番のマシンに触るテストは明示したときだけ**: `packages/core/stella_live_test.ts` は利用者の `lumisca-stella` をそのまま使います。`LUMISCA_STELLA_LIVE=1` が無ければ状態も読まずに skip し、`core.close()` の前に `setStellaVm(undefined)` で切り離します——`close()` は持っているマシンを止めるためです。`scripts/probe-stella.ts` も同じ理由で切り離してから閉じます。`deno task test` に含まれるので、ここを緩めるとテストを回しただけで利用中のマシンが落ちます。
 - **権限**: `agent` は `sudo` を使えます。コンテナの外へは出られず（ホストをマウントせず、uid 0 は `--userns keep-id` で写像）、既定を root にしないのは Chromium のサンドボックスを使うためです。
 - **同梱ファイルは 1 段まで**: `stella-container/Containerfile` は可、`stella-container/helper/a11y.py` は不可です。アーカイブを読むのは動いているサーバーのバイナリで、深さの規則はビルド時に焼き込まれます。深くすると、その版より前にインストールされたサーバーが更新を適用できません。`archive.ts` の `MAX_PACKAGE_DEPTH` を上げるのは、旧版の更新を諦めるときだけにしてください。
 

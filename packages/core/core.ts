@@ -739,6 +739,12 @@ export class LumiscaCore {
             "not_found",
           );
         }
+        // A routine runs in a conversation that is already open, so nothing
+        // on this path would otherwise ask whether the machine is up: a
+        // machine that died since (a crash, a stop from outside) answered
+        // every tool with podman's "container state improper" until the user
+        // happened to open the conversation again.
+        if (session.stella === true) await this.ensureStellaReady();
         await this.openSession(session.id);
         const agent = this.pool.require(session.id);
         this.sessions.touch(session.id);

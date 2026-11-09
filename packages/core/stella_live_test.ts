@@ -16,18 +16,38 @@ import { promptSession } from "./test-utils.ts";
  * that cannot be faked — a tool call from the model really does execute inside
  * the machine, and the file it writes is really there afterwards.
  *
+ * It drives the SAME container the application uses (`lumisca-stella`), so it
+ * runs only when asked for by name: an ordinary `deno task test` used to find
+ * the container running whenever the user had stella open — which is exactly
+ * when it ran, and then stopped the user's machine when it finished. The
+ * environment variable is the consent; without it not even a status query
+ * touches podman.
+ *
  * Run explicitly:
- *   deno test packages/core/stella_live_test.ts --allow-all
+ *   LUMISCA_STELLA_LIVE=1 deno test packages/core/stella_live_test.ts --allow-all
  */
 
 const containerDir = new URL("./vm/container/", import.meta.url).pathname;
 
+const live = Deno.env.get("LUMISCA_STELLA_LIVE") === "1";
+
 /** Whether this host can run the machine at all (podman plus a built image).
  * Read without side effects: a status query only. */
 async function machineReady(): Promise<boolean> {
+  if (!live) return false;
   const vm = createVmManager({ containerDir });
   const status = await vm.status({ fresh: true });
   return status.state === "running";
+}
+
+/** Close the test's core without ending the machine.
+ *
+ * `LumiscaCore.close()` stops the machine it was given, and the machine here
+ * belongs to the application — a test that drives it must leave it exactly as
+ * it found it. Detaching first makes `stop()` a no-op. */
+async function closeTestCore(core: LumiscaCore): Promise<void> {
+  core.setStellaVm(undefined);
+  await core.close();
 }
 
 Deno.test("stella live: a tool call runs inside the machine", {
@@ -112,7 +132,7 @@ Deno.test("stella live: a tool call runs inside the machine", {
     const results = messages.filter((message) => message.role === "toolResult");
     assertEquals(results.length > 0, true);
   } finally {
-    await core.close();
+    await closeTestCore(core);
   }
 });
 
@@ -162,7 +182,7 @@ Deno.test(
       assert(text.includes("pelican"), text);
       assert(text.includes("Remember the code word"), text);
     } finally {
-      await core.close();
+      await closeTestCore(core);
     }
   },
 );
@@ -246,7 +266,7 @@ Deno.test(
     } finally {
       await runInMachine(["rm", "-rf", "/home/agent/agents/live-other"])
         .catch(() => {});
-      await core.close();
+      await closeTestCore(core);
     }
   },
 );
@@ -302,7 +322,7 @@ Deno.test(
         "- the user writes in Japanese\n",
       );
     } finally {
-      await core.close();
+      await closeTestCore(core);
     }
   },
 );

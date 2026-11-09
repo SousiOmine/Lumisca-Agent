@@ -69,6 +69,11 @@ try {
   const availability = await core.getStellaAvailability();
   log(`availability: ${JSON.stringify(availability)}`);
 } finally {
+  // Detached first: `close()` stops the machine it holds, and this script
+  // shares the application's container. Stopping it is the explicit step at
+  // the end (`--start` without `--no-stop`), never a side effect of asking a
+  // question about availability.
+  core.setStellaVm(undefined);
   void core.close();
 }
 

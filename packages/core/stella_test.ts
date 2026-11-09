@@ -1792,3 +1792,51 @@ Deno.test("stella prompt: MEMORY.md is where the agent keeps what it must rememb
   assert(prompt.includes("may have written something there already"), prompt);
   assert(prompt.includes("delete what is no longer true"), prompt);
 });
+
+Deno.test("stella routines: a run brings a stopped machine back", async () => {
+  // A routine runs in a conversation that is already open, so no open path
+  // asks whether the machine is up. When it died since (a crash, a stop from
+  // outside), every tool of the run answered podman's "container state
+  // improper" and the routine failed for a reason that had nothing to do with
+  // what it was checking.
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting(
+    [faux.provider],
+    () => ({}),
+    recordingRunner(),
+  );
+  core.models.models.setProvider(faux.provider);
+  await core.setProviderApiKey(faux.provider.id, "faux-key");
+  let state: VmStatus = RUNNING;
+  let starts = 0;
+  core.setStellaVm({
+    status: () => Promise.resolve(state),
+    start: () => {
+      starts += 1;
+      state = RUNNING;
+      return Promise.resolve(state);
+    },
+    stop: () => Promise.resolve(),
+    vncPort: () => Promise.resolve(state.vncPort),
+  });
+  try {
+    const agent = await core.createStellaAgent({
+      name: "Watcher",
+      role: "Watches something.",
+    });
+    await core.getOrCreateStellaSession(agent.id);
+    // The machine stops while the conversation stays open.
+    state = { state: "stopped", vncPort: null, reason: "" };
+    faux.setResponses([fauxAssistantMessage("checked")]);
+    const routine = core.getRoutineRepo().create({
+      agentId: agent.id,
+      name: "Check",
+      prompt: "check it",
+      schedule: { kind: "every", minutes: 30 },
+    });
+    await core.runRoutineNow(routine.id);
+    assertEquals(starts, 1);
+  } finally {
+    await core.close();
+  }
+});

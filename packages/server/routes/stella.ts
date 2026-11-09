@@ -81,6 +81,11 @@ export interface StellaApi {
   /** The conversation, created on first use. This is also what brings the
    * machine up: a conversation lives inside it. */
   getOrCreateStellaSession(agentId?: string): Promise<SessionInfo>;
+  /** Make sure the machine is up, starting it when it is not. Sending is not
+   * opening: an already-open conversation never reaches the endpoint above
+   * again, so a machine that died since would answer every tool with podman's
+   * "container state improper" until the client happened to reload. */
+  ensureStellaReady(): Promise<void>;
   /** The conversation a stella agent already has, or undefined. The client
    * addresses the conversation by agent, never by session id. */
   findStellaSession(agentId: string): SessionInfo | undefined;
@@ -434,6 +439,11 @@ export function stellaRoutes(core: StellaApi): Hono {
     const body = await parseBody<PromptBody>(c);
     const { text, images, files } = parsePromptBody(body ?? {});
     const session = requireConversation(c.req.param("agentId"));
+    // However this conversation was opened, the machine may have stopped
+    // since. Every tool runs through `podman exec`, which refuses a stopped
+    // container, so the wait belongs here: before the run starts, and before
+    // the uploads below are written into the machine.
+    await core.ensureStellaReady();
     // Pictures and files take one path: both are written into the machine and
     // the model is told their paths. A picture kept as a byte block in the
     // message would put it in the database for the life of the conversation,
