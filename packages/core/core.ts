@@ -131,7 +131,7 @@ import {
   type RoutineScheduler,
 } from "./routine/scheduler.ts";
 import { HandoverHub, type PendingHandover } from "./vm/handover.ts";
-import { parseWatchState, runWatch } from "./vm/watch.ts";
+import { checkRoutine } from "./routine/check.ts";
 import { vmAgentDir } from "./vm/contract.ts";
 import type { PromptFileRef, Routine } from "./shared/mod.ts";
 import type { SkillInfo } from "./skills/discover.ts";
@@ -812,8 +812,8 @@ export class LumiscaCore {
         if (agent.runningRoutineId() !== routineId) return;
         agent.abort();
       },
-      check: async (agentId, source) => {
-        const session = this.sessions.getByAgent(agentId);
+      check: async (routine) => {
+        const session = this.sessions.getByAgent(routine.agentId);
         if (session === undefined) {
           return {
             kind: "unsupported",
@@ -822,9 +822,10 @@ export class LumiscaCore {
           };
         }
         // The check runs inside the machine, in the agent's own folder: the
-        // file it stats and the command it runs are that agent's (see
-        // vm/watch.ts). A machine that is not up cannot answer, and saying so
-        // is better than treating every answer as "nothing changed".
+        // file it stats, the command it runs and the request it makes are
+        // that agent's (see routine/check.ts). A machine that is not up
+        // cannot answer, and saying so is better than treating every answer
+        // as "nothing changed".
         const stella = this.stellaRuntimeFor(session);
         if (stella === undefined) {
           return {
@@ -833,23 +834,11 @@ export class LumiscaCore {
               "The machine for this agent is not running, so its checks cannot run",
           };
         }
-        const routine = this.routines.listOf(agentId).find((candidate) =>
-          candidate.schedule.kind === "watch" &&
-          candidate.schedule.source === source
-        );
-        const previous = routine?.watchState === undefined
-          ? undefined
-          : parseWatchState(routine.watchState);
-        const outcome = await runWatch(source, previous, {
+        return await checkRoutine(routine, {
           runner: stella.runner,
+          files: stella.files,
           workdir: stella.cwd,
         });
-        if (outcome.problem !== undefined && outcome.state === null) {
-          return { kind: "error", problem: outcome.problem };
-        }
-        return outcome.changed
-          ? { kind: "changed", state: outcome.state }
-          : { kind: "same", state: outcome.state };
       },
     };
   }

@@ -28,7 +28,6 @@ import { nextRunAt } from "../shared/routine.ts";
 import type { RoutineRepo } from "./repo.ts";
 import { CoreError, errorMessage } from "../errors.ts";
 import { sleep } from "../shared/misc.ts";
-import type { WatchSource } from "../shared/routine.ts";
 
 /** How often the scheduler looks for due routines. A minute's granularity
  * would be enough for the schedules it supports, but the tick also drives
@@ -62,9 +61,14 @@ export interface RoutineRunner {
   stop(agentId: string, routineId: string): void;
   /** Run a `watch` routine's check and say whether anything changed. No
    * inference call happens here — that is the point (see vm/watch.ts). A
-   * routine that is not a watch, or a source this host cannot read, answers
-   * `unsupported`. */
-  check(agentId: string, source: WatchSource): Promise<WatchCheck>;
+   * routine that is not a watch, or one whose machine cannot run the check,
+   * answers `unsupported`.
+   *
+   * The whole routine is passed, not its agent and source: the previous
+   * observation is a field of THIS routine, and looking it up again by
+   * (agent, source) matches nothing (a stored value is a new object on every
+   * read) or another routine watching the same source. */
+  check(routine: Routine): Promise<WatchCheck>;
 }
 
 /** What one check answered. `state` is what to store for the next check;
@@ -167,7 +171,7 @@ export function createRoutineScheduler(
     const id = routine.id;
     let outcome: WatchCheck;
     try {
-      outcome = await runner.check(routine.agentId, routine.schedule.source);
+      outcome = await runner.check(routine);
     } catch (error) {
       outcome = { kind: "error", problem: errorMessage(error) };
     }
