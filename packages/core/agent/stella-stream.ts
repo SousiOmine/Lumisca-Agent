@@ -101,12 +101,17 @@ export function stellaEntryOf(message: AgentMessage): StellaEntry | null {
       // picture, or text they can see.
       const files = message.role === "mode" ? [] : message.files ?? [];
       if (text.length === 0 && files.length === 0) return null;
+      // A routine's run is delivered as a prompt, so it sits on the user's
+      // side — but it is not something the user said. The name travels with
+      // the entry so the client can say who asked (see StellaEntry.routine).
+      const routine = message.role === "mode" ? undefined : message.routine;
       return {
         role: "user",
         text,
         card: null,
         attachments: [],
         files,
+        ...(routine === undefined ? {} : { routine }),
         timestamp: message.timestamp,
       };
     }
@@ -186,6 +191,9 @@ export function stellaEntryCursorOf(entry: StellaEntry): string {
     // short) and the start of the text name which is which.
     entry.card ?? "",
     entry.text.slice(0, 64),
+    // A routine's prompt and the same words typed by the user are different
+    // messages: the name is part of what tells them apart.
+    entry.routine ?? "",
   ]);
 }
 

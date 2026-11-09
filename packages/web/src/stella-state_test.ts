@@ -1,4 +1,4 @@
-import { assertEquals, assertNotEquals } from "@std/assert";
+import { assert, assertEquals, assertNotEquals } from "@std/assert";
 import type { StellaEvent, ThinkingLevel } from "./types.ts";
 import {
   applyStellaEvent,
@@ -110,7 +110,7 @@ Deno.test("applyStellaEvent: the same message twice replaces in place", () => {
     entry: entry("user", "A", 1),
   })!;
   assertEquals(current.entries.map((e) => e.text), ["A", "B"]);
-  assertEquals(entryKey(current.entries[0]!), "user:1::::A");
+  assertEquals(entryKey(current.entries[0]!), "user:1:::::A");
 });
 
 Deno.test("applyStellaEvent: the run ends", () => {
@@ -393,4 +393,21 @@ Deno.test("stella: a snapshot is the finished conversation, so it draws no live 
   };
 
   assertEquals(stellaStateOf(snapshot).liveCard, null);
+});
+
+Deno.test("entryKey: a routine's prompt and the same words typed differ", () => {
+  // Two entries of one millisecond must not collapse: the routine's name is
+  // part of which message this is.
+  const typed = {
+    role: "user" as const,
+    text: "確認して",
+    card: null,
+    attachments: [],
+    files: [],
+    timestamp: 5,
+  };
+  assert(
+    entryKey(typed) !==
+      entryKey({ ...typed, routine: "毎朝の確認" }),
+  );
 });

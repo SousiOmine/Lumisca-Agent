@@ -48,7 +48,11 @@ export type StellaPreview =
   /** A message that showed only a card (no words, no files): the card's own
    * markup is presentation, and a table of it in a 216px row would be
    * noise, so the row names the thing instead. */
-  | { kind: "card"; at: number };
+  | { kind: "card"; at: number }
+  /** A request a routine ran, named by the routine. It is on the user's side
+   * of the conversation but the user did not write it, so the row says what
+   * asked instead of quoting the request as their last words. */
+  | { kind: "routine"; name: string; at: number };
 
 /** Most characters of a message kept as a preview.
  *
@@ -67,6 +71,12 @@ export const PREVIEW_TEXT_CHARS = 200;
  * with the preview instead of being read from the agent row (which records
  * when the conversation was opened, not when it was last spoken in). */
 export function previewOf(entry: StellaEntry): StellaPreview | null {
+  // A routine's request is not something the user said (see #37): the row
+  // names the routine rather than putting the scheduled words in their
+  // mouth.
+  if (entry.routine !== undefined) {
+    return { kind: "routine", name: entry.routine, at: entry.timestamp };
+  }
   const text = previewText(entry.text);
   if (text.length > 0) return { kind: "text", text, at: entry.timestamp };
   // A message that carried files is the user's attachment or what the agent
@@ -102,6 +112,8 @@ export function samePreview(
       return b.kind === "files" && a.count === b.count;
     case "card":
       return true;
+    case "routine":
+      return b.kind === "routine" && a.name === b.name;
   }
 }
 

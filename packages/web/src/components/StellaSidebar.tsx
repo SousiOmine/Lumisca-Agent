@@ -85,6 +85,8 @@ function previewTextOf(
       });
     case "card":
       return t("chat.stella.agents.preview.card");
+    case "routine":
+      return t("chat.stella.agents.preview.routine", { name: preview.name });
   }
 }
 

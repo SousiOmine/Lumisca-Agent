@@ -39,7 +39,7 @@ export const STELLA_RECORD_SYSTEM_PROMPT =
 /** The record instruction: rewrite in full, state only, dates only when they
  * are a fact about the present or the future. */
 export const STELLA_RECORD_PROMPT =
-  `The <conversation> above is the conversation since the last record: the user's messages and the assistant's replies, each headed with its local date and time. A line beginning with [tools] may sit between them; it names the tools that ran at that point and how often, with no arguments and no output. What the assistant sent with send_chat (cards, files, progress messages) is part of the conversation.
+  `The <conversation> above is the conversation since the last record: the user's messages and the assistant's replies, each headed with its local date and time. A line headed with a routine name — \`User (routine "…")\` — is a request the user scheduled earlier and is not something they just typed. A line beginning with [tools] may sit between them; it names the tools that ran at that point and how often, with no arguments and no output. What the assistant sent with send_chat (cards, files, progress messages) is part of the conversation.
 
 Write the conversation's record. If a <previous-record> is above, rewrite it in full together with the new messages: do not append to it and do not preserve its wording. Keep what is still true, drop what is superseded, merge related items, and add what the new messages established.
 
@@ -75,7 +75,14 @@ export const STELLA_CHECKPOINT_PREAMBLE =
 function recordPart(message: AgentMessage): string | undefined {
   const entry = stellaEntryOf(message);
   if (entry === null) return undefined;
-  const who = entry.role === "user" ? "User" : "Assistant";
+  // A routine's run is the user's side of the conversation but not their
+  // words. Without the name the record would say the user asked for the
+  // routine's request, which is a fact about them that never happened.
+  const who = entry.role === "user"
+    ? entry.routine === undefined
+      ? "User"
+      : `User (routine "${entry.routine}")`
+    : "Assistant";
   return `[${formatLocalDateTime(entry.timestamp)}] ${who}\n${
     stellaEntryText(entry)
   }`;

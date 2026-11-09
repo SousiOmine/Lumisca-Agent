@@ -257,7 +257,12 @@ function formatEntry(entry: StellaEntry): string {
     stellaEntryText(entry),
     MAX_MESSAGE_CHARS,
   );
-  return `[${formatTime(entry.timestamp)}] ${entry.role}\n${body}${
+  // The head names the routine when one asked: a listing that said "user"
+  // would credit the user with a request they scheduled.
+  const who = entry.role === "user" && entry.routine !== undefined
+    ? `user (routine "${entry.routine}")`
+    : entry.role;
+  return `[${formatTime(entry.timestamp)}] ${who}\n${body}${
     truncated ? truncatedHeadNote("message", MAX_MESSAGE_CHARS) : ""
   }`;
 }

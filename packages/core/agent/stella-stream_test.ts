@@ -1,8 +1,12 @@
-import { assertEquals } from "@std/assert";
+import { assert, assertEquals } from "@std/assert";
 import { fauxAssistantMessage, fauxToolCall } from "../ai/faux.ts";
 import type { AgentMessage } from "../ai/types.ts";
 import { NO_RESPONSE } from "./silent-reply.ts";
-import { stellaEntryOf, stellaEventsOf } from "./stella-stream.ts";
+import {
+  stellaEntryCursorOf,
+  stellaEntryOf,
+  stellaEventsOf,
+} from "./stella-stream.ts";
 
 function user(text: string, timestamp = 1): AgentMessage {
   return {
@@ -499,4 +503,56 @@ Deno.test("stellaEntryOf: a prompt that is only files IS shown", () => {
   const entry = stellaEntryOf(message);
   assertEquals(entry?.text, "");
   assertEquals(entry?.files.map((file) => file.name), ["notes.txt"]);
+});
+
+Deno.test("stellaEntryOf: a routine's prompt keeps the routine's name", () => {
+  // The prompt sits on the user's side (the run is delivered like a typed
+  // message), but the user did not write it: the projection must carry the
+  // name so a client can say who asked (#37).
+  const prompt: AgentMessage = {
+    role: "user",
+    content: [{ type: "text", text: "毎朝デプロイを確認して" }],
+    routine: "朝のデプロイ確認",
+    timestamp: 9,
+  };
+  assertEquals(stellaEntryOf(prompt), {
+    role: "user",
+    text: "毎朝デプロイを確認して",
+    card: null,
+    attachments: [],
+    files: [],
+    routine: "朝のデプロイ確認",
+    timestamp: 9,
+  });
+  // A typed prompt carries none, so the client draws no label.
+  assertEquals(stellaEntryOf(user("自分で打った", 10))?.routine, undefined);
+  // Nor does a mode prompt (stella has none, but the projection is written
+  // against the transcript's type).
+  assertEquals(
+    stellaEntryOf({
+      role: "mode",
+      modeId: "review",
+      shortText: "レビュー",
+      images: [],
+      optionId: "o1",
+      modeLabel: "Review",
+      fullPrompt: "review it",
+      timestamp: 11,
+    } as AgentMessage)?.routine,
+    undefined,
+  );
+});
+
+Deno.test("stellaEntryCursor: a routine's prompt and the same words differ", () => {
+  const typed: AgentMessage = {
+    role: "user",
+    content: [{ type: "text", text: "確認して" }],
+    timestamp: 12,
+  };
+  const scheduled = { ...typed, routine: "毎朝" } as AgentMessage;
+  assert(
+    stellaEntryCursorOf(stellaEntryOf(typed)!) !==
+      stellaEntryCursorOf(stellaEntryOf(scheduled)!),
+    "the routine's name is part of the entry's identity",
+  );
 });

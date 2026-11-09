@@ -180,9 +180,11 @@ export function entryKey(entry: StellaEntry): string {
   // A prompt's own files are part of its identity: an image-only prompt and
   // an empty prompt of the same millisecond would otherwise be one entry.
   const files = entry.files.map((file) => file.ref).join(",");
+  // Two prompts of one millisecond that say the same words differ when one
+  // of them came from a routine: the name is part of the identity.
   return `${entry.role}:${entry.timestamp}:${attachments}:${files}:${
     entry.card ?? ""
-  }:${entry.text}`;
+  }:${entry.routine ?? ""}:${entry.text}`;
 }
 
 /** Insert or replace an entry at its existing position (dedup by key), or

@@ -78,6 +78,11 @@ export function MessageRow({
         text={text}
         images={imageBlocks}
         timestamp={message.timestamp}
+        {
+          // A routine's run is stored as the user's prompt: the bubble says
+          // who asked, so a scheduled request is not read as their own words.
+          ...(message.routine === undefined ? {} : { routine: message.routine })
+        }
         onRewind={onRewind ?? (() => {})}
       />
     );

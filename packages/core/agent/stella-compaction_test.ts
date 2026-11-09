@@ -288,3 +288,24 @@ Deno.test("a stella compaction sends the record prompt and the stella preamble",
     ),
   );
 });
+
+Deno.test("a routine's run is recorded as the routine's, not the user's", () => {
+  // The record is what a future turn believes about the user. Reading the
+  // scheduled request as their words would credit them with a request they
+  // scheduled days ago (#37).
+  const messages: AgentMessage[] = [
+    {
+      role: "user",
+      content: [{ type: "text", text: "check the deploy" }],
+      routine: "Morning deploy check",
+      timestamp: at(10),
+    },
+    assistant("all green", at(12)),
+  ];
+  assertEquals(STELLA_COMPACTION_STYLE.serialize(messages, undefined), [
+    '[2026-01-15 12:10] User (routine "Morning deploy check")\ncheck the deploy',
+    "[2026-01-15 12:12] Assistant\nall green",
+  ]);
+  // The prompt itself says what such a line means.
+  assert(STELLA_RECORD_PROMPT.includes('User (routine "…")'));
+});

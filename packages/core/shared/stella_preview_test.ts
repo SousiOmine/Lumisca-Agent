@@ -218,3 +218,40 @@ Deno.test("compareAgentRows: the order is total", () => {
   const newer = row("a", 100, { createdAt: 2 });
   assertEquals(compareAgentRows(newer, older) < 0, true);
 });
+
+Deno.test("previewOf: a routine's prompt is named, not quoted as the user's", () => {
+  const preview = previewOf(
+    entry({
+      role: "user",
+      text: "毎朝デプロイを確認して",
+      routine: "朝のデプロイ確認",
+    }),
+  );
+  assertEquals(preview, {
+    kind: "routine",
+    name: "朝のデプロイ確認",
+    at: 1_000,
+  });
+  // The name is what the row shows, so two routines differ.
+  assertEquals(
+    samePreview(preview, {
+      kind: "routine",
+      name: "朝のデプロイ確認",
+      at: 1_000,
+    }),
+    true,
+  );
+  assertEquals(
+    samePreview(preview, { kind: "routine", name: "別のルーチン", at: 1_000 }),
+    false,
+  );
+  // A typed prompt of the same words still reads as words.
+  assertEquals(
+    previewOf(entry({ role: "user", text: "毎朝デプロイを確認して" })),
+    {
+      kind: "text",
+      text: "毎朝デプロイを確認して",
+      at: 1_000,
+    },
+  );
+});
