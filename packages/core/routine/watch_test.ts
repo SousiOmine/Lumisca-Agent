@@ -10,8 +10,9 @@ import {
   type RoutineSchedule,
   scheduleProblem,
 } from "../shared/routine.ts";
-import { parseWatchState, runWatch } from "../vm/watch.ts";
+import { machineWatchFetch, parseWatchState, runWatch } from "../vm/watch.ts";
 import type { CommandRunner } from "../tools/command-backend.ts";
+import type { FileBackend } from "../tools/file-backend.ts";
 
 function watch(
   source: Extract<RoutineSchedule, { kind: "watch" }>["source"],
@@ -197,4 +198,184 @@ Deno.test("parseWatchState: an unreadable state reads as no state", () => {
     parseWatchState({ kind: "command", exitCode: 0, hasIncludes: false }),
     { kind: "command", exitCode: 0, hasIncludes: false },
   );
+});
+
+// --- the machine-side fetch ------------------------------------------------
+
+/** A file backend over a Map: enough for the fetch's body file (written by
+ * the fake curl, read back, removed). */
+function fakeFiles(
+  store: Map<string, string>,
+  reads: number[] = [],
+): FileBackend {
+  return {
+    roots: ["/home/agent"],
+    readHead: (path: string, maxBytes: number) => {
+      reads.push(maxBytes);
+      const text = store.get(path);
+      if (text === undefined) {
+        return Promise.reject(new Error(`no such file: ${path}`));
+      }
+      const bytes = new TextEncoder().encode(text);
+      return Promise.resolve({
+        bytes: bytes.slice(0, maxBytes),
+        size: bytes.length,
+      });
+    },
+    removeFile: (path: string) => {
+      store.delete(path);
+      return Promise.resolve();
+    },
+  } as unknown as FileBackend;
+}
+
+/** A runner that answers like curl: it writes `body` where `-o` names it and
+ * prints `status`, or fails with `stderr`. */
+function curlingRunner(
+  store: Map<string, string>,
+  options: {
+    body?: string;
+    status?: string;
+    exitCode?: number;
+    stderr?: string;
+  } = {},
+): CommandRunner & { commands: string[]; cwds: string[] } {
+  const commands: string[] = [];
+  const cwds: string[] = [];
+  return {
+    commands,
+    cwds,
+    run: (command: string, runOptions) => {
+      commands.push(command);
+      cwds.push(runOptions.cwd);
+      const target = /-o '([^']+)'/.exec(command)?.[1];
+      if (target !== undefined) store.set(target, options.body ?? "");
+      return Promise.resolve({
+        stdout: options.status ?? "200",
+        stderr: options.stderr ?? "",
+        exitCode: options.exitCode ?? 0,
+      } as never);
+    },
+  };
+}
+
+Deno.test("machineWatchFetch: the request goes out from the machine", async () => {
+  // The whole point of #32: curl runs in the agent's folder, so the address
+  // is one that machine can reach.
+  const store = new Map<string, string>();
+  const runner = curlingRunner(store, { body: "<html>deploy ok</html>" });
+  const fetched = await machineWatchFetch({
+    runner,
+    files: fakeFiles(store),
+    workdir: "/home/agent/agents/a1",
+  })("https://example.com/x");
+
+  assertEquals(fetched.status, 200);
+  assertEquals(await fetched.text(), "<html>deploy ok</html>");
+  assert(runner.commands[0]!.includes("curl"));
+  assert(runner.commands[0]!.includes("https://example.com/x"));
+  assertEquals(runner.commands[0]!.includes("-L"), true);
+  assertEquals(runner.cwds, ["/home/agent/agents/a1"]);
+  assertEquals(store.size, 0, "the body file is removed");
+});
+
+Deno.test("machineWatchFetch: the body is read through the file backend", async () => {
+  const store = new Map<string, string>();
+  const reads: number[] = [];
+  const runner = curlingRunner(store, { body: "hello" });
+  await machineWatchFetch({
+    runner,
+    files: fakeFiles(store, reads),
+    workdir: "/home/agent/agents/a1",
+  })("https://example.com/");
+  // Bounded by the check's own body cap, not by the runner's output cap: the
+  // runner's cap exists for a terminal, and would cut a page.
+  assertEquals(reads.length, 1);
+  assert(reads[0]! >= 5_000_000);
+});
+
+Deno.test("machineWatchFetch: an HTTP error is an observation", async () => {
+  // A watch on "the status is 200" must fire when the server starts
+  // answering 500, so a failing status is not a transport failure.
+  const store = new Map<string, string>();
+  const failure = await machineWatchFetch({
+    runner: curlingRunner(store, { status: "500", body: "broken" }),
+    files: fakeFiles(store),
+    workdir: "/home/agent/agents/a1",
+  })("https://example.com/");
+  assertEquals(failure.status, 500);
+  // A 204 has no body at all, and Response refuses one.
+  const store2 = new Map<string, string>();
+  const empty = await machineWatchFetch({
+    runner: curlingRunner(store2, { status: "204" }),
+    files: fakeFiles(store2),
+    workdir: "/home/agent/agents/a1",
+  })("https://example.com/empty");
+  assertEquals(empty.status, 204);
+  assertEquals(await empty.text(), "");
+});
+
+Deno.test("machineWatchFetch: a transport failure throws and cleans up", async () => {
+  const store = new Map<string, string>();
+  const runner = curlingRunner(store, {
+    exitCode: 6,
+    stderr: "curl: (6) Could not resolve host: nope.invalid",
+  });
+  let thrown: unknown;
+  try {
+    await machineWatchFetch({
+      runner,
+      files: fakeFiles(store),
+      workdir: "/home/agent/agents/a1",
+    })("https://nope.invalid/");
+  } catch (error) {
+    thrown = error;
+  }
+  assert(thrown instanceof Error);
+  assert(thrown.message.includes("Could not resolve host"));
+  assertEquals(store.size, 0, "the body file is removed on failure too");
+});
+
+Deno.test("runWatch: an http check through the machine fetch compares like any other", async () => {
+  // The fetch is a seam, so the check's own decisions must not depend on
+  // which side of it the request runs: the baseline and the change are the
+  // same.
+  const store = new Map<string, string>();
+  const source = {
+    kind: "http",
+    url: "https://example.com/",
+    expect: { hash: true },
+  } as const;
+  const first = await runWatch(source, undefined, {
+    runner: curlingRunner(store, { body: "one" }),
+    workdir: "/home/agent/agents/a1",
+    fetch: machineWatchFetch({
+      runner: curlingRunner(store, { body: "one" }),
+      files: fakeFiles(store),
+      workdir: "/home/agent/agents/a1",
+    }),
+  });
+  assertEquals(first.changed, false, "the first look is a baseline");
+
+  const same = await runWatch(source, first.state!, {
+    runner: curlingRunner(store, { body: "one" }),
+    workdir: "/home/agent/agents/a1",
+    fetch: machineWatchFetch({
+      runner: curlingRunner(store, { body: "one" }),
+      files: fakeFiles(store),
+      workdir: "/home/agent/agents/a1",
+    }),
+  });
+  assertEquals(same.changed, false);
+
+  const changed = await runWatch(source, first.state!, {
+    runner: curlingRunner(store, { body: "two" }),
+    workdir: "/home/agent/agents/a1",
+    fetch: machineWatchFetch({
+      runner: curlingRunner(store, { body: "two" }),
+      files: fakeFiles(store),
+      workdir: "/home/agent/agents/a1",
+    }),
+  });
+  assertEquals(changed.changed, true);
 });

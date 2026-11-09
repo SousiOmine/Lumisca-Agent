@@ -30,6 +30,7 @@
 import { createHash } from "node:crypto";
 import type { WatchSource } from "../shared/routine.ts";
 import type { CommandRunner } from "../tools/command-backend.ts";
+import type { FileBackend } from "../tools/file-backend.ts";
 
 /** What one check observed. The shape is deliberately small and plain: it is
  * stored as JSON on the routine's row and compared on the next check. */
@@ -50,8 +51,20 @@ export interface WatchOutcome {
 }
 
 /** The body cap of an HTTP check. A page can be megabytes; only a digest and
- * a substring test are taken from it. */
+ * a substring test are taken from it, so the machine-side fetch reads at most
+ * this much of the body (see machineWatchFetch). */
 const HTTP_MAX_BYTES = 5_000_000;
+
+/** A request may spend this long on one address. Shorter than the runner's
+ * own limit, so a stalled address reports "timed out" as a check problem
+ * instead of being killed as a command that never answered. */
+const HTTP_TIMEOUT_SEC = 30;
+
+/** The largest body curl is allowed to write. Above it the check reports a
+ * problem rather than hashing a prefix: a digest of the first few megabytes
+ * would call a page unchanged while its tail changed, which is worse than
+ * saying nothing was observed. */
+const HTTP_MAX_FETCH_BYTES = HTTP_MAX_BYTES * 2;
 
 /** What one check needs from the machine. `fetch` is a seam so a test can
  * answer without a network, and so the caller decides where the request goes
@@ -63,9 +76,82 @@ export interface WatchDeps {
   runner: CommandRunner;
   /** Working folder the check runs in (the agent's own). */
   workdir: string;
-  /** Fetch a URL. Defaults to the global `fetch`. */
+  /** Fetch a URL. Defaults to the global `fetch`, which is the HOST's
+   * network; a caller that has a machine passes `machineWatchFetch` so the
+   * request goes out from there (see the module comment). */
   fetch?: typeof fetch;
   signal?: AbortSignal;
+}
+
+/** What the machine-side fetch needs: the same runner the other checks use,
+ * plus the file backend the body is read back through. */
+export interface MachineWatchDeps {
+  runner: CommandRunner;
+  files: FileBackend;
+  /** Working folder curl runs in (the agent's own). */
+  workdir: string;
+  signal?: AbortSignal;
+}
+
+/** A `fetch` that makes its request INSIDE the machine (see the module
+ * comment): curl writes the body to a file under the agent's own root, which
+ * is read back through the file backend and removed.
+ *
+ * A file rather than stdout because the body must be hashed here and the
+ * runner's stdout is capped for a terminal: a page of a few megabytes would
+ * arrive cut, and the cut would look like a change. The file lives in the
+ * tool-output directory (the same one the spiller uses) so nothing new
+ * appears in the agent's view, and it is removed even when curl fails.
+ *
+ * The status comes from curl's `-w` on stdout, so an HTTP error is still an
+ * observation (a watch on "the status is 200" must fire on a 500), while a
+ * transport failure throws — `runWatch` turns that into a problem, not a
+ * change. */
+export function machineWatchFetch(deps: MachineWatchDeps): typeof fetch {
+  const impl = async (input: unknown): Promise<Response> => {
+    const url = input instanceof Request
+      ? input.url
+      : input instanceof URL
+      ? input.href
+      : String(input);
+    const root = (deps.files.roots[0] ?? "/").replace(/[\\/]+$/, "");
+    const bodyPath =
+      `${root}/.lumisca-tool-output/watch-${crypto.randomUUID()}.body`;
+    try {
+      const result = await deps.runner.run(
+        `curl -sS -L --compressed --max-time ${HTTP_TIMEOUT_SEC} ` +
+          `--max-redirs 5 --max-filesize ${HTTP_MAX_FETCH_BYTES} ` +
+          `-o ${shellQuote(bodyPath)} -w '%{http_code}' -- ${shellQuote(url)}`,
+        {
+          cwd: deps.workdir,
+          timeoutSec: HTTP_TIMEOUT_SEC + 15,
+          maxOutputChars: 64,
+          ...(deps.signal === undefined ? {} : { signal: deps.signal }),
+        },
+      );
+      if (result.exitCode !== 0) {
+        throw new Error(
+          firstLine(result.stderr) ||
+            `the request failed (curl exit ${result.exitCode})`,
+        );
+      }
+      const status = Number(result.stdout.trim());
+      if (!Number.isInteger(status) || status <= 0) {
+        throw new Error("the response had no status");
+      }
+      const { bytes } = await deps.files.readHead(bodyPath, HTTP_MAX_BYTES);
+      // A body that is absent by definition (curl writes nothing for these)
+      // must not be handed to Response: it refuses a body on them.
+      const nullBody = status === 204 || status === 205 || status === 304;
+      return new Response(
+        nullBody ? null : new TextDecoder().decode(bytes),
+        { status },
+      );
+    } finally {
+      await deps.files.removeFile(bodyPath).catch(() => {});
+    }
+  };
+  return impl as unknown as typeof fetch;
 }
 
 /** Run one check and compare it with the stored state.
