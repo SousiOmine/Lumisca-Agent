@@ -891,3 +891,40 @@ Deno.test("scheduler: stopping a waiting run records it without a run time", asy
     close();
   }
 });
+
+Deno.test("scheduler: stopping one run does not swallow the next", async () => {
+  // The stop marks were kept in one set for both cases, so stopping a run
+  // that had already started left a cancellation behind that skipped the
+  // routine's NEXT run (recorded as "stopped before it started").
+  const { repo: routines, close } = repo();
+  try {
+    const created = routines.create({
+      agentId: AGENT,
+      name: "Check",
+      prompt: "check it",
+      schedule: { kind: "every", minutes: 30 },
+    });
+    const fake = runner();
+    const scheduler = createRoutineScheduler({
+      repo: routines,
+      runner: fake,
+      slotPollMs: 5,
+    });
+    const first = scheduler.runNow(created.id);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    scheduler.stop(created.id);
+    fake.release();
+    await first;
+    assertEquals(routines.get(created.id)?.lastStatus, "stopped");
+
+    // The next run starts as usual.
+    const second = scheduler.runNow(created.id);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assertEquals(fake.started.length, 2);
+    fake.release();
+    await second;
+    assertEquals(routines.get(created.id)?.lastStatus, "ok");
+  } finally {
+    close();
+  }
+});

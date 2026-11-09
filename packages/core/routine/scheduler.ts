@@ -418,9 +418,15 @@ export function createRoutineScheduler(
     stop(id: string): void {
       const routine = repo.get(id);
       if (routine === undefined) return;
-      if (!running.has(id) && !queued.has(id)) return;
-      stopped.add(id);
-      cancelled.add(id);
+      const waiting = queued.has(id);
+      const active = running.has(id);
+      if (!waiting && !active) return;
+      // Waiting and running are two different facts. A waiting run is
+      // cancelled before it starts; a running one is interrupted and records
+      // itself as stopped when it ends. Marking a RUNNING routine as
+      // cancelled would leave the mark behind and swallow its next run.
+      if (waiting) cancelled.add(id);
+      if (active) stopped.add(id);
       // Only the run this routine started is stopped: the runner checks the
       // origin before interrupting anything (see RoutineRunner.stop).
       runner.stop(routine.agentId, id);
