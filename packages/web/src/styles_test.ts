@@ -1158,6 +1158,22 @@ Deno.test("the code-mode sheet is the window's paper, with one edge of canvas", 
   assertEquals(sheet.get("box-shadow"), "none");
 });
 
+Deno.test("a pane behind another tab is not laid out", async () => {
+  // Every open tab keeps its pane mounted so a switch does not rebuild its
+  // transcript (components/SessionPane); what hides one is `hidden` on the
+  // `.chat` root. This rule is what makes that work: `.chat`'s own
+  // `display: flex` outranks the user agent's `[hidden]`, so without it two
+  // transcripts would be stacked in the window — and the hidden pane would
+  // still be laid out and (for a screen reader) still be there.
+  const chat = await Deno.readTextFile(
+    new URL("./styles/chat.css", import.meta.url),
+  );
+  assertEquals(
+    declarations(cssRules(chat), ".chat[hidden]").get("display"),
+    "none",
+  );
+});
+
 Deno.test("the tab bar keeps its cards off the window's edges", async () => {
   // The bar paints the canvas, so its cards keep the canvas margin even though
   // the sheet below is the window's edge and offers no line to line up with. A

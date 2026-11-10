@@ -27,6 +27,11 @@ interface TranscriptProps {
    * so the "jump to the newest message" intent has to arrive here (see
    * useTranscriptScroll's pinToken). */
   pinToken?: number;
+  /** Whether this transcript is the pane on screen. Another tab's pane stays
+   * mounted with `hidden` (components/SessionPane), so this transcript must
+   * not follow or page history while it has no box (see
+   * useTranscriptScroll's `active`). */
+  active?: boolean;
   streamingText: string;
   /** Tool calls executing right now (see SessionView.liveTools), drawn as
    * the transcript's tail until the assistant message carrying them
@@ -97,6 +102,7 @@ export function Transcript(
     onCardSend,
     empty,
     pinToken,
+    active = true,
   }: TranscriptProps,
 ) {
   // The transcript holds a WINDOW of the session's history (see the core's
@@ -112,6 +118,7 @@ export function Transcript(
       ? undefined
       : messageKey(messages[0]),
     pinToken,
+    active,
   });
   // The rows this transcript draws and diffs, built once per history change:
   // a streamed token re-renders the component on every frame, and neither a

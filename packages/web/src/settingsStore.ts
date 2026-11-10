@@ -8,9 +8,9 @@ import { createResourceStore, useStore } from "./store.ts";
  * Five screens used to fetch `GET /api/settings` independently and pick the
  * few keys they needed (the chat view's compaction hint, the safety toggle,
  * the compaction tuning, computer use, the model preferences). Each of those
- * fetches was a separate request per mount, and the chat view is remounted
- * whenever the active tab changes — so switching tabs re-read the whole
- * settings table each time.
+ * fetches was a separate request per mount, and a pane was remounted whenever
+ * its tab became the active one — so switching tabs re-read the whole settings
+ * table each time.
  *
  * The store answers `undefined` while the first read is in flight (callers
  * that need a value use their documented default) and publishes a new

@@ -51,8 +51,9 @@ interface ChatViewProps {
   /** Peer owning the session ("" = this server); forwarded to the model
    * picker so remote sessions list the peer's models. */
   peerId?: string;
-  /** Draft (unsent) composer content, owned by the App per tab so it
-   * survives tab switches (this view remounts on every switch). */
+  /** Draft (unsent) composer content, owned by the App under the tab key: the
+   * App is what knows which tabs are open, and closing one has to discard
+   * exactly its draft (see useDrafts). */
   input: string;
   onInputChange: (value: string) => void;
   images: PendingImage[];
@@ -89,6 +90,11 @@ interface ChatViewProps {
   loadingOlder: boolean;
   /** Open the provider settings from the model picker's "設定画面" link. */
   onOpenSettings?: () => void;
+  /** Whether this view is the tab pane on screen. The panes of the other open
+   * tabs stay mounted (`hidden`) so a switch does not rebuild a transcript
+   * (see components/SessionPane); while hidden this view neither follows the
+   * newest content nor pages history, and its field does not measure itself. */
+  active?: boolean;
 }
 
 export function ChatView(
@@ -109,6 +115,7 @@ export function ChatView(
     onLoadOlder,
     loadingOlder,
     onOpenSettings,
+    active = true,
   }: ChatViewProps,
 ) {
   // The transcript owns the scroll element, so a submit can only ASK it to
@@ -364,7 +371,7 @@ export function ChatView(
   );
 
   return (
-    <div className="chat">
+    <div className="chat" hidden={!active}>
       <Transcript
         messages={view.messages}
         onLoadOlder={onLoadOlder}
@@ -381,6 +388,7 @@ export function ChatView(
         attachBase={attachBase}
         onRewind={handleRewind}
         onCardSend={handleCardSend}
+        active={active}
         empty={view.info.chat
           ? <p>{t("chat.empty.chat")}</p>
           : <p>{t("chat.empty.workspace")}</p>}
@@ -432,6 +440,7 @@ export function ChatView(
           onChange={onInputChange}
           placeholder={t("chat.composer.placeholder")}
           onKeyDown={onKeyDown}
+          visible={active}
           model={{
             provider: view.info.modelProvider,
             modelId: view.info.modelId,

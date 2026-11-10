@@ -36,6 +36,16 @@
   padding: 20px 0 10px;
 }
 
+/* Every open tab keeps its pane mounted, and the ones that are not shown carry
+ * this attribute (components/SessionPane). The rule is needed at all because
+ * `.chat`'s own `display: flex` outranks the user agent's `[hidden]`; without
+ * it two transcripts would be stacked in the window (styles_test.ts pins it).
+ * `display: none` is what takes the hidden pane out of style and layout, and
+ * what keeps it out of the accessibility tree. */
+.chat[hidden] {
+  display: none;
+}
+
 /* The "loading earlier history" line: a quiet note where the older window will
  * arrive (the transcript holds a window of history; see useTranscriptScroll). */
 .chat-history-note {

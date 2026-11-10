@@ -35,6 +35,14 @@ export interface TranscriptScrollOptions {
    * hook instance: the composer's view has no scroll element, and calling
    * `pinOnNextContent` there set a flag on a ref nobody read. */
   pinToken?: number;
+  /** Whether the transcript is on screen. A pane another tab is showing is
+   * kept mounted with `hidden` (see components/SessionPane), so its element
+   * has no box: every measurement reads zero, and the "the window is shorter
+   * than the transcript" rule below would page through history nobody is
+   * looking at. A hidden transcript neither follows the newest content nor
+   * reads older windows, and its position is put back when it is shown (see
+   * the restore below). */
+  active?: boolean;
 }
 
 /** Distance from the top (px) at which the previous window is requested. */
@@ -59,6 +67,16 @@ export function useTranscriptScroll(
   const scrollRef = useRef<HTMLDivElement>(null);
   const userScrolledUp = useRef(false);
   const pendingSubmit = useRef(false);
+  /** The reader's offset at the last scroll event. A hidden pane loses its
+   * own (see the restore below), and the offset they left is the one to put
+   * back. */
+  const shownTop = useRef(0);
+  /** Whether this transcript is on screen. The listeners below are installed
+   * once (a prop cannot be a dependency of them), so they read it from a
+   * ref. */
+  const active = options.active !== false;
+  const activeRef = useRef(active);
+  activeRef.current = active;
   /** Where the reader was when an older window was requested, with the first
    * message the transcript held at that moment. */
   const anchor = useRef<
@@ -98,6 +116,9 @@ export function useTranscriptScroll(
     let pinFrame: number | undefined;
     const pinNow = () => {
       pinFrame = undefined;
+      // A hidden pane has no box to scroll; the moment it is shown again is
+      // owned by the restore below.
+      if (!activeRef.current) return;
       if (pendingSubmit.current) {
         pendingSubmit.current = false;
         el.scrollTop = el.scrollHeight;
@@ -117,6 +138,7 @@ export function useTranscriptScroll(
       pinFrame = requestAnimationFrame(pinNow);
     };
     const onScroll = () => {
+      shownTop.current = el.scrollTop;
       userScrolledUp.current =
         el.scrollHeight - el.scrollTop - el.clientHeight >= STICK_DISTANCE;
       // Not at the top: nothing to read before, and the position the reader
@@ -143,15 +165,30 @@ export function useTranscriptScroll(
 
   // A window shorter than the transcript shows no scrollbar, so no scroll
   // event can ask for the page that would fill it. Read until the transcript
-  // overflows (or the history ends), one page per landing.
+  // overflows (or the history ends), one page per landing. A hidden pane has
+  // no box at all, so it would read as "0 < 1" and keep paging for nobody.
   const firstKey = options.firstMessageKey;
   const loadingOlder = options.loadingOlder === true;
   useEffect(() => {
+    if (!active) return;
     if (loadingOlder) return;
     const el = scrollRef.current;
     if (!el || el.scrollHeight > el.clientHeight + 1) return;
     reachTop(el);
-  }, [firstKey, loadingOlder, reachTop]);
+  }, [active, firstKey, loadingOlder, reachTop]);
+
+  // A hidden pane keeps no box, so the engine drops its scroll offset: the
+  // element reads 0 when the pane is shown again. Coming back puts the reader
+  // where they were — on the line they were reading if they had scrolled up,
+  // at the bottom if they were following the newest content (which is where
+  // this view opened when a tab switch rebuilt it). Before paint, so neither
+  // position shows for a frame first.
+  useLayoutEffect(() => {
+    if (!active) return;
+    const el = scrollRef.current;
+    if (el === null) return;
+    el.scrollTop = userScrolledUp.current ? shownTop.current : el.scrollHeight;
+  }, [active]);
 
   // The reader's position survives content inserted above it: the transcript
   // grew by (height now - height then), so adding that to the old offset keeps

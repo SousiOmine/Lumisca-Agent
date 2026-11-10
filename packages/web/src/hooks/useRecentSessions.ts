@@ -4,7 +4,7 @@ import type { PeerStatus, SessionInfo } from "../types.ts";
 import { peerLabel } from "../peers.ts";
 import { tabKey } from "../tabs.ts";
 import { describeError, useT } from "../i18n.ts";
-import { useVisibleInterval } from "./useVisibleInterval.ts";
+import { NEVER, useVisibleInterval } from "./useVisibleInterval.ts";
 
 /** How often the list is re-read while a surface showing it is visible.
  *
@@ -44,8 +44,16 @@ export interface RecentSessionItem {
  * one bad tick does not replace the rows with an error line: the rows the
  * reader can act on stay, with the failure stated above them. `loading`
  * covers the first read only — from then on the list has something to show,
- * and flipping it per refresh would only repaint the same rows. */
-export function useRecentSessions(): {
+ * and flipping it per refresh would only repaint the same rows.
+ *
+ * `enabled` is false while the surface reading the list is not on screen (the
+ * draft tab's pane, kept mounted behind another tab — see
+ * components/SessionPane). A tick probes every registered peer, so a list
+ * nobody is looking at must not keep asking; coming back reads once.
+ */
+export function useRecentSessions(
+  options: { enabled?: boolean } = {},
+): {
   items: RecentSessionItem[];
   loading: boolean;
   error: string | undefined;
@@ -143,10 +151,30 @@ export function useRecentSessions(): {
 
   // Nothing runs while the page is hidden (see useVisibleInterval), and
   // coming back to it reads at once: the list the reader returns to is the
-  // one they left, and the answer is one request away.
-  useVisibleInterval(() => void load(), RECENT_REFRESH_MS, {
-    immediate: false,
-  });
+  // one they left, and the answer is one request away. A list whose surface is
+  // behind another tab is not polled at all.
+  const enabled = options.enabled !== false;
+  useVisibleInterval(
+    () => void load(),
+    enabled ? RECENT_REFRESH_MS : NEVER,
+    { immediate: false },
+  );
+
+  // A surface that comes back reads once, the same way a freshly mounted one
+  // does: it may have been behind another tab for as long as the reader was
+  // away, and a session created meanwhile (here or on a peer) has to appear.
+  // The mount itself is not this path — `load` already ran in the effect above
+  // — so a visible surface reads once, not twice.
+  const wasEnabled = useRef(enabled);
+  useEffect(() => {
+    if (!enabled) {
+      wasEnabled.current = false;
+      return;
+    }
+    if (wasEnabled.current) return;
+    wasEnabled.current = true;
+    void load();
+  }, [enabled, load]);
 
   /** Re-fetch now (the button beside a failed read). */
   const reload = useCallback(() => {

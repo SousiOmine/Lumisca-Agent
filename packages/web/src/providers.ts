@@ -69,9 +69,9 @@ export type UseProviderModelsResult = PeerCatalogState & {
  *
  * The state lives in the catalog store keyed by peer (see modelCatalog.ts):
  * the chat view and the model picker inside its composer both mount this
- * hook for the same peer, and each tab switch remounts the chat view, so a
- * per-mount fetch would re-request the same catalog several times per page
- * load. The settings dialog shows providers and models side by side, so a
+ * hook for the same peer — and every open tab's pane mounts the chat view —
+ * so a per-mount fetch would re-request the same catalog several times per
+ * page load. The settings dialog shows providers and models side by side, so a
  * second provider-only fetch would hit the same endpoint twice. */
 export function useProviderModels(peerId = ""): UseProviderModelsResult {
   const subscribe = useCallback(

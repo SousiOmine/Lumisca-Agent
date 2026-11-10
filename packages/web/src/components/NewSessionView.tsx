@@ -76,6 +76,10 @@ interface NewSessionViewProps {
    * provider configured" verdict until a reload (the model picker itself
    * follows through the shared catalog store). */
   settingsVersion: number;
+  /** Whether this screen is the tab pane on screen. It stays mounted while
+   * another tab is shown (see components/SessionPane), so it must neither
+   * keep polling the recent list from behind nor measure its field there. */
+  active?: boolean;
 }
 
 /** Sentinel workspace id of the pinned chat entry: selecting it starts a
@@ -125,6 +129,7 @@ export function NewSessionView(
     onReopenSession,
     onOpenSettings,
     settingsVersion,
+    active = true,
   }: NewSessionViewProps,
 ) {
   // The last selected workspace, restored from localStorage. Kept in a ref
@@ -144,7 +149,7 @@ export function NewSessionView(
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const modelTouched = useRef(false);
-  const recent = useRecentSessions();
+  const recent = useRecentSessions({ enabled: active });
 
   // --- saved prompts (shared hook so the menu refreshes after the settings
   // panel mutates the list) ----------------------------------------------
@@ -361,7 +366,7 @@ export function NewSessionView(
   };
 
   return (
-    <div className="chat">
+    <div className="chat" hidden={!active}>
       <div className="chat-scroll">
         <div className="new-session-center">
           <div className="new-session-card">
@@ -432,6 +437,7 @@ export function NewSessionView(
               onChange={onInputChange}
               placeholder={t("chat.newSession.placeholder")}
               autoFocus
+              visible={active}
               large
               model={model}
               onModelSelect={(provider, modelId, info?: ModelInfo) => {

@@ -19,10 +19,15 @@ import {
  * a change of WIDTH: the same text wraps into more lines when the pane or the
  * window narrows. The observer ignores height-only resizes, because those are
  * this hook's own writes and following them would loop.
+ *
+ * `visible` is the third moment: a field inside a pane another tab is showing
+ * has no box, so a measurement there reads 0 and would write that height. The
+ * fit is skipped while hidden and runs again when the pane is shown.
  */
 export function useAutoGrow(
   ref: RefObject<HTMLTextAreaElement | null>,
   value: string,
+  visible = true,
 ): void {
   const fit = useCallback(() => {
     const el = ref.current;
@@ -39,7 +44,9 @@ export function useAutoGrow(
   // draft (a restored tab, a completed prompt) never shows one frame at the
   // wrong size. A writing animation is deliberately absent — the height
   // follows the caret, and a lag there reads as dropped input.
-  useLayoutEffect(fit, [fit, value]);
+  useLayoutEffect(() => {
+    if (visible) fit();
+  }, [fit, value, visible]);
 
   useEffect(() => {
     const el = ref.current;

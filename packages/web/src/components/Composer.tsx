@@ -136,6 +136,10 @@ interface ComposerProps {
   /** Where the meter's bar turns amber: the compaction point when the
    * caller knows it (see shared/context-usage.ts compactionUsageRatio). */
   contextWarnRatio?: number;
+  /** Whether this composer is on screen. A tab pane another tab is showing
+   * keeps its composer mounted (see SessionPane) with no box, so the field
+   * must not measure itself there; it does so again when the pane is shown. */
+  visible?: boolean;
 }
 
 /** Shared chat input: textarea + model picker + submit, in one rounded box.
@@ -171,6 +175,7 @@ export function Composer({
   onFilesChange,
   contextUsage,
   contextWarnRatio,
+  visible = true,
 }: ComposerProps) {
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showCtx, setShowCtx] = useState(false);
@@ -183,7 +188,17 @@ export function Composer({
   // The field grows with the message up to the twelve lines the stylesheet
   // allows (composer.css); the sheet owns the ceiling, this only fits the
   // text.
-  useAutoGrow(textareaRef, value);
+  useAutoGrow(textareaRef, value, visible);
+  // The draft pane is mounted once and kept (see SessionPane), so its field is
+  // no longer a fresh mount each time the tab is opened: focus it when its
+  // pane is shown again, which is what opening the tab used to do.
+  const wasVisible = useRef(visible);
+  useEffect(() => {
+    if (autoFocus && visible && !wasVisible.current) {
+      textareaRef.current?.focus();
+    }
+    wasVisible.current = visible;
+  }, [autoFocus, visible]);
   /** Message lookup of the app language (the composer's own labels). */
   const t = useT();
   // Latest images, read inside the async FileReader callback so a burst of

@@ -13,10 +13,11 @@ export interface TabDraft {
  * mutated: every update in useDrafts creates a fresh draft object. */
 export const EMPTY_DRAFT: TabDraft = { input: "", images: [], files: [] };
 
-/** Per-tab composer drafts, kept across tab switches. The chat view
- * remounts on every switch (it is keyed by the active tab), so anything
- * it held locally would be lost — the drafts live here instead, keyed by
- * tab key, and are fed back into the view when the tab is shown again.
+/** Per-tab composer drafts, keyed by tab key. A pane keeps its composer
+ * mounted while another tab is shown (see components/SessionPane), so this is
+ * no longer about surviving a remount: it is the App owning "what was typed
+ * in which tab", so closing a tab discards exactly its draft and nothing
+ * else.
  *
  * `openKeys` is the sessions this page has open, not the strip it draws: the
  * strip holds the draft tab only while `/code` is the screen (see useTabs),

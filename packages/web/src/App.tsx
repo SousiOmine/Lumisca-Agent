@@ -8,8 +8,8 @@ import {
 } from "preact/compat";
 import type { AppMode } from "@lumisca/core/shared";
 import type { InitialData } from "./types.ts";
-import { isViewRunning, type SessionView } from "./types.ts";
-import { closeTargets, DRAFT_TAB, splitTabKey } from "./tabs.ts";
+import { isViewRunning } from "./types.ts";
+import { closeTargets, DRAFT_TAB } from "./tabs.ts";
 import type { UrlState } from "./route.ts";
 import { useRoute } from "./hooks/useRoute.ts";
 import { useT } from "./i18n.ts";
@@ -21,7 +21,10 @@ import { useServerHealth } from "./hooks/useServerHealth.ts";
 import { useBuildWatch } from "./hooks/useBuildWatch.ts";
 import { useUpdateStatus } from "./hooks/useUpdateStatus.ts";
 import { useCompactViewport } from "./hooks/useMediaQuery.ts";
-import { useSessionActions } from "./hooks/useSessionActions.ts";
+import {
+  type SessionActions,
+  useSessionActions,
+} from "./hooks/useSessionActions.ts";
 import { useAppHeight } from "./hooks/useAppHeight.ts";
 import { useBackspaceGuard } from "./hooks/useBackspaceGuard.ts";
 import { inDesktopShell, quit, shellPlatform } from "./shell.ts";
@@ -33,8 +36,7 @@ import { TabBar, type TabSummary } from "./components/TabBar.tsx";
 import { TitleBar } from "./components/TitleBar.tsx";
 import { MacosTitleBarDrag } from "./components/MacosTitleBarDrag.tsx";
 import { AppMenu } from "./components/AppMenu.tsx";
-import { ChatView } from "./components/ChatView.tsx";
-import { NewSessionView } from "./components/NewSessionView.tsx";
+import { DraftPane, SessionPane } from "./components/SessionPane.tsx";
 import type { SettingsCategory } from "./components/SettingsModal.tsx";
 import { AppDialogs } from "./components/AppDialogs.tsx";
 import { UpdateBanner } from "./components/UpdateBanner.tsx";
@@ -244,9 +246,9 @@ export function App({ initialData }: AppProps): ReactElement {
   const tabClose = useTabClose({ views, closeTabs: closeAndLeave });
   const pendingClose = tabClose.pending;
 
-  // Unsent composer content per tab: the chat view remounts on every tab
-  // switch (keyed below), so the draft lives here and is fed back into
-  // the view when its tab is shown again. Closing a tab discards it.
+  // Unsent composer content per tab: a pane keeps its composer mounted now,
+  // but the draft still lives here — closing a tab discards what was typed in
+  // it, and the App is what owns "which tabs are open" (see useDrafts).
   const { drafts, updateDraft, clearDraft } = useDrafts(openSessions);
   // Background agent-event notifications (desktop only): the event hook
   // reads the persisted value directly, so this state only drives the
@@ -284,6 +286,13 @@ export function App({ initialData }: AppProps): ReactElement {
     // new client, and this page would keep describing the previous release.
     if (build.stale && update.restartRequested) location.reload();
   }, [build.stale, update.restartRequested]);
+  /** A session was created and its first prompt was sent: the tab appears and
+   * the address moves to it. Stable, so every action built on it is stable
+   * too (the panes are memoized, see SessionPane). */
+  const onSessionCreated = useCallback((key: string) => {
+    adopt(key);
+    goToTab(key);
+  }, [adopt, goToTab]);
   const {
     startSession,
     prompt,
@@ -296,24 +305,55 @@ export function App({ initialData }: AppProps): ReactElement {
   } = useSessionActions({
     setViews,
     setViewError,
-    activeTab,
     // A session this page just created already has its view (see
     // startSession), so it is adopted rather than read back: the read would
     // replace an empty transcript with an empty transcript, and put the tab
-    // in the strip only after a round trip.
-    onCreated: (key) => {
-      adopt(key);
-      goToTab(key);
-    },
+    // in the strip only after a round trip. Stable, so startSession is too (a
+    // new identity per render would re-render every pane, see SessionPane).
+    onCreated: onSessionCreated,
   });
-
-  const activeView: SessionView | undefined = activeTab
-    ? views.get(activeTab)
-    : undefined;
+  /** One object for every session pane. Rebuilt only when an action is, so the
+   * memoized panes of tabs nobody is looking at are not re-rendered on every
+   * streamed event. */
+  const sessionActions = useMemo<SessionActions>(
+    () => ({
+      prompt,
+      abort,
+      answer,
+      rewind,
+      compact,
+      changeModel,
+      changeThinkingLevel,
+    }),
+    [prompt, abort, answer, rewind, compact, changeModel, changeThinkingLevel],
+  );
+  /** The panes to draw, in tab order: every open session whose view has
+   * arrived. A session the address names but this page has never read has no
+   * pane yet, and the body shows the wait for it instead (below). */
+  const panes = useMemo(
+    () => openSessions.filter((key) => views.has(key)),
+    [openSessions, views],
+  );
+  /** Whether the address is naming a pane this body draws. */
+  const activePane = activeTab !== null && panes.includes(activeTab);
   // The draft tab (and the equivalent draft screen shown while no tab is
   // open) keeps its unsent input under the draft-tab key.
   const draftKey = activeTab ?? DRAFT_TAB;
   const draft = drafts.get(draftKey) ?? EMPTY_DRAFT;
+  // The new-session screen is mounted the first time its address is shown and
+  // then kept while the page lives (see DraftPane), so returning to it is the
+  // same attribute change as any other tab. A launch that opens a session
+  // directly still mounts it never, and so makes none of its reads.
+  const [draftPaneMounted, setDraftPaneMounted] = useState(
+    mode === "code" && activeTab === null,
+  );
+  useEffect(() => {
+    if (mode === "code" && activeTab === null) setDraftPaneMounted(true);
+  }, [mode, activeTab]);
+  // Shown while the draft is the screen even before the latch above has been
+  // set: closing the last tab lands here in the same render, and a body with
+  // neither a pane nor the draft screen would be blank for a frame.
+  const draftPaneShown = draftPaneMounted || activeTab === null;
 
   // What the tab bar renders, derived here so its memoized component stays
   // out of the streaming hot path: the view map is replaced on every event,
@@ -703,80 +743,60 @@ export function App({ initialData }: AppProps): ReactElement {
               onScreenOpenChange={setStellaScreenOpen}
             />
           )
-          : activeView
-          ? (
-            // Key by tab so switching sessions remounts the view without
-            // leaking scroll position (or draft text: the draft is owned
-            // by the App under the tab key and fed back in below).
-            <ChatView
-              key={activeTab ?? undefined}
-              view={activeView}
-              peerId={activeTab ? splitTabKey(activeTab).peerId : ""}
-              input={draft.input}
-              onInputChange={(input) => updateDraft(draftKey, { input })}
-              images={draft.images}
-              onImagesChange={(images) => updateDraft(draftKey, { images })}
-              onPrompt={(text, images, mode) =>
-                activeTab === null
-                  ? Promise.resolve()
-                  : prompt(activeTab, text, images, mode)}
-              onAbort={() => activeTab && abort(activeTab)}
-              onRewind={(timestamp) =>
-                activeTab ? rewind(activeTab, timestamp) : Promise.resolve()}
-              onAnswer={(toolCallId, answers) =>
-                activeTab
-                  ? answer(activeTab, toolCallId, answers)
-                  : Promise.reject()}
-              onModelChange={(provider, modelId) =>
-                activeTab && changeModel(activeTab, provider, modelId)}
-              onThinkingLevelChange={(level) =>
-                changeThinkingLevel(
-                  activeView.info.modelProvider,
-                  activeView.info.modelId,
-                  level,
-                )}
-              onActionCommand={(commandId, instructions) => {
-                if (!activeTab) return;
-                if (commandId === "compact") compact(activeTab, instructions);
-              }}
-              onLoadOlder={() => activeTab !== null && loadOlder(activeTab)}
-              loadingOlder={activeTab !== null && olderLoading.has(activeTab)}
-              onOpenSettings={openProviders}
-            />
-          )
-          : activeTab !== null
-          ? (
-            // The address names a session this page has not drawn yet (a
-            // bookmark, a reload, a link followed from elsewhere). Its read
-            // is in flight, so the body says so rather than flashing the
-            // new-session screen under the address of a session.
-            <div className="chat-empty" role="status">
-              <div className="chat-empty-inner">
-                <p>{t("common.loading")}</p>
-              </div>
-            </div>
-          )
           : (
-            <NewSessionView
-              workspaces={workspaces}
-              workspacesLoaded={workspacesLoaded}
-              input={draft.input}
-              onInputChange={(input) => updateDraft(draftKey, { input })}
-              images={draft.images}
-              onImagesChange={(images) => updateDraft(draftKey, { images })}
-              onStart={async (workspace, model, text, images, mode) => {
-                await startSession(workspace, model, text, images, mode);
-                // The draft screen is left by the navigation startSession
-                // made; its text was sent, so discard it (kept on failure so
-                // the user can retry).
-                clearDraft(DRAFT_TAB);
-              }}
-              onWorkspaceChanged={handleWorkspaceChanged}
-              onDeleteWorkspace={deleteWorkspace}
-              onReopenSession={goToTab}
-              onOpenSettings={openProviders}
-              settingsVersion={settingsVersion}
-            />
+            // One pane per open tab, all of them mounted: the tab the address
+            // does not name is hidden, not rebuilt, so switching costs an
+            // attribute rather than a transcript (see SessionPane). The draft
+            // screen is the last pane and is mounted once it has been shown.
+            <>
+              {panes.map((key) => {
+                const view = views.get(key);
+                // A pane exists only once its view has landed; the address
+                // reaches this page before the read does.
+                if (view === undefined) return null;
+                return (
+                  <SessionPane
+                    key={key}
+                    tabKey={key}
+                    view={view}
+                    active={key === activeTab}
+                    draft={drafts.get(key) ?? EMPTY_DRAFT}
+                    loadingOlder={olderLoading.has(key)}
+                    actions={sessionActions}
+                    loadOlder={loadOlder}
+                    updateDraft={updateDraft}
+                    onOpenSettings={openProviders}
+                  />
+                );
+              })}
+              {draftPaneShown && (
+                <DraftPane
+                  active={activeTab === null}
+                  draft={drafts.get(DRAFT_TAB) ?? EMPTY_DRAFT}
+                  workspaces={workspaces}
+                  workspacesLoaded={workspacesLoaded}
+                  settingsVersion={settingsVersion}
+                  updateDraft={updateDraft}
+                  clearDraft={clearDraft}
+                  startSession={startSession}
+                  onWorkspaceChanged={handleWorkspaceChanged}
+                  onDeleteWorkspace={deleteWorkspace}
+                  onReopenSession={goToTab}
+                  onOpenSettings={openProviders}
+                />
+              )}
+              {activeTab !== null && !activePane && (
+                // The address names a session this page has not drawn yet (a
+                // bookmark, a reload, a link followed from elsewhere). Its
+                // read is in flight, so the body says so rather than flashing
+                // the new-session screen under the address of a session.
+                <div className="chat-empty" role="status">
+                  <div className="chat-empty-inner">
+                    <p>{t("common.loading")}</p>
+                  </div>
+                </div>
+              )}
+            </>
           )}
       </div>
       <AppDialogs

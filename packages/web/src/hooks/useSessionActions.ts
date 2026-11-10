@@ -25,12 +25,45 @@ import { summarizeContextUsage } from "@lumisca/core/shared";
 export interface UseSessionActionsOptions {
   setViews: Dispatch<SetStateAction<Map<string, SessionView>>>;
   setViewError: (key: string, error: unknown) => void;
-  /** Key of the active tab; its peer half routes thinking-level updates. */
-  activeTab: string | null;
   /** A session was created and its first prompt was sent. The caller
    * navigates to the new session's address: the URL is what says which
    * session is open, so a started session is a move, not a state change. */
   onCreated: (key: string) => void;
+}
+
+/** The operations one session's pane calls. Each takes the tab key it belongs
+ * to, so a pane binds its own and the App can pass a single object built once
+ * — every pane stays mounted while another tab is shown (components/
+ * SessionPane), and a prop rebuilt per render would make all of them re-render
+ * on every streamed event. */
+export interface SessionActions {
+  prompt: (
+    key: string,
+    text: string,
+    images: PendingImage[],
+    mode?: ModePrompt,
+  ) => Promise<void>;
+  abort: (key: string) => void;
+  answer: (
+    key: string,
+    toolCallId: string,
+    answers: AskAnswer[],
+  ) => Promise<void>;
+  /** Rewind from the given message timestamp. Rejects when nothing was
+   * deleted, so the caller does not restore text to the composer. */
+  rewind: (key: string, timestamp: number) => Promise<void>;
+  compact: (key: string, instructions?: string) => void;
+  changeModel: (
+    key: string,
+    provider: string,
+    modelId: string,
+  ) => Promise<void>;
+  changeThinkingLevel: (
+    key: string,
+    provider: string,
+    modelId: string,
+    level: ThinkingLevel,
+  ) => Promise<void>;
 }
 
 /** Session operations of the App: creating a session from the draft tab,
@@ -38,7 +71,7 @@ export interface UseSessionActionsOptions {
  * and updating a model's thinking level (a per-model server setting that
  * every view of the same peer+model reflects). */
 export function useSessionActions(
-  { setViews, setViewError, activeTab, onCreated }: UseSessionActionsOptions,
+  { setViews, setViewError, onCreated }: UseSessionActionsOptions,
 ) {
   // Serial number for model switches: a stale response is discarded.
   const modelChangeSeq = useRef(0);
@@ -188,14 +221,17 @@ export function useSessionActions(
   /** The thinking level is a per-model setting on the owning server:
    * update the views of every open session on the same peer that uses
    * that model so the control stays in sync. The failure surfaces on the
-   * active tab's view (the control belongs to the open session). */
+   * view of the session whose control was used (`key`) — the caller knows
+   * it, so this callback does not depend on which tab is on screen (every
+   * tab's pane stays mounted, see components/SessionPane). */
   const changeThinkingLevel = useCallback(
     async (
+      key: string,
       provider: string,
       modelId: string,
       level: ThinkingLevel,
     ) => {
-      const { peerId } = activeTab ? splitTabKey(activeTab) : { peerId: "" };
+      const { peerId } = splitTabKey(key);
       try {
         const thinkingLevel = await setModelThinkingLevel(
           peerId,
@@ -213,10 +249,10 @@ export function useSessionActions(
           )
         );
       } catch (error) {
-        if (activeTab) setViewError(activeTab, error);
+        setViewError(key, error);
       }
     },
-    [activeTab, setViews, setViewError],
+    [setViews, setViewError],
   );
 
   return {
