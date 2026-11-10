@@ -1,7 +1,8 @@
 /**
  * The agent list: each row's second line (what the conversation last said),
- * the create form's optional fields, and the row's ⋮ menu — the only place an
- * agent can be edited or deleted from.
+ * the create form's optional fields, and the row's menu — the only place an
+ * agent can be edited or deleted from. The menu has no button now: the row
+ * itself carries it, on a right click or a held finger.
  */
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { renderToString } from "preact-render-to-string";
@@ -118,23 +119,35 @@ Deno.test("StellaSidebar: a working row that has said nothing yet stays one line
   assertStringIncludes(html, "stella-agent-dot");
 });
 
-Deno.test("StellaSidebar: a row's actions live behind its ⋮ menu", () => {
+Deno.test("StellaSidebar: the row itself is what opens its menu", () => {
   const html = render();
-  const at = html.indexOf("stella-agent-menu");
-  assert(at >= 0, "the row has no menu button");
-  const tag = html.slice(
-    html.lastIndexOf("<button", at),
-    html.indexOf(">", at),
-  );
-  // A menu, not an action: it says so to a screen reader, and it names the
-  // agent it belongs to (a list of identical ⋮ buttons is unusable read
-  // aloud).
-  assertStringIncludes(tag, 'aria-haspopup="menu"');
-  assertStringIncludes(tag, "Aide のメニュー");
-  // The row itself carries no destructive control: deleting is one click
-  // further in, behind the menu (the menu is closed here, so its own items
-  // are not in the markup at all).
+  // Regression: every row carried a ⋮ beside the name, drawn on hover and
+  // always on touch. It competed with the name for attention, and the row's
+  // two verbs (edit, delete) are the browser's context-menu verbs already.
+  assertEquals(html.includes("stella-agent-menu"), false);
+  assertEquals(html.includes("のメニュー"), false);
+  // The row still carries no destructive control of its own: deleting is
+  // behind the menu, which is closed here and so not in the markup at all.
   assertEquals(html.includes(">削除<"), false);
+
+  const source = Deno.readTextFileSync(
+    new URL("./StellaSidebar.tsx", import.meta.url),
+  );
+  // A mouse's right click opens it...
+  assertStringIncludes(source, "onContextMenu=");
+  // ...and a phone, which has no right click, holds the row instead. A press
+  // shorter than the wait is still a tap, so it opens the conversation as it
+  // always did.
+  assertStringIncludes(source, "onPointerDown=");
+  assertStringIncludes(source, "LONG_PRESS_MS");
+  assertStringIncludes(source, 'event.pointerType === "mouse"');
+  // The click a lifting finger still sends ends that press: without this it
+  // would open the conversation under the menu the press just opened.
+  assertStringIncludes(source, "onClickCapture=");
+  // A keyboard has neither gesture; its menu key and Shift+F10 open the same
+  // menu on the row.
+  assertStringIncludes(source, 'event.key === "ContextMenu"');
+  assertStringIncludes(source, 'event.key === "F10"');
 });
 
 Deno.test("StellaSidebar: the empty list is not shown while it is being read", () => {

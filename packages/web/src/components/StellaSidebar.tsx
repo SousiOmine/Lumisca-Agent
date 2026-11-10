@@ -1,6 +1,5 @@
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import {
-  IconDotsVertical,
   IconPencil,
   IconPlus,
   IconRefresh,
@@ -68,6 +67,15 @@ interface MenuAnchor {
  * of the screen still reads as a floating surface (the tab menu uses the
  * same value). */
 const MENU_MARGIN = 8;
+
+/** How long a fingertip stays down before the row's menu opens. Shorter is a
+ * tap, and a tap opens the conversation; the platforms' own long press is
+ * about half a second, so this is the same gesture the reader knows. */
+const LONG_PRESS_MS = 500;
+
+/** How far a finger may travel during that wait and still be the same press.
+ * A finger that moves is scrolling the list, not holding the row. */
+const LONG_PRESS_SLOP_PX = 10;
 
 /** The example jobs the create dialog offers.
  *
@@ -168,6 +176,20 @@ export function StellaSidebar(
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  /** The press a fingertip is holding, while it is still a candidate for the
+   * long press: whose row it is, where it went down, and the timer. */
+  const press = useRef<
+    {
+      agent: StellaAgentSummary;
+      x: number;
+      y: number;
+      timer: ReturnType<typeof setTimeout>;
+    } | null
+  >(null);
+  /** Set when a long press opened the menu. The click a lifting finger still
+   * sends is the end of that press, not a second act, and must not open the
+   * conversation under the menu. */
+  const pressOpenedMenu = useRef(false);
   /** Where the menu is drawn, after it was measured (see MENU_MARGIN). Starts
    * at the point it was opened from and is corrected on the next frame. */
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
@@ -213,6 +235,14 @@ export function StellaSidebar(
   useClickOutside(menuRef, () => setMenu(null), menu !== null, {
     onScroll: true,
   });
+
+  // A finger can still be down when the list goes away (the reader opens an
+  // agent, the panel unmounts): the timer must not open a menu for a row
+  // that is no longer drawn.
+  useEffect(() => () => {
+    const current = press.current;
+    if (current !== null) clearTimeout(current.timer);
+  }, []);
 
   const resetForm = () => {
     setCreating(false);
@@ -282,40 +312,74 @@ export function StellaSidebar(
     });
   };
 
-  /** Open a row's menu under its own ⋮ button. The position is read from the
-   * button at click time: the list scrolls, so where the row is now is the
-   * only useful answer (and a menu placed in CSS would be clipped by the
-   * scrolling list it lives in). */
-  const openMenu = (
-    agent: StellaAgentSummary,
-    button: HTMLButtonElement,
-  ) => {
-    if (menu?.agent.id === agent.id) {
-      setMenu(null);
-      return;
-    }
-    const rect = button.getBoundingClientRect();
-    setMenu({
-      agent,
-      x: rect.left,
-      top: rect.bottom + 4,
-    });
+  /** Open a row's menu along the row itself. This is where a keyboard's menu
+   * key lands (Shift+F10 too): it has no pointer of its own, and the row's
+   * left edge under the name is the place the reader is looking at. */
+  const openMenuOnRow = (agent: StellaAgentSummary, row: HTMLElement) => {
+    const rect = row.getBoundingClientRect();
+    setMenu({ agent, x: rect.left + 8, top: rect.bottom });
   };
 
-  /** The same menu from a right click on the row, at the pointer. A row's two
+  /** The menu from a right click on the row, at the pointer. A row's two
    * verbs (edit, delete) are the browser's context-menu verbs too, and a
-   * right click is where a reader looks for them; the ⋮ button stays for
-   * touch, where there is no right click. */
-  const openMenuAt = (
-    agent: StellaAgentSummary,
-    event: MouseEvent,
-  ) => {
+   * right click is where a reader looks for them. */
+  const openMenuAt = (agent: StellaAgentSummary, event: MouseEvent) => {
     event.preventDefault();
-    setMenu({
-      agent,
-      x: event.clientX,
-      top: event.clientY,
-    });
+    // A keyboard's menu key arrives as this event with no pointer: both
+    // coordinates are 0, which is the window's corner. The row answers
+    // instead, the same as Shift+F10 (see onKeyDown below).
+    if (event.clientX === 0 && event.clientY === 0) {
+      const row = event.currentTarget;
+      if (row instanceof HTMLElement) openMenuOnRow(agent, row);
+      return;
+    }
+    setMenu({ agent, x: event.clientX, top: event.clientY });
+  };
+
+  /** Stop watching a press: its finger lifted, was cancelled, or moved far
+   * enough to be scrolling. */
+  const endPress = () => {
+    const current = press.current;
+    if (current !== null) clearTimeout(current.timer);
+    press.current = null;
+  };
+
+  /** A fingertip has no right click, so the row's menu opens on a held press
+   * — the same menu, at the same point, on the input a phone has. A mouse is
+   * not watched: its right click already does this, and watching every click
+   * would put a timer under the pointer's normal use. */
+  const startPress = (agent: StellaAgentSummary, event: PointerEvent) => {
+    // A press that is not followed by a swallowed click (a finger cancelled
+    // before it lifted) must not eat the next one.
+    pressOpenedMenu.current = false;
+    if (event.pointerType === "mouse") return;
+    endPress();
+    const x = event.clientX;
+    const y = event.clientY;
+    const timer = setTimeout(() => {
+      press.current = null;
+      pressOpenedMenu.current = true;
+      setMenu({ agent, x, top: y });
+    }, LONG_PRESS_MS);
+    press.current = { agent, x, y, timer };
+  };
+
+  const movePress = (event: PointerEvent) => {
+    const current = press.current;
+    if (current === null) return;
+    if (
+      Math.abs(event.clientX - current.x) > LONG_PRESS_SLOP_PX ||
+      Math.abs(event.clientY - current.y) > LONG_PRESS_SLOP_PX
+    ) endPress();
+  };
+
+  /** The click that ends a long press: swallow it so the conversation does
+   * not open underneath the menu the press just opened. */
+  const swallowPressClick = (event: MouseEvent) => {
+    if (!pressOpenedMenu.current) return;
+    pressOpenedMenu.current = false;
+    event.preventDefault();
+    event.stopPropagation();
   };
 
   return (
@@ -352,6 +416,24 @@ export function StellaSidebar(
             className={`stella-agent${agent.id === activeId ? " active" : ""}`}
             data-enter={entering.has(agent.id) || undefined}
             onContextMenu={(event) => openMenuAt(agent, event)}
+            onPointerDown={(event) => startPress(agent, event)}
+            onPointerMove={movePress}
+            onPointerUp={endPress}
+            onPointerCancel={endPress}
+            onPointerLeave={endPress}
+            onClickCapture={swallowPressClick}
+            onKeyDown={(event) => {
+              // The browser's own context-menu keys. The menu is a popover
+              // now, not a button on the row, so this is how a keyboard
+              // reaches it.
+              if (
+                event.key === "ContextMenu" ||
+                (event.shiftKey && event.key === "F10")
+              ) {
+                event.preventDefault();
+                openMenuOnRow(agent, event.currentTarget);
+              }
+            }}
           >
             {
               /* The picture is part of the row's name button, not a control of
@@ -417,17 +499,6 @@ export function StellaSidebar(
               {agent.id === activeId && running && (
                 <span className="stella-agent-dot" aria-hidden="true" />
               )}
-            </button>
-            <button
-              type="button"
-              className="stella-agent-menu"
-              onClick={(event) => openMenu(agent, event.currentTarget)}
-              title={t("chat.stella.agents.menu", { name: agent.name })}
-              aria-label={t("chat.stella.agents.menu", { name: agent.name })}
-              aria-haspopup="menu"
-              aria-expanded={menu?.agent.id === agent.id}
-            >
-              <IconDotsVertical size={14} />
             </button>
           </div>
         ))}

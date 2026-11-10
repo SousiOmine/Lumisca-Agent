@@ -320,14 +320,10 @@ export const chat = {
   },
   "chat.stella.agents.create": { ja: "作成", en: "Create" },
   "chat.stella.agents.creating": { ja: "作成中…", en: "Creating…" },
-  /** The row's menu (the ⋮ on an agent), and the dialog it opens. What can be
-   * changed is what the user chose: the label, the picture and the model. The
-   * role is fixed at creation (it is the agent's working instruction), so
-   * this dialog deliberately has no field for it. */
-  "chat.stella.agents.menu": {
-    ja: "{name} のメニュー",
-    en: "Menu for {name}",
-  },
+  /** The dialog a row's menu opens. What can be changed is what the user
+   * chose: the label, the picture and the model. The role is fixed at
+   * creation (it is the agent's working instruction), so this dialog
+   * deliberately has no field for it. */
   "chat.stella.agents.edit": {
     ja: "名前・アイコン・モデルを編集",
     en: "Edit name, icon and model",

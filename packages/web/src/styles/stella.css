@@ -254,6 +254,10 @@
    * blinking on and off under the pointer. Colour only: a row that moved
    * would push the names under the eye. */
   transition: background-color var(--lum-dur-fast) var(--lum-ease-out);
+  /* A held press belongs to the row: it opens the row's menu, so it must not
+   * also start the browser's selection or its own menu on a phone. */
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 /* A row that just appeared (an agent created here, or one the agent itself
@@ -358,49 +362,6 @@
   border-radius: 50%;
   background: var(--accent);
   animation: pulse 1.2s ease-in-out infinite;
-}
-
-/* The row's menu. It appears on hover (and always on touch, see the media
- * query below): a ⋮ on every row would compete with the name for attention,
- * and what it holds — edit, delete — is not what the list is for. The one
- * exception is the open menu's own row, which keeps its button drawn while
- * the menu it anchors is on screen (`.app-menu` floats apart from the row, so
- * a vanished button would look like the menu belongs to nothing). Keyboard
- * focus reveals it the way hover does: a button held at opacity 0 is not
- * drawn, so the reader would tab onto nothing. */
-.stella-agent-menu {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  margin-right: 4px;
-  border: none;
-  border-radius: var(--radius-pill);
-  background: none;
-  color: var(--text-dim);
-  opacity: 0;
-  cursor: pointer;
-  transition: opacity var(--lum-dur-fast) var(--lum-ease-out);
-}
-
-.stella-agent:hover .stella-agent-menu,
-.stella-agent:focus-within .stella-agent-menu,
-.stella-agent-menu:focus-visible,
-.stella-agent-menu[aria-expanded="true"] {
-  opacity: 1;
-}
-
-.stella-agent-menu:hover {
-  background: var(--surface-3);
-  color: var(--text);
-}
-
-@media (hover: none) {
-  .stella-agent-menu {
-    opacity: 1;
-  }
 }
 
 /* --- stella: the conversation -------------------------------------------- */
@@ -1296,11 +1257,6 @@
     height: 40px;
     margin-left: -8px;
   }
-
-  .stella-agent-menu {
-    width: 32px;
-    height: 32px;
-  }
 }
 
 /* ---- phone ---------------------------------------------------------------- */
@@ -1345,10 +1301,5 @@
   .stella-screen-toggle {
     width: 36px;
     height: 36px;
-  }
-
-  .stella-agent-menu {
-    width: 34px;
-    height: 34px;
   }
 }
