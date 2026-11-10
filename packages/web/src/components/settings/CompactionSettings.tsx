@@ -158,6 +158,10 @@ export function CompactionSettings() {
         }}
         onBlur={(e) => commitTokens(key, e.currentTarget.value, current, apply)}
         onKeyDown={(e) => {
+          // Enter while an IME is composing confirms the conversion; leaving
+          // the field then would commit a half-typed number. `isComposing` is
+          // the spec's property, `keyCode === 229` what some IMEs report.
+          if (e.isComposing || e.keyCode === 229) return;
           if (e.key === "Enter") e.currentTarget.blur();
         }}
       />

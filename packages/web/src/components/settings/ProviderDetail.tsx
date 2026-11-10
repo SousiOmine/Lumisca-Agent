@@ -365,6 +365,9 @@ export function ProviderDetail({
       onChange: (event: TargetedEvent<HTMLInputElement, Event>) =>
         setPromptValue(event.currentTarget.value),
       onKeyDown: (event: TargetedKeyboardEvent<HTMLInputElement>) => {
+        // Enter while an IME is composing confirms the conversion, not the
+        // prompt: submitting then would send half-typed text to the flow.
+        if (event.isComposing || event.keyCode === 229) return;
         if (event.key === "Enter") submit();
       },
       style: { flex: 1 },
