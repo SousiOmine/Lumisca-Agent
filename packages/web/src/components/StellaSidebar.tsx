@@ -321,7 +321,6 @@ export function StellaSidebar(
   return (
     <aside className="stella-sidebar">
       <div className="stella-sidebar-header">
-        <span>{t("chat.stella.agents.title")}</span>
         <button
           type="button"
           className="icon-btn"

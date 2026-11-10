@@ -15,10 +15,6 @@ export interface StellaTitleBarHeaderProps {
    * itself is not drawn here: a reason can be a paragraph, and this strip is
    * one line tall (StellaView has the room for it, and says it there). */
   machineRunning: boolean;
-  /** What the header says when it is not about one agent (nothing picked
-   * yet): the app's name. The agent list names itself (StellaSidebar's own
-   * header), so putting its title here as well printed it twice. */
-  label: string;
   /** Return to the list. Present only at phone widths, where the list and the
    * conversation are two screens instead of two columns. */
   onBack?: () => void;
@@ -43,6 +39,11 @@ export interface StellaTitleBarHeaderProps {
  * is the answer to "whose conversation is this", which is otherwise a second
  * strip inside the sheet saying the same thing one line lower.
  *
+ * With nothing picked there is nothing to say: the app's name stood there
+ * while the list was on screen, and a window already framed as Lumisca Agent
+ * was naming itself twice. The bar is a drag surface and the controls' row
+ * then, not a caption.
+ *
  * Moving it up buys the conversation a row of height and puts the agent's
  * face and name at the top of the window, where a message app puts them. The
  * strip below is gone rather than shortened: two places saying one name is
@@ -57,7 +58,6 @@ export function StellaTitleBarHeader(
   {
     agent,
     machineRunning,
-    label,
     onBack,
     onEditAgent,
     onToggleScreen,
@@ -87,27 +87,25 @@ export function StellaTitleBarHeader(
           <IconArrowLeft size={18} />
         </button>
       )}
-      {agent === null
-        ? <span className="stella-titlebar-name">{label}</span>
-        : (
-          <>
-            <button
-              type="button"
-              className="stella-titlebar-avatar"
-              onClick={onEditAgent}
-              title={t("chat.stella.agents.edit")}
-              aria-label={t("chat.stella.agents.edit")}
-            >
-              <AgentAvatar
-                agentId={agent.id}
-                name={agent.name}
-                icon={agent.icon}
-                size={22}
-              />
-            </button>
-            <h1 className="stella-titlebar-name">{agent.name}</h1>
-          </>
-        )}
+      {agent !== null && (
+        <>
+          <button
+            type="button"
+            className="stella-titlebar-avatar"
+            onClick={onEditAgent}
+            title={t("chat.stella.agents.edit")}
+            aria-label={t("chat.stella.agents.edit")}
+          >
+            <AgentAvatar
+              agentId={agent.id}
+              name={agent.name}
+              icon={agent.icon}
+              size={22}
+            />
+          </button>
+          <h1 className="stella-titlebar-name">{agent.name}</h1>
+        </>
+      )}
       {showToggle && (
         <button
           type="button"

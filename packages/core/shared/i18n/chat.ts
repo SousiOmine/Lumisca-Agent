@@ -213,14 +213,6 @@ export const chat = {
     en: "Develop with this machine's files and shell",
   },
   "chat.modeSelect.stella.title": { ja: "stella mode", en: "stella mode" },
-  /** The title bar's label for a stella conversation. Not the mode's name:
-   * what the window shows is the app, not which mode was picked — the mode is
-   * already the only thing on screen, and "stella mode" in the corner names a
-   * setting the reader chose once rather than the program they are in. */
-  "chat.stella.titleBarLabel": {
-    ja: "Lumisca Agent",
-    en: "Lumisca Agent",
-  },
   "chat.modeSelect.stella.description": {
     ja: "シームレスな開発体験",
     en: "A seamless development experience",
@@ -258,7 +250,6 @@ export const chat = {
     ja: "初回セットアップを行っています（数分かかります）…",
     en: "Preparing the machine for the first time (this takes a few minutes)…",
   },
-  "chat.stella.agents.title": { ja: "エージェント", en: "Agents" },
   /** The conversation header's back button on a phone, where the list and
    * the conversation are two screens rather than two columns. */
   "chat.stella.backToList": {

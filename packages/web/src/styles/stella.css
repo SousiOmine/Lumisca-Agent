@@ -188,15 +188,15 @@
   transition: left var(--lum-dur-slow) var(--lum-ease-in-out);
 }
 
+/* The list's one control. It had a heading beside it ("エージェント"), which
+ * named what the rows already say by being the only thing on the screen; the
+ * heading is gone and the button keeps the row it sat on, at the right edge
+ * where a list's "add" lives. */
 .stella-sidebar-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   padding: 2px 2px 2px 8px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--text-dim);
 }
 
 .stella-sidebar-list {
@@ -1227,7 +1227,6 @@
 
   .stella-sidebar-header {
     padding: 10px 8px 8px;
-    font-size: 12px;
   }
 
   /* The face is what identifies a row at this size. */
@@ -1328,7 +1327,6 @@
 
   .stella-sidebar-header {
     padding: 12px 10px 10px;
-    font-size: 13px;
   }
 
   .stella-msg .stella-msg-body {

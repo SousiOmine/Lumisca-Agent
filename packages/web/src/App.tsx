@@ -644,7 +644,6 @@ export function App({ initialData }: AppProps): ReactElement {
               <StellaTitleBarHeader
                 agent={stellaAgent ?? null}
                 machineRunning={machineStatus?.state === "running"}
-                label={t("chat.stella.titleBarLabel")}
                 onBack={stellaSingleScreen && stellaAgentId !== null
                   ? goToStellaList
                   : undefined}

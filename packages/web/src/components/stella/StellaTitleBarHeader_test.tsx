@@ -20,7 +20,6 @@ function render(
   overrides: {
     agent?: StellaAgentSummary | null;
     machineRunning?: boolean;
-    label?: string;
     onBack?: () => void;
     onEditAgent?: () => void;
     onToggleScreen?: () => void;
@@ -32,7 +31,6 @@ function render(
     createElement(StellaTitleBarHeader, {
       agent: overrides.agent === undefined ? agent : overrides.agent,
       machineRunning: overrides.machineRunning ?? true,
-      label: overrides.label ?? "Lumisca Agent",
       onEditAgent: overrides.onEditAgent ?? (() => {}),
       ...(overrides.onBack === undefined ? {} : { onBack: overrides.onBack }),
       ...(overrides.onToggleScreen === undefined
@@ -65,11 +63,14 @@ Deno.test("StellaTitleBarHeader: the open agent is the title", () => {
   assertEquals(html.includes("Lumisca Agent"), false);
 });
 
-Deno.test("StellaTitleBarHeader: without an agent it names where the reader is", () => {
+Deno.test("StellaTitleBarHeader: with nothing picked the strip names nothing", () => {
   // The phone's list screen and the first run both have no open agent. The
-  // strip still says what the window shows, and there is no face to edit.
-  const html = render({ agent: null, label: "エージェント" });
-  assertStringIncludes(html, ">エージェント</span>");
+  // app's own name stood here, and a window already framed as Lumisca Agent
+  // was naming itself twice; the strip is a drag surface and the controls'
+  // row then, not a caption. There is no face to edit, either.
+  const html = render({ agent: null });
+  assertEquals(html.includes("stella-titlebar-name"), false);
+  assertEquals(html.includes("Lumisca Agent"), false);
   assertEquals(html.includes("stella-titlebar-avatar"), false);
   assertEquals(html.includes("stella-back"), false);
 });
