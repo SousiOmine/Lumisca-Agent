@@ -4,9 +4,12 @@
 
 /* ---- chat --------------------------------------------------------------- */
 
-/* The transcript is a sheet lying on the canvas: a surface, a hairline
- * border, a low shadow and the largest radius step. The margin is what puts
- * the canvas underneath it (--app-inset, zero on a phone). */
+/* The code-mode face is the window's own paper, not a sheet floating on the
+ * canvas: it runs to the left, right and bottom edges, so there is no corner
+ * to round and no shadow to lift it (both would only draw the window's edge a
+ * second time). Its top edge still meets the canvas under the tab bar, and
+ * that strip is where the surface begins — a hairline is the whole shape this
+ * edge needs. */
 .chat {
   flex: 1;
   display: flex;
@@ -16,11 +19,12 @@
    * so .chat grows past the viewport and the page scrolls instead of
    * .chat-scroll. */
   min-height: 0;
-  margin: var(--app-inset);
+  margin: var(--chat-top-gap) 0 0;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-panel);
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  box-shadow: none;
   overflow: hidden;
 }
 
@@ -891,15 +895,15 @@
   }
 }
 
-/* Phone: the sheet becomes the screen — the canvas margin, border, radius
- * and shadow all go, and the two things that would otherwise overflow it (a
- * wide table, a large image) stay inside the column. */
+/* Phone: the tab bar sits directly on the sheet — a strip of canvas above it
+ * would be a seam in a screen that is otherwise the whole surface. The base
+ * rule already drops the corners and the shadow; only the gap and the
+ * hairline are left to remove, and the two things that would otherwise
+ * overflow the sheet (a wide table, a large image) stay inside the column. */
 @media (max-width: 600px) {
   .chat {
     margin: 0;
     border: none;
-    border-radius: 0;
-    box-shadow: none;
   }
 
   .chat-column {

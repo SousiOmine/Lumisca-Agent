@@ -41,10 +41,11 @@
  *                   at a time where a layout has two (stella's list and
  *                   conversation, settings' list and page).
  *   600px  phone: one column; full-screen modals; the progress rows above
- *                the composer keep to a smaller height cap; the floating
- *                chat pane gives up its margin and lands edge to edge
- *                (--app-inset); text takes one step up and the controls a
- *                thumb uses grow to a fingertip.
+ *                the composer keep to a smaller height cap; the sheets that
+ *                float on a wider screen land edge to edge (stella's panes
+ *                and the banners drop --app-inset, the chat drops its top
+ *                gap); text takes one step up and the controls a thumb uses
+ *                grow to a fingertip.
  *
  * Touch ergonomics follow the input device, not the width
  * (`@media (hover: none), (pointer: coarse)`): hover-only affordances stay
@@ -71,7 +72,7 @@
    *   sm    rows: menu items, list entries, tabs
    *   md    controls and small panes: inputs, cards, popovers
    *   lg    dialogs and the floating cards inside the chat
-   *   xl    the composer, a user's message, the chat pane
+   *   xl    the composer, a user's message
    *   pill  buttons, tags, toggles: anything read as a capsule */
   --radius-xs: 8px;
   --radius-sm: 12px;
@@ -80,9 +81,18 @@
   --radius-xl: 26px;
   --radius-pill: 999px;
 
-  /* The margin a floating pane leaves around itself (the chat pane, the
-   * stella pane). Zero on a phone, where the screen belongs to the pane. */
+  /* The margin a floating pane leaves around itself (stella's panes, the
+   * banners above the chat, the tab bar's cards). Zero on a phone, where the
+   * screen belongs to the pane. The code-mode sheet is not one of them: it is
+   * the window's own paper, flush to the left, right and bottom edges, and
+   * only its top edge keeps a strip of canvas (--chat-top-gap). */
   --app-inset: 12px;
+
+  /* The canvas between the tab bar and the code-mode sheet. A tab card keeps
+   * 4px of its own below it inside the bar, so the gap the eye reads is 8px —
+   * half of the 16px the sheet's former 12px margin left under the card. The
+   * phone block clears it: there the sheet is the screen. */
+  --chat-top-gap: 4px;
 
   /* The square of the paperclip beside the composer's field. The field draws
    * its first line in the middle of this square (composer.css), so one number

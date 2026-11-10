@@ -10,8 +10,8 @@
  * right, and its empty area is the drag handle (see TitleBar.tsx).
  *
  * The strip and the tab bar paint the canvas, not a surface: the chat below
- * is a raised sheet, and painting the chrome as a second surface would put
- * two faces at the same level with a line between them. */
+ * is the surface, and painting the chrome as a second one would put two
+ * faces at the same level with a line between them. */
 
 .titlebar {
   display: flex;
@@ -262,11 +262,11 @@
   display: flex;
   align-items: stretch;
   gap: 4px;
-  /* A tab is a card on the canvas (radius, hairline, shadow), so its edge
-   * belongs where the chat sheet's is: the bar insets its cards by the same
-   * margin every floating surface below uses. The 600px block further down
-   * keeps its own 4px, because there the sheet is edge to edge and only the
-   * card needs air. */
+  /* A tab is a card on the canvas (radius, hairline, shadow), and the canvas
+   * margin is what holds it off the window's edges: the sheet below runs edge
+   * to edge, so the card has no edge there to line up with and keeps the air
+   * the other floating surfaces use. The 600px block further down keeps its
+   * own 4px, because there only the card needs air. */
   padding: 0 var(--app-inset);
   background: var(--bg);
   height: var(--tab-height);

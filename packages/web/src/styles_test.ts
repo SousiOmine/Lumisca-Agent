@@ -1141,25 +1141,33 @@ Deno.test("the window controls keep the right edge of the title bar", async () =
   assertEquals(tabbar.get("flex"), "1");
 });
 
-Deno.test("the tab bar insets its cards like the sheet below it", async () => {
-  // Regression: the bar kept a gutter of its own after the tabs became cards
-  // on the canvas, so the selected tab's left edge sat short of the chat
-  // sheet's — the one surface directly under it. Card and sheet take the same
-  // margin, so the two edges are one line.
-  const chrome = await Deno.readTextFile(
-    new URL("./styles/chrome.css", import.meta.url),
-  );
+Deno.test("the code-mode sheet is the window's paper, with one edge of canvas", async () => {
+  // The sheet used to float on the canvas on all four sides: a margin, a
+  // border, the largest radius and a shadow. It runs to the window's left,
+  // right and bottom edges now, so only the top edge has a shape to draw — a
+  // hairline under the strip of canvas the tab bar leaves. Rounding or
+  // shadowing it again would draw the window's own edge a second time.
   const chat = await Deno.readTextFile(
     new URL("./styles/chat.css", import.meta.url),
+  );
+  const sheet = declarations(cssRules(chat), ".chat");
+  assertEquals(sheet.get("margin"), "var(--chat-top-gap) 0 0");
+  assertEquals(sheet.get("border"), "0");
+  assertEquals(sheet.get("border-top"), "1px solid var(--border)");
+  assertEquals(sheet.get("border-radius"), "0");
+  assertEquals(sheet.get("box-shadow"), "none");
+});
+
+Deno.test("the tab bar keeps its cards off the window's edges", async () => {
+  // The bar paints the canvas, so its cards keep the canvas margin even though
+  // the sheet below is the window's edge and offers no line to line up with. A
+  // card written to the edge would read as a tab strip cut in half.
+  const chrome = await Deno.readTextFile(
+    new URL("./styles/chrome.css", import.meta.url),
   );
   assertEquals(
     declarations(cssRules(chrome), ".tabbar").get("padding"),
     "0 var(--app-inset)",
-  );
-  assertEquals(
-    declarations(cssRules(chat), ".chat").get("margin"),
-    "var(--app-inset)",
-    "the reference edge the tab bar lines up with",
   );
 });
 
