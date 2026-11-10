@@ -78,10 +78,11 @@ Deno.test("StellaView: the pane opens only when the machine can show it", () => 
   // and with it no VNC connection (StellaPane connects on mount).
   assertEquals(render().includes("stella-pane"), false);
   // The choice is the caller's, so opening it has to be enough to draw it.
-  assertStringIncludes(
-    render({ screenOpen: true }),
-    "stella-pane",
-  );
+  const opened = render({ screenOpen: true });
+  assertStringIncludes(opened, "stella-pane");
+  // Watching is not driving: the clipboard controls belong to the hand-over
+  // (the server refuses a write outside it, and the buttons would be dead).
+  assertEquals(opened.includes("stella-handover-clipboard"), false);
   // A machine that is not running has no picture to show, whatever the
   // reader asked for: the toggle is not drawn in that state (see
   // StellaTitleBarHeader), and a pane here would be an empty rectangle.
@@ -111,6 +112,9 @@ Deno.test("StellaView: a hand-over draws the pane whatever the caller chose", ()
   // The bar says when the wait ends by itself: a user who returns after the
   // deadline finds the run already moving and needs to have been told (#36).
   assertStringIncludes(html, "stella-handover-deadline");
+  // The screen is the user's, and so is its clipboard: the two words are
+  // drawn with the hand-over.
+  assertStringIncludes(html, "stella-handover-clipboard");
 });
 
 Deno.test("StellaView: a failed send leaves the conversation on screen", () => {

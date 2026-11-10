@@ -220,6 +220,11 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
   - 契約値は `contract.ts` の `VM_DBUS_ADDRESS` / `VM_A11Y_GSETTINGS_KEY` / `VM_A11Y_HELPER` で、`verifyImageContract` が 1 回の `podman exec` で検査し、欠ければ起動を落とします。`containerFilesDigest` はサブディレクトリも含めます。
   - スクロールは X11 のホイールボタン（4 上・5 下・6 左・7 右）で、正の値で 5 を送ります（`VM_SCROLL_NOTCH` = 100、上限 20）。
 - **受け渡し**: 人が必要な手順は `vm_ask_user` で待ちます（`packages/core/vm/handover.ts`）。待機中は画面ペインが操作可能になり、エージェントは止まっています。待ちには 15 分の期限があり（`HANDOVER_TIMEOUT_MS`）、過ぎると `handover_end` でペインを閉じてから「利用者が来なかった」をツールの結果として返します（実行は止めません。待ち続けるとルーチンが順番待ちで止まります）。期限は `handover` イベントとスナップショットの `expiresAt` に載せ、開始は通知の対象です。待ちを解く経路を増やすときは、`cancelAll` とイベントの後始末、タイマーの片付けも確認してください。
+- **クリップボードは VNC を通さない**: 受け渡し中は、この PC と画面のあいだで文字が往復します。x11vnc の cut text は ISO 8859-1 で Extended Clipboard にも対応していないため、日本語は `?` になります。文字は `GET/POST /api/stella/conversations/:agentId/clipboard` でサーバーを通り、VM の中では `xclip` が CLIPBOARD 選択を読み書きします（`packages/core/vm/clipboard.ts`）。noVNC に残るのは、選択が変わったことを知らせる `clipboard` イベント（本文はラテン 1 の代役なので使わない）と、`Ctrl+V`（`Cmd+V` / `Ctrl+Shift+V`）を画面へ送る `sendKey` だけです。
+  - **書き込みだけが受け渡しを要求する**: `POST` は `getPendingHandover` を確かめ、実行中の画面のクリップボードを変えません。読み取りは変えないので確かめません（待機の終わりと競合しても害がないためです）。
+  - **文字は stdin で渡す**: 引数にすると VM 内のプロセス一覧から読めます（パスワードが入りえます）。書いた直後に読み戻して一致を確かめてください——`xclip -i` は fork して選択の所有者として残るので、そこで失敗すれば画面へ貼る前に分かります。
+  - **イメージに `xclip` が要る**: `container/Containerfile` が持っています。足した／変えたときは `containerFilesDigest` が変わるので、次の起動でイメージが自動で再ビルドされます（`/home/agent` は退避・復元）。
+  - **画面に出すのは「コピー」「ペースト」の 2 語だけ**: 受け渡しの帯の小さなボタンで、自動の経路と同じことをする（コピー＝画面 → この PC、ペースト＝この PC → 画面）。成功は見れば分かるので文を足さず、失敗のときだけボタンの隣に 1 文を出す。入力欄やパネルは置きません。
 
 ### 履歴と自動実行
 

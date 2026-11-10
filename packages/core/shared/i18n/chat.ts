@@ -486,6 +486,48 @@ export const chat = {
     ja: "この待機は {time} までです（過ぎるとエージェントは自動で再開します）",
     en: "This wait ends at {time} (the agent resumes on its own)",
   },
+  /** The clipboard the user and the machine share while the user drives the
+   * screen. Two words in the hand-over bar: what worked is visible on its own
+   * (the text appears where it was pasted, or on this PC's clipboard), so the
+   * rest are short failures. */
+  "chat.stella.handover.clipboard.copy": { ja: "コピー", en: "Copy" },
+  "chat.stella.handover.clipboard.paste": { ja: "ペースト", en: "Paste" },
+  "chat.stella.handover.clipboard.copyHint": {
+    ja: "画面のコピーをこの PC へ",
+    en: "Copy the screen's text to this PC",
+  },
+  "chat.stella.handover.clipboard.pasteHint": {
+    ja: "この PC のコピーを画面へ",
+    en: "Paste this PC's copy into the screen",
+  },
+  "chat.stella.handover.clipboard.copied": {
+    ja: "コピーしました",
+    en: "Copied",
+  },
+  "chat.stella.handover.clipboard.copyNothing": {
+    ja: "画面ではまだ何もコピーされていません",
+    en: "Nothing has been copied on the screen yet",
+  },
+  "chat.stella.handover.clipboard.copyFailed": {
+    ja: "この PC にコピーできませんでした",
+    en: "Could not copy it to this PC",
+  },
+  "chat.stella.handover.clipboard.copyError": {
+    ja: "画面のコピーを読めませんでした: {reason}",
+    en: "Could not read the screen's copy: {reason}",
+  },
+  "chat.stella.handover.clipboard.pasteEmpty": {
+    ja: "この PC のコピーは空でした",
+    en: "This PC's clipboard was empty",
+  },
+  "chat.stella.handover.clipboard.pasteReadFailed": {
+    ja: "この PC のコピーを読めませんでした",
+    en: "Could not read this PC's clipboard",
+  },
+  "chat.stella.handover.clipboard.pasteFailed": {
+    ja: "画面へ貼り付けられませんでした: {reason}",
+    en: "Could not paste it into the screen: {reason}",
+  },
   "chat.composer.image.alt": { ja: "添付画像", en: "Attachment" },
   "chat.stella.machine.screenFailed": {
     ja: "画面に接続できませんでした: {reason}",

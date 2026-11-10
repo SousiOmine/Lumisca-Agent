@@ -86,6 +86,22 @@ export const stellaApi = {
       body: JSON.stringify({ note, toolCallId }),
     }),
 
+  /** The text on the machine's clipboard (empty when nothing was copied
+   * there). The screen pane reads it while the user drives the screen; the
+   * VNC connection cannot carry the text (see core/vm/clipboard.ts). */
+  readClipboard: (agentId: string) =>
+    request<{ text: string }>(conversationPath(agentId, "/clipboard"), {
+      method: "GET",
+    }),
+
+  /** Put text on the machine's clipboard, for the application the user is
+   * about to paste into. Only the hand-over accepts it. */
+  writeClipboard: (agentId: string, text: string) =>
+    request<{ ok: true }>(conversationPath(agentId, "/clipboard"), {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
+
   /** Rewind from a message onward (named by its timestamp). */
   rewind: (agentId: string, timestamp: number) =>
     request<{ ok: true }>(conversationPath(agentId, "/rewind"), {

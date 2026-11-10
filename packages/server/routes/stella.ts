@@ -154,6 +154,12 @@ export interface StellaApi {
     answers: AskAnswer[],
   ): void;
   finishHandover(sessionId: string, note: string, toolCallId?: string): void;
+  /** The text on the machine's clipboard (empty when nothing was copied
+   * there). The chat's screen pane reads and writes it while the user drives
+   * the screen; the VNC connection cannot carry the text (see
+   * vm/clipboard.ts). */
+  readStellaClipboard(sessionId: string): Promise<string>;
+  writeStellaClipboard(sessionId: string, text: string): Promise<void>;
   /** Subscribe to the core's event stream (the conversation's WS projects
    * from it; see stellaEventsOf). */
   subscribe(listener: (event: ClientEvent) => void): () => void;
@@ -575,6 +581,37 @@ export function stellaRoutes(core: StellaApi): Hono {
       note,
       typeof toolCallId === "string" ? toolCallId : undefined,
     );
+    return c.json({ ok: true });
+  });
+
+  /** The machine's clipboard, for the chat's screen pane.
+   *
+   * The pane cannot use the VNC connection for it: x11vnc speaks the standard
+   * RFB cut text, which is ISO 8859-1, so a Japanese message would arrive as
+   * question marks in either direction. The text crosses into the machine as
+   * one `xclip` call instead (see vm/clipboard.ts).
+   *
+   * WRITING needs the hand-over: while the agent works the screen is its own,
+   * and two people changing one clipboard is the same bug as two pointers.
+   * Reading does not: it returns what is already on the screen, and refusing
+   * it while a hand-over is ending would fail a request that changed nothing.
+   */
+  app.get("/stella/conversations/:agentId/clipboard", async (c) => {
+    const session = requireConversation(c.req.param("agentId")!);
+    const text = await core.readStellaClipboard(session.id);
+    return c.json({ text });
+  });
+
+  app.post("/stella/conversations/:agentId/clipboard", async (c) => {
+    const session = requireConversation(c.req.param("agentId")!);
+    if (core.getPendingHandover(session.id) === null) {
+      throw new AppError("The screen is not handed over to the user", 409);
+    }
+    const body = await parseBody<{ text?: unknown }>(c);
+    if (typeof body?.text !== "string") {
+      throw new AppError("text (string) is required", 400);
+    }
+    await core.writeStellaClipboard(session.id, body.text);
     return c.json({ ok: true });
   });
 

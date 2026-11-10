@@ -1108,6 +1108,29 @@
   color: var(--text-faint);
 }
 
+/* The two clipboard controls, inside the hand-over bar: a copy/paste pair
+ * needs no heading, and the bar is where the user is already reading. */
+.stella-handover-clipboard {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* What went wrong (or that a copy landed). It takes the rest of the row and
+ * wraps rather than pushing the buttons out of a narrow pane. */
+.stella-clipboard-note {
+  flex: 1 1 120px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+
+.stella-clipboard-note[data-tone="error"] {
+  color: var(--error);
+}
+
 .stella-handover-actions {
   display: flex;
   gap: 6px;

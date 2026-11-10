@@ -24,6 +24,8 @@ import {
   VmCommandRunner as VmCommandRunnerImpl,
 } from "../vm/shell.ts";
 import { createVmScreen } from "../vm/screen.ts";
+import { createVmClipboard } from "../vm/clipboard.ts";
+import type { VmClipboard } from "../vm/clipboard.ts";
 import { createVmTools } from "../vm/tools.ts";
 import { createVmLaunchTool } from "../vm/launcher.ts";
 import { createVmAskUserTool } from "../vm/ask-user.ts";
@@ -283,6 +285,43 @@ export class StellaMachineService {
   /** The hand-over hub of a session (created on first use). */
   private handoverFor(sessionId: string) {
     return this.deps.handovers.for(sessionId);
+  }
+
+  /** The machine's clipboard of one conversation (see vm/clipboard.ts).
+   *
+   * Built per call rather than kept on the runtime: it holds nothing between
+   * calls, and the chat's screen pane asks for it only while the user is at
+   * the screen. A selection inside the machine is the machine's own state, so
+   * this needs the machine to be reachable — a conversation whose machine was
+   * replaced between opens must not be answered from an old seam (the seam is
+   * rebuilt with the machine, see StellaMachine).
+   */
+  private clipboardOf(session: SessionInfo): VmClipboard {
+    if (session.stella !== true) {
+      throw new CoreError(
+        "Only a stella conversation has a machine clipboard",
+        "not_found",
+      );
+    }
+    const exec = this.deps.machine.exec();
+    if (exec === undefined) {
+      throw new CoreError(
+        "stella mode is not available: the virtual machine is not set up for this installation",
+        "unavailable",
+      );
+    }
+    return createVmClipboard({ exec });
+  }
+
+  /** The text on the machine's clipboard (empty when nothing was copied). */
+  async readClipboard(session: SessionInfo): Promise<string> {
+    return await this.clipboardOf(session).read();
+  }
+
+  /** Put `text` on the machine's clipboard, for the application the user is
+   * about to paste into. */
+  async writeClipboard(session: SessionInfo, text: string): Promise<void> {
+    await this.clipboardOf(session).write(text);
   }
 
   /** The runtime a stella session's tools run on, or undefined for every

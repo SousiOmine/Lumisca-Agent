@@ -18,6 +18,12 @@ ENV LANG=C.UTF-8
 # git and tmux are part of the working environment (the agent commits and
 # runs long jobs); the X stack is what a GUI program needs to exist at all.
 #
+# `xclip` is how the chat's screen pane hands text across to this machine:
+# while the user drives the screen the text they copied travels through the
+# server and is written onto the X CLIPBOARD selection here. The VNC connection
+# cannot carry it — x11vnc speaks the standard RFB cut text, which is ISO
+# 8859-1, so a Japanese message would arrive as question marks.
+#
 # `at-spi2-core` and `libglib2.0-bin` are the accessibility stack: the agent
 # reads and drives a program's widgets through AT-SPI (vm_find / vm_do)
 # instead of guessing at pixels. `libglib2.0-bin` carries `gsettings`, which
@@ -26,7 +32,7 @@ ENV LANG=C.UTF-8
 # Without these an app is invisible to the agent's semantic tools, so they
 # are part of the contract (vm/contract.ts) rather than an optional extra.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      xvfb x11-utils x11vnc openbox xdotool scrot imagemagick \
+      xvfb x11-utils x11vnc openbox xdotool scrot xclip imagemagick \
       websockify \
       xterm fonts-noto-cjk dbus-x11 \
       at-spi2-core libglib2.0-bin python3-pyatspi \

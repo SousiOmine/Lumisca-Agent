@@ -272,6 +272,7 @@ export function StellaView(
         <StellaPane
           running={machineRunning}
           vncPort={status?.vncPort ?? null}
+          agentId={agent?.id ?? null}
           handover={handover === null ? null : {
             toolCallId: handover.toolCallId,
             reason: handover.reason,

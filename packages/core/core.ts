@@ -1364,6 +1364,35 @@ export class LumiscaCore {
     agent.finishHandover(note, toolCallId);
   }
 
+  /** The text on the stella machine's clipboard (empty when nothing was
+   * copied there). The chat's screen pane reads it while the user drives the
+   * screen: the VNC connection cannot carry it, which is why it goes through
+   * the server (see vm/clipboard.ts). */
+  readStellaClipboard(sessionId: string): Promise<string> {
+    return this.services.stellaMachines.readClipboard(
+      this.requireSession(sessionId),
+    );
+  }
+
+  /** Put text on the stella machine's clipboard, for the application the user
+   * is about to paste into. */
+  async writeStellaClipboard(sessionId: string, text: string): Promise<void> {
+    await this.services.stellaMachines.writeClipboard(
+      this.requireSession(sessionId),
+      text,
+    );
+  }
+
+  /** One session row, or the same "not found" every id-addressed call
+   * answers. */
+  private requireSession(sessionId: string): SessionInfo {
+    const session = this.sessions.get(sessionId);
+    if (session === undefined) {
+      throw new CoreError(`Session not found: ${sessionId}`, "not_found");
+    }
+    return session;
+  }
+
   /**
    * The runtime a stella session's tools run on, or undefined for every
    * other session.
