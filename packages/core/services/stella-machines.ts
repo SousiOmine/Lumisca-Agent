@@ -77,6 +77,10 @@ export class StellaMachineService {
       pool: SessionPool;
       routineRepo: RoutineRepo;
       routineScheduler: RoutineScheduler;
+      /** Whether a routine's MCP watch may call a tool, or why not (see
+       * mcp/service.ts). Asked before a routine is saved, because a tool that
+       * writes would then act on a timer with nobody watching. */
+      watchableTool(server: string, tool: string): Promise<string | null>;
       /** Per-session hand-over hubs; the core's close path forgets them. */
       handovers: HandoverRegistry;
       decorateSession(session: SessionInfo): SessionInfo;
@@ -337,6 +341,7 @@ export class StellaMachineService {
         repo: this.deps.routineRepo,
         scheduler: this.deps.routineScheduler,
         agentId: session.agentId ?? "",
+        watchable: (server, tool) => this.deps.watchableTool(server, tool),
       }),
       // The tool goes through the same entry point as the API, so the
       // duplicate-name rule is enforced once. It reads a `role_file` through

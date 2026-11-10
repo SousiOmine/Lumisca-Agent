@@ -8,6 +8,11 @@ import { resolveServerCwd } from "./config.ts";
 export interface McpToolInfo {
   name: string;
   description?: string;
+  /** The server's own hints about the tool. `readOnlyHint` is the one a
+   * watch needs: a check runs with nobody watching, so it may only call a
+   * tool that changes nothing (see mcp/service.ts). Absent when the server
+   * sends none, which many do. */
+  annotations?: { readOnlyHint?: boolean };
   inputSchema?: unknown;
 }
 
@@ -55,12 +60,20 @@ export function createMcpTransport(
 /** Normalize an SDK tool entry into this module's shape (shared by the
  * session client and the one-shot probe). */
 function toToolInfo(
-  tool: { name: string; description?: string; inputSchema?: unknown },
+  tool: {
+    name: string;
+    description?: string;
+    inputSchema?: unknown;
+    annotations?: { readOnlyHint?: boolean };
+  },
 ): McpToolInfo {
   return {
     name: tool.name,
     description: tool.description,
     inputSchema: tool.inputSchema,
+    ...(tool.annotations === undefined ? {} : {
+      annotations: { readOnlyHint: tool.annotations.readOnlyHint },
+    }),
   };
 }
 

@@ -68,9 +68,11 @@ Deno.test("checkRoutine: the stored observation is the baseline it compares", as
       schedule: fileWatch,
     });
     const deps = (at: string) => ({
-      runner: runnerOf([`${at}\n`]),
-      files: FILES,
-      workdir: "/home/agent/agents/a1",
+      machine: {
+        runner: runnerOf([`${at}\n`]),
+        files: FILES,
+        workdir: "/home/agent/agents/a1",
+      },
     });
 
     const first = await checkRoutine(
@@ -124,9 +126,11 @@ Deno.test("checkRoutine: two routines on one source keep their own baselines", a
     });
 
     const deps = (at: string) => ({
-      runner: runnerOf([`${at}\n`]),
-      files: FILES,
-      workdir: "/home/agent/agents/a1",
+      machine: {
+        runner: runnerOf([`${at}\n`]),
+        files: FILES,
+        workdir: "/home/agent/agents/a1",
+      },
     });
     // B has no baseline: its first look records one instead of firing.
     assertEquals(
@@ -153,9 +157,11 @@ Deno.test("checkRoutine: a routine that watches nothing is unsupported", async (
       schedule: { kind: "daily", time: "08:30" },
     });
     const check = await checkRoutine(routines.get(created.id)!, {
-      runner: runnerOf([]),
-      files: FILES,
-      workdir: "/home/agent/agents/a1",
+      machine: {
+        runner: runnerOf([]),
+        files: FILES,
+        workdir: "/home/agent/agents/a1",
+      },
     });
     assertEquals(check.kind, "unsupported");
   } finally {
@@ -211,15 +217,90 @@ Deno.test("checkRoutine: an http check goes out through the machine", async () =
     } as unknown as FileBackend;
 
     const check = await checkRoutine(routines.get(created.id)!, {
-      runner,
-      files,
-      workdir: "/home/agent/agents/a1",
+      machine: {
+        runner,
+        files,
+        workdir: "/home/agent/agents/a1",
+      },
     });
     assertEquals(check.kind, "same");
     assertEquals(seen.length, 1);
     assert(seen[0]!.includes("curl"));
     assert(seen[0]!.includes("https://example.com/deploy"));
     assertEquals(store.size, 0, "the body file is removed");
+  } finally {
+    close();
+  }
+});
+
+Deno.test("checkRoutine: an mcp check runs without the machine", async () => {
+  // The one source whose check does not go through the container: the agent
+  // calls the server through the same connection the check uses, so a
+  // mailbox watch keeps working while the machine is down.
+  const { repo: routines, close } = repo();
+  try {
+    const created = routines.create({
+      agentId: AGENT,
+      name: "Watch the inbox",
+      prompt: "Tell me what is new",
+      schedule: {
+        kind: "watch",
+        everyMinutes: 10,
+        source: {
+          kind: "mcp",
+          server: "composio",
+          tool: "GMAIL_FETCH_EMAILS",
+          args: { query: "is:unread" },
+          expect: { ids: "data.messages[].id" },
+        },
+      },
+    });
+    routines.recordWatch(created.id, {
+      state: { kind: "mcp", ids: ["m1"], hash: null },
+      nextRunAt: Date.now() + 600_000,
+      checkedAt: Date.now(),
+    });
+    const check = await checkRoutine(routines.get(created.id)!, {
+      callTool: () =>
+        Promise.resolve(JSON.stringify({
+          data: { messages: [{ id: "m1" }, { id: "m2" }] },
+        })),
+    });
+    assertEquals(check.kind, "changed");
+    assert(check.kind === "changed");
+    assertEquals(check.newItems, 1);
+  } finally {
+    close();
+  }
+});
+
+Deno.test("checkRoutine: an mcp check without a connection is unsupported", async () => {
+  const { repo: routines, close } = repo();
+  try {
+    const created = routines.create({
+      agentId: AGENT,
+      name: "Watch the inbox",
+      prompt: "p",
+      schedule: {
+        kind: "watch",
+        everyMinutes: 10,
+        source: {
+          kind: "mcp",
+          server: "composio",
+          tool: "GMAIL_FETCH_EMAILS",
+          args: {},
+          expect: { ids: "data.messages[].id" },
+        },
+      },
+    });
+    const check = await checkRoutine(routines.get(created.id)!, {
+      machine: {
+        runner: runnerOf([]),
+        files: FILES,
+        workdir: "/home/agent/agents/a1",
+      },
+    });
+    assertEquals(check.kind, "unsupported");
   } finally {
     close();
   }

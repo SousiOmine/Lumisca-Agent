@@ -31,6 +31,7 @@
  *   `theme_color`),
  * - `./web-search.ts` — the web-search setting's wire shape,
  * - `./routine.ts` — routine schedules, their limits and the next-run rule,
+ * - `./watch-path.ts` — the field path a watch reads out of a tool's result,
  * - `./push.ts` — Web Push subscriptions and the base64url codec,
  * - `./ui-markup/` — the card markup a `send_chat` call carries,
  * - `./i18n/mod.ts` — Locale, the message catalogue, locale resolution.
@@ -62,5 +63,6 @@ export * from "./heartbeat.ts";
 export * from "./ws-batch.ts";
 export * from "./web-search.ts";
 export * from "./routine.ts";
+export * from "./watch-path.ts";
 export * from "./push.ts";
 export * from "./ui-markup/index.ts";

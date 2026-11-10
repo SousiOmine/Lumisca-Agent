@@ -20,15 +20,22 @@
  *   stored state was lost — a routine whose "changes" are its own bookkeeping
  *   is worse than none.
  *
- * Everything runs INSIDE the machine: the file and the command are the
+ * Everything else runs INSIDE the machine: the file and the command are the
  * agent's own (a path relative to its working folder, a command it could have
  * typed), and an HTTP check goes out from the machine, so the address is the
  * one that machine can reach. A check that ran on the host would see a
  * different filesystem and a different network, and would report a change the
  * agent cannot act on.
+ *
+ * An MCP tool is the one source that does not: its connection belongs to the
+ * server process, and the agent calls through that same connection, so the
+ * check has to go through it too (it arrives as `callTool`). Nothing about
+ * that call is machine-local — a watch on a mailbox keeps working while the
+ * machine is down, and the run it starts waits for the machine itself.
  */
 import { createHash } from "node:crypto";
 import type { WatchSource } from "../shared/routine.ts";
+import { resolveWatchPath, watchIdsFrom } from "../shared/watch-path.ts";
 import type { CommandRunner } from "../tools/command-backend.ts";
 import type { FileBackend } from "../tools/file-backend.ts";
 
@@ -37,7 +44,14 @@ import type { FileBackend } from "../tools/file-backend.ts";
 export type WatchState =
   | { kind: "http"; status: number; hash: string | null; hasIncludes: boolean }
   | { kind: "file"; mtimeMs: number | null; hash: string | null }
-  | { kind: "command"; exitCode: number; hasIncludes: boolean };
+  | { kind: "command"; exitCode: number; hasIncludes: boolean }
+  | {
+    kind: "mcp";
+    /** The ids the tool's result named, or null for a `hash` watch. */
+    ids: string[] | null;
+    /** The digest of the compared value, or null for an `ids` watch. */
+    hash: string | null;
+  };
 
 /** Why a check could not answer, or null when it did. A check that cannot
  * answer is NOT a change: a machine that is down, a URL that times out and a
@@ -48,6 +62,11 @@ export interface WatchOutcome {
   changed: boolean;
   /** What to tell the routine's row when the check could not answer. */
   problem?: string;
+  /** How many ids the observation has that the previous one did not (an
+   * `ids` watch only). The run is told the number so it does not have to
+   * read the source again to know how much happened — and so a run that
+   * starts after the items were read elsewhere does not lose them. */
+  newItems?: number;
 }
 
 /** The body cap of an HTTP check. A page can be megabytes; only a digest and
@@ -66,20 +85,32 @@ const HTTP_TIMEOUT_SEC = 30;
  * saying nothing was observed. */
 const HTTP_MAX_FETCH_BYTES = HTTP_MAX_BYTES * 2;
 
-/** What one check needs from the machine. `fetch` is a seam so a test can
- * answer without a network, and so the caller decides where the request goes
- * out from (see the module comment). */
+/** What one check needs. `fetch` is a seam so a test can answer without a
+ * network, and so the caller decides where the request goes out from (see
+ * the module comment). */
 export interface WatchDeps {
-  /** The machine's command runner: the file check's stat and the command
-   * check both run there, because the file and the command are the agent's
-   * own (see the module comment). */
-  runner: CommandRunner;
-  /** Working folder the check runs in (the agent's own). */
-  workdir: string;
+  /** The machine's command runner and the agent's own folder: the file
+   * check's stat and the command check both run there, because the file and
+   * the command are the agent's own (see the module comment). Absent for an
+   * `mcp` check, which is the one source that does not run in the machine;
+   * `runWatch` reports a problem if a source needs it and it is not there. */
+  machine?: {
+    runner: CommandRunner;
+    workdir: string;
+  };
   /** Fetch a URL. Defaults to the global `fetch`, which is the HOST's
    * network; a caller that has a machine passes `machineWatchFetch` so the
    * request goes out from there (see the module comment). */
   fetch?: typeof fetch;
+  /** Call an MCP tool and return its text. Supplied by the caller that owns
+   * the server connections (see the module comment). Absent → an `mcp`
+   * check reports a problem rather than treating silence as "unchanged". */
+  callTool?: (
+    server: string,
+    tool: string,
+    args: Record<string, unknown>,
+    signal?: AbortSignal,
+  ) => Promise<string>;
   signal?: AbortSignal;
 }
 
@@ -184,10 +215,26 @@ export async function runWatch(
     // The first look, or a source that changed shape: record, do not fire.
     return { state: current.state, changed: false };
   }
+  const changed = differs(source, previous, current.state);
+  const newItems = changed ? newItemsOf(previous, current.state) : undefined;
   return {
     state: current.state,
-    changed: differs(source, previous, current.state),
+    changed,
+    ...(newItems === undefined ? {} : { newItems }),
   };
+}
+
+/** How many ids `current` has that `previous` did not: the size of the change
+ * for an `ids` watch (see WatchOutcome.newItems). */
+function newItemsOf(
+  previous: WatchState,
+  current: WatchState,
+): number | undefined {
+  if (previous.kind !== "mcp" || current.kind !== "mcp") return undefined;
+  const before = previous.ids;
+  const now = current.ids;
+  if (before === null || now === null) return undefined;
+  return now.filter((id) => !before.includes(id)).length;
 }
 
 /** Whether two observations of one source disagree about what the watch
@@ -233,6 +280,19 @@ function differs(
     }
     return false;
   }
+  if (previous.kind === "mcp" && current.kind === "mcp") {
+    const before = previous.ids;
+    if (current.ids !== null) {
+      // Ids: a NEW one is the event. An item that left the list, or one
+      // whose content changed under the same id, is not: a mailbox that
+      // fires because something was read would fire on every check.
+      return before === null
+        ? false
+        : current.ids.some((id) => !before.includes(id));
+    }
+    return previous.hash !== null && current.hash !== null &&
+      previous.hash !== current.hash;
+  }
   return false;
 }
 
@@ -245,10 +305,83 @@ async function observe(
     case "http":
       return await observeHttp(source, deps);
     case "file":
-      return await observeFile(source, deps);
-    case "command":
-      return await observeCommand(source, deps);
+    case "command": {
+      const machine = deps.machine;
+      if (machine === undefined) {
+        return {
+          state: null,
+          problem: "This check needs the machine, which is not running",
+        };
+      }
+      return source.kind === "file"
+        ? await observeFile(source, machine, deps)
+        : await observeCommand(source, machine, deps);
+    }
+    case "mcp":
+      return await observeMcp(source, deps);
   }
+}
+
+/** One MCP tool call, read as JSON, reduced to what the watch compares.
+ *
+ * The result has to be JSON: a watch compares a field, and a sentence has no
+ * fields. Saying so is a problem, not a change — the routine's row shows
+ * "the result is not JSON" and the user can fix the source, where firing
+ * would start a run that cannot answer either. */
+async function observeMcp(
+  source: Extract<WatchSource, { kind: "mcp" }>,
+  deps: WatchDeps,
+): Promise<{ state: WatchState | null; problem?: string }> {
+  const call = deps.callTool;
+  if (call === undefined) {
+    return {
+      state: null,
+      problem: "This check has no MCP connection to call the tool through",
+    };
+  }
+  let text: string;
+  try {
+    text = await call(source.server, source.tool, source.args, deps.signal);
+  } catch (error) {
+    return {
+      state: null,
+      problem: `the tool could not be called (${messageOf(error)})`,
+    };
+  }
+  let result: unknown;
+  try {
+    result = JSON.parse(text);
+  } catch {
+    return {
+      state: null,
+      problem: "the tool's result is not JSON, so its fields cannot be " +
+        "compared",
+    };
+  }
+  if ("ids" in source.expect) {
+    const ids = watchIdsFrom(result, source.expect.ids);
+    if (ids === undefined) {
+      return {
+        state: null,
+        problem: `the result has no list of ids at "${source.expect.ids}"`,
+      };
+    }
+    return { state: { kind: "mcp", ids, hash: null } };
+  }
+  const value = resolveWatchPath(result, source.expect.hash);
+  if (value === undefined) {
+    return {
+      state: null,
+      problem: `the result has nothing at "${source.expect.hash}"`,
+    };
+  }
+  return {
+    state: {
+      kind: "mcp",
+      ids: null,
+      hash: createHash("sha256").update(JSON.stringify(value)).digest("hex"),
+    },
+  };
 }
 
 async function observeHttp(
@@ -296,6 +429,7 @@ async function observeHttp(
 
 async function observeFile(
   source: Extract<WatchSource, { kind: "file" }>,
+  machine: { runner: CommandRunner; workdir: string },
   deps: WatchDeps,
 ): Promise<{ state: WatchState | null; problem?: string }> {
   // The file is the machine's, so both the stat and the digest are taken
@@ -304,8 +438,8 @@ async function observeFile(
   const command = source.compare === "hash"
     ? `stat -c %Y -- ${quoted} && sha256sum -- ${quoted} | cut -d" " -f1`
     : `stat -c %Y -- ${quoted}`;
-  const result = await deps.runner.run(command, {
-    cwd: deps.workdir,
+  const result = await machine.runner.run(command, {
+    cwd: machine.workdir,
     timeoutSec: 30,
     maxOutputChars: 4_000,
     ...(deps.signal === undefined ? {} : { signal: deps.signal }),
@@ -339,10 +473,11 @@ async function observeFile(
 
 async function observeCommand(
   source: Extract<WatchSource, { kind: "command" }>,
+  machine: { runner: CommandRunner; workdir: string },
   deps: WatchDeps,
 ): Promise<{ state: WatchState | null; problem?: string }> {
-  const result = await deps.runner.run(source.command, {
-    cwd: deps.workdir,
+  const result = await machine.runner.run(source.command, {
+    cwd: machine.workdir,
     timeoutSec: 60,
     maxOutputChars: 64_000,
     ...(deps.signal === undefined ? {} : { signal: deps.signal }),
@@ -406,6 +541,21 @@ export function parseWatchState(value: unknown): WatchState | undefined {
       exitCode: raw.exitCode,
       hasIncludes: raw.hasIncludes === true,
     };
+  }
+  if (raw.kind === "mcp") {
+    if (Array.isArray(raw.ids)) {
+      const ids: string[] = [];
+      for (const id of raw.ids) {
+        // A list with anything but strings is not a baseline this build
+        // wrote: treat the row as unread rather than compare half of it.
+        if (typeof id !== "string") return undefined;
+        ids.push(id);
+      }
+      return { kind: "mcp", ids, hash: null };
+    }
+    return typeof raw.hash === "string"
+      ? { kind: "mcp", ids: null, hash: raw.hash }
+      : undefined;
   }
   return undefined;
 }

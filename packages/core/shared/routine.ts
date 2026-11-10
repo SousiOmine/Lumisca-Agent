@@ -25,6 +25,7 @@
  * routine fires.
  */
 import { parseLocalDateTime } from "./misc.ts";
+import { watchPathProblem } from "./watch-path.ts";
 
 /** When a routine runs. Times are the server's local time: `HH:MM` for the
  * repeating shapes, `YYYY-MM-DD HH:MM` for `once`; `days` is 1 = Monday …
@@ -44,10 +45,17 @@ export type RoutineSchedule =
  * the whole point of this trigger, and the reason the three shapes below are
  * deliberately dumb.
  *
- * One consequence is that a watch reads only what the machine can see:
- * an HTTP response, a file, a command's exit status and output. Reading a
- * page, judging a sentence or summarising a feed are things the RUN does once
- * the check fires — not things the check does to decide whether to fire. */
+ * One consequence is that a watch reads only what the agent itself can see:
+ * an HTTP response, a file, a command's exit status and output, or the answer
+ * of an MCP tool. The last one is the exception to "the check runs inside the
+ * machine": an MCP connection belongs to the server process, and the agent
+ * calls through that same connection, so a check that ran anywhere else would
+ * be watching something other than what the agent will act on (see
+ * vm/watch.ts).
+ *
+ * Reading a page, judging a sentence or summarising a feed are things the RUN
+ * does once the check fires — not things the check does to decide whether to
+ * fire. */
 export type WatchSource =
   | {
     kind: "http";
@@ -84,6 +92,33 @@ export type WatchSource =
       /** The stdout must contain this; absence is a change. */
       includes?: string;
     };
+  }
+  | {
+    kind: "mcp";
+    /** A server of the app-level config (Settings → MCP servers). A watch
+     * cannot name a workspace's or a plugin's server: its agent has no
+     * workspace, and a plugin's servers come and go with the plugin. */
+    server: string;
+    /** The tool's own name on that server (`GMAIL_FETCH_EMAILS`). Only a
+     * read-only tool may be watched (see mcp/service.ts). */
+    tool: string;
+    /** The tool's arguments, fixed for every check: a watch is one question
+     * asked again and again, not a search the check is free to change. */
+    args: Record<string, unknown>;
+    /** What counts as a change. Exactly one of the two. */
+    expect:
+      | {
+        /** The field holding each item's identity. A watch on this fires
+         * when an id appears that the previous check did not see, and stays
+         * quiet when an item it already knew about is edited or removed. */
+        ids: string;
+      }
+      | {
+        /** The field whose value is compared: a different value is a
+         * change. For "this number / this status changed", where there is
+         * no list of items to compare. */
+        hash: string;
+      };
   };
 
 /** Shortest `watch` interval. A check makes no inference call, so it can be
@@ -93,6 +128,13 @@ export type WatchSource =
 export const MIN_WATCH_MINUTES = 5;
 /** Longest `watch` interval (24 hours). */
 export const MAX_WATCH_MINUTES = 1_440;
+
+/** Longest JSON an MCP watch's `args` may be. The arguments are a filter (a
+ * query, a date range), not a document: a check that has to send a long body
+ * is a run, not a check. Eight kilobytes is ordinary page size — far more
+ * than any listing tool's filter needs, and small enough that the stored
+ * schedule stays a row the list can read. */
+export const MAX_WATCH_ARGS_CHARS = 8_192;
 
 /** How the last run ended. `running` is never stored — it is read from the
  * scheduler's memory — but the view type carries it so the UI has one
@@ -244,7 +286,8 @@ function watchProblem(raw: Record<string, unknown>): string | null {
   const source = raw.source;
   if (typeof source !== "object" || source === null) {
     return 'source must be an object: {"kind":"http","url":...}, ' +
-      '{"kind":"file","path":...} or {"kind":"command","command":...}';
+      '{"kind":"file","path":...}, {"kind":"command","command":...} or ' +
+      '{"kind":"mcp","server":...,"tool":...}';
   }
   const watch = source as Record<string, unknown>;
   switch (watch.kind) {
@@ -286,8 +329,42 @@ function watchProblem(raw: Record<string, unknown>): string | null {
           '{"includes":"..."}',
       );
     }
+    case "mcp": {
+      if (typeof watch.server !== "string" || watch.server.trim() === "") {
+        return "server must name an MCP server from the app settings";
+      }
+      if (typeof watch.tool !== "string" || watch.tool.trim() === "") {
+        return "tool must be the tool's own name on that server " +
+          '(e.g. "GMAIL_FETCH_EMAILS")';
+      }
+      const args = watch.args;
+      if (typeof args !== "object" || args === null || Array.isArray(args)) {
+        return "args must be an object of the tool's arguments ({} when it " +
+          "takes none)";
+      }
+      if (JSON.stringify(args).length > MAX_WATCH_ARGS_CHARS) {
+        return `args must be at most ${MAX_WATCH_ARGS_CHARS} characters of ` +
+          "JSON";
+      }
+      const problem = expectProblem(
+        watch.expect,
+        ["ids", "hash"],
+        'expect must name what counts as a change: {"ids":"data.items[].id"} ' +
+          'or {"hash":"data.count"}',
+      );
+      if (problem !== null) return problem;
+      const expect = watch.expect as Record<string, unknown>;
+      const named = Object.keys(expect).filter((key) =>
+        expect[key] !== undefined
+      );
+      const key = named[0];
+      if (named.length !== 1 || key === undefined) {
+        return "expect must name exactly one of ids or hash, not both";
+      }
+      return watchPathProblem(expect[key]);
+    }
     default:
-      return 'source.kind must be "http", "file" or "command"';
+      return 'source.kind must be "http", "file", "command" or "mcp"';
   }
 }
 
@@ -443,7 +520,34 @@ function watchSourceKey(source: WatchSource): unknown[] {
         source.expect.exitCode ?? null,
         source.expect.includes ?? null,
       ];
+    case "mcp":
+      return [
+        "mcp",
+        source.server,
+        source.tool,
+        canonicalJson(source.args),
+        "ids" in source.expect
+          ? ["ids", source.expect.ids]
+          : ["hash", source.expect.hash],
+      ];
   }
+}
+
+/** JSON with object keys sorted, so two spellings of the same arguments give
+ * the same text (see scheduleKey): a watch whose args were rewritten in a
+ * different key order is the same watch, and its baseline stays. */
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(sortKeys(value));
+}
+
+function sortKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortKeys);
+  if (typeof value !== "object" || value === null) return value;
+  const sorted: Record<string, unknown> = {};
+  for (const key of Object.keys(value).sort()) {
+    sorted[key] = sortKeys((value as Record<string, unknown>)[key]);
+  }
+  return sorted;
 }
 
 /** One stored routine, as every layer above the database sees it. */

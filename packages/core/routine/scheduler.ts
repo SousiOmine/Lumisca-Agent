@@ -80,11 +80,14 @@ export interface RoutineRunner {
   /** Whether the agent's conversation is running (or about to). */
   isRunning(agentId: string): boolean;
   /** Start a run with `prompt` in the agent's conversation. Resolves when
-   * the run finished; rejects when it could not start (no conversation). */
+   * the run finished; rejects when it could not start (no conversation).
+   * `trigger` is set when a check started this run, so the run knows what
+   * fired it without reading the source again. */
   run(
     agentId: string,
     prompt: string,
     routine: { id: string; name: string },
+    trigger?: RoutineTrigger,
   ): Promise<RoutineRunOutcome>;
   /** Stop the run this routine started. A run the user started in the same
    * conversation is left alone. */
@@ -104,10 +107,21 @@ export interface RoutineRunner {
 /** What one check answered. `state` is what to store for the next check;
  * undefined leaves the stored state alone (nothing was observed). */
 export type WatchCheck =
-  | { kind: "changed"; state: unknown }
+  | { kind: "changed"; state: unknown; newItems?: number }
   | { kind: "same"; state: unknown }
   | { kind: "unsupported"; problem: string }
   | { kind: "error"; state?: unknown; problem: string };
+
+/** What a check saw when it fired (see WatchCheck.changed). The run is told
+ * the count so it does not have to read the source again to find out how
+ * much happened — and so a run that starts after the items were read
+ * elsewhere (a user's own look at the mailbox) does not lose them. */
+export interface RoutineTrigger {
+  /** When the check fired (epoch ms). */
+  at: number;
+  /** How many items the observation had that the previous one did not. */
+  newItems: number;
+}
 
 /** How a started run ended. */
 export interface RoutineRunOutcome {
@@ -268,7 +282,14 @@ export function createRoutineScheduler(
     // Changed: run it. The row's next check was already advanced by the tick.
     const current = repo.get(routine.id);
     if (current === undefined) return;
-    void run(current);
+    // The number belongs to THIS check's answer, not to the row: the row's
+    // state is already the new baseline, so the count is only knowable here.
+    void run(
+      current,
+      outcome.newItems === undefined
+        ? undefined
+        : { at, newItems: outcome.newItems },
+    );
   }
 
   /** Write one check's record. A failure here belongs to the row, not to the
@@ -294,7 +315,10 @@ export function createRoutineScheduler(
    * than `queueMaxWaitMs` gives up instead of holding the slot for ever.
    *
    * A `once` routine is removed once this run ends (see the module comment). */
-  async function run(routine: Routine): Promise<void> {
+  async function run(
+    routine: Routine,
+    trigger?: RoutineTrigger,
+  ): Promise<void> {
     const id = routine.id;
     // Read before the run: by the time this returns, the row may be gone.
     const oneOff = routine.schedule.kind === "once";
@@ -330,7 +354,7 @@ export function createRoutineScheduler(
       const outcome = await runner.run(routine.agentId, routine.prompt, {
         id,
         name: routine.name,
-      });
+      }, trigger);
       const wasStopped = stopped.delete(id);
       record(id, {
         status: wasStopped

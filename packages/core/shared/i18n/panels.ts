@@ -116,6 +116,18 @@ export const panels = {
     ja: "{command}（{condition}）",
     en: "{command} ({condition})",
   },
+  "panels.routine.watch.mcp": {
+    ja: "{server} の {tool}（{condition}）",
+    en: "{server}: {tool} ({condition})",
+  },
+  "panels.routine.watch.newItem": {
+    ja: "新しい項目",
+    en: "a new item",
+  },
+  "panels.routine.watch.valueChanged": {
+    ja: "値の変化",
+    en: "a value change",
+  },
   "panels.routine.watch.status": {
     ja: "状態コード {status}",
     en: "status {status}",

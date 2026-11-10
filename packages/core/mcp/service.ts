@@ -18,6 +18,7 @@ import {
 import { APP_MCP_SETTINGS_KEY, mcpServerEntry } from "../shared/mod.ts";
 import type { McpServerStatus } from "./status.ts";
 import { probeMcpServer } from "./client.ts";
+import { McpManager } from "./manager.ts";
 import { discoverPlugins } from "../plugins/discover.ts";
 import {
   connectionOAuthProvider,
@@ -25,6 +26,16 @@ import {
   McpOAuthStore,
 } from "./oauth.ts";
 import { McpAuthSessions, type McpAuthSnapshot } from "./oauth-session.ts";
+
+/** What a server's tool name says about it when the server sends no
+ * `readOnlyHint` (many send none). A watch calls a tool on a timer with
+ * nobody watching, so it may only call one that reads: the rule is that a
+ * name segment is one of these verbs (`GMAIL_FETCH_EMAILS`,
+ * `SLACK_LIST_CHANNELS`). Anything else is refused, which is why the list
+ * can be short — every write verb is refused by not being here
+ * (`GMAIL_SEND_EMAIL`, `NOTION_CREATE_PAGE`). */
+const READ_VERBS =
+  /(^|_)(GET|LIST|FETCH|SEARCH|READ|FIND|QUERY|LOOKUP|VIEW)(_|$)/i;
 
 /** One tool reported by the settings UI's one-shot connection test. */
 export interface McpTestTool {
@@ -81,6 +92,12 @@ export class McpService {
    * session connections (see McpServiceDeps.oauth). */
   readonly oauth: McpOAuthStore;
   private readonly authSessions = new McpAuthSessions();
+  /** The connections a `watch` check calls through, and the config text they
+   * were built from. Separate from any session's manager: a check runs
+   * whether or not a client has the conversation open, and a headless server
+   * has no session at all. */
+  private checkManager: McpManager | null = null;
+  private checkManagerKey: string | null = null;
 
   constructor(private readonly deps: McpServiceDeps) {
     this.oauth = deps.oauth ?? new McpOAuthStore(deps.settings);
@@ -148,6 +165,10 @@ export class McpService {
     this.deps.applyMcpConfigChange(sessions, () => {
       this.deps.settings.set(APP_MCP_SETTINGS_KEY, text);
     });
+    // The checks' own connections are not the sessions' (see checkManager):
+    // a server that just went away must not keep its process alive, and the
+    // next check connects to what the config says now.
+    this.dropCheckManager();
     return this.getAppMcpInfo();
   }
 
@@ -451,6 +472,102 @@ export class McpService {
       this.refreshSessionsUsing(session.serverUrl);
     }
     return snapshot;
+  }
+
+  /**
+   * Whether a `watch` may call this tool, or why not.
+   *
+   * A check calls the tool on a timer, with no model in the loop, so a write
+   * tool would act again and again on its own: the server's own
+   * `readOnlyHint` is believed when it is sent, and a name whose verb is a
+   * read is accepted otherwise (see READ_VERBS). Everything else is refused
+   * — the check reports the message and does not fire.
+   *
+   * The tool is looked up through the checks' manager, so this also answers
+   * "does the server exist and is it enabled, and does the tool exist": a
+   * routine saved against a removed server says so instead of failing with
+   * "unknown server" on every check.
+   */
+  async watchableToolProblem(
+    server: string,
+    tool: string,
+  ): Promise<string | null> {
+    const config = this.loadAppMcpConfig();
+    const entry = config.servers.find((s) => s.name === server);
+    if (entry === undefined) {
+      return `No MCP server named "${server}" is configured in the app's ` +
+        "MCP settings";
+    }
+    if (!entry.enabled) {
+      return `The MCP server "${server}" is disabled`;
+    }
+    const manager = this.managerForChecks();
+    const def = (await manager.listTools()).find((t) =>
+      t.server === server && t.name === tool
+    );
+    if (def === undefined) {
+      const status = manager.getStatus().find((s) => s.name === server);
+      return status?.error !== undefined
+        ? `The MCP server "${server}" could not be reached (${status.error})`
+        : `The MCP server "${server}" has no tool named "${tool}"`;
+    }
+    if (def.annotations?.readOnlyHint === true) return null;
+    if (def.annotations?.readOnlyHint === false) {
+      return `"${tool}" may change things, so a watch cannot call it`;
+    }
+    return READ_VERBS.test(tool)
+      ? null
+      : `"${tool}" does not say it only reads. A watch runs with nobody ` +
+        "watching, so it may call only a reading tool — one whose name has " +
+        "GET, LIST, FETCH, SEARCH, READ, FIND, QUERY, LOOKUP or VIEW";
+  }
+
+  /** Call an MCP tool for a `watch` check, through the checks' own
+   * connection (see checkManager). Refuses a tool that is not watchable, so
+   * the rule cannot be bypassed by a routine saved before the tool changed. */
+  async callToolForCheck(
+    server: string,
+    tool: string,
+    args: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const problem = await this.watchableToolProblem(server, tool);
+    if (problem !== null) throw new Error(problem);
+    return await this.managerForChecks().callTool(
+      server,
+      tool,
+      args,
+      signal,
+    );
+  }
+
+  /** Close the connections the checks keep. The sessions' managers belong to
+   * the pool, which closes them with their sessions. */
+  close(): void {
+    this.dropCheckManager();
+  }
+
+  /** The manager the checks call through, built from the app-level config
+   * (the only config a stella routine can see: it has no workspace, and a
+   * plugin's servers come and go with the plugin). Rebuilt when the config
+   * changed, so a check never calls a server the user just removed. */
+  private managerForChecks(): McpManager {
+    const config = this.loadAppMcpConfig();
+    const key = JSON.stringify(config.servers);
+    const existing = this.checkManager;
+    if (existing !== null && this.checkManagerKey === key) return existing;
+    this.dropCheckManager();
+    const manager = new McpManager(config, Deno.cwd(), this.oauth);
+    this.checkManager = manager;
+    this.checkManagerKey = key;
+    return manager;
+  }
+
+  private dropCheckManager(): void {
+    const manager = this.checkManager;
+    this.checkManager = null;
+    this.checkManagerKey = null;
+    if (manager !== null) void manager.close();
   }
 
   /** Reconnect the sessions whose merged config uses `serverUrl`, so the

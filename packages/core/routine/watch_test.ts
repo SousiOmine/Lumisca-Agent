@@ -106,8 +106,7 @@ function runnerOf(
 }
 
 const deps = (runner: CommandRunner) => ({
-  runner,
-  workdir: "/home/agent/agents/a1",
+  machine: { runner, workdir: "/home/agent/agents/a1" },
 });
 
 Deno.test("runWatch: the first check is a baseline, never a change", async () => {
@@ -350,8 +349,10 @@ Deno.test("runWatch: an http check through the machine fetch compares like any o
     expect: { hash: true },
   } as const;
   const first = await runWatch(source, undefined, {
-    runner: curlingRunner(store, { body: "one" }),
-    workdir: "/home/agent/agents/a1",
+    machine: {
+      runner: curlingRunner(store, { body: "one" }),
+      workdir: "/home/agent/agents/a1",
+    },
     fetch: machineWatchFetch({
       runner: curlingRunner(store, { body: "one" }),
       files: fakeFiles(store),
@@ -361,8 +362,10 @@ Deno.test("runWatch: an http check through the machine fetch compares like any o
   assertEquals(first.changed, false, "the first look is a baseline");
 
   const same = await runWatch(source, first.state!, {
-    runner: curlingRunner(store, { body: "one" }),
-    workdir: "/home/agent/agents/a1",
+    machine: {
+      runner: curlingRunner(store, { body: "one" }),
+      workdir: "/home/agent/agents/a1",
+    },
     fetch: machineWatchFetch({
       runner: curlingRunner(store, { body: "one" }),
       files: fakeFiles(store),
@@ -372,8 +375,10 @@ Deno.test("runWatch: an http check through the machine fetch compares like any o
   assertEquals(same.changed, false);
 
   const changed = await runWatch(source, first.state!, {
-    runner: curlingRunner(store, { body: "two" }),
-    workdir: "/home/agent/agents/a1",
+    machine: {
+      runner: curlingRunner(store, { body: "two" }),
+      workdir: "/home/agent/agents/a1",
+    },
     fetch: machineWatchFetch({
       runner: curlingRunner(store, { body: "two" }),
       files: fakeFiles(store),

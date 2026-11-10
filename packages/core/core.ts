@@ -127,12 +127,14 @@ import {
   createRoutineScheduler,
   type RoutineRunner,
   type RoutineScheduler,
+  type RoutineTrigger,
 } from "./routine/scheduler.ts";
 import type { PendingHandover } from "./vm/handover.ts";
 import { HandoverRegistry } from "./vm/handover-registry.ts";
 import { checkRoutine } from "./routine/check.ts";
 import { vmAgentDir } from "./vm/contract.ts";
 import type { PromptFileRef, Routine } from "./shared/mod.ts";
+import { formatLocalDateTime } from "./shared/mod.ts";
 import type { SkillInfo } from "./skills/discover.ts";
 import type { UploadFile } from "./vm/uploads.ts";
 import type { McpInfo } from "./mcp/config.ts";
@@ -620,6 +622,9 @@ export class LumiscaCore {
     // The timers first: a tick that fires while the sessions are closing
     // would try to start a run on a pool that is shutting down.
     this.routineScheduler.close();
+    // The checks' own MCP connections are not any session's (see
+    // McpService.checkManager), so nothing else closes them.
+    this.mcp.close();
     await this.pool.closeAll();
     // Every session is gone now, so the per-session structures are too. A
     // core is not reopened after close, but releasing them here is what
@@ -729,7 +734,7 @@ export class LumiscaCore {
         const agent = this.pool.get(session.id);
         return agent !== undefined && agent.isStreaming;
       },
-      run: async (agentId, prompt, routine) => {
+      run: async (agentId, prompt, routine, trigger) => {
         const session = this.sessions.getByAgent(agentId);
         if (session === undefined) {
           // The agent exists but its conversation was never opened, or it
@@ -749,7 +754,7 @@ export class LumiscaCore {
         await this.openSession(session.id);
         const agent = this.pool.require(session.id);
         this.sessions.touch(session.id);
-        return await agent.runRoutine(prompt, {
+        return await agent.runRoutine(withTrigger(prompt, trigger), {
           id: routine.id,
           name: routine.name,
         });
@@ -774,23 +779,21 @@ export class LumiscaCore {
               "This agent has no conversation, so its checks have nowhere to run",
           };
         }
-        // The check runs inside the machine, in the agent's own folder: the
-        // file it stats, the command it runs and the request it makes are
-        // that agent's (see routine/check.ts). A machine that is not up
-        // cannot answer, and saying so is better than treating every answer
-        // as "nothing changed".
+        // The machine-bound sources run inside the machine, in the agent's
+        // own folder (see routine/check.ts); an MCP check goes through the
+        // server's own connection to that server, which is the one the agent
+        // calls through, so it works while the machine is down.
         const stella = this.stellaRuntimeFor(session);
-        if (stella === undefined) {
-          return {
-            kind: "unsupported",
-            problem:
-              "The machine for this agent is not running, so its checks cannot run",
-          };
-        }
         return await checkRoutine(routine, {
-          runner: stella.runner,
-          files: stella.files,
-          workdir: stella.cwd,
+          ...(stella === undefined ? {} : {
+            machine: {
+              runner: stella.runner,
+              files: stella.files,
+              workdir: stella.cwd,
+            },
+          }),
+          callTool: (server, tool, args, signal) =>
+            this.mcp.callToolForCheck(server, tool, args, signal),
         });
       },
     };
@@ -1926,4 +1929,22 @@ export class LumiscaCore {
       ...(session.stella === true ? { stella: true } : {}),
     };
   }
+}
+
+/** The routine's prompt as the run receives it, with one line naming the
+ * check that fired it.
+ *
+ * Routine prompts are not drawn in the transcript (see stella-state.ts), so
+ * the line changes nothing the user sees. It saves the run an MCP call whose
+ * only purpose would be learning how much happened, and it keeps an item
+ * from being missed when the user read the same list between the check and
+ * the run.
+ *
+ * A scheduled run gets the prompt alone: nothing fired it but the clock. */
+function withTrigger(prompt: string, trigger?: RoutineTrigger): string {
+  if (trigger === undefined) return prompt;
+  return `${trigger.newItems} new item(s) appeared at ${
+    formatLocalDateTime(trigger.at)
+  }, and the routine's watch check started this run with that observation.\n\n` +
+    prompt;
 }

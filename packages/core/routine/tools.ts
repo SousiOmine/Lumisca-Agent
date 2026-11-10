@@ -55,9 +55,17 @@ const SCHEDULE_DESCRIPTION = '{"kind":"daily","time":"08:30"}, ' +
   '"source":{...}}. A watch runs only when its source changed: ' +
   '{"kind":"http","url":"https://...","expect":{"status":200}} or ' +
   '{"expect":{"includes":"..."}} or {"expect":{"hash":true}}, ' +
-  '{"kind":"file","path":"app.log","compare":"mtime"} (or "hash"), or ' +
+  '{"kind":"file","path":"app.log","compare":"mtime"} (or "hash"), ' +
   '{"kind":"command","command":"...","expect":{"exitCode":0}} (or ' +
-  '{"includes":"..."}). A watch is checked by the server without asking ' +
+  '{"includes":"..."}), or ' +
+  '{"kind":"mcp","server":"composio","tool":"GMAIL_FETCH_EMAILS",' +
+  '"args":{"query":"is:unread"},"expect":{"ids":"data.messages[].id"}} ' +
+  "(ids: a watch on these fires when an id appears that the last check did " +
+  'not see; expect {"hash":"data.count"} fires when that value changes). ' +
+  'A "[]" in a path maps over the array it names. An mcp tool must only ' +
+  "read: the server's readOnlyHint decides, and otherwise the name must " +
+  "have GET, LIST, FETCH, SEARCH, READ, FIND, QUERY, LOOKUP or VIEW. " +
+  "A watch is checked by the server without asking " +
   "the model, so it costs nothing when nothing changed. A JSON string of " +
   "the same object is accepted too";
 
@@ -65,8 +73,9 @@ const SCHEDULE_DESCRIPTION = '{"kind":"daily","time":"08:30"}, ' +
  * so the description and the error cannot describe different sets. */
 const SCHEDULE_SHAPES = '{"kind":"daily","time":"08:30"}, ' +
   '{"kind":"weekly","days":[1,5],"time":"18:00"}, ' +
-  '{"kind":"every","minutes":30}, or {"kind":"once","at":"2026-11-12 ' +
-  '09:00"}.';
+  '{"kind":"every","minutes":30}, {"kind":"once","at":"2026-11-12 ' +
+  '09:00"}, or {"kind":"watch","everyMinutes":10,"source":{...}} ' +
+  "(http, file, command or mcp: see the schedule description).";
 
 /** The schedule argument: an object whose shape
  * {@link usableSchedule} checks (it owns the wording, so one validator
@@ -150,6 +159,16 @@ export function watchSourceText(
       ].filter((part) => part !== null);
       return `${JSON.stringify(source.command)} (${parts.join(", ")})`;
     }
+    case "mcp": {
+      // The args are part of what is watched: "unread mail" and "all mail"
+      // are different questions to the same tool, and the agent reading this
+      // back has to call the tool the same way to see what fired.
+      const condition = "ids" in source.expect
+        ? `new item at ${source.expect.ids}`
+        : `${source.expect.hash} changed`;
+      return `mcp ${source.server}/${source.tool} ` +
+        `${JSON.stringify(source.args)} (${condition})`;
+    }
   }
 }
 
@@ -232,6 +251,11 @@ export interface RoutineToolsOptions {
   scheduler: RoutineScheduler;
   /** The agent whose conversation these tools act for. */
   agentId: string;
+  /** Whether a watch may call an MCP tool, or why not (see
+   * McpService.watchableToolProblem). Absent → an MCP watch cannot be
+   * created here: whether the tool only reads is part of what makes the
+   * routine valid, and guessing it would let a write tool run on a timer. */
+  watchable?: (server: string, tool: string) => Promise<string | null>;
 }
 
 const createSchema = object({
@@ -292,9 +316,32 @@ function owned(
   return routine;
 }
 
+/** Refuse an MCP watch whose tool may change things (see
+ * McpService.watchableToolProblem). Asked when the routine is written, so the
+ * model learns before anything is saved; the check asks again on every call,
+ * because a server's tools can change after the routine was created. */
+async function requireWatchableTool(
+  schedule: RoutineSchedule,
+  watchable: RoutineToolsOptions["watchable"],
+): Promise<void> {
+  if (schedule.kind !== "watch" || schedule.source.kind !== "mcp") return;
+  if (watchable === undefined) {
+    throw new CoreError(
+      "This conversation cannot look up MCP servers, so a watch on one " +
+        "cannot be created here",
+      "unavailable",
+    );
+  }
+  const problem = await watchable(
+    schedule.source.server,
+    schedule.source.tool,
+  );
+  if (problem !== null) throw new CoreError(problem, "invalid");
+}
+
 /** Build the five routine tools for one agent. */
 export function createRoutineTools(options: RoutineToolsOptions): Tool[] {
-  const { repo, scheduler, agentId } = options;
+  const { repo, scheduler, agentId, watchable } = options;
 
   const createTool: Tool<typeof createSchema> = {
     name: TOOL_ROUTINE_CREATE,
@@ -311,7 +358,7 @@ export function createRoutineTools(options: RoutineToolsOptions): Tool[] {
       '"every" runs from ' +
       `${MIN_EVERY_MINUTES} to ${MAX_EVERY_MINUTES} minutes apart.`,
     parameters: createSchema,
-    execute: (_id, params): Promise<ToolResult> => {
+    execute: async (_id, params): Promise<ToolResult> => {
       const name = params.name.trim();
       if (name.length === 0) {
         throw new CoreError("name must not be empty", "invalid");
@@ -337,6 +384,7 @@ export function createRoutineTools(options: RoutineToolsOptions): Tool[] {
       const schedule = usableSchedule(params.schedule);
       const stale = pastOneOffProblem(schedule, Date.now());
       if (stale !== null) throw new CoreError(stale, "invalid");
+      await requireWatchableTool(schedule, watchable);
       const existing = repo.listOf(agentId);
       if (existing.length >= ROUTINES_PER_AGENT_MAX) {
         throw new CoreError(
@@ -354,7 +402,7 @@ export function createRoutineTools(options: RoutineToolsOptions): Tool[] {
       }
       const routine = repo.create({ agentId, name, prompt, schedule });
       const oneOff = routine.schedule.kind === "once";
-      return Promise.resolve({
+      return {
         content: [{
           type: "text",
           text: `Created routine "${routine.name}" (id ${routine.id}).\n` +
@@ -370,7 +418,7 @@ export function createRoutineTools(options: RoutineToolsOptions): Tool[] {
               : "The result of each run appears in this conversation."),
         }],
         details: { id: routine.id, nextRunAt: routine.nextRunAt },
-      });
+      };
     },
   };
 
@@ -415,7 +463,7 @@ export function createRoutineTools(options: RoutineToolsOptions): Tool[] {
       "it but stops it firing; the next run is recomputed when the schedule " +
       "or the enabled state changes.",
     parameters: updateSchema,
-    execute: (_id, params): Promise<ToolResult> => {
+    execute: async (_id, params): Promise<ToolResult> => {
       const current = owned(repo, agentId, params.id);
       const name = params.name?.trim();
       if (name !== undefined) {
@@ -449,6 +497,7 @@ export function createRoutineTools(options: RoutineToolsOptions): Tool[] {
       if (schedule !== undefined) {
         const stale = pastOneOffProblem(schedule, Date.now());
         if (stale !== null) throw new CoreError(stale, "invalid");
+        await requireWatchableTool(schedule, watchable);
       }
       const enabled = params.enabled === undefined
         ? undefined

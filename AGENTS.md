@@ -223,6 +223,7 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 
 - **ルーチン**: `daily` / `weekly` / `every` / `once` / `watch` の 5 種類だけで、cron は扱いません。`once` は `YYYY-MM-DD HH:MM` のローカル日時を 1 つ持ち、次が無いので「進める」代わりに実行前に枠を空けて無効にし、走り終えたら行を削除します（走らなかった待機・見送りは理由付きで残ります。時刻が過ぎたまま起動した場合は遅れて実行）。次回時刻は保存値ではなく `packages/core/shared/routine.ts` の `nextRunAt` で計算し、実行前に進めます。
 - **確認と実行は別**: `watch` の確認は推論を呼ばない別の事実で、`watch_checked_at` / `watch_error` に書きます（`last_run_at` / `last_status` は実行だけ）。マシンが動いていない確認は 15 分後に送り直し、ルーチンは止めません。観測値は監視対象の変更と有効化のやり直しで捨てます（`repo.ts` の `update`）。
+- **MCP の監視だけはサーバー側**: `mcp` ソースの確認はマシンではなくサーバーの接続（`McpService` のチェック用マネージャ）で走り、マシンが止まっていても続きます。読み取りツールだけを許し（`readOnlyHint`、無ければ名前の動詞）、作成時と毎回の確認の両方で拒否します。比較は ID の集合差で、新しい ID が現れたときだけ発火し、run には新着件数が隠しで渡ります。
 - **待機は 1 本・1 時間**: 会話が空くまで待つのは設計どおりですが、積み上げません（`scheduler.ts` の `queued`）。上限を超えたら実行せずに `skipped` として理由を残します。`RoutineView.queued` は画面の「待機中」です。
 - **ルーチンのプロンプトは描かない**: 実行は利用者のプロンプトとして届きますが、本文はルーチンの指示（作成時にエージェントが書いた定型の依頼）なので、会話には出しません（stella は `stella-state.ts` の `transcriptEntries`、code mode は `MessageRow` が落とします）。`StellaEntry.routine` の名前は識別・カーソル・一覧の 2 行目のために射影・圧縮の記録まで通し続けてください（stella の会話には描かないので、一覧の 2 行目だけがルーチン名を出します）。
 - **放置された会話の圧縮**: 最後のメッセージから 30 分たったとき、モデルの視界が 50k トークン以上なら畳みます（`SessionAgentOptions.idleCompaction`、定数は `packages/core/agent/factory.ts` の `STELLA_IDLE_COMPACTION`）。視界はすべて畳み、尻尾は残しません（idle 中に答えているリクエストは無いためです）。要約中に会話が動いたら挿入せずに捨てます（`ContextCompactor.compactNow` の `canCommit`）。畳んだ区間のペイロードは落としますが（`packages/core/session/prune.ts`）、行は消しません。

@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertThrows } from "@std/assert";
+import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { LumiscaDb } from "../db/mod.ts";
 import { createRoutineRepo, type RoutineRepo } from "./repo.ts";
 import { createRoutineScheduler, type RoutineRunner } from "./scheduler.ts";
@@ -571,7 +571,7 @@ Deno.test("routine tools: a one-off in the past is refused", async () => {
     });
     const create = tools.find((tool) => tool.name === "routine_create")!;
     const past = formatLocalDateTime(Date.now() - 60_000);
-    assertThrows(
+    await assertRejects(
       () =>
         create.execute("c1", {
           name: "Too late",
@@ -662,7 +662,7 @@ Deno.test("routine tools: the per-agent limit is enforced", async () => {
         schedule: { kind: "every", minutes: 30 },
       } as never);
     }
-    assertThrows(
+    await assertRejects(
       () =>
         create.execute("over", {
           name: "One too many",
@@ -1139,6 +1139,100 @@ Deno.test("scheduler: stopping one run does not swallow the next", async () => {
     fake.release();
     await second;
     assertEquals(routines.get(created.id)?.lastStatus, "ok");
+  } finally {
+    close();
+  }
+});
+
+Deno.test("routine tools: an mcp watch is saved only for a reading tool", async () => {
+  const { repo: routines, close } = repo();
+  try {
+    const scheduler = createRoutineScheduler({
+      repo: routines,
+      runner: runner(),
+    });
+    const tools = createRoutineTools({
+      repo: routines,
+      scheduler,
+      agentId: AGENT,
+      watchable: (server, tool) =>
+        Promise.resolve(
+          server === "composio" && tool === "GMAIL_FETCH_EMAILS"
+            ? null
+            : `"${tool}" may change things, so a watch cannot call it`,
+        ),
+    });
+    const create = tools.find((tool) => tool.name === "routine_create")!;
+    const schedule = (tool: string) => ({
+      kind: "watch",
+      everyMinutes: 10,
+      source: {
+        kind: "mcp",
+        server: "composio",
+        tool,
+        args: {},
+        expect: { ids: "data.messages[].id" },
+      },
+    });
+    // The refusal happens before anything is written: a write tool on a
+    // timer would act every ten minutes with nobody watching.
+    await assertRejects(
+      () =>
+        create.execute("c1", {
+          name: "Send",
+          prompt: "p",
+          schedule: schedule("GMAIL_SEND_EMAIL"),
+        } as never),
+      Error,
+      "may change things",
+    );
+    assertEquals(routines.listOf(AGENT).length, 0);
+
+    await create.execute("c2", {
+      name: "Inbox",
+      prompt: "p",
+      schedule: schedule("GMAIL_FETCH_EMAILS"),
+    } as never);
+    assertEquals(routines.listOf(AGENT).length, 1);
+  } finally {
+    close();
+  }
+});
+
+Deno.test("routine tools: an mcp watch without a lookup cannot be saved", async () => {
+  // A conversation that cannot ask whether the tool reads must not save a
+  // watch on one: the answer is part of what makes the routine valid.
+  const { repo: routines, close } = repo();
+  try {
+    const scheduler = createRoutineScheduler({
+      repo: routines,
+      runner: runner(),
+    });
+    const create = createRoutineTools({
+      repo: routines,
+      scheduler,
+      agentId: AGENT,
+    }).find((tool) => tool.name === "routine_create")!;
+    await assertRejects(
+      () =>
+        create.execute("c1", {
+          name: "Inbox",
+          prompt: "p",
+          schedule: {
+            kind: "watch",
+            everyMinutes: 10,
+            source: {
+              kind: "mcp",
+              server: "composio",
+              tool: "GMAIL_FETCH_EMAILS",
+              args: {},
+              expect: { ids: "data.messages[].id" },
+            },
+          },
+        } as never),
+      Error,
+      "cannot look up MCP servers",
+    );
   } finally {
     close();
   }

@@ -136,6 +136,8 @@ export function createCoreServices(deps: CoreServicesDeps): CoreServices {
     pool: deps.pool,
     routineRepo: deps.routines,
     routineScheduler: deps.routineScheduler,
+    watchableTool: (server, tool) =>
+      deps.mcp.watchableToolProblem(server, tool),
     handovers: deps.handovers,
     decorateSession: deps.decorateSession,
     deleteSession,

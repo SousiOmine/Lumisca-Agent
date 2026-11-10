@@ -250,3 +250,78 @@ Deno.test("routine schedule: the same meaning has the same key", () => {
     false,
   );
 });
+
+Deno.test("routine schedule: an mcp watch names a read tool and one path", () => {
+  const schedule = {
+    kind: "watch",
+    everyMinutes: 10,
+    source: {
+      kind: "mcp",
+      server: "composio",
+      tool: "GMAIL_FETCH_EMAILS",
+      args: { query: "is:unread" },
+      expect: { ids: "data.messages[].id" },
+    },
+  } as const;
+  assertEquals(scheduleProblem(schedule), null);
+  assertEquals(parseSchedule(schedule), schedule);
+
+  // Both conditions at once would leave the check guessing which one was
+  // meant.
+  assertEquals(
+    scheduleProblem({
+      ...schedule,
+      source: { ...schedule.source, expect: { ids: "a[].id", hash: "b" } },
+    }) !== null,
+    true,
+  );
+  assertEquals(
+    scheduleProblem({
+      ...schedule,
+      source: { ...schedule.source, expect: { ids: "a[0]" } },
+    }) !== null,
+    true,
+  );
+  assertEquals(
+    scheduleProblem({
+      ...schedule,
+      source: { ...schedule.source, server: "" },
+    }) !== null,
+    true,
+  );
+  // Args are a filter, not a document.
+  assertEquals(
+    scheduleProblem({
+      ...schedule,
+      source: { ...schedule.source, args: { body: "x".repeat(9_000) } },
+    }) !== null,
+    true,
+  );
+});
+
+Deno.test("routine schedule: an mcp watch's args are compared without order", () => {
+  const watch = (args: Record<string, unknown>) =>
+    ({
+      kind: "watch",
+      everyMinutes: 10,
+      source: {
+        kind: "mcp",
+        server: "composio",
+        tool: "GMAIL_FETCH_EMAILS",
+        args,
+        expect: { ids: "data.messages[].id" },
+      },
+    }) as RoutineSchedule;
+  // A saved routine whose args were rewritten in another key order is the
+  // same watch, so its baseline must survive.
+  assertEquals(
+    scheduleKey(watch({ query: "is:unread", limit: 10 })),
+    scheduleKey(watch({ limit: 10, query: "is:unread" })),
+  );
+  // A different question to the same tool is a different watch.
+  assertEquals(
+    scheduleKey(watch({ query: "is:unread" })) ===
+      scheduleKey(watch({ query: "label:work" })),
+    false,
+  );
+});

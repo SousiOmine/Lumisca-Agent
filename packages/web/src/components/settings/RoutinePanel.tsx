@@ -124,6 +124,19 @@ export function watchSourceLabel(
         condition,
       });
     }
+    case "mcp": {
+      // The args are left out: this list row is one line, and the tool's
+      // name is what the user recognizes. The condition is what makes two
+      // watches of the same tool different routines.
+      const condition = "ids" in source.expect
+        ? t("panels.routine.watch.newItem")
+        : t("panels.routine.watch.valueChanged");
+      return t("panels.routine.watch.mcp", {
+        server: source.server,
+        tool: source.tool,
+        condition,
+      });
+    }
   }
 }
 

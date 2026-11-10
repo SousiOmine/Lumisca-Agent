@@ -65,17 +65,38 @@ that came while the machine was off runs when it starts again.
 
 A \`watch\` is checked by the server without asking you: it reads one thing
 and starts a run only when that thing changed. It costs nothing when nothing
-changed, so it can be frequent. Three sources:
+changed, so it can be frequent. Four sources:
 
 - \`{"kind":"http","url":"https://...","expect":{"status":200}}\` — or
   \`{"expect":{"includes":"..."}}\`, or \`{"expect":{"hash":true}}\`.
 - \`{"kind":"file","path":"app.log","compare":"mtime"}\` — or \`"hash"\`.
 - \`{"kind":"command","command":"git diff --quiet","expect":{"exitCode":0}}\`
   — or \`{"expect":{"includes":"..."}}\`.
+- \`{"kind":"mcp","server":"composio","tool":"GMAIL_FETCH_EMAILS","args":{"query":"is:unread"},"expect":{"ids":"data.messages[].id"}}\`.
 
 Relative paths and commands are relative to your own working folder, and the
 check runs inside your machine: a local development address works, the host's
 network does not come into it.
+
+An \`mcp\` watch is the one check that does not run in your machine: it calls
+the tool through the server's own connection, the one you call, so it keeps
+working while the machine is down. Its answer must be JSON, and the path
+names the field to compare — a segment ending in \`[]\` maps over the array it
+names (\`data.messages[].id\` is every message's id). \`{"ids":...}\` fires when
+an id appears that the last check did not see: an item being read, edited or
+deleted is not a change. Use \`{"hash":...}\` instead when there is no list of
+items and one value changing is the event.
+
+Only a tool that reads can be watched. The server's \`readOnlyHint\` decides
+when it sends one, and otherwise the name must have GET, LIST, FETCH, SEARCH,
+READ, FIND, QUERY, LOOKUP or VIEW. A send/create/delete tool is refused when
+you save the routine, because a check has nobody watching: a write tool there
+would act every few minutes on its own. The server must be one from Settings
+→ MCP servers; a workspace's or a plugin's server is not in scope.
+
+This is a poll, not a notification: the delay is the interval, so "tell me
+the moment it arrives" is not what a watch gives. The run is told how many
+items appeared, and calling the tool with the same arguments shows them.
 
 Two consequences to tell the user about:
 
