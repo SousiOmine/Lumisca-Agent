@@ -211,3 +211,24 @@ Deno.test("StellaSidebar: the row menu is placed from the left edge", () => {
   assertStringIncludes(source, "left: pos?.x ?? menu.x");
   assertStringIncludes(source, 'pos === null ? "hidden" : "visible"');
 });
+
+Deno.test("StellaSidebar: a created agent is in the list before it is opened", () => {
+  // Regression: 作成 closed the dialog and left the screen on the list. The
+  // selection was made first, and the App sends an address naming an agent
+  // its list cannot find back to the list — a new agent is exactly that
+  // until the list is re-read, and a re-read cannot land before the
+  // selection does. The create's answer carries the row, so it reaches the
+  // list first.
+  const source = Deno.readTextFileSync(
+    new URL("./StellaSidebar.tsx", import.meta.url),
+  );
+  const from = source.indexOf("const create = async");
+  const body = source.slice(from, source.indexOf("const remove = async", from));
+  const row = body.indexOf("onAgentChanged(agent)");
+  const selection = body.indexOf("onSelect(agent.id)");
+  assert(row >= 0, "the create's answer must reach the list");
+  assert(selection > row, "the row must be in the list before it is named");
+  // A re-read is not what puts it there: that would be a second answer to a
+  // question already answered, and it arrives too late.
+  assertEquals(body.includes("onChanged()"), false);
+});

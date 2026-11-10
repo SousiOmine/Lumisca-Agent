@@ -476,7 +476,9 @@ export function App({ initialData }: AppProps): ReactElement {
   // An address naming a conversation that does not exist (deleted here or in
   // another window) is the list: an empty conversation screen would say the
   // agent is there and silent. The list is awaited first — before it lands,
-  // "no such agent" and "not read yet" look the same.
+  // "no such agent" and "not read yet" look the same. A freshly created agent
+  // never reaches this branch: its row is put into the list from the create's
+  // own answer before the address names it (see StellaSidebar).
   useEffect(() => {
     if (!stellaActive || stellaAgentId === null || stella.agentsLoading) {
       return;
@@ -694,7 +696,7 @@ export function App({ initialData }: AppProps): ReactElement {
               onImagesChange={(images) => updateDraft(draftKey, { images })}
               files={draft.files}
               onFilesChange={(files) => updateDraft(draftKey, { files })}
-              onAgentChanged={stella.replaceAgent}
+              onAgentChanged={stella.applyAgent}
               onSelectAgent={goToStellaAgent}
               onOpenSettings={openProviders}
               screenOpen={stellaScreenOpen}
@@ -824,7 +826,7 @@ export function App({ initialData }: AppProps): ReactElement {
           ? {
             agent: stellaAgent,
             onChanged: (updated) => {
-              stella.replaceAgent(updated);
+              stella.applyAgent(updated);
               setEditingStellaAgent(false);
             },
             onClose: () => setEditingStellaAgent(false),

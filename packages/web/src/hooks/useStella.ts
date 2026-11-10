@@ -15,7 +15,12 @@ import {
   type StellaConversationState,
   stellaStateOf,
 } from "../stella-state.ts";
-import { compareAgentRows, previewOf, samePreview } from "@lumisca/core/shared";
+import {
+  compareAgentRows,
+  previewOf,
+  samePreview,
+  withAgentRow,
+} from "@lumisca/core/shared";
 import { createStreamController } from "./useStreamController.ts";
 import { NEVER, useVisibleInterval } from "./useVisibleInterval.ts";
 import { startRevisionProbe } from "./useRevisionProbe.ts";
@@ -104,10 +109,13 @@ export type StellaHook = {
   loading: boolean;
   /** Re-read the agent list (after a create / delete). */
   reloadAgents: () => void;
-  /** Replace one agent row with the version the server answered (an icon
-   * upload or clear), so the sidebar and the header redraw without a full
-   * re-read of the list. */
-  replaceAgent: (agent: StellaAgent) => void;
+  /** Put one agent's row into the list as the server answered it — an edit
+   * (a new name, picture or model) or a create — so the sidebar and the
+   * header redraw without a full re-read of the list. A row the list does not
+   * hold yet is added: the address names a new conversation before any
+   * re-read could land, and the App treats an address naming an agent it
+   * cannot find as a conversation that is gone (see withAgentRow). */
+  applyAgent: (agent: StellaAgent) => void;
 };
 
 export function useStella(
@@ -146,16 +154,11 @@ export function useStella(
     setAgentsVersion((version) => version + 1);
   }, []);
 
-  /** Swap one row in place. An edit of the name or the picture is the only
-   * caller: neither is something that was SAID, so the row keeps its preview
-   * and its place, and a full re-read (which could arrive out of order with
-   * the conversation's own writes) would be churn for the same result. */
-  const replaceAgent = useCallback((updated: StellaAgent) => {
-    setAgents((current) =>
-      current.map((agent) =>
-        agent.id === updated.id ? { ...agent, ...updated } : agent
-      )
-    );
+  /** Take the row the server answered. An edit keeps the row's own preview
+   * and place; a create adds a row that has said nothing yet. In both cases
+   * the list is the answer's, not a re-read's — see withAgentRow. */
+  const applyAgent = useCallback((agent: StellaAgent) => {
+    setAgents((current) => withAgentRow(current, agent));
   }, []);
 
   // The agent list: read when stella becomes the mode, after a change, and on
@@ -523,6 +526,6 @@ export function useStella(
     error,
     loading,
     reloadAgents,
-    replaceAgent,
+    applyAgent,
   };
 }

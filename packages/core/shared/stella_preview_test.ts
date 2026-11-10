@@ -7,6 +7,7 @@ import {
   samePreview,
   type StellaAgentSummary,
   type StellaPreview,
+  withAgentRow,
 } from "./mod.ts";
 import type { StellaEntry } from "../domain/stella-conversation.ts";
 
@@ -262,4 +263,43 @@ Deno.test("previewOf: a routine's prompt is named, not quoted as the user's", ()
       at: 1_000,
     },
   );
+});
+
+Deno.test("withAgentRow: a created agent is in the list before it is opened", () => {
+  // Regression: creating an agent selected it before the list had read it,
+  // and an address naming an agent the list does not hold is treated as a
+  // conversation that is gone (the App sends it back to the list). The
+  // create's answer carries the row, so it goes in from there.
+  const rows = [row("said", 100), row("quiet", null)];
+  const created = withAgentRow(rows, {
+    id: "fresh",
+    name: "Aide",
+    icon: "",
+    model: null,
+    createdAt: 300,
+    updatedAt: 300,
+  });
+  assertEquals(created.map((r) => r.id), ["said", "fresh", "quiet"]);
+  // A new agent has said nothing, so its row is one line.
+  assertEquals(created.find((r) => r.id === "fresh")?.preview, null);
+  // The list it came from is left alone (the hook keeps the old one until
+  // the state lands).
+  assertEquals(rows.length, 2);
+});
+
+Deno.test("withAgentRow: an edit keeps the row's line and does not double it", () => {
+  const rows = [row("a1", 100), row("b2", null)];
+  const edited = withAgentRow(rows, {
+    id: "a1",
+    name: "Renamed",
+    icon: "",
+    model: null,
+    createdAt: 0,
+    updatedAt: 0,
+  });
+  assertEquals(edited.length, 2);
+  const row1 = edited.find((r) => r.id === "a1")!;
+  assertEquals(row1.name, "Renamed");
+  // What the conversation said is not what the edit changed.
+  assertEquals(row1.preview, { kind: "text", text: "a1", at: 100 });
 });

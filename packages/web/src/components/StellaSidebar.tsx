@@ -34,10 +34,11 @@ interface StellaSidebarProps {
   /** The agent whose conversation is showing; null before one exists. */
   activeId: string | null;
   onSelect: (id: string) => void;
-  /** Called after a create / delete so the App re-reads the list. */
+  /** Called after a delete so the App re-reads the list. A create does not
+   * need it: its answer carries the row the list is missing (see `create`). */
   onChanged: () => void;
-  /** Called with the row the server answered after an edit, so the list
-   * (and the conversation's header) redraw without a full re-read. */
+  /** Called with the row the server answered after an edit or a create, so
+   * the list (and the conversation's header) redraw without a full re-read. */
   onAgentChanged: (agent: StellaAgent) => void;
   /** Whether the active agent's conversation is running, so its row can say
    * so (a message app's "typing" in a list). Only the active one is known:
@@ -228,7 +229,13 @@ export function StellaSidebar(
     setError(null);
     try {
       const agent = await api.createStellaAgent(name, role);
-      onChanged();
+      // The row goes into the list BEFORE the address names it. Selecting
+      // first sent the reader to an agent the list had not read yet, and the
+      // App treats an address naming an agent it cannot find as one that is
+      // gone — it replaced the address with the list, so the dialog closed
+      // and the screen did not move. The create's own answer carries the
+      // row, so nothing has to be re-read to know it exists.
+      onAgentChanged(agent);
       onSelect(agent.id);
       resetForm();
     } catch (failure) {

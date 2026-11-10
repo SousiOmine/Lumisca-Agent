@@ -263,3 +263,38 @@ export function compareAgentRows(
   if (a.createdAt !== b.createdAt) return b.createdAt - a.createdAt;
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
+
+/** Put one agent's row into the list, as the server just answered it.
+ *
+ * Two client actions end with a row the list has not read yet: an edit, whose
+ * answer carries the new name, picture or model, and a create, whose answer
+ * carries the whole agent. Neither needs the list re-read — the answer already
+ * says what the row says — and for a create a re-read would be too late: the
+ * new conversation is opened (the address names it) before any re-read can
+ * land, and a list that does not hold the row yet makes that address look like
+ * an agent that does not exist (App.tsx sends such an address back to the
+ * list). Taking the row from the answer is what keeps the two in step.
+ *
+ * The preview is the row's own, not the answer's: a name or a picture is not
+ * something the conversation said, so an edit keeps the line it had. A new
+ * agent has said nothing yet, so its row has none.
+ *
+ * The result is ordered by the same rule the server uses
+ * ({@link compareAgentRows}), so a row added here sits where a re-read would
+ * have put it — a list that reorders when the next refresh lands is a list
+ * that moves under the reader's eye for no reason.
+ */
+export function withAgentRow(
+  rows: readonly StellaAgentSummary[],
+  agent: StellaAgentSummaryBase,
+): StellaAgentSummary[] {
+  const previous = rows.find((row) => row.id === agent.id);
+  const row: StellaAgentSummary = {
+    ...agent,
+    preview: previous?.preview ?? null,
+  };
+  const next = previous === undefined
+    ? [...rows, row]
+    : rows.map((existing) => existing.id === agent.id ? row : existing);
+  return next.sort(compareAgentRows);
+}

@@ -43,7 +43,7 @@ function hook(overrides: Partial<StellaHook>): StellaHook {
     error: null,
     loading: false,
     reloadAgents: () => {},
-    replaceAgent: () => {},
+    applyAgent: () => {},
     ...overrides,
   };
 }
