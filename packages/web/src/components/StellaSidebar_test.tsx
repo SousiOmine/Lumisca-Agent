@@ -119,6 +119,15 @@ Deno.test("StellaSidebar: a working row that has said nothing yet stays one line
   assertStringIncludes(html, "stella-agent-dot");
 });
 
+Deno.test("StellaSidebar: the face is what identifies a row", () => {
+  // 32px read as a badge beside the name rather than as the face the reader
+  // scans down. 40 gives the two lines a face of their own height without
+  // turning the row into a profile header (the conversation's header keeps
+  // its 22: that strip is one line tall).
+  const html = render();
+  assertStringIncludes(html, "width:40px;height:40px");
+});
+
 Deno.test("StellaSidebar: the row itself is what opens its menu", () => {
   const html = render();
   // Regression: every row carried a ⋮ beside the name, drawn on hover and

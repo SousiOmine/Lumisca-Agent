@@ -450,7 +450,7 @@ export function StellaSidebar(
                 agentId={agent.id}
                 name={agent.name}
                 icon={agent.icon}
-                size={32}
+                size={40}
               />
               <span className="stella-agent-text">
                 {
