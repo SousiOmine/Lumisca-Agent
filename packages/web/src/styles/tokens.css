@@ -90,11 +90,18 @@
    * field's own padding drift away from it. */
   --input-attach-size: 32px;
 
-  /* stella's agent list. One number, because the list's own width and the
-   * offset that centres it while no conversation is open (stella.css) are the
-   * same measurement: a second one written into the offset would put the list
-   * off-centre the day the width changed. */
+  /* stella's agent list, in the two places it stands: the column beside a
+   * conversation, and the list alone in a window where nobody is picked. The
+   * offset that centres the list (stella.css) reads `--stella-list-width`,
+   * which the list re-points to the wider one while it is alone — so the
+   * offset always measures the width the box actually has, and changing
+   * either number keeps the list in the middle.
+   *
+   * Alone the list is the only thing on the screen, so it takes the room
+   * rather than the column: at 216px the names, times and last messages sat in
+   * a strip in the middle of an empty window. */
   --stella-list-width: 216px;
+  --stella-list-width-alone: 400px;
 
   --tab-height: 40px;
   /* Room for a title bar the OS draws over the page. Non-zero only in the

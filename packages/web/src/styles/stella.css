@@ -971,8 +971,17 @@
  * left margin back — with the transition from .stella-sidebar — as soon as a
  * conversation opens. `100%` is the shell's content box, the room the two
  * columns share, so the offset follows the window and `--app-inset` without
- * anyone measuring. */
+ * anyone measuring.
+ *
+ * It is also wider here: with no conversation beside it the list owns the
+ * window, and the column's width, which is sized to sit beside something, left
+ * the rows in a strip in the middle of an empty one. The variable is
+ * re-pointed instead of the width being written a second time, so the offset
+ * above still centres the box the list actually has. The width itself is not
+ * transitioned (styles/README.md, rule 4): the list is already the wide one on
+ * the first frame and travels at that width, rather than narrowing as it goes. */
 .stella-shell[data-screen="list"] .stella-sidebar {
+  --stella-list-width: var(--stella-list-width-alone);
   left: calc((100% - var(--stella-list-width)) / 2);
 }
 

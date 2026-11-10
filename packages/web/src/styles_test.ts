@@ -865,7 +865,7 @@ Deno.test("stella draws no conversation until an agent is picked", async () => {
   // it, minus half of the list. `left`, not a `transform` — a transformed
   // element is a containing block, and the row's menu and the three agent
   // dialogs are `position: fixed` INSIDE the list: they would be placed against
-  // its 216px box instead of the window.
+  // its own box instead of the window.
   const centred = declarations(
     rules,
     '.stella-shell[data-screen="list"] .stella-sidebar',
@@ -874,6 +874,31 @@ Deno.test("stella draws no conversation until an agent is picked", async () => {
     centred.get("left"),
     "calc((100% - var(--stella-list-width)) / 2)",
     "the list alone in the window stands in the middle",
+  );
+
+  // Nothing is beside it, so the list takes the room instead of the column:
+  // at the column's width the rows (a name, a time, the last message) were a
+  // strip in the middle of an empty window. The variable is re-pointed rather
+  // than the width written again, which is what keeps the offset above
+  // measuring the box the list has.
+  assertEquals(
+    centred.get("--stella-list-width"),
+    "var(--stella-list-width-alone)",
+    "the list alone in the window is the wider one",
+  );
+  const tokens = declarations(
+    cssRules(
+      await Deno.readTextFile(
+        new URL("./styles/tokens.css", import.meta.url),
+      ),
+    ),
+    ":root",
+  );
+  assertEquals(
+    parseFloat(tokens.get("--stella-list-width-alone") ?? "0") >
+      parseFloat(tokens.get("--stella-list-width") ?? "0"),
+    true,
+    "the list alone must actually be wider than the column (tokens.css)",
   );
 
   // Both places the list can be in are lengths (`0` and the offset above),
