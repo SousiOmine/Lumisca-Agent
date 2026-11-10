@@ -836,6 +836,64 @@ Deno.test("the columns trade width in one movement", async () => {
   );
 });
 
+Deno.test("stella draws no conversation until an agent is picked", async () => {
+  // With nobody picked the window holds one thing: the list. The sheet is not
+  // drawn at all — an empty transcript, a placeholder above it and a disabled
+  // send button all said "there is nothing here", three times, and the reader's
+  // next move is the list's.
+  //
+  // The rule is top-level, not inside the compact block: this is a wide
+  // window's layout too (it also happens to be what makes the list a screen of
+  // its own below the breakpoint). A rule that only lived in the media query
+  // would leave a desktop window showing an empty conversation beside the list.
+  const css = await Deno.readTextFile(
+    new URL("./styles/stella.css", import.meta.url),
+  );
+  const rules = cssRules(css);
+  const hidden = rules.find((rule) =>
+    rule.selector === '.stella-shell[data-screen="list"] .stella' &&
+    rule.media === null
+  );
+  assertEquals(
+    hidden !== undefined,
+    true,
+    "the conversation must be hidden at every width while nothing is picked",
+  );
+  assertEquals(/display:\s*none/.test(hidden!.body), true);
+
+  // The list stands in the middle of the room the two columns share: half of
+  // it, minus half of the list. `left`, not a `transform` — a transformed
+  // element is a containing block, and the row's menu and the three agent
+  // dialogs are `position: fixed` INSIDE the list: they would be placed against
+  // its 216px box instead of the window.
+  const centred = declarations(
+    rules,
+    '.stella-shell[data-screen="list"] .stella-sidebar',
+  );
+  assertEquals(
+    centred.get("left"),
+    "calc((100% - var(--stella-list-width)) / 2)",
+    "the list alone in the window stands in the middle",
+  );
+
+  // Both places the list can be in are lengths (`0` and the offset above),
+  // which is what makes the move between them a transition rather than a jump
+  // — and the offset is computed from the width the list actually has.
+  const sidebar = declarations(rules, ".stella-sidebar");
+  assertEquals(sidebar.get("left"), "0");
+  assertEquals(sidebar.get("position"), "relative");
+  assertEquals(
+    sidebar.get("width"),
+    "var(--stella-list-width)",
+    "the centred offset must follow the list's own width",
+  );
+  assertEquals(
+    sidebar.get("transition"),
+    "left var(--lum-dur-slow) var(--lum-ease-in-out)",
+    "the list travels across the window, so it takes the motion tokens",
+  );
+});
+
 Deno.test("stella's list and conversation are two screens on a tablet", async () => {
   // A tablet held upright is 800-834px wide. Side by side, the 216px list
   // leaves the conversation a phone's width; above the conversation (what
@@ -857,37 +915,94 @@ Deno.test("stella's list and conversation are two screens on a tablet", async ()
       rule.selector === selector &&
       rule.media?.includes("max-width: 900px") === true
     );
-  const screens: Array<[string, string]> = [
-    [
-      '.stella-shell[data-screen="list"] .stella',
-      "the conversation must be off the list's screen",
-    ],
-    [
-      '.stella-shell[data-screen="conversation"] .stella-sidebar',
-      "the list must be off the conversation's screen",
-    ],
-  ];
-  for (const [selector, why] of screens) {
-    const rule = tablet(selector);
-    assertEquals(
-      rule !== undefined,
-      true,
-      `${selector} must be ruled at the tablet width`,
-    );
-    assertEquals(/display:\s*none/.test(rule!.body), true, why);
-  }
+  const rule = tablet(
+    '.stella-shell[data-screen="conversation"] .stella-sidebar',
+  );
+  assertEquals(
+    rule !== undefined,
+    true,
+    "the list must be off the conversation's screen",
+  );
+  assertEquals(/display:\s*none/.test(rule!.body), true);
 
   // The list is a screen, not a strip above one: the width and the height the
-  // one screen has.
+  // one screen has. It also gives up the centred offset — it is the room now,
+  // not a column standing in the middle of one (the top-level rule).
   const list = tablet('.stella-shell[data-screen="list"] .stella-sidebar');
   assertEquals(list !== undefined, true, "the list screen must be sized");
-  for (const [property, value] of [["width", "100%"], ["flex", "1"]]) {
+  for (
+    const [property, value] of [
+      ["width", "100%"],
+      ["flex", "1"],
+      ["left", "0"],
+    ]
+  ) {
     assertEquals(
       new RegExp(`${property}:\\s*${value}`).test(list!.body),
       true,
       `the list screen must take the ${property}`,
     );
   }
+
+  // One screen replacing another is the page-level slide (styles/motion.css);
+  // the sheet's own arrival from the right would be a second movement inside
+  // it, from a side that does not exist where there is no column beside it.
+  const arrival = tablet(
+    '.stella-shell[data-screen="conversation"] .stella-main',
+  );
+  assertEquals(
+    arrival !== undefined,
+    true,
+    "the sheet's arrival must be ruled",
+  );
+  assertEquals(/animation:\s*none/.test(arrival!.body), true);
+});
+
+Deno.test("a conversation arrives from the right beside the list", async () => {
+  // The list travels to the left margin and the sheet comes in from the right:
+  // one movement, so the sheet is not also faded up from nothing — the travel
+  // says which side it came from.
+  const css = await Deno.readTextFile(
+    new URL("./styles/stella.css", import.meta.url),
+  );
+  const rules = cssRules(css);
+  const arrival = rules.find((rule) =>
+    rule.selector ===
+      '.stella-shell[data-screen="conversation"] .stella-main' &&
+    rule.media === null
+  );
+  assertEquals(arrival !== undefined, true, "the sheet must have an entrance");
+  // `backwards`, not `both`: holding the last keyframe would leave a
+  // `transform` on the sheet once the animation ends, and with it a containing
+  // block for anything `position: fixed` inside the conversation.
+  assertEquals(
+    /animation:\s*lum-enter-right var\(--lum-dur-slow\)\s+var\(--lum-ease-drawer\)\s+backwards/
+      .test(
+        arrival!.body.replace(/\s+/g, " "),
+      ),
+    true,
+    "the entrance must read its times from the tokens and release the end state",
+  );
+
+  // Only opacity and transform move (styles/README.md, rule 4): the transcript
+  // is streaming and the noVNC canvas reads its box for the scale.
+  const motion = await Deno.readTextFile(
+    new URL("./styles/motion.css", import.meta.url),
+  );
+  const block = /@keyframes lum-enter-right \{[\s\S]*?\n\}/.exec(motion);
+  assertEquals(block !== null, true, "lum-enter-right must be declared");
+  for (const property of ["opacity", "transform"]) {
+    assertEquals(
+      new RegExp(`${property}:`).test(block![0]),
+      true,
+      `the entrance moves ${property}`,
+    );
+  }
+  assertEquals(
+    /\b(width|height|top|left):/.test(block![0]),
+    false,
+    "an entrance may move nothing but its own opacity and offset",
+  );
 });
 
 Deno.test("the model picker's panel is capped by the room it measured", () => {

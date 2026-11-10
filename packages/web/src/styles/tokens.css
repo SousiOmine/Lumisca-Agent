@@ -90,6 +90,12 @@
    * field's own padding drift away from it. */
   --input-attach-size: 32px;
 
+  /* stella's agent list. One number, because the list's own width and the
+   * offset that centres it while no conversation is open (stella.css) are the
+   * same measurement: a second one written into the offset would put the list
+   * off-centre the day the width changed. */
+  --stella-list-width: 216px;
+
   --tab-height: 40px;
   /* Room for a title bar the OS draws over the page. Non-zero only in the
    * macOS desktop window, whose transparent native title bar overlays the

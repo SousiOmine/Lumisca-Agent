@@ -52,6 +52,7 @@
   .agent-work-log,
   .stella-msg,
   .stella-running,
+  .stella-main,
   .todo-panel,
   .task-panel,
   .background-panel,
@@ -141,10 +142,12 @@
   .msg-action-btn,
   /* A zoom a click takes: the picture still arrives at the new size, it just
    * gets there at once. Pinches and pans never had a transition. */ .lightbox-image[data-zoom-smooth="true"],
-  /* The columns trading width when the machine's screen opens: a layout that
-   * slides is motion like any other, and a reader who asked for less of it
+  /* The columns trading width when the machine's screen opens, and the list
+   * travelling between the middle of the window and the left margin: a layout
+   * that slides is motion like any other, and a reader who asked for less of it
    * wants the space to be there, not to watch it arrive. */ .stella-pane,
-  .stella-main {
+  .stella-main,
+  .stella-sidebar {
     transition: none;
   }
 

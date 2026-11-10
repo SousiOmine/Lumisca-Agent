@@ -16,13 +16,22 @@ import type { UrlState } from "./route.ts";
  * draft screen it was opened from. Sliding those would claim a hierarchy that
  * is not there.
  *
- * The direction is decided here, from the two addresses. The shape, the
- * duration and the reduced-motion answer are the stylesheet's
- * (styles/motion.css), which reads `data-vt` off the root element.
+ * The direction is decided here, from the two addresses and one fact about the
+ * layout (see {@link ScreenLayout}). The shape, the duration and the
+ * reduced-motion answer are the stylesheet's (styles/motion.css), which reads
+ * `data-vt` off the root element.
  */
 
 /** The way one screen replaced another: into a deeper screen, or back out. */
 export type ScreenMove = "push" | "back";
+
+/** What the layout adds to the addresses: the same two routes are a screen
+ * swap on one window and two columns on another. */
+export interface ScreenLayout {
+  /** Whether stella's list and its conversation are two screens, one at a time
+   * — the compact width and below (hooks/useMediaQuery.ts's COMPACT_QUERY). */
+  singleScreen: boolean;
+}
 
 /** The root attribute the stylesheet reads while a transition plays. Its two
  * values are {@link ScreenMove}; it is removed when the transition ends, so no
@@ -36,17 +45,28 @@ export const TRANSITION_ATTRIBUTE = "data-vt";
 export function screenMove(
   previous: UrlState,
   next: UrlState,
+  layout: ScreenLayout,
 ): ScreenMove | null {
-  return stellaMove(previous, next) ?? settingsMove(previous, next);
+  return stellaMove(previous, next, layout) ?? settingsMove(previous, next);
 }
 
 /** `/stella` ⇄ `/stella/a/<id>`, with no dialog over either: a dialog covers
  * the screen it was opened from, so opening or closing one is not a move
  * between the two screens underneath it. */
-function stellaMove(previous: UrlState, next: UrlState): ScreenMove | null {
+function stellaMove(
+  previous: UrlState,
+  next: UrlState,
+  layout: ScreenLayout,
+): ScreenMove | null {
   if (previous.route.kind !== "stella") return null;
   if (next.route.kind !== "stella") return null;
   if (previous.settings !== null || next.settings !== null) return null;
+  // Two columns are not two screens: on a wide window the list slides to the
+  // left margin and the conversation comes in from the right (stella.css), so
+  // the layout animates itself. A page-wide snapshot there would capture both
+  // lists — the centred one and the moved one — and cross-fade them over each
+  // other.
+  if (!layout.singleScreen) return null;
   return deepen(previous.route.agentId, next.route.agentId);
 }
 

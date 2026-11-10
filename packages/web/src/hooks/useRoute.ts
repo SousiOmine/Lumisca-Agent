@@ -7,7 +7,12 @@ import {
   pushedState,
   replacedState,
 } from "../history-entry.ts";
-import { playScreenTransition, screenMove } from "../screen-transition.ts";
+import {
+  playScreenTransition,
+  type ScreenLayout,
+  screenMove,
+} from "../screen-transition.ts";
+import { useCompactViewport } from "./useMediaQuery.ts";
 
 /**
  * The address the app is showing, and how to move to another.
@@ -65,11 +70,20 @@ export function useRoute(): RouteControls {
   // this is the copy used to say which way a move went.
   const shown = useRef(state);
   shown.current = state;
+  // Whether stella's list and conversation are two screens rather than two
+  // columns, which decides whether a move between them is a page transition at
+  // all (screen-transition.ts). Held in a ref for the same reason as `shown`:
+  // the back/forward listener is subscribed once and must read what the window
+  // is now.
+  const singleScreen = useCompactViewport();
+  const layout = useRef<ScreenLayout>({ singleScreen });
+  layout.current = { singleScreen };
 
   useEffect(() => {
     const onPopState = () => {
       const next = parseUrl(location.pathname);
-      playScreenTransition(screenMove(shown.current, next), () => {
+      const way = screenMove(shown.current, next, layout.current);
+      playScreenTransition(way, () => {
         setState(next);
       });
     };
@@ -94,7 +108,8 @@ export function useRoute(): RouteControls {
   // must walk back over every page it opened, and the address alone cannot
   // say how many that is.
   const move = useCallback((next: UrlState, replace: boolean) => {
-    playScreenTransition(screenMove(shown.current, next), () => {
+    const way = screenMove(shown.current, next, layout.current);
+    playScreenTransition(way, () => {
       const url = urlOf(next);
       if (location.pathname !== url) {
         const target = `${url}${location.search}`;

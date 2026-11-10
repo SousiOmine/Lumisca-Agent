@@ -79,6 +79,22 @@
   }
 }
 
+/* A surface entering from the right edge — stella's conversation beside the
+ * list that travels the other way. The travel is short on purpose: the sheet
+ * is nearly the width of the window, and what the eye needs is which side it
+ * came from, not the journey (rule 4: a whole column crossing the screen is
+ * more motion than the change carries). */
+@keyframes lum-enter-right {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 @keyframes lum-pop {
   from {
     opacity: 0;

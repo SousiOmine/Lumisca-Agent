@@ -495,7 +495,9 @@ export function App({ initialData }: AppProps): ReactElement {
   // compact width and below: a tablet held upright is 800-834px wide, where
   // the list beside the conversation leaves the conversation a phone's width
   // (stella.css). The query is the same 900px the stylesheet switches at, so
-  // the layout and the navigation cannot disagree.
+  // the layout and the navigation cannot disagree. What it decides here is the
+  // title bar's way back to the list (there is none where the list is still a
+  // column) and, in hooks/useRoute, whether the move is a page transition.
   const stellaSingleScreen = useCompactViewport();
   const stellaAgent = stella.agents.find((a) => a.id === stellaAgentId);
   // The screen pane's switch and the edit dialog are opened from the title
@@ -607,7 +609,7 @@ export function App({ initialData }: AppProps): ReactElement {
                   : undefined}
                 onEditAgent={() => setEditingStellaAgent(true)}
                 onToggleScreen={machineStatus?.state === "running" &&
-                    !stellaHandedOver
+                    !stellaHandedOver && stellaAgentId !== null
                   ? () => setStellaScreenOpen((open) => !open)
                   : undefined}
                 screenOpen={stellaScreenOpen}
@@ -687,7 +689,6 @@ export function App({ initialData }: AppProps): ReactElement {
               stella={stella}
               agent={stellaAgent ?? null}
               status={machineStatus}
-              singleScreen={stellaSingleScreen}
               input={draft.input}
               onInputChange={(input) => updateDraft(draftKey, { input })}
               images={draft.images}

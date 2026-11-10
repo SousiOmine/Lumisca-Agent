@@ -95,8 +95,13 @@ export function useNarrowViewport(): boolean {
 
 /** Whether the viewport is at the compact width or below (see
  * {@link COMPACT_QUERY}), where a two-column layout shows one surface at a
- * time. stella uses it to decide which of its two screens is showing, so the
- * navigation and the stylesheet's hides answer the same question. */
+ * time. stella reads it for the two answers that follow from that: the title
+ * bar's way back to the list (which exists only where the list is a screen of
+ * its own), and whether a move between the list and a conversation is a page
+ * transition at all (screen-transition.ts — on a wide window the layout moves
+ * the two itself). Which of the two is showing is the selection's call, not the
+ * width's: `data-screen` on StellaModeScreen says it, and the stylesheet reads
+ * the same attribute inside its media query. */
 export function useCompactViewport(): boolean {
   return useMediaQuery(COMPACT_QUERY);
 }

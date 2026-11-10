@@ -21,13 +21,14 @@ import type { StellaHook } from "../hooks/useStella.ts";
  * about their body.
  *
  * stella has no tabs and no session list: the sidebar IS its list, and the
- * conversation is the whole surface. `data-screen` is the narrow layout — a
- * phone and a tablet held upright (the compact breakpoint, see
- * useCompactViewport): the list until one is picked, the conversation
- * afterwards, and the selection itself decides which — no extra state, so
- * going back and opening the same agent lands where the reader left off. On a
- * wider window the stylesheet ignores the attribute and lays the two out as
- * columns.
+ * conversation is the whole surface. `data-screen` says which of the two the
+ * reader is on, and the selection decides it — no extra state, so going back
+ * and opening the same agent lands where the reader left off. With nobody
+ * picked there is no conversation at all: the sheet is not drawn, and the list
+ * stands in the middle of the window (stella.css). The same attribute narrows
+ * the two to one screen each below the compact breakpoint (see
+ * useCompactViewport); there it is the same answer, read by the stylesheet
+ * inside its media query.
  */
 export interface StellaModeScreenProps {
   /** Everything useStella answers (agents, selection, conversation, actions). */
@@ -36,8 +37,6 @@ export interface StellaModeScreenProps {
   agent: StellaAgentSummary | null;
   /** The machine's state, for the conversation header and the screen pane. */
   status: StellaStatus | null;
-  /** Narrow layout: one surface at a time (see the module comment). */
-  singleScreen: boolean;
   /** The composer's unsent text and attachments, owned by the App so a
    * remount does not throw them away. */
   input: string;
@@ -64,7 +63,6 @@ export function StellaModeScreen({
   stella,
   agent,
   status,
-  singleScreen,
   input,
   onInputChange,
   images,
@@ -81,9 +79,7 @@ export function StellaModeScreen({
   return (
     <div
       className="stella-shell"
-      data-screen={singleScreen && stella.activeAgentId !== null
-        ? "conversation"
-        : "list"}
+      data-screen={stella.activeAgentId === null ? "list" : "conversation"}
     >
       <StellaSidebar
         agents={stella.agents}

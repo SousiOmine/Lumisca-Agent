@@ -162,15 +162,30 @@
 }
 
 /* The agents. Deliberately a plain list, not a card: one row per person to
- * talk to, so the eye lands on faces and names and nothing else. */
+ * talk to, so the eye lands on faces and names and nothing else.
+ *
+ * `left` is where the list stands: the left margin beside a conversation, or
+ * the middle of the window while nothing is open (`[data-screen="list"]`
+ * below). A relative offset rather than a `transform` — a transformed element
+ * is a containing block, and everything `position: fixed` inside this one (the
+ * row's menu, the create / edit / delete dialogs) would then be placed against
+ * the list instead of the window. Both states are lengths (`0` and the centred
+ * offset), which is what makes the move between them a transition; the width
+ * is a variable because the centred offset is computed from it. */
 .stella-sidebar {
-  width: 216px;
+  position: relative;
+  left: 0;
+  width: var(--stella-list-width);
   flex: none;
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding-top: 4px;
   overflow-y: auto;
+  /* The list travels across the window when a conversation opens, so the
+   * curve is the one for something moving on screen rather than the one for
+   * something arriving (styles/README.md, rule 3). */
+  transition: left var(--lum-dur-slow) var(--lum-ease-in-out);
 }
 
 .stella-sidebar-header {
@@ -938,6 +953,43 @@
   display: block;
 }
 
+/* --- stella: nobody picked yet -------------------------------------------- */
+
+/* With no conversation open the window holds one thing: the list, in the
+ * middle. The sheet is not drawn at all rather than drawn empty — an empty
+ * transcript, a placeholder above it and a disabled send button all said "there
+ * is nothing here", and the reader's next move (pick someone) is the list's.
+ *
+ * The rule is top-level, not inside the compact block below: this is a wide
+ * window's layout too (see StellaModeScreen). Below the breakpoint the same
+ * rule is what makes the list a screen of its own. */
+.stella-shell[data-screen="list"] .stella {
+  display: none;
+}
+
+/* The list alone in the window stands in the middle of the room, and takes the
+ * left margin back — with the transition from .stella-sidebar — as soon as a
+ * conversation opens. `100%` is the shell's content box, the room the two
+ * columns share, so the offset follows the window and `--app-inset` without
+ * anyone measuring. */
+.stella-shell[data-screen="list"] .stella-sidebar {
+  left: calc((100% - var(--stella-list-width)) / 2);
+}
+
+/* A conversation arrives from the right while the list above slides to the
+ * left: one movement, so the sheet is not also faded up from nothing — the
+ * travel is what says where it came from. `backwards`, not `both`: holding the
+ * last keyframe would leave a `transform` on the sheet after it ends, and with
+ * it a containing block for anything `position: fixed` inside the conversation.
+ *
+ * The distance is a hint of direction, not a journey across the window: the
+ * sheet is the width of the window, and a full-width column travelling sideways
+ * is the motion styles/motion.css refuses for a wide layout. */
+.stella-shell[data-screen="conversation"] .stella-main {
+  animation: lum-enter-right var(--lum-dur-slow) var(--lum-ease-drawer)
+    backwards;
+}
+
 @media (max-width: 900px) {
   /* The list and the conversation are two screens, not two columns. A tablet
    * held upright is 800-834px wide: side by side, the list leaves the
@@ -964,21 +1016,27 @@
   }
 
   /* The list is a screen of its own: the whole width, the whole height, and
-   * its own scroll. */
-  .stella-shell[data-screen="list"] .stella {
-    display: none;
-  }
-
+   * its own scroll. It also gives up the centred offset: it is no longer a
+   * column standing in the middle of a room, it is the room. */
   .stella-shell[data-screen="list"] .stella-sidebar {
     width: 100%;
     min-height: 0;
     flex: 1;
+    left: 0;
   }
 
   /* The conversation is the other screen; the list is gone (the title bar's
    * back button returns to it). */
   .stella-shell[data-screen="conversation"] .stella-sidebar {
     display: none;
+  }
+
+  /* One screen replacing another is the page-level slide (styles/motion.css):
+   * the sheet's own arrival from the right would be a second movement inside
+   * it, and the side it would come from means nothing where there is no column
+   * beside it. */
+  .stella-shell[data-screen="conversation"] .stella-main {
+    animation: none;
   }
 
   .stella-pane {
