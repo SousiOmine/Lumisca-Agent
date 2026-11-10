@@ -10,7 +10,6 @@ import type {
   ToolCallBlock,
 } from "../types.ts";
 import { messageKey } from "./identity.ts";
-import { sameGoal } from "./equality.ts";
 
 /** Whether a filter kept the message the history started at (the cursor names
  * that message, so it stays true exactly as long as it survives). */
@@ -376,20 +375,6 @@ export function applyEvent(
     }
     case "session_error":
       return { ...view, error: event.message };
-    case "goal_start":
-    case "goal_progress": {
-      // The goal snapshot changed; the event carries the full snapshot,
-      // so a resync that re-delivers it converges to the same state.
-      return sameGoal(view.goal, event.goal)
-        ? view
-        : { ...view, goal: event.goal };
-    }
-    case "goal_done": {
-      // The goal finished (achieved, capped, cancelled, or errored): the
-      // panel clears. The outcome itself lands in the chat as the final
-      // assistant message or a session_error, so no text is kept here.
-      return view.goal === undefined ? view : { ...view, goal: undefined };
-    }
     case "messages_truncated": {
       // The transcript was rewound from a user message onward: drop the
       // exact messages the server removed, and tombstone their identities so

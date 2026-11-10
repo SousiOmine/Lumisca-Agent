@@ -1,7 +1,6 @@
 import { CoreError } from "../errors.ts";
 import type { Agent } from "../ai/agent.ts";
 import type { AgentMessage } from "../ai/types.ts";
-import type { GoalRunner } from "./goal-runner.ts";
 import type { RetryManager } from "./retry-manager.ts";
 import type { TranscriptStore } from "./transcript.ts";
 import { messageIdentityOf } from "../session/transcript-window.ts";
@@ -14,9 +13,6 @@ export interface RewindDeps {
   agent: Agent;
   transcript: TranscriptStore;
   retry: RetryManager;
-  /** The goal loop, when the session has one. A rewound goal declaration
-   * cancels the goal. */
-  goals: GoalRunner | null;
   isStreaming: () => boolean;
   abort: () => void;
   /** Re-anchor context publications after the truncation. */
@@ -37,8 +33,8 @@ export type RemovedMessage = MessageIdentity;
  *
  * Kept apart from the session agent because it is a self-contained state
  * transition over the agent's transcript: it stops the run, finds the cut,
- * drops the rows, cancels what the dropped messages started (a goal, a
- * parked retry) and reports what went away. Two callers wait on it — a
+ * drops the rows, cancels what the dropped messages started (a parked
+ * retry) and reports what went away. Two callers wait on it — a
  * prompt delivered mid-rewind must not race the truncation.
  */
 export class Rewinder {
@@ -121,18 +117,6 @@ export class Rewinder {
         return;
       }
     }
-    // Goal declarations (modeId "goal") that would disappear with the
-    // truncation: rewinding them away cancels the goal. Captured before the
-    // splice mutates the array.
-    const goalTimestamps = new Set(
-      messages
-        .filter(
-          (m) =>
-            m.role === "mode" &&
-            (m as { modeId?: unknown }).modeId === "goal",
-        )
-        .map((m) => m.timestamp),
-    );
     let removed: RemovedMessage[] = [];
     const truncateFrom = (cut: number) => {
       removed = messages.splice(cut).map(messageIdentityOf);
@@ -162,10 +146,6 @@ export class Rewinder {
     // A parked silent-error restart was never announced — dropping it here
     // leaves no trace, exactly like clearing the queues.
     deps.retry.reset();
-    // Rewinding away the goal's own mode message cancels the goal: the
-    // declaration itself is gone, so the loop must not continue. Any other
-    // rewind leaves the goal intact.
-    deps.goals?.cancelWhenRewound(goalTimestamps, removed);
     // The truncation may have removed the context publications that went
     // with the rewound messages: re-anchor, so a provider whose snapshot is
     // no longer in history publishes it again before the next run.

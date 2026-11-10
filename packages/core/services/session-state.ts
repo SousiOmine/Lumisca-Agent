@@ -1,7 +1,7 @@
 import type { SessionAgent } from "../agent/session-agent.ts";
 import type { BackgroundCommandInfo } from "../tools/background.ts";
 import type { PendingQuestion } from "../tools/ask.ts";
-import type { GoalInfo, TaskInfo, TodoPhase } from "../shared/mod.ts";
+import type { TaskInfo, TodoPhase } from "../shared/mod.ts";
 import type { SessionServiceDeps } from "./session-deps.ts";
 
 type Deps = Pick<SessionServiceDeps, "sessions" | "pool">;
@@ -35,15 +35,6 @@ export class SessionState {
 
   getPendingQuestions(id: string): PendingQuestion[] {
     return this.deps.pool.getPendingQuestions(id);
-  }
-
-  getGoal(id: string): GoalInfo | undefined {
-    return this.deps.sessions.getGoal(id);
-  }
-
-  cancelGoal(id: string): void {
-    this.deps.pool.require(id).cancelGoal();
-    this.deps.sessions.touch(id);
   }
 
   getSessionLastError(id: string): string | undefined {

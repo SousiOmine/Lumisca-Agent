@@ -525,7 +525,7 @@ Deno.test("a card's action lines up with the plain cards around it", async () =>
 });
 
 Deno.test("the progress rows stay in the composer's column", async () => {
-  // Regression: the progress stack (todo, goal, tasks, background) was a
+  // Regression: the progress stack (todo, tasks, background) was a
   // fixed card stack in the window's top-right corner — the same corner the
   // desktop title bar opens the connection picker's menu in. The two drew
   // over each other and whichever came last took the click, so the plan
@@ -586,7 +586,7 @@ Deno.test("every class a stylesheet defines is referenced somewhere", async () =
    * ever appearing as a literal. The list is the SHAPE, not the names, so a
    * new kind needs no edit here. */
   const COMPOSED = /-(header|title|detail|summary|body)$/;
-  const COMPOSED_PREFIXES = ["todo", "task", "background", "goal"];
+  const COMPOSED_PREFIXES = ["todo", "task", "background"];
 
   const missing: string[] = [];
   for (const [path, css] of sheets) {

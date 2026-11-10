@@ -36,7 +36,6 @@ import { QuestionPanel } from "./QuestionPanel.tsx";
 import { TodoPanel } from "./TodoPanel.tsx";
 import { TaskPanel } from "./TaskPanel.tsx";
 import { BackgroundPanel } from "./BackgroundPanel.tsx";
-import { GoalPanel } from "./GoalPanel.tsx";
 import type { UserMessageImage } from "./chat/types.ts";
 import { useProviderModels } from "../providers.ts";
 import { useSavedPrompts } from "../hooks/useSavedPrompts.ts";
@@ -77,8 +76,6 @@ interface ChatViewProps {
   onAnswer: (toolCallId: string, answers: AskAnswer[]) => Promise<void>;
   onModelChange: (provider: string, modelId: string) => void;
   onThinkingLevelChange: (level: ThinkingLevel) => void;
-  /** Cancel the session's active goal (the goal panel's button). */
-  onCancelGoal: () => void;
   /** Run a client-side slash command (kind "action"): `/compact` condenses
    * the session's older history into a checkpoint. `instructions` carries
    * the text the user typed after the command (`/compact ファイル操作を詳しく`),
@@ -108,7 +105,6 @@ export function ChatView(
     onAnswer,
     onModelChange,
     onThinkingLevelChange,
-    onCancelGoal,
     onActionCommand,
     onLoadOlder,
     loadingOlder,
@@ -392,7 +388,6 @@ export function ChatView(
       />
       <div className="input-area">
         <div className="progress-panels">
-          <GoalPanel goal={view.goal} onCancel={onCancelGoal} />
           <TodoPanel todos={view.todos} />
           <TaskPanel tasks={view.tasks} />
           <BackgroundPanel commands={view.backgrounds} />

@@ -1099,7 +1099,6 @@ Deno.test("stella API: the conversation's stream carries only the conversation",
         "todo",
         "task_start",
         "background_start",
-        "goal_start",
         "messages_checkpoint",
       ]
     ) {

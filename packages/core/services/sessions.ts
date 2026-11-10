@@ -6,7 +6,6 @@ import type { BackgroundCommandInfo } from "../tools/background.ts";
 import type { SkillInfo } from "../skills/discover.ts";
 import type {
   AskAnswer,
-  GoalInfo,
   PromptFileRef,
   TaskInfo,
   ThinkingLevel,
@@ -130,14 +129,6 @@ export class SessionService {
 
   getPendingQuestions(id: string): PendingQuestion[] {
     return this.state.getPendingQuestions(id);
-  }
-
-  getGoal(id: string): GoalInfo | undefined {
-    return this.state.getGoal(id);
-  }
-
-  cancelGoal(id: string): void {
-    this.state.cancelGoal(id);
   }
 
   getSessionLastError(id: string): string | undefined {

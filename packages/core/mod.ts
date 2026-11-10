@@ -125,7 +125,6 @@ export type {
   AskQuestion,
   CatalogStatus,
   ContextUsageSummary,
-  GoalInfo,
   Locale,
   ModelInfo,
   PromptFileRef,

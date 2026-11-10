@@ -96,10 +96,6 @@ export interface SessionApi {
    * LumiscaCore.getSessionUsage): the agent holds only the model's view, so
    * a client cannot count the older turns itself. */
   getSessionUsage(id: string): ContextUsageSummary;
-  /** The session's active goal, if any (the `/goal` mode). */
-  getGoal(id: string): import("@lumisca/core").GoalInfo | undefined;
-  /** Cancel the session's active goal (no-op when none runs). */
-  cancelGoal(id: string): void;
 }
 
 /** The body `POST /sessions` reads. */
@@ -266,28 +262,6 @@ export function sessionRoutes(core: SessionApi): Hono {
     requireSession(id);
     await core.openSession(id);
     return c.json({ backgrounds: core.getBackground(id) });
-  });
-
-  /** The session's active goal (`/goal` mode), for the same resync as
-   * /todo: goal events are not replayed, so clients re-fetch after a WS
-   * drop or page reload to restore the right-side goal panel. Null when
-   * no goal runs. */
-  app.get("/sessions/:id/goal", async (c) => {
-    const id = c.req.param("id");
-    requireSession(id);
-    await core.openSession(id);
-    return c.json({ goal: core.getGoal(id) ?? null });
-  });
-
-  /** Cancel the session's active goal (the goal panel's cancel button).
-   * No-op when no goal runs; the agent emits `goal_done` so the panel
-   * clears. */
-  app.delete("/sessions/:id/goal", async (c) => {
-    const id = c.req.param("id");
-    requireSession(id);
-    await core.openSession(id);
-    core.cancelGoal(id);
-    return c.json({ ok: true });
   });
 
   app.post("/sessions", async (c) => {

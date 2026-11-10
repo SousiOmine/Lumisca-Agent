@@ -261,13 +261,6 @@ export class AgentFactory {
         }
         : {}),
       renameSession: (name) => this.deps.renameSession(session.id, name),
-      goalStore: {
-        loadGoal: () => this.deps.loadGoal(session.id),
-        saveGoal: (text, maxIterations) =>
-          this.deps.saveGoal(session.id, text, maxIterations),
-        updateGoal: (patch) => this.deps.updateGoal(session.id, patch),
-        clearGoal: () => this.deps.clearGoal(session.id),
-      },
       onEvent: (event) => {
         // Remember failures for clients that do not see the WS stream;
         // a new run clears the stale error.

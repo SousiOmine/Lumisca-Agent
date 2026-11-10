@@ -924,18 +924,6 @@ Deno.test("panel snapshots answer for a session with nothing running", async () 
     assertEquals(background.status, 200);
     assertEquals(await background.json(), { backgrounds: [] });
 
-    const goal = await json(base, `/api/sessions/${session.id}/goal`);
-    assertEquals(goal.status, 200);
-    assertEquals(await goal.json(), { goal: null });
-
-    // Cancelling a goal nobody started is a no-op, not an error: the panel's
-    // button stays clickable until its own `goal_done` arrives.
-    const cancelled = await json(base, `/api/sessions/${session.id}/goal`, {
-      method: "DELETE",
-    });
-    assertEquals(cancelled.status, 200);
-    assertEquals(await cancelled.json(), { ok: true });
-
     // A session that does not exist is a 404 on every one of them.
     const missing = await json(base, "/api/sessions/nope/todo");
     assertEquals(missing.status, 404);

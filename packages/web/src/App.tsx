@@ -288,7 +288,6 @@ export function App({ initialData }: AppProps): ReactElement {
     startSession,
     prompt,
     abort,
-    cancelGoal,
     answer,
     rewind,
     compact,
@@ -734,7 +733,6 @@ export function App({ initialData }: AppProps): ReactElement {
                   activeView.info.modelId,
                   level,
                 )}
-              onCancelGoal={() => activeTab && cancelGoal(activeTab)}
               onActionCommand={(commandId, instructions) => {
                 if (!activeTab) return;
                 if (commandId === "compact") compact(activeTab, instructions);

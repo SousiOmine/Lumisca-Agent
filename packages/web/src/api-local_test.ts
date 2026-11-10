@@ -191,18 +191,6 @@ const SESSION_CASES: Case[] = [
     call: () => api.getBackground("s1"),
   },
   {
-    name: "getGoal",
-    method: "GET",
-    path: "/api/sessions/s1/goal",
-    call: () => api.getGoal("s1"),
-  },
-  {
-    name: "cancelGoal",
-    method: "DELETE",
-    path: "/api/sessions/s1/goal",
-    call: () => api.cancelGoal("s1"),
-  },
-  {
     name: "prompt",
     method: "POST",
     path: "/api/sessions/s1/prompt",

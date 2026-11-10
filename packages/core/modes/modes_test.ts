@@ -1,6 +1,5 @@
 import { assertEquals, assertNotEquals } from "@std/assert";
 import { AGENT_MODES, findAgentMode } from "./mod.ts";
-import { buildGoalPrompt, goalMode } from "./goal.ts";
 import { buildPlanPrompt, planMode } from "./plan.ts";
 import { buildReviewPrompt, reviewMode } from "./review.ts";
 import { messages } from "../shared/mod.ts";
@@ -53,7 +52,6 @@ Deno.test("AGENT_MODES: ids are unique and every mode has menu text and options"
 Deno.test("findAgentMode finds registered modes and misses unknown ids", () => {
   assertEquals(findAgentMode("review"), reviewMode);
   assertEquals(findAgentMode("plan"), planMode);
-  assertEquals(findAgentMode("goal"), goalMode);
   assertEquals(findAgentMode("nope"), undefined);
 });
 
@@ -135,26 +133,3 @@ Deno.test("plan mode: empty fallback prompt asks for the request instead of plan
   assertEquals(buildPlanPrompt("  "), buildPlanPrompt(""));
 });
 
-Deno.test("goal mode: takes the goal text and has no options", () => {
-  assertEquals(goalMode.options.length, 0);
-  assertEquals(goalMode.buildPromptForText !== undefined, true);
-  assertEquals(goalMode.modeLabel, "chat.mode.goal.modeLabel");
-});
-
-Deno.test("goal prompt: embeds the goal and the working rules", () => {
-  const prompt = goalMode.buildPromptForText!("implement until all tests pass");
-  assertEquals(prompt.includes("implement until all tests pass"), true);
-  assertEquals(prompt.includes("goal-achieving agent"), true);
-  assertEquals(prompt.includes("report completion"), true);
-  // Undecidable questions go to the ask tool.
-  assertEquals(prompt.includes("ask tool"), true);
-  assertEquals(JAPANESE.test(prompt), false);
-});
-
-Deno.test("goal mode: empty fallback prompt asks for the goal instead of running blindly", () => {
-  const prompt = buildGoalPrompt("");
-  assertEquals(prompt.length > 0, true);
-  assertEquals(prompt.includes("No goal was given"), true);
-  assertEquals(prompt.includes("goal-achieving agent"), true);
-  assertEquals(buildGoalPrompt("  "), buildGoalPrompt(""));
-});

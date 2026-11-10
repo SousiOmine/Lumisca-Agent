@@ -76,8 +76,6 @@ const SESSION_CASES: Array<RoutedCase<SessionApi>> = [
   ["GET", "/sessions/sess-1/todo", (s) => s.getTodo(), undefined],
   ["GET", "/sessions/sess-1/tasks", (s) => s.getTasks(), undefined],
   ["GET", "/sessions/sess-1/background", (s) => s.getBackground(), undefined],
-  ["GET", "/sessions/sess-1/goal", (s) => s.getGoal(), undefined],
-  ["DELETE", "/sessions/sess-1/goal", (s) => s.cancelGoal(), undefined],
   ["POST", "/sessions/sess-1/close", (s) => s.close(), undefined],
   [
     "POST",

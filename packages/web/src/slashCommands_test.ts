@@ -34,7 +34,6 @@ const en = createTranslator("en");
 const jaCommands = commandsFor("ja");
 const planCommand = jaCommands.find((c) => c.id === "plan");
 const reviewCommand = jaCommands.find((c) => c.id === "review");
-const goalCommand = jaCommands.find((c) => c.id === "goal");
 
 /** A catalog like the server's `/api/skills` returns it. */
 const SKILLS: SkillInfo[] = [
@@ -42,15 +41,13 @@ const SKILLS: SkillInfo[] = [
   { name: "diagnosing-bugs", description: "Diagnosis loop for hard bugs." },
 ];
 
-Deno.test("slashCommands: plan and goal are text-taking (complete) commands", () => {
+Deno.test("slashCommands: plan is a text-taking (complete) command", () => {
   assertEquals(planCommand !== undefined, true);
   assertEquals(planCommand!.kind, "complete");
   assertEquals(planCommand!.items, undefined);
   // Review is a mode palette: it runs only from the start of the input.
   assertEquals(reviewCommand !== undefined, true);
   assertEquals(reviewCommand!.kind, "run");
-  assertEquals(goalCommand !== undefined, true);
-  assertEquals(goalCommand!.kind, "complete");
 });
 
 Deno.test("buildSlashCommands: the menu text follows the app language", () => {
@@ -151,12 +148,12 @@ Deno.test("slashPromptFromText: mid-text /plan wraps and keeps both sides", () =
   // A command after the caret-agnostic token: the exact position does not
   // matter, only the word-start boundary.
   const mid = slashPromptFromText(
-    "まず /plan を実行して、それから /goal 続行",
+    "まず /plan を実行して、それから /unknown 続行",
     ja,
   );
   if (mid === null || mid.kind !== "wrap") throw new Error("expected wrap");
   assertEquals(mid.mode?.modeId, "plan");
-  assertEquals(mid.mode?.shortText, "まず を実行して、それから /goal 続行");
+  assertEquals(mid.mode?.shortText, "まず を実行して、それから /unknown 続行");
 });
 
 Deno.test("slashPromptFromText: mid-text token keeps the other side as request", () => {
@@ -198,11 +195,6 @@ Deno.test("modeRewindText: text-taking modes restore as a command line", () => {
     modeRewindText("plan", "履歴機能を追加して"),
     "/plan 履歴機能を追加して",
   );
-  // Goal mode behaves the same: `/goal <ゴール文>`.
-  assertEquals(
-    modeRewindText("goal", "全テストが通るまで実装して"),
-    "/goal 全テストが通るまで実装して",
-  );
   // Menu modes keep their self-contained short text.
   assertEquals(
     modeRewindText("review", "未コミットの変更をレビューしてください"),
@@ -210,30 +202,6 @@ Deno.test("modeRewindText: text-taking modes restore as a command line", () => {
   );
   // Unknown mode ids degrade to the short text.
   assertEquals(modeRewindText("nope", "なにか"), "なにか");
-});
-
-Deno.test("slashPrompt: goal mode wraps the trailing text", () => {
-  const result = slashPrompt(
-    goalCommand!,
-    undefined,
-    "  全テストが通るまで実装して ",
-    ja,
-  );
-  assertEquals(result !== null, true);
-  assertEquals(result!.mode.modeId, "goal");
-  assertEquals(result!.mode.optionId, "");
-  assertEquals(result!.mode.modeLabel, "ゴールモード");
-  assertEquals(result!.mode.shortText, "全テストが通るまで実装して");
-  assertEquals(result!.text.includes("全テストが通るまで実装して"), true);
-  assertEquals(result!.text.includes("goal-achieving agent"), true);
-});
-
-Deno.test("slashPromptFromText: /goal <goal> wraps as a text line", () => {
-  const line = slashPromptFromText("/goal 全テストが通るまで実装して", ja);
-  if (line === null || line.kind !== "wrap") throw new Error("expected wrap");
-  assertEquals(line.mode?.modeId, "goal");
-  assertEquals(line.mode?.shortText, "全テストが通るまで実装して");
-  assertEquals(line.text.includes("全テストが通るまで実装して"), true);
 });
 
 // --- detectSlash: where the menu opens --------------------------------

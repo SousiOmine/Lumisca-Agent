@@ -15,7 +15,6 @@ import type {
 import { errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";
 import { RetryManager } from "./retry-manager.ts";
-import { GoalRunner } from "./goal-runner.ts";
 import type { ClientEvent } from "../domain/event.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import { TranscriptStore } from "./transcript.ts";
@@ -57,8 +56,6 @@ import { TitleScheduler } from "./title-scheduler.ts";
 import { type RoutineDropHost, RoutineRun } from "./routine-run.ts";
 import { CardStreams, translateRunEvent } from "./run-events.ts";
 import { RunReply } from "./run-reply.ts";
-import type { GoalInfo } from "../shared/goal.ts";
-import type { GoalStore } from "../goal/loop.ts";
 import {
   type CompactionResult,
   contextStart,
@@ -109,17 +106,13 @@ export interface SessionAgentOptions {
    * `model` cannot see them (see ImageAnalyzer). */
   imageAnalysisModel?: Model<Api>;
   /** The configured fast model: generates the session title from the
-   * first user message (see TitleGenerator), and judges a goal's turns. */
+   * first user message (see TitleGenerator). */
   fastModel?: Model<Api>;
   /** Whether the first prompt names the session (see TitleScheduler).
    * Omitted → yes. A stella conversation's name is its agent's, which the
    * user chose: a generated title would contradict the header and cost a
    * request per agent to do it. */
   titleGeneration?: boolean;
-  /** Session-bound goal persistence (the sessions table, via the pool).
-   * Undefined in tests and sessions without goal support: the goal loop
-   * is then disabled and goal mode behaves like a plain prompt. */
-  goalStore?: GoalStore;
   /** Background-command manager backing the async_bash tools. Its
    * completion events are injected into the agent loop as notifications
    * (see notifyBackgroundCommand). */
@@ -148,7 +141,7 @@ export interface SessionAgentOptions {
    * discoverable tools (the pair is not built). */
   toolRegistry?: SessionToolRegistries;
   /** The app language of this agent: the language of the text the core
-   * writes into the transcript (goal notices, compaction checkpoints) and
+   * writes into the transcript (compaction checkpoints) and
    * of the session's title. The pool passes the setting read when the
    * agent was built; omitted → the catalogue's fallback language. The
    * session's PROMPT language is decided separately, when the prompt is
@@ -233,7 +226,7 @@ export class SessionAgent {
    * no fast model is configured). */
   private readonly titleScheduler: TitleScheduler;
   /** The app language this agent was built with: the language of the text
-   * the core generates into the transcript (goal notices, compaction
+   * the core generates into the transcript (compaction
    * checkpoints) and of the session's title (see SessionAgentOptions). */
   private readonly language: Locale;
   /** The rewind currently running (abort + truncation), if any. Prompts
@@ -247,9 +240,6 @@ export class SessionAgent {
   private readonly retry: RetryManager;
   /** Condenses the history (see CompactionController). */
   private readonly compaction: CompactionController;
-  /** Owns the autonomous goal loop (start / cancel / rewind-cancel /
-   * per-turn judging). Null when the goal loop is disabled. */
-  private readonly goals: GoalRunner | null;
   private readonly renameSession: (name: string) => void;
   /** The ask questions and the screen hand-over: both are released when the
    * run ends (see InterruptionHub). */
@@ -330,18 +320,6 @@ export class SessionAgent {
       hasNoPersistedMessages: () => this.transcript.persistedCount === 0,
     });
     this.retry = new RetryManager(options.rateLimitRetrySleep);
-    const goalStore = options.goalStore ?? null;
-    this.goals = goalStore === null ? null : new GoalRunner({
-      sessionId: options.sessionId,
-      goalStore,
-      getTranscript: () => this.messages,
-      getJudgeModel: () => options.fastModel ?? options.model,
-      streamFn: options.streamFn,
-      language: this.language,
-      runTurn: (instruction) => this.runMainTurn(instruction),
-      emit: (event) => this.emit(event),
-      isClosed: () => this.closed,
-    });
     this.backgroundManager = options.backgroundManager ?? null;
     this.backgroundUnsubscribe = this.backgroundManager === null
       ? null
@@ -375,7 +353,6 @@ export class SessionAgent {
       agent: this.agent,
       transcript: this.transcript,
       retry: this.retry,
-      goals: this.goals,
       isStreaming: () => this.isStreaming,
       abort: () => this.abort(),
       rebaseContexts: (messages) => this.rebaseContexts(messages),
@@ -549,8 +526,8 @@ export class SessionAgent {
   }
 
   /** Reset the retry state for a fresh exchange. A user prompt, a
-   * notification that starts its own run, or a goal-loop turn all start a
-   * fresh exchange: they do not inherit the previous run's
+   * notification that starts its own run start a fresh exchange: they do
+   * not inherit the previous run's
    * vacant-response / rate-limit retry history. */
   private resetRetryState(): void {
     this.retry.reset();
@@ -562,13 +539,12 @@ export class SessionAgent {
    *
    * - `prompt` (awaited, no title/routine extras),
    * - `runRoutine` (carries the routine's name and returns its failure),
-   * - `deliverPrompt` (a fire-and-forget prompt, possibly a mode prompt),
-   * - `runMainTurn` (the goal loop's own turn: no goal loop recursion).
+   * - `deliverPrompt` (a fire-and-forget prompt, possibly a mode prompt).
    *
-   * The four used to repeat the same "wait for MCP → publish contexts →
-   * announce → reset retries → prompt → resume parked restarts → maybe run
-   * the goal loop" sequence, so a change to any step (the context publish a
-   * notification-driven run was missing) had to be made four times.
+   * The three used to repeat the same "wait for MCP → publish contexts →
+   * announce → reset retries → prompt → resume parked restarts" sequence,
+   * so a change to any step (the context publish a notification-driven run
+   * was missing) had to be made three times.
    *
    * `message` is already built and announced by callers that had to decide
    * its shape before the wait (see promptWhileRunning); everything else is
@@ -581,12 +557,8 @@ export class SessionAgent {
       /** The routine whose run this is (stamped so its stop button only
        * interrupts its own run). */
       routine?: { id: string; name: string };
-      /** A mode prompt: stored as a ModeMessage and used to start the goal
-       * mode's loop. */
+      /** A mode prompt: stored as a ModeMessage. */
       mode?: ModePrompt;
-      /** Whether the goal loop may run after this turn (the loop's own
-       * turns pass false so they cannot recurse). */
-      runGoalLoop?: boolean;
       /** Called before the first LLM request (title generation). */
       firstMessageText?: string;
       /** A message the caller already built AND announced (promptWhileRunning
@@ -635,7 +607,6 @@ export class SessionAgent {
           options.modelOnly,
         ));
     if (options.announced === undefined) this.announceMessage(message);
-    if (options.mode !== undefined) this.startGoalIfNeeded(options.mode);
     this.resetRetryState();
     if (options.routine !== undefined) {
       this.routineRuns.begin(options.routine.id);
@@ -675,7 +646,6 @@ export class SessionAgent {
       this.routineRuns.drop(this.routineHost, promptIndex);
     }
     await this.resumeAfterErrorRun();
-    if (options.runGoalLoop !== false) await this.maybeRunGoalLoop();
     return { failure };
   }
 
@@ -899,14 +869,6 @@ export class SessionAgent {
     this.emit({ type: "message_end", sessionId: this.sessionId, message });
   }
 
-  /** One main-agent turn without triggering the goal loop (the loop's own
-   * `runTurn`): the judge's next prompt runs to completion, then the loop
-   * judges again. `runGoalLoop: false` is what keeps injected turns from
-   * recursing into the loop. */
-  private async runMainTurn(instruction: string): Promise<void> {
-    await this.runPrompt(instruction, undefined, { runGoalLoop: false });
-  }
-
   /** A background command finished: inject its completion notification
    * into the agent loop so the agent can react (see injectNotification).
    *
@@ -995,34 +957,7 @@ export class SessionAgent {
   abort(): void {
     this.interruptions.endRun();
     this.retry.abort();
-    // An abort also stops the autonomous goal loop: the user must be able
-    // to interrupt a running goal at any time. The goal is cleared so the
-    // right-side panel disappears; a re-send restarts it.
-    this.cancelGoal();
     this.agent.abort();
-  }
-
-  /** The session's active goal, if any (for the right-side panel resync). */
-  getGoal(): GoalInfo | undefined {
-    return this.goals?.getGoal();
-  }
-
-  /** Cancel the active goal without emitting a user-visible abort of the
-   * run itself (the panel's cancel button path via Core). No-op when no
-   * goal runs. Also used by the abort fast path to stop the autonomous
-   * goal loop. */
-  cancelGoal(): void {
-    this.goals?.cancel(translate(this.language, "goal.cancelledByUser"));
-  }
-
-  /** Start the autonomous goal when a `/goal` mode prompt arrives. */
-  private startGoalIfNeeded(mode: ModePrompt): void {
-    this.goals?.startIfNeeded(mode);
-  }
-
-  /** Run the goal loop when a goal is active (after every completed run). */
-  private async maybeRunGoalLoop(): Promise<void> {
-    await this.goals?.maybeRun();
   }
 
   /** Resolve a pending ask (the ask tool) with the user's answers, letting
@@ -1090,10 +1025,6 @@ export class SessionAgent {
   close(): void {
     this.closed = true;
     this.compaction.disarmIdle();
-    // Stop the goal loop without clearing the persisted goal: reopening
-    // the session shows the goal again via the resync endpoint, but does
-    // not auto-resume the loop.
-    this.goals?.stopLoop();
     this.interruptions.endRun();
     this.retry.abort();
     this.agent.abort();

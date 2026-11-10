@@ -4,7 +4,7 @@
 
 /* ---- chat progress panels ------------------------------------------------- */
 
-/* The session's progress rows (todo plan, goal, sub-agent tasks, background
+/* The session's progress rows (todo plan, sub-agent tasks, background
  * commands), stacked directly above the composer and inside the input area's
  * own column. They used to be a fixed card stack in the top-right corner of
  * the window, which is a place the page does not own: the connection picker's
@@ -33,11 +33,10 @@
 
 /* Every row shares one shape: a header that toggles the body, a dim
  * uppercase title, the running item (truncated), a right-aligned count. The
- * four panels differ only in what their body lists. */
+ * panels differ only in what their body lists. */
 .todo-panel,
 .task-panel,
-.background-panel,
-.goal-panel {
+.background-panel {
   width: 100%;
   font-size: 12px;
   animation: lum-rise-small var(--lum-dur-mid) var(--lum-ease-out) both;
@@ -45,15 +44,13 @@
 
 .todo-panel:not(:first-child),
 .task-panel:not(:first-child),
-.background-panel:not(:first-child),
-.goal-panel:not(:first-child) {
+.background-panel:not(:first-child) {
   border-top: 1px solid var(--border);
 }
 
 .todo-panel-header,
 .task-panel-header,
-.background-panel-header,
-.goal-panel-header {
+.background-panel-header {
   width: 100%;
   display: flex;
   align-items: center;
@@ -70,15 +67,13 @@
 
 .todo-panel-header:hover,
 .task-panel-header:hover,
-.background-panel-header:hover,
-.goal-panel-header:hover {
+.background-panel-header:hover {
   background: var(--accent-soft);
 }
 
 .todo-panel-title,
 .task-panel-title,
-.background-panel-title,
-.goal-panel-title {
+.background-panel-title {
   flex: none;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -90,8 +85,7 @@
  * tooltip carries the whole value. */
 .todo-panel-detail,
 .task-panel-detail,
-.background-panel-detail,
-.goal-panel-detail {
+.background-panel-detail {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -102,8 +96,7 @@
 
 .todo-panel-summary,
 .task-panel-summary,
-.background-panel-summary,
-.goal-panel-summary {
+.background-panel-summary {
   flex: none;
   margin-left: auto;
   font-variant-numeric: tabular-nums;
@@ -112,8 +105,7 @@
 
 .todo-panel-body,
 .task-panel-body,
-.background-panel-body,
-.goal-panel-body {
+.background-panel-body {
   border-top: 1px solid var(--border);
   max-height: min(32dvh, 260px);
   overflow-y: auto;
@@ -262,40 +254,6 @@
   overflow: hidden;
 }
 
-.goal-text {
-  color: var(--text);
-  font-weight: 600;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.goal-reason {
-  color: var(--text-dim);
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.goal-cancel {
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  padding: 4px 8px;
-  font-size: 12px;
-  color: var(--text-dim);
-  cursor: pointer;
-}
-
-.goal-cancel:hover {
-  background: var(--surface-3);
-  border-color: var(--border-strong);
-  color: var(--text);
-}
 
 /* status colors: current task pops in the accent, done in the ok color,
  * blocked in the error color, abandoned fades out. */
@@ -498,8 +456,7 @@
 @media (max-width: 600px) {
   .todo-panel-body,
   .task-panel-body,
-  .background-panel-body,
-  .goal-panel-body {
+  .background-panel-body {
     max-height: min(30dvh, 220px);
   }
 
@@ -522,9 +479,6 @@
     font-size: 16px;
   }
 
-  .goal-cancel {
-    padding: 8px 12px;
-  }
 }
 
 /* ---- phone ---------------------------------------------------------------- */
@@ -547,9 +501,4 @@
     font-size: 13px;
   }
 
-  .goal-cancel {
-    min-height: 36px;
-    padding: 8px 12px;
-    font-size: 13px;
-  }
 }

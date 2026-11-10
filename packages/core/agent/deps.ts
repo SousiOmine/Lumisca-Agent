@@ -90,24 +90,6 @@ export interface SessionPersistence {
    * when none is configured: published as dynamic context together with
    * the workspace instruction files. */
   personalInstructions?: () => { path: string; content: string } | undefined;
-  /** Session-bound goal persistence (the sessions table). The pool binds
-   * these to one session when building its agent; the agent's loop calls
-   * them to persist progress shown in the right-side panel. */
-  loadGoal(sessionId: string): import("../shared/goal.ts").GoalInfo | undefined;
-  saveGoal(
-    sessionId: string,
-    text: string,
-    maxIterations: number,
-  ): import("../shared/goal.ts").GoalInfo;
-  updateGoal(
-    sessionId: string,
-    patch: {
-      iteration?: number;
-      status?: import("../shared/goal.ts").GoalStatus;
-      lastReason?: string | null;
-    },
-  ): import("../shared/goal.ts").GoalInfo | undefined;
-  clearGoal(sessionId: string): string | undefined;
   requireWorkspace(id: string): Workspace;
 }
 

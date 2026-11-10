@@ -37,7 +37,6 @@ import {
   IconListCheck,
   IconMessage,
   IconSparkles,
-  IconTarget,
 } from "@tabler/icons-preact";
 
 /** One selectable entry of the slash-command menu: a command (first level)
@@ -56,7 +55,7 @@ export interface SlashCommandItem {
 export type SlashCommandKind =
   /** Complete the input and close the menu: the request is typed after the
    * token like normal text and wrapped into the command's prompt on submit
-   * (`/plan`, `/goal`). A command with `items` completes to
+   * (`/plan`). A command with `items` completes to
    * `/id <picked item> ` instead: the item id is the command's argument
    * (the skill palette's `/skill <name> `, see slashCompletion). */
   | "complete"
@@ -97,7 +96,6 @@ const MODE_ICONS: Record<string, Icon> = {
   "base-diff": IconGitBranch,
   uncommitted: IconGitCommit,
   plan: IconListCheck,
-  goal: IconTarget,
 };
 
 const FALLBACK_ICON: Icon = IconCode;

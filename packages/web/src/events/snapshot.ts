@@ -2,7 +2,6 @@ import { withLatestContextUsage } from "@lumisca/core/shared";
 import type {
   BackgroundCommandInfo,
   BackgroundView,
-  GoalInfo,
   PendingQuestion,
   SessionView,
   TaskInfo,
@@ -13,7 +12,6 @@ import type { SessionSnapshot } from "@lumisca/core/shared";
 import { applyRunState, mergeNewestWindow } from "./identity.ts";
 import {
   sameBackgrounds,
-  sameGoal,
   sameQuestions,
   sameTasks,
   sameTodoPlan,
@@ -26,7 +24,6 @@ export interface SnapshotParts {
   todos?: TodoPhase[];
   tasks?: TaskInfo[];
   backgrounds?: BackgroundCommandInfo[];
-  goal?: GoalInfo | null;
 }
 
 /** A view's live state (run state, questions, error, title) as it stood
@@ -50,8 +47,7 @@ export interface LiveStateBefore {
  *   it meanwhile (see LiveStateBefore);
  * - panels are their own fetches: the todo plan replaces the view's plan
  *   wholesale (its events only fire on mutations), tasks and background
- *   commands merge per id so live deltas are preserved, and the goal
- *   replaces the snapshot.
+ *   commands merge per id so live deltas are preserved.
  * Messages merge append-only, minus the rewind tombstones: a message
  * deleted while the socket was down must not come back. */
 export function applySnapshot(
@@ -124,12 +120,9 @@ export function applySnapshot(
     : mergeBackgrounds(view.backgrounds, fetchedBackgrounds);
   const backgroundsChanged = fetchedBackgrounds !== undefined &&
     !sameBackgrounds(backgrounds, view.backgrounds);
-  const fetchedGoal = parts.goal;
-  const goalChanged = fetchedGoal !== undefined &&
-    !sameGoal(fetchedGoal ?? undefined, view.goal);
   if (
     messages === view.messages && older === view.older && !usageChanged &&
-    !todoChanged && !tasksChanged && !backgroundsChanged && !goalChanged &&
+    !todoChanged && !tasksChanged && !backgroundsChanged &&
     withRun === view && !questionsChanged &&
     !errorChanged && !nameChanged
   ) {
@@ -146,7 +139,6 @@ export function applySnapshot(
     ...(todoChanged ? { todos: todo } : {}),
     ...(tasksChanged ? { tasks } : {}),
     ...(backgroundsChanged ? { backgrounds } : {}),
-    ...(goalChanged ? { goal: fetchedGoal ?? undefined } : {}),
   };
 }
 

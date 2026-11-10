@@ -1,7 +1,6 @@
 import { sameAsks } from "@lumisca/core/shared";
 import type {
   BackgroundView,
-  GoalInfo,
   PendingQuestion,
   TaskView,
   TodoPhase,
@@ -71,19 +70,6 @@ export function sameTasks(a: TaskView[], b: TaskView[]): boolean {
       task.description === other.description &&
       task.status === other.status;
   });
-}
-
-/** True when two goal snapshots are identical (text, progress, status,
- * and reason). The resync replaces the snapshot, so an unchanged goal
- * must not trigger a view update on every sync tick. */
-export function sameGoal(
-  a: GoalInfo | undefined,
-  b: GoalInfo | undefined,
-): boolean {
-  if (a === undefined || b === undefined) return a === b;
-  return a.text === b.text && a.iteration === b.iteration &&
-    a.maxIterations === b.maxIterations && a.status === b.status &&
-    (a.lastReason ?? "") === (b.lastReason ?? "");
 }
 
 /** True when two background-command lists are identical (ids, commands, and

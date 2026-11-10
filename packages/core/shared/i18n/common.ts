@@ -2,7 +2,7 @@ import type { LocalizedText } from "./types.ts";
 
 /**
  * App-wide messages: generic actions shared by several surfaces, plus the
- * text the CORE generates into the transcript (compaction checkpoints, goal
+ * text the CORE generates into the transcript (compaction checkpoints,
  * notices, desktop notifications). Surfaces with their own vocabulary live
  * in `chrome.ts`, `settings.ts`, `chat.ts` and `panels.ts`.
  */
@@ -170,33 +170,6 @@ export const common = {
   "checkpoint.title": {
     ja: "履歴 {count} 件を要約しました（約 {tokens} トークン）",
     en: "Summarized {count} messages (~{tokens} tokens)",
-  },
-  /** Why the autonomous goal loop stopped without reaching the goal. */
-  "goal.cancelledByUser": {
-    ja: "ユーザー操作により処理を中止しました",
-    en: "Stopped by the user",
-  },
-  "goal.cancelledByRewind": {
-    ja: "操作の取り消し（巻き戻し）が行われたため、処理を中断しました",
-    en: "Stopped: the goal declaration was rewound",
-  },
-  "goal.maxIterations": {
-    ja:
-      "反復実行の上限回数（{max}回）に達したため、安全のため処理を停止しました",
-    en: "Stopped after reaching the iteration limit ({max})",
-  },
-  "goal.judgeFailed": {
-    ja: "ゴールの判定に失敗したため停止しました: {message}",
-    en: "Stopped: the goal judgement failed: {message}",
-  },
-  /** Short form of the same failure, shown as the goal's stop reason. */
-  "goal.judgeError": {
-    ja: "判定エラー: {message}",
-    en: "Judgement error: {message}",
-  },
-  "goal.judgeUnparsable": {
-    ja: "高速モデルの応答を解釈できませんでした",
-    en: "The fast model's reply could not be read",
   },
   /** Why a run ended without doing anything: the model answered with
    * neither text nor a tool call, and the vacant-response retries ran

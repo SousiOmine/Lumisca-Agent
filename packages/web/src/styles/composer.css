@@ -4,7 +4,7 @@
 
 /* ---- input --------------------------------------------------------------- */
 
-/* The chrome bar holds the progress rows (todo, goal, tasks, background) and
+/* The chrome bar holds the progress rows (todo, tasks, background) and
  * the question panel (ask tool) above the composer.
  * The chat history still cannot squeeze it: the history's flex basis is 0,
  * so only this area ever gives back space, and only when it alone would

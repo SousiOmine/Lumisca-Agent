@@ -343,7 +343,6 @@ Deno.test("the design documents only name files that exist", async () => {
     "packages/core/browser",
     "packages/core/domain",
     "packages/core/services",
-    "packages/core/goal",
     "packages/core/modes",
     "packages/core/pdf",
     "packages/server",

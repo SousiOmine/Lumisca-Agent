@@ -48,12 +48,6 @@ export const chat = {
     en: "Draft a plan (no file edits until you approve)",
   },
   "chat.mode.plan.modeLabel": { ja: "プラン作成モード", en: "Plan mode" },
-  "chat.mode.goal.label": { ja: "ゴール", en: "Goal" },
-  "chat.mode.goal.description": {
-    ja: "目標を設定し、達成するまでAIが自律的に作業を継続します",
-    en: "Set a goal; the agent keeps working until it is reached",
-  },
-  "chat.mode.goal.modeLabel": { ja: "ゴールモード", en: "Goal mode" },
 
   // --- client-side slash commands ------------------------------------------
   "chat.slash.compact.label": { ja: "履歴を圧縮", en: "Compact history" },

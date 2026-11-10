@@ -2,7 +2,7 @@ import type { LocalizedText } from "./types.ts";
 
 /**
  * Messages of the side panels and session lists: the progress panels (todo,
- * tasks, background commands, goal, context usage), the question panel, and
+ * tasks, background commands, context usage), the question panel, and
  * the recent-session list/modal.
  *
  * Keys are `panels.<surface>.<element>`; the shared actions (close, back,
@@ -23,7 +23,6 @@ export const panels = {
   "panels.todo.status.abandoned": { ja: "取りやめ", en: "Abandoned" },
   "panels.todo.status.blocked": { ja: "保留", en: "Blocked" },
   "panels.task.title": { ja: "タスク", en: "Tasks" },
-  "panels.goal.title": { ja: "ゴール", en: "Goal" },
   "panels.background.title": {
     ja: "バックグラウンド",
     en: "Background",
@@ -53,17 +52,6 @@ export const panels = {
     ja: "コンテキスト使用率: {value}",
     en: "Context usage: {value}",
   },
-
-  // --- goal ----------------------------------------------------------------
-  "panels.goal.judging": {
-    ja: "進捗を判定中…",
-    en: "Judging progress…",
-  },
-  "panels.goal.stopTitle": {
-    ja: "ゴール実行を中止する",
-    en: "Stop goal execution",
-  },
-  "panels.goal.stop": { ja: "中止", en: "Stop" },
 
   // --- question (ask tool) -------------------------------------------------
   // --- routines (scheduled requests) ----------------------------------------

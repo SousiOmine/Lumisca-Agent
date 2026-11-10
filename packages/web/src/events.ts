@@ -30,7 +30,6 @@ export { applyEvent } from "./events/reducer.ts";
 export {
   revisionGap,
   sameBackgrounds,
-  sameGoal,
   sameQuestions,
   sameTasks,
   sameTodoPlan,

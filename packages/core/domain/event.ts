@@ -1,7 +1,6 @@
 import type { AgentMessage, CheckpointMessage } from "../ai/types.ts";
 import type {
   AskQuestion,
-  GoalInfo,
   SubagentStatus,
   SubagentType,
   TodoPhase,
@@ -187,22 +186,6 @@ export type ClientEvent =
     exitCode?: number;
     finishedAt: number;
     tail: string;
-  }
-  /** The session's goal started (`/goal` mode). Clients show it in the
-   * right-side goal panel; the resync endpoint carries the same snapshot. */
-  | { type: "goal_start"; sessionId: string; goal: GoalInfo }
-  /** The session's goal progressed (iteration, judging status, or the
-   * judge's reason). Clients replace the goal panel wholesale. */
-  | { type: "goal_progress"; sessionId: string; goal: GoalInfo }
-  /** The session's goal finished. `achieved` is true when the judge
-   * confirmed the goal; otherwise `reason` explains the stop (limit,
-   * cancel, or judge failure). Clients clear the goal panel. */
-  | {
-    type: "goal_done";
-    sessionId: string;
-    text: string;
-    achieved: boolean;
-    reason: string;
   }
   /** The hub's event stream to one peer closed or (re)opened. The hub
    * relays each peer's stream to its UI clients; while that relay is down

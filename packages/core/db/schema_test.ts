@@ -35,19 +35,6 @@ Deno.test("migrate adds the session workspace index", () => {
   }
 });
 
-Deno.test("migrate is idempotent when reopened", () => {
-  const db = LumiscaDb.openInMemory();
-  const goalColumns = db.db
-    .prepare("SELECT name FROM pragma_table_info('sessions')")
-    .all() as unknown as Array<{ name: string }>;
-  db.close();
-  // Guard against a migration that only works on a fresh database: the
-  // column list is what later migrations key off.
-  assertEquals(
-    goalColumns.some((column) => column.name === "goal_text"),
-    true,
-  );
-});
 
 /** user_version one below the context-usage conversion (append-only list
  * position 7): replaying the migration over a database stamped there is

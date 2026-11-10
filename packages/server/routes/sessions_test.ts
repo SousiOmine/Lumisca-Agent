@@ -13,22 +13,22 @@ Deno.test("parsePromptBody passes text-only prompts through", () => {
   });
 });
 
-Deno.test("parsePromptBody passes goal mode metadata through", () => {
+Deno.test("parsePromptBody passes mode metadata through", () => {
   const { text, mode } = parsePromptBody({
-    text: "full goal prompt",
+    text: "full mode prompt",
     mode: {
-      modeId: "goal",
+      modeId: "plan",
       optionId: "",
-      modeLabel: "ゴールモード",
-      shortText: "全テストを通す",
+      modeLabel: "プラン作成モード",
+      shortText: "設計を立てる",
     },
   });
-  assertEquals(text, "full goal prompt");
+  assertEquals(text, "full mode prompt");
   assertEquals(mode, {
-    modeId: "goal",
+    modeId: "plan",
     optionId: "",
-    modeLabel: "ゴールモード",
-    shortText: "全テストを通す",
+    modeLabel: "プラン作成モード",
+    shortText: "設計を立てる",
   });
 });
 

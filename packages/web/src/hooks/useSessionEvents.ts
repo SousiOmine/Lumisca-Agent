@@ -21,8 +21,8 @@ import type { ClientEvent, SessionView, TodoPhase } from "../types.ts";
 const DISCONNECTED_SYNC_INTERVAL_MS = 10_000;
 
 /** Fetch one session's panel snapshots — the parts of a view that are not in
- * the transcript snapshot: the sub-agent tasks, the background commands and
- * the active goal. Each piece is fetched independently (one failing — a
+ * the transcript snapshot: the sub-agent tasks and the background commands.
+ * Each piece is fetched independently (one failing — a
  * deleted session, an unreachable peer — must not drop the others), and a
  * failed piece is absent rather than empty, so the caller keeps what it
  * shows. Panels only, so a caller that merges the result never touches the
@@ -43,12 +43,6 @@ async function fetchPanels(id: string): Promise<SnapshotParts | undefined> {
     fetched = true;
   } catch {
     // Server not reachable yet; keep the current backgrounds.
-  }
-  try {
-    panels.goal = (await session.getGoal()).goal;
-    fetched = true;
-  } catch {
-    // Server not reachable yet; keep the current goal.
   }
   return fetched ? panels : undefined;
 }
@@ -216,7 +210,7 @@ export function useSessionEvents(
   }, [seedRevision]);
 
   /** Re-read one open tab's panel snapshots (sub-agent tasks, background
-   * commands, goal) and merge them in. Asked for when a tab is opened on a
+   * commands) and merge them in. Asked for when a tab is opened on a
    * session whose run is still going — a session left running with "close
    * and keep running" and reopened from the session history: the transcript
    * snapshot does not carry the panels, and the task/background events only

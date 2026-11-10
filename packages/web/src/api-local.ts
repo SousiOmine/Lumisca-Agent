@@ -6,7 +6,6 @@ import type {
   ConnectionEntry,
   FsBrowse,
   FsPlace,
-  GoalInfo,
   McpAuthSnapshot,
   McpInfo,
   McpTestResult,
@@ -110,19 +109,6 @@ export const sessionRoutes = {
       peerId,
       sessionPath(sessionId, "/background"),
     ),
-  /** The session's active goal (`/goal` mode); re-fetched after a WS drop
-   * or page reload to restore the right-side goal panel (goal events are
-   * not replayed). Null when no goal runs. */
-  getGoal: (peerId: string, sessionId: string) =>
-    sessionRequest<{ goal: GoalInfo | null }>(
-      peerId,
-      sessionPath(sessionId, "/goal"),
-    ),
-  /** Cancel the session's active goal (the goal panel's cancel button). */
-  cancelGoal: (peerId: string, sessionId: string) =>
-    sessionRequest<{ ok: boolean }>(peerId, sessionPath(sessionId, "/goal"), {
-      method: "DELETE",
-    }),
   closeSession: (peerId: string, sessionId: string) =>
     sessionRequest<{ ok: boolean }>(peerId, sessionPath(sessionId, "/close"), {
       method: "POST",
@@ -315,19 +301,26 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ name, role }),
     }),
-  /** Change an agent's name, its picture and/or its model, in one request:
-   * the edit dialog saves them together. An omitted field is left alone,
-   * `icon: null` returns the agent to its initial, `icon: { data, mimeType }`
-   * sets a new picture (`data` is base64, with or without its data-URL
-   * header), `model: null` returns the agent to the app's default model and
-   * `model: { provider, modelId }` sets its own. Answers the updated agent,
-   * so the client needs no second read. */
+  /** Change an agent's name, its picture, its model and/or that model's
+   * thinking strength, in one request: the edit dialog saves them together.
+   * An omitted field is left alone, `icon: null` returns the agent to its
+   * initial, `icon: { data, mimeType }` sets a new picture (`data` is base64,
+   * with or without its data-URL header), `model: null` returns the agent to
+   * the app's default model, `model: { provider, modelId }` sets its own, and
+   * `thinkingLevel: { provider, modelId, level }` stores the level for that
+   * model (the level belongs to the model, not the agent). Answers the
+   * updated agent, so the client needs no second read. */
   updateStellaAgent: (
     id: string,
     patch: {
       name?: string;
       icon?: { data: string; mimeType: string } | null;
       model?: { provider: string; modelId: string } | null;
+      thinkingLevel?: {
+        provider: string;
+        modelId: string;
+        level: ThinkingLevel;
+      };
     },
   ) =>
     request<StellaAgent>(`/api/stella/agents/${encodeURIComponent(id)}`, {

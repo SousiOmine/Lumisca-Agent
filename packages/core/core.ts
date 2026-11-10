@@ -59,7 +59,7 @@ import type {
   UserProviderSummary,
 } from "./models/user-providers.ts";
 import type { ThinkingLevel } from "./shared/mod.ts";
-import type { GoalInfo, StellaAgentSummary } from "./shared/mod.ts";
+import type { StellaAgentSummary } from "./shared/mod.ts";
 import type { CatalogStatus } from "./models/mod.ts";
 import type { AskAnswer } from "./shared/mod.ts";
 import type { TaskInfo, TodoPhase } from "./shared/mod.ts";
@@ -423,22 +423,6 @@ export class LumiscaCore {
       streamFn,
       messageRepo: this.messages,
       requestShapeRepo: this.requestShapes,
-      loadGoal: (id) => this.sessions.getGoal(id),
-      saveGoal: (id, text, maxIterations) => {
-        this.sessions.setGoal(id, text, maxIterations);
-        const goal = this.sessions.getGoal(id);
-        if (!goal) throw new CoreError(`Session not found: ${id}`, "not_found");
-        return goal;
-      },
-      updateGoal: (id, patch) => {
-        this.sessions.updateGoal(id, patch);
-        return this.sessions.getGoal(id);
-      },
-      clearGoal: (id) => {
-        const goal = this.sessions.getGoal(id);
-        this.sessions.clearGoal(id);
-        return goal?.text;
-      },
       commandSafety: this.commandSafety,
       visuals: this.visuals,
       attachments: this.attachments,
@@ -1480,14 +1464,6 @@ export class LumiscaCore {
    * do not share a catalog (only the machine-wide folder is common). */
   listStellaSkills(agentId: string): SkillInfo[] {
     return this.services.sessions.listStellaSkills(agentId);
-  }
-
-  getGoal(id: string): GoalInfo | undefined {
-    return this.services.sessions.getGoal(id);
-  }
-
-  cancelGoal(id: string): void {
-    this.services.sessions.cancelGoal(id);
   }
 
   getSessionLastError(id: string): string | undefined {
