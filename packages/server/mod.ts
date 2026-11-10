@@ -1,3 +1,6 @@
+// The Deno API surface this server was written against, implemented on Bun.
+// Imported first: every module below reaches for `Deno.*` at load time.
+import "../core/runtime/deno.ts";
 import { dirname } from "node:path";
 import {
   createComputerHost,

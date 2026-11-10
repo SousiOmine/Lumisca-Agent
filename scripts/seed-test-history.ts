@@ -2,6 +2,7 @@
 // verified with many messages. Run with:
 //   deno run -A scripts/seed-test-history.ts <sessionId> [nPairs]
 // The DB path follows the server convention (LUMISCA_DB, default test-lumisca.db).
+import "../packages/core/runtime/deno.ts";
 import { DatabaseSync } from "node:sqlite";
 
 const sessionId = Deno.args[0];

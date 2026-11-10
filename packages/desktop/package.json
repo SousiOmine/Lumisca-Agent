@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "tauri": "tauri",
-    "build:server": "deno run --allow-all ../../scripts/build-server.ts --out src-tauri/resources/server",
-    "build:server:dev": "deno run --allow-all ../../scripts/build-server.ts --out src-tauri/resources/server --no-compile"
+    "build:server": "bun run ../../scripts/build-server.ts --out src-tauri/resources/server",
+    "build:server:dev": "bun run ../../scripts/build-server.ts --out src-tauri/resources/server --no-compile"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"

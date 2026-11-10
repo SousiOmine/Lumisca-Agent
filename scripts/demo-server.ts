@@ -13,6 +13,7 @@
  * "e2e-session" session. Prompts mentioning "bash", "read" or "send_chat"
  * exercise the matching tool; anything else answers with markdown.
  */
+import "../packages/core/runtime/deno.ts";
 import { basename } from "node:path";
 import {
   type AssistantMessage,

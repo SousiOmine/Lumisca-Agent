@@ -1,3 +1,4 @@
+import "../packages/core/runtime/deno.ts";
 import { assertEquals, assertThrows } from "@std/assert";
 import {
   parseReleaseAssets,

@@ -19,6 +19,7 @@
  * afterwards verify). Running from a copy also matches what a user does with
  * the downloaded package.
  */
+import "../packages/core/runtime/deno.ts";
 import { basename, dirname, join } from "node:path";
 import { SERVER_STARTUP_ENV_KEYS } from "../packages/server/startup.ts";
 import { installedFileNames } from "../packages/server/layout.ts";

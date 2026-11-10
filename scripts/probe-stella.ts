@@ -19,6 +19,7 @@
  * Without `--start` nothing is built or started: only the read-only questions
  * (1) are asked, which is what a normal `deno task dev` user wants.
  */
+import "../packages/core/runtime/deno.ts";
 import { LumiscaCore } from "../packages/core/mod.ts";
 import { createVmManager } from "../packages/core/vm/container.ts";
 import { createVmExec } from "../packages/core/vm/container.ts";

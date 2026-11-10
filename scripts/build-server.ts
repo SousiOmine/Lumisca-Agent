@@ -25,6 +25,7 @@
  * (packages/server/assets.ts), so the prebuild and the runtime can never
  * disagree about what an asset is.
  */
+import "../packages/core/runtime/deno.ts";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { buildAssetsManifest } from "../packages/server/assets.ts";
 import { VM_CONTAINER_DIR_NAME } from "../packages/core/vm/contract.ts";
@@ -40,16 +41,6 @@ import { binaryName, repoRoot, reportUsage } from "./lib.ts";
  * in (the artifact cannot ask for more at runtime); the desktop shell
  * launches the same binary, so this one list serves both distributions.
  */
-const SERVER_PERMISSIONS = [
-  "--allow-net",
-  "--allow-read",
-  "--allow-write",
-  "--allow-env",
-  "--allow-run",
-  "--allow-sys",
-  "--allow-ffi",
-] as const;
-
 const SERVER_ENTRY = join(repoRoot, "packages", "server", "mod.ts");
 
 interface Options {
@@ -118,14 +109,10 @@ async function exists(path: string): Promise<boolean> {
  * `--no-compile` placeholder) makes the compiler refuse to write. */
 async function compileServer(outputPath: string): Promise<void> {
   await Deno.remove(outputPath).catch(() => {});
+  // Bun builds a single executable from the same entry. The Deno permission
+  // list is gone with the runtime; Bun has no equivalent capability list.
   const status = await new Deno.Command(Deno.execPath(), {
-    args: [
-      "compile",
-      ...SERVER_PERMISSIONS,
-      "--output",
-      outputPath,
-      SERVER_ENTRY,
-    ],
+    args: ["build", "--compile", "--outfile", outputPath, SERVER_ENTRY],
     cwd: repoRoot,
     stdin: "null",
     stdout: "inherit",
@@ -133,7 +120,7 @@ async function compileServer(outputPath: string): Promise<void> {
   }).spawn().status;
   if (!status.success) {
     console.error(
-      `build-server: deno compile failed (exit ${status.code}); ` +
+      `build-server: bun build --compile failed (exit ${status.code}); ` +
         "the packaged server was not produced",
     );
     Deno.exit(status.code === 0 ? 1 : status.code);

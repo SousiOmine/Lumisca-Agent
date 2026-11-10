@@ -19,6 +19,7 @@
  *   deno task probe:computer --move 100,100 --type "hello"
  *   deno task probe:computer --key "ctrl+shift+s"
  */
+import "../packages/core/runtime/deno.ts";
 import { createComputerHost } from "../packages/core/computer/host.ts";
 import {
   DEFAULT_MAX_DIMENSION,

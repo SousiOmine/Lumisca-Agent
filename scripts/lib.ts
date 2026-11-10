@@ -15,6 +15,7 @@
  * - `createChecker` is the `ok/FAIL` reporter the archive and smoke scripts
  *   share, including the failure accumulation the exit code comes from.
  */
+import "../packages/core/runtime/deno.ts";
 import { isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 

@@ -20,6 +20,7 @@
  * `tauri signer sign` prints), so a manifest can be written without a `.sig`
  * file on disk.
  */
+import "../packages/core/runtime/deno.ts";
 import { basename, dirname, join } from "node:path";
 import {
   archiveAssetName,

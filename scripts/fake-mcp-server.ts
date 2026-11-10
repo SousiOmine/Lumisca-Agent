@@ -5,18 +5,18 @@
 //   slow  — replies after 1 second (abort and timeout tests)
 //   crash — exits the process (crash/respawn tests)
 //   image — returns an image content block
-// Run with: deno run scripts/fake-mcp-server.ts  (no permission flags needed)
+// Run with: bun run scripts/fake-mcp-server.ts
 
 const encoder = new TextEncoder();
 
 function respond(id: number, result: unknown): void {
-  Deno.stdout.writeSync(
+  process.stdout.write(
     encoder.encode(JSON.stringify({ jsonrpc: "2.0", id, result }) + "\n"),
   );
 }
 
 function respondError(id: number, code: number, message: string): void {
-  Deno.stdout.writeSync(
+  process.stdout.write(
     encoder.encode(
       JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } }) + "\n",
     ),
@@ -27,7 +27,7 @@ console.error("fake mcp server ready");
 
 const decoder = new TextDecoder();
 let buffer = "";
-for await (const chunk of Deno.stdin.readable) {
+for await (const chunk of process.stdin) {
   buffer += decoder.decode(chunk, { stream: true });
   let newline: number;
   while ((newline = buffer.indexOf("\n")) !== -1) {
@@ -110,7 +110,7 @@ for await (const chunk of Deno.stdin.readable) {
         });
       } else if (toolName === "crash") {
         console.error("fake mcp server crashing on purpose");
-        Deno.exit(1);
+        process.exit(1);
       } else if (toolName === "image") {
         respond(message.id as number, {
           content: [{ type: "image", data: "abc", mimeType: "image/png" }],

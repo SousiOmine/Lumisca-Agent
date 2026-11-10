@@ -28,7 +28,7 @@ const SERVER_PORT_ENV: &str = "LUMISCA_PORT";
 /// to update itself (see packages/server/mod.ts).
 const SERVER_DESKTOP_ENV: &str = "LUMISCA_DESKTOP";
 /// How long one local startup attempt may wait before the port is
-/// abandoned and a fresh one is tried. 3s covers a cold deno run; a
+/// abandoned and a fresh one is tried. 3s covers a cold bun run; a
 /// healthy server answers in well under a second.
 const LOCAL_START_TIMEOUT: Duration = Duration::from_secs(3);
 /// Second, longer health budget for a child that is still alive after
@@ -172,9 +172,9 @@ fn background_command<S: AsRef<OsStr>>(program: S) -> Command {
     command
 }
 
-fn find_deno() -> Option<PathBuf> {
+fn find_bun() -> Option<PathBuf> {
     // Respect an explicit override.
-    if let Ok(explicit) = std::env::var("LUMISCA_DENO") {
+    if let Ok(explicit) = std::env::var("LUMISCA_BUN") {
         let p = PathBuf::from(explicit);
         if p.exists() {
             return Some(p);
@@ -182,7 +182,7 @@ fn find_deno() -> Option<PathBuf> {
     }
     // Look up PATH.
     let path_var = std::env::var_os("PATH")?;
-    let exe = if cfg!(windows) { "deno.exe" } else { "deno" };
+    let exe = if cfg!(windows) { "bun.exe" } else { "bun" };
     for dir in std::env::split_paths(&path_var) {
         let candidate = dir.join(exe);
         if candidate.is_file() {
@@ -193,15 +193,15 @@ fn find_deno() -> Option<PathBuf> {
 }
 
 /// How to launch the server: a compiled binary (packaged builds) or a
-/// deno run of the repository entry point (development).
+/// bun run of the repository entry point (development).
 enum ServerCommand {
     Compiled(PathBuf),
-    Deno(PathBuf),
+    Bun(PathBuf),
 }
 
 /// Locate the server runtime:
 /// 1. development: repository layout (cwd is packages/desktop/src-tauri) —
-///    the server runs from current source via `deno run`, so code changes
+///    the server runs from current source via `bun run`, so code changes
 ///    take effect on the next dev launch
 /// 2. packaged: server/lumisca-server(.exe) in Tauri's resource directory
 ///
@@ -237,7 +237,7 @@ fn find_server_command(app: &AppHandle) -> Option<ServerCommand> {
         // Development always runs the repository source when it is
         // reachable; the bundled binary is for packaged (release) builds.
         if cfg!(debug_assertions) {
-            return Some(ServerCommand::Deno(entry.clone()));
+            return Some(ServerCommand::Bun(entry.clone()));
         }
     }
     if let Some(bundled) = bundled {
@@ -250,7 +250,7 @@ fn find_server_command(app: &AppHandle) -> Option<ServerCommand> {
             return Some(ServerCommand::Compiled(bundled));
         }
     }
-    repo_entry.map(ServerCommand::Deno)
+    repo_entry.map(ServerCommand::Bun)
 }
 
 /// Desktop data directory (server database, desktop settings).
@@ -333,9 +333,9 @@ fn start_server(app: &AppHandle, port: u16, token: &str) -> Result<Child, String
                 .spawn()
                 .map_err(|e| format!("Failed to start Lumisca server: {e}"))?
         }
-        ServerCommand::Deno(entry) => {
-            let deno = find_deno().ok_or_else(|| {
-                "Deno runtime not found. Install Deno (https://deno.com) and add it to PATH."
+        ServerCommand::Bun(entry) => {
+            let bun = find_bun().ok_or_else(|| {
+                "Bun runtime not found. Install Bun (https://bun.com) and add it to PATH."
                     .to_string()
             })?;
             // The server resolves frontend assets relative to the
@@ -349,18 +349,9 @@ fn start_server(app: &AppHandle, port: u16, token: &str) -> Result<Child, String
                 .and_then(|p| p.parent().map(|p| p.to_path_buf()))
                 .and_then(|p| p.parent().map(|p| p.to_path_buf()))
                 .unwrap_or_else(|| PathBuf::from("."));
-            let mut command = background_command(&deno);
+            let mut command = background_command(&bun);
             command
-                .args([
-                    "run",
-                    "--allow-net",
-                    "--allow-read",
-                    "--allow-write",
-                    "--allow-env",
-                    "--allow-run",
-                    "--allow-sys",
-                    "--allow-ffi",
-                ])
+                .args(["run"])
                 .arg(&entry)
                 .env("LUMISCA_DB", db_path)
                 .env("LUMISCA_PORT", port.to_string())
@@ -604,7 +595,7 @@ pub(crate) fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
             break;
         }
         // Keep the failed attempt's tail: it is usually the actual reason
-        // (port clash, missing Deno, listen error) and would otherwise be
+        // (port clash, missing Bun, listen error) and would otherwise be
         // cleared by the next attempt before anyone can read it.
         last_detail = last_log_lines(&server_log::tail(app), 20);
         server_log::note(

@@ -30,6 +30,7 @@
  * whose URLs cannot be mapped must not reach users. `--out` may be the
  * input path: the manifest is read before it is written.
  */
+import "../packages/core/runtime/deno.ts";
 import { absolutePath, parseOptions, reportUsage } from "./lib.ts";
 import {
   parseReleaseAssets,

@@ -6,31 +6,33 @@
 // the exit marker: the transport stops this process by ending stdin (EOF)
 // or, when it does not exit in time, by a signal. EOF is the normal path.
 //
-// Run with: deno run --allow-write scripts/fake-mcp-hang.ts <marker-file>
+// Run with: bun run scripts/fake-mcp-hang.ts <marker-file>
 
-const marker = Deno.args[0];
+import { writeFileSync } from "node:fs";
+
+const marker = process.argv.slice(2)[0];
 
 function finish(): never {
   if (marker !== undefined) {
     try {
-      Deno.writeTextFileSync(marker, "exited");
+      writeFileSync(marker, "exited");
     } catch {
       // A missing marker fails the test that asked for it.
     }
   }
-  Deno.exit(0);
+  process.exit(0);
 }
 
 // SIGTERM is the SDK's fallback kill. Best-effort only: not every platform
 // delivers it, and Windows refuses listeners for unsupported signals.
 try {
-  Deno.addSignalListener("SIGTERM", finish);
+  process.on("SIGTERM", finish);
 } catch {
   // unsupported here — stdin EOF still ends this process
 }
 
 // Swallow everything: no response is ever written.
-for await (const chunk of Deno.stdin.readable) {
+for await (const chunk of process.stdin) {
   if (chunk.length === 0) break;
 }
 // stdin EOF: the client closed the transport.

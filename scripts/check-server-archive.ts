@@ -25,6 +25,7 @@
  * throwaway signing key); the release workflow leaves it out so every
  * published package is checked against the key servers actually carry.
  */
+import "../packages/core/runtime/deno.ts";
 import { basename, join } from "node:path";
 import {
   type ArchiveFormat,

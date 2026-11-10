@@ -19,6 +19,7 @@
  *
  * Exits 1 and prints `::error::` annotations on any mismatch.
  */
+import "../packages/core/runtime/deno.ts";
 import { join } from "node:path";
 import { repoRoot } from "./lib.ts";
 
