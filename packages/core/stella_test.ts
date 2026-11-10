@@ -1698,7 +1698,7 @@ Deno.test("stella conversation: only stella sessions condense an idle history", 
   try {
     const agent = core.getAgent(session.id)!;
     assertEquals(agent.idleCompaction, {
-      afterMs: 30 * 60 * 1000,
+      afterMs: 10 * 60 * 1000,
       minTokens: 50_000,
     });
 

@@ -85,15 +85,16 @@ const STELLA_AGENT_TOOL_NAMES = [TOOL_IDENTITY, TOOL_AGENT_CREATE];
  * the whole history as input, and a history near the window would have its
  * checkpoint spliced in while the user waits for the answer.
  *
- * Half an hour of silence is short enough that the conversation is
- * condensed before the user comes back, and long enough that stepping away
- * mid-conversation does not cost the verbatim history. The 50k floor keeps
+ * Ten minutes of silence is enough for the conversation to be condensed
+ * while the user is away — before the next visit, not while they wait for
+ * an answer — and longer than the pauses inside one sitting, so thinking
+ * for a few minutes does not cost the verbatim history. The 50k floor keeps
  * short conversations out of it: a summarization call over a few thousand
  * tokens saves nothing worth having. The check condenses the whole view —
  * no tail — because nothing is being answered while the conversation sits
  * idle, so there is no request to keep recent work for. */
 const STELLA_IDLE_COMPACTION = {
-  afterMs: 30 * 60 * 1000,
+  afterMs: 10 * 60 * 1000,
   minTokens: 50_000,
 } as const;
 
