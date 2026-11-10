@@ -20,7 +20,7 @@ import { useSessionEvents } from "./hooks/useSessionEvents.ts";
 import { useServerHealth } from "./hooks/useServerHealth.ts";
 import { useBuildWatch } from "./hooks/useBuildWatch.ts";
 import { useUpdateStatus } from "./hooks/useUpdateStatus.ts";
-import { useNarrowViewport } from "./hooks/useMediaQuery.ts";
+import { useCompactViewport } from "./hooks/useMediaQuery.ts";
 import { useSessionActions } from "./hooks/useSessionActions.ts";
 import { useAppHeight } from "./hooks/useAppHeight.ts";
 import { useBackspaceGuard } from "./hooks/useBackspaceGuard.ts";
@@ -491,10 +491,12 @@ export function App({ initialData }: AppProps): ReactElement {
     stella.agents,
     replaceUrl,
   ]);
-  // stella's two surfaces are two columns on a desktop and two screens on a
-  // phone (see the shell below). The query is the same 600px the stylesheet
-  // switches at, so the layout and the navigation cannot disagree.
-  const narrow = useNarrowViewport();
+  // stella's two surfaces are two columns on a desktop and two screens at the
+  // compact width and below: a tablet held upright is 800-834px wide, where
+  // the list beside the conversation leaves the conversation a phone's width
+  // (stella.css). The query is the same 900px the stylesheet switches at, so
+  // the layout and the navigation cannot disagree.
+  const stellaSingleScreen = useCompactViewport();
   const stellaAgent = stella.agents.find((a) => a.id === stellaAgentId);
   // The screen pane's switch and the edit dialog are opened from the title
   // bar, which this App draws (see StellaTitleBarHeader): their state is
@@ -599,12 +601,8 @@ export function App({ initialData }: AppProps): ReactElement {
               <StellaTitleBarHeader
                 agent={stellaAgent ?? null}
                 machineRunning={machineStatus?.state === "running"}
-                label={t(
-                  narrow && stellaAgentId === null
-                    ? "chat.stella.agents.title"
-                    : "chat.stella.titleBarLabel",
-                )}
-                onBack={narrow && stellaAgentId !== null
+                label={t("chat.stella.titleBarLabel")}
+                onBack={stellaSingleScreen && stellaAgentId !== null
                   ? goToStellaList
                   : undefined}
                 onEditAgent={() => setEditingStellaAgent(true)}
@@ -689,7 +687,7 @@ export function App({ initialData }: AppProps): ReactElement {
               stella={stella}
               agent={stellaAgent ?? null}
               status={machineStatus}
-              narrow={narrow}
+              singleScreen={stellaSingleScreen}
               input={draft.input}
               onInputChange={(input) => updateDraft(draftKey, { input })}
               images={draft.images}

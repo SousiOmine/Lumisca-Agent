@@ -15,8 +15,9 @@ export interface StellaTitleBarHeaderProps {
    * itself is not drawn here: a reason can be a paragraph, and this strip is
    * one line tall (StellaView has the room for it, and says it there). */
   machineRunning: boolean;
-  /** What the header says when it is not about one agent: the list of agents
-   * on a phone, or nothing picked yet. */
+  /** What the header says when it is not about one agent (nothing picked
+   * yet): the app's name. The agent list names itself (StellaSidebar's own
+   * header), so putting its title here as well printed it twice. */
   label: string;
   /** Return to the list. Present only at phone widths, where the list and the
    * conversation are two screens instead of two columns. */

@@ -836,30 +836,58 @@ Deno.test("the columns trade width in one movement", async () => {
   );
 });
 
-Deno.test("stella's list and conversation stack before they stop fitting", async () => {
-  // The tablet block gives the sidebar the full width of the shell. With the
-  // shell still a row that width was the whole row: the conversation was
-  // squeezed to the 2px of its border and the row ended up a few pixels wider
-  // than the window — a horizontal scroll in stella only, since code mode has
-  // no column beside its chat. The shell's direction is what makes the block
-  // work, so it is the part worth pinning.
+Deno.test("stella's list and conversation are two screens on a tablet", async () => {
+  // A tablet held upright is 800-834px wide. Side by side, the 216px list
+  // leaves the conversation a phone's width; above the conversation (what
+  // this block used to do) the list was a band of wide, sparse rows over a
+  // conversation that had lost a third of its height. So below the compact
+  // breakpoint the two are one screen each — the same two elements serve
+  // both, and `data-screen` (the selection) says which one shows.
+  //
+  // A width alone is what went wrong before: the sidebar's `width: 100%` in
+  // a row squeezed the conversation to the 2px of its border and left a
+  // horizontal scroll in stella only, because code mode has no column beside
+  // its chat. The hide is therefore the part worth pinning.
   const css = await Deno.readTextFile(
     new URL("./styles/stella.css", import.meta.url),
   );
-  const shell = cssRules(css).find((rule) =>
-    rule.selector === ".stella-shell" &&
-    rule.media?.includes("max-width: 900px") === true
-  );
-  assertEquals(
-    shell !== undefined,
-    true,
-    ".stella-shell must be tuned at the tablet width",
-  );
-  assertEquals(
-    /flex-direction:\s*column/.test(shell!.body),
-    true,
-    "the list and the conversation must stack, not share a row",
-  );
+  const rules = cssRules(css);
+  const tablet = (selector: string): CssRule | undefined =>
+    rules.find((rule) =>
+      rule.selector === selector &&
+      rule.media?.includes("max-width: 900px") === true
+    );
+  const screens: Array<[string, string]> = [
+    [
+      '.stella-shell[data-screen="list"] .stella',
+      "the conversation must be off the list's screen",
+    ],
+    [
+      '.stella-shell[data-screen="conversation"] .stella-sidebar',
+      "the list must be off the conversation's screen",
+    ],
+  ];
+  for (const [selector, why] of screens) {
+    const rule = tablet(selector);
+    assertEquals(
+      rule !== undefined,
+      true,
+      `${selector} must be ruled at the tablet width`,
+    );
+    assertEquals(/display:\s*none/.test(rule!.body), true, why);
+  }
+
+  // The list is a screen, not a strip above one: the width and the height the
+  // one screen has.
+  const list = tablet('.stella-shell[data-screen="list"] .stella-sidebar');
+  assertEquals(list !== undefined, true, "the list screen must be sized");
+  for (const [property, value] of [["width", "100%"], ["flex", "1"]]) {
+    assertEquals(
+      new RegExp(`${property}:\\s*${value}`).test(list!.body),
+      true,
+      `the list screen must take the ${property}`,
+    );
+  }
 });
 
 Deno.test("the model picker's panel is capped by the room it measured", () => {
@@ -1000,8 +1028,8 @@ Deno.test("stella's strip starts where the list's rows do", async () => {
   // the same pair row by row. The row's box is one margin in from the pane,
   // and the row steps in by its own padding, so the strip's content has to
   // take both: a gutter of its own left the two left edges a few pixels
-  // apart. The shell's and the rows' narrower values (stella.css: the stacked
-  // columns, the phone) carry their own strip rule beside them.
+  // apart. The shell's and the rows' narrower values (stella.css: the two
+  // screens, the phone) carry their own strip rule beside them.
   const stella = await Deno.readTextFile(
     new URL("./styles/stella.css", import.meta.url),
   );
@@ -1025,13 +1053,17 @@ Deno.test("stella's strip starts where the list's rows do", async () => {
   );
 });
 
-Deno.test("a screen transition slides on a phone and fades elsewhere", async () => {
+Deno.test("a screen transition slides where one screen shows and fades elsewhere", async () => {
   // The two halves of the screen-transition contract (<htmldata-vt> is written
   // by screen-transition.ts). A direction that reached the wide layout would
   // slide a full-width column sideways, and a `view-transition-name` on an
   // inner element would snapshot it separately — which makes it a containing
   // block and moves `position: fixed` surfaces (every dialog, the machine's
   // screen) out from under themselves.
+  //
+  // The breakpoint is the compact one, not the phone's: it is where both
+  // layouts (stella's two screens, settings' list and page) stop showing the
+  // destination beside the source.
   const motion = await Deno.readTextFile(
     new URL("./styles/motion.css", import.meta.url),
   );
@@ -1043,8 +1075,8 @@ Deno.test("a screen transition slides on a phone and fades elsewhere", async () 
     "a view-transition-name snapshots an inner element apart from the page",
   );
 
-  // Wide windows fade: the travelling keyframes are the phone's, and the
-  // default pair is the fade.
+  // Wide windows fade: the travelling keyframes are the narrow layout's, and
+  // the default pair is the fade.
   const fade = rules.filter((rule) =>
     rule.media === null && /animation-name: lum-vt-fade/.test(rule.body)
   );
@@ -1054,18 +1086,18 @@ Deno.test("a screen transition slides on a phone and fades elsewhere", async () 
     "the wide layout cross-fades the two screens",
   );
   const travel = rules.filter((rule) =>
-    rule.media?.includes("max-width: 600px") === true &&
+    rule.media?.includes("max-width: 900px") === true &&
     /animation-name: lum-vt-(in|out)/.test(rule.body)
   );
   assertEquals(
     travel.map((rule) => rule.selector).sort(),
     ["::view-transition-new(root)", "::view-transition-old(root)"],
-    "the slide is the phone's, and both snapshots take part in it",
+    "the slide belongs to the breakpoint where the screens are exclusive",
   );
 
   // Both directions have travel to read: a direction without them would
   // animate from the same place as the other, which reads as a fade with a
-  // jump. Read from the phone block, where the directions live.
+  // jump. Read from the narrow block, where the directions live.
   for (const direction of ["push", "back"]) {
     const selector = `html[data-vt="${direction}"]`;
     const bodies = rules

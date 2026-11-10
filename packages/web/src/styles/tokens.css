@@ -37,7 +37,9 @@
  * guards the set):
  *
  *   900px  compact: tablet-like widths. Tighten spacing, allow wrapping,
- *                   drop fixed widths that no longer fit.
+ *                   drop fixed widths that no longer fit, and show one pane
+ *                   at a time where a layout has two (stella's list and
+ *                   conversation, settings' list and page).
  *   600px  phone: one column; full-screen modals; the progress rows above
  *                the composer keep to a smaller height cap; the floating
  *                chat pane gives up its margin and lands edge to edge

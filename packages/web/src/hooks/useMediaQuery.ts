@@ -9,7 +9,10 @@ export const PHONE_QUERY = "(max-width: 600px)";
 /** The width at or below which a two-column layout becomes one screen at a
  * time (the compact breakpoint of styles/tokens.css). Settings uses it: its
  * navigation beside the page leaves too little of the page on a tablet, and a
- * horizontal strip of category names left each label clipped. Must match the
+ * horizontal strip of category names left each label clipped. stella's agent
+ * list and conversation use it too (a tablet held upright is 800-834px wide;
+ * the list beside the conversation leaves the conversation a phone's width,
+ * and the list above it leaves neither usable). Must match the
  * `@media (max-width: 900px)` blocks. */
 export const COMPACT_QUERY = "(max-width: 900px)";
 
@@ -88,6 +91,14 @@ export function useMediaQuery(query: string): boolean {
  * cards the user did not ask for. */
 export function useNarrowViewport(): boolean {
   return useMediaQuery(PHONE_QUERY);
+}
+
+/** Whether the viewport is at the compact width or below (see
+ * {@link COMPACT_QUERY}), where a two-column layout shows one surface at a
+ * time. stella uses it to decide which of its two screens is showing, so the
+ * navigation and the stylesheet's hides answer the same question. */
+export function useCompactViewport(): boolean {
+  return useMediaQuery(COMPACT_QUERY);
 }
 
 /** Whether the input device is a finger (see {@link TOUCH_QUERY}): used by

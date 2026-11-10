@@ -14,16 +14,20 @@ import type { StellaHook } from "../hooks/useStella.ts";
  * middle.
  *
  * Extracted from App.tsx, which held both modes' bodies in one JSX tree: a
- * change to stella's narrow-screen navigation (the two screens a phone gets)
- * meant reading code about tabs and a draft composer, and the reverse. The
- * split is by mode, which is the seam the product itself has — the two modes
- * share the shell (title bar, banners, dialogs) and nothing about their body.
+ * change to stella's narrow-screen navigation (the two screens below the
+ * compact width) meant reading code about tabs and a draft composer, and the
+ * reverse. The split is by mode, which is the seam the product itself has —
+ * the two modes share the shell (title bar, banners, dialogs) and nothing
+ * about their body.
  *
  * stella has no tabs and no session list: the sidebar IS its list, and the
- * conversation is the whole surface. `data-screen` is the phone layout: the
- * list until one is picked, the conversation afterwards, and the selection
- * itself decides which — no extra state, so going back and opening the same
- * agent lands where the reader left off.
+ * conversation is the whole surface. `data-screen` is the narrow layout — a
+ * phone and a tablet held upright (the compact breakpoint, see
+ * useCompactViewport): the list until one is picked, the conversation
+ * afterwards, and the selection itself decides which — no extra state, so
+ * going back and opening the same agent lands where the reader left off. On a
+ * wider window the stylesheet ignores the attribute and lays the two out as
+ * columns.
  */
 export interface StellaModeScreenProps {
   /** Everything useStella answers (agents, selection, conversation, actions). */
@@ -32,8 +36,8 @@ export interface StellaModeScreenProps {
   agent: StellaAgentSummary | null;
   /** The machine's state, for the conversation header and the screen pane. */
   status: StellaStatus | null;
-  /** Phone layout: one surface at a time (see the module comment). */
-  narrow: boolean;
+  /** Narrow layout: one surface at a time (see the module comment). */
+  singleScreen: boolean;
   /** The composer's unsent text and attachments, owned by the App so a
    * remount does not throw them away. */
   input: string;
@@ -60,7 +64,7 @@ export function StellaModeScreen({
   stella,
   agent,
   status,
-  narrow,
+  singleScreen,
   input,
   onInputChange,
   images,
@@ -77,7 +81,7 @@ export function StellaModeScreen({
   return (
     <div
       className="stella-shell"
-      data-screen={narrow && stella.activeAgentId !== null
+      data-screen={singleScreen && stella.activeAgentId !== null
         ? "conversation"
         : "list"}
     >

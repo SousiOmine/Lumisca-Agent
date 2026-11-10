@@ -939,15 +939,14 @@
 }
 
 @media (max-width: 900px) {
-  /* The two columns stop fitting side by side, so the shell stacks: the
-   * list on top (its own scroll, at most 30vh), the conversation below, the
-   * machine's screen under that.
-   *
-   * The shell's direction is what makes the rest of this block true. With
-   * the row kept, the sidebar's `width: 100%` took the whole row: the
-   * conversation was squeezed to the 2px of its border and the row ended up
-   * a few pixels wider than the window — a horizontal scroll in stella
-   * only, because code mode has no column beside its chat. */
+  /* The list and the conversation are two screens, not two columns. A tablet
+   * held upright is 800-834px wide: side by side, the list leaves the
+   * conversation a phone's width, and the list above the conversation (what
+   * this block used to do) left neither usable — a band of wide, sparse rows
+   * over a conversation that had lost a third of its height. `data-screen`
+   * says which screen is showing (the selection decides, see
+   * StellaModeScreen); the phone below keeps its own tightening of the same
+   * two screens. */
   .stella-shell {
     flex-direction: column;
     padding: 8px;
@@ -959,14 +958,27 @@
     padding: 0 16px;
   }
 
+  /* The machine's screen stays under the conversation when it is open. */
   .stella {
     flex-direction: column;
   }
 
-  .stella-sidebar {
+  /* The list is a screen of its own: the whole width, the whole height, and
+   * its own scroll. */
+  .stella-shell[data-screen="list"] .stella {
+    display: none;
+  }
+
+  .stella-shell[data-screen="list"] .stella-sidebar {
     width: 100%;
-    max-height: 30vh;
-    flex-direction: column;
+    min-height: 0;
+    flex: 1;
+  }
+
+  /* The conversation is the other screen; the list is gone (the title bar's
+   * back button returns to it). */
+  .stella-shell[data-screen="conversation"] .stella-sidebar {
+    display: none;
   }
 
   .stella-pane {
@@ -1050,11 +1062,10 @@
 
 /* ---- narrow windows ------------------------------------------------------- */
 
-/* Phone: the list and the conversation are two screens, not two columns.
- * Both cannot fit side by side, and stacking them (what this used to do)
- * left the list a strip at the top and the conversation under it — neither
- * of the two usable. `data-screen` says which one is showing (App decides
- * from the selection), so the same two elements serve both screens. */
+/* Phone: the same two screens the tablet gets, taken to the edge. The shell's
+ * margin, the sheet's border and the rows' insets exist to lift a surface off
+ * the canvas; at this width they only cost the room the reader needs, so the
+ * screen becomes the window. */
 @media (max-width: 600px) {
   .stella-shell {
     padding: 0;
@@ -1078,21 +1089,11 @@
     border-top: 1px solid var(--border);
   }
 
-  /* The list takes the whole screen and is the screen's own scroll. */
-  .stella-shell[data-screen="list"] .stella {
-    display: none;
-  }
-
-  .stella-shell[data-screen="list"] .stella-sidebar {
-    width: 100%;
-    max-height: none;
+  /* The rows carry their own inset (below), so the scroll container gives
+   * its spacing up. */
+  .stella-sidebar {
     padding: 0;
     gap: 0;
-  }
-
-  /* The conversation takes the whole screen, and the list is gone. */
-  .stella-shell[data-screen="conversation"] .stella-sidebar {
-    display: none;
   }
 
   /* Rows are a fingertip tall and carry their two lines comfortably. */

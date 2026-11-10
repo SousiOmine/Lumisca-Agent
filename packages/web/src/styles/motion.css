@@ -143,10 +143,14 @@
  *
  * The two hierarchies the app walks into (screen-transition.ts): stella's
  * agent list and a conversation, the settings dialog's category list and a
- * category. On a phone the next screen arrives from the side and the one left
- * behind steps away, the way a native app's push and pop do; on a wide window
- * the two cross-fade, because a full-width column travelling sideways is a
- * lot of motion for a screen whose neighbour was already beside it.
+ * category. Where the two are exclusive screens — the compact width and below
+ * (styles/tokens.css), which is where both layouts fold to one surface — the
+ * next screen arrives from the side and the one left behind steps away, the
+ * way a native app's push and pop do. On a wider window the two cross-fade:
+ * there the neighbour was already beside the one being replaced (stella's
+ * list) or is a page the dialog was laid over, so a full-width column
+ * travelling sideways is a lot of motion for a swap that changed nothing
+ * about where things are.
  *
  * The whole page is one snapshot. An inner element with a
  * `view-transition-name` of its own would be captured separately — and a
@@ -225,7 +229,7 @@
   z-index: var(--vt-new-z);
 }
 
-@media (max-width: 600px) {
+@media (max-width: 900px) {
   /* The two directions, as travel. Pushing, the arriving screen comes in from
    * the right and the one leaving steps a third of the way after it. Popping,
    * the screen being left travels all the way out and the list underneath is
