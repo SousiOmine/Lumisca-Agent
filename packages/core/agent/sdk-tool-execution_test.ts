@@ -18,12 +18,19 @@ import type {
   ToolResultMessage,
 } from "../ai/types.ts";
 import { createStreamFn, type StreamTransport } from "../ai/stream.ts";
+import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import { createReadFileTool } from "../tools/filesystem.ts";
 import { HostFileBackend } from "../tools/host/files.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
 import { object, string, type Tool } from "../tools/schema.ts";
 import { contentText } from "../shared/mod.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
+
+/** A policy that reserves nothing: these tests are about tool execution,
+ * not about the completion cap (see reservedCompletionTokens). */
+const NO_RESERVATION: () => CompactionPolicyInput = () => ({
+  reservePercent: 0,
+});
 
 const echoSchema = object({ text: string("Text to echo") });
 
@@ -312,7 +319,7 @@ Deno.test("the tool result keeps its details for the UI and stays text for the m
       tools: [editTool],
       thinkingLevel: "off",
     },
-    streamFn: createStreamFn(transport),
+    streamFn: createStreamFn(transport, NO_RESERVATION),
     sessionId: "s1",
   });
 
@@ -367,7 +374,7 @@ Deno.test("a stop during an SDK-executed tool leaves a session that still runs",
     },
     streamFn: createStreamFn({
       languageModelFor: () => Promise.resolve(fake.model as never),
-    }),
+    }, NO_RESERVATION),
     sessionId: "s1",
   });
 
@@ -523,7 +530,7 @@ Deno.test("a read tool image reaches the model and the transcript", async () => 
             Promise.resolve(
               languageModelFor(model, { apiKey: "test-key", source: "test" }),
             ),
-        }),
+        }, NO_RESERVATION),
         sessionId: "s1",
       });
 

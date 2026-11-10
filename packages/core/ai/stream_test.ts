@@ -22,6 +22,14 @@ import {
 } from "./budget.ts";
 import { OVERFLOW_SAFETY_TOKENS } from "./output-cap-recovery.ts";
 import { estimateLlmMessagesTokens } from "../shared/token-estimate.ts";
+import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
+
+/** A policy that reserves nothing. The transport tests below are about the
+ * clamp, so the model's own cap has to reach the request unchanged; the
+ * reservation has its own test (see reservedCompletionTokens). */
+const NO_RESERVATION: () => CompactionPolicyInput = () => ({
+  reservePercent: 0,
+});
 
 /** A fake LanguageModel implementing the AI SDK v2 provider surface (the
  * transport accepts any specificationVersion the SDK understands). The
@@ -66,7 +74,10 @@ async function runStream(
   request: StreamRequest = { messages: [{ role: "user", content: "hi" }] },
 ) {
   const model: Model<Api> = { id: "m", name: "m" } as unknown as Model<Api>;
-  const streamFn = createStreamFn(transportFor(fakeLanguageModel(parts)));
+  const streamFn = createStreamFn(
+    transportFor(fakeLanguageModel(parts)),
+    NO_RESERVATION,
+  );
   const events: Array<{ type: string } & Record<string, unknown>> = [];
   for await (const event of streamFn(model, request, undefined)) {
     events.push(event as never);
@@ -262,7 +273,7 @@ async function runToChatBody(
   const streamFn = createStreamFn({
     languageModelFor: () =>
       Promise.resolve(buildModel(fetchFn, model) as never),
-  });
+  }, NO_RESERVATION);
   for await (const _ of streamFn(model, { messages }, options)) {
     // drain
   }
@@ -446,7 +457,7 @@ Deno.test("an api that carries tool images gets them inside the tool result", as
   // Anthropic / OpenAI Responses / Google / Bedrock tool results take image
   // blocks natively, so the image needs no message of its own there.
   const { model, prompts } = recordingV4LanguageModel();
-  const streamFn = createStreamFn(transportFor(model));
+  const streamFn = createStreamFn(transportFor(model), NO_RESERVATION);
   for await (
     const _ of streamFn(
       imageModel({ api: "anthropic-messages", provider: "fake" }),
@@ -484,7 +495,7 @@ Deno.test("a text-only model is never handed a tool image", async () => {
   // must not reach a model that cannot take one — the provider would reject
   // the whole request instead of reading the text around it.
   const { model, prompts } = recordingV4LanguageModel();
-  const streamFn = createStreamFn(transportFor(model));
+  const streamFn = createStreamFn(transportFor(model), NO_RESERVATION);
   for await (
     const _ of streamFn(
       imageModel({
@@ -662,7 +673,10 @@ function fakeHeldLanguageModel() {
 
 Deno.test("an aborted stream ends the turn as an aborted assistant message (never throws)", async () => {
   const model: Model<Api> = { id: "m", name: "m" } as unknown as Model<Api>;
-  const streamFn = createStreamFn(transportFor(fakeHeldLanguageModel()));
+  const streamFn = createStreamFn(
+    transportFor(fakeHeldLanguageModel()),
+    NO_RESERVATION,
+  );
   const controller = new AbortController();
   const request: StreamRequest = {
     messages: [{ role: "user", content: "hi" }],
@@ -732,7 +746,10 @@ Deno.test("a timeout that is not the caller's abort surfaces as an error turn", 
   // makes a failure a user stop. A timeout must stay visible (and retryable)
   // instead of ending the turn as if the user had pressed stop.
   const model: Model<Api> = { id: "m", name: "m" } as unknown as Model<Api>;
-  const streamFn = createStreamFn(transportFor(fakeTimingOutLanguageModel()));
+  const streamFn = createStreamFn(
+    transportFor(fakeTimingOutLanguageModel()),
+    NO_RESERVATION,
+  );
   const events: Array<{ type: string } & Record<string, unknown>> = [];
   for await (
     const event of streamFn(
@@ -821,6 +838,7 @@ Deno.test("interleaved reasoning is passed back as reasoning_content", async () 
   };
   const streamFn = createStreamFn(
     transportFor(provider.chatModel(model.id)),
+    NO_RESERVATION,
   );
   const request: StreamRequest = {
     thinkingLevel: "high",
@@ -984,7 +1002,7 @@ Deno.test("the margin never takes more than half the room the prompt leaves", ()
 
 Deno.test("the transport clamps the output cap to the room the prompt leaves", async () => {
   const { model, calls } = recordingLanguageModel(v2Parts(USAGE));
-  const streamFn = createStreamFn(transportFor(model));
+  const streamFn = createStreamFn(transportFor(model), NO_RESERVATION);
   const request: StreamRequest = {
     messages: [{
       role: "user",
@@ -1009,7 +1027,7 @@ Deno.test("the transport clamps the output cap to the room the prompt leaves", a
 
 Deno.test("the transport clamps a caller's override the same way", async () => {
   const { model, calls } = recordingLanguageModel(v2Parts(USAGE));
-  const streamFn = createStreamFn(transportFor(model));
+  const streamFn = createStreamFn(transportFor(model), NO_RESERVATION);
   const request: StreamRequest = {
     messages: [{
       role: "user",
@@ -1030,6 +1048,42 @@ Deno.test("the transport clamps a caller's override the same way", async () => {
     calls[0]!.maxOutputTokens,
     Math.min(4_000, 10_000 - promptTokens - CONTEXT_SAFETY_TOKENS),
   );
+});
+
+Deno.test("the completion cap stops at the room the compaction reserves", async () => {
+  // A 1,000,000-token window with a documented 384,000-token completion:
+  // asking for all of it lets any prompt past ~665,000 tokens overflow the
+  // window, which is exactly the range the pressure check lets through (it
+  // compacts one reservation below the window). The reservation is the cap.
+  const { model, calls } = recordingLanguageModel(v2Parts(USAGE));
+  const streamFn = createStreamFn(transportFor(model), () => ({
+    reservePercent: 8,
+  }));
+  for await (
+    const _ of streamFn(windowedModel(1_000_000, 384_000), {
+      messages: [{ role: "user", content: "hi" }],
+    }, undefined)
+  ) {
+    // drain
+  }
+  assertEquals(calls[0]!.maxOutputTokens, 80_000);
+});
+
+Deno.test("a policy that reserves nothing leaves the model's cap alone", async () => {
+  // Turning compaction off removes the threshold the cap was keeping room
+  // for: the model's documented cap is then the only request-side bound.
+  const { model, calls } = recordingLanguageModel(v2Parts(USAGE));
+  const streamFn = createStreamFn(transportFor(model), () => ({
+    enabled: false,
+  }));
+  for await (
+    const _ of streamFn(windowedModel(1_000_000, 384_000), {
+      messages: [{ role: "user", content: "hi" }],
+    }, undefined)
+  ) {
+    // drain
+  }
+  assertEquals(calls[0]!.maxOutputTokens, 384_000);
 });
 
 Deno.test("a request the provider rejects as too large is re-sent with a smaller cap", async () => {
@@ -1098,6 +1152,7 @@ Deno.test("a request the provider rejects as too large is re-sent with a smaller
   });
   const streamFn = createStreamFn(
     transportFor(provider.chatModel("m")),
+    NO_RESERVATION,
   );
   const model = windowedModel(1_000_000, 384_000);
   const events: Array<{ type: string } & Record<string, unknown>> = [];

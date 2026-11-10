@@ -60,6 +60,10 @@ export interface CompactionBudgets {
    * differ for models whose window counts the completion (see
    * shared/context-usage.ts inputBudgetTokens). */
   contextWindow: number;
+  /** Room the window keeps free below the threshold
+   * (`contextWindow - thresholdTokens`): what a request that reaches the
+   * threshold may still ask for as output. */
+  reserveTokens: number;
   /** Compact when the projected context would exceed this
    * (`contextWindow - reserveTokens`). */
   thresholdTokens: number;
@@ -147,8 +151,43 @@ export function resolveCompactionBudgets(
     : outputCap ?? FALLBACK_SUMMARY_MAX_TOKENS;
   return {
     contextWindow: window,
+    reserveTokens,
     thresholdTokens: threshold,
     keepRecentTokens: shareOfWindow(window, policy.keepRecentPercent),
     summaryMaxTokens,
   };
+}
+
+/**
+ * The completion cap a request may ask for under this policy: the model's
+ * documented cap, narrowed to the room the policy reserves below its
+ * threshold (`CompactionBudgets.reserveTokens`).
+ *
+ * The request and the compaction decision then describe the same limit.
+ * Providers validate prompt + completion against the window, so a cap
+ * larger than the reservation makes the request at the threshold
+ * impossible — no matter how the prompt was priced. The clamp in
+ * ai/budget.ts still narrows the cap by the prompt's own estimate; this is
+ * the bound that estimate cannot promise.
+ *
+ * The model's documented cap stands when the policy reserves nothing
+ * (compaction off, or reservePercent 0): there is no threshold to keep, and
+ * the clamp below the window is the only bound left. undefined when the
+ * model documents no cap — the provider's default applies, and inventing a
+ * larger one would be a request the provider never agreed to.
+ */
+export function reservedCompletionTokens(
+  model: Model<Api>,
+  policy: CompactionPolicyInput,
+): number | undefined {
+  const documented = model.maxTokens !== undefined && model.maxTokens > 0
+    ? model.maxTokens
+    : undefined;
+  if (documented === undefined) return undefined;
+  const budgets = resolveCompactionBudgets(
+    model,
+    resolveCompactionPolicy(policy),
+  );
+  if (budgets === undefined || budgets.reserveTokens === 0) return documented;
+  return Math.min(documented, budgets.reserveTokens);
 }

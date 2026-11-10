@@ -1,18 +1,21 @@
 /** How much room a request's prompt leaves for its completion.
  *
- * Two questions live here, and only here: how large the prompt is estimated
- * to be, and how much margin to keep between that estimate and the model's
- * window. The recovery path (output-cap-recovery.ts) reads the same policy
- * when a provider rejects a request anyway.
+ * Three questions live here, and only here: how large the prompt is
+ * estimated to be, how much margin to keep between that estimate and the
+ * model's window, and how much of the window the compaction policy reserves
+ * for the completion. The recovery path (output-cap-recovery.ts) reads the
+ * same policy when a provider rejects a request anyway.
  */
 import type { Api, Model } from "./types.ts";
 import type { StreamOptions, StreamRequest } from "./types.ts";
+import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import { inputBudgetTokens } from "../shared/context-usage.ts";
 import {
   estimateLlmMessagesTokens,
   estimateTextTokens,
   estimateToolTokens,
 } from "../shared/token-estimate.ts";
+import { reservedCompletionTokens } from "./compaction-policy.ts";
 
 /** The completion cap to send for one request: the caller's override when it
  * set one, else the model's documented `maxTokens`, else none (the
@@ -26,6 +29,23 @@ export function outputCapFor(
   return model.maxTokens !== undefined && model.maxTokens > 0
     ? model.maxTokens
     : undefined;
+}
+
+/** What that cap becomes once the compaction policy has its say: no request
+ * asks for more output than the room the policy reserves below the
+ * threshold. A prompt the pressure check lets through is at most the
+ * threshold, so the two bounds now have to agree — a larger cap would make
+ * the request exceed the window even though nothing had to be condensed.
+ * Undefined when there is no cap to send (see outputCapFor). */
+export function reservedOutputCapFor(
+  model: Model<Api>,
+  options: StreamOptions | undefined,
+  policy: CompactionPolicyInput,
+): number | undefined {
+  const desired = outputCapFor(model, options);
+  const reserved = reservedCompletionTokens(model, policy);
+  if (desired === undefined || reserved === undefined) return desired;
+  return Math.min(desired, reserved);
 }
 
 /** Room kept between the prompt and the window when clamping an output cap:

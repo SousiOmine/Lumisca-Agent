@@ -70,7 +70,7 @@ function e2eStreamFn(): StreamFn {
           source: "LUMISCA_E2E_API_KEY",
         }),
       ),
-  });
+  }, () => ({ reservePercent: 0 }));
 }
 
 function lookupTool(): AgentTool {

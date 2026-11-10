@@ -16,10 +16,15 @@ import type {
   Provider,
   StreamFn,
 } from "./types.ts";
+import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 
 export interface LumiscaModelsOptions {
   credentials?: CredentialStore;
   env?: () => Record<string, string | undefined>;
+  /** The compaction tuning every request's completion cap follows (see
+   * ai/compaction-policy.ts reservedCompletionTokens). Read per request, so
+   * a settings change applies without rebuilding the models. */
+  compactionPolicy: () => CompactionPolicyInput;
 }
 
 /**
@@ -31,11 +36,13 @@ export class LumiscaModels {
   private readonly providers = new Map<string, Provider>();
   private readonly credentials: CredentialStore | undefined;
   private readonly env: () => Record<string, string | undefined>;
+  private readonly compactionPolicy: () => CompactionPolicyInput;
   private cachedStreamFn?: ReturnType<typeof createStreamFn>;
 
-  constructor(options: LumiscaModelsOptions = {}) {
+  constructor(options: LumiscaModelsOptions) {
     this.credentials = options.credentials;
     this.env = options.env ?? (() => ({ ...Deno.env.toObject() }));
+    this.compactionPolicy = options.compactionPolicy;
   }
 
   setProvider(provider: Provider): void {
@@ -124,7 +131,10 @@ export class LumiscaModels {
     retiredProviderFor?: (providerId: string) => Provider | undefined,
   ): StreamFn {
     if (this.cachedStreamFn === undefined) {
-      const vercelStream = createStreamFn(this.transport(retiredProviderFor));
+      const vercelStream = createStreamFn(
+        this.transport(retiredProviderFor),
+        this.compactionPolicy,
+      );
       this.cachedStreamFn = (model, context, options) => {
         const provider = this.providers.get(model.provider) ??
           retiredProviderFor?.(model.provider);

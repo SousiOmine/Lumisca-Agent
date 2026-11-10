@@ -15,6 +15,7 @@ import {
   ContextCompactor,
   contextStart,
   DEFAULT_COMPACTION_POLICY,
+  reservedCompletionTokens,
   resolveCompactionBudgets,
   resolveCompactionPolicy,
   selectCompactionSpan,
@@ -228,6 +229,7 @@ Deno.test("resolveCompactionBudgets: no window, no room, or disabled disables co
     resolveCompactionBudgets(modelWith(10_000, 1_000)),
     {
       contextWindow: 10_000,
+      reserveTokens: 800,
       thresholdTokens: 10_000 - 800,
       keepRecentTokens: 2_000,
       summaryMaxTokens: 640,
@@ -246,6 +248,36 @@ Deno.test("resolveCompactionBudgets: no window, no room, or disabled disables co
       ...DEFAULT_COMPACTION_POLICY,
       enabled: false,
     }),
+    undefined,
+  );
+});
+
+Deno.test("reservedCompletionTokens: the cap stops at the reservation", () => {
+  // A 1M window documents a 384,000-token completion. The pressure check
+  // lets the prompt reach 920,000 (one 8% reservation below the window), so
+  // only the reservation is left for the answer: asking for the model's cap
+  // would make every request in the last 280,000 tokens of the window
+  // impossible, which is the failure this bound exists for.
+  const model = modelWith(1_000_000, 384_000);
+  assertEquals(reservedCompletionTokens(model, {}), 80_000);
+  // A cap the reservation does not reach stays the model's own cap.
+  assertEquals(reservedCompletionTokens(modelWith(200_000, 8_000), {}), 8_000);
+  // Nothing reserved: the model's cap is the only bound.
+  assertEquals(
+    reservedCompletionTokens(model, { reservePercent: 0 }),
+    384_000,
+  );
+  // Compaction off: there is no threshold the cap has to keep room below.
+  assertEquals(
+    reservedCompletionTokens(model, { enabled: false }),
+    384_000,
+  );
+  // A model that documents no cap sends none (the provider's default
+  // applies): inventing one would be a request the provider never agreed to.
+  const bare = { ...modelWith(200_000, 8_000) } as Partial<Model<Api>>;
+  delete bare.maxTokens;
+  assertEquals(
+    reservedCompletionTokens(bare as Model<Api>, {}),
     undefined,
   );
 });
@@ -336,6 +368,7 @@ Deno.test("selectCompactionSpan retains the newest unit and cuts on a unit bound
   const messages = conversation(3, 4_000);
   const budgets = {
     contextWindow: 10_000,
+    reserveTokens: 10_000 - 2_000,
     thresholdTokens: 2_000,
     keepRecentTokens: 100,
     summaryMaxTokens: 100,
@@ -350,6 +383,7 @@ Deno.test("selectCompactionSpan retains the newest unit and cuts on a unit bound
 Deno.test("selectCompactionSpan: a single unit, or one with nothing to summarize, is refused", () => {
   const budgets = {
     contextWindow: 10_000,
+    reserveTokens: 10_000 - 80,
     thresholdTokens: 80,
     keepRecentTokens: 10,
     summaryMaxTokens: 100,
@@ -372,6 +406,7 @@ Deno.test("selectCompactionSpan: force reduces as far as one span allows", () =>
   ];
   const budgets = {
     contextWindow: 10_000,
+    reserveTokens: 10_000 - 5_000,
     thresholdTokens: 5_000,
     keepRecentTokens: 4_000,
     summaryMaxTokens: 100,
@@ -532,6 +567,7 @@ Deno.test("selectCompactionSpan: a zero retention condenses the whole view", () 
   const messages = conversation(3, 4_000);
   const budgets = {
     contextWindow: 10_000,
+    reserveTokens: 10_000 - 2_000,
     thresholdTokens: 2_000,
     keepRecentTokens: 0,
     summaryMaxTokens: 100,

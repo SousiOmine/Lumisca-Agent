@@ -12,9 +12,10 @@ import { errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";
 import {
   clampMaxTokensToContext,
-  outputCapFor,
   promptTokensFor,
+  reservedOutputCapFor,
 } from "./budget.ts";
+import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 export {
   CONTEXT_SAFETY_RATIO,
   CONTEXT_SAFETY_TOKENS,
@@ -86,32 +87,37 @@ type VercelProviderOptions = NonNullable<
 
 /** Build the Vercel-backed StreamFn over a transport.
  *
- * A request the provider rejects for exceeding its context window is
+ * The completion cap is decided here, once: the caller's ask (or the
+ * model's documented cap) narrowed to the room the compaction policy
+ * reserves, then to the room the prompt's estimate leaves. Both bounds
+ * describe the same window, so a prompt the pressure check lets through can
+ * always be completed.
+ *
+ * A request the provider rejects for exceeding its context window anyway is
  * re-sent with a smaller completion cap before the failure reaches the
  * caller (see ai/output-cap-recovery.ts): the prompt itself is unchanged, so
  * only the completion had to shrink, and the turn completes instead of
  * surfacing an error the caller would only repair by condensing history. */
-export function createStreamFn(transport: StreamTransport): StreamFn {
-  return (model, context, options) =>
-    withOutputCapRecovery({
-      open: (cap) =>
-        runStream(model, context, optionsForCap(options, cap), transport),
-      ...(options?.maxOutputTokens !== undefined
-        ? { initialCap: options.maxOutputTokens }
-        : {}),
+export function createStreamFn(
+  transport: StreamTransport,
+  compactionPolicy: () => CompactionPolicyInput,
+): StreamFn {
+  return (model, context, options) => {
+    const cap = clampMaxTokensToContext(
+      model,
+      promptTokensFor(context),
+      reservedOutputCapFor(model, options, compactionPolicy()),
+    );
+    return withOutputCapRecovery({
+      // Every attempt, the first included, sends the cap handed to `open`:
+      // the recovery retries from what the provider saw, not from what the
+      // caller asked for.
+      open: (attemptCap) =>
+        runStream(model, context, options, transport, attemptCap),
+      ...(cap !== undefined ? { initialCap: cap } : {}),
       ...(options?.signal !== undefined ? { signal: options.signal } : {}),
     });
-}
-
-/** The same options with the completion cap replaced — the only thing the
- * recovery changes between attempts (signal, session id and retry budget
- * ride along untouched). */
-function optionsForCap(
-  options: StreamOptions | undefined,
-  cap: number | undefined,
-): StreamOptions | undefined {
-  if (cap === undefined || cap === options?.maxOutputTokens) return options;
-  return { ...(options ?? {}), maxOutputTokens: cap };
+  };
 }
 
 /** Run one LLM turn with the Vercel AI SDK.
@@ -131,17 +137,14 @@ async function* runStream(
   context: StreamRequest,
   options: StreamOptions | undefined,
   transport: StreamTransport,
+  /** The completion cap this attempt sends (see createStreamFn). */
+  outputCap: number | undefined,
 ): AsyncGenerator<StreamEvent> {
   const languageModel = await transport.languageModelFor(model);
   if (languageModel === undefined) {
     yield { type: "error", errorMessage: NOT_CONFIGURED(model.provider) };
     return;
   }
-  const outputCap = clampMaxTokensToContext(
-    model,
-    promptTokensFor(context),
-    outputCapFor(model, options),
-  );
   const request: VercelStreamRequest = {
     model: languageModel,
     messages: toCoreMessages(model, context.messages),

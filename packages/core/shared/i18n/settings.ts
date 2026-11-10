@@ -566,8 +566,9 @@ export const settings = {
     en: "Reserved (% of window)",
   },
   "settings.compaction.reservePercentDesc": {
-    ja: "上限に対して残す余裕。既定 8%。",
-    en: "Free space kept below the limit. Default 8%.",
+    ja: "上限に対して残す余裕。応答の出力上限はこの範囲に収まります。既定 8%。",
+    en:
+      "Free space kept below the limit. The reply's output cap stays within it. Default 8%.",
   },
   "settings.compaction.keepRecentPercent": {
     ja: "保持（ウィンドウ比 %）",

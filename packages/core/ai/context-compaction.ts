@@ -86,6 +86,7 @@ export {
   type CompactionBudgets,
   type CompactionPolicy,
   DEFAULT_COMPACTION_POLICY,
+  reservedCompletionTokens,
   resolveCompactionBudgets,
   resolveCompactionPolicy,
   shareOfWindow,

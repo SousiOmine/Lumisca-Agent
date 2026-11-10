@@ -41,6 +41,7 @@ import {
   IMAGE_MODEL_KEY,
   MODEL_ENABLED_PREFIX,
   MODEL_THINKING_PREFIX,
+  parseCompactionPolicyInput,
   parseModelPreference,
 } from "../shared/settings-keys.ts";
 import { createLogger } from "../log.ts";
@@ -95,11 +96,16 @@ export class ModelManager {
     env: EnvReader = processEnv,
   ) {
     this.env = env;
+    this.settings = settings;
     this.models = new LumiscaModels({
       credentials,
       env,
+      // The same tuning the session agents compact with (see
+      // LumiscaCore.getCompactionPolicy): the request's completion cap and
+      // the threshold it must not cross come from one place.
+      compactionPolicy: () =>
+        parseCompactionPolicyInput((key) => this.settings.get(key)),
     });
-    this.settings = settings;
     this.credentials = credentials;
     this.userStore = new UserProviderStore(settings);
     // ai-sdk built-in providers (OpenAI, Anthropic, Google, Mistral) plus
