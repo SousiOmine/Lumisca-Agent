@@ -132,4 +132,3 @@ Deno.test("plan mode: empty fallback prompt asks for the request instead of plan
   assertEquals(prompt.includes("explicitly permits"), true);
   assertEquals(buildPlanPrompt("  "), buildPlanPrompt(""));
 });
-

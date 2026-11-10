@@ -254,7 +254,6 @@
   overflow: hidden;
 }
 
-
 /* status colors: current task pops in the accent, done in the ok color,
  * blocked in the error color, abandoned fades out. */
 .todo-task.in_progress {
@@ -478,7 +477,6 @@
   .question-free-input {
     font-size: 16px;
   }
-
 }
 
 /* ---- phone ---------------------------------------------------------------- */
@@ -500,5 +498,4 @@
   .question-option-mark {
     font-size: 13px;
   }
-
 }

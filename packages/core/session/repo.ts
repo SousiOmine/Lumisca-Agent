@@ -179,6 +179,5 @@ export function createSessionRepo(db: LumiscaDb): SessionRepo {
     updateSystemPrompt(id: string, systemPrompt: string): void {
       updateSystemPromptStmt.run(systemPrompt, id);
     },
-
   };
 }

@@ -35,7 +35,6 @@ Deno.test("migrate adds the session workspace index", () => {
   }
 });
 
-
 /** user_version one below the context-usage conversion (append-only list
  * position 7): replaying the migration over a database stamped there is
  * what an existing installation does on its first launch after the fix. */
