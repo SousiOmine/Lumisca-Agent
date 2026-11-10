@@ -181,6 +181,20 @@ select:focus:not(:focus-visible) {
 }
 
 /* scrollbars */
+/* These pseudo-elements are what Chromium and WebKit paint with. The standard
+ * properties would be the ones to prefer, but Chromium ignores the
+ * pseudo-elements on any element whose `scrollbar-color` is not `auto`, and
+ * its `thin` bar measured 15px against the 10px this sheet draws — so they
+ * are the fallback for an engine without the pseudo-elements, not the first
+ * choice. The gate keeps a browser that has both from picking the standard
+ * painting and losing the width, the radius and the hover colour. */
+@supports not selector(::-webkit-scrollbar) {
+  html {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
