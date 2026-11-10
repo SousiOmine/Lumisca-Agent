@@ -21,6 +21,7 @@ Deno.test("MessageRow: a routine's prompt is not drawn", () => {
     toolResults: new Map(),
     runningTools: new Map(),
     visualBase: "/visual",
+    onCardSend: () => {},
   });
   assertEquals(row, null);
 });
@@ -38,6 +39,7 @@ Deno.test("MessageRow: the same words typed are drawn", () => {
     toolResults: new Map(),
     runningTools: new Map(),
     visualBase: "/visual",
+    onCardSend: () => {},
   });
   assert(row !== null);
 });

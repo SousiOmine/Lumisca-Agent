@@ -64,7 +64,6 @@ Deno.test("send_chat: the words are the message", async () => {
     const result = await test.tool.execute("t", { text: "終わりました。" });
     assertEquals(sent(result), {
       text: "終わりました。",
-      card: null,
       attachments: [],
     });
     // What the MODEL reads back is a receipt, not the message: the words are
@@ -77,39 +76,11 @@ Deno.test("send_chat: the words are the message", async () => {
   }
 });
 
-Deno.test("send_chat: a card is validated and travels with the message", async () => {
+Deno.test("send_chat: an empty message is refused", async () => {
   const test = await fixture();
   try {
-    const card = '<Card title="確認"><Text>進めますか。</Text></Card>';
-    const result = await test.tool.execute("t", {
-      text: "確認します。",
-      card,
-    });
-    assertEquals(sent(result), {
-      text: "確認します。",
-      card,
-      attachments: [],
-    });
-
-    // A card alone is a message too.
-    const onlyCard = await test.tool.execute("t", { card });
-    assertEquals(sent(onlyCard), { text: "", card, attachments: [] });
-  } finally {
-    await test.cleanup();
-  }
-});
-
-Deno.test("send_chat: a card the server cannot read fails the call", async () => {
-  const test = await fixture();
-  try {
-    // The parse is the same one the browser runs, so a markup that passes
-    // here always draws: half a card would be half a message.
-    const error = await assertRejects(() =>
-      test.tool.execute("t", { card: "<Card><Unknown>x</Unknown></Card>" })
-    );
-    assert(String(error).includes("Invalid card markup"), String(error));
-    // An empty card is refused before that: nothing would be sent.
-    await assertRejects(() => test.tool.execute("t", { card: "   " }));
+    await assertRejects(() => test.tool.execute("t", { text: "   " }));
+    await assertRejects(() => test.tool.execute("t", {}));
   } finally {
     await test.cleanup();
   }
@@ -127,7 +98,6 @@ Deno.test("send_chat: files are sent with the message", async () => {
     });
     const message = sent(result);
     assertEquals(message.text, "2つ送ります。");
-    assertEquals(message.card, null);
     assertEquals(message.attachments.length, 2);
 
     // The image is inline and keeps the user's name; the report is a
@@ -139,7 +109,7 @@ Deno.test("send_chat: files are sent with the message", async () => {
     assertEquals(report?.displayName, "report.md");
     assertEquals(report?.inline, false);
 
-    // The bytes really are in the store (the card links this name).
+    // The bytes really are in the store (the attachment row links this name).
     const resolved = await test.store.resolve("s1", image!.name);
     assert(resolved !== undefined, "the attachment was not stored");
     assertEquals(resolved.downloadName, "chart.png");

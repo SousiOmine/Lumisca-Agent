@@ -619,7 +619,7 @@ export function stellaRoutes(core: StellaApi): Hono {
         // `message_delta` has nothing to add and the projection drops it with
         // every other model-only event. A card is the exception — it is drawn
         // while the model writes it — so its fragments are batched like a
-        // reply's text, keyed by the call they belong to.
+        // reply's text, keyed by the card they belong to.
         delta: {
           accepts: (event) =>
             event.type === "card_delta" && event.sessionId === id,

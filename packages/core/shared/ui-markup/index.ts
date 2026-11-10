@@ -2,9 +2,10 @@
  * The markup for the cards drawn in the chat (see ./limits.ts).
  *
  * It is never executed as HTML (scripts, CSS, event attributes and URLs are
- * refused). The server's validation and the screen's rendering read it with
- * the same functions: `parseUiMarkup` reads it once, `resolveUiView` expands
- * the binds with the card's own data, and the screen draws the result.
+ * refused). A card is written into a reply's text, so `splitChatText` cuts it
+ * out of the prose (./segments.ts), `parseUiMarkup` reads it once,
+ * `resolveUiView` expands the binds with the card's own data, and the screen
+ * draws the result.
  */
 
 export { UI_MARKUP_LIMITS } from "./limits.ts";
@@ -34,6 +35,7 @@ export type {
   UiRepeatBlock,
   UiResolvedBlock,
   UiResolvedView,
+  UiSegment,
   UiStackBlock,
   UiTableBlock,
   UiTextBlock,
@@ -41,4 +43,5 @@ export type {
 } from "./types.ts";
 export { parseUiMarkup, parseUiMarkupPartial } from "./build.ts";
 export { resolveUiView } from "./resolve.ts";
+export { segmentsText, splitChatText } from "./segments.ts";
 export { CARD_HELP } from "./help.ts";

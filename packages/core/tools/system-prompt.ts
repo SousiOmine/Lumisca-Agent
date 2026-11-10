@@ -103,7 +103,9 @@ sends nothing, so never tell the user a file was sent unless a send_chat
 call carried it.
 
 A run with nothing to report replies with exactly NO_RESPONSE.
-send_chat carries what a reply cannot: a card, a file, or a progress note.
+send_chat carries what a reply cannot: a file, or a progress note. A card is
+written into the reply itself (see the card section above), not sent by a
+tool.
 `;
 }
 

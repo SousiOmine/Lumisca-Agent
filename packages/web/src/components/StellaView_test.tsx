@@ -122,7 +122,7 @@ Deno.test("StellaView: a failed send leaves the conversation on screen", () => {
       entries: [{
         role: "user",
         text: "README を直して",
-        card: null,
+        segments: [{ type: "text", text: "README を直して" }],
         attachments: [],
         files: [],
         timestamp: 1,

@@ -335,7 +335,6 @@ Deno.test("history_search: what the agent sent is part of the conversation", asy
       content: [{ type: "text", text: "Sent the message and a file." }],
       details: {
         text: "",
-        card: null,
         attachments: [{
           name: "0123456789ab.pdf",
           displayName: "report.pdf",
@@ -363,7 +362,6 @@ Deno.test("history_search: what the agent sent is part of the conversation", asy
       content: [{ type: "text", text: "Sent the message to the user." }],
       details: {
         text: "見積もりは 42 万円です。",
-        card: null,
         attachments: [],
       },
       isError: false,

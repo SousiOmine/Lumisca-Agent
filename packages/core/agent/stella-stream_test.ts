@@ -37,7 +37,7 @@ Deno.test("stellaEntryOf: the user's words are the user's entry", () => {
   assertEquals(stellaEntryOf(user("README を直して", 5)), {
     role: "user",
     text: "README を直して",
-    card: null,
+    segments: [{ type: "text", text: "README を直して" }],
     attachments: [],
     files: [],
     timestamp: 5,
@@ -119,26 +119,34 @@ Deno.test("stellaEntryOf: a turn that only ran a tool says nothing", () => {
 });
 
 Deno.test("stellaEntryOf: what send_chat sent is the conversation's message", () => {
-  const card = '<Card title="確認"><Text>進めますか。</Text></Card>';
   assertEquals(
-    stellaEntryOf(sent({ text: "確認します。", card: null, attachments: [] })),
+    stellaEntryOf(sent({ text: "確認します。", attachments: [] })),
     {
       role: "assistant",
       text: "確認します。",
-      card: null,
+      segments: [{ type: "text", text: "確認します。" }],
       attachments: [],
       files: [],
       timestamp: 10,
     },
   );
 
-  // A card travels with the words it was sent with: they are one message.
+  // A card written into the text is a block of the message: the words around
+  // it and the card keep the order the agent wrote them in.
+  const card = '<Card title="確認"><Text>進めますか。</Text></Card>';
   assertEquals(
-    stellaEntryOf(sent({ text: "確認します。", card, attachments: [] })),
+    stellaEntryOf(sent({
+      text: `確認します。\n\n\`\`\`card\n${card}\n\`\`\`\n\n進めますか。`,
+      attachments: [],
+    })),
     {
       role: "assistant",
-      text: "確認します。",
-      card,
+      text: "確認します。\n\n進めますか。",
+      segments: [
+        { type: "text", text: "確認します。" },
+        { type: "card", markup: card },
+        { type: "text", text: "進めますか。" },
+      ],
       attachments: [],
       files: [],
       timestamp: 10,
@@ -147,11 +155,14 @@ Deno.test("stellaEntryOf: what send_chat sent is the conversation's message", ()
 
   // A message that is only a card is still a message.
   assertEquals(
-    stellaEntryOf(sent({ text: "", card, attachments: [] }, 11)),
+    stellaEntryOf(sent({
+      text: `\`\`\`card\n${card}\n\`\`\``,
+      attachments: [],
+    }, 11)),
     {
       role: "assistant",
       text: "",
-      card,
+      segments: [{ type: "card", markup: card }],
       attachments: [],
       files: [],
       timestamp: 11,
@@ -175,11 +186,11 @@ Deno.test("stellaEntryOf: the files an agent sent travel with its message", () =
     },
   ];
   assertEquals(
-    stellaEntryOf(sent({ text: "2枚送ります。", card: null, attachments }, 15)),
+    stellaEntryOf(sent({ text: "2枚送ります。", attachments }, 15)),
     {
       role: "assistant",
       text: "2枚送ります。",
-      card: null,
+      segments: [{ type: "text", text: "2枚送ります。" }],
       attachments,
       files: [],
       timestamp: 15,
@@ -188,11 +199,11 @@ Deno.test("stellaEntryOf: the files an agent sent travel with its message", () =
 
   // The files alone are a message too (a picture needs no caption).
   assertEquals(
-    stellaEntryOf(sent({ text: "", card: null, attachments }, 16)),
+    stellaEntryOf(sent({ text: "", attachments }, 16)),
     {
       role: "assistant",
       text: "",
-      card: null,
+      segments: [],
       attachments,
       files: [],
       timestamp: 16,
@@ -203,7 +214,6 @@ Deno.test("stellaEntryOf: the files an agent sent travel with its message", () =
 Deno.test("stellaEntryOf: a failed or empty send_chat shows nothing", () => {
   const details = {
     text: "送れませんでした",
-    card: null,
     attachments: [{
       name: "9f3c2a1b4d5e.png",
       displayName: "chart.png",
@@ -224,10 +234,10 @@ Deno.test("stellaEntryOf: a failed or empty send_chat shows nothing", () => {
     null,
   );
   assertEquals(
-    stellaEntryOf(sent({ text: "", card: null, attachments: [] })),
+    stellaEntryOf(sent({ text: "", attachments: [] })),
     null,
   );
-  assertEquals(stellaEntryOf(sent({ text: null, card: null })), null);
+  assertEquals(stellaEntryOf(sent({ text: null })), null);
 });
 
 Deno.test("stellaEntryOf: the tools send_chat replaced show nothing", () => {
@@ -271,7 +281,7 @@ Deno.test("stellaEntryOf: an old chat_ui call shows its words, not its card", ()
   ], { timestamp: 21 }) as AgentMessage;
   const entry = stellaEntryOf(old);
   assertEquals(entry?.text, "確認します。");
-  assertEquals(entry?.card, null);
+  assertEquals(entry?.segments, [{ type: "text", text: "確認します。" }]);
 });
 
 Deno.test("stellaEntryOf: the model's own rows are never conversation entries", () => {
@@ -522,7 +532,7 @@ Deno.test("stellaEntryOf: a routine's prompt keeps the routine's name", () => {
   assertEquals(stellaEntryOf(prompt), {
     role: "user",
     text: "毎朝デプロイを確認して",
-    card: null,
+    segments: [{ type: "text", text: "毎朝デプロイを確認して" }],
     attachments: [],
     files: [],
     routine: "朝のデプロイ確認",

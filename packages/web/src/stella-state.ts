@@ -41,10 +41,11 @@ export interface StellaConversationState {
    * conversation's beginning. */
   older: string | null;
   running: boolean;
-  /** The card a `send_chat` call is writing right now, as far as it has
+  /** The card being written into the reply right now, as far as it has
    * arrived, or null. The run has no streaming TEXT (a reply arrives whole),
    * but a card is presentation: drawing it while it is written reads as
-   * progress. The finished entry carries the whole card and clears this. */
+   * progress. The finished entry carries the whole card and clears this;
+   * `card_end` clears it when the message turns out to be narration. */
   liveCard: { toolCallId: string; markup: string } | null;
   questions: StellaQuestion[];
   handover: StellaHandover | null;
@@ -183,9 +184,13 @@ export function entryKey(entry: StellaEntry): string {
   const files = entry.files.map((file) => file.ref).join(",");
   // Two prompts of one millisecond that say the same words differ when one
   // of them came from a routine: the name is part of the identity.
-  return `${entry.role}:${entry.timestamp}:${attachments}:${files}:${
-    entry.card ?? ""
-  }:${entry.routine ?? ""}:${entry.text}`;
+  const cards = entry.segments
+    .filter((segment) => segment.type === "card")
+    .map((segment) => segment.markup)
+    .join(",");
+  return `${entry.role}:${entry.timestamp}:${attachments}:${files}:${cards}:${
+    entry.routine ?? ""
+  }:${entry.text}`;
 }
 
 /** The entries a conversation draws, in order: every entry but a routine's
@@ -251,6 +256,8 @@ export function applyStellaEvent(
         liveCard: { toolCallId: event.toolCallId, markup },
       };
     }
+    case "card_end":
+      return state.liveCard === null ? null : { ...state, liveCard: null };
     case "entry": {
       const entries = upsertEntry(state.entries, event.entry);
       // A message arrives whole, so an unchanged list means nothing to

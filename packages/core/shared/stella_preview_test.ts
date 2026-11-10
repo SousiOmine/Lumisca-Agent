@@ -25,7 +25,7 @@ function entry(overrides: Partial<StellaEntry> = {}): StellaEntry {
   return {
     role: "assistant",
     text: "",
-    card: null,
+    segments: [],
     attachments: [],
     files: [],
     timestamp: 1_000,
@@ -126,10 +126,15 @@ Deno.test("previewOf: a message with no words is described", () => {
     at: 1_000,
   });
   // A card alone names its kind (`card` wins over nothing).
-  assertEquals(previewOf(entry({ card: "<Card />" })), {
-    kind: "card",
-    at: 1_000,
-  });
+  assertEquals(
+    previewOf(entry({
+      segments: [{ type: "card", markup: "<Card />" }],
+    })),
+    {
+      kind: "card",
+      at: 1_000,
+    },
+  );
   // Nothing at all: nothing to say.
   assertEquals(previewOf(entry()), null);
 });
@@ -140,7 +145,10 @@ Deno.test("previewOf: words win over a card and files", () => {
   assertEquals(
     previewOf(entry({
       text: "確認してください。",
-      card: "<Card />",
+      segments: [
+        { type: "text", text: "確認してください。" },
+        { type: "card", markup: "<Card />" },
+      ],
       files: [{
         name: "a.png",
         path: "/a.png",

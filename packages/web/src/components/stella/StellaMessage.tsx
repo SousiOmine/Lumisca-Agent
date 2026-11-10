@@ -236,11 +236,27 @@ function AgentBubble({
            * sideways instead of the code block scrolling inside itself. */
         }
         <div className="stella-msg-body msg-body markdown">
-          {entry.text && (
-            <MarkdownBlock text={entry.text} visualBase={visualBase} />
-          )}
-          {entry.card !== null && (
-            <CardView markup={entry.card} onSend={onSend} />
+          {
+            /* The message in the order it was written: its words and the
+             * cards the agent put between them (see
+             * shared/ui-markup/segments.ts). */
+          }
+          {entry.segments.map((segment, index) =>
+            segment.type === "card"
+              ? (
+                <CardView
+                  key={index}
+                  markup={segment.markup}
+                  onSend={onSend}
+                />
+              )
+              : (
+                <MarkdownBlock
+                  key={index}
+                  text={segment.text}
+                  visualBase={visualBase}
+                />
+              )
           )}
           <AttachmentCard attachments={entry.attachments} base={attachBase} />
         </div>

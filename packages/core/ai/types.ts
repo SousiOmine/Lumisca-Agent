@@ -594,16 +594,6 @@ export type StreamEvent =
     args: Record<string, unknown>;
     [k: string]: unknown;
   }
-  /** A fragment of the call's arguments, as the model writes them. The call
-   * itself is only complete at `toolcall_start`; this is what lets a card be
-   * drawn while it is being written. */
-  | {
-    type: "toolcall_input_delta";
-    toolCallId: string;
-    toolName: string;
-    delta: string;
-    [k: string]: unknown;
-  }
   | {
     type: "toolcall_result";
     toolCallId: string;
@@ -690,13 +680,6 @@ export type AgentEvent =
     toolCallId: string;
     toolName: string;
     args: unknown;
-  }
-  /** A fragment of a tool call's arguments, before the call is complete. */
-  | {
-    type: "tool_input_delta";
-    toolCallId: string;
-    toolName: string;
-    delta: string;
   }
   /** A tool call finished running. The outcome (content, details, isError)
    * is NOT carried here: it travels as the toolResult message the agent

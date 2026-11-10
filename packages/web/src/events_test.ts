@@ -65,7 +65,6 @@ function view(overrides: Partial<SessionView> = {}): SessionView {
     older: null,
     usage: summarizeContextUsage([]),
     streamingText: "",
-    liveCard: null,
     liveTools: [],
     runningTools: new Map(),
     pendingQuestions: [],
@@ -538,7 +537,6 @@ Deno.test("events: messages_truncated drops the exact removed messages", () => {
       message("assistant", 400),
     ],
     streamingText: "partial",
-    liveCard: null,
     runningTools: new Map([["t1", "bash"]]),
     error: "boom",
     agentStartedAt: 1,
@@ -1208,7 +1206,6 @@ Deno.test("events: messages_checkpoint inserts the row and keeps run state", () 
       message("assistant", 400),
     ],
     streamingText: "partial",
-    liveCard: null,
     runningTools: new Map([["t1", "bash"]]),
     agentStartedAt: 1,
   });
@@ -1512,42 +1509,4 @@ Deno.test("events: a steered message older than the window is not drawn", () => 
     view({ messages: [message("user", 100), message("assistant", 200)] }),
   );
   assertEquals(v, null);
-});
-
-Deno.test("events: a card being written is drawn, then replaced by its result", () => {
-  let v = applyEvent(
-    { type: "agent_start", sessionId: "s1" },
-    view(),
-  )!;
-  v = applyEvent(
-    {
-      type: "card_delta",
-      sessionId: "s1",
-      toolCallId: "call-1",
-      delta: "<Card><Text>",
-    },
-    v,
-  )!;
-  v = applyEvent(
-    {
-      type: "card_delta",
-      sessionId: "s1",
-      toolCallId: "call-1",
-      delta: "確認</Text></Card>",
-    },
-    v,
-  )!;
-  assertEquals(v.liveCard?.markup, "<Card><Text>確認</Text></Card>");
-
-  // The call is complete: the tool result carries the card from here on.
-  v = applyEvent(
-    {
-      type: "tool_end",
-      sessionId: "s1",
-      toolCallId: "call-1",
-      toolName: "chat_attach",
-    },
-    v,
-  )!;
-  assertEquals(v.liveCard, null);
 });

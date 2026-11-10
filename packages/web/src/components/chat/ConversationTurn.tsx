@@ -2,7 +2,6 @@ import { memo, useState } from "preact/compat";
 import {
   type AttachmentRef,
   attachmentsOfDetails,
-  cardOfDetails,
   contentText,
   TOOL_CHAT_ATTACH,
 } from "@lumisca/core/shared";
@@ -14,7 +13,6 @@ import type {
 } from "../../types.ts";
 import { AgentActivity } from "../AgentActivity.tsx";
 import { AttachmentCard } from "./AttachmentCard.tsx";
-import { CardView } from "./CardView.tsx";
 import { MessageRow } from "./MessageRow.tsx";
 import { AssistantText } from "./AssistantText.tsx";
 import { AssistantTools } from "./AssistantTools.tsx";
@@ -193,6 +191,7 @@ export const ConversationTurn = memo(function ConversationTurn({
             toolResults={toolResults}
             runningTools={runningTools}
             visualBase={visualBase}
+            onCardSend={onCardSend}
           />
         )}
       </section>
@@ -208,11 +207,6 @@ export const ConversationTurn = memo(function ConversationTurn({
   // it must not hide inside the collapsible work log. The results are read
   // from the turn's own list, so a rewind that drops them drops the card too.
   const attachments = attachmentsOfTurn(turn.responses);
-  // The cards the agent showed while working on this turn (`chat_attach`
-  // results). Like the files, they belong to the answer rather than to the
-  // log, so they stay visible when the log is collapsed, and a rewind that
-  // drops the calls drops them too.
-  const cards = cardsOfTurn(turn.responses);
   // Everything the turn produced except the final assistant, whose text
   // renders below the log: intermediate assistant messages (their text and
   // tool calls) plus the turn's compact rows — a notification or a prompt
@@ -251,6 +245,7 @@ export const ConversationTurn = memo(function ConversationTurn({
           toolResults={toolResults}
           runningTools={runningTools}
           visualBase={visualBase}
+          onCardSend={onCardSend}
           onRewind={onRewind}
         />
       )}
@@ -282,6 +277,7 @@ export const ConversationTurn = memo(function ConversationTurn({
                 toolResults={toolResults}
                 runningTools={runningTools}
                 visualBase={visualBase}
+                onCardSend={onCardSend}
                 onRewind={onRewind}
               />
             ))}
@@ -296,27 +292,16 @@ export const ConversationTurn = memo(function ConversationTurn({
         </div>
       </div>
       {finalAssistant && contentText(finalAssistant.content) && (
-        <AssistantText message={finalAssistant} visualBase={visualBase} />
+        <AssistantText
+          message={finalAssistant}
+          visualBase={visualBase}
+          onCardSend={onCardSend}
+        />
       )}
-      {cards.map((card, index) => (
-        <CardView key={index} markup={card} onSend={onCardSend} />
-      ))}
       <AttachmentCard attachments={attachments} base={attachBase} />
     </section>
   );
 });
-
-/** Every card the turn's `chat_attach` calls showed, in call order. */
-function cardsOfTurn(responses: readonly AgentMessage[]): string[] {
-  const cards: string[] = [];
-  for (const message of responses) {
-    if (message.role !== "toolResult") continue;
-    if (message.toolName !== TOOL_CHAT_ATTACH || message.isError) continue;
-    const card = cardOfDetails(message.details);
-    if (card !== null) cards.push(card);
-  }
-  return cards;
-}
 
 /** Every file the turn's `chat_attach` calls sent, in call order. */
 function attachmentsOfTurn(

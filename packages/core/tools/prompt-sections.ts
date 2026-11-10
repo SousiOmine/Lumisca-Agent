@@ -22,6 +22,7 @@ import {
   TOOL_WEB_SEARCH,
   TOOL_WRITE,
 } from "../shared/tool-names.ts";
+import { CARD_HELP } from "../shared/ui-markup/help.ts";
 
 /**
  * The system prompt's guideline sections.
@@ -223,6 +224,17 @@ const VISUAL_IMAGE_SECTION: PromptSection = {
   text: "- To show an image file inside your reply, publish it with the " +
     "visual tool and\n  paste the markdown snippet it returns where the " +
     "image belongs.",
+};
+
+/** How a card is written. Both modes draw them, so the grammar belongs to
+ * every session that can talk to a person: it is part of the reply, not a
+ * tool call (see shared/ui-markup/segments.ts). */
+const CARD_SECTION: PromptSection = {
+  name: "reply:card",
+  order: ORDER.tool + 126,
+  text: "- To show the user a card (a table, a chart, a question), write it " +
+    "into your\n  reply as a fenced block tagged `card`; the app draws it " +
+    "where the block sits.\n  " + CARD_HELP,
 };
 
 /** Showing a file the agent produced, in code mode: `chat_attach` hands it
@@ -465,6 +477,7 @@ export const CODING_PROMPT_SECTIONS: readonly PromptSection[] = [
   VISUAL_DIAGRAM_SECTION,
   VISUAL_IMAGE_SECTION,
   CHAT_ATTACH_SECTION,
+  CARD_SECTION,
   TASK_SECTION,
   NOTIFICATION_SECTION,
   // The same rule a sub-agent gets: a "[Message from ...]" notification is
@@ -499,6 +512,7 @@ export const STELLA_PROMPT_SECTIONS: readonly PromptSection[] = [
   VM_LAUNCH_SECTION,
   VM_ASK_USER_SECTION,
   SEND_CHAT_SECTION,
+  CARD_SECTION,
   ROUTINES_SECTION,
   NOTIFICATION_SECTION,
   SUBAGENT_MESSAGE_SECTION,
@@ -515,6 +529,7 @@ export const CHAT_PROMPT_SECTIONS: readonly PromptSection[] = [
   SKILL_SECTION,
   WEB_SEARCH_SECTION,
   VISUAL_DIAGRAM_SECTION,
+  CARD_SECTION,
   QUALITY_SECTION,
   CHAT_ANSWERS_SECTION,
 ];

@@ -20,14 +20,14 @@ function assistant(
  * tools/send-chat.ts writes; see shared/chat-message.ts). */
 function sent(
   text: string,
-  options: { card?: string; timestamp?: number } = {},
+  options: { timestamp?: number } = {},
 ): AgentMessage {
   return {
     role: "toolResult",
     toolCallId: "t1",
     toolName: "send_chat",
     content: [{ type: "text", text: "Sent the message to the user." }],
-    details: { text, card: options.card ?? null },
+    details: { text },
     isError: false,
     timestamp: options.timestamp ?? 2,
   } as AgentMessage;
@@ -73,7 +73,7 @@ Deno.test("RunReply: a message that only carried a card or files is no reply", (
   // The conversation shows an empty bubble's worth of words: there is
   // nothing a one-line notification can say.
   const reply = new RunReply();
-  reply.observe(sent("", { card: "<Text>x</Text>" }));
+  reply.observe(sent("```card\n<Card><Text>x</Text></Card>\n```"));
   assertEquals(reply.gist(), undefined);
 });
 

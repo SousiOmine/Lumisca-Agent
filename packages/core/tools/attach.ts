@@ -1,34 +1,24 @@
 import { CoreError } from "../errors.ts";
 import {
   type AttachmentRef,
-  CARD_HELP,
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENTS_PER_CALL,
   MAX_ATTACHMENTS_TOTAL_BYTES,
-  parseUiMarkup,
   TOOL_CHAT_ATTACH,
 } from "../shared/mod.ts";
 import type { SessionAttachmentStore } from "../session/attachments.ts";
 import type { FileBackend } from "./file-backend.ts";
 import { requireExistingFileWithSize } from "./resolve.ts";
-import {
-  array,
-  object,
-  optional,
-  string,
-  type Tool,
-  type ToolResult,
-} from "./schema.ts";
+import { array, object, string, type Tool, type ToolResult } from "./schema.ts";
 
 const attachSchema = object({
-  paths: optional(array(
+  paths: array(
     string("Path of one file to send"),
     "Paths of existing files to send, in the same form the file tools " +
       "take (absolute, or relative to the working folder). Images are shown " +
       "inline; every other file is offered as a download. Capped at " +
       `${MAX_ATTACHMENTS_PER_CALL} files.`,
-  )),
-  card: optional(string(`A card shown with the reply: ${CARD_HELP}`)),
+  ),
 });
 
 /** What the tool needs to read files and where to put them. */
@@ -112,12 +102,13 @@ export async function attachFiles(
  * the file is right there, so it is handed over instead.
  *
  * A stella conversation has `send_chat` instead: there the text is not shown
- * either, so "attach a file" and "say something" are one act. Both tools take
- * the same `card` markup and write it under the same `details.card` key, so
- * one reader draws either.
+ * either, so "attach a file" and "say something" are one act.
  *
- * The result carries the files and the card in `details`, which is what the
- * client draws and what a reload re-draws (the transcript keeps the call).
+ * Cards are not part of this tool: the agent writes one into its reply
+ * (shared/ui-markup), so a card needs no call of its own.
+ *
+ * The result carries the files in `details`, which is what the client draws
+ * and what a reload re-draws (the transcript keeps the call).
  * The bytes are copied into the session's store, so what the user sees keeps
  * showing what was sent even after the original file changes.
  */
@@ -129,11 +120,10 @@ export function createChatAttachTool(
     name: TOOL_CHAT_ATTACH,
     label: "Chat Attach",
     description:
-      "Send files or a card to the user in this reply, beside your text: " +
-      "images are shown inline, other files are offered as downloads, and " +
-      "`card` is a small structured panel (a table, a metric, a flow, a " +
-      "question). `paths` takes the same form as the file tools (absolute, " +
-      "or relative to the working folder) and each must exist. Up to " +
+      "Send files to the user beside your text: images are shown inline, " +
+      "other files are offered as downloads. `paths` takes the same form as " +
+      "the file tools (absolute, or relative to the working folder) and " +
+      "each must exist. Up to " +
       `${MAX_ATTACHMENTS_PER_CALL} files per call, ` +
       `${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MiB each and ` +
       `${MAX_ATTACHMENTS_TOTAL_BYTES / (1024 * 1024)} MiB in total. Your ` +
@@ -141,23 +131,11 @@ export function createChatAttachTool(
       "well; say what the file is.",
     parameters: attachSchema,
     execute: async (_id, params, signal): Promise<ToolResult> => {
-      const card = (params.card ?? "").trim();
       const paths = params.paths ?? [];
-      if (card.length === 0 && paths.length === 0) {
-        throw new CoreError("Send a file, a card, or both.", "invalid");
+      if (paths.length === 0) {
+        throw new CoreError("Attach at least one file.", "invalid");
       }
-      if (card.length > 0) {
-        // Checked here, not in the browser: a card the server accepted must
-        // draw, and the client only ever sees what this check let through.
-        const parsed = parseUiMarkup(card);
-        if (!parsed.ok) {
-          throw new CoreError(
-            `Invalid card markup: ${parsed.problem}`,
-            "invalid",
-          );
-        }
-      }
-      const attachments = paths.length === 0 ? [] : await attachFiles({
+      const attachments = await attachFiles({
         files,
         store,
         sessionId,
@@ -167,9 +145,9 @@ export function createChatAttachTool(
       return {
         content: [{
           type: "text",
-          text: receipt(card.length > 0, attachments.length),
+          text: receipt(attachments.length),
         }],
-        details: { attachments, card: card.length === 0 ? null : card },
+        details: { attachments },
       };
     },
   };
@@ -178,13 +156,6 @@ export function createChatAttachTool(
 /** What the model reads after the call. It says what was handed over, not
  * what it said: the reply's own text is shown separately, and repeating it
  * here would put the same words in the prompt twice. */
-function receipt(hasCard: boolean, files: number): string {
-  const parts: string[] = [];
-  if (files === 1) parts.push("1 file");
-  else if (files > 1) parts.push(`${files} files`);
-  if (hasCard) parts.push("a card");
-  const what = parts.length === 1
-    ? parts[0]!
-    : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
-  return `Sent ${what} to the user.`;
+function receipt(files: number): string {
+  return `Sent ${files === 1 ? "1 file" : `${files} files`} to the user.`;
 }

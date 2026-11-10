@@ -210,7 +210,6 @@ async function* runStream(
   let thinking = "";
   /** Tool name per call id: a delta part carries only the id, and the events
    * below say which tool they belong to. */
-  const toolNames = new Map<string, string>();
   let streamedUsage: LanguageModelUsage | undefined;
   /** The provider's finish reason of this step ("stop", "length", …). The
    * turn's stopReason follows it, so a response the provider cut at the
@@ -252,28 +251,6 @@ async function* runStream(
           if (delta.length === 0) break;
           thinking += delta;
           yield { type: "thinking_delta", delta };
-          break;
-        }
-        case "tool-input-start": {
-          const id = String(p.toolCallId ?? "");
-          if (id.length > 0) toolNames.set(id, String(p.toolName ?? ""));
-          break;
-        }
-        case "tool-input-delta": {
-          // The arguments are still being written: forward the fragment so a
-          // client can show what the call already carries (a card, while the
-          // model writes it) instead of waiting for the whole call.
-          const id = String(p.toolCallId ?? "");
-          const delta = typeof p.inputTextDelta === "string"
-            ? p.inputTextDelta
-            : "";
-          if (id.length === 0 || delta.length === 0) break;
-          yield {
-            type: "toolcall_input_delta",
-            toolCallId: id,
-            toolName: toolNames.get(id) ?? "",
-            delta,
-          };
           break;
         }
         case "tool-call": {

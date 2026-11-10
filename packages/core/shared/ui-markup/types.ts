@@ -4,9 +4,9 @@
  *
  * A parse keeps the binds as written (`<Repeat>`, `<If>`, `$item.x`); the
  * screen calls `resolveUiView` (./resolve.ts) once per draw to turn them into
- * the same blocks with literal text. Everything the server validates
- * therefore holds for what the client draws, and a stored card always draws
- * the same picture.
+ * the same blocks with literal text. A card is read from the message's own
+ * text every time it is drawn, so a stored message always draws the same
+ * picture.
  */
 
 /** A paragraph. Line breaks are kept as written. */
@@ -204,6 +204,23 @@ export type UiResolvedView = {
   title: string | null;
   blocks: readonly UiResolvedBlock[];
 };
+
+/** The prose of one message, with the card blocks taken out. */
+export type UiTextSegment = {
+  type: "text";
+  text: string;
+};
+
+/** One card a message wrote, as the markup between its fence's delimiters. */
+export type UiCardSegment = {
+  type: "card";
+  markup: string;
+};
+
+/** One piece of a message, in the order the agent wrote it: a card is a
+ * block OF the reply (see segments.ts), so prose may come before and after
+ * it. */
+export type UiSegment = UiTextSegment | UiCardSegment;
 
 /** The result of a parse. On failure, `problem` says how to fix it (line,
  * column and reason). */

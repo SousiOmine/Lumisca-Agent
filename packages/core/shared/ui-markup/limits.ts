@@ -9,9 +9,10 @@
  * tags listed here are understood, and scripts, CSS, event attributes and
  * URLs are refused.
  *
- * The same reading is used by the server (validating the markup a model
- * sends) and by the client (drawing the card). So that both always agree, it
- * is plain string processing: no DOM, no Node.js APIs.
+ * The model writes it into its reply, and the client draws it there; the
+ * server only cuts the card out of the message's text (./segments.ts) to hand
+ * a stella conversation the card it is writing. All of it is plain string
+ * processing: no DOM, no Node.js APIs.
  */
 
 /**
@@ -32,7 +33,7 @@ export const UI_MARKUP_LIMITS = {
   /** Blocks one card may hold, counting the blocks inside containers. */
   blocks: 40,
   /** Blocks one card may draw after the repeats are expanded. A card the
-   * server accepted must not turn into a page's worth of DOM at the client,
+   * parser accepted must not turn into a page's worth of DOM at the client,
    * and the model cannot tell how large its data is. */
   expandedBlocks: 400,
   /** Items one `<Repeat>` may expand. Past this a card is a page, and the

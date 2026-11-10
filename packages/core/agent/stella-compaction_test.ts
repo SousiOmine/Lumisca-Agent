@@ -151,7 +151,7 @@ Deno.test("send_chat is the conversation, not a tool to tally", () => {
       toolName: "send_chat",
       content: [{ type: "text", text: "sent" }],
       isError: false,
-      details: { text: "hello", card: null },
+      details: { text: "hello" },
       timestamp: at(12),
     },
     assistant("done", at(13)),

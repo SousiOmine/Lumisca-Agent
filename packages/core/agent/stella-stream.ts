@@ -35,6 +35,8 @@
  */
 import type { AgentMessage } from "../ai/types.ts";
 import { chatMessageOfDetails } from "../shared/chat-message.ts";
+import { segmentsText, splitChatText } from "../shared/ui-markup/segments.ts";
+import type { UiSegment } from "../shared/ui-markup/types.ts";
 import { assistantTextVerdict } from "./silent-reply.ts";
 import { TOOL_SEND_CHAT } from "../shared/tool-names.ts";
 import type { ClientEvent } from "../domain/event.ts";
@@ -115,7 +117,7 @@ export function stellaEntryOf(message: AgentMessage): StellaEntry | null {
       return {
         role: "user",
         text,
-        card: null,
+        segments: text.length === 0 ? [] : [{ type: "text", text }],
         attachments: [],
         files,
         ...(routine === undefined ? {} : { routine }),
@@ -139,10 +141,15 @@ export function stellaEntryOf(message: AgentMessage): StellaEntry | null {
       if (message.stopReason === "toolUse") return null;
       const verdict = assistantTextVerdict(textOf(message));
       if (verdict.kind !== "message") return null;
+      // The reply is read, not echoed: a card is a block written into it
+      // (see shared/ui-markup/segments.ts), so the words and the cards are
+      // separated here once, and every reader below gets the same picture.
+      const segments = splitChatText(verdict.text);
+      if (segments.length === 0) return null;
       return {
         role: "assistant",
-        text: verdict.text,
-        card: null,
+        text: segmentsText(segments),
+        segments,
         attachments: [],
         files: [],
         timestamp: message.timestamp,
@@ -154,18 +161,16 @@ export function stellaEntryOf(message: AgentMessage): StellaEntry | null {
       if (message.toolName !== TOOL_SEND_CHAT || message.isError) return null;
       const sent = chatMessageOfDetails(message.details);
       if (sent === undefined) return null;
-      if (
-        sent.text.length === 0 && sent.card === null &&
-        sent.attachments.length === 0
-      ) {
+      const segments: UiSegment[] = splitChatText(sent.text);
+      if (segments.length === 0 && sent.attachments.length === 0) {
         // The tool refuses an empty message, so this is a row this build did
         // not write: an empty bubble would claim the agent said something.
         return null;
       }
       return {
         role: "assistant",
-        text: sent.text,
-        card: sent.card,
+        text: segmentsText(segments),
+        segments,
         attachments: sent.attachments,
         files: [],
         timestamp: message.timestamp,
@@ -194,9 +199,13 @@ export function stellaEntryCursorOf(entry: StellaEntry): string {
     // reference names which prompt it was.
     entry.files[0]?.ref ?? "",
     // Two messages of one millisecond that carried neither files nor
-    // attachments differ only in what they said: the card (whole, it is
-    // short) and the start of the text name which is which.
-    entry.card ?? "",
+    // attachments differ only in what they said: the start of each card (a
+    // card can be long, and its beginning is what tells two apart) and the
+    // start of the text name which is which.
+    entry.segments
+      .filter((segment) => segment.type === "card")
+      .map((segment) => segment.markup.slice(0, 64))
+      .join(""),
     entry.text.slice(0, 64),
     // A routine's prompt and the same words typed by the user are different
     // messages: the name is part of what tells them apart.
@@ -278,15 +287,17 @@ export function stellaEventsOf(event: ClientEvent): StellaEvent[] {
     case "handover_end":
       return [{ type: "handover", handover: null }];
     case "card_delta":
-      // A card being written. The conversation has no streaming TEXT (a reply
-      // arrives whole), but a card is drawn while the model writes it: it is
-      // presentation, not words, so there is no half-sentence to guard
-      // against.
+      // A card being written into the reply. The conversation has no streaming
+      // TEXT (a reply arrives whole), but a card is drawn while the model
+      // writes it: it is presentation, not words, so there is no
+      // half-sentence to guard against.
       return [{
         type: "card_delta",
         toolCallId: event.toolCallId,
         delta: event.delta,
       }];
+    case "card_end":
+      return [{ type: "card_end" }];
     case "session_error":
       return [{ type: "error", message: event.message }];
     default:

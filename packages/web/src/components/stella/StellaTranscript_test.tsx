@@ -32,7 +32,7 @@ Deno.test("StellaTranscript: the words come out in order", () => {
       {
         role: "user",
         text: "README を直して",
-        card: null,
+        segments: [{ type: "text", text: "README を直して" }],
         attachments: [],
         files: [],
         timestamp: 1,
@@ -40,7 +40,7 @@ Deno.test("StellaTranscript: the words come out in order", () => {
       {
         role: "assistant",
         text: "直しました。",
-        card: null,
+        segments: [{ type: "text", text: "直しました。" }],
         attachments: [],
         files: [],
         timestamp: 2,
@@ -48,7 +48,7 @@ Deno.test("StellaTranscript: the words come out in order", () => {
       {
         role: "user",
         text: "ありがとう",
-        card: null,
+        segments: [{ type: "text", text: "ありがとう" }],
         attachments: [],
         files: [],
         timestamp: 3,
@@ -70,7 +70,10 @@ Deno.test("StellaTranscript: a card renders with its markup", () => {
       {
         role: "assistant",
         text: "確認します。",
-        card: markup,
+        segments: [{ type: "text", text: "確認します。" }, {
+          type: "card",
+          markup,
+        }],
         attachments: [],
         files: [],
         timestamp: 1,
@@ -117,7 +120,7 @@ Deno.test("StellaTranscript: nothing of the model's machinery can appear", () =>
     entries: [{
       role: "assistant",
       text: "答えです。",
-      card: null,
+      segments: [{ type: "text", text: "答えです。" }],
       attachments: [],
       files: [],
       timestamp: 1,
@@ -141,7 +144,7 @@ Deno.test("StellaTranscript: a conversation reads as messages, not rows", () => 
       {
         role: "user",
         text: "直して",
-        card: null,
+        segments: [{ type: "text", text: "直して" }],
         attachments: [],
         files: [],
         timestamp: Date.now(),
@@ -149,7 +152,7 @@ Deno.test("StellaTranscript: a conversation reads as messages, not rows", () => 
       {
         role: "assistant",
         text: "直しました。",
-        card: null,
+        segments: [{ type: "text", text: "直しました。" }],
         attachments: [],
         files: [],
         timestamp: Date.now() + 1,
@@ -190,7 +193,7 @@ Deno.test("StellaTranscript: a run of the agent's messages shares one avatar", (
       {
         role: "user",
         text: "一つ目",
-        card: null,
+        segments: [{ type: "text", text: "一つ目" }],
         attachments: [],
         files: [],
         timestamp: now,
@@ -198,7 +201,7 @@ Deno.test("StellaTranscript: a run of the agent's messages shares one avatar", (
       {
         role: "assistant",
         text: "返事一",
-        card: null,
+        segments: [{ type: "text", text: "返事一" }],
         attachments: [],
         files: [],
         timestamp: now + 1,
@@ -206,7 +209,7 @@ Deno.test("StellaTranscript: a run of the agent's messages shares one avatar", (
       {
         role: "assistant",
         text: "返事二",
-        card: null,
+        segments: [{ type: "text", text: "返事二" }],
         attachments: [],
         files: [],
         timestamp: now + 2,
@@ -230,7 +233,7 @@ Deno.test("StellaTranscript: a new day opens a separator", () => {
       {
         role: "user",
         text: "昨日の話",
-        card: null,
+        segments: [{ type: "text", text: "昨日の話" }],
         attachments: [],
         files: [],
         timestamp: yesterday,
@@ -238,7 +241,7 @@ Deno.test("StellaTranscript: a new day opens a separator", () => {
       {
         role: "user",
         text: "今日の話",
-        card: null,
+        segments: [{ type: "text", text: "今日の話" }],
         attachments: [],
         files: [],
         timestamp: today,
@@ -261,7 +264,7 @@ Deno.test("StellaTranscript: the agent's time starts at its words' edge", () => 
       {
         role: "user",
         text: "短い",
-        card: null,
+        segments: [{ type: "text", text: "短い" }],
         attachments: [],
         files: [],
         timestamp: 1,
@@ -269,7 +272,7 @@ Deno.test("StellaTranscript: the agent's time starts at its words' edge", () => 
       {
         role: "assistant",
         text: "長い返事。".repeat(40),
-        card: null,
+        segments: [{ type: "text", text: "長い返事。".repeat(40) }],
         attachments: [],
         files: [],
         timestamp: 2,
@@ -286,7 +289,7 @@ Deno.test("StellaTranscript: a prompt's pictures are drawn in the bubble", () =>
       {
         role: "user",
         text: "",
-        card: null,
+        segments: [],
         attachments: [],
         files: [{
           name: "image-1.png",
@@ -330,7 +333,10 @@ Deno.test("StellaTranscript: an answer's code scrolls inside the message", () =>
       {
         role: "assistant",
         text: "```ts\nconst veryLongIdentifierName = 1;\n```",
-        card: null,
+        segments: [{
+          type: "text",
+          text: "```ts\nconst veryLongIdentifierName = 1;\n```",
+        }],
         attachments: [],
         files: [],
         timestamp: Date.now(),

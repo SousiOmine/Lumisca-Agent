@@ -5,6 +5,8 @@ import {
   parseUiMarkup,
   parseUiMarkupPartial,
   resolveUiView,
+  segmentsText,
+  splitChatText,
   type UiView,
 } from "./ui-markup/index.ts";
 import { BLOCK_TAGS } from "./ui-markup/reader.ts";
@@ -12,9 +14,9 @@ import { BLOCK_TAGS } from "./ui-markup/reader.ts";
 /**
  * Reading the UI markup.
  *
- * The screen (client) and the validation (the tool that accepts a card) call
- * the same functions, so the grammar's promises are pinned down here, in one
- * place.
+ * The screen reads a card with these functions, and the server cuts the card
+ * out of a message's text with the same module (./ui-markup/segments.ts), so
+ * the grammar's promises are pinned down here, in one place.
  */
 
 function viewOf(markup: string): UiView {
@@ -489,6 +491,92 @@ Deno.test("CARD_HELP names every tag a card may carry", () => {
   for (const tag of BLOCK_TAGS) {
     assertStringIncludes(CARD_HELP, tag);
   }
+});
+
+Deno.test("CARD_HELP names every comparison an <If> accepts", () => {
+  // The parser takes both, and a model can only use what it is told about.
+  assertStringIncludes(CARD_HELP, 'eq="');
+  assertStringIncludes(CARD_HELP, 'ne="');
+});
+
+Deno.test("splitChatText: a card fence is lifted out of the prose", () => {
+  assertEquals(
+    splitChatText(
+      "前です。\n\n```card\n<Card><Text>a</Text></Card>\n```\n\n後です。",
+    ),
+    [
+      { type: "text", text: "前です。" },
+      { type: "card", markup: "<Card><Text>a</Text></Card>" },
+      { type: "text", text: "後です。" },
+    ],
+  );
+});
+
+Deno.test("splitChatText: text without a card is one prose segment", () => {
+  assertEquals(splitChatText("  ただの文です。\n\n続き。  "), [
+    { type: "text", text: "ただの文です。\n\n続き。" },
+  ]);
+  assertEquals(splitChatText(""), []);
+  assertEquals(splitChatText("   \n\n "), []);
+});
+
+Deno.test("splitChatText: a message may be cards alone, and several", () => {
+  assertEquals(
+    splitChatText("```card\n<Card><Text>a</Text></Card>\n```"),
+    [{ type: "card", markup: "<Card><Text>a</Text></Card>" }],
+  );
+  assertEquals(
+    splitChatText(
+      "```card\n<Card><Text>a</Text></Card>\n```\n" +
+        "```card\n<Card><Text>b</Text></Card>\n```",
+    ),
+    [
+      { type: "card", markup: "<Card><Text>a</Text></Card>" },
+      { type: "card", markup: "<Card><Text>b</Text></Card>" },
+    ],
+  );
+});
+
+Deno.test("splitChatText: an unclosed fence is a partial card", () => {
+  // The model is still writing: the screen draws what has closed. It is a
+  // card segment either way — the caller draws it, and an invalid finished
+  // card says so.
+  assertEquals(splitChatText("```card\n<Card><Text>half"), [
+    { type: "card", markup: "<Card><Text>half" },
+  ]);
+});
+
+Deno.test("splitChatText: other fences stay prose, delimiters included", () => {
+  assertEquals(
+    splitChatText("```js\nconst a = 1;\n```\n\n```card\n<Card/>\n```"),
+    [
+      { type: "text", text: "```js\nconst a = 1;\n```" },
+      { type: "card", markup: "<Card/>" },
+    ],
+  );
+  // A card's fence written INSIDE a code sample is a sample.
+  assertEquals(
+    splitChatText("```xml\n```card\n<Card/>\n```\n```"),
+    [{ type: "text", text: "```xml\n```card\n<Card/>\n```\n```" }],
+  );
+});
+
+Deno.test("splitChatText: a tilde fence is a card fence too", () => {
+  assertEquals(splitChatText("~~~card\n<Card/>\n~~~"), [
+    { type: "card", markup: "<Card/>" },
+  ]);
+});
+
+Deno.test("segmentsText: the prose is what a preview reads", () => {
+  assertEquals(
+    segmentsText([
+      { type: "text", text: "前" },
+      { type: "card", markup: "<Card/>" },
+      { type: "text", text: "後" },
+    ]),
+    "前\n\n後",
+  );
+  assertEquals(segmentsText([{ type: "card", markup: "<Card/>" }]), "");
 });
 
 Deno.test("parseUiMarkup refuses a <Data> that is late, doubled or no object", () => {

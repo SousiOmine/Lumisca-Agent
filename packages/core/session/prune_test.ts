@@ -149,7 +149,6 @@ Deno.test("prune: what the agent sent is part of the conversation", () => {
     content: [{ type: "text", text: "Sent the message to the user." }],
     details: {
       text: "report.pdf を添付しました。",
-      card: null,
       attachments: [{
         name: "0123456789ab.pdf",
         displayName: "report.pdf",

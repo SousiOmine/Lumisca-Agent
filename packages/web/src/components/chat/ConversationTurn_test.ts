@@ -711,24 +711,16 @@ Deno.test("ConversationTurn: a fragment renders its rows without a header", () =
   assertStringIncludes(html, "tool-timeline");
 });
 
-Deno.test("ConversationTurn: a chat_attach card is drawn under the reply", () => {
-  // Code mode's agent shows a card the same way stella's does: the tool result
-  // carries the markup, and the card belongs to the answer rather than to the
-  // collapsed work log (a reader must not have to open the log to see it).
-  const markup = '<Card title="確認"><Text>進めますか。</Text></Card>';
-  const call = fauxToolCall("chat_attach", { card: markup }, "call-1");
+Deno.test("ConversationTurn: a card written in the reply is drawn where it was written", () => {
+  // A card is a block of the message's own text (shared/ui-markup), so the
+  // words before and after it keep their order around it.
+  const markup = '<Card title="確認"><Text>カードの中</Text></Card>';
   const messages: AgentMessage[] = [
     user(1),
-    fauxAssistantMessage([call], { timestamp: 2 }) as AgentMessage,
-    {
-      role: "toolResult",
-      toolCallId: "call-1",
-      toolName: "chat_attach",
-      content: [{ type: "text", text: "Sent a card to the user." }],
-      details: { attachments: [], card: markup },
-      isError: false,
-      timestamp: 3,
-    },
+    fauxAssistantMessage(
+      `前の文。\n\n\`\`\`card\n${markup}\n\`\`\`\n\n後の文。`,
+      { timestamp: 2 },
+    ) as AgentMessage,
   ];
 
   const turns = buildTurns(messages);
@@ -745,39 +737,7 @@ Deno.test("ConversationTurn: a chat_attach card is drawn under the reply", () =>
   }));
 
   assertStringIncludes(html, "ui-card");
-  assertStringIncludes(html, "確認");
-  assertStringIncludes(html, "進めますか。");
-});
-
-Deno.test("ConversationTurn: a failed chat_attach draws no card", () => {
-  const markup = '<Card title="確認"><Text>進めますか。</Text></Card>';
-  const call = fauxToolCall("chat_attach", { card: markup }, "call-2");
-  const messages: AgentMessage[] = [
-    user(1),
-    fauxAssistantMessage([call], { timestamp: 2 }) as AgentMessage,
-    {
-      role: "toolResult",
-      toolCallId: "call-2",
-      toolName: "chat_attach",
-      content: [{ type: "text", text: "Invalid card markup" }],
-      details: { attachments: [], card: markup },
-      isError: true,
-      timestamp: 3,
-    },
-  ];
-
-  const turns = buildTurns(messages);
-  const html = renderToString(createElement(ConversationTurn, {
-    turn: turns[turns.length - 1]!,
-    entering: false,
-    visualBase: "/api/sessions/s/visual/",
-    attachBase: "/api/sessions/s/attachment/",
-    toolResults: new Map(),
-    runningTools: new Map(),
-    running: false,
-    onRewind: () => {},
-    onCardSend: () => {},
-  }));
-
-  assertEquals(html.includes("ui-card"), false, html);
+  assertStringIncludes(html, "カードの中");
+  assert(html.indexOf("前の文。") < html.indexOf("ui-card"), html);
+  assert(html.indexOf("ui-card") < html.indexOf("後の文。"), html);
 });

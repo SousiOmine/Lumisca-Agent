@@ -18,7 +18,6 @@ function render(parts: {
     hasOlder: false,
     loadingOlder: false,
     streamingText: parts.streamingText ?? "",
-    liveCard: null,
     liveTools: parts.liveTools ?? [],
     runningTools: parts.runningTools ?? new Map(),
     running: true,
@@ -59,6 +58,19 @@ Deno.test("Transcript: a live row that already returned is not spinning", () => 
   assertStringIncludes(html, "tool-line-name");
   assertStringIncludes(html, "a.ts");
   assert(!html.includes("spin"));
+});
+
+Deno.test("Transcript: a card being written is drawn, not printed", () => {
+  // The tail is read the same way a finished message is: the fence is never
+  // shown as text, and the card draws from its first block.
+  const html = render({
+    streamingText:
+      '確認します。\n\n```card\n<Card title="確認"><Text>進めますか。</Text>',
+  });
+
+  assertStringIncludes(html, "ui-card");
+  assertStringIncludes(html, "確認します。");
+  assert(!html.includes("```card"));
 });
 
 Deno.test("Transcript: the caret still marks text that is arriving", () => {

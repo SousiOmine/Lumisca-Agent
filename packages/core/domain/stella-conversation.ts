@@ -19,6 +19,7 @@
 import type { AskTurn } from "../shared/interaction.ts";
 import type { AttachmentRef, PromptFileRef } from "../shared/attachments.ts";
 import type { ThinkingLevel } from "../shared/providers.ts";
+import type { UiSegment } from "../shared/ui-markup/types.ts";
 
 /** One thing the user or the agent said, as the conversation shows it.
  *
@@ -33,15 +34,16 @@ export interface StellaEntry {
   /** `user` is the person talking; `assistant` is the agent. There is no
    * other role in a conversation (stella has no modes, no notifications). */
   role: "user" | "assistant";
-  /** The message's text ("" for a message that only sent a card or a set of
-   * files). */
+  /** The message's words, with the cards taken out ("" for a message that
+   * only showed cards or files). This is what a preview, a notification and
+   * the conversation search read. */
   text: string;
-  /** The card the message showed (the `card` argument of `send_chat`), or
-   * null. A card is the message's presentation — a table, a flow chart, a
-   * question — so it travels with the words rather than being dropped with
-   * the tool call that carried it. One call carries one card; a client that
-   * received two would be drawing a message the agent never sent. */
-  card: string | null;
+  /** What the message draws, in the order it was written: its prose and the
+   * cards the agent put between the words (see shared/ui-markup/segments.ts).
+   * A card is a block of the reply itself, so a message may hold several and
+   * the text before and after each of them. The user's own message has one
+   * text segment: their words are never read as markup. */
+  segments: UiSegment[];
   /** Files the agent sent with `send_chat`, in the order it named them.
    * Like a card, the files ARE part of the message (something to look at or
    * keep), so they travel with it while the tool call itself stays in the
@@ -137,8 +139,10 @@ export interface StellaConversationSnapshot {
  *
  * A card is the exception: it is presentation rather than words, so it is
  * drawn while the model writes it (a long table appearing row by row reads as
- * progress, not as a half-sentence). The finished `entry` carries the whole
- * card and replaces what was drawn from the fragments. */
+ * progress, not as a half-sentence). The card is cut out of the reply's own
+ * text as it streams (agent/run-events.ts), because a stella client never
+ * receives that text; the finished `entry` carries the whole card as one of
+ * its segments and replaces what was drawn from the fragments. */
 export type StellaEvent =
   | { type: "agent_start" }
   | { type: "agent_end" }
@@ -147,6 +151,10 @@ export type StellaEvent =
   /** A fragment of a card being written into a `send_chat` call: the markup
    * appended since the previous fragment of that call. */
   | { type: "card_delta"; toolCallId: string; delta: string }
+  /** The message that was being written ended without becoming one (a turn
+   * that stopped to call a tool is narration, not a reply): whatever card was
+   * being drawn goes. */
+  | { type: "card_end" }
   /** The pending questions changed (asked, answered, or dropped). */
   | { type: "questions"; questions: StellaQuestion[] }
   /** The screen hand-over began or ended (`null`). */

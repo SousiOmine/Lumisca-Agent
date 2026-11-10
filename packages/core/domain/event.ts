@@ -47,17 +47,23 @@ export type ClientEvent =
     toolCallId: string;
     toolName: string;
   }
-  /** A fragment of a card a tool call is writing (`send_chat` in stella,
-   * `chat_attach` in code mode). `delta` is the card text appended since the
-   * previous fragment of the same call, already unescaped from the call's
-   * JSON; the finished message carries the whole card and replaces whatever
-   * a client drew from these. */
+  /** A fragment of a card being written into a reply. `delta` is the card
+   * text appended since the previous fragment of the same card, and the id
+   * names the card (a new id is a new card); the finished message carries the
+   * whole card and replaces whatever a client drew from these.
+   *
+   * Only a stream whose client does not receive the text is fed these
+   * (stella): code mode's client cuts the card out of the text it has. */
   | {
     type: "card_delta";
     sessionId: string;
     toolCallId: string;
     delta: string;
   }
+  /** The message that was drawing a card ended without becoming a message a
+   * client sees (the turn stopped to call a tool, so it was narration). What
+   * was drawn from `card_delta` goes. */
+  | { type: "card_end"; sessionId: string }
   /** The run ended (it replied, stopped, or was aborted). `reply` is the
    * beginning of what this run said to the user — the text a notification
    * shows in place of "finished", capped by the core (see

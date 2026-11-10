@@ -1,4 +1,8 @@
-import { contentImages, contentText } from "@lumisca/core/shared";
+import {
+  contentImages,
+  contentText,
+  splitChatText,
+} from "@lumisca/core/shared";
 import type {
   AgentMessage,
   AssistantMessage,
@@ -11,6 +15,7 @@ import { ToolCall } from "../ToolCall.tsx";
 
 import { NotificationRow } from "../NotificationRow.tsx";
 import { CheckpointRow } from "../CheckpointRow.tsx";
+import { CardView } from "./CardView.tsx";
 import { CopyableUserMessage } from "./CopyableUserMessage.tsx";
 import { MarkdownBlock } from "./MarkdownBlock.tsx";
 import { modeRewindText } from "../../slashCommands.ts";
@@ -26,11 +31,14 @@ export function MessageRow({
   runningTools,
   visualBase,
   onRewind,
+  onCardSend,
 }: {
   message: AgentMessage;
   toolResults: Map<string, ToolResultMessage>;
   runningTools: Map<string, string>;
   visualBase: string;
+  /** Sends a card's answer as the user's next message. */
+  onCardSend: (text: string) => void;
   onRewind?: (
     timestamp: number,
     text: string,
@@ -96,11 +104,31 @@ export function MessageRow({
   const toolCalls = assistant.content.filter(
     (b): b is ToolCallBlock => b.type === "toolCall",
   );
+  // A card is a block of the text (see shared/ui-markup/segments.ts), so it
+  // is drawn where the agent wrote it — including in the log of a turn that
+  // went on working after showing it.
+  const segments = splitChatText(text);
 
   return (
     <div className="msg">
       <div className="msg-body markdown">
-        {text && <MarkdownBlock text={text} visualBase={visualBase} />}
+        {segments.map((segment, index) =>
+          segment.type === "card"
+            ? (
+              <CardView
+                key={index}
+                markup={segment.markup}
+                onSend={onCardSend}
+              />
+            )
+            : (
+              <MarkdownBlock
+                key={index}
+                text={segment.text}
+                visualBase={visualBase}
+              />
+            )
+        )}
         {toolCalls.map((tc) => (
           <ToolCall
             key={tc.id}

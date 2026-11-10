@@ -6,6 +6,7 @@ import type { ComponentChildren } from "preact";
 import type { AgentMessage, SessionView, ToolResultMessage } from "../types.ts";
 import type { ConversationTurnData, UserMessageImage } from "./chat/types.ts";
 import { buildTurns, ConversationTurn } from "./chat/ConversationTurn.tsx";
+import { splitChatText } from "@lumisca/core/shared";
 import { CardView } from "./chat/CardView.tsx";
 import { ErrorBanner } from "./chat/ErrorBanner.tsx";
 import { MarkdownBlock } from "./chat/MarkdownBlock.tsx";
@@ -27,8 +28,6 @@ interface TranscriptProps {
    * useTranscriptScroll's pinToken). */
   pinToken?: number;
   streamingText: string;
-  /** The card a `chat_attach` call is writing right now, or null. */
-  liveCard: { toolCallId: string; markup: string } | null;
   /** Tool calls executing right now (see SessionView.liveTools), drawn as
    * the transcript's tail until the assistant message carrying them
    * arrives. */
@@ -87,7 +86,6 @@ export function Transcript(
     loadingOlder,
     hasOlder,
     streamingText,
-    liveCard,
     liveTools,
     runningTools,
     running,
@@ -143,6 +141,13 @@ export function Transcript(
   // either — with no arrival in flight it returns the set it was given.
   const entering = withoutHandoff(arrivals, rows, streamed.current);
   streamed.current = streamingText;
+  // The tail is read the same way a finished message is: its prose is drawn
+  // as it arrives, and a card written into it is drawn while it is written.
+  const segments = useMemo(
+    () => splitChatText(streamingText),
+    [streamingText],
+  );
+  const writingText = segments.at(-1)?.type === "text";
   const toolResults = useMemo(() => {
     const map = new Map<string, ToolResultMessage>();
     for (const message of messages) {
@@ -180,21 +185,34 @@ export function Transcript(
             onCardSend={onCardSend}
           />
         ))}
-        {liveCard !== null && (
-          <CardView markup={liveCard.markup} streaming onSend={onCardSend} />
-        )}
-        {(streamingText.length > 0 || liveTools.length > 0) && (
+        {(segments.length > 0 || liveTools.length > 0) && (
           <div className="msg">
             <div className="msg-body markdown">
-              {streamingText.length > 0 && (
-                <>
-                  <MarkdownBlock text={streamingText} visualBase={visualBase} />
-                  {
-                    /* The step's text is finished once a tool of that step
-                     * runs: a caret would claim it is still being written. */
-                  }
-                  {liveTools.length === 0 && <span className="cursor" />}
-                </>
+              {segments.map((segment, index) =>
+                segment.type === "card"
+                  ? (
+                    <CardView
+                      key={index}
+                      markup={segment.markup}
+                      streaming
+                      onSend={onCardSend}
+                    />
+                  )
+                  : (
+                    <MarkdownBlock
+                      key={index}
+                      text={segment.text}
+                      visualBase={visualBase}
+                    />
+                  )
+              )}
+              {
+                /* The step's text is finished once a tool of that step
+                 * runs: a caret would claim it is still being written. And
+                 * a caret under a card would claim the card is prose. */
+              }
+              {writingText && liveTools.length === 0 && (
+                <span className="cursor" />
               )}
               {
                 /* The calls of the step that is running, drawn from the

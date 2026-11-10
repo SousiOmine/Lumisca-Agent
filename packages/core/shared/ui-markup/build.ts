@@ -1107,9 +1107,10 @@ export function parseUiMarkup(source: string): UiParseResult {
  * Read a card that is still being written: the strict parse when it already
  * is whole, otherwise the blocks that have closed so far.
  *
- * This is what the screen draws while the model streams a `send_chat` call.
- * When nothing is readable yet the strict parse's problem is returned, so a
- * card that is genuinely wrong still says why once it is complete.
+ * This is what the screen draws while the model writes a card into its reply
+ * (see ./segments.ts). When nothing is readable yet the strict parse's
+ * problem is returned, so a card that is genuinely wrong still says why once
+ * it is complete.
  */
 export function parseUiMarkupPartial(source: string): UiParseResult {
   const full = parseUiMarkup(source);

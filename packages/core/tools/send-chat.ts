@@ -4,8 +4,8 @@
  * The assistant's final text is already the reply (see
  * agent/stella-stream.ts): a model asked anything produces text, and a turn
  * that ends without a tool call is that answer. So this tool carries what a
- * reply cannot — a card, files, or a progress message while a long turn is
- * still running — and a turn that has nothing to add writes `NO_RESPONSE`
+ * reply cannot — files, or a progress message while a long turn is still
+ * running — and a turn that has nothing to add writes `NO_RESPONSE`
  * instead.
  *
  * It used to be the only way to speak, and a forgotten call left the user
@@ -13,10 +13,14 @@
  * round: forgetting this call still says something, and silence is the
  * deliberate act.
  *
- * The three things a message can carry are one call because they are one act:
- * the words, a card, and files. Splitting them (as `chat_ui` and
- * `chat_attach` did) meant an agent that wanted to hand over a picture with
- * one sentence made two calls and hoped the client drew them side by side.
+ * The two things a message can carry are one call because they are one act:
+ * the words and files. Splitting them (as `chat_attach` did) meant an agent
+ * that wanted to hand over a picture with one sentence made two calls and
+ * hoped the client drew them side by side.
+ *
+ * A card is NOT here: the agent writes it into its reply (see
+ * shared/ui-markup), so a message that shows a table or asks a question needs
+ * no call at all.
  *
  * What the model reads back is a receipt, not the message: see the `execute`
  * comment.
@@ -24,11 +28,9 @@
 import { CoreError } from "../errors.ts";
 import {
   type AttachmentRef,
-  CARD_HELP,
   type ChatMessage,
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENTS_PER_CALL,
-  parseUiMarkup,
   TOOL_SEND_CHAT,
 } from "../shared/mod.ts";
 import { attachFiles, type ChatAttachTarget } from "./attach.ts";
@@ -45,9 +47,8 @@ import {
 const sendChatSchema = object({
   text: optional(string(
     "What the user reads, in their language. Markdown is rendered. Omit it " +
-      "when the message is a card or files only.",
+      "when the message is files only.",
   )),
-  card: optional(string(`A card shown with the message: ${CARD_HELP}`)),
   paths: optional(array(
     string("Path of one file to send"),
     "Files to send with the message, in the same form the file tools take " +
@@ -87,7 +88,7 @@ const DESCRIPTION = [
   "Send the user a note BEFORE starting work that will take more than a moment — reading many files, a build, tests, a search, or anything you expect to run for a while — saying what you are about to do and what you are looking for.",
   "Until you do, the conversation shows only a timer and tool names: the user cannot see your plan, cannot tell progress from a hang, and cannot correct your direction before you have spent the time.",
   "Send another when the picture changes (what you found, that the approach is wrong, that the work is longer than you said). Your reply at the end is still the answer.",
-  "One call is one message: the words (text), a card (card), and files (paths), in any combination; at least one of the three is required.",
+  "One call is one message: the words (text) and files (paths), in any combination; at least one of the two is required. A card is not sent by this tool — write it into your reply instead.",
   "A run with nothing to report replies with exactly NO_RESPONSE (see the system prompt).",
 ].join(" ");
 
@@ -117,25 +118,9 @@ export function createSendChatTool(options: SendChatOptions): Tool<
     parameters: sendChatSchema,
     execute: async (_id, params, signal): Promise<ToolResult> => {
       const text = (params.text ?? "").trim();
-      const card = (params.card ?? "").trim();
       const paths = params.paths ?? [];
-      if (text.length === 0 && card.length === 0 && paths.length === 0) {
-        throw new CoreError(
-          "Send something: text, a card, or files.",
-          "invalid",
-        );
-      }
-      if (card.length > 0) {
-        // Validated here, not in the browser: a card the server accepted but
-        // a client cannot read would be half a message. The parse is the same
-        // one the client runs, so a markup that passes here always draws.
-        const parsed = parseUiMarkup(card);
-        if (!parsed.ok) {
-          throw new CoreError(
-            `Invalid card markup: ${parsed.problem}`,
-            "invalid",
-          );
-        }
+      if (text.length === 0 && paths.length === 0) {
+        throw new CoreError("Send something: text or files.", "invalid");
       }
       const attachments: AttachmentRef[] = paths.length === 0
         ? []
@@ -148,12 +133,8 @@ export function createSendChatTool(options: SendChatOptions): Tool<
         });
 
       return {
-        content: [{ type: "text", text: receipt({ text, card, attachments }) }],
-        details: {
-          text,
-          card: card.length === 0 ? null : card,
-          attachments,
-        } satisfies ChatMessage,
+        content: [{ type: "text", text: receipt({ text, attachments }) }],
+        details: { text, attachments } satisfies ChatMessage,
       };
     },
   };
@@ -165,7 +146,6 @@ export function createSendChatTool(options: SendChatOptions): Tool<
 function receipt(message: ChatMessage): string {
   const parts: string[] = [];
   if (message.text.length > 0) parts.push("the message");
-  if (message.card !== null) parts.push("a card");
   if (message.attachments.length > 0) {
     parts.push(
       message.attachments.length === 1

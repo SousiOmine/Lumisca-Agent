@@ -113,15 +113,6 @@ const id = (args: Args) => arg(args, "id");
 const act = (args: Args) =>
   [arg(args, "action"), arg(args, "ref")].filter(Boolean).join(" ");
 
-/** The title of the card a `send_chat` call carries, or "" — the summary a
- * code-mode tool line shows when the message had no text. Reading the markup
- * here only to label a row is fine: it is a tool line, not the card. */
-function cardTitle(args: Args): string {
-  const markup = arg(args, "card");
-  const match = /<Card[^>]*\btitle="([^"]*)"/.exec(markup);
-  return match?.[1] ?? "";
-}
-
 function todoProgress(args: Args): string {
   const phases = Array.isArray(args.phases)
     ? args.phases as Array<{ tasks?: unknown }>
@@ -207,7 +198,7 @@ const PRESENTATION: Readonly<Record<string, ToolPresentation>> = {
   [TOOL_TODO]: { icon: IconListCheck, summary: todoProgress },
   [TOOL_SEND_CHAT]: {
     icon: IconMessageCircle,
-    summary: (a) => truncate(arg(a, "text") || cardTitle(a) || "", 50),
+    summary: (a) => truncate(arg(a, "text"), 50),
   },
   [TOOL_SKILL]: { icon: IconSparkles, summary: (a) => arg(a, "name") },
   [TOOL_HISTORY_SEARCH]: { icon: IconHistory, summary: query },

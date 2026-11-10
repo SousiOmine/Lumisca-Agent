@@ -811,8 +811,9 @@ Deno.test("stella tool set: eval is absent, the screen tools present", () => {
   // question, and a blocked run has no way back.
   assertEquals(names.includes("ask"), false);
   // visual and chat_attach are gone: the conversation's only channel is
-  // send_chat, which carries the words, a card and files in one call. An
-  // image goes with the message rather than being published and linked.
+  // send_chat, which carries the words and files of one message. An image
+  // goes with the message rather than being published and linked; a card is
+  // written into the message's own text, so it needs no tool.
   assertEquals(names.includes("visual"), false);
   assertEquals(names.includes("chat_attach"), false);
   assertEquals(names.includes("chat_ui"), false);
@@ -1133,8 +1134,9 @@ Deno.test("stella conversation: what send_chat sends is the conversation", async
         // The working notes: never shown.
         { type: "text", text: "まず報告を送ろう。" },
         fauxToolCall("send_chat", {
-          text: "3件の不具合を直しました。",
-          card: markup,
+          // The card is written into the message's own text (see
+          // shared/ui-markup/segments.ts): words, a block, more words.
+          text: `3件の不具合を直しました。\n\n\`\`\`card\n${markup}\n\`\`\``,
         }, "call-1"),
       ], { stopReason: "toolUse" }),
       // A second turn that has nothing to add: silence, spelled out.
@@ -1147,7 +1149,10 @@ Deno.test("stella conversation: what send_chat sends is the conversation", async
     assertEquals(entries.map((entry) => entry.role), ["user", "assistant"]);
     const sent = entries[1]!;
     assertEquals(sent.text, "3件の不具合を直しました。");
-    assertEquals(sent.card, markup);
+    assertEquals(sent.segments, [
+      { type: "text", text: "3件の不具合を直しました。" },
+      { type: "card", markup },
+    ]);
     assertEquals(sent.attachments, []);
 
     // The words also went nowhere near the tool's model-facing result: a

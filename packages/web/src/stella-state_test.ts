@@ -16,7 +16,17 @@ function entry(
   timestamp: number,
   card: string | null = null,
 ) {
-  return { role, text, card, attachments: [], files: [], timestamp };
+  const segments = text.length === 0 ? [] : [{ type: "text" as const, text }];
+  return {
+    role,
+    text,
+    segments: card === null
+      ? segments
+      : [...segments, { type: "card" as const, markup: card }],
+    attachments: [],
+    files: [],
+    timestamp,
+  };
 }
 
 function state(
@@ -368,6 +378,23 @@ Deno.test("stella: a card being written grows, and the entry replaces it", () =>
   assertEquals(current.entries.length, 1);
 });
 
+Deno.test("stella: a narration card is dropped when its message ends", () => {
+  // A message that stopped to call a tool is not a reply (see the server's
+  // projection): the card it drew has nowhere to land, and `card_end` clears
+  // it. Waiting for the next entry would leave it up for the whole tool run.
+  let current = applyStellaEvent(state(), {
+    type: "card_delta",
+    toolCallId: "text-1",
+    delta: "<Card><Text>途中</Text></Card>",
+  })!;
+  assert(current.liveCard !== null);
+
+  current = applyStellaEvent(current, { type: "card_end" })!;
+  assertEquals(current.liveCard, null);
+  // Nothing was drawn, so the same event again changes nothing.
+  assertEquals(applyStellaEvent(current, { type: "card_end" }), null);
+});
+
 Deno.test("stella: a card of another call starts over, and the run clears it", () => {
   let current = state({ running: true });
   current = applyStellaEvent(current, {
@@ -412,7 +439,7 @@ Deno.test("entryKey: a routine's prompt and the same words typed differ", () => 
   const typed = {
     role: "user" as const,
     text: "確認して",
-    card: null,
+    segments: [{ type: "text" as const, text: "確認して" }],
     attachments: [],
     files: [],
     timestamp: 5,

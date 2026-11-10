@@ -54,7 +54,7 @@ import { ImageAnalyzer } from "./image-analysis.ts";
 import { TitleGenerator } from "./title-generation.ts";
 import { TitleScheduler } from "./title-scheduler.ts";
 import { type RoutineDropHost, RoutineRun } from "./routine-run.ts";
-import { CardStreams, translateRunEvent } from "./run-events.ts";
+import { TextCards, translateRunEvent } from "./run-events.ts";
 import { RunReply } from "./run-reply.ts";
 import {
   type CompactionResult,
@@ -113,6 +113,12 @@ export interface SessionAgentOptions {
    * user chose: a generated title would contradict the header and cost a
    * request per agent to do it. */
   titleGeneration?: boolean;
+  /** Read the card being written into a reply out of the text as it
+   * streams, and publish it as `card_delta`. A stella conversation's clients
+   * never receive that text (its reply arrives whole), so the card has to be
+   * extracted here; code mode's client has the text and cuts the card out
+   * where it draws. Omitted → false. */
+  cardsFromText?: boolean;
   /** Background-command manager backing the async_bash tools. Its
    * completion events are injected into the agent loop as notifications
    * (see notifyBackgroundCommand). */
@@ -198,10 +204,10 @@ export class SessionAgent {
   /** The rows this session owns in the messages table, and how many leading
    * transcript messages they cover (see transcript.ts). */
   private readonly transcript: TranscriptStore;
-  /** The card each tool call is writing, while its arguments stream (see the
-   * tool_input_delta case). Cleared when the call is complete — the finished
-   * message carries the whole card. */
-  private readonly cards = new CardStreams();
+  /** The card being written into a reply, for a stream whose client never
+   * receives the text (see SessionAgentOptions.cardsFromText). */
+  private readonly textCards = new TextCards();
+  private readonly cardsFromText: boolean;
   /** What this run last said to the user, for the `agent_end` notification
    * (see RunReply). */
   private readonly reply = new RunReply();
@@ -295,6 +301,7 @@ export class SessionAgent {
       options.baseIndex ?? 0,
     );
     this.toolRegistry = options.toolRegistry ?? null;
+    this.cardsFromText = options.cardsFromText === true;
     this.onEvent = options.onEvent;
     this.renameSession = options.renameSession;
     this.interruptions = new InterruptionHub(
@@ -1094,7 +1101,7 @@ export class SessionAgent {
     const translated = translateRunEvent(
       event,
       this.sessionId,
-      this.cards,
+      this.cardsFromText ? this.textCards : undefined,
       event.type === "agent_end" ? this.reply.gist() : undefined,
     );
     for (const published of translated.events) this.emit(published);

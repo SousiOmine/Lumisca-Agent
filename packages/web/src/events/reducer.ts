@@ -246,26 +246,9 @@ export function applyEvent(
       const pendingQuestions = view.pendingQuestions.filter(
         (q) => q.toolCallId !== event.toolCallId,
       );
-      // The call is complete, so the card it was writing is final from now
-      // on (it arrives with the tool result).
-      const liveCard = view.liveCard?.toolCallId === event.toolCallId
-        ? null
-        : view.liveCard;
-      return pendingQuestions.length === view.pendingQuestions.length &&
-          liveCard === view.liveCard
+      return pendingQuestions.length === view.pendingQuestions.length
         ? { ...view, runningTools }
-        : { ...view, runningTools, pendingQuestions, liveCard };
-    }
-    case "card_delta": {
-      // A card being written into a tool call: the screen draws what has
-      // arrived (see Transcript), and the tool result replaces it.
-      const markup = view.liveCard?.toolCallId === event.toolCallId
-        ? view.liveCard.markup + event.delta
-        : event.delta;
-      return {
-        ...view,
-        liveCard: { toolCallId: event.toolCallId, markup },
-      };
+        : { ...view, runningTools, pendingQuestions };
     }
     case "question": {
       // The agent asked the user a question; show it above the composer.
@@ -444,13 +427,12 @@ export function applyEvent(
     case "agent_end":
       // The run ended (a stop may leave a call that never reported its end):
       // nothing is live any more.
-      return view.agentStartedAt === undefined && view.liveCard === null &&
+      return view.agentStartedAt === undefined &&
           view.liveTools.length === 0
         ? null
         : {
           ...view,
           pendingQuestions: [],
-          liveCard: null,
           liveTools: [],
           agentEndedAt: Date.now(),
         };

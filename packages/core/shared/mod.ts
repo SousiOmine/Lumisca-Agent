@@ -32,7 +32,7 @@
  * - `./routine.ts` — routine schedules, their limits and the next-run rule,
  * - `./watch-path.ts` — the field path a watch reads out of a tool's result,
  * - `./push.ts` — Web Push subscriptions and the base64url codec,
- * - `./ui-markup/` — the card markup a `send_chat` call carries,
+ * - `./ui-markup/` — the card markup an agent writes into a reply,
  * - `./i18n/mod.ts` — Locale, the message catalogue, locale resolution.
  */
 export * from "./settings-keys.ts";

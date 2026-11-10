@@ -1,11 +1,12 @@
 /**
  * What a `send_chat` call sent, as the conversation draws it.
  *
- * The tool carries three things and they reach the user together: the words,
- * a card, and files. A stella conversation shows them beside the agent's own
- * reply (the final text of its turn; see agent/stella-stream.ts), so this is
- * the shape the projection reads for what a call sent, and the shape a
- * client draws.
+ * The tool carries two things and they reach the user together: the words
+ * and files. A stella conversation shows them beside the agent's own reply
+ * (the final text of its turn; see agent/stella-stream.ts), so this is the
+ * shape the projection reads for what a call sent, and the shape a client
+ * draws. A card is not here: it is part of the reply's own text (see
+ * ui-markup/segments.ts).
  *
  * The values live in the tool result's `details`, never in its `content`:
  * `content` is what the MODEL reads on its next turn, and repeating the
@@ -15,18 +16,12 @@
  */
 import { type AttachmentRef, attachmentsOfDetails } from "./attachments.ts";
 
-/** One message an agent sent: the words, the card, and the files. Every
- * field may be empty — a reply that was only a picture is as legitimate as
- * one that was only a sentence. */
+/** One message an agent sent: the words and the files. Every field may be
+ * empty — a reply that was only a picture is as legitimate as one that was
+ * only a sentence. */
 export interface ChatMessage {
-  /** The words the user reads ("" when the call sent only a card or files). */
+  /** The words the user reads ("" when the call sent only files). */
   text: string;
-  /** The card's markup (the `card` argument of send_chat), or null when the
-   * call showed none.
-   * One call carries at most one card: two questions in one turn are two
-   * calls, and the conversation shows them as two messages — which is also
-   * how a reader can answer the first before the second arrives. */
-  card: string | null;
   /** The files the call sent, in the order the model named them. */
   attachments: AttachmentRef[];
 }
@@ -40,28 +35,10 @@ export function chatMessageOfDetails(
   details: unknown,
 ): ChatMessage | undefined {
   if (typeof details !== "object" || details === null) return undefined;
-  const record = details as { text?: unknown; card?: unknown };
+  const record = details as { text?: unknown };
   if (typeof record.text !== "string") return undefined;
-  const card = record.card;
-  if (card !== null && card !== undefined && typeof card !== "string") {
-    return undefined;
-  }
   return {
     text: record.text,
-    card: typeof card === "string" && card.length > 0 ? card : null,
     attachments: attachmentsOfDetails(details),
   };
-}
-
-/** The card a tool result carried in `details.card`, or null when the call
- * showed none.
- *
- * Both tools that hand a card over write it under this key — `send_chat` in
- * stella, `chat_attach` in code mode — so one reader draws either. A row from
- * a build that predates the key answers null rather than failing: its files
- * are still read by `attachmentsOfDetails`. */
-export function cardOfDetails(details: unknown): string | null {
-  if (typeof details !== "object" || details === null) return null;
-  const card = (details as { card?: unknown }).card;
-  return typeof card === "string" && card.length > 0 ? card : null;
 }
