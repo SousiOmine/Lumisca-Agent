@@ -14,7 +14,10 @@ import type {
   UserProviderSummary,
 } from "../models/user-providers.ts";
 import { CoreError } from "../errors.ts";
-import { isThinkingLevel } from "../models/thinking.ts";
+import {
+  getSupportedThinkingLevels,
+  isThinkingLevel,
+} from "../models/thinking.ts";
 import type { ThinkingLevel } from "../shared/mod.ts";
 
 /**
@@ -220,5 +223,20 @@ export class ModelService {
       );
     }
     return this.models.setThinkingLevel(providerId, modelId, level);
+  }
+
+  /** The levels `providerId/modelId` offers. Refuses a model the catalog does
+   * not have: a caller checking a level against this list would otherwise
+   * read an empty answer as "the model cannot think", rather than as "that
+   * model is gone". */
+  thinkingLevelsOf(providerId: string, modelId: string): ThinkingLevel[] {
+    const model = this.models.getModel(providerId, modelId);
+    if (model === undefined) {
+      throw new CoreError(
+        `Model not found: ${providerId}/${modelId}`,
+        "not_found",
+      );
+    }
+    return getSupportedThinkingLevels(model);
   }
 }

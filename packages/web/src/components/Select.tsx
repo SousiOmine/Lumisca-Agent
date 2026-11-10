@@ -2,6 +2,10 @@ import type { ComponentChildren } from "preact";
 import { useRef, useState } from "preact/compat";
 import { IconCheck, IconChevronDown } from "@tabler/icons-preact";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
+import {
+  type SelectSide,
+  useSelectPlacement,
+} from "../hooks/useSelectPlacement.ts";
 
 /** One choice of a [`Select`]. */
 export interface SelectOption<T extends string> {
@@ -22,14 +26,15 @@ interface SelectProps<T extends string> {
    * (a row's trailing control). */
   block?: boolean;
   /**
-   * Side the list opens on, default "below".
+   * Side the list would like to open on, default "below".
    *
-   * "above" is for a trigger on the bottom edge of the window — the model
-   * picker's thinking control in the composer's footer — where a list under
-   * it would be off-screen. The scrollable screens this control otherwise
-   * lives in (the settings body, a dialog) leave room below.
+   * It is a preference, not a placement: the room around the trigger is
+   * measured on every opening (see hooks/useSelectPlacement), and a list that
+   * does not fit on this side opens on the other one — a trigger near the
+   * bottom of a dialog, or of the window, would otherwise have its list cut
+   * off by the box that clips it.
    */
-  placement?: "below" | "above";
+  preferredSide?: SelectSide;
   /** Leading glyph inside the trigger, before the current value (a category
    * icon). Part of the trigger so the whole control stays one click target. */
   icon?: ComponentChildren;
@@ -54,9 +59,10 @@ interface SelectProps<T extends string> {
  * The trigger is a normal control of the app's own shape (same height,
  * border, radius and chevron as the pickers), and the list is the same card
  * as `.app-menu`: surface, hairline border, low wide shadow, rows highlighted
- * with `--surface-3`, the current row marked with a check. It is anchored
- * under the trigger and right-aligned when it opens near the window's right
- * edge, so it never leaves the viewport.
+ * with `--surface-3`, the current row marked with a check. It is anchored to
+ * the trigger on the side the room allows (`preferredSide`, then a
+ * measurement: hooks/useSelectPlacement), so neither a dialog's bottom edge
+ * nor the window's cuts it.
  */
 export function Select<T extends string>({
   label,
@@ -65,19 +71,29 @@ export function Select<T extends string>({
   onChange,
   disabled = false,
   block = false,
-  placement = "below",
+  preferredSide = "below",
   icon,
   onOpen,
 }: SelectProps<T>) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const list = useRef<HTMLDivElement>(null);
   useClickOutside(root, () => setOpen(false), open, { onScroll: true });
+  const placement = useSelectPlacement(
+    trigger,
+    list,
+    open,
+    preferredSide,
+    options.length,
+  );
 
   const current = options.find((option) => option.value === value);
 
   return (
     <div className={`select${block ? " block" : ""}`} ref={root}>
       <button
+        ref={trigger}
         type="button"
         className={`select-trigger${open ? " open" : ""}`}
         onClick={() => {
@@ -102,8 +118,12 @@ export function Select<T extends string>({
 
       {open && (
         <div
+          ref={list}
           className="select-popover"
-          data-placement={placement}
+          data-placement={placement.side}
+          style={placement.maxHeight === null
+            ? undefined
+            : { maxHeight: `${placement.maxHeight}px` }}
           role="listbox"
           aria-label={label}
         >

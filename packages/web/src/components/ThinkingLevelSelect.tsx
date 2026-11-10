@@ -4,6 +4,7 @@ import { THINKING_LEVEL_ORDER } from "@lumisca/core/shared";
 import type { ThinkingLevel } from "../types.ts";
 import { useT } from "../i18n.ts";
 import { thinkingLevelLabel } from "../format.ts";
+import type { SelectSide } from "../hooks/useSelectPlacement.ts";
 import { Select } from "./Select.tsx";
 
 export interface ThinkingLevelSelectProps {
@@ -15,9 +16,9 @@ export interface ThinkingLevelSelectProps {
   levels: readonly ThinkingLevel[];
   onChange: (level: ThinkingLevel) => void;
   disabled?: boolean;
-  /** Side the list opens on (see Select). The composer's footer passes
-   * "above": it sits on the window's bottom edge. */
-  placement?: "below" | "above";
+  /** Side the list would like to open on (see Select). The composer's footer
+   * passes "above": it sits on the window's bottom edge. */
+  preferredSide?: SelectSide;
   /** Called when the list opens, so a caller with another popover open (the
    * model picker above the same footer) can close it. */
   onOpen?: () => void;
@@ -37,7 +38,7 @@ export function ThinkingLevelSelect({
   levels,
   onChange,
   disabled = false,
-  placement = "below",
+  preferredSide = "below",
   onOpen,
 }: ThinkingLevelSelectProps) {
   const t = useT();
@@ -55,7 +56,7 @@ export function ThinkingLevelSelect({
         }))}
         onChange={onChange}
         disabled={disabled}
-        placement={placement}
+        preferredSide={preferredSide}
         onOpen={onOpen}
         icon={<IconBrain size={12} />}
       />

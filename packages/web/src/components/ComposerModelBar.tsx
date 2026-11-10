@@ -110,7 +110,7 @@ export function ComposerModelBar({
           value={thinkingLevel ?? "off"}
           levels={levels}
           onChange={(level) => onThinkingLevelChange?.(level)}
-          placement="above"
+          preferredSide="above"
           onOpen={() => {
             if (open) onOpenChange(false);
           }}

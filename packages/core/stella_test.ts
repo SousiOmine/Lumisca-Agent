@@ -342,7 +342,10 @@ Deno.test("stella onboarding: no conversation open means no setup turn", async (
 /** A core whose provider offers two models, so "the agent's own choice" and
  * "the app's default" can be told apart. */
 async function twoModelStellaCore(): Promise<LumiscaCore> {
-  const faux = fauxProvider({ models: [{ id: "faux" }, { id: "other" }] });
+  // `other` can think: a level can only be offered for a model that has one.
+  const faux = fauxProvider({
+    models: [{ id: "faux" }, { id: "other", reasoning: true }],
+  });
   const core = LumiscaCore.forTesting([faux.provider]);
   core.models.models.setProvider(faux.provider);
   await core.setProviderApiKey(faux.provider.id, "faux-key");
@@ -427,6 +430,50 @@ Deno.test("stella conversation: a model the catalog does not have is refused", a
     );
     // Nothing was written: a refused save leaves the row as it was.
     assertEquals(core.getStellaAgent(agent.id)?.model, null);
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella agent: the thinking level is stored with the same save", async () => {
+  // The dialog saves the name, the model and the strength in one request, and
+  // Cancel must leave all of them alone — which is why the level is not
+  // written when it is picked.
+  const core = await twoModelStellaCore();
+  try {
+    const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
+    const updated = await core.updateStellaAgent(agent.id, {
+      name: "Aide 2",
+      thinkingLevel: { provider: "faux", modelId: "other", level: "high" },
+    });
+    assertEquals(updated.name, "Aide 2");
+    assertEquals(core.getStellaAgent(agent.id)?.name, "Aide 2");
+    // The level belongs to the model, so it is read back through the model
+    // (the composer and the model settings show the same value).
+    assertEquals(core.getModelThinkingLevel("faux", "other"), "high");
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella agent: a level the model does not offer is refused", async () => {
+  const core = await twoModelStellaCore();
+  try {
+    const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
+    // "max" needs an explicit entry in the model's level map, which this one
+    // does not publish — the dialog would not have offered it.
+    await assertRejects(
+      () =>
+        core.updateStellaAgent(agent.id, {
+          name: "Renamed",
+          thinkingLevel: { provider: "faux", modelId: "other", level: "max" },
+        }),
+      CoreError,
+      "does not support",
+    );
+    // Refused before anything was written: the name did not land either.
+    assertEquals(core.getStellaAgent(agent.id)?.name, "Aide");
+    assertEquals(core.getModelThinkingLevel("faux", "other"), "off");
   } finally {
     await core.close();
   }

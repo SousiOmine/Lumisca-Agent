@@ -52,6 +52,7 @@ import type {
 } from "./ai/types.ts";
 import type { ModePrompt } from "./domain/mode-message.ts";
 import { ModelManager } from "./models/mod.ts";
+import { isThinkingLevel } from "./models/thinking.ts";
 import type { EnvReader } from "./models/custom.ts";
 import type {
   UserProviderConfig,
@@ -1114,12 +1115,19 @@ export class LumiscaCore {
   }
 
   /**
-   * Change an agent's name, picture and/or model.
+   * Change an agent's name, picture, model and/or its model's thinking
+   * strength.
    *
-   * The model is validated here rather than in the agent book, and before a
+   * Everything is validated here rather than in the agent book, and before a
    * single byte is written: the book cannot see the catalog, and a save that
    * stored the name and refused the model would leave the dialog explaining
    * which half happened.
+   *
+   * The thinking strength belongs to a MODEL, not to the agent (it applies to
+   * every conversation on that model), so the patch names the model it is
+   * for: the dialog drew the list of levels from that model, and resolving
+   * "the agent's model" again here could store the level on a model the user
+   * was not looking at.
    *
    * A conversation with a run in flight is not an error: the choice is stored
    * and applied when that run ends (SessionService.setSessionModel). The
@@ -1136,6 +1144,7 @@ export class LumiscaCore {
       name?: string;
       icon?: { bytes: Uint8Array; extension: string } | null;
       model?: { provider: string; modelId: string } | null;
+      thinkingLevel?: { provider: string; modelId: string; level: string };
     },
   ): Promise<StellaAgent> {
     const agent = this.stellaAgents.get(id);
@@ -1154,11 +1163,44 @@ export class LumiscaCore {
         "not_found",
       );
     }
+    const thinking = patch.thinkingLevel;
+    if (thinking !== undefined) {
+      if (!isThinkingLevel(thinking.level)) {
+        throw new CoreError(
+          `Unknown thinking level: ${thinking.level}`,
+          "invalid",
+        );
+      }
+      // Refused rather than clamped: the dialog draws this list from the same
+      // model, so a level it does not offer means the two disagree about
+      // which model was being edited — and storing a neighbouring level would
+      // hide that.
+      const offered = this.modelService.thinkingLevelsOf(
+        thinking.provider,
+        thinking.modelId,
+      );
+      if (!offered.includes(thinking.level)) {
+        throw new CoreError(
+          `${thinking.provider}/${thinking.modelId} does not support the thinking level "${thinking.level}"`,
+          "invalid",
+        );
+      }
+    }
     const updated = await this.services.stellaAgents.updateStellaAgent(id, {
-      ...patch,
+      ...(patch.name === undefined ? {} : { name: patch.name }),
+      icon: patch.icon,
       ...(model === undefined ? {} : { model }),
     });
     if (model !== undefined) await this.applyStellaAgentModel(id, model);
+    // Through the same setter the model settings use, so open conversations
+    // on that model pick the level up for their next run.
+    if (thinking !== undefined) {
+      this.setModelThinkingLevel(
+        thinking.provider,
+        thinking.modelId,
+        thinking.level,
+      );
+    }
     return updated;
   }
 

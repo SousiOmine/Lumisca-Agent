@@ -1,7 +1,7 @@
 import { errorMessage } from "@lumisca/core/shared";
 import { modelApi } from "./api.ts";
 import { createResourceStore, type ResourceStore } from "./store.ts";
-import type { ModelInfo, ProviderInfo } from "./types.ts";
+import type { ModelInfo, ProviderInfo, ThinkingLevel } from "./types.ts";
 
 /** Catalog fetch failure, tagged with the phase that broke so the UI can
  * phrase its message: "providers" means the provider list is unknown,
@@ -34,8 +34,9 @@ export interface PeerCatalogState extends PeerCatalog {
  * exercised without a server (tests); the default fetches over HTTP. */
 export type CatalogLoader = (peerId: string) => Promise<PeerCatalog>;
 
-/** Store key of one model's enablement (see `ModelCatalog.localEnabled`). */
-function enabledKey(
+/** Key of one model's committed values (see `ModelCatalog.localEnabled` and
+ * `ModelCatalog.localThinking`). */
+function modelKey(
   peerId: string,
   providerId: string,
   modelId: string,
@@ -53,10 +54,10 @@ function enabledKey(
  * settled fetch instead of re-requesting the same catalog.
  *
  * Because consumers read this store and not their own copy, every change
- * that goes through the app must be written back here (`applyModelEnabled`)
- * rather than kept in the component that made it: a component's local state
- * dies with the component, and the next mount would show the stale catalog
- * again. */
+ * that goes through the app must be written back here (`applyModelEnabled`,
+ * `applyModelThinkingLevel`) rather than kept in the component that made it:
+ * a component's local state dies with the component, and the next mount would
+ * show the stale catalog again. */
 export class ModelCatalog {
   private readonly stores = new Map<
     string,
@@ -66,9 +67,13 @@ export class ModelCatalog {
    * reached the server still carries the old value; applying that snapshot
    * verbatim would resurrect the pre-commit value (turning a visible toggle
    * back). The commit is therefore remembered and re-applied over every
-   * fetched snapshot (`withLocalEnabled`): the page's last explicit choice
+   * fetched snapshot (`withLocalCommits`): the page's last explicit choice
    * is the value the user expects to see. */
   private readonly localEnabled = new Map<string, boolean>();
+  /** Committed thinking levels, remembered for the same reason: the level is
+   * shown by the composer, the settings list and the agent edit dialog, and
+   * each of them reads this catalog rather than its own copy. */
+  private readonly localThinking = new Map<string, ThinkingLevel>();
 
   constructor(private readonly load: CatalogLoader = fetchPeerCatalog) {}
 
@@ -102,21 +107,59 @@ export class ModelCatalog {
     modelId: string,
     enabled: boolean,
   ): void {
-    this.localEnabled.set(enabledKey(peerId, providerId, modelId), enabled);
+    this.localEnabled.set(modelKey(peerId, providerId, modelId), enabled);
+    this.commitModel(
+      peerId,
+      providerId,
+      modelId,
+      (model) => ({ ...model, enabled }),
+    );
+  }
+
+  /** Apply a thinking level the server accepted to the cached catalog, for
+   * the same reason as the enabled flag: the control that shows it must read
+   * the stored value on its next mount, and the page has no other copy of
+   * it. The level belongs to the model, so it is keyed like the enablement
+   * and survives a fetch issued before the change. */
+  applyModelThinkingLevel(
+    peerId: string,
+    providerId: string,
+    modelId: string,
+    level: ThinkingLevel,
+  ): void {
+    this.localThinking.set(modelKey(peerId, providerId, modelId), level);
+    this.commitModel(
+      peerId,
+      providerId,
+      modelId,
+      (model) => ({ ...model, thinkingLevel: level }),
+    );
+  }
+
+  /** Patch one cached model and publish. A model the cache does not have is
+   * not an error: the catalog may not be loaded yet, and the remembered
+   * commit applies on the next fetch. */
+  private commitModel(
+    peerId: string,
+    providerId: string,
+    modelId: string,
+    patch: (model: ModelInfo) => ModelInfo,
+  ): void {
     const state = this.store(peerId).get();
     const models = state.modelsByProvider.get(providerId);
     if (models === undefined || !models.some((m) => m.id === modelId)) return;
     const modelsByProvider = new Map(state.modelsByProvider);
     modelsByProvider.set(
       providerId,
-      models.map((m) => m.id === modelId ? { ...m, enabled } : m),
+      models.map((m) => (m.id === modelId ? patch(m) : m)),
     );
     this.store(peerId).commit({ providers: state.providers, modelsByProvider });
   }
 
-  /** Re-apply the committed flags (see `localEnabled`) over a fetched model
-   * map. Returns the input map unchanged when there is nothing to patch. */
-  private withLocalEnabled(
+  /** Re-apply the committed values (see `localEnabled` and `localThinking`)
+   * over a fetched model map. Returns the input map unchanged when there is
+   * nothing to patch. */
+  private withLocalCommits(
     peerId: string,
     modelsByProvider: ReadonlyMap<string, ModelInfo[]>,
   ): ReadonlyMap<string, ModelInfo[]> {
@@ -124,12 +167,22 @@ export class ModelCatalog {
     for (const [providerId, models] of modelsByProvider) {
       let patched: ModelInfo[] | undefined;
       for (const [index, model] of models.entries()) {
-        const committed = this.localEnabled.get(
-          enabledKey(peerId, providerId, model.id),
-        );
-        if (committed === undefined || model.enabled === committed) continue;
+        const key = modelKey(peerId, providerId, model.id);
+        const enabled = this.localEnabled.get(key);
+        const thinkingLevel = this.localThinking.get(key);
+        const next: ModelInfo = {
+          ...model,
+          ...(enabled === undefined ? {} : { enabled }),
+          ...(thinkingLevel === undefined ? {} : { thinkingLevel }),
+        };
+        if (
+          next.enabled === model.enabled &&
+          next.thinkingLevel === model.thinkingLevel
+        ) {
+          continue;
+        }
         patched ??= [...models];
-        patched[index] = { ...model, enabled: committed };
+        patched[index] = next;
       }
       if (patched !== undefined) {
         out ??= new Map(modelsByProvider);
@@ -152,7 +205,7 @@ export class ModelCatalog {
           const catalog = await this.load(peerId);
           return {
             providers: catalog.providers,
-            modelsByProvider: this.withLocalEnabled(
+            modelsByProvider: this.withLocalCommits(
               peerId,
               catalog.modelsByProvider,
             ),
@@ -190,13 +243,25 @@ function sameCatalog(a: PeerCatalog, b: PeerCatalog): boolean {
       if (counterpart === undefined) return false;
       if (
         model.id !== counterpart.id || model.enabled !== counterpart.enabled ||
-        model.name !== counterpart.name
+        model.name !== counterpart.name ||
+        model.thinkingLevel !== counterpart.thinkingLevel ||
+        !sameLevels(model.thinkingLevels, counterpart.thinkingLevels)
       ) {
         return false;
       }
     }
   }
   return true;
+}
+
+/** Whether two level lists are the same (both may be absent). */
+function sameLevels(
+  a: readonly ThinkingLevel[] | undefined,
+  b: readonly ThinkingLevel[] | undefined,
+): boolean {
+  if (a === b) return true;
+  if (a === undefined || b === undefined) return false;
+  return a.length === b.length && a.every((level, index) => level === b[index]);
 }
 
 /** Every catalog fetch of the app (the store's default loader). */

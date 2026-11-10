@@ -1,4 +1,5 @@
 import { assert, assertEquals } from "@std/assert";
+import type { ThinkingLevel } from "./types.ts";
 import {
   CatalogFetchError,
   type CatalogLoader,
@@ -7,17 +8,27 @@ import {
 } from "./modelCatalog.ts";
 
 /** A catalog with one provider ("faux") holding one model. */
-function catalog(enabled = true): PeerCatalog {
+function catalog(
+  enabled = true,
+  thinkingLevel?: ThinkingLevel,
+): PeerCatalog {
   return {
     providers: [{ id: "faux", name: "Faux" }],
     modelsByProvider: new Map([
-      ["faux", [{ id: "m1", name: "M1", enabled }]],
+      ["faux", [{ id: "m1", name: "M1", enabled, thinkingLevel }]],
     ]),
   };
 }
 
 function enabledOf(store: ModelCatalog, peerId = ""): boolean | undefined {
   return store.state(peerId).modelsByProvider.get("faux")?.[0]?.enabled;
+}
+
+function levelOf(
+  store: ModelCatalog,
+  peerId = "",
+): ThinkingLevel | undefined {
+  return store.state(peerId).modelsByProvider.get("faux")?.[0]?.thinkingLevel;
 }
 
 /** Wait for the fetch a subscribe kicked off to settle. */
@@ -83,6 +94,85 @@ Deno.test("ModelCatalog: applyModelEnabled ignores unknown models", async () => 
   // even though the flags are remembered for the next fetch.
   assert(store.state("") === before);
   assertEquals(enabledOf(store), true);
+});
+
+Deno.test("ModelCatalog: a committed thinking level survives a remount", async () => {
+  // The agent edit dialog drew its level control from the catalog, so the
+  // level it saved must be here when the dialog is opened again — otherwise
+  // the control shows the value from before the save.
+  const store = new ModelCatalog(() => Promise.resolve(catalog(true, "low")));
+  store.subscribe("", () => {});
+  await waitLoaded(store);
+  assertEquals(levelOf(store), "low");
+
+  store.applyModelThinkingLevel("", "faux", "m1", "high");
+  assertEquals(levelOf(store), "high");
+
+  // Reopening (a new subscriber) reuses the settled catalog, which now holds
+  // the committed level.
+  const unsubscribe = store.subscribe("", () => {});
+  assertEquals(levelOf(store), "high");
+  unsubscribe();
+});
+
+Deno.test("ModelCatalog: a committed level outlives a fetch of the old value", async () => {
+  // The save reached the server, but a fetch issued before it still carries
+  // the previous level. Applying that snapshot verbatim would turn the
+  // control back to what the user just changed.
+  let serverLevel: ThinkingLevel = "low";
+  const store = new ModelCatalog(() =>
+    Promise.resolve(catalog(true, serverLevel))
+  );
+  store.subscribe("", () => {});
+  await waitLoaded(store);
+
+  store.applyModelThinkingLevel("", "faux", "m1", "high");
+  await store.reload("");
+  assertEquals(levelOf(store), "high");
+
+  // Once the server catches up the catalog is served as-is.
+  serverLevel = "high";
+  await store.reload("");
+  assertEquals(levelOf(store), "high");
+});
+
+Deno.test("ModelCatalog: a fetch that changes only the level is published", async () => {
+  // The level is compared when deciding "this read changed nothing": without
+  // that, another client's change would arrive and be dropped as identical.
+  let serverLevel: ThinkingLevel = "low";
+  const store = new ModelCatalog(() =>
+    Promise.resolve(catalog(true, serverLevel))
+  );
+  store.subscribe("", () => {});
+  await waitLoaded(store);
+  assertEquals(levelOf(store), "low");
+
+  serverLevel = "high";
+  await store.reload("");
+  assertEquals(levelOf(store), "high");
+});
+
+Deno.test("ModelCatalog: applyModelThinkingLevel ignores unknown models", async () => {
+  const store = new ModelCatalog(() => Promise.resolve(catalog()));
+  store.subscribe("", () => {});
+  await waitLoaded(store);
+
+  const before = store.state("");
+  store.applyModelThinkingLevel("", "other", "m1", "high");
+  store.applyModelThinkingLevel("", "faux", "gone", "high");
+  assert(store.state("") === before);
+  assertEquals(levelOf(store), undefined);
+});
+
+Deno.test("ModelCatalog: the level and the enablement of one model both land", async () => {
+  const store = new ModelCatalog(() => Promise.resolve(catalog(true, "low")));
+  store.subscribe("", () => {});
+  await waitLoaded(store);
+
+  store.applyModelEnabled("", "faux", "m1", false);
+  store.applyModelThinkingLevel("", "faux", "m1", "high");
+  assertEquals(enabledOf(store), false);
+  assertEquals(levelOf(store), "high");
 });
 
 Deno.test("ModelCatalog: subscribers see every publish", async () => {

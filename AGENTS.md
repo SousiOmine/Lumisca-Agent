@@ -113,7 +113,7 @@ Deno は公開から 24 時間以内のバージョンを既定では導入し�
 
 - **カテゴリは 1 枚のページ**（`settings/SettingsPage.tsx`）。見出し（名前）と本文を分け、本文だけをスクロールさせます。中から開く画面は 1 段低い `settings/SettingsSubHeader.tsx` を持ち、`modal-header` を重ねません。900px 以下では一覧とページを 1 枚ずつ出します（`.settings-body[data-view]`）。
 - **プロバイダーは 1 画面に 2 種類**を同じ部品（`settings/SettingsSection.tsx` と `settings/ProviderRow.tsx`）で並べます。AI プロバイダーと Web 検索を分けると、検索側を見落とします。ページ名がそのまま節名になる画面では節の見出しを省きます。
-- **選択肢は `components/Select.tsx`**。ネイティブの `<select>` は OS の見た目で描かれ、説明行も現在値のチェックも持てません。
+- **選択肢は `components/Select.tsx`**。ネイティブの `<select>` は OS の見た目で描かれ、説明行も現在値のチェックも持てません。一覧を開く側は毎回測ります（`hooks/useSelectPlacement.ts`）。呼び出し側の `preferredSide` は希望で、収まらなければ反対側へ開き、どちらにも収まらなければ切り取らずに高さを切ってスクロールさせます（`.modal` は `overflow-y: auto` なので、ダイアログの中ではダイアログの縁が一覧を切ります）。
 - **設定の行は面を塗らない**。`SettingRow` や `.setting-card` / `.provider-row` は下線で区切った行です。
 - **能力のトグルは実行中のセッションにも効く**（computer use など）。設定への保存は実行中のセッションがあっても必ず行います（`SessionPool.applyCapabilityChange`）。待機中のセッションは再構築し、実行中のセッションはエージェントを差し替えず（差し替えると run の行が二重になる）ツールレジストリと能力フラグだけをその場で更新します。ツールはプリロードされずレジストリにだけ入るので、これで追従できます。能力の値は開いた時点で捕捉せず getter で渡してください（`SessionWhere.computerAvailable`、`ToolFactoryOptions.computerAvailable`）。値で持つとスキル一覧が次の open まで古いままになります。
 - **接続先はタイトルバーのドロップダウンだけ**（`components/ConnectionPicker.tsx`）。新規セッション画面にはサーバー選択を置きません。表示名はシェルが `settings.json` の `lastRemote` に記録して `state` で返します。設定画面の一覧は編集用で、行は畳んだ状態が既定、名前が空のまま URL を入れたらホスト名を補完します（`packages/web/src/connections.ts`）。
@@ -235,7 +235,7 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 
 ### 名前・アイコン・モデル
 
-- **1 つのダイアログで変える**（`packages/web/src/components/stella/AgentEditDialog.tsx`）。`PATCH /api/stella/agents/:id` に `{ name?, icon?, model? }` を送り、`icon` 省略は変更なし、`null` は頭文字、`{data, mimeType}` は差し替え、`model` 省略は変更なし、`null` は既定のモデルです。名前を先に検証し（空名・長すぎる名前は 400、重複名は 409）、モデルはカタログにあるかを確かめてから書き込みます。弾かれたときに画像も名前も書かれません。
+- **1 つのダイアログで変える**（`packages/web/src/components/stella/AgentEditDialog.tsx`）。`PATCH /api/stella/agents/:id` に `{ name?, icon?, model?, thinkingLevel? }` を送り、`icon` 省略は変更なし、`null` は頭文字、`{data, mimeType}` は差し替え、`model` 省略は変更なし、`null` は既定のモデルです。`thinkingLevel` は `{provider, modelId, level}` で、レベルはモデルの設定なので対象のモデルを名乗ります（エージェントから既定モデルを引き直すと、画面が見ていたモデルと食い違いえます）。レベルは選んだ時点では書かず、保存で名前・画像・モデルと一緒に確定します（キャンセルでは残りません）。名前を先に検証し（空名・長すぎる名前は 400、重複名は 409）、モデルはカタログにあるかを、レベルはそのモデルが提供するかを確かめてから書き込みます。弾かれたときに画像も名前も書かれません。
 - **並びは動かさない**: 改名も差し替えも `updated_at` を触りません。「最後に話した順」のままです。
 - **会話の名前はエージェント名**: stella の会話では最初のメッセージからのタイトル生成を行いません（`SessionAgentOptions.titleGeneration`、`factory.ts`）。会話のセッション名は作成時のエージェント名のままで、通知もエージェントの行から名前を読みます。古い会話は開くときに名前をエージェント名へ戻します（`getOrCreateStellaSession`）。
 - **`role` は編集できない**: 作成時のシステムプロンプトに入っており、後から変えても既存の会話に届きません。名前もプロンプトには入りません（`packages/core/tools/system-prompt.ts`）。プロンプト自体はセッションを開くたびに導出し直され、保存値と違えば書き換わるので（`packages/core/agent/factory.ts` の `ensureSystemPrompt`）、新しい版でプロンプトを変えれば既存の会話にも届きます。

@@ -54,20 +54,23 @@ export interface StellaApi {
   createStellaAgent(
     input: { name: string; role: string },
   ): Promise<StellaAgent>;
-  /** Change an agent's name, its picture and/or its model, in one call: the
-   * sidebar's edit dialog saves them together, and a request that stored one
-   * but refused the other would leave the user with half of what they asked
-   * for. `icon` undefined → unchanged, null → back to the initial,
-   * `{ bytes, extension }` → a new picture; `model` undefined → unchanged,
-   * null → the app's default model, a pair → the model to run on (the core
-   * also moves the agent's existing conversation to it, now or as its
-   * current run ends). */
+  /** Change an agent's name, its picture, its model and/or that model's
+   * thinking strength, in one call: the sidebar's edit dialog saves them
+   * together, and a request that stored one but refused the other would leave
+   * the user with half of what they asked for. `icon` undefined → unchanged,
+   * null → back to the initial, `{ bytes, extension }` → a new picture;
+   * `model` undefined → unchanged, null → the app's default model, a pair →
+   * the model to run on (the core also moves the agent's existing
+   * conversation to it, now or as its current run ends); `thinkingLevel`
+   * undefined → unchanged, `{ provider, modelId, level }` → stores the level
+   * for that model (the level belongs to the model, so the request names it). */
   updateStellaAgent(
     id: string,
     patch: {
       name?: string;
       icon?: { bytes: Uint8Array; extension: string } | null;
       model?: { provider: string; modelId: string } | null;
+      thinkingLevel?: { provider: string; modelId: string; level: string };
     },
   ): Promise<StellaAgent>;
   deleteStellaAgent(id: string): Promise<void>;
@@ -226,6 +229,35 @@ function parseIconPatch(
 }
 
 /**
+ * `{provider, modelId}` of a body field, checked as a pair. Shared by the
+ * model patch and the thinking-level patch: both name a model, so both must
+ * fail the same way when one half is missing or blank.
+ */
+function parseModelRef(
+  value: unknown,
+  field: string,
+): { provider: string; modelId: string } {
+  if (typeof value !== "object" || value === null) {
+    throw new AppError(`${field} must be an object`, 400);
+  }
+  const body = value as { provider?: unknown; modelId?: unknown };
+  // Trimmed before the emptiness check: a body of {"provider": "  "}
+  // describes the request, so it is a 400 here rather than an id no catalog
+  // has, which the core would refuse with a confusing 404.
+  const provider = requireNonEmptyString(body.provider, `${field}.provider`)
+    .trim();
+  const modelId = requireNonEmptyString(body.modelId, `${field}.modelId`)
+    .trim();
+  if (provider === "" || modelId === "") {
+    throw new AppError(
+      `${field}.provider and ${field}.modelId must not be blank`,
+      400,
+    );
+  }
+  return { provider, modelId };
+}
+
+/**
  * The model patch of an agent edit: `{provider, modelId}` sets the choice,
  * `null` returns the agent to the app's default model, and an absent key
  * means "leave it alone" (the dialog saves only what changed).
@@ -239,23 +271,32 @@ function parseModelPatch(
 ): { provider: string; modelId: string } | null | undefined {
   if (value === undefined) return undefined;
   if (value === null) return null;
-  if (typeof value !== "object") {
-    throw new AppError("model must be an object or null", 400);
-  }
-  const body = value as { provider?: unknown; modelId?: unknown };
-  // Trimmed before the emptiness check: a body of {"provider": "  "}
-  // describes the request, so it is a 400 here rather than an id no catalog
-  // has, which the core would refuse with a confusing 404.
-  const provider = requireNonEmptyString(body.provider, "model.provider")
-    .trim();
-  const modelId = requireNonEmptyString(body.modelId, "model.modelId").trim();
-  if (provider === "" || modelId === "") {
-    throw new AppError(
-      "model.provider and model.modelId must not be blank",
-      400,
-    );
-  }
-  return { provider, modelId };
+  return parseModelRef(value, "model");
+}
+
+/**
+ * The thinking-strength patch of an agent edit: the level, and the model it
+ * belongs to.
+ *
+ * The model is named rather than resolved from the agent because the level is
+ * a MODEL setting, and the dialog drew its list of levels from the model in
+ * effect at that moment. Naming it keeps the two from disagreeing about which
+ * model the user was looking at.
+ *
+ * Only the shape is checked here: whether the model offers the level (and
+ * whether the level exists at all) is the core's question, answered before
+ * anything is written.
+ */
+function parseThinkingLevelPatch(
+  value: unknown,
+): { provider: string; modelId: string; level: string } | undefined {
+  if (value === undefined) return undefined;
+  const { provider, modelId } = parseModelRef(value, "thinkingLevel");
+  const level = requireNonEmptyString(
+    (value as { level?: unknown }).level,
+    "thinkingLevel.level",
+  );
+  return { provider, modelId, level };
 }
 
 /**
@@ -346,14 +387,16 @@ export function stellaRoutes(core: StellaApi): Hono {
     );
   });
 
-  /** Change what an agent is called, what it looks like and which model its
-   * conversation runs on.
+  /** Change what an agent is called, what it looks like, which model its
+   * conversation runs on and how hard that model thinks.
    *
-   * One route for all three because they are one act: the sidebar's edit
+   * One route for all four because they are one act: the sidebar's edit
    * dialog saves them together. The body names only what changed — an absent
-   * `name`, `icon` or `model` leaves that field alone, `"icon": null`
-   * returns the agent to its initial, and `"model": null` returns it to the
-   * app's default model (`{provider, modelId}` sets one). The picture is the
+   * `name`, `icon`, `model` or `thinkingLevel` leaves that field alone,
+   * `"icon": null` returns the agent to its initial, `"model": null` returns
+   * it to the app's default model (`{provider, modelId}` sets one), and
+   * `thinkingLevel: {provider, modelId, level}` stores the level for that
+   * model. The picture is the
    * same shape a prompt's images take (`base64` + `mimeType`), and its
    * content type decides the stored format; the store then checks the bytes
    * really are that format, because a browser reports a type from the file's
@@ -361,26 +404,29 @@ export function stellaRoutes(core: StellaApi): Hono {
    *
    * What comes back is the updated agent: the client draws the new name,
    * icon and model and needs no second read. Validation is the core's (an
-   * empty or taken name is a 400/409, an unknown agent or model a 404), so
-   * the route and the agent's own tools cannot disagree about what a valid
-   * choice is. A conversation with a run in flight is not refused: the model
-   * is stored and applied when that run ends. */
+   * empty or taken name is a 400/409, an unknown agent, model or level a
+   * 404/400), so the route and the agent's own tools cannot disagree about
+   * what a valid choice is. A conversation with a run in flight is not
+   * refused: the model is stored and applied when that run ends. */
   app.patch("/stella/agents/:id", async (c) => {
     const body = await parseBody<{
       name?: unknown;
       icon?: unknown;
       model?: unknown;
+      thinkingLevel?: unknown;
     }>(c);
     const name = body?.name === undefined
       ? undefined
       : requireNonEmptyString(body.name, "name");
     const icon = parseIconPatch(body?.icon);
     const model = parseModelPatch(body?.model);
+    const thinkingLevel = parseThinkingLevelPatch(body?.thinkingLevel);
     return c.json(
       await core.updateStellaAgent(c.req.param("id"), {
         ...(name === undefined ? {} : { name }),
         icon,
         model,
+        thinkingLevel,
       }),
     );
   });

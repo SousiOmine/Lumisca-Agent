@@ -4,7 +4,7 @@ import { api } from "../../api.ts";
 import { useT } from "../../i18n.ts";
 import {
   errorText,
-  setModelThinkingLevel,
+  rememberModelThinkingLevel,
   useProviderModels,
 } from "../../providers.ts";
 import { useSetting } from "../../settingsStore.ts";
@@ -39,8 +39,9 @@ type IconChoice =
 type ModelChoice = { provider: string; modelId: string };
 
 /**
- * Edit what an agent is CALLED, what it LOOKS like, and which model its
- * conversation runs on: what the user chose for it.
+ * Edit what an agent is CALLED, what it LOOKS like, which model its
+ * conversation runs on and how hard that model thinks: what the user chose
+ * for it.
  *
  * One dialog and one save, because they are one decision ("make this agent
  * mine") and the sidebar's row shows the first two at once: two dialogs would
@@ -52,6 +53,13 @@ type ModelChoice = { provider: string; modelId: string };
  * dialog could only offer it while one was open. Unset means the app's
  * default model (see the model settings), so an agent made without a choice
  * follows that instead of pinning whatever was current that day.
+ *
+ * The thinking strength is the level of that model, not a property of the
+ * agent (two agents on one model think at one strength). It is still saved
+ * here, with the rest: the conversation has no model row to carry it, and a
+ * level written the moment it was picked could not be taken back by Cancel.
+ * The request names the model it is for (see the server route), so a level
+ * picked here lands on the model this dialog showed.
  *
  * What is NOT here is the role: it is the instruction the agent works from,
  * fixed at creation and baked into the session's system prompt (a change
@@ -77,13 +85,13 @@ export function AgentEditDialog(
    * field like the name, and Cancel leaves the agent as it was. */
   const [model, setModel] = useState<ModelChoice | null>(agent.model);
   const [picking, setPicking] = useState(false);
-  /** The thinking level this dialog just set, keyed by model. The catalog's
-   * copy is stale until its next refetch, so this keeps the control where the
-   * user left it without pretending the stored value changed. */
+  /** The thinking strength this dialog would save, keyed by the model it was
+   * picked for. A draft like the name, the picture and the model — it is part
+   * of the save, so Cancel leaves the stored level alone — and the key is what
+   * keeps a level picked for one model from being written for another. */
   const [level, setLevel] = useState<
     { key: string; level: ThinkingLevel } | null
   >(null);
-  const [savingLevel, setSavingLevel] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // The dialog's own exit (see Modal): a successful save leaves through it,
@@ -136,36 +144,22 @@ export function AgentEditDialog(
     }
   };
 
-  /** Persist the thinking level of the model in effect.
-   *
-   * Not part of the save: the level belongs to the MODEL (it applies to
-   * every conversation on it), so it is written the moment the control
-   * commits, exactly as the composer and the model settings do. */
-  const changeLevel = async (next: ThinkingLevel) => {
-    if (effective === null) return;
-    setSavingLevel(true);
-    setError(null);
-    try {
-      const stored = await setModelThinkingLevel(
-        "",
-        effective.provider,
-        effective.modelId,
-        next,
-      );
-      setLevel({ key: levelKey, level: stored });
-    } catch (failure) {
-      setError(errorText(failure));
-    } finally {
-      setSavingLevel(false);
-    }
-  };
-
   const save = async () => {
     if (!canSave) return;
     setBusy(true);
     setError(null);
     const modelChanged = model?.provider !== agent.model?.provider ||
       model?.modelId !== agent.model?.modelId;
+    // The level of the model in effect, when this dialog would change it. It
+    // is sent with the rest because it is part of the same decision ("make
+    // this agent mine"), and because the dialog's Cancel must be able to
+    // leave it alone.
+    const thinkingLevel = levelPatch(
+      effective,
+      level,
+      levelKey,
+      info?.thinkingLevel,
+    );
     try {
       const updated = await api.updateStellaAgent(agent.id, {
         name: trimmed,
@@ -178,7 +172,19 @@ export function AgentEditDialog(
         // and a model the user did not touch must not cost a rebuild of the
         // conversation.
         ...(modelChanged ? { model } : {}),
+        ...(thinkingLevel === undefined ? {} : { thinkingLevel }),
       });
+      // The catalog is what every other surface reads the level from, so the
+      // stored value lands there before the dialog closes: without it, the
+      // control shows the pre-save level the next time this dialog opens.
+      if (thinkingLevel !== undefined) {
+        rememberModelThinkingLevel(
+          "",
+          thinkingLevel.provider,
+          thinkingLevel.modelId,
+          thinkingLevel.level,
+        );
+      }
       onChanged(updated);
       closeRef.current();
     } catch (failure) {
@@ -301,8 +307,9 @@ export function AgentEditDialog(
                         ? level.level
                         : info?.thinkingLevel ?? "off"}
                       levels={supportedLevels}
-                      onChange={(next) => void changeLevel(next)}
-                      disabled={busy || savingLevel}
+                      onChange={(next) =>
+                        setLevel({ key: levelKey, level: next })}
+                      disabled={busy}
                     />
                   )}
                 </div>
@@ -323,6 +330,7 @@ export function AgentEditDialog(
                       disabled={busy}
                       onClick={() => {
                         setModel(null);
+                        setLevel(null);
                         setPicking(false);
                       }}
                     >
@@ -341,6 +349,9 @@ export function AgentEditDialog(
                 onClose={() => setPicking(false)}
                 onSelect={(provider, modelId) => {
                   setModel({ provider, modelId });
+                  // A level picked for the previous model is not a level of
+                  // this one, so the draft goes with the model it was for.
+                  setLevel(null);
                   setPicking(false);
                 }}
               />
@@ -371,6 +382,32 @@ export function AgentEditDialog(
       }}
     </Modal>
   );
+}
+
+/**
+ * The thinking level this dialog would store with a save, or undefined when
+ * it would change nothing.
+ *
+ * The level belongs to the MODEL, so the draft is only meaningful while it
+ * still names the model in effect: a level picked for the previous model
+ * would otherwise be written for the new one, and a level equal to the stored
+ * one is not a change (the request names only what changed, like `model`).
+ */
+function levelPatch(
+  effective: ModelChoice | null,
+  draft: { key: string; level: ThinkingLevel } | null,
+  levelKey: string,
+  storedLevel: ThinkingLevel | undefined,
+): { provider: string; modelId: string; level: ThinkingLevel } | undefined {
+  if (effective === null || draft === null || draft.key !== levelKey) {
+    return undefined;
+  }
+  if (draft.level === (storedLevel ?? "off")) return undefined;
+  return {
+    provider: effective.provider,
+    modelId: effective.modelId,
+    level: draft.level,
+  };
 }
 
 /** Read a file as a data URL. Rejects with the reader's failure rather than

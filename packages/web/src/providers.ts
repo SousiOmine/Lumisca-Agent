@@ -123,7 +123,9 @@ export async function setModelEnabled(
 /** Set the thinking level of a model on the peer that owns the session
  * ("" = this server) and return the stored level. Shared by every caller
  * (App, the draft tab, the settings panel) so the response is applied the
- * same way everywhere. */
+ * same way everywhere: the catalog store carries it, so the control that
+ * shows it keeps the choice after a remount instead of reverting to the
+ * value its fetch happened to carry. */
 export async function setModelThinkingLevel(
   peerId: string,
   provider: string,
@@ -135,7 +137,21 @@ export async function setModelThinkingLevel(
     modelId,
     level,
   );
+  rememberModelThinkingLevel(peerId, provider, modelId, thinkingLevel);
   return thinkingLevel;
+}
+
+/** Record a thinking level the server has already stored (the value a fetch
+ * would return), so every view reads it without a second request. For a save
+ * that carried the level together with other fields — the agent edit
+ * dialog's PATCH — where no response carries the level back. */
+export function rememberModelThinkingLevel(
+  peerId: string,
+  provider: string,
+  modelId: string,
+  level: ThinkingLevel,
+): void {
+  modelCatalog.applyModelThinkingLevel(peerId, provider, modelId, level);
 }
 
 /** Apply a stored thinking level to every open view whose session runs
