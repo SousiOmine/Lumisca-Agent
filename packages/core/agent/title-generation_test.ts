@@ -7,7 +7,6 @@ import type { StreamFn } from "@lumisca/core";
 import {
   cleanTitle,
   MAX_TITLE_CHARS,
-  TITLE_MAX_OUTPUT_TOKENS,
   TitleGenerator,
   titleSystemPrompt,
 } from "./title-generation.ts";
@@ -102,7 +101,7 @@ Deno.test("generateTitle returns the cleaned model output", async () => {
   assertEquals(calls[0]!.systemPrompt?.includes("title"), true);
 });
 
-Deno.test("generateTitle bounds its output and follows the session language", async () => {
+Deno.test("generateTitle sends no output cap and follows the session language", async () => {
   let seen: StreamOptions | undefined;
   let prompt = "";
   const generator = new TitleGenerator(
@@ -115,8 +114,10 @@ Deno.test("generateTitle bounds its output and follows the session language", as
 
   await generator.generateTitle("fix the login bug", "ja");
 
-  // A runaway answer cannot spend the fast model's whole output budget.
-  assertEquals(seen?.maxOutputTokens, TITLE_MAX_OUTPUT_TOKENS);
+  // Regression: a cap sized for the title alone (128) was spent entirely on
+  // a reasoning model's thinking tokens, so the answer was empty and the
+  // session kept its provisional name. The transport's cap is the bound.
+  assertEquals(seen?.maxOutputTokens, undefined);
   // The example follows the session, not the message.
   assert(prompt.includes("スマホのログイン不具合を修正"));
   assert(prompt.includes("Japanese"));

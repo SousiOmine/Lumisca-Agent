@@ -9,12 +9,6 @@ import { outputLanguageSentence } from "../tools/language.ts";
  * before the prompt so the text cannot name a different one. */
 export const MAX_TITLE_CHARS = 30;
 
-/** Output cap of the title call. A title is at most MAX_TITLE_CHARS
- * characters — around 60 tokens in Japanese — so anything past this is the
- * model explaining itself, which cleanTitle would cut anyway. Bounded so a
- * runaway answer cannot spend the fast model's whole output budget. */
-export const TITLE_MAX_OUTPUT_TOKENS = 128;
-
 /** One worked example per language. A small model copies the shape it saw
  * last, so the sample IS the format — and it is written in the title's own
  * language, because an English sample beside "Write the answer in Japanese"
@@ -98,7 +92,13 @@ export class TitleGenerator {
         // One-off conversation: a fresh id per title request (session-affinity
         // gateways require a conversation id on every request).
         sessionId: crypto.randomUUID(),
-        maxOutputTokens: TITLE_MAX_OUTPUT_TOKENS,
+        // No output cap of its own. Reasoning tokens are part of the
+        // completion, and a reasoning model spends a few hundred of them
+        // before the title starts (deepseek-v4.1-flash: ~250), so a cap sized
+        // for the title alone returned an empty answer on every call — finish
+        // "length", no text, and the session kept its provisional name. The
+        // transport's cap (the model's documented output limit narrowed to
+        // the compaction reserve) is the bound that does not starve it.
       },
     );
     const title = cleanTitle(text);
