@@ -10,6 +10,7 @@ import { BackgroundProcessManager } from "./background.ts";
 import { TodoHub } from "./todo.ts";
 import { TaskHub } from "./task-hub.ts";
 import { createCodingTools, hostBackends } from "./toolsets.ts";
+import { CARD_HELP } from "../shared/ui-markup/help.ts";
 import {
   CHAT_PROMPT_SECTIONS,
   CODING_PROMPT_SECTIONS,
@@ -376,6 +377,84 @@ Deno.test("one bullet per section: no section packs unrelated rules together", (
       );
     }
   }
+});
+
+// --- rule strength -----------------------------------------------------------
+
+/** Lowercase uses of a prohibition word that describe a fact instead of
+ * giving an order. Each entry is the phrase that carries it, flattened to
+ * one line so line wrapping in the source does not matter; the test fails
+ * when an entry no longer occurs, so the list cannot rot. */
+const FACTUAL_PROSE: readonly string[] = [
+  // bash: an empty result is what a wrong command looks like, not an order.
+  "an empty result is never proof of success",
+  // paths: how relative paths resolve, stated as a constraint of the rule.
+  "A relative path must start with the name of a workspace folder",
+  // web_search: part of a description of a situation, not an order.
+  "an error message you do not recognise",
+];
+
+Deno.test("a prohibition in a guideline is written as NEVER or MUST", () => {
+  // Advice is prose ("prefer edit"); an inviolable rule is the all-caps
+  // marker, so the two read differently in the same block. A capitalized or
+  // lowercase form ("Never", "do not") is prose and fails here.
+  const all = [
+    ...CODING_PROMPT_SECTIONS,
+    ...STELLA_PROMPT_SECTIONS,
+    ...CHAT_PROMPT_SECTIONS,
+    ...EXPLORE_SUBAGENT_SECTIONS,
+    ...GENERAL_SUBAGENT_SECTIONS,
+  ];
+  for (const section of all) {
+    // The card section embeds the shared markup reference, where "must" and
+    // "never" describe the grammar (a field must exist, repeats never nest)
+    // rather than behaviour. Scan what this file authors.
+    let text = section.text.replace(CARD_HELP, "").replace(/\s+/g, " ");
+    for (const phrase of FACTUAL_PROSE) text = text.split(phrase).join("");
+    for (const match of text.matchAll(/\b(never|must|do not|don't)\b/gi)) {
+      if (match[0] === match[0].toUpperCase()) continue;
+      assert(
+        false,
+        `section ${section.name} writes "${match[0]}" in prose; ` +
+          `use NEVER or MUST`,
+      );
+    }
+  }
+  const union = all.map((section) => section.text.replace(/\s+/g, " "))
+    .join(" ");
+  for (const phrase of FACTUAL_PROSE) {
+    assert(union.includes(phrase), `FACTUAL_PROSE entry went stale: ${phrase}`);
+  }
+});
+
+// --- turn economy ------------------------------------------------------------
+
+Deno.test("the batching rule reaches every kind and rides on no tool", () => {
+  // The rule is about turns, not tools: it renders wherever the model can
+  // call more than one tool, so it must not be gated on a tool name.
+  const batch = CODING_PROMPT_SECTIONS.find((s) => s.name === "tool:batch");
+  assert(batch !== undefined, "tool:batch section is missing");
+  assertEquals(batch.requires, undefined);
+  for (
+    const set of [
+      CODING_PROMPT_SECTIONS,
+      STELLA_PROMPT_SECTIONS,
+      CHAT_PROMPT_SECTIONS,
+    ]
+  ) {
+    assert(
+      renderPromptSections(set, [TOOL_READ]).includes("Batch independent"),
+      "the batching rule must reach every session kind",
+    );
+  }
+  // It names no tool: tool names are written in backticks in these bullets.
+  assertEquals(batch.text.includes("`"), false);
+});
+
+Deno.test("the todo bullet forbids a todo-only turn", () => {
+  const text = renderPromptSections(CODING_PROMPT_SECTIONS, CODING_TOOLS);
+  assert(text.includes("todo-only turn"), "a todo-only turn must be refused");
+  assert(text.includes("You MUST finish the whole list"));
 });
 
 // --- sub-agent prompts -------------------------------------------------------

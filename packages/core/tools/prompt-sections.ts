@@ -107,6 +107,21 @@ const PATHS_SECTION: PromptSection = {
 
 // --- tool guidance -----------------------------------------------------------
 
+/** Batching independent calls. A rule about how calls relate across a turn,
+ * so it opens the tool group rather than riding on one tool: the cost it
+ * names (every turn resends the whole conversation) is the same whatever the
+ * tools are. Unconditional for that reason — a session with a single tool
+ * loses nothing but a line. */
+const BATCH_SECTION: PromptSection = {
+  name: "tool:batch",
+  order: ORDER.tool,
+  text: "- Batch independent calls into one response: two reads, two " +
+    "searches, or a\n  read and a search sent together cost one turn; sent " +
+    "apart they cost one\n  each, and every turn resends the whole " +
+    "conversation. Sequence calls only\n  when a later one needs an earlier " +
+    "result.",
+};
+
 const READ_SECTION: PromptSection = {
   name: "tool:read",
   order: ORDER.tool,
@@ -126,8 +141,9 @@ const EDIT_SECTION: PromptSection = {
   name: "tool:edit",
   order: ORDER.tool + 20,
   requires: [TOOL_EDIT],
-  text: "- Use edit for targeted changes: one literal replacement per call, " +
-    "and re-read\n  the file when the match fails.",
+  text: "- Use edit for targeted changes: one literal replacement per call. " +
+    "A failed\n  match means your view is stale: you MUST re-read the file " +
+    "before retrying.",
 };
 
 const BASH_SECTION: PromptSection = {
@@ -171,13 +187,14 @@ const TODO_SECTION: PromptSection = {
   // model left to judge "is this trivial?" answers differently from one turn
   // to the next, and a run that skipped the list has nowhere to keep the
   // requests it has not done yet — so it stops after the first one.
-  text:
-    "- When the user asks for more than one thing, put every request on the " +
-    "todo\n  list before you start, and keep it current: mark a task " +
-    "`completed` the\n  moment it is done — do not batch completions. " +
-    "Finish the whole list before\n  you reply; a request left `pending` " +
-    "is a request you did not do. Skip the\n  list only when the request " +
-    "is a single step.",
+  text: "- When the user asks for more than one thing, you MUST put every " +
+    "request on the\n  todo list before you start, and keep it current: " +
+    "mark a task `completed` the\n  moment it is done — NEVER batch " +
+    "completions. Send the list in the same\n  response as your first real " +
+    "tool call: a todo-only turn spends a round trip\n  without moving the " +
+    "work. You MUST finish the whole list before you reply;\n  a request " +
+    "left `pending` is a request you did not do. Skip the list only when\n" +
+    "  the request is a single step.",
 };
 
 const SKILL_SECTION: PromptSection = {
@@ -189,8 +206,9 @@ const SKILL_SECTION: PromptSection = {
 };
 
 /** The web tools. One bullet, keyed on the search half: a session that can
- * search is the one that needs to be told how the pair is meant to be used
- * (and that what it reads is data, not orders). */
+ * search is the one that needs to be told when to reach for it. That what a
+ * page says is data rather than orders is the tools' own contract — both
+ * descriptions say it (see web.ts) — so the bullet does not repeat it. */
 const WEB_SEARCH_SECTION: PromptSection = {
   name: "tool:web_search",
   order: ORDER.tool + 112,
@@ -314,7 +332,7 @@ const VM_ASK_USER_SECTION: PromptSection = {
   order: ORDER.tool + 155,
   requires: [TOOL_VM_ASK_USER],
   text:
-    "- Never ask the user to send a secret as a chat message — it would be " +
+    "- NEVER ask the user to send a secret as a chat message — it would be " +
     "written\n  into the transcript.",
 };
 
@@ -375,7 +393,7 @@ const NOTIFICATION_SECTION: PromptSection = {
   requires: [TOOL_ASYNC_BASH, TOOL_TASK],
   text: '- A user message starting with "[Background command ...]", "[Task ' +
     '...]"\n  or "[Message from ...]" is a system notification, not from the ' +
-    "user: acknowledge\n  it and carry on. Do not poll a running background " +
+    "user: acknowledge\n  it and carry on. NEVER poll a running background " +
     "command.",
 };
 
@@ -391,17 +409,17 @@ const NOTIFICATION_SECTION: PromptSection = {
 const QUALITY_SECTION: PromptSection = {
   name: "quality",
   order: ORDER.quality,
-  text: "- Prioritize correctness. Never fabricate tool or test results, " +
-    "never narrow the\n  requested scope silently, and verify your changes " +
-    "before reporting them.",
+  text: "- Prioritize correctness. NEVER fabricate tool or test results, " +
+    "and NEVER\n  narrow the requested scope silently: you MUST verify " +
+    "your changes before\n  reporting them.",
 };
 
 const WORKFLOW_SECTION: PromptSection = {
   name: "workflow",
   order: ORDER.workflow,
   text: "- For multi-file changes, plan before editing and fix root causes " +
-    "rather than\n  symptoms. Do not hand in TODOs or placeholders. Say so " +
-    "when something could not\n  be checked.",
+    "rather than\n  symptoms. NEVER hand in TODOs or placeholders. You " +
+    "MUST say so when something\n  could not be checked.",
 };
 
 // --- chat-only ---------------------------------------------------------------
@@ -409,7 +427,7 @@ const WORKFLOW_SECTION: PromptSection = {
 const CHAT_ANSWERS_SECTION: PromptSection = {
   name: "chat:answers",
   order: ORDER.chat,
-  text: "- Write answers with future readers in mind; do not hand in " +
+  text: "- Write answers with future readers in mind; NEVER hand in " +
     "placeholder content as finished work.",
 };
 
@@ -433,7 +451,7 @@ const SUBAGENT_READ_ONLY_SECTION: PromptSection = {
   requires: [TOOL_READ, TOOL_BASH, TOOL_LIST_DIR],
   text: "- You are read-only: investigate with read/list_dir, the shell " +
     "(grep, find,\n  git log, ...) and skill, and report findings with file " +
-    "references (path:line).\n  Never modify files: no write / edit, and no " +
+    "references (path:line).\n  NEVER modify files: no write / edit, and no " +
     "shell command with side effects.",
 };
 
@@ -464,6 +482,7 @@ const SUBAGENT_REPORT_SECTION: PromptSection = {
 /** Guideline sections of a coding session's system prompt. */
 export const CODING_PROMPT_SECTIONS: readonly PromptSection[] = [
   PATHS_SECTION,
+  BATCH_SECTION,
   READ_SECTION,
   WRITE_SECTION,
   EDIT_SECTION,
@@ -506,6 +525,7 @@ export const STELLA_PROMPT_SECTIONS: readonly PromptSection[] = [
   // costs every request (and drifts from the description it copies). What is
   // left is what no tool can carry — how to choose BETWEEN tools, the rules
   // that hold across calls, and the one habit the user waits on (send_chat).
+  BATCH_SECTION,
   VM_FIND_SECTION,
   VM_SCREENSHOT_SECTION,
   VM_ACT_SECTION,
@@ -524,6 +544,7 @@ export const STELLA_PROMPT_SECTIONS: readonly PromptSection[] = [
  * session: no file, shell or sub-agent tools, so their sections never
  * render; `requires` prunes the rest on its own). */
 export const CHAT_PROMPT_SECTIONS: readonly PromptSection[] = [
+  BATCH_SECTION,
   ASK_SECTION,
   TODO_SECTION,
   SKILL_SECTION,

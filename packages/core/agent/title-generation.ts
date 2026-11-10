@@ -4,20 +4,48 @@ import { streamText } from "../ai/stream.ts";
 import { DEFAULT_LOCALE, type Locale } from "../shared/mod.ts";
 import { outputLanguageSentence } from "../tools/language.ts";
 
-/** System prompt for the title model: a short, plain session title based
- * on the user's first message. The output-language sentence is appended by
- * the caller (the title follows the session's language). */
-const TITLE_SYSTEM_PROMPT =
-  "You generate short titles for AI chat sessions. Based on the user's " +
-  "first message, produce a concise title of at most 30 characters. " +
-  "Output only the title — no quotes, no explanation, no trailing period.";
+/** Hard cap for a title. The prompt asks for this many characters and
+ * cleanTitle enforces it (models occasionally ignore the number); declared
+ * before the prompt so the text cannot name a different one. */
+export const MAX_TITLE_CHARS = 30;
 
-/** Hard cap for the title (the prompt asks for 30; models occasionally
- * ignore that). */
-const MAX_TITLE_CHARS = 30;
+/** Output cap of the title call. A title is at most MAX_TITLE_CHARS
+ * characters — around 60 tokens in Japanese — so anything past this is the
+ * model explaining itself, which cleanTitle would cut anyway. Bounded so a
+ * runaway answer cannot spend the fast model's whole output budget. */
+export const TITLE_MAX_OUTPUT_TOKENS = 128;
 
-/** Strip quotes, collapse whitespace, and cap the length of a generated
- * title. Returns "" when nothing meaningful is left. */
+/** One worked example per language. A small model copies the shape it saw
+ * last, so the sample IS the format — and it is written in the title's own
+ * language, because an English sample beside "Write the answer in Japanese"
+ * pulls the model back to English. A new locale must add its entry here
+ * (`Record<Locale, …>` fails to compile without one). */
+const TITLE_EXAMPLE: Record<Locale, { message: string; title: string }> = {
+  en: {
+    message: "the login button is broken on mobile, can you fix?",
+    title: "Fix mobile login button",
+  },
+  ja: {
+    message: "スマホでログインボタンが押せないので直して",
+    title: "スマホのログイン不具合を修正",
+  },
+};
+
+/** System prompt of the title model: positive rules only, and only the ones
+ * cleanTitle does not already guarantee. It strips quotes, a closing
+ * sentence mark and anything past MAX_TITLE_CHARS, so a "no quotes, no
+ * trailing period" clause here would spend a small model's constraint
+ * budget on rules the code keeps anyway. */
+export function titleSystemPrompt(language: Locale): string {
+  const example = TITLE_EXAMPLE[language];
+  return `Write a title of at most ${MAX_TITLE_CHARS} characters for the ` +
+    `task in <message>.\nAnswer with the title alone.\n\n` +
+    `<message>${example.message}</message>\n${example.title}`;
+}
+
+/** Strip quotes, collapse whitespace, drop a closing sentence mark, and cap
+ * the length of a generated title. Returns "" when nothing meaningful is
+ * left. */
 export function cleanTitle(raw: string): string {
   let title = raw.trim();
   if (
@@ -27,6 +55,9 @@ export function cleanTitle(raw: string): string {
     title = title.slice(1, -1).trim();
   }
   title = title.replace(/\s+/g, " ").trim();
+  // A title is a label, not a sentence: the terminator is dropped here
+  // rather than asked for in the prompt (see titleSystemPrompt).
+  title = title.replace(/[.。．]$/, "").trim();
   return title.slice(0, MAX_TITLE_CHARS).trim();
 }
 
@@ -53,7 +84,7 @@ export class TitleGenerator {
       this.streamFn,
       this.model,
       {
-        systemPrompt: `${TITLE_SYSTEM_PROMPT} ${
+        systemPrompt: `${titleSystemPrompt(language)} ${
           outputLanguageSentence(language)
         }`,
         messages: [{
@@ -63,9 +94,12 @@ export class TitleGenerator {
         }],
       },
       "title generation failed",
-      // One-off conversation: a fresh id per title request (session-affinity
-      // gateways require a conversation id on every request).
-      { sessionId: crypto.randomUUID() },
+      {
+        // One-off conversation: a fresh id per title request (session-affinity
+        // gateways require a conversation id on every request).
+        sessionId: crypto.randomUUID(),
+        maxOutputTokens: TITLE_MAX_OUTPUT_TOKENS,
+      },
     );
     const title = cleanTitle(text);
     if (!title) throw new Error("title generation returned no text");
