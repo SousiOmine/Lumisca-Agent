@@ -3,6 +3,7 @@ import {
   IconDotsVertical,
   IconPencil,
   IconPlus,
+  IconRefresh,
   IconTrash,
 } from "@tabler/icons-preact";
 import { useEffect, useRef, useState } from "preact/compat";
@@ -15,7 +16,7 @@ import type {
   StellaAgentSummary,
   StellaPreview,
 } from "../types.ts";
-import type { Translator } from "@lumisca/core/shared";
+import type { MessageKey, Translator } from "@lumisca/core/shared";
 import { Modal } from "./Modal.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { Field } from "./Field.tsx";
@@ -67,6 +68,31 @@ interface MenuAnchor {
  * same value). */
 const MENU_MARGIN = 8;
 
+/** The example jobs the create dialog offers.
+ *
+ * A preset fills the wish field with a full sentence the user can edit. It is
+ * a head start for someone who does not know how to describe the job — not a
+ * hidden prompt: the sentence IS the role, and it is readable before the
+ * agent is created. */
+const PRESETS: ReadonlyArray<{ label: MessageKey; text: MessageKey }> = [
+  {
+    label: "chat.stella.agents.preset.secretary",
+    text: "chat.stella.agents.preset.secretaryText",
+  },
+  {
+    label: "chat.stella.agents.preset.bookkeeping",
+    text: "chat.stella.agents.preset.bookkeepingText",
+  },
+  {
+    label: "chat.stella.agents.preset.research",
+    text: "chat.stella.agents.preset.researchText",
+  },
+  {
+    label: "chat.stella.agents.preset.travel",
+    text: "chat.stella.agents.preset.travelText",
+  },
+];
+
 /** The line a row shows under the name: the words that were said, or — for a
  * message that carried no words — what it carried. Kept beside the row that
  * draws it rather than in the shared module, because the shared module
@@ -98,11 +124,16 @@ function previewTextOf(
  * exactly one conversation that keeps growing — so there is no history to
  * browse, no titles to invent and no tabs to manage.
  *
- * Creating one is a two-field form (a name and what it is for) rather than a
- * chat with a wizard: the role is a sentence the user already knows. Both
- * fields are optional — an agent can be made first and described later, or
- * never — so "Create" is enabled from the start; the server supplies the name
- * and leaves the role empty (see normalizeAgentInput). The agent can also add
+ * Creating one starts from a wish, not a form: "what should it do for you?"
+ * is the one answer this dialog needs, and it becomes the agent's role (the
+ * instruction it works from). The name is optional — the server supplies one
+ * when it is empty. Examples sit under the field for a user who cannot put
+ * the job into words yet; a preset fills the field with a sentence the user
+ * can edit, so nothing is decided behind their back.
+ *
+ * How they want it done is NOT asked here. The new agent asks that itself in
+ * its first turn, once the conversation opens: it is the one that knows which
+ * blanks its job leaves (see stella/onboarding.ts). The agent can also add
  * agents itself with `agent_create`, in which case the row appears here
  * without this dialog ever opening.
  *
@@ -215,6 +246,33 @@ export function StellaSidebar(
     } catch (failure) {
       setError(errorText(failure));
     }
+  };
+
+  /** Ask the agent to set itself up again, then show the conversation the
+   * questions arrive in. A run already in flight refuses the restart (the
+   * core will not steer setup text into that work), which is said rather
+   * than swallowed: the click did something, and it did nothing visible. */
+  const redoSetup = async (agent: StellaAgentSummary) => {
+    setError(null);
+    try {
+      const { started } = await api.restartStellaOnboarding(agent.id);
+      if (!started) {
+        setError(t("chat.stella.agents.onboardingBusy"));
+        return;
+      }
+      onSelect(agent.id);
+    } catch (failure) {
+      setError(errorText(failure));
+    }
+  };
+
+  /** A preset starts a sentence; it does not replace one the user wrote.
+   * Clicking two adds both, which is the honest reading of two clicks. */
+  const applyPreset = (text: string) => {
+    setRole((current) => {
+      const trimmed = current.trim();
+      return trimmed === "" ? text : `${trimmed}\n${text}`;
+    });
   };
 
   /** Open a row's menu under its own ⋮ button. The position is read from the
@@ -400,6 +458,19 @@ export function StellaSidebar(
             className="app-menu-item"
             role="menuitem"
             onClick={() => {
+              const agent = menu.agent;
+              setMenu(null);
+              void redoSetup(agent);
+            }}
+          >
+            <IconRefresh size={14} />
+            <span>{t("chat.stella.agents.onboarding")}</span>
+          </button>
+          <button
+            type="button"
+            className="app-menu-item"
+            role="menuitem"
+            onClick={() => {
               setDeleting(menu.agent);
               setMenu(null);
             }}
@@ -415,16 +486,6 @@ export function StellaSidebar(
       {creating && (
         <Modal onClose={resetForm} label={t("chat.stella.agents.new")}>
           <h2>{t("chat.stella.agents.new")}</h2>
-          <Field label={t("chat.stella.agents.name")}>
-            <input
-              type="text"
-              value={name}
-              placeholder={t("chat.stella.agents.nameHint")}
-              onInput={(event) =>
-                setName(event.currentTarget.value)}
-              autoFocus
-            />
-          </Field>
           <Field label={t("chat.stella.agents.role")}>
             <textarea
               value={role}
@@ -432,6 +493,36 @@ export function StellaSidebar(
               placeholder={t("chat.stella.agents.roleHint")}
               onInput={(event) =>
                 setRole(event.currentTarget.value)}
+              autoFocus
+            />
+          </Field>
+          {
+            /* The same sentence the field holds, not a hidden prompt: a user
+             * who cannot describe the job starts from one and edits it. */
+          }
+          <div
+            className="stella-presets"
+            role="group"
+            aria-label={t("chat.stella.agents.presets")}
+          >
+            {PRESETS.map((preset) => (
+              <button
+                key={preset.label}
+                type="button"
+                className="stella-preset"
+                onClick={() => applyPreset(t(preset.text))}
+              >
+                {t(preset.label)}
+              </button>
+            ))}
+          </div>
+          <Field label={t("chat.stella.agents.name")}>
+            <input
+              type="text"
+              value={name}
+              placeholder={t("chat.stella.agents.nameHint")}
+              onInput={(event) =>
+                setName(event.currentTarget.value)}
             />
           </Field>
           {error !== null && <p className="error-text" role="alert">{error}</p>}
@@ -442,7 +533,7 @@ export function StellaSidebar(
             <button
               type="button"
               className="btn primary"
-              disabled={busy}
+              disabled={busy || role.trim() === ""}
               onClick={() => void create()}
             >
               {busy

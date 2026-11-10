@@ -23,6 +23,7 @@ function fakeCore(received: { name: string; role: string }[]): StellaApi {
         identity: "",
         icon: "",
         model: null,
+        onboardedAt: null,
         createdAt: 0,
         updatedAt: 0,
       });

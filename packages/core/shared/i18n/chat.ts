@@ -286,10 +286,52 @@ export const chat = {
     ja: "空のままにすると自動で付けます",
     en: "Leave it empty and one is picked for you",
   },
-  "chat.stella.agents.role": { ja: "役割", en: "Role" },
+  /** The create dialog's one required answer: the job, in the user's words.
+   * It becomes the agent's role (its system prompt); how it works is asked
+   * by the agent itself, in the conversation (see stella/onboarding.ts). */
+  "chat.stella.agents.role": {
+    ja: "どんなことをしてほしいですか？",
+    en: "What should it do for you?",
+  },
   "chat.stella.agents.roleHint": {
-    ja: "このエージェントの役割や振る舞い（任意）",
-    en: "What this agent does and how it works (optional)",
+    ja:
+      "例）毎朝の予定と未読メールをまとめて、返信が必要なものだけ知らせてください",
+    en:
+      "e.g. Summarize my morning schedule and unread mail, and tell me only what needs a reply",
+  },
+  /** The examples under the wish field. A click writes the sentence into the
+   * field: the preset IS the role, and the user can edit it first. */
+  "chat.stella.agents.presets": {
+    ja: "例から選ぶ",
+    en: "Start from an example",
+  },
+  "chat.stella.agents.preset.secretary": { ja: "秘書", en: "Secretary" },
+  "chat.stella.agents.preset.secretaryText": {
+    ja:
+      "毎朝の予定と未読メールをまとめて、返信が必要なものだけ知らせてください。予定の調整や下調べもお願いします。",
+    en:
+      "Summarize my morning schedule and unread mail, and tell me only what needs a reply. Help me move appointments and look things up.",
+  },
+  "chat.stella.agents.preset.bookkeeping": { ja: "家計", en: "Money" },
+  "chat.stella.agents.preset.bookkeepingText": {
+    ja:
+      "家計の記録を手伝ってください。レシートや明細の内容を整理して、月ごとの支出をまとめて知らせてください。",
+    en:
+      "Help me keep track of household money: sort receipts and statements, and summarize each month's spending.",
+  },
+  "chat.stella.agents.preset.research": { ja: "調べもの", en: "Research" },
+  "chat.stella.agents.preset.researchText": {
+    ja:
+      "調べものを手伝ってください。気になったことを伝えるので、複数の情報源を比べて、要点と注意点を短くまとめてください。",
+    en:
+      "Help me look things up: when I mention something, compare several sources and give me the key points and the caveats, briefly.",
+  },
+  "chat.stella.agents.preset.travel": { ja: "旅行", en: "Travel" },
+  "chat.stella.agents.preset.travelText": {
+    ja:
+      "旅行の計画を手伝ってください。行き先の候補、移動、宿、予算を整理して、比べられる形で出してください。",
+    en:
+      "Help me plan trips: organize destinations, transport, places to stay and budget in a form I can compare.",
   },
   "chat.stella.agents.create": { ja: "作成", en: "Create" },
   "chat.stella.agents.creating": { ja: "作成中…", en: "Creating…" },
@@ -304,6 +346,15 @@ export const chat = {
   "chat.stella.agents.edit": {
     ja: "名前・アイコン・モデルを編集",
     en: "Edit name, icon and model",
+  },
+  /** The row menu's redo: the agent asks how it should work, again. */
+  "chat.stella.agents.onboarding": {
+    ja: "設定をやり直す",
+    en: "Set up again",
+  },
+  "chat.stella.agents.onboardingBusy": {
+    ja: "いま作業中です。終わってからやり直してください。",
+    en: "It is working right now. Try again when it finishes.",
   },
   "chat.stella.agents.editTitle": {
     ja: "「{name}」を編集",
@@ -361,9 +412,9 @@ export const chat = {
   "chat.stella.agents.starterName": { ja: "アシスタント", en: "Assistant" },
   "chat.stella.agents.starterRole": {
     ja:
-      "仮想マシンの中で作業する開発アシスタント。依頼に応じて調査、実装、検証を行い、結果を短く報告します。",
+      "毎日の予定やメール、調べものを手伝う秘書。わからないことは短く聞き、小さなことは自分で進めて、結果だけを報告します。",
     en:
-      "A development assistant that works inside the machine: investigate, implement and verify what it is asked to do, and report the result briefly.",
+      "A secretary who helps with the day's schedule, mail and research: asks briefly when unsure, does small things on its own, and reports only the result.",
   },
   "chat.stella.conversationError": {
     ja: "会話を開けませんでした: {error}",

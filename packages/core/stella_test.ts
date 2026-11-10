@@ -23,6 +23,7 @@ import type { VmScreen } from "./vm/screen.ts";
 import { CoreError } from "./errors.ts";
 import { MINI_PNG, promptSession, withTempDir } from "./test-utils.ts";
 import { DEFAULT_AGENT_NAME } from "./stella/agents.ts";
+import { STELLA_ONBOARDING_PROMPT } from "./stella/onboarding.ts";
 import { SessionAttachmentStore } from "./session/attachments.ts";
 import { AGENT_MEMORY_FILE, vmMemoryPath } from "./vm/agent-memory.ts";
 import { vmAgentDir } from "./vm/contract.ts";
@@ -255,6 +256,84 @@ Deno.test("stella conversation: each agent has its own", async () => {
     assertEquals((await core.getOrCreateStellaSession(first.id)).id, a.id);
     // Neither appears in the session list.
     assertEquals(core.listSessions(), []);
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella onboarding: starts once and stays out of the conversation", async () => {
+  const { faux, core, agent, session } = await stellaConversation("Aide");
+  try {
+    // A new agent has not been set up: opening it is what starts the turn.
+    assertEquals(agent.onboardedAt, null);
+    faux.setResponses([fauxAssistantMessage(NO_RESPONSE)]);
+    assertEquals(core.startStellaOnboarding(agent.id), true);
+    await core.getAgent(session.id)!.waitForIdle();
+
+    // The claim is recorded, so a reload or a second client is a no-op.
+    assert(core.getStellaAgent(agent.id)!.onboardedAt !== null);
+    assertEquals(core.startStellaOnboarding(agent.id), false);
+
+    // The MODEL was given the instruction...
+    const instruction = core.getAgent(session.id)!.messages.find(
+      (message) =>
+        message.role === "user" &&
+        message.modelContent === STELLA_ONBOARDING_PROMPT,
+    );
+    assert(instruction !== undefined, "the setup instruction was not sent");
+    // Persisted, not only in the live agent: a reload resumes the same setup
+    // turn (the model still knows what it was asked to do).
+    const stored = core.readTranscript(session.id, {})!.items;
+    assert(
+      stored.some((message) =>
+        message.role === "user" &&
+        message.modelContent === STELLA_ONBOARDING_PROMPT
+      ),
+      "the setup instruction was not stored",
+    );
+
+    // ...and the CONVERSATION shows none of it. The turn is a prompt with no
+    // visible text: an empty prompt that attached nothing is not an entry
+    // (see agent/stella-stream.ts), so reloading cannot put the app's words
+    // in the user's mouth.
+    const page = core.readStellaConversation(session.id, {})!;
+    assertEquals(page.items, []);
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella onboarding: redo runs the setup turn again", async () => {
+  const { faux, core, agent, session } = await stellaConversation("Aide");
+  try {
+    faux.setResponses([fauxAssistantMessage(NO_RESPONSE)]);
+    assert(core.startStellaOnboarding(agent.id));
+    await core.getAgent(session.id)!.waitForIdle();
+
+    faux.setResponses([fauxAssistantMessage(NO_RESPONSE)]);
+    assertEquals(core.restartStellaOnboarding(agent.id), true);
+    await core.getAgent(session.id)!.waitForIdle();
+
+    const turns = core.getAgent(session.id)!.messages.filter(
+      (message) =>
+        message.role === "user" &&
+        message.modelContent === STELLA_ONBOARDING_PROMPT,
+    );
+    assertEquals(turns.length, 2);
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella onboarding: no conversation open means no setup turn", async () => {
+  // The turn is delivered into an OPEN session: a conversation that was never
+  // opened has no agent to receive it, so nothing is claimed and the first
+  // open still starts it.
+  const core = await stellaCore(RUNNING);
+  try {
+    const agent = await core.createStellaAgent({ name: "Later", role: "r" });
+    assertEquals(core.startStellaOnboarding(agent.id), false);
+    assertEquals(core.getStellaAgent(agent.id)?.onboardedAt, null);
   } finally {
     await core.close();
   }

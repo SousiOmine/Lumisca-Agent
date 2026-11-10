@@ -1,6 +1,11 @@
 import { assert, assertEquals } from "@std/assert";
 import { DatabaseSync } from "node:sqlite";
-import { applyMigrations, migrate, SCHEMA_VERSION } from "./schema.ts";
+import {
+  applyMigrations,
+  migrate,
+  MIGRATIONS,
+  SCHEMA_VERSION,
+} from "./schema.ts";
 import { LumiscaDb } from "./mod.ts";
 
 Deno.test("migrate brings an empty database to the newest user_version", () => {
@@ -216,6 +221,38 @@ Deno.test("a failing migration rolls back together with its stamp", () => {
     // rolled back completely, so a retry can run it again.
     assertEquals(version(), 1);
     assertEquals(columns().filter((name) => name === "chat").length, 1);
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("migrate stamps existing agents as already set up", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    // A database from before the setup turn: every row it holds belongs to
+    // someone who has been talking to that agent, and none of them may be
+    // greeted with "let's set me up" on the next open.
+    applyMigrations(db, MIGRATIONS.slice(0, -1));
+    db.exec(
+      "INSERT INTO stella_agents (id, name, role, created_at, updated_at) " +
+        "VALUES ('a1', 'Aide', 'r', 111, 222)",
+    );
+    applyMigrations(db, MIGRATIONS);
+    const existing = db
+      .prepare("SELECT onboarded_at FROM stella_agents WHERE id = 'a1'")
+      .get() as { onboarded_at: number | null };
+    assertEquals(existing.onboarded_at, 111);
+
+    // A row made after the migration has not been set up: it is the only
+    // kind that may start the turn.
+    db.exec(
+      "INSERT INTO stella_agents (id, name, role, created_at, updated_at) " +
+        "VALUES ('a2', 'New', 'r', 333, 333)",
+    );
+    const fresh = db
+      .prepare("SELECT onboarded_at FROM stella_agents WHERE id = 'a2'")
+      .get() as { onboarded_at: number | null };
+    assertEquals(fresh.onboarded_at, null);
   } finally {
     db.close();
   }

@@ -119,6 +119,7 @@ import {
   type StellaAgent,
 } from "./stella/agents.ts";
 import { AGENT_ICONS_DIR_NAME, AgentIconStore } from "./stella/icons.ts";
+import { STELLA_ONBOARDING_PROMPT } from "./stella/onboarding.ts";
 import type { WindowPage, WindowQuery } from "./session/transcript-window.ts";
 import type { ContextUsageSummary } from "./shared/context-usage.ts";
 import { createRoutineRepo, type RoutineRepo } from "./routine/repo.ts";
@@ -1245,6 +1246,56 @@ export class LumiscaCore {
 
   getOrCreateStellaSession(agentId?: string): Promise<SessionInfo> {
     return this.services.stellaMachines.getOrCreateStellaSession(agentId);
+  }
+
+  /**
+   * Start a new agent's setup turn, once.
+   *
+   * Opening its conversation is the first moment the machine is up, the
+   * session exists, and the app can speak before the user does. The turn
+   * itself is a prompt only the model reads (SessionAgent.startOnboarding):
+   * the conversation shows the agent's greeting and questions, never the
+   * instruction to ask them.
+   *
+   * Returns whether this call started it. False also covers "a run is
+   * already going" — the claim is left NULL there, so the next open tries
+   * again instead of steering setup text into someone's work.
+   */
+  startStellaOnboarding(agentId: string): boolean {
+    const agent = this.services.stellaAgents.getStellaAgent(agentId);
+    if (agent === undefined || agent.onboardedAt !== null) return false;
+    const session = this.sessions.getByAgent(agentId);
+    if (session === undefined) return false;
+    const open = this.services.sessions.getAgent(session.id);
+    if (open === undefined || open.isStreaming) return false;
+    // Claimed before the prompt is delivered: two clients opening the same
+    // conversation at once must start one turn, not two.
+    if (!this.services.stellaAgents.markOnboarded(agentId)) return false;
+    try {
+      this.services.sessions.startOnboarding(
+        session.id,
+        STELLA_ONBOARDING_PROMPT,
+      );
+    } catch (error) {
+      // The turn did not start, so it has not happened: give the claim back
+      // rather than leave the agent looking set up forever.
+      this.services.stellaAgents.clearOnboarded(agentId);
+      log.warn(`stella setup turn did not start: ${errorMessage(error)}`);
+      return false;
+    }
+    return true;
+  }
+
+  /** Run an agent's setup turn again (the sidebar's "設定をやり直す"). The
+   * claim is cleared only when the turn can actually start, so a click
+   * during a run changes nothing and the next open is not surprised. */
+  restartStellaOnboarding(agentId: string): boolean {
+    const session = this.sessions.getByAgent(agentId);
+    if (session === undefined) return false;
+    const open = this.services.sessions.getAgent(session.id);
+    if (open === undefined || open.isStreaming) return false;
+    this.services.stellaAgents.clearOnboarded(agentId);
+    return this.startStellaOnboarding(agentId);
   }
 
   ensureStellaReady(

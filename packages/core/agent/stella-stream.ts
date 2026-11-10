@@ -99,6 +99,11 @@ export function stellaEntryOf(message: AgentMessage): StellaEntry | null {
       // real. What such a prompt must never become is a way to put words in
       // the transcript: anything worth the user's attention is a file, a
       // picture, or text they can see.
+      //
+      // stella's setup turn is that case with a purpose (see
+      // stella/onboarding.ts): the app writes the instruction, the model
+      // reads it through `modelContent`, and the conversation shows only the
+      // agent's greeting and the questions it chose.
       const files = message.role === "mode" ? [] : message.files ?? [];
       if (text.length === 0 && files.length === 0) return null;
       // A routine's run is delivered as a prompt, so it sits on the user's

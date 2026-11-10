@@ -158,14 +158,33 @@ Deno.test("StellaSidebar: the empty list is not shown while it is being read", (
   assertStringIncludes(render(undefined, false, true), "Aide");
 });
 
-Deno.test("StellaSidebar: the create dialog's fields are optional", async () => {
+Deno.test("StellaSidebar: the create dialog asks for the job, and names it later", async () => {
   // The dialog itself is behind a click; the copy lives in the catalogue, and
-  // it is the promise the form makes.
+  // it is the promise the form makes. The ONE required answer is what the
+  // agent should do; how it works is asked by the agent itself, in the
+  // conversation (see stella/onboarding.ts).
   const { translate } = await import("@lumisca/core/shared");
-  const role = translate("ja", "chat.stella.agents.roleHint");
-  assertStringIncludes(role, "任意");
-  const name = translate("ja", "chat.stella.agents.nameHint");
-  assertStringIncludes(name, "自動");
+  assertStringIncludes(
+    translate("ja", "chat.stella.agents.role"),
+    "してほしい",
+  );
+  // A name can be decided later, and the field says so.
+  assertStringIncludes(
+    translate("ja", "chat.stella.agents.nameHint"),
+    "自動",
+  );
+  // The examples are sentences the user can edit in the same field — not
+  // labels hiding a prompt. Each names a job on its own.
+  for (
+    const key of [
+      "chat.stella.agents.preset.secretaryText",
+      "chat.stella.agents.preset.bookkeepingText",
+      "chat.stella.agents.preset.researchText",
+      "chat.stella.agents.preset.travelText",
+    ] as const
+  ) {
+    assert(translate("ja", key).length > 20, key);
+  }
 });
 
 Deno.test("StellaSidebar: the row menu is placed from the left edge", () => {

@@ -22,6 +22,7 @@ const AGENT: StellaAgent = {
   identity: "",
   icon: "",
   model: null,
+  onboardedAt: null,
   createdAt: 0,
   updatedAt: 0,
 };

@@ -102,6 +102,17 @@ export class StellaAgentService {
     return this.deps.agents.get(id);
   }
 
+  /** Claim the right to start this agent's setup turn (see
+   * AgentRepo.markOnboarded): true for exactly one caller. */
+  markOnboarded(id: string): boolean {
+    return this.deps.agents.markOnboarded(id);
+  }
+
+  /** Forget the setup turn, so the next open starts it again. */
+  clearOnboarded(id: string): void {
+    this.deps.agents.clearOnboarded(id);
+  }
+
   /** Create an agent from a name and the role it works from.
    *
    * A name that is already taken is refused (compared case-insensitively:

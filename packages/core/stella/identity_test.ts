@@ -83,6 +83,111 @@ Deno.test("identity tool: a write says when it takes effect and can clear the te
   assertStringIncludes(toolText(cleared), "was cleared");
 });
 
+Deno.test("identity tool: edit changes one passage and keeps the rest", async () => {
+  const target = memoryTarget(
+    "How I speak: polite.\nThe user: Mio.\nMy hours: 9-18.",
+  );
+  const tool = createIdentityTool(target);
+
+  const result = await tool.execute(
+    "1",
+    {
+      action: "edit",
+      old_string: "The user: Mio.",
+      new_string: "The user: Mio (call her Mio, not Ms. Sato).",
+    },
+    undefined,
+  );
+  assertEquals(
+    target.text,
+    "How I speak: polite.\nThe user: Mio (call her Mio, not Ms. Sato).\n" +
+      "My hours: 9-18.",
+  );
+  // A change takes effect next run, exactly like a write.
+  assertStringIncludes(toolText(result), "next turn");
+});
+
+Deno.test("identity tool: edit refuses a missing or ambiguous match", async () => {
+  const tool = createIdentityTool(memoryTarget("One. Two. Two."));
+
+  let missing: unknown;
+  try {
+    await tool.execute(
+      "1",
+      { action: "edit", old_string: "Three.", new_string: "X" },
+      undefined,
+    );
+  } catch (failure) {
+    missing = failure;
+  }
+  assert(missing instanceof Error);
+  assertStringIncludes(missing.message, "not found");
+
+  // Ambiguity fails instead of changing the first of several matches: the
+  // model then writes the rest of the note on top of the wrong passage.
+  let ambiguous: unknown;
+  try {
+    await tool.execute(
+      "1",
+      { action: "edit", old_string: "Two.", new_string: "X" },
+      undefined,
+    );
+  } catch (failure) {
+    ambiguous = failure;
+  }
+  assert(ambiguous instanceof Error);
+  assertStringIncludes(ambiguous.message, "appears 2 times");
+});
+
+Deno.test("identity tool: edit before a passage exists says what to do", async () => {
+  const tool = createIdentityTool(memoryTarget());
+
+  let missing: unknown;
+  try {
+    await tool.execute("1", { action: "edit", old_string: "a" }, undefined);
+  } catch (failure) {
+    missing = failure;
+  }
+  assert(missing instanceof Error);
+  assertStringIncludes(missing.message, "needs old_string and new_string");
+
+  let empty: unknown;
+  try {
+    await tool.execute(
+      "2",
+      { action: "edit", old_string: "a", new_string: "b" },
+      undefined,
+    );
+  } catch (failure) {
+    empty = failure;
+  }
+  assert(empty instanceof Error);
+  assertStringIncludes(empty.message, "nothing to edit");
+});
+
+Deno.test("identity tool: an edit is held to the identity's length limit", async () => {
+  const original = "x".repeat(10);
+  const target = memoryTarget(original);
+  const tool = createIdentityTool(target);
+
+  let tooLong: unknown;
+  try {
+    await tool.execute(
+      "1",
+      {
+        action: "edit",
+        old_string: original,
+        new_string: "x".repeat(MAX_AGENT_IDENTITY_CHARS + 1),
+      },
+      undefined,
+    );
+  } catch (failure) {
+    tooLong = failure;
+  }
+  assert(tooLong instanceof CoreError);
+  assertEquals(target.text, original);
+});
+
 Deno.test("identity tool: write without content, and unknown actions, explain themselves", async () => {
   const tool = createIdentityTool(memoryTarget());
   let missing: unknown;
@@ -101,7 +206,7 @@ Deno.test("identity tool: write without content, and unknown actions, explain th
     unknown = failure;
   }
   assert(unknown instanceof Error);
-  assertStringIncludes(unknown.message, 'Use "read" or "write"');
+  assertStringIncludes(unknown.message, 'Use "read", "write" or "edit"');
 });
 
 Deno.test("identity provider: publishes the agent's text once, and only on change", () => {

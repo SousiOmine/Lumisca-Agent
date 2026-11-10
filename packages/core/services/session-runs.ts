@@ -30,6 +30,15 @@ export class SessionRuns {
     agent.promptWhileRunning(text, images, mode, undefined, files);
   }
 
+  /** Start stella's setup turn (fire-and-forget): a prompt only the model
+   * reads, so the conversation shows the agent's questions and not the
+   * app's instruction to ask them (see SessionAgent.startOnboarding). */
+  startOnboarding(id: string, instruction: string): void {
+    const agent = this.deps.pool.require(id);
+    this.deps.sessions.touch(id);
+    agent.startOnboarding(instruction);
+  }
+
   abort(id: string): void {
     this.deps.pool.require(id).abort();
   }

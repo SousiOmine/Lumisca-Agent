@@ -753,6 +753,7 @@ export class SessionAgent {
     mode?: ModePrompt,
     routine?: string,
     files?: PromptFileRef[],
+    modelOnly?: string,
   ): void {
     // The first prompt of a session names it, whichever path delivered it.
     this.titleScheduler.maybeGenerate(mode ? mode.shortText : text);
@@ -769,9 +770,37 @@ export class SessionAgent {
         this.agent.nextTimestamp(),
         steered,
       )
-      : this.buildUserMessage(text, images, steered, routine, files);
+      : this.buildUserMessage(
+        text,
+        images,
+        steered,
+        routine,
+        files,
+        modelOnly,
+      );
     this.announceMessage(message);
     void this.deliverPrompt(message, mode);
+  }
+
+  /**
+   * Start stella's setup turn: a prompt only the MODEL reads.
+   *
+   * The visible text is empty on purpose. The conversation must show the
+   * agent's greeting and its questions, not the app's instruction to write
+   * them (see stella/onboarding.ts); an empty prompt that attached nothing is
+   * not a conversation entry (agent/stella-stream.ts drops it), while the
+   * model is sent `modelContent` in its place. This is the only caller: a
+   * user's prompt always carries text or an attachment.
+   */
+  startOnboarding(instruction: string): void {
+    this.promptWhileRunning(
+      "",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      instruction,
+    );
   }
 
   /** Whether a message delivered right now joins the run that is already

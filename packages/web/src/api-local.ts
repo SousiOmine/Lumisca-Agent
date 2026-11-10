@@ -339,6 +339,14 @@ export const api = {
       `/api/stella/agents/${encodeURIComponent(id)}`,
       { method: "DELETE" },
     ),
+  /** Ask the agent to set itself up again (the row menu's redo). Answers
+   * whether a setup turn started: false while its conversation is running,
+   * which the client reports rather than pretending the click did nothing. */
+  restartStellaOnboarding: (id: string) =>
+    request<{ started: boolean }>(
+      `/api/stella/agents/${encodeURIComponent(id)}/onboarding`,
+      { method: "POST" },
+    ),
   // --- routines (scheduled requests of a stella conversation) --------------
 
   /** One agent's routines, with the "running now" flag. */

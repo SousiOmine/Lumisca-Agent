@@ -842,6 +842,10 @@ Deno.test("stella API: the conversation is opened by agent and never listed as a
     assertEquals(created.status, 201);
     const agent = await created.json() as { id: string; name: string };
 
+    // Opening a new agent starts the app's setup turn (the agent asks how it
+    // should work). It begins after the snapshot this test reads, and a
+    // scripted reply keeps it from failing once the test has moved on.
+    faux.setResponses([fauxAssistantMessage("Hello.")]);
     // The conversation is addressed by agent: a client never learns (or
     // needs) the session id, so stella cannot drift into "a tab".
     const response = await json(

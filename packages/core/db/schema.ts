@@ -59,8 +59,9 @@ CREATE INDEX IF NOT EXISTS idx_sessions_workspace ON sessions(workspace_id);
 
 /** Ordered schema migrations. Index i brings the DB from user_version i to
  * i+1; appending a new migration is the only thing needed to evolve the
- * schema of existing databases. */
-const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
+ * schema of existing databases. Exported for the test that applies all but
+ * the last one, inserts a row, and checks what the last one does to it. */
+export const MIGRATIONS: ReadonlyArray<(db: DatabaseSync) => void> = [
   (db) => db.exec(BASE_SCHEMA),
   // Distinguish custom (user-provided) system prompts from generated ones:
   // generated prompts are rebuilt from the workspace (including AGENTS.md)
@@ -300,6 +301,27 @@ const MIGRATIONS: Array<(db: DatabaseSync) => void> = [
   (db) => {
     addColumnIfMissing(db, "routines", "watch_checked_at", "INTEGER");
     addColumnIfMissing(db, "routines", "watch_error", "TEXT");
+  },
+  // When the app started an agent's setup turn (see stella/onboarding.ts).
+  // NULL means it has not started yet; the turn is started from the
+  // conversation's first open and marked here so a reload, a second client
+  // or a routine can never start a second one.
+  //
+  // Existing agents are stamped with their creation time: they were made
+  // before conversations had a setup turn, and a user who has been talking
+  // to one for weeks must not be greeted with "let's set me up" the next
+  // time they open it. A NULL column is therefore only ever a NEW agent.
+  (db) => {
+    addColumnIfMissing(
+      db,
+      "stella_agents",
+      "onboarded_at",
+      "INTEGER",
+    );
+    db.exec(
+      "UPDATE stella_agents SET onboarded_at = created_at " +
+        "WHERE onboarded_at IS NULL",
+    );
   },
 ];
 

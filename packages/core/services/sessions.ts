@@ -218,6 +218,12 @@ export class SessionService {
     this.runs.startPrompt(id, text, images, mode, files);
   }
 
+  /** Start a stella conversation's setup turn (see
+   * SessionRuns.startOnboarding). */
+  startOnboarding(id: string, instruction: string): void {
+    this.runs.startOnboarding(id, instruction);
+  }
+
   abort(id: string): void {
     this.runs.abort(id);
   }

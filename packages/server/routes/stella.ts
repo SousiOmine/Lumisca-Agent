@@ -81,6 +81,12 @@ export interface StellaApi {
   /** The conversation, created on first use. This is also what brings the
    * machine up: a conversation lives inside it. */
   getOrCreateStellaSession(agentId?: string): Promise<SessionInfo>;
+  /** Start the setup turn of an agent that has not been set up yet, once
+   * (see LumiscaCore.startStellaOnboarding). False when there is nothing to
+   * start — already set up, no open conversation, or a run in flight. */
+  startStellaOnboarding(agentId: string): boolean;
+  /** Start the setup turn again, for an agent already set up. */
+  restartStellaOnboarding(agentId: string): boolean;
   /** Make sure the machine is up, starting it when it is not. Sending is not
    * opening: an already-open conversation never reaches the endpoint above
    * again, so a machine that died since would answer every tool with podman's
@@ -405,7 +411,32 @@ export function stellaRoutes(core: StellaApi): Hono {
     // the same mapping as every other route; an unknown agent is a
     // CoreError("not_found") — 404.
     const session = await core.getOrCreateStellaSession(agentId);
-    return c.json(snapshotOf(session, agentId, parseWindowQuery(c.req.url)));
+    // The snapshot describes the conversation BEFORE the app's first turn:
+    // it is what the client draws, and the turn then arrives as events (a
+    // snapshot that said "running" before the client could see the run would
+    // be describing a turn nobody had been shown). A new agent's first turn
+    // is the setup turn — the only moment the app may speak before the user
+    // does. It is claimed once, so a reload or a second client does not greet
+    // anyone twice.
+    const snapshot = snapshotOf(
+      session,
+      agentId,
+      parseWindowQuery(c.req.url),
+    );
+    core.startStellaOnboarding(agentId);
+    return c.json(snapshot);
+  });
+
+  /** Run an agent's setup turn again.
+   *
+   * The row menu's "設定をやり直す": a user who skipped the questions, or
+   * whose agent has drifted, can be asked again. Opening the conversation
+   * first is what brings the machine up; the core then refuses while a run
+   * is in flight rather than steering setup text into that work. */
+  app.post("/stella/agents/:id/onboarding", async (c) => {
+    const agentId = c.req.param("id");
+    await core.getOrCreateStellaSession(agentId);
+    return c.json({ started: core.restartStellaOnboarding(agentId) });
   });
 
   /** The conversation re-read after a WS drop or a page reload: a window of

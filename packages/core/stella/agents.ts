@@ -68,6 +68,12 @@ export interface StellaAgent extends StellaAgentSummaryBase {
    * choice for that conversation, written by the edit dialog and applied to
    * the row in the same call (see LumiscaCore.updateStellaAgent). */
   model: { provider: string; modelId: string } | null;
+  /** When the app started this agent's setup turn (see onboarding.ts), or
+   * null when it has not started yet. It is the once-only guard: opening the
+   * conversation starts the turn only while this is null, and the turn is
+   * not the user's message, so nothing else in the transcript can tell
+   * "never set up" from "set up and said nothing". */
+  onboardedAt: number | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -121,6 +127,14 @@ export interface AgentRepo {
   /** Record that this agent's conversation was used, so `latest()` follows
    * what the user actually talks to. */
   touch(id: string): void;
+  /** Claim the right to start the setup turn. True for exactly one caller:
+   * the update only matches while `onboarded_at` is still NULL, so two
+   * clients opening the same conversation at once cannot both start it.
+   * An unknown id is false (there is no row to set up). */
+  markOnboarded(id: string): boolean;
+  /** Forget that the setup turn ran, so the next open starts it again (the
+   * sidebar's "設定をやり直す"). */
+  clearOnboarded(id: string): void;
 }
 
 interface AgentRow {
@@ -131,6 +145,7 @@ interface AgentRow {
   icon?: string | null;
   model_provider?: string | null;
   model_id?: string | null;
+  onboarded_at?: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -147,6 +162,7 @@ function toAgent(row: AgentRow): StellaAgent {
     model: row.model_provider && row.model_id
       ? { provider: row.model_provider, modelId: row.model_id }
       : null,
+    onboardedAt: row.onboarded_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -268,6 +284,15 @@ export function createAgentRepo(db: LumiscaDb): AgentRepo {
       "MAX(?, (SELECT COALESCE(MAX(updated_at), 0) + 1 FROM stella_agents)) " +
       "WHERE id = ?",
   );
+  // `updated_at` is deliberately absent: setting the agent up is not talking
+  // to it, and the sidebar orders rows by when they last spoke.
+  const markOnboardedStmt = db.db.prepare(
+    "UPDATE stella_agents SET onboarded_at = ? " +
+      "WHERE id = ? AND onboarded_at IS NULL",
+  );
+  const clearOnboardedStmt = db.db.prepare(
+    "UPDATE stella_agents SET onboarded_at = NULL WHERE id = ?",
+  );
   const latestStmt = db.db.prepare(
     "SELECT * FROM stella_agents " +
       "ORDER BY updated_at DESC, created_at DESC, rowid DESC LIMIT 1",
@@ -295,6 +320,7 @@ export function createAgentRepo(db: LumiscaDb): AgentRepo {
         identity: "",
         icon: "",
         model: null,
+        onboardedAt: null,
         createdAt: now,
         updatedAt: now,
       };
@@ -361,6 +387,14 @@ export function createAgentRepo(db: LumiscaDb): AgentRepo {
 
     touch(id: string): void {
       touchStmt.run(Date.now(), id);
+    },
+
+    markOnboarded(id: string): boolean {
+      return Number(markOnboardedStmt.run(Date.now(), id).changes) > 0;
+    },
+
+    clearOnboarded(id: string): void {
+      clearOnboardedStmt.run(id);
     },
   };
 }

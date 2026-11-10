@@ -204,6 +204,32 @@
   font-size: 11.5px;
 }
 
+/* The create dialog's examples. They wrap rather than scroll: four labels
+ * have to be readable at once, and a hint behind a scroll is a hint nobody
+ * finds. */
+.stella-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -4px 0 14px;
+}
+
+.stella-preset {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.stella-preset:hover {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
 .stella-agent {
   display: flex;
   align-items: center;
