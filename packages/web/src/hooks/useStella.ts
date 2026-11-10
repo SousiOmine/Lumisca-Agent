@@ -8,7 +8,11 @@ import {
 import { api } from "../api.ts";
 import { connectStellaEvents, stellaApi } from "../api-stella.ts";
 import { describeError, useT } from "../i18n.ts";
-import { maybeNotifyAgentEnd, maybeNotifyHandover } from "../notify.ts";
+import {
+  maybeNotifyAgentEnd,
+  maybeNotifyEnv,
+  maybeNotifyHandover,
+} from "../notify.ts";
 import {
   applyStellaEvent,
   prependOlderEntries,
@@ -95,6 +99,12 @@ export type StellaHook = {
   ) => Promise<void>;
   rewind: (timestamp: number) => Promise<void>;
   finishHandover: (note: string, toolCallId: string) => Promise<void>;
+  /** Enter the value of the environment variable the run waits for
+   * (`vm_env`). Rejects when the server did not take it (an expired
+   * dialog); the dialog shows the failure and stays open. */
+  provideEnv: (value: string, toolCallId: string) => Promise<void>;
+  /** Refuse to enter a value: the run continues without it. */
+  declineEnv: (toolCallId: string) => Promise<void>;
   /** Read the entries before the loaded window (the reader reached the top
    * of the conversation). Returns whether a read started. */
   loadOlder: () => boolean;
@@ -283,6 +293,8 @@ export function useStella(
      * same request seen twice) must not notify twice. Tool call ids are
      * unique, so the id alone tells "the same request" from a new one. */
     let notifiedHandover: string | null = null;
+    /** The `vm_env` dialog already announced, for the same reason. */
+    let notifiedEnv: string | null = null;
 
     const resync = async () => {
       try {
@@ -326,6 +338,16 @@ export function useStella(
           void maybeNotifyHandover(
             conversationRef.current?.agentName ?? "",
             event.handover.reason,
+          );
+        }
+        if (
+          event.type === "env_request" && event.request !== null &&
+          event.request.toolCallId !== notifiedEnv
+        ) {
+          notifiedEnv = event.request.toolCallId;
+          void maybeNotifyEnv(
+            conversationRef.current?.agentName ?? "",
+            event.request.name,
           );
         }
         if (event.type === "agent_end") {
@@ -469,6 +491,20 @@ export function useStella(
     [requireAgent],
   );
 
+  const provideEnv = useCallback(
+    async (value: string, toolCallId: string) => {
+      await stellaApi.provideEnv(requireAgent(), value, toolCallId);
+    },
+    [requireAgent],
+  );
+
+  const declineEnv = useCallback(
+    async (toolCallId: string) => {
+      await stellaApi.declineEnv(requireAgent(), toolCallId);
+    },
+    [requireAgent],
+  );
+
   /** Read the entries before the loaded window (the reader reached the top
    * of the conversation). Returns whether a read started. */
   const loadOlder = useCallback((): boolean => {
@@ -523,6 +559,8 @@ export function useStella(
     answer,
     rewind,
     finishHandover,
+    provideEnv,
+    declineEnv,
     error,
     loading,
     reloadAgents,

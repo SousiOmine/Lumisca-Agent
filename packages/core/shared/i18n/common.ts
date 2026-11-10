@@ -207,6 +207,12 @@ export const common = {
     en: '"{name}" is waiting for you at the screen{detail}',
   },
   "notify.handoverDetail": { ja: "：{gist}", en: ": {gist}" },
+  /** A run blocked on the `vm_env` dialog: like a hand-over, only the user
+   * can release it, so it is notified with the same urgency. */
+  "notify.env": {
+    ja: "「{name}」が環境変数 {variable} の入力を待っています",
+    en: '"{name}" is waiting for a value of {variable}',
+  },
   // --- PWA notifications (server/push.ts) -----------------------------------
   // The installed app's notifications put the name in the TITLE, where a
   // phone shows it in bold, and the message in the BODY. So the wording here
@@ -221,6 +227,12 @@ export const common = {
   "notify.push.handover": {
     ja: "画面の操作を待っています{detail}",
     en: "Is waiting for you at the screen{detail}",
+  },
+  /** The `vm_env` dialog: the body names the variable, the title is the
+   * agent (as for every push). */
+  "notify.push.env": {
+    ja: "{variable} の入力を待っています",
+    en: "Is waiting for a value of {variable}",
   },
   "notify.push.error": {
     ja: "エラーが発生しました",

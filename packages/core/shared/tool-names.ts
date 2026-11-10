@@ -75,6 +75,13 @@ export const TOOL_VM_LAUNCH = "vm_launch";
  * for the same reason as the screen tools: an agent must know that asking a
  * person is an option, or it will try to type the password itself. */
 export const TOOL_VM_ASK_USER = "vm_ask_user";
+/** Ask the user for the value of an environment variable (`vm_env`) — the
+ * value is stored in the machine and never returned to the model.
+ * Discoverable rather than preloaded (a conversation that never needs a
+ * secret pays nothing), and main-only: the saved value belongs to the
+ * machine, not to one agent's run. The built-in `vm-env` skill is what tells
+ * the agent the tool exists. */
+export const TOOL_VM_ENV = "vm_env";
 
 /** Send files to the user (images inline, everything else as a download).
  * Code mode only: there the reply's own text is what the user reads, so this

@@ -44,6 +44,7 @@ Deno.test("stellaStateOf: a snapshot becomes the conversation", () => {
     running: true,
     questions: [],
     handover: null,
+    envRequest: null,
     error: "last failure",
     agentName: "Aide",
     sessionId: "s1",
@@ -61,11 +62,37 @@ Deno.test("stellaStateOf: a snapshot becomes the conversation", () => {
     liveCard: null,
     questions: [],
     handover: null,
+    envRequest: null,
     error: "last failure",
     agentName: "Aide",
     model: { provider: "faux", modelId: "model" },
     thinking: { level: "high", levels: ["off", "low", "high"] },
   });
+});
+
+Deno.test("stella: an env request is state a reconnect can still answer", () => {
+  // `env_request` events are not replayed, so the snapshot is the only thing
+  // that can reopen the dialog for a client that was away when it opened.
+  const request = {
+    toolCallId: "t1",
+    name: "OPENAI_API_KEY",
+    exists: false,
+    expiresAt: 1_000,
+  };
+  const next = applyStellaEvent(state(), {
+    type: "env_request",
+    request,
+  })!;
+  assertEquals(next.envRequest, request);
+  // The end of the request (stored, declined or expired) closes the dialog.
+  const closed = applyStellaEvent(next, {
+    type: "env_request",
+    request: null,
+  })!;
+  assertEquals(closed.envRequest, null);
+  // The same request twice changes nothing (a duplicate event must not
+  // re-render, and above all must not reset the field the user is typing in).
+  assertEquals(applyStellaEvent(next, { type: "env_request", request }), null);
 });
 
 Deno.test("stellaStateOf: a model without thinking levels shows no rail", () => {
@@ -77,6 +104,7 @@ Deno.test("stellaStateOf: a model without thinking levels shows no rail", () => 
     running: false,
     questions: [],
     handover: null,
+    envRequest: null,
     agentName: "Aide",
     sessionId: "s1",
     model: { provider: "faux", modelId: "model" },
@@ -210,6 +238,7 @@ Deno.test("stellaStateOf: a re-read snapshot merges into paged history", () => {
     running: false,
     questions: [],
     handover: null,
+    envRequest: null,
     agentName: "Aide",
     sessionId: "s1",
     model: { provider: "faux", modelId: "model" },
@@ -240,6 +269,7 @@ Deno.test("stellaStateOf: an empty window keeps the conversation it holds", () =
     running: true,
     questions: [],
     handover: null,
+    envRequest: null,
     agentName: "Aide",
     sessionId: "s1",
     model: { provider: "faux", modelId: "model" },
@@ -262,6 +292,7 @@ Deno.test("stellaStateOf: a window that shares nothing replaces the state", () =
     running: false,
     questions: [],
     handover: null,
+    envRequest: null,
     agentName: "Aide",
     sessionId: "s1",
     model: { provider: "faux", modelId: "model" },
@@ -424,6 +455,7 @@ Deno.test("stella: a snapshot is the finished conversation, so it draws no live 
     running: true,
     questions: [],
     handover: null,
+    envRequest: null,
     agentName: "Aide",
     sessionId: "s1",
     model: { provider: "faux", modelId: "model" },

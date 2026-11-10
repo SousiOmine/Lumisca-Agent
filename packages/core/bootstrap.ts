@@ -20,6 +20,7 @@ import type { WebSearchService } from "./websearch/service.ts";
 import type { SessionPool } from "./agent/pool.ts";
 import type { StellaMachine } from "./vm/machine.ts";
 import type { HandoverRegistry } from "./vm/handover-registry.ts";
+import type { EnvRequestRegistry } from "./vm/env-request.ts";
 import type { ModelManager } from "./models/mod.ts";
 import type { WorkspaceService } from "./services/workspaces.ts";
 
@@ -50,6 +51,9 @@ export interface CoreServicesDeps {
   routines: RoutineRepo;
   routineScheduler: RoutineScheduler;
   handovers: HandoverRegistry;
+  /** Per-session `vm_env` request hubs; the core's close path forgets
+   * them. */
+  envRequests: EnvRequestRegistry;
   icons: AgentIconStore;
   visuals: SessionVisualStore;
   attachments: SessionAttachmentStore;
@@ -139,6 +143,7 @@ export function createCoreServices(deps: CoreServicesDeps): CoreServices {
     watchableTool: (server, tool) =>
       deps.mcp.watchableToolProblem(server, tool),
     handovers: deps.handovers,
+    envRequests: deps.envRequests,
     decorateSession: deps.decorateSession,
     deleteSession,
     emit: deps.emit,

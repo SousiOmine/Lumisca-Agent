@@ -65,6 +65,7 @@ export type {
 export type {
   StellaConversationSnapshot,
   StellaEntry,
+  StellaEnvRequest,
   StellaEvent,
   StellaHandover,
   StellaQuestion,

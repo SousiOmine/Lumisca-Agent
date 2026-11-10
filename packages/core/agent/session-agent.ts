@@ -30,6 +30,7 @@ import type { SessionToolRegistries } from "../tools/registries.ts";
 import type { AskHub, PendingQuestion } from "../tools/ask.ts";
 import { InterruptionHub } from "./interruption-hub.ts";
 import type { HandoverHub, PendingHandover } from "../vm/handover.ts";
+import type { EnvRequestHub, PendingEnvRequest } from "../vm/env-request.ts";
 import type { AskAnswer } from "../shared/mod.ts";
 import {
   DEFAULT_LOCALE,
@@ -130,6 +131,10 @@ export interface SessionAgentOptions {
    * session): blocks the run while the user drives the machine, and is
    * torn down with it. */
   handoverHub?: HandoverHub;
+  /** Request hub backing `vm_env` (one per session): blocks the run while
+   * the user types a secret into the dialog. Torn down with the run, like
+   * the hand-over. */
+  envRequestHub?: EnvRequestHub;
   /** Task hub backing the task / task_output / send_message tools. The
    * agent registers itself as the delivery target for sub-agent completion
    * notifications and messages (see setParentDelivery). */
@@ -307,6 +312,7 @@ export class SessionAgent {
     this.interruptions = new InterruptionHub(
       options.askHub,
       options.handoverHub ?? null,
+      options.envRequestHub ?? null,
     );
 
     // A vision-capable main model passes images through as-is; only a
@@ -986,6 +992,14 @@ export class SessionAgent {
    * Throws when nothing is waiting (the HTTP layer answers 409). */
   finishHandover(note: string, toolCallId?: string): void {
     this.interruptions.finishHandover(note, toolCallId);
+  }
+
+  /** The environment variable this session is still waiting for, for the
+   * resync snapshot: `env_request` events are never replayed, so a client
+   * that (re)connects while the run is blocked on the dialog has no other
+   * way to learn that it may answer it. */
+  getPendingEnvRequest(): PendingEnvRequest | null {
+    return this.interruptions.pendingEnvRequest();
   }
 
   /** The questions this session is still waiting on (the ask tool), for the

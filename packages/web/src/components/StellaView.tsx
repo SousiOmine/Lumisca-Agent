@@ -14,6 +14,7 @@ import type {
 } from "../types.ts";
 import { Composer } from "./Composer.tsx";
 import { StellaPane } from "./StellaPane.tsx";
+import { EnvRequestDialog } from "./stella/EnvRequestDialog.tsx";
 import { StellaTranscript } from "./stella/StellaTranscript.tsx";
 import { usePresence } from "../hooks/usePresence.ts";
 import { useReducedMotion } from "../hooks/useMediaQuery.ts";
@@ -76,6 +77,10 @@ interface StellaViewProps {
   loadingOlder: boolean;
   /** The user finished at the screen (the `vm_ask_user` hand-over). */
   onFinishHandover: (note: string, toolCallId: string) => Promise<void>;
+  /** The user entered the value `vm_env` asked for. */
+  onProvideEnv: (value: string, toolCallId: string) => Promise<void>;
+  /** The user refused to enter a value. */
+  onDeclineEnv: (toolCallId: string) => Promise<void>;
   onOpenSettings: () => void;
 }
 
@@ -124,6 +129,8 @@ export function StellaView(
     onLoadOlder,
     loadingOlder,
     onFinishHandover,
+    onProvideEnv,
+    onDeclineEnv,
     onOpenSettings,
   }: StellaViewProps,
 ) {
@@ -268,6 +275,13 @@ export function StellaView(
           />
         </div>
       </div>
+      {conversation?.envRequest != null && (
+        <EnvRequestDialog
+          request={conversation.envRequest}
+          onProvide={onProvideEnv}
+          onDecline={onDeclineEnv}
+        />
+      )}
       {pane.mounted && (
         <StellaPane
           running={machineRunning}

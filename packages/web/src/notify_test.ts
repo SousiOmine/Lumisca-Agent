@@ -2,6 +2,7 @@ import { assert, assertEquals } from "@std/assert";
 import { createTranslator } from "@lumisca/core/shared";
 import {
   buildAgentEndNotification,
+  buildEnvNotification,
   buildHandoverNotification,
   buildQuestionNotification,
   isNotifyEnabled,
@@ -112,6 +113,19 @@ Deno.test("buildHandoverNotification names the session and the reason", () => {
   assert(body.includes("「Aide」"), body);
   assert(body.includes("画面の操作を待っています"), body);
   assert(body.includes("password only you know"), body);
+});
+
+Deno.test("buildEnvNotification says which variable and which conversation", () => {
+  const { title, body } = buildEnvNotification("Aide", "OPENAI_API_KEY", ja);
+  assertEquals(title, "Lumisca");
+  assert(body.includes("「Aide」"), body);
+  assert(body.includes("OPENAI_API_KEY"), body);
+  assert(body.includes("入力を待っています"), body);
+  // The words of the dialog, not its layout: a toast has one line for it.
+  assertEquals(
+    buildEnvNotification("Aide", "GITHUB_TOKEN", en).body,
+    '"Aide" is waiting for a value of GITHUB_TOKEN',
+  );
 });
 
 Deno.test("buildHandoverNotification follows the language", () => {

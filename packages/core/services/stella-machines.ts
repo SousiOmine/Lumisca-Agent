@@ -16,6 +16,10 @@ import type { Workspace } from "../domain/workspace.ts";
 import type { Locale } from "../shared/mod.ts";
 import { CoreError, errorMessage } from "../errors.ts";
 import type { HandoverRegistry } from "../vm/handover-registry.ts";
+import type { EnvRequestRegistry } from "../vm/env-request.ts";
+import { requireEnvValue, VmEnvStore } from "../vm/env-store.ts";
+import { createVmEnvTool } from "../vm/env-tool.ts";
+import type { VmExec } from "../vm/container.ts";
 import { StellaSkillCache } from "../stella/skill-cache.ts";
 import { vmAgentDir } from "../vm/contract.ts";
 import { VmFileBackend } from "../vm/fs.ts";
@@ -69,6 +73,10 @@ function entriesOf(messages: readonly AgentMessage[]): StellaEntry[] {
 export class StellaMachineService {
   /** The catalog of each agent, as last read (see StellaSkillCache). */
   private readonly skills = new StellaSkillCache();
+  /** The machine's variable store, kept across sessions so its write queue
+   * serializes two dialogs answered at once (see VmEnvStore). Rebuilt when a
+   * different machine is attached: the exec seam of the old one is gone. */
+  private envStoreOf: { exec: VmExec; store: VmEnvStore } | undefined;
 
   constructor(
     private readonly deps: {
@@ -85,6 +93,8 @@ export class StellaMachineService {
       watchableTool(server: string, tool: string): Promise<string | null>;
       /** Per-session hand-over hubs; the core's close path forgets them. */
       handovers: HandoverRegistry;
+      /** Per-session `vm_env` request hubs; forgotten the same way. */
+      envRequests: EnvRequestRegistry;
       decorateSession(session: SessionInfo): SessionInfo;
       deleteSession(id: string): Promise<void>;
       emit(event: ClientEvent): void;
@@ -107,6 +117,7 @@ export class StellaMachineService {
    * has resolved where the container files live). Detach with undefined. */
   setStellaVm(vm: VmManager | undefined): void {
     this.deps.machine.set(vm);
+    this.envStoreOf = undefined;
   }
 
   /** The machine, when one is attached. */
@@ -376,6 +387,11 @@ export class StellaMachineService {
       ],
       semanticTools: createVmSemanticTools({ exec }),
       handoverHub: this.handoverFor(session.id),
+      envTool: createVmEnvTool({
+        requests: this.deps.envRequests.for(session.id),
+        store: this.envStore(exec),
+      }),
+      envRequestHub: this.deps.envRequests.for(session.id),
       routineTools: createRoutineTools({
         repo: this.deps.routineRepo,
         scheduler: this.deps.routineScheduler,
@@ -409,6 +425,76 @@ export class StellaMachineService {
       identityTool: createIdentityTool(identity),
       identityProvider: createIdentityProvider(identity),
     };
+  }
+
+  /** The variable store of the attached machine. */
+  private envStore(exec: VmExec): VmEnvStore {
+    if (this.envStoreOf?.exec === exec) return this.envStoreOf.store;
+    const store = new VmEnvStore(exec);
+    this.envStoreOf = { exec, store };
+    return store;
+  }
+
+  /**
+   * Store the value the user typed for the variable `vm_env` asked about,
+   * then let the blocked run continue.
+   *
+   * The name comes from the pending request, never from the request body:
+   * an answer can only fill the question that was asked. The value is
+   * written before the wait is released — a write that failed must leave the
+   * dialog up with its error, not tell the agent that a variable exists.
+   *
+   * A run that was torn down while the value was being written is not an
+   * error here: the value is stored, and there is simply nothing left to
+   * resume.
+   */
+  async provideEnv(
+    sessionId: string,
+    rawValue: unknown,
+    toolCallId?: string,
+  ): Promise<void> {
+    const hub = this.deps.envRequests.get(sessionId);
+    const pending = hub?.pendingEnvRequest() ?? null;
+    if (hub === undefined || pending === null) {
+      throw new CoreError(
+        "No environment variable is waiting for the user",
+        "not_found",
+      );
+    }
+    if (toolCallId !== undefined && toolCallId !== pending.toolCallId) {
+      throw new CoreError(
+        `No environment variable is waiting for tool call: ${toolCallId}`,
+        "not_found",
+      );
+    }
+    const value = requireEnvValue(rawValue);
+    const exec = this.deps.machine.exec();
+    if (exec === undefined) {
+      throw new CoreError("The stella machine is not running", "unavailable");
+    }
+    await this.envStore(exec).set(pending.name, value);
+    try {
+      hub.finish(pending.toolCallId);
+    } catch (error) {
+      // The run ended while the value was being written (the dialog was
+      // closed by `cancelAll`). The value is saved; there is nothing else to
+      // do, and reporting a failure would say the save did not happen.
+      if (!(error instanceof CoreError) || error.kind !== "not_found") {
+        throw error;
+      }
+    }
+  }
+
+  /** The user refused to enter a value: the run continues without it. */
+  declineEnv(sessionId: string, toolCallId?: string): void {
+    const hub = this.deps.envRequests.get(sessionId);
+    if (hub === undefined) {
+      throw new CoreError(
+        "No environment variable is waiting for the user",
+        "not_found",
+      );
+    }
+    hub.decline(toolCallId);
   }
 
   /** Re-read one stella agent's skill catalog. Awaited before its session

@@ -51,7 +51,14 @@ export interface PushNotification {
  * tool traffic, `session_created`) is the UI's alone. */
 export type NotifiableEvent = Extract<
   ClientEvent,
-  { type: "agent_end" | "question" | "session_error" | "handover" }
+  {
+    type:
+      | "agent_end"
+      | "question"
+      | "session_error"
+      | "handover"
+      | "env_request";
+  }
 >;
 
 /** Whether the event is one the installed app is notified about. A
@@ -62,7 +69,8 @@ export function isNotifiable(
   event: ClientEvent,
 ): event is NotifiableEvent {
   return event.type === "agent_end" || event.type === "question" ||
-    event.type === "session_error" || event.type === "handover";
+    event.type === "session_error" || event.type === "handover" ||
+    event.type === "env_request";
 }
 
 /** The notification one notifiable event produces. `name` is the display
@@ -141,6 +149,19 @@ export function buildPushNotification(
         urgency: "high",
       };
     }
+    case "env_request":
+      return {
+        message: {
+          title: name,
+          body: tr("notify.push.env", { variable: event.name }),
+          // The same tag as the completion: the request replaces the
+          // "finished" toast of the same session instead of stacking on it.
+          tag: `session:${event.sessionId}`,
+        },
+        // The run is blocked on the dialog until the user types the value
+        // (or declines), so the device is woken.
+        urgency: "high",
+      };
   }
 }
 

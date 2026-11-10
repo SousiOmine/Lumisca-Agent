@@ -9,6 +9,7 @@ import type {
   StellaAgentSummary,
   StellaConversationSnapshot,
   StellaEntry,
+  StellaEnvRequest,
   StellaHandover,
   StellaQuestion,
   WindowQuery,
@@ -109,6 +110,9 @@ export interface StellaApi {
   getPendingQuestions(sessionId: string): StellaQuestion[];
   /** The screen hand-over the run is blocked on, or null. */
   getPendingHandover(sessionId: string): StellaHandover | null;
+  /** The environment variable the run is waiting for the user to fill in,
+   * or null (`vm_env`). */
+  getPendingEnvRequest(sessionId: string): StellaEnvRequest | null;
   getSessionLastError(sessionId: string): string | undefined;
   getSession(sessionId: string): SessionInfo | undefined;
   /** The thinking level the conversation's model runs at, and the levels it
@@ -154,6 +158,15 @@ export interface StellaApi {
     answers: AskAnswer[],
   ): void;
   finishHandover(sessionId: string, note: string, toolCallId?: string): void;
+  /** Store the value the user typed for the variable `vm_env` asked about
+   * (written into the machine; never recorded anywhere else). */
+  provideStellaEnv(
+    sessionId: string,
+    value: unknown,
+    toolCallId?: string,
+  ): Promise<void>;
+  /** The user refused to enter a value. */
+  declineStellaEnv(sessionId: string, toolCallId?: string): void;
   /** The text on the machine's clipboard (empty when nothing was copied
    * there). The chat's screen pane reads and writes it while the user drives
    * the screen; the VNC connection cannot carry the text (see
@@ -584,6 +597,46 @@ export function stellaRoutes(core: StellaApi): Hono {
     return c.json({ ok: true });
   });
 
+  /** The user entered a value for the environment variable `vm_env` asked
+   * about: store it in the machine and let the blocked run continue.
+   *
+   * The name is the one the agent asked for — taken from the pending
+   * request, never from this body — so a dialog can only fill the question
+   * it was opened for. Nothing about the value is echoed back or logged. */
+  app.post("/stella/conversations/:agentId/env", async (c) => {
+    const body = await parseBody<{
+      value?: unknown;
+      toolCallId?: unknown;
+    }>(c);
+    const toolCallId = body?.toolCallId;
+    if (toolCallId !== undefined && typeof toolCallId !== "string") {
+      throw new AppError("toolCallId must be a string", 400);
+    }
+    const session = requireConversation(c.req.param("agentId"));
+    await core.provideStellaEnv(
+      session.id,
+      body?.value,
+      typeof toolCallId === "string" ? toolCallId : undefined,
+    );
+    return c.json({ ok: true });
+  });
+
+  /** The user refused to enter a value (or closed the dialog). Not an
+   * error: the run continues without the variable. */
+  app.post("/stella/conversations/:agentId/env/decline", async (c) => {
+    const body = await parseBody<{ toolCallId?: unknown }>(c);
+    const toolCallId = body?.toolCallId;
+    if (toolCallId !== undefined && typeof toolCallId !== "string") {
+      throw new AppError("toolCallId must be a string", 400);
+    }
+    const session = requireConversation(c.req.param("agentId"));
+    core.declineStellaEnv(
+      session.id,
+      typeof toolCallId === "string" ? toolCallId : undefined,
+    );
+    return c.json({ ok: true });
+  });
+
   /** The machine's clipboard, for the chat's screen pane.
    *
    * The pane cannot use the VNC connection for it: x11vnc speaks the standard
@@ -717,6 +770,7 @@ export function stellaRoutes(core: StellaApi): Hono {
       running: core.getAgent(session.id)?.isStreaming === true,
       questions: core.getPendingQuestions(session.id),
       handover: core.getPendingHandover(session.id),
+      envRequest: core.getPendingEnvRequest(session.id),
       ...(lastErrorOf(session.id) !== undefined
         ? { error: lastErrorOf(session.id) }
         : {}),

@@ -13,6 +13,7 @@ import type { FileBackend } from "../tools/file-backend.ts";
 import type { Tool } from "../tools/schema.ts";
 import type { SkillDef } from "../skills/discover.ts";
 import type { HandoverHub } from "./handover.ts";
+import type { EnvRequestHub } from "./env-request.ts";
 import type { ContextProvider } from "../ai/context-providers.ts";
 
 export interface StellaRuntime {
@@ -47,6 +48,13 @@ export interface StellaRuntime {
   /** The session's screen hand-over: the tool blocks inside it while the
    * user drives the machine, and the agent tears it down with the run. */
   handoverHub: HandoverHub;
+  /** `vm_env`, discoverable through tool_search: it asks the user for a
+   * secret and stores it in the machine. Main-only and not preloaded, so the
+   * built-in `vm-env` skill is what tells the agent it exists. */
+  envTool: Tool;
+  /** The session's environment-variable request: `vm_env` blocks inside it
+   * while the dialog is up, and the agent tears it down with the run. */
+  envRequestHub: EnvRequestHub;
   /** `agent_create`, which adds another agent to the sidebar. */
   agentTool: Tool;
   /** `history_search`, which reads this conversation's saved history back

@@ -81,6 +81,21 @@ export interface StellaHandover {
   expiresAt: number;
 }
 
+/** The environment variable the run waits on (`vm_env`).
+ *
+ * There is no value field, and that is the whole contract: the user types
+ * the value in the client and posts it to the conversation's env endpoint,
+ * which writes it into the machine. Nothing that reaches a client's state,
+ * the event stream or the transcript carries it. */
+export interface StellaEnvRequest {
+  toolCallId: string;
+  name: string;
+  /** The name already had a value: the dialog says the entry is replaced. */
+  exists: boolean;
+  /** When the wait ends on its own (epoch ms). */
+  expiresAt: number;
+}
+
 /** Everything a client needs to draw a conversation from nothing: the
  * messages, whether a run is going right now, and what is blocking it.
  * Read in one handler so the pieces describe the same instant. */
@@ -98,6 +113,10 @@ export interface StellaConversationSnapshot {
   questions: StellaQuestion[];
   /** The screen hand-over the run is blocked on, or null. */
   handover: StellaHandover | null;
+  /** The environment variable the run is waiting for the user to fill in
+   * (`vm_env`), or null. Carries the name and whether it already has a
+   * value — never a value. */
+  envRequest: StellaEnvRequest | null;
   /** The last run's failure, cleared when a new run starts. */
   error?: string;
   /** The agent's name: the conversation's title. */
@@ -159,4 +178,6 @@ export type StellaEvent =
   | { type: "questions"; questions: StellaQuestion[] }
   /** The screen hand-over began or ended (`null`). */
   | { type: "handover"; handover: StellaHandover | null }
+  /** The environment-variable request began or ended (`null`). */
+  | { type: "env_request"; request: StellaEnvRequest | null }
   | { type: "error"; message: string };

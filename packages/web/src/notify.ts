@@ -146,6 +146,23 @@ export function buildHandoverNotification(
   };
 }
 
+/** Display text for the `vm_env` dialog: the run is blocked until the user
+ * types a value, and the variable's name is what tells them whether they
+ * can. Pure (unit-tested). */
+export function buildEnvNotification(
+  sessionName: string,
+  variable: string,
+  tr: Translator = t,
+): { title: string; body: string } {
+  return {
+    title: "Lumisca",
+    body: tr("notify.env", {
+      name: sessionLabel(sessionName, tr),
+      variable,
+    }),
+  };
+}
+
 /** Decide from already-known state whether the app is hidden from the
  * user (notify-worthy). Pure (unit-tested):
  * - a hidden document is always hidden (minimized WebView, background
@@ -251,5 +268,18 @@ export function maybeNotifyHandover(
     sessionName,
     true,
     (name) => buildHandoverNotification(name, reason),
+  );
+}
+
+/** Notify that the run is waiting for an environment variable's value
+ * (`vm_env`). Urgent like a question: the run cannot continue without it. */
+export function maybeNotifyEnv(
+  sessionName: SessionName,
+  variable: string,
+): Promise<void> {
+  return maybeNotify(
+    sessionName,
+    true,
+    (name) => buildEnvNotification(name, variable),
   );
 }

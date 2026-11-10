@@ -68,6 +68,8 @@ function render(
       onLoadOlder: () => false,
       loadingOlder: false,
       onFinishHandover: () => Promise.resolve(),
+      onProvideEnv: () => Promise.resolve(),
+      onDeclineEnv: () => Promise.resolve(),
       onOpenSettings: () => {},
     }),
   );
@@ -115,6 +117,43 @@ Deno.test("StellaView: a hand-over draws the pane whatever the caller chose", ()
   // The screen is the user's, and so is its clipboard: the two words are
   // drawn with the hand-over.
   assertStringIncludes(html, "stella-handover-clipboard");
+});
+
+Deno.test("StellaView: the env dialog asks for a secret field, not a text field", () => {
+  // The run is blocked on this dialog, so it is drawn from the conversation's
+  // state alone — the screen pane has nothing to do with it.
+  const expiresAt = Date.now() + 15 * 60_000;
+  const html = render({
+    conversation: {
+      envRequest: {
+        toolCallId: "t1",
+        name: "OPENAI_API_KEY",
+        exists: false,
+        expiresAt,
+      },
+    },
+  });
+  assertStringIncludes(html, "env-request-form");
+  assertStringIncludes(html, "OPENAI_API_KEY");
+  // A password field: the value is not meant to be read off the screen, and
+  // the browser must not offer to remember it.
+  assertStringIncludes(html, 'type="password"');
+  assertStringIncludes(html, 'autocomplete="off"');
+  // A first entry says nothing about replacing; an existing one does.
+  assertEquals(html.includes("env-request-existing"), false);
+  assertStringIncludes(
+    render({
+      conversation: {
+        envRequest: {
+          toolCallId: "t1",
+          name: "GITHUB_TOKEN",
+          exists: true,
+          expiresAt,
+        },
+      },
+    }),
+    "env-request-existing",
+  );
 });
 
 Deno.test("StellaView: a failed send leaves the conversation on screen", () => {

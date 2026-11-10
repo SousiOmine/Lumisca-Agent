@@ -26,6 +26,7 @@ import type {
 } from "../tools/command-backend.ts";
 import { firstLine } from "../lines.ts";
 import { VM_BG_DIR } from "./contract.ts";
+import { VM_ENV_SOURCE } from "./env-store.ts";
 import type { VmExec } from "./container.ts";
 import { sleep } from "../shared/misc.ts";
 import { shellQuote } from "./quote.ts";
@@ -46,6 +47,10 @@ const BG_DIR = VM_BG_DIR;
  * Per-call env vars are exported by the shell itself (`env NAME=value …`)
  * rather than passed as `podman exec --env`: the value can contain anything,
  * and one escaping path (shellQuote) is easier to keep right than two.
+ *
+ * The user's saved variables are sourced first and the per-call ones come
+ * after, so an argument the model passed overrides a saved value for that
+ * one command — the same precedence the tool documents.
  */
 export class VmCommandRunner implements CommandRunner {
   readonly #exec: VmExec;
@@ -58,7 +63,7 @@ export class VmCommandRunner implements CommandRunner {
     const startedAt = performance.now();
     const env = envPrefix({ ...options.baseEnv, ...options.env });
     const result = await this.#exec(
-      ["bash", "-lc", `${env}${command}`],
+      ["bash", "-lc", `${VM_ENV_SOURCE}${env}${command}`],
       {
         workdir: options.cwd,
         timeoutMs: Math.max(1, Math.ceil(options.timeoutSec)) * 1000,
@@ -110,8 +115,14 @@ export class VmBackgroundSpawner implements BackgroundSpawner {
       `: > ${shellQuote(log)}`,
       `cd ${shellQuote(input.cwd)} && ` +
       // `$!` is the setsid child's pid; setsid makes it the group leader, so
-      // `kill -<pid>` reaches the whole tree.
-      `${envPrefix(input.env)}setsid bash -lc ${shellQuote(input.command)} ` +
+      // `kill -<pid>` reaches the whole tree. The saved variables are sourced
+      // inside the same login shell the foreground runner uses, before the
+      // per-call ones, so both paths hand a command the same environment.
+      `setsid bash -lc ${
+        shellQuote(
+          `${VM_ENV_SOURCE}${envPrefix(input.env)}${input.command}`,
+        )
+      } ` +
       `>> ${shellQuote(log)} 2>&1 & ` +
       `printf '%s' "$!" > ${shellQuote(pidFile)}`,
       `cat ${shellQuote(pidFile)}`,

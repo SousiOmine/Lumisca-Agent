@@ -46,6 +46,7 @@ export type {
   StellaAvailability,
   StellaConversationSnapshot,
   StellaEntry,
+  StellaEnvRequest,
   StellaEvent,
   StellaHandover,
   StellaQuestion,

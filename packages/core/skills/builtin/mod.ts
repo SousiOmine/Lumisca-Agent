@@ -8,6 +8,7 @@ import { identitySkill } from "./identity.ts";
 import { mcpServersSkill } from "./mcp-servers.ts";
 import { routinesSkill } from "./routines.ts";
 import { skillAuthoringSkill } from "./skill-authoring.ts";
+import { vmEnvSkill } from "./vm-env.ts";
 
 /**
  * App-embedded skills: shipped with the application itself, always
@@ -78,6 +79,11 @@ export function builtinSkills(context: BuiltinContext): SkillDef[] {
     // create them are discoverable — this is the only thing that tells the
     // agent they exist at all (#39).
     ...(context.stella === true ? [routinesSkill()] : []),
+    // `vm_env` is discoverable for the same reason, and its tool is
+    // main-only: the variables belong to the machine, so code mode (no
+    // machine) and sub-agents (no dialog they could show) are not pointed at
+    // it.
+    ...(context.stella === true ? [vmEnvSkill()] : []),
     ...(context.mcpAdmin === true ? [mcpServersSkill()] : []),
     // Skills are written with the file tools, so the guide follows them: no
     // file tools (a chat session) → nothing to teach about writing files.

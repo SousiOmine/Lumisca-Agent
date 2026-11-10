@@ -1,5 +1,7 @@
 import { assertEquals, assertRejects } from "@std/assert";
 import { VmBackgroundSpawner, VmCommandRunner } from "./shell.ts";
+import { VM_ENV_SH } from "./contract.ts";
+import { VM_ENV_SOURCE } from "./env-store.ts";
 import { shellQuote } from "./quote.ts";
 import type { VmExec, VmExecOptions } from "./container.ts";
 import type { VmCommandResult } from "./command.ts";
@@ -44,7 +46,17 @@ Deno.test("vm shell: the runner wraps the command in one login shell", async () 
   const [argv] = calls;
   // One login shell, with the command as a single argument: nothing in it is
   // re-interpreted, so a command that works in the host's bash works here.
-  assertEquals(argv?.slice(0, 3), ["bash", "-lc", "echo hi"]);
+  // The saved variables are sourced first (an absent file is not an error),
+  // so a command sees what the user entered through `vm_env`.
+  assertEquals(argv?.slice(0, 3), [
+    "bash",
+    "-lc",
+    `${VM_ENV_SOURCE}echo hi`,
+  ]);
+  assertEquals(
+    argv?.[2],
+    `[ -f ${VM_ENV_SH} ] && . ${VM_ENV_SH}; echo hi`,
+  );
 });
 
 Deno.test("vm shell: per-call env vars travel through env, quoted", async () => {
@@ -57,7 +69,30 @@ Deno.test("vm shell: per-call env vars travel through env, quoted", async () => 
     env: { GREETING: "it's fine" },
   });
   const script = calls[0]?.[2] ?? "";
-  assertEquals(script, `env GREETING='it'\\''s fine' printenv`);
+  // The saved file is sourced first, the per-call value applied after it: an
+  // argument the model passed overrides a stored value for this one command.
+  assertEquals(script, `${VM_ENV_SOURCE}env GREETING='it'\\''s fine' printenv`);
+});
+
+Deno.test("vm shell: a background command sources the saved variables", async () => {
+  const { run, calls } = exec((joined) => {
+    if (joined.includes("setsid")) return { stdout: "4242" };
+    if (joined.includes("kill -0")) return { stdout: "gone\n" };
+    return { stdout: "" };
+  });
+  const spawner = new VmBackgroundSpawner(run);
+  const process = await spawner.spawn({
+    command: "npm run dev",
+    cwd: "/home/agent/app",
+    env: { PORT: "3000" },
+  });
+  const start = calls[0]?.join(" ") ?? "";
+  // The file is sourced inside the same login shell the foreground runner
+  // uses, so a dev server started in the background reads the same values.
+  assertEquals(start.includes(VM_ENV_SOURCE), true);
+  assertEquals(start.includes("setsid"), true);
+  assertEquals(await process.exited, undefined);
+  await process.kill();
 });
 
 Deno.test("vm shell: a timeout is reported, not thrown", async () => {

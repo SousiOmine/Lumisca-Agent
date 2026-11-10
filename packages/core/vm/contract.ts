@@ -32,6 +32,21 @@ export function vmAgentDir(agentId: string): string {
  * working folder, so they are not part of the agent's own files). */
 export const VM_BG_DIR = `${VM_WORKDIR}/.lumisca-bg`;
 
+/** Where the environment variables the user entered through `vm_env` live.
+ *
+ * Two files, both 0600 and both machine-wide (the machine is one machine: an
+ * agent's key is the same key in another agent's shell). `env.json` is the
+ * truth — one object, rewritten a key at a time — and `env.sh` is what a
+ * command sources, generated from it. Keeping the pair is what makes an
+ * overwrite possible without touching the other entries: a shell file alone
+ * cannot be merged safely, because a value may contain anything.
+ *
+ * They sit under the agent's home, which is a volume (VM_HOME_VOLUME), so a
+ * rebuilt machine keeps them. */
+export const VM_ENV_DIR = `${VM_WORKDIR}/.lumisca-env`;
+export const VM_ENV_JSON = `${VM_ENV_DIR}/env.json`;
+export const VM_ENV_SH = `${VM_ENV_DIR}/env.sh`;
+
 /** The virtual X display the container runs Xvfb on. */
 export const VM_DISPLAY = ":99";
 

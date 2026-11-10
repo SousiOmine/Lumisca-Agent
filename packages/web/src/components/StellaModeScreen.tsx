@@ -113,6 +113,9 @@ export function StellaModeScreen({
         loadingOlder={stella.loadingOlder}
         onFinishHandover={(note, toolCallId) =>
           stella.finishHandover(note, toolCallId)}
+        onProvideEnv={(value, toolCallId) =>
+          stella.provideEnv(value, toolCallId)}
+        onDeclineEnv={(toolCallId) => stella.declineEnv(toolCallId)}
         onOpenSettings={onOpenSettings}
       />
     </div>

@@ -86,6 +86,23 @@ export const stellaApi = {
       body: JSON.stringify({ note, toolCallId }),
     }),
 
+  /** The user entered the value of the environment variable the run is
+   * waiting on (`vm_env`). The value goes into the machine; the server does
+   * not echo it anywhere, and nothing here keeps it. */
+  provideEnv: (agentId: string, value: string, toolCallId: string) =>
+    request<{ ok: true }>(conversationPath(agentId, "/env"), {
+      method: "POST",
+      body: JSON.stringify({ value, toolCallId }),
+    }),
+
+  /** The user refused to enter a value (`vm_env`): the run continues
+   * without it. */
+  declineEnv: (agentId: string, toolCallId: string) =>
+    request<{ ok: true }>(conversationPath(agentId, "/env/decline"), {
+      method: "POST",
+      body: JSON.stringify({ toolCallId }),
+    }),
+
   /** The text on the machine's clipboard (empty when nothing was copied
    * there). The screen pane reads it while the user drives the screen; the
    * VNC connection cannot carry the text (see core/vm/clipboard.ts). */

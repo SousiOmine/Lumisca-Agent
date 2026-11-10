@@ -486,6 +486,41 @@ export const chat = {
     ja: "この待機は {time} までです（過ぎるとエージェントは自動で再開します）",
     en: "This wait ends at {time} (the agent resumes on its own)",
   },
+  /** The dialog `vm_env` opens: the user types a secret that goes into the
+   * machine and never into the conversation. The wording says both halves,
+   * because a field that looks like any other would make the user paste a
+   * key into the wrong place. */
+  "chat.stella.env.title": {
+    ja: "環境変数の入力",
+    en: "Environment variable",
+  },
+  "chat.stella.env.request": {
+    ja: "エージェントが環境変数 {name} の値を求めています。",
+    en: "The agent is asking for the value of {name}.",
+  },
+  "chat.stella.env.existing": {
+    ja: "この変数はすでに設定されています。入力した値で置き換えます。",
+    en: "This variable is already set; the value you enter replaces it.",
+  },
+  "chat.stella.env.value": { ja: "値", en: "Value" },
+  "chat.stella.env.placeholder": {
+    ja: "値を入力（エージェントには渡りません）",
+    en: "Enter the value (the agent never sees it)",
+  },
+  "chat.stella.env.hint": {
+    ja: "値はマシンの中に保存され、以降のコマンドが環境変数として使います。",
+    en: "The value is stored in the machine; later commands use it as an " +
+      "environment variable.",
+  },
+  /** The button is the generic save (common.save); only the busy state is
+   * this dialog's own. */
+  "chat.stella.env.saving": { ja: "保存中…", en: "Saving…" },
+  /** The same deadline sentence as the hand-over's: both waits end the same
+   * way, so one phrasing covers both. */
+  "chat.stella.env.deadline": {
+    ja: "この待機は {time} までです（過ぎるとエージェントは自動で再開します）",
+    en: "This wait ends at {time} (the agent resumes on its own)",
+  },
   /** The clipboard the user and the machine share while the user drives the
    * screen. Two words in the hand-over bar: what worked is visible on its own
    * (the text appears where it was pasted, or on this PC's clipboard), so the

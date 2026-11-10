@@ -38,6 +38,8 @@ function hook(overrides: Partial<StellaHook>): StellaHook {
     answer: () => Promise.resolve(),
     rewind: () => Promise.resolve(),
     finishHandover: () => Promise.resolve(),
+    provideEnv: () => Promise.resolve(),
+    declineEnv: () => Promise.resolve(),
     loadOlder: () => false,
     loadingOlder: false,
     error: null,

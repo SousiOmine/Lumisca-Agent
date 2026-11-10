@@ -7,6 +7,7 @@ import {
 import type {
   StellaConversationSnapshot,
   StellaEntry,
+  StellaEnvRequest,
   StellaEvent,
   StellaHandover,
   StellaQuestion,
@@ -49,6 +50,9 @@ export interface StellaConversationState {
   liveCard: { toolCallId: string; markup: string } | null;
   questions: StellaQuestion[];
   handover: StellaHandover | null;
+  /** The environment variable the run waits for the user to fill in, or
+   * null. Carries the name only — a value never reaches the client. */
+  envRequest: StellaEnvRequest | null;
   error?: string;
   /** The agent's name: the conversation's title. */
   agentName: string;
@@ -97,6 +101,7 @@ export function stellaStateOf(
     liveCard: null,
     questions: snapshot.questions,
     handover: snapshot.handover,
+    envRequest: snapshot.envRequest,
     ...(snapshot.error !== undefined ? { error: snapshot.error } : {}),
     agentName: snapshot.agentName,
     model: snapshot.model,
@@ -277,6 +282,11 @@ export function applyStellaEvent(
         ...state,
         handover: event.handover,
       };
+    case "env_request":
+      return sameEnvRequest(event.request, state.envRequest) ? null : {
+        ...state,
+        envRequest: event.request,
+      };
     case "error":
       return { ...state, error: event.message, liveCard: null };
   }
@@ -292,6 +302,16 @@ function sameHandover(
     a.instructions === b.instructions && a.expiresAt === b.expiresAt;
 }
 
+function sameEnvRequest(
+  a: StellaEnvRequest | null,
+  b: StellaEnvRequest | null,
+): boolean {
+  if (a === b) return true;
+  if (a === null || b === null) return false;
+  return a.toolCallId === b.toolCallId && a.name === b.name &&
+    a.exists === b.exists && a.expiresAt === b.expiresAt;
+}
+
 /** An empty conversation (the sidebar can be shown before one is open). The
  * model, and with it the thinking strength, is unknown until a snapshot
  * arrives; the picker stays hidden while it is `null`. */
@@ -303,6 +323,7 @@ export function emptyStellaState(agentName: string): StellaConversationState {
     liveCard: null,
     questions: [],
     handover: null,
+    envRequest: null,
     agentName,
     model: null,
     thinking: null,

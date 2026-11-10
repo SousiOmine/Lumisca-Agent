@@ -59,6 +59,7 @@ import {
   TOOL_ROUTINE_LIST,
   TOOL_ROUTINE_RUN,
   TOOL_ROUTINE_UPDATE,
+  TOOL_VM_ENV,
 } from "../shared/mod.ts";
 import { canonicalJson } from "../shared/digest.ts";
 
@@ -76,6 +77,12 @@ const ROUTINE_TOOL_NAMES = [
  * (discoverable, main-only): removed from every session that is not
  * stella's, added to that session's main registry when it is. */
 const STELLA_AGENT_TOOL_NAMES = [TOOL_IDENTITY, TOOL_AGENT_CREATE];
+
+/** Names of the environment-variable tool (discoverable, main-only): the
+ * value it asks for belongs to the machine, and a sub-agent cannot put a
+ * dialog in front of the user. Removed from every session that is not a
+ * stella conversation, added to that session's main registry when it is. */
+const VM_ENV_TOOL_NAMES = [TOOL_VM_ENV];
 
 /** The rule that condenses a stella conversation while it sits idle (see
  * SessionAgentOptions.idleCompaction).
@@ -230,7 +237,10 @@ export class AgentFactory {
       backgroundManager: hubs.background,
       askHub: hubs.ask,
       ...(where.stella !== undefined
-        ? { handoverHub: where.stella.handoverHub }
+        ? {
+          handoverHub: where.stella.handoverHub,
+          envRequestHub: where.stella.envRequestHub,
+        }
         : {}),
       taskHub: hubs.tasks,
       toolRegistry: registries,
@@ -420,8 +430,8 @@ export class AgentFactory {
   /**
    * Seed the session's tool registries with the tools that are discovered
    * rather than preloaded: MCP (by the attachment), the browser lab,
-   * computer use, the PDF reader, and — for a stella session — the routines
-   * and the two tools of the conversation's own agent.
+   * computer use, the PDF reader, and — for a stella session — the routines,
+   * the two tools of the conversation's own agent, and `vm_env`.
    *
    * The registry is reused across agent rebuilds, so every family is
    * removed-then-added: a capability that went away (a backend detached, the
@@ -468,11 +478,13 @@ export class AgentFactory {
     // create siblings the user never asked for.
     registries.main.removeTools(ROUTINE_TOOL_NAMES);
     registries.main.removeTools(STELLA_AGENT_TOOL_NAMES);
+    registries.main.removeTools(VM_ENV_TOOL_NAMES);
     if (where.stella !== undefined) {
       registries.addMainOnly(where.stella.routineTools);
       registries.addMainOnly([
         where.stella.identityTool,
         where.stella.agentTool,
+        where.stella.envTool,
       ]);
     }
   }

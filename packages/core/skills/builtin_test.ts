@@ -7,6 +7,7 @@ import {
   loadSkillContent,
 } from "./discover.ts";
 import { builtinSkills } from "./builtin/mod.ts";
+import { subagentSkills } from "../tools/tool-pieces.ts";
 
 /** A user skill named "web-browser" — the same name as the built-in one —
  * used by the precedence tests. A user skill with this name must shadow
@@ -58,6 +59,7 @@ Deno.test("builtinSkills advertises the stella-only skills for a stella session"
     "agent-create",
     "identity",
     "routines",
+    "vm-env",
   ]);
 
   // Each guide teaches the tool_search → tool_call path, because neither
@@ -109,10 +111,38 @@ Deno.test("builtinSkills advertises the stella-only skills for a stella session"
       s,
     ) =>
       s.name === "agent-create" || s.name === "identity" ||
-      s.name === "routines"
+      s.name === "routines" || s.name === "vm-env"
     ),
     false,
   );
+});
+
+Deno.test("builtinSkills advertises vm-env only in a stella session", async () => {
+  // `vm_env` is discoverable, so this skill is the only thing that tells the
+  // agent the tool exists at all. It has to name the tool and the search that
+  // finds it, and it has to say the one rule the tool's description cannot
+  // leave out: the value never comes back.
+  const skill = builtinSkills({
+    browser: false,
+    computer: false,
+    stella: true,
+    subagents: false,
+  }).find((s) => s.name === "vm-env");
+  assert(skill !== undefined, "stella sessions can ask for a secret");
+  const guide = await loadSkillContent(skill!);
+  assert(guide.includes("tool_search"));
+  assert(guide.includes("vm_env"));
+  assert(guide.includes("OPENAI_API_KEY"));
+  // The wait is a person, so the guide has to say the run stops and that a
+  // refusal is an answer (not a reason to ask again in a loop).
+  assert(guide.includes("decline"));
+  assert(guide.includes("15 minutes"));
+  // A sub-agent has no dialog to show: its catalog drops this skill like it
+  // drops the other main-only guides.
+  const subagent = subagentSkills([skill!], {
+    subagents: true,
+  });
+  assertEquals(subagent.some((s) => s.name === "vm-env"), false);
 });
 
 Deno.test("builtinSkills advertises desktop-apps only in a stella session", async () => {

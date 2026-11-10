@@ -132,6 +132,8 @@ import {
 } from "./routine/scheduler.ts";
 import type { PendingHandover } from "./vm/handover.ts";
 import { HandoverRegistry } from "./vm/handover-registry.ts";
+import type { PendingEnvRequest } from "./vm/env-request.ts";
+import { EnvRequestRegistry } from "./vm/env-request.ts";
 import { checkRoutine } from "./routine/check.ts";
 import { vmAgentDir } from "./vm/contract.ts";
 import type { PromptFileRef, Routine } from "./shared/mod.ts";
@@ -252,6 +254,11 @@ export class LumiscaCore {
   private readonly stella: StellaMachine;
   /** Hand-over hubs per session. Dropped with the session. */
   private readonly handovers = new HandoverRegistry((event) =>
+    this.events.emit(event)
+  );
+  /** Environment-variable request hubs per session (`vm_env`). Dropped with
+   * the session, like the hand-over hubs. */
+  private readonly envRequests = new EnvRequestRegistry((event) =>
     this.events.emit(event)
   );
 
@@ -487,6 +494,7 @@ export class LumiscaCore {
       routines: this.routines,
       routineScheduler: this.routineScheduler,
       handovers: this.handovers,
+      envRequests: this.envRequests,
       icons: this.agentIcons,
       visuals: this.visuals,
       attachments: this.attachments,
@@ -619,6 +627,7 @@ export class LumiscaCore {
     const forgotten = new Set([
       ...this.events.sessionIds(),
       ...this.handovers.sessionIds(),
+      ...this.envRequests.sessionIds(),
     ]);
     for (const sessionId of forgotten) this.forgetSession(sessionId);
     // The machine is this application's; leaving it running would keep a
@@ -858,12 +867,14 @@ export class LumiscaCore {
   }
 
   /** Drop every per-session structure this core keeps outside the pool
-   * (the revision counter and the hand-over hub). The close path, the delete
-   * path and the shutdown path all come through here, so a new per-session
-   * map has one place to be cleaned up. */
+   * (the revision counter, the hand-over hub and the env-request hub). The
+   * close path, the delete path and the shutdown path all come through here,
+   * so a new per-session map has one place to be cleaned up. */
   private forgetSession(sessionId: string): void {
     this.events.forgetSession(sessionId);
     this.handovers.forget(sessionId);
+    this.envRequests.get(sessionId)?.cancelAll();
+    this.envRequests.forget(sessionId);
   }
 
   // --- settings -----------------------------------------------------------
@@ -1362,6 +1373,37 @@ export class LumiscaCore {
   finishHandover(sessionId: string, note: string, toolCallId?: string): void {
     const agent = this.pool.require(sessionId);
     agent.finishHandover(note, toolCallId);
+  }
+
+  /** The environment variable a session's run is waiting for (the resync
+   * snapshot carries it so a client that reconnects while the run is blocked
+   * can still answer the dialog). */
+  getPendingEnvRequest(sessionId: string): PendingEnvRequest | null {
+    return this.pool.get(sessionId)?.getPendingEnvRequest() ?? null;
+  }
+
+  /** The user entered a value for the environment variable the run is
+   * waiting on: store it in the machine and let the run continue.
+   *
+   * The value goes from here into the machine and nowhere else — it is not
+   * logged, not recorded on the session, and not part of what the tool
+   * returns. */
+  provideStellaEnv(
+    sessionId: string,
+    value: unknown,
+    toolCallId?: string,
+  ): Promise<void> {
+    return this.services.stellaMachines.provideEnv(
+      sessionId,
+      value,
+      toolCallId,
+    );
+  }
+
+  /** The user refused to enter a value (or closed the dialog): the run
+   * continues without it. */
+  declineStellaEnv(sessionId: string, toolCallId?: string): void {
+    this.services.stellaMachines.declineEnv(sessionId, toolCallId);
   }
 
   /** The text on the stella machine's clipboard (empty when nothing was

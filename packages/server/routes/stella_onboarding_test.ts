@@ -63,6 +63,7 @@ function fakeCore(
     getAgent: () => ({ isStreaming: false }),
     getPendingQuestions: () => [],
     getPendingHandover: () => null,
+    getPendingEnvRequest: () => null,
     getSessionLastError: () => undefined,
     getStellaAgent: () => agent(),
     getThinkingState: () => ({ thinkingLevel: "off", thinkingLevels: [] }),

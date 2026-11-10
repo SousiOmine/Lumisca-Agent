@@ -139,6 +139,31 @@ export type ClientEvent =
     toolCallId: string;
     note: string;
   }
+  /** The agent asked the user for an environment variable's value
+   * (`vm_env`) and the run is blocked until they answer. Clients show a
+   * dialog; the value is posted back to the conversation's env endpoint and
+   * goes straight into the machine — it is never part of this event, of the
+   * tool call, or of the tool's result.
+   *
+   * `exists` says the name already has a value, so the dialog can tell the
+   * user the entry is being replaced. `expiresAt` is when the wait ends on
+   * its own (epoch ms), the same contract as the screen hand-over. */
+  | {
+    type: "env_request";
+    sessionId: string;
+    toolCallId: string;
+    name: string;
+    exists: boolean;
+    expiresAt: number;
+  }
+  /** The request ended: the value was stored, the user declined, or the
+   * deadline passed. Clients close the dialog. */
+  | {
+    type: "env_request_end";
+    sessionId: string;
+    toolCallId: string;
+    outcome: "set" | "declined" | "timed_out";
+  }
   /** A sub-agent task started (the task tool). Clients add it to the tasks
    * panel; its live response arrives as `task_delta` events. */
   | {

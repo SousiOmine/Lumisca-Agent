@@ -42,6 +42,7 @@ import { TOOL_SEND_CHAT } from "../shared/tool-names.ts";
 import type { ClientEvent } from "../domain/event.ts";
 import type {
   StellaEntry,
+  StellaEnvRequest,
   StellaEvent,
   StellaHandover,
   StellaQuestion,
@@ -235,6 +236,20 @@ function handoverOf(handover: StellaHandover | null): StellaHandover | null {
   };
 }
 
+/** The conversation's view of an environment-variable request (same reason
+ * as questionsOf). There is no value to copy: none ever arrives as an
+ * event. */
+function envRequestOf(
+  request: StellaEnvRequest | null,
+): StellaEnvRequest | null {
+  return request === null ? null : {
+    toolCallId: request.toolCallId,
+    name: request.name,
+    exists: request.exists,
+    expiresAt: request.expiresAt,
+  };
+}
+
 /**
  * The conversation events one `ClientEvent` implies; empty when the event is
  * model-only (text deltas, tools, todo, tasks, background commands, goals,
@@ -286,6 +301,18 @@ export function stellaEventsOf(event: ClientEvent): StellaEvent[] {
       }];
     case "handover_end":
       return [{ type: "handover", handover: null }];
+    case "env_request":
+      return [{
+        type: "env_request",
+        request: envRequestOf({
+          toolCallId: event.toolCallId,
+          name: event.name,
+          exists: event.exists,
+          expiresAt: event.expiresAt,
+        }),
+      }];
+    case "env_request_end":
+      return [{ type: "env_request", request: null }];
     case "card_delta":
       // A card being written into the reply. The conversation has no streaming
       // TEXT (a reply arrives whole), but a card is drawn while the model

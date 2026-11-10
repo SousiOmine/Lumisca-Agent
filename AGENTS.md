@@ -143,7 +143,7 @@ Deno は公開から 24 時間以内のバージョンを既定では導入し�
 - **存在しない画面はモードのトップへ**。消えたセッション・消えたエージェント・知らないカテゴリは、エラー画面ではなく使える画面に倒します（このアプリに 404 ページはありません）。
 - **`/code` の状態は URL のタブだけ**。以前の「開いていたタブをすべて `localStorage` から復元」は廃止しました（URL が同じ問いに答えるため）。タブバーはこのページが開いたセッションの一覧です。
 - **ドラフトはセッションの集合で管理**。`/code` の下書きは、セッションへ移っても消えません（`useDrafts` は `useTabs` の `open` をキーにします）。
-- **タブの面は閉じるまで保持する**（`components/SessionPane.tsx`）。開いているタブは 1 枚ずつマウントしたままで、住所が名指さない面は `hidden` で隠すだけです。切り替えのたびに作り直すと、窓（最大 200 行）のターン組み・マークダウン解析・DOM 生成・レイアウトが毎回走り、低スペック機では数百 ms 画面が止まります。隠れた面には `active` で、追従スクロールと過去の読み出し（`useTranscriptScroll`）、入力欄の自動伸縮（`useAutoGrow`）、直近一覧の 30 秒ポーリング（`useRecentSessions`）を止めます——`display: none` の要素は測ると 0 になるためです。戻ったときの位置は、履歴を読んでいたならその行、最新を追っていたなら最下段です。`.chat[hidden] { display: none }` は必須です（`.chat` の `display: flex` が UA の `[hidden]` に勝つため。`styles_test.ts` と `components/SessionPane_test.tsx` が固定）。新規セッション画面も一度表示したら保持し、起動してセッションを開いただけのときはマウントしません。
+- **タブの面は閉じるまで保持する**（`components/SessionPane.tsx`）。開いているタブは 1 枚ずつマウントしたままで、住所が名指さない面は `hidden` で隠すだけです。切り替えのたびに作り直すと、窓（最大 200 行）のターン組み・マークダウン解析・DOM 生成・レイアウトが毎回走り、低スペック機では数百 ms 画面が止まります。隠れた面には `active` で、追従スクロールと過去の読み出し（`useTranscriptScroll`）、入力欄の自動伸縮（`useAutoGrow`）、直近一覧の 30 秒ポーリング（`useRecentSessions`）を止めます——`display: none` の要素は測ると 0 になるためです。戻ったときの位置は、履歴を読んでいたならその行、最新を追っていたなら最下部です。`.chat[hidden] { display: none }` は必須です（`.chat` の `display: flex` が UA の `[hidden]` に勝つため。`styles_test.ts` と `components/SessionPane_test.tsx` が固定）。新規セッション画面も一度表示したら保持し、起動してセッションを開いただけのときはマウントしません。
 - **エージェントを選んでいない間は会話パネルを描かない**。`/stella` は一覧だけの画面です。一覧はウィンドウの中央に立ち、`StellaModeScreen` の `data-screen`（**選択だけで決まり、幅では変わりません**）を読んだ `.stella-shell[data-screen="list"] .stella { display: none }` が会話シートを出しません。空の会話パネル（「依頼を入力してください」と無効な送信ボタン）は、同じことを 3 度言うだけでした。エージェントを選ぶと一覧が左端へすべり、会話シートが右から入ります（`stella.css` の `left` の遷移と `lum-enter-right`）。中央寄せは相対配置の `left` で、`transform` ではありません——一覧の中の ⋮ メニューとエージェントのダイアログ（`position: fixed`）が包含ブロックに閉じ込められます。900px 以下では同じ属性が「一覧か会話か」の 1 枚ずつを決め、中央寄せは外れます。
 - **画面遷移は階層のある移動だけ**: 遷移するのは stella の一覧 ⇄ 会話と、設定の一覧 ⇄ カテゴリページです。判定は `packages/web/src/screen-transition.ts` の `screenMove` がアドレスの組から決め、`hooks/useRoute.ts` の push / replace / `popstate` が `playScreenTransition` を通します。タブの切り替え、新規セッション画面とセッション、ダイアログの開閉は遷移しません（並列の面であり、階層ではないためです）。向きは `<html data-vt="push|back">` として JS が書き、形は `styles/motion.css` が決めます（1 枚ずつの画面になる 900px 以下は横スライド、それ以上はフェード）。
   - **2 列の stella は遷移しない**: 広い画面では一覧と会話が同時に並び、選ぶと一覧そのものが左へ動くため、ページ全体のスナップショットを取ると一覧が 2 枚（中央のものと左のもの）写って二重にフェードします。`screenMove` は `ScreenLayout.singleScreen`（= `useCompactViewport()`）が偽なら stella の移動を遷移にしません。設定の一覧 ⇄ カテゴリは、ページが隣に残るので幅に関係なくクロスフェードです。
@@ -193,7 +193,7 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 
 ### ツール
 
-- **集合**: ファイル、シェル、バックグラウンド実行（`async_bash` / `async_bash_status` / `async_bash_kill`。VM 内で `setsid` で動き、完了は通知としてモデルに届きます。パネルはありません）、画面、意味の層、`send_chat`、`history_search`、`skill`、`todo`、サブエージェントがプリロードされます。`todo` の計画は画面に出しません（依頼が複数あるときに、まだやっていないことを覚えておくためのもので、パネルのためではありません）。`ask` はありません。`identity` と `agent_create`、`routine_*` は main レジストリ経由で `tool_search` から見つけさせます。ルーチンは組み込みスキル `routines` が教えます（`packages/core/skills/builtin/routines.ts`）。`agent_create` の役割は `role` か `role_file`（マシン内のファイル）で渡し、UTF-8 でない・空・20,000 文字超は拒否します。
+- **集合**: ファイル、シェル、バックグラウンド実行（`async_bash` / `async_bash_status` / `async_bash_kill`。VM 内で `setsid` で動き、完了は通知としてモデルに届きます。パネルはありません）、画面、意味の層、`send_chat`、`history_search`、`skill`、`todo`、サブエージェントがプリロードされます。`todo` の計画は画面に出しません（依頼が複数あるときに、まだやっていないことを覚えておくためのもので、パネルのためではありません）。`ask` はありません。`identity` と `agent_create`、`routine_*`、`vm_env` は main レジストリ経由で `tool_search` から見つけさせます。ルーチンは組み込みスキル `routines` が教え（`packages/core/skills/builtin/routines.ts`）、環境変数は組み込みスキル `vm-env` が教えます（`packages/core/skills/builtin/vm-env.ts`）。`agent_create` の役割は `role` か `role_file`（マシン内のファイル）で渡し、UTF-8 でない・空・20,000 文字超は拒否します。
 - **`eval` は渡さない**: サーバープロセス内で JavaScript を実行するため、VM の外へ出る経路になります。VM 内でコードを動かすときは `bash` から `node` を使います。サブエージェントにも渡しません（`SubagentRuntime.eval` が `false`）。
 - **サブエージェントのスキル**: `skill` ツールが読むカタログはセッションが渡します（`SubagentRuntime.skills`）。stella はマシン内のカタログ（`stella.skills()`）から、サブエージェントが持たないツールを教える組み込みを落としたもの、code mode はワークスペースのディスカバリです。開始時に `<available_skills>` 一覧も context メッセージとして 1 件渡します（`packages/core/tools/task-hub.ts` の `spawn`）。VM の画面ツールはサブエージェントに渡しません。
 - **レジストリの分離**: セッションは `main` と `subagent` の 2 つを持ちます（`packages/core/tools/registries.ts`）。MCP・browser-lab・computer・`pdf_read_pages` は両方に入り、`identity` / `agent_create` / `routine_*` は main だけです。
@@ -226,6 +226,19 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
   - **文字は stdin で渡す**: 引数にすると VM 内のプロセス一覧から読めます（パスワードが入りえます）。書いた直後に読み戻して一致を確かめてください——`xclip -i` は fork して選択の所有者として残るので、そこで失敗すれば画面へ貼る前に分かります。
   - **イメージに `xclip` が要る**: `container/Containerfile` が持っています。足した／変えたときは `containerFilesDigest` が変わるので、次の起動でイメージが自動で再ビルドされます（`/home/agent` は退避・復元）。
   - **画面に出すのは「コピー」「ペースト」の 2 語だけ**: 受け渡しの帯の小さなボタンで、自動の経路と同じことをする（コピー＝画面 → この PC、ペースト＝この PC → 画面）。成功は見れば分かるので文を足さず、失敗のときだけボタンの隣に 1 文を出す。入力欄やパネルは置きません。
+
+### 環境変数（`vm_env`）
+
+API キーやトークンは、ツールの引数にも戻り値にも会話にも入れません。エージェントは名前だけを言い、ユーザーがダイアログに入力し、値はマシンのファイルへ直接書かれます。
+
+- **保存は 2 ファイル**: `/home/agent/.lumisca-env/env.json`（真実、キー単位で書き換える）と `env.sh`（生成物、`export NAME='…'`）。どちらも 0600 で、`/home/agent` はボリュームなのでマシンを作り直しても残ります。`env.json` を読まずに `env.sh` へ追記すると、同じ名前が 2 行になります。
+- **適用は `vm/shell.ts` の 2 か所**: `VmCommandRunner.run` と `VmBackgroundSpawner.spawn` が `bash -lc` の先頭で source します（`VM_ENV_SOURCE`）。片方だけ直すと、バックグラウンドのコマンドだけ値を見なくなります。`vm/shell_test.ts` が両方を固定しています。
+- **値は argv に載せない**: 書き込みは `podman exec` の stdin（引数にするとホストの `ps` に出ます）。`env-store_test.ts` が「コマンド文字列に値が出ない」を固定しています。
+- **待ちは `EnvRequestHub`**: `vm/env-request.ts`（セッションごとに 1 つ、同時に 1 件）。`env_request` イベントと `POST /api/stella/conversations/:agentId/env` で答え、拒否は `…/env/decline` です。期限は 15 分（`ENV_REQUEST_TIMEOUT_MS`）で、過ぎたら `env_request_end` を出してから「値は無い」を返します。待ちを解く経路を増やすときは `cancelAll` とタイマーの片付けも見てください（`InterruptionHub.endRun` が実行の終了で呼びます）。
+- **値の書き込みより先に待ちを解かない**: `StellaMachineService.provideEnv` は store に書いてから `finish` します。逆にすると、書けなかったときにエージェントが「設定済み」と思い込みます。
+- **スナップショットに載せる**: 再読み込みや再接続でダイアログを戻すため、会話のスナップショットは `envRequest`（名前・既存か・期限）を持ちます。値のフィールドはありません（サーバーも持ち歩きません）。
+- **隠せる範囲**: マシンの中ではエージェントが同じアカウントで `sudo` も使えるので、`echo $NAME` を実行すれば読めます。守っているのは「ツールの引数・結果・会話・DB を通らない」ところまでです。`vm_launch` で起動した GUI アプリには継承されません。
+- **通知**: `env_request` は実行が止まる待ちなので、`handover` と同じく Web Push とデスクトップ通知の対象です（`packages/server/push.ts` の `isNotifiable`）。
 
 ### 履歴と自動実行
 
