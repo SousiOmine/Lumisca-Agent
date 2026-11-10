@@ -203,9 +203,9 @@ Deno.test("a finished run carries its reply", () => {
     "ja",
   );
   assertEquals(finished.message.title, "朝の番人");
-  // One line: a toast has room for the first sentence, not for markdown
-  // blocks.
-  assertEquals(finished.message.body, "## デプロイは緑 問題はありません。");
+  // One line of the words: a toast has room for the first sentence, not for
+  // markdown blocks, and no renderer to hide their marks.
+  assertEquals(finished.message.body, "デプロイは緑 問題はありません。");
   assertEquals(finished.urgency, "normal");
 });
 

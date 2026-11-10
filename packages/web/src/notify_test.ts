@@ -57,9 +57,12 @@ Deno.test("buildAgentEndNotification carries the start of the reply", () => {
     ja,
     "## デプロイは緑\n\n問題はありません",
   );
+  // The heading's mark is not part of what the run said: a toast has no
+  // renderer, so a mark left in the text is punctuation the reader has to
+  // read past.
   assertEquals(
     body,
-    "「Morning check」の処理が完了しました\n## デプロイは緑 問題はありません",
+    "「Morning check」の処理が完了しました\nデプロイは緑 問題はありません",
   );
   // A silent run has nothing to add, so the body is what it always was.
   assertEquals(

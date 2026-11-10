@@ -32,6 +32,8 @@
  * - `./routine.ts` — routine schedules, their limits and the next-run rule,
  * - `./watch-path.ts` — the field path a watch reads out of a tool's result,
  * - `./push.ts` — Web Push subscriptions and the base64url codec,
+ * - `./markdown-text.ts` — a reply's markdown as the plain text of a
+ *   notification,
  * - `./ui-markup/` — the card markup an agent writes into a reply,
  * - `./i18n/mod.ts` — Locale, the message catalogue, locale resolution.
  */
@@ -63,4 +65,5 @@ export * from "./web-search.ts";
 export * from "./routine.ts";
 export * from "./watch-path.ts";
 export * from "./push.ts";
+export * from "./markdown-text.ts";
 export * from "./ui-markup/index.ts";

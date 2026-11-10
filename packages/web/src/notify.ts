@@ -1,4 +1,4 @@
-import { withTimeout } from "@lumisca/core/shared";
+import { notificationText, withTimeout } from "@lumisca/core/shared";
 import type { Translator } from "@lumisca/core/shared";
 import { notifyApi, type WindowState, windowStateApi } from "./shell.ts";
 import { t } from "./i18n.ts";
@@ -94,12 +94,10 @@ export function buildAgentEndNotification(
     name: sessionLabel(sessionName, tr),
   });
   // One line: a reply can be a document, and its first paragraph is what a
-  // toast has room for. Whitespace is folded so a markdown reply does not
-  // arrive as a stack of empty lines.
-  const gist = truncate(
-    (detail ?? "").replace(/\s+/g, " ").trim(),
-    MAX_DETAIL_CHARS,
-  );
+  // toast has room for. The conversion is shared with the installed app's
+  // notification (core/shared/markdown-text.ts): a toast has no renderer,
+  // so a mark left in the text is a mark the reader sees literally.
+  const gist = notificationText(detail, MAX_DETAIL_CHARS);
   return { title: "Lumisca", body: gist === "" ? head : `${head}\n${gist}` };
 }
 

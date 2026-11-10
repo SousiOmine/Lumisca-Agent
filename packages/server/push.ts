@@ -6,7 +6,12 @@ import {
   sendPush,
   type VapidKeys,
 } from "@lumisca/core";
-import { type Locale, type MessageKey, translate } from "@lumisca/core/shared";
+import {
+  type Locale,
+  type MessageKey,
+  notificationText,
+  translate,
+} from "@lumisca/core/shared";
 
 const log = createLogger("push");
 
@@ -32,13 +37,6 @@ const MAX_HANDOVER_CHARS = 120;
  * expanding it. The same cap the desktop notification applies (see
  * web/src/notify.ts), so the two describe one run the same way. */
 const MAX_DETAIL_CHARS = 120;
-
-/** Text as one line, capped: a reply is markdown that can be a document,
- * and a toast has room for its first sentence. */
-function oneLine(text: string | undefined, max: number): string {
-  const folded = (text ?? "").replace(/\s+/g, " ").trim();
-  return Array.from(folded).slice(0, max).join("");
-}
 
 /** What `push` events send: the message, and how the push service should
  * treat it (a blocked run wakes the device). */
@@ -90,10 +88,12 @@ export function buildPushNotification(
   switch (event.type) {
     case "agent_end": {
       // The reply is the body: "finished" alone does not say whether opening
-      // the app is worth it, and a routine's result IS the answer. A run
-      // that said nothing the user can read (a silent turn, a card or files
-      // without words) falls back to saying it finished.
-      const reply = oneLine(event.reply, MAX_DETAIL_CHARS);
+      // the app is worth it, and a routine's result IS the answer. It is
+      // markdown, and a phone's notification has no renderer, so it is read
+      // as the words it decorates (the same conversion the desktop uses). A
+      // run that said nothing the user can read (a silent turn, a card or
+      // files without words) falls back to saying it finished.
+      const reply = notificationText(event.reply, MAX_DETAIL_CHARS);
       return {
         message: {
           title: name,
