@@ -10,6 +10,7 @@ import * as fsp from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
+import * as net from "node:net";
 
 type DenoTestOptions = {
   name: string;
@@ -41,6 +42,14 @@ const denoTest = (
   test(name, body as () => unknown);
 };
 
+function sync<T>(body: () => T): T {
+  try {
+    return body();
+  } catch (error) {
+    mapError(error);
+  }
+}
+
 class NotFoundError extends Error {
   override name = "NotFound";
 }
@@ -52,6 +61,9 @@ class PermissionDeniedError extends Error {
 }
 class NotCapableError extends Error {
   override name = "NotCapable";
+}
+class AddrInUseError extends Error {
+  override name = "AddrInUse";
 }
 
 function mapError(error: unknown): never {
@@ -121,33 +133,44 @@ async function* readDir(pathname: string) {
 
 class FsFile {
   #fd: number;
+  #pos = 0;
   constructor(fd: number) {
     this.#fd = fd;
   }
   read(p: Uint8Array): Promise<number | null> {
-    const n = fs.readSync(this.#fd, p, 0, p.length, null);
-    return n === 0 ? null : n;
+    const n = fs.readSync(this.#fd, p, 0, p.length, this.#pos);
+    if (n === 0) return Promise.resolve(null);
+    this.#pos += n;
+    return Promise.resolve(n);
   }
   write(p: Uint8Array): Promise<number> {
-    return Promise.resolve(fs.writeSync(this.#fd, p));
+    const n = fs.writeSync(this.#fd, p, 0, p.length, this.#pos);
+    this.#pos += n;
+    return Promise.resolve(n);
   }
   seek(offset: number, whence: number): Promise<number> {
-    return Promise.resolve(fs.fsyncSync ? fs.readSync : 0).then(() => {
-      // fs.readSync moves the position with a null position; emulate lseek.
-      return lseek(this.#fd, offset, whence);
-    });
+    if (whence === 0) this.#pos = offset;
+    else if (whence === 1) this.#pos += offset;
+    else this.#pos = fs.fstatSync(this.#fd).size + offset;
+    return Promise.resolve(this.#pos);
   }
   stat(): Promise<ReturnType<typeof fileInfo>> {
     return Promise.resolve(fileInfo(fs.fstatSync(this.#fd)));
   }
+  get readable(): ReadableStream<Uint8Array> {
+    const file = this;
+    return new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        const buffer = new Uint8Array(64 * 1024);
+        const read = await file.read(buffer);
+        if (read === null) controller.close();
+        else controller.enqueue(buffer.subarray(0, read));
+      },
+    });
+  }
   close(): void {
     fs.closeSync(this.#fd);
   }
-}
-
-/** lseek(2) via FFI is overkill; the spike's callers seek from the start. */
-function lseek(_fd: number, offset: number, _whence: number): number {
-  return offset;
 }
 
 function openFile(
@@ -179,6 +202,7 @@ type CommandOptions = {
   stdin?: "null" | "inherit" | "piped";
   stdout?: "null" | "inherit" | "piped";
   stderr?: "null" | "inherit" | "piped";
+  signal?: AbortSignal;
 };
 
 class ChildProcess {
@@ -203,6 +227,25 @@ class ChildProcess {
         },
       })
       : new ReadableStream({ start: (c) => c.close() });
+  }
+  get stdin(): WritableStream<Uint8Array> {
+    const input = this.#child.stdin;
+    return new WritableStream<Uint8Array>({
+      write(chunk) {
+        return new Promise<void>((resolve, reject) => {
+          if (!input) {
+            resolve();
+            return;
+          }
+          input.write(chunk, (error) => (error ? reject(error) : resolve()));
+        });
+      },
+      close() {
+        return new Promise<void>((resolve) => {
+          input?.end(() => resolve());
+        });
+      },
+    });
   }
   get pid(): number {
     return this.#child.pid ?? -1;
@@ -249,7 +292,26 @@ class Command {
           : "pipe",
       ],
     });
+    const signal = this.#options.signal;
+    if (signal !== undefined) {
+      if (signal.aborted) child.kill("SIGTERM");
+      else signal.addEventListener("abort", () => child.kill("SIGTERM"), { once: true });
+    }
     return new ChildProcess(child);
+  }
+  outputSync() {
+    const result = spawnSync(this.#cmd, this.#options.args ?? [], {
+      cwd: this.#options.cwd,
+      env: this.#options.env ?? process.env,
+      stdio: "pipe",
+    });
+    return {
+      code: result.status ?? 1,
+      success: result.status === 0,
+      signal: null,
+      stdout: new Uint8Array(result.stdout ?? []),
+      stderr: new Uint8Array(result.stderr ?? []),
+    };
   }
   async output() {
     const result = spawnSync(this.#cmd, this.#options.args ?? [], {
@@ -265,11 +327,107 @@ class Command {
       stderr: new Uint8Array(result.stderr ?? []),
     };
   }
-  async outputSync() {
-    return await this.output();
+}
+
+
+
+/** The Deno-shaped WebSocket that hono/deno's adapter drives through its
+ * onopen/onmessage/onclose fields. Bun delivers the same events to the
+ * server's `websocket` handler, so this object is the bridge between them. */
+class DenoSocket {
+  onopen: ((event: Event) => void) | null = null;
+  onmessage: ((event: { data: unknown }) => void) | null = null;
+  onclose: ((event: { code: number; reason: string }) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+  readyState = 0;
+  readonly protocol: string;
+  readonly url: string;
+  #ws: { send(data: unknown): void; close(code?: number, reason?: string): void } | null = null;
+  constructor(url: string, protocol: string) {
+    this.url = url;
+    this.protocol = protocol;
+  }
+  _attach(ws: { send(data: unknown): void; close(code?: number, reason?: string): void }) {
+    this.#ws = ws;
+    this.readyState = 1;
+    this.onopen?.(new Event("open"));
+  }
+  _message(data: string | Uint8Array) {
+    this.onmessage?.({ data: typeof data === "string" ? data : data.buffer });
+  }
+  _close(code: number, reason: string) {
+    this.readyState = 3;
+    this.onclose?.({ code, reason });
+  }
+  send(data: unknown): void {
+    this.#ws?.send(data);
+  }
+  close(code = 1000, reason = ""): void {
+    this.#ws?.close(code, reason);
   }
 }
 
+
+/** Deno.listen for plain TCP: enough to claim a port and to prove it is free.
+ * Bun binds synchronously, so EADDRINUSE arrives as a throw like Deno's. */
+function denoListen(options: { hostname?: string; port?: number; transport?: string }) {
+  try {
+    const server = Bun.listen({
+      hostname: options.hostname ?? "127.0.0.1",
+      port: options.port ?? 0,
+      socket: {
+        data() {},
+        open(socket) {
+          socket.end();
+        },
+      },
+    });
+    return {
+      addr: {
+        transport: "tcp",
+        hostname: options.hostname ?? "127.0.0.1",
+        port: server.port,
+      },
+      close: () => server.stop(true),
+    };
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "EADDRINUSE") throw new AddrInUseError((error as Error).message);
+    throw error;
+  }
+}
+
+/** Deno.connect, used only to pre-flight a unix socket before handing the
+ * address to dbus. */
+function denoConnect(options: { path?: string; hostname?: string; port?: number }) {
+  return new Promise<{ close: () => void }>((resolve, reject) => {
+    const socket = options.path !== undefined
+      ? net.connect(options.path)
+      : net.connect(options.port ?? 0, options.hostname ?? "127.0.0.1");
+    socket.once("connect", () => resolve({ close: () => socket.destroy() }));
+    socket.once("error", (error) => reject(error));
+  });
+}
+
+let activeServer: ReturnType<typeof Bun.serve> | null = null;
+
+function upgradeWebSocket(req: Request, options?: { protocol?: string }) {
+  const server = activeServer;
+  if (server === null) {
+    throw new Error("Deno.upgradeWebSocket was called outside a Deno.serve handler");
+  }
+  const socket = new DenoSocket(req.url, options?.protocol ?? "");
+  const upgraded = server.upgrade(req, {
+    data: { __denoSocket: socket },
+    ...(options?.protocol
+      ? { headers: { "Sec-WebSocket-Protocol": options.protocol } }
+      : {}),
+  } as Parameters<typeof server.upgrade>[1]);
+  if (!upgraded) {
+    return { response: new Response("WebSocket upgrade failed", { status: 400 }), socket };
+  }
+  return { response: new Response(null, { status: 101 }), socket };
+}
 
 /** Deno.serve on Bun.serve: enough for the HTTP paths the suite exercises.
  * WebSocket upgrades still throw (see upgradeWebSocket). */
@@ -284,18 +442,35 @@ function denoServe(
   const finished = new Promise<void>((resolve) => {
     finish = resolve;
   });
+  const holder: { server: ReturnType<typeof Bun.serve> | null } = { server: null };
   const server = Bun.serve({
     hostname: options.hostname ?? "127.0.0.1",
     port: options.port ?? 0,
     async fetch(req) {
+      const previous = activeServer;
+      activeServer = holder.server;
       try {
         return await handler(req);
       } catch (error) {
         console.error("deno-shim: handler threw", error);
         return new Response("Internal Server Error", { status: 500 });
+      } finally {
+        activeServer = previous;
       }
     },
+    websocket: {
+      open(ws) {
+        (ws.data as { __denoSocket?: DenoSocket }).__denoSocket?._attach(ws);
+      },
+      message(ws, message) {
+        (ws.data as { __denoSocket?: DenoSocket }).__denoSocket?._message(message);
+      },
+      close(ws, code, reason) {
+        (ws.data as { __denoSocket?: DenoSocket }).__denoSocket?._close(code, reason);
+      },
+    },
   });
+  holder.server = server;
   const addr = { transport: "tcp", hostname: server.hostname, port: server.port };
   options.onListen?.(addr);
   return {
@@ -341,18 +516,37 @@ const DenoShim = {
     has: (key: string) => process.env[key] !== undefined,
     toObject: () => ({ ...process.env }) as Record<string, string>,
   },
-  readTextFile: (p: string) => fsp.readFile(p, "utf8"),
-  readTextFileSync: (p: string) => fs.readFileSync(p, "utf8"),
-  readFile: (p: string) => fsp.readFile(p),
-  readFileSync: (p: string) => fs.readFileSync(p),
-  writeTextFile: (p: string, data: string, opts?: { append?: boolean; create?: boolean }) =>
-    fsp.writeFile(p, data, { flag: opts?.append ? "a" : "w" }),
+  readTextFile: (p: string) => fsp.readFile(p, "utf8").catch(mapError),
+  readTextFileSync: (p: string) => sync(() => fs.readFileSync(p, "utf8")),
+  readFile: (p: string) => fsp.readFile(p).catch(mapError),
+  readFileSync: (p: string) => sync(() => fs.readFileSync(p)),
+  writeTextFile: (
+    p: string,
+    data: string,
+    opts?: { append?: boolean; create?: boolean; mode?: number },
+  ) =>
+    fsp.writeFile(p, data, {
+      flag: opts?.append ? "a" : "w",
+      mode: opts?.mode,
+    }).catch(mapError),
   writeTextFileSync: (p: string, data: string, opts?: { append?: boolean }) =>
-    fs.writeFileSync(p, data, { flag: opts?.append ? "a" : "w" }),
-  writeFile: (p: string, data: Uint8Array) => fsp.writeFile(p, data),
-  writeFileSync: (p: string, data: Uint8Array) => fs.writeFileSync(p, data),
-  mkdir: async (p: string, o?: { recursive?: boolean }) => makeDir(p, o),
-  mkdirSync: makeDir,
+    sync(() => fs.writeFileSync(p, data, { flag: opts?.append ? "a" : "w" })),
+  writeFile: (p: string, data: Uint8Array) => fsp.writeFile(p, data).catch(mapError),
+  writeFileSync: (p: string, data: Uint8Array) => sync(() => fs.writeFileSync(p, data)),
+  mkdir: async (p: string, o?: { recursive?: boolean }) => {
+    try {
+      makeDir(p, o);
+    } catch (error) {
+      mapError(error);
+    }
+  },
+  mkdirSync: (p: string, o?: { recursive?: boolean }) => {
+    try {
+      makeDir(p, o);
+    } catch (error) {
+      mapError(error);
+    }
+  },
   remove: (p: string, o?: { recursive?: boolean }) =>
     fsp.rm(p, { recursive: o?.recursive ?? false, force: false }).catch(mapError),
   removeSync: (p: string, o?: { recursive?: boolean }) =>
@@ -371,22 +565,24 @@ const DenoShim = {
   readDirSync,
   makeTempDir: tempDirAsync,
   makeTempDirSync: tempDir,
-  copyFile: (a: string, b: string) => fsp.copyFile(a, b),
-  rename: (a: string, b: string) => fsp.rename(a, b),
-  renameSync: (a: string, b: string) => fs.renameSync(a, b),
-  realPath: (p: string) => fsp.realpath(p),
-  realPathSync: (p: string) => fs.realpathSync(p),
-  chmod: (p: string, mode: number) => fsp.chmod(p, mode),
-  symlink: (a: string, b: string) => fsp.symlink(a, b),
+  copyFile: (a: string, b: string) => fsp.copyFile(a, b).catch(mapError),
+  rename: (a: string, b: string) => fsp.rename(a, b).catch(mapError),
+  renameSync: (a: string, b: string) =>
+    sync(() => fs.renameSync(a, b)),
+  realPath: (p: string) => fsp.realpath(p).catch(mapError),
+  realPathSync: (p: string) => sync(() => fs.realpathSync(p)),
+  chmod: (p: string, mode: number) => fsp.chmod(p, mode).catch(mapError),
+  symlink: (a: string, b: string) => fsp.symlink(a, b).catch(mapError),
   open: (p: string, o?: Parameters<typeof openFile>[1]) => Promise.resolve(openFile(p, o)),
   openSync: openFile,
-  SeekMode: { START: 0, CURRENT: 1, END: 2 },
+  SeekMode: { Start: 0, Current: 1, End: 2, START: 0, CURRENT: 1, END: 2 },
   Command,
   errors: {
     NotFound: NotFoundError,
     AlreadyExists: AlreadyExistsError,
     PermissionDenied: PermissionDeniedError,
     NotCapable: NotCapableError,
+    AddrInUse: AddrInUseError,
   },
   networkInterfaces: () => {
     const out = [];
@@ -437,15 +633,9 @@ const DenoShim = {
     write: (p: Uint8Array) => Promise.resolve(process.stderr.write(p)),
   },
   serve: denoServe,
-  listen: () => {
-    throw new Error("Deno.listen is not shimmed in this spike");
-  },
-  connect: () => {
-    throw new Error("Deno.connect is not shimmed in this spike");
-  },
-  upgradeWebSocket: () => {
-    throw new Error("Deno.upgradeWebSocket is not shimmed in this spike");
-  },
+  listen: denoListen,
+  connect: denoConnect,
+  upgradeWebSocket,
   PointerValue: undefined,
   UnsafePointer: undefined,
   UnsafeCallback: undefined,
