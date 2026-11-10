@@ -1,0 +1,5 @@
+[test]
+preload = ["./tools/bun/deno-shim.ts"]
+
+[run]
+preload = ["./tools/bun/deno-shim.ts"]
