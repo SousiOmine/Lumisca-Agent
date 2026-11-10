@@ -1,10 +1,12 @@
 import { assert, assertEquals } from "@std/assert";
+import type { Workspace } from "../domain/workspace.ts";
+import { CARD_HELP } from "../shared/ui-markup/help.ts";
 import {
   buildChatSystemPrompt,
+  buildStellaSystemPrompt,
   buildSystemPrompt,
   sessionSkills,
 } from "./mod.ts";
-import type { Workspace } from "../domain/workspace.ts";
 import {
   TOOL_ASK,
   TOOL_ASYNC_BASH,
@@ -119,13 +121,36 @@ Deno.test("coding prompt never mentions a tool", () => {
   // change whenever a backend detached or an MCP server was added, and the
   // session would rewrite its head on an event that has nothing to do with
   // the instructions.
-  const prompt = buildSystemPrompt(workspace);
+  //
+  // The card paragraph is scanned out: it is a constant of the reply, not of
+  // the tool set, so it cannot go stale with a backend, and it says "read"
+  // as an ordinary verb ("fields are read as ...").
+  const prompt = buildSystemPrompt(workspace).replace(CARD_HELP, "");
   for (const name of CODING_TOOLS) {
     assertEquals(
       prompt.includes(name),
       false,
       `${name} must not be named in the prompt`,
     );
+  }
+});
+
+Deno.test("every prompt whose reply a person reads teaches the card grammar", () => {
+  // The grammar used to live in a prompt-sections module that only the
+  // sub-agent prompt rendered, so no main session was ever told how to write
+  // a card: the screen drew plain lists where a Choice belonged, and nothing
+  // failed. The three builders are the whole set of prompts a reader sees.
+  for (
+    const prompt of [
+      buildSystemPrompt(workspace),
+      buildChatSystemPrompt(),
+      buildStellaSystemPrompt(),
+    ]
+  ) {
+    assert(prompt.includes(CARD_HELP), prompt.slice(0, 200));
+    // The fence is what makes a block a card; a prompt that named the tags
+    // but not the fence would still produce plain markdown.
+    assert(prompt.includes("fenced code block"), prompt.slice(0, 200));
   }
 });
 

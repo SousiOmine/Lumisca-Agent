@@ -3,11 +3,14 @@
  *
  * A card is part of the reply, not a tool call: the model writes it inside a
  * fenced block tagged `card`, and the screen draws it in place (see
- * ./segments.ts). This text is sent in the system prompt of every session
- * that can draw one, so it states the grammar once, in the shape a model can
- * copy, and nothing that changes per card. The parser in ./build.ts is the
- * authority — a tag this text does not name is refused there, and a tag it
- * names is accepted — so the two are edited together
+ * ./segments.ts). Every prompt whose reply a person reads carries this text —
+ * code mode, chat and stella (tools/system-prompt.ts); a sub-agent's prompt
+ * does not, because its text is a report to another model. Since no tool
+ * description can state the grammar of something no tool produces, this is
+ * the only place it is taught, and it states it once, in the shape a model
+ * can copy, and nothing that changes per card. The parser in ./build.ts is
+ * the authority — a tag this text does not name is refused there, and a tag
+ * it names is accepted — so the two are edited together
  * (ui-markup_test.ts fails when a tag is missing here).
  */
 export const CARD_HELP: string = [

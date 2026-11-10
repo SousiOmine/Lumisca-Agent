@@ -4,6 +4,7 @@ import { TOOL_READ, TOOL_TODO } from "../shared/tool-names.ts";
 import { outputLanguageRule, outputLanguageSentence } from "./language.ts";
 import { buildChatSystemPrompt, buildSystemPrompt } from "./system-prompt.ts";
 import { subagentSystemPrompt } from "./subagent-format.ts";
+import { CARD_HELP } from "../shared/ui-markup/help.ts";
 import type { Workspace } from "../domain/workspace.ts";
 
 /** A folder-less workspace for prompt tests. */
@@ -57,9 +58,16 @@ Deno.test("buildSystemPrompt: nothing that varies with the session is in it", ()
   const prompt = buildSystemPrompt(workspace);
   assertEquals(prompt.includes("Write every reply in"), false);
   // No tool name either — the prompt would go stale the moment a backend
-  // detached or a server was added.
+  // detached or a server was added. The card paragraph is scanned out: it is
+  // a constant of the reply, not of the session, and it says "read" as an
+  // ordinary verb.
+  const withoutCards = prompt.replace(CARD_HELP, "");
   for (const name of TOOLS) {
-    assertEquals(prompt.includes(name), false, `${name} must not be named`);
+    assertEquals(
+      withoutCards.includes(name),
+      false,
+      `${name} must not be named`,
+    );
   }
 });
 

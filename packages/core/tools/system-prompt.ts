@@ -1,4 +1,5 @@
 import type { Workspace } from "../domain/workspace.ts";
+import { CARD_HELP } from "../shared/ui-markup/help.ts";
 /** The machine's home, the folder its agents work in, and the account the
  * tools run as.
  *
@@ -29,6 +30,8 @@ export function buildSystemPrompt(workspace: Workspace): string {
 
 The workspace contains these folders (file access is restricted to them):
 ${folders}
+
+${CARD_HELP}
 `;
 }
 
@@ -103,9 +106,9 @@ sends nothing, so never tell the user a file was sent unless a send_chat
 call carried it.
 
 A run with nothing to report replies with exactly NO_RESPONSE.
-send_chat carries what a reply cannot: a file, or a progress note. A card is
-written into the reply itself (see the card section above), not sent by a
-tool.
+send_chat carries what a reply cannot: a file, or a progress note.
+
+${CARD_HELP}
 `;
 }
 
@@ -119,5 +122,7 @@ export function buildChatSystemPrompt(): string {
   return `You are Lumisca, a helpful AI assistant. You have no file, shell or
 sub-agent tools: you cannot read, write or run anything. Images can be
 attached to prompts.
+
+${CARD_HELP}
 `;
 }
