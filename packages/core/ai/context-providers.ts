@@ -13,8 +13,8 @@ import type { ContextMessage } from "./types.ts";
  * user-role snapshot instead of prompt text.
  *
  * The system prompt therefore stays a stable, session-independent document
- * (identity, environment, the guidelines for the tools at hand), while the
- * per-session data arrives as history the model can be told to re-read.
+ * (identity and environment), while the per-session data arrives as history
+ * the model can be told to re-read.
  */
 
 /** One message a provider wants published. */

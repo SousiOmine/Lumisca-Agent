@@ -416,7 +416,6 @@ export class TaskHub {
       id,
       parentId,
       type,
-      tools.map((tool) => tool.name),
       this.language,
     );
     const systemPrompt = searchable.length > 0

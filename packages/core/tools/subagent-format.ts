@@ -4,41 +4,34 @@ import type { NotificationPayload } from "../domain/notification.ts";
 import type { SubagentType, TaskInfo } from "../shared/mod.ts";
 import { DEFAULT_LOCALE, type Locale } from "../shared/mod.ts";
 import { MAX_TOOL_OUTPUT, truncate, truncatedNote } from "./truncate.ts";
-import { outputLanguageSection } from "./language.ts";
-import {
-  EXPLORE_SUBAGENT_SECTIONS,
-  GENERAL_SUBAGENT_SECTIONS,
-  renderPromptSections,
-} from "./prompt-sections.ts";
+import { outputLanguageRule } from "./language.ts";
 
 /** The system prompt of one sub-agent: its identity (ids and role, which
- * only the caller knows) plus the guidelines of its kind, pruned to the
- * tools it actually has (see prompt-sections). The output-language rule is
- * part of it: a sub-agent's report is read by its parent and shown to the
- * user, so it must come back in the session's language. */
+ * only the caller knows), the protocol of its report, and the reply
+ * language. It carries no list of guidelines, exactly like a session's
+ * prompt: what a tool is for and when to reach for it is the tool's own
+ * description, which is read whenever the model decides. The one fact the
+ * tool set cannot state is that an explore sub-agent is read-only — a set
+ * of tools says what CAN run, not what may — so that belongs to the
+ * identity. */
 export function subagentSystemPrompt(
   agentId: string,
   parentId: string,
   type: SubagentType,
-  tools: readonly string[],
   language: Locale = DEFAULT_LOCALE,
 ): string {
   const role = type === "explore" ? "research" : "coding";
-  const sections = type === "explore"
-    ? EXPLORE_SUBAGENT_SECTIONS
-    : GENERAL_SUBAGENT_SECTIONS;
+  const readOnly = type === "explore"
+    ? " You are read-only: investigate with read/list_dir, the shell (grep, " +
+      "find, git log, ...) and skill, report findings with file references " +
+      "(path:line), and do not modify files or run a command with side " +
+      "effects."
+    : "";
   return `You are a ${role} sub-agent of Lumisca, started by agent ${parentId} ` +
-    `to handle one piece of work. Your own id is ${agentId}.
+    `to handle one piece of work. Your own id is ${agentId}.${readOnly}
 Work on the assigned task and answer with a complete final report as your last message.
 If you need input mid-task, send a message to ${parentId} with send_message. You cannot ask the user directly.
-
-Guidelines:
-${
-      renderPromptSections(
-        [outputLanguageSection(language), ...sections],
-        tools,
-      )
-    }
+${outputLanguageRule(language)}
 `;
 }
 

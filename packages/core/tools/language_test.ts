@@ -1,7 +1,7 @@
 import { assert, assertEquals } from "@std/assert";
 import { DEFAULT_LOCALE } from "../shared/mod.ts";
 import { TOOL_READ, TOOL_TODO } from "../shared/tool-names.ts";
-import { outputLanguageBullet, outputLanguageSentence } from "./language.ts";
+import { outputLanguageRule, outputLanguageSentence } from "./language.ts";
 import { buildChatSystemPrompt, buildSystemPrompt } from "./system-prompt.ts";
 import { subagentSystemPrompt } from "./subagent-format.ts";
 import type { Workspace } from "../domain/workspace.ts";
@@ -15,15 +15,18 @@ const workspace: Workspace = {
   chat: false,
 };
 
-/** A couple of tools, so the guidelines render more than the language
- * rule (the sections key on the preloaded tool set). */
+/** A couple of tool names, so the prompt test can check that neither is
+ * named. */
 const TOOLS = [TOOL_READ, TOOL_TODO];
 
-Deno.test("outputLanguageBullet: names the language, in English, for both", () => {
-  const ja = outputLanguageBullet("ja");
+Deno.test("outputLanguageRule: names the language, in English, for both", () => {
+  const ja = outputLanguageRule("ja");
   assertEquals(ja.includes("Japanese"), true);
-  const en = outputLanguageBullet("en");
+  const en = outputLanguageRule("en");
   assertEquals(en.includes("English"), true);
+  // A prompt line, not a list item: the sub-agent prompt carries no
+  // guidelines, and a leading "- " would make this read as one.
+  assertEquals(ja.startsWith("- "), false);
   // The prompt text itself is uniformly English: only the language the
   // agent must answer in varies.
   const japanese = /[\u3040-\u30ff\u4e00-\u9fff]/;
@@ -67,29 +70,17 @@ Deno.test("buildChatSystemPrompt: no rule and no tool name in the prompt either"
 });
 
 Deno.test("subagentSystemPrompt: reports come back in the session language", () => {
-  const explore = subagentSystemPrompt(
-    "agent_2",
-    "agent_1",
-    "explore",
-    [],
-    "ja",
-  );
+  const explore = subagentSystemPrompt("agent_2", "agent_1", "explore", "ja");
   assertEquals(explore.includes("Write every reply in Japanese"), true);
-  const general = subagentSystemPrompt(
-    "agent_3",
-    "agent_1",
-    "general",
-    [],
-    "en",
-  );
+  const general = subagentSystemPrompt("agent_3", "agent_1", "general", "en");
   assertEquals(general.includes("Write every reply in English"), true);
   // The identity header is untouched.
   assert(general.includes("You are a coding sub-agent of Lumisca"));
   // Omitted → the fallback language (sub-agents of a session built before
   // the language existed still get a rule).
-  const fallback = subagentSystemPrompt("a", "b", "explore", []);
+  const fallback = subagentSystemPrompt("a", "b", "explore");
   assertEquals(
-    fallback.includes(outputLanguageBullet(DEFAULT_LOCALE)),
+    fallback.includes(outputLanguageRule(DEFAULT_LOCALE)),
     true,
   );
 });

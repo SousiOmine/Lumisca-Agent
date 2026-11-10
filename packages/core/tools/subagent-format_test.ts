@@ -1,9 +1,10 @@
-import { assertEquals } from "@std/assert";
+import { assert, assertEquals } from "@std/assert";
 import type { SubagentStatus, TaskInfo } from "../shared/mod.ts";
 import {
   endsWithToolCallSyntax,
   formatTaskCompletion,
   formatTaskOutput,
+  subagentSystemPrompt,
 } from "./subagent-format.ts";
 
 function info(
@@ -118,4 +119,28 @@ Deno.test("formatTaskOutput keeps the running live tail readable", () => {
   assertEquals(text.includes("Live output (tail):"), true);
   // A running task's text is a tail, not a result: no warning guessing.
   assertEquals(text.includes("[warning]"), false);
+});
+
+Deno.test("a sub-agent prompt is identity and protocol, with no guideline list", () => {
+  const explore = subagentSystemPrompt("agent_2", "agent_1", "explore", "en");
+  // The identity only the caller knows.
+  assert(explore.includes("research sub-agent of Lumisca"));
+  assert(explore.includes("Your own id is agent_2"));
+  assert(explore.includes("send a message to agent_1 with send_message"));
+  // The report protocol, and the one capability the tool set cannot state:
+  // an explore sub-agent may investigate but not change anything.
+  assert(explore.includes("complete final report as your last message"));
+  assert(explore.includes("You are read-only"));
+  // No guidelines: a session's prompt has none either, and the cross-call
+  // guidance lives in the tools' own descriptions.
+  assertEquals(explore.includes("Guidelines:"), false);
+  assertEquals(
+    explore.split("\n").filter((line) => line.startsWith("- ")),
+    [],
+  );
+
+  // A general sub-agent carries the same shape, without the restriction.
+  const general = subagentSystemPrompt("agent_3", "agent_1", "general", "en");
+  assert(general.includes("coding sub-agent of Lumisca"));
+  assertEquals(general.includes("You are read-only"), false);
 });

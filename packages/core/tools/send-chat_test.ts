@@ -168,7 +168,7 @@ Deno.test("send_chat: too many files in one call is refused", async () => {
 
 Deno.test("send_chat: the description tells the model to speak before long work", async () => {
   // The description is the only place that reaches the model about WHEN to
-  // send: the system prompt does not repeat it (see STELLA_PROMPT_SECTIONS).
+  // send: no system prompt repeats it.
   // The old wording ("while long work is still running") left the decision to
   // the model's own sense of timing, and what it decided was to wait until it
   // had something to report — at which point the reply itself was the report,

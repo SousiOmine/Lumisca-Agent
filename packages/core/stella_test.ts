@@ -12,7 +12,6 @@ import { createStellaTools } from "./tools/toolsets.ts";
 import { hostBackends } from "./tools/toolsets.ts";
 import { createVmTools } from "./vm/tools.ts";
 import { createHistorySearchTool } from "./session/history.ts";
-import { STELLA_PROMPT_SECTIONS } from "./tools/prompt-sections.ts";
 import { BackgroundProcessManager } from "./tools/background.ts";
 import { TodoHub } from "./tools/todo.ts";
 import { TaskHub } from "./tools/task-hub.ts";
@@ -821,11 +820,9 @@ Deno.test("stella tool set: eval is absent, the screen tools present", () => {
   void faux;
 });
 
-Deno.test("stella tool set: every preloaded tool has a guideline section", () => {
-  // The stella sections are keyed on the preloaded tools, so a tool added
-  // without a section would reach a session whose prompt says nothing about
-  // it. Built the way the factory builds it (tools/toolsets.ts), not copied
-  // by hand — the coding set's equivalent test caught a drifted list once.
+Deno.test("stella tool set: the conversation's tools are preloaded", () => {
+  // Built the way the factory builds it (tools/toolsets.ts), not copied by
+  // hand — the hand-written list this replaced had already drifted once.
   const screen: VmScreen = {
     screenshot: () => Promise.resolve(new Uint8Array()),
     move: () => Promise.resolve(),
@@ -866,44 +863,8 @@ Deno.test("stella tool set: every preloaded tool has a guideline section", () =>
     }),
   }).map((tool) => tool.name);
 
-  const covered = new Set(
-    STELLA_PROMPT_SECTIONS.flatMap((section) => section.requires ?? []),
-  );
-  // Tools whose whole contract (arguments, result markers) is stated by the
-  // tool's own description, with no cross-call guidance to add. Adding a
-  // name here says the tool needs no bullet — never that one was forgotten.
-  const noSection = [
-    // A tool whose whole contract is its description. The prompt repeats
-    // nothing of it: an agent reads the description whenever it decides.
-    "read",
-    "write",
-    "edit",
-    "list_dir",
-    "bash",
-    "async_bash",
-    "async_bash_status",
-    "async_bash_kill",
-    "skill",
-    "send_chat",
-    "todo",
-    "history_search",
-    "web_search",
-    "web_fetch",
-    "task",
-    "task_output",
-    "send_message",
-    "vm_do",
-    "vm_wait",
-  ];
-  const unguided = stellaTools.filter((name) =>
-    !covered.has(name) && !noSection.includes(name)
-  );
-  assertEquals(
-    unguided,
-    [],
-    "a stella tool needs a guideline section or an entry in noSection",
-  );
-  // The invariant is only meaningful while the set is the full one.
+  // The tools the conversation itself needs: one silently missing would
+  // make the checks below vacuous.
   for (
     const expected of [
       "history_search",

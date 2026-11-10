@@ -17,13 +17,8 @@ import {
   TOOL_TODO,
   TOOL_WRITE,
 } from "../shared/tool-names.ts";
-import {
-  CHAT_PROMPT_SECTIONS,
-  renderPromptSections,
-} from "./prompt-sections.ts";
-
-/** Every tool a coding session preloads (the set the guideline sections
- * key on). */
+/** Every tool a coding session preloads (the set the prompt must not
+ * name). */
 const CODING_TOOLS = [
   TOOL_READ,
   TOOL_WRITE,
@@ -146,9 +141,4 @@ Deno.test("chat prompt is the folder-less framing alone", () => {
     "chat sessions have no shell",
   );
   assertEquals(prompt.includes("The workspace contains these folders"), false);
-  assertEquals(
-    renderPromptSections(CHAT_PROMPT_SECTIONS, [TOOL_ASK]).includes("todo"),
-    false,
-    "a chat session without the todo tool gets no todo guidance",
-  );
 });

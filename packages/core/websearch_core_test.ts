@@ -83,13 +83,11 @@ Deno.test("core: unknown provider ids are refused", async () => {
   }
 });
 
-/** Whether the session's snapshotted prompt carries the web-search
- * guideline. The prompt is built from the tool set the session actually has
- * (agent/factory.ts), so it is the observable proof that the pair was
- * preloaded — and that it was absent when no provider was configured. */
+/** Whether the session has the web-search pair. Read from the session's
+ * own tool list: the prompt names no tools (see tools/system-prompt.ts), so
+ * the preloaded tools themselves are the observable proof that the pair was
+ * attached — and that it was absent when no provider was configured. */
 function sessionHasWebTools(core: LumiscaCore, sessionId: string): boolean {
-  // Read from the session's own tool list: the prompt no longer names its
-  // tools (see tools/system-prompt.ts).
   const names = core.getAgent(sessionId)?.toolNames ?? [];
   return names.includes("web_search") && names.includes("web_fetch");
 }
