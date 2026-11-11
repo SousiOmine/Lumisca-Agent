@@ -49,8 +49,8 @@ export const settings = {
   // --- general panel --------------------------------------------------------
   "settings.general.serverAddress": { ja: "接続先", en: "Server" },
   "settings.general.updateNoUpdater": {
-    ja: "このサーバーには更新機能がありません（開発実行、またはデスクトップアプリが管理するサーバーです）。",
-    en: "This server has no updater (it is a development run, or a server the desktop app manages).",
+    ja: "このサーバーには更新機能がありません。開発実行か、デスクトップアプリが管理するサーバーです。",
+    en: "This server has no updater. It is a development run, or a server the desktop app manages.",
   },
   "settings.general.updateUnauthorized": {
     ja: "サーバーの認証が切れています。このページを読み込み直して、もう一度お試しください。",
@@ -104,8 +104,8 @@ export const settings = {
     en: "Auto-restart on apply",
   },
   "settings.general.autoRestartDesc": {
-    ja: "常時稼働サーバー向けの設定です。無効にした場合は次回起動時に反映されます（※再起動時は実行中のセッションが停止します）。",
-    en: "For always-on servers. When disabled, changes take effect on the next start (running sessions will be interrupted on restart).",
+    ja: "常時稼働サーバー向けの設定です。無効にした場合は次回起動時に反映されます。再起動すると実行中のセッションは停止します。",
+    en: "For always-on servers. When disabled, changes take effect on the next start. Restarting stops running sessions.",
   },
   "settings.general.downloading": { ja: "ダウンロード中", en: "Downloading" },
   "settings.general.checkForUpdate": {
@@ -397,8 +397,8 @@ export const settings = {
     en: "e.g. home-vllm",
   },
   "settings.userProvider.idHint": {
-    ja: "モデル指定で使う識別子（例: home-vllm/gpt-4o）。英数字・. _ - のみ",
-    en: "Identifier for model references (e.g. home-vllm/gpt-4o). Alphanumeric, . _ - only",
+    ja: "モデル指定で使う識別子。例: home-vllm/gpt-4o。英数字と . _ - のみ使えます。",
+    en: "Identifier for model references. Example: home-vllm/gpt-4o. Alphanumeric and . _ - only.",
   },
   "settings.userProvider.idHintEdit": {
     ja: "編集時は変更できません",
@@ -407,8 +407,8 @@ export const settings = {
   "settings.userProvider.baseUrlLabel": { ja: "Base URL", en: "Base URL" },
   "settings.userProvider.apiLabel": { ja: "API", en: "API" },
   "settings.userProvider.baseUrlHint": {
-    ja: "OpenAI 互換エンドポイントの基底 URL（通常は /v1 まで）",
-    en: "Base URL for the OpenAI-compatible endpoint (usually up to /v1)",
+    ja: "OpenAI 互換エンドポイントの基底 URL。通常は /v1 までです。",
+    en: "Base URL for the OpenAI-compatible endpoint. Usually up to /v1.",
   },
   "settings.userProvider.apiDefaultHint": {
     ja: "モデルが未指定の場合の既定 API",
@@ -416,8 +416,8 @@ export const settings = {
   },
   "settings.userProvider.apiKeyLabel": { ja: "APIキー", en: "API key" },
   "settings.userProvider.apiKeyKeepBlank": {
-    ja: "（空欄で現在の設定を維持）",
-    en: "(leave blank to keep)",
+    ja: "空欄なら現在の設定を維持",
+    en: "Leave blank to keep the current value",
   },
   "settings.userProvider.apiKeyPlaceholderSet": {
     ja: "設定済み（上書き）",
@@ -511,8 +511,8 @@ export const settings = {
     en: "Model for sub-tasks",
   },
   "settings.model.fastModelDesc": {
-    ja: "タスク本体とは別に、高速・低コストな補助処理（要約・サブタスクなど）で使用するモデル。",
-    en: "A fast, low-cost model for auxiliary tasks (summarization, sub-tasks, etc.), separate from the main task.",
+    ja: "タスク本体とは別に、要約やサブタスクなどの補助処理に使う高速・低コストなモデル。",
+    en: "A fast, low-cost model for auxiliary work such as summaries and sub-tasks, separate from the main task.",
   },
   "settings.model.imageAnalysisModel": {
     ja: "画像分析モデル",
@@ -724,7 +724,7 @@ export const settings = {
     en: "This server ({origin})",
   },
   "settings.connection.localServerDesc": {
-    ja: "ローカル（このPC）で稼働しているサーバーに接続します",
+    ja: "このPCで稼働しているサーバーに接続します",
     en: "Connect to the server running locally on this PC",
   },
   "settings.connection.view": { ja: "表示", en: "View" },
@@ -760,8 +760,8 @@ export const settings = {
     en: "The URL must start with http:// or https://",
   },
   "settings.connection.urlHint": {
-    ja: "接続先サーバーの URL を入力してください（http:// または https://）。",
-    en: "Enter the server URL (http:// or https://).",
+    ja: "接続先サーバーの URL を入力してください。http:// か https:// で始まるもの。",
+    en: "Enter the server URL, starting with http:// or https://.",
   },
   "settings.connection.unnamed": { ja: "（無名）", en: "(unnamed)" },
   /** The row of a registry entry is the way into its fields: the first opens
@@ -876,8 +876,8 @@ export const settings = {
   "settings.webSearch.form.check": { ja: "接続を確認", en: "Check" },
   "settings.webSearch.form.checking": { ja: "確認中…", en: "Checking…" },
   "settings.webSearch.form.checked": {
-    ja: "検索に成功しました（結果: {count} 件）。追加できます。",
-    en: "Search worked ({count} result(s)). You can add it now.",
+    ja: "検索に成功しました。{count} 件見つかりました。追加できます。",
+    en: "Search worked. {count} result(s) found. You can add it now.",
   },
   "settings.webSearch.form.failed": {
     ja: "検索に失敗しました: {detail}",

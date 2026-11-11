@@ -117,12 +117,12 @@ export const chrome = {
     en: "Lumisca v{version} has been downloaded.",
   },
   "chrome.update.ready": {
-    ja: "新しいバージョン（v{version}）にアップデートできます。",
+    ja: "新しいバージョン v{version} にアップデートできます。",
     en: "An update to v{version} is available.",
   },
   "chrome.update.restartNote": {
-    ja: "再起動すると適用されます（※実行中のセッションは停止します）。",
-    en: "Restart to apply (running sessions will be stopped).",
+    ja: "再起動すると適用されます。実行中のセッションは停止します。",
+    en: "Restart to apply. Running sessions will be stopped.",
   },
   "chrome.update.systemdNote": {
     ja: "サービスの再起動後に新しいバージョンが適用されます。",
@@ -162,16 +162,16 @@ export const chrome = {
 
   // --- server down banner --------------------------------------------------
   "chrome.serverDown.crashed": {
-    ja: "ローカルサーバーが終了しました（終了コード: {code}）",
-    en: "The local server exited (exit code: {code})",
+    ja: "ローカルサーバーが終了しました。終了コード: {code}",
+    en: "The local server exited. Exit code: {code}",
   },
   "chrome.serverDown.crashedNoCode": {
     ja: "ローカルサーバーが終了しました",
     en: "The local server exited",
   },
   "chrome.serverDown.hung": {
-    ja: "ローカルサーバーから応答がありません（応答停止の可能性）",
-    en: "The local server is not responding (possibly hung)",
+    ja: "ローカルサーバーから応答がありません。応答が停止している可能性があります。",
+    en: "The local server is not responding. It may have hung.",
   },
   "chrome.serverDown.unreachable": {
     ja: "ローカルサーバーに接続できません",
@@ -213,8 +213,8 @@ export const chrome = {
 
   // --- model picker --------------------------------------------------------
   "chrome.modelPicker.providersError": {
-    ja: "プロバイダー一覧を取得できませんでした（サーバーに接続できません）",
-    en: "Could not fetch the provider list (cannot reach the server)",
+    ja: "プロバイダー一覧を取得できませんでした。サーバーに接続できません。",
+    en: "Could not fetch the provider list. The server is unreachable.",
   },
   "chrome.modelPicker.modelsError": {
     ja: "モデル一覧を取得できませんでした",
@@ -233,7 +233,7 @@ export const chrome = {
     en: "Search models…",
   },
   "chrome.modelPicker.reasoning": {
-    ja: "推論モデル（Reasoning）",
+    ja: "推論モデル",
     en: "Reasoning model",
   },
   "chrome.modelPicker.noImageModels": {
@@ -241,8 +241,8 @@ export const chrome = {
     en: "No models support image input",
   },
   "chrome.modelPicker.noEnabledModels": {
-    ja: "利用可能なモデルがありません（設定画面でモデルを有効化してください）",
-    en: "No models available (enable models in the settings)",
+    ja: "利用可能なモデルがありません。設定画面でモデルを有効化してください。",
+    en: "No models available. Enable models in the settings.",
   },
   "chrome.modelPicker.noMatch": {
     ja: "条件に一致するモデルがありません",
@@ -269,8 +269,8 @@ export const chrome = {
     en: "No workspaces registered",
   },
   "chrome.workspacePicker.chatOnly": {
-    ja: "通常チャット（ワークスペースなし）",
-    en: "Plain chat (no workspace)",
+    ja: "ワークスペースなしのチャット",
+    en: "Plain chat without a workspace",
   },
   "chrome.workspacePicker.folderCount": {
     ja: "{count} 件のフォルダー",
@@ -316,7 +316,7 @@ export const chrome = {
     en: "Select folder",
   },
   "chrome.workspaceModal.description": {
-    ja: "関連する複数のフォルダーをまとめて、作業環境（ワークスペース）を作成します。AIによるファイルの読み書きやコマンド実行は、指定したフォルダー内に限定されます。",
+    ja: "関連する複数のフォルダーをまとめて、ワークスペースを作成します。AIによるファイルの読み書きやコマンド実行は、指定したフォルダー内に限定されます。",
     en: "Group related folders into a workspace. AI file read/write and command execution are restricted to the specified folders.",
   },
   "chrome.workspaceModal.removeFolder": {

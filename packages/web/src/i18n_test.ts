@@ -16,7 +16,7 @@ const en = createTranslator("en");
 Deno.test("describeError: each failure kind is said in the app's language", () => {
   assertEquals(
     describeError(new ApiError("Failed to fetch", "network"), ja),
-    "サーバーに接続できません（自動で再試行します）",
+    "サーバーに接続できません。自動で再試行します。",
   );
   assertEquals(
     describeError(new ApiError("Request failed: 400", "http-4xx"), en),

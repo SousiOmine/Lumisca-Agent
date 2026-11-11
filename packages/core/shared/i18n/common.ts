@@ -55,8 +55,8 @@ export const common = {
    * fetch" does not tell them whether to retry or to fix the input. The
    * server's own text travels along as `{detail}`. */
   "common.error.network": {
-    ja: "サーバーに接続できません（自動で再試行します）",
-    en: "Cannot reach the server (retrying)",
+    ja: "サーバーに接続できません。自動で再試行します。",
+    en: "Cannot reach the server. Retrying.",
   },
   "common.error.badRequest": {
     ja: "入力が受け付けられませんでした",
@@ -148,8 +148,8 @@ export const common = {
     en: "Sign-in failed: {error}",
   },
   "common.mcpAuth.missing": {
-    ja: "この認証リクエストは見つかりませんでした（期限切れか、すでに完了しています）。Lumisca に戻り、もう一度お試しください。",
-    en: "This sign-in request was not found (it expired or already finished). Return to Lumisca and try again.",
+    ja: "この認証リクエストは見つかりませんでした。期限切れか、すでに完了しています。Lumisca に戻り、もう一度お試しください。",
+    en: "This sign-in request was not found. It expired or already finished. Return to Lumisca and try again.",
   },
 
   // --- core-generated transcript text --------------------------------------
@@ -160,15 +160,15 @@ export const common = {
    * It is stored with the message, so a checkpoint keeps the language it was
    * generated in. */
   "checkpoint.title": {
-    ja: "履歴 {count} 件を要約しました（約 {tokens} トークン）",
-    en: "Summarized {count} messages (~{tokens} tokens)",
+    ja: "履歴 {count} 件を約 {tokens} トークンに要約しました。",
+    en: "Summarized {count} messages into about {tokens} tokens.",
   },
   /** Why a run ended without doing anything: the model answered with
    * neither text nor a tool call, and the vacant-response retries ran
    * out (see ai/retry-policy.ts). Without this the turn just stopped,
    * which reads as the agent ignoring the prompt. */
   "session.vacantResponse": {
-    ja: "モデルの応答が空でした（本文もツール呼び出しもありません）。{count} 回まで自動で再試行しましたが回復しませんでした。もう一度送信してください。",
+    ja: "モデルの応答が空でした。本文もツール呼び出しもありません。{count} 回まで自動で再試行しましたが回復しませんでした。もう一度送信してください。",
     en:
       "The model answered with neither text nor a tool call. Retried " +
       "automatically {count} times without recovering. Send the message " +
@@ -176,7 +176,7 @@ export const common = {
   },
   /** Why a run ended on a rate-limit/error budget that had been retried. */
   "session.retryExhausted": {
-    ja: "自動再試行の上限（{count} 回）に達したため停止しました: {message}",
+    ja: "自動再試行の上限 {count} 回に達したため停止しました: {message}",
     en: "Stopped after {count} automatic retries: {message}",
   },
 

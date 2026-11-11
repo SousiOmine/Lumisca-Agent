@@ -43,16 +43,16 @@ export const chat = {
   },
   "chat.mode.plan.label": { ja: "プラン", en: "Plan" },
   "chat.mode.plan.description": {
-    ja: "作業計画を立案します（ユーザーの承認があるまでファイル編集は行いません）",
-    en: "Draft a plan (no file edits until you approve)",
+    ja: "作業計画を立案します。承認するまでファイル編集は行いません。",
+    en: "Draft a plan. No file edits until you approve.",
   },
   "chat.mode.plan.modeLabel": { ja: "プラン作成モード", en: "Plan mode" },
 
   // --- client-side slash commands ------------------------------------------
   "chat.slash.compact.label": { ja: "履歴を圧縮", en: "Compact history" },
   "chat.slash.compact.description": {
-    ja: "古い履歴を要約します（続けて指示を書くと要約の観点を指定できます）",
-    en: "Summarize older history (type a focus after it to steer the summary)",
+    ja: "古い履歴を要約します。続けて指示を書くと、要約の観点を指定できます。",
+    en: "Summarize older history. Type a focus after it to steer the summary.",
   },
   "chat.slash.skill.label": { ja: "スキル", en: "Skills" },
   "chat.slash.skill.description": {
@@ -167,8 +167,8 @@ export const chat = {
     en: "Recent sessions",
   },
   "chat.newSession.chatName": {
-    ja: "通常チャット（ワークスペースなし）",
-    en: "Chat (no workspace)",
+    ja: "ワークスペースなしのチャット",
+    en: "Chat without a workspace",
   },
 
   // --- visuals (diagrams and images the agent puts in its reply) ----------
@@ -185,8 +185,8 @@ export const chat = {
     en: "Diagrams may not contain scripts",
   },
   "chat.visual.error.size": {
-    ja: "図が大きすぎます（上限 {limit}）",
-    en: "Diagram is too large (limit {limit})",
+    ja: "図が大きすぎます。上限は {limit} です。",
+    en: "Diagram is too large. The limit is {limit}.",
   },
   "chat.visual.error.source": { ja: "ソースを表示", en: "Show source" },
 
@@ -238,8 +238,8 @@ export const chat = {
     en: "Loading…",
   },
   "chat.stella.machine.starting": {
-    ja: "初回セットアップを行っています（数分かかります）…",
-    en: "Preparing the machine for the first time (this takes a few minutes)…",
+    ja: "初回セットアップを行っています。数分かかります…",
+    en: "Preparing the machine for the first time. This takes a few minutes…",
   },
   /** The conversation header's back button on a phone, where the list and
    * the conversation are two screens rather than two columns. */
@@ -442,11 +442,11 @@ export const chat = {
   },
   "chat.stella.handover.done": { ja: "完了", en: "Done" },
   "chat.stella.handover.finishing": { ja: "送信中…", en: "Sending…" },
-  /** When the wait ends by itself: the agent resumes without the user, so
-   * saying when keeps a late return from looking like a lost run. */
+  /** When the wait ends by itself: saying when keeps a late return from
+   * looking like a lost run. */
   "chat.stella.handover.deadline": {
-    ja: "この待機は {time} までです（過ぎるとエージェントは自動で再開します）",
-    en: "This wait ends at {time} (the agent resumes on its own)",
+    ja: "この待機は {time} までです",
+    en: "This wait ends at {time}.",
   },
   /** The card `vm_env` puts in the conversation: the user types a secret
    * that goes into the machine and never into the conversation. The card is
