@@ -17,7 +17,6 @@ import type {
 } from "../types.ts";
 import { Composer } from "./Composer.tsx";
 import { StellaPane } from "./StellaPane.tsx";
-import { EnvRequestDialog } from "./stella/EnvRequestDialog.tsx";
 import { StellaTranscript } from "./stella/StellaTranscript.tsx";
 
 interface StellaViewProps {
@@ -232,6 +231,8 @@ export function StellaView({
             uploadBase={uploadBase}
             onRewind={handleRewind}
             onSend={(text) => onPrompt(text, [], [])}
+            onProvideEnv={onProvideEnv}
+            onDeclineEnv={onDeclineEnv}
             onLoadOlder={onLoadOlder}
             loadingOlder={loadingOlder}
             pinToken={pinToken}
@@ -275,13 +276,6 @@ export function StellaView({
           />
         </div>
       </div>
-      {conversation?.envRequest != null && (
-        <EnvRequestDialog
-          request={conversation.envRequest}
-          onProvide={onProvideEnv}
-          onDecline={onDeclineEnv}
-        />
-      )}
       {pane.mounted && (
         <StellaPane
           running={machineRunning}

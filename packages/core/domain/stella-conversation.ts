@@ -91,7 +91,7 @@ export interface StellaHandover {
 export interface StellaEnvRequest {
   toolCallId: string;
   name: string;
-  /** The name already had a value: the dialog says the entry is replaced. */
+  /** The name already had a value: the card says the entry is replaced. */
   exists: boolean;
   /** When the wait ends on its own (epoch ms). */
   expiresAt: number;

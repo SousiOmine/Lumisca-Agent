@@ -4,14 +4,14 @@
  * The tool is the only way a secret reaches the machine without passing
  * through the conversation. It takes a NAME and returns a sentence — never a
  * value — because the whole point is that the model does not learn it: the
- * user types it into a dialog in the browser, the server writes it into the
+ * user types it into a card in the conversation, the server writes it into the
  * machine, and every later command has it as `$NAME`.
  *
  * Discoverable rather than preloaded (see the built-in `vm-env` skill): most
  * conversations never need one, and a tool definition kept in the context of
  * every turn for that is a cost with no gain. Main-only as well — the saved
  * value belongs to the machine, not to one agent's run, and a sub-agent
- * cannot put a dialog in front of the user.
+ * cannot put a request in front of the user.
  */
 import { CoreError } from "../errors.ts";
 import { TOOL_VM_ENV } from "../shared/mod.ts";
@@ -39,7 +39,7 @@ const envSchema: SchemaObject<{ name: SchemaString }> = object({
 
 export interface VmEnvToolOptions {
   requests: EnvRequestHub;
-  /** Read to tell the dialog whether the name already has a value. */
+  /** Read to tell the card whether the name already has a value. */
   store: VmEnvStore;
 }
 
@@ -53,12 +53,12 @@ export function createVmEnvTool(
     description:
       "Ask the user to enter the value of an environment variable, for a " +
       "program that needs a secret (an API key, token or password). A " +
-      "dialog appears in the conversation for the user and this tool waits " +
+      "card appears in the conversation for the user and this tool waits " +
       "until they enter it or decline; the run is blocked meanwhile. The " +
       "value is saved in the machine and from then on every command " +
       "(bash, async_bash) has it as $NAME — its value is never returned to " +
       "you, so use the variable rather than printing it. If nobody answers " +
-      `within ${TIMEOUT_MINUTES} minutes the dialog closes and the tool ` +
+      `within ${TIMEOUT_MINUTES} minutes the card closes and the tool ` +
       "returns without a value.",
     parameters: envSchema,
     execute: async (_id, params, signal): Promise<ToolResult> => {
@@ -90,7 +90,7 @@ export function createVmEnvTool(
         case "timed_out":
           return text(
             `The user did not answer within ${TIMEOUT_MINUTES} minutes, so ` +
-              `no value was saved and the dialog closed. ${name} is not ` +
+              `no value was saved and the card closed. ${name} is not ` +
               "available: do what you can without it, or stop and say what " +
               "you still need. Calling this tool again starts a new wait.",
           );

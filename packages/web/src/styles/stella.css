@@ -1113,13 +1113,54 @@
   color: var(--text-dim);
 }
 
-/* The `vm_env` dialog: a secret goes from this field into the machine. The
- * sheet's own gap applies to the form as one child, so the form carries the
- * same rhythm inside. */
-.env-request-form {
+/* The `vm_env` card: a secret goes from this field into the machine. It is
+ * drawn in the conversation, not over it (see EnvRequestCard), so it takes
+ * the surface a UI card takes and the width a single field needs — a reply
+ * may be 640px wide, a form with one input in it does not want to be. */
+.env-request-card {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
+  width: 100%;
+  max-width: 420px;
+  padding: 14px 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  /* One card per request, mounted once, so the arrival can be a plain
+   * one-shot animation: unlike a message row it cannot be re-staged by a
+   * re-render (see hooks/useArrivals.ts for why rows need a flag). */
+  animation: lum-rise-small var(--lum-dur-mid) var(--lum-ease-out) both;
+}
+
+.env-request-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.env-request-text {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+/* The plain button's own surface IS this card's (both --surface-2), which
+ * on the sheet it replaces was not the case: there it sat on --surface and
+ * read as a button. Here the border is what shows it. */
+.env-request-card .btn:not(.primary) {
+  background: transparent;
+  border-color: var(--border);
+}
+
+/* The refusal travels with the save: one row, the sheet's own alignment. */
+.env-request-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 /* The entry exists: the value entered replaces it. Quieter than the request

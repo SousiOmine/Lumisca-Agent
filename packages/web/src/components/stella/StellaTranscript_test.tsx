@@ -22,6 +22,8 @@ function render(state: Partial<StellaConversationState>): string {
       uploadBase: "/api/stella/conversations/a1/upload",
       onRewind: () => {},
       onSend: () => {},
+      onProvideEnv: () => Promise.resolve(),
+      onDeclineEnv: () => Promise.resolve(),
       onLoadOlder: () => false,
       loadingOlder: false,
     }),
@@ -109,6 +111,26 @@ Deno.test("StellaTranscript: a run with nothing to show yet is typing dots", () 
   assertStringIncludes(html, "stella-typing-dot");
   assertStringIncludes(html, "作業中");
   assertStringIncludes(html, "visually-hidden");
+});
+
+Deno.test("StellaTranscript: a blocked run asks in a card, not in dots", () => {
+  const html = render({
+    running: true,
+    envRequest: {
+      toolCallId: "t1",
+      name: "OPENAI_API_KEY",
+      exists: false,
+      expiresAt: Date.now() + 15 * 60_000,
+    },
+  });
+  // The request sits where the reply would: in the message column, with the
+  // agent's face, so the answer is given in the conversation it belongs to.
+  assertStringIncludes(html, "env-request-card");
+  assertStringIncludes(html, "OPENAI_API_KEY");
+  assertStringIncludes(html, "stella-msg-avatar");
+  // The dots say the agent is composing. It is blocked on the user instead,
+  // and the card says so: both at once would read as a stuck run.
+  assertEquals(html.includes("stella-typing"), false);
 });
 
 Deno.test("StellaTranscript: the last failure is shown, not swallowed", () => {

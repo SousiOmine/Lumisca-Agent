@@ -11,6 +11,7 @@ import {
 import { CardView } from "../chat/CardView.tsx";
 import { RunningIndicator } from "../chat/RunningIndicator.tsx";
 import { AgentAvatar } from "./AgentAvatar.tsx";
+import { EnvRequestCard } from "./EnvRequestCard.tsx";
 import { type MessageAuthor, StellaMessage } from "./StellaMessage.tsx";
 
 /**
@@ -34,6 +35,8 @@ export function StellaTranscript({
   uploadBase,
   onRewind,
   onSend,
+  onProvideEnv,
+  onDeclineEnv,
   onLoadOlder,
   loadingOlder,
   pinToken,
@@ -53,6 +56,12 @@ export function StellaTranscript({
   onRewind: (timestamp: number, text: string) => void;
   /** Send a card's answer as the user's next message. */
   onSend: (text: string) => void;
+  /** The user entered the value `vm_env` asked for. The card that asks is
+   * drawn here rather than over the window: the request is a turn of the
+   * conversation (see EnvRequestCard). */
+  onProvideEnv: (value: string, toolCallId: string) => Promise<void>;
+  /** The user refused to give the value. */
+  onDeclineEnv: (toolCallId: string) => Promise<void>;
   /** Read the entries before the loaded window (the reader reached the
    * top). Returns whether a read started. */
   onLoadOlder: () => boolean;
@@ -154,7 +163,46 @@ export function StellaTranscript({
             onSend={onSend}
           />
         )}
-        {conversation.running && (
+        {/* The question the run is blocked on, at the live edge where the
+         * answer belongs. It takes the agent's face and column like a
+         * message: the agent is the one asking. */}
+        {conversation.envRequest !== null && (
+          <div className="stella-msg">
+            <div className="stella-msg-avatar" aria-hidden="true">
+              <AgentAvatar
+                agentId={author.id}
+                name={author.name}
+                icon={author.icon}
+                size={26}
+              />
+            </div>
+            <div className="stella-msg-main">
+              <EnvRequestCard
+                // A different request is a different field: without this,
+                // a resync that replaces one request with another would keep
+                // the value typed for the first.
+                key={conversation.envRequest.toolCallId}
+                request={conversation.envRequest}
+                onProvide={onProvideEnv}
+                onDecline={onDeclineEnv}
+              />
+              {/* The sheet announced itself (a dialog takes the attention);
+               * a card does not, so the request says its sentence once for
+               * a screen reader. Silent otherwise: the same sentence is
+               * written in the card right beside it. */}
+              <span className="visually-hidden" role="status">
+                {t("chat.stella.env.request", {
+                  name: conversation.envRequest.name,
+                })}
+              </span>
+            </div>
+          </div>
+        )}
+        {/* The dots say "the agent is composing". While the run waits for
+         * the user it is not composing but blocked, and the card above says
+         * so — two opposite signals in one column would read as a stuck
+         * run. */}
+        {conversation.running && conversation.envRequest === null && (
           <RunningIndicator
             avatar={
               <AgentAvatar

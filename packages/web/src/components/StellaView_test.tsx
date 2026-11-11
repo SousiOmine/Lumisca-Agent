@@ -120,9 +120,11 @@ Deno.test("StellaView: a hand-over draws the pane whatever the caller chose", ()
   assertStringIncludes(html, "stella-handover-clipboard");
 });
 
-Deno.test("StellaView: the env dialog asks for a secret field, not a text field", () => {
-  // The run is blocked on this dialog, so it is drawn from the conversation's
-  // state alone — the screen pane has nothing to do with it.
+Deno.test("StellaView: the env request is a card in the conversation", () => {
+  // The run is blocked on this request, but it is drawn as a card at the live
+  // edge of the transcript rather than as a sheet over the window: reading
+  // the conversation, or writing a sentence of one's own, must stay possible
+  // while the value is fetched from somewhere else.
   const expiresAt = Date.now() + 15 * 60_000;
   const html = render({
     conversation: {
@@ -134,8 +136,12 @@ Deno.test("StellaView: the env dialog asks for a secret field, not a text field"
       },
     },
   });
-  assertStringIncludes(html, "env-request-form");
+  assertStringIncludes(html, "env-request-card");
+  assertStringIncludes(html, "stella-column");
   assertStringIncludes(html, "OPENAI_API_KEY");
+  // Nothing covers the conversation: no backdrop, no dialog role.
+  assertEquals(html.includes("modal-backdrop"), false);
+  assertEquals(html.includes('role="dialog"'), false);
   // A password field: the value is not meant to be read off the screen, and
   // the browser must not offer to remember it.
   assertStringIncludes(html, 'type="password"');

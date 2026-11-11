@@ -448,10 +448,10 @@ export const chat = {
     ja: "この待機は {time} までです（過ぎるとエージェントは自動で再開します）",
     en: "This wait ends at {time} (the agent resumes on its own)",
   },
-  /** The dialog `vm_env` opens: the user types a secret that goes into the
-   * machine and never into the conversation. The wording says both halves,
-   * because a field that looks like any other would make the user paste a
-   * key into the wrong place. */
+  /** The card `vm_env` puts in the conversation: the user types a secret
+   * that goes into the machine and never into the conversation. The wording
+   * says both halves, because a field that looks like any other would make
+   * the user paste a key into the wrong place. */
   "chat.stella.env.title": {
     ja: "環境変数の入力",
     en: "Environment variable",
@@ -465,19 +465,32 @@ export const chat = {
     en: "This variable is already set; the value you enter replaces it.",
   },
   "chat.stella.env.value": { ja: "値", en: "Value" },
+  /** Short on purpose: a phone's field is 16px (so the keyboard does not
+   * zoom the page), and the parenthetical that used to be here was cut off
+   * at the field's edge. The promise it made moved into the hint, which
+   * wraps. */
   "chat.stella.env.placeholder": {
-    ja: "値を入力（エージェントには渡りません）",
-    en: "Enter the value (the agent never sees it)",
+    ja: "値を入力",
+    en: "Enter the value",
   },
   "chat.stella.env.hint": {
-    ja: "値はマシンの中に保存され、以降のコマンドが環境変数として使います。",
+    ja:
+      "値はマシンの中に保存され、以降のコマンドが環境変数として使います。" +
+      "値そのものはエージェントに渡りません。",
     en:
       "The value is stored in the machine; later commands use it as an " +
-      "environment variable.",
+      "environment variable. The agent never sees the value itself.",
   },
   /** The button is the generic save (common.save); only the busy state is
-   * this dialog's own. */
+   * this card's own. */
   "chat.stella.env.saving": { ja: "保存中…", en: "Saving…" },
+  /** Refusing to give the value. A card has no close button, so this is the
+   * only way to say "no"; it names what happens (the run goes on) rather
+   * than "cancel", which in a card would read as dismissing it. */
+  "chat.stella.env.decline": {
+    ja: "値を渡さずに続ける",
+    en: "Continue without it",
+  },
   /** The same deadline sentence as the hand-over's: both waits end the same
    * way, so one phrasing covers both. */
   "chat.stella.env.deadline": {
