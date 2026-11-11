@@ -3,7 +3,6 @@ import { useState } from "preact/compat";
 import { formatClockTime } from "../../format.ts";
 import { useLocale, useT } from "../../i18n.ts";
 import type { StellaEnvRequest } from "../../types.ts";
-import { Field } from "../Field.tsx";
 
 interface EnvRequestCardProps {
   /** The variable the run is waiting for. The name is all this card knows:
@@ -99,19 +98,21 @@ export function EnvRequestCard({
       {request.exists && (
         <p className="env-request-existing">{t("chat.stella.env.existing")}</p>
       )}
-      <Field label={t("chat.stella.env.value")}>
-        <input
-          type="password"
-          name="env-value"
-          value={value}
-          placeholder={t("chat.stella.env.placeholder")}
-          autocomplete="off"
-          autocapitalize="off"
-          autocorrect="off"
-          spellcheck={false}
-          onInput={(event) => setValue(event.currentTarget.value)}
-        />
-      </Field>
+      {/* No visible caption: "値を入力" is the placeholder, and a line above
+       * it saying "値" was a third name for the same thing. The accessible
+       * name stays, without a row of its own. */}
+      <input
+        type="password"
+        name="env-value"
+        aria-label={t("chat.stella.env.value")}
+        value={value}
+        placeholder={t("chat.stella.env.placeholder")}
+        autocomplete="off"
+        autocapitalize="off"
+        autocorrect="off"
+        spellcheck={false}
+        onInput={(event) => setValue(event.currentTarget.value)}
+      />
       <p className="env-request-hint">{t("chat.stella.env.hint")}</p>
       <p className="env-request-deadline">
         {t("chat.stella.env.deadline", {

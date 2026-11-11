@@ -1147,6 +1147,12 @@
   overflow-wrap: anywhere;
 }
 
+/* The field has no caption of its own (see EnvRequestCard), so the input is
+ * the row. */
+.env-request-card input {
+  width: 100%;
+}
+
 /* The plain button's own surface IS this card's (both --surface-2), which
  * on the sheet it replaces was not the case: there it sat on --surface and
  * read as a button. Here the border is what shows it. */

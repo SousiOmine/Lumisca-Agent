@@ -449,53 +449,49 @@ export const chat = {
     en: "This wait ends at {time} (the agent resumes on its own)",
   },
   /** The card `vm_env` puts in the conversation: the user types a secret
-   * that goes into the machine and never into the conversation. The wording
-   * says both halves, because a field that looks like any other would make
-   * the user paste a key into the wrong place. */
+   * that goes into the machine and never into the conversation. The card is
+   * small, so every line earns its place: the title names the kind, the
+   * sentence names the variable and asks once, the hint keeps the one
+   * promise a secret needs (the agent never sees it). */
   "chat.stella.env.title": {
-    ja: "環境変数の入力",
+    ja: "環境変数",
     en: "Environment variable",
   },
   "chat.stella.env.request": {
-    ja: "エージェントが環境変数 {name} の値を求めています。",
-    en: "The agent is asking for the value of {name}.",
+    ja: "{name} の値を入力してください。",
+    en: "Enter the value of {name}.",
   },
   "chat.stella.env.existing": {
-    ja: "この変数はすでに設定されています。入力した値で置き換えます。",
-    en: "This variable is already set; the value you enter replaces it.",
+    ja: "設定済みの値を置き換えます。",
+    en: "Replaces the stored value.",
   },
+  /** The input's accessible name only: the visible caption was a third name
+   * for what the placeholder already says. */
   "chat.stella.env.value": { ja: "値", en: "Value" },
-  /** Short on purpose: a phone's field is 16px (so the keyboard does not
-   * zoom the page), and the parenthetical that used to be here was cut off
-   * at the field's edge. The promise it made moved into the hint, which
-   * wraps. */
   "chat.stella.env.placeholder": {
     ja: "値を入力",
     en: "Enter the value",
   },
   "chat.stella.env.hint": {
-    ja:
-      "値はマシンの中に保存され、以降のコマンドが環境変数として使います。" +
-      "値そのものはエージェントに渡りません。",
-    en:
-      "The value is stored in the machine; later commands use it as an " +
-      "environment variable. The agent never sees the value itself.",
+    ja: "マシンに保存され、エージェントには渡りません。",
+    en: "Stored in the machine; the agent never sees it.",
   },
   /** The button is the generic save (common.save); only the busy state is
    * this card's own. */
   "chat.stella.env.saving": { ja: "保存中…", en: "Saving…" },
   /** Refusing to give the value. A card has no close button, so this is the
-   * only way to say "no"; it names what happens (the run goes on) rather
-   * than "cancel", which in a card would read as dismissing it. */
+   * only way to say "no". Short: it sits beside the save, and the row has
+   * two words in it already. */
   "chat.stella.env.decline": {
-    ja: "値を渡さずに続ける",
-    en: "Continue without it",
+    ja: "入れない",
+    en: "Skip",
   },
-  /** The same deadline sentence as the hand-over's: both waits end the same
-   * way, so one phrasing covers both. */
+  /** The hand-over's deadline sentence in a card's width: the same two facts
+   * (when it ends, that it resumes by itself), without the "この待機は…です"
+   * frame a full-width bar can afford. */
   "chat.stella.env.deadline": {
-    ja: "この待機は {time} までです（過ぎるとエージェントは自動で再開します）",
-    en: "This wait ends at {time} (the agent resumes on its own)",
+    ja: "{time} まで（過ぎると自動で再開）",
+    en: "Until {time} (then it resumes on its own)",
   },
   /** The clipboard the user and the machine share while the user drives the
    * screen. Two words in the hand-over bar: what worked is visible on its own
