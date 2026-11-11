@@ -213,13 +213,19 @@ Deno.test("a failing migration rolls back together with its stamp", () => {
   }
 });
 
+/** user_version one below the setup-turn migration (append-only list
+ * position 18): a database from before conversations had a setup turn. Named
+ * rather than "the last one", so appending a migration does not quietly
+ * change what this test is about. */
+const PRE_ONBOARDING_VERSION = 18;
+
 Deno.test("migrate stamps existing agents as already set up", () => {
   const db = new Database(":memory:");
   try {
     // A database from before the setup turn: every row it holds belongs to
     // someone who has been talking to that agent, and none of them may be
     // greeted with "let's set me up" on the next open.
-    applyMigrations(db, MIGRATIONS.slice(0, -1));
+    applyMigrations(db, MIGRATIONS.slice(0, PRE_ONBOARDING_VERSION));
     db.exec(
       "INSERT INTO stella_agents (id, name, role, created_at, updated_at) " +
         "VALUES ('a1', 'Aide', 'r', 111, 222)",
@@ -240,6 +246,156 @@ Deno.test("migrate stamps existing agents as already set up", () => {
       .prepare("SELECT onboarded_at FROM stella_agents WHERE id = 'a2'")
       .get() as { onboarded_at: number | null };
     assertEquals(fresh.onboarded_at, null);
+  } finally {
+    db.close();
+  }
+});
+
+/** user_version one below the session-table rebuild (append-only list
+ * position 19). */
+const PRE_SESSION_REBUILD_VERSION = 19;
+
+/** Insert a message row that satisfies the rebuild's references; the payload
+ * is never read by it, but a real row is what must survive the table swap. */
+function insertMessages(db: Database, sessionId: string, ids: string[]): void {
+  const stmt = db.prepare(
+    "INSERT INTO messages (id, session_id, role, content, timestamp) " +
+      "VALUES (?, ?, 'user', ?, 1)",
+  );
+  for (const id of ids) {
+    stmt.run(id, sessionId, `{"v":2,"message":{"role":"user","content":"hi"}}`);
+  }
+}
+
+Deno.test("migrate rebuilds sessions: one column per fact, children kept", () => {
+  const db = new Database(":memory:");
+  try {
+    applyMigrations(db, MIGRATIONS.slice(0, PRE_SESSION_REBUILD_VERSION));
+    db.exec(`
+      INSERT INTO workspaces (id, name, created_at, chat)
+        VALUES ('w', 'W', 0, 0);
+      INSERT INTO stella_agents (id, name, role, created_at, updated_at)
+        VALUES ('a1', 'Aide', 'r', 0, 0);
+      INSERT INTO sessions
+        (id, workspace_id, name, model_provider, model_id, created_at,
+         updated_at, stella, agent_id)
+        VALUES
+          ('plain',  'w', 'Build failed',     'faux', 'm', 0, 0, 0, NULL),
+          ('conv',   'w', 'Aide',             'faux', 'm', 0, 0, 1, 'a1'),
+          ('legacy', 'w', 'Old conversation', 'faux', 'm', 0, 0, 1, NULL),
+          ('ghost',  'w', '',                 'faux', 'm', 0, 0, 1, 'gone');
+    `);
+    for (const id of ["plain", "conv", "legacy", "ghost"]) {
+      insertMessages(db, id, [`m-${id}-1`, `m-${id}-2`]);
+    }
+
+    applyMigrations(db, MIGRATIONS);
+
+    // The derived column and the dead feature's columns are gone.
+    const columns = (
+      db
+        .prepare("SELECT name FROM pragma_table_info('sessions')")
+        .all() as Array<{ name: string }>
+    ).map((column) => column.name);
+    assertEquals(columns.includes("stella"), false);
+    assertEquals(columns.includes("goal_text"), false);
+    assertEquals(columns.includes("goal_status"), false);
+
+    // A conversation that belongs to an agent has no name of its own.
+    const names = db
+      .prepare("SELECT id, name, agent_id FROM sessions ORDER BY id")
+      .all() as Array<{ id: string; name: string; agent_id: string | null }>;
+    assertEquals(names.find((row) => row.id === "conv")?.name, "");
+    assertEquals(names.find((row) => row.id === "plain")?.name, "Build failed");
+
+    // The two conversations with no agent to own them were adopted instead
+    // of being left unreachable, and the agent is named after each.
+    const adopted = db
+      .prepare("SELECT id, name FROM stella_agents ORDER BY created_at, rowid")
+      .all() as Array<{ id: string; name: string }>;
+    assertEquals(adopted.length, 3);
+    assertEquals(
+      adopted.some((agent) => agent.name === "Old conversation"),
+      true,
+    );
+    // A row pointing at an agent that is not there was given one too.
+    assertEquals(
+      adopted.some((agent) => agent.name === "Stella"),
+      true,
+    );
+    for (const row of names) {
+      assertEquals(row.agent_id === null, row.id === "plain");
+    }
+
+    // The rebuild drops the old table; every child row is still there.
+    const messages = db.prepare("SELECT COUNT(*) AS n FROM messages").get() as {
+      n: number;
+    };
+    assertEquals(Number(messages.n), 8);
+
+    // The reference is now the database's business: a row cannot name an
+    // agent that does not exist.
+    db.exec("PRAGMA foreign_keys = ON");
+    let refused = false;
+    try {
+      db.exec(
+        "INSERT INTO sessions (id, workspace_id, name, model_provider, " +
+          "model_id, created_at, updated_at, agent_id) " +
+          "VALUES ('bad', 'w', '', 'faux', 'm', 0, 0, 'gone')",
+      );
+    } catch {
+      refused = true;
+    }
+    assertEquals(refused, true);
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("a migration that would commit a dangling reference is refused", () => {
+  // Migrations run with foreign keys off (a table rebuild needs that), so
+  // the check before the commit is what keeps "a migration cannot land a
+  // broken reference" true.
+  const db = new Database(":memory:");
+  try {
+    db.exec(`
+      CREATE TABLE parent (id TEXT PRIMARY KEY);
+      CREATE TABLE child (
+        id TEXT PRIMARY KEY,
+        parent_id TEXT REFERENCES parent(id)
+      );
+      INSERT INTO parent (id) VALUES ('p');
+      INSERT INTO child (id, parent_id) VALUES ('c', 'p');
+    `);
+    const version = () =>
+      (db.prepare("PRAGMA user_version").get() as { user_version: number })
+        .user_version;
+    const rows = () =>
+      Number(
+        (
+          db.prepare("SELECT COUNT(*) AS n FROM child").get() as {
+            n: number;
+          }
+        ).n,
+      );
+
+    let failure: unknown;
+    try {
+      applyMigrations(db, [
+        (target) =>
+          target.exec("INSERT INTO child (id, parent_id) VALUES ('d', 'gone')"),
+      ]);
+    } catch (error) {
+      failure = error;
+    }
+    assert(failure !== undefined, "the migration must be refused");
+    assert(
+      String(failure).includes("dangling"),
+      `unexpected error: ${String(failure)}`,
+    );
+    // Rolled back with its stamp: nothing landed, so a fixed retry can run.
+    assertEquals(version(), 0);
+    assertEquals(rows(), 1);
   } finally {
     db.close();
   }

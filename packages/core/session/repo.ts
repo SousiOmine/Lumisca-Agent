@@ -9,9 +9,9 @@ export interface SessionRepo {
       id?: string;
       createdAt?: number;
       updatedAt?: number;
-      /** True for a stella agent's conversation (see SessionInfo). */
-      stella?: boolean;
-      /** The stella agent this conversation belongs to. */
+      /** The stella agent this conversation belongs to. Having one is what
+       * makes the row a stella conversation (see SessionInfo.stella): the
+       * flag is derived, never stored. */
       agentId?: string;
     },
   ): SessionRecord;
@@ -23,9 +23,8 @@ export interface SessionRepo {
    * as much as any other. `list()` stays the UI's list: stella has no
    * session, so it must not appear there. */
   listEvery(workspaceId?: string): SessionRecord[];
-  /** stella mode's single conversation row, or undefined before the first
-   * one is created. Never part of `list()`: stella has no session list. */
-  /** The conversation belonging to one stella agent, if it has been started. */
+  /** The conversation belonging to one stella agent, if it has been
+   * started. Never part of `list()`: stella has no session list. */
   getByAgent(agentId: string): SessionRecord | undefined;
   delete(id: string): void;
   touch(id: string, updatedAt?: number): void;
@@ -35,7 +34,6 @@ export interface SessionRepo {
 }
 
 interface SessionRow {
-  stella?: number;
   agent_id?: string | null;
   /** The agent's name, joined for a stella conversation (see toSession). */
   agent_name?: string | null;
@@ -51,9 +49,11 @@ interface SessionRow {
 
 function toSession(row: SessionRow): SessionRecord {
   return {
-    ...(row.stella === 1 ? { stella: true } : {}),
+    // One fact, one column: belonging to an agent IS being a stella
+    // conversation. `stella` stays on SessionInfo for its readers, derived
+    // here so no write can make the two disagree.
     ...(row.agent_id !== undefined && row.agent_id !== null
-      ? { agentId: row.agent_id }
+      ? { stella: true, agentId: row.agent_id }
       : {}),
     id: row.id,
     workspaceId: row.workspace_id,
@@ -82,20 +82,21 @@ const SELECT_SESSIONS =
 
 export function createSessionRepo(db: LumiscaDb): SessionRepo {
   const insertStmt = db.db.prepare(`
-    INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, system_prompt, created_at, updated_at, stella, agent_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, system_prompt, created_at, updated_at, agent_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const getByAgentStmt = db.db.prepare(
     `${SELECT_SESSIONS} WHERE s.agent_id = ?`,
   );
   const getStmt = db.db.prepare(`${SELECT_SESSIONS} WHERE s.id = ?`);
-  // stella's row is not a session: it is excluded everywhere a session list
-  // is built, so no client ever offers to open, close or delete it.
+  // stella's row is not a session: a conversation that belongs to an agent
+  // is excluded everywhere a session list is built, so no client ever offers
+  // to open, close or delete it.
   const listStmt = db.db.prepare(
-    `${SELECT_SESSIONS} WHERE s.stella = 0 ORDER BY s.updated_at DESC`,
+    `${SELECT_SESSIONS} WHERE s.agent_id IS NULL ORDER BY s.updated_at DESC`,
   );
   const listByWorkspaceStmt = db.db.prepare(
-    `${SELECT_SESSIONS} WHERE s.workspace_id = ? AND s.stella = 0 ` +
+    `${SELECT_SESSIONS} WHERE s.workspace_id = ? AND s.agent_id IS NULL ` +
       "ORDER BY s.updated_at DESC",
   );
   // Everything, stella included (see SessionRepo.listEvery).
@@ -124,7 +125,6 @@ export function createSessionRepo(db: LumiscaDb): SessionRepo {
       const id = input.id ?? crypto.randomUUID();
       const createdAt = input.createdAt ?? Date.now();
       const updatedAt = input.updatedAt ?? createdAt;
-      const stella = input.stella === true;
       insertStmt.run(
         id,
         input.workspaceId,
@@ -134,7 +134,6 @@ export function createSessionRepo(db: LumiscaDb): SessionRepo {
         input.systemPrompt ?? null,
         createdAt,
         updatedAt,
-        stella ? 1 : 0,
         input.agentId ?? null,
       );
       // Read the row back instead of assembling the record here: a stella
