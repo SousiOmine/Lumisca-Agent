@@ -14,8 +14,10 @@
  * and exit callbacks), so the whole state machine is testable without a
  * running server, a network, or a self-replacing binary.
  */
+
 import { errorMessage } from "@lumisca/core";
 import { UPDATE_AUTO_KEY, UPDATE_AUTO_RESTART_KEY } from "@lumisca/core/shared";
+import { runtime } from "../../core/runtime/runtime.ts";
 import type { UpdateRestartMode } from "../startup.ts";
 import { SERVER_VERSION } from "../version.ts";
 import {
@@ -115,14 +117,14 @@ export interface UpdateServiceOptions {
   /** Manifest URL (defaults to the release page of this target). */
   manifestUrl?: string;
   restartMode?: UpdateRestartMode;
-  /** Defaults to the compiled-in SERVER_VERSION / Deno.build.target. */
+  /** Defaults to the compiled-in SERVER_VERSION / runtime.build.target. */
   currentVersion?: string;
   target?: string;
   fetch?: typeof fetch;
   /** Release the running server (server shutdown + core close) before the
    * successor starts. */
   shutdown?: () => Promise<void>;
-  /** Terminate this process (Deno.exit by default). */
+  /** Terminate this process (runtime.exit by default). */
   exit?: (code: number) => void;
   /** Release key to verify against (tests and forks pass their own). */
   publicKey?: string;
@@ -184,7 +186,7 @@ export class UpdateService {
     this.#options = options;
     this.#environment = options.environment;
     this.#currentVersion = options.currentVersion ?? SERVER_VERSION;
-    this.#target = options.target ?? Deno.build.target;
+    this.#target = options.target ?? runtime.build.target;
     this.#fetch = options.fetch ?? fetch;
     this.#restartMode = options.restartMode ?? "self";
     this.#autoUpdate = flagSetting(options.settings, UPDATE_AUTO_KEY, true);
@@ -575,7 +577,7 @@ export class UpdateService {
       // The successor (or the supervisor) owns the port from here on; this
       // process is done. Exit 0 either way: a supervisor's restart policy
       // reacts to a clean stop, and the new version is already on disk.
-      (this.#options.exit ?? Deno.exit)(0);
+      (this.#options.exit ?? runtime.exit)(0);
     } catch (error) {
       this.#patch({ restarting: false });
       this.#fail(`再起動に失敗しました: ${errorMessage(error)}`);
@@ -591,7 +593,7 @@ export class UpdateService {
         `Lumisca: 再起動に失敗しました: ${errorMessage(error)}` +
           " (このプロセスは終了します)",
       );
-      (this.#options.exit ?? Deno.exit)(1);
+      (this.#options.exit ?? runtime.exit)(1);
     }
   }
 

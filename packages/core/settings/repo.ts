@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname } from "node:path";
 import { atomicWriteTextFileSync, readIfExists } from "../fs.ts";
+import { runtime } from "../runtime/runtime.ts";
 import { parseJsonc, SettingsFileError } from "./jsonc.ts";
 
 export { THEME_KEY } from "../shared/mod.ts";
@@ -97,7 +98,7 @@ export function createFileSettingsRepo(path: string): SettingsRepo {
 
 function loadFile(path: string): Map<string, unknown> {
   if (!existsSync(path)) return new Map();
-  const parsed = parseJsonc(Deno.readTextFileSync(path), path);
+  const parsed = parseJsonc(runtime.readTextFileSync(path), path);
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new SettingsFileError(
       `Settings file ${path} must contain a JSON object at the top level`,

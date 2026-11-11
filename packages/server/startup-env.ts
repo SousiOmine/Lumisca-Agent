@@ -16,6 +16,7 @@
  * successor starts, and Windows keeps TIME_WAIT sockets on it (binding then
  * fails until they drain). Declared before the list so both stay one source.
  */
+import { runtime } from "../core/runtime/runtime.ts";
 export const PORT_WAIT_ENV_KEY = "LUMISCA_PORT_WAIT_MS";
 
 /** Environment key the desktop shell sets on the server child it spawns:
@@ -69,12 +70,12 @@ export type ServerStartupEnvironment = Readonly<
 
 /**
  * Capture and remove every server-only environment variable synchronously in
- * the startup path. Deno.Command inherits the current process environment, so
+ * the startup path. runtime.Command inherits the current process environment, so
  * consuming these values before LumiscaCore is created isolates all later
  * bash, background, and MCP children from the hosting server instance.
  */
 export function consumeServerStartupEnvironment(
-  source: EnvironmentSource = Deno.env,
+  source: EnvironmentSource = runtime.env,
 ): ServerStartupEnvironment {
   const values = Object.fromEntries(
     SERVER_STARTUP_ENV_KEYS.map((key) => [key, source.get(key)]),

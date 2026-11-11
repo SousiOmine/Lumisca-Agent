@@ -22,6 +22,7 @@ import {
 import { McpManager } from "../mcp/manager.ts";
 import { createInstructionsProvider } from "../memory/instructions.ts";
 import { createPdfTools, PDF_TOOL_NAMES } from "../pdf/tools.ts";
+import { runtime } from "../runtime/runtime.ts";
 import { canonicalJson } from "../shared/digest.ts";
 import {
   TOOL_AGENT_CREATE,
@@ -319,7 +320,7 @@ export class AgentFactory {
     const attachment = new McpAttachment(
       new McpManager(
         merged.config,
-        workspace.folders[0] ?? Deno.cwd(),
+        workspace.folders[0] ?? runtime.cwd(),
         this.deps.mcpOAuth,
       ),
       merged.config,
@@ -858,7 +859,7 @@ export class AgentFactory {
     const attachment = new McpAttachment(
       new McpManager(
         merged.config,
-        workspace.folders[0] ?? Deno.cwd(),
+        workspace.folders[0] ?? runtime.cwd(),
         this.deps.mcpOAuth,
       ),
       merged.config,

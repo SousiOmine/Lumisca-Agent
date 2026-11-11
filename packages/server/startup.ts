@@ -1,5 +1,6 @@
 import { dirname, join } from "node:path";
 import { errorMessage } from "@lumisca/core";
+import { runtime } from "../core/runtime/runtime.ts";
 import type { ServerStartupEnvironment } from "./startup-env.ts";
 
 export type {
@@ -61,7 +62,7 @@ export function parseServerPort(
  * working directory. */
 export function resolveDbPath(
   env: ServerStartupEnvironment,
-  cwd: string = Deno.cwd(),
+  cwd: string = runtime.cwd(),
 ): string {
   const db = env.LUMISCA_DB;
   if (db) return db;
@@ -75,11 +76,11 @@ export function resolveDbPath(
  * directories when bundling the client. */
 export function resolveRepoRoot(
   env: ServerStartupEnvironment,
-  cwd: string = Deno.cwd(),
+  cwd: string = runtime.cwd(),
 ): string {
   const root = env.LUMISCA_REPO_ROOT ?? cwd;
   try {
-    return Deno.realPathSync(root);
+    return runtime.realPathSync(root);
   } catch {
     return root;
   }
@@ -97,7 +98,7 @@ export function resolveAllowedHosts(env: ServerStartupEnvironment): string[] {
 /** True when a listen failure means "someone else holds this port". */
 export function isAddressInUseError(error: unknown): boolean {
   return (
-    error instanceof Deno.errors.AddrInUse ||
+    error instanceof runtime.errors.AddrInUse ||
     (error instanceof Error && error.name === "AddrInUse")
   );
 }
@@ -116,7 +117,7 @@ export function isDesktopManaged(raw: string | undefined): boolean {
 
 /** Whether this process may replace its own files (the server updater).
  *
- * Only a packaged server (`deno compile`, i.e. Deno.build.standalone) owns
+ * Only a packaged server (`deno compile`, i.e. runtime.build.standalone) owns
  * its installation: a `bun run server` server is the repository, and the desktop
  * shell's copy lives inside the app bundle, which the shell's own updater
  * replaces (it marks the child with {@link DESKTOP_ENV_KEY}).
@@ -125,7 +126,7 @@ export function isDesktopManaged(raw: string | undefined): boolean {
  * from this answer (and registers no update endpoints when it is disabled),
  * so the reasoning cannot drift from the wiring.
  *
- * `standalone` is a parameter rather than a direct Deno.build read so the
+ * `standalone` is a parameter rather than a direct runtime.build read so the
  * decision stays testable.
  */
 export function updateSupport(options: {
@@ -175,7 +176,7 @@ export function parseUpdateRestartMode(
  * simply "not there"). */
 function isFile(path: string): boolean {
   try {
-    return Deno.statSync(path).isFile;
+    return runtime.statSync(path).isFile;
   } catch {
     return false;
   }
@@ -185,7 +186,7 @@ function isFile(path: string): boolean {
  * Frontend asset manifest of a packaged server: `scripts/build-server.ts`
  * stages `assets.json` next to the compiled binary, so an unpacked server
  * release serves the UI with no configuration (the desktop shell passes
- * the same path as LUMISCA_ASSETS_FILE). `execPath` is Deno.execPath():
+ * the same path as LUMISCA_ASSETS_FILE). `execPath` is runtime.execPath():
  * a `bun run server` server (development) has no manifest next to the runtime,
  * so the repository sources stay authoritative there.
  *

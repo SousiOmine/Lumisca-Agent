@@ -30,7 +30,7 @@
  * whose URLs cannot be mapped must not reach users. `--out` may be the
  * input path: the manifest is read before it is written.
  */
-import "../packages/core/runtime/deno.ts";
+import { exit, runtime } from "../packages/core/runtime/runtime.ts";
 import { absolutePath, parseOptions, reportUsage } from "./lib.ts";
 import {
   parseReleaseAssets,
@@ -71,7 +71,7 @@ function parseArgs(args: readonly string[]): Options {
 
 function fail(message: string): never {
   console.error(`rewrite-updater-json: ${message}`);
-  Deno.exit(1);
+  exit(1);
 }
 
 function describe(error: unknown): string {
@@ -81,7 +81,7 @@ function describe(error: unknown): string {
 async function readJson(path: string, what: string): Promise<unknown> {
   let text: string;
   try {
-    text = await Deno.readTextFile(path);
+    text = await runtime.readTextFile(path);
   } catch (error) {
     fail(`cannot read ${what} ${path}: ${describe(error)}`);
   }
@@ -92,7 +92,7 @@ async function readJson(path: string, what: string): Promise<unknown> {
   }
 }
 
-const options = parseArgs(Deno.args);
+const options = parseArgs(runtime.args);
 
 const rewrite = await (async () => {
   const manifest = await readJson(options.manifest, "manifest");
@@ -111,7 +111,7 @@ const rewrite = await (async () => {
 
 const document = JSON.stringify(rewrite.manifest, null, 2) + "\n";
 try {
-  await Deno.writeTextFile(options.out, document);
+  await runtime.writeTextFile(options.out, document);
 } catch (error) {
   fail(`cannot write ${options.out}: ${describe(error)}`);
 }

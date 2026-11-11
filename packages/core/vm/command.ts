@@ -10,6 +10,7 @@
 
 import { concatBytes } from "../bytes.ts";
 import { errorMessage } from "../errors.ts";
+import { type ChildProcess, runtime } from "../runtime/runtime.ts";
 
 /** The result of one command, already decoded and capped. */
 export interface VmCommandResult {
@@ -75,9 +76,9 @@ export async function runVmCommand(
     options.signal === undefined
       ? timeout
       : AbortSignal.any([options.signal, timeout]);
-  let process: Deno.ChildProcess;
+  let process: ChildProcess;
   try {
-    process = new Deno.Command(command[0]!, {
+    process = new runtime.Command(command[0]!, {
       args: command.slice(1),
       stdin: options.stdin === undefined ? "null" : "piped",
       stdout: "piped",
@@ -125,9 +126,9 @@ export async function runVmCommandBytes(
     options.signal === undefined
       ? timeout
       : AbortSignal.any([options.signal, timeout]);
-  let process: Deno.ChildProcess;
+  let process: ChildProcess;
   try {
-    process = new Deno.Command(command[0]!, {
+    process = new runtime.Command(command[0]!, {
       args: command.slice(1),
       stdin: options.stdin === undefined ? "null" : "piped",
       stdout: "piped",
@@ -166,7 +167,7 @@ export async function runVmCommandBytes(
 /** Feed `stdin` and close it. A command that exits without reading all of it
  * makes the write fail; that is not an error (the exit code says why). */
 async function writeStdin(
-  process: Deno.ChildProcess,
+  process: ChildProcess,
   stdin: Uint8Array,
 ): Promise<void> {
   const writer = process.stdin.getWriter();

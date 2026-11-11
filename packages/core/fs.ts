@@ -2,11 +2,13 @@
  * Filesystem and type-guard helpers shared by memory, plugins, skills,
  * models discovery and the settings/catalog stores.
  *
- * Backend-only: this module touches `Deno.*` and `node:path`, so it lives
+ * Backend-only: this module touches `runtime.*` and `node:path`, so it lives
  * outside `shared/` (which is bundled into the browser client and must stay
  * runtime-dependency free).
  */
+
 import { dirname, join } from "node:path";
+import { runtime } from "./runtime/runtime.ts";
 
 // ---- type guards -----------------------------------------------------------
 
@@ -20,7 +22,7 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 /** Read a file if it exists; returns `undefined` on any filesystem error. */
 export function readIfExists(path: string): string | undefined {
   try {
-    return Deno.readTextFileSync(path);
+    return runtime.readTextFileSync(path);
   } catch {
     return undefined;
   }
@@ -30,7 +32,7 @@ export function readIfExists(path: string): string | undefined {
  * sub-path (e.g. `.agents/skills` or `.agents/plugins`).
  * Returns an empty array when the home directory cannot be determined. */
 export function resolveGlobalDirs(subPath: string): string[] {
-  const home = Deno.env.get("USERPROFILE") ?? Deno.env.get("HOME");
+  const home = runtime.env.get("USERPROFILE") ?? runtime.env.get("HOME");
   if (home === undefined || home === "") return [];
   return [join(home, subPath)];
 }
@@ -46,14 +48,14 @@ export function atomicWriteTextFileSync(
   text: string,
   options: { mode?: number } = {},
 ): void {
-  Deno.mkdirSync(dirname(path), { recursive: true });
+  runtime.mkdirSync(dirname(path), { recursive: true });
   const tmp = `${path}.tmp`;
   try {
-    Deno.writeTextFileSync(tmp, text, options);
-    Deno.renameSync(tmp, path);
+    runtime.writeTextFileSync(tmp, text, options);
+    runtime.renameSync(tmp, path);
   } finally {
     try {
-      Deno.removeSync(tmp);
+      runtime.removeSync(tmp);
     } catch {
       // Already renamed into place.
     }

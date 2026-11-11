@@ -1,3 +1,4 @@
+import { type Command, runtime } from "../../runtime/runtime.ts";
 import { decodeUtf8 } from "../../shared/mod.ts";
 
 /** How a shell is invoked: the program plus fixed leading args (the command
@@ -27,7 +28,7 @@ let cached: Shell | undefined;
  * lookups plus one spawn per candidate.
  */
 export function getShell(): Shell {
-  if (Deno.build.os !== "windows") {
+  if (runtime.build.os !== "windows") {
     return { file: "/bin/sh", args: ["-c"], env: {} };
   }
   cached ??= detectWindowsShell();
@@ -49,9 +50,9 @@ export function shellCommand(options: {
   baseEnv?: Record<string, string>;
   /** Per-call env vars; override everything else. */
   env?: Record<string, string>;
-}): Deno.Command {
+}): Command {
   const shell = getShell();
-  return new Deno.Command(shell.file, {
+  return new runtime.Command(shell.file, {
     args: [...shell.args, options.command],
     cwd: options.cwd,
     env: { ...options.baseEnv, ...shell.env, ...options.env },
@@ -78,7 +79,7 @@ function detectWindowsShell(): Shell {
   // reason PowerShell is preferred, but something runnable beats nothing
   // on stripped-down systems.
   return {
-    file: Deno.env.get("COMSPEC") ?? "cmd.exe",
+    file: runtime.env.get("COMSPEC") ?? "cmd.exe",
     args: ["/d", "/s", "/c"],
     env: {},
   };
@@ -92,7 +93,7 @@ function shellAvailable(file: string): boolean {
 /** All PATH matches for `file` (where.exe prints one path per line). */
 function whereAll(file: string): string[] {
   try {
-    const { stdout, success } = new Deno.Command("where.exe", {
+    const { stdout, success } = new runtime.Command("where.exe", {
       args: [file],
       stdout: "piped",
       stderr: "null",
@@ -116,7 +117,7 @@ function findGitBash(): string | undefined {
     if (isWslBashStub(candidate)) continue;
     if (canRun(candidate)) return candidate;
   }
-  const programFiles = Deno.env.get("ProgramFiles") ?? "C:\\Program Files";
+  const programFiles = runtime.env.get("ProgramFiles") ?? "C:\\Program Files";
   for (const candidate of [
     `${programFiles}\\Git\\bin\\bash.exe`,
     `${programFiles}\\Git\\usr\\bin\\bash.exe`,
@@ -140,7 +141,7 @@ function isWslBashStub(path: string): boolean {
  * for every shell). */
 function canRun(file: string): boolean {
   try {
-    const { success } = new Deno.Command(file, {
+    const { success } = new runtime.Command(file, {
       args: ["--version"],
       stdout: "null",
       stderr: "null",

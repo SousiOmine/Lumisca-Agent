@@ -12,6 +12,7 @@
 import type { StellaAgent } from "@lumisca/core";
 import { Hono } from "hono";
 import { renderPreview } from "../../core/media/preview.ts";
+import { runtime } from "../../core/runtime/runtime.ts";
 import { assetHeaders } from "./asset-headers.ts";
 import { AppError } from "./util.ts";
 
@@ -54,7 +55,7 @@ export function stellaAssetRoutes(core: StellaAssetApi): Hono {
     if (icon === undefined) {
       throw new AppError(`Icon not found: ${name}`, 404);
     }
-    const bytes = await Deno.readFile(icon.path);
+    const bytes = await runtime.readFile(icon.path);
     return new Response(bytes, {
       headers: assetHeaders({ mimeType: icon.mimeType }),
     });

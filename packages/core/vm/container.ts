@@ -8,10 +8,12 @@
  * by hand, or removed with `podman rm`, must not leave this application
  * believing the machine is up.
  */
+
 import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
 import { concatBytes } from "../bytes.ts";
 import { firstLine } from "../lines.ts";
+import { runtime } from "../runtime/runtime.ts";
 import { sleep } from "../shared/misc.ts";
 import {
   runVmCommand,
@@ -247,14 +249,14 @@ async function readContainerFiles(
   prefix = "",
 ): Promise<{ path: string; bytes: Uint8Array }[]> {
   const out: { path: string; bytes: Uint8Array }[] = [];
-  for (const entry of Deno.readDirSync(dir)) {
+  for (const entry of runtime.readDirSync(dir)) {
     const path = `${prefix}${entry.name}`;
     if (entry.isDirectory) {
       out.push(
         ...(await readContainerFiles(join(dir, entry.name), `${path}/`)),
       );
     } else if (entry.isFile) {
-      out.push({ path, bytes: await Deno.readFile(join(dir, entry.name)) });
+      out.push({ path, bytes: await runtime.readFile(join(dir, entry.name)) });
     }
   }
   return out;
@@ -755,7 +757,9 @@ export function createVmManager(options: VmManagerOptions): VmManager {
   async function migrateHomeToVolume(options: {
     rebuildImage: boolean;
   }): Promise<void> {
-    const home = await Deno.makeTempDir({ prefix: "lumisca-stella-migrate-" });
+    const home = await runtime.makeTempDir({
+      prefix: "lumisca-stella-migrate-",
+    });
     try {
       const stopped = await run(
         podman(["stop", "--time", "5", VM_CONTAINER_NAME]),
@@ -804,7 +808,7 @@ export function createVmManager(options: VmManagerOptions): VmManager {
         );
       }
     } finally {
-      await Deno.remove(home, { recursive: true }).catch(() => {});
+      await runtime.remove(home, { recursive: true }).catch(() => {});
     }
   }
 

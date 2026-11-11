@@ -19,8 +19,9 @@
  *
  * Exits 1 and prints `::error::` annotations on any mismatch.
  */
-import "../packages/core/runtime/deno.ts";
+
 import { join } from "node:path";
+import { exit, runtime } from "../packages/core/runtime/runtime.ts";
 import { repoRoot } from "./lib.ts";
 
 interface Manifest {
@@ -66,21 +67,24 @@ const MANIFESTS: Manifest[] = [
 
 function readVersion(manifest: Manifest): string | undefined {
   try {
-    return manifest.read(Deno.readTextFileSync(join(repoRoot, manifest.path)));
+    return manifest.read(
+      runtime.readTextFileSync(join(repoRoot, manifest.path)),
+    );
   } catch (error) {
     console.error(
       `::error::cannot read ${manifest.path}: ${
         error instanceof Error ? error.message : String(error)
       }`,
     );
-    Deno.exit(1);
+    exit(1);
   }
 }
 
-const expected = Deno.args[0]?.replace(/^v/, "") ?? readVersion(MANIFESTS[0]!);
+const expected =
+  runtime.args[0]?.replace(/^v/, "") ?? readVersion(MANIFESTS[0]!);
 if (expected === undefined) {
   console.error(`::error::no version found in ${REFERENCE}`);
-  Deno.exit(1);
+  exit(1);
 }
 
 let failed = false;
@@ -101,7 +105,7 @@ if (failed) {
     `::error::Version mismatch: every manifest must carry ${expected}. ` +
       "Update them all before tagging.",
   );
-  Deno.exit(1);
+  exit(1);
 }
 
 console.log(`Versions agree: ${expected} (${MANIFESTS.length} manifests)`);

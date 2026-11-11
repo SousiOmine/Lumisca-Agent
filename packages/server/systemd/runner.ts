@@ -9,7 +9,9 @@
  * exit code *is* the answer (`is-active`, `is-enabled`); a failure to start
  * the tool at all is thrown, since nothing can be inferred from it.
  */
+
 import { errorMessage } from "@lumisca/core";
+import { runtime } from "../../core/runtime/runtime.ts";
 
 /** Result of one external command, decoded and trimmed. */
 export interface CommandResult {
@@ -39,7 +41,7 @@ export function createSystemdRunner(): ServiceRunner {
     program: string,
     args: readonly string[],
   ): Promise<CommandResult> => {
-    const output = await new Deno.Command(program, {
+    const output = await new runtime.Command(program, {
       args: [...args],
       stdin: "null",
       stdout: "piped",

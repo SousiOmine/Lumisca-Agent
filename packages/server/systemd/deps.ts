@@ -15,6 +15,10 @@
  * launcher's unhandled-rejection handler, print, and let the process drain
  * its event loop into a silent exit 0.
  */
+import {
+  type NetworkInterfaceInfo,
+  runtime,
+} from "../../core/runtime/runtime.ts";
 import { probeHealth as probeHealthShared } from "../health-probe.ts";
 import {
   DESKTOP_ENV_KEY,
@@ -44,16 +48,16 @@ export interface ServiceDeps {
   /** Injected so a first install's credential stays testable. */
   generateToken: () => string;
   /** Network interfaces of this machine, for the connection URLs a wildcard
-   * bind expands to (`Deno.networkInterfaces()`). */
-  interfaces: () => Deno.NetworkInterfaceInfo[];
+   * bind expands to (`runtime.networkInterfaces()`). */
+  interfaces: () => NetworkInterfaceInfo[];
 }
 
 /** The real machine, the real systemd, and the real network. `env` is a
- * parameter rather than a direct read: Deno.env is shared by every test file
+ * parameter rather than a direct read: runtime.env is shared by every test file
  * the runner executes in parallel, so a test that needs another environment
  * (no HOME, say) passes one instead of clearing the real one. */
 export function defaultServiceDeps(
-  env: EnvironmentSource = Deno.env,
+  env: EnvironmentSource = runtime.env,
 ): ServiceDeps {
   const home = env.get("USERPROFILE") ?? env.get("HOME") ?? "";
   if (home === "") {
@@ -69,13 +73,13 @@ export function defaultServiceDeps(
   }
   return {
     host: {
-      os: Deno.build.os,
-      standalone: Deno.build.standalone,
+      os: runtime.build.os,
+      standalone: runtime.build.standalone,
       desktopManaged: isDesktopManaged(env.get(DESKTOP_ENV_KEY)),
-      execPath: Deno.execPath(),
+      execPath: runtime.execPath(),
       home,
       user,
-      cwd: Deno.cwd(),
+      cwd: runtime.cwd(),
       xdgConfigHome: env.get("XDG_CONFIG_HOME") || undefined,
     },
     runner: createSystemdRunner(),
@@ -85,7 +89,7 @@ export function defaultServiceDeps(
     probeIntervalMs: PROBE_INTERVAL_MS,
     probeTimeoutMs: PROBE_TIMEOUT_MS,
     generateToken,
-    interfaces: () => Deno.networkInterfaces(),
+    interfaces: () => runtime.networkInterfaces(),
   };
 }
 

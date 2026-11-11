@@ -27,8 +27,10 @@
  * installation runs is answered by the binary itself (`--version`), by the
  * applied-update record next to it (stage.ts) and by the release manifest.
  */
+
 import { basename, join } from "node:path";
 import { errorMessage } from "@lumisca/core";
+import { type DirEntry, runtime } from "../../core/runtime/runtime.ts";
 import { installedFileNames } from "../layout.ts";
 import { PORT_WAIT_ENV_KEY } from "../startup.ts";
 import { extractArchive } from "./archive.ts";
@@ -44,7 +46,7 @@ import {
 export interface InstallEnvironment {
   /** Directory holding the server binary and its assets. */
   installDir: string;
-  /** Path of the running server binary (`Deno.execPath()`). */
+  /** Path of the running server binary (`runtime.execPath()`). */
   execPath: string;
 }
 
@@ -59,7 +61,7 @@ export class InstallError extends Error {
 /** Run `<binary> --version` and return its output. Used to prove a staged
  * binary is runnable and really is the version the manifest promised. */
 export async function runVersionCommand(binary: string): Promise<string> {
-  const output = await new Deno.Command(binary, {
+  const output = await new runtime.Command(binary, {
     args: ["--version"],
     // The staged binary must not inherit this process's launch configuration
     // (it is not supposed to start a server, but a startup value slipping in
@@ -89,7 +91,7 @@ async function removeQuietly(
   options?: { recursive?: boolean },
 ): Promise<void> {
   try {
-    await Deno.remove(path, { recursive: options?.recursive ?? false });
+    await runtime.remove(path, { recursive: options?.recursive ?? false });
   } catch {
     // Missing, not empty (a leftover directory this call may not remove
     // recursively), or still held by a process that has not exited yet.
@@ -150,8 +152,8 @@ export async function applyStagedUpdate(
 
   // 1. Unpack into the staging area and prove the new binary runs and
   //    reports the version the manifest promised.
-  await Deno.remove(extractDir, { recursive: true }).catch(() => {});
-  await Deno.mkdir(extractDir, { recursive: true });
+  await runtime.remove(extractDir, { recursive: true }).catch(() => {});
+  await runtime.mkdir(extractDir, { recursive: true });
   let files: string[];
   try {
     files = await extractArchive(
@@ -168,7 +170,7 @@ export async function applyStagedUpdate(
     // The execute bit must survive the move into the install directory
     // (tar entries usually carry it, but the mode is not part of the
     // contract this updater relies on).
-    await Deno.chmod(extractedBinary, 0o755).catch(() => {});
+    await runtime.chmod(extractedBinary, 0o755).catch(() => {});
     const reported = (await versionCheck(extractedBinary)).trim();
     if (reported !== options.staged.version) {
       throw new InstallError(
@@ -177,7 +179,7 @@ export async function applyStagedUpdate(
       );
     }
   } catch (error) {
-    await Deno.remove(extractDir, { recursive: true }).catch(() => {});
+    await runtime.remove(extractDir, { recursive: true }).catch(() => {});
     throw error;
   }
 
@@ -192,14 +194,14 @@ export async function applyStagedUpdate(
     for (const entry of entries) {
       const target = join(installDir, `${entry.name}.new`);
       await removeQuietly(target);
-      await Deno.rename(join(extractDir, entry.name), target);
+      await runtime.rename(join(extractDir, entry.name), target);
       prepared.push(entry.name);
     }
   } catch (error) {
     for (const name of prepared) {
       await removeQuietly(join(installDir, `${name}.new`));
     }
-    await Deno.remove(extractDir, { recursive: true }).catch(() => {});
+    await runtime.remove(extractDir, { recursive: true }).catch(() => {});
     throw new InstallError(
       `更新ファイルを配置できませんでした (${installDir}): ` +
         `${errorMessage(error)}`,
@@ -232,14 +234,15 @@ export async function applyStagedUpdate(
     const backupPath = join(installDir, `${name}${backupSuffix}`);
     try {
       await removeQuietly(backupPath, { recursive: isDirectory });
-      const existing = await Deno.stat(target)
+      const existing = await runtime
+        .stat(target)
         .then(() => true)
         .catch(() => false);
       if (existing) {
-        await Deno.rename(target, backupPath);
+        await runtime.rename(target, backupPath);
         backups.push({ backup: backupPath, target, isDirectory });
       }
-      await Deno.rename(newPath, target);
+      await runtime.rename(newPath, target);
       if (!existing) added.push({ target, isDirectory });
     } catch (error) {
       failures.push(`${name}: ${errorMessage(error)}`);
@@ -254,7 +257,7 @@ export async function applyStagedUpdate(
     // the installation would be a mixture of two versions.
     for (const entry of backups.reverse()) {
       await removeQuietly(entry.target, { recursive: entry.isDirectory });
-      await Deno.rename(entry.backup, entry.target).catch(() => {});
+      await runtime.rename(entry.backup, entry.target).catch(() => {});
     }
     for (const entry of added) {
       await removeQuietly(entry.target, { recursive: entry.isDirectory });
@@ -264,7 +267,7 @@ export async function applyStagedUpdate(
         recursive: entry.isDirectory,
       });
     }
-    await Deno.remove(extractDir, { recursive: true }).catch(() => {});
+    await runtime.remove(extractDir, { recursive: true }).catch(() => {});
     throw new InstallError(
       `更新の適用に失敗しました (以前のファイルに戻しました): ${failures.join(
         " / ",
@@ -275,7 +278,7 @@ export async function applyStagedUpdate(
   // 4. The swap completed: the package is no longer needed, and the backups
   //    are the next startup's cleanup job (a file may still be held open by
   //    the running process — measured on Windows for the binary itself).
-  await Deno.remove(extractDir, { recursive: true }).catch(() => {});
+  await runtime.remove(extractDir, { recursive: true }).catch(() => {});
   await removeQuietly(options.staged.archivePath);
   await removeQuietly(join(stagingDir(installDir), STAGED_METADATA_FILE));
   await writeAppliedUpdate(installDir, options.staged.version);
@@ -321,7 +324,7 @@ export function successorEnvironment(
  * Start the successor process that takes over after this one exits, and
  * return its pid.
  *
- * Launching it naively (`Deno.Command(...).spawn()` + `unref`) is **not**
+ * Launching it naively (`runtime.Command(...).spawn()` + `unref`) is **not**
  * enough on Windows: measured on this project's machine, a child spawned
  * that way dies with its parent (Deno tracks spawned children in a Job
  * Object), so the restart would silently leave the user with no server. The
@@ -338,8 +341,8 @@ export function successorEnvironment(
  */
 export function startSuccessor(options: SuccessorOptions): number {
   const env = options.env;
-  if (Deno.build.os !== "windows") {
-    const child = new Deno.Command(options.execPath, {
+  if (runtime.build.os !== "windows") {
+    const child = new runtime.Command(options.execPath, {
       cwd: options.cwd,
       env,
       stdin: "null",
@@ -354,7 +357,7 @@ export function startSuccessor(options: SuccessorOptions): number {
   // contain spaces) is quoted here rather than left to Deno's per-argument
   // quoting of the cmd invocation.
   const commandLine = quoteWindowsArgument(options.execPath);
-  const child = new Deno.Command("cmd", {
+  const child = new runtime.Command("cmd", {
     // The empty argument is `start`'s window-title slot: without it, a quoted
     // path would be taken as the title instead of the program.
     args: ["/c", "start", '""', "/b", commandLine],
@@ -386,9 +389,9 @@ export async function cleanupStaleFiles(
 ): Promise<string[]> {
   const names = new Set(installedFileNames(environment.execPath));
   const removed: string[] = [];
-  let entries: Deno.DirEntry[];
+  let entries: DirEntry[];
   try {
-    entries = [...Deno.readDirSync(environment.installDir)];
+    entries = [...runtime.readDirSync(environment.installDir)];
   } catch {
     return removed;
   }
@@ -403,7 +406,7 @@ export async function cleanupStaleFiles(
       names.has(entry.name.slice(0, -".new".length));
     if (!isBackup && !isStaged) continue;
     try {
-      await Deno.remove(join(environment.installDir, entry.name), {
+      await runtime.remove(join(environment.installDir, entry.name), {
         recursive: true,
       });
       removed.push(entry.name);

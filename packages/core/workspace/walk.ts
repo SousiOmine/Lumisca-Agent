@@ -1,4 +1,5 @@
 import { join, relative } from "node:path";
+import { type DirEntry, runtime } from "../runtime/runtime.ts";
 import { isWithin } from "./path-util.ts";
 
 /** VCS metadata and build-output directories always pruned by the workspace
@@ -73,9 +74,9 @@ export async function* walkEntries(
 
   async function* walk(dir: string, depth: number): AsyncGenerator<WalkEntry> {
     if (depth > maxDepth || emitted >= maxEntries) return;
-    let list: Deno.DirEntry[];
+    let list: DirEntry[];
     try {
-      list = [...Deno.readDirSync(dir)];
+      list = [...runtime.readDirSync(dir)];
     } catch {
       return; // unreadable directory (permissions, race) — skip
     }
@@ -93,7 +94,7 @@ export async function* walkEntries(
     if (options.filesFirst === true) {
       // Files first: emit the directory's files, then each subdirectory
       // entry, then recurse into it.
-      const subdirs: Deno.DirEntry[] = [];
+      const subdirs: DirEntry[] = [];
       for (const entry of filtered) {
         if (entry.isDirectory) {
           subdirs.push(entry);
@@ -169,8 +170,8 @@ export class GitignoreMatcher {
     const rulesByRoot = new Map<string, IgnoreRule[]>();
     for (const root of roots) {
       try {
-        const canonical = await Deno.realPath(root);
-        const text = await Deno.readTextFile(join(canonical, ".gitignore"));
+        const canonical = await runtime.realPath(root);
+        const text = await runtime.readTextFile(join(canonical, ".gitignore"));
         rulesByRoot.set(canonical, parseGitignore(text));
       } catch {
         // No .gitignore in this root (or the root no longer exists).

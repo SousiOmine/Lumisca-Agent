@@ -10,9 +10,11 @@
  * health route. The checks and the wait belong to this verb alone — `install`
  * is the one command that touches the system (see mod.ts).
  */
+
 import { dirname, join } from "node:path";
 import { errorMessage } from "@lumisca/core";
 import { hostForUrl, isLoopbackHost } from "@lumisca/core/shared";
+import { type Listener, runtime } from "../../core/runtime/runtime.ts";
 import { isAddressInUseError } from "../startup.ts";
 import { STAGING_DIR_NAME } from "../update/stage.ts";
 import { renderUnit, type ServicePaths } from "./compose.ts";
@@ -49,19 +51,19 @@ const WRITE_PROBE_NAME = ".write-test";
  * platform this runs on, POSIX and Windows alike).
  */
 async function writeDocument(path: string, text: string): Promise<void> {
-  await Deno.mkdir(dirname(path), { recursive: true });
+  await runtime.mkdir(dirname(path), { recursive: true });
   const temporary = `${path}.tmp`;
   // A leftover temp file from an interrupted install is not worth failing
   // over: recreating it truncates it (the same reasoning as the updater's
   // removeQuietly).
-  await Deno.remove(temporary).catch(() => {});
+  await runtime.remove(temporary).catch(() => {});
   // `writeTextFile` truncates unless `append` is set, which is what a
   // leftover temp file needs.
-  await Deno.writeTextFile(temporary, text, {
+  await runtime.writeTextFile(temporary, text, {
     create: true,
     mode: 0o600,
   });
-  await Deno.rename(temporary, path);
+  await runtime.rename(temporary, path);
 }
 
 /**
@@ -75,9 +77,9 @@ async function requireWritableInstallDir(paths: ServicePaths): Promise<void> {
   const staging = join(paths.installDir, STAGING_DIR_NAME);
   const probe = join(staging, WRITE_PROBE_NAME);
   try {
-    await Deno.mkdir(staging, { recursive: true });
-    await Deno.writeTextFile(probe, "");
-    await Deno.remove(probe);
+    await runtime.mkdir(staging, { recursive: true });
+    await runtime.writeTextFile(probe, "");
+    await runtime.remove(probe);
   } catch (error) {
     throw new ServiceDefinitionError(
       `インストール先に書き込めません (${paths.installDir}): ` +
@@ -100,9 +102,9 @@ function isBindableHere(host: string, deps: ServiceDeps): boolean {
 /** Refuse to install onto a port another process already holds. */
 function requireFreePort(values: ServiceValues, deps: ServiceDeps): void {
   if (!isBindableHere(values.host, deps)) return;
-  let listener: Deno.Listener;
+  let listener: Listener;
   try {
-    listener = Deno.listen({
+    listener = runtime.listen({
       hostname: values.host === "localhost" ? "127.0.0.1" : values.host,
       port: values.port,
     });
@@ -163,8 +165,8 @@ export async function runInstall(
   if (!active) requireFreePort(values, deps);
 
   await writeDocument(paths.documentPath, renderDocument(values));
-  await Deno.mkdir(dirname(paths.unitPath), { recursive: true });
-  await Deno.writeTextFile(
+  await runtime.mkdir(dirname(paths.unitPath), { recursive: true });
+  await runtime.writeTextFile(
     paths.unitPath,
     renderUnit(SERVICE_UNIT_TEMPLATE, paths),
   );

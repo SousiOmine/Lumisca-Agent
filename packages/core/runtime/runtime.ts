@@ -1,15 +1,20 @@
 /// <reference path="../../../types/bun.d.ts" />
 /**
- * The `Deno` surface this app actually uses, implemented on Bun and Node.
+ * The runtime API this app is written against, implemented on Bun and Node:
+ * file system, process, Command, serve (HTTP and WebSocket) and the small
+ * pieces around them.
  *
- * The server was written for Deno. Bun has no `Deno` namespace, so this
- * module installs one: file system, process, Command, serve (HTTP and
- * WebSocket) and the small pieces around them. It is the migration seam —
- * nothing below calls into the Deno runtime — and the server imports it
- * before anything else, so the packaged binary carries it too.
+ * The server was written for Deno, and the shape kept here is Deno's — the
+ * names, the option objects and the quirks (`status` ends at process exit,
+ * `env` merges, a missing program throws from `spawn`) — so the call sites
+ * did not have to change when the runtime did. It is the migration seam:
+ * nothing below calls into Deno, and the server imports it before anything
+ * else, so the packaged binary carries it too. Product code uses the
+ * `runtime` export; the `Deno` global stays for the test runner's
+ * `Deno.test` and for the browser probe.
  *
- * FFI (`dlopen`) is still Deno-only and throws here; the Windows computer
- * host is the one caller and needs `bun:ffi` before that platform can move.
+ * FFI (`dlopen`) is not implemented yet; the Windows computer host is the
+ * one caller and needs `bun:ffi` before that platform can move.
  */
 
 import { spawn, spawnSync } from "node:child_process";
@@ -131,7 +136,7 @@ async function* readDir(pathname: string) {
   yield* readDirSync(pathname);
 }
 
-class FsFile {
+class ShimFsFile {
   #fd: number;
   #pos = 0;
   constructor(fd: number) {
@@ -185,7 +190,7 @@ function openFile(
      * the updater relies on it to keep a binary's exec bit). */
     mode?: number;
   },
-): FsFile {
+): ShimFsFile {
   let flags = 0;
   const read = options?.read ?? true;
   const write = options?.write ?? false;
@@ -195,7 +200,7 @@ function openFile(
   if (options?.create) flags |= fs.constants.O_CREAT;
   if (options?.truncate) flags |= fs.constants.O_TRUNC;
   if (options?.append) flags |= fs.constants.O_APPEND;
-  return new FsFile(fs.openSync(pathname, flags, options?.mode));
+  return new ShimFsFile(fs.openSync(pathname, flags, options?.mode));
 }
 
 type CommandOptions = {
@@ -286,7 +291,7 @@ function findExecutable(command: string): string {
   throw new NotFoundError(`Executable not found in $PATH: "${command}"`);
 }
 
-class ChildProcess {
+class ShimChildProcess {
   #child: ReturnType<typeof spawn>;
   readonly stdout: ReadableStream<Uint8Array>;
   readonly stderr: ReadableStream<Uint8Array>;
@@ -321,6 +326,36 @@ class ChildProcess {
   }
   get pid(): number {
     return this.#child.pid ?? -1;
+  }
+
+  /** Collect both pipes and the exit status (`Deno.Command.output`). */
+  async output(): Promise<{
+    code: number;
+    success: boolean;
+    signal: string | null;
+    stdout: Uint8Array;
+    stderr: Uint8Array;
+  }> {
+    const [stdout, stderr] = await Promise.all([
+      new Response(this.stdout).arrayBuffer(),
+      new Response(this.stderr).arrayBuffer(),
+    ]);
+    const status = await this.status;
+    return {
+      ...status,
+      stdout: new Uint8Array(stdout),
+      stderr: new Uint8Array(stderr),
+    } as {
+      code: number;
+      success: boolean;
+      signal: string | null;
+      stdout: Uint8Array;
+      stderr: Uint8Array;
+    };
+  }
+
+  [Symbol.asyncDispose](): Promise<void> {
+    return this.status.then(() => undefined);
   }
   /** Set when the child failed before it started (permission, too many
    * files, …). Its streams never open, so status answers like a shell does. */
@@ -385,7 +420,7 @@ function commandEnv(options: CommandOptions): Record<string, string> {
   return { ...merged, ...options.env };
 }
 
-class Command {
+class ShimCommand {
   #cmd: string;
   #options: CommandOptions;
   constructor(cmd: string, options: CommandOptions = {}) {
@@ -406,7 +441,7 @@ class Command {
     }
     return args;
   }
-  spawn(): ChildProcess {
+  spawn(): ShimChildProcess {
     const child = spawn(findExecutable(this.#cmd), this.#args(), {
       cwd: this.#options.cwd,
       env: commandEnv(this.#options),
@@ -436,7 +471,7 @@ class Command {
           once: true,
         });
     }
-    return new ChildProcess(child);
+    return new ShimChildProcess(child);
   }
   outputSync() {
     const result = spawnSync(findExecutable(this.#cmd), this.#args(), {
@@ -779,7 +814,7 @@ const DenoShim = {
     Promise.resolve(openFile(p, o)),
   openSync: openFile,
   SeekMode: { Start: 0, Current: 1, End: 2, START: 0, CURRENT: 1, END: 2 },
-  Command,
+  Command: ShimCommand,
   errors: {
     NotFound: NotFoundError,
     AlreadyExists: AlreadyExistsError,
@@ -864,5 +899,47 @@ const DenoShim = {
   },
 };
 
+// The `Deno` global stays: the test runner's `Deno.test` and the browser
+// probe's expectations are written against it, and a window object that has
+// it is part of the surface the app is developed against. Product code uses
+// the named `runtime` export below instead of the global name.
 // deno-lint-ignore no-explicit-any
 (globalThis as any).Deno = DenoShim;
+
+/** Terminate the process. A declaration rather than `runtime.exit`: the
+ * control-flow analysis ends a function after a call to a declaration that
+ * returns `never`, but not after a property access (`runtime.exit()`), which
+ * leaves the code after it "reachable" and every narrowing broken. */
+export function exit(code?: number): never {
+  return DenoShim.exit(code);
+}
+
+/** The runtime this app runs on: Deno's API shape, implemented on Bun.
+ *
+ * Typed as `typeof Deno` so call sites keep the signatures they were written
+ * against: the object below is the implementation, and the parts of Deno's
+ * surface it does not implement (FFI, mostly) are exactly the ones no caller
+ * here reaches. */
+export const runtime = DenoShim as unknown as typeof Deno;
+
+// The types call sites name (`runtime.NetAddr` would need a type namespace;
+// a named import per type keeps them ordinary). They are Deno's, because the
+// shape is.
+export type ChildProcess = Deno.ChildProcess;
+export type Command = Deno.Command;
+export type FsFile = Deno.FsFile;
+export type NetAddr = Deno.NetAddr;
+export type HttpServer<Addr extends Deno.Addr = Deno.NetAddr> =
+  Deno.HttpServer<Addr>;
+export type DirEntry = Deno.DirEntry;
+export type NetworkInterfaceInfo = Deno.NetworkInterfaceInfo;
+export type Listener = Deno.Listener;
+export type ForeignLibraryInterface = Deno.ForeignLibraryInterface;
+export type ForeignFunction = Deno.ForeignFunction;
+export type DynamicLibrary<
+  Symbols extends Record<string, Deno.ForeignFunction>,
+> = Deno.DynamicLibrary<Symbols>;
+export type UnsafeCallback = Deno.UnsafeCallback;
+export type UnsafePointer = typeof Deno.UnsafePointer;
+export type UnsafePointerView = Deno.UnsafePointerView;
+export type PointerValue<T = unknown> = Deno.PointerValue<T>;

@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { readIfExists } from "../fs.ts";
+import { runtime } from "../runtime/runtime.ts";
 import { truncatedHeadNote, truncateHead } from "../tools/truncate.ts";
 
 /** Combined project memory budget (matches Codex's project_doc_max_bytes). */
@@ -14,7 +15,7 @@ export function findRepoRoot(folder: string): string {
   let current = folder;
   for (let i = 0; i < MAX_REPO_LEVELS; i++) {
     try {
-      Deno.statSync(join(current, ".git"));
+      runtime.statSync(join(current, ".git"));
       return current;
     } catch {
       // no .git here — keep walking up

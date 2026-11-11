@@ -1,6 +1,7 @@
 import { inspect } from "node:util";
 import { type Context, createContext, runInContext } from "node:vm";
 import { errorMessage } from "../errors.ts";
+import { runtime } from "../runtime/runtime.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
 import { TOOL_EVAL, withTimeoutError } from "../shared/mod.ts";
 import { safetyBlockResult } from "./safety.ts";
@@ -316,7 +317,7 @@ export function createEvalTool(
           options.safety,
           "eval",
           params.code,
-          Deno.cwd(),
+          runtime.cwd(),
           {
             prefix: "[error]\n",
             fallbackReason: "The snippet was judged unsafe.",

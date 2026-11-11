@@ -9,6 +9,7 @@
  */
 
 /** One request a fake server saw. */
+import { runtime } from "../runtime/runtime.ts";
 export interface FakeRequest {
   method: string;
   path: string;
@@ -143,7 +144,7 @@ export function startFakeMcpServer(
     return json(answers.length === 1 ? answers[0] : answers);
   };
 
-  const server = Deno.serve(
+  const server = runtime.serve(
     { hostname: "127.0.0.1", port: 0, onListen: () => {} },
     handler,
   );
@@ -244,7 +245,7 @@ export function startFakeAuthServer(
     return new Response("not found", { status: 404 });
   };
 
-  const server = Deno.serve(
+  const server = runtime.serve(
     { hostname: "127.0.0.1", port: 0, onListen: () => {} },
     handler,
   );

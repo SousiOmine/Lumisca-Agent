@@ -5,8 +5,9 @@
  */
 
 /** Lowercase for case-insensitive comparison on Windows. */
+import { runtime } from "../runtime/runtime.ts";
 export function normalizeCase(p: string): string {
-  return Deno.build.os === "windows" ? p.toLowerCase() : p;
+  return runtime.build.os === "windows" ? p.toLowerCase() : p;
 }
 
 /** Convert backslashes to forward slashes (portable rel paths). */
@@ -32,7 +33,7 @@ export function isWithin(root: string, candidate: string): boolean {
  * inside; the lexical check must have run first. */
 export function isWithinRealpath(root: string, path: string): boolean {
   try {
-    return isWithin(Deno.realPathSync(root), Deno.realPathSync(path));
+    return isWithin(runtime.realPathSync(root), runtime.realPathSync(path));
   } catch {
     return true;
   }

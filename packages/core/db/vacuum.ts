@@ -28,6 +28,7 @@ import { basename, dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";
+import { runtime } from "../runtime/runtime.ts";
 
 const log = createLogger("vacuum");
 
@@ -65,7 +66,7 @@ export async function vacuumOnStartup(dbPath: string): Promise<void> {
   const marker = vacuumMarkerPath(dbPath);
   let due: number;
   try {
-    due = Number((await Deno.readTextFile(marker)).trim());
+    due = Number((await runtime.readTextFile(marker)).trim());
   } catch {
     // No marker: nothing was requested (the ordinary case).
     return;

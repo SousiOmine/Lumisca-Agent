@@ -7,6 +7,7 @@ import type {
 } from "../ai/types.ts";
 import { errorMessage } from "../errors.ts";
 import { isRecord } from "../fs.ts";
+import { runtime } from "../runtime/runtime.ts";
 import { parseJsonOrThrow } from "../shared/mod.ts";
 
 /**
@@ -27,7 +28,7 @@ import { parseJsonOrThrow } from "../shared/mod.ts";
  * Both sources may be active at once; the env-var provider is registered
  * last so it wins on provider-id collisions (setProvider is an upsert).
  *
- * Neither source reads `Deno.env` directly: both take an {@link EnvReader},
+ * Neither source reads `runtime.env` directly: both take an {@link EnvReader},
  * so the host (and a test) decides what "the environment" is.
  */
 
@@ -35,13 +36,13 @@ import { parseJsonOrThrow } from "../shared/mod.ts";
 export const CUSTOM_PROVIDER_ID = "custom";
 
 /** Reads the process environment the custom sources look at. Injectable so
- * a host (and a test) can supply its own: `Deno.env` is process-global, so
+ * a host (and a test) can supply its own: `runtime.env` is process-global, so
  * a test that has to set it would otherwise leak into every other test
  * running in the same process. */
 export type EnvReader = () => Record<string, string>;
 
 /** The real environment, read afresh on every call. */
-export const processEnv: EnvReader = () => Deno.env.toObject();
+export const processEnv: EnvReader = () => runtime.env.toObject();
 
 /** Nothing is invented for a model that does not state its window. A made-up
  * 128k window used to be assumed for every models.json entry, and every
@@ -298,7 +299,7 @@ export function customProvidersFromModelsFile(
 
   let text: string;
   try {
-    text = Deno.readTextFileSync(path);
+    text = runtime.readTextFileSync(path);
   } catch (error) {
     throw new Error(
       `Failed to load models.json: ${errorMessage(error)}\nFile: ${path}`,

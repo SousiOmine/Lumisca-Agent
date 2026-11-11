@@ -1,3 +1,4 @@
+import { runtime } from "../../runtime/runtime.ts";
 import { sleep } from "../../shared/misc.ts";
 import { decodeUtf8 } from "../../shared/mod.ts";
 
@@ -19,7 +20,7 @@ function windowsDescendantPids(rootPid: number): number[] {
     `foreach($k in $kids){$id=[int]$k.ProcessId;if(-not $found.ContainsKey($id)){$found[$id]=$true;$next+=$id}}}` +
     `$queue=$next};$found.Keys -join ','`;
   try {
-    const { stdout, success } = new Deno.Command("powershell.exe", {
+    const { stdout, success } = new runtime.Command("powershell.exe", {
       args: ["-NoProfile", "-NonInteractive", "-Command", script],
       stdout: "piped",
       stderr: "null",
@@ -40,7 +41,7 @@ function taskkillPids(pids: number[]): void {
   const args: string[] = ["/F"];
   for (const pid of pids) args.push("/PID", String(pid));
   try {
-    new Deno.Command("taskkill", {
+    new runtime.Command("taskkill", {
       args,
       stdout: "null",
       stderr: "null",
@@ -58,7 +59,7 @@ function taskkillPids(pids: number[]): void {
 function posixDescendantPids(rootPid: number): number[] {
   let stdout: Uint8Array;
   try {
-    ({ stdout } = new Deno.Command("ps", {
+    ({ stdout } = new runtime.Command("ps", {
       args: ["-eo", "pid,ppid"],
       stdout: "piped",
       stderr: "null",
@@ -97,7 +98,7 @@ function posixDescendantPids(rootPid: number): number[] {
 /** POSIX: SIGKILL a pid, ignoring one that is already gone. */
 function signalKill(pid: number): void {
   try {
-    Deno.kill(pid, "SIGKILL");
+    runtime.kill(pid, "SIGKILL");
   } catch {
     // already exited
   }
@@ -141,7 +142,7 @@ async function killPosixTree(rootPid: number): Promise<void> {
  * running (a reported kill that stopped nothing, and pipes and working
  * directories held by survivors). */
 export async function killProcessTree(child: { pid: number }): Promise<void> {
-  if (Deno.build.os === "windows") {
+  if (runtime.build.os === "windows") {
     taskkillPids([...windowsDescendantPids(child.pid), child.pid]);
     for (let attempt = 0; attempt < 3; attempt++) {
       await sleep(100);

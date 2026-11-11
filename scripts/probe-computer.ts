@@ -19,7 +19,7 @@
  *   deno task probe:computer --move 100,100 --type "hello"
  *   deno task probe:computer --key "ctrl+shift+s"
  */
-import "../packages/core/runtime/deno.ts";
+
 import { createComputerHost } from "../packages/core/computer/host.ts";
 import {
   DEFAULT_MAX_DIMENSION,
@@ -27,6 +27,7 @@ import {
 } from "../packages/core/computer/image.ts";
 import type { RestoreTokenStore } from "../packages/core/computer/portal/types.ts";
 import type { ComputerAction } from "../packages/core/computer/types.ts";
+import { exit, runtime } from "../packages/core/runtime/runtime.ts";
 
 const IMAGE_FILE = "probe-computer.png";
 /** The screen-sharing permission (the portal's restore token) is kept here
@@ -38,7 +39,7 @@ const TOKEN_FILE = ".lumisca-cache/probe-session-token";
 const tokenStore: RestoreTokenStore = {
   load: () => {
     try {
-      const token = Deno.readTextFileSync(TOKEN_FILE).trim();
+      const token = runtime.readTextFileSync(TOKEN_FILE).trim();
       return token.length > 0 ? token : undefined;
     } catch {
       return undefined;
@@ -46,8 +47,8 @@ const tokenStore: RestoreTokenStore = {
   },
   save: (token) => {
     try {
-      Deno.mkdirSync(".lumisca-cache", { recursive: true });
-      Deno.writeTextFileSync(TOKEN_FILE, token);
+      runtime.mkdirSync(".lumisca-cache", { recursive: true });
+      runtime.writeTextFileSync(TOKEN_FILE, token);
     } catch {
       // A probe that cannot remember the permission still works; it just
       // asks again next time.
@@ -69,7 +70,7 @@ function usage(): never {
       "Only one action is performed, and only when a flag asks for it.",
     ].join("\n"),
   );
-  Deno.exit(2);
+  exit(2);
 }
 
 /** Parse `x,y` into image coordinates. */
@@ -79,12 +80,12 @@ function point(value: string, flag: string): { x: number; y: number } {
   const y = Number(parts[1]);
   if (parts.length !== 2 || !Number.isFinite(x) || !Number.isFinite(y)) {
     console.error(`${flag} expects "x,y" (got "${value}")`);
-    Deno.exit(2);
+    exit(2);
   }
   return { x, y };
 }
 
-const args = Deno.args;
+const args = runtime.args;
 let requested: { kind: string; value: string } | undefined;
 for (let i = 0; i < args.length; i++) {
   const flag = args[i]!;
@@ -109,7 +110,7 @@ for (let i = 0; i < args.length; i++) {
 const host = await createComputerHost({ store: tokenStore });
 if (!host.available) {
   console.error(`computer use is unavailable: ${host.reason}`);
-  Deno.exit(1);
+  exit(1);
 }
 
 try {
@@ -128,7 +129,7 @@ try {
   const started = Date.now();
   const raw = await host.host.capture(primary.bounds);
   const encoded = encodeCapture(raw, DEFAULT_MAX_DIMENSION);
-  await Deno.writeFile(IMAGE_FILE, encoded.png);
+  await runtime.writeFile(IMAGE_FILE, encoded.png);
   console.log(
     `captured ${raw.screen.width}×${raw.screen.height} screen units as ` +
       `${raw.width}×${raw.height} pixels in ${Date.now() - started}ms`,

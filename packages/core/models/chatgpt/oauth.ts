@@ -11,8 +11,14 @@
  * Codex CLI sends; see ARCHITECTURE.md's ChatGPT section for the sources of
  * the shape (instructions required, store:false, ChatGPT-Account-Id).
  */
+
 import type { AuthInteraction } from "../../ai/types.ts";
 import { isRecord } from "../../fs.ts";
+import {
+  type HttpServer,
+  type NetAddr,
+  runtime,
+} from "../../runtime/runtime.ts";
 import {
   CHATGPT_REQUEST_TIMEOUT_MS,
   type FetchLike,
@@ -309,7 +315,7 @@ type CallbackOutcome = { code?: string; error?: Error };
  * device code. The listener is bound to 127.0.0.1: the browser's callback
  * never leaves the machine. */
 function startCallbackServer(state: string): CallbackServer {
-  let server: Deno.HttpServer<Deno.NetAddr> | undefined;
+  let server: HttpServer<NetAddr> | undefined;
   let port: number | undefined;
   let settle: (outcome: CallbackOutcome) => void = () => {};
   const received = new Promise<CallbackOutcome>((resolve) => {
@@ -360,11 +366,14 @@ function startCallbackServer(state: string): CallbackServer {
 
   for (const candidate of BROWSER_PORTS) {
     try {
-      server = Deno.serve({ hostname: "127.0.0.1", port: candidate }, handler);
+      server = runtime.serve(
+        { hostname: "127.0.0.1", port: candidate },
+        handler,
+      );
       port = candidate;
       break;
     } catch (error) {
-      if (!(error instanceof Deno.errors.AddrInUse)) throw error;
+      if (!(error instanceof runtime.errors.AddrInUse)) throw error;
     }
   }
   if (server === undefined || port === undefined) {

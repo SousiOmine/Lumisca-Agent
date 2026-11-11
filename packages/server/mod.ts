@@ -1,6 +1,6 @@
 // The Deno API surface this server was written against, implemented on Bun.
-// Imported first: every module below reaches for `Deno.*` at load time.
-import "../core/runtime/deno.ts";
+// Imported first: every module below reaches for `runtime.*` at load time.
+
 import { dirname } from "node:path";
 import {
   createComputerHost,
@@ -15,6 +15,12 @@ import {
   COMPUTER_USE_SESSION_TOKEN_KEY,
   errorMessage,
 } from "@lumisca/core/shared";
+import {
+  exit,
+  type HttpServer,
+  type NetAddr,
+  runtime,
+} from "../core/runtime/runtime.ts";
 import { disposeServer, startServer } from "./app.ts";
 import { stellaContainerDir } from "./paths.ts";
 import { validateHostConfig } from "./security.ts";
@@ -69,9 +75,9 @@ globalThis.addEventListener("unhandledrejection", (event) => {
 // install.ts runs the staged binary with it before replacing anything) and
 // any "which build is this?" support question. Handled before the
 // environment is consumed so it reads nothing and starts nothing.
-if (Deno.args.includes("--version")) {
+if (runtime.args.includes("--version")) {
   console.log(SERVER_VERSION);
-  Deno.exit(0);
+  exit(0);
 }
 
 /** The launcher's own command surface (the server's first argument). */
@@ -89,15 +95,15 @@ const LAUNCHER_USAGE = [
 // mistyped flag or an option meant for a subcommand would be a running
 // service nobody asked for. The desktop shell spawns this binary with no
 // arguments, so the strict surface costs it nothing.
-const launcherCommand = Deno.args[0];
+const launcherCommand = runtime.args[0];
 if (launcherCommand === "--help" || launcherCommand === "-h") {
   console.log(LAUNCHER_USAGE);
-  Deno.exit(0);
+  exit(0);
 }
 if (launcherCommand !== undefined && launcherCommand !== "service") {
-  console.error(`lumisca-server: 不明な引数です: ${Deno.args.join(" ")}\n`);
+  console.error(`lumisca-server: 不明な引数です: ${runtime.args.join(" ")}\n`);
   console.error(LAUNCHER_USAGE);
-  Deno.exit(2);
+  exit(2);
 }
 
 if (launcherCommand === "service") {
@@ -108,10 +114,10 @@ if (launcherCommand === "service") {
   // success (the smoke test caught exactly that shape when the machine could
   // not be resolved).
   try {
-    Deno.exit(await runServiceCommand(Deno.args.slice(1)));
+    exit(await runServiceCommand(runtime.args.slice(1)));
   } catch (error) {
     console.error(`lumisca-server service: ${errorMessage(error)}`);
-    Deno.exit(1);
+    exit(1);
   }
 }
 
@@ -173,10 +179,10 @@ export async function main(): Promise<void> {
   function attachStellaVm(core: LumiscaCore): void {
     const containerDir = stellaContainerDir(
       repoRoot,
-      Deno.execPath(),
+      runtime.execPath(),
       (path) => {
         try {
-          return Deno.statSync(path).isDirectory;
+          return runtime.statSync(path).isDirectory;
         } catch {
           return false;
         }
@@ -225,7 +231,7 @@ export async function main(): Promise<void> {
   const configError = validateHostConfig(host, token);
   if (configError) {
     console.error(`Lumisca: ${configError}`);
-    Deno.exit(1);
+    exit(1);
   }
 
   let port: number;
@@ -233,7 +239,7 @@ export async function main(): Promise<void> {
     port = parseServerPort(startupEnv.LUMISCA_PORT, DEFAULT_PORT);
   } catch (error) {
     console.error(errorMessage(error));
-    Deno.exit(1);
+    exit(1);
   }
   // Only the updater's successor sets this: it starts before its predecessor
   // has released the port (and Windows keeps TIME_WAIT sockets on it), so it
@@ -248,7 +254,7 @@ export async function main(): Promise<void> {
   // own binary (scripts/build-server.ts), so it runs without configuration.
   // (`||` so a blank value counts as unset, like every other startup value.)
   const assetsFile =
-    startupEnv.LUMISCA_ASSETS_FILE || defaultAssetsFile(Deno.execPath());
+    startupEnv.LUMISCA_ASSETS_FILE || defaultAssetsFile(runtime.execPath());
 
   let core: LumiscaCore;
   // A previous run may have left a request to rewrite the database file (see
@@ -264,7 +270,7 @@ export async function main(): Promise<void> {
         error,
       )}`,
     );
-    Deno.exit(1);
+    exit(1);
   }
   attachBrowserBackend(core);
   await attachComputerHost(core);
@@ -277,10 +283,10 @@ export async function main(): Promise<void> {
   // The updater of this installation. `server` is filled in below (the
   // restart path needs to release the listener before its successor starts,
   // and the listener does not exist yet).
-  let server: Deno.HttpServer<Deno.NetAddr> | undefined;
+  let server: HttpServer<NetAddr> | undefined;
   const support = updateSupport({
     desktopManaged: isDesktopManaged(startupEnv[DESKTOP_ENV_KEY]),
-    standalone: Deno.build.standalone,
+    standalone: runtime.build.standalone,
   });
   // No updater object when this installation cannot update itself: without it
   // the `/api/update/*` routes are not registered at all (see app.ts), so a
@@ -289,14 +295,14 @@ export async function main(): Promise<void> {
   const update = support.enabled
     ? new UpdateService({
         environment: {
-          installDir: dirname(Deno.execPath()),
-          execPath: Deno.execPath(),
+          installDir: dirname(runtime.execPath()),
+          execPath: runtime.execPath(),
         },
         settings: core,
         // The successor must start exactly like this process did, so the launch
         // configuration captured at startup is replayed for it.
         startupEnv,
-        cwd: Deno.cwd(),
+        cwd: runtime.cwd(),
         manifestUrl: startupEnv[UPDATE_MANIFEST_ENV_KEY] || undefined,
         restartMode: parseUpdateRestartMode(startupEnv[UPDATE_RESTART_ENV_KEY]),
         shutdown: async () => {
@@ -348,7 +354,7 @@ export async function main(): Promise<void> {
         describeListenError(host, port, listenError),
     );
     await core.close();
-    Deno.exit(1);
+    exit(1);
   }
 
   console.log(`Lumisca server listening on http://${host}:${port}`);
@@ -393,12 +399,12 @@ export async function main(): Promise<void> {
       server.shutdown();
       await core.close();
     },
-    exit: (code) => Deno.exit(code),
+    exit: (code) => exit(code),
     onSignal: (signal) => console.log(`${signal} を受信しました`),
     onError: (message) => console.error(`Lumisca: ${message}`),
   });
-  Deno.addSignalListener("SIGINT", () => shutdown("SIGINT"));
-  Deno.addSignalListener("SIGTERM", () => shutdown("SIGTERM"));
+  runtime.addSignalListener("SIGINT", () => shutdown("SIGINT"));
+  runtime.addSignalListener("SIGTERM", () => shutdown("SIGTERM"));
 }
 
 if (import.meta.main) await main();

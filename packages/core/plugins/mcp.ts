@@ -1,6 +1,7 @@
 import { join, normalize, sep } from "node:path";
 import { errorMessage } from "../errors.ts";
 import type { McpServerConfig } from "../mcp/config.ts";
+import { runtime } from "../runtime/runtime.ts";
 import { isWithinRealpath } from "../workspace/path-util.ts";
 
 /** Canonical identifier of the mcp.json schema this client implements
@@ -34,14 +35,14 @@ export interface PluginMcpResult {
  * $XDG_DATA_HOME (or %LOCALAPPDATA% on Windows, else
  * ~/.local/share)/lumisca-agent/plugin-data. */
 export function resolvePluginDataRoot(): string {
-  const home = Deno.env.get("USERPROFILE") ?? Deno.env.get("HOME");
-  const xdg = Deno.env.get("XDG_DATA_HOME");
-  const localAppData = Deno.env.get("LOCALAPPDATA");
+  const home = runtime.env.get("USERPROFILE") ?? runtime.env.get("HOME");
+  const xdg = runtime.env.get("XDG_DATA_HOME");
+  const localAppData = runtime.env.get("LOCALAPPDATA");
   const base =
     xdg ??
     localAppData ??
     (home !== undefined ? join(home, ".local", "share") : undefined);
-  if (base === undefined) return join(Deno.cwd(), ".lumisca-plugin-data");
+  if (base === undefined) return join(runtime.cwd(), ".lumisca-plugin-data");
   return join(base, "lumisca-agent", "plugin-data");
 }
 
@@ -158,7 +159,7 @@ export function parsePluginMcp(
   if (needsPluginData) {
     // Dedicated writable PLUGIN_DATA dir, created before launch and kept
     // across plugin updates (keyed by plugin name only).
-    Deno.mkdirSync(pluginData, { recursive: true });
+    runtime.mkdirSync(pluginData, { recursive: true });
   }
   return { servers, warnings };
 }

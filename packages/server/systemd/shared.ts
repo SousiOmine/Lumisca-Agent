@@ -11,7 +11,12 @@
  * is about to bind, whether linger is on, and where the operator can reach
  * the server it just started.
  */
+
 import { hostForUrl } from "@lumisca/core/shared";
+import {
+  type NetworkInterfaceInfo,
+  runtime,
+} from "../../core/runtime/runtime.ts";
 import { DEFAULT_HOST, DEFAULT_PORT, DESKTOP_ENV_KEY } from "../startup.ts";
 import { resolveValues, type ServicePaths } from "./compose.ts";
 import type { ServiceDeps } from "./deps.ts";
@@ -81,9 +86,9 @@ export async function readTextIfPresent(
   path: string,
 ): Promise<string | undefined> {
   try {
-    return await Deno.readTextFile(path);
+    return await runtime.readTextFile(path);
   } catch (error) {
-    if (error instanceof Deno.errors.NotFound) return undefined;
+    if (error instanceof runtime.errors.NotFound) return undefined;
     throw error;
   }
 }
@@ -146,7 +151,7 @@ export async function isLingerEnabled(deps: ServiceDeps): Promise<boolean> {
 export function connectionUrls(
   host: string,
   port: number,
-  interfaces: readonly Deno.NetworkInterfaceInfo[],
+  interfaces: readonly NetworkInterfaceInfo[],
 ): string[] {
   const hosts: string[] = [];
   if (host === "0.0.0.0" || host === "::") {

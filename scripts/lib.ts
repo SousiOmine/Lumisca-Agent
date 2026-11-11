@@ -15,9 +15,10 @@
  * - `createChecker` is the `ok/FAIL` reporter the archive and smoke scripts
  *   share, including the failure accumulation the exit code comes from.
  */
-import "../packages/core/runtime/deno.ts";
+
 import { isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { exit, runtime } from "../packages/core/runtime/runtime.ts";
 
 /** Repository root. This file lives in `scripts/`, so the root is one
  * directory up. `fileURLToPath` (not `.pathname`) so a repository path
@@ -27,7 +28,9 @@ export const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 /** Name of the server binary on this platform (the compiled server and the
  * desktop shell both expect the `.exe` suffix on Windows). */
 export function binaryName(): string {
-  return Deno.build.os === "windows" ? "lumisca-server.exe" : "lumisca-server";
+  return runtime.build.os === "windows"
+    ? "lumisca-server.exe"
+    : "lumisca-server";
 }
 
 /** One script's usage handler. `usage("--out needs a directory")` reports
@@ -51,7 +54,7 @@ export function reportUsage(
 ): never {
   if (message !== undefined) console.error(`${script}: ${message}`);
   console.log(`usage: ${line}`);
-  Deno.exit(message === undefined ? 0 : 1);
+  exit(message === undefined ? 0 : 1);
 }
 
 /** Parse `--key value` pairs into a map keyed without the leading `--`.
@@ -80,7 +83,7 @@ export function parseOptions(
 /** Resolve a caller-supplied path against the working directory, so a
  * relative argument means what the shell that typed it means. */
 export function absolutePath(path: string): string {
-  return isAbsolute(path) ? path : resolve(Deno.cwd(), path);
+  return isAbsolute(path) ? path : resolve(runtime.cwd(), path);
 }
 
 /** The `ok/FAIL` reporter shared by the verification scripts: each check

@@ -1,4 +1,5 @@
 import { mergeRanges, stripTrailingCR } from "../../lines.ts";
+import { runtime } from "../../runtime/runtime.ts";
 import type { ResolvedPath, Sandbox } from "../../workspace/sandbox.ts";
 import type {
   BackendDirEntry,
@@ -27,21 +28,21 @@ export class HostFileBackend implements FileBackend {
   }
 
   async stat(path: string): Promise<BackendStat | undefined> {
-    const stat = await Deno.stat(path).catch(() => null);
+    const stat = await runtime.stat(path).catch(() => null);
     if (stat === null) return undefined;
     return { isFile: stat.isFile, size: stat.size };
   }
 
   readText(path: string): Promise<string> {
-    return Deno.readTextFile(path);
+    return runtime.readTextFile(path);
   }
 
   async readHead(
     path: string,
     maxBytes: number,
   ): Promise<{ bytes: Uint8Array; size: number }> {
-    const stat = await Deno.stat(path);
-    const file = await Deno.open(path, { read: true });
+    const stat = await runtime.stat(path);
+    const file = await runtime.open(path, { read: true });
     try {
       const buffer = new Uint8Array(Math.min(maxBytes, stat.size));
       let read = 0;
@@ -61,8 +62,8 @@ export class HostFileBackend implements FileBackend {
     text: string,
     options: { private?: boolean } = {},
   ): Promise<void> {
-    await Deno.mkdir(parentOf(path), { recursive: true });
-    await Deno.writeTextFile(
+    await runtime.mkdir(parentOf(path), { recursive: true });
+    await runtime.writeTextFile(
       path,
       text,
       options.private === true ? { mode: 0o600 } : {},
@@ -72,7 +73,7 @@ export class HostFileBackend implements FileBackend {
   async removeFile(path: string): Promise<void> {
     // Pruning is best effort: a missing file means another prune (or the
     // model) got there first, which is the outcome the caller wanted.
-    await Deno.remove(path).catch(() => {});
+    await runtime.remove(path).catch(() => {});
   }
 
   async readRanges(
@@ -121,7 +122,7 @@ export class HostFileBackend implements FileBackend {
 
   async listDir(path: string): Promise<BackendDirEntry[]> {
     const entries: BackendDirEntry[] = [];
-    for await (const entry of Deno.readDir(path)) {
+    for await (const entry of runtime.readDir(path)) {
       entries.push({
         name: entry.name,
         isDirectory: entry.isDirectory,
@@ -136,7 +137,7 @@ export class HostFileBackend implements FileBackend {
  * and a trailing `\r` (CRLF files) are stripped, so the model always sees
  * LF-style lines. Stops early when the consumer breaks. */
 async function* readLines(path: string): AsyncGenerator<[number, string]> {
-  const file = await Deno.open(path, { read: true });
+  const file = await runtime.open(path, { read: true });
   const decoder = new TextDecoder();
   const buffer = new Uint8Array(64 * 1024);
   let lineNo = 1;

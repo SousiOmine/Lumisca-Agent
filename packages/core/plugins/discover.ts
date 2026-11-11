@@ -2,6 +2,7 @@ import { basename, join } from "node:path";
 import { readIfExists, resolveGlobalDirs } from "../fs.ts";
 import type { McpServerConfig } from "../mcp/config.ts";
 import { repoChain } from "../memory/agents-md.ts";
+import { type DirEntry, runtime } from "../runtime/runtime.ts";
 import type { SkillDef } from "../skills/discover.ts";
 import { parseSkillFrontmatter } from "../skills/frontmatter.ts";
 import { isWithinRealpath } from "../workspace/path-util.ts";
@@ -66,9 +67,9 @@ function scanPluginsDir(
   options: DiscoverPluginsOptions,
   byName: Map<string, PluginDef>,
 ): void {
-  let entries: Deno.DirEntry[];
+  let entries: DirEntry[];
   try {
-    entries = [...Deno.readDirSync(dir)];
+    entries = [...runtime.readDirSync(dir)];
   } catch {
     return; // no plugins directory at this level
   }
@@ -137,14 +138,14 @@ function loadPlugin(
 function scanPluginSkills(root: string, warnings: string[]): SkillDef[] {
   const skillsDir = join(root, "skills");
   try {
-    if (!Deno.statSync(skillsDir).isDirectory) {
+    if (!runtime.statSync(skillsDir).isDirectory) {
       warnings.push(`"skills" is not a directory; skills disabled`);
       return [];
     }
   } catch {
     return []; // no skills component (valid absence)
   }
-  const entries = [...Deno.readDirSync(skillsDir)];
+  const entries = [...runtime.readDirSync(skillsDir)];
   entries.sort((a, b) => a.name.localeCompare(b.name));
   const skills: SkillDef[] = [];
   for (const entry of entries) {
@@ -187,11 +188,11 @@ function scanPluginMcp(
   const mcpJsonPath = join(root, "mcp.json");
   let text: string;
   try {
-    if (!Deno.statSync(mcpJsonPath).isFile) {
+    if (!runtime.statSync(mcpJsonPath).isFile) {
       warnings.push(`"mcp.json" is not a file; MCP disabled`);
       return [];
     }
-    text = Deno.readTextFileSync(mcpJsonPath);
+    text = runtime.readTextFileSync(mcpJsonPath);
   } catch {
     return []; // no mcp.json (valid absence)
   }

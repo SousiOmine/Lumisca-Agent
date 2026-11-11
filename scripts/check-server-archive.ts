@@ -25,8 +25,9 @@
  * throwaway signing key); the release workflow leaves it out so every
  * published package is checked against the key servers actually carry.
  */
-import "../packages/core/runtime/deno.ts";
+
 import { basename, join } from "node:path";
+import { exit, runtime } from "../packages/core/runtime/runtime.ts";
 import {
   type ArchiveFormat,
   extractArchive,
@@ -73,7 +74,7 @@ function parseArgs(args: readonly string[]): Options {
 
 const { check, failures } = createChecker();
 
-const options = parseArgs(Deno.args);
+const options = parseArgs(runtime.args);
 const archiveName = basename(options.archive);
 const format: ArchiveFormat = archiveName.endsWith(".zip") ? "zip" : "tar.gz";
 const binaryName =
@@ -85,7 +86,7 @@ console.log(`Verifying ${options.archive}`);
 try {
   await verifyFileSignature({
     file: options.archive,
-    signature: await Deno.readTextFile(options.signature),
+    signature: await runtime.readTextFile(options.signature),
     publicKey: options.publicKey,
   });
   check("signature verifies against the release key", true);
@@ -98,7 +99,9 @@ try {
 }
 
 // 2. The container the updater reads, and the files inside it.
-const extractDir = await Deno.makeTempDir({ prefix: "lumisca-archive-check-" });
+const extractDir = await runtime.makeTempDir({
+  prefix: "lumisca-archive-check-",
+});
 let extracted: string[] | undefined;
 try {
   extracted = await extractArchive(options.archive, format, extractDir);
@@ -119,8 +122,8 @@ try {
     let detail = "";
     try {
       const [fromArchive, fromStage] = await Promise.all([
-        Deno.readFile(join(extractDir, name)),
-        Deno.readFile(staged),
+        runtime.readFile(join(extractDir, name)),
+        runtime.readFile(staged),
       ]);
       same =
         fromArchive.length === fromStage.length &&
@@ -138,7 +141,7 @@ try {
     error instanceof Error ? error.message : String(error),
   );
 } finally {
-  await Deno.remove(extractDir, { recursive: true }).catch(() => {});
+  await runtime.remove(extractDir, { recursive: true }).catch(() => {});
 }
 
 // 3. Completeness, the direction the per-file comparison cannot see: every
@@ -154,7 +157,7 @@ if (extracted !== undefined) {
     // written here would silently stop checking a file added below it.
     const stagedFiles: string[] = [];
     const walk = async (dir: string, prefix: string): Promise<void> => {
-      for await (const entry of Deno.readDir(dir)) {
+      for await (const entry of runtime.readDir(dir)) {
         if (entry.isFile) stagedFiles.push(`${prefix}${entry.name}`);
         else if (entry.isDirectory) {
           await walk(join(dir, entry.name), `${prefix}${entry.name}/`);
@@ -181,6 +184,6 @@ if (extracted !== undefined) {
 
 if (failures.length > 0) {
   console.error(`check-server-archive: FAILED (${failures.join("; ")})`);
-  Deno.exit(1);
+  exit(1);
 }
 console.log("check-server-archive: the package installs as an update");

@@ -9,7 +9,6 @@
  * exists in only one of them is a bug, not a configuration choice.
  */
 
-/** Repository whose GitHub Releases carry the server packages. */
 export const RELEASE_REPOSITORY = "SousiOmine/Lumisca-Agent";
 
 /** How a platform's package is compressed. Windows ships a zip (Explorer
@@ -24,7 +23,7 @@ export interface ReleaseTarget {
 }
 
 /**
- * Platforms the release workflow publishes. Keys are `Deno.build.target`
+ * Platforms the release workflow publishes. Keys are `runtime.build.target`
  * values, so the running server looks itself up with no configuration.
  * Adding a platform is one entry here plus one matrix row in
  * `.github/workflows/release.yml`; an unknown target simply has no updates
@@ -83,7 +82,7 @@ export function defaultManifestUrl(target: string): string {
 export interface ReleaseManifest {
   /** Version of the release (e.g. "0.7.8"). */
   version: string;
-  /** `Deno.build.target` the manifest was written for. */
+  /** `runtime.build.target` the manifest was written for. */
   target: string;
   /** Absolute URL of the archive to download. */
   url: string;

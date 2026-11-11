@@ -4,6 +4,7 @@ import {
   ensurePreview,
   previewPathOf,
 } from "../../core/media/preview-cache.ts";
+import { runtime } from "../../core/runtime/runtime.ts";
 import { assetHeaders } from "./asset-headers.ts";
 import { AppError } from "./util.ts";
 
@@ -67,7 +68,7 @@ export function attachmentRoutes(core: AttachmentApi): Hono {
     if (preview !== undefined) {
       return new Response(preview.buffer as ArrayBuffer, { headers });
     }
-    const bytes = await Deno.readFile(attachment.path);
+    const bytes = await runtime.readFile(attachment.path);
     return new Response(bytes, { headers });
   });
 

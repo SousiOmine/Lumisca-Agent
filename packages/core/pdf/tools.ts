@@ -23,6 +23,7 @@ import { getDocumentProxy, renderPageAsImage } from "unpdf";
 import { bytesToBase64 } from "../base64.ts";
 import { errorMessage } from "../errors.ts";
 import { prepareStoredImage } from "../media/stored-image.ts";
+import { runtime } from "../runtime/runtime.ts";
 import { TOOL_PDF_READ_PAGES } from "../shared/mod.ts";
 import type { FileBackend } from "../tools/file-backend.ts";
 import { requireExistingFile } from "../tools/resolve.ts";
@@ -135,7 +136,7 @@ export function createUnpdfRenderer(options?: {
   // Windows Skia loads `icudtl.dat` from the library/executable
   // directory at startup and aborts when it is missing; the other
   // platforms compile the data into the binding and skip the guard.
-  const needsIcuDataFile = Deno.build.os === "windows";
+  const needsIcuDataFile = runtime.build.os === "windows";
   const findIcuDataFile = options?.findIcuDataFile ?? findCanvasIcuDataFile;
   return {
     async render(

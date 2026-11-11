@@ -1,4 +1,5 @@
 import { isAbsolute, join } from "node:path";
+import { runtime } from "../runtime/runtime.ts";
 import { parseJsonOrThrow, serializeMcpServers } from "../shared/mod.ts";
 import type { McpServerStatus } from "./status.ts";
 
@@ -65,7 +66,7 @@ export const MCP_TEST_SOURCE = "MCP test config";
 export function expandEnv(value: string): string {
   return value.replace(
     /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g,
-    (match, name: string) => Deno.env.get(name) ?? match,
+    (match, name: string) => runtime.env.get(name) ?? match,
   );
 }
 
@@ -163,7 +164,7 @@ export function loadMcpConfig(workspaceRoot: string): McpConfig {
   const filePath = join(workspaceRoot, MCP_CONFIG_FILE);
   let text: string;
   try {
-    text = Deno.readTextFileSync(filePath);
+    text = runtime.readTextFileSync(filePath);
   } catch {
     return { servers: [], filePath };
   }

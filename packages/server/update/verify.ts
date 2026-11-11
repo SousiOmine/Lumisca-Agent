@@ -15,7 +15,9 @@
  * is used for the digest alone, and the signature check itself is
  * WebCrypto).
  */
+
 import { blake2b } from "@noble/hashes/blake2.js";
+import { runtime } from "../../core/runtime/runtime.ts";
 
 /**
  * Public key of the release signing key, in the base64 form
@@ -161,7 +163,7 @@ export async function hashFileBlake2b512(
   path: string,
 ): Promise<Uint8Array<ArrayBuffer>> {
   const hasher = blake2b.create({ dkLen: 64 });
-  const file = await Deno.open(path, { read: true });
+  const file = await runtime.open(path, { read: true });
   try {
     const buffer = new Uint8Array(HASH_CHUNK_BYTES);
     for (;;) {

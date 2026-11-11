@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { runtime } from "../runtime/runtime.ts";
 
 /**
  * One owner's directory of generated assets, and the name allocation every
@@ -46,7 +47,7 @@ export class AssetDir {
     maxFiles?: number,
   ): Promise<string> {
     const dir = this.dirOf(owner);
-    await Deno.mkdir(dir, { recursive: true });
+    await runtime.mkdir(dir, { recursive: true });
     if (maxFiles !== undefined && (await this.count(dir)) >= maxFiles) {
       throw new Error(
         `This owner already holds ${maxFiles} assets; reuse one of them ` +
@@ -61,10 +62,10 @@ export class AssetDir {
     for (let attempt = 0; attempt < 3; attempt++) {
       const name = `${randomNameBase()}${extension.toLowerCase()}`;
       try {
-        await Deno.writeFile(join(dir, name), bytes, { createNew: true });
+        await runtime.writeFile(join(dir, name), bytes, { createNew: true });
         return name;
       } catch (error) {
-        if (!(error instanceof Deno.errors.AlreadyExists)) throw error;
+        if (!(error instanceof runtime.errors.AlreadyExists)) throw error;
       }
     }
     throw new Error("Could not allocate an asset name");
@@ -74,15 +75,17 @@ export class AssetDir {
    * store keeps for facts about the bytes — an attachment's original file
    * name). The file is replaced rather than appended. */
   async writeSidecar(owner: string, name: string, text: string): Promise<void> {
-    await Deno.writeTextFile(join(this.dirOf(owner), `${name}.json`), text);
+    await runtime.writeTextFile(join(this.dirOf(owner), `${name}.json`), text);
   }
 
   /** The sidecar text of an asset, or undefined when it has none. */
   async readSidecar(owner: string, name: string): Promise<string | undefined> {
     try {
-      return await Deno.readTextFile(join(this.dirOf(owner), `${name}.json`));
+      return await runtime.readTextFile(
+        join(this.dirOf(owner), `${name}.json`),
+      );
     } catch (error) {
-      if (error instanceof Deno.errors.NotFound) return undefined;
+      if (error instanceof runtime.errors.NotFound) return undefined;
       throw error;
     }
   }
@@ -94,7 +97,7 @@ export class AssetDir {
   async resolve(owner: string, name: string): Promise<string | undefined> {
     const path = join(this.dirOf(owner), name);
     try {
-      const stat = await Deno.stat(path);
+      const stat = await runtime.stat(path);
       if (!stat.isFile) return undefined;
     } catch {
       return undefined;
@@ -106,9 +109,9 @@ export class AssetDir {
    * error: the writer is replacing it with something the owner now shows. */
   async removeFile(owner: string, name: string): Promise<void> {
     try {
-      await Deno.remove(join(this.dirOf(owner), name));
+      await runtime.remove(join(this.dirOf(owner), name));
     } catch (error) {
-      if (!(error instanceof Deno.errors.NotFound)) throw error;
+      if (!(error instanceof runtime.errors.NotFound)) throw error;
     }
   }
 
@@ -116,15 +119,15 @@ export class AssetDir {
    * never wrote one. */
   async deleteOwner(owner: string): Promise<void> {
     try {
-      await Deno.remove(this.dirOf(owner), { recursive: true });
+      await runtime.remove(this.dirOf(owner), { recursive: true });
     } catch (error) {
-      if (!(error instanceof Deno.errors.NotFound)) throw error;
+      if (!(error instanceof runtime.errors.NotFound)) throw error;
     }
   }
 
   private async count(dir: string): Promise<number> {
     let held = 0;
-    for await (const entry of Deno.readDir(dir)) {
+    for await (const entry of runtime.readDir(dir)) {
       // Sidecars and previews belong to their asset, so they are not assets
       // themselves (a cap must count the pictures, not their bookkeeping).
       if (entry.isFile && !isDerivedFile(entry.name)) held++;

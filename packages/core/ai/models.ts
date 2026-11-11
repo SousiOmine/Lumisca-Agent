@@ -5,6 +5,7 @@
  * {@link buildStreamFn}.
  */
 
+import { runtime } from "../runtime/runtime.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import { languageModelFor, type ResolvedApiKey } from "./lang-model.ts";
 import { createStreamFn, type StreamTransport } from "./stream.ts";
@@ -42,7 +43,7 @@ export class LumiscaModels {
 
   constructor(options: LumiscaModelsOptions) {
     this.credentials = options.credentials;
-    this.env = options.env ?? (() => ({ ...Deno.env.toObject() }));
+    this.env = options.env ?? (() => ({ ...runtime.env.toObject() }));
     this.compactionPolicy = options.compactionPolicy;
   }
 

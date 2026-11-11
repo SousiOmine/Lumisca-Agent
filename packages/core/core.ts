@@ -53,6 +53,7 @@ import {
   type RoutineScheduler,
   type RoutineTrigger,
 } from "./routine/scheduler.ts";
+import { runtime } from "./runtime/runtime.ts";
 import { CommandSafety } from "./safety/command-safety.ts";
 import { SavedPromptsService } from "./saved-prompts.ts";
 import { ComputerUseService } from "./services/computer.ts";
@@ -586,7 +587,7 @@ export class LumiscaCore {
    * sees).
    *
    * The model layer reads its environment through `env`, which defaults to
-   * EMPTY. `Deno.env` is global to the whole test process (the runner runs
+   * EMPTY. `runtime.env` is global to the whole test process (the runner runs
    * every test file in one process, in parallel worker threads), so reading
    * it would make a test depend on the machine — and on whatever another
    * file happened to set at that moment. A test that wants ambient
@@ -670,7 +671,7 @@ export class LumiscaCore {
       return;
     }
     try {
-      await Deno.writeTextFile(
+      await runtime.writeTextFile(
         vacuumMarkerPath(this.dbPath),
         String(this.freedBytes),
         { mode: 0o600 },

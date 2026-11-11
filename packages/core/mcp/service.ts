@@ -5,6 +5,7 @@ import type { Workspace } from "../domain/workspace.ts";
 import { CoreError, errorMessage } from "../errors.ts";
 import { atomicWriteTextFileSync } from "../fs.ts";
 import { discoverPlugins } from "../plugins/discover.ts";
+import { runtime } from "../runtime/runtime.ts";
 import type { SettingsRepo } from "../settings/repo.ts";
 import { APP_MCP_SETTINGS_KEY, mcpServerEntry } from "../shared/mod.ts";
 import { probeMcpServer } from "./client.ts";
@@ -390,7 +391,7 @@ export class McpService {
     // plain 401 is the answer, and it carries needsAuth below.
     const authProvider = connectionOAuthProvider(this.oauth, server);
     try {
-      const tools = await probeMcpServer(server, Deno.cwd(), timeoutMs, {
+      const tools = await probeMcpServer(server, runtime.cwd(), timeoutMs, {
         ...(authProvider !== undefined ? { authProvider } : {}),
       });
       return {
@@ -552,7 +553,7 @@ export class McpService {
     const existing = this.checkManager;
     if (existing !== null && this.checkManagerKey === key) return existing;
     this.dropCheckManager();
-    const manager = new McpManager(config, Deno.cwd(), this.oauth);
+    const manager = new McpManager(config, runtime.cwd(), this.oauth);
     this.checkManager = manager;
     this.checkManagerKey = key;
     return manager;

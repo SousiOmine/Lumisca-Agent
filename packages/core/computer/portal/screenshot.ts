@@ -12,8 +12,10 @@
  * The portal leaves the file behind, so the file is read and removed: one
  * leftover PNG per screenshot would pile up in the runtime directory.
  */
+
 import { fileURLToPath } from "node:url";
 import { CoreError, errorMessage } from "../../errors.ts";
+import { runtime } from "../../runtime/runtime.ts";
 import { decodePngToBgra } from "../image.ts";
 import { type PortalConnection, unwrapVariant } from "./connection.ts";
 import {
@@ -82,7 +84,7 @@ export async function captureScreen(
   const path = fileURLToPath(uri);
   let encoded: Uint8Array;
   try {
-    encoded = await Deno.readFile(path);
+    encoded = await runtime.readFile(path);
   } catch (error) {
     throw new CoreError(
       `could not read the screenshot file ${path}: ${errorMessage(error)}`,
@@ -90,7 +92,7 @@ export async function captureScreen(
     );
   }
   try {
-    await Deno.remove(path);
+    await runtime.remove(path);
   } catch {
     // A file the desktop wants to keep (or already removed) is not a
     // reason to fail a capture that succeeded.

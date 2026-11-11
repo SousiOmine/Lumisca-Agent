@@ -4,6 +4,7 @@ import {
   resolveGlobalDirs as resolveGlobalDirsBase,
 } from "../fs.ts";
 import { repoChain } from "../memory/agents-md.ts";
+import { type DirEntry, runtime } from "../runtime/runtime.ts";
 import { appSkillDirs as resolveAppSkillDirs } from "../settings/path.ts";
 import { truncatedHeadNote, truncateHead } from "../tools/truncate.ts";
 import { isWithinRealpath } from "../workspace/path-util.ts";
@@ -187,9 +188,9 @@ function scanSkillsDir(
   byName: Map<string, SkillDef>,
   seenPaths: Set<string>,
 ): void {
-  let entries: Deno.DirEntry[];
+  let entries: DirEntry[];
   try {
-    entries = [...Deno.readDirSync(dir)];
+    entries = [...runtime.readDirSync(dir)];
   } catch {
     return; // no skills directory at this level
   }

@@ -20,8 +20,9 @@
  * `tauri signer sign` prints), so a manifest can be written without a `.sig`
  * file on disk.
  */
-import "../packages/core/runtime/deno.ts";
+
 import { basename, dirname, join } from "node:path";
+import { runtime } from "../packages/core/runtime/runtime.ts";
 import {
   archiveAssetName,
   manifestAssetName,
@@ -64,7 +65,7 @@ function parseArgs(args: readonly string[]): Options {
   };
 }
 
-const options = parseArgs(Deno.args);
+const options = parseArgs(runtime.args);
 
 const target = releaseTargetFor(options.target);
 if (target === undefined) {
@@ -92,7 +93,7 @@ const resolvedSignature = await (async (): Promise<string> => {
   if (options.signature.includes("/") || options.signature.includes("\\")) {
     const path = absolutePath(options.signature);
     try {
-      return (await Deno.readTextFile(path)).trim();
+      return (await runtime.readTextFile(path)).trim();
     } catch (error) {
       usage(
         `cannot read --signature ${path}: ` +
@@ -105,7 +106,7 @@ const resolvedSignature = await (async (): Promise<string> => {
 
 let size: number;
 try {
-  size = (await Deno.stat(options.archive)).size;
+  size = (await runtime.stat(options.archive)).size;
 } catch (error) {
   usage(
     `cannot read --archive ${options.archive}: ` +
@@ -127,7 +128,7 @@ const manifest = {
 // Read the document back through the runtime's parser: the release must not
 // publish a manifest the updater would refuse.
 parseReleaseManifest(manifest, options.target);
-await Deno.writeTextFile(out, JSON.stringify(manifest, null, 2) + "\n");
+await runtime.writeTextFile(out, JSON.stringify(manifest, null, 2) + "\n");
 console.log(
   `Manifest: ${out} (${version}, ${options.target}, ${size} bytes, ` +
     `${assetName})`,

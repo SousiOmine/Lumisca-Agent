@@ -5,7 +5,7 @@ migration itself, not a spike; it is not merged yet.
 
 ## What changed
 
-- `packages/core/runtime/deno.ts` — a first-party implementation of the
+- `packages/core/runtime/runtime.ts` — a first-party implementation of the
   `Deno` API surface this codebase uses (files, env, `Command`, `serve` with
   WebSocket upgrade, `listen`/`connect`, `build.standalone`). Nothing in it
   calls the Deno runtime. The name stays because 460 call sites still say

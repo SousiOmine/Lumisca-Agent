@@ -25,9 +25,10 @@
  * (packages/server/assets.ts), so the prebuild and the runtime can never
  * disagree about what an asset is.
  */
-import "../packages/core/runtime/deno.ts";
+
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { findCanvasIcuDataFile } from "../packages/core/pdf/icu-data.ts";
+import { exit, runtime } from "../packages/core/runtime/runtime.ts";
 import { VM_CONTAINER_DIR_NAME } from "../packages/core/vm/contract.ts";
 import { buildAssetsManifest } from "../packages/server/assets.ts";
 import {
@@ -60,7 +61,7 @@ function usage(message?: string): never {
  * per build target (Deno's triple names, which the release manifests still
  * use), so several platforms can be built side by side. */
 function defaultOutDir(): string {
-  return join(repoRoot, "dist", "server", "stage", Deno.build.target);
+  return join(repoRoot, "dist", "server", "stage", runtime.build.target);
 }
 
 function parseArgs(args: readonly string[]): Options {
@@ -90,13 +91,13 @@ function parseArgs(args: readonly string[]): Options {
       ? defaultOutDir()
       : isAbsolute(out)
         ? out
-        : resolve(Deno.cwd(), out);
+        : resolve(runtime.cwd(), out);
   return { outDir, compile };
 }
 
 async function exists(path: string): Promise<boolean> {
   try {
-    await Deno.stat(path);
+    await runtime.stat(path);
     return true;
   } catch {
     return false;
@@ -107,10 +108,10 @@ async function exists(path: string): Promise<boolean> {
  * replaced by hand first: an existing file (notably the `--no-compile`
  * placeholder) makes the compiler refuse to write. */
 async function compileServer(outputPath: string): Promise<void> {
-  await Deno.remove(outputPath).catch(() => {});
+  await runtime.remove(outputPath).catch(() => {});
   // Bun builds a single executable from the same entry. The Deno permission
   // list is gone with the runtime; Bun has no equivalent capability list.
-  const status = await new Deno.Command(Deno.execPath(), {
+  const status = await new runtime.Command(runtime.execPath(), {
     args: ["build", "--compile", "--outfile", outputPath, SERVER_ENTRY],
     cwd: repoRoot,
     stdin: "null",
@@ -122,7 +123,7 @@ async function compileServer(outputPath: string): Promise<void> {
       `build-server: bun build --compile failed (exit ${status.code}); ` +
         "the packaged server was not produced",
     );
-    Deno.exit(status.code === 0 ? 1 : status.code);
+    exit(status.code === 0 ? 1 : status.code);
   }
 }
 
@@ -137,11 +138,11 @@ async function compileServer(outputPath: string): Promise<void> {
  */
 async function stageCanvasIcuData(outDir: string): Promise<void> {
   const target = join(outDir, ICU_DATA_FILE_NAME);
-  if (Deno.build.os !== "windows") {
+  if (runtime.build.os !== "windows") {
     // macOS/Linux Skia embeds its ICU data; no file to ship. Drop any
     // stale file a previous Windows run left in a shared output directory
     // (the desktop resources dir is the same directory for both platforms).
-    await Deno.remove(target).catch(() => {});
+    await runtime.remove(target).catch(() => {});
     return;
   }
   // The search the server itself runs at startup (packages/core/pdf/
@@ -156,8 +157,8 @@ async function stageCanvasIcuData(outDir: string): Promise<void> {
     );
     return;
   }
-  await Deno.copyFile(source, target);
-  const { size } = await Deno.stat(target);
+  await runtime.copyFile(source, target);
+  const { size } = await runtime.stat(target);
   console.log(`ICU data: ${target} (${size} bytes, from ${source})`);
 }
 
@@ -173,7 +174,7 @@ async function stageCanvasIcuData(outDir: string): Promise<void> {
 async function stageStellaContainer(outDir: string): Promise<void> {
   const source = join(repoRoot, "packages", "core", "vm", "container");
   const target = join(outDir, VM_CONTAINER_DIR_NAME);
-  await Deno.remove(target, { recursive: true }).catch(() => {});
+  await runtime.remove(target, { recursive: true }).catch(() => {});
   await copyContainerTree(source, target);
   console.log(`stella container files: ${target}`);
 }
@@ -191,8 +192,8 @@ async function copyContainerTree(
   source: string,
   target: string,
 ): Promise<void> {
-  await Deno.mkdir(target, { recursive: true });
-  for await (const entry of Deno.readDir(source)) {
+  await runtime.mkdir(target, { recursive: true });
+  for await (const entry of runtime.readDir(source)) {
     const from = join(source, entry.name);
     const to = join(target, entry.name);
     if (entry.isDirectory) {
@@ -200,17 +201,17 @@ async function copyContainerTree(
       continue;
     }
     if (!entry.isFile) continue;
-    await Deno.copyFile(from, to);
+    await runtime.copyFile(from, to);
     // entry.sh must stay executable: podman runs it as the container's CMD,
     // and a copied mode is not guaranteed by every platform's filesystem.
     if (entry.name.endsWith(".sh")) {
-      await Deno.chmod(to, 0o755).catch(() => {});
+      await runtime.chmod(to, 0o755).catch(() => {});
     }
   }
 }
 
-const options = parseArgs(Deno.args);
-await Deno.mkdir(options.outDir, { recursive: true });
+const options = parseArgs(runtime.args);
+await runtime.mkdir(options.outDir, { recursive: true });
 
 // 1. Bundle the client and read the static assets into the manifest. The
 //    client's chunks travel inside `assets.json`, so a package stays the
@@ -218,7 +219,7 @@ await Deno.mkdir(options.outDir, { recursive: true });
 //    stage, and no directory whose contents could go stale.
 const { manifest, clientBytes } = await buildAssetsManifest(repoRoot);
 const assetsFile = join(options.outDir, ASSETS_FILE_NAME);
-await Deno.writeTextFile(assetsFile, JSON.stringify(manifest));
+await runtime.writeTextFile(assetsFile, JSON.stringify(manifest));
 console.log(
   `Assets: ${assetsFile} (${clientBytes} bytes of JS: ` +
     `${Object.keys(manifest.client).join(", ")})`,
@@ -234,12 +235,12 @@ await stageStellaContainer(options.outDir);
 const binaryPath = join(options.outDir, binaryName());
 if (options.compile) {
   await compileServer(binaryPath);
-  const { size } = await Deno.stat(binaryPath);
+  const { size } = await runtime.stat(binaryPath);
   console.log(`Server binary: ${binaryPath} (${size} bytes)`);
 } else if (await exists(binaryPath)) {
   console.log(`Placeholder binary kept at ${binaryPath} (--no-compile)`);
 } else {
-  await Deno.writeFile(binaryPath, new Uint8Array(0));
+  await runtime.writeFile(binaryPath, new Uint8Array(0));
   console.log(`Placeholder binary written to ${binaryPath} (--no-compile)`);
 }
 

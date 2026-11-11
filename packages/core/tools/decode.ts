@@ -1,4 +1,6 @@
 /** Windows code page number -> WHATWG TextDecoder label. */
+import { runtime } from "../runtime/runtime.ts";
+
 const OEM_CP_TO_LABEL: Record<number, string> = {
   874: "windows-874",
   932: "shift_jis",
@@ -26,10 +28,10 @@ let oemLabelCache: string | null | undefined;
  * TextDecoder label.
  */
 export async function detectOemLabel(): Promise<string | null> {
-  if (Deno.build.os !== "windows") return null;
+  if (runtime.build.os !== "windows") return null;
   if (oemLabelCache !== undefined) return oemLabelCache;
   try {
-    const { stdout } = await new Deno.Command("cmd.exe", {
+    const { stdout } = await new runtime.Command("cmd.exe", {
       args: ["/d", "/c", "chcp"],
       stdout: "piped",
       stderr: "piped",

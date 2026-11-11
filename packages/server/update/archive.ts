@@ -15,8 +15,10 @@
  * server. The archive is signature-verified before it gets here, so this is
  * defense in depth rather than the trust boundary.
  */
+
 import { dirname } from "node:path";
 import { type TarStreamEntry, UntarStream } from "@std/tar/untar-stream";
+import { type FsFile, runtime } from "../../core/runtime/runtime.ts";
 import type { ArchiveFormat } from "./release.ts";
 
 /** The container formats this module can read (the release layout owns
@@ -104,13 +106,13 @@ export function packageEntryPath(path: string): string | undefined {
 /** Read exactly `length` bytes at `offset`, or throw (a short read means
  * the archive was truncated). */
 async function readAt(
-  file: Deno.FsFile,
+  file: FsFile,
   offset: number,
   length: number,
 ): Promise<Bytes> {
   if (length < 0) throw new ArchiveError("アーカイブのオフセットが不正です");
   const buffer = new Uint8Array(length);
-  await file.seek(offset, Deno.SeekMode.Start);
+  await file.seek(offset, runtime.SeekMode.Start);
   let filled = 0;
   while (filled < length) {
     const read = await file.read(buffer.subarray(filled));
@@ -122,7 +124,7 @@ async function readAt(
   return buffer;
 }
 
-async function writeAll(file: Deno.FsFile, bytes: Uint8Array): Promise<void> {
+async function writeAll(file: FsFile, bytes: Uint8Array): Promise<void> {
   let written = 0;
   while (written < bytes.length) {
     written += await file.write(bytes.subarray(written));
@@ -134,7 +136,7 @@ async function writeAll(file: Deno.FsFile, bytes: Uint8Array): Promise<void> {
 async function ensureParent(path: string): Promise<boolean> {
   const parent = dirname(path);
   try {
-    await Deno.mkdir(parent, { recursive: true });
+    await runtime.mkdir(parent, { recursive: true });
     return true;
   } catch {
     // Already there (the common case: files of one directory share it).
@@ -149,7 +151,7 @@ async function writeStream(
   mode?: number,
 ): Promise<number> {
   await ensureParent(path);
-  const file = await Deno.open(path, {
+  const file = await runtime.open(path, {
     create: true,
     write: true,
     truncate: true,
@@ -182,7 +184,7 @@ interface ZipEntry {
 /** Parse the central directory of a zip file (the authoritative record:
  * entries written with a data descriptor carry zero sizes in their local
  * header). */
-async function readZipEntries(file: Deno.FsFile): Promise<ZipEntry[]> {
+async function readZipEntries(file: FsFile): Promise<ZipEntry[]> {
   const { size } = await file.stat();
   if (size < 22) throw new ArchiveError("ZIP アーカイブが小さすぎます");
 
@@ -295,7 +297,7 @@ async function extractZip(
   archivePath: string,
   targetDir: string,
 ): Promise<string[]> {
-  const file = await Deno.open(archivePath, { read: true });
+  const file = await runtime.open(archivePath, { read: true });
   try {
     const entries = await readZipEntries(file);
     const written: string[] = [];
@@ -313,7 +315,7 @@ async function extractZip(
         if (compressed.length !== entry.size) {
           throw new ArchiveError(`展開サイズが一致しません: ${entry.name}`);
         }
-        const out = await Deno.open(target, {
+        const out = await runtime.open(target, {
           create: true,
           write: true,
           truncate: true,
@@ -375,7 +377,7 @@ async function extractTarGz(
   archivePath: string,
   targetDir: string,
 ): Promise<string[]> {
-  const file = await Deno.open(archivePath, { read: true });
+  const file = await runtime.open(archivePath, { read: true });
   const written: string[] = [];
   try {
     const entries = file.readable
@@ -430,7 +432,7 @@ async function extractTarGz(
 /** Close a file whose readable stream may have closed the resource already
  * (`file.readable` releases the resource at EOF and on cancel, so the
  * explicit close after a successful extraction is a no-op error rather than
- * a fault). */ function closeQuietly(file: Deno.FsFile): void {
+ * a fault). */ function closeQuietly(file: FsFile): void {
   try {
     file.close();
   } catch {

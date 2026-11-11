@@ -2,17 +2,18 @@
 // verified with many messages. Run with:
 //   deno run -A scripts/seed-test-history.ts <sessionId> [nPairs]
 // The DB path follows the server convention (LUMISCA_DB, default test-lumisca.db).
-import "../packages/core/runtime/deno.ts";
-import { DatabaseSync } from "node:sqlite";
 
-const sessionId = Deno.args[0];
-const nPairs = Number(Deno.args[1] ?? 12);
+import { DatabaseSync } from "node:sqlite";
+import { exit, runtime } from "../packages/core/runtime/runtime.ts";
+
+const sessionId = runtime.args[0];
+const nPairs = Number(runtime.args[1] ?? 12);
 if (!sessionId) {
   console.error("usage: seed-test-history.ts <sessionId> [nPairs]");
-  Deno.exit(1);
+  exit(1);
 }
 
-const db = new DatabaseSync(Deno.env.get("LUMISCA_DB") ?? "test-lumisca.db");
+const db = new DatabaseSync(runtime.env.get("LUMISCA_DB") ?? "test-lumisca.db");
 const insert = db.prepare(
   "INSERT INTO messages (id, session_id, role, content, timestamp) VALUES (?, ?, ?, ?, ?)",
 );

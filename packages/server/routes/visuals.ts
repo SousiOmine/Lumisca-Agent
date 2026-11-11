@@ -4,6 +4,7 @@ import {
   ensurePreview,
   previewPathOf,
 } from "../../core/media/preview-cache.ts";
+import { runtime } from "../../core/runtime/runtime.ts";
 import { assetHeaders } from "./asset-headers.ts";
 import { AppError } from "./util.ts";
 
@@ -61,7 +62,7 @@ export function visualRoutes(core: VisualApi): Hono {
     if (preview !== undefined) {
       return c.newResponse(preview.buffer as ArrayBuffer, 200, headers);
     }
-    const bytes = await Deno.readFile(visual.path);
+    const bytes = await runtime.readFile(visual.path);
     // The asset is bounded by the store's limit (4 MiB), so buffering it
     // needs no stream handling; the buffer is an ArrayBuffer of its own.
     return c.newResponse(bytes.buffer as ArrayBuffer, 200, headers);

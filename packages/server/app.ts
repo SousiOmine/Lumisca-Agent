@@ -4,6 +4,11 @@ import { hostForUrl } from "@lumisca/core/shared";
 import { Hono } from "hono";
 import { compress } from "hono/compress";
 import { upgradeWebSocket } from "hono/deno";
+import {
+  type HttpServer,
+  type NetAddr,
+  runtime,
+} from "../core/runtime/runtime.ts";
 import { Assets } from "./assets.ts";
 import { FederationClient } from "./federation.ts";
 import { languageForRequest, registerPages } from "./pages.ts";
@@ -89,10 +94,7 @@ export interface AppOptions {
 
 /** Cleanup hooks per app instance, reached via disposeServer. */
 const appDisposers = new WeakMap<Hono, () => void>();
-const serverDisposers = new WeakMap<
-  Deno.HttpServer<Deno.NetAddr>,
-  () => void
->();
+const serverDisposers = new WeakMap<HttpServer<NetAddr>, () => void>();
 
 function disposeApp(app: Hono): void {
   appDisposers.get(app)?.();
@@ -101,7 +103,7 @@ function disposeApp(app: Hono): void {
 /** Create the HTTP + WebSocket application. */
 export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   const app = new Hono();
-  const repoRoot = options.repoRoot ?? Deno.cwd();
+  const repoRoot = options.repoRoot ?? runtime.cwd();
   const assets = new Assets(
     repoRoot,
     join(repoRoot, ".lumisca-cache"),
@@ -369,7 +371,7 @@ export function startServer(
   core: LumiscaCore,
   port = 8000,
   options?: AppOptions,
-): Deno.HttpServer<Deno.NetAddr> {
+): HttpServer<NetAddr> {
   const hostname = options?.hostname ?? "127.0.0.1";
   // The hub's real origin is only known after binding (port 0 =
   // ephemeral); the federation self-guard reads it through this holder,
@@ -382,7 +384,7 @@ export function startServer(
     { selfId: () => instanceId },
   );
   const app = createApp(core, { ...options, selfOrigin, fed, instanceId });
-  const server = Deno.serve(
+  const server = runtime.serve(
     {
       hostname,
       port,
@@ -403,6 +405,6 @@ export function startServer(
 
 /** Release resources tied to a running server (e.g. the dev watcher).
  * Call before server.shutdown() when shutting down gracefully. */
-export function disposeServer(server: Deno.HttpServer<Deno.NetAddr>): void {
+export function disposeServer(server: HttpServer<NetAddr>): void {
   serverDisposers.get(server)?.();
 }

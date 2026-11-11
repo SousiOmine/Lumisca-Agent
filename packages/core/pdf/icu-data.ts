@@ -16,6 +16,7 @@
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { type EnvReader, processEnv } from "../models/custom.ts";
+import { runtime } from "../runtime/runtime.ts";
 
 /** Platform suffixes of the `@napi-rs/canvas-<platform>` npm packages
  * (the optionalDependencies of @napi-rs/canvas plus the extra branches of
@@ -50,7 +51,7 @@ const CANVAS_PLATFORM_SUFFIXES: readonly string[] = [
  * binding, (4) next to any installed `@napi-rs/canvas-<platform>`
  * package, resolved without loading it.
  *
- * `env` is a parameter, not a direct `Deno.env` read: the process
+ * `env` is a parameter, not a direct `runtime.env` read: the process
  * environment is shared by every test file the runner executes in
  * parallel, so a test that needs an override passes one instead of
  * mutating the real environment.
@@ -61,7 +62,7 @@ export function findCanvasIcuDataFile(
   const override = readOverride(env);
   if (override) {
     try {
-      if (Deno.statSync(override).isFile) return override;
+      if (runtime.statSync(override).isFile) return override;
     } catch {
       // A stale override must not crash the process; fall through to the
       // normal search, which refuses cleanly when nothing is found.
@@ -70,7 +71,7 @@ export function findCanvasIcuDataFile(
   for (const dir of canvasIcuSearchDirs()) {
     const candidate = join(dir, "icudtl.dat");
     try {
-      if (Deno.statSync(candidate).isFile) return candidate;
+      if (runtime.statSync(candidate).isFile) return candidate;
     } catch {
       // Not here; try the next directory.
     }
@@ -93,7 +94,7 @@ function canvasIcuSearchDirs(): string[] {
   // The deno-compiled server ships icudtl.dat next to its own binary
   // (the `server/icudtl.dat` Tauri resource).
   try {
-    dirs.push(dirname(Deno.execPath()));
+    dirs.push(dirname(runtime.execPath()));
   } catch {
     // execPath unavailable; the searches below may still match.
   }

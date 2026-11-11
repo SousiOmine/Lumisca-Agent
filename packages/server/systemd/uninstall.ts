@@ -8,7 +8,9 @@
  * setting, not a property of this unit — and the operator is told how to turn
  * it off.
  */
+
 import { join } from "node:path";
+import { runtime } from "../../core/runtime/runtime.ts";
 import type { ServiceDeps } from "./deps.ts";
 import { servicePaths, UNIT_NAME } from "./plan.ts";
 import {
@@ -36,7 +38,7 @@ export async function runUninstall(deps: ServiceDeps): Promise<number> {
     await deps.runner.systemctl(["disable", "--now", UNIT_NAME]),
     `systemctl --user disable --now ${UNIT_NAME}`,
   );
-  await Deno.remove(paths.unitPath);
+  await runtime.remove(paths.unitPath);
   await reloadSystemd(deps);
 
   deps.out(`ユニットを削除しました: ${paths.unitPath}`);

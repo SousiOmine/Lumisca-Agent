@@ -1,6 +1,6 @@
 /** `bun test` only: the runtime shim plus `Deno.test` mapped to `bun:test`. */
 import { afterAll, afterEach, beforeAll, beforeEach, test } from "bun:test";
-import "../../packages/core/runtime/deno.ts";
+import "../../packages/core/runtime/runtime.ts";
 
 type DenoTestOptions = {
   name: string;

@@ -1,5 +1,6 @@
 // The Deno namespace this script's Command/args/exit calls resolve to.
-import "../../packages/core/runtime/deno.ts";
+import { exit, runtime } from "../../core/runtime/runtime.ts";
+import "../../packages/core/runtime/runtime.ts";
 import { fileURLToPath } from "node:url";
 // The dependency-free half of the server startup, not startup.ts: this
 // directory is outside the workspace, so the root import map (and therefore
@@ -13,9 +14,9 @@ import { consumeServerStartupEnvironment } from "../../server/startup-env.ts";
 consumeServerStartupEnvironment();
 
 const desktopRoot = fileURLToPath(new URL("..", import.meta.url));
-const npm = Deno.build.os === "windows" ? "npm.cmd" : "npm";
-const child = new Deno.Command(npm, {
-  args: ["run", "tauri", "--", "dev", ...Deno.args],
+const npm = runtime.build.os === "windows" ? "npm.cmd" : "npm";
+const child = new runtime.Command(npm, {
+  args: ["run", "tauri", "--", "dev", ...runtime.args],
   cwd: desktopRoot,
   stdin: "inherit",
   stdout: "inherit",
@@ -23,4 +24,4 @@ const child = new Deno.Command(npm, {
 }).spawn();
 
 const status = await child.status;
-Deno.exit(status.code);
+exit(status.code);

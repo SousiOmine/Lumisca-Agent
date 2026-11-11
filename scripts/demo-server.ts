@@ -13,7 +13,7 @@
  * "e2e-session" session. Prompts mentioning "bash", "read" or "send_chat"
  * exercise the matching tool; anything else answers with markdown.
  */
-import "../packages/core/runtime/deno.ts";
+
 import { basename } from "node:path";
 import {
   type AssistantMessage,
@@ -25,6 +25,7 @@ import {
   LumiscaCore,
   type StreamRequest,
 } from "../packages/core/mod.ts";
+import { exit, runtime } from "../packages/core/runtime/runtime.ts";
 import {
   TOOL_BASH,
   TOOL_CALL,
@@ -45,13 +46,13 @@ function parsePort(raw: string | undefined): number {
   return port;
 }
 
-const PORT = parsePort(Deno.args[0]);
+const PORT = parsePort(runtime.args[0]);
 /** Tool arguments are workspace-relative: the sandbox addresses a folder
  * by its directory name (`<folder>/<path>`), and `bash` takes the folder
  * as its required `cwd`. */
 const folder = basename(repoRoot);
 /** The demo's directory listing (the shell differs per OS). */
-const LIST_COMMAND = Deno.build.os === "windows" ? "dir" : "ls -la";
+const LIST_COMMAND = runtime.build.os === "windows" ? "dir" : "ls -la";
 
 /** Answer one LLM call from the transcript so far: a tool result ends the
  * run with a summary, a prompt mentioning a tool name calls it, and
@@ -170,10 +171,10 @@ core.createSession({
 const server = startServer(core, PORT, { repoRoot });
 console.log(`E2E demo server on http://127.0.0.1:${PORT}`);
 console.log("workspace: E2E Demo / session: e2e-session");
-Deno.addSignalListener("SIGINT", () => {
+runtime.addSignalListener("SIGINT", () => {
   console.log("\nShutting down...");
   server.shutdown();
   // Await the teardown so background commands and MCP child processes
   // are dead before the process exits.
-  void core.close().then(() => Deno.exit(0));
+  void core.close().then(() => exit(0));
 });

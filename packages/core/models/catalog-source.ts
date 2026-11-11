@@ -6,6 +6,7 @@ import snapshot, {
 import { errorMessage } from "../errors.ts";
 import { atomicWriteTextFileSync, isRecord } from "../fs.ts";
 import { createLogger } from "../log.ts";
+import { runtime } from "../runtime/runtime.ts";
 import type { SettingsRepo } from "../settings/repo.ts";
 import type { CatalogSourceKind, CatalogStatus } from "../shared/providers.ts";
 
@@ -119,9 +120,9 @@ export function loadCachedCatalog(
   if (dir === undefined) return undefined;
   let text: string;
   try {
-    text = Deno.readTextFileSync(cachedPath(dir));
+    text = runtime.readTextFileSync(cachedPath(dir));
   } catch (error) {
-    if (!(error instanceof Deno.errors.NotFound)) {
+    if (!(error instanceof runtime.errors.NotFound)) {
       log.debug(`cached catalog unreadable: ${errorMessage(error)}`);
     }
     return undefined;

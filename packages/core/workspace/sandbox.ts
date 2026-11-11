@@ -8,6 +8,7 @@ import {
   relative,
   sep,
 } from "node:path";
+import { runtime } from "../runtime/runtime.ts";
 import { isWithin, normalizeCase, toPosix } from "./path-util.ts";
 
 export type ResolvedPath =
@@ -65,7 +66,7 @@ export class Sandbox {
       .map((f) => {
         const abs = isAbsolute(f)
           ? normalize(f)
-          : normalize(join(Deno.cwd(), f));
+          : normalize(join(runtime.cwd(), f));
         try {
           // Resolve 8.3 short names and symlinks on the root itself.
           return realpathSync.native(abs);
@@ -150,7 +151,7 @@ export class Sandbox {
   /** Resolve symlinks; for missing paths, canonicalize the deepest existing ancestor. */
   private async canonicalize(abs: string): Promise<ResolvedPath> {
     try {
-      return { ok: true, path: await Deno.realPath(abs) };
+      return { ok: true, path: await runtime.realPath(abs) };
     } catch {
       // abs does not exist yet — walk up to the deepest existing ancestor.
       return this.canonicalizeParent(abs);
@@ -166,7 +167,7 @@ export class Sandbox {
       return { ok: false, reason: `Path does not exist: ${abs}` };
     }
     try {
-      const realParent = await Deno.realPath(parent);
+      const realParent = await runtime.realPath(parent);
       // `abs` may not exist yet: re-attach the whole missing suffix of the
       // ORIGINAL path (not just the recursed argument), so deep new paths
       // (e.g. a/b/file.txt with only a/ existing) are resolved in full
@@ -181,7 +182,7 @@ export class Sandbox {
   /** Resolve a folder at workspace-creation time; it must exist. */
   static async resolveFolder(folder: string): Promise<ResolvedPath> {
     try {
-      return { ok: true, path: await Deno.realPath(folder) };
+      return { ok: true, path: await runtime.realPath(folder) };
     } catch {
       return { ok: false, reason: `Folder does not exist: ${folder}` };
     }

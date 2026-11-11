@@ -9,6 +9,8 @@
  */
 
 /** POSIX locale variables, most specific first (the order glibc uses). */
+import { runtime } from "./runtime/runtime.ts";
+
 const POSIX_VARIABLES = ["LC_ALL", "LC_MESSAGES", "LANG"] as const;
 
 /** GNU's LANGUAGE variable: a colon-separated preference list. */
@@ -52,7 +54,7 @@ function resolvedLocaleTag(): string | undefined {
 function readEnv(name: string): string | undefined {
   try {
     // Without --allow-env this throws; the fallback chain continues.
-    return Deno.env.get(name) ?? undefined;
+    return runtime.env.get(name) ?? undefined;
   } catch {
     return undefined;
   }

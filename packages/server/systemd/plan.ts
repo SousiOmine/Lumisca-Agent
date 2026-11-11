@@ -9,6 +9,7 @@
  * desktop shell's copy is replaced by the app's own updater), and a
  * non-loopback bind must name the authorities clients will use.
  */
+
 import { dirname, join } from "node:path";
 import { errorMessage, SETTINGS_DIR_NAME } from "@lumisca/core";
 import { parsePortValue } from "../startup.ts";
@@ -24,13 +25,13 @@ export const DOCUMENT_NAME = "service.env";
 /** What `service` needs to know about the machine it runs on, injected so
  * every decision is testable. */
 export interface ServiceHost {
-  /** `Deno.build.os`. */
+  /** `runtime.build.os`. */
   os: string;
-  /** `Deno.build.standalone`: only a packaged server owns its installation. */
+  /** `runtime.build.standalone`: only a packaged server owns its installation. */
   standalone: boolean;
   /** `LUMISCA_DESKTOP` was set: the desktop shell owns this binary. */
   desktopManaged: boolean;
-  /** `Deno.execPath()`. */
+  /** `runtime.execPath()`. */
   execPath: string;
   /** HOME the unit sets (the server resolves its settings file under it). */
   home: string;

@@ -7,6 +7,7 @@ import type {
   FsPlaceKind,
 } from "@lumisca/core/shared";
 import { Hono } from "hono";
+import { runtime } from "../../core/runtime/runtime.ts";
 import { AppError, requireNonEmptyString } from "./util.ts";
 
 /** The picker's wire shapes (FsPlace, FsEntry, FsBreadcrumb, FsBrowse) and
@@ -59,7 +60,7 @@ export async function readUserDirs(
   const dirs = new Map<string, string | null>();
   let text: string;
   try {
-    text = await Deno.readTextFile(file);
+    text = await runtime.readTextFile(file);
   } catch {
     // No file (macOS, Windows, a machine without a desktop session):
     // nothing is declared here, and the English names take over.
@@ -92,7 +93,7 @@ function userDirsFile(env: (key: string) => string | undefined): string {
  * testable. */
 export function placeCandidates(
   env: (key: string) => string | undefined,
-  os: string = Deno.build.os,
+  os: string = runtime.build.os,
   userDirs: (key: string) => string | null | undefined = () => undefined,
 ): PlaceCandidate[] {
   const home = env("USERPROFILE") || env("HOME") || "";
@@ -172,8 +173,8 @@ export function fsRoutes(): Hono {
   /** The places the sidebar lists: the user folders that exist on the
    * machine serving this request, then its filesystem roots. */
   app.get("/fs/places", async (c) => {
-    const env = (key: string) => Deno.env.get(key);
-    const os = Deno.build.os;
+    const env = (key: string) => runtime.env.get(key);
+    const os = runtime.build.os;
     // Only Linux keeps its user folders in the XDG config file.
     const userDirs =
       os === "linux"
@@ -188,7 +189,7 @@ export function fsRoutes(): Hono {
       throw new AppError(`not a directory: ${path}`, 400);
     }
     const entries: FsEntry[] = [];
-    for await (const entry of Deno.readDir(path)) {
+    for await (const entry of runtime.readDir(path)) {
       const entryPath = join(path, entry.name);
       // A dirent describes the link itself, so a symlinked folder would read
       // as a file (and could never be picked as a workspace folder): resolve

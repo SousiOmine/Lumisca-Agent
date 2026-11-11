@@ -13,6 +13,7 @@ import type {
 } from "../ai/types.ts";
 import { errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";
+import { runtime } from "../runtime/runtime.ts";
 import type { Locale } from "../shared/mod.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 
@@ -188,7 +189,7 @@ export class CompactionController {
     // Deno's signature says `number`; Bun hands back a timer object, and the
     // shim's `unrefTimer` unrefs it. The cast states that difference once,
     // here, instead of typing every timer in the agent as Deno's.
-    Deno.unrefTimer(timer as unknown as number);
+    runtime.unrefTimer(timer as unknown as number);
     this.idleTimer = timer;
   }
 
