@@ -73,8 +73,11 @@ Deno.test("eval rejects re-declaring a const or let name", async () => {
   const tool = makeEval();
   await tool.execute("1", { code: "const x = 1" }, undefined);
   const result = await tool.execute("1", { code: "const x = 5" }, undefined);
+  // The engine's wording differs (V8: "has already been declared", Bun's
+  // JavaScriptCore: "Can't create duplicate variable"); the rejection and the
+  // name it is about are what the caller relies on.
   assert(
-    toolText(result).includes("already been declared"),
+    toolText(result).startsWith("[error]") && toolText(result).includes("'x'"),
     `result: ${toolText(result)}`,
   );
 });

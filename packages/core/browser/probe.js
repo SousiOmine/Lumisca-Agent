@@ -1,7 +1,7 @@
-// Lumisca browser probe — SINGLE SOURCE OF TRUTH.
+// Lumisca browser probe - SINGLE SOURCE OF TRUTH.
 //
 // Consumed two ways:
-//  - Deno/TypeScript: `import { PROBE_SOURCE } from "./probe.js"` — the
+//  - Deno/TypeScript: `import { PROBE_SOURCE } from "./probe.js"` - the
 //    module export below. `deno compile` bundles it statically, so the
 //    compiled server binary carries the probe with no disk dependency.
 //  - Rust host (desktop): `include_str!` on this file, then
@@ -11,8 +11,10 @@
 //    into the page.
 //
 // The probe content must NOT contain backticks or "${" (it lives inside a
-// template literal whose raw text must equal the injected script). The
-// Deno test probe_test.ts enforces both invariants.
+// template literal whose raw text must equal the injected script), and it
+// must stay ASCII: Bun re-escapes non-ASCII characters inside a template
+// literal, which changes the value of a String.raw template. probe_test.ts
+// enforces all three invariants.
 
 /* LUMISCA-PROBE-START */
 export const PROBE_SOURCE = String.raw`
@@ -63,7 +65,7 @@ export const PROBE_SOURCE = String.raw`
       try {
         var json = JSON.stringify(value);
         if (json && json.length > 0 && json.length <= 200) { return json; }
-      } catch (e) { /* circular — fall through */ }
+      } catch (e) { /* circular - fall through */ }
       var name = value.constructor && value.constructor.name
         ? value.constructor.name
         : "Object";
@@ -78,7 +80,7 @@ export const PROBE_SOURCE = String.raw`
     for (var i = 0; i < args.length; i++) {
       var text = String(formatArg(args[i]));
       if (total + text.length > MAX_ENTRY) {
-        text = text.slice(0, Math.max(0, MAX_ENTRY - total)) + "…";
+        text = text.slice(0, Math.max(0, MAX_ENTRY - total)) + "\u2026";
       }
       out.push(text);
       total += text.length + 1;
@@ -195,7 +197,7 @@ export const PROBE_SOURCE = String.raw`
         attributes: true,
         characterData: true
       });
-    } catch (e) { /* document not ready — skip mutation tracking */ }
+    } catch (e) { /* document not ready - skip mutation tracking */ }
   }
 
   // --- refs ----------------------------------------------------------------
@@ -293,7 +295,7 @@ export const PROBE_SOURCE = String.raw`
 
   function bound(text, max) {
     text = String(text);
-    return text.length > max ? text.slice(0, max) + "…" : text;
+    return text.length > max ? text.slice(0, max) + "\u2026" : text;
   }
 
   function accessibleName(el) {
@@ -488,7 +490,7 @@ export const PROBE_SOURCE = String.raw`
     var current = !!el.checked;
     if (current === checked) { return; }
     if (typeof el.click === "function") {
-      // Native click toggles the state and fires input/change — React
+      // Native click toggles the state and fires input/change - React
       // observes both, and the browser keeps the checked attribute in sync.
       el.click();
       return;
@@ -553,7 +555,7 @@ export const PROBE_SOURCE = String.raw`
         case "press":
           dispatchKey(target, "keydown", action.key);
           dispatchKey(target, "keyup", action.key);
-          // Synthetic keys never trigger default actions — Enter on a form
+          // Synthetic keys never trigger default actions - Enter on a form
           // is the one case worth synthesizing (form submission).
           if (action.key === "Enter" && target.form &&
               typeof target.form.requestSubmit === "function") {

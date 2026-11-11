@@ -190,7 +190,31 @@ Deno.test("shouldNotifyFromState matrix", () => {
   assertEquals(shouldNotifyFromState(null, true, false), true);
 });
 
+/** An in-memory stand-in for the browser's localStorage: Bun's test
+ * environment has none (Deno's had one), and this test is about what the
+ * setting does with storage, not about the absence of it. */
+class MemoryStorage {
+  readonly #items = new Map<string, string>();
+  getItem(key: string): string | null {
+    return this.#items.get(key) ?? null;
+  }
+  setItem(key: string, value: string): void {
+    this.#items.set(key, value);
+  }
+  removeItem(key: string): void {
+    this.#items.delete(key);
+  }
+}
+
 Deno.test("notify enabled defaults to on and round-trips", () => {
+  const descriptor = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "localStorage",
+  );
+  Object.defineProperty(globalThis, "localStorage", {
+    value: new MemoryStorage(),
+    configurable: true,
+  });
   const prev = (() => {
     try {
       return localStorage.getItem("lumisca.notify.enabled");
@@ -215,6 +239,11 @@ Deno.test("notify enabled defaults to on and round-trips", () => {
       else localStorage.setItem("lumisca.notify.enabled", prev);
     } catch {
       // Best-effort restore.
+    }
+    if (descriptor === undefined) {
+      delete (globalThis as { localStorage?: unknown }).localStorage;
+    } else {
+      Object.defineProperty(globalThis, "localStorage", descriptor);
     }
   }
 });

@@ -296,6 +296,17 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Put a global back the way it was, including "it was not there". */
+function restore(
+  target: object,
+  name: string,
+  descriptor: PropertyDescriptor | undefined,
+): void {
+  if (descriptor === undefined)
+    delete (target as Record<string, unknown>)[name];
+  else Object.defineProperty(target, name, descriptor);
+}
+
 /** Run `body` with the page globals replaced by a stand-in page: location,
  * WebSocket and the visibility API are plain properties on globalThis in
  * Deno, and the descriptors are put back in a `finally` so nothing leaks
@@ -305,8 +316,8 @@ async function withPage(
   page: { protocol: string; host: string },
   body: (doc: FakeDocument) => void | Promise<void>,
 ): Promise<void> {
-  const location = Object.getOwnPropertyDescriptor(globalThis, "location")!;
-  const socket = Object.getOwnPropertyDescriptor(globalThis, "WebSocket")!;
+  const location = Object.getOwnPropertyDescriptor(globalThis, "location");
+  const socket = Object.getOwnPropertyDescriptor(globalThis, "WebSocket");
   // Deno has no `document`: the stub is added, then removed again.
   const docDescriptor = Object.getOwnPropertyDescriptor(globalThis, "document");
   const doc = new FakeDocument();
@@ -326,8 +337,11 @@ async function withPage(
   try {
     await body(doc);
   } finally {
-    Object.defineProperty(globalThis, "location", location);
-    Object.defineProperty(globalThis, "WebSocket", socket);
+    // `location` and `WebSocket` only exist in a browser (and in Deno's test
+    // environment); under Bun they are absent, and there is no descriptor to
+    // put back — defining `undefined` throws instead.
+    restore(globalThis, "location", location);
+    restore(globalThis, "WebSocket", socket);
     if (docDescriptor !== undefined) {
       Object.defineProperty(globalThis, "document", docDescriptor);
     } else {

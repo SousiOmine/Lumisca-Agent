@@ -21,6 +21,15 @@ Deno.test("probe source stays embeddable (no backticks, no ${)", () => {
   assert(!PROBE_SOURCE.includes("${"), "probe must not contain ${");
 });
 
+Deno.test("probe source stays ASCII", () => {
+  // Bun rewrites a non-ASCII character inside a template literal into a
+  // \uXXXX escape, and inside String.raw that changes the value: the export
+  // and the text the Rust hosts extract from the file stopped being equal
+  // (6 em dashes made them differ by 30 characters). ASCII keeps them
+  // byte-identical; a user-visible ellipsis is written as "\u2026".
+  assert(!/[^\x00-\x7F]/.test(PROBE_SOURCE), "probe must be ASCII only");
+});
+
 Deno.test("Rust-style extraction from the file yields the exact export", () => {
   // The Rust hosts extract the probe from this same file (include_str! +
   // split on "String.raw`"). Mirror that algorithm here so a drift between

@@ -299,13 +299,16 @@ Deno.test("spawned commands inherit the cleaned process environment", async () =
     Deno.env.set("LUMISCA_MODEL", "test-model");
     consumeServerStartupEnvironment();
 
+    // The child reads the environment from the runtime itself (Bun has no
+    // `eval` subcommand, and no Deno namespace without the shim): what the
+    // test is about is the environment it is handed, not how it is read.
     const code = `console.log(JSON.stringify([
-      Deno.env.get("LUMISCA_PORT") ?? null,
-      Deno.env.get("LUMISCA_TOKEN") ?? null,
-      Deno.env.get("LUMISCA_MODEL") ?? null,
+      process.env.LUMISCA_PORT ?? null,
+      process.env.LUMISCA_TOKEN ?? null,
+      process.env.LUMISCA_MODEL ?? null,
     ]))`;
     const output = await new Deno.Command(Deno.execPath(), {
-      args: ["eval", code],
+      args: ["--eval", code],
       stdout: "piped",
       stderr: "piped",
     }).output();
