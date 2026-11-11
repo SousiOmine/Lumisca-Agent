@@ -47,14 +47,25 @@ const workspace: Workspace = {
 
 // --- sessionSkills gating ----------------------------------------------------
 
+/** Keep the developer's own skill folders out of these assertions: a global
+ * `computer-use` or `web-browser` skill would be discovered regardless of
+ * the gate the test is checking (the built-ins are only the fallback). */
+const NO_USER_SKILLS = { globalDirs: [], appSkillDirs: [] } as const;
+
 Deno.test("sessionSkills advertises the web-browser skill only with a browser backend", () => {
-  const withBrowser = sessionSkills([], { browserAvailable: true });
+  const withBrowser = sessionSkills([], {
+    browserAvailable: true,
+    ...NO_USER_SKILLS,
+  });
   assert(
     withBrowser.some((s) => s.name === "web-browser"),
     "web-browser must be advertised when the browser backend is attached",
   );
   for (const opts of [undefined, {}, { browserAvailable: false }]) {
-    const without = sessionSkills([], opts as { browserAvailable?: boolean });
+    const without = sessionSkills([], {
+      ...opts,
+      ...NO_USER_SKILLS,
+    } as { browserAvailable?: boolean });
     assertEquals(
       without.some((s) => s.name === "web-browser"),
       false,
@@ -64,7 +75,10 @@ Deno.test("sessionSkills advertises the web-browser skill only with a browser ba
 });
 
 Deno.test("sessionSkills advertises the computer-use skill only when the machine can be driven", () => {
-  const withComputer = sessionSkills([], { computerAvailable: true });
+  const withComputer = sessionSkills([], {
+    computerAvailable: true,
+    ...NO_USER_SKILLS,
+  });
   assert(
     withComputer.some((s) => s.name === "computer-use"),
     "computer-use must be advertised when the session may drive the machine",
@@ -75,10 +89,10 @@ Deno.test("sessionSkills advertises the computer-use skill only when the machine
     { computerAvailable: false },
     { browserAvailable: true },
   ]) {
-    const without = sessionSkills(
-      [],
-      opts as { computerAvailable?: boolean; browserAvailable?: boolean },
-    );
+    const without = sessionSkills([], {
+      ...opts,
+      ...NO_USER_SKILLS,
+    } as { computerAvailable?: boolean; browserAvailable?: boolean });
     assertEquals(
       without.some((s) => s.name === "computer-use"),
       false,
