@@ -1,4 +1,4 @@
-import type { MessageKey, Translator } from "@lumisca/core/shared";
+import type { Translator } from "@lumisca/core/shared";
 import {
   IconPencil,
   IconPlus,
@@ -11,6 +11,7 @@ import { api } from "../api.ts";
 import { formatRelativeTime } from "../format.ts";
 import { useArrivals } from "../hooks/useArrivals.ts";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
+import { useCompactViewport } from "../hooks/useMediaQuery.ts";
 import { useLocale, useT } from "../i18n.ts";
 import { errorText } from "../providers.ts";
 import type {
@@ -19,8 +20,6 @@ import type {
   StellaPreview,
 } from "../types.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
-import { Field } from "./Field.tsx";
-import { Modal } from "./Modal.tsx";
 import { AgentAvatar } from "./stella/AgentAvatar.tsx";
 import { AgentEditDialog } from "./stella/AgentEditDialog.tsx";
 import { AgentRoutinesDialog } from "./stella/AgentRoutinesDialog.tsx";
@@ -41,6 +40,10 @@ interface StellaSidebarProps {
   /** Called with the row the server answered after an edit or a create, so
    * the list (and the conversation's header) redraw without a full re-read. */
   onAgentChanged: (agent: StellaAgent) => void;
+  /** Open the create dialog. The list has two ways in (this row over the list
+   * at wide widths, the title bar at phone widths), so the dialog itself is
+   * the App's, not this component's. */
+  onNewAgent: () => void;
   /** Whether the active agent's conversation is running, so its row can say
    * so (a message app's "typing" in a list). Only the active one is known:
    * the others have no open stream, and asking each would be a request per
@@ -79,31 +82,6 @@ const LONG_PRESS_MS = 500;
  * A finger that moves is scrolling the list, not holding the row. */
 const LONG_PRESS_SLOP_PX = 10;
 
-/** The example jobs the create dialog offers.
- *
- * A preset fills the wish field with a full sentence the user can edit. It is
- * a head start for someone who does not know how to describe the job — not a
- * hidden prompt: the sentence IS the role, and it is readable before the
- * agent is created. */
-const PRESETS: ReadonlyArray<{ label: MessageKey; text: MessageKey }> = [
-  {
-    label: "chat.stella.agents.preset.secretary",
-    text: "chat.stella.agents.preset.secretaryText",
-  },
-  {
-    label: "chat.stella.agents.preset.bookkeeping",
-    text: "chat.stella.agents.preset.bookkeepingText",
-  },
-  {
-    label: "chat.stella.agents.preset.research",
-    text: "chat.stella.agents.preset.researchText",
-  },
-  {
-    label: "chat.stella.agents.preset.travel",
-    text: "chat.stella.agents.preset.travelText",
-  },
-];
-
 /** The line a row shows under the name: the words that were said, or — for a
  * message that carried no words — what it carried. Kept beside the row that
  * draws it rather than in the shared module, because the shared module
@@ -130,12 +108,12 @@ function previewTextOf(preview: StellaPreview, t: Translator): string {
  * exactly one conversation that keeps growing — so there is no history to
  * browse, no titles to invent and no tabs to manage.
  *
- * Creating one starts from a wish, not a form: "what should it do for you?"
- * is the one answer this dialog needs, and it becomes the agent's role (the
- * instruction it works from). The name is optional — the server supplies one
- * when it is empty. Examples sit under the field for a user who cannot put
- * the job into words yet; a preset fills the field with a sentence the user
- * can edit, so nothing is decided behind their back.
+ * Creating one starts from a wish, not a form (AgentCreateDialog): "what
+ * should it do for you?" is the one answer that dialog needs, and it becomes
+ * the agent's role (the instruction it works from). The dialog's two ways
+ * in are the button over the list at wide widths and the title bar's at phone
+ * widths, where this list is a screen of its own and the row above it is the
+ * only place for a control.
  *
  * How they want it done is NOT asked here. The new agent asks that itself in
  * its first turn, once the conversation opens: it is the one that knows which
@@ -159,11 +137,15 @@ export function StellaSidebar({
   onSelect,
   onChanged,
   onAgentChanged,
+  onNewAgent,
   running,
 }: StellaSidebarProps) {
   const t = useT();
   const locale = useLocale();
-  const [creating, setCreating] = useState(false);
+  /** At phone widths the title bar carries the create button (the list and
+   * the conversation are one screen each, so the button belongs in the one
+   * row above the list), and this header would be a second one under it. */
+  const compact = useCompactViewport();
   const [deleting, setDeleting] = useState<StellaAgentSummary | null>(null);
   /** The row whose menu is open, with where to draw it. */
   const [menu, setMenu] = useState<MenuAnchor | null>(null);
@@ -175,9 +157,6 @@ export function StellaSidebar({
   const [routinesFor, setRoutinesFor] = useState<StellaAgentSummary | null>(
     null,
   );
-  const [name, setName] = useState("");
-  const [role, setRole] = useState("");
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   /** The press a fingertip is holding, while it is still a candidate for the
@@ -249,37 +228,6 @@ export function StellaSidebar({
     [],
   );
 
-  const resetForm = () => {
-    setCreating(false);
-    setName("");
-    setRole("");
-    setError(null);
-  };
-
-  const create = async () => {
-    // Both answers are optional: the server fills in a name and leaves the
-    // role empty (the agent then works from the app's own instructions).
-    if (busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const agent = await api.createStellaAgent(name, role);
-      // The row goes into the list BEFORE the address names it. Selecting
-      // first sent the reader to an agent the list had not read yet, and the
-      // App treats an address naming an agent it cannot find as one that is
-      // gone — it replaced the address with the list, so the dialog closed
-      // and the screen did not move. The create's own answer carries the
-      // row, so nothing has to be re-read to know it exists.
-      onAgentChanged(agent);
-      onSelect(agent.id);
-      resetForm();
-    } catch (failure) {
-      setError(errorText(failure));
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const remove = async (agent: StellaAgentSummary) => {
     setDeleting(null);
     try {
@@ -306,15 +254,6 @@ export function StellaSidebar({
     } catch (failure) {
       setError(errorText(failure));
     }
-  };
-
-  /** A preset starts a sentence; it does not replace one the user wrote.
-   * Clicking two adds both, which is the honest reading of two clicks. */
-  const applyPreset = (text: string) => {
-    setRole((current) => {
-      const trimmed = current.trim();
-      return trimmed === "" ? text : `${trimmed}\n${text}`;
-    });
   };
 
   /** Open a row's menu along the row itself. This is where a keyboard's menu
@@ -390,17 +329,22 @@ export function StellaSidebar({
 
   return (
     <aside className="stella-sidebar">
-      <div className="stella-sidebar-header">
-        <button
-          type="button"
-          className="icon-btn"
-          onClick={() => setCreating(true)}
-          title={t("chat.stella.agents.new")}
-          aria-label={t("chat.stella.agents.new")}
-        >
-          <IconPlus size={15} />
-        </button>
-      </div>
+      {/* The list's one control, on the row above the list — the same row the
+       * title bar's create button takes at phone widths, so only one of them
+       * is drawn at a time. */}
+      {!compact && (
+        <div className="stella-sidebar-header">
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={onNewAgent}
+            title={t("chat.stella.agents.new")}
+            aria-label={t("chat.stella.agents.new")}
+          >
+            <IconPlus size={15} />
+          </button>
+        </div>
+      )}
       <nav className="stella-sidebar-list">
         {/* An empty list and a list still being read look identical, and the
             empty state's advice ("create one") is wrong for half of them. */}
@@ -569,66 +513,6 @@ export function StellaSidebar({
         <p className="error-text stella-sidebar-error" role="alert">
           {error}
         </p>
-      )}
-      {creating && (
-        <Modal onClose={resetForm} label={t("chat.stella.agents.new")}>
-          <h2>{t("chat.stella.agents.new")}</h2>
-          <Field label={t("chat.stella.agents.role")}>
-            <textarea
-              value={role}
-              rows={4}
-              placeholder={t("chat.stella.agents.roleHint")}
-              onInput={(event) => setRole(event.currentTarget.value)}
-              autoFocus
-            />
-          </Field>
-          {/* The same sentence the field holds, not a hidden prompt: a user
-           * who cannot describe the job starts from one and edits it. */}
-          <div
-            className="stella-presets"
-            role="group"
-            aria-label={t("chat.stella.agents.presets")}
-          >
-            {PRESETS.map((preset) => (
-              <button
-                key={preset.label}
-                type="button"
-                className="stella-preset"
-                onClick={() => applyPreset(t(preset.text))}
-              >
-                {t(preset.label)}
-              </button>
-            ))}
-          </div>
-          <Field label={t("chat.stella.agents.name")}>
-            <input
-              type="text"
-              value={name}
-              placeholder={t("chat.stella.agents.nameHint")}
-              onInput={(event) => setName(event.currentTarget.value)}
-            />
-          </Field>
-          {error !== null && (
-            <p className="error-text" role="alert">
-              {error}
-            </p>
-          )}
-          <div className="modal-actions">
-            <button type="button" className="btn" onClick={resetForm}>
-              {t("common.cancel")}
-            </button>
-            <button
-              type="button"
-              className="btn primary"
-              disabled={busy || role.trim() === ""}
-              onClick={() => void create()}
-            >
-              {busy
-                ? t("chat.stella.agents.creating")
-                : t("chat.stella.agents.create")}
-            </button>
-          </div>
-        </Modal>
       )}
       {deleting !== null && (
         <ConfirmDialog

@@ -51,6 +51,7 @@ function render(
       onSelect={() => {}}
       onChanged={() => {}}
       onAgentChanged={() => {}}
+      onNewAgent={() => {}}
       running={running}
       {...(loading === undefined ? {} : { loading })}
     />,
@@ -238,16 +239,23 @@ Deno.test("StellaSidebar: a created agent is in the list before it is opened", (
   // until the list is re-read, and a re-read cannot land before the
   // selection does. The create's answer carries the row, so it reaches the
   // list first.
-  const source = Deno.readTextFileSync(
-    new URL("./StellaSidebar.tsx", import.meta.url),
+  //
+  // The dialog is the App's (the title bar opens the same one at phone
+  // widths), so the two steps are in two files: the dialog hands over only
+  // the row the server answered, and the App puts it into the list before it
+  // moves the address.
+  const dialog = Deno.readTextFileSync(
+    new URL("./stella/AgentCreateDialog.tsx", import.meta.url),
   );
-  const from = source.indexOf("const create = async");
-  const body = source.slice(from, source.indexOf("const remove = async", from));
-  const row = body.indexOf("onAgentChanged(agent)");
-  const selection = body.indexOf("onSelect(agent.id)");
+  assertStringIncludes(dialog, "onCreated(agent)");
+  const app = Deno.readTextFileSync(new URL("../App.tsx", import.meta.url));
+  const start = app.indexOf("agentCreate={");
+  const body = app.slice(start, app.indexOf("agentEdit={", start));
+  const row = body.indexOf("stella.applyAgent(agent)");
+  const selection = body.indexOf("goToStellaAgent(agent.id)");
   assert(row >= 0, "the create's answer must reach the list");
   assert(selection > row, "the row must be in the list before it is named");
   // A re-read is not what puts it there: that would be a second answer to a
   // question already answered, and it arrives too late.
-  assertEquals(body.includes("onChanged()"), false);
+  assertEquals(body.includes("reloadAgents"), false);
 });

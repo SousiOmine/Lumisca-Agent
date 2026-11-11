@@ -1,4 +1,5 @@
 import type { AppMode } from "@lumisca/core/shared";
+import { IconPlus } from "@tabler/icons-preact";
 import {
   type ReactElement,
   useCallback,
@@ -544,6 +545,10 @@ export function App({ initialData }: AppProps): ReactElement {
   // here, above both the bar and the conversation it names.
   const [stellaScreenOpen, setStellaScreenOpen] = useState(false);
   const [editingStellaAgent, setEditingStellaAgent] = useState(false);
+  /** The create dialog. It is the App's because two places open it: the
+   * sidebar's button at wide widths, and the title bar's at phone widths,
+   * where the list and the conversation are one screen each. */
+  const [creatingStellaAgent, setCreatingStellaAgent] = useState(false);
   const stellaHandedOver =
     stella.conversation?.handover !== null &&
     stella.conversation?.handover !== undefined;
@@ -644,6 +649,22 @@ export function App({ initialData }: AppProps): ReactElement {
               }
               screenOpen={stellaScreenOpen}
             />
+            {/* The list's create button, in the one row above the list at
+             * phone widths: the sidebar's own copy sits under this row and
+             * left a gap of its own height between the menu and the list.
+             * Only the list screen has it — a conversation has nothing to
+             * create from. */}
+            {stellaSingleScreen && stellaAgentId === null && (
+              <button
+                type="button"
+                className="icon-btn stella-new-agent"
+                onClick={() => setCreatingStellaAgent(true)}
+                title={t("chat.stella.agents.new")}
+                aria-label={t("chat.stella.agents.new")}
+              >
+                <IconPlus size={15} />
+              </button>
+            )}
             {/* On desktop the app menu lives in the title bar's controls; in
              * a plain browser this strip is the only chrome stella mode
              * has, so the menu (settings, mode switch, session history)
@@ -722,6 +743,7 @@ export function App({ initialData }: AppProps): ReactElement {
             files={draft.files}
             onFilesChange={(files) => updateDraft(draftKey, { files })}
             onAgentChanged={stella.applyAgent}
+            onNewAgent={() => setCreatingStellaAgent(true)}
             onSelectAgent={goToStellaAgent}
             onOpenSettings={openProviders}
             screenOpen={stellaScreenOpen}
@@ -826,6 +848,20 @@ export function App({ initialData }: AppProps): ReactElement {
                 onCancel: tabClose.cancel,
                 onStopAndClose: () => tabClose.resolve(false),
                 onKeepRunning: () => tabClose.resolve(true),
+              }
+            : null
+        }
+        agentCreate={
+          stellaActive && creatingStellaAgent
+            ? {
+                onCreated: (agent) => {
+                  // The row goes into the list before the address names it
+                  // (see AgentCreateDialog).
+                  stella.applyAgent(agent);
+                  setCreatingStellaAgent(false);
+                  goToStellaAgent(agent.id);
+                },
+                onClose: () => setCreatingStellaAgent(false),
               }
             : null
         }

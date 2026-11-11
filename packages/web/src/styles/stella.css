@@ -549,6 +549,16 @@
   width: auto;
 }
 
+/* The list's create button when it rides in the title bar (phone widths):
+ * the strip is one row of controls, so it is centred in it rather than
+ * stretched to the strip's height, and it keeps the gap the app menu's row
+ * uses. */
+.stella-new-agent {
+  flex: none;
+  align-self: center;
+  margin-right: 2px;
+}
+
 /* The conversation's title, in the window's title bar: the agent's name and
  * nothing else. A subtitle or a state line there would be a second thing to
  * read on every visit. The two exceptions are the first-run build (a wait
@@ -1359,10 +1369,6 @@
     font-size: 11.5px;
   }
 
-  .stella-sidebar-header {
-    padding: 10px 8px 8px;
-  }
-
   /* The face is what identifies a row at this size. */
   .stella-column {
     padding: 0 14px;
@@ -1452,10 +1458,6 @@
 
   .stella-agent-meta {
     font-size: 12.5px;
-  }
-
-  .stella-sidebar-header {
-    padding: 12px 10px 10px;
   }
 
   .stella-msg .stella-msg-body {

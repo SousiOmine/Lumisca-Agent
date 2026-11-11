@@ -46,6 +46,9 @@ export interface StellaModeScreenProps {
   files: PendingFile[];
   onFilesChange: (files: PendingFile[]) => void;
   onAgentChanged: (agent: StellaAgent) => void;
+  /** Open the create dialog. The App owns it (the title bar's create button
+   * opens the same one at phone widths). */
+  onNewAgent: () => void;
   /** Open an agent's conversation. A navigation: the address names the
    * conversation (`/stella/a/<id>`), which is what makes a conversation
    * reloadable and linkable. The way back to the list is the title bar's
@@ -70,6 +73,7 @@ export function StellaModeScreen({
   files,
   onFilesChange,
   onAgentChanged,
+  onNewAgent,
   onSelectAgent,
   onOpenSettings,
   screenOpen,
@@ -88,6 +92,7 @@ export function StellaModeScreen({
         onSelect={onSelectAgent}
         onChanged={stella.reloadAgents}
         onAgentChanged={onAgentChanged}
+        onNewAgent={onNewAgent}
         running={conversation?.running === true}
       />
       <StellaView

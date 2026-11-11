@@ -64,6 +64,7 @@ function render(stella: StellaHook): string {
       files={[]}
       onFilesChange={() => {}}
       onAgentChanged={() => {}}
+      onNewAgent={() => {}}
       onSelectAgent={() => {}}
       onOpenSettings={() => {}}
       screenOpen={false}
