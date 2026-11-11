@@ -1,7 +1,9 @@
-# Bun migration (branch `bun-migration`)
+# Bun migration
 
-The server runs, tests, checks and builds on Bun. This branch is the
-migration itself; it is not merged yet.
+The server runs, tests, checks and builds on Bun. The migration landed on
+`master`; this file records what moved and how it was verified. `tools/bun/`
+keeps the one piece that is still needed at runtime — the `Deno.test` glue
+(`deno-shim.ts`) — and the script that loads it (`bunfig.toml`).
 
 ## What changed
 
@@ -77,6 +79,3 @@ Ubuntu, macOS and Windows and is green on all three.
   bridge. The live host tests in `computer/windows_test.ts` pass: monitor
   enumeration, a 1:1 region capture, window enumeration and a double close.
 
-## Left to do
-
-- Merge the branch.
