@@ -10,18 +10,43 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "paths": {
-      "@lumisca/core": ["./packages/core/mod.ts"],
-      "@lumisca/core/bytes": ["./packages/core/bytes.ts"],
-      "@lumisca/core/shared": ["./packages/core/shared/mod.ts"],
-      "@lumisca/core/modes": ["./packages/core/modes/mod.ts"],
-      "@lumisca/core/skills/slash": ["./packages/core/skills/slash.ts"],
-      "@lumisca/core/browser-entries": ["./packages/core/browser-entries.ts"],
-      "@lumisca/core/test-utils": ["./packages/core/test-utils.ts"],
-      "@lumisca/core/*": ["./packages/core/*"],
-      "@lumisca/server": ["./packages/server/mod.ts"]
+      "@lumisca/core": [
+        "./packages/core/mod.ts"
+      ],
+      "@lumisca/core/bytes": [
+        "./packages/core/bytes.ts"
+      ],
+      "@lumisca/core/shared": [
+        "./packages/core/shared/mod.ts"
+      ],
+      "@lumisca/core/modes": [
+        "./packages/core/modes/mod.ts"
+      ],
+      "@lumisca/core/skills/slash": [
+        "./packages/core/skills/slash.ts"
+      ],
+      "@lumisca/core/browser-entries": [
+        "./packages/core/browser-entries.ts"
+      ],
+      "@lumisca/core/test-utils": [
+        "./packages/core/test-utils.ts"
+      ],
+      "@lumisca/core/*": [
+        "./packages/core/*"
+      ],
+      "@lumisca/server": [
+        "./packages/server/mod.ts"
+      ]
     },
-    "types": ["deno"],
-    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": [
+      "deno",
+      "node"
+    ],
+    "lib": [
+      "ESNext",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "skipLibCheck": true
   },
   "files": [
@@ -30,5 +55,8 @@
     "packages/web/src/client.tsx",
     "packages/web/vite.config.ts"
   ],
-  "include": ["types/**/*.d.ts", "scripts/*.ts"]
+  "include": [
+    "types/**/*.d.ts",
+    "scripts/*.ts"
+  ]
 }
