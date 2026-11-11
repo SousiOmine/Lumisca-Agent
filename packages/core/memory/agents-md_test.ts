@@ -6,7 +6,7 @@ import { findRepoRoot, loadProjectMemoryFiles } from "./agents-md.ts";
 /** Realpath'd temp dir: makeTempDir may return 8.3 short names on Windows
  * (e.g. `MAINPC~1`), which would break path equality assertions. */
 function tempDir(prefix: string): Promise<string> {
-  return Deno.makeTempDir({ prefix }).then((p) => realpathSync(p));
+  return Deno.makeTempDir({ prefix }).then((p) => realpathSync.native(p));
 }
 
 Deno.test("findRepoRoot locates the .git marker", async () => {
@@ -14,11 +14,14 @@ Deno.test("findRepoRoot locates the .git marker", async () => {
   try {
     await Deno.mkdir(join(root, "sub", "deep"), { recursive: true });
     await Deno.mkdir(join(root, ".git"), { recursive: true });
-    assertEquals(findRepoRoot(join(root, "sub", "deep")), realpathSync(root));
+    assertEquals(
+      findRepoRoot(join(root, "sub", "deep")),
+      realpathSync.native(root),
+    );
     // A .git file (worktree / submodule) counts too.
     await Deno.remove(join(root, ".git"), { recursive: true });
     await Deno.writeTextFile(join(root, ".git"), "gitdir: ../other\n");
-    assertEquals(findRepoRoot(join(root, "sub")), realpathSync(root));
+    assertEquals(findRepoRoot(join(root, "sub")), realpathSync.native(root));
   } finally {
     await Deno.remove(root, { recursive: true });
   }
@@ -27,7 +30,7 @@ Deno.test("findRepoRoot locates the .git marker", async () => {
 Deno.test("findRepoRoot falls back to the folder itself", async () => {
   const root = await tempDir("lumisca-mem-");
   try {
-    assertEquals(findRepoRoot(root), realpathSync(root));
+    assertEquals(findRepoRoot(root), realpathSync.native(root));
   } finally {
     await Deno.remove(root, { recursive: true });
   }
@@ -39,7 +42,7 @@ Deno.test("loadProjectMemoryFiles reads AGENTS.md from the workspace root", asyn
     await Deno.writeTextFile(join(root, "AGENTS.md"), "Use Deno.\n");
     const files = loadProjectMemoryFiles([root]);
     assertEquals(files.length, 1);
-    assertEquals(files[0]!.path, join(realpathSync(root), "AGENTS.md"));
+    assertEquals(files[0]!.path, join(realpathSync.native(root), "AGENTS.md"));
     assertEquals(files[0]!.content, "Use Deno.\n");
   } finally {
     await Deno.remove(root, { recursive: true });
@@ -77,7 +80,7 @@ Deno.test("AGENTS.override.md replaces AGENTS.md in the same directory", async (
     assertEquals(files[0]!.content, "NEW");
     assertEquals(
       files[0]!.path,
-      join(realpathSync(root), "AGENTS.override.md"),
+      join(realpathSync.native(root), "AGENTS.override.md"),
     );
   } finally {
     await Deno.remove(root, { recursive: true });

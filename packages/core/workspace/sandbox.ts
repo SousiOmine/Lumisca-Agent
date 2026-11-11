@@ -68,7 +68,7 @@ export class Sandbox {
           : normalize(join(Deno.cwd(), f));
         try {
           // Resolve 8.3 short names and symlinks on the root itself.
-          return realpathSync(abs);
+          return realpathSync.native(abs);
         } catch {
           return abs;
         }
@@ -81,7 +81,7 @@ export class Sandbox {
     this.#extraRoots = (options.extraRoots ?? []).map((root) => {
       const abs = normalize(root);
       try {
-        return realpathSync(abs);
+        return realpathSync.native(abs);
       } catch {
         return abs;
       }

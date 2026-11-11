@@ -139,7 +139,7 @@ export async function removeDirRetry(path: string): Promise<void> {
  * return 8.3 short names on Windows (e.g. `MAINPC~1`) while the sandbox
  * resolves real paths, so tests must compare against the realpath'd form. */
 export async function makeRealTempDir(prefix: string): Promise<string> {
-  return realpathSync(await Deno.makeTempDir({ prefix }));
+  return realpathSync.native(await Deno.makeTempDir({ prefix }));
 }
 
 /** Poll `check` until it holds, or fail naming what was awaited: a test that

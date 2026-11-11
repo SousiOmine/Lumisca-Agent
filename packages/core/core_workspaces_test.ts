@@ -82,7 +82,7 @@ Deno.test("workspace creation resolves folders and rejects missing ones", async 
   const root = await Deno.makeTempDir({ prefix: "lumisca-core-" });
   const ws = await core.createWorkspace("ws1", [root]);
   assertEquals(ws.folders.length, 1);
-  assertEquals(ws.folders[0], realpathSync(root));
+  assertEquals(ws.folders[0], realpathSync.native(root));
 
   await assertRejects(
     async () => {

@@ -44,7 +44,7 @@ Deno.test("health and workspaces API", async () => {
     });
     assertEquals(create.status, 201);
     const ws = await create.json();
-    assertEquals(ws.folders[0], realpathSync(root));
+    assertEquals(ws.folders[0], realpathSync.native(root));
 
     const list = await json(base, "/api/workspaces");
     const workspaces = await list.json();

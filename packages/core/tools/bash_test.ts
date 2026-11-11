@@ -27,7 +27,9 @@ function makeTool() {
   // under /var comes back as /private/var. Comparing the spill path (which
   // goes through the backend) against the unresolved name would fail for
   // that reason alone, not because the spill went somewhere else.
-  const root = realpathSync(Deno.makeTempDirSync({ prefix: "lumisca-bash-" }));
+  const root = realpathSync.native(
+    Deno.makeTempDirSync({ prefix: "lumisca-bash-" }),
+  );
   // The spill follows the file backend (a per-test workspace), so a run
   // never shares the real directory with another one.
   return {

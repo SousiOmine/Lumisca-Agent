@@ -9,7 +9,7 @@ function tempDir(prefix: string): Promise<string> {
 }
 
 function real(p: string): string {
-  return realpathSync(p);
+  return realpathSync.native(p);
 }
 
 Deno.test("sandbox resolves absolute paths inside the workspace", async () => {
