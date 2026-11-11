@@ -308,6 +308,86 @@ export const MIGRATIONS: ReadonlyArray<(db: Database) => void> = [
         "WHERE onboarded_at IS NULL",
     );
   },
+  // `sessions` with one column per fact, which needs a rebuilt table: SQLite
+  // cannot add a reference or drop a column's constraint in place. Three
+  // leftovers go at once, because each answers the same question — what does
+  // a session row have to say for itself?
+  //
+  // - `stella` repeated what `agent_id` already said. The agent link is the
+  //   fact; a stella conversation is one that has one. The two columns could
+  //   disagree, and a row carrying only the flag (the single-conversation
+  //   era) was invisible to the session lists AND to every agent.
+  // - The goal-mode columns (`goal_text` …) outlived the feature. Nothing
+  //   reads them, so a reader of the table has to learn that they are dead.
+  // - `agent_id` had no reference, so a row could name an agent that is gone.
+  //
+  // Before the rebuild, a conversation with no agent to own it gets one,
+  // named after the conversation. That keeps its history reachable — in the
+  // sidebar, as an agent — instead of leaving it where neither list nor any
+  // agent could see it. Migrations run with foreign keys off (see
+  // applyMigrations), so every row this touches is written explicitly.
+  (db) => {
+    const orphans = db
+      .prepare(
+        "SELECT s.id, s.name, s.created_at, s.updated_at FROM sessions s " +
+          "LEFT JOIN stella_agents a ON a.id = s.agent_id " +
+          "WHERE a.id IS NULL AND (s.stella = 1 OR s.agent_id IS NOT NULL)",
+      )
+      .all() as Array<{
+      id: string;
+      name: string;
+      created_at: number;
+      updated_at: number;
+    }>;
+    const insertAgent = db.prepare(
+      "INSERT INTO stella_agents " +
+        "(id, name, role, identity, icon, onboarded_at, created_at, updated_at) " +
+        "VALUES (?, ?, '', '', '', ?, ?, ?)",
+    );
+    const adopt = db.prepare("UPDATE sessions SET agent_id = ? WHERE id = ?");
+    for (const row of orphans) {
+      const id = crypto.randomUUID();
+      // Stamped as already set up: this agent has been talking to the user
+      // for longer than this build has existed, and a setup turn now would
+      // introduce it to someone who already knows it.
+      insertAgent.run(
+        id,
+        row.name.trim() || "Stella",
+        row.created_at,
+        row.created_at,
+        row.updated_at,
+      );
+      adopt.run(id, row.id);
+    }
+    // A stella conversation has no name of its own (see SessionRepo): the
+    // column held a copy, and a rename had to chase it.
+    db.exec("UPDATE sessions SET name = '' WHERE agent_id IS NOT NULL");
+    db.exec(`
+      CREATE TABLE sessions_rebuilt (
+        id             TEXT PRIMARY KEY,
+        workspace_id   TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        name           TEXT NOT NULL,
+        model_provider TEXT NOT NULL,
+        model_id       TEXT NOT NULL,
+        system_prompt  TEXT,
+        created_at     INTEGER NOT NULL,
+        updated_at     INTEGER NOT NULL,
+        agent_id       TEXT REFERENCES stella_agents(id)
+      );
+      INSERT INTO sessions_rebuilt
+        (id, workspace_id, name, model_provider, model_id, system_prompt,
+         created_at, updated_at, agent_id)
+        SELECT id, workspace_id, name, model_provider, model_id, system_prompt,
+               created_at, updated_at, agent_id
+        FROM sessions;
+      DROP TABLE sessions;
+      ALTER TABLE sessions_rebuilt RENAME TO sessions;
+      CREATE INDEX IF NOT EXISTS idx_sessions_workspace
+        ON sessions(workspace_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_agent
+        ON sessions(agent_id) WHERE agent_id IS NOT NULL;
+    `);
+  },
 ];
 
 /** The `user_version` a fully migrated database carries: one per migration
@@ -326,6 +406,21 @@ export function migrate(db: Database): void {
   applyMigrations(db, MIGRATIONS);
 }
 
+/** A migration that would leave a row pointing at a row that is not there
+ * fails here, before its stamp is written. */
+function assertForeignKeys(db: Database): void {
+  const violations = db.prepare("PRAGMA foreign_key_check").all() as Array<{
+    table: string;
+    rowid: number;
+    parent: string;
+  }>;
+  const first = violations[0];
+  if (first === undefined) return;
+  throw new Error(
+    `migration left a dangling reference: ${first.table} row ${first.rowid} → ${first.parent}`,
+  );
+}
+
 /** Apply a migration list. Split from {@link migrate} so a test can drive a
  * deliberately failing migration and observe the rollback, which is the
  * property that keeps a half-done database openable. */
@@ -336,17 +431,33 @@ export function applyMigrations(
   const { user_version: current } = db.prepare("PRAGMA user_version").get() as {
     user_version: number;
   };
-  for (let v = current; v < migrations.length; v++) {
-    db.exec("BEGIN IMMEDIATE");
-    try {
-      migrations[v]!(db);
-      // PRAGMA user_version cannot take a bound parameter, and the value is
-      // this module's own integer (never user input).
-      db.exec(`PRAGMA user_version = ${v + 1}`);
-      db.exec("COMMIT");
-    } catch (error) {
-      db.exec("ROLLBACK");
-      throw error;
+  // Foreign keys are off for the run, and every step is checked before its
+  // commit. A table rebuild (the only way to add a reference or drop a
+  // constraint in SQLite) would otherwise cascade into the child rows when
+  // the old table is dropped — a transcript's messages go with it — and a
+  // rebuild that would leave a row pointing at nothing rolls back instead of
+  // landing. The check is what keeps the promise the old `foreign_keys = ON`
+  // made: a migration cannot commit a broken reference.
+  const { foreign_keys: wasEnabled } = db
+    .prepare("PRAGMA foreign_keys")
+    .get() as { foreign_keys: number };
+  db.exec("PRAGMA foreign_keys = OFF");
+  try {
+    for (let v = current; v < migrations.length; v++) {
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        migrations[v]!(db);
+        assertForeignKeys(db);
+        // PRAGMA user_version cannot take a bound parameter, and the value is
+        // this module's own integer (never user input).
+        db.exec(`PRAGMA user_version = ${v + 1}`);
+        db.exec("COMMIT");
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
     }
+  } finally {
+    if (wasEnabled === 1) db.exec("PRAGMA foreign_keys = ON");
   }
 }

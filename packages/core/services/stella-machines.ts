@@ -218,7 +218,6 @@ export class StellaMachineService {
       name: "",
       modelProvider: model.provider,
       modelId: model.modelId,
-      stella: true,
       agentId: agent.id,
     });
     this.deps.pool.open(session, workspace, []);

@@ -33,7 +33,11 @@ export interface SessionInfo {
   /** True for a stella agent's conversation. It is not a session the user
    * opened — stella has no session concept — so it never appears in a
    * session list; it exists so one ongoing conversation per agent can reuse
-   * the message store, compaction and rewind. */
+   * the message store, compaction and rewind.
+   *
+   * Derived from `agentId` when a row is read: belonging to an agent IS being
+   * a stella conversation, so there is no stored flag that could disagree
+   * with the link. */
   stella?: boolean;
   /** The stella agent whose conversation this is (absent for every other
    * session). */
