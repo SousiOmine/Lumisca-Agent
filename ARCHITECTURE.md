@@ -383,7 +383,7 @@ stella の会話でエージェントの発言になるのは 2 つです。タ�
   実装の細部（AT-SPI の木を読む 1 本の Python、`walk` が作る経路、ref の同一性、`entry.sh` の起動順、`--force-renderer-accessibility`、同梱ファイルの深さ制限、スクロールの向き）は `AGENTS.md` の stella mode の章にあります。
 
 - **Computer Use（`computer/`）**  
-  画面キャプチャと操作（クリック・キー入力・ウィンドウ一覧）を提供します。Windows と Linux（Wayland）に対応し、設定で明示的に有効化されているときだけ使えます。Windows は GDI・SendInput・Win32 のウィンドウ列挙を Deno FFI 経由で使い、座標は物理ピクセルです（`computer/windows.ts`）。Linux は xdg-desktop-portal（Screenshot / RemoteDesktop + ScreenCast）を D-Bus 経由で使い（`computer/wayland.ts`、`computer/portal/`）、撮影は全画面 1 枚をモニタごとに切り出して、入力をモニタごとの物理ピクセルグリッドへ変換します。Wayland ではウィンドウ一覧とカーソル位置を取得できず、能力差として扱います。
+  画面キャプチャと操作（クリック・キー入力・ウィンドウ一覧）を提供します。Windows と Linux（Wayland）に対応し、設定で明示的に有効化されているときだけ使えます。Windows は GDI・SendInput・Win32 のウィンドウ列挙を `bun:ffi` 経由で使い、座標は物理ピクセルです（`computer/windows.ts`）。Linux は xdg-desktop-portal（Screenshot / RemoteDesktop + ScreenCast）を D-Bus 経由で使い（`computer/wayland.ts`、`computer/portal/`）、撮影は全画面 1 枚をモニタごとに切り出して、入力をモニタごとの物理ピクセルグリッドへ変換します。Wayland ではウィンドウ一覧とカーソル位置を取得できず、能力差として扱います。
 
   利用可否は環境変数ではなくポータルに尋ねます。`WAYLAND_DISPLAY` の有無で判定すると、systemd ユーザーユニットとしてデスクトップより先に起動したサーバーでは、起動順で結果が入れ替わるためです。判定は `probePortal` の結果だけを使い、撮影と入力は実際にポータル越しに行います。設定画面のトグルは有効化の前に `LumiscaCore.recheckComputerHost` で問い直すので、起動時にデスクトップが無かったマシンでも、ログイン後にトグルを入れれば再起動なしで使えます。
 
@@ -459,6 +459,6 @@ stella の会話でエージェントの発言になるのは 2 つです。タ�
 - **`shared/i18n/settings.ts`（約 1,000 行）を分割しない。** これはデータであり、行数は責任の数ではありません。分割するとキーの所在が散り、`repo_hygiene_test.ts` の「使われていないキー」検査も読みにくくなります。
 - **`AGENTS.md` と `ARCHITECTURE.md` を統合しない。** 読者が違います（前者は作業者、後者は設計を読む人）。統合すると、作業中に読む必要のない設計の理由が毎回目に入ります。重複だけを消しました。
 - **`eval` ツールから `sucrase` を外さない。** 外すと TypeScript を受け付けなくなり、code mode の `eval` が素の JavaScript だけに狭まります。`sucrase` は遅延 import（`await import("sucrase")`）なので起動コストはゼロです。stella には `eval` 自体を渡していません。
-- **`packages/core` を物理的に複数パッケージへ割らない。** 3 層（`shared` / `domain` / 実行時）の考え方は `deno.json` の `exports` と `browser-entries.ts` で表現し、`web` の境界テストが縛っています。物理分割は `deno compile` の入力とワークスペースの設定を作り直すことになり、得られるのは import の書き方の厳格さだけです。`repo_hygiene_test.ts` の DAG 検査で循環は止めています。
+- **`packages/core` を物理的に複数パッケージへ割らない。** 3 層（`shared` / `domain` / 実行時）の考え方は `browser-entries.ts` と `web` の境界テストで表現しています。物理分割は `bun build --compile` の入力を組み直すことになり、得られるのは import の書き方の厳格さだけです。`repo_hygiene_test.ts` の DAG 検査で循環は止めています。
 - **`LumiscaCore` を完全に無くさない。** `server` のルートは部分インターフェースで受け取りますが、ファサードが無いと `mod.ts` の公開面がルートごとにばらけます。抽出した 4 領域は `services/` にあり、ファサードはその一覧です。
 - **Rust のクレートを統合しない。** `browser-rpc` は `desktop/src-tauri` からパス依存で入っており、プロトコルの定数をテストで突き合わせる仕組み（`browser/types_test.ts`）が機能しています。統合すると、その突き合わせが同じクレート内の参照になり、検査の意味が薄れます。

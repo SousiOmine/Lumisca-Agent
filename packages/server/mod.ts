@@ -1,5 +1,5 @@
-// The Deno API surface this server was written against, implemented on Bun.
-// Imported first: every module below reaches for `runtime.*` at load time.
+// The runtime API this server is written against (`runtime.*`), implemented
+// on Bun. Imported first: every module below reaches for it at load time.
 
 import { dirname } from "node:path";
 import {

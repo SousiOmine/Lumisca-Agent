@@ -1,4 +1,4 @@
-Lumisca-Agent は、LLM を用いてアプリケーション開発を支援するコーディングエージェントです。Web サーバーおよびデスクトップアプリとして動作し、Deno、Tauri、Preact で構築されています。
+Lumisca-Agent は、LLM を用いてアプリケーション開発を支援するコーディングエージェントです。Web サーバーおよびデスクトップアプリとして動作し、Bun、Tauri、Preact で構築されています。
 
 LLM との接続には Vercel AI SDK（`ai` および `@ai-sdk/*`）を使用します。モデルのメタデータは models.dev（`@opencode-ai/models`）を基準とし、アプリケーション側でプロバイダーの生成と API キーの注入を行います。
 
@@ -34,8 +34,8 @@ LLM との接続には Vercel AI SDK（`ai` および `@ai-sdk/*`）を使用し
 
 ## 1. ビルドの注意点
 
-- **`packages/desktop` はワークスペースに含めない**: ルートの `deno.json` の `workspace` に入れると、Deno がシンボリックリンクを作り、サーバーバイナリのコンパイルに `src-tauri/target` を巻き込んで巨大になります。デスクトップはルートから `deno task dev:desktop` で動かします。このディレクトリから import するサーバー側のモジュールは、ルートの import map が効かないため bare specifier を持てません。環境の取り出しは `packages/server/startup-env.ts` のように依存の無いモジュールへ分け、`startup.ts` から再輸出します。
-- **サーバーのビルド経路**: `scripts/build-server.ts` に集約しています。確認は `deno task smoke:server` です。
+- **`packages/desktop` はワークスペースに含めない**: ルートの `package.json` に `workspaces` を置いていないので、`bun install` はデスクトップを巻き込みません（`src-tauri/target` がサーバーバイナリの入力に入ると巨大になります）。デスクトップはルートから `bun run dev:desktop` で動かします。このディレクトリから import するサーバー側のモジュールは、ルートの `tsconfig.json` の `@lumisca/*` が効かないため bare specifier を持てません。環境の取り出しは `packages/server/startup-env.ts` のように依存の無いモジュールへ分け、`startup.ts` から再輸出します。
+- **サーバーのビルド経路**: `scripts/build-server.ts` に集約しています。確認は `bun run smoke:server` です。
 
 ### デスクトップのシェルブリッジ
 
@@ -82,24 +82,24 @@ LLM との接続には Vercel AI SDK（`ai` および `@ai-sdk/*`）を使用し
 
 末尾から、クラッシュ（エラー出力）、強制終了（`[shell] Stopping`）、ハング（ヘルスチェックの無応答）を判別できます。systemd は `journalctl --user -u lumisca -n 100` です。
 
-作業中のエージェント自身を止めないため、`deno` や `lumisca-server` をプロセス名で一括終了しないでください。個別のプロセス ID を指定します。
+作業中のエージェント自身を止めないため、`bun` や `lumisca-server` をプロセス名で一括終了しないでください。個別のプロセス ID を指定します。
 
 ## 5. 依存関係の更新
 
 依存のバージョンは直接編集せず、次のコマンドで更新します。
 
 ```bash
-deno update -r --latest                                        # ルートおよび全ワークスペース
+bun update --latest                                            # ルート
 cargo update --manifest-path packages/desktop/src-tauri/Cargo.toml
 cargo update --manifest-path packages/browser-rpc/Cargo.toml
 npm outdated                                                   # packages/desktop 内で実行
 ```
 
-Deno は公開から 24 時間以内のバージョンを既定では導入しません。`packages/desktop` はワークスペース外なので個別に確認します。
+新しく公開された版は、24 時間たってから入れます（`bun update --latest` に待ち時間はないので、ここで守ります）。`packages/desktop` はワークスペース外なので個別に確認します。
 
 ## 6. UI の多言語対応
 
-表示文言は `packages/core/shared/i18n/` のカタログに日英の対で置きます。コンポーネントでは `const t = useT();`（`packages/web/src/i18n.ts`）で `t("キー名")` を呼び、キーは `<area>.<surface>.<element>` 形式です。システムプロンプトとツール定義の英語文面は翻訳対象外で、回答言語はセッションの指示で制御します。文言を変えたら `deno test packages/core/shared/i18n_test.ts` を実行してください。
+表示文言は `packages/core/shared/i18n/` のカタログに日英の対で置きます。コンポーネントでは `const t = useT();`（`packages/web/src/i18n.ts`）で `t("キー名")` を呼び、キーは `<area>.<surface>.<element>` 形式です。システムプロンプトとツール定義の英語文面は翻訳対象外で、回答言語はセッションの指示で制御します。文言を変えたら `bun test packages/core/shared/i18n_test.ts` を実行してください。
 
 ### 設定のカテゴリ
 
@@ -177,7 +177,7 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 - **イメージ**: `packages/core/vm/container/Containerfile` から初回起動時にビルドします。配布物では `scripts/build-server.ts` が `stella-container/` をバイナリの隣へ同梱し、`packages/server/paths.ts` が場所を解決します。定義のダイジェストを `lumisca.container-digest` ラベルに焼き、ずれていればイメージを作り直します（`/home/agent` は `podman cp` で退避して戻します）。
 - **契約値**: 画面サイズ（1280x800）、DISPLAY、uid/gid、作業ディレクトリ、パスワード無し `sudo` は `packages/core/vm/contract.ts` と Containerfile / entry.sh の両方にあります。起動時に実コンテナと突き合わせ（`sudo -n true` を含む）、ずれていれば起動を失敗させます。
 - **落ちたマシンは podman が戻す**: `podman create` に `--restart=unless-stopped` を渡します。マシンは会話を開くときにしか起動されないので、自前で死んだコンテナは止まったままになり、全ツールが `container state improper` を返していました。`podman stop` は手動停止として扱われるため、アプリの終了（`LumiscaCore.close()`）で止めたマシンは戻りません。送信とルーチン実行は起動を確かめてから走ります（`ensureStellaReady`）。
-- **本番のマシンに触るテストは明示したときだけ**: `packages/core/stella_live_test.ts` は利用者の `lumisca-stella` をそのまま使います。`LUMISCA_STELLA_LIVE=1` が無ければ状態も読まずに skip し、`core.close()` の前に `setStellaVm(undefined)` で切り離します——`close()` は持っているマシンを止めるためです。`scripts/probe-stella.ts` も同じ理由で切り離してから閉じます。`deno task test` に含まれるので、ここを緩めるとテストを回しただけで利用中のマシンが落ちます。
+- **本番のマシンに触るテストは明示したときだけ**: `packages/core/stella_live_test.ts` は利用者の `lumisca-stella` をそのまま使います。`LUMISCA_STELLA_LIVE=1` が無ければ状態も読まずに skip し、`core.close()` の前に `setStellaVm(undefined)` で切り離します——`close()` は持っているマシンを止めるためです。`scripts/probe-stella.ts` も同じ理由で切り離してから閉じます。`bun run test` に含まれるので、ここを緩めるとテストを回しただけで利用中のマシンが落ちます。
 - **権限**: `agent` は `sudo` を使えます。コンテナの外へは出られず（ホストをマウントせず、uid 0 は `--userns keep-id` で写像）、既定を root にしないのは Chromium のサンドボックスを使うためです。
 - **同梱ファイルは 1 段まで**: `stella-container/Containerfile` は可、`stella-container/helper/a11y.py` は不可です。アーカイブを読むのは動いているサーバーのバイナリで、深さの規則はビルド時に焼き込まれます。深くすると、その版より前にインストールされたサーバーが更新を適用できません。`archive.ts` の `MAX_PACKAGE_DEPTH` を上げるのは、旧版の更新を諦めるときだけにしてください。
 
@@ -214,7 +214,7 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 - **パネルは既定で閉じる**: 開閉はヘッダーのトグルで、送信で勝手に開き直しません。`vm_ask_user` の受け渡し中だけは必ず開きます。
 - **computer use は code mode だけ**: `agent/factory.ts` が stella セッションへ渡しません（VM には `vm_screenshot` / `vm_act` と `vm_find` / `vm_do` / `vm_wait` があります）。設定でも「画面操作」は code mode 専用です。
 - **GUI は意味で操作する**: ボタンを押す用途には `vm_find` / `vm_do` / `vm_wait` を使います。画素のツールは、座標を読んで渡すしかない対象（キャンバス、ドラッグ、ゲーム）のためです。結果は `delivered_verified` か `delivered_unverified` で返り、後者は繰り返すと二重に押すことになります。
-  - 実装は VM の中の 1 本の Python（`packages/core/vm/container/a11y.py`）で、Deno 側（`vm/semantic.ts`）は JSON を渡して結果を文にするだけです。
+  - 実装は VM の中の 1 本の Python（`packages/core/vm/container/a11y.py`）で、サーバー側（`vm/semantic.ts`）は JSON を渡して結果を文にするだけです。
   - ref（`@s12345:e7`）はスナップショットに属し、`vm_do` は role と name が変わっていれば拒否します。経路は `a11y.py` の `walk` が tuple で組み立て、読み戻しも role と name で引き直します。
   - ウィンドウの題名は frame の name なので、保存後の確認は `vm_wait` で待つのが確実です。xterm のようにバスへ出ないアプリは `vm_find` に出ません。
 - **アクセシビリティはイメージ側の設定**: `entry.sh` がアプリの起動前に `gsettings set org.gnome.desktop.interface toolkit-accessibility true` を実行します。GTK アプリはこの値を起動時に 1 度だけ読み、後から変えてもバスに出ません。Chromium には `--force-renderer-accessibility` を付けます。
@@ -271,13 +271,13 @@ API キーやトークンは、ツールの引数にも戻り値にも会話に�
 
 ## 9. 開発用スクリプト
 
-手元の確認は `deno task` から実行します。どれも手動操作用で、CI からは実行しません。
+手元の確認は `bun run` から実行します。どれも手動操作用で、CI からは実行しません。
 
-- `deno task demo`: faux プロバイダで動くデモサーバー
-- `deno task seed:history <sessionId> [nPairs]`: 指定セッションに長い履歴を流し込む
-- `deno task probe:token`: 認証トークンのガードを確認
-- `deno task probe:computer`: computer use が使えるかを確認（`--click x,y` で操作も）
-- `deno task probe:stella`: stella mode が使えるかを確認（`--start` でビルドから停止まで）
+- `bun run demo`: faux プロバイダで動くデモサーバー
+- `bun run seed:history <sessionId> [nPairs]`: 指定セッションに長い履歴を流し込む
+- `bun run probe:token`: 認証トークンのガードを確認
+- `bun run probe:computer`: computer use が使えるかを確認（`--click x,y` で操作も）
+- `bun run probe:stella`: stella mode が使えるかを確認（`--start` でビルドから停止まで）
 
 引数の詳細は各スクリプトの先頭コメントにあります。
 
@@ -330,7 +330,7 @@ https（`tailscale serve` など）で開いた端末から、ページを PWA �
 - **このサーバーのイベントだけ**送ります。中継しているピアのイベントは対象外で、購読はこのオリジンの端末のものです。
 - **`pushsubscriptionchange` は当てにしない**。Chromium も発火しないことがあり、Safari は実装していません。ページを開いたときに購読を 1 回 POST し直す経路（`packages/web/src/hooks/usePush.ts`）を消さないでください。
 - **`public/sw.js` は素の script** なので、ページの `push.ts` を import できません。base64url の復号だけが 2 か所にあります。
-- **設定行は `pushSupported()` のときだけ**出します（`https` かつデスクトップシェル外かつ Push API あり）。デスクトップの `http://127.0.0.1` と `deno task dev` は対象外で、そこは従来どおり Tauri の通知が担当します。iOS はホーム画面の PWA でだけ動きます。
+- **設定行は `pushSupported()` のときだけ**出します（`https` かつデスクトップシェル外かつ Push API あり）。デスクトップの `http://127.0.0.1` と `bun run dev` は対象外で、そこは従来どおり Tauri の通知が担当します。iOS はホーム画面の PWA でだけ動きます。
 
 ## 13. プロバイダーの OAuth ログイン（ChatGPT）
 
@@ -341,4 +341,4 @@ https（`tailscale serve` など）で開いた端末から、ページを PWA �
 - **期限切れの更新**: `resolveCredential` が期限の 60 秒前に更新し、同時要求は 1 回の更新を共有します。更新トークンはローテーションされるため、2 回交換すると片方が無効になります。
 - **要求の形**: Codex バックエンドは `instructions` 必須・`store:false` です。`ai/stream.ts` の `chatgptProviderOptions` がシステムプロンプトを `instructions` に移し、`input` から外します。ここを外すと全リクエストが 400 になります。
 - **設定のキー**: `AuthInteraction.method`（クライアントの選択）、`OAuthAuth.methods`（プロバイダーが受理する方式）、`ProviderInfo.loginMethods`（UI が読む一覧）です。`methods` を増やすときは 3 つとも合わせてください。
-- **確認**: `deno test packages/core/models/chatgpt packages/server/login_openai_codex_test.ts packages/server/routes/providers_test.ts`。実機の確認には ChatGPT アカウントが必要で、デバイスコード方式は ChatGPT のセキュリティ設定で有効化しておきます。
+- **確認**: `bun test packages/core/models/chatgpt packages/server/login_openai_codex_test.ts packages/server/routes/providers_test.ts`。実機の確認には ChatGPT アカウントが必要で、デバイスコード方式は ChatGPT のセキュリティ設定で有効化しておきます。

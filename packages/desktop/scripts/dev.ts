@@ -1,7 +1,7 @@
-// The Deno namespace this script's Command/args/exit calls resolve to.
-import { exit, runtime } from "../../core/runtime/runtime.ts";
-import "../../packages/core/runtime/runtime.ts";
+// The runtime API this script's Command/args/exit calls resolve to.
+
 import { fileURLToPath } from "node:url";
+import { exit, runtime } from "../../core/runtime/runtime.ts";
 // The dependency-free half of the server startup, not startup.ts: this
 // directory is outside the workspace, so the root import map (and therefore
 // `@lumisca/core`) is unavailable to anything reached from here.
