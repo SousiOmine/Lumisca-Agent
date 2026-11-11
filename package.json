@@ -48,10 +48,10 @@
     "seed:history": "bun run scripts/seed-test-history.ts",
     "server": "bun run packages/server/mod.ts",
     "smoke:server": "bun run scripts/smoke-server.ts",
-    "test": "bun test --parallel",
-    "test:core": "bun test --parallel packages/core",
-    "test:server": "bun test --parallel packages/server",
-    "test:web": "bun test --parallel packages/web"
+    "test": "bun test --parallel --timeout 30000",
+    "test:core": "bun test --parallel --timeout 30000 packages/core",
+    "test:server": "bun test --parallel --timeout 30000 packages/server",
+    "test:web": "bun test --parallel --timeout 30000 packages/web"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.6",

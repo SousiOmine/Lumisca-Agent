@@ -393,7 +393,7 @@ async function agentToolFixture(
   // what makes a symlinked or 8.3-short temp path — Windows `RUNNER~1`,
   // macOS `/var` → `/private/var` — compare equal to the path a tool
   // reports), so `path()` must hand out the same canonical form.
-  const root = realpathSync(
+  const root = realpathSync.native(
     await Deno.makeTempDir({ prefix: "lumisca-agent-create-" }),
   );
   for (const [name, data] of Object.entries(options.files ?? {})) {

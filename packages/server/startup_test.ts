@@ -111,7 +111,7 @@ Deno.test("the update decision names the reason for every unsupported launch", (
     standalone: false,
   });
   assertEquals(development.enabled, false);
-  assertEquals(development.reason?.includes("deno run"), true);
+  assertEquals(development.reason?.includes("bun run server"), true);
 
   // The desktop shell owns the copy inside the app bundle: its own updater
   // replaces it, and the server must not fight it.

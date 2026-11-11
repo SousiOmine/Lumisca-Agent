@@ -8,7 +8,9 @@ import { HostCommandRunner } from "./command-runner.ts";
  * and a Get-Content alias in PowerShell), resolved so macOS's /var symlink
  * does not change the path under the runner. */
 function workspace(): string {
-  return realpathSync(Deno.makeTempDirSync({ prefix: "lumisca-runner-" }));
+  return realpathSync.native(
+    Deno.makeTempDirSync({ prefix: "lumisca-runner-" }),
+  );
 }
 
 Deno.test("command runner: a capped stream keeps its tail, not its head", async () => {
