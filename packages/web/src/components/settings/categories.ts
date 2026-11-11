@@ -1,17 +1,23 @@
-import type { AppMode, MessageKey } from "@lumisca/core/shared";
+import type { MessageKey } from "@lumisca/core/shared";
 
 /**
  * The settings dialog's navigation model: which categories exist, and what
  * each one's values act on.
  *
+ * Everything the dialog holds is a setting of this installation — the same
+ * for every conversation and for every agent. Something that belongs to ONE
+ * agent is not a category here: routines are that agent's, so they open from
+ * the agent's own row in the stella list (StellaSidebar), and an agent's name,
+ * picture and model open from the same menu's editor. A settings dialog that
+ * also changed one agent's machinery made "the app's settings" two different
+ * things depending on which conversation happened to be open.
+ *
  * Both modes show every category: hiding a page hid the page, never the
  * effect, and a reader in stella mode could not learn that 画面操作 existed
  * without switching modes first. What a reader does need to see is which
- * pages change something in this mode — a routine only exists in a stella
- * conversation, computer use only drives this machine for code mode's
- * sessions — so the navigation groups the entries by that and names each
- * group. The grouping is the same in both modes; only the group a reader is
- * working in differs.
+ * pages act on which mode's sessions — computer use drives this machine for
+ * code mode's sessions, a saved prompt is recalled by code mode's composer —
+ * so the navigation groups the entries by that and names each group.
  *
  * The categories also stay apart by subject: one page never held both a
  * mode's own setting and a shared one (the old セキュリティ carried the
@@ -40,7 +46,6 @@ export const SETTINGS_CATEGORIES = [
   "security",
   "computerUse",
   "prompts",
-  "routines",
 ] as const;
 
 export type SettingsCategory = (typeof SETTINGS_CATEGORIES)[number];
@@ -51,8 +56,10 @@ export function isSettingsCategory(value: string): value is SettingsCategory {
   return (SETTINGS_CATEGORIES as readonly string[]).includes(value);
 }
 
-/** What a category's values act on: both modes, or exactly one of them. */
-export type SettingsScope = "common" | AppMode;
+/** What a category's values act on: the whole app, or exactly one mode's
+ * sessions. Nothing here acts on one agent — that is not this dialog's
+ * subject (see the module comment). */
+export type SettingsScope = "common" | "code";
 
 /** One navigation entry: its identity, what its values act on, and its label
  * (a catalogue key, so the navigation follows the app language). */
@@ -70,8 +77,8 @@ export interface SettingsNavGroup {
 }
 
 /**
- * The navigation's groups, in reading order: what both modes share, then
- * code mode's own, then stella's. A group with no entry is dropped, so a
+ * The navigation's groups, in reading order: what the whole app shares, then
+ * what only code mode's sessions use. A group with no entry is dropped, so a
  * missing one costs no heading.
  *
  * There is no mode parameter: both modes draw every group (see the module
@@ -82,7 +89,7 @@ export interface SettingsNavGroup {
 export function navGroups(
   entries: readonly SettingsNavEntry[],
 ): SettingsNavGroup[] {
-  const scopes: readonly SettingsScope[] = ["common", "code", "stella"];
+  const scopes: readonly SettingsScope[] = ["common", "code"];
   return scopes
     .map((scope) => ({
       scope,
@@ -91,9 +98,10 @@ export function navGroups(
     .filter((group) => group.entries.length > 0);
 }
 
-/** The catalogue key naming a mode (the heading of that mode's group). */
-export function modeLabelKey(mode: AppMode): MessageKey {
-  return mode === "code"
-    ? "chat.modeSelect.code.title"
-    : "chat.modeSelect.stella.title";
+/** The catalogue key heading a group: the shared one, or the mode whose
+ * sessions the group's pages act on. */
+export function scopeLabelKey(scope: SettingsScope): MessageKey {
+  return scope === "common"
+    ? "settings.nav.common"
+    : "chat.modeSelect.code.title";
 }

@@ -309,6 +309,13 @@ export const chat = {
     ja: "名前・アイコン・モデルを編集",
     en: "Edit name, icon and model",
   },
+  /** The row menu's way into the agent's schedule. Routines belong to one
+   * agent, so they open from its row rather than from the app's settings. */
+  "chat.stella.agents.routines": { ja: "ルーチン", en: "Routines" },
+  "chat.stella.agents.routinesTitle": {
+    ja: "「{name}」のルーチン",
+    en: 'Routines of "{name}"',
+  },
   /** The row menu's redo: the agent asks how it should work, again. */
   "chat.stella.agents.onboarding": {
     ja: "設定をやり直す",

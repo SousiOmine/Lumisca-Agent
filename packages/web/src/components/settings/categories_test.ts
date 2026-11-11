@@ -1,10 +1,10 @@
 import { assertEquals } from "@std/assert";
 import {
   isSettingsCategory,
-  modeLabelKey,
   navGroups,
   SETTINGS_CATEGORIES,
   type SettingsNavEntry,
+  scopeLabelKey,
 } from "./categories.ts";
 
 /** A minimal entry (the model only needs identity, scope and a label). */
@@ -17,21 +17,22 @@ function entry(
 
 Deno.test("navGroups groups the entries by what they act on", () => {
   // Both modes draw every group, so the groups are the effect, not the mode
-  // on screen: shared first, then code mode's own, then stella's.
+  // on screen: the shared pages first, then the ones only code mode's
+  // sessions use. Nothing in the dialog belongs to one agent, so there is no
+  // third group (see categories.ts).
   const entries = [
     entry("general", "common"),
-    entry("routines", "stella"),
-    entry("appearance", "common"),
     entry("computerUse", "code"),
+    entry("appearance", "common"),
   ];
 
   assertEquals(
     navGroups(entries).map((group) => group.scope),
-    ["common", "code", "stella"],
+    ["common", "code"],
   );
   assertEquals(
     navGroups(entries).flatMap((group) => group.entries.map((item) => item.id)),
-    ["general", "appearance", "computerUse", "routines"],
+    ["general", "appearance", "computerUse"],
   );
 });
 
@@ -78,14 +79,13 @@ Deno.test("every category is named once, in the table's order", () => {
       "security",
       "computerUse",
       "prompts",
-      "routines",
     ],
   );
 });
 
-Deno.test("modeLabelKey names the mode a group acts on", () => {
-  assertEquals(modeLabelKey("code"), "chat.modeSelect.code.title");
-  assertEquals(modeLabelKey("stella"), "chat.modeSelect.stella.title");
+Deno.test("scopeLabelKey names the group", () => {
+  assertEquals(scopeLabelKey("common"), "settings.nav.common");
+  assertEquals(scopeLabelKey("code"), "chat.modeSelect.code.title");
 });
 
 Deno.test("isSettingsCategory accepts the table and refuses anything else", () => {

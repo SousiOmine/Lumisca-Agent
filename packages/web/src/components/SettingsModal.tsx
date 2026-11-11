@@ -4,7 +4,6 @@ import {
   IconPalette,
   IconPlugConnected,
   IconPointer,
-  IconRepeat,
   IconServer,
   IconSettings,
   IconShield,
@@ -16,7 +15,6 @@ import type { ReactNode } from "preact/compat";
 import { useEffect, useState } from "preact/compat";
 import { COMPACT_QUERY, useMediaQuery } from "../hooks/useMediaQuery.ts";
 import type { PushControls } from "../hooks/usePush.ts";
-import type { useRoutines } from "../hooks/useRoutines.ts";
 import type { UpdateControls } from "../hooks/useUpdateStatus.ts";
 import { useT } from "../i18n.ts";
 import { reloadCatalog, useUserProviders } from "../providers.ts";
@@ -30,10 +28,10 @@ import { CompactionSettings } from "./settings/CompactionSettings.tsx";
 import { ComputerUsePanel } from "./settings/ComputerUsePanel.tsx";
 import { ConnectionList } from "./settings/ConnectionList.tsx";
 import {
-  modeLabelKey,
   navGroups,
   type SettingsCategory,
   type SettingsNavEntry,
+  scopeLabelKey,
 } from "./settings/categories.ts";
 import { GeneralPanel } from "./settings/GeneralPanel.tsx";
 import { McpList } from "./settings/McpList.tsx";
@@ -42,7 +40,6 @@ import { ModelPreferencePanel } from "./settings/ModelPreferencePanel.tsx";
 import { PersonalizePanel } from "./settings/PersonalizePanel.tsx";
 import { ProviderDetail } from "./settings/ProviderDetail.tsx";
 import { ProviderList } from "./settings/ProviderList.tsx";
-import { RoutinePanel } from "./settings/RoutinePanel.tsx";
 import { SavedPromptsPanel } from "./settings/SavedPromptsPanel.tsx";
 import { SettingsPage } from "./settings/SettingsPage.tsx";
 import { WebSearchPanel } from "./settings/WebSearchPanel.tsx";
@@ -77,10 +74,6 @@ interface SettingsModalProps {
    * address says which of the two is showing — so the browser's back and this
    * button are the same move. */
   onBackToList: () => void;
-  /** The routines of the active stella agent (empty in code mode, which has
-   * no agent), plus which agent they belong to. */
-  routines: ReturnType<typeof useRoutines>;
-  routineAgent: string | null;
   onClose: () => void;
 }
 
@@ -124,18 +117,18 @@ type ProvidersView =
  * three places and a forgotten one was not a type error. One table cannot
  * drift from itself.
  *
- * Four entries act on one mode's machinery. They are shown in both modes
- * anyway, and each says what it needs when that is missing:
+ * Two entries act on code mode's machinery. They are shown in both modes
+ * anyway, because hiding a page hid what it does rather than the page:
  *
  * - `/prompt` is code mode's: only code mode's composers carry the slash menu
  *   (stella's conversation has one box and no commands), so the prompt list
  *   there is a list nothing recalls.
  * - Computer use drives THIS machine's screen; a stella session is given the
  *   virtual machine's own screen tools instead (agent/factory.ts).
- * - The conversation's model is stella's: a code session picks its model in
- *   the composer, and has no conversation to pin one to.
- * - Routines schedule a request on a stella agent's conversation, and code
- *   mode has no such conversation ("pick an agent" is what the panel says).
+ *
+ * Nothing here belongs to one agent. Routines schedule requests on one
+ * agent's conversation, so they are not a category at all: the agent's own
+ * row in the stella list opens them (StellaSidebar).
  */
 const CATEGORIES: readonly SettingsCategoryEntry[] = [
   {
@@ -338,29 +331,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     icon: <IconBookmark size={18} />,
     render: () => <SavedPromptsPanel />,
   },
-  {
-    id: "routines",
-    scope: "stella",
-    // The panel's own heading names the category: one wording for one thing,
-    // in the navigation and on the page.
-    labelKey: "panels.routine.title",
-    icon: <IconRepeat size={18} />,
-    // Routines schedule requests on a stella agent's conversation; code mode
-    // has no such conversation to schedule anything on.
-    render: ({ props }) => (
-      <RoutinePanel
-        routines={props.routines.routines}
-        loading={props.routines.loading}
-        error={props.routines.error}
-        agentName={props.routineAgent}
-        onRefresh={props.routines.refresh}
-        onSetEnabled={props.routines.setEnabled}
-        onRun={props.routines.run}
-        onStop={props.routines.stop}
-        onDelete={props.routines.remove}
-      />
-    ),
-  },
 ];
 
 /**
@@ -396,8 +366,6 @@ export function SettingsModal({
   category,
   onOpenCategory,
   onBackToList,
-  routines,
-  routineAgent,
   onClose,
 }: SettingsModalProps) {
   const t = useT();
@@ -457,8 +425,6 @@ export function SettingsModal({
       category,
       onOpenCategory,
       onBackToList,
-      routines,
-      routineAgent,
       onClose,
     },
     providersView,
@@ -493,9 +459,7 @@ export function SettingsModal({
               {groups.map((group) => (
                 <div key={group.scope} className="settings-nav-group">
                   <h3 className="settings-nav-heading">
-                    {group.scope === "common"
-                      ? t("settings.nav.common")
-                      : t(modeLabelKey(group.scope))}
+                    {t(scopeLabelKey(group.scope))}
                   </h3>
                   {group.entries.map((navEntry) => {
                     const item = navEntry as SettingsCategoryEntry;

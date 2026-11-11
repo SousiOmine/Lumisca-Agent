@@ -19,9 +19,11 @@ import { splitTabKey, tabKey } from "./tabs.ts";
  *   …/settings                 the settings dialog, first page
  *   …/settings/<category>      the settings dialog, one category
  *
- * Settings hang UNDER the mode's path rather than living at `/settings`,
- * because the set of categories is the mode's own (categories.ts): a
- * /settings that named no mode could not say which mode's pages it listed.
+ * Settings hang UNDER a screen's path rather than living at `/settings`:
+ * the dialog is drawn OVER that screen, and closing it returns there (the
+ * session a code-mode tab had open, the agent whose conversation was
+ * showing). The categories are the installation's and the same in both modes
+ * (categories.ts); the path names the screen underneath, not a set of pages.
  *
  * A code-mode URL carries the tab key, not a (peer, session) pair: the tab
  * strip, the event stream and the per-session API are all keyed by it (see

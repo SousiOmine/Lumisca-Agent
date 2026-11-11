@@ -21,16 +21,21 @@ import {
 import { NEVER, useVisibleInterval } from "../../hooks/useVisibleInterval.ts";
 import { useLocale, useT } from "../../i18n.ts";
 import type { RoutineView } from "../../types.ts";
-import { SettingsSection } from "./SettingsSection.tsx";
 
 /**
- * Routines: the requests this conversation runs on a schedule.
+ * Routines: the requests one agent's conversation runs on a schedule.
  *
  * The panel is a list, not an editor. A routine's name and request are things
  * the user said in a conversation, so the agent writes them (the `routine_*`
  * tools); what the user needs here is the state — when it fires next, how the
  * last run went — and the four actions that belong to a person's judgment:
  * turn it off, run it now, stop a run, delete it.
+ *
+ * It opens from the agent's own row in the list (StellaSidebar), not from the
+ * settings dialog: a routine belongs to ONE agent, and the settings dialog
+ * holds the installation's settings. The row is also where the reader knows
+ * which agent they are looking at, so the list never has to say "pick an
+ * agent first".
  *
  * The list polls only while something is running: "running now" is the one
  * fact that changes without a request from this screen.
@@ -176,12 +181,10 @@ function statusKey(status: RoutineStatus | null): MessageKey | null {
 }
 
 export interface RoutinePanelProps {
-  /** The routines of the agent whose conversation is open (empty when none
-   * exists yet). */
+  /** The routines of the agent this list is about. */
   routines: RoutineView[];
   loading: boolean;
   error: string | null;
-  agentName: string | null;
   onRefresh: () => void;
   onSetEnabled: (id: string, enabled: boolean) => Promise<void>;
   onRun: (id: string) => Promise<void>;
@@ -190,7 +193,7 @@ export interface RoutinePanelProps {
 }
 
 /**
- * The routines panel of the settings dialog.
+ * The routines list of one agent.
  *
  * Creating one is not offered here: a routine is a request the agent writes
  * from what the user said ("every morning, check the deploy"), and a form
@@ -200,7 +203,6 @@ export function RoutinePanel({
   routines,
   loading,
   error,
-  agentName,
   onRefresh,
   onSetEnabled,
   onRun,
@@ -246,13 +248,9 @@ export function RoutinePanel({
   }, []);
 
   return (
-    <SettingsSection
-      description={
-        agentName === null
-          ? t("panels.routine.noAgent")
-          : t("panels.routine.description", { agent: agentName })
-      }
-      action={
+    <div className="routine-panel">
+      <div className="routine-head">
+        <p className="settings-note">{t("panels.routine.description")}</p>
         <button
           type="button"
           className="btn"
@@ -262,8 +260,7 @@ export function RoutinePanel({
         >
           <IconRefresh size={14} />
         </button>
-      }
-    >
+      </div>
       {loading && <p className="settings-note">{t("common.loading")}</p>}
       {error !== null && (
         <p className="error-text" role="alert">
@@ -446,6 +443,6 @@ export function RoutinePanel({
           );
         })}
       </ul>
-    </SettingsSection>
+    </div>
   );
 }

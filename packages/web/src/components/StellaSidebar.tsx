@@ -3,6 +3,7 @@ import {
   IconPencil,
   IconPlus,
   IconRefresh,
+  IconRepeat,
   IconTrash,
 } from "@tabler/icons-preact";
 import { useEffect, useRef, useState } from "preact/compat";
@@ -22,6 +23,7 @@ import { Field } from "./Field.tsx";
 import { Modal } from "./Modal.tsx";
 import { AgentAvatar } from "./stella/AgentAvatar.tsx";
 import { AgentEditDialog } from "./stella/AgentEditDialog.tsx";
+import { AgentRoutinesDialog } from "./stella/AgentRoutinesDialog.tsx";
 
 interface StellaSidebarProps {
   agents: StellaAgentSummary[];
@@ -143,11 +145,14 @@ function previewTextOf(preview: StellaPreview, t: Translator): string {
  * agents itself with `agent_create`, in which case the row appears here
  * without this dialog ever opening.
  *
- * A row's ⋮ menu holds what can be done TO an agent — edit its name and
- * picture, delete it — apart from what the row itself does, which is open the
- * conversation. Deleting is not on the row: an always-visible × on every row
- * reads as "something to delete here", and it put a destructive control one
- * stray click from the thing the list exists for.
+ * A row's menu holds what can be done TO an agent — edit its name, picture and
+ * model, see its routines, ask it to set itself up again, delete it — apart
+ * from what the row itself does, which is open the conversation. Routines are
+ * here rather than in the settings dialog because they belong to one agent,
+ * and this is where the reader names that agent without opening anything.
+ * Deleting is not on the row: an always-visible × on every row reads as
+ * "something to delete here", and it put a destructive control one stray
+ * click from the thing the list exists for.
  */
 export function StellaSidebar({
   agents,
@@ -166,6 +171,12 @@ export function StellaSidebar({
   const [menu, setMenu] = useState<MenuAnchor | null>(null);
   /** The agent being edited (its name and picture), or null. */
   const [editing, setEditing] = useState<StellaAgentSummary | null>(null);
+  /** The agent whose routines are showing, or null. Routines belong to one
+   * agent, so they open from that agent's row and never from the settings
+   * dialog, which holds the installation's settings. */
+  const [routinesFor, setRoutinesFor] = useState<StellaAgentSummary | null>(
+    null,
+  );
   const [name, setName] = useState("");
   const [role, setRole] = useState("");
   const [busy, setBusy] = useState(false);
@@ -316,8 +327,8 @@ export function StellaSidebar({
     setMenu({ agent, x: rect.left + 8, top: rect.bottom });
   };
 
-  /** The menu from a right click on the row, at the pointer. A row's two
-   * verbs (edit, delete) are the browser's context-menu verbs too, and a
+  /** The menu from a right click on the row, at the pointer. The row's verbs
+   * (edit, routines, delete) are the browser's context-menu verbs too, and a
    * right click is where a reader looks for them. */
   const openMenuAt = (agent: StellaAgentSummary, event: MouseEvent) => {
     event.preventDefault();
@@ -522,6 +533,18 @@ export function StellaSidebar({
             className="app-menu-item"
             role="menuitem"
             onClick={() => {
+              setRoutinesFor(menu.agent);
+              setMenu(null);
+            }}
+          >
+            <IconRepeat size={14} />
+            <span>{t("chat.stella.agents.routines")}</span>
+          </button>
+          <button
+            type="button"
+            className="app-menu-item"
+            role="menuitem"
+            onClick={() => {
               const agent = menu.agent;
               setMenu(null);
               void redoSetup(agent);
@@ -626,6 +649,12 @@ export function StellaSidebar({
             setEditing(null);
           }}
           onClose={() => setEditing(null)}
+        />
+      )}
+      {routinesFor !== null && (
+        <AgentRoutinesDialog
+          agent={routinesFor}
+          onClose={() => setRoutinesFor(null)}
         />
       )}
     </aside>

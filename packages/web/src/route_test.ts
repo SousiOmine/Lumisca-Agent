@@ -89,12 +89,13 @@ Deno.test("route: a conversation carries its agent", () => {
 });
 
 Deno.test("route: settings hang under the screen they cover", () => {
-  // The categories are the mode's own, so the dialog names the mode it is
-  // describing — and closing it can return to the session it was opened on.
+  // The dialog is drawn OVER a screen, and closing it returns there, so the
+  // address keeps that screen. The categories themselves are the
+  // installation's and the same in both modes.
   const onSession = withSettings({ kind: "code", tabKey: "s-1" }, "providers");
   assertEquals(urlOf(onSession), "/code/s/s-1/settings/providers");
   roundTrip(onSession);
-  roundTrip(withSettings({ kind: "stella", agentId: null }, "routines"));
+  roundTrip(withSettings({ kind: "stella", agentId: null }, "models"));
   roundTrip(withSettings({ kind: "code", tabKey: null }, "general"));
 });
 

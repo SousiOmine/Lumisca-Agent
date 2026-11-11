@@ -28,7 +28,6 @@ import { useLanguage } from "./hooks/useLanguage.ts";
 import { useCompactViewport } from "./hooks/useMediaQuery.ts";
 import { usePush } from "./hooks/usePush.ts";
 import { useRoute } from "./hooks/useRoute.ts";
-import { useRoutines } from "./hooks/useRoutines.ts";
 import { useServerHealth } from "./hooks/useServerHealth.ts";
 import {
   type SessionActions,
@@ -548,11 +547,6 @@ export function App({ initialData }: AppProps): ReactElement {
   const stellaHandedOver =
     stella.conversation?.handover !== null &&
     stella.conversation?.handover !== undefined;
-  // The settings dialog's routine list: the active agent's routines
-  // (code mode has no agent, so the list stays empty and says so).
-  const routines = useRoutines(stellaActive ? stellaAgentId : null);
-  const routineAgentName = stellaActive ? (stellaAgent?.name ?? null) : null;
-
   // The mode-selection screen, and nothing else, until this client picks a
   // mode. The choice is per client (hooks/useAppMode.ts), so a second window
   // on the same server is never dragged into it.
@@ -806,8 +800,6 @@ export function App({ initialData }: AppProps): ReactElement {
                 category: settingsRoute.category,
                 onOpenCategory: openSettingsAt,
                 onBackToList: backToSettingsList,
-                routines,
-                routineAgent: routineAgentName,
                 onClose: closeSettings,
               }
             : null
