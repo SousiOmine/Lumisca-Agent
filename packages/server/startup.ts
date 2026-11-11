@@ -117,7 +117,7 @@ export function isDesktopManaged(raw: string | undefined): boolean {
 /** Whether this process may replace its own files (the server updater).
  *
  * Only a packaged server (`deno compile`, i.e. Deno.build.standalone) owns
- * its installation: a `deno run` server is the repository, and the desktop
+ * its installation: a `bun run server` server is the repository, and the desktop
  * shell's copy lives inside the app bundle, which the shell's own updater
  * replaces (it marks the child with {@link DESKTOP_ENV_KEY}).
  *
@@ -142,7 +142,7 @@ export function updateSupport(options: {
     return {
       enabled: false,
       reason:
-        "開発実行 (deno run) では自動アップデートを利用できません。パッケージ済みサーバーでのみ有効です",
+        "開発実行 (bun run server) では自動アップデートを利用できません。パッケージ済みサーバーでのみ有効です",
     };
   }
   return { enabled: true };
@@ -186,7 +186,7 @@ function isFile(path: string): boolean {
  * stages `assets.json` next to the compiled binary, so an unpacked server
  * release serves the UI with no configuration (the desktop shell passes
  * the same path as LUMISCA_ASSETS_FILE). `execPath` is Deno.execPath():
- * a `deno run` server (development) has no manifest next to the runtime,
+ * a `bun run server` server (development) has no manifest next to the runtime,
  * so the repository sources stay authoritative there.
  *
  * Returns undefined when no manifest sits beside the executable.
@@ -200,10 +200,10 @@ export function defaultAssetsFile(
 }
 
 /** Human-readable startup failure for a listen error. An occupied port
- * (the common case: another `deno task dev:server` still runs) names the
+ * (the common case: another `bun run dev:server` still runs) names the
  * likely cause and the fix; anything else reports the raw detail. The web
  * dev server proxies a fixed port (see packages/web/vite.config.ts), so
- * silently falling over to another port would only break `deno task dev`
+ * silently falling over to another port would only break `bun run dev`
  * in a confusing way — fail loudly instead. */
 export function describeListenError(
   host: string,
@@ -218,7 +218,7 @@ export function describeListenError(
       "対処: 起動中のサーバーを停止するか、別ポートで起動してください。",
       `  - 使用中プロセスの確認 (Windows): netstat -ano | findstr :${port}`,
       "  - プロセスの終了 (Windows): taskkill /PID <PID> /F",
-      "  - 別ポートで起動 (PowerShell): $env:LUMISCA_PORT=8100; deno task dev:server",
+      "  - 別ポートで起動 (PowerShell): $env:LUMISCA_PORT=8100; bun run dev:server",
     ].join("\n");
   }
   const detail = errorMessage(error);

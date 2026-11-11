@@ -312,7 +312,7 @@ export async function main(): Promise<void> {
       })
     : undefined;
 
-  // A taken port (usually a leftover `deno task dev:server`) must fail with
+  // A taken port (usually a leftover `bun run dev:server`) must fail with
   // guidance, not an `AddrInUse` stack trace. The DB is closed before exit
   // so no lock files linger for the next attempt.
   let listenError: unknown;

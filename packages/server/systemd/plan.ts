@@ -5,7 +5,7 @@
  * packaged binary, or a Linux host.
  *
  * Two rules from the launcher side live here as well: only a packaged server
- * owns an installation (a `deno run` server is the repository, and the
+ * owns an installation (a `bun run server` server is the repository, and the
  * desktop shell's copy is replaced by the app's own updater), and a
  * non-loopback bind must name the authorities clients will use.
  */

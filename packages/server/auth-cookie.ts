@@ -53,7 +53,7 @@ function hostPort(host: string | undefined): string {
  * Name of the token cookie for a request's Host, e.g. `lumisca_token_8000`.
  *
  * The port is part of the name because cookies ignore it: two servers on
- * one host (`deno task dev:server` on 8000 next to a packaged server on
+ * one host (`bun run dev:server` on 8000 next to a packaged server on
  * 8100, say) would otherwise overwrite each other's cookie, leaving one of
  * them answering 401 until the operator pastes its token URL again. A Host
  * without a port (the default 80/443, typical behind a reverse proxy) has

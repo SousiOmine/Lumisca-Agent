@@ -32,16 +32,26 @@
     "unpdf": "2.1.0"
   },
   "scripts": {
+    "build:server": "bun run scripts/build-server.ts",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "check:versions": "bun run scripts/check-versions.ts",
+    "demo": "bun run scripts/demo-server.ts",
+    "dev": "bun run scripts/dev.ts",
+    "dev:desktop": "bun run packages/desktop/scripts/dev.ts",
+    "dev:server": "bun run packages/server/mod.ts",
+    "dev:web": "bun x vite packages/web --configLoader native",
+    "fmt": "biome check --write .",
+    "fmt:check": "biome check .",
+    "probe:computer": "bun run scripts/probe-computer.ts",
+    "probe:stella": "bun run scripts/probe-stella.ts",
+    "probe:token": "bun run scripts/token-probe.ts",
+    "seed:history": "bun run scripts/seed-test-history.ts",
+    "server": "bun run packages/server/mod.ts",
+    "smoke:server": "bun run scripts/smoke-server.ts",
     "test": "bun test --parallel",
     "test:core": "bun test --parallel packages/core",
     "test:server": "bun test --parallel packages/server",
-    "test:web": "bun test --parallel packages/web",
-    "fmt": "biome check --write .",
-    "fmt:check": "biome check .",
-    "check": "tsc --noEmit -p tsconfig.json",
-    "build:server": "bun run scripts/build-server.ts",
-    "smoke:server": "bun run scripts/smoke-server.ts",
-    "check:versions": "bun run scripts/check-versions.ts"
+    "test:web": "bun test --parallel packages/web"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.6",

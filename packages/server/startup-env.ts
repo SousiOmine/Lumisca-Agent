@@ -1,11 +1,11 @@
 /**
  * The server-only environment, split out from `startup.ts` so a launcher
- * outside the Deno workspace can consume it.
+ * outside the workspace can consume it.
  *
  * `packages/desktop` is deliberately not a workspace member (its `src-tauri`
- * target would be linked into the compiled server), so `deno task
- * dev:desktop` resolves imports without the root import map. Anything it
- * reaches must therefore be free of bare specifiers; `startup.ts` imports
+ * target would be linked into the compiled server), so `bun run dev:desktop`
+ * resolves imports without the root tsconfig's `@lumisca/*` paths. Anything
+ * it reaches must therefore be free of bare specifiers; `startup.ts` imports
  * `@lumisca/core` and cannot be that module. The key list and the capture
  * stay here — one source — and `startup.ts` re-exports them.
  */

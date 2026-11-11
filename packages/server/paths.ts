@@ -46,7 +46,7 @@ export function webServiceWorkerPath(repoRoot: string): string {
  * compiled server ships them BESIDE THE BINARY (scripts/build-server.ts
  * stages them there, next to assets.json) — a compiled binary contains no
  * file system of its own. The repository path is tried first so
- * `deno task dev` and the desktop's development launch keep working from a
+ * `bun run dev` and the desktop's development launch keep working from a
  * checkout; the install directory is the packaged layout.
  *
  * `existsInInstall` is injected so the choice is testable without creating

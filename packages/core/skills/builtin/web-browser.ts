@@ -24,7 +24,7 @@ first with tool_search (see "Most important" below).
 
 ## When to use
 
-- Verifying the UI of a dev server (deno task dev, npm run dev, ...) or a
+- Verifying the UI of a dev server (bun run dev, npm run dev, ...) or a
   built app
 - Exercising the UI: form input, clicks, scrolling
 - Taking a screenshot of the page and reporting it as part of the result

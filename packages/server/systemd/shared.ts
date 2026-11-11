@@ -27,14 +27,14 @@ import {
 } from "./plan.ts";
 import { type CommandResult, ServiceCommandError } from "./runner.ts";
 
-/** A packaged server owns its installation: a `deno run` server would put the
+/** A packaged server owns its installation: a `bun run server` server would put the
  * runtime's own path into the unit, and the desktop shell's copy is replaced
  * by the app's updater. */
 export function requirePackaged(deps: ServiceDeps): void {
   if (!deps.host.standalone) {
     throw new ServiceUsageError(
       "常駐化はパッケージ済みサーバーでのみ実行できます " +
-        "(開発実行: deno run packages/server/mod.ts)",
+        "(開発実行: bun run server)",
     );
   }
 }
