@@ -1,4 +1,4 @@
-import type { DatabaseSync } from "node:sqlite";
+import type { Database } from "bun:sqlite";
 
 /**
  * `ALTER TABLE … ADD COLUMN`, skipped when the column already exists.
@@ -10,7 +10,7 @@ import type { DatabaseSync } from "node:sqlite";
  * {@link applyMigrations}) this guards history, not the current path.
  */
 function addColumnIfMissing(
-  db: DatabaseSync,
+  db: Database,
   table: string,
   column: string,
   definition: string,
@@ -61,7 +61,7 @@ CREATE INDEX IF NOT EXISTS idx_sessions_workspace ON sessions(workspace_id);
  * i+1; appending a new migration is the only thing needed to evolve the
  * schema of existing databases. Exported for the test that applies all but
  * the last one, inserts a row, and checks what the last one does to it. */
-export const MIGRATIONS: ReadonlyArray<(db: DatabaseSync) => void> = [
+export const MIGRATIONS: ReadonlyArray<(db: Database) => void> = [
   (db) => db.exec(BASE_SCHEMA),
   // Distinguish custom (user-provided) system prompts from generated ones:
   // generated prompts are rebuilt from the workspace (including AGENTS.md)
@@ -322,7 +322,7 @@ export const SCHEMA_VERSION = MIGRATIONS.length;
  * of half-migrated. That matters because the ALTERs are not idempotent: a
  * column added without its stamp would make the retried migration fail with
  * `duplicate column name`, and the database could never be opened again. */
-export function migrate(db: DatabaseSync): void {
+export function migrate(db: Database): void {
   applyMigrations(db, MIGRATIONS);
 }
 
@@ -330,8 +330,8 @@ export function migrate(db: DatabaseSync): void {
  * deliberately failing migration and observe the rollback, which is the
  * property that keeps a half-done database openable. */
 export function applyMigrations(
-  db: DatabaseSync,
-  migrations: ReadonlyArray<(db: DatabaseSync) => void>,
+  db: Database,
+  migrations: ReadonlyArray<(db: Database) => void>,
 ): void {
   const { user_version: current } = db.prepare("PRAGMA user_version").get() as {
     user_version: number;

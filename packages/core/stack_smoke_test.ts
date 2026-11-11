@@ -1,9 +1,9 @@
-import { DatabaseSync } from "node:sqlite";
+import { Database } from "bun:sqlite";
 import { assertEquals } from "@std/assert";
 
 /**
  * Stack smoke test: verify that the external building block with no dedicated
- * suite (node:sqlite) works under Deno. It guards against silent
+ * suite (bun:sqlite) works on Bun. It guards against silent
  * incompatibilities when the stack is upgraded.
  *
  * The agent and model-registry scenarios live in their own suites
@@ -15,8 +15,8 @@ import { assertEquals } from "@std/assert";
  * first.
  */
 
-Deno.test("node:sqlite works in Deno", () => {
-  const db = new DatabaseSync(":memory:");
+Deno.test("bun:sqlite works on Bun", () => {
+  const db = new Database(":memory:");
   db.exec(`
     CREATE TABLE workspaces (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

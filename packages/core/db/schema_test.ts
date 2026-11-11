@@ -1,4 +1,4 @@
-import { DatabaseSync } from "node:sqlite";
+import { Database } from "bun:sqlite";
 import { assert, assertEquals } from "@std/assert";
 import { LumiscaDb } from "./mod.ts";
 import {
@@ -166,7 +166,7 @@ Deno.test("a failing migration rolls back together with its stamp", () => {
   // without the version, and the retried migration then failed with
   // `duplicate column name` — the database could never be opened again.
   // Each step now runs in one transaction with its stamp.
-  const db = new DatabaseSync(":memory:");
+  const db = new Database(":memory:");
   try {
     db.exec("CREATE TABLE workspaces (id TEXT PRIMARY KEY)");
     const version = () =>
@@ -180,7 +180,7 @@ Deno.test("a failing migration rolls back together with its stamp", () => {
       ).map((column) => column.name);
 
     let ran = 0;
-    const migrations: Array<(db: DatabaseSync) => void> = [
+    const migrations: Array<(db: Database) => void> = [
       (target) => {
         ran++;
         target.exec(
@@ -214,7 +214,7 @@ Deno.test("a failing migration rolls back together with its stamp", () => {
 });
 
 Deno.test("migrate stamps existing agents as already set up", () => {
-  const db = new DatabaseSync(":memory:");
+  const db = new Database(":memory:");
   try {
     // A database from before the setup turn: every row it holds belongs to
     // someone who has been talking to that agent, and none of them may be

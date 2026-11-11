@@ -216,7 +216,7 @@ export function createRoutineRepo(db: LumiscaDb): RoutineRepo {
   );
 
   const rowOf = (id: string): RoutineRow | undefined =>
-    getStmt.get(id) as unknown as RoutineRow | undefined;
+    (getStmt.get(id) as unknown as RoutineRow | null) ?? undefined;
 
   return {
     list(): Routine[] {
@@ -235,9 +235,9 @@ export function createRoutineRepo(db: LumiscaDb): RoutineRepo {
     },
 
     findByName(agentId: string, name: string): Routine | undefined {
-      const row = byNameStmt.get(agentId, name) as unknown as
-        | RoutineRow
-        | undefined;
+      const row =
+        (byNameStmt.get(agentId, name) as unknown as RoutineRow | null) ??
+        undefined;
       return row === undefined ? undefined : toRoutine(row);
     },
 

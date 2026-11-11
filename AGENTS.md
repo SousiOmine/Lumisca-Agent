@@ -249,7 +249,8 @@ API キーやトークンは、ツールの引数にも戻り値にも会話に�
 - **ルーチンのプロンプトは描かない**: 実行は利用者のプロンプトとして届きますが、本文はルーチンの指示（作成時にエージェントが書いた定型の依頼）なので、会話には出しません（stella は `stella-state.ts` の `transcriptEntries`、code mode は `MessageRow` が落とします）。`StellaEntry.routine` の名前は識別・カーソル・一覧の 2 行目のために射影・圧縮の記録まで通し続けてください（stella の会話には描かないので、一覧の 2 行目だけがルーチン名を出します）。
 - **放置された会話の圧縮**: 最後のメッセージから 10 分たったとき、モデルの視界が 50k トークン以上なら畳みます（`SessionAgentOptions.idleCompaction`、定数は `packages/core/agent/factory.ts` の `STELLA_IDLE_COMPACTION`）。視界はすべて畳み、尻尾は残しません（idle 中に答えているリクエストは無いためです）。要約中に会話が動いたら挿入せずに捨てます（`ContextCompactor.compactNow` の `canCommit`）。畳んだ区間のペイロードは落としますが（`packages/core/session/prune.ts`）、行は消しません。
 - **履歴は遅延読み込み**: メモリに載せるのはモデルの視界（最新チェックポイント以降）だけです（`MessageRepo.listModelView`）。画面の遡りは `packages/core/session/transcript-pager.ts` がストアから引きます。**ページが数える行（`CONVERSATION_ROWS_SQL`）は、射影（`stellaEntryOf`）がエントリにする行と同じ集合でなければなりません**。片方だけ変えると、画面に出ていた発言が再読み込みで消えます。
-- **空いた領域は次の起動で返す**: `close()` がマーカーを書き（`packages/core/db/vacuum.ts` の `vacuumMarkerPath`）、次の起動時にファイルを作り直します（`vacuumOnStartup`、`packages/server/mod.ts`）。`node:sqlite` は `VACUUM` を使えないため、全行コピーと rename です。
+- **空いた領域は次の起動で返す**: `close()` がマーカーを書き（`packages/core/db/vacuum.ts` の `vacuumMarkerPath`）、次の起動時にファイルを作り直します（`vacuumOnStartup`、`packages/server/mod.ts`）。`bun:sqlite` の `VACUUM INTO` で新しいファイルへ書き出し、rename で置き換えます。
+- **DB は `closeDatabase()` で閉じる**: `bun:sqlite` は `close()` だけではプリペアドステートメントを解放せず、Windows ではファイルが開いたままになって rename も削除もできません（起動時の vacuum とテストの後片付けが落ちます）。`packages/core/db/close.ts` の `close(true)` が唯一の閉じ方です。
 - **`history_search`**: 検索するのは会話の射影（画面に出るもの）だけで、結果はローカル日時付き、`from` / `to` で期間を切れます。ツール名・引数・結果は出ません。
 
 ### 名前・アイコン・モデル

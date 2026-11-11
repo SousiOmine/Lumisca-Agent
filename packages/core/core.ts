@@ -663,7 +663,7 @@ export class LumiscaCore {
   /** Note that the database file should be rewritten at the next start.
    *
    * A marker rather than a rewrite here: the copy of a large database takes
-   * minutes and `node:sqlite` is synchronous, so it only runs before the
+   * minutes and SQLite is synchronous here, so it only runs before the
    * first request is served. Below the threshold nothing is written — a
    * conversation that only grew a little is not worth a restart's delay. */
   private async requestVacuumIfWorthwhile(): Promise<void> {

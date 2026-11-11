@@ -1,6 +1,5 @@
+import { Database } from "bun:sqlite";
 import { join } from "node:path";
-
-import { DatabaseSync } from "node:sqlite";
 import {
   fauxAssistantMessage,
   fauxProvider,
@@ -706,7 +705,7 @@ Deno.test("migration drops the legacy settings table", async () => {
   // system_prompt_custom column, which the latest migration drops. The
   // workspaces table exists as in the real schema (chat workspaces were
   // added afterwards, so only the new migration touches it).
-  const legacy = new DatabaseSync(path);
+  const legacy = new Database(path);
   legacy.exec(
     `CREATE TABLE workspaces (
       id TEXT PRIMARY KEY,
@@ -752,7 +751,7 @@ Deno.test("migration drops the legacy settings table", async () => {
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'settings'",
     )
     .get();
-  assertEquals(table, undefined);
+  assertEquals(table, null);
   const column = db.db
     .prepare("PRAGMA table_info(sessions)")
     .all()

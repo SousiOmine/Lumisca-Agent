@@ -1,16 +1,17 @@
-import { DatabaseSync } from "node:sqlite";
+import { Database } from "bun:sqlite";
+import { closeDatabase } from "./close.ts";
 import { migrate } from "./schema.ts";
 
 /** Central SQLite access point. All repositories share one instance. */
 export class LumiscaDb {
-  readonly db: DatabaseSync;
+  readonly db: Database;
 
-  private constructor(db: DatabaseSync) {
+  private constructor(db: Database) {
     this.db = db;
   }
 
   static open(path: string): LumiscaDb {
-    const db = new DatabaseSync(path);
+    const db = new Database(path);
     const lumisca = new LumiscaDb(db);
     lumisca.db.exec("PRAGMA journal_mode = WAL;");
     lumisca.db.exec("PRAGMA foreign_keys = ON;");
@@ -19,7 +20,7 @@ export class LumiscaDb {
   }
 
   static openInMemory(): LumiscaDb {
-    const db = new DatabaseSync(":memory:");
+    const db = new Database(":memory:");
     const lumisca = new LumiscaDb(db);
     lumisca.db.exec("PRAGMA foreign_keys = ON;");
     migrate(db);
@@ -27,6 +28,6 @@ export class LumiscaDb {
   }
 
   close(): void {
-    this.db.close();
+    closeDatabase(this.db);
   }
 }

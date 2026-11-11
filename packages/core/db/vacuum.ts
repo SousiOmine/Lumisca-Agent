@@ -7,14 +7,12 @@
  * the freed pages back: they are reused by later writes (so the file stops
  * growing), while the file itself stays the size of its high-water mark.
  *
- * **Why the rows are copied instead of vacuumed.** SQLite's own `VACUUM`
- * (and `VACUUM INTO`) needs a second database connection, and the runtime
- * this app uses (`node:sqlite`) is built with `SQLITE_MAX_ATTACHED=0` — both
- * forms fail with "too many attached databases - max 0". So the rewrite is
- * done here: a fresh file is created with the schema, every row is copied
- * into it, and the result replaces the original in one rename. That is what
- * `VACUUM` does internally anyway (rebuild from a fresh file), with the
- * reader being this process instead of SQLite's own.
+ * **How.** `VACUUM INTO` writes a fresh file with the schema, the rows, the
+ * indexes and `user_version`, and the result replaces the original in one
+ * rename. The rebuild is SQLite's own (the same work `VACUUM` does), so this
+ * file does not restate the schema. `INTO` rather than an in-place `VACUUM`:
+ * the old file must survive a rewrite that fails (a full disk is the usual
+ * cause), and the marker is what asks for the next attempt.
  *
  * It is a STARTUP operation and nothing else. The copy of a large database
  * takes minutes and blocks the event loop, and a running server cannot pause
@@ -23,12 +21,13 @@
  * bytes to be worth the wait (see requestVacuum).
  */
 
+import { Database } from "bun:sqlite";
 import { rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";
 import { runtime } from "../runtime/runtime.ts";
+import { closeDatabase } from "./close.ts";
 
 const log = createLogger("vacuum");
 
@@ -79,7 +78,7 @@ export async function vacuumOnStartup(dbPath: string): Promise<void> {
   const startedAt = performance.now();
   try {
     await rm(copy, { force: true });
-    copyDatabase(dbPath, copy);
+    vacuumInto(dbPath, copy);
     const before = (await stat(dbPath)).size;
     const after = (await stat(copy)).size;
     // The copy is complete and closed, so replacing the original is one
@@ -104,77 +103,18 @@ export async function vacuumOnStartup(dbPath: string): Promise<void> {
   }
 }
 
-/** Copy every row of every table into a fresh file with the same shape.
+/** Rewrite the file through SQLite's own rebuild.
  *
- * The tables come from `sqlite_master` in creation order (the migrations
- * create parents before children, which is the order the foreign keys need),
- * and each table's own `CREATE` statement is replayed into the target — the
- * source is the authority on its own schema, so the copy works for any
- * database this build can read, not just one built by the current
- * migrations. */
-function copyDatabase(from: string, to: string): void {
-  const source = new DatabaseSync(from);
-  let target: DatabaseSync | undefined;
+ * The destination path is bound, not interpolated: a Windows user name or a
+ * folder may carry a quote. The caller has already removed anything at the
+ * destination, which `VACUUM INTO` requires. */
+function vacuumInto(from: string, to: string): void {
+  const source = new Database(from);
   try {
-    target = new DatabaseSync(to);
-    target.exec("PRAGMA journal_mode = WAL;");
-    target.exec("PRAGMA foreign_keys = OFF;");
-    // One transaction for the whole copy: a half-written database must never
-    // be promoted (the caller renames only after this returns). Foreign keys
-    // stay off while it runs: creation order already matches the references,
-    // and a table copied before its parent must not be refused.
-    target.exec("BEGIN IMMEDIATE");
-    try {
-      for (const { name, sql } of tablesOf(source, "table")) {
-        if (sql !== null) target.exec(sql);
-        const rows = source.prepare(`SELECT * FROM "${name}"`).all() as Array<
-          Record<string, unknown>
-        >;
-        if (rows.length === 0) continue;
-        const columns = Object.keys(rows[0]!);
-        const insert = target.prepare(
-          `INSERT INTO "${name}" (${columns
-            .map((column) => `"${column}"`)
-            .join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`,
-        );
-        for (const row of rows) {
-          insert.run(...columns.map((column) => row[column] as never));
-        }
-      }
-      // Indexes are replayed after the rows: building them once is faster
-      // than maintaining them during the copy.
-      for (const { name, sql } of tablesOf(source, "index")) {
-        if (sql === null || name.startsWith("sqlite_autoindex")) continue;
-        target.exec(sql);
-      }
-      // The schema version travels with the data: a copy that claimed an
-      // older version would be migrated again on the next open.
-      const { user_version: version } = source
-        .prepare("PRAGMA user_version")
-        .get() as { user_version: number };
-      target.exec(`PRAGMA user_version = ${version}`);
-      target.exec("COMMIT");
-    } catch (error) {
-      target.exec("ROLLBACK");
-      throw error;
-    }
+    source.prepare("VACUUM INTO ?").run(to);
   } finally {
-    target?.close();
-    source.close();
+    closeDatabase(source);
   }
-}
-
-/** The objects of one kind in the database, in creation order. */
-function tablesOf(
-  db: DatabaseSync,
-  type: "table" | "index",
-): Array<{ name: string; sql: string | null }> {
-  return db
-    .prepare(
-      "SELECT name, sql FROM sqlite_master WHERE type = ? " +
-        "AND name NOT LIKE 'sqlite_%' ORDER BY rowid",
-    )
-    .all(type) as Array<{ name: string; sql: string | null }>;
 }
 
 function formatMiB(bytes: number): string {

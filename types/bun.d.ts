@@ -31,6 +31,7 @@ declare const Bun: {
   argv: string[];
   main: string;
   isStandaloneExecutable: boolean;
+  gc(force: boolean): void;
   serve(options: {
     hostname?: string;
     port?: number;
@@ -99,5 +100,59 @@ declare module "bun:ffi" {
     );
     readonly ptr: number;
     close(): void;
+  }
+}
+
+/** The pieces of `bun:sqlite` the database layer uses. Like `bun:ffi`, Bun's
+ * own types (`bun-types`) are not installed, so only the calls that are made
+ * are declared. */
+declare module "bun:sqlite" {
+  export type SQLQueryBindings =
+    | string
+    | number
+    | bigint
+    | boolean
+    | null
+    | Uint8Array;
+
+  export type SQLOutputValue = string | number | bigint | Uint8Array | null;
+
+  export interface Changes {
+    changes: number;
+    lastInsertRowid: number | bigint;
+  }
+
+  export class Statement<
+    Row extends Record<string, SQLOutputValue> = Record<string, SQLOutputValue>,
+  > {
+    run(...params: SQLQueryBindings[]): Changes;
+    /** `null` when the statement returned no row (Deno's `node:sqlite`
+     * answered `undefined`; callers here use a truthiness check). */
+    get(...params: SQLQueryBindings[]): Row | null;
+    all(...params: SQLQueryBindings[]): Row[];
+    iterate(...params: SQLQueryBindings[]): IterableIterator<Row>;
+    finalize(): void;
+    readonly columnNames: string[];
+    readonly paramsCount: number;
+  }
+
+  export class Database {
+    constructor(
+      filename?: string,
+      options?: {
+        readonly?: boolean;
+        create?: boolean;
+        readwrite?: boolean;
+        strict?: boolean;
+      },
+    );
+    prepare<
+      Row extends Record<string, SQLOutputValue> = Record<
+        string,
+        SQLOutputValue
+      >,
+    >(sql: string): Statement<Row>;
+    exec(sql: string): void;
+    close(throwOnError?: boolean): void;
   }
 }

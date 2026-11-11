@@ -1,6 +1,7 @@
+import { Database } from "bun:sqlite";
 import { basename, dirname, join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { assertEquals } from "@std/assert";
+import { closeDatabase } from "./close.ts";
 import { LumiscaDb } from "./mod.ts";
 import {
   MIN_VACUUM_BYTES,
@@ -15,7 +16,7 @@ import {
  * autocommit per row spends seconds on fsync (`sqlite` flushes the WAL on
  * every commit), and this fixture is built by four cases here. */
 function makeDatabase(path: string, rows: number): void {
-  const db = new DatabaseSync(path);
+  const db = new Database(path);
   try {
     db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, blob BLOB)");
     db.exec("BEGIN");
@@ -25,7 +26,7 @@ function makeDatabase(path: string, rows: number): void {
     }
     db.exec("COMMIT");
   } finally {
-    db.close();
+    closeDatabase(db);
   }
 }
 
@@ -96,9 +97,9 @@ Deno.test("vacuum: a due request rewrites the file and keeps its contents", asyn
     makeDatabase(path, 200);
     // Delete most of the rows: the pages are free but the file stays large,
     // which is exactly the state a prune leaves behind.
-    const db = new DatabaseSync(path);
+    const db = new Database(path);
     db.exec("DELETE FROM t WHERE id > 10");
-    db.close();
+    closeDatabase(db);
     const before = await sizeOf(path);
     await Deno.writeTextFile(vacuumMarkerPath(path), String(MIN_VACUUM_BYTES));
 
@@ -108,14 +109,14 @@ Deno.test("vacuum: a due request rewrites the file and keeps its contents", asyn
     assertEquals(after < before, true, `${after} should be under ${before}`);
     // Nothing was lost: the surviving rows are still there, and the database
     // opens as an ordinary file.
-    const reread = new DatabaseSync(path);
+    const reread = new Database(path);
     try {
       const row = reread.prepare("SELECT COUNT(*) AS n FROM t").get() as {
         n: number;
       };
       assertEquals(Number(row.n), 10);
     } finally {
-      reread.close();
+      closeDatabase(reread);
     }
     // The request was consumed.
     assertEquals(
@@ -141,14 +142,14 @@ Deno.test("vacuum: a failed rewrite leaves the database usable and the marker in
 
     await vacuumOnStartup(path);
 
-    const db = new DatabaseSync(path);
+    const db = new Database(path);
     try {
       const row = db.prepare("SELECT COUNT(*) AS n FROM t").get() as {
         n: number;
       };
       assertEquals(Number(row.n), 20);
     } finally {
-      db.close();
+      closeDatabase(db);
     }
     // Left for the next start.
     assertEquals(
