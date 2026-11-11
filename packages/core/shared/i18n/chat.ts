@@ -481,17 +481,18 @@ export const chat = {
   "chat.stella.env.saving": { ja: "保存中…", en: "Saving…" },
   /** Refusing to give the value. A card has no close button, so this is the
    * only way to say "no". Short: it sits beside the save, and the row has
-   * two words in it already. */
+   * two words in it already. It says what the user does, not what the card
+   * lacks: "入れない" read as a judgement of the value. */
   "chat.stella.env.decline": {
-    ja: "入れない",
+    ja: "入力しない",
     en: "Skip",
   },
-  /** The hand-over's deadline sentence in a card's width: the same two facts
-   * (when it ends, that it resumes by itself), without the "この待機は…です"
-   * frame a full-width bar can afford. */
+  /** When the wait ends. The card says nothing about what happens after it:
+   * a parenthetical explanation made the line the longest one on a card that
+   * has to stay small. */
   "chat.stella.env.deadline": {
-    ja: "{time} まで（過ぎると自動で再開）",
-    en: "Until {time} (then it resumes on its own)",
+    ja: "{time} まで",
+    en: "Until {time}",
   },
   /** The clipboard the user and the machine share while the user drives the
    * screen. Two words in the hand-over bar: what worked is visible on its own
