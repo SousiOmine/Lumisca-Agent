@@ -170,6 +170,9 @@ function openFile(
     create?: boolean;
     truncate?: boolean;
     append?: boolean;
+    /** Permission bits for a file this call creates (Deno's `open` option;
+     * the updater relies on it to keep a binary's exec bit). */
+    mode?: number;
   },
 ): FsFile {
   let flags = 0;
@@ -181,7 +184,7 @@ function openFile(
   if (options?.create) flags |= fs.constants.O_CREAT;
   if (options?.truncate) flags |= fs.constants.O_TRUNC;
   if (options?.append) flags |= fs.constants.O_APPEND;
-  return new FsFile(fs.openSync(pathname, flags));
+  return new FsFile(fs.openSync(pathname, flags, options?.mode));
 }
 
 type CommandOptions = {
@@ -194,32 +197,42 @@ type CommandOptions = {
   signal?: AbortSignal;
 };
 
+/** A child's stdout/stderr as a web stream. The "end" event can arrive
+ * after the reader has cancelled (a killed command whose pipes a survivor
+ * still holds), so both handlers are guarded: closing an already closed
+ * controller throws out of an event listener, where nobody can catch it. */
+function pipeToStream(
+  stream: ReturnType<typeof spawn>["stdout"],
+): ReadableStream<Uint8Array> {
+  if (!stream) return new ReadableStream({ start: (c) => c.close() });
+  let finished = false;
+  return new ReadableStream({
+    start(controller) {
+      stream.on("data", (chunk) => {
+        if (finished) return;
+        controller.enqueue(new Uint8Array(chunk));
+      });
+      stream.on("end", () => {
+        if (finished) return;
+        finished = true;
+        controller.close();
+      });
+    },
+    cancel() {
+      finished = true;
+      stream.destroy();
+    },
+  });
+}
+
 class ChildProcess {
   #child: ReturnType<typeof spawn>;
   readonly stdout: ReadableStream<Uint8Array>;
   readonly stderr: ReadableStream<Uint8Array>;
   constructor(child: ReturnType<typeof spawn>) {
     this.#child = child;
-    this.stdout = child.stdout
-      ? new ReadableStream({
-          start(controller) {
-            child.stdout!.on("data", (chunk) =>
-              controller.enqueue(new Uint8Array(chunk)),
-            );
-            child.stdout!.on("end", () => controller.close());
-          },
-        })
-      : new ReadableStream({ start: (c) => c.close() });
-    this.stderr = child.stderr
-      ? new ReadableStream({
-          start(controller) {
-            child.stderr!.on("data", (chunk) =>
-              controller.enqueue(new Uint8Array(chunk)),
-            );
-            child.stderr!.on("end", () => controller.close());
-          },
-        })
-      : new ReadableStream({ start: (c) => c.close() });
+    this.stdout = pipeToStream(child.stdout);
+    this.stderr = pipeToStream(child.stderr);
   }
   get stdin(): WritableStream<Uint8Array> {
     const input = this.#child.stdin;
@@ -248,10 +261,28 @@ class ChildProcess {
     success: boolean;
     signal: string | null;
   }> {
+    // Deno's `status` settles when the process exits, not when its pipes
+    // close: a descendant the command left behind inherits the pipes and can
+    // outlive it (a `server &`), and waiting for "close" would hang the call
+    // on a process that is already gone. Node keeps the exit state, so a
+    // caller that asks after the fact still gets an answer.
+    const settled = (): {
+      code: number;
+      success: boolean;
+      signal: string | null;
+    } => {
+      const code = this.#child.exitCode ?? 1;
+      return {
+        code,
+        success: code === 0,
+        signal: this.#child.signalCode ?? null,
+      };
+    };
+    if (this.#child.exitCode !== null || this.#child.signalCode !== null) {
+      return Promise.resolve(settled());
+    }
     return new Promise((resolve) => {
-      this.#child.on("close", (code) =>
-        resolve({ code: code ?? 1, success: code === 0, signal: null }),
-      );
+      this.#child.on("exit", () => resolve(settled()));
     });
   }
   kill(signal?: string): void {
@@ -369,7 +400,13 @@ class DenoSocket {
   }) {
     this.#ws = ws;
     this.readyState = 1;
-    this.onopen?.(new Event("open"));
+    // Deno's open event is asynchronous: a handler assigned right after
+    // `upgradeWebSocket` returns must still see it. Bun can call the
+    // websocket's open hook inside `upgrade`, before the caller has the
+    // socket, so the event is deferred to a microtask.
+    queueMicrotask(() => {
+      if (this.readyState === 1) this.onopen?.(new Event("open"));
+    });
   }
   _message(data: string | Uint8Array) {
     this.onmessage?.({ data: typeof data === "string" ? data : data.buffer });
@@ -706,10 +743,19 @@ const DenoShim = {
   connect: denoConnect,
   upgradeWebSocket,
   PointerValue: undefined,
-  UnsafePointer: undefined,
+  // A pointer value the shim can carry but not dereference: `dlopen` below
+  // throws, so nothing reaches a call that would hand it to native code. The
+  // Windows host uses these to parse and format window handles, which is all
+  // that runs before `bun:ffi` replaces this (see the module header).
+  UnsafePointer: {
+    create: (value: bigint) => ({ value }),
+    value: (pointer: { value: bigint }) => pointer.value,
+    equals: (a: unknown, b: unknown) => a === b,
+    of: () => null,
+  },
   UnsafeCallback: undefined,
   dlopen: () => {
-    throw new Error("Deno.dlopen is not shimmed in this spike");
+    throw new Error("Deno.dlopen is not available on Bun yet");
   },
 };
 

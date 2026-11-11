@@ -1,5 +1,5 @@
 /** `bun test` only: the runtime shim plus `Deno.test` mapped to `bun:test`. */
-import { test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, test } from "bun:test";
 import "../../packages/core/runtime/deno.ts";
 
 type DenoTestOptions = {
@@ -31,6 +31,17 @@ const denoTest = (
   if (only) return test.only(name, body as () => unknown);
   test(name, body as () => unknown);
 };
+
+// `Deno.test` is also a namespace: the suite calls `Deno.test.afterAll` for
+// a server shared by a file's tests, and `Deno.test.ignore` to skip one.
+Object.assign(denoTest, {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  ignore: (name: string, body: () => unknown) => test.skip(name, body),
+  only: test.only,
+});
 
 // deno-lint-ignore no-explicit-any
 ((globalThis as any).Deno as Record<string, unknown>).test = denoTest;
