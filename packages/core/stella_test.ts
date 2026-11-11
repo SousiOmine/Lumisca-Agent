@@ -13,6 +13,7 @@ import { CoreError } from "./errors.ts";
 import { SessionAttachmentStore } from "./session/attachments.ts";
 import { createHistorySearchTool } from "./session/history.ts";
 import type { WindowPage } from "./session/transcript-window.ts";
+import { DEFAULT_MODEL_KEY } from "./shared/settings-keys.ts";
 import { DEFAULT_AGENT_NAME } from "./stella/agents.ts";
 import { STELLA_ONBOARDING_PROMPT } from "./stella/onboarding.ts";
 import { MINI_PNG, promptSession, withTempDir } from "./test-utils.ts";
@@ -398,10 +399,40 @@ Deno.test("stella conversation: an unset model follows the app's default", async
   const core = await twoModelStellaCore();
   try {
     const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
+    core.setSetting(
+      DEFAULT_MODEL_KEY,
+      JSON.stringify({ provider: "faux", modelId: "other" }),
+    );
     const session = await core.getOrCreateStellaSession(agent.id);
     // Whatever the default resolves to, it is not the agent's to choose.
-    assert(session.modelId === "faux" || session.modelId === "other");
+    assertEquals(session.modelId, "other");
     assertEquals(core.getStellaAgent(agent.id)?.model, null);
+
+    // The conversation row froze the pair it resolved when it was created,
+    // while the dialog kept saying "default". Moving the default has to move
+    // the row as well: the row is what a run reads.
+    core.setSetting(
+      DEFAULT_MODEL_KEY,
+      JSON.stringify({ provider: "faux", modelId: "faux" }),
+    );
+    const moved = await core.getOrCreateStellaSession(agent.id);
+    assertEquals(moved.id, session.id);
+    assertEquals(moved.modelId, "faux");
+    assertEquals(core.getSession(session.id)?.modelId, "faux");
+
+    // An explicit choice is not the default, so the default moving past it
+    // leaves it alone.
+    await core.updateStellaAgent(agent.id, {
+      model: { provider: "faux", modelId: "other" },
+    });
+    core.setSetting(
+      DEFAULT_MODEL_KEY,
+      JSON.stringify({ provider: "faux", modelId: "faux" }),
+    );
+    assertEquals(
+      (await core.getOrCreateStellaSession(agent.id)).modelId,
+      "other",
+    );
   } finally {
     await core.close();
   }

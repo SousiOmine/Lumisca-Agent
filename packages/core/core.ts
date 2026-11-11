@@ -1302,7 +1302,11 @@ export class LumiscaCore {
     return this.services.stellaMachines.getStellaAvailability();
   }
 
-  getOrCreateStellaSession(agentId?: string): Promise<SessionInfo> {
+  async getOrCreateStellaSession(agentId?: string): Promise<SessionInfo> {
+    // Before the conversation is returned (and therefore before anything is
+    // read or run in it): an agent that follows the app's default model must
+    // be sitting on the default as it is NOW.
+    await this.followDefaultModel(agentId);
     return this.services.stellaMachines.getOrCreateStellaSession(agentId);
   }
 
@@ -1988,17 +1992,8 @@ export class LumiscaCore {
     // this installation cannot reach (a provider removed since, a retired
     // id) is skipped rather than obeyed — it would otherwise make every new
     // session fail on a setting the user cannot see from here.
-    const preferred = parseModelPreference(
-      this.settings.get(DEFAULT_MODEL_KEY),
-    );
-    if (
-      preferred !== undefined &&
-      this.models.getModel(preferred.provider, preferred.modelId) !==
-        undefined &&
-      (await this.models.hasConfiguredAuth(preferred.provider))
-    ) {
-      return { provider: preferred.provider, modelId: preferred.modelId };
-    }
+    const preferred = await this.explicitDefaultModel();
+    if (preferred !== undefined) return preferred;
     const latest = this.sessions.list()[0];
     if (
       latest &&
@@ -2012,6 +2007,73 @@ export class LumiscaCore {
     throw new CoreError(
       "No models available: no provider is configured",
       "unavailable",
+    );
+  }
+
+  /** The model the user named as the app default, when it can run here.
+   * A default naming a model this installation cannot reach (a provider
+   * removed since, a retired id, no credentials) answers undefined: the
+   * caller falls through to what it would have chosen without the setting,
+   * rather than failing on a value the user cannot see from here.
+   *
+   * One definition for both readers — choosing a model for a new session
+   * ({@link resolveDefaultModel}) and moving a stella conversation onto it
+   * ({@link followDefaultModel}) — so the two cannot disagree about what
+   * "the default" means. */
+  private async explicitDefaultModel(): Promise<
+    { provider: string; modelId: string } | undefined
+  > {
+    const preferred = parseModelPreference(
+      this.settings.get(DEFAULT_MODEL_KEY),
+    );
+    if (preferred === undefined) return undefined;
+    if (
+      this.models.getModel(preferred.provider, preferred.modelId) === undefined
+    ) {
+      return undefined;
+    }
+    if (!(await this.models.hasConfiguredAuth(preferred.provider))) {
+      return undefined;
+    }
+    return { provider: preferred.provider, modelId: preferred.modelId };
+  }
+
+  /**
+   * Move an agent's conversation onto the app's default model, when the agent
+   * has no model of its own.
+   *
+   * "Unset means the app's default model" is what the agent dialog promises
+   * (see chat.stella.agents.modelHint), but the conversation row stores the
+   * pair it resolved when it was created and a run reads that row. Changing
+   * the default afterwards therefore left the row on the old model while the
+   * agent still said "default" — the row was right about what runs and wrong
+   * about why. The row is the model a run reads, so it is moved to whatever
+   * the default is now, at the moment the conversation is opened.
+   *
+   * Only the row is written when it differs: an unchanged pair is not a
+   * write, and a run in flight keeps its model until it ends (see
+   * SessionService.setSessionModel).
+   */
+  private async followDefaultModel(agentId?: string): Promise<void> {
+    const agent =
+      agentId === undefined
+        ? this.stellaAgents.latest()
+        : this.stellaAgents.get(agentId);
+    if (agent === undefined || agent.model !== null) return;
+    const session = this.sessions.getByAgent(agent.id);
+    if (session === undefined) return;
+    const preferred = await this.explicitDefaultModel();
+    if (preferred === undefined) return;
+    if (
+      session.modelProvider === preferred.provider &&
+      session.modelId === preferred.modelId
+    ) {
+      return;
+    }
+    this.services.sessions.setSessionModel(
+      session.id,
+      preferred.provider,
+      preferred.modelId,
     );
   }
 
