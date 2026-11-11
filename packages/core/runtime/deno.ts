@@ -567,7 +567,10 @@ function denoServe(
   };
 }
 
-const platformOs = process.platform;
+/** Deno's `build.os` names: "windows", "darwin", "linux" — not Node's
+ * "win32". Several callers compare against "windows" (the binary suffix, the
+ * ICU file, the Windows host), so the mapping belongs here, once. */
+const platformOs = process.platform === "win32" ? "windows" : process.platform;
 const arch =
   process.arch === "x64"
     ? "x86_64"
@@ -575,7 +578,7 @@ const arch =
       ? "aarch64"
       : process.arch;
 const target =
-  platformOs === "win32"
+  platformOs === "windows"
     ? `${arch}-pc-windows-msvc`
     : platformOs === "darwin"
       ? `${arch}-apple-darwin`
