@@ -37,6 +37,8 @@ export interface SessionRepo {
 interface SessionRow {
   stella?: number;
   agent_id?: string | null;
+  /** The agent's name, joined for a stella conversation (see toSession). */
+  agent_name?: string | null;
   id: string;
   workspace_id: string;
   name: string;
@@ -55,7 +57,12 @@ function toSession(row: SessionRow): SessionRecord {
       : {}),
     id: row.id,
     workspaceId: row.workspace_id,
-    name: row.name,
+    // A stella conversation has no name of its own: the agent is named, and
+    // the conversation is that agent talking. The row's own `name` is empty
+    // there (see StellaMachineService.getOrCreateStellaSession), so the name
+    // is read from the agent on every read — a copy kept on the row is what
+    // once left a renamed agent's conversation answering to its old name.
+    name: row.agent_name ?? row.name,
     modelProvider: row.model_provider,
     modelId: row.model_id,
     systemPrompt: row.system_prompt ?? undefined,
@@ -64,29 +71,39 @@ function toSession(row: SessionRow): SessionRecord {
   };
 }
 
+/** Every session read goes through this. A stella conversation's name is its
+ * agent's (see toSession), so the agent's name rides along as `agent_name`;
+ * for every other session the join finds nothing and the row's own name is
+ * used. An index lookup on the primary key, so a read costs one extra probe
+ * whatever the table's size. */
+const SELECT_SESSIONS =
+  "SELECT s.*, a.name AS agent_name FROM sessions s " +
+  "LEFT JOIN stella_agents a ON a.id = s.agent_id";
+
 export function createSessionRepo(db: LumiscaDb): SessionRepo {
   const insertStmt = db.db.prepare(`
     INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, system_prompt, created_at, updated_at, stella, agent_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const getByAgentStmt = db.db.prepare(
-    "SELECT * FROM sessions WHERE agent_id = ?",
+    `${SELECT_SESSIONS} WHERE s.agent_id = ?`,
   );
-  const getStmt = db.db.prepare("SELECT * FROM sessions WHERE id = ?");
+  const getStmt = db.db.prepare(`${SELECT_SESSIONS} WHERE s.id = ?`);
   // stella's row is not a session: it is excluded everywhere a session list
   // is built, so no client ever offers to open, close or delete it.
   const listStmt = db.db.prepare(
-    "SELECT * FROM sessions WHERE stella = 0 ORDER BY updated_at DESC",
+    `${SELECT_SESSIONS} WHERE s.stella = 0 ORDER BY s.updated_at DESC`,
   );
   const listByWorkspaceStmt = db.db.prepare(
-    "SELECT * FROM sessions WHERE workspace_id = ? AND stella = 0 ORDER BY updated_at DESC",
+    `${SELECT_SESSIONS} WHERE s.workspace_id = ? AND s.stella = 0 ` +
+      "ORDER BY s.updated_at DESC",
   );
   // Everything, stella included (see SessionRepo.listEvery).
   const listEveryStmt = db.db.prepare(
-    "SELECT * FROM sessions ORDER BY updated_at DESC",
+    `${SELECT_SESSIONS} ORDER BY s.updated_at DESC`,
   );
   const listEveryByWorkspaceStmt = db.db.prepare(
-    "SELECT * FROM sessions WHERE workspace_id = ? ORDER BY updated_at DESC",
+    `${SELECT_SESSIONS} WHERE s.workspace_id = ? ORDER BY s.updated_at DESC`,
   );
   const deleteStmt = db.db.prepare("DELETE FROM sessions WHERE id = ?");
   const touchStmt = db.db.prepare(
@@ -120,18 +137,12 @@ export function createSessionRepo(db: LumiscaDb): SessionRepo {
         stella ? 1 : 0,
         input.agentId ?? null,
       );
-      return {
-        id,
-        workspaceId: input.workspaceId,
-        name: input.name,
-        modelProvider: input.modelProvider,
-        modelId: input.modelId,
-        systemPrompt: input.systemPrompt,
-        createdAt,
-        updatedAt,
-        ...(stella ? { stella: true } : {}),
-        ...(input.agentId !== undefined ? { agentId: input.agentId } : {}),
-      };
+      // Read the row back instead of assembling the record here: a stella
+      // conversation's name comes from its agent (see toSession), and a
+      // second hand-written mapping would be a second answer to "what is
+      // this session" that can drift from the one every other read gives.
+      const row = getStmt.get(id) as unknown as SessionRow;
+      return toSession(row);
     },
 
     getByAgent(agentId: string): SessionRecord | undefined {

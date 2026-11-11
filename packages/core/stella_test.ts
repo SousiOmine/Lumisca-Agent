@@ -259,6 +259,27 @@ Deno.test("stella conversation: each agent has its own", async () => {
   }
 });
 
+Deno.test("stella conversation: its name is the agent's, after a rename too", async () => {
+  const core = await stellaCore(RUNNING);
+  try {
+    const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
+    const session = await core.getOrCreateStellaSession(agent.id);
+    assertEquals(session.name, "Aide");
+    // The conversation has no name of its own: the row holds no second copy
+    // that a rename would have to chase. A read after the rename answers with
+    // the new name, and so does opening it again (the pool may still hold the
+    // conversation from before).
+    await core.updateStellaAgent(agent.id, { name: "Aide 2" });
+    assertEquals(core.getSession(session.id)?.name, "Aide 2");
+    assertEquals(
+      (await core.getOrCreateStellaSession(agent.id)).name,
+      "Aide 2",
+    );
+  } finally {
+    await core.close();
+  }
+});
+
 Deno.test("stella onboarding: starts once and stays out of the conversation", async () => {
   const { faux, core, agent, session } = await stellaConversation("Aide");
   try {
