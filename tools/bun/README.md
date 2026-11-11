@@ -39,29 +39,22 @@ migration itself, not a spike; it is not merged yet.
 
 | package | pass | fail | skip |
 | --- | ---: | ---: | ---: |
-| core | 1701 | 12 | 15 |
-| web | 545 | 2 | 0 |
-| server | 341 | 18 | 0 |
-| **total** | **2587** | **32** | **15** |
+| core | 1714 | 0 | 15 |
+| web | 547 | 0 | 0 |
+| server | 366 | 0 | 0 |
+| **total** | **2627** | **0** | **15** |
 
-93.9 % → 98.2 % since the spike.
+93.9 % → 100 % of the tests that can run here.
 
-## What still fails
-
-- 20 of the 32 need podman, which this machine does not have (stella
-  conversation/API/websocket tests).
-- `eval` rejects re-declaring a const differently under Bun's VM.
-- `killProcessTree` and the "descendant holds the pipes" case: process-group
-  semantics of the `Command` adapter.
-- Window ids round-trip through FFI pointers (`Deno.dlopen` still throws).
-- One tar.gz mode assertion and one federation relay assertion.
-- Two web tests assume `location`/`localStorage` exist (Deno's test
-  environment provided them).
+18 stella tests need podman, which this machine does not have. They are the
+only failures without it; with a stand-in `podman` on `PATH` (`--version` and
+`run` exit 0, `image` exits 1) the whole suite is green.
 
 ## Not done yet
 
-- Those 12 failures: the branch cannot go to `master` with them.
 - Windows FFI (`computer/windows.ts`) needs `bun:ffi`; `Deno.dlopen` throws.
+  `Deno.UnsafePointer.create/value` is enough to parse and format window ids,
+  but nothing native can be called.
 - `Deno.*` naming (460 call sites) and the now-unused `deno.json` tasks.
 - Development commands still come from `deno task` (`dev`, `dev:server`,
   `probe:*`): they need `bun run` equivalents before Deno can be removed.
