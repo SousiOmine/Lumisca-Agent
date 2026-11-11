@@ -9,7 +9,7 @@
  * the token check ever runs.
  *
  * Run from the repository root:
- *   deno run --allow-read --allow-env --allow-sys scripts/token-probe.ts
+ *   bun run scripts/token-probe.ts
  */
 import { fauxProvider, LumiscaCore } from "../packages/core/mod.ts";
 import { createApp } from "../packages/server/app.ts";

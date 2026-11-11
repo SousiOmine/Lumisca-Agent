@@ -22,6 +22,8 @@ migration itself; it is not merged yet.
 - Formatting and lint are Biome (`biome.json`), the type check is `tsc`
   (`tsconfig.json`), and both are package.json scripts: `fmt`, `fmt:check`,
   `check`. The suite is `bun test --parallel --timeout 30000` (`test`).
+  Biome reads `.gitignore` (`vcs.useIgnoreFile`), so build output, scratch
+  folders and the agent's own tool output never reach the checks.
 - CI and release run on Bun (`oven-sh/setup-bun`): `bun install
   --frozen-lockfile` then the package.json scripts. No workflow calls `deno`
   any more.
@@ -31,42 +33,50 @@ migration itself; it is not merged yet.
 - The Windows computer host's FFI goes through `computer/windows-ffi.ts`, a
   Deno-shaped bridge over `bun:ffi` (`dlopen`, pointers as numbers,
   `JSCallback`, `toArrayBuffer`).
+- The database layer uses `bun:sqlite` rather than `node:sqlite`. Bun's
+  `node:sqlite` keeps the database file open until every prepared statement
+  is collected — there is no `finalize()` — and Windows refuses to rename or
+  delete an open file. That broke the startup vacuum (which renames the
+  database it just copied) and every test that deletes its temporary folder
+  after closing one. `bun:sqlite`'s `close(true)` finalizes the statements
+  first; `db/close.ts` is the single place that closes a database.
 - `bun.lock` is the dependency lock; `package.json` carries the versions the
-  root `deno.json` import map used to hold. `deno.json`/`deno.lock` remain
-  only as a local `deno check` cross-check and for the version entries.
+  root `deno.json` import map used to hold. `deno.json`/`deno.lock` are
+  gone, and nothing reads them.
 
 ## Verified
 
 - `bun run build:server --out <dir>`: assets.json + stella container + a
-  195 MB single binary, in about 2 seconds on this machine.
+  141 MB single binary, in under 2 seconds on this machine.
 - Running that binary from an unrelated cwd: `/api/health` 200, `/api/build`
   with a buildId, `/` with the embedded client, assets and the stella
   container directory found beside the binary, standalone auto-update
   active. `bun run smoke:server --bin <path>` checks all of it.
 - `bun run dev`: server on 8000, Vite on 5173, both 200, both stop together.
-- `bun test --parallel --timeout 30000`:
+- `bun run check` (tsc), `bun run fmt:check` (Biome) and
+  `bun run check:versions` are clean.
+- `bun test --parallel --timeout 30000` on Windows:
 
 | package | pass | fail | skip |
 | --- | ---: | ---: | ---: |
-| core | 1714 | 0 | 15 |
+| core | 1718 | 0 | 11 |
 | web | 547 | 0 | 0 |
 | server | 366 | 0 | 0 |
-| **total** | **2627** | **0** | **15** |
+| scripts | 9 | 0 | 0 |
+| **total** | **2640** | **0** | **11** |
 
+The skips are the tests that need a display, a browser backend or podman.
 18 stella tests need podman; with a stand-in `podman` on `PATH` (`--version`
 and `run` exit 0, `image` exits 1) the whole suite is green. CI runs on
 Ubuntu, macOS and Windows and is green on all three.
 
-## Not verified
+## Windows, on a real desktop
 
-- The Windows FFI bridge has not run on a real Windows desktop: the machine
-  this was written on is Linux, and the host's tests skip without a display.
-  The structures and sizes are unchanged; only the bridge is new. The first
-  thing to check on Windows is monitor enumeration and one screenshot,
-  before anything is clicked.
+- `bun run probe:computer`: the host reports itself, lists three displays
+  (one primary), and captures 2560×1440 in 75 ms through the `bun:ffi`
+  bridge. The live host tests in `computer/windows_test.ts` pass: monitor
+  enumeration, a 1:1 region capture, window enumeration and a double close.
 
 ## Left to do
 
-- Delete `deno.json` / `deno.lock` (and the version entries they carry), and
-  with them the local `deno check` cross-check. Nothing in CI or the release
-  flow reads them any more.
+- Merge the branch.

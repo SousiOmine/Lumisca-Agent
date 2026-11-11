@@ -1,4 +1,4 @@
-# Normalize line endings to LF: the repo is deno-formatted (LF) and deno fmt
-# must produce a clean diff on every platform (git autocrlf would otherwise
-# break fmt:check on Windows checkouts).
+# Normalize line endings to LF: the repo is formatted by Biome (LF) and
+# `bun run fmt:check` must produce a clean diff on every platform (git
+# autocrlf would otherwise break it on Windows checkouts).
 * text=auto eol=lf

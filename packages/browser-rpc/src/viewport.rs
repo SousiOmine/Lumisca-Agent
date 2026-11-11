@@ -23,7 +23,7 @@
 //! implementation work everywhere.
 
 /// Default viewport when `open` omits width/height. Mirrors
-/// packages/core/browser/tools.ts (the Deno side always sends explicit
+/// packages/core/browser/tools.ts (the Bun side always sends explicit
 /// values; this is the protocol-level default for other clients).
 pub const DEFAULT_VIEWPORT_WIDTH: u32 = 800;
 pub const DEFAULT_VIEWPORT_HEIGHT: u32 = 600;

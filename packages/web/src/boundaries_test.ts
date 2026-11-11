@@ -47,7 +47,7 @@ async function* sourceFiles(dir: URL, prefix = ""): AsyncGenerator<SourceFile> {
   }
 }
 
-/** Import/export statements of a module, as written (deno fmt starts each
+/** Import/export statements of a module, as written (Biome starts each
  * one on its own line and ends it with a semicolon). */
 function statements(source: string): string[] {
   return [...source.matchAll(/^(?:import|export)\b[\s\S]*?;/gm)].map(

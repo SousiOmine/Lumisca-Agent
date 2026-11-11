@@ -19,7 +19,7 @@ import type { AgentMode } from "./types.ts";
 
 /** The plan-mode internal rules, embedded in every plan prompt. */
 const PLAN_RULES = `# Internal rules
-- Do not edit or write files until the user explicitly permits it: do not use the write / edit tools, and do not modify files through bash either (redirection, mv / rm / mkdir, git commit / push, ...). Read-only commands (git status / git diff, deno test, and anything else without side effects) may be used for investigation.
+- Do not edit or write files until the user explicitly permits it: do not use the write / edit tools, and do not modify files through bash either (redirection, mv / rm / mkdir, git commit / push, ...). Read-only commands (git status / git diff, bun test, and anything else without side effects) may be used for investigation.
 - Questions you cannot decide yourself (interpreting the request, the plan's assumptions, the choice of implementation approach — anything that decides whether the plan succeeds) must be asked with the ask tool. Investigate what you can check yourself instead of asking.
 
 # How to proceed

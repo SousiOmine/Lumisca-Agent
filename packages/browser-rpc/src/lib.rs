@@ -1,11 +1,11 @@
 //! lumisca-browser-rpc: protocol pieces for the browser-lab host — the
 //! desktop shell's WebView window (packages/desktop/src-tauri).
 //!
-//! The host serves the RPC protocol to the Deno side (see
+//! The host serves the RPC protocol to the Bun side (see
 //! packages/core/browser/types.ts): POST /rpc with a random-token header,
 //! JSON bodies, strict size limits, explicit errors — no fallbacks. This
 //! crate provides the probe extraction, the URL policy (defense in depth —
-//! the Deno tools enforce it first), the viewport geometry, and a minimal
+//! the Bun tools enforce it first), the viewport geometry, and a minimal
 //! HTTP/1.1 server.
 //!
 //! Nothing here is platform-specific: the probe channel, the viewport and

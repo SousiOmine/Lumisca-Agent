@@ -7,7 +7,7 @@
  * it into the session's tool registry (discoverable via tool_search), the
  * same contract as MCP and browser-lab tools.
  *
- * Rendering is Deno-native: unpdf (PDF.js) rasterizes pages through
+ * Rendering is in-process: unpdf (PDF.js) rasterizes pages through
  * @napi-rs/canvas — no Python, no poppler/mupdf binaries, no external
  * process. The canvas library loads lazily at render time (FFI), so a host
  * without a matching native binding fails the tool call with a clear
@@ -72,7 +72,7 @@ export interface PdfRenderResult {
   pages: RenderedPdfPage[];
 }
 
-/** Renders PDF pages. The default implementation is Deno-native (see
+/** Renders PDF pages. The default implementation is in-process (see
  * `createUnpdfRenderer`); tests inject a fake.
  *
  * `readBytes` is the caller's file backend, so a PDF that lives in the

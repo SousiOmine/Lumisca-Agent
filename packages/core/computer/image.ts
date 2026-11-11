@@ -200,7 +200,7 @@ export function encodePng(
 }
 
 /** Deflate with the zlib wrapper (RFC 1950), which is what PNG's IDAT
- * requires. node:zlib is a Deno built-in and the same native zlib the rest
+ * requires. node:zlib comes with Bun's Node compatibility and is the same native zlib the rest
  * of the stack uses — no stream plumbing and no hand-rolled compressor. */
 function zlibDeflate(data: Uint8Array): Uint8Array {
   return deflateSync(data);

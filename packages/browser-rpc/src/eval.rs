@@ -70,7 +70,7 @@ pub fn probe_method_of(rpc_method: &str) -> &str {
 }
 
 /// The `timeoutMs` a wait request asks for, defaulting to 10s (the
-/// protocol default; the Deno tools always send an explicit value).
+/// protocol default; the Bun tools always send an explicit value).
 pub fn wait_timeout_ms(params: &Value) -> u64 {
     params
         .get("timeoutMs")

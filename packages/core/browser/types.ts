@@ -314,7 +314,7 @@ export const MAX_RPC_RESPONSE_BYTES = 1024 * 1024;
 export const MAX_SCREENSHOT_BYTES = 8 * 1024 * 1024;
 
 /** Header carrying the per-run random token, and the method/path of the
- * RPC endpoint. Shared by the Deno client and the Rust host. */
+ * RPC endpoint. Shared by the Bun client and the Rust host. */
 export const RPC_TOKEN_HEADER = "x-lumisca-browser-token";
 export const RPC_PATH = "/rpc";
 

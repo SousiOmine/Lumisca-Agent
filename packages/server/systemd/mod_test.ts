@@ -102,7 +102,7 @@ interface Harness {
    * of these tests are about — so a test that exercises those steps must ask
    * for a free port instead of inheriting the default one. The default
    * (8000) is commonly taken on a developer machine by a running server (the
-   * desktop app's own, or `deno task dev:server`), which used to fail those
+   * desktop app's own, or `bun run dev:server`), which used to fail those
    * tests for a reason that has nothing to do with what they cover. */
   port: number;
   cleanup: () => Promise<void>;

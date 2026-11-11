@@ -4,7 +4,7 @@
  * The lab debugs Web apps under development — by default that means a
  * local dev server only. Anything else (public sites, file://, data:,
  * credentials-in-URL) is refused with an explicit error, never silently
- * rewritten. The policy is enforced in two places: the Deno tool layer
+ * rewritten. The policy is enforced in two places: the Bun tool layer
  * (fast, user-friendly errors) and each host (defense in depth, in case a
  * future frontend calls the RPC directly).
  *

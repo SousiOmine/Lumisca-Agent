@@ -13,11 +13,10 @@
  *   3. whether the machine stops again.
  *
  * Run from the repository root:
- *   deno run --allow-net --allow-read --allow-write --allow-env --allow-run \
- *     --allow-sys --allow-ffi scripts/probe-stella.ts [--start] [--no-stop]
+ *   bun run scripts/probe-stella.ts [--start] [--no-stop]
  *
  * Without `--start` nothing is built or started: only the read-only questions
- * (1) are asked, which is what a normal `deno task dev` user wants.
+ * (1) are asked, which is what a normal `bun run dev` user wants.
  */
 
 import { LumiscaCore } from "../packages/core/mod.ts";

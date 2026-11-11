@@ -6,8 +6,7 @@
  *
  * Run from the repository root (the optional argument overrides the port,
  * so the demo can run alongside a real server on 8000):
- *   deno run --allow-net --allow-read --allow-write --allow-env \
- *     --allow-run --allow-sys --allow-ffi scripts/demo-server.ts [port]
+ *   bun run scripts/demo-server.ts [port]
  *
  * Then open the printed URL, pick the "E2E Demo" workspace, and open the
  * "e2e-session" session. Prompts mentioning "bash", "read" or "send_chat"

@@ -47,7 +47,7 @@ const CANVAS_PLATFORM_SUFFIXES: readonly string[] = [
  *
  * Order: (1) explicit `LUMISCA_ICU_DATA` override, (2) the `server/`
  * resource directory shipped by the desktop installer (next to the
- * deno-compiled binary), (3) next to an already-loaded canvas native
+ * bun-compiled binary), (3) next to an already-loaded canvas native
  * binding, (4) next to any installed `@napi-rs/canvas-<platform>`
  * package, resolved without loading it.
  *

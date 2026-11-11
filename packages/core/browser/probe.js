@@ -1,8 +1,8 @@
 // Lumisca browser probe - SINGLE SOURCE OF TRUTH.
 //
 // Consumed two ways:
-//  - Deno/TypeScript: `import { PROBE_SOURCE } from "./probe.js"` - the
-//    module export below. `deno compile` bundles it statically, so the
+//  - Bun/TypeScript: `import { PROBE_SOURCE } from "./probe.js"` - the
+//    module export below. `bun build --compile` bundles it statically, so the
 //    compiled server binary carries the probe with no disk dependency.
 //  - Rust host (desktop): `include_str!` on this file, then
 //    extract the text between the opening "String.raw" + back-tick and the

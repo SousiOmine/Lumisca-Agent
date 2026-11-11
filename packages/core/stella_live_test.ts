@@ -16,14 +16,14 @@ import { VM_WORKDIR, vmAgentDir } from "./vm/contract.ts";
  * the machine, and the file it writes is really there afterwards.
  *
  * It drives the SAME container the application uses (`lumisca-stella`), so it
- * runs only when asked for by name: an ordinary `deno task test` used to find
+ * runs only when asked for by name: an ordinary `bun run test` used to find
  * the container running whenever the user had stella open — which is exactly
  * when it ran, and then stopped the user's machine when it finished. The
  * environment variable is the consent; without it not even a status query
  * touches podman.
  *
  * Run explicitly:
- *   LUMISCA_STELLA_LIVE=1 deno test packages/core/stella_live_test.ts --allow-all
+ *   LUMISCA_STELLA_LIVE=1 bun test packages/core/stella_live_test.ts
  */
 
 const containerDir = new URL("./vm/container/", import.meta.url).pathname;

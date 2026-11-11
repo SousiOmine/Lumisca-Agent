@@ -7,8 +7,7 @@
  * once. It is skipped unless an API key is provided, because a cache read
  * can only be observed against a real endpoint:
  *
- *   LUMISCA_E2E_API_KEY=... deno test --allow-read --allow-write \
- *     --allow-run --allow-env --allow-net --allow-ffi --allow-sys \
+ *   LUMISCA_E2E_API_KEY=... bun test \
  *     packages/core/ai/prefix-cache.e2e_test.ts
  *
  * `LUMISCA_E2E_MODEL` (default `deepseek-chat`) and `LUMISCA_E2E_BASE_URL`

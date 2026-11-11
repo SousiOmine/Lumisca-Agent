@@ -219,7 +219,7 @@ Deno.test("history_search: tool calls and their output are not history", async (
           type: "toolCall",
           id: "call-1",
           name: "bash",
-          arguments: { command: "deno test --filter secret-token" },
+          arguments: { command: "bun test --filter secret-token" },
         },
       ],
       api: "openai-completions",

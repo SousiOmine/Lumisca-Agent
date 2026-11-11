@@ -1,8 +1,8 @@
 /**
  * The Windows computer host: screen capture over GDI, input injection over
  * SendInput, window enumeration over the Win32 window list — all reached
- * through Deno's FFI, so the server needs no native module of its own (the
- * packaged server already ships `--allow-ffi` for Skia).
+ * through `bun:ffi` (see windows-ffi.ts), so the server needs no native
+ * module of its own.
  *
  * Decisions worth knowing before changing anything here:
  *
@@ -215,7 +215,7 @@ type User32 = DynamicLibrary<typeof USER32_SYMBOLS>;
 type Gdi32 = DynamicLibrary<typeof GDI32_SYMBOLS>;
 type Imm32 = DynamicLibrary<typeof IMM32_SYMBOLS>;
 
-/** Pointer width of this process (both Windows targets Deno builds for are
+/** Pointer width of this process (both Windows targets Bun builds for are
  * 64-bit, but the input structs are built from the width rather than
  * assumed). */
 export function pointerSizeFor(arch: string): number {
@@ -922,7 +922,7 @@ class WindowsComputerHost implements ComputerHost {
     value: number,
   ): bigint {
     // The buffer is spelled out so its type is ArrayBuffer (a plain
-    // `new BigUint64Array(1)` widens to ArrayBufferLike, which Deno's FFI
+    // `new BigUint64Array(1)` widens to ArrayBufferLike, which Bun's FFI
     // signature does not accept).
     const result: BigUint64Array<ArrayBuffer> = new BigUint64Array(
       new ArrayBuffer(8),

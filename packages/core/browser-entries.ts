@@ -9,8 +9,8 @@
  * esbuild aliases. `path` is relative to the
  * repository root; each consumer resolves it against its own root.
  *
- * Adding an entry means the module is browser-safe (no `node:` imports, no
- * Deno APIs beyond what the browser has): the boundary test, the dev server
+ * Adding an entry means the module is browser-safe (no `node:` or `bun:`
+ * imports, no runtime APIs beyond what the browser has): the boundary test, the dev server
  * and the production bundle all read this one list, so a wrong entry breaks
  * all three rather than drifting apart.
  */

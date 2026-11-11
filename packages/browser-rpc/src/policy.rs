@@ -1,10 +1,10 @@
 //! URL policy for the browser lab — the HOST-side enforcement of
-//! packages/core/browser/policy.ts (the Deno tools validate first; a host
+//! packages/core/browser/policy.ts (the Bun tools validate first; a host
 //! must never open a URL the client was not allowed to pass. Defense in
 //! depth, exact same rules).
 
 /// Check the URL against the lab policy. Returns Ok when the URL may be
-/// opened, Err(reason) otherwise. Same rules as the Deno side:
+/// opened, Err(reason) otherwise. Same rules as the Bun side:
 /// http/https on localhost / 127.0.0.1 / ::1 only; no credentials in the
 /// URL; no other hosts, schemes or forms.
 pub fn check(url: &str) -> Result<(), String> {

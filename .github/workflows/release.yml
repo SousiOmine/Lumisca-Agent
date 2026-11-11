@@ -211,7 +211,7 @@ jobs:
           - os: ubuntu-22.04
             platform: linux-x64
             # `bun build --compile` output directory for this runner
-            # (the shim's Deno.build.target); also the archive's payload.
+            # (the shim's runtime.build.target); also the archive's payload.
             stage: x86_64-unknown-linux-gnu
           - os: windows-latest
             platform: windows-x64

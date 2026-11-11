@@ -188,13 +188,13 @@ Deno.test("defaultAssetsFile picks up the manifest staged next to the binary", (
 });
 
 Deno.test("defaultAssetsFile leaves development servers on the repository sources", () => {
-  // `deno run` has no assets.json beside the runtime binary.
+  // `bun run` has no assets.json beside the runtime binary.
   assertEquals(
-    defaultAssetsFile("/usr/local/bin/deno", () => false),
+    defaultAssetsFile("/usr/local/bin/bun", () => false),
     undefined,
   );
   // An unreadable path is "not there", not a crash.
-  assertEquals(defaultAssetsFile("/usr/local/bin/deno"), undefined);
+  assertEquals(defaultAssetsFile("/usr/local/bin/bun"), undefined);
 });
 
 Deno.test("describeListenError guides away from an occupied port", () => {

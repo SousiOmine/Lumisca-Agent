@@ -302,7 +302,7 @@ Deno.test("pdf tool renders a real PDF with the bundled renderer", async () => {
       join(import.meta.dirname!, "testdata", "two-pages.pdf"),
       join(root, "doc.pdf"),
     );
-    // The default renderer is Deno-native (no external process), so this
+    // The default renderer is in-process (no external process), so this
     // runs on every host.
     const tools = createPdfTools({
       files: new HostFileBackend(new Sandbox([root])),

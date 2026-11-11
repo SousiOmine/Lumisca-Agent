@@ -3,7 +3,7 @@
  *
  * @jellybrick/dbus-next is a maintained fork of dbus-next whose transport is
  * plain `node:net` unix sockets — no native addon — which is what lets the
- * packaged Deno server speak D-Bus without shipping a C library. Nothing
+ * packaged Bun server speak D-Bus without shipping a C library. Nothing
  * else in the computer-use code imports it: replacing the transport means
  * rewriting this file alone.
  *

@@ -117,7 +117,7 @@ export function isDesktopManaged(raw: string | undefined): boolean {
 
 /** Whether this process may replace its own files (the server updater).
  *
- * Only a packaged server (`deno compile`, i.e. runtime.build.standalone) owns
+ * Only a packaged server (`bun build --compile`, i.e. runtime.build.standalone) owns
  * its installation: a `bun run server` server is the repository, and the desktop
  * shell's copy lives inside the app bundle, which the shell's own updater
  * replaces (it marks the child with {@link DESKTOP_ENV_KEY}).

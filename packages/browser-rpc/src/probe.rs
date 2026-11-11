@@ -11,7 +11,7 @@ pub const PROBE_FILE: &str = include_str!("../../core/browser/probe.js");
 const OPEN_MARKER: &str = "String.raw`";
 
 /// Extract the probe script from [`PROBE_FILE`]. The result is exactly
-/// what the Deno side exports as PROBE_SOURCE (verified by the Deno test
+/// what the Bun side exports as PROBE_SOURCE (verified by the Bun test
 /// suite in packages/core/browser/probe_test.ts and by the unit tests
 /// here).
 pub fn extract() -> Result<&'static str, String> {
@@ -54,7 +54,7 @@ mod tests {
     fn probe_is_a_single_install_script() {
         // The injected script must never contain backticks (the template
         // literal would have ended) and never evaluate `${` (interpolation
-        // would have silently corrupted it). The Deno test enforces the
+        // would have silently corrupted it). The Bun test enforces the
         // same invariants on the exported string.
         let probe = extract().expect("extraction must succeed");
         assert!(!probe.contains('`'), "probe must not contain backticks");

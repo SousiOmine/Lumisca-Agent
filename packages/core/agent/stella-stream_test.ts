@@ -89,7 +89,7 @@ Deno.test("stellaEntryOf: narration before a tool is not a message", () => {
   const withCall = fauxAssistantMessage(
     [
       { type: "text", text: "テストを実行します。" },
-      fauxToolCall("bash", { command: "deno task test" }),
+      fauxToolCall("bash", { command: "bun run test" }),
     ],
     { stopReason: "toolUse", timestamp: 8 },
   ) as AgentMessage;

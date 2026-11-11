@@ -14,10 +14,10 @@
  * a point read off the PNG can be clicked directly.
  *
  * Run from the repository root:
- *   deno task probe:computer
- *   deno task probe:computer --click 640,360
- *   deno task probe:computer --move 100,100 --type "hello"
- *   deno task probe:computer --key "ctrl+shift+s"
+ *   bun run probe:computer
+ *   bun run probe:computer --click 640,360
+ *   bun run probe:computer --move 100,100 --type "hello"
+ *   bun run probe:computer --key "ctrl+shift+s"
  */
 
 import { createComputerHost } from "../packages/core/computer/host.ts";
@@ -59,7 +59,7 @@ const tokenStore: RestoreTokenStore = {
 function usage(): never {
   console.log(
     [
-      "usage: deno task probe:computer [options]",
+      "usage: bun run probe:computer [options]",
       "",
       "  --move x,y     move the pointer to an image pixel of the capture",
       "  --click x,y    click (left) at an image pixel of the capture",
