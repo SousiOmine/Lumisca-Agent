@@ -201,7 +201,10 @@ function openFile(
 type CommandOptions = {
   args?: string[];
   cwd?: string;
+  /** Extra variables, merged over this process's environment — Deno's
+   * default. `clearEnv: true` starts from nothing instead. */
   env?: Record<string, string>;
+  clearEnv?: boolean;
   stdin?: "null" | "inherit" | "piped";
   stdout?: "null" | "inherit" | "piped";
   stderr?: "null" | "inherit" | "piped";
@@ -366,6 +369,22 @@ class ChildProcess {
   unref(): void {}
 }
 
+/** Deno merges `env` over the parent environment unless `clearEnv` is set;
+ * Node's spawn replaces it. The difference is invisible with a full map and
+ * fatal with a partial one: on Windows a child without SystemRoot cannot run
+ * at all. */
+function commandEnv(options: CommandOptions): Record<string, string> {
+  const inherited =
+    options.clearEnv === true
+      ? {}
+      : (process.env as Record<string, string | undefined>);
+  const merged: Record<string, string> = {};
+  for (const [key, value] of Object.entries(inherited)) {
+    if (value !== undefined) merged[key] = value;
+  }
+  return { ...merged, ...options.env };
+}
+
 class Command {
   #cmd: string;
   #options: CommandOptions;
@@ -390,7 +409,7 @@ class Command {
   spawn(): ChildProcess {
     const child = spawn(findExecutable(this.#cmd), this.#args(), {
       cwd: this.#options.cwd,
-      env: this.#options.env ?? process.env,
+      env: commandEnv(this.#options),
       stdio: [
         this.#options.stdin === "piped"
           ? "pipe"
@@ -420,9 +439,9 @@ class Command {
     return new ChildProcess(child);
   }
   outputSync() {
-    const result = spawnSync(this.#cmd, this.#args(), {
+    const result = spawnSync(findExecutable(this.#cmd), this.#args(), {
       cwd: this.#options.cwd,
-      env: this.#options.env ?? process.env,
+      env: commandEnv(this.#options),
       stdio: "pipe",
     });
     return {
