@@ -40,7 +40,9 @@ Object.assign(denoTest, {
   beforeAll,
   beforeEach,
   ignore: (name: string, body: () => unknown) => test.skip(name, body),
-  only: test.only,
+  // Referencing `test.only` is enough to throw under CI (Bun guards the
+  // property itself), so it is wrapped: a real `only` still fails there.
+  only: (name: string, body: () => unknown) => test.only(name, body),
 });
 
 // deno-lint-ignore no-explicit-any
