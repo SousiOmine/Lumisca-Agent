@@ -36,6 +36,7 @@
 
 import { concatBytes } from "../bytes.ts";
 import { CoreError, errorMessage } from "../errors.ts";
+import { runtime } from "../runtime/runtime.ts";
 import { sleep } from "../shared/misc.ts";
 import { MAX_CAPTURE_DIMENSION } from "./image.ts";
 import {
@@ -64,6 +65,15 @@ import type {
   Rect,
   WindowInfo,
 } from "./types.ts";
+import {
+  type DynamicLibrary,
+  dlopen,
+  type ForeignLibraryInterface,
+  type PointerValue,
+  UnsafeCallback,
+  UnsafePointer,
+  UnsafePointerView,
+} from "./windows-ffi.ts";
 
 // The timings, the interpolation, the key chord syntax and the typing split
 // live in motion.ts: they are the same for every platform, and the tool
@@ -164,13 +174,13 @@ const USER32_SYMBOLS = {
     ],
     result: "pointer",
   },
-} satisfies Deno.ForeignLibraryInterface;
+} as const satisfies ForeignLibraryInterface;
 
 /** imm32: the IME of a window, needed to keep an open IME from intercepting
  * injected characters (see WindowsComputerHost.withImeOff). */
 const IMM32_SYMBOLS = {
   ImmGetDefaultIMEWnd: { parameters: ["pointer"], result: "pointer" },
-} satisfies Deno.ForeignLibraryInterface;
+} as const satisfies ForeignLibraryInterface;
 
 const GDI32_SYMBOLS = {
   CreateCompatibleDC: { parameters: ["pointer"], result: "pointer" },
@@ -199,11 +209,11 @@ const GDI32_SYMBOLS = {
   },
   DeleteObject: { parameters: ["pointer"], result: "i32" },
   DeleteDC: { parameters: ["pointer"], result: "i32" },
-} satisfies Deno.ForeignLibraryInterface;
+} as const satisfies ForeignLibraryInterface;
 
-type User32 = Deno.DynamicLibrary<typeof USER32_SYMBOLS>;
-type Gdi32 = Deno.DynamicLibrary<typeof GDI32_SYMBOLS>;
-type Imm32 = Deno.DynamicLibrary<typeof IMM32_SYMBOLS>;
+type User32 = DynamicLibrary<typeof USER32_SYMBOLS>;
+type Gdi32 = DynamicLibrary<typeof GDI32_SYMBOLS>;
+type Imm32 = DynamicLibrary<typeof IMM32_SYMBOLS>;
 
 /** Pointer width of this process (both Windows targets Deno builds for are
  * 64-bit, but the input structs are built from the width rather than
@@ -408,7 +418,7 @@ export function resolveKeyChord(
 }
 
 /** Window handle of a `WindowInfo.id` ("0x000A0B2C"). */
-export function parseWindowId(id: string): Deno.PointerValue {
+export function parseWindowId(id: string): PointerValue {
   const hex = id.trim();
   if (!/^0x[0-9a-f]+$/i.test(hex)) {
     throw new CoreError(
@@ -416,12 +426,12 @@ export function parseWindowId(id: string): Deno.PointerValue {
       "invalid",
     );
   }
-  return Deno.UnsafePointer.create(BigInt(hex));
+  return UnsafePointer.create(BigInt(hex));
 }
 
 /** Render a window handle the way `WindowInfo.id` carries it. */
-export function formatWindowId(handle: Deno.PointerValue): string {
-  const value = handle === null ? 0n : Deno.UnsafePointer.value(handle);
+export function formatWindowId(handle: PointerValue): string {
+  const value = handle === null ? 0n : UnsafePointer.value(handle);
   return `0x${value.toString(16).toUpperCase().padStart(8, "0")}`;
 }
 
@@ -432,19 +442,19 @@ export function formatWindowId(handle: Deno.PointerValue): string {
  * reason (the settings toggle shows it verbatim), never as a half-working
  * host. */
 export function createWindowsComputerHost(): ComputerHostResult {
-  if (Deno.build.arch !== "x86_64" && Deno.build.arch !== "aarch64") {
+  if (runtime.build.arch !== "x86_64" && runtime.build.arch !== "aarch64") {
     return {
       available: false,
-      reason: `computer use is not supported on this CPU architecture (${Deno.build.arch})`,
+      reason: `computer use is not supported on this CPU architecture (${runtime.build.arch})`,
     };
   }
   let user32: User32;
   let gdi32: Gdi32;
   let imm32: Imm32;
   try {
-    user32 = Deno.dlopen("user32.dll", USER32_SYMBOLS);
-    gdi32 = Deno.dlopen("gdi32.dll", GDI32_SYMBOLS);
-    imm32 = Deno.dlopen("imm32.dll", IMM32_SYMBOLS);
+    user32 = dlopen("user32.dll", USER32_SYMBOLS);
+    gdi32 = dlopen("gdi32.dll", GDI32_SYMBOLS);
+    imm32 = dlopen("imm32.dll", IMM32_SYMBOLS);
   } catch (error) {
     return {
       available: false,
@@ -493,7 +503,7 @@ export function createWindowsComputerHost(): ComputerHostResult {
  * library), so the check — not the return value — is what decides. */
 function ensurePerMonitorAware(user32: User32): string | undefined {
   user32.symbols.SetProcessDpiAwarenessContext(
-    Deno.UnsafePointer.create(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2),
+    UnsafePointer.create(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2),
   );
   const context = user32.symbols.GetThreadDpiAwarenessContext();
   const awareness = user32.symbols.GetAwarenessFromDpiAwarenessContext(context);
@@ -510,17 +520,13 @@ function ensurePerMonitorAware(user32: User32): string | undefined {
 /** The machine's displays, ordered left to right (then top to bottom) so
  * the indices are stable and follow the physical arrangement. */
 function enumerateDisplays(user32: User32): DisplayInfo[] {
-  const monitors: Array<{ handle: Deno.PointerValue; bounds: Rect }> = [];
-  const callback = new Deno.UnsafeCallback(
+  const monitors: Array<{ handle: PointerValue; bounds: Rect }> = [];
+  const callback = new UnsafeCallback(
     { parameters: ["pointer", "pointer", "pointer", "pointer"], result: "i32" },
-    (
-      monitor: Deno.PointerValue,
-      _hdc: Deno.PointerValue,
-      rect: Deno.PointerValue,
-    ) => {
+    (monitor: PointerValue, _hdc: PointerValue, rect: PointerValue) => {
       try {
         if (rect !== null) {
-          const view = new Deno.UnsafePointerView(rect);
+          const view = new UnsafePointerView(rect);
           const left = view.getInt32(0);
           const top = view.getInt32(4);
           const right = view.getInt32(8);
@@ -579,7 +585,7 @@ class WindowsComputerHost implements ComputerHost {
     private readonly gdi32: Gdi32,
     private readonly imm32: Imm32,
   ) {
-    this.pointerSize = pointerSizeFor(Deno.build.arch);
+    this.pointerSize = pointerSizeFor(runtime.build.arch);
   }
 
   describe(): string {
@@ -718,10 +724,10 @@ class WindowsComputerHost implements ComputerHost {
   }
 
   windows(): WindowInfo[] {
-    const handles: Deno.PointerValue[] = [];
-    const callback = new Deno.UnsafeCallback(
+    const handles: PointerValue[] = [];
+    const callback = new UnsafeCallback(
       { parameters: ["pointer", "pointer"], result: "i32" },
-      (handle: Deno.PointerValue) => {
+      (handle: PointerValue) => {
         try {
           if (handle !== null) handles.push(handle);
         } catch {
@@ -900,18 +906,18 @@ class WindowsComputerHost implements ComputerHost {
   }
 
   /** Whether the IME of `imeWnd` is open (its "on" state). */
-  private imeOpen(imeWnd: Deno.PointerValue): boolean {
+  private imeOpen(imeWnd: PointerValue): boolean {
     return this.imeMessage(imeWnd, IMC_GETOPENSTATUS, 0) !== 0n;
   }
 
-  private setImeOpen(imeWnd: Deno.PointerValue, open: boolean): void {
+  private setImeOpen(imeWnd: PointerValue, open: boolean): void {
     this.imeMessage(imeWnd, IMC_SETOPENSTATUS, open ? 1 : 0);
   }
 
   /** One WM_IME_CONTROL message. Returns 0 when the window did not answer
    * within the timeout: a hung window must not hang the tool. */
   private imeMessage(
-    imeWnd: Deno.PointerValue,
+    imeWnd: PointerValue,
     command: number,
     value: number,
   ): bigint {
@@ -924,8 +930,8 @@ class WindowsComputerHost implements ComputerHost {
     const answered = this.user32.symbols.SendMessageTimeoutW(
       imeWnd,
       WM_IME_CONTROL,
-      Deno.UnsafePointer.create(BigInt(command)),
-      Deno.UnsafePointer.create(BigInt(value)),
+      UnsafePointer.create(BigInt(command)),
+      UnsafePointer.create(BigInt(value)),
       SMTO_ABORTIFHUNG,
       IME_MESSAGE_TIMEOUT_MS,
       result,
@@ -964,7 +970,7 @@ class WindowsComputerHost implements ComputerHost {
     this.user32.symbols.SetForegroundWindow(handle);
     await sleep(FOCUS_SETTLE_MS);
     const foreground = this.user32.symbols.GetForegroundWindow();
-    if (!Deno.UnsafePointer.equals(foreground, handle)) {
+    if (!UnsafePointer.equals(foreground, handle)) {
       throw new CoreError(
         `could not bring window ${id} to the foreground (Windows kept ` +
           `${formatWindowId(foreground)} focused)`,
@@ -981,8 +987,8 @@ class WindowsComputerHost implements ComputerHost {
   }
 
   private describeWindow(
-    handle: Deno.PointerValue,
-    foreground: Deno.PointerValue,
+    handle: PointerValue,
+    foreground: PointerValue,
   ): WindowInfo {
     const title = this.windowTitle(handle);
     const rect = new Uint8Array(16);
@@ -1001,13 +1007,13 @@ class WindowsComputerHost implements ComputerHost {
         width: right - left,
         height: bottom - top,
       },
-      focused: Deno.UnsafePointer.equals(handle, foreground),
+      focused: UnsafePointer.equals(handle, foreground),
       visible: this.user32.symbols.IsWindowVisible(handle) !== 0,
       minimized: this.user32.symbols.IsIconic(handle) !== 0,
     };
   }
 
-  private windowTitle(handle: Deno.PointerValue): string {
+  private windowTitle(handle: PointerValue): string {
     const buffer = new Uint8Array(MAX_WINDOW_TITLE_CHARS * 2);
     const length = this.user32.symbols.GetWindowTextW(
       handle,
@@ -1052,9 +1058,9 @@ class WindowsComputerHost implements ComputerHost {
         "unavailable",
       );
     }
-    let memDC: Deno.PointerValue = null;
-    let bitmap: Deno.PointerValue = null;
-    let previous: Deno.PointerValue = null;
+    let memDC: PointerValue = null;
+    let bitmap: PointerValue = null;
+    let previous: PointerValue = null;
     try {
       memDC = this.gdi32.symbols.CreateCompatibleDC(screenDC);
       if (memDC === null) {

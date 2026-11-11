@@ -51,3 +51,53 @@ declare const Bun: {
   }): BunListenServer;
   stdin: { stream(): ReadableStream<Uint8Array> };
 };
+
+/** The pieces of `bun:ffi` the Windows computer host uses. Bun ships its own
+ * types in `bun-types`, which this project does not install (see the top of
+ * this file), so only the calls that are made are declared. */
+declare module "bun:ffi" {
+  export const FFIType: {
+    void: number;
+    bool: number;
+    u8: number;
+    i8: number;
+    u16: number;
+    i16: number;
+    u32: number;
+    i32: number;
+    u64: number;
+    i64: number;
+    usize: number;
+    isize: number;
+    f32: number;
+    f64: number;
+    ptr: number;
+    buffer: number;
+    cstring: number;
+  };
+  export interface ForeignSymbol {
+    args: number[];
+    returns: number;
+  }
+  export interface Library {
+    symbols: Record<string, (...args: never[]) => unknown>;
+    close(): void;
+  }
+  export function dlopen(
+    path: string,
+    symbols: Record<string, ForeignSymbol>,
+  ): Library;
+  export function toArrayBuffer(
+    pointer: number,
+    byteOffset?: number,
+    byteLength?: number,
+  ): ArrayBuffer;
+  export class JSCallback {
+    constructor(
+      fn: (...args: never[]) => unknown,
+      options?: { args?: number[]; returns?: number },
+    );
+    readonly ptr: number;
+    close(): void;
+  }
+}
