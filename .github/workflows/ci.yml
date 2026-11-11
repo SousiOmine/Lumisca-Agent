@@ -29,47 +29,32 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: denoland/setup-deno@v2
+      - uses: oven-sh/setup-bun@v2
         with:
-          deno-version: v2.x
-          # Cache Deno's remote module + npm dependency downloads
-          # (nodeModulesDir: "auto" reinstalls npm deps into node_modules
-          # from the cache instead of re-downloading them).
-          cache: true
+          bun-version: 1.4.x
 
-      # node_modules cache: deno.json's imports drive the install, so the
-      # lockfile-free install is keyed on deno.json + deno.lock.
-      #
-      # Windows is excluded on purpose. Deno's nodeModulesDir layout links
-      # every package through a *junction*
-      # (node_modules/sucrase -> node_modules/.deno/sucrase@x/node_modules/
-      # sucrase), and Node resolves through it to the real path, which is
-      # how a package finds its own dependencies in .deno/. actions/cache's
-      # tar round-trip does not preserve junctions: the restored tree has
-      # plain directory copies, so the real path is no longer inside .deno/
-      # and resolution fails ("Cannot find module 'ts-interface-checker'" —
-      # the eval tool's TypeScript stripping). macOS/Linux use symlinks,
-      # which tar does preserve, so they keep the cache. The Deno
-      # dependency cache above still spares Windows the re-download; only
-      # the linking reruns (measured: ~1.5 min).
-      - name: Cache node_modules
-        if: runner.os != 'Windows'
+      # Bun's download cache only: `bun install` links node_modules in a few
+      # seconds, so caching the tree itself buys little and risks the same
+      # junction problems Deno's nodeModulesDir had on Windows.
+      - name: Cache Bun's package cache
         uses: actions/cache@v6
         with:
-          path: node_modules
-          key: node-modules-${{ runner.os }}-${{ hashFiles('deno.json', 'deno.lock') }}
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
 
-      # deno task check/lint/fmt:check/test live in the root deno.json —
-      # running them via tasks keeps the permission flags (notably
-      # --allow-ffi) defined in exactly one place.
-      - name: Format check
-        run: deno task fmt:check
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
 
-      - name: Lint
-        run: deno task lint
+      # Formatting and lint are one command (`biome check`), the type check
+      # is tsc. Both are package.json scripts, so this file does not repeat
+      # their arguments. The suite needs no runtime permission flags any
+      # more — Bun has no equivalent of Deno's --allow-*.
+      - name: Format and lint
+        run: bun run fmt:check
 
       - name: Type check
-        run: deno task check
+        run: bun run check
 
       # The version lives in nine manifests (four deno.json, package.json,
       # package-lock.json, tauri.conf.json, Cargo.toml, and
@@ -78,10 +63,10 @@ jobs:
       # workflow pins them to the tag; checking them on every change catches
       # a half-done bump at the PR instead of at the tag.
       - name: Version consistency
-        run: deno task check:versions
+        run: bun run check:versions
 
       - name: Test
-        run: deno task test
+        run: bun run test
 
   browser-rust:
     # The browser-rpc crate carries a real test suite (auth, 413, error
@@ -137,10 +122,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: denoland/setup-deno@v2
+      - uses: oven-sh/setup-bun@v2
         with:
-          deno-version: v2.x
-          cache: true
+          bun-version: 1.4.x
+
+      # The desktop's dev build runs the root build script, which needs the
+      # root node_modules (esbuild, sucrase, …) — install them from the
+      # repository root, not from packages/desktop.
+      - name: Install root dependencies
+        run: bun install --frozen-lockfile
+        working-directory: ${{ github.workspace }}
 
       - uses: actions/setup-node@v7
         with:
@@ -185,15 +176,12 @@ jobs:
       - name: Test
         run: cargo test --manifest-path src-tauri/Cargo.toml
 
-      - name: Compile server binary
-        # The full `deno compile` (with its denort download) runs in the
-        # server-package job below; here the entry must still type-check on
-        # its own. Run from the repository root: packages/desktop is
-        # deliberately NOT a workspace member (AGENTS.md — a member would
-        # make `deno compile` embed src-tauri/target), so its own directory
-        # lacks the root's nodeModulesDir: auto resolution for npm deps like
-        # @types/node.
-        run: deno check packages/server/mod.ts
+      - name: Type check the server entry
+        # The full `bun build --compile` runs in the server-package job
+        # below; here the entry must still type-check on its own, from the
+        # repository root (packages/desktop is deliberately not a workspace
+        # member, so its own directory lacks the root's dependencies).
+        run: bun run check
         working-directory: ${{ github.workspace }}
 
   server-package:
@@ -210,24 +198,24 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: denoland/setup-deno@v2
+      - uses: oven-sh/setup-bun@v2
         with:
-          deno-version: v2.x
-          cache: true
+          bun-version: 1.4.x
 
-      # `deno compile` embeds node_modules, so the same cache the `check`
-      # job uses applies here. Windows is excluded for the same reason: the
-      # tar round-trip turns Deno's junctions into plain directories and
-      # breaks module resolution.
-      - name: Cache node_modules
-        if: runner.os != 'Windows'
+      # `bun build --compile` embeds node_modules, so the install happens
+      # here too; the download cache keeps it to a few seconds.
+      - name: Cache Bun's package cache
         uses: actions/cache@v6
         with:
-          path: node_modules
-          key: node-modules-${{ runner.os }}-${{ hashFiles('deno.json', 'deno.lock') }}
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
 
       - name: Build packaged server
-        run: deno task build:server
+        run: bun run build:server
 
       - name: Smoke test packaged server
-        run: deno task smoke:server
+        run: bun run smoke:server

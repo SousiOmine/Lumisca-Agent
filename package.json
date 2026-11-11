@@ -38,7 +38,10 @@
     "test:web": "bun test --parallel packages/web",
     "fmt": "biome check --write .",
     "fmt:check": "biome check .",
-    "check": "tsc --noEmit -p tsconfig.json"
+    "check": "tsc --noEmit -p tsconfig.json",
+    "build:server": "bun run scripts/build-server.ts",
+    "smoke:server": "bun run scripts/smoke-server.ts",
+    "check:versions": "bun run scripts/check-versions.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.6",

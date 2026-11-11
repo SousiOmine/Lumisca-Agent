@@ -55,9 +55,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: denoland/setup-deno@v2
+      - uses: oven-sh/setup-bun@v2
         with:
-          deno-version: v2.x
+          bun-version: 1.4.x
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
 
       # The release's own asset list is the authority for both URLs: a
       # manifest URL is rewritten only when it is an asset's API URL, and
@@ -72,7 +75,7 @@ jobs:
           mkdir -p dist/updater
           gh release view "$TAG" --json assets --jq .assets > dist/updater/assets.json
           gh release download "$TAG" -p latest.json -D dist/updater --clobber
-          deno run --allow-read --allow-write scripts/rewrite-updater-json.ts \
+          bun run scripts/rewrite-updater-json.ts \
             --manifest dist/updater/latest.json \
             --assets dist/updater/assets.json \
             --tag "$TAG" \
