@@ -288,6 +288,11 @@ Deno.test("migrate rebuilds sessions: one column per fact, children kept", () =>
     for (const id of ["plain", "conv", "legacy", "ghost"]) {
       insertMessages(db, id, [`m-${id}-1`, `m-${id}-2`]);
     }
+    db.exec(`
+      INSERT INTO request_shapes
+        (session_id, created_at, change, head_hash, messages_hash, message_count)
+        VALUES ('conv', 0, 'first', 'h', 'm', 0), ('legacy', 0, 'first', 'h', 'm', 0);
+    `);
 
     applyMigrations(db, MIGRATIONS);
 
@@ -332,6 +337,11 @@ Deno.test("migrate rebuilds sessions: one column per fact, children kept", () =>
       n: number;
     };
     assertEquals(Number(messages.n), 8);
+    // The debug table references sessions too, and keeps its rows.
+    const shapes = db
+      .prepare("SELECT COUNT(*) AS n FROM request_shapes")
+      .get() as { n: number };
+    assertEquals(Number(shapes.n), 2);
 
     // The reference is now the database's business: a row cannot name an
     // agent that does not exist.
