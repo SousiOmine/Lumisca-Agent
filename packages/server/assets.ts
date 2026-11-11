@@ -191,7 +191,7 @@ export class Assets {
     private readonly assetsFile?: string,
   ) {}
 
-  /** Packaged builds (deno compile, no repository layout) serve the
+  /** Packaged builds (a compiled binary, no repository layout) serve the
    * prebuilt assets from the manifest staged beside the binary
    * (scripts/build-server.ts), or from the path given by
    * LUMISCA_ASSETS_FILE (the desktop shell passes its resource copy).

@@ -2,11 +2,10 @@
  * The systemd unit template shipped in the server binary.
  *
  * It is a TypeScript constant rather than a `.in` file read at runtime: the
- * packaged server is one `deno compile` binary, so a separate file would have
- * to sit beside it — a new artifact in the release layout, and a new way for a
- * release to be broken. `deno compile` does inline text imports, but `deno fmt`
- * cannot parse the import-attribute syntax, and the template would then leave
- * the repository's one formatting gate; a constant keeps it inside.
+ * packaged server is one executable, so a separate file would have to sit
+ * beside it — a new artifact in the release layout, and a new way for a
+ * release to be broken. A constant also keeps the template inside the
+ * formatter's reach.
  *
  * `{{name}}` placeholders are substituted by compose.ts, which fails when the
  * template and its values disagree in either direction (a missing value would

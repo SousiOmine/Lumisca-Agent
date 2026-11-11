@@ -14,7 +14,7 @@
  *
  *   gh release view v0.9.0 --json assets --jq .assets > dist/updater/assets.json
  *   gh release download v0.9.0 -p latest.json -D dist/updater --clobber
- *   deno run --allow-read --allow-write scripts/rewrite-updater-json.ts \
+ *   bun run scripts/rewrite-updater-json.ts \
  *     --manifest dist/updater/latest.json \
  *     --assets dist/updater/assets.json \
  *     --tag v0.9.0 \
@@ -41,7 +41,7 @@ import {
 function usage(message?: string): never {
   reportUsage(
     "rewrite-updater-json",
-    "deno run --allow-read --allow-write scripts/rewrite-updater-json.ts " +
+    "bun run scripts/rewrite-updater-json.ts " +
       "--manifest <latest.json> --assets <gh asset list> --tag <vX.Y.Z> " +
       "--out <path>",
     message,

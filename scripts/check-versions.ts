@@ -11,7 +11,7 @@
  * so a mismatch is caught before a release is published.
  *
  * Usage:
- *   deno run --allow-read scripts/check-versions.ts [expected]
+ *   bun run scripts/check-versions.ts [expected]
  *
  * `expected` (e.g. `0.7.5`, or the tag with its `v` stripped) pins the
  * version to compare against; without it, `tauri.conf.json` is the

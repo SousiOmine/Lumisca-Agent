@@ -24,7 +24,7 @@ import { fileURLToPath } from "node:url";
  * containing spaces or non-ASCII characters resolves correctly. */
 export const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 
-/** Name of the server binary on this platform (`deno compile` and the
+/** Name of the server binary on this platform (the compiled server and the
  * desktop shell both expect the `.exe` suffix on Windows). */
 export function binaryName(): string {
   return Deno.build.os === "windows" ? "lumisca-server.exe" : "lumisca-server";

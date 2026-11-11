@@ -1,7 +1,7 @@
 /**
  * Build a packaged Lumisca server: the frontend assets a server can serve
  * (`assets.json`), Skia's ICU data file on Windows, and — unless
- * `--no-compile` — the `deno compile` binary itself.
+ * `--no-compile` — the compiled binary itself.
  *
  * This is the single build path for BOTH distributions. The desktop shell
  * embeds the very same binary as a Tauri resource (`--out
@@ -13,7 +13,7 @@
  * Usage (from the repository root, or via `npm run build:server` in
  * packages/desktop):
  *
- *   deno run --allow-all scripts/build-server.ts [--out <dir>] [--no-compile]
+ *   bun run scripts/build-server.ts [--out <dir>] [--no-compile]
  *
  * `--no-compile` stages the assets and keeps a zero-byte placeholder binary
  * instead of compiling: `cargo check` and `tauri dev` need the resource to
@@ -36,11 +36,9 @@ import {
 } from "../packages/server/layout.ts";
 import { binaryName, repoRoot, reportUsage } from "./lib.ts";
 
-/**
- * Permissions embedded into the compiled server. `deno compile` bakes them
- * in (the artifact cannot ask for more at runtime); the desktop shell
- * launches the same binary, so this one list serves both distributions.
- */
+/** The entry both distributions compile: the desktop shell bundles the
+ * resulting binary as a Tauri resource, the server-only release publishes it
+ * on its own. */
 const SERVER_ENTRY = join(repoRoot, "packages", "server", "mod.ts");
 
 interface Options {
@@ -53,14 +51,14 @@ interface Options {
 function usage(message?: string): never {
   reportUsage(
     "build-server",
-    "deno run --allow-all scripts/build-server.ts [--out <dir>] [--no-compile]",
+    "bun run scripts/build-server.ts [--out <dir>] [--no-compile]",
     message,
   );
 }
 
 /** Where a standalone server package is staged by default: one directory
- * per `deno compile` target, so several platforms can be built side by
- * side (the release workflow ships one directory to each platform). */
+ * per build target (Deno's triple names, which the release manifests still
+ * use), so several platforms can be built side by side. */
 function defaultOutDir(): string {
   return join(repoRoot, "dist", "server", "stage", Deno.build.target);
 }
@@ -105,9 +103,9 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-/** Compile the server entry into `outputPath`. The stored `deno compile`
- * artifact must be replaced by hand first: an existing file (notably the
- * `--no-compile` placeholder) makes the compiler refuse to write. */
+/** Compile the server entry into `outputPath`. The stored binary must be
+ * replaced by hand first: an existing file (notably the `--no-compile`
+ * placeholder) makes the compiler refuse to write. */
 async function compileServer(outputPath: string): Promise<void> {
   await Deno.remove(outputPath).catch(() => {});
   // Bun builds a single executable from the same entry. The Deno permission
@@ -129,8 +127,8 @@ async function compileServer(outputPath: string): Promise<void> {
 }
 
 /**
- * Stage Skia's ICU data file next to the server binary. `deno compile` does
- * not bundle it, and @napi-rs/canvas' native Skia aborts the whole server
+ * Stage Skia's ICU data file next to the server binary. The compiled
+ * executable does not carry it, and @napi-rs/canvas' native Skia aborts the whole server
  * process when it is missing (see packages/core/pdf/tools.ts, which looks
  * for `icudtl.dat` beside the executable). The file is copied verbatim
  * from the installed `@napi-rs/canvas-<platform>` npm package, so its
@@ -166,8 +164,8 @@ async function stageCanvasIcuData(outDir: string): Promise<void> {
 /**
  * Stage the stella machine's container files beside the binary.
  *
- * A compiled server cannot read them any other way: `deno compile` produces a
- * single executable with no file system of its own, and the server runs
+ * A compiled server cannot read them any other way: `bun build --compile`
+ * produces a single executable with no file system of its own, and the server runs
  * `podman build` against a Containerfile on disk. The directory name is the
  * one packages/server/paths.ts looks for (`VM_CONTAINER_DIR_NAME`), so the
  * runtime and the packaging cannot disagree.

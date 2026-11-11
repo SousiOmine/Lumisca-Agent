@@ -10,7 +10,7 @@
  *
  * Usage (from the repository root):
  *
- *   deno run --allow-read --allow-write scripts/build-server-manifest.ts \
+ *   bun run scripts/build-server-manifest.ts \
  *     --archive dist/server/lumisca-server-0.7.8-windows-x64.zip \
  *     --signature dist/server/lumisca-server-0.7.8-windows-x64.zip.sig \
  *     --tag v0.7.8 --target x86_64-pc-windows-msvc \
@@ -34,9 +34,9 @@ import { absolutePath, parseOptions, reportUsage } from "./lib.ts";
 function usage(message?: string): never {
   reportUsage(
     "build-server-manifest",
-    "deno run --allow-read --allow-write scripts/build-server-manifest.ts " +
+    "bun run scripts/build-server-manifest.ts " +
       "--archive <path> --signature <path|base64> --tag <vX.Y.Z> " +
-      "--target <deno target> [--out <path>]",
+      "--target <target triple> [--out <path>]",
     message,
   );
 }

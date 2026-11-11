@@ -16,7 +16,7 @@ export const RELEASE_REPOSITORY = "SousiOmine/Lumisca-Agent";
  * double-click), the POSIX platforms a tar.gz (`tar -xzf`). */
 export type ArchiveFormat = "zip" | "tar.gz";
 
-/** The release identity of a `deno compile` target triple. */
+/** The release identity of a build target triple. */
 export interface ReleaseTarget {
   /** Platform label used in the asset names (`lumisca-server-<v>-<platform>`). */
   platform: string;

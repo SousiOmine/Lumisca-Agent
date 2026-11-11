@@ -11,13 +11,13 @@
  *
  * Usage (from the repository root):
  *
- *   deno run --allow-read --allow-write scripts/check-server-archive.ts \
+ *   bun run scripts/check-server-archive.ts \
  *     --archive dist/server/lumisca-server-0.7.8-windows-x64.zip \
  *     --signature dist/server/lumisca-server-0.7.8-windows-x64.zip.sig \
  *     --stage dist/server/stage/x86_64-pc-windows-msvc \
  *     [--bin lumisca-server.exe] [--public-key <base64>]
  *
- * `--stage` is the directory `deno task build:server` produced on the same
+ * `--stage` is the directory `bun run build:server` produced on the same
  * machine. Without `--bin` the binary name is derived from the archive's
  * platform (the manifest's target is not part of an archive, so the caller
  * states it when the archive does not carry the standard name).
@@ -42,7 +42,7 @@ import {
 function usage(message?: string): never {
   reportUsage(
     "check-server-archive",
-    "deno run --allow-read --allow-write scripts/check-server-archive.ts " +
+    "bun run scripts/check-server-archive.ts " +
       "--archive <path> --signature <path> --stage <dir> [--bin <name>] " +
       "[--public-key <base64>]",
     message,

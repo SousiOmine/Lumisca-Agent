@@ -7,10 +7,10 @@
  * broken package fails there instead of at a pushed tag.
  *
  * Usage:
- *   deno run --allow-all scripts/smoke-server.ts [--bin <path>]
+ *   bun run scripts/smoke-server.ts [--bin <path>]
  *
  * Without `--bin` the staged release build of this host is used
- * (dist/server/stage/<deno target>/lumisca-server[.exe]).
+ * (dist/server/stage/<target triple>/lumisca-server[.exe]).
  *
  * The package is COPIED to a temporary directory and started from there: a
  * packaged server owns its installation and checks for updates in the
@@ -42,7 +42,7 @@ const SHUTDOWN_TIMEOUT_MS = 5_000;
 function usage(message?: string): never {
   reportUsage(
     "smoke-server",
-    "deno run --allow-all scripts/smoke-server.ts [--bin <path>]",
+    "bun run scripts/smoke-server.ts [--bin <path>]",
     message,
   );
 }
@@ -177,9 +177,7 @@ try {
     usage(`not a file: ${sourceBinary}`);
   }
 } catch {
-  usage(
-    `server binary not found: ${sourceBinary} (run deno task build:server)`,
-  );
+  usage(`server binary not found: ${sourceBinary} (run bun run build:server)`);
 }
 
 const { check, failures } = createChecker();
@@ -373,9 +371,9 @@ try {
     );
     await favicon.body?.cancel();
 
-    // The systemd unit template is a text import inlined by `deno compile`,
-    // so it must be inside the packaged binary: a build that dropped it would
-    // ship a server whose `service install` cannot produce a unit. `config`
+    // The systemd unit template is a constant compiled into the binary, so
+    // it must survive packaging: a build that dropped it would ship a server
+    // whose `service install` cannot produce a unit. `config`
     // is the verb that only composes and prints (it never touches systemd),
     // which makes it the checkable half of the feature on every platform.
     const config = await new Deno.Command(binary, {
