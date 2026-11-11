@@ -174,11 +174,10 @@ export function buildPushNotification(
  *
  * A stella conversation is an agent talking, so it is notified under the
  * AGENT's name: that is the name the user chose and the one the
- * conversation's header shows. The session row carries it too, but a
- * conversation opened before stella stopped generating titles still holds a
- * title made from its first message, and renaming the agent does not reach
- * the row — reading the agent is what cannot go stale. Code mode has no
- * agent, so its session's name is the answer there.
+ * conversation's header shows. The session row answers with the same name
+ * (it reads it from the agent, see SessionRepo), so this is the direct
+ * source rather than a second copy. Code mode has no agent, and its
+ * session's name is the answer there.
  *
  * Pure, so the rule is asserted without a push service. */
 export function notificationName(

@@ -159,15 +159,6 @@ export class StellaMachineService {
     // read the client is already polling (see isRunning) — and everything
     // else is skipped when it answers.
     const existing = this.deps.sessions.getByAgent(agent.id);
-    // The conversation is named after its agent: that is the name the user
-    // gave it, and the one both the header and the notifications show. A
-    // conversation opened before stella stopped generating titles carries a
-    // title made from its first message, so the row is aligned here (and
-    // again when the agent is renamed). Two names for one conversation is
-    // what made notifications look stuck on the first message.
-    if (existing !== undefined && existing.name !== agent.name) {
-      this.deps.sessions.rename(existing.id, agent.name);
-    }
     if (
       existing !== undefined &&
       this.deps.pool.get(existing.id) !== undefined
@@ -220,7 +211,11 @@ export class StellaMachineService {
     const workspace = this.deps.chatWorkspace();
     const session = this.deps.sessions.create({
       workspaceId: workspace.id,
-      name: agent.name,
+      // No name of its own: a stella conversation is the agent talking, and
+      // the agent's name is read on every read (see SessionRepo.toSession).
+      // The column is NOT NULL, so it holds the empty string — the marker
+      // of a session that has no name but its agent's.
+      name: "",
       modelProvider: model.provider,
       modelId: model.modelId,
       stella: true,
