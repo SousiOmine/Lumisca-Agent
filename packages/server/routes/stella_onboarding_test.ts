@@ -1,4 +1,4 @@
-import { stellaApiStub } from "./test-stubs.ts";
+import type { SessionInfo, StellaAgent } from "@lumisca/core";
 /**
  * The setup turn's two entry points.
  *
@@ -8,10 +8,10 @@ import { stellaApiStub } from "./test-stubs.ts";
  * first open, and the row menu's "set up again".
  */
 import { assertEquals } from "@std/assert";
-import type { SessionInfo, StellaAgent } from "@lumisca/core";
-import { stellaRoutes } from "./stella.ts";
-import { jsonError } from "./util.ts";
 import type { StellaApi } from "./stella.ts";
+import { stellaRoutes } from "./stella.ts";
+import { stellaApiStub } from "./test-stubs.ts";
+import { jsonError } from "./util.ts";
 
 function session(): SessionInfo {
   return {
@@ -45,10 +45,7 @@ function agent(): StellaAgent {
 /** A core that records the two setup calls and answers the snapshot the open
  * route reads. Everything the snapshot touches is stubbed because it all runs
  * on the same request: a missing method here would be a 500, not a setup. */
-function fakeCore(
-  calls: string[],
-  started: boolean,
-): StellaApi {
+function fakeCore(calls: string[], started: boolean): StellaApi {
   return stellaApiStub({
     getOrCreateStellaSession: () => Promise.resolve(session()),
     startStellaOnboarding: (agentId: string) => {

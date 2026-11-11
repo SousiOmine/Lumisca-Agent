@@ -4,8 +4,8 @@ import type {
   ModeMessage,
   NotificationMessage,
 } from "../ai/types.ts";
-import { modeFullPromptText } from "./mode-message.ts";
 import { isPruned } from "../session/prune.ts";
+import { modeFullPromptText } from "./mode-message.ts";
 
 /** What the generators (background / task) produce; the session agent
  * stamps role, timestamp and `steered` when injecting — only the delivery
@@ -104,9 +104,10 @@ export function toLlmMessages(messages: AgentMessage[]): Message[] {
           : [];
         out.push({
           ...message,
-          content: images.length === 0
-            ? modelContent
-            : [{ type: "text", text: modelContent }, ...images],
+          content:
+            images.length === 0
+              ? modelContent
+              : [{ type: "text", text: modelContent }, ...images],
         });
       }
       continue;

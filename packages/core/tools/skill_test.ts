@@ -1,15 +1,17 @@
 import { join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
+import { builtinSkills } from "../skills/builtin/mod.ts";
+import { discoverSkills, type SkillDef } from "../skills/discover.ts";
 import { createSkillTool } from "../skills/tool.ts";
 import { makeRealTempDir, removeDirRetry, toolText } from "../test-utils.ts";
-import { discoverSkills, type SkillDef } from "../skills/discover.ts";
-import { builtinSkills } from "../skills/builtin/mod.ts";
-import { createCodingTools } from "./toolsets.ts";
 import { sessionSkills } from "./tool-pieces.ts";
+import { createCodingTools } from "./toolsets.ts";
 
-async function makeTool(): Promise<
-  { root: string; skills: SkillDef[]; tool: ReturnType<typeof createSkillTool> }
-> {
+async function makeTool(): Promise<{
+  root: string;
+  skills: SkillDef[];
+  tool: ReturnType<typeof createSkillTool>;
+}> {
   const root = await makeRealTempDir("lumisca-skill-tool-");
   await Deno.mkdir(join(root, ".agents", "skills", "demo"), {
     recursive: true,
@@ -63,7 +65,7 @@ Deno.test("skill tool rejects unknown skill names", async () => {
     await assertRejects(
       () =>
         Promise.resolve().then(() =>
-          tool.execute("1", { name: "nope" }, undefined)
+          tool.execute("1", { name: "nope" }, undefined),
         ),
       Error,
       'Unknown skill "nope"',
@@ -83,7 +85,7 @@ Deno.test("skill tool rejects follow-up reads that escape the skill directory", 
             "1",
             { name: "demo", read_followup: "../secret.txt" },
             undefined,
-          )
+          ),
         ),
       Error,
       "escapes",
@@ -120,7 +122,7 @@ Deno.test("skill tool rejects follow-up reads on a built-in skill", async () => 
           "1",
           { name: "web-browser", read_followup: "reference.md" },
           undefined,
-        )
+        ),
       ),
     Error,
     'No such file in skill "web-browser"',
@@ -132,7 +134,7 @@ Deno.test("skill tool hides built-in skills when their capability is absent", as
   await assertRejects(
     () =>
       Promise.resolve().then(() =>
-        tool.execute("1", { name: "web-browser" }, undefined)
+        tool.execute("1", { name: "web-browser" }, undefined),
       ),
     Error,
     'Unknown skill "web-browser"',
@@ -151,7 +153,7 @@ Deno.test("skill tool resolves the catalog on every call", async () => {
     await assertRejects(
       () =>
         Promise.resolve().then(() =>
-          tool.execute("1", { name: "fresh" }, undefined)
+          tool.execute("1", { name: "fresh" }, undefined),
         ),
       Error,
       'Unknown skill "fresh"',

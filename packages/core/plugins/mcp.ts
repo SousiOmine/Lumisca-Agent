@@ -1,6 +1,6 @@
 import { join, normalize, sep } from "node:path";
-import type { McpServerConfig } from "../mcp/config.ts";
 import { errorMessage } from "../errors.ts";
+import type { McpServerConfig } from "../mcp/config.ts";
 import { isWithinRealpath } from "../workspace/path-util.ts";
 
 /** Canonical identifier of the mcp.json schema this client implements
@@ -37,7 +37,9 @@ export function resolvePluginDataRoot(): string {
   const home = Deno.env.get("USERPROFILE") ?? Deno.env.get("HOME");
   const xdg = Deno.env.get("XDG_DATA_HOME");
   const localAppData = Deno.env.get("LOCALAPPDATA");
-  const base = xdg ?? localAppData ??
+  const base =
+    xdg ??
+    localAppData ??
     (home !== undefined ? join(home, ".local", "share") : undefined);
   if (base === undefined) return join(Deno.cwd(), ".lumisca-plugin-data");
   return join(base, "lumisca-agent", "plugin-data");
@@ -78,15 +80,15 @@ export function parsePluginMcp(
   const obj = raw as Record<string, unknown>;
   if (obj.$schema !== MCP_SCHEMA_URL) {
     return {
-      fatal:
-        `mcp.json has an unsupported $schema; supported: ${MCP_SCHEMA_URL}`,
+      fatal: `mcp.json has an unsupported $schema; supported: ${MCP_SCHEMA_URL}`,
       servers: [],
       warnings: [],
     };
   }
   const mcpServers = obj.mcpServers;
   if (
-    typeof mcpServers !== "object" || mcpServers === null ||
+    typeof mcpServers !== "object" ||
+    mcpServers === null ||
     Array.isArray(mcpServers)
   ) {
     return {
@@ -110,9 +112,9 @@ export function parsePluginMcp(
   const servers: McpServerConfig[] = [];
   let needsPluginData = false;
 
-  for (
-    const [name, entry] of Object.entries(mcpServers as Record<string, unknown>)
-  ) {
+  for (const [name, entry] of Object.entries(
+    mcpServers as Record<string, unknown>,
+  )) {
     if (!name.trim()) {
       warnings.push(`MCP server name must not be empty; entry skipped`);
       continue;
@@ -125,9 +127,9 @@ export function parsePluginMcp(
     const type = cfg.type;
     if (type !== "stdio" && type !== "streamable-http" && type !== "sse") {
       warnings.push(
-        `MCP server "${name}" has unknown transport "${
-          String(type)
-        }"; entry skipped`,
+        `MCP server "${name}" has unknown transport "${String(
+          type,
+        )}"; entry skipped`,
       );
       continue;
     }

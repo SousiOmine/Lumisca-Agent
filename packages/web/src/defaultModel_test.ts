@@ -1,8 +1,8 @@
-import { assertEquals, assertRejects } from "@std/assert";
 import {
   DEFAULT_MODEL_KEY,
   serializeModelPreference,
 } from "@lumisca/core/shared";
+import { assertEquals, assertRejects } from "@std/assert";
 import { rememberDefaultModel } from "./defaultModel.ts";
 import { settingsStore } from "./settingsStore.ts";
 
@@ -29,9 +29,10 @@ async function withFetch(
     const request: Sent = {
       method: init?.method ?? "GET",
       path: url.pathname,
-      value: body === undefined
-        ? undefined
-        : (JSON.parse(body) as { value: string }).value,
+      value:
+        body === undefined
+          ? undefined
+          : (JSON.parse(body) as { value: string }).value,
     };
     sent.push(request);
     return Promise.resolve(respond(request));
@@ -60,13 +61,13 @@ const preference = (provider: string, modelId: string) =>
 // new-session screen is in when it is the first screen a page shows.
 Deno.test("rememberDefaultModel reads the settings before its first write", async () => {
   const sent = await withFetch(
-    (request) => request.method === "GET" ? table({ theme: "dark" })() : ok(),
+    (request) => (request.method === "GET" ? table({ theme: "dark" })() : ok()),
     () => rememberDefaultModel("anthropic", "claude-sonnet-4-5"),
   );
-  assertEquals(sent.map((r) => `${r.method} ${r.path}`), [
-    "GET /api/settings",
-    "PUT /api/settings/model_default",
-  ]);
+  assertEquals(
+    sent.map((r) => `${r.method} ${r.path}`),
+    ["GET /api/settings", "PUT /api/settings/model_default"],
+  );
   // The write marks the table as read, so every panel reading the store would
   // show the values it never loaded: the read comes first, and the other
   // settings survive it.
@@ -79,25 +80,25 @@ Deno.test("rememberDefaultModel reads the settings before its first write", asyn
 
 Deno.test("rememberDefaultModel writes the pick to the default model key", async () => {
   settingsStore.reset();
-  const sent = await withFetch(
-    ok,
-    () => rememberDefaultModel("anthropic", "claude-sonnet-4-5"),
+  const sent = await withFetch(ok, () =>
+    rememberDefaultModel("anthropic", "claude-sonnet-4-5"),
   );
   // The path is the contract: the session resolver reads this same key
   // first, which is what makes the pick survive a reload or a tab switch.
-  assertEquals(sent, [{
-    method: "PUT",
-    path: "/api/settings/model_default",
-    value: preference("anthropic", "claude-sonnet-4-5"),
-  }]);
+  assertEquals(sent, [
+    {
+      method: "PUT",
+      path: "/api/settings/model_default",
+      value: preference("anthropic", "claude-sonnet-4-5"),
+    },
+  ]);
 });
 
 Deno.test("rememberDefaultModel writes nothing when it already is the default", async () => {
   settingsStore.reset();
   await withFetch(ok, () => rememberDefaultModel("openai", "gpt-5"));
-  const sent = await withFetch(
-    ok,
-    () => rememberDefaultModel("openai", "gpt-5"),
+  const sent = await withFetch(ok, () =>
+    rememberDefaultModel("openai", "gpt-5"),
   );
   assertEquals(sent, [], "a second pick of the same model is not a request");
 });
@@ -108,7 +109,7 @@ Deno.test("rememberDefaultModel reports a failed write instead of keeping it", a
     withFetch(
       () => new Response("{}", { status: 500 }),
       () => rememberDefaultModel("openai", "gpt-5"),
-    )
+    ),
   );
   // The stored value is what the next session would run on, so a failed
   // write must not leave the store claiming the model was remembered.

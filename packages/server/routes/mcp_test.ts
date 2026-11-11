@@ -1,10 +1,10 @@
-import { assert, assertEquals } from "@std/assert";
 import type {
   McpAuthSnapshot,
   McpInfo,
   McpServerInfo,
   McpTestResult,
 } from "@lumisca/core";
+import { assert, assertEquals } from "@std/assert";
 import { type McpApi, mcpRoutes } from "./mcp.ts";
 import { jsonError } from "./util.ts";
 
@@ -85,9 +85,11 @@ class FakeMcpApi implements McpApi {
     snapshot.status = "cancelled";
     return true;
   }
-  completeMcpAuth(
-    input: { state: string; code?: string; error?: string },
-  ): Promise<McpAuthSnapshot | undefined> {
+  completeMcpAuth(input: {
+    state: string;
+    code?: string;
+    error?: string;
+  }): Promise<McpAuthSnapshot | undefined> {
     this.authCompleted = input;
     const snapshot = this.authSessions.get("s1");
     if (snapshot === undefined || input.state !== "st") {
@@ -120,12 +122,13 @@ Deno.test("/mcp stores the raw config text and reports it back", async () => {
   // Stored as sent, never re-serialized: the file's formatting is the
   // user's (or the UI's) business.
   assertEquals(fake.appText, text);
-  assertEquals((await put.json() as McpInfo).servers.map((s) => s.name), [
-    "app",
-  ]);
+  assertEquals(
+    ((await put.json()) as McpInfo).servers.map((s) => s.name),
+    ["app"],
+  );
 
   const get = await app.request("/mcp");
-  assertEquals((await get.json() as McpInfo).exists, true);
+  assertEquals(((await get.json()) as McpInfo).exists, true);
 });
 
 Deno.test("/mcp and /mcp/test reject an empty body", async () => {
@@ -174,12 +177,17 @@ Deno.test("workspace .mcp.json routes keep their text per workspace", async () =
     body: '{"mcpServers":{"ws":{"command":"x"}}}',
   });
 
-  const info = await (await app.request("/workspaces/w1/mcp"))
-    .json() as McpInfo;
-  assertEquals(info.servers.map((s) => s.name), ["ws"]);
+  const info = (await (
+    await app.request("/workspaces/w1/mcp")
+  ).json()) as McpInfo;
+  assertEquals(
+    info.servers.map((s) => s.name),
+    ["ws"],
+  );
   // Another workspace keeps its own (absent) file.
-  const other = await (await app.request("/workspaces/w2/mcp"))
-    .json() as McpInfo;
+  const other = (await (
+    await app.request("/workspaces/w2/mcp")
+  ).json()) as McpInfo;
   assertEquals(other.exists, false);
 });
 
@@ -202,7 +210,7 @@ Deno.test("/mcp/auth registers the origin the browser is on", async () => {
     },
   });
   assertEquals(res.status, 200);
-  const snapshot = await res.json() as McpAuthSnapshot;
+  const snapshot = (await res.json()) as McpAuthSnapshot;
   assertEquals(snapshot.status, "waiting");
   assertEquals(
     snapshot.authorizationUrl,
@@ -258,12 +266,12 @@ Deno.test("/mcp/auth/:id answers the poll, the cancel and 404s when gone", async
 
   const poll = await app.request("/mcp/auth/s1");
   assertEquals(poll.status, 200);
-  assertEquals((await poll.json() as McpAuthSnapshot).status, "waiting");
+  assertEquals(((await poll.json()) as McpAuthSnapshot).status, "waiting");
 
   const cancel = await app.request("/mcp/auth/s1/cancel", { method: "POST" });
   assertEquals(cancel.status, 200);
   const after = await app.request("/mcp/auth/s1");
-  assertEquals((await after.json() as McpAuthSnapshot).status, "cancelled");
+  assertEquals(((await after.json()) as McpAuthSnapshot).status, "cancelled");
 
   assertEquals((await app.request("/mcp/auth/nope")).status, 404);
   assertEquals(

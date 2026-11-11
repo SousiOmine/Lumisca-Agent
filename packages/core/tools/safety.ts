@@ -28,12 +28,16 @@ export async function safetyBlockResult(
   const verdict = await safety.check(kind, command, cwd);
   if (verdict.ok) return undefined;
   return {
-    content: [{
-      type: "text",
-      text: `${options.prefix ?? ""}[blocked by safety check]\n` +
-        (verdict.reason ?? options.fallbackReason ??
-          "The command was judged unsafe."),
-    }],
+    content: [
+      {
+        type: "text",
+        text:
+          `${options.prefix ?? ""}[blocked by safety check]\n` +
+          (verdict.reason ??
+            options.fallbackReason ??
+            "The command was judged unsafe."),
+      },
+    ],
     details: {
       blocked: true,
       reason: verdict.reason ?? "",

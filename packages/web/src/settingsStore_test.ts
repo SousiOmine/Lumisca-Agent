@@ -28,19 +28,22 @@ const ok = (body: Record<string, string>) => () =>
 Deno.test("settings store: two subscribers opening together share one read", async () => {
   settingsStore.reset();
   let reads = 0;
-  await withFetch(() => {
-    reads++;
-    return new Response(JSON.stringify({ theme: "dark" }), { status: 200 });
-  }, async () => {
-    // Two screens mounting in the same tick (the tab-switch case) reuse the
-    // read already in flight instead of asking the server twice.
-    const unsubscribe = [
-      settingsStore.subscribe(() => {}),
-      settingsStore.subscribe(() => {}),
-    ];
-    await settingsStore.reload();
-    for (const off of unsubscribe) off();
-  });
+  await withFetch(
+    () => {
+      reads++;
+      return new Response(JSON.stringify({ theme: "dark" }), { status: 200 });
+    },
+    async () => {
+      // Two screens mounting in the same tick (the tab-switch case) reuse the
+      // read already in flight instead of asking the server twice.
+      const unsubscribe = [
+        settingsStore.subscribe(() => {}),
+        settingsStore.subscribe(() => {}),
+      ];
+      await settingsStore.reload();
+      for (const off of unsubscribe) off();
+    },
+  );
   assertEquals(reads, 1, "the shared read is issued once");
   assertEquals(settingsStore.value("theme"), "dark");
 });
@@ -48,19 +51,22 @@ Deno.test("settings store: two subscribers opening together share one read", asy
 Deno.test("settings store: the newer read wins", async () => {
   settingsStore.reset();
   let call = 0;
-  await withFetch(() => {
-    call++;
-    if (call === 1) {
-      // The first read is held until the second has answered, so its stale
-      // value would land last if the store published whatever came back.
-      return new Response(JSON.stringify({ theme: "old" }), { status: 200 });
-    }
-    return new Response(JSON.stringify({ theme: "new" }), { status: 200 });
-  }, async () => {
-    const slow = settingsStore.reload();
-    await settingsStore.reload();
-    await slow;
-  });
+  await withFetch(
+    () => {
+      call++;
+      if (call === 1) {
+        // The first read is held until the second has answered, so its stale
+        // value would land last if the store published whatever came back.
+        return new Response(JSON.stringify({ theme: "old" }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ theme: "new" }), { status: 200 });
+    },
+    async () => {
+      const slow = settingsStore.reload();
+      await settingsStore.reload();
+      await slow;
+    },
+  );
   assertEquals(settingsStore.value("theme"), "new");
 });
 
@@ -85,23 +91,29 @@ Deno.test("settings store: a write is reflected and rolled back on failure", asy
   assertEquals(settingsStore.value("language"), "ja");
 
   // A rejected one restores what was there (and removes a key that was new).
-  await withFetch(() => new Response("{}", { status: 403 }), async () => {
-    let failed = false;
-    try {
-      await settingsStore.set("language", "en");
-    } catch {
-      failed = true;
-    }
-    assert(failed, "the write must fail");
-  });
+  await withFetch(
+    () => new Response("{}", { status: 403 }),
+    async () => {
+      let failed = false;
+      try {
+        await settingsStore.set("language", "en");
+      } catch {
+        failed = true;
+      }
+      assert(failed, "the write must fail");
+    },
+  );
   assertEquals(settingsStore.value("language"), "ja");
 
-  await withFetch(() => new Response("{}", { status: 403 }), async () => {
-    try {
-      await settingsStore.set("brand_new", "x");
-    } catch {
-      // expected
-    }
-  });
+  await withFetch(
+    () => new Response("{}", { status: 403 }),
+    async () => {
+      try {
+        await settingsStore.set("brand_new", "x");
+      } catch {
+        // expected
+      }
+    },
+  );
   assertEquals(settingsStore.value("brand_new"), undefined);
 });

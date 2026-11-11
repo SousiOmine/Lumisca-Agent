@@ -4,8 +4,8 @@ import {
   MAX_RATE_LIMIT_RETRIES,
   RATE_LIMIT_BASE_DELAY_MS,
   RATE_LIMIT_MAX_DELAY_MS,
-  rateLimitRetryDelayMs,
   RetryAbortError,
+  rateLimitRetryDelayMs,
   retryOnRateLimitError,
   sleepAbortable,
 } from "./rate-limit.ts";
@@ -65,7 +65,10 @@ Deno.test("sleepAbortable rejects when the signal fires", async () => {
   const controller = new AbortController();
   const p = sleepAbortable(1000, controller.signal);
   controller.abort();
-  const err = await p.then(() => null, (e) => e);
+  const err = await p.then(
+    () => null,
+    (e) => e,
+  );
   assert(err instanceof RetryAbortError);
 });
 
@@ -99,7 +102,10 @@ Deno.test("retryOnRateLimitError stops at non-rate errors", async () => {
     },
     isRetryableRateLimitError,
     { sleep: instantSleep },
-  ).then(() => null, (e) => e);
+  ).then(
+    () => null,
+    (e) => e,
+  );
   assertEquals((err as Error).message, "boom");
   assertEquals(calls, 1);
 });
@@ -113,7 +119,10 @@ Deno.test("retryOnRateLimitError gives up after the budget", async () => {
     },
     isRetryableRateLimitError,
     { sleep: instantSleep, maxRetries: 2 },
-  ).then(() => null, (e) => e);
+  ).then(
+    () => null,
+    (e) => e,
+  );
   assertEquals((err as Error).message, "429 rate_limit_exceeded");
   // First attempt + 2 retries = 3 calls.
   assertEquals(calls, 3);
@@ -128,7 +137,10 @@ Deno.test("retryOnRateLimitError respects the default budget", async () => {
     },
     isRetryableRateLimitError,
     { sleep: instantSleep },
-  ).then(() => null, () => {});
+  ).then(
+    () => null,
+    () => {},
+  );
   assertEquals(calls, MAX_RATE_LIMIT_RETRIES + 1);
 });
 
@@ -147,6 +159,9 @@ Deno.test("retryOnRateLimitError aborts during backoff with RetryAbortError", as
       },
       signal: controller.signal,
     },
-  ).then(() => null, (e) => e);
+  ).then(
+    () => null,
+    (e) => e,
+  );
   assertEquals((err as Error).message, "429 rate_limit_exceeded");
 });

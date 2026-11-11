@@ -25,11 +25,10 @@ Deno.test("navGroups groups the entries by what they act on", () => {
     entry("computerUse", "code"),
   ];
 
-  assertEquals(navGroups(entries).map((group) => group.scope), [
-    "common",
-    "code",
-    "stella",
-  ]);
+  assertEquals(
+    navGroups(entries).map((group) => group.scope),
+    ["common", "code", "stella"],
+  );
   assertEquals(
     navGroups(entries).flatMap((group) => group.entries.map((item) => item.id)),
     ["general", "appearance", "computerUse", "routines"],
@@ -53,7 +52,10 @@ Deno.test("navGroups keeps the caller's order inside a group", () => {
 Deno.test("navGroups drops an empty group", () => {
   // A group with no entry gets no heading rather than an empty one.
   const shared = [entry("general", "common")];
-  assertEquals(navGroups(shared).map((group) => group.scope), ["common"]);
+  assertEquals(
+    navGroups(shared).map((group) => group.scope),
+    ["common"],
+  );
   assertEquals(navGroups([]), []);
 });
 
@@ -63,19 +65,22 @@ Deno.test("every category is named once, in the table's order", () => {
   // put one page in the navigation twice; a missing entry would be a page no
   // address could name.
   assertEquals(new Set(SETTINGS_CATEGORIES).size, SETTINGS_CATEGORIES.length);
-  assertEquals([...SETTINGS_CATEGORIES], [
-    "general",
-    "appearance",
-    "providers",
-    "models",
-    "mcp",
-    "personalize",
-    "servers",
-    "security",
-    "computerUse",
-    "prompts",
-    "routines",
-  ]);
+  assertEquals(
+    [...SETTINGS_CATEGORIES],
+    [
+      "general",
+      "appearance",
+      "providers",
+      "models",
+      "mcp",
+      "personalize",
+      "servers",
+      "security",
+      "computerUse",
+      "prompts",
+      "routines",
+    ],
+  );
 });
 
 Deno.test("modeLabelKey names the mode a group acts on", () => {

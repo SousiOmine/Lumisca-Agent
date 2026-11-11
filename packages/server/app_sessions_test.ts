@@ -1,18 +1,16 @@
 import { join } from "node:path";
-
 import {
   fauxAssistantMessage,
   fauxProvider,
   fauxToolCall,
+  LumiscaCore,
+  type TodoPhase,
 } from "@lumisca/core";
+import { noisyPng, removeDirRetry } from "@lumisca/core/test-utils";
 import { assert, assertEquals } from "@std/assert";
-import { LumiscaCore, type TodoPhase } from "@lumisca/core";
-
+import { bytesToBase64 } from "../core/base64.ts";
 import { disposeServer, startServer } from "./app.ts";
 import { conversationOf, json, setup } from "./test-utils.ts";
-
-import { noisyPng, removeDirRetry } from "@lumisca/core/test-utils";
-import { bytesToBase64 } from "../core/base64.ts";
 
 Deno.test("session prompt roundtrip via API", async () => {
   const { core, server, faux, base } = await setup();
@@ -81,20 +79,24 @@ Deno.test("prompt API stores a bounded copy of an attached picture", async () =>
   const { core, server, faux, base } = await setup();
   const root = await Deno.makeTempDir({ prefix: "lumisca-srv-img-" });
   try {
-    const ws = await (await json(base, "/api/workspaces", {
-      method: "POST",
-      body: JSON.stringify({ name: "ws", folders: [root] }),
-    })).json();
+    const ws = await (
+      await json(base, "/api/workspaces", {
+        method: "POST",
+        body: JSON.stringify({ name: "ws", folders: [root] }),
+      })
+    ).json();
     faux.setResponses([fauxAssistantMessage("I see it.")]);
-    const session = await (await json(base, "/api/sessions", {
-      method: "POST",
-      body: JSON.stringify({
-        workspaceId: ws.id,
-        modelProvider: faux.provider.id,
-        modelId: faux.getModel().id,
-        name: "img-test",
-      }),
-    })).json();
+    const session = await (
+      await json(base, "/api/sessions", {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: ws.id,
+          modelProvider: faux.provider.id,
+          modelId: faux.getModel().id,
+          name: "img-test",
+        }),
+      })
+    ).json();
 
     // A phone-sized picture: the attachment is what the router stores today,
     // so this is the shape that fills the database.
@@ -112,16 +114,17 @@ Deno.test("prompt API stores a bounded copy of an attached picture", async () =>
     // transcript the API serves.
     let stored: { data: string; mimeType: string } | undefined;
     for (let attempt = 0; attempt < 50 && stored === undefined; attempt++) {
-      const snapshot = await (await json(
-        base,
-        `/api/sessions/${session.id}/messages`,
-      )).json();
-      const user = (snapshot.messages as Array<{
-        role: string;
-        content: Array<{ type: string; data?: string; mimeType?: string }>;
-      }>).find((message) => message.role === "user");
-      stored = user?.content.find((block) =>
-        block.type === "image" && typeof block.data === "string"
+      const snapshot = await (
+        await json(base, `/api/sessions/${session.id}/messages`)
+      ).json();
+      const user = (
+        snapshot.messages as Array<{
+          role: string;
+          content: Array<{ type: string; data?: string; mimeType?: string }>;
+        }>
+      ).find((message) => message.role === "user");
+      stored = user?.content.find(
+        (block) => block.type === "image" && typeof block.data === "string",
       ) as { data: string; mimeType: string } | undefined;
       if (stored === undefined) await new Promise((r) => setTimeout(r, 100));
     }
@@ -185,10 +188,7 @@ Deno.test("chat session API: no workspaceId creates a chat session", async () =>
       }>,
     );
     assertEquals(chatConversation.length, 2);
-    assertEquals(
-      chatConversation[1]!.content[0]!.text,
-      "chat reply",
-    );
+    assertEquals(chatConversation[1]!.content[0]!.text, "chat reply");
 
     // The chat workspace refuses update/delete through the API.
     const del = await json(base, `/api/workspaces/${chatWs.id}`, {
@@ -250,9 +250,9 @@ Deno.test("rewind truncates messages via the API and rejects bad bodies", async 
     // them.
     let conversation: Array<{ role: string; timestamp: number }> = [];
     for (let i = 0; i < 100 && conversation.length < 4; i++) {
-      messages = (await (
-        await json(base, `/api/sessions/${session.id}/messages`)
-      ).json()).messages;
+      messages = (
+        await (await json(base, `/api/sessions/${session.id}/messages`)).json()
+      ).messages;
       conversation = conversationOf(messages);
       if (conversation.length < 4) {
         await new Promise((resolve) => setTimeout(resolve, 20));
@@ -312,22 +312,26 @@ Deno.test("revision endpoint tracks the events of a session", async () => {
   const { core, server, faux, base } = await setup();
   try {
     const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
-    const ws = await (await json(base, "/api/workspaces", {
-      method: "POST",
-      body: JSON.stringify({ name: "ws", folders: [root] }),
-    })).json();
-    const session = await (await json(base, "/api/sessions", {
-      method: "POST",
-      body: JSON.stringify({
-        workspaceId: ws.id,
-        modelProvider: faux.provider.id,
-        modelId: faux.getModel().id,
-      }),
-    })).json();
+    const ws = await (
+      await json(base, "/api/workspaces", {
+        method: "POST",
+        body: JSON.stringify({ name: "ws", folders: [root] }),
+      })
+    ).json();
+    const session = await (
+      await json(base, "/api/sessions", {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: ws.id,
+          modelProvider: faux.provider.id,
+          modelId: faux.getModel().id,
+        }),
+      })
+    ).json();
 
     const revision = async (): Promise<number> =>
-      (await (await json(base, `/api/sessions/${session.id}/revision`))
-        .json()).rev;
+      (await (await json(base, `/api/sessions/${session.id}/revision`)).json())
+        .rev;
     // The probe deliberately does not open the session: a count with no
     // events behind it is 0.
     assertEquals(await revision(), 0);
@@ -341,10 +345,9 @@ Deno.test("revision endpoint tracks the events of a session", async () => {
 
     const afterRun = await revision();
     assert(afterRun > 0, "the run's events advanced the revision");
-    const snapshot = await (await json(
-      base,
-      `/api/sessions/${session.id}/messages`,
-    )).json();
+    const snapshot = await (
+      await json(base, `/api/sessions/${session.id}/messages`)
+    ).json();
     assertEquals(snapshot.rev > 0, true);
     // The count only grows, so the snapshot (read first) cannot be ahead of
     // the revision read after it.
@@ -420,8 +423,9 @@ Deno.test("prompt API steers a prompt sent while the session is streaming", asyn
     assertEquals(second.status, 200);
 
     await core.getAgent(session.id)!.waitForIdle();
-    const userTexts = core.getAgent(session.id)!.messages
-      .filter((m) => m.role === "user")
+    const userTexts = core
+      .getAgent(session.id)!
+      .messages.filter((m) => m.role === "user")
       .map((m) => (m.content[0] as { text: string }).text);
     assertEquals(userTexts, ["go", "again"]);
     await removeDirRetry(root);
@@ -479,7 +483,7 @@ Deno.test("federation: hub reports its peers and proxies their workspaces and se
         headers: auth,
       });
       assertEquals(peersRes.status, 200);
-      const { peers } = await peersRes.json() as {
+      const { peers } = (await peersRes.json()) as {
         peers: Array<{
           id: string;
           name: string;
@@ -500,16 +504,22 @@ Deno.test("federation: hub reports its peers and proxies their workspaces and se
       const hubWorkspaces = await json(hubBase, "/api/workspaces", {
         headers: auth,
       });
-      const hubList = await hubWorkspaces.json() as Array<{ name: string }>;
-      assertEquals(hubList.map((w) => w.name), ["hub-ws"]);
+      const hubList = (await hubWorkspaces.json()) as Array<{ name: string }>;
+      assertEquals(
+        hubList.map((w) => w.name),
+        ["hub-ws"],
+      );
       const peerWorkspaces = await json(hubBase, "/api/fed/peer1/workspaces", {
         headers: auth,
       });
-      const peerList = await peerWorkspaces.json() as Array<{
+      const peerList = (await peerWorkspaces.json()) as Array<{
         id: string;
         name: string;
       }>;
-      assertEquals(peerList.map((w) => w.name), ["peer-ws"]);
+      assertEquals(
+        peerList.map((w) => w.name),
+        ["peer-ws"],
+      );
       const peerWorkspaceId = peerList[0]?.id;
 
       // Create a workspace on the peer through the hub.
@@ -773,10 +783,12 @@ Deno.test("todo API returns the session's current plan", async () => {
     faux.setResponses([
       fauxAssistantMessage([
         fauxToolCall("todo", {
-          phases: [{
-            name: "実装",
-            tasks: [{ name: "調査する" }, { name: "実装する" }],
-          }],
+          phases: [
+            {
+              name: "実装",
+              tasks: [{ name: "調査する" }, { name: "実装する" }],
+            },
+          ],
         }),
       ]),
       fauxAssistantMessage("planned"),
@@ -799,7 +811,7 @@ Deno.test("todo API returns the session's current plan", async () => {
     await finished;
 
     const res = await json(base, `/api/sessions/${session.id}/todo`);
-    const { todos } = await res.json() as { todos: TodoPhase[] };
+    const { todos } = (await res.json()) as { todos: TodoPhase[] };
     assertEquals(todos.length, 1);
     assertEquals(todos[0]!.name, "実装");
     assertEquals(
@@ -840,7 +852,7 @@ Deno.test("stella API: the conversation is opened by agent and never listed as a
       body: JSON.stringify({ name: "Aide", role: "Help with the work." }),
     });
     assertEquals(created.status, 201);
-    const agent = await created.json() as { id: string; name: string };
+    const agent = (await created.json()) as { id: string; name: string };
 
     // Opening a new agent starts the app's setup turn (the agent asks how it
     // should work). It begins after the snapshot this test reads, and a
@@ -848,12 +860,9 @@ Deno.test("stella API: the conversation is opened by agent and never listed as a
     faux.setResponses([fauxAssistantMessage("Hello.")]);
     // The conversation is addressed by agent: a client never learns (or
     // needs) the session id, so stella cannot drift into "a tab".
-    const response = await json(
-      base,
-      `/api/stella/conversations/${agent.id}`,
-    );
+    const response = await json(base, `/api/stella/conversations/${agent.id}`);
     assertEquals(response.status, 200);
-    const snapshot = await response.json() as {
+    const snapshot = (await response.json()) as {
       entries: unknown[];
       running: boolean;
       questions: unknown[];
@@ -875,7 +884,7 @@ Deno.test("stella API: the conversation is opened by agent and never listed as a
     const again = await json(base, `/api/stella/conversations/${agent.id}`);
     assertEquals(again.status, 200);
     assertEquals(
-      (await again.json() as { sessionId: string }).sessionId,
+      ((await again.json()) as { sessionId: string }).sessionId,
       snapshot.sessionId,
     );
 
@@ -904,7 +913,7 @@ Deno.test("panel snapshots answer for a session with nothing running", async () 
       }),
     });
     assertEquals(created.status, 201);
-    const session = await created.json() as { id: string };
+    const session = (await created.json()) as { id: string };
 
     // The four resync endpoints the web re-reads after a socket drop. Each
     // one opens the session first, so an empty answer still proves the route
@@ -951,7 +960,7 @@ Deno.test("saved prompts and user providers: the routes exist and validate", asy
       body: JSON.stringify({ label: "L2" }),
     });
     assertEquals(updated.status, 200);
-    assertEquals((await updated.json() as { label: string }).label, "L2");
+    assertEquals(((await updated.json()) as { label: string }).label, "L2");
     const removed = await json(base, "/api/settings/saved-prompts/p1", {
       method: "DELETE",
     });

@@ -103,9 +103,10 @@ export function startFakeMcpServer(
     if (parsed.pathname === FAKE_PRM_PATH) {
       return json({
         resource: `${baseUrl}${FAKE_MCP_PATH}`,
-        authorization_servers: options.authorizationServerUrl === undefined
-          ? []
-          : [options.authorizationServerUrl],
+        authorization_servers:
+          options.authorizationServerUrl === undefined
+            ? []
+            : [options.authorizationServerUrl],
         scopes_supported: ["offline_access"],
       });
     }
@@ -122,8 +123,7 @@ export function startFakeMcpServer(
         },
         401,
         {
-          "www-authenticate":
-            `Bearer resource_metadata="${baseUrl}${FAKE_PRM_PATH}"`,
+          "www-authenticate": `Bearer resource_metadata="${baseUrl}${FAKE_PRM_PATH}"`,
         },
       );
     }
@@ -227,7 +227,7 @@ export function startFakeAuthServer(
     }
     if (parsed.pathname === "/register" && req.method === "POST") {
       state.registrations++;
-      const registration = await req.json() as Record<string, unknown>;
+      const registration = (await req.json()) as Record<string, unknown>;
       // RFC 7591: the registration is echoed back with the issued client id.
       return json({ ...registration, client_id: clientId }, 201);
     }

@@ -18,13 +18,14 @@
  * abort the whole server process with `STATUS_ILLEGAL_INSTRUCTION`, which no
  * try/catch can contain.
  */
-import { findCanvasIcuDataFile } from "./icu-data.ts";
+
 import { getDocumentProxy, renderPageAsImage } from "unpdf";
-import { errorMessage } from "../errors.ts";
 import { bytesToBase64 } from "../base64.ts";
+import { errorMessage } from "../errors.ts";
 import { prepareStoredImage } from "../media/stored-image.ts";
-import type { FileBackend } from "../tools/file-backend.ts";
 import { TOOL_PDF_READ_PAGES } from "../shared/mod.ts";
+import type { FileBackend } from "../tools/file-backend.ts";
+import { requireExistingFile } from "../tools/resolve.ts";
 import {
   array,
   integer,
@@ -33,8 +34,8 @@ import {
   string,
   type Tool,
 } from "../tools/schema.ts";
-import { requireExistingFile } from "../tools/resolve.ts";
 import { requireIntegerInRange } from "../tools/validate.ts";
+import { findCanvasIcuDataFile } from "./icu-data.ts";
 
 /** The tool names of the PDF family. The session pool removes the seeded
  * tools with this list for chat sessions (no workspace folders to resolve
@@ -158,9 +159,9 @@ export function createUnpdfRenderer(options?: {
         await canvasImport();
       } catch (error) {
         throw new Error(
-          `Cannot render PDF pages (the canvas library failed to load: ${
-            errorMessage(error)
-          }); the host needs @napi-rs/canvas support (FFI)`,
+          `Cannot render PDF pages (the canvas library failed to load: ${errorMessage(
+            error,
+          )}); the host needs @napi-rs/canvas support (FFI)`,
         );
       }
       if (needsIcuDataFile && findIcuDataFile() === undefined) {
@@ -181,15 +182,16 @@ export function createUnpdfRenderer(options?: {
         const bad = pages.filter((p) => p < 1 || p > totalPages);
         if (bad.length > 0) {
           throw new Error(
-            `Page ${
-              bad.join(",")
-            } out of range: the PDF has ${totalPages} page(s)`,
+            `Page ${bad.join(
+              ",",
+            )} out of range: the PDF has ${totalPages} page(s)`,
           );
         }
         const rendered: RenderedPdfPage[] = [];
         for (const page of pages) {
-          const viewport = (await abortable(pdf.getPage(page), signal))
-            .getViewport({ scale });
+          const viewport = (
+            await abortable(pdf.getPage(page), signal)
+          ).getViewport({ scale });
           const buffer = await abortable(
             renderPageAsImage(pdf, page, { scale, canvasImport }),
             signal,
@@ -216,10 +218,12 @@ const pdfReadPagesSchema = object({
     "1-based page numbers to render as images, e.g. [1, 2, 3]. " +
       `At most ${MAX_PDF_PAGES_PER_CALL} pages per call; duplicates are rendered once.`,
   ),
-  dpi: optional(integer(
-    `Render resolution in DPI (${MIN_PDF_DPI}-${MAX_PDF_DPI}, default ${DEFAULT_PDF_DPI}). ` +
-      "Higher values give sharper images at a larger context cost.",
-  )),
+  dpi: optional(
+    integer(
+      `Render resolution in DPI (${MIN_PDF_DPI}-${MAX_PDF_DPI}, default ${DEFAULT_PDF_DPI}). ` +
+        "Higher values give sharper images at a larger context cost.",
+    ),
+  ),
 });
 
 export interface PdfToolOptions {
@@ -299,16 +303,17 @@ function createPdfReadPagesTool(
       );
       const base = filePath.split(/[\\/]/).pop() ?? filePath;
       const lines = [
-        `[pdf: ${params.path} — pages ${
-          pages.join(", ")
-        } of ${totalPages} at ${dpi}dpi]`,
+        `[pdf: ${params.path} — pages ${pages.join(
+          ", ",
+        )} of ${totalPages} at ${dpi}dpi]`,
       ];
       const content: Array<
-        { type: "text"; text: string } | {
-          type: "image";
-          data: string;
-          mimeType: string;
-        }
+        | { type: "text"; text: string }
+        | {
+            type: "image";
+            data: string;
+            mimeType: string;
+          }
       > = [];
       for (const page of rendered) {
         // A rendered page is a transcript image like any other: it is kept
@@ -317,9 +322,10 @@ function createPdfReadPagesTool(
         const stored = await prepareStoredImage(page.png, "image/png");
         const width = stored.size?.width ?? page.width;
         const height = stored.size?.height ?? page.height;
-        const scaled = stored.downscaledFrom === undefined
-          ? ""
-          : `, downscaled from ${page.width}x${page.height}`;
+        const scaled =
+          stored.downscaledFrom === undefined
+            ? ""
+            : `, downscaled from ${page.width}x${page.height}`;
         lines.push(
           `[image: ${base} p.${page.page} (${stored.bytes.byteLength} bytes, ` +
             `${width}x${height}${scaled})]`,

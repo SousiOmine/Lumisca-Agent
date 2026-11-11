@@ -1,17 +1,17 @@
-import { useState } from "preact/compat";
-import type { CSSProperties } from "preact/compat";
+import { serializeMcpServers } from "@lumisca/core/shared";
 import {
   IconCheck,
   IconCopy,
   IconExternalLink,
   IconLoader2,
 } from "@tabler/icons-preact";
-import { serializeMcpServers } from "@lumisca/core/shared";
-import type { McpServerInfo, McpTestTool } from "../../types.ts";
+import type { CSSProperties } from "preact/compat";
+import { useState } from "preact/compat";
 import { api } from "../../api.ts";
-import { errorText } from "../../providers.ts";
-import { useT } from "../../i18n.ts";
 import { useMcpSignIn } from "../../hooks/useMcpSignIn.ts";
+import { useT } from "../../i18n.ts";
+import { errorText } from "../../providers.ts";
+import type { McpServerInfo, McpTestTool } from "../../types.ts";
 import { Field } from "../Field.tsx";
 import { mcpDraftKey } from "./mcpDraft.ts";
 import { SettingsSubHeader } from "./SettingsSubHeader.tsx";
@@ -91,9 +91,7 @@ export function McpDetail({
   const [cwd, setCwd] = useState(initial?.cwd ?? "");
   const [env, setEnv] = useState(joinKeyValues(initial?.env ?? {}));
   const [url, setUrl] = useState(initial?.url ?? "");
-  const [headers, setHeaders] = useState(
-    joinKeyValues(initial?.headers ?? {}),
-  );
+  const [headers, setHeaders] = useState(joinKeyValues(initial?.headers ?? {}));
   const [error, setError] = useState<string | null>(null);
   const [test, setTest] = useState<McpTestState | null>(null);
   /** Whether the add button is unlocked: set by every finished test, so a
@@ -188,9 +186,11 @@ export function McpDetail({
     <>
       <SettingsSubHeader
         onBack={onCancel}
-        title={initial
-          ? t("settings.mcp.editTitle", { name: initial.name })
-          : t("common.addServer")}
+        title={
+          initial
+            ? t("settings.mcp.editTitle", { name: initial.name })
+            : t("common.addServer")
+        }
       >
         <button type="button" className="btn push" onClick={onCancel}>
           {t("common.close")}
@@ -225,46 +225,44 @@ export function McpDetail({
           </select>
         </Field>
 
-        {type === "stdio"
-          ? (
-            <>
-              <Field label={t("settings.mcp.commandLabel")}>
-                <input
-                  value={command}
-                  onChange={(e) => setCommand(e.currentTarget.value)}
-                  placeholder={t("settings.mcp.commandPlaceholder")}
-                  style={fullWidth}
-                />
-              </Field>
-              <Field label={t("settings.mcp.argsLabel")}>
-                <textarea
-                  rows={3}
-                  value={args}
-                  onChange={(e) => setArgs(e.currentTarget.value)}
-                  placeholder={t("settings.mcp.argsPlaceholder")}
-                  style={{ ...fullWidth, fontFamily: "monospace" }}
-                />
-              </Field>
-              <Field label={t("settings.mcp.cwdLabel")}>
-                <input
-                  value={cwd}
-                  onChange={(e) => setCwd(e.currentTarget.value)}
-                  placeholder={t("settings.mcp.cwdPlaceholder")}
-                  style={fullWidth}
-                />
-              </Field>
-            </>
-          )
-          : (
-            <Field label={t("settings.mcp.urlLabel")}>
+        {type === "stdio" ? (
+          <>
+            <Field label={t("settings.mcp.commandLabel")}>
               <input
-                value={url}
-                onChange={(e) => setUrl(e.currentTarget.value)}
-                placeholder="https://example.com/mcp"
+                value={command}
+                onChange={(e) => setCommand(e.currentTarget.value)}
+                placeholder={t("settings.mcp.commandPlaceholder")}
                 style={fullWidth}
               />
             </Field>
-          )}
+            <Field label={t("settings.mcp.argsLabel")}>
+              <textarea
+                rows={3}
+                value={args}
+                onChange={(e) => setArgs(e.currentTarget.value)}
+                placeholder={t("settings.mcp.argsPlaceholder")}
+                style={{ ...fullWidth, fontFamily: "monospace" }}
+              />
+            </Field>
+            <Field label={t("settings.mcp.cwdLabel")}>
+              <input
+                value={cwd}
+                onChange={(e) => setCwd(e.currentTarget.value)}
+                placeholder={t("settings.mcp.cwdPlaceholder")}
+                style={fullWidth}
+              />
+            </Field>
+          </>
+        ) : (
+          <Field label={t("settings.mcp.urlLabel")}>
+            <input
+              value={url}
+              onChange={(e) => setUrl(e.currentTarget.value)}
+              placeholder="https://example.com/mcp"
+              style={fullWidth}
+            />
+          </Field>
+        )}
 
         <Field label={t("settings.mcp.envLabel", { var: "${VAR}" })}>
           <textarea
@@ -353,9 +351,11 @@ export function McpDetail({
                 disabled={signIn.pending}
                 onClick={() => void signIn.start(draft)}
               >
-                {signIn.pending
-                  ? <IconLoader2 size={14} className="spin" />
-                  : <IconExternalLink size={14} />}
+                {signIn.pending ? (
+                  <IconLoader2 size={14} className="spin" />
+                ) : (
+                  <IconExternalLink size={14} />
+                )}
                 {signIn.pending
                   ? t("settings.mcp.authWaiting")
                   : t("settings.mcp.authStart")}
@@ -375,9 +375,11 @@ export function McpDetail({
                   className="btn"
                   onClick={() => void signIn.copyUrl()}
                 >
-                  {signIn.copied
-                    ? <IconCheck size={14} />
-                    : <IconCopy size={14} />}
+                  {signIn.copied ? (
+                    <IconCheck size={14} />
+                  ) : (
+                    <IconCopy size={14} />
+                  )}
                   {signIn.copied
                     ? t("settings.mcp.authCopied")
                     : t("settings.mcp.authCopyUrl")}

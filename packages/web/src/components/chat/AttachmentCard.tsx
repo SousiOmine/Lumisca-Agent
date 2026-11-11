@@ -1,5 +1,5 @@
-import { useState } from "preact/compat";
 import { type AttachmentRef, formatAttachmentSize } from "@lumisca/core/shared";
+import { useState } from "preact/compat";
 import { useT } from "../../i18n.ts";
 import { Lightbox } from "../Lightbox.tsx";
 
@@ -39,11 +39,9 @@ export function AttachmentCard({
           onOpen={() => setOpen(attachment)}
         />
       ))}
-      {
-        /* Rendered even when closed: the overlay stays up while it shrinks
+      {/* Rendered even when closed: the overlay stays up while it shrinks
           (see Lightbox). `preview=0` is the original — the point of opening
-          it is to see what the thumbnail could not show. */
-      }
+          it is to see what the thumbnail could not show. */}
       <Lightbox
         src={open === null ? null : `${base}${open.name}?preview=0`}
         alt={open?.displayName}
@@ -80,11 +78,7 @@ function AttachmentRow({
         title={attachment.displayName}
         aria-label={attachment.displayName}
       >
-        <img
-          src={url}
-          alt=""
-          onError={() => setBroken(true)}
-        />
+        <img src={url} alt="" onError={() => setBroken(true)} />
       </button>
     );
   }

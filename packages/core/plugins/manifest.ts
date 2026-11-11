@@ -120,7 +120,8 @@ export function parsePluginManifest(
   let author: PluginAuthor | undefined;
   if (obj.author !== undefined) {
     if (
-      typeof obj.author !== "object" || obj.author === null ||
+      typeof obj.author !== "object" ||
+      obj.author === null ||
       Array.isArray(obj.author)
     ) {
       return fatal(`${filePath}: "author" must be an object`);
@@ -154,7 +155,8 @@ export function parsePluginManifest(
 
   if (obj.extensions !== undefined) {
     if (
-      typeof obj.extensions !== "object" || obj.extensions === null ||
+      typeof obj.extensions !== "object" ||
+      obj.extensions === null ||
       Array.isArray(obj.extensions)
     ) {
       // Non-object extensions: report and ignore (non-fatal).
@@ -172,8 +174,9 @@ export function parsePluginManifest(
       ...(repository !== undefined ? { repository } : {}),
       ...(license !== undefined ? { license } : {}),
       ...(keywords !== undefined ? { keywords } : {}),
-      ...(typeof obj.extensions === "object" && obj.extensions !== null &&
-          !Array.isArray(obj.extensions)
+      ...(typeof obj.extensions === "object" &&
+      obj.extensions !== null &&
+      !Array.isArray(obj.extensions)
         ? { extensions: obj.extensions as Record<string, unknown> }
         : {}),
     },
@@ -182,8 +185,9 @@ export function parsePluginManifest(
 }
 
 function isValidPluginName(name: string): boolean {
-  return name.length <= MAX_PLUGIN_NAME_LENGTH &&
-    PLUGIN_NAME_PATTERN.test(name);
+  return (
+    name.length <= MAX_PLUGIN_NAME_LENGTH && PLUGIN_NAME_PATTERN.test(name)
+  );
 }
 
 const KNOWN_TOP_LEVEL_FIELDS = new Set([
@@ -202,9 +206,7 @@ const KNOWN_TOP_LEVEL_FIELDS = new Set([
 /** Sentinel for "present but the wrong type" (vs. absent). */
 const invalid = Symbol("invalid");
 
-function asOptionalString(
-  value: unknown,
-): string | undefined | typeof invalid {
+function asOptionalString(value: unknown): string | undefined | typeof invalid {
   if (value === undefined) return undefined;
   if (typeof value !== "string") return invalid;
   return value;

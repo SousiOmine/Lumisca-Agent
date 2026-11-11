@@ -1,20 +1,24 @@
 import { assertEquals } from "@std/assert";
+import type { RequestShape } from "../ai/types.ts";
 import { LumiscaDb } from "../db/mod.ts";
 import {
   createRequestShapeRepo,
   MAX_REQUEST_SHAPES_PER_SESSION,
 } from "./request-shapes.ts";
-import type { RequestShape } from "../ai/types.ts";
 
 /** Create workspace + session rows so the FK constraint is satisfied. */
 function createSession(db: LumiscaDb, id: string): void {
-  db.db.prepare(
-    "INSERT OR IGNORE INTO workspaces (id, name, created_at) VALUES ('ws1', 'test', 0)",
-  ).run();
-  db.db.prepare(
-    `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
+  db.db
+    .prepare(
+      "INSERT OR IGNORE INTO workspaces (id, name, created_at) VALUES ('ws1', 'test', 0)",
+    )
+    .run();
+  db.db
+    .prepare(
+      `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
      VALUES (?, 'ws1', 'test', 'faux', 'model', 0, 0)`,
-  ).run(id);
+    )
+    .run(id);
 }
 
 function shape(overrides: Partial<RequestShape> = {}): RequestShape {
@@ -49,7 +53,10 @@ Deno.test("request shapes: record/list round-trips a session's cache breaks", ()
       s1.map((r) => r.change),
       ["initial", "head-changed", "history-rewritten"],
     );
-    assertEquals(s1.map((r) => r.createdAt), [1000, 2000, 3000]);
+    assertEquals(
+      s1.map((r) => r.createdAt),
+      [1000, 2000, 3000],
+    );
     assertEquals(s1[1]!.headHash, "xyz");
     assertEquals(s1[2]!.messageCount, 9);
     assertEquals(s1[0]!.sessionId, "s1");
@@ -72,7 +79,10 @@ Deno.test("request shapes: a limit keeps the newest entries", () => {
     }
     const newest = repo.list("s1", 2);
     assertEquals(newest.length, 2);
-    assertEquals(newest.map((r) => r.createdAt), [1003, 1004]);
+    assertEquals(
+      newest.map((r) => r.createdAt),
+      [1003, 1004],
+    );
   } finally {
     db.close();
   }
@@ -119,8 +129,13 @@ Deno.test("record keeps only the newest shapes of a session", () => {
     const kept = repo.list("s1");
     assertEquals(kept.length, MAX_REQUEST_SHAPES_PER_SESSION);
     // The newest rows survive; the oldest (including the initial one) go.
-    assertEquals(kept.at(-1)?.id! > kept[0]!.id, true);
-    assertEquals(kept.some((entry) => entry.change === "initial"), false);
+    const firstKept = kept[0]!;
+    const lastKept = kept.at(-1)!;
+    assertEquals(lastKept.id > firstKept.id, true);
+    assertEquals(
+      kept.some((entry) => entry.change === "initial"),
+      false,
+    );
   } finally {
     db.close();
   }

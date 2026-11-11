@@ -1,13 +1,13 @@
-import { assert, assertEquals, assertThrows } from "@std/assert";
 import { join } from "node:path";
+import { SETTINGS_DIR_NAME } from "@lumisca/core";
+import { assert, assertEquals, assertThrows } from "@std/assert";
 import {
   parseServiceArgs,
   type ServiceHost,
-  servicePaths,
   ServiceUsageError,
+  servicePaths,
   UNIT_NAME,
 } from "./plan.ts";
-import { SETTINGS_DIR_NAME } from "@lumisca/core";
 
 function host(patch: Partial<ServiceHost> = {}): ServiceHost {
   return {
@@ -28,12 +28,7 @@ Deno.test("installed files live where systemd and the settings file expect them"
   // Windows, macOS, and Linux), so the expectation is built, not spelled.
   assertEquals(servicePaths(host()), {
     unitPath: join("/home/me", ".config", "systemd", "user", UNIT_NAME),
-    documentPath: join(
-      "/home/me",
-      ".config",
-      SETTINGS_DIR_NAME,
-      "service.env",
-    ),
+    documentPath: join("/home/me", ".config", SETTINGS_DIR_NAME, "service.env"),
     installDir: "/home/me/lumisca",
     home: "/home/me",
     execPath: "/home/me/lumisca/lumisca-server",
@@ -63,10 +58,7 @@ Deno.test("the four verbs parse with their own options", () => {
     },
   );
   // `--flag=value` is what most CLIs accept; both spellings must work.
-  assertEquals(
-    parseServiceArgs(["install", "--port=9100"]).flags.port,
-    9100,
-  );
+  assertEquals(parseServiceArgs(["install", "--port=9100"]).flags.port, 9100);
   assertEquals(parseServiceArgs(["status"]).verb, "status");
   assertEquals(parseServiceArgs(["uninstall"]).verb, "uninstall");
   assertEquals(parseServiceArgs(["config"]), {

@@ -243,8 +243,11 @@ function interactiveIn(
   for (const block of blocks) {
     if (block.type === "choice" || block.type === "form") return block;
     if (
-      block.type === "stack" || block.type === "columns" ||
-      block.type === "grid" || block.type === "repeat" || block.type === "if"
+      block.type === "stack" ||
+      block.type === "columns" ||
+      block.type === "grid" ||
+      block.type === "repeat" ||
+      block.type === "if"
     ) {
       const found = interactiveIn(block.blocks);
       if (found !== null) return found;

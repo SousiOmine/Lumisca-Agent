@@ -1,12 +1,12 @@
-import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { join } from "node:path";
+import { SETTINGS_DIR_NAME } from "@lumisca/core";
+import { unusedPort } from "@lumisca/core/test-utils";
+import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { pathUnitValue, quoteUnitValue } from "./compose.ts";
 import type { ServiceDeps } from "./deps.ts";
 import { runServiceCommand } from "./mod.ts";
 import { DOCUMENT_NAME, UNIT_NAME } from "./plan.ts";
 import type { CommandResult, ServiceRunner } from "./runner.ts";
-import { SETTINGS_DIR_NAME } from "@lumisca/core";
-import { unusedPort } from "@lumisca/core/test-utils";
 
 /** A systemd that keeps the state the verbs ask about, so the whole command
  * can run without a user manager. */
@@ -260,13 +260,10 @@ Deno.test("explicit flags override the installed layer", async () => {
       0,
     );
     assertEquals(
-      await runServiceCommand([
-        "install",
-        "--port",
-        "8200",
-        "--db",
-        "data/x.db",
-      ], test.deps),
+      await runServiceCommand(
+        ["install", "--port", "8200", "--db", "data/x.db"],
+        test.deps,
+      ),
       0,
     );
     const document = await Deno.readTextFile(test.documentPath);
@@ -320,13 +317,11 @@ Deno.test("an active unit owns its port, so a reinstall does not test it", async
 });
 
 Deno.test("install fails fast where a user unit cannot work", async () => {
-  for (
-    const [options, expected] of [
-      [{ os: "windows" }, "Linux のみ対応"],
-      [{ standalone: false }, "パッケージ済みサーバー"],
-      [{ desktopManaged: true }, "デスクトップアプリ"],
-    ] as const
-  ) {
+  for (const [options, expected] of [
+    [{ os: "windows" }, "Linux のみ対応"],
+    [{ standalone: false }, "パッケージ済みサーバー"],
+    [{ desktopManaged: true }, "デスクトップアプリ"],
+  ] as const) {
     const test = await harness(options);
     try {
       const code = await runServiceCommand(["install"], test.deps);

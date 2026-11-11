@@ -181,10 +181,7 @@ Deno.test("parseUiMarkup refuses an empty markup, a non-Card root or no blocks",
   assertStringIncludes(problemOf(""), "empty");
   assertStringIncludes(problemOf("  \n "), "empty");
   assertStringIncludes(problemOf("<Text>a</Text>"), "the root must be <Card>");
-  assertStringIncludes(
-    problemOf("<Card></Card>"),
-    "needs at least one block",
-  );
+  assertStringIncludes(problemOf("<Card></Card>"), "needs at least one block");
 });
 
 Deno.test("parseUiMarkup refuses unknown tags and attributes", () => {
@@ -521,10 +518,9 @@ Deno.test("splitChatText: text without a card is one prose segment", () => {
 });
 
 Deno.test("splitChatText: a message may be cards alone, and several", () => {
-  assertEquals(
-    splitChatText("```card\n<Card><Text>a</Text></Card>\n```"),
-    [{ type: "card", markup: "<Card><Text>a</Text></Card>" }],
-  );
+  assertEquals(splitChatText("```card\n<Card><Text>a</Text></Card>\n```"), [
+    { type: "card", markup: "<Card><Text>a</Text></Card>" },
+  ]);
   assertEquals(
     splitChatText(
       "```card\n<Card><Text>a</Text></Card>\n```\n" +
@@ -555,10 +551,9 @@ Deno.test("splitChatText: other fences stay prose, delimiters included", () => {
     ],
   );
   // A card's fence written INSIDE a code sample is a sample.
-  assertEquals(
-    splitChatText("```xml\n```card\n<Card/>\n```\n```"),
-    [{ type: "text", text: "```xml\n```card\n<Card/>\n```\n```" }],
-  );
+  assertEquals(splitChatText("```xml\n```card\n<Card/>\n```\n```"), [
+    { type: "text", text: "```xml\n```card\n<Card/>\n```\n```" },
+  ]);
 });
 
 Deno.test("splitChatText: a tilde fence is a card fence too", () => {
@@ -744,7 +739,8 @@ Deno.test("parseUiMarkupPartial draws the blocks that closed so far", () => {
 });
 
 Deno.test("parseUiMarkupPartial reads the data before the blocks that follow it", () => {
-  const markup = `<Card><Data>{"envs":[{"name":"prod"}]}</Data>` +
+  const markup =
+    `<Card><Data>{"envs":[{"name":"prod"}]}</Data>` +
     '<Repeat over="envs"><Metric label="$item.name" value="1" /></Repeat>' +
     "<Text>tail";
 

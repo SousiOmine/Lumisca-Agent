@@ -7,8 +7,10 @@ export interface ThinkingModel {
 }
 
 export function isThinkingLevel(value: unknown): value is ThinkingLevel {
-  return typeof value === "string" &&
-    (THINKING_LEVEL_ORDER as readonly string[]).includes(value);
+  return (
+    typeof value === "string" &&
+    (THINKING_LEVEL_ORDER as readonly string[]).includes(value)
+  );
 }
 
 /**

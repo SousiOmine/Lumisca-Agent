@@ -1,3 +1,4 @@
+import type { SessionSnapshot } from "@lumisca/core/shared";
 import { withLatestContextUsage } from "@lumisca/core/shared";
 import type {
   BackgroundCommandInfo,
@@ -8,14 +9,13 @@ import type {
   TaskView,
   TodoPhase,
 } from "../types.ts";
-import type { SessionSnapshot } from "@lumisca/core/shared";
-import { applyRunState, mergeNewestWindow } from "./identity.ts";
 import {
   sameBackgrounds,
   sameQuestions,
   sameTasks,
   sameTodoPlan,
 } from "./equality.ts";
+import { applyRunState, mergeNewestWindow } from "./identity.ts";
 
 /** The fetched snapshots of one session, as the resync collects them. Any
  * piece may be missing (its request failed); the rest are still applied. */
@@ -57,11 +57,12 @@ export function applySnapshot(
 ): SessionView {
   const { snapshot } = parts;
   const movedByEvent = {
-    runState: before !== undefined &&
+    runState:
+      before !== undefined &&
       (view.agentStartedAt !== before.started ||
         view.agentEndedAt !== before.ended),
-    questions: before !== undefined &&
-      view.pendingQuestions !== before.questions,
+    questions:
+      before !== undefined && view.pendingQuestions !== before.questions,
     error: before !== undefined && view.error !== before.error,
     name: before !== undefined && view.info.name !== before.name,
   };
@@ -69,62 +70,76 @@ export function applySnapshot(
   // handler): a view that (re)connected while a run was going must render
   // it as running, and one whose run ended unwatched must stop showing it
   // as running (see applyRunState).
-  const withRun = snapshot === undefined || movedByEvent.runState
-    ? view
-    : applyRunState(view, snapshot.running);
-  const questions = snapshot === undefined || movedByEvent.questions
-    ? view.pendingQuestions
-    : snapshot.questions;
-  const error = snapshot === undefined || movedByEvent.error
-    ? view.error
-    : snapshot.error;
-  const name = snapshot === undefined || movedByEvent.name
-    ? view.info.name
-    : snapshot.name;
-  const questionsChanged = snapshot !== undefined &&
+  const withRun =
+    snapshot === undefined || movedByEvent.runState
+      ? view
+      : applyRunState(view, snapshot.running);
+  const questions =
+    snapshot === undefined || movedByEvent.questions
+      ? view.pendingQuestions
+      : snapshot.questions;
+  const error =
+    snapshot === undefined || movedByEvent.error ? view.error : snapshot.error;
+  const name =
+    snapshot === undefined || movedByEvent.name
+      ? view.info.name
+      : snapshot.name;
+  const questionsChanged =
+    snapshot !== undefined &&
     !movedByEvent.questions &&
     !sameQuestions(questions, view.pendingQuestions);
-  const errorChanged = snapshot !== undefined && !movedByEvent.error &&
-    error !== view.error;
-  const nameChanged = snapshot !== undefined && !movedByEvent.name &&
-    name !== view.info.name;
+  const errorChanged =
+    snapshot !== undefined && !movedByEvent.error && error !== view.error;
+  const nameChanged =
+    snapshot !== undefined && !movedByEvent.name && name !== view.info.name;
   // The snapshot is a WINDOW of the transcript (see mergeNewestWindow): it
   // extends the view forwards, and the view's cursor stays true because
   // paging back is the reader's action, not a resync's.
-  const history = snapshot === undefined
-    ? { messages: view.messages, older: view.older }
-    : mergeNewestWindow(
-      view,
-      { messages: snapshot.messages, older: snapshot.older },
-      view.removed,
-    );
+  const history =
+    snapshot === undefined
+      ? { messages: view.messages, older: view.older }
+      : mergeNewestWindow(
+          view,
+          { messages: snapshot.messages, older: snapshot.older },
+          view.removed,
+        );
   const messages = history.messages;
   const older = history.older;
-  const usage = snapshot === undefined
-    ? view.usage
-    : withLatestContextUsage(snapshot.usage, messages);
+  const usage =
+    snapshot === undefined
+      ? view.usage
+      : withLatestContextUsage(snapshot.usage, messages);
   // A snapshot counts whole history: the meter must not blink when the
   // summary moved (a run priced another turn) while the messages did not.
   const usageChanged = usage !== view.usage;
   const todo = parts.todos;
   const todoChanged = todo !== undefined && !sameTodoPlan(todo, view.todos);
   const fetchedTasks = parts.tasks;
-  const tasks = fetchedTasks === undefined
-    ? view.tasks
-    : mergeTasks(view.tasks, fetchedTasks);
-  const tasksChanged = fetchedTasks !== undefined &&
-    !sameTasks(tasks, view.tasks);
+  const tasks =
+    fetchedTasks === undefined
+      ? view.tasks
+      : mergeTasks(view.tasks, fetchedTasks);
+  const tasksChanged =
+    fetchedTasks !== undefined && !sameTasks(tasks, view.tasks);
   const fetchedBackgrounds = parts.backgrounds;
-  const backgrounds = fetchedBackgrounds === undefined
-    ? view.backgrounds
-    : mergeBackgrounds(view.backgrounds, fetchedBackgrounds);
-  const backgroundsChanged = fetchedBackgrounds !== undefined &&
+  const backgrounds =
+    fetchedBackgrounds === undefined
+      ? view.backgrounds
+      : mergeBackgrounds(view.backgrounds, fetchedBackgrounds);
+  const backgroundsChanged =
+    fetchedBackgrounds !== undefined &&
     !sameBackgrounds(backgrounds, view.backgrounds);
   if (
-    messages === view.messages && older === view.older && !usageChanged &&
-    !todoChanged && !tasksChanged && !backgroundsChanged &&
-    withRun === view && !questionsChanged &&
-    !errorChanged && !nameChanged
+    messages === view.messages &&
+    older === view.older &&
+    !usageChanged &&
+    !todoChanged &&
+    !tasksChanged &&
+    !backgroundsChanged &&
+    withRun === view &&
+    !questionsChanged &&
+    !errorChanged &&
+    !nameChanged
   ) {
     return view;
   }
@@ -195,9 +210,8 @@ export function mergeBackgrounds(
       finishedAt: info.finishedAt,
       exitCode: info.exitCode,
       tail: info.tail.length > cmd.tail.length ? info.tail : cmd.tail,
-      liveText: info.tail.length > cmd.liveText.length
-        ? info.tail
-        : cmd.liveText,
+      liveText:
+        info.tail.length > cmd.liveText.length ? info.tail : cmd.liveText,
     };
   });
   const known = new Set(existing.map((cmd) => cmd.commandId));

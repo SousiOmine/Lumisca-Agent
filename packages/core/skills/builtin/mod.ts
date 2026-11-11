@@ -1,14 +1,14 @@
 import type { SkillDef } from "../discover.ts";
-import { webBrowserSkill } from "./web-browser.ts";
-import { computerUseSkill } from "./computer-use.ts";
-import { desktopAppsSkill } from "./desktop-apps.ts";
 import { agentCreateSkill } from "./agent-create.ts";
 import { codingAgentsSkill } from "./coding-agents.ts";
+import { computerUseSkill } from "./computer-use.ts";
+import { desktopAppsSkill } from "./desktop-apps.ts";
 import { identitySkill } from "./identity.ts";
 import { mcpServersSkill } from "./mcp-servers.ts";
 import { routinesSkill } from "./routines.ts";
 import { skillAuthoringSkill } from "./skill-authoring.ts";
 import { vmEnvSkill } from "./vm-env.ts";
+import { webBrowserSkill } from "./web-browser.ts";
 
 /**
  * App-embedded skills: shipped with the application itself, always
@@ -88,12 +88,14 @@ export function builtinSkills(context: BuiltinContext): SkillDef[] {
     // Skills are written with the file tools, so the guide follows them: no
     // file tools (a chat session) → nothing to teach about writing files.
     ...(context.skillAuthoring !== undefined
-      ? [skillAuthoringSkill({
-        ...(context.skillAuthoring.sharedDir !== undefined
-          ? { sharedDir: context.skillAuthoring.sharedDir }
-          : {}),
-        stella: context.stella === true,
-      })]
+      ? [
+          skillAuthoringSkill({
+            ...(context.skillAuthoring.sharedDir !== undefined
+              ? { sharedDir: context.skillAuthoring.sharedDir }
+              : {}),
+            stella: context.stella === true,
+          }),
+        ]
       : []),
     ...(context.subagents ? [codingAgentsSkill()] : []),
   ];

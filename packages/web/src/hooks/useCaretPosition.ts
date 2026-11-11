@@ -12,9 +12,7 @@ import {
  * own rect, so the result is relative to the mirror — and, because the
  * textarea and its wrapper share a top-left origin, to the popover's
  * containing block — regardless of any transform on an ancestor. */
-function measureCaret(
-  textarea: HTMLTextAreaElement,
-): { x: number; y: number } {
+function measureCaret(textarea: HTMLTextAreaElement): { x: number; y: number } {
   const pos = textarea.selectionStart;
   const style = getComputedStyle(textarea);
   const mirror = document.createElement("div");

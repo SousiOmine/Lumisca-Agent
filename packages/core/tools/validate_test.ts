@@ -1,8 +1,8 @@
 import { assertEquals, assertThrows } from "@std/assert";
 import { CoreError } from "../errors.ts";
-import { integer, object, optional, string, type Tool } from "./schema.ts";
 import { toAgentTool } from "./pi-adapter.ts";
 import { ToolRegistry } from "./registry.ts";
+import { integer, object, optional, string, type Tool } from "./schema.ts";
 import { assertSchemaBounds } from "./validate.ts";
 
 /** The `bash` schema as the model was told it, and the argument shapes it
@@ -34,7 +34,7 @@ Deno.test("a required argument that was not sent is reported by name", () => {
   );
   assertEquals(
     errorMessage(() =>
-      assertSchemaBounds(bashSchema, { command: "ls", timeout: 30 })
+      assertSchemaBounds(bashSchema, { command: "ls", timeout: 30 }),
     ),
     "Missing required argument: cwd. Send it and call again.",
   );
@@ -45,7 +45,7 @@ Deno.test("a null required argument counts as missing", () => {
   // not a usable path and does not mean "absent" to the tool either.
   assertEquals(
     errorMessage(() =>
-      assertSchemaBounds(bashSchema, { cwd: null, command: "ls" })
+      assertSchemaBounds(bashSchema, { cwd: null, command: "ls" }),
     ),
     "Missing required argument: cwd. Send it and call again.",
   );
@@ -80,7 +80,7 @@ Deno.test("declared integer bounds still hold", () => {
         cwd: "Aaa",
         command: "ls",
         timeout: 0,
-      })
+      }),
     ),
     "timeout must be an integer between 1 and 3600 (got 0)",
   );

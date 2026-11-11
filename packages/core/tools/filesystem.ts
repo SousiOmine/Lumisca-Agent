@@ -1,4 +1,6 @@
 import { extname } from "node:path";
+import { bytesToBase64 } from "../base64.ts";
+import { prepareStoredImage, type StoredImage } from "../media/stored-image.ts";
 import {
   decodeUtf8,
   diffLineCounts,
@@ -8,13 +10,11 @@ import {
   TOOL_READ,
   TOOL_WRITE,
 } from "../shared/mod.ts";
-import { object, string, type Tool } from "./schema.ts";
-import { DEFAULT_READ_LIMIT, truncate, truncatedNote } from "./truncate.ts";
-import { bytesToBase64 } from "../base64.ts";
-import { prepareStoredImage, type StoredImage } from "../media/stored-image.ts";
 import type { FsToolContext } from "./context.ts";
 import type { BackendDirEntry, LineRange } from "./file-backend.ts";
 import { requireExistingFile, requireResolved } from "./resolve.ts";
+import { object, string, type Tool } from "./schema.ts";
+import { DEFAULT_READ_LIMIT, truncate, truncatedNote } from "./truncate.ts";
 
 /** Largest image handed to the model as an image block; anything bigger
  * falls back to the (garbled) text read. */
@@ -37,12 +37,15 @@ function fileInfoLine(entry: BackendDirEntry): string {
 function imageNote(name: string, bytes: number, stored: StoredImage): string {
   const size = stored.size;
   if (size === undefined) return `[image: ${name} (${bytes} bytes)]`;
-  const scaled = stored.downscaledFrom === undefined
-    ? ""
-    : ` (downscaled from ${stored.downscaledFrom.width}×` +
-      `${stored.downscaledFrom.height})`;
-  return `[image: ${name} — ${size.width}×${size.height}${scaled}, ` +
-    `${stored.bytes.byteLength} bytes]`;
+  const scaled =
+    stored.downscaledFrom === undefined
+      ? ""
+      : ` (downscaled from ${stored.downscaledFrom.width}×` +
+        `${stored.downscaledFrom.height})`;
+  return (
+    `[image: ${name} — ${size.width}×${size.height}${scaled}, ` +
+    `${stored.bytes.byteLength} bytes]`
+  );
 }
 
 /** Resolve a path, throwing the rejection reason (the wording every tool
@@ -70,9 +73,11 @@ function invalidRange(path: string, spec: string): Error {
  * colons inside file names stay part of the path. Suffixes that do not match
  * the grammar at all are not ranges and stay in the path (the resolver then
  * reports them as a missing file). */
-function splitRangeSuffix(
-  requested: string,
-): { path: string; spec: string; ranges: LineRange[] | undefined } {
+function splitRangeSuffix(requested: string): {
+  path: string;
+  spec: string;
+  ranges: LineRange[] | undefined;
+} {
   const colon = requested.lastIndexOf(":");
   if (colon === -1) return { path: requested, spec: "", ranges: undefined };
   const spec = requested.slice(colon + 1);
@@ -140,7 +145,8 @@ export function createReadFileTool(
   return {
     name: TOOL_READ,
     label: "Read File",
-    description: "Read a file as text. Append a line range to the path: " +
+    description:
+      "Read a file as text. Append a line range to the path: " +
       "`f.ts:50-100`, `f.ts:50+20` (20 lines from 50), `f.ts:5-16,960-973`. " +
       "Raster images (PNG/JPEG/GIF/WebP/BMP) come back as images. A " +
       `whole-file read keeps ${Math.floor(DEFAULT_READ_LIMIT / 1024)}KB and ` +
@@ -161,10 +167,11 @@ export function createReadFileTool(
         const { lines: kept, truncated } = capRangeLines(read);
         let output = `--- ${path} lines ${spec} ---\n${kept.join("\n")}`;
         if (truncated) {
-          output += read.droppedLines > 0
-            ? `\n[output truncated: the first ${read.droppedLines} line(s) ` +
-              `are not shown]`
-            : truncatedNote("output");
+          output +=
+            read.droppedLines > 0
+              ? `\n[output truncated: the first ${read.droppedLines} line(s) ` +
+                `are not shown]`
+              : truncatedNote("output");
         }
         if (read.endOfFile) {
           output += `\n[end of file: ${read.lastLine} lines]`;
@@ -213,8 +220,7 @@ export function createReadFileTool(
       if (truncated) note = truncatedNote("output");
       if (bytes.length < actualSize) {
         const nextLine = countNewlines(bytes) + 1;
-        note +=
-          `\n[file continues; read with ${params.path}:${nextLine}+${SUGGESTED_RANGE_LINES}]`;
+        note += `\n[file continues; read with ${params.path}:${nextLine}+${SUGGESTED_RANGE_LINES}]`;
       }
       return {
         content: [{ type: "text", text: trimmed + note }],
@@ -347,7 +353,8 @@ export function createEditFileTool(
         }
         const origIndex = mapOffset(content, normIndex);
         const origEnd = mapOffset(content, normIndex + needle.length);
-        const updated = content.slice(0, origIndex) +
+        const updated =
+          content.slice(0, origIndex) +
           toFileNewlines(params.new_string, content) +
           content.slice(origEnd);
         await files.writeText(filePath, updated);
@@ -407,9 +414,11 @@ function withFileLock<T>(path: string, fn: () => Promise<T>): Promise<T> {
   // finally-chain's rejection (the caller already observes `next`'s own
   // failure) so an expected tool error cannot become an unhandled
   // rejection.
-  next.finally(() => {
-    if (fileLocks.get(path) === next) fileLocks.delete(path);
-  }).catch(() => {});
+  next
+    .finally(() => {
+      if (fileLocks.get(path) === next) fileLocks.delete(path);
+    })
+    .catch(() => {});
   return next;
 }
 

@@ -1,5 +1,5 @@
-import { assert, assertEquals, assertThrows } from "@std/assert";
 import { resolve as resolvePath } from "node:path";
+import { assert, assertEquals, assertThrows } from "@std/assert";
 import {
   pathUnitValue,
   quoteUnitValue,
@@ -45,9 +45,7 @@ Deno.test("the shipped template renders, and its placeholders match the composer
   assert(unit.includes(`ExecStart=${quoteUnitValue(PATHS.execPath)}`));
   assert(unit.includes(`WorkingDirectory=${pathUnitValue(PATHS.installDir)}`));
   assert(unit.includes(`Environment=HOME=${quoteUnitValue(PATHS.home)}`));
-  assert(
-    unit.includes(`EnvironmentFile=${pathUnitValue(PATHS.documentPath)}`),
-  );
+  assert(unit.includes(`EnvironmentFile=${pathUnitValue(PATHS.documentPath)}`));
   // The directives the lifecycle depends on: restart on its own exit (an
   // applied update) and stop inside the drain budget (shutdown.ts).
   assert(unit.includes("Restart=always"));
@@ -95,11 +93,7 @@ Deno.test("path directives take their value verbatim, quotes and all", () => {
     ServiceDefinitionError,
     "空白",
   );
-  assertThrows(
-    () => pathUnitValue(" /home/x"),
-    ServiceDefinitionError,
-    "空白",
-  );
+  assertThrows(() => pathUnitValue(" /home/x"), ServiceDefinitionError, "空白");
 });
 
 Deno.test("values compose over the installed document, then the defaults", () => {

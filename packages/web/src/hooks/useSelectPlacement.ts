@@ -65,9 +65,10 @@ export function chooseSelectSide(
     below: Math.max(0, clip.bottom - trigger.bottom - SELECT_GAP),
   };
   const other: SelectSide = preferred === "above" ? "below" : "above";
-  const side = room[preferred] < height && room[other] > room[preferred]
-    ? other
-    : preferred;
+  const side =
+    room[preferred] < height && room[other] > room[preferred]
+      ? other
+      : preferred;
   const available = room[side];
   // Neither side holds the list (a clip shorter than the list): the side with
   // more room, capped, scrolls. A capped list says there is more; a cut one
@@ -114,10 +115,7 @@ export function clipBandOf(element: HTMLElement | null): Band {
   return visible;
 }
 
-function samePlacement(
-  a: SelectPlacement,
-  b: SelectPlacement,
-): boolean {
+function samePlacement(a: SelectPlacement, b: SelectPlacement): boolean {
   return a.side === b.side && a.maxHeight === b.maxHeight;
 }
 
@@ -171,7 +169,7 @@ export function useSelectPlacement(
         preferred,
       );
       setPlacement((previous) =>
-        samePlacement(previous, next) ? previous : next
+        samePlacement(previous, next) ? previous : next,
       );
     };
     update();

@@ -1,12 +1,12 @@
 import { assert, assertEquals } from "@std/assert";
+import { buildStellaSystemPrompt } from "../tools/system-prompt.ts";
 import {
   AGENT_MEMORY_FILE,
   ensureAgentMemory,
   vmMemoryPath,
 } from "./agent-memory.ts";
-import { vmAgentDir } from "./contract.ts";
-import { buildStellaSystemPrompt } from "../tools/system-prompt.ts";
 import type { VmExec } from "./container.ts";
+import { vmAgentDir } from "./contract.ts";
 
 /**
  * MEMORY.md is made by ONE shell command, and the shape of that command is the
@@ -62,10 +62,7 @@ Deno.test("vm memory: an existing MEMORY.md is never emptied", async () => {
   assert(command !== undefined);
   // Pinned exactly: opening a conversation runs this again, so an unguarded
   // `: >` would throw away what the agent wrote last time.
-  assertEquals(
-    command[2],
-    'mkdir -p -- "$1" && { [ -e "$2" ] || : > "$2"; }',
-  );
+  assertEquals(command[2], 'mkdir -p -- "$1" && { [ -e "$2" ] || : > "$2"; }');
 });
 
 Deno.test("vm memory: the prompt names the file the machine creates", () => {

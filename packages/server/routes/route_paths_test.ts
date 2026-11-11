@@ -1,4 +1,4 @@
-import { stellaApiStub } from "./test-stubs.ts";
+import type { SessionInfo, StellaAgent } from "@lumisca/core";
 /**
  * The shared session builder's mounted paths.
  *
@@ -21,9 +21,9 @@ import { stellaApiStub } from "./test-stubs.ts";
  * invisible at runtime (the later one simply never runs).
  */
 import { assertEquals } from "@std/assert";
-import { stellaRoutes } from "./stella.ts";
 import type { StellaApi } from "./stella.ts";
-import type { SessionInfo, StellaAgent } from "@lumisca/core";
+import { stellaRoutes } from "./stella.ts";
+import { stellaApiStub } from "./test-stubs.ts";
 
 const AGENT: StellaAgent = {
   id: "a1",
@@ -51,8 +51,8 @@ const SESSION = {
 
 /** A core that answers only for the fixture agent, recording the calls. */
 function fakeCore(seen: string[]): StellaApi {
-  const agentOf = (id: string) => id === AGENT.id ? AGENT : undefined;
-  const sessionOf = (id: string) => id === AGENT.id ? SESSION : undefined;
+  const agentOf = (id: string) => (id === AGENT.id ? AGENT : undefined);
+  const sessionOf = (id: string) => (id === AGENT.id ? SESSION : undefined);
   return stellaApiStub({
     getStellaAgent: agentOf,
     findStellaSession: sessionOf,
@@ -61,7 +61,7 @@ function fakeCore(seen: string[]): StellaApi {
     updateStellaAgent: () => Promise.resolve(AGENT),
     deleteStellaAgent: () => Promise.resolve(),
     getStellaStatus: () => Promise.resolve({} as never),
-    getSession: (id: string) => id === SESSION.id ? SESSION : undefined,
+    getSession: (id: string) => (id === SESSION.id ? SESSION : undefined),
     getSessionLastError: () => undefined,
     getSessionRevision: () => 0,
     openSession: (id: string) => {
@@ -126,20 +126,16 @@ async function registrationsIn(
     new URL(here.slice(0, here.lastIndexOf("/") + 1) + file),
   );
   const out: Array<{ method: string; path: string }> = [];
-  for (
-    const match of text.matchAll(
-      /\bapp\.(get|post|put|patch|delete|all)\(\s*[`"]([^`"]+)[`"]/g,
-    )
-  ) {
+  for (const match of text.matchAll(
+    /\bapp\.(get|post|put|patch|delete|all)\(\s*[`"]([^`"]+)[`"]/g,
+  )) {
     out.push({ method: match[1]!, path: match[2]! });
   }
   // The builder's shared handlers: `app.<method>(path("/suffix")`, where the
   // base is the caller's option.
-  for (
-    const match of text.matchAll(
-      /\bapp\.(get|post|put|patch|delete|all)\(\s*path\(\s*[`"]([^`"]+)[`"]/g,
-    )
-  ) {
+  for (const match of text.matchAll(
+    /\bapp\.(get|post|put|patch|delete|all)\(\s*path\(\s*[`"]([^`"]+)[`"]/g,
+  )) {
     out.push({ method: match[1]!, path: `<base>${match[2]!}` });
   }
   return out;

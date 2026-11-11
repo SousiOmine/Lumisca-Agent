@@ -1,25 +1,25 @@
 import { join } from "node:path";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
+import type { Workspace } from "../domain/workspace.ts";
 import { CoreError, errorMessage } from "../errors.ts";
+import {
+  createInMemorySettingsRepo,
+  type SettingsRepo,
+} from "../settings/repo.ts";
+import { APP_MCP_SETTINGS_KEY } from "../shared/mod.ts";
+import { makeRealTempDir, removeDirRetry } from "../test-utils.ts";
+import { McpCallTimeoutError, probeMcpServer } from "./client.ts";
+import type { McpServerConfig } from "./config.ts";
 import {
   loadMcpConfig,
   McpConfigError,
   parseMcpConfig,
   serializeMcpConfig,
 } from "./config.ts";
-import type { McpServerConfig } from "./config.ts";
-import { APP_MCP_SETTINGS_KEY } from "../shared/mod.ts";
-import { McpManager } from "./manager.ts";
-import { createMcpTools, sanitizeServerName } from "./tools.ts";
-import { McpService } from "./service.ts";
-import { McpCallTimeoutError, probeMcpServer } from "./client.ts";
 import { startFakeMcpServer } from "./fake-http.ts";
-import {
-  createInMemorySettingsRepo,
-  type SettingsRepo,
-} from "../settings/repo.ts";
-import { makeRealTempDir, removeDirRetry } from "../test-utils.ts";
-import type { Workspace } from "../domain/workspace.ts";
+import { McpManager } from "./manager.ts";
+import { McpService } from "./service.ts";
+import { createMcpTools, sanitizeServerName } from "./tools.ts";
 
 // --- config -----------------------------------------------------------------
 
@@ -330,13 +330,7 @@ Deno.test("an aborted call stays an abort, not a timeout", async () => {
     setTimeout(() => controller.abort("stopped by user"), 100);
     let error: unknown;
     try {
-      await manager.callTool(
-        "fake",
-        "slow",
-        {},
-        controller.signal,
-        60_000,
-      );
+      await manager.callTool("fake", "slow", {}, controller.signal, 60_000);
     } catch (e) {
       error = e;
     }
@@ -387,7 +381,10 @@ Deno.test("failed server startup is reported per server", async () => {
   try {
     const tools = await createMcpTools(manager);
     // The healthy server's tools are still discovered.
-    assertEquals(tools.some((t) => t.name === "mcp__fake__echo"), true);
+    assertEquals(
+      tools.some((t) => t.name === "mcp__fake__echo"),
+      true,
+    );
     const status = manager.getStatus();
     const broken = status.find((s) => s.name === "broken")!;
     assertEquals(broken.status, "error");
@@ -402,10 +399,7 @@ Deno.test("sanitizeServerName produces provider-safe names", () => {
   assertEquals(sanitizeServerName("my server"), "my_server");
   assertEquals(sanitizeServerName("github.com"), "github_com");
   assertEquals(sanitizeServerName("ok-1"), "ok-1");
-  assertEquals(
-    sanitizeServerName("x".repeat(100)),
-    "x".repeat(64),
-  );
+  assertEquals(sanitizeServerName("x".repeat(100)), "x".repeat(64));
 });
 
 // --- http client ------------------------------------------------------------
@@ -416,7 +410,7 @@ Deno.test("http servers work over streamable HTTP with session ids", async () =>
   let sessionId: string | null = null;
   const server = Deno.serve({ port: 0, onListen: () => {} }, async (req) => {
     if (req.method !== "POST") return new Response("nope", { status: 405 });
-    const body = await req.json() as {
+    const body = (await req.json()) as {
       id?: string;
       method?: string;
       params?: Record<string, unknown>;
@@ -446,28 +440,29 @@ Deno.test("http servers work over streamable HTTP with session ids", async () =>
         jsonrpc: "2.0",
         id: body.id,
         result: {
-          tools: [{
-            name: "ping",
-            description: "Pings",
-            inputSchema: { type: "object" },
-          }],
+          tools: [
+            {
+              name: "ping",
+              description: "Pings",
+              inputSchema: { type: "object" },
+            },
+          ],
         },
       });
     }
     if (body.method === "tools/call") {
       const sentSession = req.headers.get("mcp-session-id");
-      const text = sentSession === sessionId
-        ? "pong (session ok)"
-        : `pong (session missing: ${sentSession ?? "none"})`;
+      const text =
+        sentSession === sessionId
+          ? "pong (session ok)"
+          : `pong (session missing: ${sentSession ?? "none"})`;
       // Respond as SSE to exercise the SSE parser.
       return new Response(
-        `event: message\ndata: ${
-          JSON.stringify({
-            jsonrpc: "2.0",
-            id: body.id,
-            result: { content: [{ type: "text", text }] },
-          })
-        }\n\n`,
+        `event: message\ndata: ${JSON.stringify({
+          jsonrpc: "2.0",
+          id: body.id,
+          result: { content: [{ type: "text", text }] },
+        })}\n\n`,
         { headers: { "Content-Type": "text/event-stream" } },
       );
     }
@@ -644,7 +639,7 @@ Deno.test("probeMcpServer fails for a server that cannot start", async () => {
       probeTarget("lumisca-definitely-missing-command", []),
       Deno.cwd(),
       5_000,
-    )
+    ),
   );
 });
 
@@ -662,7 +657,7 @@ Deno.test("a timed-out probe leaves no server process behind", async () => {
         ]),
         cwd,
         500,
-      )
+      ),
     );
     // Closing the transport ends the fixture's stdin and waits for the
     // child, so its exit marker is there by the time the probe settled.
@@ -684,7 +679,10 @@ Deno.test("testServer reports a server with its tools", async () => {
   assertEquals(result.ok, true);
   assertEquals(result.error, undefined);
   assertEquals(result.tools.length, 5);
-  assertEquals(result.tools.some((t) => t.name === "echo"), true);
+  assertEquals(
+    result.tools.some((t) => t.name === "echo"),
+    true,
+  );
 });
 
 Deno.test("testServer tests a disabled server too", async () => {
@@ -753,7 +751,10 @@ Deno.test("an HTTP server receives the configured headers", async () => {
       Deno.cwd(),
       10_000,
     );
-    assertEquals(tools.map((t) => t.name), ["echo"]);
+    assertEquals(
+      tools.map((t) => t.name),
+      ["echo"],
+    );
     // The headers ride in `requestInit`: passing them as a top-level
     // transport option silently drops them (the SDK has no such option).
     const sent = server.requests[0]!;
@@ -836,7 +837,10 @@ Deno.test("addAppServer appends without expanding the other servers' env", () =>
       }),
     );
     const info = service.addAppServer(stdioServer("added"));
-    assertEquals(info.servers.map((s) => s.name), ["existing", "added"]);
+    assertEquals(
+      info.servers.map((s) => s.name),
+      ["existing", "added"],
+    );
     const stored = settings.get(APP_MCP_SETTINGS_KEY)!;
     // The reference stays a reference: parsing expands it to the value, and
     // writing that back would put the secret in the settings file.
@@ -895,7 +899,10 @@ Deno.test("removeAppServer drops one server and keeps the rest", () => {
     }),
   );
   const info = service.removeAppServer("b");
-  assertEquals(info.servers.map((s) => s.name), ["a"]);
+  assertEquals(
+    info.servers.map((s) => s.name),
+    ["a"],
+  );
   const stored = settings.get(APP_MCP_SETTINGS_KEY)!;
   assert(!stored.includes('"b"'), stored);
   assert(stored.includes('"a"'), stored);
@@ -907,10 +914,7 @@ Deno.test("removeAppServer refuses a name that is not configured", () => {
     APP_MCP_SETTINGS_KEY,
     JSON.stringify({ mcpServers: { a: { command: "x" } } }),
   );
-  const error = assertThrows(
-    () => service.removeAppServer("nope"),
-    CoreError,
-  );
+  const error = assertThrows(() => service.removeAppServer("nope"), CoreError);
   assertEquals(error.kind, "not_found");
   assert(settings.get(APP_MCP_SETTINGS_KEY)!.includes('"a"'));
 });

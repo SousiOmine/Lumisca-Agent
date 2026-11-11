@@ -43,9 +43,10 @@ export function parseJsonc(text: string, path?: string): unknown {
     const message = errorMessage(err);
     const where = path === undefined ? "" : ` in ${path}`;
     throw new SettingsFileError(
-      `Invalid settings JSONC${where}: ${message}${
-        describeLocation(text, message)
-      }`,
+      `Invalid settings JSONC${where}: ${message}${describeLocation(
+        text,
+        message,
+      )}`,
     );
   }
 }

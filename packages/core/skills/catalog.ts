@@ -58,10 +58,12 @@ export function createSkillCatalogProvider(
         // emptied out is worth one message: the earlier listing is stale.
         if (published === undefined) return [];
         published = undefined;
-        return [{
-          title: "Skills (none available)",
-          body: "No skills are available in this session any more.",
-        }];
+        return [
+          {
+            title: "Skills (none available)",
+            body: "No skills are available in this session any more.",
+          },
+        ];
       }
       if (published === listing) return [];
 
@@ -73,20 +75,22 @@ export function createSkillCatalogProvider(
           : " (this catalog replaces the earlier one)"
       }. Load a skill with the skill tool before starting work that matches it.
 ${
-        hidden > 0
-          ? `Only the first ${listed} skills are listed; the remaining ` +
-            `${hidden} stay loadable with the skill tool by name.\n`
-          : ""
-      }
+  hidden > 0
+    ? `Only the first ${listed} skills are listed; the remaining ` +
+      `${hidden} stay loadable with the skill tool by name.\n`
+    : ""
+}
 <available_skills>
 ${listing}
 </available_skills>`;
       published = listing;
-      return [{
-        title: `Skills (${skills.length} available)`,
-        body,
-        state: { text: listing } satisfies CatalogState,
-      }];
+      return [
+        {
+          title: `Skills (${skills.length} available)`,
+          body,
+          state: { text: listing } satisfies CatalogState,
+        },
+      ];
     },
     rebase(state: unknown): void {
       published = textOf(state);

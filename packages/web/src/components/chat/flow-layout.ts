@@ -93,9 +93,8 @@ export function layoutFlow(block: UiFlowBlock): FlowLayout {
 
   // Back edges are routed on the right, so both sides get that much extra
   // room (the diagram stays centered).
-  const backMargin = back.size === 0
-    ? 0
-    : BACK_EDGE_GAP + back.size * BACK_EDGE_STEP + 12;
+  const backMargin =
+    back.size === 0 ? 0 : BACK_EDGE_GAP + back.size * BACK_EDGE_STEP + 12;
   const sidePadding = PADDING + backMargin;
 
   // Pass 1: measure every node's height, wrapping included.
@@ -115,10 +114,7 @@ export function layoutFlow(block: UiFlowBlock): FlowLayout {
   for (const layer of layers) {
     let rowHeight = 0;
     for (const id of layer) {
-      rowHeight = Math.max(
-        rowHeight,
-        sizes.get(id)?.height ?? MIN_NODE_HEIGHT,
-      );
+      rowHeight = Math.max(rowHeight, sizes.get(id)?.height ?? MIN_NODE_HEIGHT);
     }
 
     let x = (width - layerWidth(layer.length)) / 2;
@@ -173,9 +169,10 @@ function layerWidth(count: number): number {
 /** Decide a node's size and its wrapped label. */
 function measure(node: UiFlowNode): { lines: string[]; height: number } {
   // A diamond leaves less room for text, so it wraps earlier.
-  const textWidth = node.shape === "diamond"
-    ? NODE_WIDTH - 72
-    : NODE_WIDTH - NODE_PADDING_X * 2;
+  const textWidth =
+    node.shape === "diamond"
+      ? NODE_WIDTH - 72
+      : NODE_WIDTH - NODE_PADDING_X * 2;
   const lines = wrap(node.label, textWidth);
   const height = Math.max(
     MIN_NODE_HEIGHT,
@@ -272,7 +269,8 @@ function ranks(
     incoming.set(edge.to, (incoming.get(edge.to) ?? 0) + 1);
   }
 
-  const queue = block.nodes.filter((node) => (incoming.get(node.id) ?? 0) === 0)
+  const queue = block.nodes
+    .filter((node) => (incoming.get(node.id) ?? 0) === 0)
     .map((node) => node.id);
 
   for (let cursor = 0; cursor < queue.length; cursor += 1) {
@@ -340,14 +338,16 @@ function orderLayers(
     const center = new Map<string, number>();
     for (const id of layer) {
       const adjacent = neighborsOf(id, side).filter((other) =>
-        position.has(other)
+        position.has(other),
       );
       center.set(
         id,
-        adjacent.length === 0 ? Number.POSITIVE_INFINITY : adjacent.reduce(
-          (sum, other) => sum + (position.get(other) ?? 0),
-          0,
-        ) / adjacent.length,
+        adjacent.length === 0
+          ? Number.POSITIVE_INFINITY
+          : adjacent.reduce(
+              (sum, other) => sum + (position.get(other) ?? 0),
+              0,
+            ) / adjacent.length,
       );
     }
 
@@ -394,8 +394,7 @@ function forwardEdgeLine(
     to: edge.to,
     label: edge.label,
     dashed: edge.dashed,
-    path:
-      `M ${startX} ${startY} C ${startX} ${middleY}, ${endX} ${middleY}, ${endX} ${endY}`,
+    path: `M ${startX} ${startY} C ${startX} ${middleY}, ${endX} ${middleY}, ${endX} ${endY}`,
     labelX: (startX + endX) / 2,
     labelY: middleY,
   };
@@ -413,16 +412,15 @@ function backEdgeLine(
   const startY = from.y + from.height / 2;
   const endX = to.x + to.width;
   const endY = to.y + to.height / 2;
-  const controlX = Math.max(startX, endX) + BACK_EDGE_GAP +
-    index * BACK_EDGE_STEP;
+  const controlX =
+    Math.max(startX, endX) + BACK_EDGE_GAP + index * BACK_EDGE_STEP;
 
   return {
     from: edge.from,
     to: edge.to,
     label: edge.label,
     dashed: edge.dashed,
-    path:
-      `M ${startX} ${startY} C ${controlX} ${startY}, ${controlX} ${endY}, ${endX} ${endY}`,
+    path: `M ${startX} ${startY} C ${controlX} ${startY}, ${controlX} ${endY}, ${endX} ${endY}`,
     // Position at t=0.5 of the cubic Bezier.
     labelX: (startX + endX + controlX * 6) / 8,
     labelY: (startY + endY) / 2,

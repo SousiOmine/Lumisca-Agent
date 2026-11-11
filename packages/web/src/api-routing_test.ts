@@ -284,7 +284,9 @@ class FakeDocument {
   /** Change the visibility and fire the listeners, as the browser does. */
   setHidden(hidden: boolean): void {
     this.hidden = hidden;
-    if (!hidden) { for (const listener of [...this.listeners]) listener(); }
+    if (!hidden) {
+      for (const listener of [...this.listeners]) listener();
+    }
   }
 }
 
@@ -338,7 +340,10 @@ Deno.test("api-routing: connectEvents opens /ws of the page origin with the toke
   // Same origin as the page that served the UI, upgraded for https — the
   // server serves UI, API and event stream together.
   await withPage({ protocol: "https:", host: "hub:8443" }, () => {
-    connectEvents(() => {}, () => {});
+    connectEvents(
+      () => {},
+      () => {},
+    );
     assertEquals(
       FakeWebSocket.last().url,
       "wss://hub:8443/ws?token=tok%2Fen%2B1",
@@ -346,7 +351,10 @@ Deno.test("api-routing: connectEvents opens /ws of the page origin with the toke
   });
 
   await withPage({ protocol: "http:", host: "127.0.0.1:8000" }, () => {
-    connectEvents(() => {}, () => {});
+    connectEvents(
+      () => {},
+      () => {},
+    );
     assertEquals(
       FakeWebSocket.last().url,
       "ws://127.0.0.1:8000/ws?token=tok%2Fen%2B1",
@@ -391,7 +399,10 @@ Deno.test("api-routing: connectEvents parses events, ignores garbage and reports
 Deno.test("api-routing: connectEvents swallows heartbeat frames", async () => {
   await withPage({ protocol: "http:", host: "hub:8000" }, () => {
     const events: unknown[] = [];
-    const close = connectEvents((event) => events.push(event), () => {});
+    const close = connectEvents(
+      (event) => events.push(event),
+      () => {},
+    );
     const socket = FakeWebSocket.last();
 
     socket.onopen?.();
@@ -410,10 +421,15 @@ Deno.test("api-routing: connectEvents swallows heartbeat frames", async () => {
 Deno.test("api-routing: connectEvents closes a socket that stays silent", async () => {
   await withPage({ protocol: "http:", host: "hub:8000" }, async () => {
     let closes = 0;
-    const close = connectEvents(() => {}, () => closes++, undefined, {
-      heartbeatTimeoutMs: 15,
-      heartbeatCheckMs: 5,
-    });
+    const close = connectEvents(
+      () => {},
+      () => closes++,
+      undefined,
+      {
+        heartbeatTimeoutMs: 15,
+        heartbeatCheckMs: 5,
+      },
+    );
     const socket = FakeWebSocket.last();
     socket.onopen?.();
 
@@ -430,10 +446,15 @@ Deno.test("api-routing: connectEvents closes a socket that stays silent", async 
 Deno.test("api-routing: a hidden page does not judge, and judges on return", async () => {
   await withPage({ protocol: "http:", host: "hub:8000" }, async (doc) => {
     let closes = 0;
-    const close = connectEvents(() => {}, () => closes++, undefined, {
-      heartbeatTimeoutMs: 15,
-      heartbeatCheckMs: 5,
-    });
+    const close = connectEvents(
+      () => {},
+      () => closes++,
+      undefined,
+      {
+        heartbeatTimeoutMs: 15,
+        heartbeatCheckMs: 5,
+      },
+    );
     const socket = FakeWebSocket.last();
     socket.onopen?.();
 

@@ -80,9 +80,11 @@ export function resolveCompactionPolicy(
 ): CompactionPolicy {
   return {
     enabled: input?.enabled ?? DEFAULT_COMPACTION_POLICY.enabled,
-    reservePercent: percent(input?.reservePercent) ??
+    reservePercent:
+      percent(input?.reservePercent) ??
       DEFAULT_COMPACTION_POLICY.reservePercent,
-    keepRecentPercent: percent(input?.keepRecentPercent) ??
+    keepRecentPercent:
+      percent(input?.keepRecentPercent) ??
       DEFAULT_COMPACTION_POLICY.keepRecentPercent,
   };
 }
@@ -137,18 +139,20 @@ export function resolveCompactionBudgets(
   // A reservation as large as the window leaves no room for a prompt:
   // compacting would not make the request acceptable either.
   if (threshold <= 0) return undefined;
-  const outputCap = model.maxTokens !== undefined && model.maxTokens > 0
-    ? model.maxTokens
-    : undefined;
-  const summaryMaxTokens = reserveTokens > 0
-    ? Math.max(
-      1,
-      Math.min(
-        Math.floor(reserveTokens * 0.8),
-        outputCap ?? Number.POSITIVE_INFINITY,
-      ),
-    )
-    : outputCap ?? FALLBACK_SUMMARY_MAX_TOKENS;
+  const outputCap =
+    model.maxTokens !== undefined && model.maxTokens > 0
+      ? model.maxTokens
+      : undefined;
+  const summaryMaxTokens =
+    reserveTokens > 0
+      ? Math.max(
+          1,
+          Math.min(
+            Math.floor(reserveTokens * 0.8),
+            outputCap ?? Number.POSITIVE_INFINITY,
+          ),
+        )
+      : (outputCap ?? FALLBACK_SUMMARY_MAX_TOKENS);
   return {
     contextWindow: window,
     reserveTokens,
@@ -180,9 +184,10 @@ export function reservedCompletionTokens(
   model: Model<Api>,
   policy: CompactionPolicyInput,
 ): number | undefined {
-  const documented = model.maxTokens !== undefined && model.maxTokens > 0
-    ? model.maxTokens
-    : undefined;
+  const documented =
+    model.maxTokens !== undefined && model.maxTokens > 0
+      ? model.maxTokens
+      : undefined;
   if (documented === undefined) return undefined;
   const budgets = resolveCompactionBudgets(
     model,

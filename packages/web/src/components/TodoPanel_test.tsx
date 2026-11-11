@@ -1,7 +1,7 @@
+import type { TodoPhase } from "@lumisca/core/shared";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
-import type { TodoPhase } from "@lumisca/core/shared";
 import { initLocale } from "../i18n.ts";
 import { TodoPanel } from "./TodoPanel.tsx";
 
@@ -30,10 +30,10 @@ function phase(
 
 Deno.test("TodoPanel is a one-line row naming the running task", () => {
   const html = render([
-    phase("調査", [["コードを読む", "completed"], [
-      "原因を特定する",
-      "in_progress",
-    ]]),
+    phase("調査", [
+      ["コードを読む", "completed"],
+      ["原因を特定する", "in_progress"],
+    ]),
     phase("修正", [["テストを直す", "pending"]]),
   ]);
 
@@ -55,10 +55,12 @@ Deno.test("TodoPanel is a one-line row naming the running task", () => {
 
 Deno.test("TodoPanel falls back to no detail when nothing is in progress", () => {
   // Work left to do, but not yet started: the row shows the count only.
-  const html = render([phase("調査", [
-    ["コードを読む", "completed"],
-    ["測る", "pending"],
-  ])]);
+  const html = render([
+    phase("調査", [
+      ["コードを読む", "completed"],
+      ["測る", "pending"],
+    ]),
+  ]);
   assertStringIncludes(html, "1/2");
   assertEquals(html.includes("todo-panel-detail"), false);
 });
@@ -78,7 +80,10 @@ Deno.test("TodoPanel leaves the composer alone once the plan is settled", () => 
   // transcript, not above the field being typed into.
   assertEquals(
     render([
-      phase("調査", [["コードを読む", "completed"], ["測る", "abandoned"]]),
+      phase("調査", [
+        ["コードを読む", "completed"],
+        ["測る", "abandoned"],
+      ]),
       phase("修正", [["直す", "completed"]]),
     ]),
     "",
@@ -88,7 +93,10 @@ Deno.test("TodoPanel leaves the composer alone once the plan is settled", () => 
 
 Deno.test("TodoPanel counts abandoned tasks in the total but not as done", () => {
   const html = render([
-    phase("調査", [["読む", "completed"], ["捨てる", "abandoned"]]),
+    phase("調査", [
+      ["読む", "completed"],
+      ["捨てる", "abandoned"],
+    ]),
     phase("修正", [["直す", "pending"]]),
   ]);
   assertStringIncludes(html, "1/3");

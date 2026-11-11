@@ -1,10 +1,10 @@
-import { createPortal, type RefObject } from "preact/compat";
 import { IconChevronRight } from "@tabler/icons-preact";
+import { createPortal, type RefObject } from "preact/compat";
+import type { PopoverPlacement } from "../hooks/usePopoverPlacement.ts";
+import { useT } from "../i18n.ts";
+import type { ModelInfo, ThinkingLevel } from "../types.ts";
 import { ModelPicker } from "./ModelPicker.tsx";
 import { ThinkingLevelSelect } from "./ThinkingLevelSelect.tsx";
-import type { ModelInfo, ThinkingLevel } from "../types.ts";
-import { useT } from "../i18n.ts";
-import type { PopoverPlacement } from "../hooks/usePopoverPlacement.ts";
 
 /** A model as the composer's row names it. */
 export interface ComposerModel {
@@ -19,11 +19,7 @@ export interface ComposerModelBarProps {
   peerId?: string;
   thinkingLevel?: ThinkingLevel;
   thinkingLevels?: ThinkingLevel[];
-  onModelSelect: (
-    provider: string,
-    modelId: string,
-    info?: ModelInfo,
-  ) => void;
+  onModelSelect: (provider: string, modelId: string, info?: ModelInfo) => void;
   onThinkingLevelChange?: (level: ThinkingLevel) => void;
   onOpenSettings?: () => void;
 
@@ -116,27 +112,29 @@ export function ComposerModelBar({
           }}
         />
       )}
-      {open && placement !== null && createPortal(
-        <div
-          className="mp-popover model-popover"
-          ref={popoverRef}
-          style={placement.style}
-        >
-          <ModelPicker
-            value={model}
-            peerId={peerId}
-            onClose={() => onOpenChange(false)}
-            onSelect={(provider, modelId, info) => {
-              onModelSelect(provider, modelId, info);
-            }}
-            onOpenSettings={() => {
-              onOpenChange(false);
-              onOpenSettings?.();
-            }}
-          />
-        </div>,
-        document.body,
-      )}
+      {open &&
+        placement !== null &&
+        createPortal(
+          <div
+            className="mp-popover model-popover"
+            ref={popoverRef}
+            style={placement.style}
+          >
+            <ModelPicker
+              value={model}
+              peerId={peerId}
+              onClose={() => onOpenChange(false)}
+              onSelect={(provider, modelId, info) => {
+                onModelSelect(provider, modelId, info);
+              }}
+              onOpenSettings={() => {
+                onOpenChange(false);
+                onOpenSettings?.();
+              }}
+            />
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

@@ -18,11 +18,13 @@
  */
 
 import { CoreError } from "../errors.ts";
+import type { Locale } from "../shared/i18n/mod.ts";
 import type {
   WebSearchSettingsView,
   WebSearchTestView,
 } from "../shared/web-search.ts";
 import { createWebSearchManager, type WebSearchManager } from "./manager.ts";
+import { isWebSearchProviderId, providerInfo } from "./providers/registry.ts";
 import {
   addWebSearchProvider,
   availableProviderIds,
@@ -33,13 +35,11 @@ import {
   updateWebSearchProvider,
   type WebSearchSettingsStore,
 } from "./settings.ts";
-import { isWebSearchProviderId, providerInfo } from "./providers/registry.ts";
 import type {
   FetchLike,
   SearchProvider,
   WebSearchProviderId,
 } from "./types.ts";
-import type { Locale } from "../shared/i18n/mod.ts";
 
 export interface WebSearchServiceOptions {
   settings: WebSearchSettingsStore;
@@ -109,9 +109,10 @@ export class WebSearchService {
     if (stored === undefined) {
       throw new CoreError(`Search provider not found: ${id}`, "not_found");
     }
-    const apiKey = input.apiKey.trim().length === 0
-      ? stored.apiKey
-      : requireApiKey(input.apiKey);
+    const apiKey =
+      input.apiKey.trim().length === 0
+        ? stored.apiKey
+        : requireApiKey(input.apiKey);
     this.settings.write(updateWebSearchProvider(current, providerId, apiKey));
     return this.view();
   }

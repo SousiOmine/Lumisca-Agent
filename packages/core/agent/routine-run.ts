@@ -1,7 +1,7 @@
 import type { AgentMessage } from "../ai/types.ts";
 import type { MessageIdentity } from "../domain/event.ts";
-import { TOOL_SEND_CHAT } from "../shared/mod.ts";
 import { contentText } from "../shared/content.ts";
+import { TOOL_SEND_CHAT } from "../shared/mod.ts";
 import { assistantTextVerdict } from "./silent-reply.ts";
 
 /** The text of a message's content blocks, joined (what the conversation
@@ -67,7 +67,8 @@ export class RoutineRun {
         continue;
       }
       if (
-        message.role === "notification" || message.role === "context" ||
+        message.role === "notification" ||
+        message.role === "context" ||
         message.role === "checkpoint"
       ) {
         continue;

@@ -1,10 +1,10 @@
-import { type Context, Hono } from "hono";
-import type { ContentfulStatusCode } from "hono/http-status";
 import { errorMessage } from "@lumisca/core";
 import type { PeerStatus } from "@lumisca/core/shared";
-import { AppError } from "./util.ts";
+import { type Context, Hono } from "hono";
+import type { ContentfulStatusCode } from "hono/http-status";
 import type { FederationClient } from "../federation.ts";
 import { probeHealth } from "../health-probe.ts";
+import { AppError } from "./util.ts";
 
 /** How long the peer-reachability probe may take (see the route below): long
  * enough for a slow tailnet hop, short enough that one unreachable peer does

@@ -85,10 +85,7 @@ Deno.test("StellaTitleBarHeader: the screen toggle is drawn only while it can ac
   assertStringIncludes(tag, 'aria-pressed="false"');
   assertStringIncludes(tag, 'title="画面を表示"');
   assert(!tag.includes(" on "), `closed must not carry .on: ${tag}`);
-  assertStringIncludes(
-    running,
-    "tabler-icon-device-desktop-off",
-  );
+  assertStringIncludes(running, "tabler-icon-device-desktop-off");
 
   // Open: pressed, the monitor itself, and the label names the other way.
   const open = render({ onToggleScreen: onToggle, screenOpen: true });

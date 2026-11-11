@@ -1,10 +1,10 @@
-import snapshot from "@opencode-ai/models/snapshot";
 import type {
   Model as DevModel,
   Provider as DevProvider,
   ProviderMap,
   ReasoningOption,
 } from "@opencode-ai/models";
+import snapshot from "@opencode-ai/models/snapshot";
 import type {
   Api,
   Model,
@@ -145,9 +145,9 @@ const ALL_LEVELS: readonly ModelThinkingLevel[] = THINKING_LEVEL_ORDER;
  * (no reasoning_options, or only budget_tokens) yields no map, keeping the
  * previous "provider defaults apply" behavior for those.
  */
-function thinkingLevelMapFor(options: readonly ReasoningOption[] | undefined):
-  | ThinkingLevelMap
-  | undefined {
+function thinkingLevelMapFor(
+  options: readonly ReasoningOption[] | undefined,
+): ThinkingLevelMap | undefined {
   if (options === undefined || options.length === 0) return undefined;
   const accepted = new Map<ModelThinkingLevel, string>();
   let hasEffort = false;
@@ -199,16 +199,18 @@ function toLumiscaModel(
   providerBaseUrl: string | undefined,
   m: DevModel,
 ): Model<Api> {
-  const input = (m.modalities?.input ?? [])
-    .filter((i): i is "text" | "image" => i === "text" || i === "image");
-  const cost = m.cost !== undefined && typeof m.cost === "object"
-    ? {
-      input: m.cost.input ?? 0,
-      output: m.cost.output ?? 0,
-      cacheRead: (m.cost as { cache_read?: number }).cache_read ?? 0,
-      cacheWrite: (m.cost as { cache_write?: number }).cache_write ?? 0,
-    }
-    : undefined;
+  const input = (m.modalities?.input ?? []).filter(
+    (i): i is "text" | "image" => i === "text" || i === "image",
+  );
+  const cost =
+    m.cost !== undefined && typeof m.cost === "object"
+      ? {
+          input: m.cost.input ?? 0,
+          output: m.cost.output ?? 0,
+          cacheRead: (m.cost as { cache_read?: number }).cache_read ?? 0,
+          cacheWrite: (m.cost as { cache_write?: number }).cache_write ?? 0,
+        }
+      : undefined;
   return {
     id: m.id,
     name: m.name,
@@ -224,7 +226,7 @@ function toLumiscaModel(
     headers: m.provider?.headers,
     thinkingLevelMap: thinkingLevelMapFor(m.reasoning_options),
     ...(typeof m.interleaved === "object" &&
-        m.interleaved.field === "reasoning_content"
+    m.interleaved.field === "reasoning_content"
       ? { compat: { requiresReasoningContentOnAssistantMessages: true } }
       : {}),
   };
@@ -237,10 +239,7 @@ function toLumiscaModel(
  * resolve — only ambient env auth is lost for that entry). `npm` stays
  * required for transport selection: without it the provider cannot be
  * routed, so the entry is dropped instead of guessed. */
-function toLumiscaProvider(
-  id: string,
-  p: DevProvider,
-): Provider | undefined {
+function toLumiscaProvider(id: string, p: DevProvider): Provider | undefined {
   if (typeof p.npm !== "string" || p.npm.length === 0) return undefined;
   const baseUrl = p.api ?? KNOWN_BASE_URLS[id];
   const models = Object.values(p.models)

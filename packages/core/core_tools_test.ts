@@ -1,5 +1,6 @@
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@lumisca/core";
 import { assert, assertEquals, assertThrows } from "@std/assert";
+import { MCP_TOOLS_PROVIDER, ON_DEMAND_TOOLS_NOTE } from "./mcp/context.ts";
 import type {
   AgentMessage,
   BrowserBackend,
@@ -7,12 +8,11 @@ import type {
   ComputerAction,
   ComputerActionResult,
   ComputerHost,
+  LumiscaCore,
   Point,
   RawCapture,
   Rect,
 } from "./mod.ts";
-import type { LumiscaCore } from "./mod.ts";
-
 import {
   TOOL_BROWSER_OPEN,
   TOOL_CALL,
@@ -20,7 +20,6 @@ import {
   TOOL_PDF_READ_PAGES,
   TOOL_SEARCH,
 } from "./shared/mod.ts";
-import { MCP_TOOLS_PROVIDER, ON_DEMAND_TOOLS_NOTE } from "./mcp/context.ts";
 
 import {
   makeWorkspace,
@@ -82,11 +81,13 @@ class FakeComputerHost implements ComputerHost {
     return "fake, 256×144 primary";
   }
   displays() {
-    return [{
-      index: 0,
-      primary: true,
-      bounds: { x: 0, y: 0, width: 256, height: 144 },
-    }];
+    return [
+      {
+        index: 0,
+        primary: true,
+        bounds: { x: 0, y: 0, width: 256, height: 144 },
+      },
+    ];
   }
   cursor(): Point | undefined {
     return { x: 3, y: 4 };
@@ -239,9 +240,9 @@ Deno.test("browser tools are discoverable via tool_search, never preloaded", asy
 
     // The skill catalog went in before the user message and lists the
     // built-in browser skill.
-    const catalog = core.getAgent(session.id)!.messages.find(
-      (m) => m.role === "context" && m.provider === "skills",
-    );
+    const catalog = core
+      .getAgent(session.id)!
+      .messages.find((m) => m.role === "context" && m.provider === "skills");
     assert(
       catalog !== undefined && catalog.role === "context",
       "expected a skill catalog message",
@@ -394,17 +395,17 @@ Deno.test("computer use: the tools are seeded via tool_search only when enabled"
     assertEquals(notes.length, 1, "the note is published exactly once");
     assertEquals(notes[0]!.body, ON_DEMAND_TOOLS_NOTE);
     assertEquals(
-      core.getAgent(session.id)!.agent.state.systemPrompt.includes(
-        "tool_search",
-      ),
+      core
+        .getAgent(session.id)!
+        .agent.state.systemPrompt.includes("tool_search"),
       false,
       "the prompt must stay free of the on-demand-tools note",
     );
 
     assertEquals(host.captures, [{ x: 0, y: 0, width: 256, height: 144 }]);
-    const toolResults = core.getAgent(session.id)!.messages.filter(
-      (m) => m.role === "toolResult",
-    );
+    const toolResults = core
+      .getAgent(session.id)!
+      .messages.filter((m) => m.role === "toolResult");
     assertEquals(toolResults.length, 2);
     const tr = toolResults[1] as {
       isError: boolean;
@@ -416,11 +417,12 @@ Deno.test("computer use: the tools are seeded via tool_search only when enabled"
       `unexpected screenshot result: ${tr.content[0]!.text}`,
     );
     // The skill catalog published before the run lists the built-in skill.
-    const catalog = core.getAgent(session.id)!.messages.find(
-      (m) => m.role === "context" && m.provider === "skills",
-    );
+    const catalog = core
+      .getAgent(session.id)!
+      .messages.find((m) => m.role === "context" && m.provider === "skills");
     assert(
-      catalog !== undefined && catalog.role === "context" &&
+      catalog !== undefined &&
+        catalog.role === "context" &&
         catalog.body.includes("- computer-use:"),
       "the built-in computer-use skill must be listed while enabled",
     );
@@ -483,11 +485,13 @@ Deno.test("ask tool blocks the run until the user answers, then continues", asyn
   faux.setResponses([
     fauxAssistantMessage([
       fauxToolCall("ask", {
-        questions: [{
-          id: "lang",
-          question: "Which language?",
-          options: [{ label: "Deno" }, { label: "Node" }],
-        }],
+        questions: [
+          {
+            id: "lang",
+            question: "Which language?",
+            options: [{ label: "Deno" }, { label: "Node" }],
+          },
+        ],
       }),
     ]),
     fauxAssistantMessage("Great choice!"),
@@ -514,7 +518,10 @@ Deno.test("ask tool blocks the run until the user answers, then continues", asyn
   assertEquals(resultText, "Answers from the user:\n- Which language?: Deno");
   const last = messages.at(-1) as { content: Array<{ text: string }> };
   assertEquals(last.content[0]!.text, "Great choice!");
-  assertEquals(events.some((e) => e.type === "question"), true);
+  assertEquals(
+    events.some((e) => e.type === "question"),
+    true,
+  );
 
   unsubscribe();
   core.close();
@@ -532,24 +539,32 @@ Deno.test("todo tool records the whole plan and replaces it on the next call", a
   faux.setResponses([
     fauxAssistantMessage([
       fauxToolCall("todo", {
-        phases: [{
-          name: "実装",
-          tasks: [{ name: "調査する" }, { name: "実装する" }, {
-            name: "テストする",
-          }],
-        }],
+        phases: [
+          {
+            name: "実装",
+            tasks: [
+              { name: "調査する" },
+              { name: "実装する" },
+              {
+                name: "テストする",
+              },
+            ],
+          },
+        ],
       }),
     ]),
     fauxAssistantMessage([
       fauxToolCall("todo", {
-        phases: [{
-          name: "実装",
-          tasks: [
-            { name: "調査する", status: "completed" },
-            { name: "実装する", status: "in_progress" },
-            { name: "テストする" },
-          ],
-        }],
+        phases: [
+          {
+            name: "実装",
+            tasks: [
+              { name: "調査する", status: "completed" },
+              { name: "実装する", status: "in_progress" },
+              { name: "テストする" },
+            ],
+          },
+        ],
       }),
     ]),
     fauxAssistantMessage("finished!"),
@@ -571,10 +586,9 @@ Deno.test("todo tool records the whole plan and replaces it on the next call", a
     ["テストする", "pending"],
   ]);
   // The second call sent the whole plan again, with the new statuses.
-  const updated = todoEvents.at(-1)!.todos[0]!.tasks.map((t) => [
-    t.name,
-    t.status,
-  ]);
+  const updated = todoEvents
+    .at(-1)!
+    .todos[0]!.tasks.map((t) => [t.name, t.status]);
   assertEquals(updated, [
     ["調査する", "completed"],
     ["実装する", "in_progress"],
@@ -607,11 +621,13 @@ Deno.test("rewind while a question is pending aborts the run cleanly", async () 
   faux.setResponses([
     fauxAssistantMessage([
       fauxToolCall("ask", {
-        questions: [{
-          id: "lang",
-          question: "Which language?",
-          options: [{ label: "Deno" }, { label: "Node" }],
-        }],
+        questions: [
+          {
+            id: "lang",
+            question: "Which language?",
+            options: [{ label: "Deno" }, { label: "Node" }],
+          },
+        ],
       }),
     ]),
     fauxAssistantMessage("Great choice!"),

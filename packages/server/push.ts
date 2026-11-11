@@ -63,12 +63,14 @@ export type NotifiableEvent = Extract<
  * hand-over is included: the run is blocked at the screen, and the user is
  * the only one who can release it — a message nobody sees is a run that
  * waits until the deadline. */
-export function isNotifiable(
-  event: ClientEvent,
-): event is NotifiableEvent {
-  return event.type === "agent_end" || event.type === "question" ||
-    event.type === "session_error" || event.type === "handover" ||
-    event.type === "env_request";
+export function isNotifiable(event: ClientEvent): event is NotifiableEvent {
+  return (
+    event.type === "agent_end" ||
+    event.type === "question" ||
+    event.type === "session_error" ||
+    event.type === "handover" ||
+    event.type === "env_request"
+  );
 }
 
 /** The notification one notifiable event produces. `name` is the display
@@ -107,7 +109,9 @@ export function buildPushNotification(
       const first = event.questions[0];
       const gist = Array.from(
         first?.header?.trim() || first?.question.trim() || "",
-      ).slice(0, MAX_QUESTION_CHARS).join("");
+      )
+        .slice(0, MAX_QUESTION_CHARS)
+        .join("");
       return {
         message: {
           title: name,
@@ -132,7 +136,8 @@ export function buildPushNotification(
         urgency: "normal",
       };
     case "handover": {
-      const gist = Array.from(event.reason.trim()).slice(0, MAX_HANDOVER_CHARS)
+      const gist = Array.from(event.reason.trim())
+        .slice(0, MAX_HANDOVER_CHARS)
         .join("");
       return {
         message: {
@@ -228,9 +233,10 @@ export interface PushNotifierOptions {
   fetch?: typeof fetch;
 }
 
-export function createPushNotifier(
-  { core, fetch: fetchImpl = fetch }: PushNotifierOptions,
-): PushNotifier {
+export function createPushNotifier({
+  core,
+  fetch: fetchImpl = fetch,
+}: PushNotifierOptions): PushNotifier {
   let disposed = false;
 
   /** The display name a notification is titled with (see
@@ -238,9 +244,10 @@ export function createPushNotifier(
    * name for everything else. */
   const nameOf = (sessionId: string): string => {
     const session = core.getSession(sessionId);
-    const agent = session?.agentId === undefined
-      ? undefined
-      : core.getStellaAgent(session.agentId);
+    const agent =
+      session?.agentId === undefined
+        ? undefined
+        : core.getStellaAgent(session.agentId);
     return notificationName(session, agent, core.getLanguage());
   };
 
@@ -302,11 +309,14 @@ export function createPushNotifier(
 
   return {
     sendTest: async () =>
-      await deliver({
-        title: "Lumisca",
-        body: translate(core.getLanguage(), "settings.general.pushTestSent"),
-        tag: "test",
-      }, "normal"),
+      await deliver(
+        {
+          title: "Lumisca",
+          body: translate(core.getLanguage(), "settings.general.pushTestSent"),
+          tag: "test",
+        },
+        "normal",
+      ),
     dispose: () => {
       disposed = true;
       detach();

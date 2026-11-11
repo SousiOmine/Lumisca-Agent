@@ -96,12 +96,7 @@ function writePixel(out: Uint8Array, at: number, x: number, y: number): void {
 
 /** The pixel makeImage() writes for an absolute position. */
 function expectedPixel(x: number, y: number): number[] {
-  return [
-    (x * 7 + y * 3) & 0xff,
-    (x + y * 13) & 0xff,
-    (x ^ y) & 0xff,
-    0xff,
-  ];
+  return [(x * 7 + y * 3) & 0xff, (x + y * 13) & 0xff, (x ^ y) & 0xff, 0xff];
 }
 
 class FakeSession implements PortalSession {
@@ -119,11 +114,7 @@ class FakeSession implements PortalSession {
     readonly restoreToken?: string,
   ) {}
 
-  pointerMotionAbsolute(
-    streamId: number,
-    x: number,
-    y: number,
-  ): Promise<void> {
+  pointerMotionAbsolute(streamId: number, x: number, y: number): Promise<void> {
     if (this.failMotion) {
       return Promise.reject(new Error("the session ended"));
     }
@@ -234,7 +225,11 @@ Deno.test("capture crops the whole-desktop image at the compositor's scale", asy
   const raw = await host.capture({ x: 320, y: 0, width: 480, height: 270 });
   assertEquals(raw.screen, { x: 320, y: 0, width: 480, height: 270 });
   assertEquals([raw.width, raw.height], [960, 540]);
-  for (const [localX, localY] of [[0, 0], [7, 3], [959, 539]] as const) {
+  for (const [localX, localY] of [
+    [0, 0],
+    [7, 3],
+    [959, 539],
+  ] as const) {
     const at = (localY * raw.width + localX) * 4;
     assertEquals(
       [...raw.pixels.subarray(at, at + 4)],
@@ -302,7 +297,10 @@ Deno.test("a click is converted into the target monitor's physical grid", async 
   await host.act({ kind: "click", x: 100, y: 50, button: "left", count: 1 });
   const first = portal.sessions.at(0)!;
   assertEquals(first.motions.at(-1), [11, 200, 100]);
-  assertEquals(first.buttons, [["left", true], ["left", false]]);
+  assertEquals(first.buttons, [
+    ["left", true],
+    ["left", false],
+  ]);
 
   // Screen (400, 100) is on the primary monitor (screen x 320..800): one
   // screen unit there is one stream pixel.
@@ -340,7 +338,10 @@ Deno.test("scrolling carries the tool layer's sign convention", async () => {
   const session = portal.sessions.at(0)!;
   // Positive deltaY is "down" for the caller, and positive steps scroll down
   // for the portal; positive deltaX is "right".
-  assertEquals(session.scrolls, [["vertical", -2], ["horizontal", 3]]);
+  assertEquals(session.scrolls, [
+    ["vertical", -2],
+    ["horizontal", 3],
+  ]);
   host.close();
 });
 
@@ -409,7 +410,7 @@ Deno.test("the screen-sharing session is opened once, on the first input", async
 Deno.test("a monitor the user did not share is reported and the session dropped", async () => {
   const { portal, host } = makeHost();
   portal.streams = mixedStreams().filter((stream) =>
-    stream.connectors.includes("Virtual-1")
+    stream.connectors.includes("Virtual-1"),
   );
   await assertRejects(
     () => host.act({ kind: "click", x: 100, y: 50, button: "left", count: 1 }),
@@ -480,7 +481,8 @@ Deno.test("the display variables do not decide availability", async () => {
   // systemd-started server experiences.
   const withDisplay = await createWaylandComputerHost({
     env: {
-      get: (key: string) => key === "WAYLAND_DISPLAY" ? "wayland-0" : undefined,
+      get: (key: string) =>
+        key === "WAYLAND_DISPLAY" ? "wayland-0" : undefined,
     },
   });
   const withoutDisplay = await createWaylandComputerHost({

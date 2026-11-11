@@ -64,11 +64,12 @@ export function recoveredOutputCap(
 ): number | undefined {
   if (!isContextOverflowText(text)) return undefined;
   const { windowTokens, promptTokens } = parseContextOverflow(text);
-  const room = windowTokens !== undefined && promptTokens !== undefined
-    ? windowTokens - promptTokens - OVERFLOW_SAFETY_TOKENS
-    : undefined;
-  let next = room ??
-    (sentCap === undefined ? undefined : Math.floor(sentCap / 2));
+  const room =
+    windowTokens !== undefined && promptTokens !== undefined
+      ? windowTokens - promptTokens - OVERFLOW_SAFETY_TOKENS
+      : undefined;
+  let next =
+    room ?? (sentCap === undefined ? undefined : Math.floor(sentCap / 2));
   if (next === undefined) return undefined;
   // A retry must narrow the request: a cap the arithmetic says fits is only
   // useful while it is smaller than the one the provider just refused.
@@ -128,7 +129,7 @@ export async function* withOutputCapRecovery(
   // failure thrown before the first attempt ever reached its `start` lets
   // the retry's start through instead.
   let started = false;
-  for (let attempt = 0;; attempt++) {
+  for (let attempt = 0; ; attempt++) {
     let produced = false;
     let retryWith: number | undefined;
     try {

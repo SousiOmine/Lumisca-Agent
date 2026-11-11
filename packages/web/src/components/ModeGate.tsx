@@ -1,9 +1,9 @@
 import type { AppMode } from "@lumisca/core/shared";
+import { useState } from "preact/compat";
+import { useT } from "../i18n.ts";
+import { Modal } from "./Modal.tsx";
 import type { ModeSelectViewProps } from "./ModeSelectView.tsx";
 import { ModeSelectView } from "./ModeSelectView.tsx";
-import { useState } from "preact/compat";
-import { Modal } from "./Modal.tsx";
-import { useT } from "../i18n.ts";
 
 /**
  * One place that shows the mode chooser, in the two shapes it is needed.
@@ -35,16 +35,11 @@ export function ModeGate(view: ModeGateProps) {
 }
 
 /** The "switch mode" dialog. A refusal keeps it open showing its reason. */
-export function ModeGateDialog(
-  view: ModeGateProps & { onClose: () => void },
-) {
+export function ModeGateDialog(view: ModeGateProps & { onClose: () => void }) {
   const t = useT();
   const { onClose, ...rest } = view;
   return (
-    <ModeSelectHost
-      {...rest}
-      onChosen={onClose}
-    >
+    <ModeSelectHost {...rest} onChosen={onClose}>
       {(shared) => (
         <Modal onClose={onClose} label={t("chat.modeSelect.title")}>
           <ModeSelectView {...shared} />
@@ -60,24 +55,22 @@ export function ModeGateDialog(
  * `onChosen` runs only on success: a refusal (stella on a server without a
  * usable machine) leaves the chooser where it is, showing the reason.
  */
-function ModeSelectHost(
-  {
-    status,
-    mode,
-    error,
-    choose,
-    onChosen,
-    children,
-  }: Omit<ModeGateProps, "busy"> & {
-    onChosen?: () => void;
-    children: (
-      view: Omit<ModeSelectViewProps, "busy" | "onChoose"> & {
-        busy: boolean;
-        onChoose: ModeSelectViewProps["onChoose"];
-      },
-    ) => preact.JSX.Element;
-  },
-) {
+function ModeSelectHost({
+  status,
+  mode,
+  error,
+  choose,
+  onChosen,
+  children,
+}: Omit<ModeGateProps, "busy"> & {
+  onChosen?: () => void;
+  children: (
+    view: Omit<ModeSelectViewProps, "busy" | "onChoose"> & {
+      busy: boolean;
+      onChoose: ModeSelectViewProps["onChoose"];
+    },
+  ) => preact.JSX.Element;
+}) {
   const [busy, setBusy] = useState(false);
   const onChoose = (next: AppMode) => {
     setBusy(true);

@@ -15,10 +15,7 @@ import { createHeartbeatWatchdog } from "./heartbeat.ts";
  */
 
 /** A watchdog over a clock the test moves by hand. */
-function watchdog(options: {
-  timeoutMs?: number;
-  isHidden?: () => boolean;
-}) {
+function watchdog(options: { timeoutMs?: number; isHidden?: () => boolean }) {
   let now = 0;
   let dead = 0;
   const instance = createHeartbeatWatchdog({

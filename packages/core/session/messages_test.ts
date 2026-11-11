@@ -1,7 +1,7 @@
+import type { AgentMessage, ImageContent, ModeMessage } from "@lumisca/core";
 import { assertEquals } from "@std/assert";
 import { LumiscaDb } from "../db/mod.ts";
 import { createMessageRepo } from "./messages.ts";
-import type { AgentMessage, ImageContent, ModeMessage } from "@lumisca/core";
 
 function sampleMessage(): AgentMessage {
   return {
@@ -14,13 +14,17 @@ function sampleMessage(): AgentMessage {
 /** Create workspace + session rows so the messages FK constraint is
  * satisfied. */
 function createSession(db: LumiscaDb, id: string): void {
-  db.db.prepare(
-    "INSERT INTO workspaces (id, name, created_at) VALUES ('ws1', 'test', 0)",
-  ).run();
-  db.db.prepare(
-    `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
+  db.db
+    .prepare(
+      "INSERT INTO workspaces (id, name, created_at) VALUES ('ws1', 'test', 0)",
+    )
+    .run();
+  db.db
+    .prepare(
+      `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
      VALUES (?, 'ws1', 'test', 'faux', 'model', 0, 0)`,
-  ).run(id);
+    )
+    .run(id);
 }
 
 Deno.test("messages: append/list round-trips through the versioned envelope", () => {
@@ -71,15 +75,17 @@ Deno.test("messages: legacy rows (raw AgentMessage JSON) still decode", () => {
     createSession(db, "s1");
     // Simulate a row written before versioning: raw AgentMessage JSON.
     const message = sampleMessage();
-    db.db.prepare(
-      "INSERT INTO messages (id, session_id, role, content, timestamp) VALUES (?, ?, ?, ?, ?)",
-    ).run(
-      "legacy-1",
-      "s1",
-      "user",
-      JSON.stringify(message),
-      message.timestamp as number,
-    );
+    db.db
+      .prepare(
+        "INSERT INTO messages (id, session_id, role, content, timestamp) VALUES (?, ?, ?, ?, ?)",
+      )
+      .run(
+        "legacy-1",
+        "s1",
+        "user",
+        JSON.stringify(message),
+        message.timestamp as number,
+      );
 
     const repo = createMessageRepo(db);
     const listed = repo.list("s1");
@@ -188,10 +194,12 @@ Deno.test("messages: deleteFrom removes a positional suffix", () => {
     assertEquals(repo.list("s1"), [kept]);
 
     // Other sessions are unaffected.
-    db.db.prepare(
-      `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
+    db.db
+      .prepare(
+        `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
        VALUES ('s2', 'ws1', 'test', 'faux', 'model', 0, 0)`,
-    ).run();
+      )
+      .run();
     const other = repo.append("s2", {
       role: "user",
       content: [{ type: "text", text: "keep" }],
@@ -237,17 +245,27 @@ Deno.test("messages: insertAt pushes the rows after the position one later", () 
     assertEquals(listed[0]!.id, ids[0]!);
     assertEquals(listed[1]!.id, inserted.id);
     assertEquals(listed[1]!.message, checkpoint);
-    assertEquals(listed.slice(2).map((row) => row.id), ids.slice(1));
     assertEquals(
-      listed.slice(2).map((row) =>
-        (row.message as { content: Array<{ text: string }> }).content[0]!.text
-      ),
+      listed.slice(2).map((row) => row.id),
+      ids.slice(1),
+    );
+    assertEquals(
+      listed
+        .slice(2)
+        .map(
+          (row) =>
+            (row.message as { content: Array<{ text: string }> }).content[0]!
+              .text,
+        ),
       ["b", "c", "d"],
     );
     // The positional operations still agree with the list: truncating from
     // the inserted row leaves exactly the prefix before it.
     repo.deleteFrom("s1", 1);
-    assertEquals(repo.list("s1").map((row) => row.id), [ids[0]!]);
+    assertEquals(
+      repo.list("s1").map((row) => row.id),
+      [ids[0]!],
+    );
   } finally {
     db.close();
   }
@@ -282,10 +300,12 @@ Deno.test("messages: insertAt leaves other sessions untouched", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
-    db.db.prepare(
-      `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
+    db.db
+      .prepare(
+        `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
        VALUES ('s2', 'ws1', 'test', 'faux', 'model', 0, 0)`,
-    ).run();
+      )
+      .run();
     const repo = createMessageRepo(db);
     // Interleaved rows of two sessions share the rowid space: the rewrite
     // must not move (or drop) the other session's rows.
@@ -328,25 +348,28 @@ Deno.test("messages: listBetween bounds the window and keeps transcript order", 
     at(2000);
 
     const all = repo.listBetween("s1", { from: null, to: null });
-    assertEquals(all.map((row) => row.timestamp), [3000, 1000, 2000]);
+    assertEquals(
+      all.map((row) => row.timestamp),
+      [3000, 1000, 2000],
+    );
     // Both bounds are inclusive.
     assertEquals(
-      repo.listBetween("s1", { from: 2000, to: 3000 }).map((row) =>
-        row.timestamp
-      ),
+      repo
+        .listBetween("s1", { from: 2000, to: 3000 })
+        .map((row) => row.timestamp),
       [3000, 2000],
     );
     // One open side each way.
     assertEquals(
-      repo.listBetween("s1", { from: 2000, to: null }).map((row) =>
-        row.timestamp
-      ),
+      repo
+        .listBetween("s1", { from: 2000, to: null })
+        .map((row) => row.timestamp),
       [3000, 2000],
     );
     assertEquals(
-      repo.listBetween("s1", { from: null, to: 2000 }).map((row) =>
-        row.timestamp
-      ),
+      repo
+        .listBetween("s1", { from: null, to: 2000 })
+        .map((row) => row.timestamp),
       [1000, 2000],
     );
     assertEquals(repo.listBetween("s1", { from: 4000, to: null }), []);
@@ -425,7 +448,10 @@ Deno.test("messages: listWindow pages backwards, oldest first", () => {
       limit: 2,
       rows: "all",
     });
-    assertEquals(newest.map((row) => row.timestamp), [4, 5]);
+    assertEquals(
+      newest.map((row) => row.timestamp),
+      [4, 5],
+    );
 
     // The page before it, ending where the previous one started (row 4's
     // position is 3 — rows are 0-based positions in transcript order).
@@ -434,14 +460,20 @@ Deno.test("messages: listWindow pages backwards, oldest first", () => {
       limit: 2,
       rows: "all",
     });
-    assertEquals(older.map((row) => row.timestamp), [2, 3]);
+    assertEquals(
+      older.map((row) => row.timestamp),
+      [2, 3],
+    );
 
     const oldest = repo.listWindow("s1", {
       beforeIndex: 1,
       limit: 2,
       rows: "all",
     });
-    assertEquals(oldest.map((row) => row.timestamp), [1]);
+    assertEquals(
+      oldest.map((row) => row.timestamp),
+      [1],
+    );
 
     // Before the first row there is nothing, not an error.
     assertEquals(
@@ -457,10 +489,12 @@ Deno.test("messages: listWindow never reads another session's rows", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
-    db.db.prepare(
-      `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
+    db.db
+      .prepare(
+        `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
        VALUES ('s2', 'ws1', 'test', 'faux', 'model', 0, 0)`,
-    ).run();
+      )
+      .run();
     const repo = createMessageRepo(db);
     repo.append("s1", {
       role: "user",
@@ -478,7 +512,10 @@ Deno.test("messages: listWindow never reads another session's rows", () => {
       limit: 10,
       rows: "all",
     });
-    assertEquals(page.map((row) => row.timestamp), [1]);
+    assertEquals(
+      page.map((row) => row.timestamp),
+      [1],
+    );
   } finally {
     db.close();
   }
@@ -650,17 +687,24 @@ Deno.test("messages: newestConversationRows reads only what a conversation shows
     // a failed send are not things the conversation shows.
     assertEquals(
       rows.map((row) => [row.role, row.timestamp]),
-      [["user", 150], ["toolResult", 130], ["assistant", 110], ["user", 100]],
+      [
+        ["user", 150],
+        ["toolResult", 130],
+        ["assistant", 110],
+        ["user", 100],
+      ],
     );
 
     // The limit bounds the read (it is a payload bound, not a scan).
     assertEquals(repo.newestConversationRows("s1", 2).length, 2);
 
     // Another session's rows never appear.
-    db.db.prepare(
-      `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
+    db.db
+      .prepare(
+        `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
        VALUES ('s2', 'ws1', 'test', 'faux', 'model', 0, 0)`,
-    ).run();
+      )
+      .run();
     repo.append("s2", {
       role: "user",
       content: [{ type: "text", text: "other" }],
@@ -714,13 +758,11 @@ Deno.test("messages: newestConversationRows also reads pre-stamped rows", () => 
       "INSERT INTO messages (id, session_id, role, content, timestamp) " +
         "VALUES (?, ?, ?, ?, ?)",
     );
-    for (
-      const [id, message] of [
-        ["legacy-1", legacySend],
-        ["legacy-2", legacyReply],
-        ["legacy-3", legacyNarration],
-      ] as const
-    ) {
+    for (const [id, message] of [
+      ["legacy-1", legacySend],
+      ["legacy-2", legacyReply],
+      ["legacy-3", legacyNarration],
+    ] as const) {
       insert.run(
         id,
         "s1",
@@ -733,7 +775,10 @@ Deno.test("messages: newestConversationRows also reads pre-stamped rows", () => 
     // Each comes back from the query AND decodes to the same message, so the
     // projection can read it. The narration is not a conversation row.
     const rows = repo.newestConversationRows("s1", 4);
-    assertEquals(rows.map((row) => row.message), [legacyReply, legacySend]);
+    assertEquals(
+      rows.map((row) => row.message),
+      [legacyReply, legacySend],
+    );
   } finally {
     db.close();
   }

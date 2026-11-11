@@ -8,8 +8,8 @@
  */
 import { assertStringIncludes } from "@std/assert";
 import { renderToString } from "preact-render-to-string";
-import { initLocale } from "../i18n.ts";
 import type { StellaHook } from "../hooks/useStella.ts";
+import { initLocale } from "../i18n.ts";
 import { emptyStellaState } from "../stella-state.ts";
 import type { StellaAgentSummary } from "../types.ts";
 import { StellaModeScreen } from "./StellaModeScreen.tsx";
@@ -85,11 +85,13 @@ Deno.test("StellaModeScreen: nobody picked is the list", () => {
 
 Deno.test("StellaModeScreen: a picked agent is the conversation", () => {
   assertStringIncludes(
-    render(hook({
-      activeAgentId: "a1",
-      conversation: emptyStellaState("Aide"),
-      sessionId: "s1",
-    })),
+    render(
+      hook({
+        activeAgentId: "a1",
+        conversation: emptyStellaState("Aide"),
+        sessionId: "s1",
+      }),
+    ),
     'data-screen="conversation"',
   );
 });

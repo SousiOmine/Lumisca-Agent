@@ -79,9 +79,11 @@ export function useTranscriptScroll(
   activeRef.current = active;
   /** Where the reader was when an older window was requested, with the first
    * message the transcript held at that moment. */
-  const anchor = useRef<
-    { height: number; top: number; key: string | undefined } | null
-  >(null);
+  const anchor = useRef<{
+    height: number;
+    top: number;
+    key: string | undefined;
+  } | null>(null);
   /** A read is in flight for the held position: the follow-to-bottom must not
    * undo it, and a second reach for the top must not start another. */
   const holding = useRef(false);

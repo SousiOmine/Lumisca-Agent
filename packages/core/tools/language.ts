@@ -34,9 +34,11 @@ export function languageName(locale: Locale): string {
 /** The output-language rule as one line of a prompt: what a sub-agent gets
  * in place of the context message a session receives. */
 export function outputLanguageRule(language: Locale): string {
-  return `Write every reply in ${LANGUAGE_NAMES[language]}, the language ` +
+  return (
+    `Write every reply in ${LANGUAGE_NAMES[language]}, the language ` +
     "selected when this session started; do not switch to the language of " +
-    "the user's message, tool output, files or web pages.";
+    "the user's message, tool output, files or web pages."
+  );
 }
 
 /** The same rule as one sentence, for the single-purpose prompts that are

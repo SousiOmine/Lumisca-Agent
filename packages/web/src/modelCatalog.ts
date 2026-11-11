@@ -7,7 +7,10 @@ import type { ModelInfo, ProviderInfo, ThinkingLevel } from "./types.ts";
  * phrase its message: "providers" means the provider list is unknown,
  * "models" means the providers arrived but their model lists did not. */
 export class CatalogFetchError extends Error {
-  constructor(readonly phase: "providers" | "models", message: string) {
+  constructor(
+    readonly phase: "providers" | "models",
+    message: string,
+  ) {
     super(message);
     this.name = "CatalogFetchError";
   }
@@ -36,11 +39,7 @@ export type CatalogLoader = (peerId: string) => Promise<PeerCatalog>;
 
 /** Key of one model's committed values (see `ModelCatalog.localEnabled` and
  * `ModelCatalog.localThinking`). */
-function modelKey(
-  peerId: string,
-  providerId: string,
-  modelId: string,
-): string {
+function modelKey(peerId: string, providerId: string, modelId: string): string {
   return `${peerId}\u0000${providerId}\u0000${modelId}`;
 }
 
@@ -108,12 +107,10 @@ export class ModelCatalog {
     enabled: boolean,
   ): void {
     this.localEnabled.set(modelKey(peerId, providerId, modelId), enabled);
-    this.commitModel(
-      peerId,
-      providerId,
-      modelId,
-      (model) => ({ ...model, enabled }),
-    );
+    this.commitModel(peerId, providerId, modelId, (model) => ({
+      ...model,
+      enabled,
+    }));
   }
 
   /** Apply a thinking level the server accepted to the cached catalog, for
@@ -128,12 +125,10 @@ export class ModelCatalog {
     level: ThinkingLevel,
   ): void {
     this.localThinking.set(modelKey(peerId, providerId, modelId), level);
-    this.commitModel(
-      peerId,
-      providerId,
-      modelId,
-      (model) => ({ ...model, thinkingLevel: level }),
-    );
+    this.commitModel(peerId, providerId, modelId, (model) => ({
+      ...model,
+      thinkingLevel: level,
+    }));
   }
 
   /** Patch one cached model and publish. A model the cache does not have is
@@ -194,9 +189,7 @@ export class ModelCatalog {
 
   /** One peer's store, created on first use. Peers are few and long-lived,
    * so entries are never evicted. */
-  private store(
-    peerId: string,
-  ): ResourceStore<PeerCatalog, CatalogFetchError> {
+  private store(peerId: string): ResourceStore<PeerCatalog, CatalogFetchError> {
     let store = this.stores.get(peerId);
     if (store === undefined) {
       store = createResourceStore<PeerCatalog, CatalogFetchError>({
@@ -226,7 +219,8 @@ export class ModelCatalog {
  * match: a re-read that produced the same catalog renders nothing. */
 function sameCatalog(a: PeerCatalog, b: PeerCatalog): boolean {
   if (
-    a.providers === b.providers && a.modelsByProvider === b.modelsByProvider
+    a.providers === b.providers &&
+    a.modelsByProvider === b.modelsByProvider
   ) {
     return true;
   }
@@ -242,7 +236,8 @@ function sameCatalog(a: PeerCatalog, b: PeerCatalog): boolean {
       const counterpart = other[index];
       if (counterpart === undefined) return false;
       if (
-        model.id !== counterpart.id || model.enabled !== counterpart.enabled ||
+        model.id !== counterpart.id ||
+        model.enabled !== counterpart.enabled ||
         model.name !== counterpart.name ||
         model.thinkingLevel !== counterpart.thinkingLevel ||
         !sameLevels(model.thinkingLevels, counterpart.thinkingLevels)

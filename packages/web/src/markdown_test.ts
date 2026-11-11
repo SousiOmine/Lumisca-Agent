@@ -1,5 +1,5 @@
-import { assertEquals } from "@std/assert";
 import { createTranslator, MAX_VISUAL_SVG_BYTES } from "@lumisca/core/shared";
+import { assertEquals } from "@std/assert";
 import { type MarkdownOptions, renderMarkdown } from "./markdown.ts";
 
 /** Render with the options every call site supplies: the session's asset
@@ -14,13 +14,12 @@ function render(text: string): string {
 }
 
 /** A minimal diagram an agent may write in a `svg` fence. */
-const DIAGRAM = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">' +
+const DIAGRAM =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">' +
   '<title>Flow</title><rect width="10" height="10" /></svg>';
 
 Deno.test("markdown renders headings, code and lists", () => {
-  const html = render(
-    "# Title\n\n```ts\nconst x = 1;\n```\n\n- a\n- b",
-  );
+  const html = render("# Title\n\n```ts\nconst x = 1;\n```\n\n- a\n- b");
   assertEquals(html.includes("<h1>Title</h1>"), true);
   assertEquals(html.includes("<code"), true);
   assertEquals(html.includes("const x = 1;"), true);
@@ -79,10 +78,10 @@ Deno.test("a visual: image resolves against the session's asset base", () => {
   assertEquals(html.indexOf("<img") < html.indexOf("after"), true);
   // A peer's session is read through the hub: the base is what changes, not
   // the reference.
-  const peer = renderMarkdown(
-    "![chart](visual:9f3c2a1b4d5e.png)",
-    { ...OPTIONS, visualBase: "/api/fed/p1/sessions/s/visual/" },
-  );
+  const peer = renderMarkdown("![chart](visual:9f3c2a1b4d5e.png)", {
+    ...OPTIONS,
+    visualBase: "/api/fed/p1/sessions/s/visual/",
+  });
   assertEquals(
     peer.includes('src="/api/fed/p1/sessions/s/visual/9f3c2a1b4d5e.png"'),
     true,
@@ -92,14 +91,12 @@ Deno.test("a visual: image resolves against the session's asset base", () => {
 Deno.test("a malformed visual: reference never renders", () => {
   // Anything but an asset name is dropped like the other unsafe sources: the
   // store's names are the only thing the route serves.
-  for (
-    const href of [
-      "visual:../../etc/passwd",
-      "visual:9f3c2a1b4d5e.pdf",
-      "visual:9f3c2a1b4d5z.png",
-      "visual:",
-    ]
-  ) {
+  for (const href of [
+    "visual:../../etc/passwd",
+    "visual:9f3c2a1b4d5e.pdf",
+    "visual:9f3c2a1b4d5z.png",
+    "visual:",
+  ]) {
     const html = render(`![x](${href})`);
     assertEquals(html.includes("<img"), false, `${href} must not render`);
   }
@@ -132,9 +129,7 @@ Deno.test("an svg fence without a <svg> root is reported, not shown", () => {
 });
 
 Deno.test("an svg fence with a script is refused", () => {
-  const html = render(
-    "```svg\n<svg><script>alert(1)</script></svg>\n```",
-  );
+  const html = render("```svg\n<svg><script>alert(1)</script></svg>\n```");
   assertEquals(html.includes("<img"), false);
   assertEquals(html.includes("may not contain scripts"), true);
   assertEquals(html.includes("<script>"), false);
@@ -170,8 +165,8 @@ Deno.test("the render parser keeps no state across calls", () => {
   // reply must not build a parser per frame. That is only sound if a parse
   // leaves nothing behind: the same text renders the same HTML twice in a row,
   // and an earlier call cannot change a later one.
-  const text = "```svg\n" + DIAGRAM +
-    "\n```\n\n![chart](visual:9f3c2a1b4d5e.png)";
+  const text =
+    "```svg\n" + DIAGRAM + "\n```\n\n![chart](visual:9f3c2a1b4d5e.png)";
   const first = render(text);
   const second = render(text);
   assertEquals(second, first);

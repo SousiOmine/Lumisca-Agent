@@ -91,11 +91,13 @@ export function createMcpToolsProvider(
       }
       if (announced === available) return [];
       announced = available;
-      return [{
-        title: available ? "On-demand tools" : "On-demand tools (gone)",
-        body: available ? ON_DEMAND_TOOLS_NOTE : ON_DEMAND_TOOLS_GONE,
-        state: { available } satisfies McpToolsState,
-      }];
+      return [
+        {
+          title: available ? "On-demand tools" : "On-demand tools (gone)",
+          body: available ? ON_DEMAND_TOOLS_NOTE : ON_DEMAND_TOOLS_GONE,
+          state: { available } satisfies McpToolsState,
+        },
+      ];
     },
     rebase(state: unknown): void {
       announced = availableOf(state);

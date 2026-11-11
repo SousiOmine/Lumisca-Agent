@@ -1,14 +1,14 @@
 import { assert, assertEquals } from "@std/assert";
-import { SessionToolRegistries } from "./registries.ts";
 import { createToolCallTool } from "./call-tool.ts";
-import { createToolSearchTool } from "./search-tool.ts";
+import { SessionToolRegistries } from "./registries.ts";
 import { object, type Tool, type ToolContentBlock } from "./schema.ts";
+import { createToolSearchTool } from "./search-tool.ts";
 
 /** The text of a tool result (the search tools answer in text only). */
 function textOf(content: readonly ToolContentBlock[]): string {
   return content
-    .filter((block): block is { type: "text"; text: string } =>
-      block.type === "text"
+    .filter(
+      (block): block is { type: "text"; text: string } => block.type === "text",
     )
     .map((block) => block.text)
     .join("");

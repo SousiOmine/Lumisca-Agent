@@ -12,8 +12,9 @@
  * this module finds, so the build and the runtime cannot disagree about
  * which one that is.
  */
-import { dirname, join } from "node:path";
+
 import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import { type EnvReader, processEnv } from "../models/custom.ts";
 
 /** Platform suffixes of the `@napi-rs/canvas-<platform>` npm packages
@@ -102,9 +103,11 @@ function canvasIcuSearchDirs(): string[] {
     );
     // Next to an already-loaded native binding (require.cache exposes
     // the `.node` path once @napi-rs/canvas was imported earlier).
-    const cache = (bindingRequire as unknown as {
-      cache?: Record<string, unknown>;
-    }).cache;
+    const cache = (
+      bindingRequire as unknown as {
+        cache?: Record<string, unknown>;
+      }
+    ).cache;
     if (cache) {
       for (const path of Object.keys(cache)) {
         if (path.endsWith(".node")) dirs.push(dirname(path));

@@ -1,5 +1,10 @@
 import type { Agent } from "../ai/agent.ts";
-import type { AgentMessage, AssistantMessage } from "../ai/types.ts";
+import { isRetryableRateLimit } from "../ai/llm-retry.ts";
+import {
+  MAX_RATE_LIMIT_RETRIES,
+  rateLimitRetryDelayMs,
+  sleepAbortable,
+} from "../ai/rate-limit.ts";
 import {
   buildContextOverflowRetryNotification,
   buildInterruptedRetryNotification,
@@ -13,13 +18,11 @@ import {
   isTransientStreamError,
   MAX_EMPTY_RESPONSE_RETRIES,
 } from "../ai/retry-policy.ts";
-import {
-  MAX_RATE_LIMIT_RETRIES,
-  rateLimitRetryDelayMs,
-  sleepAbortable,
-} from "../ai/rate-limit.ts";
-import { isRetryableRateLimit } from "../ai/llm-retry.ts";
-import type { NotificationMessage } from "../ai/types.ts";
+import type {
+  AgentMessage,
+  AssistantMessage,
+  NotificationMessage,
+} from "../ai/types.ts";
 
 /** Outcome of classifying one assistant turn for retry. */
 export type RetryDecision =
@@ -30,13 +33,13 @@ export type RetryDecision =
   | { action: "exhausted"; count: number; message?: string }
   | { action: "followUp"; notification: NotificationMessage }
   | {
-    action: "park";
-    notification: NotificationMessage;
-    rateLimit: boolean;
-    /** True when the parked restart follows a context overflow: the history
-     * must be condensed before the run restarts (see SessionAgent). */
-    overflow?: boolean;
-  };
+      action: "park";
+      notification: NotificationMessage;
+      rateLimit: boolean;
+      /** True when the parked restart follows a context overflow: the history
+       * must be condensed before the run restarts (see SessionAgent). */
+      overflow?: boolean;
+    };
 
 /** Maximum consecutive context-overflow recoveries per exchange. One is
  * enough when the forced compaction reduces the history; a second rejection
@@ -144,8 +147,9 @@ export class RetryManager {
 
   /** True when a silent-error or rate-limit restart is parked. */
   get hasPendingRestart(): boolean {
-    return this.pendingErrorRetry !== null ||
-      this.pendingRateLimitRetry !== null;
+    return (
+      this.pendingErrorRetry !== null || this.pendingRateLimitRetry !== null
+    );
   }
 
   /** True when a parked restart follows a context overflow: the caller
@@ -169,10 +173,7 @@ export class RetryManager {
    * retry in-run, retryable failures park a restart. Returns the decision;
    * the agent executes it (followUp on its Agent, or a parked restart via
    * resumeOnce). */
-  classify(
-    message: AgentMessage,
-    closed: boolean,
-  ): RetryDecision {
+  classify(message: AgentMessage, closed: boolean): RetryDecision {
     if (message.role !== "assistant") return { action: "none" };
     const assistant = message as AssistantMessage;
     // An answer the provider cut at the output cap is incomplete even though
@@ -180,7 +181,8 @@ export class RetryManager {
     // Checked first because the visible text would otherwise reset the
     // budgets below and the model would never be asked to go on.
     if (
-      !closed && isOutputCapStop(assistant) &&
+      !closed &&
+      isOutputCapStop(assistant) &&
       this.outputCapRetries < MAX_OUTPUT_CAP_RETRIES
     ) {
       this.outputCapRetries++;
@@ -196,7 +198,8 @@ export class RetryManager {
       // stays in the transcript, so the restart resumes instead of
       // repeating. Anything else is real progress and resets the budgets.
       if (
-        !closed && isTransientStreamError(assistant) &&
+        !closed &&
+        isTransientStreamError(assistant) &&
         this.interruptedRetries < MAX_EMPTY_RESPONSE_RETRIES
       ) {
         this.interruptedRetries++;
@@ -222,7 +225,8 @@ export class RetryManager {
     // it. A second rejection within the same exchange means compaction could
     // not free enough, so the provider's own error surfaces.
     if (
-      !closed && isContextOverflowError(assistant) &&
+      !closed &&
+      isContextOverflowError(assistant) &&
       this.overflowRetries < MAX_OVERFLOW_RETRIES
     ) {
       this.overflowRetries++;
@@ -301,7 +305,8 @@ export class RetryManager {
   ): Promise<boolean> {
     const epoch = this.abortEpoch;
     while (
-      !closed && this.abortEpoch === epoch &&
+      !closed &&
+      this.abortEpoch === epoch &&
       (this.pendingErrorRetry !== null || this.pendingRateLimitRetry !== null)
     ) {
       const isRateLimit = this.pendingRateLimitRetry !== null;

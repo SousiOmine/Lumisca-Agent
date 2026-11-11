@@ -1,6 +1,6 @@
+import { MINI_PNG, noisyPng } from "@lumisca/core/test-utils";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { base64ToBytes, bytesToBase64 } from "../../core/base64.ts";
-import { MINI_PNG, noisyPng } from "@lumisca/core/test-utils";
 import { parsePromptBody, preparePromptImages } from "./session-requests.ts";
 import { AppError } from "./util.ts";
 
@@ -69,7 +69,7 @@ Deno.test("parsePromptBody allows image-only prompts (empty text)", () => {
 Deno.test("parsePromptBody rejects invalid bodies", () => {
   const expect400 = (body: unknown, fragment: string) => {
     const thrown = assertThrows(() =>
-      parsePromptBody(body as { text?: unknown; images?: unknown })
+      parsePromptBody(body as { text?: unknown; images?: unknown }),
     );
     assert(thrown instanceof AppError, "must be an AppError");
     const error = thrown as AppError;
@@ -160,11 +160,13 @@ Deno.test("preparePromptImages: a picture inside the budget is passed through", 
 
 Deno.test("preparePromptImages: a heavy picture is bounded before it is stored", async () => {
   const png = await noisyPng(1800, 1200);
-  const prepared = await preparePromptImages([{
-    type: "image",
-    data: bytesToBase64(png),
-    mimeType: "image/png",
-  }]);
+  const prepared = await preparePromptImages([
+    {
+      type: "image",
+      data: bytesToBase64(png),
+      mimeType: "image/png",
+    },
+  ]);
   assertEquals(prepared?.length, 1);
   const stored = prepared![0]!;
   assert(
@@ -187,7 +189,9 @@ Deno.test("preparePromptImages: no pictures stay no pictures", async () => {
 
 Deno.test("preparePromptImages: a payload that is not base64 is a 400", async () => {
   const error = await assertRejects(() =>
-    preparePromptImages([{ type: "image", data: "%%%", mimeType: "image/png" }])
+    preparePromptImages([
+      { type: "image", data: "%%%", mimeType: "image/png" },
+    ]),
   );
   assert(error instanceof AppError, "must be an AppError");
   assertEquals((error as AppError).status, 400);

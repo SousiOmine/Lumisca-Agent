@@ -1,5 +1,5 @@
-import type { ReactNode } from "preact/compat";
 import { IconChevronRight } from "@tabler/icons-preact";
+import type { ReactNode } from "preact/compat";
 
 /**
  * One entry of a provider list (AI or web search): the name, an optional
@@ -40,13 +40,13 @@ export function ProviderRow({
   );
   return (
     <div className="provider-row">
-      {onOpen === undefined
-        ? <div className="provider-row-body">{body}</div>
-        : (
-          <button type="button" className="provider-row-body" onClick={onOpen}>
-            {body}
-          </button>
-        )}
+      {onOpen === undefined ? (
+        <div className="provider-row-body">{body}</div>
+      ) : (
+        <button type="button" className="provider-row-body" onClick={onOpen}>
+          {body}
+        </button>
+      )}
       {trailing !== undefined && (
         <span className="provider-row-actions">{trailing}</span>
       )}

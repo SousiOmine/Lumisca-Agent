@@ -1,7 +1,7 @@
+import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { McpServerConfig } from "./config.ts";
 import { resolveServerCwd } from "./config.ts";
 
@@ -59,21 +59,21 @@ export function createMcpTransport(
 
 /** Normalize an SDK tool entry into this module's shape (shared by the
  * session client and the one-shot probe). */
-function toToolInfo(
-  tool: {
-    name: string;
-    description?: string;
-    inputSchema?: unknown;
-    annotations?: { readOnlyHint?: boolean };
-  },
-): McpToolInfo {
+function toToolInfo(tool: {
+  name: string;
+  description?: string;
+  inputSchema?: unknown;
+  annotations?: { readOnlyHint?: boolean };
+}): McpToolInfo {
   return {
     name: tool.name,
     description: tool.description,
     inputSchema: tool.inputSchema,
-    ...(tool.annotations === undefined ? {} : {
-      annotations: { readOnlyHint: tool.annotations.readOnlyHint },
-    }),
+    ...(tool.annotations === undefined
+      ? {}
+      : {
+          annotations: { readOnlyHint: tool.annotations.readOnlyHint },
+        }),
   };
 }
 
@@ -219,9 +219,9 @@ export class McpServerClient {
     }
     if (result.isError === true) {
       throw new McpToolError(
-        `MCP tool ${name} failed: ${
-          formatContent(result.content as McpContentBlock[])
-        }`,
+        `MCP tool ${name} failed: ${formatContent(
+          result.content as McpContentBlock[],
+        )}`,
       );
     }
     return result.content as McpContentBlock[];

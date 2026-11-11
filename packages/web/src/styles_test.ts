@@ -1,5 +1,5 @@
-import { assert, assertEquals } from "@std/assert";
 import { THEME_COLORS } from "@lumisca/core/shared";
+import { assert, assertEquals } from "@std/assert";
 
 /**
  * Guards for the design tokens (styles/tokens.css). Both bugs these catch are
@@ -23,8 +23,8 @@ function blocks(css: string): Block[] {
     const [, selector = "", body = ""] = match;
     return {
       selector: selector.trim(),
-      tokens: [...body.matchAll(/(--[a-z0-9-]+)\s*:/g)].map((token) =>
-        token[1] ?? ""
+      tokens: [...body.matchAll(/(--[a-z0-9-]+)\s*:/g)].map(
+        (token) => token[1] ?? "",
       ),
     };
   });
@@ -44,8 +44,8 @@ async function* sourceFiles(dir: URL): AsyncGenerator<URL> {
 
 /** The token names a stylesheet or component references in a variable. */
 function referenced(css: string): string[] {
-  return [...css.matchAll(/var\(\s*(--[a-z0-9-]+)/g)].map((match) =>
-    match[1] ?? ""
+  return [...css.matchAll(/var\(\s*(--[a-z0-9-]+)/g)].map(
+    (match) => match[1] ?? "",
   );
 }
 
@@ -77,9 +77,10 @@ Deno.test("both theme blocks declare the same tokens", async () => {
   );
   // Dark is the default theme: it applies before the client sets data-theme.
   assertEquals(
-    blocks(css).some((block) =>
-      block.selector.includes(":root") &&
-      block.selector.includes('data-theme="dark"')
+    blocks(css).some(
+      (block) =>
+        block.selector.includes(":root") &&
+        block.selector.includes('data-theme="dark"'),
     ),
     true,
     "the dark theme block must also match :root",
@@ -90,9 +91,7 @@ Deno.test("every token reference resolves", async () => {
   const tokensCss = await Deno.readTextFile(
     new URL("./styles/tokens.css", import.meta.url),
   );
-  const declared = new Set(
-    blocks(tokensCss).flatMap((block) => block.tokens),
-  );
+  const declared = new Set(blocks(tokensCss).flatMap((block) => block.tokens));
   const missing = new Set<string>();
   for await (const file of sourceFiles(new URL("./", import.meta.url))) {
     if (file.pathname.endsWith("styles/tokens.css")) continue;
@@ -157,10 +156,13 @@ function cssRules(css: string): CssRule[] {
 /** The elements a hover rule reveals: the last compound selector of each
  * comma-separated part (`...:hover .x` reveals `.x`). */
 function revealed(selector: string): string[] {
-  return selector.split(",").map((part) => {
-    const compounds = part.trim().split(/\s+/);
-    return compounds[compounds.length - 1] ?? "";
-  }).filter((compound) => compound !== "");
+  return selector
+    .split(",")
+    .map((part) => {
+      const compounds = part.trim().split(/\s+/);
+      return compounds[compounds.length - 1] ?? "";
+    })
+    .filter((compound) => compound !== "");
 }
 
 /** The stylesheets under `styles/`, in cascade order. */
@@ -190,11 +192,9 @@ Deno.test("width breakpoints are the documented two", async () => {
   assertEquals(
     [...used.keys()].sort(),
     ["600px", "900px"],
-    `used by: ${
-      [...used.entries()].map(([width, files]) =>
-        `${width} (${[...files].sort().join(", ")})`
-      ).join("; ")
-    }`,
+    `used by: ${[...used.entries()]
+      .map(([width, files]) => `${width} (${[...files].sort().join(", ")})`)
+      .join("; ")}`,
   );
 });
 
@@ -251,16 +251,19 @@ Deno.test("hover-only affordances stay visible on touch", async () => {
   for await (const [name, css] of styleSheets()) {
     const rules = cssRules(css);
     const hidden = rules
-      .filter((rule) =>
-        rule.media === null &&
-        /(opacity|visibility):\s*(0|hidden)/.test(rule.body)
+      .filter(
+        (rule) =>
+          rule.media === null &&
+          /(opacity|visibility):\s*(0|hidden)/.test(rule.body),
       )
       .map((rule) => rule.selector);
     const hoverRevealed = new Set(
       rules
-        .filter((rule) =>
-          rule.media === null && rule.selector.includes(":hover") &&
-          /(opacity:\s*1|visibility:\s*visible)/.test(rule.body)
+        .filter(
+          (rule) =>
+            rule.media === null &&
+            rule.selector.includes(":hover") &&
+            /(opacity:\s*1|visibility:\s*visible)/.test(rule.body),
         )
         .flatMap((rule) => revealed(rule.selector)),
     );
@@ -268,10 +271,11 @@ Deno.test("hover-only affordances stay visible on touch", async () => {
       // Hidden for another reason (a keyboard-only input, a JS-toggled
       // class): only the hover-revealed ones have to be covered.
       if (!hoverRevealed.has(selector)) continue;
-      const covered = rules.some((rule) =>
-        rule.media?.includes("hover: none") === true &&
-        revealed(rule.selector).includes(selector) &&
-        /(opacity:\s*1|visibility:\s*visible)/.test(rule.body)
+      const covered = rules.some(
+        (rule) =>
+          rule.media?.includes("hover: none") === true &&
+          revealed(rule.selector).includes(selector) &&
+          /(opacity:\s*1|visibility:\s*visible)/.test(rule.body),
       );
       if (!covered) missing.push(`${name}: ${selector}`);
     }
@@ -344,9 +348,9 @@ Deno.test("corners come from the radius ramp", async () => {
         const value = (match[1] ?? "").trim();
         // A shorthand naming one to four corners of the ramp (the bottom
         // edge of a menu, a blockquote's outer side) is still the ramp.
-        const parts = value.split(/\s+/).filter((part) =>
-          part !== "0" && !allowed.has(part)
-        );
+        const parts = value
+          .split(/\s+/)
+          .filter((part) => part !== "0" && !allowed.has(part));
         if (parts.length > 0 && value !== "50%") {
           offenders.push(`${name}: ${rule.selector} { ${value} }`);
         }
@@ -389,13 +393,16 @@ Deno.test("the machine's screen canvas is left to noVNC to size", () => {
  * own). Used to match an animated rule against its reduced-motion override,
  * which names the element without the gate. */
 function animatedTargets(selector: string): string[] {
-  return selector.split(",").map((part) => {
-    const compounds = part.trim().split(/\s+/);
-    return (compounds[compounds.length - 1] ?? "").replace(
-      /\[data-[a-z-]+(\]|=[^\]]*\])$/,
-      "",
-    );
-  }).filter((target) => target !== "");
+  return selector
+    .split(",")
+    .map((part) => {
+      const compounds = part.trim().split(/\s+/);
+      return (compounds[compounds.length - 1] ?? "").replace(
+        /\[data-[a-z-]+(\]|=[^\]]*\])$/,
+        "",
+      );
+    })
+    .filter((target) => target !== "");
 }
 
 Deno.test("every animation has a reduced-motion override", () => {
@@ -457,10 +464,7 @@ Deno.test("transitions name their properties and use the motion tokens", async (
       if (transition === null) continue;
       const value = transition[3] ?? "";
       if (/\ball\b/.test(value)) {
-        offenders.push(
-          `${name}: ${selector.trim()} uses ` +
-            `transition: all`,
-        );
+        offenders.push(`${name}: ${selector.trim()} uses ` + `transition: all`);
         continue;
       }
       // A duration or an easing written out instead of read from the tokens.
@@ -487,10 +491,7 @@ function styleSheetsSync(): [string, string][] {
   const sheets: [string, string][] = [];
   for (const entry of Deno.readDirSync(dir)) {
     if (!entry.isFile || !entry.name.endsWith(".css")) continue;
-    sheets.push([
-      entry.name,
-      Deno.readTextFileSync(new URL(entry.name, dir)),
-    ]);
+    sheets.push([entry.name, Deno.readTextFileSync(new URL(entry.name, dir))]);
   }
   return sheets;
 }
@@ -662,8 +663,8 @@ Deno.test("the composer draws one frame, and its buttons are one size", async ()
   );
 
   // The icon-only buttons are square, at one size.
-  const actions = /\.input-actions \.btn:not\(\.btn-with-label\) \{([^}]*)\}/
-    .exec(css);
+  const actions =
+    /\.input-actions \.btn:not\(\.btn-with-label\) \{([^}]*)\}/.exec(css);
   assertEquals(actions !== null, true, "the icon buttons need a shape rule");
   assertEquals(
     /aspect-ratio:\s*1/.test(actions![1]!),
@@ -701,9 +702,10 @@ Deno.test("the composer draws one frame, and its buttons are one size", async ()
   // three size overrides need no second number to keep in step. They must
   // not replace the whole `padding` shorthand, though: that would drop the
   // derived top padding and put the drift back.
-  const shorthand = cssRules(css).filter((rule) =>
-    rule.selector.includes(".input-box") &&
-    /(^|[;{\s])padding:/.test(rule.body)
+  const shorthand = cssRules(css).filter(
+    (rule) =>
+      rule.selector.includes(".input-box") &&
+      /(^|[;{\s])padding:/.test(rule.body),
   );
   assertEquals(
     shorthand.map((rule) => rule.selector),
@@ -723,10 +725,10 @@ Deno.test("the composer field grows to twelve lines and then scrolls", async () 
     new URL("./styles/composer.css", import.meta.url),
   );
   const field = cssRules(css).filter((rule) =>
-    rule.selector.includes(".input-box")
+    rule.selector.includes(".input-box"),
   );
   const shared = field.find((rule) =>
-    rule.selector.includes(".input-box:focus-visible")
+    rule.selector.includes(".input-box:focus-visible"),
   );
   assertEquals(shared !== undefined, true, "the shared field rule is missing");
   const body = shared!.body;
@@ -850,9 +852,10 @@ Deno.test("stella draws no conversation until an agent is picked", async () => {
     new URL("./styles/stella.css", import.meta.url),
   );
   const rules = cssRules(css);
-  const hidden = rules.find((rule) =>
-    rule.selector === '.stella-shell[data-screen="list"] .stella' &&
-    rule.media === null
+  const hidden = rules.find(
+    (rule) =>
+      rule.selector === '.stella-shell[data-screen="list"] .stella' &&
+      rule.media === null,
   );
   assertEquals(
     hidden !== undefined,
@@ -888,9 +891,7 @@ Deno.test("stella draws no conversation until an agent is picked", async () => {
   );
   const tokens = declarations(
     cssRules(
-      await Deno.readTextFile(
-        new URL("./styles/tokens.css", import.meta.url),
-      ),
+      await Deno.readTextFile(new URL("./styles/tokens.css", import.meta.url)),
     ),
     ":root",
   );
@@ -936,9 +937,10 @@ Deno.test("stella's list and conversation are two screens on a tablet", async ()
   );
   const rules = cssRules(css);
   const tablet = (selector: string): CssRule | undefined =>
-    rules.find((rule) =>
-      rule.selector === selector &&
-      rule.media?.includes("max-width: 900px") === true
+    rules.find(
+      (rule) =>
+        rule.selector === selector &&
+        rule.media?.includes("max-width: 900px") === true,
     );
   const rule = tablet(
     '.stella-shell[data-screen="conversation"] .stella-sidebar',
@@ -955,13 +957,11 @@ Deno.test("stella's list and conversation are two screens on a tablet", async ()
   // not a column standing in the middle of one (the top-level rule).
   const list = tablet('.stella-shell[data-screen="list"] .stella-sidebar');
   assertEquals(list !== undefined, true, "the list screen must be sized");
-  for (
-    const [property, value] of [
-      ["width", "100%"],
-      ["flex", "1"],
-      ["left", "0"],
-    ]
-  ) {
+  for (const [property, value] of [
+    ["width", "100%"],
+    ["flex", "1"],
+    ["left", "0"],
+  ]) {
     assertEquals(
       new RegExp(`${property}:\\s*${value}`).test(list!.body),
       true,
@@ -991,20 +991,20 @@ Deno.test("a conversation arrives from the right beside the list", async () => {
     new URL("./styles/stella.css", import.meta.url),
   );
   const rules = cssRules(css);
-  const arrival = rules.find((rule) =>
-    rule.selector ===
-      '.stella-shell[data-screen="conversation"] .stella-main' &&
-    rule.media === null
+  const arrival = rules.find(
+    (rule) =>
+      rule.selector ===
+        '.stella-shell[data-screen="conversation"] .stella-main' &&
+      rule.media === null,
   );
   assertEquals(arrival !== undefined, true, "the sheet must have an entrance");
   // `backwards`, not `both`: holding the last keyframe would leave a
   // `transform` on the sheet once the animation ends, and with it a containing
   // block for anything `position: fixed` inside the conversation.
   assertEquals(
-    /animation:\s*lum-enter-right var\(--lum-dur-slow\)\s+var\(--lum-ease-drawer\)\s+backwards/
-      .test(
-        arrival!.body.replace(/\s+/g, " "),
-      ),
+    /animation:\s*lum-enter-right var\(--lum-dur-slow\)\s+var\(--lum-ease-drawer\)\s+backwards/.test(
+      arrival!.body.replace(/\s+/g, " "),
+    ),
     true,
     "the entrance must read its times from the tokens and release the end state",
   );
@@ -1039,8 +1039,8 @@ Deno.test("the model picker's panel is capped by the room it measured", () => {
   return Deno.readTextFile(
     new URL("./styles/model-picker.css", import.meta.url),
   ).then((css) => {
-    const panel = cssRules(css).find((rule) =>
-      rule.selector === ".mp-popover" && rule.media === null
+    const panel = cssRules(css).find(
+      (rule) => rule.selector === ".mp-popover" && rule.media === null,
     );
     assertEquals(panel !== undefined, true, ".mp-popover must be placed");
     assertEquals(
@@ -1081,10 +1081,7 @@ Deno.test("the manifest's theme colours are the themes' --bg", async () => {
 
 /** The declarations of one rule (the last one for a selector wins, matching
  * the cascade for the repeated selectors these checks look at). */
-function declarations(
-  rules: CssRule[],
-  selector: string,
-): Map<string, string> {
+function declarations(rules: CssRule[], selector: string): Map<string, string> {
   const found = new Map<string, string>();
   for (const rule of rules) {
     if (rule.selector !== selector || rule.media !== null) continue;
@@ -1241,17 +1238,19 @@ Deno.test("a screen transition slides where one screen shows and fades elsewhere
 
   // Wide windows fade: the travelling keyframes are the narrow layout's, and
   // the default pair is the fade.
-  const fade = rules.filter((rule) =>
-    rule.media === null && /animation-name: lum-vt-fade/.test(rule.body)
+  const fade = rules.filter(
+    (rule) =>
+      rule.media === null && /animation-name: lum-vt-fade/.test(rule.body),
   );
   assertEquals(
     fade.map((rule) => rule.selector).sort(),
     ["::view-transition-new(root)", "::view-transition-old(root)"],
     "the wide layout cross-fades the two screens",
   );
-  const travel = rules.filter((rule) =>
-    rule.media?.includes("max-width: 900px") === true &&
-    /animation-name: lum-vt-(in|out)/.test(rule.body)
+  const travel = rules.filter(
+    (rule) =>
+      rule.media?.includes("max-width: 900px") === true &&
+      /animation-name: lum-vt-(in|out)/.test(rule.body),
   );
   assertEquals(
     travel.map((rule) => rule.selector).sort(),
@@ -1281,9 +1280,10 @@ Deno.test("a screen transition slides where one screen shows and fades elsewhere
   const reduced = await Deno.readTextFile(
     new URL("./styles/reduced-motion.css", import.meta.url),
   );
-  const overrides = cssRules(reduced).filter((rule) =>
-    rule.media?.includes("prefers-reduced-motion") === true &&
-    rule.selector.startsWith("::view-transition-")
+  const overrides = cssRules(reduced).filter(
+    (rule) =>
+      rule.media?.includes("prefers-reduced-motion") === true &&
+      rule.selector.startsWith("::view-transition-"),
   );
   assertEquals(
     overrides.map((rule) => rule.selector).sort(),
@@ -1324,7 +1324,7 @@ Deno.test("a disclosure animates its height, and only that", async () => {
   // The row's own transition is the height; the body's fade is the only
   // other thing that moves. No rule measures a size.
   const rowRules = rules.filter((rule) =>
-    /^\.collapse(\[data-open="true"\])?$/.test(rule.selector)
+    /^\.collapse(\[data-open="true"\])?$/.test(rule.selector),
   );
   assertEquals(rowRules.length, 2, "the collapse has one rule per state");
   for (const rule of rowRules) {
@@ -1349,9 +1349,10 @@ Deno.test("a disclosure animates its height, and only that", async () => {
   const reduced = await Deno.readTextFile(
     new URL("./styles/reduced-motion.css", import.meta.url),
   );
-  const stopped = cssRules(reduced).filter((rule) =>
-    rule.media?.includes("prefers-reduced-motion") === true &&
-    rule.selector.split(",").some((part) => part.trim() === ".collapse")
+  const stopped = cssRules(reduced).filter(
+    (rule) =>
+      rule.media?.includes("prefers-reduced-motion") === true &&
+      rule.selector.split(",").some((part) => part.trim() === ".collapse"),
   );
   assertEquals(
     stopped.map((rule) => rule.body.trim()),

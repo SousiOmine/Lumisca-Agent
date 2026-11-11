@@ -1,4 +1,7 @@
 import { memo, useCallback } from "preact/compat";
+import type { TabDraft } from "../hooks/useDrafts.ts";
+import type { SessionActions } from "../hooks/useSessionActions.ts";
+import { DRAFT_TAB, splitTabKey } from "../tabs.ts";
 import type {
   AskAnswer,
   ModePrompt,
@@ -7,9 +10,6 @@ import type {
   ThinkingLevel,
   Workspace,
 } from "../types.ts";
-import { DRAFT_TAB, splitTabKey } from "../tabs.ts";
-import type { TabDraft } from "../hooks/useDrafts.ts";
-import type { SessionActions } from "../hooks/useSessionActions.ts";
 import { ChatView } from "./ChatView.tsx";
 import type { ComposerModel } from "./Composer.tsx";
 import { NewSessionView } from "./NewSessionView.tsx";
@@ -53,19 +53,17 @@ interface SessionPaneProps {
   onOpenSettings: () => void;
 }
 
-export const SessionPane = memo(function SessionPane(
-  {
-    tabKey,
-    view,
-    active,
-    draft,
-    loadingOlder,
-    actions,
-    loadOlder,
-    updateDraft,
-    onOpenSettings,
-  }: SessionPaneProps,
-) {
+export const SessionPane = memo(function SessionPane({
+  tabKey,
+  view,
+  active,
+  draft,
+  loadingOlder,
+  actions,
+  loadOlder,
+  updateDraft,
+  onOpenSettings,
+}: SessionPaneProps) {
   const onInputChange = useCallback(
     (input: string) => updateDraft(tabKey, { input }),
     [updateDraft, tabKey],
@@ -159,22 +157,20 @@ interface DraftPaneProps {
  * recent session list (which probes every registered peer) on every visit.
  * The App mounts it lazily — a launch that opens a session directly still
  * makes none of those requests. */
-export const DraftPane = memo(function DraftPane(
-  {
-    active,
-    draft,
-    workspaces,
-    workspacesLoaded,
-    settingsVersion,
-    updateDraft,
-    clearDraft,
-    startSession,
-    onWorkspaceChanged,
-    onDeleteWorkspace,
-    onReopenSession,
-    onOpenSettings,
-  }: DraftPaneProps,
-) {
+export const DraftPane = memo(function DraftPane({
+  active,
+  draft,
+  workspaces,
+  workspacesLoaded,
+  settingsVersion,
+  updateDraft,
+  clearDraft,
+  startSession,
+  onWorkspaceChanged,
+  onDeleteWorkspace,
+  onReopenSession,
+  onOpenSettings,
+}: DraftPaneProps) {
   const onInputChange = useCallback(
     (input: string) => updateDraft(DRAFT_TAB, { input }),
     [updateDraft],

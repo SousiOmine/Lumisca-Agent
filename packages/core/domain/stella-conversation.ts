@@ -16,8 +16,9 @@
  * receives a turn's narration cannot leak it into a conversation the agent
  * was not addressing.
  */
-import type { AskTurn } from "../shared/interaction.ts";
+
 import type { AttachmentRef, PromptFileRef } from "../shared/attachments.ts";
+import type { AskTurn } from "../shared/interaction.ts";
 import type { ThinkingLevel } from "../shared/providers.ts";
 import type { UiSegment } from "../shared/ui-markup/types.ts";
 

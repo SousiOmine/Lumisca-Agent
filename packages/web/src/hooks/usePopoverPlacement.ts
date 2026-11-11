@@ -97,9 +97,12 @@ export interface PopoverFit {
  * anchored at the trigger's left edge it would otherwise run off the right
  * edge of a narrow window.
  */
-export function fitPopover(
-  { anchor, viewport, layoutHeight, prefer }: PopoverFitInput,
-): PopoverFit {
+export function fitPopover({
+  anchor,
+  viewport,
+  layoutHeight,
+  prefer,
+}: PopoverFitInput): PopoverFit {
   const visibleTop = viewport.top + POPOVER_MARGIN;
   const visibleBottom = viewport.top + viewport.height - POPOVER_MARGIN;
   // A trigger outside the visible slice (the software keyboard covered it, a
@@ -117,9 +120,10 @@ export function fitPopover(
   const room: Record<PopoverSide, number> = { above, below };
 
   const other: PopoverSide = prefer === "above" ? "below" : "above";
-  const side = room[prefer] < POPOVER_MIN_HEIGHT && room[other] > room[prefer]
-    ? other
-    : prefer;
+  const side =
+    room[prefer] < POPOVER_MIN_HEIGHT && room[other] > room[prefer]
+      ? other
+      : prefer;
   // Neither side holds a panel worth showing (a window a few hundred pixels
   // tall): rather than a sliver of a list, the panel fills the visible area.
   // It is still an overlay the user can leave (outside click, Escape, the
@@ -166,17 +170,17 @@ export function visibleArea(): PopoverViewport {
   const viewport = globalThis.visualViewport;
   return viewport
     ? {
-      left: viewport.offsetLeft,
-      top: viewport.offsetTop,
-      width: viewport.width,
-      height: viewport.height,
-    }
+        left: viewport.offsetLeft,
+        top: viewport.offsetTop,
+        width: viewport.width,
+        height: viewport.height,
+      }
     : {
-      left: 0,
-      top: 0,
-      width: globalThis.innerWidth,
-      height: globalThis.innerHeight,
-    };
+        left: 0,
+        top: 0,
+        width: globalThis.innerWidth,
+        height: globalThis.innerHeight,
+      };
 }
 
 /** Height of the app's own chrome (the title bar), read from the token so the
@@ -263,8 +267,10 @@ function samePlacement(
   if (a === null || b === null) return a === b;
   if (a.height !== b.height) return false;
   const keys = Object.keys(a.style);
-  return keys.length === Object.keys(b.style).length &&
-    keys.every((key) => a.style[key] === b.style[key]);
+  return (
+    keys.length === Object.keys(b.style).length &&
+    keys.every((key) => a.style[key] === b.style[key])
+  );
 }
 
 /**
@@ -301,7 +307,7 @@ export function usePopoverPlacement(
       if (trigger === null) return;
       const next = placementOf(trigger, prefer);
       setPlacement((previous) =>
-        samePlacement(previous, next) ? previous : next
+        samePlacement(previous, next) ? previous : next,
       );
     };
     update();

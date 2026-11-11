@@ -4,8 +4,8 @@ import type {
   CredentialInfo,
   CredentialStore,
 } from "../ai/types.ts";
-import type { SettingsRepo } from "./repo.ts";
 import { safeJsonParse } from "../shared/mod.ts";
+import type { SettingsRepo } from "./repo.ts";
 
 /** Settings-file key prefix for credentials. Shared with the server layer
  * (settings API filters these keys out) — single source of truth. */

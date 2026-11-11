@@ -1,4 +1,3 @@
-import type { Context, Hono } from "hono";
 import {
   errorMessage,
   LANGUAGE_KEY,
@@ -12,16 +11,17 @@ import {
   type ThemeSetting,
 } from "@lumisca/core";
 import type { InitialData } from "@lumisca/core/shared";
-import type { AssetFile, Assets } from "./assets.ts";
-import { safePageHost } from "./security.ts";
-import { renderHtmlDocument } from "./render.ts";
-import { renderManifest } from "./manifest.ts";
+import type { Context, Hono } from "hono";
 import {
   appFileHeaders,
   bytesEtag,
   contentEtag,
   etagMatches,
 } from "./app-file-headers.ts";
+import type { AssetFile, Assets } from "./assets.ts";
+import { renderManifest } from "./manifest.ts";
+import { renderHtmlDocument } from "./render.ts";
+import { safePageHost } from "./security.ts";
 
 /** Theme preference from the core settings ("system" when unset/unknown).
  * The client resolves "system" via prefers-color-scheme; the shell falls back
@@ -39,10 +39,7 @@ function resolvedThemeOf(core: LumiscaCore): "light" | "dark" {
 /** The app language of one request: the stored setting when the user chose
  * one, else the browser's preference (Accept-Language), else the machine's
  * locale. Shared with the MCP routes (their OAuth page renders the same way). */
-export function languageForRequest(
-  core: LumiscaCore,
-  c: Context,
-): Locale {
+export function languageForRequest(core: LumiscaCore, c: Context): Locale {
   return resolveLocale(core.getSetting(LANGUAGE_KEY), [
     ...parseAcceptLanguage(c.req.header("accept-language")),
     ...systemLanguageTags(),
@@ -172,10 +169,7 @@ export function registerPages(
     try {
       file = await assets.getClientFile(c.req.param("file"));
     } catch (error) {
-      return c.text(
-        `Client bundle build failed: ${errorMessage(error)}`,
-        500,
-      );
+      return c.text(`Client bundle build failed: ${errorMessage(error)}`, 500);
     }
     if (file === undefined) return c.text("Not found", 404);
     return serveRevalidatable(
@@ -242,10 +236,7 @@ export function registerPages(
     try {
       body = await assets.getServiceWorker();
     } catch (error) {
-      return c.text(
-        `Service worker unavailable: ${errorMessage(error)}`,
-        500,
-      );
+      return c.text(`Service worker unavailable: ${errorMessage(error)}`, 500);
     }
     return serveRevalidatable(
       c,

@@ -1,14 +1,21 @@
 import { basename, join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
-import { Sandbox } from "../workspace/sandbox.ts";
-import { ToolRegistry } from "../tools/registry.ts";
-import { createToolSearchTool } from "../tools/search-tool.ts";
-import { createToolCallTool } from "../tools/call-tool.ts";
-import { createChatTools, createCodingTools } from "../tools/mod.ts";
 import type { Workspace } from "../domain/workspace.ts";
 import { TOOL_PDF_READ_PAGES } from "../shared/mod.ts";
-import { findCanvasIcuDataFile } from "./icu-data.ts";
+import {
+  MINI_PNG,
+  makeRealTempDir,
+  noisyPng,
+  removeDirRetry,
+  toolText,
+} from "../test-utils.ts";
+import { createToolCallTool } from "../tools/call-tool.ts";
 import { HostFileBackend } from "../tools/host/files.ts";
+import { createChatTools, createCodingTools } from "../tools/mod.ts";
+import { ToolRegistry } from "../tools/registry.ts";
+import { createToolSearchTool } from "../tools/search-tool.ts";
+import { Sandbox } from "../workspace/sandbox.ts";
+import { findCanvasIcuDataFile } from "./icu-data.ts";
 import {
   createPdfTools,
   createUnpdfRenderer,
@@ -17,13 +24,6 @@ import {
   PDF_TOOL_NAMES,
   type PdfRenderer,
 } from "./tools.ts";
-import {
-  makeRealTempDir,
-  MINI_PNG,
-  noisyPng,
-  removeDirRetry,
-  toolText,
-} from "../test-utils.ts";
 
 /** Fake renderer: serves canned PNGs, mirroring the production range
  * validation (1-based pages within the total). */
@@ -34,9 +34,9 @@ function fakeRenderer(totalPages: number): PdfRenderer {
       if (bad.length > 0) {
         return Promise.reject(
           new Error(
-            `Page ${
-              bad.join(",")
-            } out of range: the PDF has ${totalPages} page(s)`,
+            `Page ${bad.join(
+              ",",
+            )} out of range: the PDF has ${totalPages} page(s)`,
           ),
         );
       }
@@ -91,10 +91,7 @@ Deno.test("pdf tool renders requested pages as image blocks", async () => {
     assertEquals(images[0]?.mimeType, "image/png");
     for (const image of images) {
       if (image.type !== "image") continue;
-      const decoded = Uint8Array.from(
-        atob(image.data),
-        (c) => c.charCodeAt(0),
-      );
+      const decoded = Uint8Array.from(atob(image.data), (c) => c.charCodeAt(0));
       assertEquals(decoded, MINI_PNG);
     }
     assertEquals(result.details, {
@@ -133,9 +130,8 @@ Deno.test("pdf tool stores a page at the model's budget", async () => {
     });
     const images = result.content.filter((c) => c.type === "image");
     assertEquals(images.length, 1);
-    const decoded = Uint8Array.from(
-      atob(images[0]!.data),
-      (c) => c.charCodeAt(0),
+    const decoded = Uint8Array.from(atob(images[0]!.data), (c) =>
+      c.charCodeAt(0),
     );
     // The transcript keeps the smaller copy, and the line says what it was
     // made from so a reader can tell it from the rendered page.
@@ -207,13 +203,15 @@ Deno.test("pdf tool rejects invalid pages and dpi", async () => {
 Deno.test("pdf tool surfaces out-of-range pages", async () => {
   const { root, folder } = await fixture();
   try {
-    const error = await makeTool(root, 2).execute("id", {
-      path: `${folder}/doc.pdf`,
-      pages: [5],
-    }).then(
-      () => null,
-      (e: unknown) => e instanceof Error ? e : new Error(String(e)),
-    );
+    const error = await makeTool(root, 2)
+      .execute("id", {
+        path: `${folder}/doc.pdf`,
+        pages: [5],
+      })
+      .then(
+        () => null,
+        (e: unknown) => (e instanceof Error ? e : new Error(String(e))),
+      );
     assert(error !== null, "expected an out-of-range error");
     assert(error.message.includes("out of range"), error.message);
   } finally {
@@ -253,13 +251,11 @@ Deno.test("preloaded tool sets never contain the pdf tool", async () => {
     // Preloaded definitions stay small: the pdf tool is discoverable
     // through the session's tool registry via tool_search, exactly like
     // MCP and browser-lab tools.
-    for (
-      const tools of [
-        createCodingTools(workspace, {}),
-        createCodingTools(workspace),
-        createChatTools({}),
-      ]
-    ) {
+    for (const tools of [
+      createCodingTools(workspace, {}),
+      createCodingTools(workspace),
+      createChatTools({}),
+    ]) {
       assertEquals(
         tools.some((t) => t.name === TOOL_PDF_READ_PAGES),
         false,
@@ -282,9 +278,7 @@ Deno.test("pdf tool is discoverable via tool_search and callable via tool_call",
       }),
     );
     const search = createToolSearchTool(() => registry);
-    const found = toolText(
-      await search.execute("search", { query: "pdf" }),
-    );
+    const found = toolText(await search.execute("search", { query: "pdf" }));
     assert(found.includes(TOOL_PDF_READ_PAGES), `not found: ${found}`);
 
     const call = createToolCallTool(() => registry);
@@ -323,23 +317,11 @@ Deno.test("pdf tool renders a real PDF with the bundled renderer", async () => {
     assertEquals(images.length, 1);
     const image = images[0]!;
     assert(image.type === "image" && image.mimeType === "image/png");
-    const decoded = Uint8Array.from(
-      atob(image.data),
-      (c) => c.charCodeAt(0),
-    );
+    const decoded = Uint8Array.from(atob(image.data), (c) => c.charCodeAt(0));
     // PNG magic.
     assertEquals(
       decoded.slice(0, 8),
-      new Uint8Array([
-        0x89,
-        0x50,
-        0x4e,
-        0x47,
-        0x0d,
-        0x0a,
-        0x1a,
-        0x0a,
-      ]),
+      new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     );
     // IHDR dimensions: floor(595pt * 150/72) x floor(842pt * 150/72).
     const view = new DataView(decoded.buffer);

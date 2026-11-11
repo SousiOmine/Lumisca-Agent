@@ -90,9 +90,9 @@ export async function scanVmSkillsDir(
       "sh",
       "-c",
       'cd "$1" 2>/dev/null || exit 0; ' +
-      "for entry in */; do " +
-      'name=${entry%/}; [ -f "$name/SKILL.md" ] || continue; ' +
-      'printf "\\n__SKILL__%s\\n" "$name"; cat "$name/SKILL.md"; done',
+        "for entry in */; do " +
+        'name=${entry%/}; [ -f "$name/SKILL.md" ] || continue; ' +
+        'printf "\\n__SKILL__%s\\n" "$name"; cat "$name/SKILL.md"; done',
       "sh",
       dir,
     ],
@@ -143,9 +143,10 @@ async function readVmSkillFile(
   name: string,
   relativePath: string | undefined,
 ): Promise<string> {
-  const target = relativePath === undefined
-    ? `${skillDir}/SKILL.md`
-    : skillTarget(skillDir, name, relativePath);
+  const target =
+    relativePath === undefined
+      ? `${skillDir}/SKILL.md`
+      : skillTarget(skillDir, name, relativePath);
   const result = await exec(
     ["sh", "-c", 'cat -- "$1" 2>/dev/null || exit 4', "sh", target],
     {

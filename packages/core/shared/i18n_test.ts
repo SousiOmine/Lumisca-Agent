@@ -2,14 +2,12 @@ import { assert, assertEquals } from "@std/assert";
 import { chat } from "./i18n/chat.ts";
 import { chrome } from "./i18n/chrome.ts";
 import { common } from "./i18n/common.ts";
-import { panels } from "./i18n/panels.ts";
-import { settings } from "./i18n/settings.ts";
 import {
   createTranslator,
   DEFAULT_LOCALE,
   isLocale,
-  localeForTag,
   LOCALES,
+  localeForTag,
   localeTag,
   messages,
   parseAcceptLanguage,
@@ -17,6 +15,8 @@ import {
   resolveLocale,
   translate,
 } from "./i18n/mod.ts";
+import { panels } from "./i18n/panels.ts";
+import { settings } from "./i18n/settings.ts";
 
 /** Each area file's own table, for the duplicate-key check (the catalogue
  * spread merges them, which is exactly what hides a collision). */
@@ -118,10 +118,7 @@ Deno.test("translate interpolates {name} placeholders", () => {
   );
   // A missing value leaves the placeholder visible instead of printing
   // "undefined": a broken sentence the user can report beats a silent lie.
-  assertEquals(
-    translate("en", "common.sessionName", {}),
-    "Session {date}",
-  );
+  assertEquals(translate("en", "common.sessionName", {}), "Session {date}");
   // Repeated placeholders are all replaced.
   assertEquals(
     translate("en", "notify.question", { name: "S", detail: ": x" }),
@@ -252,9 +249,6 @@ Deno.test("catalogue: user-facing text is not left in one language only", () => 
   for (const key of Object.keys(messages)) {
     if (allowed.has(key)) continue;
     const entry = messages[key as keyof typeof messages];
-    assert(
-      entry.ja !== entry.en,
-      `untranslated message (ja === en): ${key}`,
-    );
+    assert(entry.ja !== entry.en, `untranslated message (ja === en): ${key}`);
   }
 });

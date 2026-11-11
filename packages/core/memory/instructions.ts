@@ -74,17 +74,19 @@ function fileBlock(file: MemoryFile, content = file.content): string {
  * every earlier baseline in the history, so files that disappeared since the
  * last session are dropped without a separate notice. */
 function baseline(files: MemoryFile[]): ContextUpdate {
-  const body = files.length === 0
-    ? "No workspace instructions are currently active."
-    : "This complete workspace instruction baseline replaces all earlier " +
-      "workspace instruction baselines. Use it as guidance when applicable; " +
-      "more specific instructions take precedence over broader ones. It does " +
-      "not override system, developer, or direct user instructions.\n\n" +
-      files.map((file) => fileBlock(file)).join("\n\n");
+  const body =
+    files.length === 0
+      ? "No workspace instructions are currently active."
+      : "This complete workspace instruction baseline replaces all earlier " +
+        "workspace instruction baselines. Use it as guidance when applicable; " +
+        "more specific instructions take precedence over broader ones. It does " +
+        "not override system, developer, or direct user instructions.\n\n" +
+        files.map((file) => fileBlock(file)).join("\n\n");
   return {
-    title: files.length === 0
-      ? "Workspace instructions (none)"
-      : `Workspace instructions (${files.length})`,
+    title:
+      files.length === 0
+        ? "Workspace instructions (none)"
+        : `Workspace instructions (${files.length})`,
     body,
   };
 }
@@ -115,8 +117,7 @@ function delta(
         "The previously loaded instructions from this file no longer apply.",
     );
   }
-  const names = [...added, ...updated].map((file) => file.path)
-    .concat(removed);
+  const names = [...added, ...updated].map((file) => file.path).concat(removed);
   const label = names.length === 1 ? names[0]! : `${names.length} files`;
   return {
     title: `Instructions updated: ${label}`,
@@ -165,9 +166,10 @@ export function createInstructionsProvider(
         return [{ ...update, state: stateFrom(current) }];
       }
       const added = files.filter((file) => !known!.has(file.path));
-      const updated = files.filter((file) =>
-        known!.has(file.path) &&
-        known!.get(file.path) !== current.get(file.path)
+      const updated = files.filter(
+        (file) =>
+          known!.has(file.path) &&
+          known!.get(file.path) !== current.get(file.path),
       );
       const removed = [...known.keys()].filter((path) => !current.has(path));
       known = current;

@@ -32,21 +32,21 @@ export type ClientEvent =
   | { type: "message_delta"; sessionId: string; delta: string }
   | { type: "message_end"; sessionId: string; message: AgentMessage }
   | {
-    type: "tool_start";
-    sessionId: string;
-    toolCallId: string;
-    toolName: string;
-    args: unknown;
-  }
+      type: "tool_start";
+      sessionId: string;
+      toolCallId: string;
+      toolName: string;
+      args: unknown;
+    }
   /** A tool call finished running. The outcome is carried by the toolResult
    * message (`message_end`), not by this event — the event only clears the
    * tool line's running state. */
   | {
-    type: "tool_end";
-    sessionId: string;
-    toolCallId: string;
-    toolName: string;
-  }
+      type: "tool_end";
+      sessionId: string;
+      toolCallId: string;
+      toolName: string;
+    }
   /** A fragment of a card being written into a reply. `delta` is the card
    * text appended since the previous fragment of the same card, and the id
    * names the card (a new id is a new card); the finished message carries the
@@ -55,11 +55,11 @@ export type ClientEvent =
    * Only a stream whose client does not receive the text is fed these
    * (stella): code mode's client cuts the card out of the text it has. */
   | {
-    type: "card_delta";
-    sessionId: string;
-    toolCallId: string;
-    delta: string;
-  }
+      type: "card_delta";
+      sessionId: string;
+      toolCallId: string;
+      delta: string;
+    }
   /** The message that was drawing a card ended without becoming a message a
    * client sees (the turn stopped to call a tool, so it was narration). What
    * was drawn from `card_delta` goes. */
@@ -77,10 +77,10 @@ export type ClientEvent =
    * those identities from the view and remember them so a later resync
    * cannot resurrect them. */
   | {
-    type: "messages_truncated";
-    sessionId: string;
-    removed: MessageIdentity[];
-  }
+      type: "messages_truncated";
+      sessionId: string;
+      removed: MessageIdentity[];
+    }
   /** Older history was condensed into a checkpoint message because the
    * conversation reached the model's request limit (see
    * ai/context-compaction.ts). The checkpoint was INSERTED immediately
@@ -93,11 +93,11 @@ export type ClientEvent =
    * where the row belongs in what they have. Unlike `messages_truncated` this
    * arrives while a run keeps streaming: it never clears the run state. */
   | {
-    type: "messages_checkpoint";
-    sessionId: string;
-    before: MessageIdentity;
-    message: CheckpointMessage;
-  }
+      type: "messages_checkpoint";
+      sessionId: string;
+      before: MessageIdentity;
+      message: CheckpointMessage;
+    }
   /** The session title changed (e.g. auto-generated from the first
    * message by the fast model). Clients update the displayed name. */
   | { type: "session_renamed"; sessionId: string; name: string }
@@ -105,11 +105,11 @@ export type ClientEvent =
    * for the answer; clients show the questions in the UI and post the
    * answers back via the answer endpoint. */
   | {
-    type: "question";
-    sessionId: string;
-    toolCallId: string;
-    questions: AskQuestion[];
-  }
+      type: "question";
+      sessionId: string;
+      toolCallId: string;
+      questions: AskQuestion[];
+    }
   /** The todo plan of a session changed (the todo tool): the full plan is
    * carried so clients can replace their view idempotently (resync-safe).
    * Emitted on every mutation (plan / update / clear). */
@@ -123,22 +123,22 @@ export type ClientEvent =
    * the hand-over and hands the run back a "the user did not come" result,
    * so an absent user never parks the conversation for good. */
   | {
-    type: "handover";
-    sessionId: string;
-    toolCallId: string;
-    reason: string;
-    instructions: string | null;
-    expiresAt: number;
-  }
+      type: "handover";
+      sessionId: string;
+      toolCallId: string;
+      reason: string;
+      instructions: string | null;
+      expiresAt: number;
+    }
   /** The handover ended (the user finished, the run was aborted, or the
    * session closed). `note` is what the user reported doing, empty when
    * they only pressed done. Clients stop accepting input on the screen. */
   | {
-    type: "handover_end";
-    sessionId: string;
-    toolCallId: string;
-    note: string;
-  }
+      type: "handover_end";
+      sessionId: string;
+      toolCallId: string;
+      note: string;
+    }
   /** The agent asked the user for an environment variable's value
    * (`vm_env`) and the run is blocked until they answer. Clients show a
    * dialog; the value is posted back to the conversation's env endpoint and
@@ -149,31 +149,31 @@ export type ClientEvent =
    * user the entry is being replaced. `expiresAt` is when the wait ends on
    * its own (epoch ms), the same contract as the screen hand-over. */
   | {
-    type: "env_request";
-    sessionId: string;
-    toolCallId: string;
-    name: string;
-    exists: boolean;
-    expiresAt: number;
-  }
+      type: "env_request";
+      sessionId: string;
+      toolCallId: string;
+      name: string;
+      exists: boolean;
+      expiresAt: number;
+    }
   /** The request ended: the value was stored, the user declined, or the
    * deadline passed. Clients close the dialog. */
   | {
-    type: "env_request_end";
-    sessionId: string;
-    toolCallId: string;
-    outcome: "set" | "declined" | "timed_out";
-  }
+      type: "env_request_end";
+      sessionId: string;
+      toolCallId: string;
+      outcome: "set" | "declined" | "timed_out";
+    }
   /** A sub-agent task started (the task tool). Clients add it to the tasks
    * panel; its live response arrives as `task_delta` events. */
   | {
-    type: "task_start";
-    sessionId: string;
-    agentId: string;
-    parentAgentId: string;
-    subagentType: SubagentType;
-    description: string;
-  }
+      type: "task_start";
+      sessionId: string;
+      agentId: string;
+      parentAgentId: string;
+      subagentType: SubagentType;
+      description: string;
+    }
   /** A chunk of a sub-agent's live response. Clients append it to the
    * task's view; the stream restarts after a reload (deltas are not
    * replayed, the resync endpoint carries only the tail). */
@@ -181,43 +181,43 @@ export type ClientEvent =
   /** A sub-agent task finished, failed, or was aborted. Clients update the
    * task's status in the panel. */
   | {
-    type: "task_end";
-    sessionId: string;
-    agentId: string;
-    status: SubagentStatus;
-  }
+      type: "task_end";
+      sessionId: string;
+      agentId: string;
+      status: SubagentStatus;
+    }
   /** A background command started (the async_bash tool). Clients add it to
    * the background panel; its live output arrives as `background_delta`
    * events. */
   | {
-    type: "background_start";
-    sessionId: string;
-    commandId: string;
-    pid: number;
-    command: string;
-    cwd: string;
-    startedAt: number;
-  }
+      type: "background_start";
+      sessionId: string;
+      commandId: string;
+      pid: number;
+      command: string;
+      cwd: string;
+      startedAt: number;
+    }
   /** A chunk of a background command's decoded output. Clients append it to
    * the command's view; the stream restarts after a reload (deltas are not
    * replayed, the resync endpoint carries only the tail). */
   | {
-    type: "background_delta";
-    sessionId: string;
-    commandId: string;
-    delta: string;
-  }
+      type: "background_delta";
+      sessionId: string;
+      commandId: string;
+      delta: string;
+    }
   /** A background command finished, was killed, or timed out. Clients update
    * the command's status in the panel; `tail` is the final output tail. */
   | {
-    type: "background_end";
-    sessionId: string;
-    commandId: string;
-    state: "finished" | "killed";
-    exitCode?: number;
-    finishedAt: number;
-    tail: string;
-  }
+      type: "background_end";
+      sessionId: string;
+      commandId: string;
+      state: "finished" | "killed";
+      exitCode?: number;
+      finishedAt: number;
+      tail: string;
+    }
   /** The hub's event stream to one peer closed or (re)opened. The hub
    * relays each peer's stream to its UI clients; while that relay is down
    * the peer's sessions miss events (an `agent_end`, a tool result, a todo

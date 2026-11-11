@@ -1,7 +1,4 @@
-import { useEffect, useRef, useState } from "preact/compat";
-// Since preact 11 the JSX namespace carries only the intrinsic elements;
-// targeted event types live in the module root.
-import type { TargetedEvent, TargetedKeyboardEvent } from "preact";
+import { isLoopbackHost } from "@lumisca/core/shared";
 import {
   IconCheck,
   IconCircleDashed,
@@ -15,18 +12,20 @@ import {
   IconTrash,
   IconX,
 } from "@tabler/icons-preact";
+// Since preact 11 the JSX namespace carries only the intrinsic elements;
+// targeted event types live in the module root.
+import type { TargetedEvent, TargetedKeyboardEvent } from "preact";
+import { useEffect, useRef, useState } from "preact/compat";
 import { api } from "../../api.ts";
 import { confirmAction } from "../../confirm.ts";
-import { SettingsSubHeader } from "./SettingsSubHeader.tsx";
-import { useT } from "../../i18n.ts";
 import { useAsyncEffect } from "../../hooks/useAsync.ts";
 import { useSavedNotice } from "../../hooks/useSave.ts";
+import { useT } from "../../i18n.ts";
 import {
   errorText,
   useProviderModels,
   useUserProviders,
 } from "../../providers.ts";
-import { isLoopbackHost } from "@lumisca/core/shared";
 import type {
   ProviderAuthType,
   ProviderLoginEvent,
@@ -34,6 +33,7 @@ import type {
   ProviderLoginPrompt,
   ProviderLoginSnapshot,
 } from "../../types.ts";
+import { SettingsSubHeader } from "./SettingsSubHeader.tsx";
 
 /** One running login flow the settings UI is driving (started, then
  * polled until it settles). */
@@ -86,11 +86,14 @@ export function ProviderDetail({
     setAuth(authState);
   };
 
-  useAsyncEffect((isStale) => {
-    load().catch((e) => {
-      if (!isStale()) setError(errorText(e));
-    });
-  }, [providerId]);
+  useAsyncEffect(
+    (isStale) => {
+      load().catch((e) => {
+        if (!isStale()) setError(errorText(e));
+      });
+    },
+    [providerId],
+  );
 
   const provider = providers.find((p) => p.id === providerId);
   const authType = auth.authType ?? provider?.authType;
@@ -114,8 +117,8 @@ export function ProviderDetail({
         );
         if (cancelled) return;
         setLoginFlow((cur) => (cur ? { ...cur, snapshot } : cur));
-        const terminal = snapshot.status !== "starting" &&
-          snapshot.status !== "waiting";
+        const terminal =
+          snapshot.status !== "starting" && snapshot.status !== "waiting";
         if (!terminal) {
           pollTimer.current = setTimeout(poll, LOGIN_POLL_MS);
         }
@@ -269,10 +272,7 @@ export function ProviderDetail({
     switch (event.type) {
       case "device_code":
         return (
-          <div
-            key={index}
-            className="stack-6"
-          >
+          <div key={index} className="stack-6">
             <p className="settings-note">
               {t("settings.provider.deviceCodeLabel")}
             </p>
@@ -301,10 +301,7 @@ export function ProviderDetail({
         );
       case "auth_url":
         return (
-          <div
-            key={index}
-            className="stack-6"
-          >
+          <div key={index} className="stack-6">
             <button
               type="button"
               className="btn primary"
@@ -320,19 +317,18 @@ export function ProviderDetail({
         );
       case "progress":
       case "info":
-        return <p key={index} className="settings-note">{event.message}</p>;
+        return (
+          <p key={index} className="settings-note">
+            {event.message}
+          </p>
+        );
     }
   };
 
-  const renderPrompt = (
-    prompt: ProviderLoginPrompt & { id: string },
-  ) => {
+  const renderPrompt = (prompt: ProviderLoginPrompt & { id: string }) => {
     if (prompt.type === "select") {
       return (
-        <div
-          key={prompt.id}
-          className="stack-6"
-        >
+        <div key={prompt.id} className="stack-6">
           <p className="settings-note">{prompt.message}</p>
           {prompt.options.map((option) => (
             <button
@@ -377,9 +373,11 @@ export function ProviderDetail({
         key={prompt.id}
         style={{ display: "flex", gap: 6, alignItems: "flex-start" }}
       >
-        {prompt.type === "secret"
-          ? <input type="password" {...field} />
-          : <input type="text" {...field} />}
+        {prompt.type === "secret" ? (
+          <input type="password" {...field} />
+        ) : (
+          <input type="text" {...field} />
+        )}
         <button
           type="button"
           className="btn primary"
@@ -394,163 +392,161 @@ export function ProviderDetail({
 
   const snapshot = loginFlow?.snapshot;
   const flowPrompt = snapshot?.prompt;
-  const flowTerminal = snapshot !== undefined &&
-    snapshot.status !== "starting" && snapshot.status !== "waiting";
+  const flowTerminal =
+    snapshot !== undefined &&
+    snapshot.status !== "starting" &&
+    snapshot.status !== "waiting";
 
   return (
     <>
-      <SettingsSubHeader
-        onBack={onBack}
-        title={provider?.name ?? providerId}
-      >
-        {auth.configured
-          ? (
-            <span className="provider-state configured">
-              <IconCheck size={12} /> {isOAuth
-                ? t("settings.provider.loginStatus")
-                : t("settings.provider.configured")}
-            </span>
-          )
-          : (
-            <span className="provider-state">
-              <IconCircleDashed size={12} />{" "}
-              {t("settings.provider.notConfigured")}
-            </span>
-          )}
+      <SettingsSubHeader onBack={onBack} title={provider?.name ?? providerId}>
+        {auth.configured ? (
+          <span className="provider-state configured">
+            <IconCheck size={12} />{" "}
+            {isOAuth
+              ? t("settings.provider.loginStatus")
+              : t("settings.provider.configured")}
+          </span>
+        ) : (
+          <span className="provider-state">
+            <IconCircleDashed size={12} />{" "}
+            {t("settings.provider.notConfigured")}
+          </span>
+        )}
       </SettingsSubHeader>
 
       <div className="stack-8">
-        {isOAuth
-          ? (
-            <div className="stack-8">
-              <p className="settings-note">
-                {t("settings.provider.oauthDescription")}
-              </p>
+        {isOAuth ? (
+          <div className="stack-8">
+            <p className="settings-note">
+              {t("settings.provider.oauthDescription")}
+            </p>
 
-              {auth.configured && (
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={logout}
-                  disabled={loginBusy}
-                >
-                  <IconLogout size={14} /> {t("settings.provider.logout")}
-                </button>
-              )}
+            {auth.configured && (
+              <button
+                type="button"
+                className="btn"
+                onClick={logout}
+                disabled={loginBusy}
+              >
+                <IconLogout size={14} /> {t("settings.provider.logout")}
+              </button>
+            )}
 
-              {!loginFlow && (
-                <div className="stack-8">
-                  {localPage && loginMethods.includes("browser") && (
-                    <button
-                      type="button"
-                      className="btn primary"
-                      onClick={() => startLogin("browser")}
-                      disabled={loginBusy}
-                    >
-                      {loginBusy
-                        ? <IconLoader2 size={14} className="spin" />
-                        : <IconLogin2 size={14} />}
-                      {t("settings.provider.loginWithBrowser")}
-                    </button>
-                  )}
-                  {loginMethods.includes("device_code") && (
-                    <button
-                      type="button"
-                      className={localPage ? "btn" : "btn primary"}
-                      onClick={() => startLogin("device_code")}
-                      disabled={loginBusy}
-                    >
-                      {loginBusy
-                        ? <IconLoader2 size={14} className="spin" />
-                        : <IconLogin2 size={14} />}
-                      {t("settings.provider.loginWithDeviceCode")}
-                    </button>
-                  )}
-                  <p className="settings-note">
-                    {localPage
-                      ? t("settings.provider.loginHint")
-                      : t("settings.provider.loginRemoteHint")}
-                  </p>
-                </div>
-              )}
-
-              {loginFlow && !flowTerminal && (
-                <div
-                  style={{ display: "flex", flexDirection: "column", gap: 8 }}
-                >
-                  <p
-                    className="settings-note"
-                    style={{ display: "flex", alignItems: "center", gap: 6 }}
+            {!loginFlow && (
+              <div className="stack-8">
+                {localPage && loginMethods.includes("browser") && (
+                  <button
+                    type="button"
+                    className="btn primary"
+                    onClick={() => startLogin("browser")}
+                    disabled={loginBusy}
                   >
-                    <IconLoader2 size={14} className="spin" />{" "}
-                    {t("settings.provider.authWaiting")}
-                  </p>
-                  {(snapshot?.events ?? []).map(renderEvent)}
-                  {flowPrompt && renderPrompt(flowPrompt)}
-                  <button type="button" className="btn" onClick={cancelLogin}>
-                    <IconX size={14} /> {t("common.cancel")}
+                    {loginBusy ? (
+                      <IconLoader2 size={14} className="spin" />
+                    ) : (
+                      <IconLogin2 size={14} />
+                    )}
+                    {t("settings.provider.loginWithBrowser")}
                   </button>
-                </div>
-              )}
-
-              {snapshot?.status === "done" && (
-                <p className="settings-note" style={{ color: "var(--ok)" }}>
-                  {t("settings.provider.loginDone")}
-                </p>
-              )}
-              {snapshot?.status === "cancelled" && (
+                )}
+                {loginMethods.includes("device_code") && (
+                  <button
+                    type="button"
+                    className={localPage ? "btn" : "btn primary"}
+                    onClick={() => startLogin("device_code")}
+                    disabled={loginBusy}
+                  >
+                    {loginBusy ? (
+                      <IconLoader2 size={14} className="spin" />
+                    ) : (
+                      <IconLogin2 size={14} />
+                    )}
+                    {t("settings.provider.loginWithDeviceCode")}
+                  </button>
+                )}
                 <p className="settings-note">
-                  {t("settings.provider.loginCancelled")}
+                  {localPage
+                    ? t("settings.provider.loginHint")
+                    : t("settings.provider.loginRemoteHint")}
                 </p>
-              )}
-              {snapshot?.status === "error" && (
-                <div className="error-text">
-                  {snapshot.error ?? t("settings.provider.loginFailed")}
-                </div>
-              )}
-            </div>
-          )
-          : (
-            <>
-              <p className="settings-note">
-                {t("settings.provider.apiKeyLabel")}
-              </p>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input
-                  type="password"
-                  placeholder={auth.configured
-                    ? t("settings.provider.apiKeyPlaceholderOverwrite")
-                    : t("settings.provider.apiKeyPlaceholderNew")}
-                  aria-label={t("settings.provider.apiKeyLabel")}
-                  value={key}
-                  onChange={(e) => setKey(e.currentTarget.value)}
-                  style={{ flex: 1 }}
-                />
-                <button
-                  type="button"
-                  className="btn primary"
-                  onClick={saveKey}
-                  disabled={savingKey || !key.trim()}
-                >
-                  {t("common.save")}
-                </button>
               </div>
-              {savedNotice && (
+            )}
+
+            {loginFlow && !flowTerminal && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <p
                   className="settings-note"
-                  style={{ color: "var(--ok)" }}
-                  role="status"
+                  style={{ display: "flex", alignItems: "center", gap: 6 }}
                 >
-                  {t("settings.provider.apiKeySaved")}
+                  <IconLoader2 size={14} className="spin" />{" "}
+                  {t("settings.provider.authWaiting")}
                 </p>
-              )}
-            </>
-          )}
+                {(snapshot?.events ?? []).map(renderEvent)}
+                {flowPrompt && renderPrompt(flowPrompt)}
+                <button type="button" className="btn" onClick={cancelLogin}>
+                  <IconX size={14} /> {t("common.cancel")}
+                </button>
+              </div>
+            )}
 
-        {
-          /* A notice is the outcome of an action just taken (a copy, a login,
-            a logout): a status line, so it is spoken when it appears. */
-        }
+            {snapshot?.status === "done" && (
+              <p className="settings-note" style={{ color: "var(--ok)" }}>
+                {t("settings.provider.loginDone")}
+              </p>
+            )}
+            {snapshot?.status === "cancelled" && (
+              <p className="settings-note">
+                {t("settings.provider.loginCancelled")}
+              </p>
+            )}
+            {snapshot?.status === "error" && (
+              <div className="error-text">
+                {snapshot.error ?? t("settings.provider.loginFailed")}
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            <p className="settings-note">
+              {t("settings.provider.apiKeyLabel")}
+            </p>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                type="password"
+                placeholder={
+                  auth.configured
+                    ? t("settings.provider.apiKeyPlaceholderOverwrite")
+                    : t("settings.provider.apiKeyPlaceholderNew")
+                }
+                aria-label={t("settings.provider.apiKeyLabel")}
+                value={key}
+                onChange={(e) => setKey(e.currentTarget.value)}
+                style={{ flex: 1 }}
+              />
+              <button
+                type="button"
+                className="btn primary"
+                onClick={saveKey}
+                disabled={savingKey || !key.trim()}
+              >
+                {t("common.save")}
+              </button>
+            </div>
+            {savedNotice && (
+              <p
+                className="settings-note"
+                style={{ color: "var(--ok)" }}
+                role="status"
+              >
+                {t("settings.provider.apiKeySaved")}
+              </p>
+            )}
+          </>
+        )}
+
+        {/* A notice is the outcome of an action just taken (a copy, a login,
+            a logout): a status line, so it is spoken when it appears. */}
         {notice && (
           <p
             className="settings-note"

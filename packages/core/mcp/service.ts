@@ -1,10 +1,13 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { CoreError, errorMessage } from "../errors.ts";
-import { atomicWriteTextFileSync } from "../fs.ts";
 import type { SessionInfo } from "../domain/session.ts";
 import type { Workspace } from "../domain/workspace.ts";
+import { CoreError, errorMessage } from "../errors.ts";
+import { atomicWriteTextFileSync } from "../fs.ts";
+import { discoverPlugins } from "../plugins/discover.ts";
 import type { SettingsRepo } from "../settings/repo.ts";
+import { APP_MCP_SETTINGS_KEY, mcpServerEntry } from "../shared/mod.ts";
+import { probeMcpServer } from "./client.ts";
 import {
   APP_MCP_SOURCE,
   loadMcpConfig,
@@ -15,17 +18,14 @@ import {
   type McpServerConfig,
   parseMcpConfig,
 } from "./config.ts";
-import { APP_MCP_SETTINGS_KEY, mcpServerEntry } from "../shared/mod.ts";
-import type { McpServerStatus } from "./status.ts";
-import { probeMcpServer } from "./client.ts";
 import { McpManager } from "./manager.ts";
-import { discoverPlugins } from "../plugins/discover.ts";
 import {
   connectionOAuthProvider,
   isMcpAuthRequired,
   McpOAuthStore,
 } from "./oauth.ts";
 import { McpAuthSessions, type McpAuthSnapshot } from "./oauth-session.ts";
+import type { McpServerStatus } from "./status.ts";
 
 /** What a server's tool name says about it when the server sends no
  * `readOnlyHint` (many send none). A watch calls a tool on a timer with
@@ -417,10 +417,7 @@ export class McpService {
    * in the background; the resolved snapshot carries the authorization URL
    * the UI opens (or the reason the flow could not start).
    */
-  async startAuth(
-    text: string,
-    redirectUri: string,
-  ): Promise<McpAuthSnapshot> {
+  async startAuth(text: string, redirectUri: string): Promise<McpAuthSnapshot> {
     const server = this.parseSingleServer(text);
     if (server.type !== "http" || server.url === undefined) {
       throw new CoreError(
@@ -428,7 +425,8 @@ export class McpService {
         "invalid",
       );
     }
-    return await this.authSessions.create(server, this.oauth, redirectUri)
+    return await this.authSessions
+      .create(server, this.oauth, redirectUri)
       .started();
   }
 
@@ -495,15 +493,17 @@ export class McpService {
     const config = this.loadAppMcpConfig();
     const entry = config.servers.find((s) => s.name === server);
     if (entry === undefined) {
-      return `No MCP server named "${server}" is configured in the app's ` +
-        "MCP settings";
+      return (
+        `No MCP server named "${server}" is configured in the app's ` +
+        "MCP settings"
+      );
     }
     if (!entry.enabled) {
       return `The MCP server "${server}" is disabled`;
     }
     const manager = this.managerForChecks();
-    const def = (await manager.listTools()).find((t) =>
-      t.server === server && t.name === tool
+    const def = (await manager.listTools()).find(
+      (t) => t.server === server && t.name === tool,
     );
     if (def === undefined) {
       const status = manager.getStatus().find((s) => s.name === server);
@@ -518,8 +518,8 @@ export class McpService {
     return READ_VERBS.test(tool)
       ? null
       : `"${tool}" does not say it only reads. A watch runs with nobody ` +
-        "watching, so it may call only a reading tool — one whose name has " +
-        "GET, LIST, FETCH, SEARCH, READ, FIND, QUERY, LOOKUP or VIEW";
+          "watching, so it may call only a reading tool — one whose name has " +
+          "GET, LIST, FETCH, SEARCH, READ, FIND, QUERY, LOOKUP or VIEW";
   }
 
   /** Call an MCP tool for a `watch` check, through the checks' own
@@ -533,12 +533,7 @@ export class McpService {
   ): Promise<string> {
     const problem = await this.watchableToolProblem(server, tool);
     if (problem !== null) throw new Error(problem);
-    return await this.managerForChecks().callTool(
-      server,
-      tool,
-      args,
-      signal,
-    );
+    return await this.managerForChecks().callTool(server, tool, args, signal);
   }
 
   /** Close the connections the checks keep. The sessions' managers belong to

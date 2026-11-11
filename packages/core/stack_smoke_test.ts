@@ -24,8 +24,10 @@ Deno.test("node:sqlite works in Deno", () => {
       created_at INTEGER NOT NULL
     );
   `);
-  db.prepare("INSERT INTO workspaces (name, created_at) VALUES (?, ?)")
-    .run("my-workspace", Date.now());
+  db.prepare("INSERT INTO workspaces (name, created_at) VALUES (?, ?)").run(
+    "my-workspace",
+    Date.now(),
+  );
   const row = db.prepare("SELECT name FROM workspaces WHERE id = 1").get() as {
     name: string;
   };

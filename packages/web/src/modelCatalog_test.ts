@@ -1,17 +1,14 @@
 import { assert, assertEquals } from "@std/assert";
-import type { ThinkingLevel } from "./types.ts";
 import {
   CatalogFetchError,
   type CatalogLoader,
   ModelCatalog,
   type PeerCatalog,
 } from "./modelCatalog.ts";
+import type { ThinkingLevel } from "./types.ts";
 
 /** A catalog with one provider ("faux") holding one model. */
-function catalog(
-  enabled = true,
-  thinkingLevel?: ThinkingLevel,
-): PeerCatalog {
+function catalog(enabled = true, thinkingLevel?: ThinkingLevel): PeerCatalog {
   return {
     providers: [{ id: "faux", name: "Faux" }],
     modelsByProvider: new Map([
@@ -24,10 +21,7 @@ function enabledOf(store: ModelCatalog, peerId = ""): boolean | undefined {
   return store.state(peerId).modelsByProvider.get("faux")?.[0]?.enabled;
 }
 
-function levelOf(
-  store: ModelCatalog,
-  peerId = "",
-): ThinkingLevel | undefined {
+function levelOf(store: ModelCatalog, peerId = ""): ThinkingLevel | undefined {
   return store.state(peerId).modelsByProvider.get("faux")?.[0]?.thinkingLevel;
 }
 
@@ -121,7 +115,7 @@ Deno.test("ModelCatalog: a committed level outlives a fetch of the old value", a
   // control back to what the user just changed.
   let serverLevel: ThinkingLevel = "low";
   const store = new ModelCatalog(() =>
-    Promise.resolve(catalog(true, serverLevel))
+    Promise.resolve(catalog(true, serverLevel)),
   );
   store.subscribe("", () => {});
   await waitLoaded(store);
@@ -141,7 +135,7 @@ Deno.test("ModelCatalog: a fetch that changes only the level is published", asyn
   // that, another client's change would arrive and be dropped as identical.
   let serverLevel: ThinkingLevel = "low";
   const store = new ModelCatalog(() =>
-    Promise.resolve(catalog(true, serverLevel))
+    Promise.resolve(catalog(true, serverLevel)),
   );
   store.subscribe("", () => {});
   await waitLoaded(store);
@@ -215,12 +209,13 @@ Deno.test("ModelCatalog: a failed fetch reports the failing phase", async () => 
 
 Deno.test("ModelCatalog: a commit during a fetch is not reverted by its snapshot", async () => {
   let release: (() => void) | undefined;
-  const store = new ModelCatalog(() =>
-    new Promise<PeerCatalog>((resolve) => {
-      // The snapshot (still enabled) is resolved only after the commit
-      // below lands — the ordering that used to turn a visible toggle back.
-      release = () => resolve(catalog(true));
-    })
+  const store = new ModelCatalog(
+    () =>
+      new Promise<PeerCatalog>((resolve) => {
+        // The snapshot (still enabled) is resolved only after the commit
+        // below lands — the ordering that used to turn a visible toggle back.
+        release = () => resolve(catalog(true));
+      }),
   );
   store.subscribe("", () => {});
   // The models are not cached yet, so the commit only records itself here.

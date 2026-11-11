@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "preact/compat";
-import { parseUrl, urlOf, type UrlState } from "../route.ts";
 import {
   dialogDepth,
   dismissSteps,
@@ -7,6 +6,7 @@ import {
   pushedState,
   replacedState,
 } from "../history-entry.ts";
+import { parseUrl, type UrlState, urlOf } from "../route.ts";
 import {
   playScreenTransition,
   type ScreenLayout,
@@ -62,7 +62,7 @@ export function canGoBack(): boolean {
 
 export function useRoute(): RouteControls {
   const [state, setState] = useState<UrlState>(() =>
-    parseUrl(location.pathname)
+    parseUrl(location.pathname),
   );
   // The screen on display, readable from a `popstate` handler without putting
   // the address in the listener's identity (a listener rebuilt per navigation
@@ -137,21 +137,24 @@ export function useRoute(): RouteControls {
   const push = useCallback((next: UrlState) => move(next, false), [move]);
   const replace = useCallback((next: UrlState) => move(next, true), [move]);
 
-  const dismiss = useCallback((next: UrlState) => {
-    if (canGoBack()) {
-      // `popstate` restores the state from the restored path — and decides
-      // the direction of the move, which is why nothing is set here.
-      //
-      // The settings dialog is more than one entry deep once its pages were
-      // picked; closing it reaches the screen it covered in one move, so the
-      // sheet's exit and the screen behind agree (history-entry.ts).
-      const steps = dismissSteps(dialogDepth(globalThis.history.state), next);
-      if (steps === 1) globalThis.history.back();
-      else globalThis.history.go(-steps);
-      return;
-    }
-    move(next, true);
-  }, [move]);
+  const dismiss = useCallback(
+    (next: UrlState) => {
+      if (canGoBack()) {
+        // `popstate` restores the state from the restored path — and decides
+        // the direction of the move, which is why nothing is set here.
+        //
+        // The settings dialog is more than one entry deep once its pages were
+        // picked; closing it reaches the screen it covered in one move, so the
+        // sheet's exit and the screen behind agree (history-entry.ts).
+        const steps = dismissSteps(dialogDepth(globalThis.history.state), next);
+        if (steps === 1) globalThis.history.back();
+        else globalThis.history.go(-steps);
+        return;
+      }
+      move(next, true);
+    },
+    [move],
+  );
 
   return { state, push, replace, dismiss };
 }

@@ -1,17 +1,26 @@
 import { basename } from "node:path";
-import { assert, assertEquals } from "@std/assert";
 import {
   fauxAssistantMessage,
   fauxProvider,
   fauxText,
   fauxToolCall,
 } from "@lumisca/core";
-import { createAsyncBashTools } from "./background.ts";
-import { HostFileBackend } from "./host/files.ts";
+import { assert, assertEquals } from "@std/assert";
+import type { ClientEvent } from "../domain/event.ts";
+import { LumiscaCore } from "../mod.ts";
+import { decodeUtf8 } from "../shared/mod.ts";
+import {
+  promptSession,
+  removeDirRetry,
+  toolText,
+  waitUntil,
+} from "../test-utils.ts";
+import { Sandbox } from "../workspace/sandbox.ts";
 import {
   BACKGROUND_TAIL_LIMIT,
   type BackgroundCommandDone,
   BackgroundProcessManager,
+  createAsyncBashTools,
   formatBackgroundNotification,
   MAX_BACKGROUND_COMMANDS,
   trimIncompleteUtf8,
@@ -21,16 +30,7 @@ import type {
   BackgroundSpawner,
   BackgroundSpawnInput,
 } from "./background-backend.ts";
-import type { ClientEvent } from "../domain/event.ts";
-import { Sandbox } from "../workspace/sandbox.ts";
-import { LumiscaCore } from "../mod.ts";
-import { decodeUtf8 } from "../shared/mod.ts";
-import {
-  promptSession,
-  removeDirRetry,
-  toolText,
-  waitUntil,
-} from "../test-utils.ts";
+import { HostFileBackend } from "./host/files.ts";
 
 /** Cross-platform commands. The Windows shell has no sleep; ping is the
  * classic stand-in.
@@ -41,18 +41,20 @@ import {
  * `startContractCommand` only has to be alive when the *synchronous*
  * `start()` contract is checked (Windows pays ~0.5s for `cmd.exe` startup
  * before `ping` runs, so it gets an extra ping). */
-const longCommand = Deno.build.os === "windows"
-  ? "ping -n 60 127.0.0.1 > $null"
-  : "sleep 60";
-const briefCommand = Deno.build.os === "windows"
-  ? "ping -n 1 127.0.0.1 > $null; echo done"
-  : "sleep 0.4; echo done";
-const startContractCommand = Deno.build.os === "windows"
-  ? "ping -n 2 127.0.0.1 > $null; echo done"
-  : "sleep 0.8; echo done";
-const linesCommand = Deno.build.os === "windows"
-  ? "echo start; echo line1; echo line2"
-  : "echo start; echo line1; echo line2";
+const longCommand =
+  Deno.build.os === "windows" ? "ping -n 60 127.0.0.1 > $null" : "sleep 60";
+const briefCommand =
+  Deno.build.os === "windows"
+    ? "ping -n 1 127.0.0.1 > $null; echo done"
+    : "sleep 0.4; echo done";
+const startContractCommand =
+  Deno.build.os === "windows"
+    ? "ping -n 2 127.0.0.1 > $null; echo done"
+    : "sleep 0.8; echo done";
+const linesCommand =
+  Deno.build.os === "windows"
+    ? "echo start; echo line1; echo line2"
+    : "echo start; echo line1; echo line2";
 
 /** Resolve when the next command completes (bounded so a hang fails the
  * test instead of running forever). */
@@ -93,9 +95,9 @@ function waitForEndEvent(
       if (Date.now() > deadline) {
         reject(
           new Error(
-            `timed out waiting for background_end; events: ${
-              JSON.stringify(events)
-            }`,
+            `timed out waiting for background_end; events: ${JSON.stringify(
+              events,
+            )}`,
           ),
         );
         return;
@@ -240,9 +242,10 @@ Deno.test("per-command env vars are passed and override the manager-level env", 
     env: { LUMISCA_TEST_ENV: "manager-level" },
   });
   const exitPromise = waitForExit(manager);
-  const echo = Deno.build.os === "windows"
-    ? "echo $env:LUMISCA_TEST_ENV"
-    : "echo $LUMISCA_TEST_ENV";
+  const echo =
+    Deno.build.os === "windows"
+      ? "echo $env:LUMISCA_TEST_ENV"
+      : "echo $LUMISCA_TEST_ENV";
   const { commandId } = await manager.start({
     cwd: Deno.cwd(),
     command: echo,
@@ -263,9 +266,10 @@ Deno.test("async_bash start tool forwards env vars", async () => {
   try {
     const [start] = createAsyncBashTools({ manager, files });
     if (start === undefined) throw new Error("start tool missing");
-    const echo = Deno.build.os === "windows"
-      ? "echo $env:LUMISCA_TEST_ENV"
-      : "echo $LUMISCA_TEST_ENV";
+    const echo =
+      Deno.build.os === "windows"
+        ? "echo $env:LUMISCA_TEST_ENV"
+        : "echo $LUMISCA_TEST_ENV";
     const result = await start.execute(
       "1",
       {
@@ -338,19 +342,15 @@ Deno.test({
       // that reaches only the shell leaves that child appending.
       const { commandId } = await manager.start({
         cwd: root,
-        command:
-          `sh -c 'while :; do echo tick >> ${marker}; sleep 0.2; done' & wait`,
+        command: `sh -c 'while :; do echo tick >> ${marker}; sleep 0.2; done' & wait`,
       });
-      await waitUntil(
-        () => {
-          try {
-            return Deno.statSync(`${root}/${marker}`).size > 0;
-          } catch {
-            return false;
-          }
-        },
-        "the command's child to write its first tick",
-      );
+      await waitUntil(() => {
+        try {
+          return Deno.statSync(`${root}/${marker}`).size > 0;
+        } catch {
+          return false;
+        }
+      }, "the command's child to write its first tick");
 
       const killed = await manager.kill(commandId);
       assertEquals(killed.timedOut, false);
@@ -444,9 +444,7 @@ Deno.test("finished commands free their slot for new starts", async () => {
     for (let i = 0; i < MAX_BACKGROUND_COMMANDS; i++) {
       await manager.start({ cwd: Deno.cwd(), command: "echo hi" });
     }
-    while (
-      manager.list().some((info) => info.state === "running")
-    ) {
+    while (manager.list().some((info) => info.state === "running")) {
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
     await manager.start({ cwd: Deno.cwd(), command: "echo ninth" });
@@ -462,9 +460,10 @@ Deno.test("finished commands free their slot for new starts", async () => {
 Deno.test("output tail is capped and keeps the last bytes", async () => {
   const manager = new BackgroundProcessManager();
   const exitPromise = waitForExit(manager);
-  const spam = Deno.build.os === "windows"
-    ? "for ($i = 0; $i -lt 4000; $i++) { echo 12345678901234567890 }"
-    : "for i in $(seq 1 4000); do echo 12345678901234567890; done";
+  const spam =
+    Deno.build.os === "windows"
+      ? "for ($i = 0; $i -lt 4000; $i++) { echo 12345678901234567890 }"
+      : "for i in $(seq 1 4000); do echo 12345678901234567890; done";
   await manager.start({ cwd: Deno.cwd(), command: spam });
   const done = await exitPromise;
   assertEquals(done.reason, "exited");
@@ -654,8 +653,10 @@ function messageText(message: unknown): string {
   const content = m.content;
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
-  return content.filter((b) => (b as { type?: string }).type === "text")
-    .map((b) => (b as { text?: string }).text ?? "").join("");
+  return content
+    .filter((b) => (b as { type?: string }).type === "text")
+    .map((b) => (b as { text?: string }).text ?? "")
+    .join("");
 }
 
 /** Poll the transcript until some message text matches (bounded so a hang
@@ -670,9 +671,9 @@ async function waitForMessage(
     if (agent.messages.some((m) => predicate(messageText(m)))) return;
     if (Date.now() > deadline) {
       throw new Error(
-        `timed out waiting for message; transcript: ${
-          JSON.stringify(agent.messages.map(messageText))
-        }`,
+        `timed out waiting for message; transcript: ${JSON.stringify(
+          agent.messages.map(messageText),
+        )}`,
       );
     }
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -705,9 +706,8 @@ Deno.test("background completion is injected into the agent loop", async () => {
     await promptSession(core, session.id, "Start a background server");
 
     const agent = core.getAgent(session.id)!;
-    await waitForMessage(
-      agent,
-      (text) => text.startsWith("[Background command #1"),
+    await waitForMessage(agent, (text) =>
+      text.startsWith("[Background command #1"),
     );
     await waitForMessage(
       agent,
@@ -741,9 +741,8 @@ Deno.test("background commands survive a session rebuild", async () => {
     ]);
     await promptSession(core, session.id, "Start a long command");
     const agent = core.getAgent(session.id)!;
-    await waitForMessage(
-      agent,
-      (text) => text.includes("Started background command #1"),
+    await waitForMessage(agent, (text) =>
+      text.includes("Started background command #1"),
     );
 
     // Rebuild the session (a model change rebuilds the agent while the
@@ -784,15 +783,15 @@ Deno.test("background commands survive a session rebuild", async () => {
       ]);
       await promptSession(core, session.id, "Check the command again");
       killed = rebuilt.messages.some((m) =>
-        messageText(m).includes("Background command #1: killed")
+        messageText(m).includes("Background command #1: killed"),
       );
       if (!killed) await new Promise((resolve) => setTimeout(resolve, 250));
     }
     assert(
       killed,
-      `the command never reached the killed state: ${
-        JSON.stringify(rebuilt.messages.map(messageText))
-      }`,
+      `the command never reached the killed state: ${JSON.stringify(
+        rebuilt.messages.map(messageText),
+      )}`,
     );
 
     // Once the status reports killed, finalize has run, so any notification

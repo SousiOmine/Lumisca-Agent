@@ -1,6 +1,6 @@
-import type { PeerStatus } from "./types.ts";
 import { request } from "./api-client.ts";
 import { peerRoutes, sessionRoutes } from "./api-local.ts";
+import type { PeerStatus } from "./types.ts";
 
 /** Federated (hub-and-spoke) API: resources owned by a peer server. The
  * agent runs on the peer; the hub only proxies. Every method here mirrors a

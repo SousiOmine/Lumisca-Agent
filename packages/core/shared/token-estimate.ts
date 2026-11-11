@@ -98,12 +98,15 @@ export function estimateMessageTokens(message: AgentMessage): number {
       // only for the model (see UserMessage.modelContent), that is what the
       // request costs — not the shorter words the user sees on screen.
       const modelContent = message.modelContent;
-      const content = modelContent === undefined ? message.content : [
-        { type: "text" as const, text: modelContent },
-        ...(Array.isArray(message.content)
-          ? message.content.filter((block) => block.type === "image")
-          : []),
-      ];
+      const content =
+        modelContent === undefined
+          ? message.content
+          : [
+              { type: "text" as const, text: modelContent },
+              ...(Array.isArray(message.content)
+                ? message.content.filter((block) => block.type === "image")
+                : []),
+            ];
       return estimateContentTokens(content) + MESSAGE_OVERHEAD_TOKENS;
     }
     case "assistant": {
@@ -112,11 +115,9 @@ export function estimateMessageTokens(message: AgentMessage): number {
         if (block.type === "text") {
           tokens += estimateTextTokens(block.text) + BLOCK_OVERHEAD_TOKENS;
         } else if (block.type === "thinking") {
-          // Reasoning blocks are not sent back in most provider protocols;
-          // pricing them would overstate the request.
-          continue;
         } else {
-          tokens += estimateTextTokens(block.name) +
+          tokens +=
+            estimateTextTokens(block.name) +
             estimateTextTokens(argumentsText(block.arguments)) +
             BLOCK_OVERHEAD_TOKENS;
         }
@@ -124,18 +125,26 @@ export function estimateMessageTokens(message: AgentMessage): number {
       return tokens;
     }
     case "toolResult":
-      return estimateContentTokens(message.content) +
-        estimateTextTokens(message.toolName) + MESSAGE_OVERHEAD_TOKENS;
+      return (
+        estimateContentTokens(message.content) +
+        estimateTextTokens(message.toolName) +
+        MESSAGE_OVERHEAD_TOKENS
+      );
     case "mode":
       // Priced as the user message it becomes (see toLlmMessages): the full
       // prompt as a text block plus the images attached to it.
-      return estimateContentTokens([
-        { type: "text", text: message.fullPrompt },
-        ...message.images,
-      ]) + MESSAGE_OVERHEAD_TOKENS;
+      return (
+        estimateContentTokens([
+          { type: "text", text: message.fullPrompt },
+          ...message.images,
+        ]) + MESSAGE_OVERHEAD_TOKENS
+      );
     case "notification":
-      return estimateTextTokens(message.title) +
-        estimateTextTokens(message.body) + MESSAGE_OVERHEAD_TOKENS;
+      return (
+        estimateTextTokens(message.title) +
+        estimateTextTokens(message.body) +
+        MESSAGE_OVERHEAD_TOKENS
+      );
     case "context":
     case "checkpoint":
       return estimateTextTokens(message.body) + MESSAGE_OVERHEAD_TOKENS;
@@ -173,7 +182,8 @@ export function estimateLlmMessageTokens(message: LlmMessage): number {
         tokens += IMAGE_TOKEN_ESTIMATE + BLOCK_OVERHEAD_TOKENS;
         break;
       case "toolCall":
-        tokens += estimateTextTokens(block.name) +
+        tokens +=
+          estimateTextTokens(block.name) +
           estimateTextTokens(argumentsText(block.arguments)) +
           BLOCK_OVERHEAD_TOKENS;
         break;
@@ -203,8 +213,10 @@ export function estimateToolTokens(tool: {
   description: string;
   parameters: unknown;
 }): number {
-  return estimateTextTokens(tool.name) +
+  return (
+    estimateTextTokens(tool.name) +
     estimateTextTokens(tool.description) +
     estimateTextTokens(argumentsText(tool.parameters)) +
-    MESSAGE_OVERHEAD_TOKENS;
+    MESSAGE_OVERHEAD_TOKENS
+  );
 }

@@ -34,12 +34,15 @@ export async function ensureAgentMemory(
   exec: VmExec,
   agentId: string,
 ): Promise<void> {
-  await exec([
-    "sh",
-    "-c",
-    'mkdir -p -- "$1" && { [ -e "$2" ] || : > "$2"; }',
-    "sh",
-    vmAgentDir(agentId),
-    vmMemoryPath(agentId),
-  ], { timeoutMs: 30_000 });
+  await exec(
+    [
+      "sh",
+      "-c",
+      'mkdir -p -- "$1" && { [ -e "$2" ] || : > "$2"; }',
+      "sh",
+      vmAgentDir(agentId),
+      vmMemoryPath(agentId),
+    ],
+    { timeoutMs: 30_000 },
+  );
 }

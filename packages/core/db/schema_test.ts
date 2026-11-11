@@ -1,12 +1,12 @@
-import { assert, assertEquals } from "@std/assert";
 import { DatabaseSync } from "node:sqlite";
+import { assert, assertEquals } from "@std/assert";
+import { LumiscaDb } from "./mod.ts";
 import {
   applyMigrations,
-  migrate,
   MIGRATIONS,
+  migrate,
   SCHEMA_VERSION,
 } from "./schema.ts";
-import { LumiscaDb } from "./mod.ts";
 
 Deno.test("migrate brings an empty database to the newest user_version", () => {
   const db = LumiscaDb.openInMemory();
@@ -173,10 +173,11 @@ Deno.test("a failing migration rolls back together with its stamp", () => {
       (db.prepare("PRAGMA user_version").get() as { user_version: number })
         .user_version;
     const columns = () =>
-      (db.prepare("SELECT name FROM pragma_table_info('workspaces')")
-        .all() as unknown as Array<{ name: string }>).map((column) =>
-          column.name
-        );
+      (
+        db
+          .prepare("SELECT name FROM pragma_table_info('workspaces')")
+          .all() as unknown as Array<{ name: string }>
+      ).map((column) => column.name);
 
     let ran = 0;
     const migrations: Array<(db: DatabaseSync) => void> = [

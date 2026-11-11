@@ -7,8 +7,7 @@
  * exempts `*_test.ts` files from the core-barrel rule, so keeping this file
  * out of any non-test import path is the caller's job.
  */
-import { fauxProvider } from "@lumisca/core";
-import { LumiscaCore } from "@lumisca/core";
+import { fauxProvider, LumiscaCore } from "@lumisca/core";
 import { MINI_PNG } from "@lumisca/core/test-utils";
 import { type AppOptions, startServer } from "./app.ts";
 
@@ -61,9 +60,7 @@ export function json(
  * first user message of a run. Those are not part of a turn, so the tests
  * that count or position turns count this array.
  */
-export function conversationOf<T extends { role: string }>(
-  messages: T[],
-): T[] {
+export function conversationOf<T extends { role: string }>(messages: T[]): T[] {
   return messages.filter((m) => m.role !== "context");
 }
 

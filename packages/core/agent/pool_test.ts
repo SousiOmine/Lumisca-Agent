@@ -1,8 +1,8 @@
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import type { Model } from "../ai/types.ts";
-import { CoreError } from "../errors.ts";
 import type { SessionInfo } from "../domain/session.ts";
 import type { Workspace } from "../domain/workspace.ts";
+import { CoreError } from "../errors.ts";
 import type { AgentFactory } from "./factory.ts";
 import {
   SessionPool,
@@ -138,10 +138,7 @@ function makePool(options: { streaming?: boolean } = {}): {
 
 Deno.test("pool.require throws not_found for an unopened session", () => {
   const { pool } = makePool();
-  const error = assertThrows(
-    () => pool.require("missing"),
-    CoreError,
-  );
+  const error = assertThrows(() => pool.require("missing"), CoreError);
   assertEquals((error as CoreError).kind, "not_found");
   assertEquals(pool.get("missing"), undefined);
   assertEquals(pool.lastError("missing"), undefined);

@@ -31,6 +31,23 @@
  *   transcript untouched and the run continues with the history it had.
  */
 
+import { errorMessage } from "../errors.ts";
+import { createLogger } from "../log.ts";
+import { contextTokensOf } from "../shared/context-usage.ts";
+import { DEFAULT_LOCALE, type Locale, translate } from "../shared/mod.ts";
+import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
+import {
+  estimateMessageTokens,
+  estimateTextTokens,
+  estimateToolTokens,
+} from "../shared/token-estimate.ts";
+import {
+  buildSummarizationPrompt,
+  contextStart,
+  estimateMessagesTokensFrom,
+  selectCompactionSpan,
+} from "./compaction-span.ts";
+import { streamText } from "./stream.ts";
 import type {
   AgentMessage,
   AgentTool,
@@ -41,23 +58,6 @@ import type {
   Model,
   StreamFn,
 } from "./types.ts";
-import { errorMessage } from "../errors.ts";
-import { createLogger } from "../log.ts";
-import { streamText } from "./stream.ts";
-import {
-  estimateMessageTokens,
-  estimateTextTokens,
-  estimateToolTokens,
-} from "../shared/token-estimate.ts";
-import { contextTokensOf } from "../shared/context-usage.ts";
-import { DEFAULT_LOCALE, type Locale, translate } from "../shared/mod.ts";
-import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
-import {
-  buildSummarizationPrompt,
-  contextStart,
-  estimateMessagesTokensFrom,
-  selectCompactionSpan,
-} from "./compaction-span.ts";
 
 export type { CompactionSpan } from "./compaction-span.ts";
 export {
@@ -66,22 +66,16 @@ export {
   type TranscriptUnit,
   transcriptUnits,
 } from "./compaction-span.ts";
-import { CHECKPOINT_SUMMARY_TAG } from "./compaction-prompts.ts";
-import type { CompactionStyle } from "./compaction-style.ts";
+
 import {
   type CompactionBudgets,
   type CompactionPolicy,
   resolveCompactionBudgets,
   resolveCompactionPolicy,
 } from "./compaction-policy.ts";
+import { CHECKPOINT_SUMMARY_TAG } from "./compaction-prompts.ts";
+import type { CompactionStyle } from "./compaction-style.ts";
 
-export {
-  CHECKPOINT_PREAMBLE,
-  CHECKPOINT_SUMMARY_TAG,
-  SUMMARIZATION_PROMPT,
-  SUMMARIZATION_SYSTEM_PROMPT,
-  UPDATE_SUMMARIZATION_PROMPT,
-} from "./compaction-prompts.ts";
 export {
   type CompactionBudgets,
   type CompactionPolicy,
@@ -91,6 +85,13 @@ export {
   resolveCompactionPolicy,
   shareOfWindow,
 } from "./compaction-policy.ts";
+export {
+  CHECKPOINT_PREAMBLE,
+  CHECKPOINT_SUMMARY_TAG,
+  SUMMARIZATION_PROMPT,
+  SUMMARIZATION_SYSTEM_PROMPT,
+  UPDATE_SUMMARIZATION_PROMPT,
+} from "./compaction-prompts.ts";
 
 /** Module logger (debug-gated): every compaction outcome is logged so a
  * session that kept working past its window can be traced. */
@@ -229,12 +230,13 @@ export class ContextCompactor {
   /** Estimated tokens of the request envelope: the system prompt and the
    * tool schemas. */
   private envelopeTokens(): number {
-    return estimateTextTokens(this.options.systemPrompt()) +
+    return (
+      estimateTextTokens(this.options.systemPrompt()) +
       ENVELOPE_OVERHEAD_TOKENS +
-      this.options.tools().reduce(
-        (sum, tool) => sum + estimateToolTokens(tool),
-        0,
-      );
+      this.options
+        .tools()
+        .reduce((sum, tool) => sum + estimateToolTokens(tool), 0)
+    );
   }
 
   /** Estimated tokens of the model's view: the anchored provider figure
@@ -244,12 +246,15 @@ export class ContextCompactor {
     const start = contextStart(messages);
     const anchor = this.anchor;
     if (
-      anchor !== undefined && anchor.start === start &&
+      anchor !== undefined &&
+      anchor.start === start &&
       anchor.length <= messages.length - start
     ) {
-      return anchor.tokens +
+      return (
+        anchor.tokens +
         (this.envelopeTokens() - anchor.envelopeTokens) +
-        estimateMessagesTokensFrom(messages, start + anchor.length);
+        estimateMessagesTokensFrom(messages, start + anchor.length)
+      );
     }
     return this.envelopeTokens() + estimateMessagesTokensFrom(messages, start);
   }
@@ -349,9 +354,10 @@ export class ContextCompactor {
     if (budgets === undefined) return null;
     // The retention is the only budget this call may replace: the window,
     // the threshold and the summary's output cap stay the model's.
-    const retention = keepRecentTokens === undefined
-      ? budgets
-      : { ...budgets, keepRecentTokens };
+    const retention =
+      keepRecentTokens === undefined
+        ? budgets
+        : { ...budgets, keepRecentTokens };
     const span = selectCompactionSpan(
       messages,
       contextStart(messages),
@@ -363,9 +369,10 @@ export class ContextCompactor {
     // The checkpoint at the head's start is not replayed as a message: its
     // summary travels to the summarizer separately (the style decides how —
     // see CompactionStyle.prompt).
-    const previous = head[0]?.role === "checkpoint"
-      ? checkpointSummaryText(head[0])
-      : undefined;
+    const previous =
+      head[0]?.role === "checkpoint"
+        ? checkpointSummaryText(head[0])
+        : undefined;
     this.running = true;
     let summary: string;
     try {
@@ -374,9 +381,9 @@ export class ContextCompactor {
       // Nothing was rewritten: the transcript keeps the history it had, and
       // the run continues with it.
       log.warn(
-        `session ${this.options.sessionId}: compaction failed: ${
-          errorMessage(error)
-        }`,
+        `session ${this.options.sessionId}: compaction failed: ${errorMessage(
+          error,
+        )}`,
       );
       return null;
     } finally {
@@ -462,11 +469,13 @@ export class ContextCompactor {
     );
     const request = {
       systemPrompt: this.options.style.systemPrompt,
-      messages: [{
-        role: "user",
-        content: [{ type: "text", text: prompt }],
-        timestamp: Date.now(),
-      }] as LlmMessage[],
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: prompt }],
+          timestamp: Date.now(),
+        },
+      ] as LlmMessage[],
     };
     return await streamText(
       this.options.streamFn,
@@ -497,8 +506,7 @@ export function checkpointMessage(
       count: summarizedCount,
       tokens: formatTokenCount(summarizedTokens),
     }),
-    body:
-      `${preamble}\n\n<${CHECKPOINT_SUMMARY_TAG}>\n${summary}\n</${CHECKPOINT_SUMMARY_TAG}>`,
+    body: `${preamble}\n\n<${CHECKPOINT_SUMMARY_TAG}>\n${summary}\n</${CHECKPOINT_SUMMARY_TAG}>`,
     timestamp: Date.now(),
   };
 }

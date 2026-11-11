@@ -5,9 +5,9 @@ import {
   type RunOptions,
   type ShellRunResult,
 } from "../command-backend.ts";
-import { shellCommand } from "./shell.ts";
-import { killProcessTree } from "./process-tree.ts";
 import { MAX_UTF8_BYTES_PER_CHAR, OutputTail } from "./output-tail.ts";
+import { killProcessTree } from "./process-tree.ts";
+import { shellCommand } from "./shell.ts";
 
 /** How long the pipes get to flush the last output after the process exits
  * before the call reports what it has (a descendant that keeps a pipe open
@@ -55,10 +55,7 @@ export class HostCommandRunner implements CommandRunner {
     const errTail = new OutputTail(outputBudget(options.maxOutputChars));
     const outReader = process.stdout.getReader();
     const errReader = process.stderr.getReader();
-    const readers = [
-      drain(outReader, outTail),
-      drain(errReader, errTail),
-    ];
+    const readers = [drain(outReader, outTail), drain(errReader, errTail)];
 
     // Fire-and-forget: the timeout/abort path must not await the kill (the
     // exit wait below already covers it).
@@ -91,10 +88,7 @@ export class HostCommandRunner implements CommandRunner {
       const drained = await Promise.race([
         Promise.all(readers).then(() => true),
         new Promise<boolean>((resolve) => {
-          flushGiveUp = setTimeout(
-            () => resolve(false),
-            FINAL_FLUSH_GRACE_MS,
-          );
+          flushGiveUp = setTimeout(() => resolve(false), FINAL_FLUSH_GRACE_MS);
         }),
       ]);
       if (!drained) {

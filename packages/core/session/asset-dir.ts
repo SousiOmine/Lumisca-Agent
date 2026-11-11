@@ -47,7 +47,7 @@ export class AssetDir {
   ): Promise<string> {
     const dir = this.dirOf(owner);
     await Deno.mkdir(dir, { recursive: true });
-    if (maxFiles !== undefined && await this.count(dir) >= maxFiles) {
+    if (maxFiles !== undefined && (await this.count(dir)) >= maxFiles) {
       throw new Error(
         `This owner already holds ${maxFiles} assets; reuse one of them ` +
           "instead of writing another",
@@ -73,26 +73,14 @@ export class AssetDir {
   /** Store `text` beside an asset of the same base name (the sidecar a
    * store keeps for facts about the bytes — an attachment's original file
    * name). The file is replaced rather than appended. */
-  async writeSidecar(
-    owner: string,
-    name: string,
-    text: string,
-  ): Promise<void> {
-    await Deno.writeTextFile(
-      join(this.dirOf(owner), `${name}.json`),
-      text,
-    );
+  async writeSidecar(owner: string, name: string, text: string): Promise<void> {
+    await Deno.writeTextFile(join(this.dirOf(owner), `${name}.json`), text);
   }
 
   /** The sidecar text of an asset, or undefined when it has none. */
-  async readSidecar(
-    owner: string,
-    name: string,
-  ): Promise<string | undefined> {
+  async readSidecar(owner: string, name: string): Promise<string | undefined> {
     try {
-      return await Deno.readTextFile(
-        join(this.dirOf(owner), `${name}.json`),
-      );
+      return await Deno.readTextFile(join(this.dirOf(owner), `${name}.json`));
     } catch (error) {
       if (error instanceof Deno.errors.NotFound) return undefined;
       throw error;

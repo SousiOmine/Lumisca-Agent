@@ -7,6 +7,8 @@
  * returns an unexpected reply, the caller gets a BrowserBackendError —
  * never a silently substituted result.
  */
+
+import { isLoopbackHost } from "../shared/mod.ts";
 import {
   type ActionResult,
   type BrowserAction,
@@ -39,7 +41,6 @@ import {
   type WaitOptions,
   type WaitResult,
 } from "./types.ts";
-import { isLoopbackHost } from "../shared/mod.ts";
 
 export interface HttpBrowserBackendOptions {
   /** Base URL of the host's RPC endpoint, e.g.

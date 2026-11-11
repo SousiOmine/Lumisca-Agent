@@ -1,34 +1,34 @@
 import { join } from "node:path";
+import { type LumiscaCore, nextRunAt } from "@lumisca/core";
+import { hostForUrl } from "@lumisca/core/shared";
 import { Hono } from "hono";
 import { compress } from "hono/compress";
 import { upgradeWebSocket } from "hono/deno";
-import { type LumiscaCore, nextRunAt } from "@lumisca/core";
-import { hostForUrl } from "@lumisca/core/shared";
 import { Assets } from "./assets.ts";
+import { FederationClient } from "./federation.ts";
 import { languageForRequest, registerPages } from "./pages.ts";
-import { installSecurityMiddleware } from "./security.ts";
+import { createPushNotifier } from "./push.ts";
+import { attachmentRoutes } from "./routes/attachments.ts";
+import { connectionRoutes } from "./routes/connections.ts";
+import { federationRoutes } from "./routes/federation.ts";
 import { fsRoutes } from "./routes/fs.ts";
-import { workspaceRoutes } from "./routes/workspaces.ts";
-import { skillRoutes } from "./routes/skills.ts";
+import { mcpRoutes } from "./routes/mcp.ts";
+import { notifyRoutes } from "./routes/notify.ts";
+import { providerRoutes } from "./routes/providers.ts";
+import { routineRoutes } from "./routes/routines.ts";
 import { sessionRoutes } from "./routes/sessions.ts";
+import { settingRoutes } from "./routes/settings.ts";
+import { skillRoutes } from "./routes/skills.ts";
 import { stellaRoutes } from "./routes/stella.ts";
 import { stellaAssetRoutes } from "./routes/stella-assets.ts";
-import { routineRoutes } from "./routes/routines.ts";
-import { stellaScreenRoute } from "./stella-screen.ts";
-import { visualRoutes } from "./routes/visuals.ts";
-import { attachmentRoutes } from "./routes/attachments.ts";
-import { providerRoutes } from "./routes/providers.ts";
-import { settingRoutes } from "./routes/settings.ts";
-import { mcpRoutes } from "./routes/mcp.ts";
-import { webSearchRoutes } from "./routes/web-search.ts";
-import { connectionRoutes } from "./routes/connections.ts";
-import { notifyRoutes } from "./routes/notify.ts";
-import { createPushNotifier } from "./push.ts";
-import { federationRoutes } from "./routes/federation.ts";
 import { type UpdateApi, updateRoutes } from "./routes/update.ts";
-import { FederationClient } from "./federation.ts";
 import { jsonError } from "./routes/util.ts";
+import { visualRoutes } from "./routes/visuals.ts";
+import { webSearchRoutes } from "./routes/web-search.ts";
+import { workspaceRoutes } from "./routes/workspaces.ts";
 import { createEventStream } from "./routes/ws-stream.ts";
+import { installSecurityMiddleware } from "./security.ts";
+import { stellaScreenRoute } from "./stella-screen.ts";
 
 export interface AppOptions {
   /** Repository root (defaults to the current working directory). */
@@ -114,7 +114,8 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   // its own client (started once the real origin is known); direct
   // createApp usage gets a client with no self-guard.
   const instanceId = options.instanceId ?? crypto.randomUUID();
-  const fed = options.fed ??
+  const fed =
+    options.fed ??
     new FederationClient(
       () => core.getConnections(),
       () => options.selfOrigin?.current ?? "",
@@ -177,14 +178,12 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   // a live peer was reported as down when the machine was busy. The build id
   // has its own route (`/api/build`), asked for by the one client that
   // compares it.
-  app.get(
-    "/api/health",
-    (c) =>
-      c.json({
-        ok: true,
-        now: Date.now(),
-        instanceId,
-      }),
+  app.get("/api/health", (c) =>
+    c.json({
+      ok: true,
+      now: Date.now(),
+      instanceId,
+    }),
   );
 
   /** The client build this process serves (see Assets.buildId). Split from
@@ -192,12 +191,10 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
    * machine up" is asked with seconds to spare and must not wait for a
    * frontend build; "has the bundle been replaced" is asked once a minute by
    * an open page, which can afford to wait for the first build. */
-  app.get(
-    "/api/build",
-    async (c) =>
-      c.json({
-        buildId: await assets.buildId().catch(() => undefined),
-      }),
+  app.get("/api/build", async (c) =>
+    c.json({
+      buildId: await assets.buildId().catch(() => undefined),
+    }),
   );
 
   // --- page and static assets ----------------------------------------------
@@ -212,7 +209,10 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   app.route("/api", fsRoutes());
   app.route("/api", workspaceRoutes(core));
   app.route("/api", skillRoutes(core));
-  app.route("/api", mcpRoutes(core, (c) => languageForRequest(core, c)));
+  app.route(
+    "/api",
+    mcpRoutes(core, (c) => languageForRequest(core, c)),
+  );
   // Web search: its own surface because the setting holds API keys (the
   // generic /settings surface filters it out).
   app.route("/api", webSearchRoutes(core));
@@ -247,7 +247,10 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   app.route("/api", attachmentRoutes(core));
   app.route("/api", providerRoutes(core));
   app.route("/api", settingRoutes(core));
-  app.route("/api", connectionRoutes(core, () => fed.restart()));
+  app.route(
+    "/api",
+    connectionRoutes(core, () => fed.restart()),
+  );
   app.route(
     "/api",
     notifyRoutes({
@@ -302,11 +305,13 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
         // the emitting session's revision, which lets the client detect a
         // lost frame without another round trip (see
         // core.getSessionRevision).
-        return [{
-          peerId: "",
-          ...(rev === undefined ? {} : { rev }),
-          ...event,
-        }];
+        return [
+          {
+            peerId: "",
+            ...(rev === undefined ? {} : { rev }),
+            ...event,
+          },
+        ];
       },
       // Federated peers' events, tagged with their id. The peer's own
       // `peerId` marker ("" on its side) is stripped first, so the tag is
@@ -321,7 +326,7 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
       ...(options.heartbeatMs === undefined
         ? {}
         : { heartbeatMs: options.heartbeatMs }),
-    })
+    }),
   );
   app.get("/ws", ws);
   // The stella machine's screen relay. Mounted under /api so the Host guard,

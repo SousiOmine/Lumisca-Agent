@@ -1,4 +1,5 @@
 import { assert, assertEquals } from "@std/assert";
+import { createAssistantMessageEventStream } from "../ai/event-stream.ts";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "../ai/faux.ts";
 import type {
   AgentMessage,
@@ -7,24 +8,23 @@ import type {
   Model,
   StreamFn,
 } from "../ai/types.ts";
-import { createAssistantMessageEventStream } from "../ai/event-stream.ts";
+import { WORK_COMPACTION_STYLE } from "./compaction-style.ts";
 import {
   CHECKPOINT_PREAMBLE,
   CHECKPOINT_SUMMARY_TAG,
-  checkpointSummaryText,
   ContextCompactor,
+  checkpointSummaryText,
   contextStart,
   DEFAULT_COMPACTION_POLICY,
   reservedCompletionTokens,
   resolveCompactionBudgets,
   resolveCompactionPolicy,
-  selectCompactionSpan,
   SUMMARIZATION_PROMPT,
   SUMMARIZATION_SYSTEM_PROMPT,
+  selectCompactionSpan,
   transcriptUnits,
   UPDATE_SUMMARIZATION_PROMPT,
 } from "./context-compaction.ts";
-import { WORK_COMPACTION_STYLE } from "./compaction-style.ts";
 
 /** A model with a wide window: the summarization request then has room for
  * the whole head, so a test can assert on the request as it was built. */
@@ -137,13 +137,15 @@ function compactorFor(
   const compactor = new ContextCompactor({
     model: options.model ?? wideModel(),
     systemPrompt: () => "You are Lumisca.",
-    tools: () => [{
-      name: "bash",
-      label: "Bash",
-      description: "Run a command",
-      parameters: { type: "object" },
-      execute: () => Promise.resolve({ content: [], details: {} }),
-    }],
+    tools: () => [
+      {
+        name: "bash",
+        label: "Bash",
+        description: "Run a command",
+        parameters: { type: "object" },
+        execute: () => Promise.resolve({ content: [], details: {} }),
+      },
+    ],
     streamFn,
     sessionId: "s1",
     style: WORK_COMPACTION_STYLE,
@@ -186,7 +188,7 @@ Deno.test("resolveCompactionBudgets: a share behaves the same at every window si
   for (const window of [32_000, 200_000, 1_000_000]) {
     const budgets = resolveCompactionBudgets(modelWith(window, 8_000), policy)!;
     assertEquals(budgets.thresholdTokens, window - Math.ceil(window * 0.08));
-    assertEquals(budgets.keepRecentTokens, Math.ceil(window * 0.20));
+    assertEquals(budgets.keepRecentTokens, Math.ceil(window * 0.2));
     // The share of the window that stays usable, before compaction fires.
     assert(
       Math.abs(budgets.thresholdTokens / window - 0.92) < 0.001,
@@ -225,16 +227,13 @@ Deno.test("resolveCompactionBudgets: no window, no room, or disabled disables co
   // A reservation that leaves nothing for a prompt disables compaction. The
   // share is what decides that now, so it is stated rather than assumed:
   // 8% of a 10K window leaves 9.2K, which is a perfectly usable prompt.
-  assertEquals(
-    resolveCompactionBudgets(modelWith(10_000, 1_000)),
-    {
-      contextWindow: 10_000,
-      reserveTokens: 800,
-      thresholdTokens: 10_000 - 800,
-      keepRecentTokens: 2_000,
-      summaryMaxTokens: 640,
-    },
-  );
+  assertEquals(resolveCompactionBudgets(modelWith(10_000, 1_000)), {
+    contextWindow: 10_000,
+    reserveTokens: 800,
+    thresholdTokens: 10_000 - 800,
+    keepRecentTokens: 2_000,
+    summaryMaxTokens: 640,
+  });
   assertEquals(
     resolveCompactionBudgets(modelWith(10_000, 1_000), {
       enabled: true,
@@ -263,23 +262,14 @@ Deno.test("reservedCompletionTokens: the cap stops at the reservation", () => {
   // A cap the reservation does not reach stays the model's own cap.
   assertEquals(reservedCompletionTokens(modelWith(200_000, 8_000), {}), 8_000);
   // Nothing reserved: the model's cap is the only bound.
-  assertEquals(
-    reservedCompletionTokens(model, { reservePercent: 0 }),
-    384_000,
-  );
+  assertEquals(reservedCompletionTokens(model, { reservePercent: 0 }), 384_000);
   // Compaction off: there is no threshold the cap has to keep room below.
-  assertEquals(
-    reservedCompletionTokens(model, { enabled: false }),
-    384_000,
-  );
+  assertEquals(reservedCompletionTokens(model, { enabled: false }), 384_000);
   // A model that documents no cap sends none (the provider's default
   // applies): inventing one would be a request the provider never agreed to.
   const bare = { ...modelWith(200_000, 8_000) } as Partial<Model<Api>>;
   delete bare.maxTokens;
-  assertEquals(
-    reservedCompletionTokens(bare as Model<Api>, {}),
-    undefined,
-  );
+  assertEquals(reservedCompletionTokens(bare as Model<Api>, {}), undefined);
 });
 
 Deno.test("resolveCompactionBudgets: a zero reservation falls back to the model's cap", () => {
@@ -311,10 +301,11 @@ Deno.test("resolveCompactionPolicy falls back to pi's defaults", () => {
     resolveCompactionPolicy({ enabled: false, reservePercent: -5 }),
     { enabled: false, reservePercent: 8, keepRecentPercent: 20 },
   );
-  assertEquals(
-    resolveCompactionPolicy({ reservePercent: 150 }),
-    { enabled: true, reservePercent: 8, keepRecentPercent: 20 },
-  );
+  assertEquals(resolveCompactionPolicy({ reservePercent: 150 }), {
+    enabled: true,
+    reservePercent: 8,
+    keepRecentPercent: 20,
+  });
   assertEquals(
     resolveCompactionPolicy({ reservePercent: 12.7, keepRecentPercent: 0 }),
     { enabled: true, reservePercent: 12, keepRecentPercent: 0 },
@@ -328,17 +319,23 @@ Deno.test("transcriptUnits keeps an assistant turn with its tool results", () =>
     assistant("done"),
     user("again"),
   ];
-  assertEquals(transcriptUnits(messages).map((u) => [u.index, u.count]), [
-    [0, 1],
-    [1, 2],
-    [3, 1],
-    [4, 1],
-  ]);
+  assertEquals(
+    transcriptUnits(messages).map((u) => [u.index, u.count]),
+    [
+      [0, 1],
+      [1, 2],
+      [3, 1],
+      [4, 1],
+    ],
+  );
   // `from` starts the split at the projection start.
-  assertEquals(transcriptUnits(messages, 3).map((u) => [u.index, u.count]), [
-    [3, 1],
-    [4, 1],
-  ]);
+  assertEquals(
+    transcriptUnits(messages, 3).map((u) => [u.index, u.count]),
+    [
+      [3, 1],
+      [4, 1],
+    ],
+  );
 });
 
 Deno.test("contextStart is the newest checkpoint (0 when there is none)", () => {
@@ -356,8 +353,7 @@ Deno.test("checkpointSummaryText unwraps the framed summary", () => {
   const message = {
     role: "checkpoint",
     title: "t",
-    body:
-      `${CHECKPOINT_PREAMBLE}\n\n<${CHECKPOINT_SUMMARY_TAG}>\n## Goal\n- x\n</${CHECKPOINT_SUMMARY_TAG}>`,
+    body: `${CHECKPOINT_PREAMBLE}\n\n<${CHECKPOINT_SUMMARY_TAG}>\n## Goal\n- x\n</${CHECKPOINT_SUMMARY_TAG}>`,
     timestamp: 1,
   } as AgentMessage;
   assertEquals(checkpointSummaryText(message), "## Goal\n- x");
@@ -575,11 +571,10 @@ Deno.test("selectCompactionSpan: a zero retention condenses the whole view", () 
   // No tail: the checkpoint lands after the last message, so the model's
   // view is the record alone.
   const span = selectCompactionSpan(messages, 0, budgets)!;
-  assertEquals([span.start, span.cutIndex, span.count], [
-    0,
-    messages.length,
-    messages.length,
-  ]);
+  assertEquals(
+    [span.start, span.cutIndex, span.count],
+    [0, messages.length, messages.length],
+  );
   // A view that is one unit is still compactable when nothing is retained.
   const single = [user("x".repeat(4_000))];
   const one = selectCompactionSpan(single, 0, budgets)!;
@@ -624,9 +619,11 @@ Deno.test("measure anchors on provider usage and estimates only the delta", () =
   const { compactor } = compactorFor(messages);
   const full = compactor.measure(messages);
   assertEquals(full > 0, true);
-  messages.push(fauxAssistantMessage([fauxText("second")], {
-    usage: { input: 150_000, output: 10, cacheRead: 0, cacheWrite: 0 },
-  }));
+  messages.push(
+    fauxAssistantMessage([fauxText("second")], {
+      usage: { input: 150_000, output: 10, cacheRead: 0, cacheWrite: 0 },
+    }),
+  );
   compactor.observeTurn(messages);
   const anchored = compactor.measure(messages);
   assertEquals(anchored >= 150_000, true);

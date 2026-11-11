@@ -23,8 +23,7 @@
  * the values live in the environment file, because reinstalling rewrites this
  * one.
  */
-export const SERVICE_UNIT_TEMPLATE =
-  `# lumisca-server service install が生成します。このファイルを直接編集しても
+export const SERVICE_UNIT_TEMPLATE = `# lumisca-server service install が生成します。このファイルを直接編集しても
 # 再インストールで上書きされます。設定値は下の EnvironmentFile に置いてください。
 [Unit]
 Description=Lumisca server (coding agent)

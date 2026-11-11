@@ -1,6 +1,6 @@
-import { removeDirRetry } from "../test-utils.ts";
 import { join } from "node:path";
 import { assertEquals, assertThrows } from "@std/assert";
+import { removeDirRetry } from "../test-utils.ts";
 import { parseJsonc, SettingsFileError } from "./jsonc.ts";
 import { resolveSettingsPath } from "./path.ts";
 import { createFileSettingsRepo, createInMemorySettingsRepo } from "./repo.ts";
@@ -118,11 +118,7 @@ Deno.test("file settings repo: malformed file fails fast with its path", async (
   const path = join(dir, "settings.jsonc");
   try {
     Deno.writeTextFileSync(path, '{ "theme": ,}');
-    assertThrows(
-      () => createFileSettingsRepo(path),
-      SettingsFileError,
-      path,
-    );
+    assertThrows(() => createFileSettingsRepo(path), SettingsFileError, path);
   } finally {
     await removeDirRetry(dir);
   }

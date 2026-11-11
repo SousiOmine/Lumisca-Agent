@@ -1,4 +1,3 @@
-import { stellaApiStub } from "./test-stubs.ts";
 /**
  * Creating an agent with an empty form. The regression this pins: the form's
  * two free-text answers were required, and the server's route refused an
@@ -6,9 +5,10 @@ import { stellaApiStub } from "./test-stubs.ts";
  * agent without describing it first was stuck at a disabled button.
  */
 import { assertEquals } from "@std/assert";
-import { stellaRoutes } from "./stella.ts";
-import { jsonError } from "./util.ts";
 import type { StellaApi } from "./stella.ts";
+import { stellaRoutes } from "./stella.ts";
+import { stellaApiStub } from "./test-stubs.ts";
+import { jsonError } from "./util.ts";
 
 /** Only the create route matters here; it must receive what the client sent,
  * norm, untouched, so the core's rule is the only one in play. */

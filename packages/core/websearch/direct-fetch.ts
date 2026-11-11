@@ -11,11 +11,11 @@
  *   (or chunked, hence undeclared) response never fills memory.
  */
 
-import { errorMessage } from "../shared/misc.ts";
 import { concatBytes } from "../bytes.ts";
+import { errorMessage } from "../shared/misc.ts";
+import { MAX_DIRECT_FETCH_BYTES, MAX_DIRECT_FETCH_CHARS } from "./constants.ts";
 import { WebSearchError } from "./errors.ts";
 import { htmlToText, pageTitle } from "./html.ts";
-import { MAX_DIRECT_FETCH_BYTES, MAX_DIRECT_FETCH_CHARS } from "./constants.ts";
 import type { FetchLike, FetchRequest, FetchResponse } from "./types.ts";
 
 /** One direct fetch gives up after this long. */
@@ -35,9 +35,10 @@ export async function fetchDirect(
 ): Promise<FetchResponse> {
   let url = httpUrl(request.url);
   const timeout = AbortSignal.timeout(DIRECT_TIMEOUT_MS);
-  const signal = request.signal === undefined
-    ? timeout
-    : AbortSignal.any([request.signal, timeout]);
+  const signal =
+    request.signal === undefined
+      ? timeout
+      : AbortSignal.any([request.signal, timeout]);
 
   let response: Response;
   let redirects = 0;
@@ -98,9 +99,10 @@ export async function fetchDirect(
 
   if (!response.ok) {
     // A 404 is usually a wrong URL, which the model can fix, not an outage.
-    const code = response.status === 404 || response.status === 410
-      ? "invalid"
-      : "unavailable";
+    const code =
+      response.status === 404 || response.status === 410
+        ? "invalid"
+        : "unavailable";
     throw new WebSearchError(
       code,
       `The page returned HTTP ${response.status} (${url})`,
@@ -108,8 +110,9 @@ export async function fetchDirect(
     );
   }
 
-  const contentType = (response.headers.get("content-type") ?? "")
-    .toLowerCase();
+  const contentType = (
+    response.headers.get("content-type") ?? ""
+  ).toLowerCase();
   if (contentType.includes("application/pdf")) {
     throw new WebSearchError(
       "unsupported",
@@ -166,8 +169,13 @@ function httpUrl(value: string): string {
 }
 
 function isRedirect(status: number): boolean {
-  return status === 301 || status === 302 || status === 303 || status === 307 ||
-    status === 308;
+  return (
+    status === 301 ||
+    status === 302 ||
+    status === 303 ||
+    status === 307 ||
+    status === 308
+  );
 }
 
 /**
@@ -191,8 +199,10 @@ function isPrivateHost(hostname: string): boolean {
   // URL.hostname keeps IPv6 in brackets; a zone id (%25eth0, or %eth0 when
   // the spelling skipped URL) is not part of the address.
   const address =
-    (host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host)
-      .split("%")[0] ?? "";
+    (host.startsWith("[") && host.endsWith("]")
+      ? host.slice(1, -1)
+      : host
+    ).split("%")[0] ?? "";
 
   const ipv4 = parseIpv4(address);
   if (ipv4 !== null) return isPrivateIpv4(ipv4);
@@ -221,13 +231,16 @@ function isPrivateHost(hostname: string): boolean {
 
   // NAT64 (64:ff9b::/96, and the local-use 64:ff9b:1::/48) wrapping IPv4.
   if (
-    first === 0x64 && groups[1] === 0xff9b &&
+    first === 0x64 &&
+    groups[1] === 0xff9b &&
     groups.slice(2, 6).every((group) => group === 0)
   ) {
     return isPrivateIpv4(groupsToIpv4(groups));
   }
   if (
-    first === 0x64 && groups[1] === 0xff9b && groups[2] === 1 &&
+    first === 0x64 &&
+    groups[1] === 0xff9b &&
+    groups[2] === 1 &&
     groups.slice(3, 6).every((group) => group === 0)
   ) {
     return isPrivateIpv4(groupsToIpv4(groups));

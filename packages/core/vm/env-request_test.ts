@@ -1,6 +1,6 @@
 import { assertEquals, assertRejects } from "@std/assert";
-import { EnvRequestHub } from "./env-request.ts";
 import type { ClientEvent } from "../domain/event.ts";
+import { EnvRequestHub } from "./env-request.ts";
 
 /**
  * The environment-variable request: the wait, the events clients follow, and

@@ -1,6 +1,7 @@
 import { assert, assertEquals } from "@std/assert";
-import { fauxAssistantMessage, fauxText, fauxToolCall } from "../ai/faux.ts";
+import { ContextCompactor } from "../ai/context-compaction.ts";
 import { createAssistantMessageEventStream } from "../ai/event-stream.ts";
+import { fauxAssistantMessage, fauxText, fauxToolCall } from "../ai/faux.ts";
 import type {
   AgentMessage,
   Api,
@@ -8,7 +9,6 @@ import type {
   StreamFn,
   ToolResultMessage,
 } from "../ai/types.ts";
-import { ContextCompactor } from "../ai/context-compaction.ts";
 import {
   STELLA_CHECKPOINT_PREAMBLE,
   STELLA_COMPACTION_STYLE,
@@ -20,9 +20,7 @@ import {
 /** A local wall-clock minute on one fixed day, so the expected strings do not
  * depend on the test machine's time zone (see formatLocalDateTime). */
 function at(minute: number): number {
-  return Date.parse(
-    `2026-01-15T12:${String(minute).padStart(2, "0")}:00`,
-  );
+  return Date.parse(`2026-01-15T12:${String(minute).padStart(2, "0")}:00`);
 }
 
 function user(text: string, timestamp: number): AgentMessage {
@@ -98,8 +96,9 @@ Deno.test("a call's arguments and a result's output never reach the record", () 
     ...toolPair("t1", "secret output", at(11)),
     assistant("done", at(12)),
   ];
-  const text = STELLA_COMPACTION_STYLE.serialize(messages, undefined)
-    .join("\n");
+  const text = STELLA_COMPACTION_STYLE.serialize(messages, undefined).join(
+    "\n",
+  );
   // The same string is the call's argument and the result's body: neither
   // may leak into the record's input.
   assert(!text.includes("secret output"));
@@ -167,10 +166,13 @@ Deno.test("send_chat is the conversation, not a tool to tally", () => {
 Deno.test("a failed call is counted as a call and marked as failed", () => {
   const messages: AgentMessage[] = [
     user("go", at(10)),
-    fauxAssistantMessage([
-      fauxToolCall("bash", { command: "ok" }, "t1"),
-      fauxToolCall("bash", { command: "boom" }, "t2"),
-    ], { timestamp: at(11) }),
+    fauxAssistantMessage(
+      [
+        fauxToolCall("bash", { command: "ok" }, "t1"),
+        fauxToolCall("bash", { command: "boom" }, "t2"),
+      ],
+      { timestamp: at(11) },
+    ),
     toolResult("t1", "ok", at(12)),
     toolResult("t2", "boom", at(13), { isError: true }),
     assistant("done", at(14)),

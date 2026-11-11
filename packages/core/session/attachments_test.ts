@@ -1,5 +1,5 @@
-import { assert, assertEquals, assertRejects } from "@std/assert";
 import { join } from "node:path";
+import { assert, assertEquals, assertRejects } from "@std/assert";
 import { MAX_ATTACHMENT_BYTES } from "../shared/mod.ts";
 import { SessionAttachmentStore } from "./attachments.ts";
 
@@ -44,11 +44,7 @@ Deno.test("put refuses bytes over the limit", async () => {
   await withStore(async (store) => {
     await assertRejects(
       () =>
-        store.put(
-          "s1",
-          new Uint8Array(MAX_ATTACHMENT_BYTES + 1),
-          "huge.bin",
-        ),
+        store.put("s1", new Uint8Array(MAX_ATTACHMENT_BYTES + 1), "huge.bin"),
       Error,
       "too large",
     );
@@ -58,16 +54,14 @@ Deno.test("put refuses bytes over the limit", async () => {
 Deno.test("resolve refuses anything that is not a name the store made", async () => {
   await withStore(async (store) => {
     const ref = await store.put("s1", new Uint8Array([1]), "a.png");
-    assert(await store.resolve("s1", ref.name) !== undefined);
-    for (
-      const name of [
-        "../" + ref.name,
-        "/etc/passwd",
-        ref.name.toUpperCase(),
-        "nope.png",
-        "",
-      ]
-    ) {
+    assert((await store.resolve("s1", ref.name)) !== undefined);
+    for (const name of [
+      "../" + ref.name,
+      "/etc/passwd",
+      ref.name.toUpperCase(),
+      "nope.png",
+      "",
+    ]) {
       assertEquals(await store.resolve("s1", name), undefined, name);
     }
   });
@@ -76,7 +70,7 @@ Deno.test("resolve refuses anything that is not a name the store made", async ()
 Deno.test("resolve does not cross sessions", async () => {
   await withStore(async (store) => {
     const ref = await store.put("s1", new Uint8Array([1]), "a.png");
-    assert(await store.resolve("s2", ref.name) === undefined);
+    assert((await store.resolve("s2", ref.name)) === undefined);
   });
 });
 
@@ -118,7 +112,7 @@ Deno.test("deleteSession drops one session's files only", async () => {
     const kept = await store.put("s1", new Uint8Array([1]), "a.png");
     const gone = await store.put("s2", new Uint8Array([2]), "b.png");
     await store.deleteSession("s2");
-    assert(await store.resolve("s1", kept.name) !== undefined);
+    assert((await store.resolve("s1", kept.name)) !== undefined);
     assertEquals(await store.resolve("s2", gone.name), undefined);
     // The other session's directory is intact.
     let keptFiles = 0;

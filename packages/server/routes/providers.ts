@@ -1,5 +1,3 @@
-import { type Context, Hono } from "hono";
-import { isLoopbackHost } from "@lumisca/core/shared";
 import type {
   AuthCheck,
   AuthInteraction,
@@ -11,6 +9,11 @@ import type {
   UserProviderInput,
   UserProviderSummary,
 } from "@lumisca/core";
+import { isLoopbackHost } from "@lumisca/core/shared";
+import { type Context, Hono } from "hono";
+import { ttlCache } from "../cache.ts";
+import { LoginSessions } from "../login.ts";
+import { hostnameOf } from "../security.ts";
 import {
   AppError,
   parseBody,
@@ -19,9 +22,6 @@ import {
   requireNonEmptyString,
   requireString,
 } from "./util.ts";
-import { ttlCache } from "../cache.ts";
-import { LoginSessions } from "../login.ts";
-import { hostnameOf } from "../security.ts";
 
 /** Auth checks are cached briefly; invalidated when a key or credential
  * (login/logout) changes. */
@@ -46,9 +46,7 @@ export interface ProviderApi {
    * not count. */
   hasConfiguredAuth(providerId: string): Promise<boolean>;
   setProviderApiKey(providerId: string, key: string): Promise<void>;
-  getProviderAuthType(
-    providerId: string,
-  ): ProviderAuthType | undefined;
+  getProviderAuthType(providerId: string): ProviderAuthType | undefined;
   /** Run a provider-owned login flow (OAuth) with the given interaction. */
   loginProvider(
     providerId: string,
@@ -99,9 +97,7 @@ export function providerRoutes(core: ProviderApi): Hono {
   const authCache = ttlCache<
     string,
     { configured: boolean; source?: string; authType?: ProviderAuthType }
-  >(
-    AUTH_CACHE_TTL,
-  );
+  >(AUTH_CACHE_TTL);
   const cachedAuth = async (providerId: string) => {
     const cached = authCache.get(providerId);
     if (cached) return cached;
@@ -185,11 +181,7 @@ export function providerRoutes(core: ProviderApi): Hono {
     // Hono already decodes path params once; the client percent-encodes
     // model ids, so decoding again here would corrupt ids containing `+`
     // (or throw on malformed escapes like %zz).
-    core.setModelEnabled(
-      c.req.param("id"),
-      c.req.param("modelId"),
-      enabled,
-    );
+    core.setModelEnabled(c.req.param("id"), c.req.param("modelId"), enabled);
     return c.json({ ok: true });
   });
 
@@ -239,10 +231,7 @@ export function providerRoutes(core: ProviderApi): Hono {
     const body = await parseBody<{ method?: unknown }>(c);
     const method = body?.method;
     if (method !== "browser" && method !== "device_code") {
-      throw new AppError(
-        'method must be "browser" or "device_code"',
-        400,
-      );
+      throw new AppError('method must be "browser" or "device_code"', 400);
     }
     if (!oauth.methods.includes(method)) {
       throw new AppError(
@@ -261,10 +250,8 @@ export function providerRoutes(core: ProviderApi): Hono {
     // concurrent polls (which OpenAI rate-limits with 429 errors).
     const active = loginSessions.getActive(id);
     if (active) return c.json({ sessionId: active.sessionId });
-    const session = loginSessions.create(
-      id,
-      method,
-      (interaction) => core.loginProvider(id, "oauth", interaction),
+    const session = loginSessions.create(id, method, (interaction) =>
+      core.loginProvider(id, "oauth", interaction),
     );
     return c.json({ sessionId: session.sessionId });
   });
@@ -289,7 +276,8 @@ export function providerRoutes(core: ProviderApi): Hono {
     }
     const body = await parseBody<{ promptId?: unknown; value?: unknown }>(c);
     if (
-      !body || typeof body.promptId !== "string" ||
+      !body ||
+      typeof body.promptId !== "string" ||
       typeof body.value !== "string"
     ) {
       throw new AppError("promptId and value (strings) are required", 400);

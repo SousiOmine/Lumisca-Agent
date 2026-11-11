@@ -128,7 +128,7 @@ export function createVmClipboard(options: VmClipboardOptions): VmClipboard {
       // background. Ask for the text back once so a machine that dropped it
       // (an old image, an X server that refused the value) reports the
       // failure here rather than letting the paste arrive empty.
-      if (await read(signal) !== normalized) {
+      if ((await read(signal)) !== normalized) {
         throw new CoreError(
           "The machine did not keep the text on its clipboard",
           "unavailable",

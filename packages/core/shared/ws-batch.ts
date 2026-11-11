@@ -111,9 +111,10 @@ export function createFrameBatcher<K = string, R = number>(
 ): FrameBatcher<K, R> {
   const flushMs = options.flushMs ?? WS_DELTA_FLUSH_MS;
   const maxChars = options.maxChars ?? WS_DELTA_MAX_CHARS;
-  const setTimer = options.setTimer ??
-    ((fn: () => void, ms: number) => setTimeout(fn, ms));
-  const clearTimer = options.clearTimer ??
+  const setTimer =
+    options.setTimer ?? ((fn: () => void, ms: number) => setTimeout(fn, ms));
+  const clearTimer =
+    options.clearTimer ??
     ((handle: unknown) =>
       clearTimeout(handle as ReturnType<typeof setTimeout>));
 

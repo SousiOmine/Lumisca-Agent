@@ -15,9 +15,9 @@ function addColumnIfMissing(
   column: string,
   definition: string,
 ): void {
-  const columns = db
-    .prepare(`PRAGMA table_info(${table})`)
-    .all() as Array<{ name: string }>;
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{
+    name: string;
+  }>;
   if (columns.some((entry) => entry.name === column)) return;
   db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
@@ -160,12 +160,7 @@ export const MIGRATIONS: ReadonlyArray<(db: DatabaseSync) => void> = [
   // several rows carry it at once. The index exists only to make "the stella
   // rows" cheap to find.
   (db) => {
-    addColumnIfMissing(
-      db,
-      "sessions",
-      "stella",
-      "INTEGER NOT NULL DEFAULT 0",
-    );
+    addColumnIfMissing(db, "sessions", "stella", "INTEGER NOT NULL DEFAULT 0");
     // A database stamped by the earlier, one-conversation shape carries a
     // UNIQUE index here; it would reject the second agent's conversation, so
     // it is replaced rather than kept.
@@ -255,12 +250,7 @@ export const MIGRATIONS: ReadonlyArray<(db: DatabaseSync) => void> = [
   // or a database row can never point the icon route at a file of its own
   // choosing.
   (db) => {
-    addColumnIfMissing(
-      db,
-      "stella_agents",
-      "icon",
-      "TEXT NOT NULL DEFAULT ''",
-    );
+    addColumnIfMissing(db, "stella_agents", "icon", "TEXT NOT NULL DEFAULT ''");
   },
   // Opening a session loads what the MODEL is shown — the newest compaction
   // checkpoint and everything after it — rather than the whole transcript
@@ -312,12 +302,7 @@ export const MIGRATIONS: ReadonlyArray<(db: DatabaseSync) => void> = [
   // to one for weeks must not be greeted with "let's set me up" the next
   // time they open it. A NULL column is therefore only ever a NEW agent.
   (db) => {
-    addColumnIfMissing(
-      db,
-      "stella_agents",
-      "onboarded_at",
-      "INTEGER",
-    );
+    addColumnIfMissing(db, "stella_agents", "onboarded_at", "INTEGER");
     db.exec(
       "UPDATE stella_agents SET onboarded_at = created_at " +
         "WHERE onboarded_at IS NULL",
@@ -348,9 +333,9 @@ export function applyMigrations(
   db: DatabaseSync,
   migrations: ReadonlyArray<(db: DatabaseSync) => void>,
 ): void {
-  const { user_version: current } = db
-    .prepare("PRAGMA user_version")
-    .get() as { user_version: number };
+  const { user_version: current } = db.prepare("PRAGMA user_version").get() as {
+    user_version: number;
+  };
   for (let v = current; v < migrations.length; v++) {
     db.exec("BEGIN IMMEDIATE");
     try {

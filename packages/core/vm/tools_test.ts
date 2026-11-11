@@ -1,17 +1,17 @@
-import { assert, assertEquals } from "@std/assert";
 import { loadImage } from "@napi-rs/canvas";
+import { assert, assertEquals } from "@std/assert";
 import { base64ToBytes } from "../base64.ts";
 import { noisyPng } from "../test-utils.ts";
-import { scanVmSkillsDir } from "./skills.ts";
-import { createVmTools } from "./tools.ts";
-import { createVmScreen, scrollNotches } from "./screen.ts";
+import type { VmCommandBytesResult, VmCommandResult } from "./command.ts";
+import type { VmExec, VmExecBytes, VmExecOptions } from "./container.ts";
 import {
   VM_SCREEN_HEIGHT,
   VM_SCREEN_WIDTH,
   VM_SKILLS_DIR,
 } from "./contract.ts";
-import type { VmExec, VmExecBytes, VmExecOptions } from "./container.ts";
-import type { VmCommandBytesResult, VmCommandResult } from "./command.ts";
+import { createVmScreen, scrollNotches } from "./screen.ts";
+import { scanVmSkillsDir } from "./skills.ts";
+import { createVmTools } from "./tools.ts";
 
 /** A scripted exec seam: each answer is matched against the joined argv. */
 function exec(
@@ -44,27 +44,32 @@ function exec(
 // --- skills ----------------------------------------------------------------
 
 Deno.test("vm skills: a skill's frontmatter name must match its directory", async () => {
-  const { run } = exec([{
-    match: /^sh -c cd/,
-    stdout: [
-      "",
-      "__SKILL__alpha",
-      "---",
-      "name: alpha",
-      "description: The alpha skill.",
-      "---",
-      "",
-      "# Alpha",
-      "",
-      "__SKILL__beta",
-      "---",
-      "name: not-beta",
-      "description: A mismatched name.",
-      "---",
-    ].join("\n"),
-  }]);
+  const { run } = exec([
+    {
+      match: /^sh -c cd/,
+      stdout: [
+        "",
+        "__SKILL__alpha",
+        "---",
+        "name: alpha",
+        "description: The alpha skill.",
+        "---",
+        "",
+        "# Alpha",
+        "",
+        "__SKILL__beta",
+        "---",
+        "name: not-beta",
+        "description: A mismatched name.",
+        "---",
+      ].join("\n"),
+    },
+  ]);
   const skills = await scanVmSkillsDir(run, VM_SKILLS_DIR);
-  assertEquals(skills.map((skill) => skill.name), ["alpha"]);
+  assertEquals(
+    skills.map((skill) => skill.name),
+    ["alpha"],
+  );
   const alpha = skills[0]!;
   assertEquals(alpha.description, "The alpha skill.");
   assertEquals(alpha.path, `${VM_SKILLS_DIR}/alpha/SKILL.md`);
@@ -116,10 +121,12 @@ Deno.test("vm skills: a missing skills directory yields an empty catalog", async
 
 // --- screen tools ----------------------------------------------------------
 
-const enclosing = (overrides: {
-  exec?: ReturnType<typeof exec>;
-  bytes?: string | Uint8Array;
-} = {}) => {
+const enclosing = (
+  overrides: {
+    exec?: ReturnType<typeof exec>;
+    bytes?: string | Uint8Array;
+  } = {},
+) => {
   const scripted = overrides.exec ?? exec([]);
   const screen = createVmScreen({
     exec: scripted.run,
@@ -129,11 +136,12 @@ const enclosing = (overrides: {
     ): Promise<VmCommandBytesResult> =>
       Promise.resolve({
         exitCode: 0,
-        stdout: overrides.bytes === undefined
-          ? new TextEncoder().encode("png")
-          : typeof overrides.bytes === "string"
-          ? new TextEncoder().encode(overrides.bytes)
-          : overrides.bytes,
+        stdout:
+          overrides.bytes === undefined
+            ? new TextEncoder().encode("png")
+            : typeof overrides.bytes === "string"
+              ? new TextEncoder().encode(overrides.bytes)
+              : overrides.bytes,
         stderr: "",
         truncated: false,
         timedOut: false,
@@ -148,7 +156,10 @@ Deno.test("vm tools: the screenshot reports the 1:1 coordinate contract", async 
   assert(screenshot !== undefined);
   assertEquals(screenshot.name, "vm_screenshot");
   const result = await screenshot.execute("1", {}, undefined);
-  assertEquals(result.content.some((item) => item.type === "image"), true);
+  assertEquals(
+    result.content.some((item) => item.type === "image"),
+    true,
+  );
   const text = result.content[0];
   assert(text?.type === "text");
   assert(
@@ -245,7 +256,10 @@ Deno.test("vm tools: act builds the xdotool call for each action", async () => {
   await act.execute("1", { action: "type", text: "hi there" }, undefined);
 
   const joined = calls.map((call) => call.join(" "));
-  assert(joined.some((c) => c.includes("mousemove 10 20")), joined.join("\n"));
+  assert(
+    joined.some((c) => c.includes("mousemove 10 20")),
+    joined.join("\n"),
+  );
   assert(
     joined.some((c) => c.includes("key --clearmodifiers -- Return")),
     joined.join("\n"),

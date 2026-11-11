@@ -1,5 +1,3 @@
-import { useEffect, useState } from "preact/compat";
-import type { ReactNode } from "preact/compat";
 import {
   IconBookmark,
   IconBrain,
@@ -14,38 +12,40 @@ import {
   IconWorld,
   IconX,
 } from "@tabler/icons-preact";
-import { useT } from "../i18n.ts";
+import type { ReactNode } from "preact/compat";
+import { useEffect, useState } from "preact/compat";
 import { COMPACT_QUERY, useMediaQuery } from "../hooks/useMediaQuery.ts";
-import { Modal } from "./Modal.tsx";
-import { ProviderList } from "./settings/ProviderList.tsx";
-import { AddProviderFlow } from "./settings/AddProviderFlow.tsx";
-import { ProviderDetail } from "./settings/ProviderDetail.tsx";
-import { AddUserProviderForm } from "./settings/AddUserProviderForm.tsx";
-import { reloadCatalog, useUserProviders } from "../providers.ts";
-import { ModelList } from "./settings/ModelList.tsx";
-import { ModelPreferencePanel } from "./settings/ModelPreferencePanel.tsx";
-import { CompactionSettings } from "./settings/CompactionSettings.tsx";
-import { McpList } from "./settings/McpList.tsx";
-import { RoutinePanel } from "./settings/RoutinePanel.tsx";
+import type { PushControls } from "../hooks/usePush.ts";
 import type { useRoutines } from "../hooks/useRoutines.ts";
-import { ConnectionList } from "./settings/ConnectionList.tsx";
-import { PersonalizePanel } from "./settings/PersonalizePanel.tsx";
-import { SavedPromptsPanel } from "./settings/SavedPromptsPanel.tsx";
+import type { UpdateControls } from "../hooks/useUpdateStatus.ts";
+import { useT } from "../i18n.ts";
+import { reloadCatalog, useUserProviders } from "../providers.ts";
+import type { Locale, ThemeSetting } from "../types.ts";
+import { Modal } from "./Modal.tsx";
+import { AddProviderFlow } from "./settings/AddProviderFlow.tsx";
+import { AddUserProviderForm } from "./settings/AddUserProviderForm.tsx";
 import { AppearancePanel } from "./settings/AppearancePanel.tsx";
 import { CommandSafetyPanel } from "./settings/CommandSafetyPanel.tsx";
+import { CompactionSettings } from "./settings/CompactionSettings.tsx";
 import { ComputerUsePanel } from "./settings/ComputerUsePanel.tsx";
-import { WebSearchPanel } from "./settings/WebSearchPanel.tsx";
-import { GeneralPanel } from "./settings/GeneralPanel.tsx";
-import { SettingsPage } from "./settings/SettingsPage.tsx";
+import { ConnectionList } from "./settings/ConnectionList.tsx";
 import {
   modeLabelKey,
   navGroups,
   type SettingsCategory,
   type SettingsNavEntry,
 } from "./settings/categories.ts";
-import type { UpdateControls } from "../hooks/useUpdateStatus.ts";
-import type { PushControls } from "../hooks/usePush.ts";
-import type { Locale, ThemeSetting } from "../types.ts";
+import { GeneralPanel } from "./settings/GeneralPanel.tsx";
+import { McpList } from "./settings/McpList.tsx";
+import { ModelList } from "./settings/ModelList.tsx";
+import { ModelPreferencePanel } from "./settings/ModelPreferencePanel.tsx";
+import { PersonalizePanel } from "./settings/PersonalizePanel.tsx";
+import { ProviderDetail } from "./settings/ProviderDetail.tsx";
+import { ProviderList } from "./settings/ProviderList.tsx";
+import { RoutinePanel } from "./settings/RoutinePanel.tsx";
+import { SavedPromptsPanel } from "./settings/SavedPromptsPanel.tsx";
+import { SettingsPage } from "./settings/SettingsPage.tsx";
+import { WebSearchPanel } from "./settings/WebSearchPanel.tsx";
 
 export type { SettingsCategory } from "./settings/categories.ts";
 
@@ -218,7 +218,8 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
                   kind: "detail",
                   providerId: id,
                   from: "add",
-                })}
+                })
+              }
               onAddUser={() => setProvidersView({ kind: "addUser" })}
               onBack={() => setProvidersView({ kind: "list" })}
             />
@@ -230,7 +231,8 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
               onBack={() => setProvidersView({ kind: providersView.from })}
               onDone={() => setProvidersView({ kind: "list" })}
               onEditUser={(providerId) =>
-                setProvidersView({ kind: "editUser", providerId })}
+                setProvidersView({ kind: "editUser", providerId })
+              }
             />
           );
         case "addUser":

@@ -1,5 +1,5 @@
-import { assertEquals } from "@std/assert";
 import { THEME_COLORS } from "@lumisca/core/shared";
+import { assertEquals } from "@std/assert";
 import { PWA_ICON_FILES, renderManifest } from "./manifest.ts";
 
 /** The fields this module is responsible for. The manifest is plain JSON;
@@ -51,7 +51,7 @@ Deno.test("the manifest carries what Chromium requires to install", () => {
 
 Deno.test("every manifest icon is a file the build ships", () => {
   const names = (parse("dark").icons ?? []).map((icon) =>
-    icon.src.replace("/pwa/", "")
+    icon.src.replace("/pwa/", ""),
   );
   for (const name of names) {
     assertEquals(PWA_ICON_FILES.includes(name), true, name);

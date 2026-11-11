@@ -1,5 +1,5 @@
-import { useState } from "preact/compat";
 import { toDataUrl } from "@lumisca/core/shared";
+import { useState } from "preact/compat";
 import { Lightbox } from "./Lightbox.tsx";
 
 /** Render image content blocks (base64 `data`) as thumbnails that open
@@ -33,12 +33,10 @@ export function ContentImages({
           />
         ))}
       </div>
-      {
-        /* Rendered even when closed: the overlay stays up while it shrinks
-          (see Lightbox). */
-      }
+      {/* Rendered even when closed: the overlay stays up while it shrinks
+          (see Lightbox). */}
       <Lightbox
-        src={open === null ? null : sources[open] ?? null}
+        src={open === null ? null : (sources[open] ?? null)}
         onClose={() => setOpen(null)}
       />
     </>

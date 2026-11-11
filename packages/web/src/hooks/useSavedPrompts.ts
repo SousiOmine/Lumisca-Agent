@@ -1,6 +1,6 @@
 import { api } from "../api.ts";
-import type { SavedPrompt } from "../types.ts";
 import { createResourceStore, useStore } from "../store.ts";
+import type { SavedPrompt } from "../types.ts";
 
 /**
  * The saved prompts (the settings panel's list, and the `/prompt` menu the
@@ -35,8 +35,12 @@ function samePrompts(
   if (a.length !== b.length) return false;
   return a.every((prompt, index) => {
     const other = b[index];
-    return other !== undefined && prompt.id === other.id &&
-      prompt.label === other.label && prompt.prompt === other.prompt;
+    return (
+      other !== undefined &&
+      prompt.id === other.id &&
+      prompt.label === other.label &&
+      prompt.prompt === other.prompt
+    );
   });
 }
 

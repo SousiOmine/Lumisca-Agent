@@ -1,19 +1,23 @@
 import { assertEquals } from "@std/assert";
-import { LumiscaDb } from "../db/mod.ts";
 import type { AgentMessage } from "../ai/types.ts";
+import { LumiscaDb } from "../db/mod.ts";
 import { createMessageRepo, type MessageRepo } from "../session/messages.ts";
 import { TranscriptStore } from "./transcript.ts";
 
 /** A session whose store holds `count` user prompts, 1 ms apart. */
 function setup(count: number): { db: LumiscaDb; repo: MessageRepo } {
   const db = LumiscaDb.openInMemory();
-  db.db.prepare(
-    "INSERT INTO workspaces (id, name, created_at) VALUES ('ws', 't', 0)",
-  ).run();
-  db.db.prepare(
-    `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
+  db.db
+    .prepare(
+      "INSERT INTO workspaces (id, name, created_at) VALUES ('ws', 't', 0)",
+    )
+    .run();
+  db.db
+    .prepare(
+      `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
      VALUES ('s1', 'ws', 't', 'faux', 'model', 0, 0)`,
-  ).run();
+    )
+    .run();
   const repo = createMessageRepo(db);
   for (let i = 1; i <= count; i++) {
     repo.append("s1", {
@@ -55,7 +59,10 @@ Deno.test("transcript store: an append writes only what is missing", () => {
     // after them is appended from here, and the rows that already exist are
     // not written twice.
     const store = new TranscriptStore("s1", repo, 3, 2);
-    const view = repo.list("s1").slice(2).map((row) => row.message);
+    const view = repo
+      .list("s1")
+      .slice(2)
+      .map((row) => row.message);
     assertEquals(view.length, 3);
     view.push({ role: "user", content: "new", timestamp: 9 } as AgentMessage);
     store.persist(view);
@@ -74,14 +81,7 @@ Deno.test("transcript store: an insert translates the view position", () => {
     const store = new TranscriptStore("s1", repo, 3, 2);
     store.insertAt(1, checkpoint("spliced", 10));
     const roles = repo.list("s1").map((row) => row.role);
-    assertEquals(roles, [
-      "user",
-      "user",
-      "user",
-      "checkpoint",
-      "user",
-      "user",
-    ]);
+    assertEquals(roles, ["user", "user", "user", "checkpoint", "user", "user"]);
   } finally {
     db.close();
   }
@@ -151,7 +151,10 @@ Deno.test("transcript store: a rewind inside the view keeps the rows before it",
     // follows) goes, so the checkpoint survives as the view's first row.
     const removed = store.truncateFrom(6);
     assertEquals(removed.length, 1);
-    assertEquals(store.reload().map((m) => m.role), ["checkpoint"]);
+    assertEquals(
+      store.reload().map((m) => m.role),
+      ["checkpoint"],
+    );
     assertEquals(store.baseIndex, 5);
   } finally {
     db.close();

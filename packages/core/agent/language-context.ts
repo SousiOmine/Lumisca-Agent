@@ -52,9 +52,11 @@ function localeOf(state: unknown): string | undefined {
  * user's message, tool output, files or web pages) — the second half is the
  * part a model gets wrong on its own. */
 export function languageInstruction(locale: Locale): string {
-  return `Write every reply in ${languageName(locale)}, the language ` +
+  return (
+    `Write every reply in ${languageName(locale)}, the language ` +
     "selected in this app's settings. Do not switch to the language of the " +
-    "user's message, tool output, files or web pages.";
+    "user's message, tool output, files or web pages."
+  );
 }
 
 export function createLanguageProvider(
@@ -71,17 +73,19 @@ export function createLanguageProvider(
       const replaced = published !== undefined;
       published = locale;
       const name = languageName(locale);
-      return [{
-        title: `Reply language: ${name}`,
-        body: `${languageInstruction(locale)}${
-          replaced
-            ? ` This replaces the earlier language: the user changed the ` +
-              `setting, so everything from this point on is answered in ` +
-              `${name}.`
-            : ""
-        }`,
-        state: { locale } satisfies LanguageState,
-      }];
+      return [
+        {
+          title: `Reply language: ${name}`,
+          body: `${languageInstruction(locale)}${
+            replaced
+              ? ` This replaces the earlier language: the user changed the ` +
+                `setting, so everything from this point on is answered in ` +
+                `${name}.`
+              : ""
+          }`,
+          state: { locale } satisfies LanguageState,
+        },
+      ];
     },
     rebase(state: unknown): void {
       published = localeOf(state);

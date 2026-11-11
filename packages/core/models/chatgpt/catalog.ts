@@ -10,9 +10,9 @@
 import type { Api, Model, ThinkingLevelMap } from "../../ai/types.ts";
 import { isRecord } from "../../fs.ts";
 import type { SettingsRepo } from "../../settings/repo.ts";
-import { CHATGPT_MODELS_KEY } from "../../shared/settings-keys.ts";
 import { safeJsonParse } from "../../shared/mod.ts";
 import { THINKING_LEVEL_ORDER } from "../../shared/providers.ts";
+import { CHATGPT_MODELS_KEY } from "../../shared/settings-keys.ts";
 import { type FetchLike, requestSignal, truncateBody } from "./http.ts";
 import { CHATGPT_API_BASE, CHATGPT_ORIGINATOR } from "./oauth.ts";
 
@@ -44,9 +44,9 @@ export async function fetchChatGptModels(
   const text = await response.text();
   if (!response.ok) {
     throw new Error(
-      `model catalog request failed: HTTP ${response.status}: ${
-        truncateBody(text)
-      }`,
+      `model catalog request failed: HTTP ${response.status}: ${truncateBody(
+        text,
+      )}`,
     );
   }
   let body: unknown;
@@ -92,18 +92,19 @@ export function saveChatGptModels(
  * occasionally publishes rows for features Lumisca cannot address). */
 function toModel(entry: unknown): Model<Api> | undefined {
   if (!isRecord(entry)) return undefined;
-  const id = typeof entry.slug === "string" && entry.slug.length > 0
-    ? entry.slug
-    : typeof entry.id === "string" && entry.id.length > 0
-    ? entry.id
-    : undefined;
+  const id =
+    typeof entry.slug === "string" && entry.slug.length > 0
+      ? entry.slug
+      : typeof entry.id === "string" && entry.id.length > 0
+        ? entry.id
+        : undefined;
   if (id === undefined) return undefined;
-  const name = typeof entry.display_name === "string" &&
-      entry.display_name.length > 0
-    ? entry.display_name
-    : id;
-  const contextWindow = numberField(entry.context_window) ??
-    numberField(entry.max_context_window);
+  const name =
+    typeof entry.display_name === "string" && entry.display_name.length > 0
+      ? entry.display_name
+      : id;
+  const contextWindow =
+    numberField(entry.context_window) ?? numberField(entry.max_context_window);
   const efforts = effortsOf(entry);
   return {
     id,
@@ -153,9 +154,11 @@ function numberField(value: unknown): number | undefined {
 }
 
 function isStoredModel(value: unknown): value is Model<Api> {
-  return isRecord(value) &&
+  return (
+    isRecord(value) &&
     typeof value.id === "string" &&
     typeof value.name === "string" &&
     typeof value.api === "string" &&
-    typeof value.provider === "string";
+    typeof value.provider === "string"
+  );
 }

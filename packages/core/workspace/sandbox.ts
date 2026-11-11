@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import {
   basename,
   dirname,
@@ -7,7 +8,6 @@ import {
   relative,
   sep,
 } from "node:path";
-import { realpathSync } from "node:fs";
 import { isWithin, normalizeCase, toPosix } from "./path-util.ts";
 
 export type ResolvedPath =

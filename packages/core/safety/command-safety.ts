@@ -1,6 +1,5 @@
-import type { Api, Model } from "../ai/types.ts";
-import type { StreamFn } from "../ai/types.ts";
 import { streamText } from "../ai/stream.ts";
+import type { Api, Model, StreamFn } from "../ai/types.ts";
 import type { CommandApproval, CommandSafetyKind } from "../shared/mod.ts";
 import {
   COMMAND_SAFETY_APPROVALS_KEY,
@@ -151,10 +150,7 @@ export class CommandSafety {
     const list = this.approvals();
     if (!list.some((a) => a.hash === entry.hash)) {
       list.push(entry);
-      this.deps.setSetting(
-        COMMAND_SAFETY_APPROVALS_KEY,
-        JSON.stringify(list),
-      );
+      this.deps.setSetting(COMMAND_SAFETY_APPROVALS_KEY, JSON.stringify(list));
     }
   }
 
@@ -188,20 +184,23 @@ export class CommandSafety {
     command: string,
   ): Promise<{ safe: boolean; reason: string } | null> {
     const controller = new AbortController();
-    const describe = kind === "bash"
-      ? `The agent wants to run this shell command in the directory ${cwd}:\n${command}`
-      : `The agent wants to evaluate this JavaScript/TypeScript snippet (working directory ${cwd}):\n${command}`;
+    const describe =
+      kind === "bash"
+        ? `The agent wants to run this shell command in the directory ${cwd}:\n${command}`
+        : `The agent wants to evaluate this JavaScript/TypeScript snippet (working directory ${cwd}):\n${command}`;
     const collect = async () => {
       const text = await streamText(
         this.deps.streamFn,
         model,
         {
           systemPrompt: SAFETY_SYSTEM_PROMPT,
-          messages: [{
-            role: "user",
-            content: [{ type: "text", text: describe }],
-            timestamp: Date.now(),
-          }],
+          messages: [
+            {
+              role: "user",
+              content: [{ type: "text", text: describe }],
+              timestamp: Date.now(),
+            },
+          ],
         },
         "safety check request failed",
         // One-off conversation per check: a fresh id each call
@@ -229,10 +228,12 @@ export class CommandSafety {
 function isCommandApproval(value: unknown): value is CommandApproval {
   if (typeof value !== "object" || value === null) return false;
   const v = value as Record<string, unknown>;
-  return (v.kind === "bash" || v.kind === "eval") &&
+  return (
+    (v.kind === "bash" || v.kind === "eval") &&
     typeof v.hash === "string" &&
     typeof v.cwd === "string" &&
-    typeof v.command === "string";
+    typeof v.command === "string"
+  );
 }
 
 /** SHA-256 of `text`, hex-encoded (Web Crypto; the record never needs to
@@ -258,7 +259,8 @@ export function parseVerdict(
   if (match === null) return null;
   const parsed = safeJsonParse<unknown>(match[0]);
   if (
-    typeof parsed === "object" && parsed !== null &&
+    typeof parsed === "object" &&
+    parsed !== null &&
     typeof (parsed as { safe?: unknown }).safe === "boolean" &&
     typeof (parsed as { reason?: unknown }).reason === "string"
   ) {

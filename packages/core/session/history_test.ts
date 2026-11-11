@@ -1,10 +1,10 @@
 import { assert, assertEquals, assertThrows } from "@std/assert";
+import { stellaEntryOf } from "../agent/stella-stream.ts";
+import type { AgentMessage } from "../ai/types.ts";
 import { LumiscaDb } from "../db/mod.ts";
+import type { StellaEntry } from "../domain/stella-conversation.ts";
 import { CoreError } from "../errors.ts";
 import { createMessageRepo } from "../session/messages.ts";
-import type { AgentMessage } from "../ai/types.ts";
-import { stellaEntryOf } from "../agent/stella-stream.ts";
-import type { StellaEntry } from "../domain/stella-conversation.ts";
 import { TOOL_HISTORY_SEARCH } from "../shared/mod.ts";
 import { toolText } from "../test-utils.ts";
 import { createHistorySearchTool, MAX_HISTORY_LIMIT } from "./history.ts";
@@ -23,19 +23,21 @@ function entriesOf(messages: readonly AgentMessage[]): StellaEntry[] {
 /** A tool bound to one in-memory conversation, plus the repo that fills it. */
 function setup() {
   const db = LumiscaDb.openInMemory();
-  db.db.prepare(
-    "INSERT INTO workspaces (id, name, created_at) VALUES ('ws', 't', 0)",
-  ).run();
-  db.db.prepare(
-    `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
+  db.db
+    .prepare(
+      "INSERT INTO workspaces (id, name, created_at) VALUES ('ws', 't', 0)",
+    )
+    .run();
+  db.db
+    .prepare(
+      `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
      VALUES (?, 'ws', 't', 'faux', 'model', 0, 0)`,
-  ).run("s1");
+    )
+    .run("s1");
   const repo = createMessageRepo(db);
   const tool = createHistorySearchTool({
     entries: (window) =>
-      entriesOf(
-        repo.listBetween("s1", window).map((row) => row.message),
-      ),
+      entriesOf(repo.listBetween("s1", window).map((row) => row.message)),
   });
   return { db, repo, tool };
 }
@@ -280,11 +282,14 @@ Deno.test("history_search: its own earlier results are not history", async () =>
       role: "toolResult",
       toolCallId: "call-0",
       toolName: TOOL_HISTORY_SEARCH,
-      content: [{
-        type: "text",
-        text: 'Found 1 message(s) matching "pelican".\n\n[user]\nThe code ' +
-          "word is pelican",
-      }],
+      content: [
+        {
+          type: "text",
+          text:
+            'Found 1 message(s) matching "pelican".\n\n[user]\nThe code ' +
+            "word is pelican",
+        },
+      ],
       isError: false,
       timestamp: localDay("2026-10-01", 13),
     } as AgentMessage);
@@ -307,13 +312,15 @@ Deno.test("history_search: a picture-only prompt is a turn, not a hole", async (
     repo.append("s1", {
       role: "user",
       content: [{ type: "text", text: "" }],
-      files: [{
-        name: "image-1.png",
-        path: "/home/agent/agents/a1/uploads/1-ab/01-image-1.png",
-        size: 4,
-        ref: "uploads/1-ab/01-image-1.png",
-        image: true,
-      }],
+      files: [
+        {
+          name: "image-1.png",
+          path: "/home/agent/agents/a1/uploads/1-ab/01-image-1.png",
+          size: 4,
+          ref: "uploads/1-ab/01-image-1.png",
+          image: true,
+        },
+      ],
       timestamp: localDay("2026-10-01"),
     } as AgentMessage);
 
@@ -335,12 +342,14 @@ Deno.test("history_search: what the agent sent is part of the conversation", asy
       content: [{ type: "text", text: "Sent the message and a file." }],
       details: {
         text: "",
-        attachments: [{
-          name: "0123456789ab.pdf",
-          displayName: "report.pdf",
-          size: 1234,
-          inline: false,
-        }],
+        attachments: [
+          {
+            name: "0123456789ab.pdf",
+            displayName: "report.pdf",
+            size: 1234,
+            inline: false,
+          },
+        ],
       },
       isError: false,
       timestamp: localDay("2026-10-01", 11),

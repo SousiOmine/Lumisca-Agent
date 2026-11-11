@@ -33,9 +33,7 @@ Deno.test("appFileHeaders: a stable URL revalidates every time", () => {
 Deno.test("contentEtag: equal bodies share a validator, different ones do not", () => {
   assertEquals(
     contentEtag("body { color: red; }"),
-    contentEtag(
-      "body { color: red; }",
-    ),
+    contentEtag("body { color: red; }"),
   );
   assert(contentEtag("a") !== contentEtag("b"));
   // The form is a weak validator: the comparison is about content, not about

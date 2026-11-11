@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "preact/compat";
 import { errorMessage } from "@lumisca/core/shared";
+import { useCallback, useEffect, useRef, useState } from "preact/compat";
 import { onServerFailure, token } from "../api-client.ts";
 import { type LocalServerStatus, serverApi } from "../shell.ts";
 
@@ -79,7 +79,7 @@ export function useServerHealth(active: boolean): ServerHealth {
     // A new incident starts when the previous failure is stale; failures
     // within one incident keep the original start (hang detection).
     setIncidentSince((prev) =>
-      now - prev < FAILURE_FRESHNESS_MS && prev !== 0 ? prev : now
+      now - prev < FAILURE_FRESHNESS_MS && prev !== 0 ? prev : now,
     );
     setHealthyRounds(0);
     setDismissed(false);
@@ -184,7 +184,8 @@ export function useServerHealth(active: boolean): ServerHealth {
   // child with failures persisting past HUNG_AFTER_MS is a hang — show the
   // same banner (its log tail is then the only clue). Transient blips
   // (fresh but brief, or already recovering) stay quiet.
-  const disconnected = server !== null &&
+  const disconnected =
+    server !== null &&
     localDisplay &&
     failureFresh &&
     healthyRounds < RECOVER_ROUNDS &&

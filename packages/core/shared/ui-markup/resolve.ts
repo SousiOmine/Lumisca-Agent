@@ -47,9 +47,7 @@ function resolveBlocks(
           ? value.value
           : [];
         items.forEach((item, index) => {
-          resolved.push(
-            ...resolveBlocks(block.blocks, data, { item, index }),
-          );
+          resolved.push(...resolveBlocks(block.blocks, data, { item, index }));
         });
         break;
       }

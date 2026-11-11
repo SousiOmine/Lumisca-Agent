@@ -1,18 +1,17 @@
-import { useState } from "preact/compat";
+import type { CommandApproval } from "@lumisca/core/shared";
 import {
   COMMAND_SAFETY_ENABLED_KEY,
   FAST_MODEL_KEY,
   parseModelPreference,
 } from "@lumisca/core/shared";
-import type { CommandApproval } from "@lumisca/core/shared";
+import { useEffect, useState } from "preact/compat";
 import { api } from "../../api.ts";
-import { errorText } from "../../providers.ts";
-import { useEffect } from "preact/compat";
 import { useAsyncEffect } from "../../hooks/useAsync.ts";
 import { useSaveAction } from "../../hooks/useSave.ts";
-import { SettingRow, Toggle } from "../SettingRow.tsx";
-import { settingsStore, useSettings } from "../../settingsStore.ts";
 import { useT } from "../../i18n.ts";
+import { errorText } from "../../providers.ts";
+import { settingsStore, useSettings } from "../../settingsStore.ts";
+import { SettingRow, Toggle } from "../SettingRow.tsx";
 
 /** Settings → セキュリティ: the command safety check. When enabled, the
  * fast model judges every bash / eval / async_bash command before it runs;
@@ -40,7 +39,8 @@ export function CommandSafetyPanel() {
   }, [loaded, settings.values]);
 
   useAsyncEffect((isStale) => {
-    void api.getCommandSafety()
+    void api
+      .getCommandSafety()
       .then((state) => {
         if (!isStale()) setApprovals(state.approvals);
       })
@@ -107,38 +107,33 @@ export function CommandSafetyPanel() {
             </button>
           )}
         </div>
-        {approvals.length === 0
-          ? (
-            <p className="settings-note">
-              {loaded
-                ? t("settings.security.approvedNone")
-                : t("common.loading")}
-            </p>
-          )
-          : (
-            <ul className="approval-list">
-              {approvals.map((entry) => (
-                <li key={entry.hash} className="approval-item">
-                  <div className="approval-body">
-                    <code className="approval-command">{entry.command}</code>
-                    <span className="approval-meta">
-                      {entry.kind} · {entry.cwd}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    className="btn small"
-                    disabled={saving}
-                    onClick={() =>
-                      removeApproval(entry.hash)}
-                    aria-label={t("settings.security.deleteApprovalAria")}
-                  >
-                    {t("common.delete")}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+        {approvals.length === 0 ? (
+          <p className="settings-note">
+            {loaded ? t("settings.security.approvedNone") : t("common.loading")}
+          </p>
+        ) : (
+          <ul className="approval-list">
+            {approvals.map((entry) => (
+              <li key={entry.hash} className="approval-item">
+                <div className="approval-body">
+                  <code className="approval-command">{entry.command}</code>
+                  <span className="approval-meta">
+                    {entry.kind} · {entry.cwd}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="btn small"
+                  disabled={saving}
+                  onClick={() => removeApproval(entry.hash)}
+                  aria-label={t("settings.security.deleteApprovalAria")}
+                >
+                  {t("common.delete")}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {error && (

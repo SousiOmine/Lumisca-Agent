@@ -15,14 +15,12 @@ import { AgentAvatar } from "./AgentAvatar.tsx";
 
 const AGENT = "6f0c1f9e-2a44-4f4d-9f0e-8a3b7c5d1e2f";
 
-function render(
-  props: {
-    agentId?: string;
-    name: string;
-    icon: string;
-    size?: number;
-  },
-): string {
+function render(props: {
+  agentId?: string;
+  name: string;
+  icon: string;
+  size?: number;
+}): string {
   initLocale("ja");
   return renderToString(
     createElement(AgentAvatar, {

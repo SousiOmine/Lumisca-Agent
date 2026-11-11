@@ -1,5 +1,4 @@
-import { StellaSidebar } from "./StellaSidebar.tsx";
-import { StellaView } from "./StellaView.tsx";
+import type { StellaHook } from "../hooks/useStella.ts";
 import type {
   PendingFile,
   PendingImage,
@@ -7,7 +6,8 @@ import type {
   StellaAgentSummary,
   StellaStatus,
 } from "../types.ts";
-import type { StellaHook } from "../hooks/useStella.ts";
+import { StellaSidebar } from "./StellaSidebar.tsx";
+import { StellaView } from "./StellaView.tsx";
 
 /**
  * stella mode's screen: the agents on the left, the open conversation in the
@@ -106,15 +106,18 @@ export function StellaModeScreen({
         files={files}
         onFilesChange={onFilesChange}
         onPrompt={(text, promptImages, promptFiles) =>
-          stella.prompt(text, promptImages, promptFiles)}
+          stella.prompt(text, promptImages, promptFiles)
+        }
         onAbort={() => stella.abort()}
         onRewind={(timestamp) => stella.rewind(timestamp)}
         onLoadOlder={stella.loadOlder}
         loadingOlder={stella.loadingOlder}
         onFinishHandover={(note, toolCallId) =>
-          stella.finishHandover(note, toolCallId)}
+          stella.finishHandover(note, toolCallId)
+        }
         onProvideEnv={(value, toolCallId) =>
-          stella.provideEnv(value, toolCallId)}
+          stella.provideEnv(value, toolCallId)
+        }
         onDeclineEnv={(toolCallId) => stella.declineEnv(toolCallId)}
         onOpenSettings={onOpenSettings}
       />

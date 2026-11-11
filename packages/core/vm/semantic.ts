@@ -38,8 +38,8 @@ import {
   type ToolResult,
 } from "../tools/schema.ts";
 import { requireOneOf } from "../tools/validate.ts";
-import { VM_A11Y_HELPER } from "./contract.ts";
 import type { VmExec } from "./container.ts";
+import { VM_A11Y_HELPER } from "./contract.ts";
 
 /** One helper call is a `podman exec` into a machine that is already running;
  * a walk of a large window is the slow case. */
@@ -56,27 +56,37 @@ const findSchema = object({
       'usually the program name ("chromium", "zenity", "nautilus"). The ' +
       "result lists the running names when nothing matches.",
   ),
-  role: optional(string(
-    'The element kind, e.g. "push button", "entry", "check box", ' +
-      '"combo box", "menu item", "page tab", "link", "table cell", ' +
-      '"label". Omit to match any kind.',
-  )),
-  name: optional(string(
-    "Text the element's name contains (case-insensitive). This is what the " +
-      "control says: a button's label, a field's label.",
-  )),
-  text: optional(string(
-    "Text the element's name OR its text content contains. Use it to find a " +
-      "row or a cell by what it shows.",
-  )),
-  limit: optional(integer("How many matches to return (default 20, max 60)", {
-    min: 1,
-    max: 60,
-  })),
-  actionable: optional(string(
-    'Whether to list only elements that can be acted on (default "yes"). ' +
-      '"no" also reports static text and containers, e.g. to read a page.',
-  )),
+  role: optional(
+    string(
+      'The element kind, e.g. "push button", "entry", "check box", ' +
+        '"combo box", "menu item", "page tab", "link", "table cell", ' +
+        '"label". Omit to match any kind.',
+    ),
+  ),
+  name: optional(
+    string(
+      "Text the element's name contains (case-insensitive). This is what the " +
+        "control says: a button's label, a field's label.",
+    ),
+  ),
+  text: optional(
+    string(
+      "Text the element's name OR its text content contains. Use it to find a " +
+        "row or a cell by what it shows.",
+    ),
+  ),
+  limit: optional(
+    integer("How many matches to return (default 20, max 60)", {
+      min: 1,
+      max: 60,
+    }),
+  ),
+  actionable: optional(
+    string(
+      'Whether to list only elements that can be acted on (default "yes"). ' +
+        '"no" also reports static text and containers, e.g. to read a page.',
+    ),
+  ),
 });
 
 const doSchema = object({
@@ -89,40 +99,46 @@ const doSchema = object({
     'The action: "click" | "set_value" | "check" | "uncheck" | "select" | ' +
       '"focus" | "key" | "scroll".',
   ),
-  value: optional(string(
-    "set_value: the text to write. select: the option's visible name.",
-  )),
-  key: optional(string(
-    "key: the key or combination by X11 name, e.g. `Return`, `Escape`, " +
-      "`Tab`, `ctrl+a`, `ctrl+v`.",
-  )),
-  vertical: optional(integer(
-    "scroll: notches to scroll, positive for down (default 0)",
-  )),
-  horizontal: optional(integer(
-    "scroll: notches to scroll, positive for right (default 0)",
-  )),
+  value: optional(
+    string("set_value: the text to write. select: the option's visible name."),
+  ),
+  key: optional(
+    string(
+      "key: the key or combination by X11 name, e.g. `Return`, `Escape`, " +
+        "`Tab`, `ctrl+a`, `ctrl+v`.",
+    ),
+  ),
+  vertical: optional(
+    integer("scroll: notches to scroll, positive for down (default 0)"),
+  ),
+  horizontal: optional(
+    integer("scroll: notches to scroll, positive for right (default 0)"),
+  ),
 });
 
 const waitSchema = object({
-  ms: optional(integer(
-    "Plain delay in milliseconds (max 30000). Omit to wait for a condition.",
-    { min: 0, max: MAX_WAIT_MS },
-  )),
+  ms: optional(
+    integer(
+      "Plain delay in milliseconds (max 30000). Omit to wait for a condition.",
+      { min: 0, max: MAX_WAIT_MS },
+    ),
+  ),
   app: optional(string("The application to watch (a condition needs it).")),
   role: optional(string("Condition: the element kind to wait for.")),
   name: optional(string("Condition: text the element's name contains.")),
-  text: optional(string(
-    "Condition: text in the element's name or content.",
-  )),
-  gone: optional(string(
-    'Condition: wait for the element to DISAPPEAR instead (default "no"). ' +
-      "Use it after an action that closes a dialog.",
-  )),
-  timeout_ms: optional(integer(
-    "How long to wait for the condition (default 5000, max 30000)",
-    { min: 100, max: MAX_WAIT_MS },
-  )),
+  text: optional(string("Condition: text in the element's name or content.")),
+  gone: optional(
+    string(
+      'Condition: wait for the element to DISAPPEAR instead (default "no"). ' +
+        "Use it after an action that closes a dialog.",
+    ),
+  ),
+  timeout_ms: optional(
+    integer("How long to wait for the condition (default 5000, max 30000)", {
+      min: 100,
+      max: MAX_WAIT_MS,
+    }),
+  ),
 });
 
 export interface SemanticToolsOptions {
@@ -131,9 +147,7 @@ export interface SemanticToolsOptions {
 }
 
 /** Build the semantic tool family. */
-export function createVmSemanticTools(
-  options: SemanticToolsOptions,
-): Tool[] {
+export function createVmSemanticTools(options: SemanticToolsOptions): Tool[] {
   return [
     createFindTool(options),
     createDoTool(options),
@@ -178,7 +192,8 @@ async function callHelper(
   } catch {
     throw new CoreError(
       "The machine's accessibility helper answered something that is not " +
-        "JSON: " + result.stdout.slice(0, 400),
+        "JSON: " +
+        result.stdout.slice(0, 400),
       "unavailable",
     );
   }
@@ -207,9 +222,9 @@ function describeRoles(answer: Record<string, unknown>): string {
   return `\nRoles present in that window: ${roles.join(", ")}.`;
 }
 
-function createFindTool(
-  { exec }: SemanticToolsOptions,
-): Tool<typeof findSchema> {
+function createFindTool({
+  exec,
+}: SemanticToolsOptions): Tool<typeof findSchema> {
   return {
     name: TOOL_VM_FIND,
     label: "VM Find",
@@ -284,7 +299,8 @@ function formatMatch(match: Record<string, unknown>): string {
     parts.push(`"${match.name}"`);
   }
   if (
-    typeof match.text === "string" && match.text !== "" &&
+    typeof match.text === "string" &&
+    match.text !== "" &&
     match.text !== match.name
   ) {
     parts.push(`text: ${match.text}`);
@@ -328,20 +344,16 @@ function createDoTool({ exec }: SemanticToolsOptions): Tool<typeof doSchema> {
     parameters: doSchema,
     execute: async (_id, params, signal): Promise<ToolResult> => {
       const action = params.action.trim();
-      requireOneOf(
-        "action",
-        action,
-        [
-          "click",
-          "set_value",
-          "check",
-          "uncheck",
-          "select",
-          "focus",
-          "key",
-          "scroll",
-        ] as const,
-      );
+      requireOneOf("action", action, [
+        "click",
+        "set_value",
+        "check",
+        "uncheck",
+        "select",
+        "focus",
+        "key",
+        "scroll",
+      ] as const);
       const request: Record<string, unknown> = {
         command: "do",
         ref: params.ref,
@@ -389,10 +401,12 @@ function createDoTool({ exec }: SemanticToolsOptions): Tool<typeof doSchema> {
       const answer = await callHelper(exec, request, signal);
       if (answer.unchanged === true) {
         return {
-          content: [{
-            type: "text",
-            text: `The element was already in that state; nothing was done.`,
-          }],
+          content: [
+            {
+              type: "text",
+              text: `The element was already in that state; nothing was done.`,
+            },
+          ],
           details: { action, unchanged: true, states: answer.states },
         };
       }
@@ -432,9 +446,9 @@ function formatDoAnswer(
   return lines.join("\n");
 }
 
-function createWaitTool(
-  { exec }: SemanticToolsOptions,
-): Tool<typeof waitSchema> {
+function createWaitTool({
+  exec,
+}: SemanticToolsOptions): Tool<typeof waitSchema> {
   return {
     name: TOOL_VM_WAIT,
     label: "VM Wait",
@@ -447,8 +461,10 @@ function createWaitTool(
       "reads a settled screen.",
     parameters: waitSchema,
     execute: async (_id, params, signal): Promise<ToolResult> => {
-      const condition = params.app !== undefined &&
-        (params.role !== undefined || params.name !== undefined ||
+      const condition =
+        params.app !== undefined &&
+        (params.role !== undefined ||
+          params.name !== undefined ||
           params.text !== undefined);
       const request: Record<string, unknown> = { command: "wait" };
       if (params.ms !== undefined && !condition) {
@@ -485,12 +501,14 @@ function createWaitTool(
       }
       const present = answer.present === true;
       return {
-        content: [{
-          type: "text",
-          text: present
-            ? `The element is present (waited ${answer.waited_ms} ms).`
-            : `The element is gone (waited ${answer.waited_ms} ms).`,
-        }],
+        content: [
+          {
+            type: "text",
+            text: present
+              ? `The element is present (waited ${answer.waited_ms} ms).`
+              : `The element is gone (waited ${answer.waited_ms} ms).`,
+          },
+        ],
         details: { present, waited_ms: answer.waited_ms },
       };
     },

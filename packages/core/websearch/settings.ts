@@ -49,12 +49,10 @@ export interface WebSearchSettingsStore {
 }
 
 /** Backed by the settings store (the JSONC file). */
-export function createWebSearchSettingsStore(
-  settings: {
-    get(key: string): string | undefined;
-    set(key: string, value: string): void;
-  },
-): WebSearchSettingsStore {
+export function createWebSearchSettingsStore(settings: {
+  get(key: string): string | undefined;
+  set(key: string, value: string): void;
+}): WebSearchSettingsStore {
   return {
     read: () => parseWebSearchSettings(settings.get(WEB_SEARCH_KEY)),
     write: (next) => {
@@ -77,9 +75,8 @@ export function parseWebSearchSettings(
   for (const id of WEB_SEARCH_PROVIDER_IDS) {
     const entry = entries[id];
     if (!isRecord(entry)) continue;
-    const apiKey = typeof entry["apiKey"] === "string"
-      ? entry["apiKey"].trim()
-      : "";
+    const apiKey =
+      typeof entry["apiKey"] === "string" ? entry["apiKey"].trim() : "";
     if (apiKey.length === 0) continue;
     providers.set(id, { apiKey });
   }
@@ -88,11 +85,12 @@ export function parseWebSearchSettings(
   // repaired to the first configured one. An absent (or null) default is not
   // repaired: that is how search is switched off, and it must stay off.
   const storedDefault = parsed["default"];
-  const defaultId = typeof storedDefault !== "string"
-    ? null
-    : isWebSearchProviderId(storedDefault) && providers.has(storedDefault)
-    ? storedDefault
-    : firstConfigured(providers);
+  const defaultId =
+    typeof storedDefault !== "string"
+      ? null
+      : isWebSearchProviderId(storedDefault) && providers.has(storedDefault)
+        ? storedDefault
+        : firstConfigured(providers);
 
   return { defaultId, providers };
 }
@@ -172,9 +170,10 @@ export function removeWebSearchProvider(
   const providers = new Map(settings.providers);
   providers.delete(id);
   return {
-    defaultId: settings.defaultId === id
-      ? firstConfigured(providers)
-      : settings.defaultId,
+    defaultId:
+      settings.defaultId === id
+        ? firstConfigured(providers)
+        : settings.defaultId,
     providers,
   };
 }

@@ -82,15 +82,19 @@ export function isPruned(message: AgentMessage): boolean {
   switch (message.role) {
     case "assistant":
       // A reduced turn holds no calls (they became one text marker).
-      return !message.content.some((block) => block.type === "toolCall") &&
-        message.content.some((block) =>
-          block.type === "text" && isPrunedText(block.text)
-        );
+      return (
+        !message.content.some((block) => block.type === "toolCall") &&
+        message.content.some(
+          (block) => block.type === "text" && isPrunedText(block.text),
+        )
+      );
     case "toolResult":
-      return message.content.length > 0 &&
-        message.content.every((block) =>
-          block.type === "text" && isPrunedText(block.text)
-        );
+      return (
+        message.content.length > 0 &&
+        message.content.every(
+          (block) => block.type === "text" && isPrunedText(block.text),
+        )
+      );
     case "context":
     case "notification":
       return isPrunedText(message.body);

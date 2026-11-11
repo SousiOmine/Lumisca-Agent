@@ -1,8 +1,8 @@
-import { useCallback, useState } from "preact/compat";
 // Since preact 11 the JSX namespace carries only the intrinsic elements;
 // targeted event types live in the module root (they always did, the
 // namespace used to re-export them).
 import type { TargetedKeyboardEvent } from "preact";
+import { useCallback, useState } from "preact/compat";
 
 /** Props that turn a row element into a keyboard-operable disclosure. */
 export interface ExpandableRowProps {
@@ -48,12 +48,12 @@ export function useExpandableRow(enabled = true): ExpandableRow {
 
   const triggerProps: ExpandableRowProps = enabled
     ? {
-      onClick: toggle,
-      onKeyDown,
-      role: "button",
-      tabIndex: 0,
-      "aria-expanded": open,
-    }
+        onClick: toggle,
+        onKeyDown,
+        role: "button",
+        tabIndex: 0,
+        "aria-expanded": open,
+      }
     : { onClick: toggle, onKeyDown };
 
   return { open, triggerProps };

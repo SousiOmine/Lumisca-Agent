@@ -1,3 +1,4 @@
+import { mergeRanges, stripTrailingCR } from "../../lines.ts";
 import type { ResolvedPath, Sandbox } from "../../workspace/sandbox.ts";
 import type {
   BackendDirEntry,
@@ -7,7 +8,6 @@ import type {
   RangeReadResult,
 } from "../file-backend.ts";
 import { MAX_TOOL_OUTPUT } from "../truncate.ts";
-import { mergeRanges, stripTrailingCR } from "../../lines.ts";
 
 /**
  * The host (this machine) implementation of {@link FileBackend}: a workspace
@@ -102,7 +102,8 @@ export class HostFileBackend implements FileBackend {
         // the front as the collection exceeds that (keeping at least one
         // line) so huge ranges stay memory-bounded.
         while (
-          collectedBytes > MAX_TOOL_OUTPUT && startIndex < lines.length - 1
+          collectedBytes > MAX_TOOL_OUTPUT &&
+          startIndex < lines.length - 1
         ) {
           collectedBytes -= lines[startIndex]!.length + 1;
           startIndex++;

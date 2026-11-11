@@ -7,15 +7,16 @@
  * from the compactor itself (which decides WHEN and performs the call) so
  * that question can be read, and tested, without a model in sight.
  */
-import type { AgentMessage, Message } from "./types.ts";
-import { CONTEXT_SAFETY_TOKENS } from "./budget.ts";
+
+import { toLlmMessages } from "../domain/notification.ts";
 import { createLogger } from "../log.ts";
 import {
   estimateMessageTokens,
   estimateTextTokens,
 } from "../shared/token-estimate.ts";
-import { toLlmMessages } from "../domain/notification.ts";
+import { CONTEXT_SAFETY_TOKENS } from "./budget.ts";
 import type { CompactionBudgets } from "./compaction-policy.ts";
+import type { AgentMessage, Message } from "./types.ts";
 
 const log = createLogger("compaction");
 
@@ -73,9 +74,10 @@ function contentText(content: string | readonly unknown[]): string {
 function truncateForSummary(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text;
   const truncated = text.length - maxChars;
-  return `${
-    text.slice(0, maxChars)
-  }\n\n[... ${truncated} more characters truncated]`;
+  return `${text.slice(
+    0,
+    maxChars,
+  )}\n\n[... ${truncated} more characters truncated]`;
 }
 
 /** Serialize one LLM message into the `[Role]: text` shape pi uses. */
@@ -140,8 +142,11 @@ export function buildSummarizationPrompt(
   budgets: CompactionBudgets,
   sessionId: string,
 ): string {
-  const budget = budgets.contextWindow - CONTEXT_SAFETY_TOKENS -
-    MIN_SUMMARY_TOKENS - estimateTextTokens(skeleton);
+  const budget =
+    budgets.contextWindow -
+    CONTEXT_SAFETY_TOKENS -
+    MIN_SUMMARY_TOKENS -
+    estimateTextTokens(skeleton);
   let total = parts.reduce((sum, part) => sum + estimateTextTokens(part), 0);
   let from = 0;
   while (from < parts.length - 1 && total > budget) {
@@ -202,7 +207,7 @@ export function transcriptUnits(
   from = 0,
 ): TranscriptUnit[] {
   const units: TranscriptUnit[] = [];
-  for (let i = from; i < messages.length;) {
+  for (let i = from; i < messages.length; ) {
     const message = messages[i]!;
     let count = 1;
     if (message.role === "assistant") {
@@ -272,9 +277,8 @@ export function selectCompactionSpan(
   }
   if (cutUnit <= 0) return null;
   const first = units[0]!;
-  const cutIndex = cutUnit < units.length
-    ? units[cutUnit]!.index
-    : messages.length;
+  const cutIndex =
+    cutUnit < units.length ? units[cutUnit]!.index : messages.length;
   let headTokens = 0;
   for (let i = 0; i < cutUnit; i++) headTokens += units[i]!.tokens;
   let hasSourceMessage = false;

@@ -1,6 +1,6 @@
-import { useState } from "preact/compat";
-import type { ComponentChildren } from "preact";
 import { IconChevronDown, IconChevronUp } from "@tabler/icons-preact";
+import type { ComponentChildren } from "preact";
+import { useState } from "preact/compat";
 import { useT } from "../i18n.ts";
 
 interface CollapsiblePanelProps {
@@ -24,16 +24,14 @@ interface CollapsiblePanelProps {
  * background): a header that toggles the body. Starts collapsed — the stack
  * shares the input area's height with the composer, so an open body would
  * push the field the reader is typing into up the screen. */
-export function CollapsiblePanel(
-  {
-    kind,
-    icon,
-    title,
-    detail,
-    summary,
-    children,
-  }: CollapsiblePanelProps,
-) {
+export function CollapsiblePanel({
+  kind,
+  icon,
+  title,
+  detail,
+  summary,
+  children,
+}: CollapsiblePanelProps) {
   const t = useT();
   const [collapsed, setCollapsed] = useState(true);
   const open = !collapsed;
@@ -42,9 +40,9 @@ export function CollapsiblePanel(
       <button
         type="button"
         className={`${kind}-header`}
-        title={collapsed
-          ? t("common.expandPanel")
-          : t("panels.common.collapse")}
+        title={
+          collapsed ? t("common.expandPanel") : t("panels.common.collapse")
+        }
         aria-expanded={open}
         onClick={() => setCollapsed((c) => !c)}
       >
@@ -54,18 +52,20 @@ export function CollapsiblePanel(
           // One truncated line; the tooltip carries the rest. It sits on the
           // span, not on the button, so the header's own tooltip keeps
           // saying what a click does.
-          <span className={`${kind}-detail`} title={detail}>{detail}</span>
+          <span className={`${kind}-detail`} title={detail}>
+            {detail}
+          </span>
         )}
         <span className={`${kind}-summary`}>{summary}</span>
-        {collapsed
-          ? <IconChevronDown size={14} />
-          : <IconChevronUp size={14} />}
+        {collapsed ? (
+          <IconChevronDown size={14} />
+        ) : (
+          <IconChevronUp size={14} />
+        )}
       </button>
-      {
-        /* Always mounted, with `data-open` carrying the state: a body that
-         * unmounts cannot animate its height, and the collapse is the whole
-         * movement (styles/motion.css, `.collapse`). */
-      }
+      {/* Always mounted, with `data-open` carrying the state: a body that
+       * unmounts cannot animate its height, and the collapse is the whole
+       * movement (styles/motion.css, `.collapse`). */}
       <div className="collapse" data-open={open}>
         <div className="collapse-inner">
           <div className={`${kind}-body`}>{children}</div>

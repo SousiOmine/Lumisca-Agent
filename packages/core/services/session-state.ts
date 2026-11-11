@@ -1,7 +1,7 @@
 import type { SessionAgent } from "../agent/session-agent.ts";
-import type { BackgroundCommandInfo } from "../tools/background.ts";
-import type { PendingQuestion } from "../tools/ask.ts";
 import type { TaskInfo, TodoPhase } from "../shared/mod.ts";
+import type { PendingQuestion } from "../tools/ask.ts";
+import type { BackgroundCommandInfo } from "../tools/background.ts";
 import type { SessionServiceDeps } from "./session-deps.ts";
 
 type Deps = Pick<SessionServiceDeps, "sessions" | "pool">;

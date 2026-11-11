@@ -31,9 +31,11 @@ export interface ModalKeyboardOptions {
  * in the document: a keyboard user returns to the control they opened the
  * surface from, not to the top of the page.
  */
-export function useModalKeyboard(
-  { surface, onClose, lockScroll = true }: ModalKeyboardOptions,
-): void {
+export function useModalKeyboard({
+  surface,
+  onClose,
+  lockScroll = true,
+}: ModalKeyboardOptions): void {
   useEffect(() => {
     const opener = document.activeElement;
     surface.current?.focus();
@@ -49,7 +51,8 @@ export function useModalKeyboard(
       // page behind it. A dialog owns a real focus trap (see Modal), which
       // runs first and consumes the key before this sees it.
       if (
-        event.key === "Tab" && (surface.current?.childElementCount ?? 0) === 0
+        event.key === "Tab" &&
+        (surface.current?.childElementCount ?? 0) === 0
       ) {
         event.preventDefault();
         surface.current?.focus();

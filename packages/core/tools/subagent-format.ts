@@ -1,10 +1,9 @@
 import type { AgentMessage } from "../ai/types.ts";
-import { contentText } from "../shared/mod.ts";
 import type { NotificationPayload } from "../domain/notification.ts";
 import type { SubagentType, TaskInfo } from "../shared/mod.ts";
-import { DEFAULT_LOCALE, type Locale } from "../shared/mod.ts";
-import { MAX_TOOL_OUTPUT, truncate, truncatedNote } from "./truncate.ts";
+import { contentText, DEFAULT_LOCALE, type Locale } from "../shared/mod.ts";
 import { outputLanguageRule } from "./language.ts";
+import { MAX_TOOL_OUTPUT, truncate, truncatedNote } from "./truncate.ts";
 
 /** The system prompt of one sub-agent: its identity (ids and role, which
  * only the caller knows), the protocol of its report, and the reply
@@ -21,18 +20,21 @@ export function subagentSystemPrompt(
   language: Locale = DEFAULT_LOCALE,
 ): string {
   const role = type === "explore" ? "research" : "coding";
-  const readOnly = type === "explore"
-    ? " You are read-only: investigate with read/list_dir, the shell (grep, " +
-      "find, git log, ...) and skill, report findings with file references " +
-      "(path:line), and do not modify files or run a command with side " +
-      "effects."
-    : "";
-  return `You are a ${role} sub-agent of Lumisca, started by agent ${parentId} ` +
+  const readOnly =
+    type === "explore"
+      ? " You are read-only: investigate with read/list_dir, the shell (grep, " +
+        "find, git log, ...) and skill, report findings with file references " +
+        "(path:line), and do not modify files or run a command with side " +
+        "effects."
+      : "";
+  return (
+    `You are a ${role} sub-agent of Lumisca, started by agent ${parentId} ` +
     `to handle one piece of work. Your own id is ${agentId}.${readOnly}
 Work on the assigned task and answer with a complete final report as your last message.
 If you need input mid-task, send a message to ${parentId} with send_message. You cannot ask the user directly.
 ${outputLanguageRule(language)}
-`;
+`
+  );
 }
 
 /** The text of the final assistant message of a finished sub-agent run. */
@@ -71,18 +73,21 @@ export function endsWithToolCallSyntax(text: string): boolean {
  * block, or "" when the report ends normally. */
 function toolSyntaxWarning(info: TaskInfo): string {
   if (info.text.length === 0 || !endsWithToolCallSyntax(info.text)) return "";
-  return "\n\n[warning] This report ends inside a tool-call block, which " +
+  return (
+    "\n\n[warning] This report ends inside a tool-call block, which " +
     "means the provider streamed a tool call as plain text and it never " +
-    "executed. Treat the report as incomplete.";
+    "executed. Treat the report as incomplete."
+  );
 }
 
 /** The partial output a failed run produced before the transport cut it. */
 function partialOutputSection(info: TaskInfo): string {
   const text = info.text.trim();
   if (text.length === 0) return "";
-  const tail = text.length <= PARTIAL_OUTPUT_TAIL_CHARS
-    ? text
-    : `…\n${text.slice(-PARTIAL_OUTPUT_TAIL_CHARS)}`;
+  const tail =
+    text.length <= PARTIAL_OUTPUT_TAIL_CHARS
+      ? text
+      : `…\n${text.slice(-PARTIAL_OUTPUT_TAIL_CHARS)}`;
   return `\n\n[partial output before the failure]\n${tail}`;
 }
 
@@ -101,8 +106,8 @@ export function formatTaskCompletion(
     return {
       kind: "task",
       title: `[Task ${info.agentId} (${info.description}) finished]`,
-      body: result.text +
-        (result.truncated ? truncatedNote("task result") : ""),
+      body:
+        result.text + (result.truncated ? truncatedNote("task result") : ""),
       status: "success",
     };
   }
@@ -124,14 +129,12 @@ export function formatTaskCompletion(
 
 /** The text shown by task_output for one task. */
 export function formatTaskOutput(info: TaskInfo): string {
-  const head =
-    `Agent ${info.agentId} (${info.subagentType}, ${info.description}): ${info.status}`;
+  const head = `Agent ${info.agentId} (${info.subagentType}, ${info.description}): ${info.status}`;
   const text = info.text.trim();
   if (info.status === "running") {
     return text.length > 0 ? `${head}\nLive output (tail):\n${text}` : head;
   }
-  const body = text.length > 0
-    ? `${head}\n${text}${toolSyntaxWarning(info)}`
-    : head;
+  const body =
+    text.length > 0 ? `${head}\n${text}${toolSyntaxWarning(info)}` : head;
   return body;
 }

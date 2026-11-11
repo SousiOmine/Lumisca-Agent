@@ -1,4 +1,4 @@
-import { stellaApiStub } from "./test-stubs.ts";
+import type { PromptFileRef } from "@lumisca/core";
 /**
  * The conversation's prompt takes the same attachments code mode's prompt
  * does, and puts them where the agent can reach them.
@@ -10,10 +10,10 @@ import { stellaApiStub } from "./test-stubs.ts";
  * years (see ai/types.ts UserMessage.files).
  */
 import { assertEquals } from "@std/assert";
-import type { PromptFileRef } from "@lumisca/core";
-import { stellaRoutes } from "./stella.ts";
-import { jsonError } from "./util.ts";
 import type { StellaApi } from "./stella.ts";
+import { stellaRoutes } from "./stella.ts";
+import { stellaApiStub } from "./test-stubs.ts";
+import { jsonError } from "./util.ts";
 
 interface Received {
   texts: string[];
@@ -62,10 +62,12 @@ function fakeCore(received: Received): StellaApi {
       uploads: readonly { name: string; bytes: Uint8Array }[],
     ) => {
       received.order.push("upload");
-      received.uploads.push(uploads.map((file) => ({
-        name: file.name,
-        bytes: file.bytes,
-      })));
+      received.uploads.push(
+        uploads.map((file) => ({
+          name: file.name,
+          bytes: file.bytes,
+        })),
+      );
       received.saved = uploads.map((file, index) => ({
         name: file.name,
         path: `/home/agent/agents/a1/uploads/1-ab/0${index}-${file.name}`,

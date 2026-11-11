@@ -15,6 +15,9 @@
  * index and the user's own name per file), so a caller cannot address a
  * directory outside the uploads folder.
  */
+
+import { extname } from "node:path";
+import { CoreError } from "../errors.ts";
 import {
   attachmentDisplayName,
   isInlineImageExtension,
@@ -23,10 +26,8 @@ import {
   MAX_ATTACHMENTS_TOTAL_BYTES,
   type PromptFileRef,
 } from "../shared/mod.ts";
-import { extname } from "node:path";
-import { CoreError } from "../errors.ts";
-import { VM_WORKDIR, vmAgentDir } from "./contract.ts";
 import type { VmExec, VmExecBytes } from "./container.ts";
+import { VM_WORKDIR, vmAgentDir } from "./contract.ts";
 
 /** Where a prompt's uploads go, inside the agent's own folder: they are the
  * agent's files from the moment it reads them (it may move, edit or keep
@@ -72,12 +73,10 @@ export async function saveUploads(
   if (files.length === 0) return [];
   assertUploadLimits(files);
   const exec = options.exec;
-  const folder = `${(options.now ?? Date.now)()}-${
-    (options.randomId ?? randomId)()
-  }`;
-  const directory = `${
-    vmAgentDir(options.agentId)
-  }/${VM_UPLOADS_DIR}/${folder}`;
+  const folder = `${(options.now ?? Date.now)()}-${(options.randomId ?? randomId)()}`;
+  const directory = `${vmAgentDir(
+    options.agentId,
+  )}/${VM_UPLOADS_DIR}/${folder}`;
 
   const saved: SavedUpload[] = [];
   for (const [index, file] of files.entries()) {

@@ -1,4 +1,7 @@
+import { inflateSync } from "node:zlib";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
+import { crc32 } from "../bytes.ts";
+import { findCanvasIcuDataFile } from "../pdf/icu-data.ts";
 import {
   bgraToRgb,
   DEFAULT_MAX_DIMENSION,
@@ -7,9 +10,6 @@ import {
   resizeRgb,
 } from "./image.ts";
 import type { RawCapture } from "./types.ts";
-import { findCanvasIcuDataFile } from "../pdf/icu-data.ts";
-import { inflateSync } from "node:zlib";
-import { crc32 } from "../bytes.ts";
 
 /** @napi-rs/canvas is a real, independent PNG decoder already in the stack
  * (the PDF renderer uses it). Decoding our output with it proves the
@@ -73,20 +73,7 @@ function parseChunks(png: Uint8Array): Chunk[] {
 
 Deno.test("encodePng writes a well-formed truecolor PNG", () => {
   // 2×2: red, green / blue, white.
-  const rgb = new Uint8Array([
-    255,
-    0,
-    0,
-    0,
-    255,
-    0,
-    0,
-    0,
-    255,
-    255,
-    255,
-    255,
-  ]);
+  const rgb = new Uint8Array([255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255]);
   const png = encodePng(rgb, 2, 2);
 
   assertEquals(
@@ -96,7 +83,10 @@ Deno.test("encodePng writes a well-formed truecolor PNG", () => {
   );
 
   const chunks = parseChunks(png);
-  assertEquals(chunks.map((c) => c.type), ["IHDR", "IDAT", "IEND"]);
+  assertEquals(
+    chunks.map((c) => c.type),
+    ["IHDR", "IDAT", "IEND"],
+  );
   for (const chunk of chunks) {
     assert(chunk.crcOk, `chunk ${chunk.type} must carry a valid CRC`);
   }
@@ -215,12 +205,12 @@ Deno.test("resizeRgb returns the source when the size is unchanged", () => {
 // --- encodeCapture ----------------------------------------------------------
 
 Deno.test("encodeCapture keeps a small region at 1:1", () => {
-  const raw = rawFromRgb(
-    new Array(4 * 2 * 3).fill(120),
-    4,
-    2,
-    { x: -100, y: 50, width: 4, height: 2 },
-  );
+  const raw = rawFromRgb(new Array(4 * 2 * 3).fill(120), 4, 2, {
+    x: -100,
+    y: 50,
+    width: 4,
+    height: 2,
+  });
   const encoded = encodeCapture(raw, DEFAULT_MAX_DIMENSION);
   assertEquals([encoded.width, encoded.height], [4, 2]);
   assertEquals(encoded.scale, 1, "no upscaling: the mapping is 1:1");

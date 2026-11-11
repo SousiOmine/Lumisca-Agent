@@ -45,18 +45,22 @@ import {
 } from "./schema.ts";
 
 const sendChatSchema = object({
-  text: optional(string(
-    "What the user reads, in their language. Markdown is rendered. Omit it " +
-      "when the message is files only.",
-  )),
-  paths: optional(array(
-    string("Path of one file to send"),
-    "Files to send with the message, in the same form the file tools take " +
-      "(absolute, or relative to the working folder); each must exist. " +
-      `Images are shown inline, other files are offered as downloads. Up to ` +
-      `${MAX_ATTACHMENTS_PER_CALL} files, ` +
-      `${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MiB each.`,
-  )),
+  text: optional(
+    string(
+      "What the user reads, in their language. Markdown is rendered. Omit it " +
+        "when the message is files only.",
+    ),
+  ),
+  paths: optional(
+    array(
+      string("Path of one file to send"),
+      "Files to send with the message, in the same form the file tools take " +
+        "(absolute, or relative to the working folder); each must exist. " +
+        `Images are shown inline, other files are offered as downloads. Up to ` +
+        `${MAX_ATTACHMENTS_PER_CALL} files, ` +
+        `${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MiB each.`,
+    ),
+  ),
 });
 
 /** What the tool needs: the session's files to read and its store to keep
@@ -107,9 +111,9 @@ const DESCRIPTION = [
  *   a compaction checkpoint has replaced that span, from `history_search`
  *   (session/prune.ts keeps this result for exactly that).
  */
-export function createSendChatTool(options: SendChatOptions): Tool<
-  typeof sendChatSchema
-> {
+export function createSendChatTool(
+  options: SendChatOptions,
+): Tool<typeof sendChatSchema> {
   const { files, store, sessionId } = options;
   return {
     name: TOOL_SEND_CHAT,
@@ -122,15 +126,16 @@ export function createSendChatTool(options: SendChatOptions): Tool<
       if (text.length === 0 && paths.length === 0) {
         throw new CoreError("Send something: text or files.", "invalid");
       }
-      const attachments: AttachmentRef[] = paths.length === 0
-        ? []
-        : await attachFiles({
-          files,
-          store,
-          sessionId,
-          paths,
-          ...(signal !== undefined ? { signal } : {}),
-        });
+      const attachments: AttachmentRef[] =
+        paths.length === 0
+          ? []
+          : await attachFiles({
+              files,
+              store,
+              sessionId,
+              paths,
+              ...(signal !== undefined ? { signal } : {}),
+            });
 
       return {
         content: [{ type: "text", text: receipt({ text, attachments }) }],
@@ -153,8 +158,9 @@ function receipt(message: ChatMessage): string {
         : `${message.attachments.length} files`,
     );
   }
-  const what = parts.length === 1
-    ? parts[0]!
-    : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
+  const what =
+    parts.length === 1
+      ? parts[0]!
+      : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
   return `Sent ${what} to the user.`;
 }

@@ -47,11 +47,7 @@ Deno.test("TitleBar: macOS leaves the window buttons to the window server", () =
   const html = render();
   assertStringIncludes(html, "titlebar");
   for (const label of ["最小化", "最大化", "閉じる"]) {
-    assertEquals(
-      buttonTag(html, label),
-      "",
-      `macOS must not draw "${label}"`,
-    );
+    assertEquals(buttonTag(html, label), "", `macOS must not draw "${label}"`);
   }
 });
 

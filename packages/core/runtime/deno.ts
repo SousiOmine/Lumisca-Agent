@@ -1,3 +1,4 @@
+/// <reference path="../../../types/bun.d.ts" />
 /**
  * The `Deno` surface this app actually uses, implemented on Bun and Node.
  *
@@ -10,12 +11,14 @@
  * FFI (`dlopen`) is still Deno-only and throws here; the Windows computer
  * host is the one caller and needs `bun:ffi` before that platform can move.
  */
+
+import { spawn, spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as fsp from "node:fs/promises";
+import * as net from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
-import { spawn, spawnSync } from "node:child_process";
-import * as net from "node:net";
+import { fileURLToPath } from "node:url";
 
 function sync<T>(body: () => T): T {
   try {
@@ -199,19 +202,23 @@ class ChildProcess {
     this.#child = child;
     this.stdout = child.stdout
       ? new ReadableStream({
-        start(controller) {
-          child.stdout!.on("data", (chunk) => controller.enqueue(new Uint8Array(chunk)));
-          child.stdout!.on("end", () => controller.close());
-        },
-      })
+          start(controller) {
+            child.stdout!.on("data", (chunk) =>
+              controller.enqueue(new Uint8Array(chunk)),
+            );
+            child.stdout!.on("end", () => controller.close());
+          },
+        })
       : new ReadableStream({ start: (c) => c.close() });
     this.stderr = child.stderr
       ? new ReadableStream({
-        start(controller) {
-          child.stderr!.on("data", (chunk) => controller.enqueue(new Uint8Array(chunk)));
-          child.stderr!.on("end", () => controller.close());
-        },
-      })
+          start(controller) {
+            child.stderr!.on("data", (chunk) =>
+              controller.enqueue(new Uint8Array(chunk)),
+            );
+            child.stderr!.on("end", () => controller.close());
+          },
+        })
       : new ReadableStream({ start: (c) => c.close() });
   }
   get stdin(): WritableStream<Uint8Array> {
@@ -236,10 +243,15 @@ class ChildProcess {
   get pid(): number {
     return this.#child.pid ?? -1;
   }
-  get status(): Promise<{ code: number; success: boolean; signal: string | null }> {
+  get status(): Promise<{
+    code: number;
+    success: boolean;
+    signal: string | null;
+  }> {
     return new Promise((resolve) => {
       this.#child.on("close", (code) =>
-        resolve({ code: code ?? 1, success: code === 0, signal: null }));
+        resolve({ code: code ?? 1, success: code === 0, signal: null }),
+      );
     });
   }
   kill(signal?: string): void {
@@ -262,7 +274,11 @@ class Command {
   #args(): string[] {
     const args = this.#options.args ?? [];
     if (this.#cmd === process.execPath && args[0] === "run") {
-      return ["--preload", path.join(import.meta.dir, "deno-shim.ts"), ...args];
+      return [
+        "--preload",
+        path.join(path.dirname(fileURLToPath(import.meta.url)), "deno-shim.ts"),
+        ...args,
+      ];
     }
     return args;
   }
@@ -274,24 +290,27 @@ class Command {
         this.#options.stdin === "piped"
           ? "pipe"
           : this.#options.stdin === "inherit"
-          ? "inherit"
-          : "ignore",
+            ? "inherit"
+            : "ignore",
         this.#options.stdout === "inherit"
           ? "inherit"
           : this.#options.stdout === "null"
-          ? "ignore"
-          : "pipe",
+            ? "ignore"
+            : "pipe",
         this.#options.stderr === "inherit"
           ? "inherit"
           : this.#options.stderr === "null"
-          ? "ignore"
-          : "pipe",
+            ? "ignore"
+            : "pipe",
       ],
     });
     const signal = this.#options.signal;
     if (signal !== undefined) {
       if (signal.aborted) child.kill("SIGTERM");
-      else signal.addEventListener("abort", () => child.kill("SIGTERM"), { once: true });
+      else
+        signal.addEventListener("abort", () => child.kill("SIGTERM"), {
+          once: true,
+        });
     }
     return new ChildProcess(child);
   }
@@ -325,8 +344,6 @@ class Command {
   }
 }
 
-
-
 /** The Deno-shaped WebSocket that hono/deno's adapter drives through its
  * onopen/onmessage/onclose fields. Bun delivers the same events to the
  * server's `websocket` handler, so this object is the bridge between them. */
@@ -338,12 +355,18 @@ class DenoSocket {
   readyState = 0;
   readonly protocol: string;
   readonly url: string;
-  #ws: { send(data: unknown): void; close(code?: number, reason?: string): void } | null = null;
+  #ws: {
+    send(data: unknown): void;
+    close(code?: number, reason?: string): void;
+  } | null = null;
   constructor(url: string, protocol: string) {
     this.url = url;
     this.protocol = protocol;
   }
-  _attach(ws: { send(data: unknown): void; close(code?: number, reason?: string): void }) {
+  _attach(ws: {
+    send(data: unknown): void;
+    close(code?: number, reason?: string): void;
+  }) {
     this.#ws = ws;
     this.readyState = 1;
     this.onopen?.(new Event("open"));
@@ -363,10 +386,13 @@ class DenoSocket {
   }
 }
 
-
 /** Deno.listen for plain TCP: enough to claim a port and to prove it is free.
  * Bun binds synchronously, so EADDRINUSE arrives as a throw like Deno's. */
-function denoListen(options: { hostname?: string; port?: number; transport?: string }) {
+function denoListen(options: {
+  hostname?: string;
+  port?: number;
+  transport?: string;
+}) {
   try {
     const server = Bun.listen({
       hostname: options.hostname ?? "127.0.0.1",
@@ -388,18 +414,24 @@ function denoListen(options: { hostname?: string; port?: number; transport?: str
     };
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
-    if (code === "EADDRINUSE") throw new AddrInUseError((error as Error).message);
+    if (code === "EADDRINUSE")
+      throw new AddrInUseError((error as Error).message);
     throw error;
   }
 }
 
 /** Deno.connect, used only to pre-flight a unix socket before handing the
  * address to dbus. */
-function denoConnect(options: { path?: string; hostname?: string; port?: number }) {
+function denoConnect(options: {
+  path?: string;
+  hostname?: string;
+  port?: number;
+}) {
   return new Promise<{ close: () => void }>((resolve, reject) => {
-    const socket = options.path !== undefined
-      ? net.connect(options.path)
-      : net.connect(options.port ?? 0, options.hostname ?? "127.0.0.1");
+    const socket =
+      options.path !== undefined
+        ? net.connect(options.path)
+        : net.connect(options.port ?? 0, options.hostname ?? "127.0.0.1");
     socket.once("connect", () => resolve({ close: () => socket.destroy() }));
     socket.once("error", (error) => reject(error));
   });
@@ -410,7 +442,9 @@ let activeServer: ReturnType<typeof Bun.serve> | null = null;
 function upgradeWebSocket(req: Request, options?: { protocol?: string }) {
   const server = activeServer;
   if (server === null) {
-    throw new Error("Deno.upgradeWebSocket was called outside a Deno.serve handler");
+    throw new Error(
+      "Deno.upgradeWebSocket was called outside a Deno.serve handler",
+    );
   }
   const socket = new DenoSocket(req.url, options?.protocol ?? "");
   const upgraded = server.upgrade(req, {
@@ -420,7 +454,10 @@ function upgradeWebSocket(req: Request, options?: { protocol?: string }) {
       : {}),
   } as Parameters<typeof server.upgrade>[1]);
   if (!upgraded) {
-    return { response: new Response("WebSocket upgrade failed", { status: 400 }), socket };
+    return {
+      response: new Response("WebSocket upgrade failed", { status: 400 }),
+      socket,
+    };
   }
   return { response: new Response(null, { status: 101 }), socket };
 }
@@ -428,8 +465,9 @@ function upgradeWebSocket(req: Request, options?: { protocol?: string }) {
 /** Deno.serve on Bun.serve: enough for the HTTP paths the suite exercises.
  * WebSocket upgrades still throw (see upgradeWebSocket). */
 function denoServe(
-  arg1: { hostname?: string; port?: number; onListen?: (addr: unknown) => void } |
-    ((req: Request) => Response | Promise<Response>),
+  arg1:
+    | { hostname?: string; port?: number; onListen?: (addr: unknown) => void }
+    | ((req: Request) => Response | Promise<Response>),
   arg2?: (req: Request) => Response | Promise<Response>,
 ) {
   const options = typeof arg1 === "function" ? {} : arg1;
@@ -438,7 +476,9 @@ function denoServe(
   const finished = new Promise<void>((resolve) => {
     finish = resolve;
   });
-  const holder: { server: ReturnType<typeof Bun.serve> | null } = { server: null };
+  const holder: { server: ReturnType<typeof Bun.serve> | null } = {
+    server: null,
+  };
   const server = Bun.serve({
     hostname: options.hostname ?? "127.0.0.1",
     port: options.port ?? 0,
@@ -459,15 +499,24 @@ function denoServe(
         (ws.data as { __denoSocket?: DenoSocket }).__denoSocket?._attach(ws);
       },
       message(ws, message) {
-        (ws.data as { __denoSocket?: DenoSocket }).__denoSocket?._message(message);
+        (ws.data as { __denoSocket?: DenoSocket }).__denoSocket?._message(
+          message,
+        );
       },
       close(ws, code, reason) {
-        (ws.data as { __denoSocket?: DenoSocket }).__denoSocket?._close(code, reason);
+        (ws.data as { __denoSocket?: DenoSocket }).__denoSocket?._close(
+          code,
+          reason,
+        );
       },
     },
   });
   holder.server = server;
-  const addr = { transport: "tcp", hostname: server.hostname, port: server.port };
+  const addr = {
+    transport: "tcp",
+    hostname: server.hostname,
+    port: server.port,
+  };
   options.onListen?.(addr);
   return {
     addr,
@@ -482,24 +531,27 @@ function denoServe(
 }
 
 const platformOs = process.platform;
-const arch = process.arch === "x64"
-  ? "x86_64"
-  : process.arch === "arm64"
-  ? "aarch64"
-  : process.arch;
-const target = platformOs === "win32"
-  ? `${arch}-pc-windows-msvc`
-  : platformOs === "darwin"
-  ? `${arch}-apple-darwin`
-  : `${arch}-unknown-linux-gnu`;
+const arch =
+  process.arch === "x64"
+    ? "x86_64"
+    : process.arch === "arm64"
+      ? "aarch64"
+      : process.arch;
+const target =
+  platformOs === "win32"
+    ? `${arch}-pc-windows-msvc`
+    : platformOs === "darwin"
+      ? `${arch}-apple-darwin`
+      : `${arch}-unknown-linux-gnu`;
 
 const DenoShim = {
   build: {
     os: platformOs,
     arch,
     target,
-    standalone: (globalThis as { Bun?: { isStandaloneExecutable?: boolean } }).Bun
-      ?.isStandaloneExecutable ?? false,
+    standalone:
+      (globalThis as { Bun?: { isStandaloneExecutable?: boolean } }).Bun
+        ?.isStandaloneExecutable ?? false,
   },
   args: process.argv.slice(2),
   cwd: () => process.cwd(),
@@ -526,14 +578,18 @@ const DenoShim = {
     data: string,
     opts?: { append?: boolean; create?: boolean; mode?: number },
   ) =>
-    fsp.writeFile(p, data, {
-      flag: opts?.append ? "a" : "w",
-      mode: opts?.mode,
-    }).catch(mapError),
+    fsp
+      .writeFile(p, data, {
+        flag: opts?.append ? "a" : "w",
+        mode: opts?.mode,
+      })
+      .catch(mapError),
   writeTextFileSync: (p: string, data: string, opts?: { append?: boolean }) =>
     sync(() => fs.writeFileSync(p, data, { flag: opts?.append ? "a" : "w" })),
-  writeFile: (p: string, data: Uint8Array) => fsp.writeFile(p, data).catch(mapError),
-  writeFileSync: (p: string, data: Uint8Array) => sync(() => fs.writeFileSync(p, data)),
+  writeFile: (p: string, data: Uint8Array) =>
+    fsp.writeFile(p, data).catch(mapError),
+  writeFileSync: (p: string, data: Uint8Array) =>
+    sync(() => fs.writeFileSync(p, data)),
   mkdir: async (p: string, o?: { recursive?: boolean }) => {
     try {
       makeDir(p, o);
@@ -549,7 +605,9 @@ const DenoShim = {
     }
   },
   remove: (p: string, o?: { recursive?: boolean }) =>
-    fsp.rm(p, { recursive: o?.recursive ?? false, force: false }).catch(mapError),
+    fsp
+      .rm(p, { recursive: o?.recursive ?? false, force: false })
+      .catch(mapError),
   removeSync: (p: string, o?: { recursive?: boolean }) =>
     fs.rmSync(p, { recursive: o?.recursive ?? false, force: false }),
   stat: (p: string) => fsp.stat(p).then(fileInfo).catch(mapError),
@@ -570,13 +628,13 @@ const DenoShim = {
   makeTempFileSync: tempFile,
   copyFile: (a: string, b: string) => fsp.copyFile(a, b).catch(mapError),
   rename: (a: string, b: string) => fsp.rename(a, b).catch(mapError),
-  renameSync: (a: string, b: string) =>
-    sync(() => fs.renameSync(a, b)),
+  renameSync: (a: string, b: string) => sync(() => fs.renameSync(a, b)),
   realPath: (p: string) => fsp.realpath(p).catch(mapError),
   realPathSync: (p: string) => sync(() => fs.realpathSync(p)),
   chmod: (p: string, mode: number) => fsp.chmod(p, mode).catch(mapError),
   symlink: (a: string, b: string) => fsp.symlink(a, b).catch(mapError),
-  open: (p: string, o?: Parameters<typeof openFile>[1]) => Promise.resolve(openFile(p, o)),
+  open: (p: string, o?: Parameters<typeof openFile>[1]) =>
+    Promise.resolve(openFile(p, o)),
   openSync: openFile,
   SeekMode: { Start: 0, Current: 1, End: 2, START: 0, CURRENT: 1, END: 2 },
   Command,
@@ -614,16 +672,19 @@ const DenoShim = {
     read: (_p: Uint8Array) => Promise.resolve(null),
     readable: new ReadableStream<Uint8Array>({
       start(controller) {
-        Bun.stdin.stream().pipeTo(
-          new WritableStream({
-            write(chunk) {
-              controller.enqueue(chunk);
-            },
-            close() {
-              controller.close();
-            },
-          }),
-        ).catch(() => controller.close());
+        Bun.stdin
+          .stream()
+          .pipeTo(
+            new WritableStream({
+              write(chunk) {
+                controller.enqueue(chunk);
+              },
+              close() {
+                controller.close();
+              },
+            }),
+          )
+          .catch(() => controller.close());
       },
     }),
   },
@@ -649,5 +710,3 @@ const DenoShim = {
 
 // deno-lint-ignore no-explicit-any
 (globalThis as any).Deno = DenoShim;
-
-export {};

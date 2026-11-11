@@ -17,8 +17,11 @@ export function sameTodoPlan(a: TodoPhase[], b: TodoPhase[]): boolean {
     if (phase.tasks.length !== other.tasks.length) return false;
     return phase.tasks.every((task, j) => {
       const otherTask = other.tasks[j]!;
-      return task.id === otherTask.id && task.name === otherTask.name &&
-        task.status === otherTask.status;
+      return (
+        task.id === otherTask.id &&
+        task.name === otherTask.name &&
+        task.status === otherTask.status
+      );
     });
   });
 }
@@ -65,10 +68,12 @@ export function sameTasks(a: TaskView[], b: TaskView[]): boolean {
   if (a.length !== b.length) return false;
   return a.every((task, i) => {
     const other = b[i]!;
-    return task.agentId === other.agentId &&
+    return (
+      task.agentId === other.agentId &&
       task.subagentType === other.subagentType &&
       task.description === other.description &&
-      task.status === other.status;
+      task.status === other.status
+    );
   });
 }
 
@@ -83,8 +88,10 @@ export function sameBackgrounds(
   if (a.length !== b.length) return false;
   return a.every((cmd, i) => {
     const other = b[i]!;
-    return cmd.commandId === other.commandId &&
+    return (
+      cmd.commandId === other.commandId &&
       cmd.command === other.command &&
-      cmd.state === other.state;
+      cmd.state === other.state
+    );
   });
 }

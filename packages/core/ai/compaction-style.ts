@@ -10,15 +10,16 @@
  * (see session/history.ts). The mechanism is the same; only the text, the
  * instruction and the checkpoint's preamble differ.
  */
-import type { AgentMessage } from "./types.ts";
+
 import type { CompactionBudgets } from "./compaction-policy.ts";
-import { serializeHead } from "./compaction-span.ts";
 import {
   CHECKPOINT_PREAMBLE,
   SUMMARIZATION_PROMPT,
   SUMMARIZATION_SYSTEM_PROMPT,
   UPDATE_SUMMARIZATION_PROMPT,
 } from "./compaction-prompts.ts";
+import { serializeHead } from "./compaction-span.ts";
+import type { AgentMessage } from "./types.ts";
 
 export interface CompactionStyle {
   /** System prompt of the summarization call. */

@@ -45,7 +45,7 @@ watch the screen — that is vm_ask_user's job when a GUI asks for it.
 2. A dialog appears in the conversation for the user, and the run stops
    until they answer. That is normal: the run is waiting for a person.
 3. If they enter it, every command you run from then on — bash and
-   async_bash — has it as \$NAME. The tool's result says so, and nothing
+   async_bash — has it as $NAME. The tool's result says so, and nothing
    more: the value itself is never returned to you.
 4. If they decline, the result says so. Work without the variable and say
    what cannot be done; do not open the dialog again in a loop.
@@ -58,12 +58,12 @@ watch the screen — that is vm_ask_user's job when a GUI asks for it.
 Pass the variable to the program and let the program read it:
 
     gh auth login --with-token < /dev/null   # (only if it reads it from env)
-    curl -H "Authorization: Bearer \$OPENAI_API_KEY" https://api.example.com
+    curl -H "Authorization: Bearer $OPENAI_API_KEY" https://api.example.com
 
 Do not print the value, and do not write it into a file, a card or the
 conversation: you do not know it, and a command that echoes it puts it into
 the transcript for good. If you need to know whether it is set, test for its
-presence instead — \`[ -n "\$OPENAI_API_KEY" ]\` — rather than reading it.
+presence instead — \`[ -n "$OPENAI_API_KEY" ]\` — rather than reading it.
 
 Two limits worth knowing:
 

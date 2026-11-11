@@ -1,6 +1,5 @@
 import { isAbsolute, join } from "node:path";
-import { parseJsonOrThrow } from "../shared/mod.ts";
-import { serializeMcpServers } from "../shared/mod.ts";
+import { parseJsonOrThrow, serializeMcpServers } from "../shared/mod.ts";
 import type { McpServerStatus } from "./status.ts";
 
 /** One configured MCP server (normalized form of `.mcp.json`). */
@@ -120,9 +119,9 @@ export function parseMcpConfig(text: string, filePath: string): McpConfig {
   }
 
   const servers: McpServerConfig[] = [];
-  for (
-    const [name, entry] of Object.entries(mcpServers as Record<string, unknown>)
-  ) {
+  for (const [name, entry] of Object.entries(
+    mcpServers as Record<string, unknown>,
+  )) {
     if (!name.trim()) {
       throw new McpConfigError(`MCP server name must not be empty`);
     }

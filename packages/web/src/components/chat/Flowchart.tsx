@@ -1,5 +1,5 @@
-import { useId, useMemo } from "preact/compat";
 import type { UiFlowBlock, UiFlowShape } from "@lumisca/core/shared";
+import { useId, useMemo } from "preact/compat";
 import { useT } from "../../i18n.ts";
 import { FLOW_LINE_HEIGHT, layoutFlow } from "./flow-layout.ts";
 
@@ -92,15 +92,13 @@ export function Flowchart({ block }: { block: UiFlowBlock }) {
 
 /** A node's outline, in its shape's own geometry. The text is drawn by the
  * caller on top, so this returns the plain shape alone. */
-function shapeOf(
-  node: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    shape: UiFlowShape;
-  },
-) {
+function shapeOf(node: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  shape: UiFlowShape;
+}) {
   const common = {
     fill: "var(--surface-2)",
     stroke: "var(--border-strong)",
@@ -161,6 +159,7 @@ function lineY(
   index: number,
 ): number {
   const blockHeight = node.lines.length * FLOW_LINE_HEIGHT;
-  return node.y + node.height / 2 - blockHeight / 2 + 4 +
-    index * FLOW_LINE_HEIGHT;
+  return (
+    node.y + node.height / 2 - blockHeight / 2 + 4 + index * FLOW_LINE_HEIGHT
+  );
 }

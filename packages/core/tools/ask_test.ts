@@ -1,7 +1,7 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import type { ClientEvent } from "../domain/event.ts";
-import { AskHub, createAskTool } from "./ask.ts";
 import { toolText } from "../test-utils.ts";
+import { AskHub, createAskTool } from "./ask.ts";
 
 /** A hub whose emitted events are recorded, so tests can observe the
  * `question` event and resolve the ask as the HTTP layer would. */
@@ -17,11 +17,13 @@ const TOOL_CALL_ID = "call-1";
 Deno.test("ask emits a question event and resolves with the answers", async () => {
   const { hub, events } = makeHub();
   const tool = createAskTool(hub);
-  const questions = [{
-    id: "q1",
-    question: "Which language?",
-    options: [{ label: "Deno" }, { label: "Node" }],
-  }];
+  const questions = [
+    {
+      id: "q1",
+      question: "Which language?",
+      options: [{ label: "Deno" }, { label: "Node" }],
+    },
+  ];
   const promise = tool.execute(TOOL_CALL_ID, { questions }, undefined);
 
   // The event goes out immediately; the run waits for the answer.
@@ -42,11 +44,13 @@ Deno.test("ask emits a question event and resolves with the answers", async () =
 
 Deno.test("pendingQuestions lists the asks that are still waiting", async () => {
   const { hub } = makeHub();
-  const questions = [{
-    id: "q1",
-    question: "Which language?",
-    options: [{ label: "Deno" }, { label: "Node" }],
-  }];
+  const questions = [
+    {
+      id: "q1",
+      question: "Which language?",
+      options: [{ label: "Deno" }, { label: "Node" }],
+    },
+  ];
   assertEquals(hub.pendingQuestions(), []);
 
   // The resync snapshot reads this: a client that (re)connects while the
@@ -81,9 +85,13 @@ Deno.test("ask with multiple questions resolves with all answers", async () => {
           id: "scale",
           question: "Scale?",
           multi: true,
-          options: [{ label: "Small" }, { label: "Medium" }, {
-            label: "Large",
-          }],
+          options: [
+            { label: "Small" },
+            { label: "Medium" },
+            {
+              label: "Large",
+            },
+          ],
           recommended: 1,
         },
       ],
@@ -116,11 +124,13 @@ Deno.test("answer rejects for unknown question ids", async () => {
   const promise = tool.execute(
     TOOL_CALL_ID,
     {
-      questions: [{
-        id: "q1",
-        question: "Which language?",
-        options: [{ label: "Deno" }, { label: "Node" }],
-      }],
+      questions: [
+        {
+          id: "q1",
+          question: "Which language?",
+          options: [{ label: "Deno" }, { label: "Node" }],
+        },
+      ],
     },
     undefined,
   );
@@ -140,11 +150,13 @@ Deno.test("answer accepts free-text values outside the options", async () => {
   const promise = tool.execute(
     TOOL_CALL_ID,
     {
-      questions: [{
-        id: "q1",
-        question: "Which language?",
-        options: [{ label: "Deno" }, { label: "Node" }],
-      }],
+      questions: [
+        {
+          id: "q1",
+          question: "Which language?",
+          options: [{ label: "Deno" }, { label: "Node" }],
+        },
+      ],
     },
     undefined,
   );
@@ -163,11 +175,13 @@ Deno.test("answer rejects empty values", async () => {
   const promise = tool.execute(
     TOOL_CALL_ID,
     {
-      questions: [{
-        id: "q1",
-        question: "Which language?",
-        options: [{ label: "Deno" }, { label: "Node" }],
-      }],
+      questions: [
+        {
+          id: "q1",
+          question: "Which language?",
+          options: [{ label: "Deno" }, { label: "Node" }],
+        },
+      ],
     },
     undefined,
   );
@@ -220,11 +234,13 @@ Deno.test("rejectAll rejects a pending ask (run teardown)", async () => {
   const promise = tool.execute(
     TOOL_CALL_ID,
     {
-      questions: [{
-        id: "q1",
-        question: "Which language?",
-        options: [{ label: "Deno" }, { label: "Node" }],
-      }],
+      questions: [
+        {
+          id: "q1",
+          question: "Which language?",
+          options: [{ label: "Deno" }, { label: "Node" }],
+        },
+      ],
     },
     undefined,
   );
@@ -272,12 +288,14 @@ Deno.test("ask rejects a non-string id or option label", async () => {
   const { hub } = makeHub();
   const tool = createAskTool(hub);
   const numericId = {
-    questions: [{
-      id: 1,
-      question: "Pick",
-      multi: true,
-      options: [{ label: "A" }, { label: "B" }],
-    }],
+    questions: [
+      {
+        id: 1,
+        question: "Pick",
+        multi: true,
+        options: [{ label: "A" }, { label: "B" }],
+      },
+    ],
   } as never;
   await assertRejects(
     () => tool.execute(TOOL_CALL_ID, numericId, undefined),
@@ -285,11 +303,13 @@ Deno.test("ask rejects a non-string id or option label", async () => {
     "questions[0].id must be a string (got number)",
   );
   const numericLabel = {
-    questions: [{
-      id: "q1",
-      question: "Pick",
-      options: [{ label: 1 }, { label: 2 }],
-    }],
+    questions: [
+      {
+        id: "q1",
+        question: "Pick",
+        options: [{ label: 1 }, { label: 2 }],
+      },
+    ],
   } as never;
   await assertRejects(
     () => tool.execute(TOOL_CALL_ID, numericLabel, undefined),
@@ -319,12 +339,14 @@ Deno.test("ask rejects empty options and out-of-range recommended", async () => 
       tool.execute(
         TOOL_CALL_ID,
         {
-          questions: [{
-            id: "q1",
-            question: "One?",
-            options: [{ label: "A" }],
-            recommended: 3,
-          }],
+          questions: [
+            {
+              id: "q1",
+              question: "One?",
+              options: [{ label: "A" }],
+              recommended: 3,
+            },
+          ],
         },
         undefined,
       ),
@@ -348,9 +370,6 @@ function assertThrowsCoreError(
       error instanceof Error ? error.message : String(error),
       message,
     );
-    assertEquals(
-      (error as { kind?: string }).kind,
-      kind,
-    );
+    assertEquals((error as { kind?: string }).kind, kind);
   }
 }

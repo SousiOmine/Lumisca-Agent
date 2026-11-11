@@ -1,8 +1,8 @@
-import { splitTabKey, tabKey } from "./tabs.ts";
 import {
   isSettingsCategory,
   type SettingsCategory,
 } from "./components/settings/categories.ts";
+import { splitTabKey, tabKey } from "./tabs.ts";
 
 /**
  * The app's screens as URLs.
@@ -120,9 +120,7 @@ export function parseUrl(pathname: string): UrlState {
     if (second === "s" && isId(third)) {
       route = { kind: "code", tabKey: tabKey("", third) };
       consumed = 3;
-    } else if (
-      second === "p" && isId(third) && fourth === "s" && isId(fifth)
-    ) {
+    } else if (second === "p" && isId(third) && fourth === "s" && isId(fifth)) {
       route = { kind: "code", tabKey: tabKey(third, fifth) };
       consumed = 5;
     }
@@ -139,10 +137,7 @@ export function parseUrl(pathname: string): UrlState {
 }
 
 /** The settings part of a path, given what the route did not consume. */
-function settingsOf(
-  route: AppRoute,
-  trailing: string[],
-): SettingsRoute | null {
+function settingsOf(route: AppRoute, trailing: string[]): SettingsRoute | null {
   // The chooser has no categories to name: an address that put settings
   // there is read as the chooser it starts with.
   if (route.kind === "modeSelect") return null;
@@ -154,9 +149,8 @@ function settingsOf(
   // error: a category is a position in a list, not a document that can be
   // missing, and the reader still gets the dialog they asked for.
   return {
-    category: category !== undefined && isSettingsCategory(category)
-      ? category
-      : null,
+    category:
+      category !== undefined && isSettingsCategory(category) ? category : null,
   };
 }
 
@@ -176,6 +170,10 @@ function decodeSegment(segment: string): string {
  * taken from the connection registry (`ConnectionEntry.id`, also a UUID), so
  * an empty or dot-like segment is a path that meant a top screen. */
 function isId(segment: string | undefined): segment is string {
-  return segment !== undefined && segment !== "" && segment !== "." &&
-    segment !== "..";
+  return (
+    segment !== undefined &&
+    segment !== "" &&
+    segment !== "." &&
+    segment !== ".."
+  );
 }

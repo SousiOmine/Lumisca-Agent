@@ -1,11 +1,11 @@
-import { assert, assertEquals, assertStringIncludes } from "@std/assert";
-import { createElement } from "preact";
-import { renderToString } from "preact-render-to-string";
 import {
   parseUiMarkup,
   resolveUiView,
   type UiResolvedView,
 } from "@lumisca/core/shared";
+import { assert, assertEquals, assertStringIncludes } from "@std/assert";
+import { createElement } from "preact";
+import { renderToString } from "preact-render-to-string";
 import { initLocale } from "../../i18n.ts";
 import { UiCard } from "./UiCard.tsx";
 
@@ -30,12 +30,14 @@ function draw(view: UiResolvedView | null): string {
 }
 
 Deno.test("UiCard draws a metric beside another in a row of columns", () => {
-  const html = draw(viewOf(`<Card title="状況">
+  const html = draw(
+    viewOf(`<Card title="状況">
       <Columns gap="m">
         <Metric label="本番" value="81" unit="%" hint="+3.2%" />
         <Metric label="検証" value="42" unit="%" />
       </Columns>
-    </Card>`));
+    </Card>`),
+  );
 
   assertStringIncludes(html, "ui-card-columns");
   assertStringIncludes(html, "本番");
@@ -48,10 +50,12 @@ Deno.test("UiCard draws a metric beside another in a row of columns", () => {
 });
 
 Deno.test("UiCard draws a repeated block once per item", () => {
-  const html = draw(viewOf(`<Card>
+  const html = draw(
+    viewOf(`<Card>
       <Data>{"envs":[{"name":"prod","load":81},{"name":"stg","load":42}]}</Data>
       <Repeat over="envs"><Text>$item.name: $item.load</Text></Repeat>
-    </Card>`));
+    </Card>`),
+  );
 
   assertStringIncludes(html, "prod: 81");
   assertStringIncludes(html, "stg: 42");
@@ -59,10 +63,12 @@ Deno.test("UiCard draws a repeated block once per item", () => {
 });
 
 Deno.test("UiCard draws a grid on its columns and stacks the rest", () => {
-  const html = draw(viewOf(`<Card>
+  const html = draw(
+    viewOf(`<Card>
       <Grid columns="3"><Text>a</Text><Text>b</Text></Grid>
       <Stack gap="s"><Text>c</Text><Text>d</Text></Stack>
-    </Card>`));
+    </Card>`),
+  );
 
   assertStringIncludes(html, 'class="ui-card-grid"');
   assertStringIncludes(html, 'data-columns="3"');
@@ -71,9 +77,11 @@ Deno.test("UiCard draws a grid on its columns and stacks the rest", () => {
 });
 
 Deno.test("UiCard draws a choice as a row of buttons when asked", () => {
-  const html = draw(viewOf(
-    '<Card><Choice layout="row"><Option>再実行</Option><Option>中止</Option></Choice></Card>',
-  ));
+  const html = draw(
+    viewOf(
+      '<Card><Choice layout="row"><Option>再実行</Option><Option>中止</Option></Choice></Card>',
+    ),
+  );
 
   assertStringIncludes(html, 'data-layout="row"');
   assertStringIncludes(html, "再実行");

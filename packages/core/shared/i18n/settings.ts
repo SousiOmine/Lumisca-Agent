@@ -49,16 +49,12 @@ export const settings = {
   // --- general panel --------------------------------------------------------
   "settings.general.serverAddress": { ja: "接続先", en: "Server" },
   "settings.general.updateNoUpdater": {
-    ja:
-      "このサーバーには更新機能がありません（開発実行、またはデスクトップアプリが管理するサーバーです）。",
-    en:
-      "This server has no updater (it is a development run, or a server the desktop app manages).",
+    ja: "このサーバーには更新機能がありません（開発実行、またはデスクトップアプリが管理するサーバーです）。",
+    en: "This server has no updater (it is a development run, or a server the desktop app manages).",
   },
   "settings.general.updateUnauthorized": {
-    ja:
-      "サーバーの認証が切れています。このページを読み込み直して、もう一度お試しください。",
-    en:
-      "The server refused this page's credential. Reload the page and try again.",
+    ja: "サーバーの認証が切れています。このページを読み込み直して、もう一度お試しください。",
+    en: "The server refused this page's credential. Reload the page and try again.",
   },
   "settings.general.updateUnreachable": {
     ja: "サーバーに接続できないため、更新状態を取得できませんでした。",
@@ -108,10 +104,8 @@ export const settings = {
     en: "Auto-restart on apply",
   },
   "settings.general.autoRestartDesc": {
-    ja:
-      "常時稼働サーバー向けの設定です。無効にした場合は次回起動時に反映されます（※再起動時は実行中のセッションが停止します）。",
-    en:
-      "For always-on servers. When disabled, changes take effect on the next start (running sessions will be interrupted on restart).",
+    ja: "常時稼働サーバー向けの設定です。無効にした場合は次回起動時に反映されます（※再起動時は実行中のセッションが停止します）。",
+    en: "For always-on servers. When disabled, changes take effect on the next start (running sessions will be interrupted on restart).",
   },
   "settings.general.downloading": { ja: "ダウンロード中", en: "Downloading" },
   "settings.general.checkForUpdate": {
@@ -128,14 +122,11 @@ export const settings = {
   },
   "settings.general.installNoteServer": {
     ja: "インストールすると、次回の起動で新しいバージョンが有効になります。",
-    en:
-      "After installation, the new version will take effect on the next start.",
+    en: "After installation, the new version will take effect on the next start.",
   },
   "settings.general.autoRestartDisabled": {
-    ja:
-      "自動再起動が無効に設定されています。手動または監視サービスから再起動してください。",
-    en:
-      "Auto-restart is disabled. Please restart manually or from your supervisor service.",
+    ja: "自動再起動が無効に設定されています。手動または監視サービスから再起動してください。",
+    en: "Auto-restart is disabled. Please restart manually or from your supervisor service.",
   },
   "settings.general.autoUpdateNotAvailable": {
     ja: "このサーバーでは自動アップデートを利用できません",
@@ -156,16 +147,12 @@ export const settings = {
     en: "PWA notifications",
   },
   "settings.general.pushNotificationsDesc": {
-    ja:
-      "インストールした PWA に、実行完了・質問・エラーを OS の通知で届けます。アプリを閉じていても届きます。iPhone / iPad ではホーム画面に追加した PWA でだけ使えます。",
-    en:
-      "Deliver completion, question and error alerts to the installed PWA through your OS, even with the app closed. On iPhone / iPad this works only in a PWA added to the home screen.",
+    ja: "インストールした PWA に、実行完了・質問・エラーを OS の通知で届けます。アプリを閉じていても届きます。iPhone / iPad ではホーム画面に追加した PWA でだけ使えます。",
+    en: "Deliver completion, question and error alerts to the installed PWA through your OS, even with the app closed. On iPhone / iPad this works only in a PWA added to the home screen.",
   },
   "settings.general.pushDenied": {
-    ja:
-      "このサイトの通知がブラウザでブロックされています。ブラウザのサイト設定から許可してください。",
-    en:
-      "Notifications are blocked for this site. Allow them in your browser's site settings.",
+    ja: "このサイトの通知がブラウザでブロックされています。ブラウザのサイト設定から許可してください。",
+    en: "Notifications are blocked for this site. Allow them in your browser's site settings.",
   },
   "settings.general.pushFailed": {
     ja: "通知を有効にできませんでした: {error}",
@@ -183,18 +170,14 @@ export const settings = {
     en: "Custom instructions",
   },
   "settings.personalize.customInstructionsPlaceholder": {
-    ja:
-      "例:\n- 回答は日本語で記述してください。\n- 変更後は必ずテストを実行してください。",
-    en:
-      "Example:\n- Write your responses in English.\n- Always run tests after making changes.",
+    ja: "例:\n- 回答は日本語で記述してください。\n- 変更後は必ずテストを実行してください。",
+    en: "Example:\n- Write your responses in English.\n- Always run tests after making changes.",
   },
   /** The path the editor writes to, shown under it: the text is a file on
    * this machine, not a value in a database. */
   "settings.personalize.appliesTo": {
-    ja:
-      "このマシンで動くすべてのエージェントに適用されます。開始済みのセッションにも、次の発言から反映されます。",
-    en:
-      "Applies to every agent on this machine, including sessions already running (from their next message).",
+    ja: "このマシンで動くすべてのエージェントに適用されます。開始済みのセッションにも、次の発言から反映されます。",
+    en: "Applies to every agent on this machine, including sessions already running (from their next message).",
   },
 
   // --- saved prompts (their own category) -----------------------------------
@@ -221,8 +204,7 @@ export const settings = {
   },
   "settings.prompts.idInvalidChars": {
     ja: "識別子に使用できる文字は半角英数字および記号「.」「_」「-」のみです",
-    en:
-      'The ID may only contain ASCII letters, digits, and the symbols ".", "_", "-"',
+    en: 'The ID may only contain ASCII letters, digits, and the symbols ".", "_", "-"',
   },
   "settings.prompts.displayLabel": { ja: "表示名", en: "Display name" },
   "settings.prompts.displayPlaceholder": {
@@ -262,8 +244,7 @@ export const settings = {
     en: "Could not refresh: {error}",
   },
   "settings.provider.noProviders": {
-    ja:
-      "登録されたプロバイダーがありません。「追加」ボタンから設定してください。",
+    ja: "登録されたプロバイダーがありません。「追加」ボタンから設定してください。",
     en: 'No providers registered. Use the "Add" button to set one up.',
   },
   /** One-line explanation under the AI provider heading, mirroring the
@@ -301,10 +282,8 @@ export const settings = {
     en: "Sign in with your subscription account.",
   },
   "settings.provider.loginRemoteHint": {
-    ja:
-      "ブラウザでのログインは、このサーバーと同じマシンで開いたページでのみ使えます。リモート接続ではデバイスコードを使ってください。",
-    en:
-      "Browser sign-in works only on a page opened on the server machine. Use a device code when connecting remotely.",
+    ja: "ブラウザでのログインは、このサーバーと同じマシンで開いたページでのみ使えます。リモート接続ではデバイスコードを使ってください。",
+    en: "Browser sign-in works only on a page opened on the server machine. Use a device code when connecting remotely.",
   },
   "settings.provider.authWaiting": {
     ja: "認証を待機中…",
@@ -320,10 +299,8 @@ export const settings = {
     en: "Open login screen",
   },
   "settings.provider.deviceCodeHint": {
-    ja:
-      "表示された認証画面で上記の確認コードを入力し、連携を承認してください。",
-    en:
-      "Enter the verification code shown above in the authentication screen and approve the connection.",
+    ja: "表示された認証画面で上記の確認コードを入力し、連携を承認してください。",
+    en: "Enter the verification code shown above in the authentication screen and approve the connection.",
   },
   "settings.provider.loginInBrowser": {
     ja: "ブラウザでログイン",
@@ -421,8 +398,7 @@ export const settings = {
   },
   "settings.userProvider.idHint": {
     ja: "モデル指定で使う識別子（例: home-vllm/gpt-4o）。英数字・. _ - のみ",
-    en:
-      "Identifier for model references (e.g. home-vllm/gpt-4o). Alphanumeric, . _ - only",
+    en: "Identifier for model references (e.g. home-vllm/gpt-4o). Alphanumeric, . _ - only",
   },
   "settings.userProvider.idHintEdit": {
     ja: "編集時は変更できません",
@@ -509,8 +485,7 @@ export const settings = {
     en: "Search models…",
   },
   "settings.model.noProviders": {
-    ja:
-      "利用可能なプロバイダーが未設定です。「APIプロバイダー」からAPIキーを登録してください。",
+    ja: "利用可能なプロバイダーが未設定です。「APIプロバイダー」からAPIキーを登録してください。",
     en: 'No providers configured. Register an API key in "API providers".',
   },
   "settings.model.noMatch": {
@@ -536,18 +511,15 @@ export const settings = {
     en: "Model for sub-tasks",
   },
   "settings.model.fastModelDesc": {
-    ja:
-      "タスク本体とは別に、高速・低コストな補助処理（要約・サブタスクなど）で使用するモデル。",
-    en:
-      "A fast, low-cost model for auxiliary tasks (summarization, sub-tasks, etc.), separate from the main task.",
+    ja: "タスク本体とは別に、高速・低コストな補助処理（要約・サブタスクなど）で使用するモデル。",
+    en: "A fast, low-cost model for auxiliary tasks (summarization, sub-tasks, etc.), separate from the main task.",
   },
   "settings.model.imageAnalysisModel": {
     ja: "画像分析モデル",
     en: "Image analysis model",
   },
   "settings.model.imageAnalysisModelDesc": {
-    ja:
-      "メインモデルが画像認識に未対応の場合に、代替として画像の解析・読み取りを担当するモデル。",
+    ja: "メインモデルが画像認識に未対応の場合に、代替として画像の解析・読み取りを担当するモデル。",
     en: "The model that analyzes and reads images when the main model cannot.",
   },
   // --- context compaction ---------------------------------------------------
@@ -567,8 +539,7 @@ export const settings = {
   },
   "settings.compaction.reservePercentDesc": {
     ja: "上限に対して残す余裕。応答の出力上限はこの範囲に収まります。既定 8%。",
-    en:
-      "Free space kept below the limit. The reply's output cap stays within it. Default 8%.",
+    en: "Free space kept below the limit. The reply's output cap stays within it. Default 8%.",
   },
   "settings.compaction.keepRecentPercent": {
     ja: "保持（ウィンドウ比 %）",
@@ -600,18 +571,15 @@ export const settings = {
 
   // --- mcp list -------------------------------------------------------------
   "settings.mcp.configConflict": {
-    ja:
-      "MCPの設定ファイルが外部で更新されています。現在の内容で上書き保存してもよろしいですか？",
-    en:
-      "The MCP config file has been updated externally. Overwrite with the current contents?",
+    ja: "MCPの設定ファイルが外部で更新されています。現在の内容で上書き保存してもよろしいですか？",
+    en: "The MCP config file has been updated externally. Overwrite with the current contents?",
   },
   "settings.mcp.deleteConfirm": {
     ja: "MCPサーバー「{name}」を削除しますか？",
     en: 'Delete MCP server "{name}"?',
   },
   "settings.mcp.noServers": {
-    ja:
-      "MCPサーバーが登録されていません。「サーバーを追加」から設定してください。",
+    ja: "MCPサーバーが登録されていません。「サーバーを追加」から設定してください。",
     en: 'No MCP servers registered. Use "Add server" above to set one up.',
   },
   "settings.mcp.notStarted": { ja: "未起動", en: "Not started" },
@@ -672,8 +640,7 @@ export const settings = {
   "settings.mcp.urlEmpty": { ja: "URL を入力してください", en: "Enter a URL" },
   "settings.mcp.envLabel": {
     ja: "環境変数（key=value、1行に1つ、{var} 展開可）",
-    en:
-      "Environment variables (key=value, one per line, {var} expansion supported)",
+    en: "Environment variables (key=value, one per line, {var} expansion supported)",
   },
   "settings.mcp.httpHeadersLabel": {
     ja: "HTTPヘッダー（key=value、1行に1つ）",
@@ -820,22 +787,16 @@ export const settings = {
     en: "Command safety check",
   },
   "settings.security.description": {
-    ja:
-      "コマンドを実行する前に、危険な操作が含まれていないか安全性を自動で確認します。",
-    en:
-      "Automatically checks commands for dangerous operations before execution.",
+    ja: "コマンドを実行する前に、危険な操作が含まれていないか安全性を自動で確認します。",
+    en: "Automatically checks commands for dangerous operations before execution.",
   },
   "settings.security.tooltip": {
-    ja:
-      "コマンド実行前に安全性を自動で検証します。一度承認されたコマンドは次回以降そのまま実行され、危険と判定されたコマンドは実行がブロックされます。",
-    en:
-      "Automatically verifies the safety of commands before execution. Approved commands run automatically next time, while dangerous commands are blocked.",
+    ja: "コマンド実行前に安全性を自動で検証します。一度承認されたコマンドは次回以降そのまま実行され、危険と判定されたコマンドは実行がブロックされます。",
+    en: "Automatically verifies the safety of commands before execution. Approved commands run automatically next time, while dangerous commands are blocked.",
   },
   "settings.security.fastModelMissing": {
-    ja:
-      "サブタスクで使用するモデルが未設定です。有効にするには「モデル設定」で「サブタスクで使用するモデル」を指定してください。",
-    en:
-      'No model for sub-tasks is configured. Set "Model for sub-tasks" in "Models" to enable this.',
+    ja: "サブタスクで使用するモデルが未設定です。有効にするには「モデル設定」で「サブタスクで使用するモデル」を指定してください。",
+    en: 'No model for sub-tasks is configured. Set "Model for sub-tasks" in "Models" to enable this.',
   },
   "settings.security.approvedCommands": {
     ja: "承認済みコマンド",
@@ -860,10 +821,8 @@ export const settings = {
    * own: the nav key `settings.nav.providers` names the category). */
   "settings.webSearch.title": { ja: "Web検索", en: "Web search" },
   "settings.webSearch.description": {
-    ja:
-      "エージェントが Web 検索やページの閲覧に使用する検索プロバイダーを設定します。",
-    en:
-      "Configure the search provider used by the agent for web searches and fetching pages.",
+    ja: "エージェントが Web 検索やページの閲覧に使用する検索プロバイダーを設定します。",
+    en: "Configure the search provider used by the agent for web searches and fetching pages.",
   },
   "settings.webSearch.empty": {
     ja: "検索プロバイダーが登録されていません。",
@@ -872,8 +831,7 @@ export const settings = {
   "settings.webSearch.makeDefault": { ja: "既定にする", en: "Make default" },
   "settings.webSearch.defaultBadge": { ja: "既定", en: "Default" },
   "settings.webSearch.noDefault": {
-    ja:
-      "既定のプロバイダーが未設定です。エージェントは Web 検索ツールを使用できません。",
+    ja: "既定のプロバイダーが未設定です。エージェントは Web 検索ツールを使用できません。",
     en: "No default provider: the agent has no web tools.",
   },
   "settings.webSearch.useFetchApi": {
@@ -946,10 +904,8 @@ export const settings = {
     en: "Lets the agent see and control the screen.",
   },
   "settings.computerUse.tooltip": {
-    ja:
-      "Computer Use: エージェントが実画面を撮影し、クリックや入力を行います。既定は無効です。",
-    en:
-      "Computer use: the agent captures the real screen and clicks or types on it. Disabled by default.",
+    ja: "Computer Use: エージェントが実画面を撮影し、クリックや入力を行います。既定は無効です。",
+    en: "Computer use: the agent captures the real screen and clicks or types on it. Disabled by default.",
   },
   "settings.computerUse.operationFailed": {
     ja: "変更に失敗しました: {error}",

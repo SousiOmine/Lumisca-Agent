@@ -108,9 +108,7 @@ export function codingAgentsSkill(): SkillDef {
         // One file per built-in skill: no follow-up files exist. The message
         // mirrors the file-based skills' read error.
         return Promise.reject(
-          new Error(
-            `No such file in skill "coding-agents": ${relativePath}`,
-          ),
+          new Error(`No such file in skill "coding-agents": ${relativePath}`),
         );
       }
       return Promise.resolve(SKILL_MD);

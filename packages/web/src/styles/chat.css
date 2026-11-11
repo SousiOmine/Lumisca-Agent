@@ -170,7 +170,8 @@
   color: var(--text-dim);
   cursor: pointer;
   opacity: 0;
-  transition: opacity var(--lum-dur-fast) var(--lum-ease-out),
+  transition:
+    opacity var(--lum-dur-fast) var(--lum-ease-out),
     background var(--lum-dur-fast) var(--lum-ease-out);
   font-size: 11px;
 }
@@ -1197,7 +1198,8 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   cursor: pointer;
-  transition: background var(--lum-dur-fast) var(--lum-ease-out),
+  transition:
+    background var(--lum-dur-fast) var(--lum-ease-out),
     border-color var(--lum-dur-fast) var(--lum-ease-out);
 }
 

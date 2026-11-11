@@ -1,6 +1,6 @@
 import { IconCheck, IconClipboard } from "@tabler/icons-preact";
-import { useT } from "../../i18n.ts";
 import { useCopy } from "../../hooks/useSave.ts";
+import { useT } from "../../i18n.ts";
 
 /** The session error banner. Clicking it copies the error text to the
  * clipboard — provider error messages are long and hard to select by
@@ -32,17 +32,17 @@ export function ErrorBanner({ text }: { text: string }) {
           <p>{text}</p>
         </div>
         <span className="error-copy-btn" aria-hidden>
-          {copied
-            ? <IconCheck size={16} stroke={2} />
-            : <IconClipboard size={16} stroke={1.5} />}
+          {copied ? (
+            <IconCheck size={16} stroke={2} />
+          ) : (
+            <IconClipboard size={16} stroke={1.5} />
+          )}
         </span>
       </div>
-      {
-        /* Mounted empty and filled on success: a live region has to be in the
+      {/* Mounted empty and filled on success: a live region has to be in the
           tree before its text changes to be announced. It sits OUTSIDE the
           banner because a button's descendants are presentational, so a
-          live region inside one is never announced. */
-      }
+          live region inside one is never announced. */}
       <span className="visually-hidden" role="status">
         {copied ? t("chat.message.copied") : null}
       </span>

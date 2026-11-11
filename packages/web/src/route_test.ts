@@ -8,9 +8,9 @@
  * this app has no "not found" page to send them to.
  */
 import { assertEquals } from "@std/assert";
-import { parseUrl, urlOf, type UrlState } from "./route.ts";
-import { tabKey } from "./tabs.ts";
 import { SETTINGS_CATEGORIES } from "./components/settings/categories.ts";
+import { parseUrl, type UrlState, urlOf } from "./route.ts";
+import { tabKey } from "./tabs.ts";
 
 /** A state with the settings dialog closed. */
 function at(route: UrlState["route"]): UrlState {
@@ -20,7 +20,8 @@ function at(route: UrlState["route"]): UrlState {
 /** An open settings dialog on one category. */
 function withSettings(
   route: UrlState["route"],
-  category: UrlState["settings"] extends null ? never
+  category: UrlState["settings"] extends null
+    ? never
     : NonNullable<UrlState["settings"]>["category"],
 ): UrlState {
   return { route, settings: { category } };
@@ -32,12 +33,10 @@ function roundTrip(state: UrlState): void {
 }
 
 Deno.test("route: a mode's top is one segment", () => {
-  for (
-    const [route, path] of [
-      [{ kind: "code", tabKey: null }, "/code"],
-      [{ kind: "stella", agentId: null }, "/stella"],
-    ] as const
-  ) {
+  for (const [route, path] of [
+    [{ kind: "code", tabKey: null }, "/code"],
+    [{ kind: "stella", agentId: null }, "/stella"],
+  ] as const) {
     assertEquals(urlOf(at(route)), path);
     roundTrip(at(route));
   }

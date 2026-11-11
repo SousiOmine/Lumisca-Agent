@@ -1,6 +1,6 @@
+import { formatAttachmentSize, type PromptFileRef } from "@lumisca/core/shared";
 import { useState } from "preact/compat";
 import { useT } from "../../i18n.ts";
-import { formatAttachmentSize, type PromptFileRef } from "@lumisca/core/shared";
 import { Lightbox } from "../Lightbox.tsx";
 
 /** Show one file a prompt brought in, read back from the machine.
@@ -48,10 +48,8 @@ export function PromptFiles({
           ))}
         </div>
       )}
-      {
-        /* Rendered even when closed: the overlay stays up while it shrinks
-          (see Lightbox). */
-      }
+      {/* Rendered even when closed: the overlay stays up while it shrinks
+          (see Lightbox). */}
       <Lightbox
         src={open === null ? null : srcOf(open, false)}
         alt={open?.name}

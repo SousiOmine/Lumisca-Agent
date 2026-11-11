@@ -24,10 +24,7 @@ Deno.test("the sentinel repeated per turn is still silence", () => {
   // A model re-emits it after each tool batch; the segments of one turn are
   // joined with no separator, so this is one run, not prose.
   assertEquals(isExactNoResponse(`${NO_RESPONSE}${NO_RESPONSE}`), true);
-  assertEquals(
-    isExactNoResponse(`${NO_RESPONSE}\n${NO_RESPONSE}\n`),
-    true,
-  );
+  assertEquals(isExactNoResponse(`${NO_RESPONSE}\n${NO_RESPONSE}\n`), true);
 });
 
 Deno.test("a sentinel with prose is an answer, not silence", () => {
@@ -65,12 +62,12 @@ Deno.test("stray sentinels at the edges are removed; the rest stays", () => {
 Deno.test("the verdict a conversation draws from one message", () => {
   assertEquals(assistantTextVerdict(NO_RESPONSE), { kind: "silent" });
   assertEquals(assistantTextVerdict("  "), { kind: "empty" });
-  assertEquals(
-    assistantTextVerdict("the answer"),
-    { kind: "message", text: "the answer" },
-  );
-  assertEquals(
-    assistantTextVerdict(`${NO_RESPONSE} the answer`),
-    { kind: "message", text: "the answer" },
-  );
+  assertEquals(assistantTextVerdict("the answer"), {
+    kind: "message",
+    text: "the answer",
+  });
+  assertEquals(assistantTextVerdict(`${NO_RESPONSE} the answer`), {
+    kind: "message",
+    text: "the answer",
+  });
 });

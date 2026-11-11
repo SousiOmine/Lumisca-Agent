@@ -1,5 +1,5 @@
-import { assertEquals } from "@std/assert";
 import { fromBase64Url, toBase64Url } from "@lumisca/core/shared";
+import { assertEquals } from "@std/assert";
 import { canUsePush } from "./push.ts";
 
 /** The page's codec has to agree with the server's (`shared/push.ts`) and

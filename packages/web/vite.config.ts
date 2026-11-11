@@ -1,5 +1,5 @@
-import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import preact from "@preact/preset-vite";
 import { defineConfig } from "vite";
 // Relative on purpose: this file is loaded by Vite (not by Deno), which does

@@ -1,5 +1,9 @@
-import { fakeModel } from "../test-utils.ts";
 import { assert, assertEquals } from "@std/assert";
+import { contentText } from "../shared/mod.ts";
+import { fakeModel } from "../test-utils.ts";
+import { Agent } from "./agent.ts";
+import { createAssistantMessageEventStream } from "./event-stream.ts";
+import { fauxAssistantMessage, fauxToolCall } from "./faux.ts";
 import type {
   AgentEvent,
   AgentMessage,
@@ -7,10 +11,6 @@ import type {
   StreamFn,
   ToolResultMessage,
 } from "./types.ts";
-import { Agent } from "./agent.ts";
-import { createAssistantMessageEventStream } from "./event-stream.ts";
-import { fauxAssistantMessage, fauxToolCall } from "./faux.ts";
-import { contentText } from "../shared/mod.ts";
 
 /** One scheduler turn: lets the run reach the stream function. */
 function tick(): Promise<void> {
@@ -206,7 +206,7 @@ function userText(message: AgentMessage): string {
     .map((b) =>
       (b as { type?: string; text?: string }).type === "text"
         ? (b as { text: string }).text
-        : ""
+        : "",
     )
     .join("");
 }
@@ -225,18 +225,20 @@ function neverReturningTool(): AgentTool {
 
 /** A stream function that asks for a tool on the first call and answers
  * with text on every later one (what a session after a stop looks like). */
-function toolThenAnswerStreamFn(
-  toolName: string,
-): { streamFn: StreamFn; calls: () => number } {
+function toolThenAnswerStreamFn(toolName: string): {
+  streamFn: StreamFn;
+  calls: () => number;
+} {
   let calls = 0;
   const streamFn: StreamFn = () => {
     const stream = createAssistantMessageEventStream();
     calls++;
-    const message = calls === 1
-      ? fauxAssistantMessage([fauxToolCall(toolName, {}, "t1")], {
-        stopReason: "toolUse",
-      })
-      : fauxAssistantMessage("second run answered");
+    const message =
+      calls === 1
+        ? fauxAssistantMessage([fauxToolCall(toolName, {}, "t1")], {
+            stopReason: "toolUse",
+          })
+        : fauxAssistantMessage("second run answered");
     stream.push({ type: "start", partial: message });
     stream.end(message);
     return stream;
@@ -303,17 +305,13 @@ Deno.test("an abandoned turn's tool call is answered with a stop, not left dangl
 
   const toolResults = agent.messages.filter((m) => m.role === "toolResult");
   assertEquals(toolResults.length, 1);
-  assertEquals(
-    (toolResults[0] as ToolResultMessage).toolCallId,
-    "t1",
-  );
+  assertEquals((toolResults[0] as ToolResultMessage).toolCallId, "t1");
   assertEquals((toolResults[0] as ToolResultMessage).isError, true);
   // Transcript order stays assistant(toolCalls) → toolResults.
-  assertEquals(agent.messages.map((m) => m.role), [
-    "user",
-    "assistant",
-    "toolResult",
-  ]);
+  assertEquals(
+    agent.messages.map((m) => m.role),
+    ["user", "assistant", "toolResult"],
+  );
 });
 
 Deno.test("a steer during a tool loop is processed at the next turn boundary, not at the end", async () => {
@@ -373,12 +371,13 @@ Deno.test("a steer during a tool loop is processed at the next turn boundary, no
     roles.indexOf("user") > -1 && roles.indexOf("toolResult") > -1,
     `expected a user + toolResult transcript, got ${JSON.stringify(roles)}`,
   );
-  const steerIndex = agent.messages.findIndex((m) =>
-    m.role === "user" && userText(m) === "interrupt"
+  const steerIndex = agent.messages.findIndex(
+    (m) => m.role === "user" && userText(m) === "interrupt",
   );
-  const reactionIndex = agent.messages.findIndex((m) =>
-    m.role === "assistant" &&
-    contentText(m.content).includes("reaction to the interrupt")
+  const reactionIndex = agent.messages.findIndex(
+    (m) =>
+      m.role === "assistant" &&
+      contentText(m.content).includes("reaction to the interrupt"),
   );
   assert(
     steerIndex !== -1 && reactionIndex !== -1,

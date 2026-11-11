@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from "preact/compat";
 import {
   IconCheck,
   IconEdit,
@@ -6,12 +5,13 @@ import {
   IconTrash,
   IconX,
 } from "@tabler/icons-preact";
+import { useEffect, useRef, useState } from "preact/compat";
 import { api } from "../../api.ts";
 import { confirmAction } from "../../confirm.ts";
-import { errorText } from "../../providers.ts";
-import type { SavedPrompt } from "../../types.ts";
 import { useSavedPrompts } from "../../hooks/useSavedPrompts.ts";
 import { useT } from "../../i18n.ts";
+import { errorText } from "../../providers.ts";
+import type { SavedPrompt } from "../../types.ts";
 import { Field } from "../Field.tsx";
 import { SettingsSection } from "./SettingsSection.tsx";
 
@@ -66,9 +66,7 @@ export function SavedPromptsPanel() {
     }
   };
 
-  const save = async (
-    input: { id: string; label: string; prompt: string },
-  ) => {
+  const save = async (input: { id: string; label: string; prompt: string }) => {
     setActionError(null);
     if (editing === null || editing === undefined) {
       await api.createSavedPrompt(input);
@@ -129,8 +127,7 @@ export function SavedPromptsPanel() {
                 className="btn small"
                 title={t("common.edit")}
                 aria-label={t("common.edit")}
-                onClick={() =>
-                  startEditing(prompt)}
+                onClick={() => startEditing(prompt)}
               >
                 <IconEdit size={13} />
               </button>
@@ -139,8 +136,7 @@ export function SavedPromptsPanel() {
                 className="btn small danger"
                 title={t("common.delete")}
                 aria-label={t("common.delete")}
-                onClick={() =>
-                  void remove(prompt.id)}
+                onClick={() => void remove(prompt.id)}
               >
                 <IconTrash size={13} />
               </button>
@@ -161,9 +157,11 @@ function PromptForm({
   onCancel,
 }: {
   initial?: SavedPrompt;
-  onSave: (
-    input: { id: string; label: string; prompt: string },
-  ) => Promise<void>;
+  onSave: (input: {
+    id: string;
+    label: string;
+    prompt: string;
+  }) => Promise<void>;
   onCancel: () => void;
 }) {
   const t = useT();

@@ -1,4 +1,3 @@
-import { useId, useState } from "preact/compat";
 import type {
   UiChoiceBlock,
   UiColumnsBlock,
@@ -10,6 +9,7 @@ import type {
   UiResolvedView,
   UiStackBlock,
 } from "@lumisca/core/shared";
+import { useId, useState } from "preact/compat";
 import { useT } from "../../i18n.ts";
 import { Flowchart } from "./Flowchart.tsx";
 
@@ -68,7 +68,9 @@ function BlockView({
     case "list":
       return (
         <ul className={`ui-card-list${block.ordered ? " ordered" : ""}`}>
-          {block.items.map((item, index) => <li key={index}>{item}</li>)}
+          {block.items.map((item, index) => (
+            <li key={index}>{item}</li>
+          ))}
         </ul>
       );
     case "table":
@@ -102,11 +104,12 @@ function LayoutBlock({
     | UiGridBlock<UiResolvedBlock>;
   onSend: (text: string) => void;
 }) {
-  const className = block.type === "stack"
-    ? "ui-card-stack"
-    : block.type === "columns"
-    ? "ui-card-columns"
-    : "ui-card-grid";
+  const className =
+    block.type === "stack"
+      ? "ui-card-stack"
+      : block.type === "columns"
+        ? "ui-card-columns"
+        : "ui-card-grid";
   return (
     <div
       className={className}
@@ -148,13 +151,17 @@ function TableBlock({ rows }: { rows: readonly (readonly string[])[] }) {
       <table className="ui-card-table">
         <thead>
           <tr>
-            {header.map((cell, index) => <th key={index}>{cell}</th>)}
+            {header.map((cell, index) => (
+              <th key={index}>{cell}</th>
+            ))}
           </tr>
         </thead>
         <tbody>
           {body.map((row, rowIndex) => (
             <tr key={rowIndex}>
-              {row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}
+              {row.map((cell, cellIndex) => (
+                <td key={cellIndex}>{cell}</td>
+              ))}
             </tr>
           ))}
         </tbody>
@@ -197,16 +204,12 @@ function ChoiceBlock({
     setSelected((current) =>
       current.includes(index)
         ? current.filter((item) => item !== index)
-        : [...current, index]
+        : [...current, index],
     );
   };
 
   return (
-    <div
-      className="ui-card-choice"
-      data-layout={block.layout}
-      role="group"
-    >
+    <div className="ui-card-choice" data-layout={block.layout} role="group">
       {block.multiple && (
         <span className="ui-card-hint">{t("panels.ui.multiple")}</span>
       )}
@@ -367,7 +370,9 @@ function FieldView({
         >
           <option value="">{field.placeholder ?? ""}</option>
           {field.options.map((option, index) => (
-            <option key={index} value={option.label}>{option.label}</option>
+            <option key={index} value={option.label}>
+              {option.label}
+            </option>
           ))}
         </select>
       </div>

@@ -6,22 +6,25 @@
  * A test may inject a held-back stream function instead (see agent/faux.ts),
  * so the transport surface stays exactly one function.
  */
-import { isStepCount, streamText as vercelStreamText } from "ai";
+
 import type { LanguageModel, LanguageModelUsage } from "ai";
+import { isStepCount, streamText as vercelStreamText } from "ai";
 import { errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";
+import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import {
   clampMaxTokensToContext,
   promptTokensFor,
   reservedOutputCapFor,
 } from "./budget.ts";
-import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
+
 export {
   CONTEXT_SAFETY_RATIO,
   CONTEXT_SAFETY_TOKENS,
   contextSafetyTokens,
   MIN_MAX_TOKENS,
 } from "./budget.ts";
+
 import { withOutputCapRecovery } from "./output-cap-recovery.ts";
 import {
   toArgsRecord,
@@ -29,14 +32,16 @@ import {
   toExecutableToolSet,
 } from "./stream-messages.ts";
 import { readToolOutput } from "./tool-envelope.ts";
+
 export {
   readToolOutput,
   type ToolImage,
   type ToolOutput,
 } from "./tool-envelope.ts";
+
+import { contentText } from "../shared/mod.ts";
 import { describeFailedCall, failureText } from "./error-detail.ts";
 import { sessionHeadersFor } from "./lang-model.ts";
-import { contentText } from "../shared/mod.ts";
 import {
   isRetryableRateLimitError,
   type RateLimitRetryOptions,
@@ -70,8 +75,11 @@ const NOT_CONFIGURED = (providerId: string) =>
 /** Structural guard for the streamed `finish-step` usage part (the stream
  * parts are typed loosely here, so the shape is validated at runtime). */
 function isLanguageModelUsage(value: unknown): value is LanguageModelUsage {
-  return typeof value === "object" && value !== null &&
-    ("inputTokens" in value || "outputTokens" in value);
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    ("inputTokens" in value || "outputTokens" in value)
+  );
 }
 
 /** The request bag handed to the SDK, typed as the SDK's own parameter: a
@@ -295,10 +303,12 @@ async function* runStream(
             type: "toolcall_result",
             toolCallId: String(p.toolCallId ?? ""),
             toolName: String(p.toolName ?? ""),
-            content: [{
-              type: "text" as const,
-              text: errorMessage(p.error),
-            }],
+            content: [
+              {
+                type: "text" as const,
+                text: errorMessage(p.error),
+              },
+            ],
             isError: true,
           };
           break;
@@ -399,9 +409,8 @@ async function* runStream(
   // fall back to the step text when the stream carried none (e.g. a cached
   // or non-streaming provider path).
   const finalText = text.length > 0 ? text : (lastStep?.text ?? "");
-  const finalThinking = thinking.length > 0
-    ? thinking
-    : (lastStep?.reasoningText ?? "");
+  const finalThinking =
+    thinking.length > 0 ? thinking : (lastStep?.reasoningText ?? "");
   const finalUsage = stepUsage(streamedUsage, lastStep);
   const message = buildAssistantMessage(
     model,
@@ -470,9 +479,8 @@ function stepUsage(
   const cacheRead = usage?.inputTokenDetails?.cacheReadTokens ?? 0;
   const cacheWrite = usage?.inputTokenDetails?.cacheWriteTokens ?? 0;
   const input = uncachedInputTokens(usage, cacheRead, cacheWrite);
-  const output = typeof usage?.outputTokens === "number"
-    ? usage.outputTokens
-    : 0;
+  const output =
+    typeof usage?.outputTokens === "number" ? usage.outputTokens : 0;
   const reasoningTokens = usage?.outputTokenDetails?.reasoningTokens ?? 0;
   return {
     input,
@@ -518,20 +526,16 @@ function uncachedInputTokens(
  * An object like `{ enabled: true }` or `{ enabled: false }` reaches the
  * wire as-is, which OpenCode Go / Console Go rejects since it expects a
  * string like `"low"`, `"medium"`, `"high"`, etc. */
-function reasoningHint(
-  model: Model<Api>,
-  level: string,
-): string | undefined {
+function reasoningHint(model: Model<Api>, level: string): string | undefined {
   if (model.reasoning !== true) return undefined;
   if (level === "off") return undefined;
-  const mapped = model.thinkingLevelMap
-    ?.[level as keyof typeof model.thinkingLevelMap];
+  const mapped =
+    model.thinkingLevelMap?.[level as keyof typeof model.thinkingLevelMap];
   return mapped && mapped !== "null"
     ? mapped
-    : ({ low: "low", medium: "medium", high: "high" } as Record<
-      string,
-      string
-    >)[level];
+    : (
+        { low: "low", medium: "medium", high: "high" } as Record<string, string>
+      )[level];
 }
 
 /**
@@ -553,7 +557,8 @@ export function reasoningForceOption(
   if (reasoning === undefined) return undefined;
   if (model.reasoning !== true) return undefined;
   if (
-    model.api !== "openai-responses" && model.api !== "azure-openai-responses"
+    model.api !== "openai-responses" &&
+    model.api !== "azure-openai-responses"
   ) {
     return undefined;
   }
@@ -592,10 +597,10 @@ export function chatgptProviderOptions(
     openai: {
       store: false,
       systemMessageMode: "remove",
-      instructions: context.systemPrompt !== undefined &&
-          context.systemPrompt.length > 0
-        ? context.systemPrompt
-        : CHATGPT_FALLBACK_INSTRUCTIONS,
+      instructions:
+        context.systemPrompt !== undefined && context.systemPrompt.length > 0
+          ? context.systemPrompt
+          : CHATGPT_FALLBACK_INSTRUCTIONS,
       ...(model.reasoning === true ? { forceReasoning: true } : {}),
     },
   };
@@ -634,10 +639,10 @@ function buildAssistantMessage(
   model: Model<Api>,
   step:
     | {
-      text?: string;
-      reasoning?: unknown;
-      toolCalls?: unknown[];
-    }
+        text?: string;
+        reasoning?: unknown;
+        toolCalls?: unknown[];
+      }
     | undefined,
   text: string,
   thinking: string,
@@ -736,7 +741,8 @@ export async function streamText(
           error?: { errorMessage?: string };
         };
         throw new Error(
-          errorEvent.errorMessage ?? errorEvent.error?.errorMessage ??
+          errorEvent.errorMessage ??
+            errorEvent.error?.errorMessage ??
             failureLabel,
         );
       }

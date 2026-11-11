@@ -1,8 +1,8 @@
 import { extname } from "node:path";
 import {
+  type AttachmentRef,
   attachmentDisplayName,
   attachmentMimeType,
-  type AttachmentRef,
   isInlineImageExtension,
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENT_NAME_CHARS,

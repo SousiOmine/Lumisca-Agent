@@ -47,9 +47,7 @@ export type SettingsCategory = (typeof SETTINGS_CATEGORIES)[number];
 
 /** Whether `value` names a category: the question a URL's path segment asks,
  * where the answer may be anything a reader (or a typo) put there. */
-export function isSettingsCategory(
-  value: string,
-): value is SettingsCategory {
+export function isSettingsCategory(value: string): value is SettingsCategory {
   return (SETTINGS_CATEGORIES as readonly string[]).includes(value);
 }
 

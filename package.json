@@ -35,6 +35,13 @@
     "test": "bun test --parallel",
     "test:core": "bun test --parallel packages/core",
     "test:server": "bun test --parallel packages/server",
-    "test:web": "bun test --parallel packages/web"
+    "test:web": "bun test --parallel packages/web",
+    "fmt": "biome check --write .",
+    "fmt:check": "biome check ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.6",
+    "@types/deno": "^2.7.0",
+    "typescript": "^7.0.2"
   }
 }

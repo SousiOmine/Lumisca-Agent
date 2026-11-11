@@ -124,8 +124,9 @@ export async function openRemoteDesktopSession(
     { session_handle_token: connection.variant("s", newRequestToken()) },
   );
   const sessionHandle = unwrapVariant(
-    requireSuccess(created, "create a screen-sharing session")
-      .results["session_handle"],
+    requireSuccess(created, "create a screen-sharing session").results[
+      "session_handle"
+    ],
   );
   if (typeof sessionHandle !== "string" || sessionHandle.length === 0) {
     throw new CoreError(
@@ -290,9 +291,10 @@ function parseStreams(value: unknown): PortalStream[] {
     const fields = Array.isArray(entry) ? entry : [];
     const id = unwrapVariant(fields[0]);
     const properties = unwrapVariant(fields[1]);
-    const record = typeof properties === "object" && properties !== null
-      ? properties as Record<string, unknown>
-      : {};
+    const record =
+      typeof properties === "object" && properties !== null
+        ? (properties as Record<string, unknown>)
+        : {};
     const position = tuple(record["position"]);
     const size = tuple(record["size"]);
     // mutter publishes "output-name" (the connector, e.g. "Virtual-1");
@@ -300,8 +302,8 @@ function parseStreams(value: unknown): PortalStream[] {
     // name to match a monitor with.
     const connectors = [record["output-name"], record["id"]]
       .map(unwrapVariant)
-      .filter((name): name is string =>
-        typeof name === "string" && name.length > 0
+      .filter(
+        (name): name is string => typeof name === "string" && name.length > 0,
       );
     if (typeof id !== "number") {
       throw new CoreError(
@@ -321,7 +323,7 @@ function parseStreams(value: unknown): PortalStream[] {
 function tuple(value: unknown): number[] {
   const list = unwrapVariant(value);
   if (!Array.isArray(list)) return [];
-  return list.map(unwrapVariant).filter((entry): entry is number =>
-    typeof entry === "number"
-  );
+  return list
+    .map(unwrapVariant)
+    .filter((entry): entry is number => typeof entry === "number");
 }

@@ -32,8 +32,7 @@ export const SUMMARIZATION_SYSTEM_PROMPT =
 
 /** Instruction appended after the serialized conversation on a first
  * compaction (pi's SUMMARIZATION_PROMPT). */
-export const SUMMARIZATION_PROMPT =
-  `The messages above are a conversation to summarize. Create a structured context checkpoint summary that another LLM will use to continue the work.
+export const SUMMARIZATION_PROMPT = `The messages above are a conversation to summarize. Create a structured context checkpoint summary that another LLM will use to continue the work.
 
 Use this EXACT format:
 
@@ -68,8 +67,7 @@ Keep each section concise. Preserve exact file paths, function names, and error 
 
 /** Instruction used when a previous checkpoint exists: the previous summary
  * is merged instead of being replaced (pi's UPDATE_SUMMARIZATION_PROMPT). */
-export const UPDATE_SUMMARIZATION_PROMPT =
-  `The messages above are NEW conversation messages to incorporate into the existing summary provided in <previous-summary> tags.
+export const UPDATE_SUMMARIZATION_PROMPT = `The messages above are NEW conversation messages to incorporate into the existing summary provided in <previous-summary> tags.
 
 Update the existing structured summary with new information. RULES:
 - PRESERVE all existing information from the previous summary

@@ -1,50 +1,49 @@
-import type { SessionInfo } from "../domain/session.ts";
-import type { ClientEvent } from "../domain/event.ts";
-import type { AgentRepo } from "../stella/agents.ts";
-import type { SessionRepo } from "../session/repo.ts";
-import type { MessageRepo } from "../session/messages.ts";
 import type { SessionPool } from "../agent/pool.ts";
+import { stellaEntryOf } from "../agent/stella-stream.ts";
+import type { AgentMessage } from "../ai/types.ts";
+import type { ClientEvent } from "../domain/event.ts";
+import type { SessionInfo } from "../domain/session.ts";
+import type { StellaEntry } from "../domain/stella-conversation.ts";
+import type { Workspace } from "../domain/workspace.ts";
+import { CoreError, errorMessage } from "../errors.ts";
 import type { RoutineRepo } from "../routine/repo.ts";
 import type { RoutineScheduler } from "../routine/scheduler.ts";
-import type { StellaMachine } from "../vm/machine.ts";
-import type { StellaRuntime } from "../vm/runtime.ts";
-import type { VmManager, VmProgress } from "../vm/container.ts";
-import type { StellaAvailability } from "../vm/availability.ts";
+import { createRoutineTools } from "../routine/tools.ts";
+import { createHistorySearchTool } from "../session/history.ts";
+import type { MessageRepo } from "../session/messages.ts";
+import type { SessionRepo } from "../session/repo.ts";
+import type { Locale } from "../shared/mod.ts";
 import type { StellaStatus } from "../shared/wire.ts";
 import type { SkillDef } from "../skills/discover.ts";
-import type { Workspace } from "../domain/workspace.ts";
-import type { Locale } from "../shared/mod.ts";
-import { CoreError, errorMessage } from "../errors.ts";
-import type { HandoverRegistry } from "../vm/handover-registry.ts";
-import type { EnvRequestRegistry } from "../vm/env-request.ts";
-import { requireEnvValue, VmEnvStore } from "../vm/env-store.ts";
-import { createVmEnvTool } from "../vm/env-tool.ts";
-import type { VmExec } from "../vm/container.ts";
-import { StellaSkillCache } from "../stella/skill-cache.ts";
-import { vmAgentDir } from "../vm/contract.ts";
-import { VmFileBackend } from "../vm/fs.ts";
-import {
-  VmBackgroundSpawner,
-  VmCommandRunner as VmCommandRunnerImpl,
-} from "../vm/shell.ts";
-import { createVmScreen } from "../vm/screen.ts";
-import { createVmClipboard } from "../vm/clipboard.ts";
-import type { VmClipboard } from "../vm/clipboard.ts";
-import { createVmTools } from "../vm/tools.ts";
-import { createVmLaunchTool } from "../vm/launcher.ts";
-import { createVmAskUserTool } from "../vm/ask-user.ts";
-import { createVmSemanticTools } from "../vm/semantic.ts";
-import { createRoutineTools } from "../routine/tools.ts";
-import { createAgentCreateTool } from "../stella/tools.ts";
-import { createHistorySearchTool } from "../session/history.ts";
+import type { AgentRepo } from "../stella/agents.ts";
+import type { IdentityTarget } from "../stella/identity.ts";
 import {
   createIdentityProvider,
   createIdentityTool,
 } from "../stella/identity.ts";
-import { stellaEntryOf } from "../agent/stella-stream.ts";
-import type { StellaEntry } from "../domain/stella-conversation.ts";
-import type { AgentMessage } from "../ai/types.ts";
-import type { IdentityTarget } from "../stella/identity.ts";
+import { StellaSkillCache } from "../stella/skill-cache.ts";
+import { createAgentCreateTool } from "../stella/tools.ts";
+import { createVmAskUserTool } from "../vm/ask-user.ts";
+import type { StellaAvailability } from "../vm/availability.ts";
+import type { VmClipboard } from "../vm/clipboard.ts";
+import { createVmClipboard } from "../vm/clipboard.ts";
+import type { VmExec, VmManager, VmProgress } from "../vm/container.ts";
+import { vmAgentDir } from "../vm/contract.ts";
+import type { EnvRequestRegistry } from "../vm/env-request.ts";
+import { requireEnvValue, VmEnvStore } from "../vm/env-store.ts";
+import { createVmEnvTool } from "../vm/env-tool.ts";
+import { VmFileBackend } from "../vm/fs.ts";
+import type { HandoverRegistry } from "../vm/handover-registry.ts";
+import { createVmLaunchTool } from "../vm/launcher.ts";
+import type { StellaMachine } from "../vm/machine.ts";
+import type { StellaRuntime } from "../vm/runtime.ts";
+import { createVmScreen } from "../vm/screen.ts";
+import { createVmSemanticTools } from "../vm/semantic.ts";
+import {
+  VmBackgroundSpawner,
+  VmCommandRunner as VmCommandRunnerImpl,
+} from "../vm/shell.ts";
+import { createVmTools } from "../vm/tools.ts";
 
 /** The conversation entries a set of stored rows projects to, oldest first —
  * the same projection the conversation endpoints serve. */
@@ -105,9 +104,10 @@ export class StellaMachineService {
         provider?: string,
         modelId?: string,
       ): Promise<{ provider: string; modelId: string }>;
-      createStellaAgent(
-        input: { name: string; role: string },
-      ): Promise<import("../stella/agents.ts").StellaAgent>;
+      createStellaAgent(input: {
+        name: string;
+        role: string;
+      }): Promise<import("../stella/agents.ts").StellaAgent>;
     },
   ) {}
 
@@ -139,9 +139,10 @@ export class StellaMachineService {
 
   /** The agents in the sidebar, most recently used first. */
   async getOrCreateStellaSession(agentId?: string): Promise<SessionInfo> {
-    const agent = agentId !== undefined
-      ? this.deps.agents.get(agentId)
-      : this.deps.agents.latest();
+    const agent =
+      agentId !== undefined
+        ? this.deps.agents.get(agentId)
+        : this.deps.agents.latest();
     if (agent === undefined) {
       throw new CoreError(
         agentId !== undefined
@@ -168,7 +169,8 @@ export class StellaMachineService {
       this.deps.sessions.rename(existing.id, agent.name);
     }
     if (
-      existing !== undefined && this.deps.pool.get(existing.id) !== undefined
+      existing !== undefined &&
+      this.deps.pool.get(existing.id) !== undefined
     ) {
       if (await this.deps.machine.isRunning()) {
         this.deps.agents.touch(agent.id);
@@ -212,8 +214,9 @@ export class StellaMachineService {
     // The agent's own model, or the app's default when it has none: the
     // choice lives on the agent so it can be made before the conversation
     // exists.
-    const model = agent.model ??
-      await this.deps.resolveDefaultModel(undefined, undefined);
+    const model =
+      agent.model ??
+      (await this.deps.resolveDefaultModel(undefined, undefined));
     const workspace = this.deps.chatWorkspace();
     const session = this.deps.sessions.create({
       workspaceId: workspace.id,
@@ -414,9 +417,9 @@ export class StellaMachineService {
       historyTool: createHistorySearchTool({
         entries: (window) =>
           entriesOf(
-            this.deps.messages.listBetween(session.id, window).map((row) =>
-              row.message
-            ),
+            this.deps.messages
+              .listBetween(session.id, window)
+              .map((row) => row.message),
           ),
       }),
       // The identity belongs to this agent: the tool writes it, and the
@@ -500,10 +503,8 @@ export class StellaMachineService {
   /** Re-read one stella agent's skill catalog. Awaited before its session
    * opens, so the agent's skill tool starts with a current list. */
   refreshStellaSkills(agentId: string): Promise<void> {
-    return this.skills.refresh(
-      agentId,
-      this.deps.machine.get(),
-      () => this.deps.machine.refreshSkills(agentId),
+    return this.skills.refresh(agentId, this.deps.machine.get(), () =>
+      this.deps.machine.refreshSkills(agentId),
     );
   }
 
@@ -522,10 +523,8 @@ export class StellaMachineService {
    * folder, hence another entry.
    */
   private primeStellaSkills(agentId: string): Promise<void> {
-    return this.skills.prime(
-      agentId,
-      this.deps.machine.get(),
-      () => this.deps.machine.refreshSkills(agentId),
+    return this.skills.prime(agentId, this.deps.machine.get(), () =>
+      this.deps.machine.refreshSkills(agentId),
     );
   }
 }

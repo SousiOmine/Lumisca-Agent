@@ -183,18 +183,20 @@ function foldLines(source: string): string {
 
 /** Inline markers, and the whitespace fold that makes the result one line. */
 function foldInline(text: string): string {
-  return text
-    // Images and links keep their label: it is the words the message read.
-    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-    // Emphasis and inline code lose their markers, keep their text.
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/__([^_]+)__/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
-    // Table cells: the pipes are the table's syntax, not the sentence's.
-    .replace(/\s*\|\s*/g, " ")
-    .replace(/[\s\u3000]+/g, " ")
-    .trim();
+  return (
+    text
+      // Images and links keep their label: it is the words the message read.
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+      // Emphasis and inline code lose their markers, keep their text.
+      .replace(/\*\*([^*]+)\*\*/g, "$1")
+      .replace(/__([^_]+)__/g, "$1")
+      .replace(/`([^`]+)`/g, "$1")
+      // Table cells: the pipes are the table's syntax, not the sentence's.
+      .replace(/\s*\|\s*/g, " ")
+      .replace(/[\s\u3000]+/g, " ")
+      .trim()
+  );
 }
 
 /** What a sidebar row needs to know about the agent itself: the label, the
@@ -293,8 +295,9 @@ export function withAgentRow(
     ...agent,
     preview: previous?.preview ?? null,
   };
-  const next = previous === undefined
-    ? [...rows, row]
-    : rows.map((existing) => existing.id === agent.id ? row : existing);
+  const next =
+    previous === undefined
+      ? [...rows, row]
+      : rows.map((existing) => (existing.id === agent.id ? row : existing));
   return next.sort(compareAgentRows);
 }

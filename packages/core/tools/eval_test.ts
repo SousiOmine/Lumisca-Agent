@@ -1,8 +1,8 @@
 import { join } from "node:path";
 import { assert, assertEquals } from "@std/assert";
-import { createEvalTool } from "./eval.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
 import { removeDirRetry, toolText } from "../test-utils.ts";
+import { createEvalTool } from "./eval.ts";
 
 function makeEval() {
   return createEvalTool();
@@ -22,10 +22,7 @@ Deno.test("eval captures console output and inspects values", async () => {
     undefined,
   );
   const text = toolText(result);
-  assertEquals(
-    text,
-    "[output]\nhello 2\n\n[result]\n{ items: [ 1, 2, 3 ] }",
-  );
+  assertEquals(text, "[output]\nhello 2\n\n[result]\n{ items: [ 1, 2, 3 ] }");
 });
 
 Deno.test("eval keeps var, function and globalThis state between calls", async () => {
@@ -98,10 +95,7 @@ Deno.test("eval enforces the timeout", async () => {
     { code: "while (true) {}", timeout: 100 },
     undefined,
   );
-  assert(
-    toolText(result).includes("timed out"),
-    `result: ${toolText(result)}`,
-  );
+  assert(toolText(result).includes("timed out"), `result: ${toolText(result)}`);
 });
 
 Deno.test("eval strips TypeScript types", async () => {
@@ -119,8 +113,7 @@ Deno.test("eval exposes Deno and fetch deliberately, but not node globals", asyn
   const result = await tool.execute(
     "1",
     {
-      code:
-        "[typeof Deno, typeof fetch, typeof process, typeof require].join(',')",
+      code: "[typeof Deno, typeof fetch, typeof process, typeof require].join(',')",
     },
     undefined,
   );
@@ -166,7 +159,8 @@ Deno.test("eval provides the web globals real snippets need", async () => {
   // 18 web globals present, the three node internals absent.
   assertEquals(
     toolText(result),
-    "[result]\n'" + "function+".repeat(17) +
+    "[result]\n'" +
+      "function+".repeat(17) +
       "function+undefined+undefined+undefined'",
   );
 });
@@ -176,8 +170,7 @@ Deno.test("eval can decode, hash and abort with the web globals", async () => {
   const decoded = await tool.execute(
     "1",
     {
-      code:
-        "new TextDecoder().decode(new TextEncoder().encode('hello')) + '|' + btoa('hi')",
+      code: "new TextDecoder().decode(new TextEncoder().encode('hello')) + '|' + btoa('hi')",
     },
     undefined,
   );
@@ -188,7 +181,8 @@ Deno.test("eval can decode, hash and abort with the web globals", async () => {
   const aborted = await tool.execute(
     "1",
     {
-      code: "const c = new AbortController(); c.abort(); " +
+      code:
+        "const c = new AbortController(); c.abort(); " +
         "try { await fetch('http://127.0.0.1:1/', { signal: c.signal }); " +
         "console.log('resolved') } catch (e) { " +
         "console.log('rejected:' + (e.name === 'AbortError' || e.name === 'DOMException')) }",
@@ -273,10 +267,7 @@ Deno.test("eval times out a promise that never resolves", async () => {
     { code: "new Promise(() => {})", timeout: 100 },
     undefined,
   );
-  assert(
-    toolText(result).includes("timed out"),
-    `result: ${toolText(result)}`,
-  );
+  assert(toolText(result).includes("timed out"), `result: ${toolText(result)}`);
 });
 
 Deno.test("eval times out top-level await that never settles", async () => {
@@ -284,19 +275,13 @@ Deno.test("eval times out top-level await that never settles", async () => {
   // only bounds the synchronous part, so an unawaited wrapper used to hold
   // the tool call — and the whole run — for good. Both an explicit await
   // and a stream/socket that never answers must end at the timeout.
-  for (
-    const code of [
-      "await new Promise(() => {})",
-      "const never = await new Promise(() => {}); console.log(never)",
-    ]
-  ) {
+  for (const code of [
+    "await new Promise(() => {})",
+    "const never = await new Promise(() => {}); console.log(never)",
+  ]) {
     const tool = makeEval();
     const started = performance.now();
-    const result = await tool.execute(
-      "1",
-      { code, timeout: 100 },
-      undefined,
-    );
+    const result = await tool.execute("1", { code, timeout: 100 }, undefined);
     assert(
       toolText(result).includes("timed out"),
       `${code}: ${toolText(result)}`,
@@ -364,11 +349,7 @@ Deno.test("eval: reset stops the timers its snippets scheduled", async () => {
     await tool.execute("2", { code: "'reset'", reset: true }, undefined);
     await new Promise((resolve) => setTimeout(resolve, 150));
     const after = Number(Deno.readTextFileSync(marker));
-    assertEquals(
-      after,
-      before,
-      "the interval kept running after reset",
-    );
+    assertEquals(after, before, "the interval kept running after reset");
   } finally {
     tool.dispose?.();
     await removeDirRetry(dir);

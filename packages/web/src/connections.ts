@@ -33,9 +33,13 @@ function sameEntries(
   if (a.length !== b.length) return false;
   return a.every((entry, index) => {
     const other = b[index];
-    return other !== undefined && entry.id === other.id &&
-      entry.name === other.name && entry.url === other.url &&
-      entry.token === other.token;
+    return (
+      other !== undefined &&
+      entry.id === other.id &&
+      entry.name === other.name &&
+      entry.url === other.url &&
+      entry.token === other.token
+    );
   });
 }
 
@@ -210,12 +214,12 @@ export function suggestConnectionName(url: string): string | null {
 export function withUrl(entry: ConnectionEntry, url: string): ConnectionEntry {
   const name = entry.name.trim();
   const previous = suggestConnectionName(entry.url);
-  const followsAddress = name === "" ||
-    (previous !== null && name === previous);
+  const followsAddress =
+    name === "" || (previous !== null && name === previous);
   return followsAddress
     ? { ...entry, url, name: suggestConnectionName(url) ?? "" }
     : {
-      ...entry,
-      url,
-    };
+        ...entry,
+        url,
+      };
 }

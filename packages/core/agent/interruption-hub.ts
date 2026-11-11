@@ -1,8 +1,8 @@
 import { CoreError } from "../errors.ts";
 import type { AskAnswer } from "../shared/mod.ts";
 import type { AskHub, PendingQuestion } from "../tools/ask.ts";
-import type { HandoverHub, PendingHandover } from "../vm/handover.ts";
 import type { EnvRequestHub, PendingEnvRequest } from "../vm/env-request.ts";
+import type { HandoverHub, PendingHandover } from "../vm/handover.ts";
 
 /**
  * The ways a run stops and waits for a person: the `ask` tool's questions,

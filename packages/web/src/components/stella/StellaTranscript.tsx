@@ -1,16 +1,16 @@
 import { Fragment, useMemo } from "preact/compat";
+import { formatDaySeparator, startOfDay } from "../../format.ts";
 import { useArrivals } from "../../hooks/useArrivals.ts";
 import { useTranscriptScroll } from "../../hooks/useTranscriptScroll.ts";
 import { useLocale, useT } from "../../i18n.ts";
-import { formatDaySeparator, startOfDay } from "../../format.ts";
-import { RunningIndicator } from "../chat/RunningIndicator.tsx";
 import {
   entryKey,
   type StellaConversationState,
   transcriptEntries,
 } from "../../stella-state.ts";
-import { AgentAvatar } from "./AgentAvatar.tsx";
 import { CardView } from "../chat/CardView.tsx";
+import { RunningIndicator } from "../chat/RunningIndicator.tsx";
+import { AgentAvatar } from "./AgentAvatar.tsx";
 import { type MessageAuthor, StellaMessage } from "./StellaMessage.tsx";
 
 /**
@@ -122,7 +122,8 @@ export function StellaTranscript({
           const previous = entries[index - 1];
           // A run of the agent's messages reads as one answer: the face and
           // the gap belong to the first of the run only.
-          const showAvatar = entry.role !== "user" &&
+          const showAvatar =
+            entry.role !== "user" &&
             (newDay || previous === undefined || previous.role === "user");
           const key = entryKey(entry);
           return (
@@ -166,7 +167,9 @@ export function StellaTranscript({
           />
         )}
         {conversation.error !== undefined && (
-          <p className="error-text" role="alert">{conversation.error}</p>
+          <p className="error-text" role="alert">
+            {conversation.error}
+          </p>
         )}
       </div>
     </div>

@@ -11,6 +11,7 @@
  * is the one command that touches the system (see mod.ts).
  */
 import { dirname, join } from "node:path";
+import { errorMessage } from "@lumisca/core";
 import { hostForUrl, isLoopbackHost } from "@lumisca/core/shared";
 import { isAddressInUseError } from "../startup.ts";
 import { STAGING_DIR_NAME } from "../update/stage.ts";
@@ -35,7 +36,6 @@ import {
   requirePackaged,
 } from "./shared.ts";
 import { SERVICE_UNIT_TEMPLATE } from "./template.ts";
-import { errorMessage } from "@lumisca/core";
 
 /** File the write-access check creates inside the updater's staging
  * directory. */
@@ -185,9 +185,9 @@ export async function runInstall(
   deps.out(healthy ? "疎通確認: ok" : "疎通確認: 応答がありません");
   if (!healthy) {
     deps.err(
-      `サーバーが応答しません (http://${
-        hostForUrl(values.host)
-      }:${values.port})。` +
+      `サーバーが応答しません (http://${hostForUrl(
+        values.host,
+      )}:${values.port})。` +
         `ログを確認してください: journalctl --user -u ${UNIT_NAME} -n 50`,
     );
   }

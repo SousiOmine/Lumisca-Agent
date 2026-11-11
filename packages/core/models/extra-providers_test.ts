@@ -1,5 +1,6 @@
 import { assert, assertEquals } from "@std/assert";
 import { LumiscaCore } from "../mod.ts";
+import { inputBudgetTokens } from "../shared/context-usage.ts";
 import {
   builtinProvider,
   builtinProviders,
@@ -9,7 +10,6 @@ import {
   opencodeGoProvider,
 } from "./dev-catalog.ts";
 import { getSupportedThinkingLevels } from "./thinking.ts";
-import { inputBudgetTokens } from "../shared/context-usage.ts";
 
 /** The providers this suite covers: the ids the catalog must register and
  * the endpoints they must be served from. Written out here instead of
@@ -81,14 +81,12 @@ Deno.test("OpenCode Go routes each model over the transport models.dev declares"
 
   // Responses-only models (docs: /v1/responses, @ai-sdk/openai) — Muse
   // Spark and friends are rejected when asked over /chat/completions.
-  for (
-    const id of [
-      "muse-spark-1.2-contributor",
-      "muse-spark-1.3-contributor",
-      "grok-4.7",
-      "gpt-5.6-luna",
-    ]
-  ) {
+  for (const id of [
+    "muse-spark-1.2-contributor",
+    "muse-spark-1.3-contributor",
+    "grok-4.7",
+    "gpt-5.6-luna",
+  ]) {
     assertEquals(
       byId.get(id)?.api,
       "openai-responses",
@@ -129,7 +127,8 @@ Deno.test("the catalog's input caps stay inside the prompt budget", () => {
       // against a 190,000 window), which is exactly why the rule lives in
       // one helper instead of at the call sites.
       assert(
-        budget !== undefined && model.contextWindow !== undefined &&
+        budget !== undefined &&
+          model.contextWindow !== undefined &&
           budget <= model.contextWindow,
         `${provider.id}/${model.id}: budget above the window`,
       );
@@ -324,15 +323,15 @@ Deno.test("other providers derive per-model levels from reasoning_options", () =
 Deno.test("extra providers register in LumiscaCore and need a stored key", async () => {
   const core = LumiscaCore.forTesting([], NO_ENV);
   try {
-    const deepinfra = core.listProviders().find((p) =>
-      p.id === DEEPINFRA_PROVIDER_ID
-    )!;
-    const clinepass = core.listProviders().find((p) =>
-      p.id === CLINEPASS_PROVIDER_ID
-    )!;
-    const commandcode = core.listProviders().find((p) =>
-      p.id === COMMANDCODE_PROVIDER_ID
-    )!;
+    const deepinfra = core
+      .listProviders()
+      .find((p) => p.id === DEEPINFRA_PROVIDER_ID)!;
+    const clinepass = core
+      .listProviders()
+      .find((p) => p.id === CLINEPASS_PROVIDER_ID)!;
+    const commandcode = core
+      .listProviders()
+      .find((p) => p.id === COMMANDCODE_PROVIDER_ID)!;
     assertEquals(deepinfra.getModels().length > 0, true);
     assertEquals(clinepass.getModels().length > 0, true);
     assertEquals(commandcode.getModels().length > 0, true);
@@ -345,10 +344,7 @@ Deno.test("extra providers register in LumiscaCore and need a stored key", async
     // ...but the settings UI offers API-key entry for all of them.
     assertEquals(core.getProviderAuthType(DEEPINFRA_PROVIDER_ID), "api_key");
     assertEquals(core.getProviderAuthType(CLINEPASS_PROVIDER_ID), "api_key");
-    assertEquals(
-      core.getProviderAuthType(OPENCODE_GO_PROVIDER_ID),
-      "api_key",
-    );
+    assertEquals(core.getProviderAuthType(OPENCODE_GO_PROVIDER_ID), "api_key");
     assertEquals(core.getProviderAuthType(COMMANDCODE_PROVIDER_ID), "api_key");
 
     // A stored key is the "configured" signal.

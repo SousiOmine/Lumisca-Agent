@@ -1,5 +1,5 @@
-import { assertEquals } from "@std/assert";
 import { fauxProvider, LumiscaCore } from "@lumisca/core";
+import { assertEquals } from "@std/assert";
 import { createApp } from "../app.ts";
 import type { UpdateStatus } from "../update/service.ts";
 import { type UpdateApi, updateRoutes } from "./update.ts";
@@ -90,34 +90,41 @@ Deno.test("update endpoints drive the updater and answer with its status", async
       }),
     );
     assertEquals(initial.status, 200);
-    const initialBody = await initial.json() as UpdateStatus;
+    const initialBody = (await initial.json()) as UpdateStatus;
     assertEquals(initialBody.currentVersion, "0.7.7");
     assertEquals(initialBody.supported, true);
     assertEquals(initialBody.autoUpdate, true);
 
     const auto = await post("/api/update/set-auto", { enabled: false });
     assertEquals(auto.status, 200);
-    assertEquals((await auto.json() as UpdateStatus).autoUpdate, false);
+    assertEquals(((await auto.json()) as UpdateStatus).autoUpdate, false);
     const autoRestart = await post("/api/update/set-auto-restart", {
       enabled: true,
     });
-    assertEquals((await autoRestart.json() as UpdateStatus).autoRestart, true);
+    assertEquals(
+      ((await autoRestart.json()) as UpdateStatus).autoRestart,
+      true,
+    );
 
     // Every action returns the state it produced, so the UI can update
     // without waiting for its next poll.
     const checked = await post("/api/update/check");
-    assertEquals((await checked.json() as UpdateStatus).latestVersion, "0.7.8");
     assertEquals(
-      (await (await post("/api/update/download")).json() as UpdateStatus).ready,
+      ((await checked.json()) as UpdateStatus).latestVersion,
+      "0.7.8",
+    );
+    assertEquals(
+      ((await (await post("/api/update/download")).json()) as UpdateStatus)
+        .ready,
       true,
     );
     assertEquals(
-      (await (await post("/api/update/install")).json() as UpdateStatus)
+      ((await (await post("/api/update/install")).json()) as UpdateStatus)
         .applied,
       true,
     );
     assertEquals(
-      (await (await post("/api/update/restart")).json() as UpdateStatus)
+      ((await (await post("/api/update/restart")).json()) as UpdateStatus)
         .restarting,
       true,
     );

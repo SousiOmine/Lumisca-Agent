@@ -8,8 +8,11 @@
  * draws the result.
  */
 
+export { parseUiMarkup, parseUiMarkupPartial } from "./build.ts";
+export { CARD_HELP } from "./help.ts";
 export { UI_MARKUP_LIMITS } from "./limits.ts";
-export { interactiveBlock } from "./types.ts";
+export { resolveUiView } from "./resolve.ts";
+export { segmentsText, splitChatText } from "./segments.ts";
 export type {
   UiBlock,
   UiChoiceBlock,
@@ -41,7 +44,4 @@ export type {
   UiTextBlock,
   UiView,
 } from "./types.ts";
-export { parseUiMarkup, parseUiMarkupPartial } from "./build.ts";
-export { resolveUiView } from "./resolve.ts";
-export { segmentsText, splitChatText } from "./segments.ts";
-export { CARD_HELP } from "./help.ts";
+export { interactiveBlock } from "./types.ts";

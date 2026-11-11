@@ -1,6 +1,6 @@
+import { IconCheck, IconChevronDown } from "@tabler/icons-preact";
 import type { ComponentChildren } from "preact";
 import { useRef, useState } from "preact/compat";
-import { IconCheck, IconChevronDown } from "@tabler/icons-preact";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import {
   type SelectSide,
@@ -121,9 +121,11 @@ export function Select<T extends string>({
           ref={list}
           className="select-popover"
           data-placement={placement.side}
-          style={placement.maxHeight === null
-            ? undefined
-            : { maxHeight: `${placement.maxHeight}px` }}
+          style={
+            placement.maxHeight === null
+              ? undefined
+              : { maxHeight: `${placement.maxHeight}px` }
+          }
           role="listbox"
           aria-label={label}
         >

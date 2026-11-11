@@ -1,26 +1,26 @@
 import type { Workspace } from "../domain/workspace.ts";
+import type { CommandSafety } from "../safety/command-safety.ts";
 import type { SkillDef } from "../skills/discover.ts";
+import { createSkillTool } from "../skills/tool.ts";
+import type { SearchProvider } from "../websearch/types.ts";
+import { type AskHub, createAskTool } from "./ask.ts";
+import { type ChatAttachTarget, createChatAttachTool } from "./attach.ts";
+import type { BackgroundProcessManager } from "./background.ts";
+import { createAsyncBashTools } from "./background.ts";
+import { createBashTool } from "./bash.ts";
+import { createEvalTool } from "./eval.ts";
+import type { Tool } from "./schema.ts";
+import { createSendChatTool, type SendChatTarget } from "./send-chat.ts";
+import type { TaskHub } from "./task-hub.ts";
+import { createTodoTool, type TodoHub } from "./todo.ts";
 import {
   fileTools,
   hostBackends,
   sessionSkills,
   type ToolBackends,
 } from "./tool-pieces.ts";
-import { createBashTool } from "./bash.ts";
-import { createAsyncBashTools } from "./background.ts";
-import type { BackgroundProcessManager } from "./background.ts";
-import { createEvalTool } from "./eval.ts";
-import { type ChatAttachTarget, createChatAttachTool } from "./attach.ts";
-import { createSendChatTool, type SendChatTarget } from "./send-chat.ts";
 import { createVisualTool, type VisualTarget } from "./visual.ts";
 import { createWebSearchTools } from "./web.ts";
-import type { SearchProvider } from "../websearch/types.ts";
-import type { Tool } from "./schema.ts";
-import { createSkillTool } from "../skills/tool.ts";
-import { type AskHub, createAskTool } from "./ask.ts";
-import { createTodoTool, type TodoHub } from "./todo.ts";
-import type { TaskHub } from "./task-hub.ts";
-import type { CommandSafety } from "../safety/command-safety.ts";
 
 export {
   fileTools,
@@ -111,7 +111,8 @@ export function createCodingTools(
   workspace: Workspace,
   options: Partial<ToolFactoryOptions> = {},
 ): Tool[] {
-  const backends = options.backends ??
+  const backends =
+    options.backends ??
     hostBackends(workspace, { appSkillDirs: options.appSkillDirs });
   const { files, runner } = backends;
   // Resolved per call, not once: a skill this agent writes during the run
@@ -137,10 +138,10 @@ export function createCodingTools(
     createBashTool({ files, runner, env: options.env, safety: options.safety }),
     options.background !== undefined
       ? createAsyncBashTools({
-        manager: options.background,
-        files,
-        safety: options.safety,
-      })
+          manager: options.background,
+          files,
+          safety: options.safety,
+        })
       : undefined,
     createEvalTool({ safety: options.safety }),
     options.attach !== undefined
@@ -159,7 +160,7 @@ export function createCodingTools(
       : undefined,
     options.task?.parentTools(),
   ];
-  return rows.flatMap((row) => row === undefined ? [] : [row].flat());
+  return rows.flatMap((row) => (row === undefined ? [] : [row].flat()));
 }
 
 /**
@@ -263,11 +264,11 @@ export function createStellaTools(options: {
     }),
     options.background !== undefined
       ? createAsyncBashTools({
-        manager: options.background,
-        files,
-        safety: options.safety,
-        defaultCwd: options.cwd,
-      })
+          manager: options.background,
+          files,
+          safety: options.safety,
+          defaultCwd: options.cwd,
+        })
       : undefined,
     options.screen,
     options.sendChat !== undefined
@@ -283,7 +284,7 @@ export function createStellaTools(options: {
     createSkillTool({ skills: options.skills }),
     options.task?.parentTools(),
   ];
-  return rows.flatMap((row) => row === undefined ? [] : [row].flat());
+  return rows.flatMap((row) => (row === undefined ? [] : [row].flat()));
 }
 
 /** Build the tool set of a chat session ("simple chat" without a
@@ -324,5 +325,5 @@ export function createChatTools(
       ? createTodoTool(options.todo, { panel: true })
       : undefined,
   ];
-  return rows.flatMap((row) => row === undefined ? [] : [row].flat());
+  return rows.flatMap((row) => (row === undefined ? [] : [row].flat()));
 }

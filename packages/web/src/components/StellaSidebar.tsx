@@ -1,4 +1,4 @@
-import { useClickOutside } from "../hooks/useClickOutside.ts";
+import type { MessageKey, Translator } from "@lumisca/core/shared";
 import {
   IconPencil,
   IconPlus,
@@ -7,21 +7,21 @@ import {
 } from "@tabler/icons-preact";
 import { useEffect, useRef, useState } from "preact/compat";
 import { api } from "../api.ts";
-import { errorText } from "../providers.ts";
-import { useLocale, useT } from "../i18n.ts";
 import { formatRelativeTime } from "../format.ts";
+import { useArrivals } from "../hooks/useArrivals.ts";
+import { useClickOutside } from "../hooks/useClickOutside.ts";
+import { useLocale, useT } from "../i18n.ts";
+import { errorText } from "../providers.ts";
 import type {
   StellaAgent,
   StellaAgentSummary,
   StellaPreview,
 } from "../types.ts";
-import type { MessageKey, Translator } from "@lumisca/core/shared";
-import { Modal } from "./Modal.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { Field } from "./Field.tsx";
+import { Modal } from "./Modal.tsx";
 import { AgentAvatar } from "./stella/AgentAvatar.tsx";
 import { AgentEditDialog } from "./stella/AgentEditDialog.tsx";
-import { useArrivals } from "../hooks/useArrivals.ts";
 
 interface StellaSidebarProps {
   agents: StellaAgentSummary[];
@@ -107,10 +107,7 @@ const PRESETS: ReadonlyArray<{ label: MessageKey; text: MessageKey }> = [
  * draws it rather than in the shared module, because the shared module
  * decides WHAT the line is (see shared/stella-preview.ts) and this decides
  * how it reads in one language. */
-function previewTextOf(
-  preview: StellaPreview,
-  t: Translator,
-): string {
+function previewTextOf(preview: StellaPreview, t: Translator): string {
   switch (preview.kind) {
     case "text":
       return preview.text;
@@ -152,17 +149,15 @@ function previewTextOf(
  * reads as "something to delete here", and it put a destructive control one
  * stray click from the thing the list exists for.
  */
-export function StellaSidebar(
-  {
-    agents,
-    loading = false,
-    activeId,
-    onSelect,
-    onChanged,
-    onAgentChanged,
-    running,
-  }: StellaSidebarProps,
-) {
+export function StellaSidebar({
+  agents,
+  loading = false,
+  activeId,
+  onSelect,
+  onChanged,
+  onAgentChanged,
+  running,
+}: StellaSidebarProps) {
   const t = useT();
   const locale = useLocale();
   const [creating, setCreating] = useState(false);
@@ -178,14 +173,12 @@ export function StellaSidebar(
   const menuRef = useRef<HTMLDivElement>(null);
   /** The press a fingertip is holding, while it is still a candidate for the
    * long press: whose row it is, where it went down, and the timer. */
-  const press = useRef<
-    {
-      agent: StellaAgentSummary;
-      x: number;
-      y: number;
-      timer: ReturnType<typeof setTimeout>;
-    } | null
-  >(null);
+  const press = useRef<{
+    agent: StellaAgentSummary;
+    x: number;
+    y: number;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
   /** Set when a long press opened the menu. The click a lifting finger still
    * sends is the end of that press, not a second act, and must not open the
    * conversation under the menu. */
@@ -239,10 +232,13 @@ export function StellaSidebar(
   // A finger can still be down when the list goes away (the reader opens an
   // agent, the panel unmounts): the timer must not open a menu for a row
   // that is no longer drawn.
-  useEffect(() => () => {
-    const current = press.current;
-    if (current !== null) clearTimeout(current.timer);
-  }, []);
+  useEffect(
+    () => () => {
+      const current = press.current;
+      if (current !== null) clearTimeout(current.timer);
+    },
+    [],
+  );
 
   const resetForm = () => {
     setCreating(false);
@@ -370,7 +366,8 @@ export function StellaSidebar(
     if (
       Math.abs(event.clientX - current.x) > LONG_PRESS_SLOP_PX ||
       Math.abs(event.clientY - current.y) > LONG_PRESS_SLOP_PX
-    ) endPress();
+    )
+      endPress();
   };
 
   /** The click that ends a long press: swallow it so the conversation does
@@ -396,10 +393,8 @@ export function StellaSidebar(
         </button>
       </div>
       <nav className="stella-sidebar-list">
-        {
-          /* An empty list and a list still being read look identical, and the
-            empty state's advice ("create one") is wrong for half of them. */
-        }
+        {/* An empty list and a list still being read look identical, and the
+            empty state's advice ("create one") is wrong for half of them. */}
         {agents.length === 0 && loading && (
           <p className="stella-sidebar-empty" role="status">
             {t("common.loading")}
@@ -435,12 +430,10 @@ export function StellaSidebar(
               }
             }}
           >
-            {
-              /* The picture is part of the row's name button, not a control of
+            {/* The picture is part of the row's name button, not a control of
                 its own: the row's one action is "open this conversation", and
                 what the agent is called or looks like belongs to the ⋮ menu
-                beside it — not to a list the eye scans. */
-            }
+                beside it — not to a list the eye scans. */}
             <button
               type="button"
               className="stella-agent-name"
@@ -453,16 +446,14 @@ export function StellaSidebar(
                 size={40}
               />
               <span className="stella-agent-text">
-                {
-                  /* The two facts a message app puts in a row: who, and when
-                   * that conversation last said something. The time sits at
-                   * the far edge of the name's line — scanned down the list,
-                   * the column of times is what tells the reader which
-                   * conversation is current, and it is the time of the
-                   * MESSAGE, not of the last visit (a list that says "3分前"
-                   * about something said last week is about the reader, not
-                   * the conversation). */
-                }
+                {/* The two facts a message app puts in a row: who, and when
+                 * that conversation last said something. The time sits at
+                 * the far edge of the name's line — scanned down the list,
+                 * the column of times is what tells the reader which
+                 * conversation is current, and it is the time of the
+                 * MESSAGE, not of the last visit (a list that says "3分前"
+                 * about something said last week is about the reader, not
+                 * the conversation). */}
                 <span className="stella-agent-head">
                   <span className="stella-agent-label">{agent.name}</span>
                   {agent.preview !== null && (
@@ -474,28 +465,24 @@ export function StellaSidebar(
                     </time>
                   )}
                 </span>
-                {
-                  /* What was said last. It stays while the agent works: a
-                   * row that replaced the message with "working" took away
-                   * the one thing the reader was looking at, and the dot
-                   * beside the row already says that work is happening. A
-                   * fresh agent has said nothing, so its row is one line,
-                   * exactly like a message app's row for someone you have
-                   * not talked to yet. */
-                }
+                {/* What was said last. It stays while the agent works: a
+                 * row that replaced the message with "working" took away
+                 * the one thing the reader was looking at, and the dot
+                 * beside the row already says that work is happening. A
+                 * fresh agent has said nothing, so its row is one line,
+                 * exactly like a message app's row for someone you have
+                 * not talked to yet. */}
                 {agent.preview !== null && (
                   <span className="stella-agent-meta">
                     {previewTextOf(agent.preview, t)}
                   </span>
                 )}
               </span>
-              {
-                /* A dot on the agent that is working right now, so the list
-                 * answers "is anything happening?" without opening each
-                 * conversation. It repeats what the second line says
-                 * because the line is text and the dot is what the eye
-                 * catches while scanning. */
-              }
+              {/* A dot on the agent that is working right now, so the list
+               * answers "is anything happening?" without opening each
+               * conversation. It repeats what the second line says
+               * because the line is text and the dot is what the eye
+               * catches while scanning. */}
               {agent.id === activeId && running && (
                 <span className="stella-agent-dot" aria-hidden="true" />
               )}
@@ -558,7 +545,9 @@ export function StellaSidebar(
         </div>
       )}
       {error !== null && (
-        <p className="error-text stella-sidebar-error" role="alert">{error}</p>
+        <p className="error-text stella-sidebar-error" role="alert">
+          {error}
+        </p>
       )}
       {creating && (
         <Modal onClose={resetForm} label={t("chat.stella.agents.new")}>
@@ -568,15 +557,12 @@ export function StellaSidebar(
               value={role}
               rows={4}
               placeholder={t("chat.stella.agents.roleHint")}
-              onInput={(event) =>
-                setRole(event.currentTarget.value)}
+              onInput={(event) => setRole(event.currentTarget.value)}
               autoFocus
             />
           </Field>
-          {
-            /* The same sentence the field holds, not a hidden prompt: a user
-             * who cannot describe the job starts from one and edits it. */
-          }
+          {/* The same sentence the field holds, not a hidden prompt: a user
+           * who cannot describe the job starts from one and edits it. */}
           <div
             className="stella-presets"
             role="group"
@@ -598,11 +584,14 @@ export function StellaSidebar(
               type="text"
               value={name}
               placeholder={t("chat.stella.agents.nameHint")}
-              onInput={(event) =>
-                setName(event.currentTarget.value)}
+              onInput={(event) => setName(event.currentTarget.value)}
             />
           </Field>
-          {error !== null && <p className="error-text" role="alert">{error}</p>}
+          {error !== null && (
+            <p className="error-text" role="alert">
+              {error}
+            </p>
+          )}
           <div className="modal-actions">
             <button type="button" className="btn" onClick={resetForm}>
               {t("common.cancel")}

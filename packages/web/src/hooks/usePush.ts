@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState } from "preact/compat";
 import { errorMessage } from "@lumisca/core/shared";
+import { useCallback, useEffect, useState } from "preact/compat";
 import {
   disablePush,
   enablePush,
-  postSubscription,
   type PushState,
+  postSubscription,
   readPushState,
   readSubscription,
   sendTestPush,
@@ -61,9 +61,8 @@ export function usePush(active: boolean): PushControls {
     void (async () => {
       try {
         const current = await readPushState();
-        const next = current === "on"
-          ? await disablePush()
-          : await enablePush();
+        const next =
+          current === "on" ? await disablePush() : await enablePush();
         setState(next);
       } catch (failure) {
         // The state is re-read rather than assumed: a subscribe that failed

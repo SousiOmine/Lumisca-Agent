@@ -1,9 +1,9 @@
-import { makeRealTempDir } from "../test-utils.ts";
 import { join } from "node:path";
 import { assert, assertEquals } from "@std/assert";
+import { discoverSkills } from "../skills/discover.ts";
+import { makeRealTempDir } from "../test-utils.ts";
 import { discoverPlugins } from "./discover.ts";
 import { PLUGIN_SCHEMA_URL } from "./manifest.ts";
-import { discoverSkills } from "../skills/discover.ts";
 
 const SKILL = (name: string) =>
   `---
@@ -41,8 +41,9 @@ async function fixture(): Promise<string> {
   await Deno.mkdir(join(root, ".git"), { recursive: true });
 
   const writeAt = (rel: string, content: string) =>
-    Deno.mkdir(join(root, rel, ".."), { recursive: true })
-      .then(() => Deno.writeTextFile(join(root, rel), content));
+    Deno.mkdir(join(root, rel, ".."), { recursive: true }).then(() =>
+      Deno.writeTextFile(join(root, rel), content),
+    );
 
   const plugins = join(root, ".agents", "plugins");
   await Deno.mkdir(plugins, { recursive: true });
@@ -106,9 +107,11 @@ async function fixture(): Promise<string> {
   return root;
 }
 
-async function globalFixture(): Promise<
-  { dir: string; pluginDir: string; skillsDir: string }
-> {
+async function globalFixture(): Promise<{
+  dir: string;
+  pluginDir: string;
+  skillsDir: string;
+}> {
   const dir = await makeRealTempDir("lumisca-global-");
   const pluginDir = join(dir, ".agents", "plugins");
   const skillsDir = join(dir, ".agents", "skills");
@@ -116,8 +119,9 @@ async function globalFixture(): Promise<
   await Deno.mkdir(skillsDir, { recursive: true });
 
   const writeAt = (rel: string, content: string) =>
-    Deno.mkdir(join(dir, rel, ".."), { recursive: true })
-      .then(() => Deno.writeTextFile(join(dir, rel), content));
+    Deno.mkdir(join(dir, rel, ".."), { recursive: true }).then(() =>
+      Deno.writeTextFile(join(dir, rel), content),
+    );
 
   // Same name as the workspace plugin: the workspace one must win.
   await writeAt(
@@ -165,13 +169,19 @@ Deno.test("discoverPlugins finds plugins with skills and MCP servers", async () 
   assert(demo, "demo plugin should be discovered");
   assertEquals(demo.root, join(root, ".agents", "plugins", "demo"));
   assertEquals(demo.manifest?.description, "Plugin demo");
-  assertEquals(demo.skills.map((s) => s.name), ["alpha", "shared"]);
+  assertEquals(
+    demo.skills.map((s) => s.name),
+    ["alpha", "shared"],
+  );
   assertEquals(demo.skills[0]!.source, "plugin");
   assertEquals(
     demo.skills[0]!.dir,
     join(root, ".agents", "plugins", "demo", "skills", "alpha"),
   );
-  assertEquals(demo.mcpServers.map((s) => s.name), ["demo-server"]);
+  assertEquals(
+    demo.mcpServers.map((s) => s.name),
+    ["demo-server"],
+  );
   assertEquals(demo.mcpServers[0]!.cwd, demo.root);
   // PLUGIN_DATA for the stdio server lives under the data root.
   assert(Deno.statSync(join(dataRoot, "demo")).isDirectory);
@@ -181,7 +191,10 @@ Deno.test("discoverPlugins finds plugins with skills and MCP servers", async () 
 Deno.test("discoverPlugins skips directories without a plugin.json", async () => {
   const root = await fixture();
   const plugins = discoverPlugins([root]);
-  assertEquals(plugins.find((p) => p.name === "empty"), undefined);
+  assertEquals(
+    plugins.find((p) => p.name === "empty"),
+    undefined,
+  );
 });
 
 Deno.test("discoverPlugins rejects plugins with fatal manifests", async () => {
@@ -201,7 +214,10 @@ Deno.test("discoverPlugins does not recurse into nested skill directories", asyn
   const plugins = discoverPlugins([root]);
   const demo = plugins.find((p) => p.name === "demo")!;
   // "deep" (nested two levels) is absent; only direct children count.
-  assertEquals(demo.skills.map((s) => s.name), ["alpha", "shared"]);
+  assertEquals(
+    demo.skills.map((s) => s.name),
+    ["alpha", "shared"],
+  );
 });
 
 Deno.test("discoverPlugins isolates wrong-kinded component locations", async () => {

@@ -1,7 +1,7 @@
-import { assert, assertEquals } from "@std/assert";
-import { createInMemorySettingsRepo } from "../core/settings/repo.ts";
-import { PushSubscriptions } from "../core/notify/subscriptions.ts";
 import { toBase64Url } from "@lumisca/core/shared";
+import { assert, assertEquals } from "@std/assert";
+import { PushSubscriptions } from "../core/notify/subscriptions.ts";
+import { createInMemorySettingsRepo } from "../core/settings/repo.ts";
 import {
   buildPushNotification,
   createPushNotifier,
@@ -34,7 +34,7 @@ function harness() {
     },
     getSession: (id: string) => sessions[id] as never,
     getStellaAgent: (id: string) =>
-      id === "a1" ? { name: "朝の番人" } as never : undefined,
+      id === "a1" ? ({ name: "朝の番人" } as never) : undefined,
     getLanguage: () => language,
     listPushSubscriptions: () => store.list(),
     pushVapidKeys: () => store.vapidKeys(),
@@ -90,7 +90,8 @@ Deno.test("a finished run notifies every subscription", async () => {
   const notifier = createPushNotifier({
     core,
     fetch: (_input, init) => {
-      sent.push(String((init?.headers as Record<string, string>)["urgency"]));
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      sent.push(String(headers["urgency"]));
       return Promise.resolve(new Response(null, { status: 201 }));
     },
   });
@@ -112,12 +113,14 @@ Deno.test("a question is urgent and replaces the completion toast", () => {
       type: "question",
       sessionId: "s1",
       toolCallId: "t1",
-      questions: [{
-        id: "q",
-        question: "どちらにしますか?",
-        header: "選択",
-        options: [],
-      }],
+      questions: [
+        {
+          id: "q",
+          question: "どちらにしますか?",
+          header: "選択",
+          options: [],
+        },
+      ],
     },
     "リファクタ",
     "ja",
@@ -239,11 +242,7 @@ Deno.test("a stella conversation is notified under its agent's name", () => {
   // the user recognizes, and the header shows it too.
   const { core } = harness();
   assertEquals(
-    notificationName(
-      core.getSession("s2"),
-      core.getStellaAgent("a1"),
-      "ja",
-    ),
+    notificationName(core.getSession("s2"), core.getStellaAgent("a1"), "ja"),
     "朝の番人",
   );
   // An agent that cannot be read (deleted, or a build that had no agents)
@@ -283,7 +282,10 @@ Deno.test("a gone endpoint is forgotten after one failure", async () => {
   try {
     emit({ type: "agent_end", sessionId: "s1" });
     await waitUntil(() => store.list().length === 1);
-    assertEquals(store.list().map((entry) => entry.endpoint), [alive.endpoint]);
+    assertEquals(
+      store.list().map((entry) => entry.endpoint),
+      [alive.endpoint],
+    );
   } finally {
     notifier.dispose();
   }

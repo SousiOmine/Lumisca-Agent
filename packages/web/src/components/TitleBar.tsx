@@ -1,19 +1,19 @@
+import { IconCopy, IconMinus, IconSquare, IconX } from "@tabler/icons-preact";
 import {
   type MouseEvent,
   type ReactNode,
   useRef,
   useState,
 } from "preact/compat";
-import { IconCopy, IconMinus, IconSquare, IconX } from "@tabler/icons-preact";
+import { useVisibleInterval } from "../hooks/useVisibleInterval.ts";
+import { useT } from "../i18n.ts";
 import {
   inDesktopShell,
-  shellPlatform,
   type ShellState,
+  shellPlatform,
   shellState,
   windowApi,
 } from "../shell.ts";
-import { useVisibleInterval } from "../hooks/useVisibleInterval.ts";
-import { useT } from "../i18n.ts";
 import { AppMenu } from "./AppMenu.tsx";
 import { ConnectionPicker } from "./ConnectionPicker.tsx";
 
@@ -138,7 +138,8 @@ export function TitleBar({
       // The system cancels the zoom when the pointer moved between the two
       // presses; do the same so a sloppy double click does not resize.
       if (
-        start !== null && !isInteractive(e) &&
+        start !== null &&
+        !isInteractive(e) &&
         Math.abs(e.clientX - start.x) + Math.abs(e.clientY - start.y) <= 4
       ) {
         windowApi.toggleMaximize().catch(() => {});
@@ -164,11 +165,9 @@ export function TitleBar({
     >
       {children}
       <div className="titlebar-controls">
-        {
-          /* Which server this window shows. The window's own state, so it
+        {/* Which server this window shows. The window's own state, so it
          * belongs to the window chrome rather than to a settings dialog: a
-         * page served by a remote machine looks exactly like the local one. */
-        }
+         * page served by a remote machine looks exactly like the local one. */}
         <ConnectionPicker onManage={onManageConnections} />
         <AppMenu
           onNew={onNew}
@@ -195,12 +194,16 @@ export function TitleBar({
               type="button"
               className="titlebar-btn"
               onClick={() => windowApi.toggleMaximize()}
-              title={maximized
-                ? t("chrome.titleBar.restore")
-                : t("chrome.titleBar.maximize")}
-              aria-label={maximized
-                ? t("chrome.titleBar.restore")
-                : t("chrome.titleBar.maximize")}
+              title={
+                maximized
+                  ? t("chrome.titleBar.restore")
+                  : t("chrome.titleBar.maximize")
+              }
+              aria-label={
+                maximized
+                  ? t("chrome.titleBar.restore")
+                  : t("chrome.titleBar.maximize")
+              }
             >
               {maximized ? <IconCopy size={13} /> : <IconSquare size={12} />}
             </button>

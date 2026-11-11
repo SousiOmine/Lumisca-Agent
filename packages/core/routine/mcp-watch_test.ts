@@ -48,13 +48,13 @@ Deno.test("mcp watch: an edited or removed item is not a change", async () => {
   const first = await check(undefined, () => inbox("m1", "m2"));
   assertEquals((await check(first.state!, () => inbox("m1"))).changed, false);
   assertEquals(
-    (await check(
-      first.state!,
-      () =>
+    (
+      await check(first.state!, () =>
         answer({
           data: { messages: [{ id: "m1", read: true }, { id: "m2" }] },
         }),
-    )).changed,
+      )
+    ).changed,
     false,
   );
 });
@@ -74,9 +74,11 @@ Deno.test("mcp watch: a hash watch compares the value at the path", async () => 
   // The value, not the whole answer: an unrelated field changing under the
   // same count is not what this watch asks about.
   assertEquals(
-    (await runWatch(source, first.state, {
-      callTool: () => answer({ data: { count: 2, cursor: "next" } }),
-    })).changed,
+    (
+      await runWatch(source, first.state, {
+        callTool: () => answer({ data: { count: 2, cursor: "next" } }),
+      })
+    ).changed,
     false,
   );
 });
@@ -89,9 +91,8 @@ Deno.test("mcp watch: an answer with no JSON is a problem, not a change", async 
 });
 
 Deno.test("mcp watch: a failed call is a problem, not a change", async () => {
-  const result = await check(
-    undefined,
-    () => Promise.reject(new Error("Unauthorized")),
+  const result = await check(undefined, () =>
+    Promise.reject(new Error("Unauthorized")),
   );
   assertEquals(result.state, null);
   assert(result.problem?.includes("Unauthorized") === true);
@@ -106,10 +107,7 @@ Deno.test("mcp watch: a path with nothing at it is a problem", async () => {
 
 Deno.test("mcp watch: the stored state survives the row's JSON", () => {
   const state: WatchState = { kind: "mcp", ids: ["m1", "m2"], hash: null };
-  assertEquals(
-    parseWatchState(JSON.parse(JSON.stringify(state))),
-    state,
-  );
+  assertEquals(parseWatchState(JSON.parse(JSON.stringify(state))), state);
   // A row edited by hand reads as "no baseline", so the next check records
   // one instead of comparing against half a list.
   assertEquals(parseWatchState({ kind: "mcp", ids: ["m1", 2] }), undefined);

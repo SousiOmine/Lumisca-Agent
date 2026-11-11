@@ -46,8 +46,10 @@ export function archiveAssetName(
   version: string,
   target: ReleaseTarget,
 ): string {
-  return `lumisca-server-${version}-${target.platform}` +
-    (target.format === "zip" ? ".zip" : ".tar.gz");
+  return (
+    `lumisca-server-${version}-${target.platform}` +
+    (target.format === "zip" ? ".zip" : ".tar.gz")
+  );
 }
 
 /** Manifest file name of a platform (`latest-server-<target>.json`). One
@@ -71,8 +73,10 @@ export function releaseAssetUrl(tag: string, assetName: string): string {
  * budget (unlike `api.github.com`).
  */
 export function defaultManifestUrl(target: string): string {
-  return `https://github.com/${RELEASE_REPOSITORY}/releases/latest/download/` +
-    manifestAssetName(target);
+  return (
+    `https://github.com/${RELEASE_REPOSITORY}/releases/latest/download/` +
+    manifestAssetName(target)
+  );
 }
 
 /** What an update manifest says about this platform's package. */
@@ -98,10 +102,7 @@ export class ReleaseManifestError extends Error {
   }
 }
 
-function requireString(
-  value: unknown,
-  field: string,
-): string {
+function requireString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim() === "") {
     throw new ReleaseManifestError(`更新マニフェストの ${field} が不正です`);
   }

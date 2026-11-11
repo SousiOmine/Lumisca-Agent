@@ -18,15 +18,7 @@
  * a caller may use is the union, and which file holds it is an implementation
  * detail.
  */
-export {
-  applyRunState,
-  filterRemoved,
-  type LoadedHistory,
-  mergeNewestWindow,
-  messageKey,
-  prependOlderWindow,
-} from "./events/identity.ts";
-export { applyEvent } from "./events/reducer.ts";
+
 export {
   revisionGap,
   sameBackgrounds,
@@ -35,15 +27,24 @@ export {
   sameTodoPlan,
 } from "./events/equality.ts";
 export {
+  applyRunState,
+  filterRemoved,
+  type LoadedHistory,
+  mergeNewestWindow,
+  messageKey,
+  prependOlderWindow,
+} from "./events/identity.ts";
+export {
+  type LoadedWindow,
+  type MergeRules,
+  mergeNewestWindow as mergeWindow,
+  prependHistoricWindow,
+} from "./events/merge.ts";
+export { applyEvent } from "./events/reducer.ts";
+export {
   applySnapshot,
   type LiveStateBefore,
   mergeBackgrounds,
   mergeTasks,
   type SnapshotParts,
 } from "./events/snapshot.ts";
-export {
-  type LoadedWindow,
-  mergeNewestWindow as mergeWindow,
-  type MergeRules,
-  prependHistoricWindow,
-} from "./events/merge.ts";

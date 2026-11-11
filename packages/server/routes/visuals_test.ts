@@ -1,17 +1,17 @@
 import { join } from "node:path";
-import { createCanvas, loadImage } from "@napi-rs/canvas";
-import { assert, assertEquals } from "@std/assert";
 import {
+  LumiscaCore as Core,
   fauxProvider,
   type LumiscaCore,
-  LumiscaCore as Core,
   VISUALS_DIR_NAME,
 } from "@lumisca/core";
 import {
-  makeRealTempDir,
   MINI_PNG,
+  makeRealTempDir,
   removeDirRetry,
 } from "@lumisca/core/test-utils";
+import { createCanvas, loadImage } from "@napi-rs/canvas";
+import { assert, assertEquals } from "@std/assert";
 import { createApp } from "../app.ts";
 import { tokenCookieName } from "../auth-cookie.ts";
 
@@ -109,17 +109,15 @@ Deno.test("the asset route serves only the session's own assets", async () => {
     // A file the store never named — even one sitting in the session's own
     // directory — is not reachable.
     await Deno.writeTextFile(join(storeDir, "notes.txt"), "secret");
-    for (
-      const name of [
-        "notes.txt",
-        "9f3c2a1b4d5e.pdf",
-        "9f3c2a1b4d5e.png.bak",
-        // An encoded traversal reaches the route as one segment, and the
-        // store refuses it like any other malformed name.
-        "..%2f..%2fnotes.txt",
-        "%2Fetc%2Fpasswd",
-      ]
-    ) {
+    for (const name of [
+      "notes.txt",
+      "9f3c2a1b4d5e.pdf",
+      "9f3c2a1b4d5e.png.bak",
+      // An encoded traversal reaches the route as one segment, and the
+      // store refuses it like any other malformed name.
+      "..%2f..%2fnotes.txt",
+      "%2Fetc%2Fpasswd",
+    ]) {
       const res = await get(`/api/sessions/${sessionId}/visual/${name}`);
       assertEquals(res.status, 404, `${name} must not be served`);
     }
@@ -132,7 +130,7 @@ Deno.test("the asset route serves only the session's own assets", async () => {
       `/api/sessions/${sessionId}/visual/000000000000.png`,
     );
     assertEquals(unknown.status, 404);
-    const body = await unknown.json() as { error?: unknown };
+    const body = (await unknown.json()) as { error?: unknown };
     assert(typeof body.error === "string", "the API answers JSON errors");
   });
 });

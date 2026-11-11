@@ -23,9 +23,10 @@
  * One handover per session at a time: a single run is what asks, and a
  * second simultaneous request would mean two people on one screen.
  */
+
+import type { ClientEvent } from "../domain/event.ts";
 import { CoreError } from "../errors.ts";
 import { abortError } from "../shared/misc.ts";
-import type { ClientEvent } from "../domain/event.ts";
 
 /** How long the agent waits at the screen before it continues without the
  * user. Long enough for a password reset or a CAPTCHA in another window,
@@ -217,8 +218,6 @@ export class HandoverHub {
       toolCallId: pending.toolCallId,
       note: "",
     });
-    pending.reject(
-      new CoreError("The handover was cancelled", "unavailable"),
-    );
+    pending.reject(new CoreError("The handover was cancelled", "unavailable"));
   }
 }

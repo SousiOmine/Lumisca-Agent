@@ -48,9 +48,9 @@ export function agentIconExtensionOfMimeType(
   mimeType: string,
 ): string | undefined {
   const wanted = mimeType.trim().toLowerCase();
-  for (
-    const [extension, type] of Object.entries(AGENT_ICON_MIME_BY_EXTENSION)
-  ) {
+  for (const [extension, type] of Object.entries(
+    AGENT_ICON_MIME_BY_EXTENSION,
+  )) {
     if (type === wanted) return extension;
   }
   return undefined;

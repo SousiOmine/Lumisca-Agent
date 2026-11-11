@@ -2,6 +2,10 @@ import { dirname, join } from "node:path";
 import { errorMessage } from "@lumisca/core";
 import type { ServerStartupEnvironment } from "./startup-env.ts";
 
+export type {
+  EnvironmentSource,
+  ServerStartupEnvironment,
+} from "./startup-env.ts";
 // The environment allow-list lives apart from this module so launchers
 // outside the workspace (packages/desktop) can reach it without the root
 // import map. Re-exported here to keep `startup.ts` the single import site.
@@ -12,10 +16,6 @@ export {
   SERVER_STARTUP_ENV_KEYS,
   UPDATE_MANIFEST_ENV_KEY,
   UPDATE_RESTART_ENV_KEY,
-} from "./startup-env.ts";
-export type {
-  EnvironmentSource,
-  ServerStartupEnvironment,
 } from "./startup-env.ts";
 
 /** Default bind address: loopback only. Exposing the server is an explicit
@@ -87,9 +87,7 @@ export function resolveRepoRoot(
 
 /** Extra hostnames the Host guard accepts (LUMISCA_ALLOWED_HOSTS,
  * comma-separated, no port). Loopback hostnames are always accepted. */
-export function resolveAllowedHosts(
-  env: ServerStartupEnvironment,
-): string[] {
+export function resolveAllowedHosts(env: ServerStartupEnvironment): string[] {
   return (env.LUMISCA_ALLOWED_HOSTS ?? "")
     .split(",")
     .map((h) => h.trim().toLowerCase())
@@ -98,8 +96,10 @@ export function resolveAllowedHosts(
 
 /** True when a listen failure means "someone else holds this port". */
 export function isAddressInUseError(error: unknown): boolean {
-  return error instanceof Deno.errors.AddrInUse ||
-    (error instanceof Error && error.name === "AddrInUse");
+  return (
+    error instanceof Deno.errors.AddrInUse ||
+    (error instanceof Error && error.name === "AddrInUse")
+  );
 }
 
 /** True when the value of a boolean startup flag ("1"/"true") is set. */
@@ -128,9 +128,10 @@ export function isDesktopManaged(raw: string | undefined): boolean {
  * `standalone` is a parameter rather than a direct Deno.build read so the
  * decision stays testable.
  */
-export function updateSupport(
-  options: { desktopManaged: boolean; standalone: boolean },
-): { enabled: boolean; reason?: string } {
+export function updateSupport(options: {
+  desktopManaged: boolean;
+  standalone: boolean;
+}): { enabled: boolean; reason?: string } {
   if (options.desktopManaged) {
     return {
       enabled: false,
@@ -212,7 +213,7 @@ export function describeListenError(
   if (isAddressInUseError(error)) {
     return [
       `Lumisca: ポート ${port} は既に使用されています ` +
-      `(http://${host}:${port} で listen できません)。`,
+        `(http://${host}:${port} で listen できません)。`,
       "別の Lumisca サーバーが起動中の可能性があります。",
       "対処: 起動中のサーバーを停止するか、別ポートで起動してください。",
       `  - 使用中プロセスの確認 (Windows): netstat -ano | findstr :${port}`,

@@ -1,6 +1,5 @@
-import type { Api, Model } from "../ai/types.ts";
-import type { StreamFn } from "../ai/types.ts";
 import { streamText } from "../ai/stream.ts";
+import type { Api, Model, StreamFn } from "../ai/types.ts";
 import { DEFAULT_LOCALE, type Locale } from "../shared/mod.ts";
 import { outputLanguageSentence } from "../tools/language.ts";
 
@@ -32,9 +31,11 @@ const TITLE_EXAMPLE: Record<Locale, { message: string; title: string }> = {
  * budget on rules the code keeps anyway. */
 export function titleSystemPrompt(language: Locale): string {
   const example = TITLE_EXAMPLE[language];
-  return `Write a title of at most ${MAX_TITLE_CHARS} characters for the ` +
+  return (
+    `Write a title of at most ${MAX_TITLE_CHARS} characters for the ` +
     `task in <message>.\nAnswer with the title alone.\n\n` +
-    `<message>${example.message}</message>\n${example.title}`;
+    `<message>${example.message}</message>\n${example.title}`
+  );
 }
 
 /** Strip quotes, collapse whitespace, drop a closing sentence mark, and cap
@@ -78,14 +79,16 @@ export class TitleGenerator {
       this.streamFn,
       this.model,
       {
-        systemPrompt: `${titleSystemPrompt(language)} ${
-          outputLanguageSentence(language)
-        }`,
-        messages: [{
-          role: "user",
-          content: [{ type: "text", text: firstMessage }],
-          timestamp: Date.now(),
-        }],
+        systemPrompt: `${titleSystemPrompt(language)} ${outputLanguageSentence(
+          language,
+        )}`,
+        messages: [
+          {
+            role: "user",
+            content: [{ type: "text", text: firstMessage }],
+            timestamp: Date.now(),
+          },
+        ],
       },
       "title generation failed",
       {

@@ -26,8 +26,8 @@ import type {
   OAuthClientMetadata,
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
-import { safeJsonParse } from "../shared/mod.ts";
 import type { SettingsRepo } from "../settings/repo.ts";
+import { safeJsonParse } from "../shared/mod.ts";
 import type { McpServerConfig } from "./config.ts";
 
 /** Settings key prefix of one MCP server's OAuth state. Kept out of the
@@ -73,9 +73,7 @@ export class McpOAuthStore {
   /** Rewrite one server's record; returning undefined drops the entry. */
   update(
     serverUrl: string,
-    mutate: (
-      current: McpOAuthRecord | undefined,
-    ) => McpOAuthRecord | undefined,
+    mutate: (current: McpOAuthRecord | undefined) => McpOAuthRecord | undefined,
   ): void {
     const key = `${MCP_OAUTH_KEY_PREFIX}${serverUrl}`;
     const next = mutate(this.read(serverUrl));
@@ -178,8 +176,9 @@ export class McpOAuthProvider implements OAuthClientProvider {
    * always started with an explicit URI (the page the user is looking at).
    */
   get redirectUrl(): string | undefined {
-    return this.options.redirectUri ??
-      this.store.read(this.serverUrl)?.redirectUri;
+    return (
+      this.options.redirectUri ?? this.store.read(this.serverUrl)?.redirectUri
+    );
   }
 
   get clientMetadata(): OAuthClientMetadata {
@@ -211,9 +210,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
     // A registration is tied to one redirect URI, so the interactive flow
     // must not present a client registered for another one (the SDK then
     // registers a fresh client for the URI the user is actually on).
-    if (
-      this.options.interactive && record.redirectUri !== this.redirectUrl
-    ) {
+    if (this.options.interactive && record.redirectUri !== this.redirectUrl) {
       return undefined;
     }
     return record.clientInformation;

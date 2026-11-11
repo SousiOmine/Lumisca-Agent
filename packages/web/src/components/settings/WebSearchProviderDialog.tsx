@@ -1,13 +1,13 @@
 import { useState } from "preact/compat";
+import { api } from "../../api.ts";
+import { useT } from "../../i18n.ts";
+import { errorText } from "../../providers.ts";
 import type {
   WebSearchProviderId,
   WebSearchSettingsView,
   WebSearchTestView,
 } from "../../types.ts";
-import { api } from "../../api.ts";
-import { useT } from "../../i18n.ts";
 import { Field } from "../Field.tsx";
-import { errorText } from "../../providers.ts";
 import { SettingsSubHeader } from "./SettingsSubHeader.tsx";
 
 /**
@@ -75,9 +75,10 @@ export function WebSearchProviderDialog({
     setBusy("saving");
     setError(null);
     try {
-      const next = editing === undefined
-        ? await api.addWebSearchProvider({ id, apiKey: key })
-        : await api.updateWebSearchProvider(id, { apiKey: key });
+      const next =
+        editing === undefined
+          ? await api.addWebSearchProvider({ id, apiKey: key })
+          : await api.updateWebSearchProvider(id, { apiKey: key });
       onDone(next);
     } catch (e) {
       setError(errorText(e));
@@ -170,9 +171,7 @@ export function WebSearchProviderDialog({
         )}
 
         {error !== null && (
-          <p className="error-text">
-            {t("common.saveFailed", { error })}
-          </p>
+          <p className="error-text">{t("common.saveFailed", { error })}</p>
         )}
 
         <div className="stack-4" style={{ flexDirection: "row", gap: 8 }}>
@@ -193,13 +192,14 @@ export function WebSearchProviderDialog({
           <button
             type="button"
             className="btn primary"
-            disabled={busy !== null || id === "" ||
-              (adding && (checked === null || !checked.ok))}
+            disabled={
+              busy !== null ||
+              id === "" ||
+              (adding && (checked === null || !checked.ok))
+            }
             onClick={() => void save()}
           >
-            {t(
-              adding ? "settings.webSearch.form.add" : "common.save",
-            )}
+            {t(adding ? "settings.webSearch.form.add" : "common.save")}
           </button>
         </div>
       </div>

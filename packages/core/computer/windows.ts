@@ -33,8 +33,10 @@
  * runs, so importing it on any platform is safe (host.ts picks the
  * implementation by platform).
  */
-import { CoreError, errorMessage } from "../errors.ts";
+
 import { concatBytes } from "../bytes.ts";
+import { CoreError, errorMessage } from "../errors.ts";
+import { sleep } from "../shared/misc.ts";
 import { MAX_CAPTURE_DIMENSION } from "./image.ts";
 import {
   CLICK_HOLD_MS,
@@ -43,13 +45,12 @@ import {
   FOCUS_SETTLE_MS,
   HOVER_SETTLE_MS,
   interpolatePoint,
-  type ModifierName,
   MOVE_MS,
   MOVE_TICK_MS,
+  type ModifierName,
   parseKeyChord,
   splitTypeText,
 } from "./motion.ts";
-import { sleep } from "../shared/misc.ts";
 import type {
   ComputerAction,
   ComputerActionResult,
@@ -384,10 +385,7 @@ export function resolveKeyChord(
   }
   const part = parsed.key;
   if (part.length !== 1) {
-    throw new CoreError(
-      `unknown key "${part}" in chord "${chord}"`,
-      "invalid",
-    );
+    throw new CoreError(`unknown key "${part}" in chord "${chord}"`, "invalid");
   }
   // The character is looked up as written: its case is what decides
   // whether Shift belongs to the chord ("A" needs it, "a" does not).
@@ -437,8 +435,7 @@ export function createWindowsComputerHost(): ComputerHostResult {
   if (Deno.build.arch !== "x86_64" && Deno.build.arch !== "aarch64") {
     return {
       available: false,
-      reason:
-        `computer use is not supported on this CPU architecture (${Deno.build.arch})`,
+      reason: `computer use is not supported on this CPU architecture (${Deno.build.arch})`,
     };
   }
   let user32: User32;
@@ -451,9 +448,9 @@ export function createWindowsComputerHost(): ComputerHostResult {
   } catch (error) {
     return {
       available: false,
-      reason: `computer use could not open the Windows libraries: ${
-        errorMessage(error)
-      }`,
+      reason: `computer use could not open the Windows libraries: ${errorMessage(
+        error,
+      )}`,
     };
   }
   const closeAll = () => {
@@ -473,9 +470,9 @@ export function createWindowsComputerHost(): ComputerHostResult {
     closeAll();
     return {
       available: false,
-      reason: `computer use could not read the display list: ${
-        errorMessage(error)
-      }`,
+      reason: `computer use could not read the display list: ${errorMessage(
+        error,
+      )}`,
     };
   }
   if (displays.length === 0) {
@@ -501,9 +498,11 @@ function ensurePerMonitorAware(user32: User32): string | undefined {
   const context = user32.symbols.GetThreadDpiAwarenessContext();
   const awareness = user32.symbols.GetAwarenessFromDpiAwarenessContext(context);
   if (awareness !== DPI_AWARENESS_PER_MONITOR_AWARE) {
-    return "computer use needs a per-monitor DPI aware process, and this " +
+    return (
+      "computer use needs a per-monitor DPI aware process, and this " +
       `one could not be made aware (DPI awareness ${awareness}); screen ` +
-      "coordinates would be wrong";
+      "coordinates would be wrong"
+    );
   }
   return undefined;
 }
@@ -662,7 +661,7 @@ class WindowsComputerHost implements ComputerHost {
         }
         if (action.deltaX !== 0) {
           this.sendWheel(
-            0x01000, /* MOUSEEVENTF_HWHEEL */
+            0x01000 /* MOUSEEVENTF_HWHEEL */,
             action.deltaX * WHEEL_DELTA,
           );
         }
@@ -682,9 +681,8 @@ class WindowsComputerHost implements ComputerHost {
         };
       }
       case "key": {
-        const chord = resolveKeyChord(
-          action.key,
-          (char) => this.user32.symbols.VkKeyScanW(char.charCodeAt(0)),
+        const chord = resolveKeyChord(action.key, (char) =>
+          this.user32.symbols.VkKeyScanW(char.charCodeAt(0)),
         );
         const buffer = buildKeyChordInputs(
           chord.vk,
@@ -772,9 +770,8 @@ class WindowsComputerHost implements ComputerHost {
     const started = Date.now();
     let steps = 0;
     for (;;) {
-      const ratio = durationMs <= 0
-        ? 1
-        : Math.min(1, (Date.now() - started) / durationMs);
+      const ratio =
+        durationMs <= 0 ? 1 : Math.min(1, (Date.now() - started) / durationMs);
       const at = interpolatePoint(from, to, ratio);
       this.sendMouseMove(at.x, at.y);
       steps++;
@@ -812,11 +809,18 @@ class WindowsComputerHost implements ComputerHost {
   }
 
   private sendButton(button: MouseButton, down: boolean): void {
-    const flags = button === "left"
-      ? (down ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_LEFTUP)
-      : button === "right"
-      ? (down ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_RIGHTUP)
-      : (down ? MOUSEEVENTF_MIDDLEDOWN : MOUSEEVENTF_MIDDLEUP);
+    const flags =
+      button === "left"
+        ? down
+          ? MOUSEEVENTF_LEFTDOWN
+          : MOUSEEVENTF_LEFTUP
+        : button === "right"
+          ? down
+            ? MOUSEEVENTF_RIGHTDOWN
+            : MOUSEEVENTF_RIGHTUP
+          : down
+            ? MOUSEEVENTF_MIDDLEDOWN
+            : MOUSEEVENTF_MIDDLEUP;
     const at = this.cursor();
     const virtual = this.virtualScreen();
     const buffer = buildMouseInput(
@@ -840,10 +844,7 @@ class WindowsComputerHost implements ComputerHost {
       for (const segment of segments) {
         if (segment.kind === "enter") {
           const buffer = buildKeyChordInputs(VK_RETURN, [], this.pointerSize);
-          this.sendInput(
-            buffer,
-            buffer.length / inputSize(this.pointerSize),
-          );
+          this.sendInput(buffer, buffer.length / inputSize(this.pointerSize));
           continue;
         }
         for (let i = 0; i < segment.value.length; i += TYPE_CHUNK_CHARS) {
@@ -1028,7 +1029,8 @@ class WindowsComputerHost implements ComputerHost {
   /** Copy a screen region into a BGRA buffer. */
   private grabRegion(region: Rect): RawCapture {
     if (
-      region.width < 1 || region.height < 1 ||
+      region.width < 1 ||
+      region.height < 1 ||
       region.width > MAX_CAPTURE_DIMENSION ||
       region.height > MAX_CAPTURE_DIMENSION
     ) {

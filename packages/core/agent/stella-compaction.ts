@@ -19,11 +19,12 @@
  * serialization, not part of the projection: what the conversation shows is
  * still stellaEntryOf's answer alone.
  */
-import type { AgentMessage } from "../ai/types.ts";
+
 import type { CompactionStyle } from "../ai/compaction-style.ts";
+import type { AgentMessage } from "../ai/types.ts";
+import { stellaEntryText } from "../session/history.ts";
 import { formatLocalDateTime } from "../shared/misc.ts";
 import { TOOL_SEND_CHAT } from "../shared/tool-names.ts";
-import { stellaEntryText } from "../session/history.ts";
 import { stellaEntryOf } from "./stella-stream.ts";
 
 /** Output cap of the record. The prompt asks for at most 30 short lines;
@@ -38,8 +39,7 @@ export const STELLA_RECORD_SYSTEM_PROMPT =
 
 /** The record instruction: rewrite in full, state only, dates only when they
  * are a fact about the present or the future. */
-export const STELLA_RECORD_PROMPT =
-  `The <conversation> above is the conversation since the last record: the user's messages and the assistant's replies, each headed with its local date and time. A line headed with a routine name — \`User (routine "…")\` — is a request the user scheduled earlier and is not something they just typed. A line beginning with [tools] may sit between them; it names the tools that ran at that point and how often, with no arguments and no output. What the assistant sent with send_chat (cards, files, progress messages) is part of the conversation.
+export const STELLA_RECORD_PROMPT = `The <conversation> above is the conversation since the last record: the user's messages and the assistant's replies, each headed with its local date and time. A line headed with a routine name — \`User (routine "…")\` — is a request the user scheduled earlier and is not something they just typed. A line beginning with [tools] may sit between them; it names the tools that ran at that point and how often, with no arguments and no output. What the assistant sent with send_chat (cards, files, progress messages) is part of the conversation.
 
 Write the conversation's record. If a <previous-record> is above, rewrite it in full together with the new messages: do not append to it and do not preserve its wording. Keep what is still true, drop what is superseded, merge related items, and add what the new messages established.
 
@@ -78,12 +78,15 @@ function recordPart(message: AgentMessage): string | undefined {
   // A routine's run is the user's side of the conversation but not their
   // words. Without the name the record would say the user asked for the
   // routine's request, which is a fact about them that never happened.
-  const who = entry.role === "user"
-    ? entry.routine === undefined ? "User" : `User (routine "${entry.routine}")`
-    : "Assistant";
-  return `[${formatLocalDateTime(entry.timestamp)}] ${who}\n${
-    stellaEntryText(entry)
-  }`;
+  const who =
+    entry.role === "user"
+      ? entry.routine === undefined
+        ? "User"
+        : `User (routine "${entry.routine}")`
+      : "Assistant";
+  return `[${formatLocalDateTime(entry.timestamp)}] ${who}\n${stellaEntryText(
+    entry,
+  )}`;
 }
 
 /** Tools whose calls are the conversation itself: a `send_chat` result is
@@ -131,18 +134,19 @@ function countTools(
 /** The `[tools]` line of one run: names and counts only, most-used first, and
  * the name as the tie-break so the same run always serializes the same way.
  * Undefined when the run called nothing worth naming. */
-function toolsLine(
-  pending: ReadonlyMap<string, ToolUse>,
-): string | undefined {
+function toolsLine(pending: ReadonlyMap<string, ToolUse>): string | undefined {
   if (pending.size === 0) return undefined;
-  const sorted = [...pending.entries()].sort((a, b) =>
-    b[1].calls - a[1].calls || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)
+  const sorted = [...pending.entries()].sort(
+    (a, b) =>
+      b[1].calls - a[1].calls || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0),
   );
-  const shown = sorted.slice(0, TOOL_LINE_LIMIT).map(([name, use]) =>
-    use.failed > 0
-      ? `${name} ×${use.calls} (${use.failed} failed)`
-      : `${name} ×${use.calls}`
-  );
+  const shown = sorted
+    .slice(0, TOOL_LINE_LIMIT)
+    .map(([name, use]) =>
+      use.failed > 0
+        ? `${name} ×${use.calls} (${use.failed} failed)`
+        : `${name} ×${use.calls}`,
+    );
   const hidden = sorted.length - shown.length;
   return `[tools] ${shown.join(", ")}${hidden > 0 ? `, +${hidden} more` : ""}`;
 }

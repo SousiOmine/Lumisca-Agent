@@ -137,14 +137,15 @@ export function createEventStream(
     onOpen(_event, ws) {
       socket = ws;
       const delta = options.delta;
-      batcher = delta === undefined
-        ? undefined
-        : createFrameBatcher<string, number>({
-          ...(options.flushMs === undefined
-            ? {}
-            : { flushMs: options.flushMs }),
-          flush: (batch) => write(delta.frame(batch)),
-        });
+      batcher =
+        delta === undefined
+          ? undefined
+          : createFrameBatcher<string, number>({
+              ...(options.flushMs === undefined
+                ? {}
+                : { flushMs: options.flushMs }),
+              flush: (batch) => write(delta.frame(batch)),
+            });
       detach = options.subscribe((event) => {
         if (!options.accept(event)) return;
         const rev = options.revOf(event);

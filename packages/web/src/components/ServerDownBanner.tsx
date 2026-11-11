@@ -1,12 +1,12 @@
-import { useState } from "preact/compat";
 import {
   IconAlertTriangle,
   IconCheck,
   IconClipboard,
 } from "@tabler/icons-preact";
+import { useState } from "preact/compat";
+import { useSavedNotice } from "../hooks/useSave.ts";
 import type { ServerHealth } from "../hooks/useServerHealth.ts";
 import { useT } from "../i18n.ts";
-import { useSavedNotice } from "../hooks/useSave.ts";
 
 /** Banner shown when the desktop local server looks unreachable: recent
  * fetch/WS failures plus the shell confirming the child is gone — or
@@ -25,12 +25,12 @@ export function ServerDownBanner({ health }: { health: ServerHealth }) {
   const crashed = server?.liveness === "exited";
   const hung = server?.liveness === "running";
   const headline = crashed
-    ? (server?.exitCode != null
+    ? server?.exitCode != null
       ? t("chrome.serverDown.crashed", { code: String(server.exitCode) })
-      : t("chrome.serverDown.crashedNoCode"))
+      : t("chrome.serverDown.crashedNoCode")
     : hung
-    ? t("chrome.serverDown.hung")
-    : t("chrome.serverDown.unreachable");
+      ? t("chrome.serverDown.hung")
+      : t("chrome.serverDown.unreachable");
   const logTail = server?.logTail?.trim() ?? "";
 
   const copyLog = async () => {
@@ -40,7 +40,9 @@ export function ServerDownBanner({ health }: { health: ServerHealth }) {
       server?.exitCode != null ? `exit code: ${server.exitCode}` : "",
       "",
       logTail || t("chrome.serverDown.noLog"),
-    ].filter((line, i) => i < 3 || line !== "").join("\n");
+    ]
+      .filter((line, i) => i < 3 || line !== "")
+      .join("\n");
     try {
       await navigator.clipboard.writeText(body);
       flashCopied();
@@ -101,10 +103,8 @@ export function ServerDownBanner({ health }: { health: ServerHealth }) {
           {copied ? <IconCheck size={14} /> : <IconClipboard size={14} />}
           {t("chrome.serverDown.copyLog")}
         </button>
-        {
-          /* Mounted empty and filled on success: a live region has to be in
-            the tree before its text changes to be announced. */
-        }
+        {/* Mounted empty and filled on success: a live region has to be in
+            the tree before its text changes to be announced. */}
         <span className="visually-hidden" role="status">
           {copied ? t("chrome.serverDown.copied") : null}
         </span>

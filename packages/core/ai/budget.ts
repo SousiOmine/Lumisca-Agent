@@ -6,16 +6,16 @@
  * for the completion. The recovery path (output-cap-recovery.ts) reads the
  * same policy when a provider rejects a request anyway.
  */
-import type { Api, Model } from "./types.ts";
-import type { StreamOptions, StreamRequest } from "./types.ts";
-import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
+
 import { inputBudgetTokens } from "../shared/context-usage.ts";
+import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import {
   estimateLlmMessagesTokens,
   estimateTextTokens,
   estimateToolTokens,
 } from "../shared/token-estimate.ts";
 import { reservedCompletionTokens } from "./compaction-policy.ts";
+import type { Api, Model, StreamOptions, StreamRequest } from "./types.ts";
 
 /** The completion cap to send for one request: the caller's override when it
  * set one, else the model's documented `maxTokens`, else none (the
@@ -133,7 +133,7 @@ export function clampMaxTokensToContext(
   if (window === undefined) {
     return Math.max(MIN_MAX_TOKENS, desired);
   }
-  const available = window - promptTokens -
-    contextSafetyTokens(promptTokens, window);
+  const available =
+    window - promptTokens - contextSafetyTokens(promptTokens, window);
   return Math.min(desired, Math.max(MIN_MAX_TOKENS, available));
 }

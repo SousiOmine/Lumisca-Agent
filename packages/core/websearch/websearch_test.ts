@@ -1,10 +1,10 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
-import { decodeEntities, htmlToText, pageTitle } from "./html.ts";
+import { MAX_DIRECT_FETCH_BYTES } from "./constants.ts";
+import { fetchDirect } from "./direct-fetch.ts";
 import { WebSearchError } from "./errors.ts";
 import { failureText } from "./failure-text.ts";
-import { fetchDirect } from "./direct-fetch.ts";
+import { decodeEntities, htmlToText, pageTitle } from "./html.ts";
 import { createSearchProvider } from "./providers/registry.ts";
-import { MAX_DIRECT_FETCH_BYTES } from "./constants.ts";
 import type { FetchLike } from "./types.ts";
 
 /** A Response with the given body and headers. */
@@ -65,18 +65,16 @@ Deno.test("the direct fetch refuses this machine's addresses", async () => {
     throw new Error("must not be called");
   };
 
-  for (
-    const url of [
-      "http://localhost:8000/api/settings",
-      "http://127.0.0.1/",
-      "http://10.0.0.5/",
-      "http://192.168.1.1/",
-      "http://169.254.169.254/latest/meta-data",
-      "http://[::1]/",
-      "http://[::ffff:127.0.0.1]/",
-      "http://[64:ff9b::7f00:1]/",
-    ]
-  ) {
+  for (const url of [
+    "http://localhost:8000/api/settings",
+    "http://127.0.0.1/",
+    "http://10.0.0.5/",
+    "http://192.168.1.1/",
+    "http://169.254.169.254/latest/meta-data",
+    "http://[::1]/",
+    "http://[::ffff:127.0.0.1]/",
+    "http://[64:ff9b::7f00:1]/",
+  ]) {
     const error = await assertRejects(
       () => fetchDirect(fetchImpl, { url }),
       WebSearchError,
@@ -149,9 +147,7 @@ Deno.test("the direct fetch stops at the size limit while reading", async () => 
 
 Deno.test("failureText speaks each reader's language", () => {
   const message = "Tavily returned HTTP 401";
-  assert(
-    failureText("ja", "auth", message).includes("API キー"),
-  );
+  assert(failureText("ja", "auth", message).includes("API キー"));
   assert(failureText("en", "auth", message).includes("API key"));
 });
 
@@ -163,11 +159,13 @@ Deno.test("a provider without a page API falls back to the direct fetch", async 
         new Response(
           JSON.stringify({
             web: {
-              results: [{
-                title: "Hit",
-                url: "https://example.com/hit",
-                description: "<b>excerpt</b>",
-              }],
+              results: [
+                {
+                  title: "Hit",
+                  url: "https://example.com/hit",
+                  description: "<b>excerpt</b>",
+                },
+              ],
             },
           }),
           { headers: { "content-type": "application/json" } },
@@ -185,12 +183,14 @@ Deno.test("a provider without a page API falls back to the direct fetch", async 
   assertEquals(provider.supportsFetch, false);
 
   const found = await provider.search({ query: "q", limit: 3 });
-  assertEquals(found.results, [{
-    title: "Hit",
-    url: "https://example.com/hit",
-    snippet: "excerpt",
-    publishedAt: null,
-  }]);
+  assertEquals(found.results, [
+    {
+      title: "Hit",
+      url: "https://example.com/hit",
+      snippet: "excerpt",
+      publishedAt: null,
+    },
+  ]);
 
   const page = await provider.fetchPage({ url: "https://example.com/page" });
   assertEquals(page.title, "Page");

@@ -40,9 +40,14 @@ export interface AgentAvatarProps {
  * second implementation would drift the moment one of them changed (the
  * initial's uppercase rule, the image's fit).
  */
-export function AgentAvatar(
-  { agentId, name, icon, preview, size, className }: AgentAvatarProps,
-) {
+export function AgentAvatar({
+  agentId,
+  name,
+  icon,
+  preview,
+  size,
+  className,
+}: AgentAvatarProps) {
   // A var rather than an inline colour: tokens.css declares the default, so
   // the rule that reads it stays in the stylesheet (and a theme can adjust
   // the lightness without touching every call site).
@@ -60,11 +65,12 @@ export function AgentAvatar(
   // A picture to draw: the one about to be saved (a preview), else the stored
   // one. Both are painted the same way, so the dialog never promises a
   // different shape than the row will have.
-  const src = preview !== undefined && preview !== ""
-    ? preview
-    : icon === ""
-    ? ""
-    : stellaAgentIconUrl(agentId, icon);
+  const src =
+    preview !== undefined && preview !== ""
+      ? preview
+      : icon === ""
+        ? ""
+        : stellaAgentIconUrl(agentId, icon);
   if (src !== "") {
     return (
       <img

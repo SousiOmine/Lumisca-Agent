@@ -1,8 +1,8 @@
 import { IconX } from "@tabler/icons-preact";
-import { Modal } from "./Modal.tsx";
-import { RecentSessionsList } from "./RecentSessionsList.tsx";
 import { useRecentSessions } from "../hooks/useRecentSessions.ts";
 import { useT } from "../i18n.ts";
+import { Modal } from "./Modal.tsx";
+import { RecentSessionsList } from "./RecentSessionsList.tsx";
 
 interface RecentSessionsModalProps {
   /** Tab keys currently open; those sessions are hidden ("閉じたセッション"). */

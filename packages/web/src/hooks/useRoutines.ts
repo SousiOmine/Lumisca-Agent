@@ -71,25 +71,37 @@ export function useRoutines(agentId: string | null): {
     setError(null);
   }, []);
 
-  const setEnabled = useCallback(async (id: string, enabled: boolean) => {
-    const { routines: list } = await api.setRoutineEnabled(id, enabled);
-    apply(list);
-  }, [apply]);
+  const setEnabled = useCallback(
+    async (id: string, enabled: boolean) => {
+      const { routines: list } = await api.setRoutineEnabled(id, enabled);
+      apply(list);
+    },
+    [apply],
+  );
 
-  const run = useCallback(async (id: string) => {
-    const { routines: list } = await api.runRoutine(id);
-    apply(list);
-  }, [apply]);
+  const run = useCallback(
+    async (id: string) => {
+      const { routines: list } = await api.runRoutine(id);
+      apply(list);
+    },
+    [apply],
+  );
 
-  const stop = useCallback(async (id: string) => {
-    const { routines: list } = await api.stopRoutine(id);
-    apply(list);
-  }, [apply]);
+  const stop = useCallback(
+    async (id: string) => {
+      const { routines: list } = await api.stopRoutine(id);
+      apply(list);
+    },
+    [apply],
+  );
 
-  const remove = useCallback(async (id: string) => {
-    const { routines: list } = await api.deleteRoutine(id);
-    apply(list);
-  }, [apply]);
+  const remove = useCallback(
+    async (id: string) => {
+      const { routines: list } = await api.deleteRoutine(id);
+      apply(list);
+    },
+    [apply],
+  );
 
   return {
     routines,

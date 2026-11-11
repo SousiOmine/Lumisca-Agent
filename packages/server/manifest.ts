@@ -48,9 +48,7 @@ export interface ManifestOptions {
 }
 
 /** The manifest document, as the JSON text its route answers with. */
-export function renderManifest(
-  { theme, language }: ManifestOptions,
-): string {
+export function renderManifest({ theme, language }: ManifestOptions): string {
   const color = THEME_COLORS[theme];
   return JSON.stringify({
     // A stable identity: without it the browser derives one from start_url,

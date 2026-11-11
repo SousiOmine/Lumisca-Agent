@@ -8,7 +8,9 @@
  * The transport is whatever StreamFn is injected — the real one is
  * Vercel-backed (ai/stream.ts), tests inject a faux (ai/faux.ts).
  */
-import type { StreamFn } from "./types.ts";
+
+import type { NotificationMessage } from "../ai/types.ts";
+import { canonicalJson, fnv1a } from "../shared/digest.ts";
 import type {
   AgentEvent,
   AgentMessage,
@@ -21,11 +23,10 @@ import type {
   ModelThinkingLevel,
   RequestShape,
   StopReason,
+  StreamFn,
   ToolCall,
   ToolResultMessage,
 } from "./types.ts";
-import type { NotificationMessage } from "../ai/types.ts";
-import { canonicalJson, fnv1a } from "../shared/digest.ts";
 
 export interface AgentDefaults {
   systemPrompt: string;
@@ -61,11 +62,12 @@ export interface AgentInit {
 /** A completion (tool result) of one tool call. */
 interface ToolOutcome {
   content: Array<
-    { type: "text"; text: string } | {
-      type: "image";
-      data: string;
-      mimeType: string;
-    }
+    | { type: "text"; text: string }
+    | {
+        type: "image";
+        data: string;
+        mimeType: string;
+      }
   >;
   details: unknown;
   isError: boolean;
@@ -307,11 +309,13 @@ export class Agent {
       const message = messages[i]!;
       if (message.role === "toolResult") answered.add(message.toolCallId);
     }
-    const unanswered = (tail.content as ReadonlyArray<{
-      type?: string;
-      id?: string;
-      name?: string;
-    }>)
+    const unanswered = (
+      tail.content as ReadonlyArray<{
+        type?: string;
+        id?: string;
+        name?: string;
+      }>
+    )
       .filter((block) => block.type === "toolCall")
       .filter((block) => block.id !== undefined && !answered.has(block.id));
     if (unanswered.length === 0) return;
@@ -393,9 +397,9 @@ export class Agent {
     // The run's own promise settles the waiter when it returns normally;
     // an abandoned run was settled by abort already (settleRun is
     // idempotent).
-    void this.__run(id, first).catch(() => {}).finally(() =>
-      this.settleRun(id)
-    );
+    void this.__run(id, first)
+      .catch(() => {})
+      .finally(() => this.settleRun(id));
     this.running = settled;
     await settled;
   }
@@ -626,11 +630,12 @@ export class Agent {
         // Keep the transport's detail with the message: the transcript (and
         // therefore the DB, the UI banner and the session log) then says
         // *why* the call failed, not just that it did.
-        errorMessage = base === undefined
-          ? undefined
-          : ev.errorDetail === undefined
-          ? base
-          : `${base} (${ev.errorDetail})`;
+        errorMessage =
+          base === undefined
+            ? undefined
+            : ev.errorDetail === undefined
+              ? base
+              : `${base} (${ev.errorDetail})`;
         if (ev.errorRetryable === true) errorRetryable = true;
       } else if (event.type === "toolcall_start") {
         // The SDK is executing this tool call: only the start event is
@@ -664,11 +669,12 @@ export class Agent {
           toolCallId: event.toolCallId,
           toolName: event.toolName,
           content: event.content as Array<
-            { type: "text"; text: string } | {
-              type: "image";
-              data: string;
-              mimeType: string;
-            }
+            | { type: "text"; text: string }
+            | {
+                type: "image";
+                data: string;
+                mimeType: string;
+              }
           >,
           details,
           isError: event.isError,
@@ -717,10 +723,12 @@ export class Agent {
     // MessageIdentity, and web's applyMessage / mergeNewestWindow).
     final = { ...final!, timestamp: this.nextTimestamp() };
     this.state.messages.push(final);
-    const results = pendingResults.map((result): ToolResultMessage => ({
-      ...result,
-      timestamp: this.nextTimestamp(),
-    }));
+    const results = pendingResults.map(
+      (result): ToolResultMessage => ({
+        ...result,
+        timestamp: this.nextTimestamp(),
+      }),
+    );
     this.state.messages.push(...results);
     this.state.errorMessage = errorMessage ?? this.state.errorMessage;
     this.emit({ type: "message_end", message: final });
@@ -792,7 +800,8 @@ export class Agent {
   private headHash(): string {
     const cached = this.headFingerprint;
     if (
-      cached !== undefined && cached.prompt === this.state.systemPrompt &&
+      cached !== undefined &&
+      cached.prompt === this.state.systemPrompt &&
       cached.tools === this.state.tools
     ) {
       return cached.hash;
@@ -835,9 +844,8 @@ export class Agent {
     let reminder: NotificationMessage | undefined;
     for (const call of calls) {
       const signature = `${call.name}\u0000${canonicalJson(call.arguments)}`;
-      this.repeatCount = signature === this.repeatSignature
-        ? this.repeatCount + 1
-        : 1;
+      this.repeatCount =
+        signature === this.repeatSignature ? this.repeatCount + 1 : 1;
       this.repeatSignature = signature;
       if (REPEAT_REMINDER_AT.includes(this.repeatCount)) {
         reminder = repeatReminder(call, this.repeatCount);
@@ -862,8 +870,8 @@ export class Agent {
   ): Promise<void> {
     for (const call of toolCalls) {
       if (this.abortRequested || this.isStaleRun(runId)) return;
-      const tool = this.state.tools.find((t) => t.name === call.name) ??
-        ({} as AgentTool);
+      const tool =
+        this.state.tools.find((t) => t.name === call.name) ?? ({} as AgentTool);
       this.emit({
         type: "tool_execution_start",
         toolCallId: call.id,
@@ -893,9 +901,8 @@ export class Agent {
             isError: false,
           };
         } catch (error) {
-          const message = error instanceof Error
-            ? error.message
-            : String(error);
+          const message =
+            error instanceof Error ? error.message : String(error);
           outcome = {
             content: [{ type: "text", text: message }],
             details: {},
@@ -943,15 +950,16 @@ const REPEAT_ARGUMENTS_PREVIEW = 500;
 /** The advisory message for a repeated call (see Agent.noteToolCalls). */
 function repeatReminder(call: ToolCall, count: number): NotificationMessage {
   const repeated = `${count} times in a row with identical arguments`;
-  const body = count >= REPEAT_REMINDER_AT[1]!
-    ? `You called ${call.name} ${repeated}. The repeats are not making ` +
-      "progress: inspect the latest result and choose a different action, " +
-      "different arguments, or finish the task instead of calling it " +
-      "again.\n- arguments: " +
-      canonicalJson(call.arguments).slice(0, REPEAT_ARGUMENTS_PREVIEW)
-    : `You called ${call.name} ${repeated}. Inspect the previous result ` +
-      "before calling it again: if the task is not complete, change the " +
-      "approach or the arguments instead of repeating the call.";
+  const body =
+    count >= REPEAT_REMINDER_AT[1]!
+      ? `You called ${call.name} ${repeated}. The repeats are not making ` +
+        "progress: inspect the latest result and choose a different action, " +
+        "different arguments, or finish the task instead of calling it " +
+        "again.\n- arguments: " +
+        canonicalJson(call.arguments).slice(0, REPEAT_ARGUMENTS_PREVIEW)
+      : `You called ${call.name} ${repeated}. Inspect the previous result ` +
+        "before calling it again: if the task is not complete, change the " +
+        "approach or the arguments instead of repeating the call.";
   return {
     role: "notification",
     kind: "notice",

@@ -1,13 +1,13 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
-import { type PushSubscriptionRecord, toBase64Url } from "../shared/push.ts";
 import { createInMemorySettingsRepo } from "../settings/repo.ts";
+import { type PushSubscriptionRecord, toBase64Url } from "../shared/push.ts";
+import { loadVapidKeys } from "./vapid.ts";
 import {
   buildVapidAuth,
   decryptPushPayload,
   encryptPushPayload,
   sendPush,
 } from "./web-push.ts";
-import { loadVapidKeys } from "./vapid.ts";
 
 /** A browser's side of the channel: the key pair it subscribed with, and the
  * secret the service worker holds. */
@@ -81,7 +81,7 @@ Deno.test("a subscription that is not a P-256 point is refused", async () => {
     encryptPushPayload(
       { p256dh: toBase64Url(new Uint8Array(10)), auth: "AAAA" },
       { title: "T", body: "B", tag: "" },
-    )
+    ),
   );
 });
 
@@ -108,7 +108,8 @@ Deno.test("the VAPID header is an ES256 token scoped to the endpoint", async () 
   // The signature verifies against the advertised public key: that check is
   // what makes the header usable.
   const raw = new Uint8Array(
-    atob(publicKey!.replaceAll("-", "+").replaceAll("_", "/")).split("")
+    atob(publicKey!.replaceAll("-", "+").replaceAll("_", "/"))
+      .split("")
       .map((c) => c.charCodeAt(0)),
   );
   const verifyKey = await crypto.subtle.importKey(
@@ -122,9 +123,8 @@ Deno.test("the VAPID header is an ES256 token scoped to the endpoint", async () 
     { name: "ECDSA", hash: "SHA-256" },
     verifyKey,
     new Uint8Array(
-      atob(encodedSignature!.replaceAll("-", "+").replaceAll("_", "/")).split(
-        "",
-      )
+      atob(encodedSignature!.replaceAll("-", "+").replaceAll("_", "/"))
+        .split("")
         .map((c) => c.charCodeAt(0)),
     ),
     new TextEncoder().encode(`${encodedHeader}.${encodedClaims}`),
@@ -140,11 +140,17 @@ Deno.test("sendPush posts an encrypted body and reports what happened", async ()
     seen = { url: String(input), init: init ?? {} };
     return Promise.resolve(new Response(null, { status: 201 }));
   };
-  const result = await sendPush(fake, keys, record, {
-    title: "Lumisca",
-    body: "done",
-    tag: "session:s1",
-  }, { urgency: "high" });
+  const result = await sendPush(
+    fake,
+    keys,
+    record,
+    {
+      title: "Lumisca",
+      body: "done",
+      tag: "session:s1",
+    },
+    { urgency: "high" },
+  );
   assertEquals(result, { kind: "sent", status: 201 });
   assertEquals(seen?.url, record.endpoint);
   const headers = seen!.init.headers as Record<string, string>;

@@ -21,8 +21,8 @@
  */
 import "../packages/core/runtime/deno.ts";
 import { basename, dirname, join } from "node:path";
-import { SERVER_STARTUP_ENV_KEYS } from "../packages/server/startup.ts";
 import { installedFileNames } from "../packages/server/layout.ts";
+import { SERVER_STARTUP_ENV_KEYS } from "../packages/server/startup.ts";
 import { SERVER_VERSION } from "../packages/server/version.ts";
 import {
   absolutePath,
@@ -106,9 +106,7 @@ function freePort(): number {
  */
 function serviceEnv(): Record<string, string> {
   const env: Record<string, string> = {};
-  for (
-    const key of ["HOME", "USER", "USERPROFILE", "USERNAME"] as const
-  ) {
+  for (const key of ["HOME", "USER", "USERPROFILE", "USERNAME"] as const) {
     const value = Deno.env.get(key);
     if (value !== undefined) env[key] = value;
   }
@@ -148,7 +146,9 @@ async function stop(child: Deno.ChildProcess, status: Promise<unknown>) {
       args: ["/PID", String(child.pid), "/T", "/F"],
       stdout: "null",
       stderr: "null",
-    }).output().catch(() => {});
+    })
+      .output()
+      .catch(() => {});
   } else {
     try {
       child.kill("SIGTERM");
@@ -229,9 +229,9 @@ async function copyPackage(source: string, targetDir: string): Promise<string> {
   }
   if (copied === 0) {
     usage(
-      `no package files next to ${source} (looked for ${
-        installedFileNames(source).join(", ")
-      })`,
+      `no package files next to ${source} (looked for ${installedFileNames(
+        source,
+      ).join(", ")})`,
     );
   }
   return join(targetDir, basename(source));
@@ -313,7 +313,8 @@ try {
     const html = await page.text();
     check(
       "GET / serves the app shell",
-      page.status === 200 && html.includes("<html") &&
+      page.status === 200 &&
+        html.includes("<html") &&
         html.includes("/assets/app.js"),
       `status ${page.status}, ${html.length} bytes`,
     );
@@ -349,12 +350,15 @@ try {
     // updater endpoints; the UI reads them when the page is not inside the
     // desktop shell.
     const update = await fetch(`${base}/api/update/status`);
-    const updateBody = await update.json().catch(() => null) as
-      | { supported?: boolean; currentVersion?: string; target?: string }
-      | null;
+    const updateBody = (await update.json().catch(() => null)) as {
+      supported?: boolean;
+      currentVersion?: string;
+      target?: string;
+    } | null;
     check(
       "/api/update/status offers self-updating",
-      update.status === 200 && updateBody?.supported === true &&
+      update.status === 200 &&
+        updateBody?.supported === true &&
         updateBody.currentVersion === SERVER_VERSION &&
         updateBody.target === Deno.build.target,
       `status ${update.status}, ${JSON.stringify(updateBody)}`,

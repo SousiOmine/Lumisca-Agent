@@ -1,4 +1,3 @@
-import { useRef, useState } from "preact/compat";
 import {
   IconChevronDown,
   IconFolder,
@@ -7,9 +6,10 @@ import {
   IconPlus,
   IconTrash,
 } from "@tabler/icons-preact";
-import type { Workspace } from "../types.ts";
+import { useRef, useState } from "preact/compat";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { useT } from "../i18n.ts";
+import type { Workspace } from "../types.ts";
 
 interface WorkspacePickerProps {
   workspaces: Workspace[];

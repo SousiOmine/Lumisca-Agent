@@ -105,6 +105,9 @@ export async function play(
     fill: "both",
   });
   return {
-    finished: Promise.resolve(controls.finished).then(() => {}, () => {}),
+    finished: Promise.resolve(controls.finished).then(
+      () => {},
+      () => {},
+    ),
   };
 }

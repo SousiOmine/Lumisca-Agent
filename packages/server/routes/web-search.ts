@@ -1,8 +1,8 @@
-import { Hono } from "hono";
 import type {
   WebSearchSettingsView,
   WebSearchTestView,
 } from "@lumisca/core/shared";
+import { Hono } from "hono";
 import {
   AppError,
   parseBody,
@@ -25,9 +25,10 @@ import {
 /** The slice of the core these routes need. */
 export interface WebSearchApi {
   getWebSearchSettings(): WebSearchSettingsView;
-  addWebSearchProvider(
-    input: { id: string; apiKey: string },
-  ): WebSearchSettingsView;
+  addWebSearchProvider(input: {
+    id: string;
+    apiKey: string;
+  }): WebSearchSettingsView;
   updateWebSearchProvider(
     id: string,
     input: { apiKey: string },
@@ -91,9 +92,7 @@ export function webSearchRoutes(core: WebSearchApi): Hono {
     // null turns search off. An absent field is treated as null as well: the
     // request says which provider to use, and saying none is how it does it.
     return c.json(
-      core.setDefaultWebSearchProvider(
-        typeof id === "string" ? id : null,
-      ),
+      core.setDefaultWebSearchProvider(typeof id === "string" ? id : null),
     );
   });
 

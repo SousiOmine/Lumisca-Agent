@@ -1,8 +1,8 @@
-import { removeDirRetry } from "@lumisca/core/test-utils";
 import { join } from "node:path";
+import { removeDirRetry } from "@lumisca/core/test-utils";
 import { assertEquals, assertRejects } from "@std/assert";
-import { Assets, type AssetsManifest, bundleStylesCss } from "./assets.ts";
 import { contentEtag } from "./app-file-headers.ts";
+import { Assets, type AssetsManifest, bundleStylesCss } from "./assets.ts";
 
 Deno.test("packaged assets use the startup-captured manifest path", async () => {
   const root = await Deno.makeTempDir();
@@ -110,10 +110,7 @@ Deno.test("bundleStylesCss passes a plain stylesheet through", async () => {
   try {
     const entryPath = join(root, "styles.css");
     await Deno.writeTextFile(entryPath, "body { color: white; }\n");
-    assertEquals(
-      await bundleStylesCss(entryPath),
-      "body { color: white; }\n",
-    );
+    assertEquals(await bundleStylesCss(entryPath), "body { color: white; }\n");
   } finally {
     await removeDirRetry(root);
   }
@@ -130,11 +127,9 @@ Deno.test("bundleStylesCss rejects stray rules and escapes", async () => {
     await assertRejects(() => bundleStylesCss(withRule), Error);
     // An import pointing outside the web sources is rejected.
     await Deno.writeTextFile(join(root, "evil.css"), ".e {}\n");
-    const escaping = await writeStylesEntry(
-      root,
-      `@import "../evil.css";\n`,
-      { "a.css": ".a { color: red; }\n" },
-    );
+    const escaping = await writeStylesEntry(root, `@import "../evil.css";\n`, {
+      "a.css": ".a { color: red; }\n",
+    });
     await assertRejects(() => bundleStylesCss(escaping), Error);
   } finally {
     await removeDirRetry(root);

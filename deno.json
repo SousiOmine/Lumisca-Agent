@@ -1,9 +1,5 @@
 {
-  "workspace": [
-    "packages/core",
-    "packages/server",
-    "packages/web"
-  ],
+  "workspace": ["packages/core", "packages/server", "packages/web"],
   "nodeModulesDir": "auto",
   "compilerOptions": {
     "strict": true,

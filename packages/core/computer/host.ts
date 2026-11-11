@@ -38,8 +38,7 @@ export function createComputerHost(
     default:
       return Promise.resolve({
         available: false,
-        reason:
-          `computer use is not supported on this platform yet (${Deno.build.os})`,
+        reason: `computer use is not supported on this platform yet (${Deno.build.os})`,
       });
   }
 }

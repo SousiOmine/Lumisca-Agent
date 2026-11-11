@@ -1,11 +1,10 @@
-import { assertEquals } from "@std/assert";
 import { join } from "node:path";
+import { assertEquals } from "@std/assert";
 import { Agent } from "../ai/agent.ts";
 import { createAssistantMessageEventStream } from "../ai/event-stream.ts";
 import { fauxAssistantMessage, fauxToolCall } from "../ai/faux.ts";
 import { languageModelFor } from "../ai/lang-model.ts";
-import { bytesToBase64 } from "../base64.ts";
-import { fakeModel, MINI_PNG, withTempDir } from "../test-utils.ts";
+import { createStreamFn, type StreamTransport } from "../ai/stream.ts";
 import type {
   AgentEvent,
   AgentMessage,
@@ -17,13 +16,14 @@ import type {
   ToolCall,
   ToolResultMessage,
 } from "../ai/types.ts";
-import { createStreamFn, type StreamTransport } from "../ai/stream.ts";
+import { bytesToBase64 } from "../base64.ts";
+import { contentText } from "../shared/mod.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
+import { fakeModel, MINI_PNG, withTempDir } from "../test-utils.ts";
 import { createReadFileTool } from "../tools/filesystem.ts";
 import { HostFileBackend } from "../tools/host/files.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
 import { object, string, type Tool } from "../tools/schema.ts";
-import { contentText } from "../shared/mod.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 
 /** A policy that reserves nothing: these tests are about tool execution,
@@ -132,13 +132,15 @@ Deno.test("SDK-executed tools keep their args and are not re-executed", async ()
   assertEquals(toolStartArgs(events), [{ text: "hi" }]);
 
   const messages: AgentMessage[] = agent.messages;
-  const assistantIndex = messages.findIndex((m) =>
-    m.role === "assistant" &&
-    (m as AssistantMessage).content.some((b) => b.type === "toolCall")
+  const assistantIndex = messages.findIndex(
+    (m) =>
+      m.role === "assistant" &&
+      (m as AssistantMessage).content.some((b) => b.type === "toolCall"),
   );
-  const resultIndex = messages.findIndex((m) =>
-    m.role === "toolResult" &&
-    (m as { toolCallId?: string }).toolCallId === "t1"
+  const resultIndex = messages.findIndex(
+    (m) =>
+      m.role === "toolResult" &&
+      (m as { toolCallId?: string }).toolCallId === "t1",
   );
   // Transcript order stays assistant(toolCalls) → toolResults.
   assertEquals(
@@ -146,8 +148,8 @@ Deno.test("SDK-executed tools keep their args and are not re-executed", async ()
     true,
   );
   const assistant = messages[assistantIndex] as AssistantMessage;
-  const recorded = assistant.content.find((b) =>
-    b.type === "toolCall"
+  const recorded = assistant.content.find(
+    (b) => b.type === "toolCall",
   ) as ToolCall;
   assertEquals(recorded.arguments, { text: "hi" });
 
@@ -208,8 +210,8 @@ Deno.test("tool calls without SDK results still run via the fallback", async () 
   // result the client is never told about leaves the line unmarked until the
   // next transcript resync.
   assertEquals(
-    events.filter((e) =>
-      e.type === "message_end" && e.message.role === "toolResult"
+    events.filter(
+      (e) => e.type === "message_end" && e.message.role === "toolResult",
     ).length,
     1,
   );
@@ -329,8 +331,8 @@ Deno.test("the tool result keeps its details for the UI and stays text for the m
   assertEquals(call.args, { path: "a.ts" });
   // The transcript (and therefore the DB, and the UI after a reload)
   // carries the details the badge reads.
-  const result = agent.messages.find((m) =>
-    m.role === "toolResult"
+  const result = agent.messages.find(
+    (m) => m.role === "toolResult",
   ) as ToolResultMessage;
   assertEquals(result.details, {
     path: "a.ts",
@@ -372,9 +374,12 @@ Deno.test("a stop during an SDK-executed tool leaves a session that still runs",
       tools: [stuck],
       thinkingLevel: "off",
     },
-    streamFn: createStreamFn({
-      languageModelFor: () => Promise.resolve(fake.model as never),
-    }, NO_RESERVATION),
+    streamFn: createStreamFn(
+      {
+        languageModelFor: () => Promise.resolve(fake.model as never),
+      },
+      NO_RESERVATION,
+    ),
     sessionId: "s1",
   });
 
@@ -385,7 +390,7 @@ Deno.test("a stop during an SDK-executed tool leaves a session that still runs",
   await Promise.race([
     first,
     new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("the run did not settle")), 2_000)
+      setTimeout(() => reject(new Error("the run did not settle")), 2_000),
     ),
   ]);
   assertEquals(agent.isStreaming, false);
@@ -410,7 +415,10 @@ Deno.test("a stop during an SDK-executed tool leaves a session that still runs",
       results.add(message.toolCallId);
     }
   }
-  assertEquals([...calls].filter((id) => !results.has(id)), []);
+  assertEquals(
+    [...calls].filter((id) => !results.has(id)),
+    [],
+  );
 });
 
 // ---- read tool images through the whole path ------------------------------
@@ -445,15 +453,20 @@ function toolCallAnswer(
   args: Record<string, unknown>,
 ): Response {
   return sse([
-    chatChunk({
-      role: "assistant",
-      tool_calls: [{
-        index: 0,
-        id,
-        type: "function",
-        function: { name, arguments: JSON.stringify(args) },
-      }],
-    }, null),
+    chatChunk(
+      {
+        role: "assistant",
+        tool_calls: [
+          {
+            index: 0,
+            id,
+            type: "function",
+            function: { name, arguments: JSON.stringify(args) },
+          },
+        ],
+      },
+      null,
+    ),
     chatChunk({}, "tool_calls"),
   ]);
 }
@@ -477,7 +490,7 @@ function scriptedEndpoint(scripts: Response[]): {
 } {
   const bodies: Array<Record<string, unknown>> = [];
   const server = Deno.serve({ port: 0, onListen: () => {} }, async (req) => {
-    bodies.push(await req.json() as Record<string, unknown>);
+    bodies.push((await req.json()) as Record<string, unknown>);
     return scripts[Math.min(bodies.length - 1, scripts.length - 1)]!;
   });
   // The port is assigned by the listener, which Deno starts with the
@@ -525,12 +538,15 @@ Deno.test("a read tool image reaches the model and the transcript", async () => 
           ],
           thinkingLevel: "off",
         },
-        streamFn: createStreamFn({
-          languageModelFor: () =>
-            Promise.resolve(
-              languageModelFor(model, { apiKey: "test-key", source: "test" }),
-            ),
-        }, NO_RESERVATION),
+        streamFn: createStreamFn(
+          {
+            languageModelFor: () =>
+              Promise.resolve(
+                languageModelFor(model, { apiKey: "test-key", source: "test" }),
+              ),
+          },
+          NO_RESERVATION,
+        ),
         sessionId: "s1",
       });
 
@@ -539,10 +555,13 @@ Deno.test("a read tool image reaches the model and the transcript", async () => 
       // The transcript carries the image: the UI renders it under the tool
       // line, the DB keeps it across a reload, and the image analysis of a
       // text-only model reads it.
-      const result = agent.messages.find((m) =>
-        m.role === "toolResult"
+      const result = agent.messages.find(
+        (m) => m.role === "toolResult",
       ) as ToolResultMessage;
-      assertEquals(result.content.map((b) => b.type), ["text", "image"]);
+      assertEquals(
+        result.content.map((b) => b.type),
+        ["text", "image"],
+      );
       assertEquals(result.content[1], {
         type: "image",
         data: bytesToBase64(MINI_PNG),

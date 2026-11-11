@@ -21,8 +21,7 @@ let ts = 1785633377599;
 let n = 0;
 for (let i = 1; i <= nPairs; i++) {
   ts += 60_000;
-  const userText =
-    `テスト質問 ${i} です。この会話は履歴が長くなったときのレイアウトを確認するためのものです。ダミーの質問文を何行かにわたって書いています。これは ${i} 回目のやりとりです。`;
+  const userText = `テスト質問 ${i} です。この会話は履歴が長くなったときのレイアウトを確認するためのものです。ダミーの質問文を何行かにわたって書いています。これは ${i} 回目のやりとりです。`;
   insert.run(
     `msg-u-${i}`,
     sessionId,
@@ -39,11 +38,9 @@ for (let i = 1; i <= nPairs; i++) {
   ts += 90_000;
   let paragraphs = "";
   for (let j = 1; j <= 30; j++) {
-    paragraphs +=
-      ` ダミーパラグラフ ${i}-${j} です。履歴が長くなったときのスクロール挙動を確認するための文章です。`;
+    paragraphs += ` ダミーパラグラフ ${i}-${j} です。履歴が長くなったときのスクロール挙動を確認するための文章です。`;
   }
-  const answerText =
-    `回答 ${i} です。長い履歴になるとレイアウトがどうなるかを確認するためのダミー回答です。${paragraphs}`;
+  const answerText = `回答 ${i} です。長い履歴になるとレイアウトがどうなるかを確認するためのダミー回答です。${paragraphs}`;
   insert.run(
     `msg-a-${i}`,
     sessionId,
@@ -104,13 +101,14 @@ for (let i = 1; i <= nPairs; i++) {
         role: "toolResult",
         toolCallId: callIds[k]!,
         toolName: k === 0 ? "list_dir" : "read",
-        content: [{
-          type: "text",
-          text:
-            `ツール実行結果 ${i}-${k} です。ダミーの実行結果テキストが入ります。${
-              "ダミー行です。".repeat(10)
-            }`,
-        }],
+        content: [
+          {
+            type: "text",
+            text: `ツール実行結果 ${i}-${k} です。ダミーの実行結果テキストが入ります。${"ダミー行です。".repeat(
+              10,
+            )}`,
+          },
+        ],
         timestamp: ts,
       }),
       ts,

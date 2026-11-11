@@ -16,7 +16,8 @@ const APPLE = {
   name: "Lumisca_0.9.0_aarch64.app.tar.gz",
   apiUrl:
     "https://api.github.com/repos/SousiOmine/Lumisca-Agent/releases/assets/642668642",
-  url: "https://github.com/SousiOmine/Lumisca-Agent/releases/download/v0.9.0/" +
+  url:
+    "https://github.com/SousiOmine/Lumisca-Agent/releases/download/v0.9.0/" +
     "Lumisca_0.9.0_aarch64.app.tar.gz",
 };
 
@@ -24,7 +25,8 @@ const NSIS = {
   name: "Lumisca_0.9.0_x64-setup.exe",
   apiUrl:
     "https://api.github.com/repos/SousiOmine/Lumisca-Agent/releases/assets/642672118",
-  url: "https://github.com/SousiOmine/Lumisca-Agent/releases/download/v0.9.0/" +
+  url:
+    "https://github.com/SousiOmine/Lumisca-Agent/releases/download/v0.9.0/" +
     "Lumisca_0.9.0_x64-setup.exe",
 };
 
@@ -82,10 +84,12 @@ Deno.test("an API asset URL becomes the tag's public download link", () => {
       "windows-x86_64-nsis": { signature: SIGNATURE, url: NSIS.url },
     },
   });
-  assertEquals(
-    Object.keys(rewrite.manifest),
-    ["version", "notes", "pub_date", "platforms"],
-  );
+  assertEquals(Object.keys(rewrite.manifest), [
+    "version",
+    "notes",
+    "pub_date",
+    "platforms",
+  ]);
 });
 
 Deno.test("a draft's placeholder URLs become the tag's download links", () => {
@@ -100,7 +104,10 @@ Deno.test("a draft's placeholder URLs become the tag's download links", () => {
 
   assertEquals(platforms["darwin-aarch64"]!.url, APPLE.url);
   assertEquals(platforms["windows-x86_64-nsis"]!.url, NSIS.url);
-  assertEquals(rewrite.platforms.every((entry) => entry.rewritten), true);
+  assertEquals(
+    rewrite.platforms.every((entry) => entry.rewritten),
+    true,
+  );
 });
 
 Deno.test("a manifest that already has the tag's links is left alone", () => {
@@ -114,7 +121,10 @@ Deno.test("a manifest that already has the tag's links is left alone", () => {
   );
 
   assertEquals(again.manifest, published);
-  assertEquals(again.platforms.every((entry) => !entry.rewritten), true);
+  assertEquals(
+    again.platforms.every((entry) => !entry.rewritten),
+    true,
+  );
 });
 
 Deno.test("a platform key like __proto__ stays an own property", () => {
@@ -140,7 +150,8 @@ Deno.test("a URL that is no asset of the release fails", () => {
     platforms: {
       "darwin-aarch64": {
         signature: SIGNATURE,
-        url: "https://api.github.com/repos/SousiOmine/Lumisca-Agent/releases/" +
+        url:
+          "https://api.github.com/repos/SousiOmine/Lumisca-Agent/releases/" +
           "assets/1",
       },
     },

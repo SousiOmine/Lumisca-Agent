@@ -12,6 +12,16 @@ import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
 import { concatBytes } from "../bytes.ts";
 import { firstLine } from "../lines.ts";
+import { sleep } from "../shared/misc.ts";
+import {
+  runVmCommand,
+  VM_TEXT_OUTPUT_LIMIT,
+  type VmCommandBytesResult,
+  type VmCommandBytesRunner,
+  type VmCommandOptions,
+  type VmCommandResult,
+  type VmCommandRunner,
+} from "./command.ts";
 import {
   VM_A11Y_GSETTINGS_KEY,
   VM_A11Y_HELPER,
@@ -39,16 +49,6 @@ import {
   VM_VNC_PORT,
   VM_WORKDIR,
 } from "./contract.ts";
-import {
-  runVmCommand,
-  VM_TEXT_OUTPUT_LIMIT,
-  type VmCommandBytesResult,
-  type VmCommandBytesRunner,
-  type VmCommandOptions,
-  type VmCommandResult,
-  type VmCommandRunner,
-} from "./command.ts";
-import { sleep } from "../shared/misc.ts";
 
 /** Where the machine is, as far as this application can tell. */
 export type VmState =
@@ -117,8 +117,7 @@ export interface VmManagerOptions {
  * start (or a recreation) is verified again and a running one is not asked
  * again on every poll.
  */
-const CONTAINER_FACTS_FORMAT =
-  `{{.Id}}\t{{.State.Status}}\t{{.State.StartedAt}}\t{{json .NetworkSettings.Ports}}`;
+const CONTAINER_FACTS_FORMAT = `{{.Id}}\t{{.State.Status}}\t{{.State.StartedAt}}\t{{json .NetworkSettings.Ports}}`;
 
 /**
  * The contract probes, in one shell.
@@ -251,7 +250,9 @@ async function readContainerFiles(
   for (const entry of Deno.readDirSync(dir)) {
     const path = `${prefix}${entry.name}`;
     if (entry.isDirectory) {
-      out.push(...await readContainerFiles(join(dir, entry.name), `${path}/`));
+      out.push(
+        ...(await readContainerFiles(join(dir, entry.name), `${path}/`)),
+      );
     } else if (entry.isFile) {
       out.push({ path, bytes: await Deno.readFile(join(dir, entry.name)) });
     }
@@ -261,20 +262,17 @@ async function readContainerFiles(
 
 export function createVmManager(options: VmManagerOptions): VmManager {
   const run = options.run ?? runVmCommand;
-  const containerfilePath = join(
-    options.containerDir,
-    VM_CONTAINERFILE_NAME,
-  );
+  const containerfilePath = join(options.containerDir, VM_CONTAINERFILE_NAME);
 
   let cached: { at: number; status: VmStatus } | null = null;
   /** Whether a usable image was seen by the last status read, so the next one
    * can skip asking podman again. Undefined until a read has answered: a
    * known-absent image is not retried, but a fresh manager always asks. */
-  let imagePresent: boolean | undefined = undefined;
+  let imagePresent: boolean | undefined;
   /** Whether this host has proven it can actually start a container (see
    * readStatus). Undefined until asked; a host that cannot is not asked
    * again on every poll. */
-  let runtimeUsable: boolean | undefined = undefined;
+  let runtimeUsable: boolean | undefined;
   /** Whether `podman --version` has answered successfully. Its answer cannot
    * change while the process runs, and asking it on every status read was one
    * spawn of the three a poll used to cost. A failure is not remembered (see
@@ -291,12 +289,12 @@ export function createVmManager(options: VmManagerOptions): VmManager {
    * ordinary one is a machine that has not finished booting, and caching that
    * would report a working machine as broken), and even a pass expires so a
    * screen that died inside a running container is noticed. */
-  let verified: { instance: string; at: number } | undefined = undefined;
+  let verified: { instance: string; at: number } | undefined;
   /** The in-flight status read. Concurrent callers (the status poll, an open,
    * the screen's port lookup) wait for the same podman calls instead of
    * queueing their own: on a slow link each redundant call is a second the
    * user waits. */
-  let inFlight: Promise<VmStatus> | undefined = undefined;
+  let inFlight: Promise<VmStatus> | undefined;
 
   const report = (progress: VmProgress) => options.onProgress?.(progress);
 
@@ -313,7 +311,7 @@ export function createVmManager(options: VmManagerOptions): VmManager {
    * itself (see buildImage, which forgets the cached value). Asking podman
    * again on every status read was a process spawn per poll for an answer
    * that could not have moved. */
-  let imageDigestCache: { value: string | null } | undefined = undefined;
+  let imageDigestCache: { value: string | null } | undefined;
   async function imageDigest(): Promise<string | null> {
     if (imageDigestCache !== undefined) return imageDigestCache.value;
     const result = await run(
@@ -342,7 +340,7 @@ export function createVmManager(options: VmManagerOptions): VmManager {
   async function imageIsStale(): Promise<boolean> {
     const wanted = await containerDigest();
     if (wanted === null) return false;
-    return await imageDigest() !== wanted;
+    return (await imageDigest()) !== wanted;
   }
 
   async function status(readFresh = false): Promise<VmStatus> {
@@ -468,9 +466,10 @@ export function createVmManager(options: VmManagerOptions): VmManager {
     return podman([
       "exec",
       ...(options.interactive === true ? ["--interactive"] : []),
-      ...Object.entries(options.env ?? {}).flatMap((
-        [name, value],
-      ) => ["--env", `${name}=${value}`]),
+      ...Object.entries(options.env ?? {}).flatMap(([name, value]) => [
+        "--env",
+        `${name}=${value}`,
+      ]),
       "--workdir",
       options.workdir ?? VM_WORKDIR,
       VM_CONTAINER_NAME,
@@ -583,13 +582,14 @@ export function createVmManager(options: VmManagerOptions): VmManager {
     // The screen must be the size the agent's coordinates assume.
     const geometry = fields.get("geometry");
     if (geometry === undefined) {
-      return `the machine's screen is not up: ${
-        firstLine(fields.get("geometry_error") ?? "")
-      }`;
+      return `the machine's screen is not up: ${firstLine(
+        fields.get("geometry_error") ?? "",
+      )}`;
     }
     const [width, height] = geometry.split(/\s+/);
     if (
-      Number(width) !== VM_SCREEN_WIDTH || Number(height) !== VM_SCREEN_HEIGHT
+      Number(width) !== VM_SCREEN_WIDTH ||
+      Number(height) !== VM_SCREEN_HEIGHT
     ) {
       return `the machine's screen is ${width}x${height}, expected ${VM_SCREEN_WIDTH}x${VM_SCREEN_HEIGHT}`;
     }
@@ -597,8 +597,10 @@ export function createVmManager(options: VmManagerOptions): VmManager {
     // existed would leave root reachable only through a prompt nobody can
     // answer, so the machine is refused rather than started into that state.
     if (!fields.has("sudo")) {
-      return `the machine's "${VM_USER}" account cannot run sudo without a ` +
-        `password: ${firstLine(fields.get("sudo_error") ?? "")}`;
+      return (
+        `the machine's "${VM_USER}" account cannot run sudo without a ` +
+        `password: ${firstLine(fields.get("sudo_error") ?? "")}`
+      );
     }
     // The semantic tools (vm_find / vm_do / vm_wait) read the machine's
     // widgets through one accessibility bus, reached by a fixed address, and
@@ -608,22 +610,30 @@ export function createVmManager(options: VmManagerOptions): VmManager {
     // machine is refused at start-up instead of at the first tool call.
     const bus = fields.get("dbus");
     if (bus !== VM_DBUS_ADDRESS) {
-      return `the machine's session bus is ${bus || "(unset)"}, expected ` +
-        `${VM_DBUS_ADDRESS}: the semantic tools could not reach it`;
+      return (
+        `the machine's session bus is ${bus || "(unset)"}, expected ` +
+        `${VM_DBUS_ADDRESS}: the semantic tools could not reach it`
+      );
     }
     const toolkit = fields.get("toolkit");
     if (toolkit === undefined) {
-      return `the machine cannot read its accessibility setting: ` +
-        `${firstLine(fields.get("toolkit_error") ?? "")}`;
+      return (
+        `the machine cannot read its accessibility setting: ` +
+        `${firstLine(fields.get("toolkit_error") ?? "")}`
+      );
     }
     if (toolkit.trim() !== "true") {
-      return `the machine's ${VM_A11Y_GSETTINGS_KEY} is ` +
+      return (
+        `the machine's ${VM_A11Y_GSETTINGS_KEY} is ` +
         `${toolkit.trim() || "(unset)"}, expected true: applications started ` +
-        `without it never appear on the accessibility bus`;
+        `without it never appear on the accessibility bus`
+      );
     }
     if (!fields.has("helper")) {
-      return `the machine's accessibility helper did not run: ` +
-        `${firstLine(fields.get("helper_error") ?? "")}`;
+      return (
+        `the machine's accessibility helper did not run: ` +
+        `${firstLine(fields.get("helper_error") ?? "")}`
+      );
     }
     return null;
   }
@@ -653,9 +663,7 @@ export function createVmManager(options: VmManagerOptions): VmManager {
       { timeoutMs: VM_BUILD_TIMEOUT_MS, maxOutput: VM_TEXT_OUTPUT_LIMIT },
     );
     if (result.exitCode !== 0) {
-      throw new Error(
-        `Could not build the machine's image: ${detail(result)}`,
-      );
+      throw new Error(`Could not build the machine's image: ${detail(result)}`);
     }
     // The image the label belonged to is gone: the next read must ask again
     // rather than compare against the build that was just replaced.
@@ -707,9 +715,7 @@ export function createVmManager(options: VmManagerOptions): VmManager {
       { timeoutMs: VM_RUN_TIMEOUT_MS, maxOutput: VM_TEXT_OUTPUT_LIMIT },
     );
     if (result.exitCode !== 0) {
-      throw new Error(
-        `Could not create the machine: ${detail(result)}`,
-      );
+      throw new Error(`Could not create the machine: ${detail(result)}`);
     }
   }
 
@@ -746,9 +752,9 @@ export function createVmManager(options: VmManagerOptions): VmManager {
    * would throw the files away, and a machine that starts empty after an
    * update is the failure this whole change exists to prevent.
    */
-  async function migrateHomeToVolume(
-    options: { rebuildImage: boolean },
-  ): Promise<void> {
+  async function migrateHomeToVolume(options: {
+    rebuildImage: boolean;
+  }): Promise<void> {
     const home = await Deno.makeTempDir({ prefix: "lumisca-stella-migrate-" });
     try {
       const stopped = await run(
@@ -774,10 +780,9 @@ export function createVmManager(options: VmManagerOptions): VmManager {
       // home has been read. The volume outlives it, so the replacement is
       // the one that mounts the files (its home is empty, so the copy below
       // goes straight in).
-      const removed = await run(
-        podman(["rm", "--force", VM_CONTAINER_NAME]),
-        { timeoutMs: VM_REMOVE_TIMEOUT_MS },
-      );
+      const removed = await run(podman(["rm", "--force", VM_CONTAINER_NAME]), {
+        timeoutMs: VM_REMOVE_TIMEOUT_MS,
+      });
       if (removed.exitCode !== 0) {
         throw new Error(
           `Could not replace the machine after reading its files ` +
@@ -816,9 +821,9 @@ export function createVmManager(options: VmManagerOptions): VmManager {
    * only needs a fresh one from the same image, while a stale image needs the
    * image itself rebuilt first. Both ends with a started container.
    */
-  async function recreateContainer(
-    options: { rebuildImage: boolean },
-  ): Promise<void> {
+  async function recreateContainer(options: {
+    rebuildImage: boolean;
+  }): Promise<void> {
     // Stopping first, not removing: `podman rm` on a running container would
     // be `--force` (a kill), and the volume's files are written by processes
     // the machine is still running.
@@ -831,14 +836,11 @@ export function createVmManager(options: VmManagerOptions): VmManager {
         timeoutMs: VM_STOP_TIMEOUT_MS,
         maxOutput: VM_TEXT_OUTPUT_LIMIT,
       });
-      const removed = await run(
-        podman(["rm", "--force", VM_CONTAINER_NAME]),
-        { timeoutMs: VM_REMOVE_TIMEOUT_MS },
-      );
+      const removed = await run(podman(["rm", "--force", VM_CONTAINER_NAME]), {
+        timeoutMs: VM_REMOVE_TIMEOUT_MS,
+      });
       if (removed.exitCode !== 0) {
-        throw new Error(
-          `Could not replace the machine: ${detail(removed)}`,
-        );
+        throw new Error(`Could not replace the machine: ${detail(removed)}`);
       }
     }
     if (options.rebuildImage) await buildImage();
@@ -848,10 +850,10 @@ export function createVmManager(options: VmManagerOptions): VmManager {
 
   async function startContainer(): Promise<void> {
     report({ phase: "starting_container" });
-    const result = await run(
-      podman(["start", VM_CONTAINER_NAME]),
-      { timeoutMs: VM_RUN_TIMEOUT_MS, maxOutput: VM_TEXT_OUTPUT_LIMIT },
-    );
+    const result = await run(podman(["start", VM_CONTAINER_NAME]), {
+      timeoutMs: VM_RUN_TIMEOUT_MS,
+      maxOutput: VM_TEXT_OUTPUT_LIMIT,
+    });
     if (result.exitCode !== 0) {
       throw new Error(`Could not start the machine: ${detail(result)}`);
     }
@@ -864,16 +866,16 @@ export function createVmManager(options: VmManagerOptions): VmManager {
   async function waitForScreen(): Promise<void> {
     const deadline = Date.now() + 30_000;
     for (;;) {
-      const probe = await run(
-        podmanExec(["xdotool", "getdisplaygeometry"]),
-        { timeoutMs: 15_000, maxOutput: 4096 },
-      );
+      const probe = await run(podmanExec(["xdotool", "getdisplaygeometry"]), {
+        timeoutMs: 15_000,
+        maxOutput: 4096,
+      });
       if (probe.exitCode === 0) return;
       if (Date.now() >= deadline) {
         throw new Error(
-          `The machine started but its screen did not come up: ${
-            firstLine(probe.stderr)
-          }`,
+          `The machine started but its screen did not come up: ${firstLine(
+            probe.stderr,
+          )}`,
         );
       }
       await sleep(300);
@@ -902,7 +904,7 @@ export function createVmManager(options: VmManagerOptions): VmManager {
           // (it may lack anything the definition now grants), so it is
           // replaced. An installation that predates the home volume has its
           // files moved onto it first — see migrateHomeToVolume.
-          if (!await containerUsesHomeVolume()) {
+          if (!(await containerUsesHomeVolume())) {
             await migrateHomeToVolume({ rebuildImage: true });
           } else {
             await recreateContainer({ rebuildImage: true });
@@ -920,7 +922,7 @@ export function createVmManager(options: VmManagerOptions): VmManager {
             // volume has it moved across first; losing it would make "the
             // machine misbehaved" cost the user everything the agent had
             // done.
-            if (!await containerUsesHomeVolume()) {
+            if (!(await containerUsesHomeVolume())) {
               await migrateHomeToVolume({ rebuildImage: false });
             } else {
               await recreateContainer({ rebuildImage: false });
@@ -971,17 +973,16 @@ export function createVmManager(options: VmManagerOptions): VmManager {
 }
 
 /** Run a command inside the machine (the entry point every backend uses). */
-export interface VmExec {
-  (command: readonly string[], options: VmExecOptions): Promise<VmExecResult>;
-}
+export type VmExec = (
+  command: readonly string[],
+  options: VmExecOptions,
+) => Promise<VmExecResult>;
 
 /** The same seam for a command whose output is binary (a screen capture). */
-export interface VmExecBytes {
-  (
-    command: readonly string[],
-    options: VmExecOptions,
-  ): Promise<VmExecBytesResult>;
-}
+export type VmExecBytes = (
+  command: readonly string[],
+  options: VmExecOptions,
+) => Promise<VmExecBytesResult>;
 
 export type VmExecBytesResult = VmCommandBytesResult;
 
@@ -1017,9 +1018,10 @@ function execArgv(
   return podman([
     "exec",
     ...(exec.stdin === undefined ? [] : ["--interactive"]),
-    ...Object.entries(exec.env ?? {}).flatMap((
-      [name, value],
-    ) => ["--env", `${name}=${value}`]),
+    ...Object.entries(exec.env ?? {}).flatMap(([name, value]) => [
+      "--env",
+      `${name}=${value}`,
+    ]),
     "--workdir",
     exec.workdir ?? VM_WORKDIR,
     container,

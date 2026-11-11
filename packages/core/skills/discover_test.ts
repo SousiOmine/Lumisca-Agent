@@ -1,6 +1,6 @@
-import { makeRealTempDir, removeDirRetry } from "../test-utils.ts";
 import { join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
+import { makeRealTempDir, removeDirRetry } from "../test-utils.ts";
 import {
   discoverSkills,
   formatAvailableSkills,
@@ -37,7 +37,7 @@ async function fixture(): Promise<string> {
 
   const skill = (dir: string, content: string) =>
     Deno.mkdir(dir, { recursive: true }).then(() =>
-      Deno.writeTextFile(join(dir, "SKILL.md"), content)
+      Deno.writeTextFile(join(dir, "SKILL.md"), content),
     );
 
   await skill(join(root, ".agents", "skills", "alpha"), VALID);
@@ -189,12 +189,10 @@ Deno.test("shared skills shadow global ones but not workspace ones", async () =>
   try {
     // The same name in all three places, plus one that exists only in the
     // shared folder.
-    for (
-      const [dir, description] of [
-        [shared, "Shared alpha."],
-        [global, "Global alpha."],
-      ] as const
-    ) {
+    for (const [dir, description] of [
+      [shared, "Shared alpha."],
+      [global, "Global alpha."],
+    ] as const) {
       await Deno.mkdir(join(dir, "alpha"), { recursive: true });
       await Deno.writeTextFile(
         join(dir, "alpha", "SKILL.md"),
@@ -213,10 +211,7 @@ Deno.test("shared skills shadow global ones but not workspace ones", async () =>
     });
     // A workspace skill wins over both; the shared folder wins over the
     // user's global one.
-    assertEquals(
-      skills.find((s) => s.name === "alpha")?.source,
-      "workspace",
-    );
+    assertEquals(skills.find((s) => s.name === "alpha")?.source, "workspace");
     const only = skills.find((s) => s.name === "shared-only");
     assertEquals(only?.source, "app");
     assertEquals(only?.path, join(shared, "shared-only", "SKILL.md"));
@@ -242,10 +237,7 @@ Deno.test("discoverSkills dedupes skills reachable from overlapping folders", as
     const skills = discoverSkills([root, join(root, "pkg")], {
       globalDirs: [],
     });
-    assertEquals(
-      skills.filter((s) => s.name === "alpha").length,
-      1,
-    );
+    assertEquals(skills.filter((s) => s.name === "alpha").length, 1);
   } finally {
     await removeDirRetry(root);
   }

@@ -1,11 +1,11 @@
-import { useState } from "preact/compat";
 import { IconPlus } from "@tabler/icons-preact";
+import { useState } from "preact/compat";
 import { api } from "../../api.ts";
 import { useAsyncData } from "../../hooks/useAsync.ts";
 import { useT } from "../../i18n.ts";
 import { errorText, useProviderModels } from "../../providers.ts";
-import { SettingsSection } from "./SettingsSection.tsx";
 import { ProviderRow } from "./ProviderRow.tsx";
+import { SettingsSection } from "./SettingsSection.tsx";
 
 /** One-line catalog status with a manual refresh button. Shown under the AI
  * provider list: the model catalog syncs from models.dev at startup and on
@@ -41,19 +41,22 @@ function CatalogStatusRow({ onRefreshed }: { onRefreshed: () => void }) {
     }
   };
 
-  const sourceLabel = status?.source === "live"
-    ? t("settings.provider.catalogSourceLatest")
-    : status?.source === "cache"
-    ? t("settings.provider.catalogSourceCache")
-    : t("settings.provider.catalogSourceSnapshot");
+  const sourceLabel =
+    status?.source === "live"
+      ? t("settings.provider.catalogSourceLatest")
+      : status?.source === "cache"
+        ? t("settings.provider.catalogSourceCache")
+        : t("settings.provider.catalogSourceSnapshot");
 
-  const generated = status?.generatedAt !== undefined
-    ? ` (${status.generatedAt.slice(0, 10)})`
-    : "";
+  const generated =
+    status?.generatedAt !== undefined
+      ? ` (${status.generatedAt.slice(0, 10)})`
+      : "";
   return (
     <div className="catalog-status">
       <span className="settings-note">
-        {t("settings.provider.catalogStatus")} {status
+        {t("settings.provider.catalogStatus")}{" "}
+        {status
           ? `${sourceLabel}${generated}`
           : t("settings.provider.catalogChecking")}
       </span>
@@ -128,13 +131,15 @@ export function ProviderList({
         <ProviderRow
           key={p.id}
           name={p.name}
-          status={p.userDefined
-            ? (p.configured
-              ? t("settings.provider.configured")
-              : t("settings.provider.notConfigured"))
-            : (p.authType === "oauth"
-              ? t("settings.provider.oauth")
-              : (p.source ?? t("settings.provider.apiKeyLabel")))}
+          status={
+            p.userDefined
+              ? p.configured
+                ? t("settings.provider.configured")
+                : t("settings.provider.notConfigured")
+              : p.authType === "oauth"
+                ? t("settings.provider.oauth")
+                : (p.source ?? t("settings.provider.apiKeyLabel"))
+          }
           onOpen={() => onOpen(p.id)}
         />
       ))}

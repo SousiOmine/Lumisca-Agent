@@ -92,19 +92,16 @@ Deno.test("translateRunEvent: a card in the text reaches a stella client", () =>
     "s1",
     cards,
   );
-  assertEquals(update.events.map((event) => event.type), [
-    "message_delta",
-    "card_delta",
-  ]);
   assertEquals(
-    update.events[1],
-    {
-      type: "card_delta",
-      sessionId: "s1",
-      toolCallId: "text-1",
-      delta: "<Card><Text>a",
-    },
+    update.events.map((event) => event.type),
+    ["message_delta", "card_delta"],
   );
+  assertEquals(update.events[1], {
+    type: "card_delta",
+    sessionId: "s1",
+    toolCallId: "text-1",
+    delta: "<Card><Text>a",
+  });
 
   // The message ended drawing a card: if it turns out to be narration, the
   // client is told to drop it (the entry, when there is one, replaces it).
@@ -116,10 +113,10 @@ Deno.test("translateRunEvent: a card in the text reaches a stella client", () =>
     "s1",
     cards,
   );
-  assertEquals(end.events.map((event) => event.type), [
-    "message_end",
-    "card_end",
-  ]);
+  assertEquals(
+    end.events.map((event) => event.type),
+    ["message_end", "card_end"],
+  );
 });
 
 Deno.test("translateRunEvent: code mode's client cuts the card from the text", () => {
@@ -135,5 +132,8 @@ Deno.test("translateRunEvent: code mode's client cuts the card from the text", (
     "s1",
     undefined,
   );
-  assertEquals(update.events.map((event) => event.type), ["message_delta"]);
+  assertEquals(
+    update.events.map((event) => event.type),
+    ["message_delta"],
+  );
 });

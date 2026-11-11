@@ -1,6 +1,6 @@
 import { assert, assertEquals } from "@std/assert";
-import { createDateProvider, DATE_PROVIDER } from "./date-context.ts";
 import { today } from "../environment.ts";
+import { createDateProvider, DATE_PROVIDER } from "./date-context.ts";
 
 Deno.test("date context: publishes the current date once, then only on a new day", () => {
   let now = new Date("2026-10-08T12:00:00Z");

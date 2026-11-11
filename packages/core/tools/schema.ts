@@ -86,21 +86,30 @@ export function optional<S extends ToolSchema>(schema: S): SchemaOptional<S> {
 /** The TypeScript type a validated argument object has. Properties wrapped
  * in `optional()` become optional (`?`), matching the call sites' null
  * checks. */
-export type Infer<S extends ToolSchema> = S extends SchemaObject<infer P> ?
-    & {
-      [K in keyof P as IsOptional<P[K]> extends true ? never : K]: Infer<P[K]>;
-    }
-    & {
-      [K in keyof P as IsOptional<P[K]> extends true ? K : never]?: Infer<P[K]>;
-    }
-    & (S extends { additionalProperties: true } ? Record<string, unknown>
-      : unknown)
-  : S extends SchemaStringMap ? Record<string, string>
-  : S extends SchemaArray<infer I> ? Array<Infer<I>>
-  : S extends SchemaString ? string
-  : S extends SchemaInteger ? number
-  : S extends SchemaBoolean ? boolean
-  : never;
+export type Infer<S extends ToolSchema> =
+  S extends SchemaObject<infer P>
+    ? {
+        [K in keyof P as IsOptional<P[K]> extends true ? never : K]: Infer<
+          P[K]
+        >;
+      } & {
+        [K in keyof P as IsOptional<P[K]> extends true ? K : never]?: Infer<
+          P[K]
+        >;
+      } & (S extends { additionalProperties: true }
+          ? Record<string, unknown>
+          : unknown)
+    : S extends SchemaStringMap
+      ? Record<string, string>
+      : S extends SchemaArray<infer I>
+        ? Array<Infer<I>>
+        : S extends SchemaString
+          ? string
+          : S extends SchemaInteger
+            ? number
+            : S extends SchemaBoolean
+              ? boolean
+              : never;
 
 // --- builders ----------------------------------------------------------------
 

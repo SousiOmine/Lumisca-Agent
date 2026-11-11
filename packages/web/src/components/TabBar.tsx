@@ -1,5 +1,5 @@
-import { memo, useEffect, useRef, useState } from "preact/compat";
 import { IconChevronRight, IconPlus, IconX } from "@tabler/icons-preact";
+import { memo, useEffect, useRef, useState } from "preact/compat";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { useT } from "../i18n.ts";
 import { AppMenu } from "./AppMenu.tsx";
@@ -61,7 +61,8 @@ export const TabBar = memo(TabBarView, sameTabBar);
  * too — the list is new every event, so an unread field would leave a stale
  * tab on screen. */
 function sameTabBar(previous: TabBarProps, next: TabBarProps): boolean {
-  return previous.isDesktop === next.isDesktop &&
+  return (
+    previous.isDesktop === next.isDesktop &&
     previous.onSelect === next.onSelect &&
     previous.onClose === next.onClose &&
     previous.onCloseToRight === next.onCloseToRight &&
@@ -72,24 +73,29 @@ function sameTabBar(previous: TabBarProps, next: TabBarProps): boolean {
     previous.onOpenSettings === next.onOpenSettings &&
     previous.onQuit === next.onQuit &&
     previous.onSwitchMode === next.onSwitchMode &&
-    sameTabs(previous.tabs, next.tabs);
+    sameTabs(previous.tabs, next.tabs)
+  );
 }
 
 /** Element-wise shallow equality: a tab is the same when everything it draws
  * — and its id, which keys the row — still matches. */
 function sameTabs(previous: TabSummary[], next: TabSummary[]): boolean {
-  return previous.length === next.length &&
+  return (
+    previous.length === next.length &&
     next.every((tab, index) => {
       const before = previous[index];
-      return before === tab ||
+      return (
+        before === tab ||
         (before !== undefined &&
           before.id === tab.id &&
           before.name === tab.name &&
           before.modelId === tab.modelId &&
           before.active === tab.active &&
           before.running === tab.running &&
-          before.runningTool === tab.runningTool);
-    });
+          before.runningTool === tab.runningTool)
+      );
+    })
+  );
 }
 
 function TabBarView({
@@ -218,9 +224,11 @@ function TabBarView({
             // The strip clips long names, so the tooltip has to carry the
             // whole one — and the model beside it, which the tab itself has
             // no room for.
-            title={modelId === null
-              ? name ?? t("chrome.tabBar.newSession")
-              : `${name ?? t("chrome.tabBar.newSession")} — ${modelId}`}
+            title={
+              modelId === null
+                ? (name ?? t("chrome.tabBar.newSession"))
+                : `${name ?? t("chrome.tabBar.newSession")} — ${modelId}`
+            }
           >
             {running && (
               <span
@@ -258,10 +266,8 @@ function TabBarView({
       >
         <IconPlus size={17} />
       </button>
-      {
-        /* On desktop the app menu lives in the title bar next to the window
-       * controls; in a plain browser (no title bar) it stays here. */
-      }
+      {/* On desktop the app menu lives in the title bar next to the window
+       * controls; in a plain browser (no title bar) it stays here. */}
       {!isDesktop && (
         <div className="tabbar-actions">
           <AppMenu

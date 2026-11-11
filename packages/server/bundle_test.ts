@@ -1,6 +1,6 @@
 import { join } from "node:path";
-import { assert, assertEquals } from "@std/assert";
 import { removeDirRetry } from "@lumisca/core/test-utils";
+import { assert, assertEquals } from "@std/assert";
 import { bundleClient } from "./bundle.ts";
 
 /** A miniature entry with one static and one dynamic import. The real client

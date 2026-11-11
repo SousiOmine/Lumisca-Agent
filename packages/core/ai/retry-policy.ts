@@ -1,7 +1,6 @@
-import type { AssistantMessage } from "./types.ts";
-import type { NotificationMessage } from "./types.ts";
-import { isContextOverflowText } from "./context-overflow.ts";
 import { notificationMessage } from "../domain/notification.ts";
+import { isContextOverflowText } from "./context-overflow.ts";
+import type { AssistantMessage, NotificationMessage } from "./types.ts";
 
 /** Maximum consecutive vacant responses (no text, no tool call) to retry
  * before giving up and ending the run normally. Shared by both retry
@@ -78,7 +77,8 @@ export function buildInterruptedRetryNotification(
   return notificationMessage({
     kind: "retry",
     title: `Previous response was cut off (retry ${attempt})`,
-    body: "Your previous response was interrupted by a transport failure. " +
+    body:
+      "Your previous response was interrupted by a transport failure. " +
       "Continue from where it stopped — do not repeat what you already wrote.",
     status: "neutral",
   });
@@ -100,7 +100,8 @@ export function buildOutputCapRetryNotification(
   return notificationMessage({
     kind: "retry",
     title: `Output limit reached (retry ${attempt})`,
-    body: "Your previous response hit the model's output limit and was cut " +
+    body:
+      "Your previous response hit the model's output limit and was cut " +
       "off. Continue from where it stopped — do not repeat what you already " +
       "wrote.",
     status: "neutral",
@@ -114,8 +115,7 @@ export function buildRetryNotification(attempt: number): NotificationMessage {
   return notificationMessage({
     kind: "retry",
     title: `Previous response was empty (retry ${attempt})`,
-    body:
-      "You produced neither text nor a tool call. Continue: respond with text or call a tool.",
+    body: "You produced neither text nor a tool call. Continue: respond with text or call a tool.",
     status: "neutral",
   });
 }

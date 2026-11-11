@@ -1,4 +1,4 @@
-import { stellaApiStub } from "./test-stubs.ts";
+import type { StellaAgent } from "@lumisca/core";
 /**
  * What an agent's edit dialog saves besides its name and picture: the model
  * its conversation runs on, and the thinking strength of that model.
@@ -14,10 +14,10 @@ import { stellaApiStub } from "./test-stubs.ts";
  * dialog drew the list from one model, and the core must store it there.
  */
 import { assertEquals } from "@std/assert";
-import { stellaRoutes } from "./stella.ts";
-import { jsonError } from "./util.ts";
-import type { StellaAgent } from "@lumisca/core";
 import type { StellaApi } from "./stella.ts";
+import { stellaRoutes } from "./stella.ts";
+import { stellaApiStub } from "./test-stubs.ts";
+import { jsonError } from "./util.ts";
 
 const AGENT: StellaAgent = {
   id: "a1",
@@ -43,10 +43,7 @@ interface Received {
 
 function fakeCore(received: Received[]): StellaApi {
   return stellaApiStub({
-    updateStellaAgent: (
-      id: string,
-      patch: Received["patch"],
-    ) => {
+    updateStellaAgent: (id: string, patch: Received["patch"]) => {
       received.push({ id, patch });
       return Promise.resolve({
         ...AGENT,

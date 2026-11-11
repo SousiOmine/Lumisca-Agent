@@ -1,28 +1,28 @@
+import type { SessionPool } from "./agent/pool.ts";
 import type { Api, Model } from "./ai/types.ts";
-import type { MessageRepo } from "./session/messages.ts";
-import type { SessionRepo } from "./session/repo.ts";
-import type { SessionVisualStore } from "./session/visuals.ts";
-import type { SessionAttachmentStore } from "./session/attachments.ts";
+import type { ClientEvent } from "./domain/event.ts";
 import type { SessionInfo } from "./domain/session.ts";
 import type { Workspace } from "./domain/workspace.ts";
-import type { ClientEvent } from "./domain/event.ts";
-import type { Locale } from "./shared/mod.ts";
+import type { McpService } from "./mcp/service.ts";
+import type { ModelManager } from "./models/mod.ts";
 import type { RoutineRepo } from "./routine/repo.ts";
 import type { RoutineScheduler } from "./routine/scheduler.ts";
-import type { AgentRepo } from "./stella/agents.ts";
-import type { AgentIconStore } from "./stella/icons.ts";
-import type { McpService } from "./mcp/service.ts";
 import type { ModelService } from "./services/models.ts";
 import { SessionService } from "./services/sessions.ts";
 import { StellaAgentService } from "./services/stella-agents.ts";
 import { StellaMachineService } from "./services/stella-machines.ts";
-import type { WebSearchService } from "./websearch/service.ts";
-import type { SessionPool } from "./agent/pool.ts";
-import type { StellaMachine } from "./vm/machine.ts";
-import type { HandoverRegistry } from "./vm/handover-registry.ts";
-import type { EnvRequestRegistry } from "./vm/env-request.ts";
-import type { ModelManager } from "./models/mod.ts";
 import type { WorkspaceService } from "./services/workspaces.ts";
+import type { SessionAttachmentStore } from "./session/attachments.ts";
+import type { MessageRepo } from "./session/messages.ts";
+import type { SessionRepo } from "./session/repo.ts";
+import type { SessionVisualStore } from "./session/visuals.ts";
+import type { Locale } from "./shared/mod.ts";
+import type { AgentRepo } from "./stella/agents.ts";
+import type { AgentIconStore } from "./stella/icons.ts";
+import type { EnvRequestRegistry } from "./vm/env-request.ts";
+import type { HandoverRegistry } from "./vm/handover-registry.ts";
+import type { StellaMachine } from "./vm/machine.ts";
+import type { WebSearchService } from "./websearch/service.ts";
 
 /** The areas of the core, as `LumiscaCore.services` exposes them. */
 export interface CoreServices {

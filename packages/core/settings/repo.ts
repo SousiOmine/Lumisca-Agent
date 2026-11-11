@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
 import { dirname } from "node:path";
-import { parseJsonc, SettingsFileError } from "./jsonc.ts";
 import { atomicWriteTextFileSync, readIfExists } from "../fs.ts";
+import { parseJsonc, SettingsFileError } from "./jsonc.ts";
+
 export { THEME_KEY } from "../shared/mod.ts";
 
 export interface SettingsRepo {

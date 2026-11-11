@@ -9,10 +9,10 @@
  * good package or nothing — never a half package that "looks" ready.
  */
 import { join } from "node:path";
+import { errorMessage } from "@lumisca/core";
 import type { ArchiveFormat, ReleaseManifest } from "./release.ts";
 import { releaseTargetFor } from "./release.ts";
 import { verifyFileSignature } from "./verify.ts";
-import { errorMessage } from "@lumisca/core";
 
 /** Sub-directory of the install directory that holds staged packages. */
 export const STAGING_DIR_NAME = ".lumisca-update";
@@ -62,7 +62,7 @@ function readJson(path: string): Record<string, unknown> | undefined {
   try {
     const parsed = JSON.parse(Deno.readTextFileSync(path));
     return typeof parsed === "object" && parsed !== null
-      ? parsed as Record<string, unknown>
+      ? (parsed as Record<string, unknown>)
       : undefined;
   } catch {
     // Missing, unreadable, or malformed: treated as "nothing staged".
@@ -72,16 +72,17 @@ function readJson(path: string): Record<string, unknown> | undefined {
 
 /** The staged package of this installation, or undefined when none is
  * complete (a malformed or partially written marker counts as none). */
-export function readStagedUpdate(
-  installDir: string,
-): StagedUpdate | undefined {
+export function readStagedUpdate(installDir: string): StagedUpdate | undefined {
   const record = readJson(join(stagingDir(installDir), STAGED_METADATA_FILE));
   if (record === undefined) return undefined;
   const { version, target, url, signature, size, format, stagedAt } = record;
   if (
-    typeof version !== "string" || typeof target !== "string" ||
-    typeof url !== "string" || typeof signature !== "string" ||
-    typeof size !== "number" || typeof stagedAt !== "string" ||
+    typeof version !== "string" ||
+    typeof target !== "string" ||
+    typeof url !== "string" ||
+    typeof signature !== "string" ||
+    typeof size !== "number" ||
+    typeof stagedAt !== "string" ||
     (format !== "zip" && format !== "tar.gz")
   ) {
     return undefined;
@@ -126,11 +127,8 @@ export async function writeAppliedUpdate(
   await Deno.mkdir(dir, { recursive: true });
   await Deno.writeTextFile(
     join(dir, APPLIED_METADATA_FILE),
-    JSON.stringify(
-      { version, appliedAt: new Date().toISOString() },
-      null,
-      2,
-    ) + "\n",
+    JSON.stringify({ version, appliedAt: new Date().toISOString() }, null, 2) +
+      "\n",
   );
 }
 
@@ -206,9 +204,10 @@ export async function stageUpdate(
   await Deno.remove(partPath).catch(() => {});
 
   const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
-  const signal = options.signal === undefined
-    ? timeout
-    : AbortSignal.any([options.signal, timeout]);
+  const signal =
+    options.signal === undefined
+      ? timeout
+      : AbortSignal.any([options.signal, timeout]);
 
   let received = 0;
   try {
@@ -222,9 +221,10 @@ export async function stageUpdate(
       );
     }
     const declared = Number(response.headers.get("content-length") ?? "");
-    const total = Number.isFinite(declared) && declared > 0
-      ? declared
-      : options.manifest.size;
+    const total =
+      Number.isFinite(declared) && declared > 0
+        ? declared
+        : options.manifest.size;
 
     const file = await Deno.open(partPath, {
       create: true,
@@ -258,9 +258,9 @@ export async function stageUpdate(
 
     if (received !== options.manifest.size) {
       throw new UpdateDownloadError(
-        `更新パッケージのサイズが一致しません (${
-          received.toLocaleString("en-US")
-        } / ${options.manifest.size.toLocaleString("en-US")} バイト)`,
+        `更新パッケージのサイズが一致しません (${received.toLocaleString(
+          "en-US",
+        )} / ${options.manifest.size.toLocaleString("en-US")} バイト)`,
       );
     }
 

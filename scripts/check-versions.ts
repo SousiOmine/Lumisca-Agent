@@ -77,8 +77,7 @@ function readVersion(manifest: Manifest): string | undefined {
   }
 }
 
-const expected = Deno.args[0]?.replace(/^v/, "") ??
-  readVersion(MANIFESTS[0]!);
+const expected = Deno.args[0]?.replace(/^v/, "") ?? readVersion(MANIFESTS[0]!);
 if (expected === undefined) {
   console.error(`::error::no version found in ${REFERENCE}`);
   Deno.exit(1);

@@ -15,14 +15,17 @@
  * sometimes hands JSON as text), and is normalized to the strict stored form
  * before anything is written.
  */
+
+import { CoreError } from "../errors.ts";
+import { formatLocalDateTime, parseLocalDateTime } from "../shared/misc.ts";
 import {
   MAX_EVERY_MINUTES,
   MIN_EVERY_MINUTES,
   nextRunAt,
-  type Routine,
   ROUTINE_NAME_MAX_CHARS,
   ROUTINE_PROMPT_MAX_CHARS,
   ROUTINES_PER_AGENT_MAX,
+  type Routine,
   type RoutineSchedule,
   scheduleProblem,
   TOOL_ROUTINE_CREATE,
@@ -31,7 +34,6 @@ import {
   TOOL_ROUTINE_RUN,
   TOOL_ROUTINE_UPDATE,
 } from "../shared/mod.ts";
-import { formatLocalDateTime, parseLocalDateTime } from "../shared/misc.ts";
 import {
   integer,
   object,
@@ -40,13 +42,13 @@ import {
   type Tool,
   type ToolResult,
 } from "../tools/schema.ts";
-import { CoreError } from "../errors.ts";
 import type { RoutineRepo } from "./repo.ts";
 import type { RoutineRunState, RoutineScheduler } from "./scheduler.ts";
 
 /** Description of the schedule argument, shared by the two tools that take
  * one. */
-const SCHEDULE_DESCRIPTION = '{"kind":"daily","time":"08:30"}, ' +
+const SCHEDULE_DESCRIPTION =
+  '{"kind":"daily","time":"08:30"}, ' +
   '{"kind":"weekly","days":[1,5],"time":"18:00"} (1 = Monday), ' +
   '{"kind":"every","minutes":30}, ' +
   '{"kind":"once","at":"2026-11-12 09:00"} (one run at that local date and ' +
@@ -71,7 +73,8 @@ const SCHEDULE_DESCRIPTION = '{"kind":"daily","time":"08:30"}, ' +
 
 /** The accepted shapes as a refusal lists them. One wording for both tools,
  * so the description and the error cannot describe different sets. */
-const SCHEDULE_SHAPES = '{"kind":"daily","time":"08:30"}, ' +
+const SCHEDULE_SHAPES =
+  '{"kind":"daily","time":"08:30"}, ' +
   '{"kind":"weekly","days":[1,5],"time":"18:00"}, ' +
   '{"kind":"every","minutes":30}, {"kind":"once","at":"2026-11-12 ' +
   '09:00"}, or {"kind":"watch","everyMinutes":10,"source":{...}} ' +
@@ -81,18 +84,18 @@ const SCHEDULE_SHAPES = '{"kind":"daily","time":"08:30"}, ' +
  * {@link usableSchedule} checks (it owns the wording, so one validator
  * answers for both tools). Its properties stay open because the shapes have
  * different keys. */
-const scheduleSchema = object({}, {
-  additionalProperties: true,
-  description: SCHEDULE_DESCRIPTION,
-});
+const scheduleSchema = object(
+  {},
+  {
+    additionalProperties: true,
+    description: SCHEDULE_DESCRIPTION,
+  },
+);
 
 /** One routine as the model reads it: one line per routine, with the facts
  * needed to change it (the id) and to judge it (when it runs next, how the
  * last run ended). */
-function describeRoutine(
-  routine: Routine,
-  runState: RoutineRunState,
-): string {
+function describeRoutine(routine: Routine, runState: RoutineRunState): string {
   const parts = [
     `${routine.name} (id ${routine.id})`,
     scheduleText(routine.schedule),
@@ -103,8 +106,8 @@ function describeRoutine(
     routine.lastStatus === null
       ? "never run"
       : `last ${routine.lastStatus}${
-        routine.lastDetail === null ? "" : ` (${routine.lastDetail})`
-      }`,
+          routine.lastDetail === null ? "" : ` (${routine.lastDetail})`
+        }`,
   ];
   // The check is not a run, so it is said separately: a stopped machine is
   // not a routine that keeps failing (see scheduler.ts).
@@ -163,11 +166,14 @@ export function watchSourceText(
       // The args are part of what is watched: "unread mail" and "all mail"
       // are different questions to the same tool, and the agent reading this
       // back has to call the tool the same way to see what fired.
-      const condition = "ids" in source.expect
-        ? `new item at ${source.expect.ids}`
-        : `${source.expect.hash} changed`;
-      return `mcp ${source.server}/${source.tool} ` +
-        `${JSON.stringify(source.args)} (${condition})`;
+      const condition =
+        "ids" in source.expect
+          ? `new item at ${source.expect.ids}`
+          : `${source.expect.hash} changed`;
+      return (
+        `mcp ${source.server}/${source.tool} ` +
+        `${JSON.stringify(source.args)} (${condition})`
+      );
     }
   }
 }
@@ -180,16 +186,16 @@ export function scheduleText(schedule: RoutineSchedule): string {
     case "watch": {
       // What is watched matters more than the cadence: "every 5 minutes"
       // says nothing about what the routine is for.
-      return `watch ${
-        watchSourceText(schedule.source)
-      }, every ${schedule.everyMinutes} min`;
+      return `watch ${watchSourceText(
+        schedule.source,
+      )}, every ${schedule.everyMinutes} min`;
     }
     case "daily":
       return `daily at ${schedule.time}`;
     case "weekly": {
-      const days = [...schedule.days].sort().map((day) =>
-        WEEKDAYS[day - 1] ?? String(day)
-      );
+      const days = [...schedule.days]
+        .sort()
+        .map((day) => WEEKDAYS[day - 1] ?? String(day));
       return `weekly on ${days.join(", ")} at ${schedule.time}`;
     }
     case "every":
@@ -242,7 +248,7 @@ function pastOneOffProblem(
   const at = parseLocalDateTime(schedule.at);
   return at !== null && at <= now
     ? `the one-off time ${schedule.at} has already passed; pick a later ` +
-      "time, or do the work now instead of scheduling it"
+        "time, or do the work now instead of scheduling it"
     : null;
 }
 
@@ -273,12 +279,10 @@ const listSchema = object({});
 
 const updateSchema = object({
   id: string("The routine's id (from routine_list)"),
-  name: optional(string(
-    `A new name (1-${ROUTINE_NAME_MAX_CHARS} characters)`,
-  )),
-  prompt: optional(string(
-    `A new request (1-${ROUTINE_PROMPT_MAX_CHARS} characters)`,
-  )),
+  name: optional(string(`A new name (1-${ROUTINE_NAME_MAX_CHARS} characters)`)),
+  prompt: optional(
+    string(`A new request (1-${ROUTINE_PROMPT_MAX_CHARS} characters)`),
+  ),
   schedule: optional(scheduleSchema),
   enabled: optional(integer("1 to enable it, 0 to disable it")),
 });
@@ -293,11 +297,7 @@ const runSchema = object({
 
 /** The routine this agent owns, or a failure naming how to find the right
  * one. */
-function owned(
-  repo: RoutineRepo,
-  agentId: string,
-  id: string,
-): Routine {
+function owned(repo: RoutineRepo, agentId: string, id: string): Routine {
   const routine = repo.get(id);
   if (routine === undefined) {
     throw new CoreError(
@@ -332,10 +332,7 @@ async function requireWatchableTool(
       "unavailable",
     );
   }
-  const problem = await watchable(
-    schedule.source.server,
-    schedule.source.tool,
-  );
+  const problem = await watchable(schedule.source.server, schedule.source.tool);
   if (problem !== null) throw new CoreError(problem, "invalid");
 }
 
@@ -403,20 +400,23 @@ export function createRoutineTools(options: RoutineToolsOptions): Tool[] {
       const routine = repo.create({ agentId, name, prompt, schedule });
       const oneOff = routine.schedule.kind === "once";
       return {
-        content: [{
-          type: "text",
-          text: `Created routine "${routine.name}" (id ${routine.id}).\n` +
-            `Schedule: ${scheduleText(routine.schedule)} (local time).\n` +
-            `Next run: ${
-              routine.nextRunAt === null
-                ? "(none)"
-                : formatLocal(routine.nextRunAt)
-            } (local time).\n` +
-            (oneOff
-              ? "It runs once and is then removed from the list; its result " +
-                "stays in this conversation."
-              : "The result of each run appears in this conversation."),
-        }],
+        content: [
+          {
+            type: "text",
+            text:
+              `Created routine "${routine.name}" (id ${routine.id}).\n` +
+              `Schedule: ${scheduleText(routine.schedule)} (local time).\n` +
+              `Next run: ${
+                routine.nextRunAt === null
+                  ? "(none)"
+                  : formatLocal(routine.nextRunAt)
+              } (local time).\n` +
+              (oneOff
+                ? "It runs once and is then removed from the list; its result " +
+                  "stays in this conversation."
+                : "The result of each run appears in this conversation."),
+          },
+        ],
         details: { id: routine.id, nextRunAt: routine.nextRunAt },
       };
     },
@@ -433,22 +433,26 @@ export function createRoutineTools(options: RoutineToolsOptions): Tool[] {
       const routines = repo.listOf(agentId);
       if (routines.length === 0) {
         return Promise.resolve({
-          content: [{
-            type: "text",
-            text: "No routines yet. Create one with routine_create.",
-          }],
+          content: [
+            {
+              type: "text",
+              text: "No routines yet. Create one with routine_create.",
+            },
+          ],
           details: { count: 0 },
         });
       }
       return Promise.resolve({
-        content: [{
-          type: "text",
-          text: routines
-            .map((routine) =>
-              describeRoutine(routine, scheduler.stateOf(routine.id))
-            )
-            .join("\n"),
-        }],
+        content: [
+          {
+            type: "text",
+            text: routines
+              .map((routine) =>
+                describeRoutine(routine, scheduler.stateOf(routine.id)),
+              )
+              .join("\n"),
+          },
+        ],
         details: { count: routines.length },
       });
     },
@@ -491,17 +495,17 @@ export function createRoutineTools(options: RoutineToolsOptions): Tool[] {
           );
         }
       }
-      const schedule = params.schedule === undefined
-        ? undefined
-        : usableSchedule(params.schedule);
+      const schedule =
+        params.schedule === undefined
+          ? undefined
+          : usableSchedule(params.schedule);
       if (schedule !== undefined) {
         const stale = pastOneOffProblem(schedule, Date.now());
         if (stale !== null) throw new CoreError(stale, "invalid");
         await requireWatchableTool(schedule, watchable);
       }
-      const enabled = params.enabled === undefined
-        ? undefined
-        : params.enabled !== 0;
+      const enabled =
+        params.enabled === undefined ? undefined : params.enabled !== 0;
       const willBeEnabled = enabled ?? current.enabled;
       const willRun = schedule ?? current.schedule;
       // The next run follows the new state: enabling (or changing the
@@ -518,18 +522,21 @@ export function createRoutineTools(options: RoutineToolsOptions): Tool[] {
         nextRunAt: nextRunAtValue,
       });
       return Promise.resolve({
-        content: [{
-          type: "text",
-          text: `Updated routine "${updated.name}" (id ${updated.id}).\n` +
-            `Schedule: ${scheduleText(updated.schedule)} (local time).\n` +
-            (updated.enabled
-              ? `Next run: ${
-                updated.nextRunAt === null
-                  ? "(none)"
-                  : formatLocal(updated.nextRunAt)
-              } (local time).`
-              : "It is disabled and will not run."),
-        }],
+        content: [
+          {
+            type: "text",
+            text:
+              `Updated routine "${updated.name}" (id ${updated.id}).\n` +
+              `Schedule: ${scheduleText(updated.schedule)} (local time).\n` +
+              (updated.enabled
+                ? `Next run: ${
+                    updated.nextRunAt === null
+                      ? "(none)"
+                      : formatLocal(updated.nextRunAt)
+                  } (local time).`
+                : "It is disabled and will not run."),
+          },
+        ],
         details: { id: updated.id, enabled: updated.enabled },
       });
     },
@@ -546,11 +553,14 @@ export function createRoutineTools(options: RoutineToolsOptions): Tool[] {
       const routine = owned(repo, agentId, params.id);
       repo.delete(routine.id);
       return Promise.resolve({
-        content: [{
-          type: "text",
-          text: `Deleted routine "${routine.name}". Its past runs stay in ` +
-            "the conversation.",
-        }],
+        content: [
+          {
+            type: "text",
+            text:
+              `Deleted routine "${routine.name}". Its past runs stay in ` +
+              "the conversation.",
+          },
+        ],
         details: { id: routine.id },
       });
     },
@@ -574,11 +584,14 @@ export function createRoutineTools(options: RoutineToolsOptions): Tool[] {
         void error;
       });
       return Promise.resolve({
-        content: [{
-          type: "text",
-          text: `Started routine "${routine.name}". Its result appears in ` +
-            "this conversation when it finishes.",
-        }],
+        content: [
+          {
+            type: "text",
+            text:
+              `Started routine "${routine.name}". Its result appears in ` +
+              "this conversation when it finishes.",
+          },
+        ],
         details: { id: routine.id },
       });
     },

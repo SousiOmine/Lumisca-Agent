@@ -1,4 +1,3 @@
-import type { ComponentChildren } from "preact";
 import {
   IconBrain,
   IconCheck,
@@ -8,9 +7,10 @@ import {
   IconSend,
   IconTerminal2,
 } from "@tabler/icons-preact";
-import type { NotificationKind, NotificationStatus } from "../types.ts";
+import type { ComponentChildren } from "preact";
 import { useExpandableRow } from "../hooks/useExpandableRow.ts";
 import { useT } from "../i18n.ts";
+import type { NotificationKind, NotificationStatus } from "../types.ts";
 
 export function notificationKindIcon(kind: NotificationKind) {
   switch (kind) {

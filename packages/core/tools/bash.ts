@@ -1,3 +1,13 @@
+import type { CommandSafety } from "../safety/command-safety.ts";
+import { TOOL_BASH } from "../shared/mod.ts";
+import {
+  type CommandRunner,
+  MAX_RAW_COMMAND_OUTPUT,
+} from "./command-backend.ts";
+import { formatDuration } from "./duration.ts";
+import type { FileBackend } from "./file-backend.ts";
+import { requireResolved } from "./resolve.ts";
+import { safetyBlockResult } from "./safety.ts";
 import {
   integer,
   object,
@@ -6,15 +16,6 @@ import {
   stringMap,
   type Tool,
 } from "./schema.ts";
-import { TOOL_BASH } from "../shared/mod.ts";
-import type { CommandSafety } from "../safety/command-safety.ts";
-import {
-  type CommandRunner,
-  MAX_RAW_COMMAND_OUTPUT,
-} from "./command-backend.ts";
-import { formatDuration } from "./duration.ts";
-import { requireResolved } from "./resolve.ts";
-import { safetyBlockResult } from "./safety.ts";
 import {
   MAX_TOOL_OUTPUT,
   OutputSpiller,
@@ -22,7 +23,6 @@ import {
   truncate,
   truncatedNote,
 } from "./truncate.ts";
-import type { FileBackend } from "./file-backend.ts";
 
 /** Default and maximum wall-clock time one command may take. A model that
  * asks for a longer one is refused rather than silently clamped, and a
@@ -39,10 +39,12 @@ const bashSchema = object({
       "call fails without it.",
   ),
   command: string("The shell command to execute"),
-  timeout: optional(integer(
-    "Timeout in seconds (default 120)",
-    { min: 1, max: MAX_BASH_TIMEOUT_SEC },
-  )),
+  timeout: optional(
+    integer("Timeout in seconds (default 120)", {
+      min: 1,
+      max: MAX_BASH_TIMEOUT_SEC,
+    }),
+  ),
   env: optional(stringMap("Environment variables to pass to the command")),
 });
 
@@ -129,15 +131,16 @@ export function createBashTool(
     // keeps the schema — and every caller that passes `cwd` — unchanged.
     ...(options.defaultCwd !== undefined
       ? {
-        prepareArguments: (args: unknown) => {
-          const record = typeof args === "object" && args !== null
-            ? args as Record<string, unknown>
-            : {};
-          return record.cwd === undefined
-            ? { ...record, cwd: options.defaultCwd as string }
-            : record;
-        },
-      }
+          prepareArguments: (args: unknown) => {
+            const record =
+              typeof args === "object" && args !== null
+                ? (args as Record<string, unknown>)
+                : {};
+            return record.cwd === undefined
+              ? { ...record, cwd: options.defaultCwd as string }
+              : record;
+          },
+        }
       : {}),
     execute: async (_id, params, signal) => {
       // Resolve the working directory before the safety check so the check
@@ -192,7 +195,8 @@ export function createBashTool(
         body += await cutNote("stderr", result.stderr);
       }
       if (result.orphanedOutput) {
-        body += "\n[command left a process holding its output streams; later " +
+        body +=
+          "\n[command left a process holding its output streams; later " +
           "output is not reported]";
       }
       body += `\n[exit code: ${result.exitCode ?? "?"}]`;

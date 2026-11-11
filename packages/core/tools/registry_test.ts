@@ -1,7 +1,6 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { createToolCallTool } from "./call-tool.ts";
 import { MAX_SEARCH_DESCRIPTION_CHARS, ToolRegistry } from "./registry.ts";
-import { createToolSearchTool } from "./search-tool.ts";
 import {
   integer,
   object,
@@ -9,6 +8,7 @@ import {
   type Tool,
   type ToolContentBlock,
 } from "./schema.ts";
+import { createToolSearchTool } from "./search-tool.ts";
 
 function fakeTool(
   name: string,
@@ -25,11 +25,13 @@ function fakeTool(
     parameters: object({}, {}),
     execute: (_id, params) =>
       Promise.resolve({
-        content: [{
-          type: "text",
-          text: options.result ??
-            `result of ${name}: ${JSON.stringify(params)}`,
-        }],
+        content: [
+          {
+            type: "text",
+            text:
+              options.result ?? `result of ${name}: ${JSON.stringify(params)}`,
+          },
+        ],
         details: {},
       }),
   };
@@ -59,10 +61,7 @@ Deno.test("search ranks exact name matches above partial and description matches
   // Exact name wins over a description-only match.
   assertEquals(searchResult(registry, "db_query"), ["db_query"]);
   // Partial name beats description text; ties break alphabetically.
-  assertEquals(
-    searchResult(registry, "db"),
-    ["db_connect", "db_query"],
-  );
+  assertEquals(searchResult(registry, "db"), ["db_connect", "db_query"]);
   // Description-only matches still surface, ranked below name matches.
   const database = searchResult(registry, "database");
   assert(database.includes("db_query"));
@@ -105,8 +104,8 @@ Deno.test("describe reports name, label and a truncated description", () => {
   assertEquals(entry.name, "echo");
   assertEquals(entry.label, "fake: echo");
   assert(
-    entry.description.length < `d`.repeat(MAX_SEARCH_DESCRIPTION_CHARS + 500)
-      .length,
+    entry.description.length <
+      `d`.repeat(MAX_SEARCH_DESCRIPTION_CHARS + 500).length,
     "description must be truncated",
   );
   // The cut is announced with the shared note, so the model can tell the

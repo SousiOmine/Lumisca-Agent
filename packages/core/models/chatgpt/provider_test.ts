@@ -12,7 +12,9 @@ import { chatgptProvider } from "./provider.ts";
 
 function jwt(claims: Record<string, unknown>): string {
   const b64 = (value: unknown) =>
-    btoa(JSON.stringify(value)).replace(/\+/g, "-").replace(/\//g, "_")
+    btoa(JSON.stringify(value))
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
       .replace(/=+$/, "");
   return `${b64({ alg: "none" })}.${b64(claims)}.signature`;
 }
@@ -35,10 +37,14 @@ function memoryStore(initial?: Credential): {
       read: () => Promise.resolve(stored),
       list: () =>
         Promise.resolve(
-          stored === undefined ? [] : [{
-            providerId: "openai-codex",
-            type: stored.type,
-          }],
+          stored === undefined
+            ? []
+            : [
+                {
+                  providerId: "openai-codex",
+                  type: stored.type,
+                },
+              ],
         ),
       modify: (_providerId, fn) =>
         fn(stored).then((next) => {
@@ -209,13 +215,15 @@ Deno.test("login without a method fails fast", async () => {
 
 Deno.test("getModels serves the catalog stored at login", () => {
   const settings = createInMemorySettingsRepo();
-  saveChatGptModels(settings, [{
-    id: "gpt-5.3-codex",
-    name: "GPT-5.3 Codex",
-    api: "openai-responses",
-    provider: "openai-codex",
-    baseUrl: "https://chatgpt.com/backend-api/codex",
-  }]);
+  saveChatGptModels(settings, [
+    {
+      id: "gpt-5.3-codex",
+      name: "GPT-5.3 Codex",
+      api: "openai-responses",
+      provider: "openai-codex",
+      baseUrl: "https://chatgpt.com/backend-api/codex",
+    },
+  ]);
   const provider = chatgptProvider({
     credentials: memoryStore().store,
     settings,

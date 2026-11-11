@@ -1,5 +1,4 @@
-import { assert, assertEquals } from "@std/assert";
-import { assertEquals as assertSame } from "@std/assert";
+import { assert, assertEquals, assertEquals as assertSame } from "@std/assert";
 import {
   AGENT_ICON_MIME_BY_EXTENSION,
   agentAvatarHue,

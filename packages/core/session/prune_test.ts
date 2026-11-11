@@ -14,9 +14,7 @@ import {
   reduceMessage,
 } from "./prune.ts";
 
-function assistant(
-  content: AssistantMessage["content"],
-): AssistantMessage {
+function assistant(content: AssistantMessage["content"]): AssistantMessage {
   return {
     role: "assistant",
     content,
@@ -91,15 +89,16 @@ Deno.test("prune: a tool call is dropped and marked, its text survives", () => {
     "the call (and its arguments) is gone",
   );
   assertEquals(
-    blocks.some((block) =>
-      block.type === "text" && block.text === "Writing the file now."
+    blocks.some(
+      (block) =>
+        block.type === "text" && block.text === "Writing the file now.",
     ),
     true,
     "the agent's words are still there",
   );
   assertEquals(
-    blocks.some((block) =>
-      block.type === "text" && block.text === PRUNED_TOOL_CALL
+    blocks.some(
+      (block) => block.type === "text" && block.text === PRUNED_TOOL_CALL,
     ),
     true,
     "the turn says a call happened",
@@ -117,8 +116,8 @@ Deno.test("prune: thinking is emptied, not removed", () => {
   ]);
   const { message: reduced, changed } = reduceMessage(message);
   assertEquals(changed, true);
-  const thinking = (reduced as AssistantMessage).content.find((block) =>
-    block.type === "thinking"
+  const thinking = (reduced as AssistantMessage).content.find(
+    (block) => block.type === "thinking",
   );
   assertEquals(thinking, { type: "thinking", thinking: "" });
 });
@@ -149,12 +148,14 @@ Deno.test("prune: what the agent sent is part of the conversation", () => {
     content: [{ type: "text", text: "Sent the message to the user." }],
     details: {
       text: "report.pdf を添付しました。",
-      attachments: [{
-        name: "0123456789ab.pdf",
-        displayName: "report.pdf",
-        size: 1,
-        inline: false,
-      }],
+      attachments: [
+        {
+          name: "0123456789ab.pdf",
+          displayName: "report.pdf",
+          size: 1,
+          inline: false,
+        },
+      ],
     },
   });
   // The words, the card and the files ARE the conversation: a reload redraws

@@ -46,19 +46,22 @@ Deno.test("zoom: a picture that fits cannot be moved", () => {
 Deno.test("zoom: an enlarged picture stops at the overlay's edge", () => {
   // At 2x the picture is 1600×1200 in a 1000×800 overlay: 300px of it can be
   // shown either side horizontally, 200px vertically.
-  assertEquals(
-    clampOffset({ scale: 2, x: 500, y: -500 }, IMAGE, VIEWPORT),
-    { scale: 2, x: 300, y: -200 },
-  );
-  assertEquals(
-    clampOffset({ scale: 2, x: -500, y: 500 }, IMAGE, VIEWPORT),
-    { scale: 2, x: -300, y: 200 },
-  );
+  assertEquals(clampOffset({ scale: 2, x: 500, y: -500 }, IMAGE, VIEWPORT), {
+    scale: 2,
+    x: 300,
+    y: -200,
+  });
+  assertEquals(clampOffset({ scale: 2, x: -500, y: 500 }, IMAGE, VIEWPORT), {
+    scale: 2,
+    x: -300,
+    y: 200,
+  });
   // Inside the limits the offset is the reader's.
-  assertEquals(
-    clampOffset({ scale: 2, x: 120, y: -80 }, IMAGE, VIEWPORT),
-    { scale: 2, x: 120, y: -80 },
-  );
+  assertEquals(clampOffset({ scale: 2, x: 120, y: -80 }, IMAGE, VIEWPORT), {
+    scale: 2,
+    x: 120,
+    y: -80,
+  });
 });
 
 Deno.test("zoom: the point under the pointer stays under it", () => {
@@ -150,8 +153,7 @@ Deno.test("zoom: a pinch scales by the fingers and follows their midpoint", () =
       { distance: 100_000, midpoint: { x: 0, y: 0 } },
       IMAGE,
       VIEWPORT,
-    )
-      .scale,
+    ).scale,
     ZOOM_MAX,
   );
 });

@@ -33,11 +33,12 @@
  * its slot is emptied (and the row switched off) BEFORE its run starts, so
  * "switched off" is what a one-off looks like while it runs.
  */
+
+import { CoreError, errorMessage } from "../errors.ts";
+import { sleep } from "../shared/misc.ts";
 import type { Routine } from "../shared/routine.ts";
 import { nextRunAt } from "../shared/routine.ts";
 import type { RoutineRepo, RoutineWatchResult } from "./repo.ts";
-import { CoreError, errorMessage } from "../errors.ts";
-import { sleep } from "../shared/misc.ts";
 
 /** How often the scheduler looks for due routines. A minute's granularity
  * would be enough for the schedules it supports, but the tick also drives
@@ -299,9 +300,9 @@ export function createRoutineScheduler(
       repo.recordWatch(routine.id, result);
     } catch (error) {
       log(
-        `routine ${routine.id}: could not record the check (${
-          errorMessage(error)
-        })`,
+        `routine ${routine.id}: could not record the check (${errorMessage(
+          error,
+        )})`,
       );
     }
   }
@@ -351,17 +352,22 @@ export function createRoutineScheduler(
       started = true;
       queued.delete(id);
       running.set(id, (running.get(id) ?? 0) + 1);
-      const outcome = await runner.run(routine.agentId, routine.prompt, {
-        id,
-        name: routine.name,
-      }, trigger);
+      const outcome = await runner.run(
+        routine.agentId,
+        routine.prompt,
+        {
+          id,
+          name: routine.name,
+        },
+        trigger,
+      );
       const wasStopped = stopped.delete(id);
       record(id, {
         status: wasStopped
           ? "stopped"
           : outcome.failure === null
-          ? "ok"
-          : "error",
+            ? "ok"
+            : "error",
         detail: wasStopped ? "Stopped by the user" : outcome.failure,
       });
     } catch (error) {
@@ -392,9 +398,9 @@ export function createRoutineScheduler(
       repo.delete(id);
     } catch (error) {
       log(
-        `routine ${id}: could not remove the one-off after its run (${
-          errorMessage(error)
-        })`,
+        `routine ${id}: could not remove the one-off after its run (${errorMessage(
+          error,
+        )})`,
       );
     }
   }

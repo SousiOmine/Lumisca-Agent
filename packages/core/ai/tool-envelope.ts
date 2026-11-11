@@ -54,8 +54,10 @@ export function toolImages(value: unknown): ToolImage[] {
     if (typeof entry !== "object" || entry === null) continue;
     const image = entry as { data?: unknown; mimeType?: unknown };
     if (
-      typeof image.data !== "string" || image.data === "" ||
-      typeof image.mimeType !== "string" || image.mimeType === ""
+      typeof image.data !== "string" ||
+      image.data === "" ||
+      typeof image.mimeType !== "string" ||
+      image.mimeType === ""
     ) {
       continue;
     }
@@ -69,7 +71,7 @@ export function toolImages(value: unknown): ToolImage[] {
  * the transcript never carries a non-record. */
 export function toolDetails(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : {};
 }
 

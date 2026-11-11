@@ -67,16 +67,16 @@ export function CopyableUserMessage({
             aria-label={t("chat.message.copy")}
             onClick={handleCopy}
           >
-            {copied
-              ? <IconCheck size={16} stroke={2} />
-              : <IconClipboard size={16} stroke={1.5} />}
+            {copied ? (
+              <IconCheck size={16} stroke={2} />
+            ) : (
+              <IconClipboard size={16} stroke={1.5} />
+            )}
           </button>
         )}
-        {
-          /* Mounted empty and filled on success: a live region has to be in
+        {/* Mounted empty and filled on success: a live region has to be in
             the tree before its text changes to be announced, and the
-            checkmark that replaces the icon says nothing. */
-        }
+            checkmark that replaces the icon says nothing. */}
         <span className="visually-hidden" role="status">
           {copied ? t("chat.message.copied") : null}
         </span>

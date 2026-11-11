@@ -99,26 +99,20 @@ export const common = {
     en: "A token is required",
   },
   "common.tokenRequired.why": {
-    ja:
-      "このサーバーはトークン認証が有効です。ブラウザにトークンが保存されていない、または保存されたトークンが一致しないため、このページを表示できません。",
-    en:
-      "This server requires a token. The page is not shown because the browser has no token stored, or the stored one does not match.",
+    ja: "このサーバーはトークン認証が有効です。ブラウザにトークンが保存されていない、または保存されたトークンが一致しないため、このページを表示できません。",
+    en: "This server requires a token. The page is not shown because the browser has no token stored, or the stored one does not match.",
   },
   "common.tokenRequired.how": {
-    ja:
-      "次の形式の URL を一度だけ開いてください。2 回目以降はトークン無しの URL で開けます。",
-    en:
-      "Open a URL of the form below once. After that, the URL without the token works.",
+    ja: "次の形式の URL を一度だけ開いてください。2 回目以降はトークン無しの URL で開けます。",
+    en: "Open a URL of the form below once. After that, the URL without the token works.",
   },
   "common.tokenRequired.example": {
     ja: "http://<ホスト>:<ポート>/?token=<トークン>",
     en: "http://<host>:<port>/?token=<token>",
   },
   "common.tokenRequired.note": {
-    ja:
-      "トークンの値はサーバーの設定を確認してください。ブラウザで Cookie が無効になっている場合にもこの画面が表示されます。",
-    en:
-      "Check your server configuration for the token value. This screen also appears when the browser rejects cookies.",
+    ja: "トークンの値はサーバーの設定を確認してください。ブラウザで Cookie が無効になっている場合にもこの画面が表示されます。",
+    en: "Check your server configuration for the token value. This screen also appears when the browser rejects cookies.",
   },
   /** The way back in when the app runs without an address bar: an installed
    * PWA has no URL field, so a browser that lost its cookie cannot present
@@ -154,10 +148,8 @@ export const common = {
     en: "Sign-in failed: {error}",
   },
   "common.mcpAuth.missing": {
-    ja:
-      "この認証リクエストは見つかりませんでした（期限切れか、すでに完了しています）。Lumisca に戻り、もう一度お試しください。",
-    en:
-      "This sign-in request was not found (it expired or already finished). Return to Lumisca and try again.",
+    ja: "この認証リクエストは見つかりませんでした（期限切れか、すでに完了しています）。Lumisca に戻り、もう一度お試しください。",
+    en: "This sign-in request was not found (it expired or already finished). Return to Lumisca and try again.",
   },
 
   // --- core-generated transcript text --------------------------------------
@@ -176,9 +168,9 @@ export const common = {
    * out (see ai/retry-policy.ts). Without this the turn just stopped,
    * which reads as the agent ignoring the prompt. */
   "session.vacantResponse": {
-    ja:
-      "モデルの応答が空でした（本文もツール呼び出しもありません）。{count} 回まで自動で再試行しましたが回復しませんでした。もう一度送信してください。",
-    en: "The model answered with neither text nor a tool call. Retried " +
+    ja: "モデルの応答が空でした（本文もツール呼び出しもありません）。{count} 回まで自動で再試行しましたが回復しませんでした。もう一度送信してください。",
+    en:
+      "The model answered with neither text nor a tool call. Retried " +
       "automatically {count} times without recovering. Send the message " +
       "again to continue.",
   },

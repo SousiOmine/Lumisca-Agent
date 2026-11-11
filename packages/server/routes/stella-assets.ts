@@ -8,11 +8,12 @@
  * (open, prompt, rewind, events) reads as one thing, and the asset delivery
  * as another — the two have nothing in common but their path prefix.
  */
-import { Hono } from "hono";
+
 import type { StellaAgent } from "@lumisca/core";
-import { AppError } from "./util.ts";
-import { assetHeaders } from "./asset-headers.ts";
+import { Hono } from "hono";
 import { renderPreview } from "../../core/media/preview.ts";
+import { assetHeaders } from "./asset-headers.ts";
+import { AppError } from "./util.ts";
 
 /** The slice of the core the file routes need (interface segregation). */
 export interface StellaAssetApi {
@@ -89,8 +90,8 @@ export function stellaAssetRoutes(core: StellaAssetApi): Hono {
     // source.
     const wantsPreview = c.req.query("preview") !== "0";
     const bytes = wantsPreview
-      ? await renderPreview(new Uint8Array(file.bytes), file.mimeType) ??
-        new Uint8Array(file.bytes)
+      ? ((await renderPreview(new Uint8Array(file.bytes), file.mimeType)) ??
+        new Uint8Array(file.bytes))
       : new Uint8Array(file.bytes);
     return new Response(bytes.buffer as ArrayBuffer, {
       headers: assetHeaders({ mimeType: file.mimeType }),

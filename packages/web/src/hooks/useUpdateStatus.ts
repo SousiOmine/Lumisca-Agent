@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from "preact/compat";
 import { errorMessage as errorText } from "@lumisca/core/shared";
+import { useEffect, useRef, useState } from "preact/compat";
 import { ApiError } from "../api-client.ts";
 import {
   serverUpdateApi,
   shellAvailable,
-  updateApi,
   type UpdateStatus,
+  updateApi,
 } from "../shell.ts";
 
 /** Poll interval while a check/download/install is in flight (progress bar,
@@ -181,14 +181,15 @@ export function useUpdateStatus(active: boolean): UpdateControls {
 
   // Actions go to whichever updater answered the last poll; before the
   // first answer they are no-ops (there is nothing to drive yet).
-  const call = (
-    shellAction: () => Promise<UpdateStatus>,
-    serverAction: () => Promise<UpdateStatus>,
-  ) =>
-  () => {
-    if (source === null) return;
-    return run(source === "shell" ? shellAction : serverAction);
-  };
+  const call =
+    (
+      shellAction: () => Promise<UpdateStatus>,
+      serverAction: () => Promise<UpdateStatus>,
+    ) =>
+    () => {
+      if (source === null) return;
+      return run(source === "shell" ? shellAction : serverAction);
+    };
 
   return {
     status,

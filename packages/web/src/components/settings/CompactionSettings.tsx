@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from "preact/compat";
 import {
   COMPACTION_DEFAULT_KEEP_RECENT_PERCENT,
   COMPACTION_DEFAULT_RESERVE_PERCENT,
@@ -7,10 +6,11 @@ import {
   COMPACTION_RESERVE_PERCENT_KEY,
   parsePercentSetting,
 } from "@lumisca/core/shared";
-import { errorText } from "../../providers.ts";
-import { useSettings } from "../../settingsStore.ts";
+import { useEffect, useRef, useState } from "preact/compat";
 import { useDebouncedWrite, useSavedNotice } from "../../hooks/useSave.ts";
 import { useT } from "../../i18n.ts";
+import { errorText } from "../../providers.ts";
+import { useSettings } from "../../settingsStore.ts";
 import { SettingRow, Toggle } from "../SettingRow.tsx";
 import { SettingsSection } from "./SettingsSection.tsx";
 
@@ -93,10 +93,8 @@ export function CompactionSettings() {
   const toggleEnabled = (next: boolean) => {
     const previous = enabled;
     setEnabled(next); // optimistic, like the other toggles
-    void save(
-      COMPACTION_ENABLED_KEY,
-      next ? "1" : "0",
-      () => setEnabled(previous),
+    void save(COMPACTION_ENABLED_KEY, next ? "1" : "0", () =>
+      setEnabled(previous),
     );
   };
 
@@ -170,9 +168,7 @@ export function CompactionSettings() {
 
   return (
     <SettingsSection title={t("settings.compaction.title")}>
-      <SettingRow
-        label={t("settings.compaction.enabled")}
-      >
+      <SettingRow label={t("settings.compaction.enabled")}>
         <Toggle
           checked={enabled}
           disabled={saving || !loaded}

@@ -8,8 +8,8 @@
  * App builds, so a new screen has to say whether it belongs to one.
  */
 import { assertEquals } from "@std/assert";
-import { type ScreenLayout, screenMove } from "./screen-transition.ts";
 import type { UrlState } from "./route.ts";
+import { type ScreenLayout, screenMove } from "./screen-transition.ts";
 
 function at(route: UrlState["route"], settings: UrlState["settings"] = null) {
   return { route, settings } satisfies UrlState;
@@ -123,14 +123,8 @@ Deno.test("screen transition: code mode's moves stay instant", () => {
 
 Deno.test("screen transition: the mode chooser is not in either hierarchy", () => {
   const chooser = at({ kind: "modeSelect" });
-  assertEquals(
-    move(chooser, at({ kind: "stella", agentId: null })),
-    null,
-  );
-  assertEquals(
-    move(at({ kind: "stella", agentId: null }), chooser),
-    null,
-  );
+  assertEquals(move(chooser, at({ kind: "stella", agentId: null })), null);
+  assertEquals(move(at({ kind: "stella", agentId: null }), chooser), null);
   // Settings do not exist on the chooser (route.ts), so a category cannot be
   // reached from it either.
   assertEquals(move(chooser, at({ kind: "code", tabKey: null })), null);

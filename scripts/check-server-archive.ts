@@ -76,8 +76,8 @@ const { check, failures } = createChecker();
 const options = parseArgs(Deno.args);
 const archiveName = basename(options.archive);
 const format: ArchiveFormat = archiveName.endsWith(".zip") ? "zip" : "tar.gz";
-const binaryName = options.bin ??
-  (format === "zip" ? "lumisca-server.exe" : "lumisca-server");
+const binaryName =
+  options.bin ?? (format === "zip" ? "lumisca-server.exe" : "lumisca-server");
 
 console.log(`Verifying ${options.archive}`);
 
@@ -122,7 +122,8 @@ try {
         Deno.readFile(join(extractDir, name)),
         Deno.readFile(staged),
       ]);
-      same = fromArchive.length === fromStage.length &&
+      same =
+        fromArchive.length === fromStage.length &&
         fromArchive.every((byte, index) => byte === fromStage[index]);
       detail = `${fromArchive.length} bytes`;
     } catch (error) {

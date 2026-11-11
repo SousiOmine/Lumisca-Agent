@@ -65,17 +65,19 @@ export function createModelProvider(
       if (published === label) return [];
       const replaced = published !== undefined;
       published = label;
-      return [{
-        title: `Model: ${label}`,
-        body: `You are running on ${label}.${
-          replaced
-            ? " This replaces the earlier model: any statement you made " +
-              "about your own capabilities before this message may no longer " +
-              "apply."
-            : ""
-        }`,
-        state: { label } satisfies ModelState,
-      }];
+      return [
+        {
+          title: `Model: ${label}`,
+          body: `You are running on ${label}.${
+            replaced
+              ? " This replaces the earlier model: any statement you made " +
+                "about your own capabilities before this message may no longer " +
+                "apply."
+              : ""
+          }`,
+          state: { label } satisfies ModelState,
+        },
+      ];
     },
     rebase(state: unknown): void {
       published = labelOf(state);

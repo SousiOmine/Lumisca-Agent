@@ -43,9 +43,10 @@ After the plan is drafted, explain it to the user and confirm with the ask tool 
  * blindly (the UI never sends this — it requires the request text). */
 export function buildPlanPrompt(request: string): string {
   const trimmed = request.trim();
-  const subject = trimmed.length > 0
-    ? trimmed
-    : "(No request was given. First ask the user for the request with the ask tool.)";
+  const subject =
+    trimmed.length > 0
+      ? trimmed
+      : "(No request was given. First ask the user for the request with the ask tool.)";
   return `You are an implementation planner. Draft an implementation plan for the user's request. Do not edit the code until the user explicitly permits it.
 
 # Request

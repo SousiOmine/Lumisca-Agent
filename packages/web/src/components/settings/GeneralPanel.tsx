@@ -1,14 +1,14 @@
-import type { UpdateStatus } from "../../shell.ts";
+import { LOCALES, type MessageKey } from "@lumisca/core/shared";
+import type { PushControls } from "../../hooks/usePush.ts";
 import type {
   UpdateFailureKind,
   UpdateSource,
 } from "../../hooks/useUpdateStatus.ts";
-import type { PushControls } from "../../hooks/usePush.ts";
-import { LOCALES, type MessageKey } from "@lumisca/core/shared";
 import { useT } from "../../i18n.ts";
-import { SettingRow, Toggle } from "../SettingRow.tsx";
-import { Select } from "../Select.tsx";
+import type { UpdateStatus } from "../../shell.ts";
 import type { Locale } from "../../types.ts";
+import { Select } from "../Select.tsx";
+import { SettingRow, Toggle } from "../SettingRow.tsx";
 
 interface GeneralPanelProps {
   /** null = no updater reachable (a browser against a development server). */
@@ -48,13 +48,15 @@ const LANGUAGE_OPTION_KEYS: Record<Locale, MessageKey> = {
  * The choice applies to the UI immediately and to the system prompt of
  * sessions created after it (the server reads the same setting); sessions
  * already started keep the language they began in. */
-function LanguageItem(
-  { language, error, onLanguageChange }: {
-    language: Locale;
-    error: string | null;
-    onLanguageChange: (language: Locale) => void;
-  },
-) {
+function LanguageItem({
+  language,
+  error,
+  onLanguageChange,
+}: {
+  language: Locale;
+  error: string | null;
+  onLanguageChange: (language: Locale) => void;
+}) {
   const t = useT();
   return (
     <>
@@ -144,26 +146,24 @@ function PushNotificationsItem({ push }: { push: PushControls }) {
  * packaged standalone server opened in a browser, the server itself (which
  * replaces its files and takes effect at the next start). Same panel, one
  * difference: the server offers an explicit restart. */
-export function GeneralPanel(
-  {
-    status,
-    source,
-    bridgeError,
-    failure,
-    language,
-    languageError,
-    onLanguageChange,
-    onSetAuto,
-    onSetAutoRestart,
-    onCheck,
-    onDownload,
-    onInstall,
-    onRestart,
-    notifyEnabled,
-    onNotifyEnabledChange,
-    push,
-  }: GeneralPanelProps,
-) {
+export function GeneralPanel({
+  status,
+  source,
+  bridgeError,
+  failure,
+  language,
+  languageError,
+  onLanguageChange,
+  onSetAuto,
+  onSetAutoRestart,
+  onCheck,
+  onDownload,
+  onInstall,
+  onRestart,
+  notifyEnabled,
+  onNotifyEnabledChange,
+  push,
+}: GeneralPanelProps) {
   const t = useT();
 
   // The language and the notification toggle are app preferences of their
@@ -180,32 +180,36 @@ export function GeneralPanel(
   // address, and "the update is unavailable" is otherwise indistinguishable
   // from "you are looking at a different installation than you think".
   const host = globalThis.location?.host ?? "";
-  const addressItem = host === "" ? null : (
-    <div className="update-item">
-      <div className="update-info">
-        <span className="update-label">
-          {t("settings.general.serverAddress")}
-        </span>
-        <span className="update-desc">{host}</span>
+  const addressItem =
+    host === "" ? null : (
+      <div className="update-item">
+        <div className="update-info">
+          <span className="update-label">
+            {t("settings.general.serverAddress")}
+          </span>
+          <span className="update-desc">{host}</span>
+        </div>
       </div>
-    </div>
-  );
+    );
 
   // Why there are no controls. Each reason is a different problem with a
   // different answer, so the panel says which one it is instead of one
   // sentence for all of them; before a first answer arrives it says that it
   // is asking, rather than claiming there is no updater.
-  const unavailableNote = failure === "no-updater"
-    ? t("settings.general.updateNoUpdater")
-    : failure === "unauthorized"
-    ? t("settings.general.updateUnauthorized")
-    : failure === "unreachable"
-    ? t("settings.general.updateUnreachable")
-    : failure === "failed"
-    ? t("settings.general.updateReadFailed", { error: bridgeError ?? "" })
-    : bridgeError === null
-    ? t("settings.general.checkingUpdate")
-    : t("settings.general.shellUnreachable") + bridgeError;
+  const unavailableNote =
+    failure === "no-updater"
+      ? t("settings.general.updateNoUpdater")
+      : failure === "unauthorized"
+        ? t("settings.general.updateUnauthorized")
+        : failure === "unreachable"
+          ? t("settings.general.updateUnreachable")
+          : failure === "failed"
+            ? t("settings.general.updateReadFailed", {
+                error: bridgeError ?? "",
+              })
+            : bridgeError === null
+              ? t("settings.general.checkingUpdate")
+              : t("settings.general.shellUnreachable") + bridgeError;
 
   if (status === null) {
     return (
@@ -219,9 +223,8 @@ export function GeneralPanel(
 
   const server = source === "server";
   const supported = status.supported !== false;
-  const percent = status.progress == null
-    ? null
-    : Math.round(status.progress * 100);
+  const percent =
+    status.progress == null ? null : Math.round(status.progress * 100);
   const restartPending = server && status.restartPending === true;
   const canRestart = restartPending && status.restartMode !== "none";
   // Replacing the files takes seconds and moves nothing else in the status:
@@ -230,28 +233,32 @@ export function GeneralPanel(
   const statusText = status.checking
     ? t("settings.general.checkingUpdate")
     : installing
-    ? t("settings.general.installing")
-    : restartPending
-    ? (canRestart
-      ? status.restartMode === "supervisor"
-        ? t("settings.general.appliedRestartSystemd", {
-          version: status.appliedVersion,
-        })
-        : t("settings.general.appliedRestartDesktop", {
-          version: status.appliedVersion,
-        })
-      : t("settings.general.appliedNextStart", {
-        version: status.appliedVersion,
-      }))
-    : status.ready
-    ? (server
-      ? t("settings.general.readyToInstallServer", {
-        version: status.latestVersion,
-      })
-      : t("settings.general.readyToInstall", { version: status.latestVersion }))
-    : status.available
-    ? t("settings.general.versionAvailable", { version: status.latestVersion })
-    : t("settings.general.latestVersion");
+      ? t("settings.general.installing")
+      : restartPending
+        ? canRestart
+          ? status.restartMode === "supervisor"
+            ? t("settings.general.appliedRestartSystemd", {
+                version: status.appliedVersion,
+              })
+            : t("settings.general.appliedRestartDesktop", {
+                version: status.appliedVersion,
+              })
+          : t("settings.general.appliedNextStart", {
+              version: status.appliedVersion,
+            })
+        : status.ready
+          ? server
+            ? t("settings.general.readyToInstallServer", {
+                version: status.latestVersion,
+              })
+            : t("settings.general.readyToInstall", {
+                version: status.latestVersion,
+              })
+          : status.available
+            ? t("settings.general.versionAvailable", {
+                version: status.latestVersion,
+              })
+            : t("settings.general.latestVersion");
 
   return (
     <div className="settings-pane">
@@ -296,108 +303,94 @@ export function GeneralPanel(
           )}
 
           <div className="update-status-row">
-            {status.downloading
-              ? (
-                <>
+            {status.downloading ? (
+              <>
+                <div
+                  className="update-progress"
+                  role="progressbar"
+                  aria-valuenow={percent ?? 0}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                >
                   <div
-                    className="update-progress"
-                    role="progressbar"
-                    aria-valuenow={percent ?? 0}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                  >
-                    <div
-                      className="update-progress-fill"
-                      style={{ width: `${percent ?? 0}%` }}
-                    />
-                  </div>
-                  <span className="update-status-text">
-                    {t("settings.general.downloading")}{" "}
-                    {formatBytes(status.downloaded)}
-                    {status.total ? ` / ${formatBytes(status.total)}` : ""}
-                  </span>
-                  {percent !== null && (
-                    <span className="update-percent">{percent}%</span>
-                  )}
-                </>
-              )
-              : (
-                <>
-                  <span className="update-status-text">{statusText}</span>
-                  <div className="update-actions">
-                    {status.checking
-                      ? (
-                        <button type="button" className="btn small" disabled>
-                          {t("settings.general.checkForUpdate")}
-                        </button>
-                      )
-                      : installing
-                      ? (
-                        <button type="button" className="btn push" disabled>
-                          {t("settings.general.installing")}
-                        </button>
-                      )
-                      : restartPending
-                      ? canRestart
-                        ? (
-                          <button
-                            type="button"
-                            className="btn push"
-                            onClick={onRestart}
-                          >
-                            {t("settings.general.restart")}
-                          </button>
-                        )
-                        : null
-                      : status.ready
-                      ? (
-                        <>
-                          <button
-                            type="button"
-                            className="btn push"
-                            onClick={onInstall}
-                          >
-                            {t("settings.general.install")}
-                          </button>
-                          {
-                            /* The staged package is the *previous* release
+                    className="update-progress-fill"
+                    style={{ width: `${percent ?? 0}%` }}
+                  />
+                </div>
+                <span className="update-status-text">
+                  {t("settings.general.downloading")}{" "}
+                  {formatBytes(status.downloaded)}
+                  {status.total ? ` / ${formatBytes(status.total)}` : ""}
+                </span>
+                {percent !== null && (
+                  <span className="update-percent">{percent}%</span>
+                )}
+              </>
+            ) : (
+              <>
+                <span className="update-status-text">{statusText}</span>
+                <div className="update-actions">
+                  {status.checking ? (
+                    <button type="button" className="btn small" disabled>
+                      {t("settings.general.checkForUpdate")}
+                    </button>
+                  ) : installing ? (
+                    <button type="button" className="btn push" disabled>
+                      {t("settings.general.installing")}
+                    </button>
+                  ) : restartPending ? (
+                    canRestart ? (
+                      <button
+                        type="button"
+                        className="btn push"
+                        onClick={onRestart}
+                      >
+                        {t("settings.general.restart")}
+                      </button>
+                    ) : null
+                  ) : status.ready ? (
+                    <>
+                      <button
+                        type="button"
+                        className="btn push"
+                        onClick={onInstall}
+                      >
+                        {t("settings.general.install")}
+                      </button>
+                      {/* The staged package is the *previous* release
                               when a newer one is out (a failed install keeps
                               its package staged), so checking must stay
                               reachable — otherwise the screen offers a
                               package that cannot be installed and no way to
-                              learn that a new release exists. */
-                          }
-                          <button
-                            type="button"
-                            className="btn small"
-                            onClick={onCheck}
-                          >
-                            {t("settings.general.checkForUpdate")}
-                          </button>
-                        </>
-                      )
-                      : status.available
-                      ? (
-                        <button
-                          type="button"
-                          className="btn push"
-                          onClick={onDownload}
-                        >
-                          {t("settings.general.download")}
-                        </button>
-                      )
-                      : (
-                        <button
-                          type="button"
-                          className="btn small"
-                          onClick={onCheck}
-                        >
-                          {t("settings.general.checkForUpdate")}
-                        </button>
-                      )}
-                  </div>
-                </>
-              )}
+                              learn that a new release exists. */}
+                      <button
+                        type="button"
+                        className="btn small"
+                        onClick={onCheck}
+                      >
+                        {t("settings.general.checkForUpdate")}
+                      </button>
+                    </>
+                  ) : status.available ? (
+                    <button
+                      type="button"
+                      className="btn push"
+                      onClick={onDownload}
+                    >
+                      {t("settings.general.download")}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn small"
+                      onClick={onCheck}
+                    >
+                      {t("settings.general.checkForUpdate")}
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           {status.ready && !installing && (
@@ -423,11 +416,9 @@ export function GeneralPanel(
       )}
 
       {status.error && <div className="error-text">{status.error}</div>}
-      {
-        /* A shell failure and a server failure are different sentences: the
+      {/* A shell failure and a server failure are different sentences: the
           bridge's "cannot communicate with the desktop shell" would be
-          wrong here, where the server itself is what did not answer. */
-      }
+          wrong here, where the server itself is what did not answer. */}
       {bridgeError !== null && failure === null && (
         <div className="error-text" role="alert">
           {t("settings.general.shellUnreachable")}
@@ -435,7 +426,9 @@ export function GeneralPanel(
         </div>
       )}
       {failure !== null && (
-        <div className="error-text" role="alert">{unavailableNote}</div>
+        <div className="error-text" role="alert">
+          {unavailableNote}
+        </div>
       )}
 
       {source === "shell" && (

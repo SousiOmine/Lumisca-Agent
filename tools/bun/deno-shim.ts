@@ -15,7 +15,8 @@ const denoTest = (
   maybeFn?: () => unknown,
 ) => {
   if (typeof nameOrOptions === "string") {
-    const options = typeof optionsOrFn === "function" ? {} : optionsOrFn ?? {};
+    const options =
+      typeof optionsOrFn === "function" ? {} : (optionsOrFn ?? {});
     const body = typeof optionsOrFn === "function" ? optionsOrFn : maybeFn;
     if (typeof body !== "function") {
       throw new Error(`test expects a function as the body: ${nameOrOptions}`);

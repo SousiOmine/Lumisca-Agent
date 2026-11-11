@@ -1,8 +1,8 @@
-import { assert, assertEquals } from "@std/assert";
 import type { ProviderMap } from "@opencode-ai/models";
+import { assert, assertEquals } from "@std/assert";
 import { LumiscaCore } from "../mod.ts";
-import { DEV_PROVIDER_IDS } from "./dev-catalog.ts";
 import { snapshotCatalog } from "./catalog-source.ts";
+import { DEV_PROVIDER_IDS } from "./dev-catalog.ts";
 
 function liveProviders(): ProviderMap {
   // A live catalog that adds a model, drops a provider, and keeps the
@@ -37,9 +37,7 @@ function liveProviders(): ProviderMap {
 
 function stubFetch(map: ProviderMap) {
   return (_url: string | URL | Request, _init?: RequestInit) =>
-    Promise.resolve(
-      new Response(JSON.stringify(map), { status: 200 }),
-    );
+    Promise.resolve(new Response(JSON.stringify(map), { status: 200 }));
 }
 
 function failingFetch() {
@@ -125,10 +123,7 @@ Deno.test("refreshCatalog keeps an existing session usable after upstream remova
     });
     assertEquals(status.source, "live");
     assertEquals(core.getModel("openai", doomed.id), undefined);
-    assertEquals(
-      core.models.isRetiredModel("openai", doomed.id),
-      true,
-    );
+    assertEquals(core.models.isRetiredModel("openai", doomed.id), true);
     const reopened = core.openSession(session.id);
     assertEquals(reopened.modelProvider, "openai");
     assertEquals(reopened.modelId, doomed.id);

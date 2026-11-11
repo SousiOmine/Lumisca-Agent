@@ -61,9 +61,10 @@ function respond(context: StreamRequest): AssistantMessage {
   if (last?.role === "toolResult") {
     const result = contentText(last.content);
     return fauxAssistantMessage(
-      `ツールの実行結果を確認しました: ${
-        result.slice(0, 80)
-      }\n\nタスクは完了です。`,
+      `ツールの実行結果を確認しました: ${result.slice(
+        0,
+        80,
+      )}\n\nタスクは完了です。`,
     );
   }
   const text = contentText(last?.content ?? "");
@@ -106,8 +107,7 @@ function respond(context: StreamRequest): AssistantMessage {
       fauxText("カードで確認します。"),
       fauxToolCall(TOOL_SEND_CHAT, {
         text: "この内容で進めますか。",
-        card:
-          '<Card title="リリース確認">\n  <Text>この内容で進めますか。</Text>\n  <Table>\n    <Row><Cell>項目</Cell><Cell>値</Cell></Row>\n    <Row><Cell>版</Cell><Cell>0.9.4</Cell></Row>\n  </Table>\n  <Flow>\n    <Node id="a" shape="round">開始</Node>\n    <Node id="b">確認</Node>\n    <Edge from="a" to="b" label="はい" />\n  </Flow>\n  <Choice>\n    <Option description="そのまま公開します">進める</Option>\n    <Option>止める</Option>\n  </Choice>\n</Card>',
+        card: '<Card title="リリース確認">\n  <Text>この内容で進めますか。</Text>\n  <Table>\n    <Row><Cell>項目</Cell><Cell>値</Cell></Row>\n    <Row><Cell>版</Cell><Cell>0.9.4</Cell></Row>\n  </Table>\n  <Flow>\n    <Node id="a" shape="round">開始</Node>\n    <Node id="b">確認</Node>\n    <Edge from="a" to="b" label="はい" />\n  </Flow>\n  <Choice>\n    <Option description="そのまま公開します">進める</Option>\n    <Option>止める</Option>\n  </Choice>\n</Card>',
       }),
     ]);
   }

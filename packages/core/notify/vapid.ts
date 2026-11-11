@@ -12,9 +12,10 @@
  * client about to subscribe makes — rather than at startup: a user who never
  * enables notifications never gets a secret written for them.
  */
+
+import type { SettingsRepo } from "../settings/repo.ts";
 import { fromBase64Url, toBase64Url } from "../shared/push.ts";
 import { PUSH_VAPID_KEY } from "../shared/settings-keys.ts";
-import type { SettingsRepo } from "../settings/repo.ts";
 
 /** The curve of a VAPID key (`prime256v1` = P-256, what ES256 signs with). */
 const CURVE = "P-256";
@@ -69,7 +70,8 @@ export async function keysFromStoredJson(json: string): Promise<VapidKeys> {
     throw new Error("the stored VAPID key pair is not JSON");
   }
   if (
-    typeof parsed?.publicKey !== "string" || parsed.privateJwk === undefined
+    typeof parsed?.publicKey !== "string" ||
+    parsed.privateJwk === undefined
   ) {
     throw new Error("the stored VAPID key pair is incomplete");
   }
@@ -89,9 +91,7 @@ export async function keysFromStoredJson(json: string): Promise<VapidKeys> {
     uncompressedPoint(parsed.privateJwk.x, parsed.privateJwk.y),
   );
   if (derived !== parsed.publicKey) {
-    throw new Error(
-      "the stored VAPID key pair does not match its public half",
-    );
+    throw new Error("the stored VAPID key pair does not match its public half");
   }
   return { privateKey, publicKey: parsed.publicKey, subject: VAPID_SUBJECT };
 }
@@ -121,9 +121,7 @@ function uncompressedPoint(
 /** The bytes of a subscription's `p256dh`, for the ECDH exchange. Throws when
  * the value is not an uncompressed P-256 point, which is a subscription this
  * server must not try to send to. */
-export function subscriptionPublicKey(
-  p256dh: string,
-): Uint8Array<ArrayBuffer> {
+export function subscriptionPublicKey(p256dh: string): Uint8Array<ArrayBuffer> {
   const bytes = fromBase64Url(p256dh);
   if (bytes.length !== 65 || bytes[0] !== 0x04) {
     throw new Error("p256dh is not an uncompressed P-256 point");
@@ -133,9 +131,7 @@ export function subscriptionPublicKey(
 
 /** The bytes of a subscription's `auth` (16 in practice). Throws when the
  * value cannot be a shared secret. */
-export function subscriptionAuthSecret(
-  auth: string,
-): Uint8Array<ArrayBuffer> {
+export function subscriptionAuthSecret(auth: string): Uint8Array<ArrayBuffer> {
   const bytes = fromBase64Url(auth);
   if (bytes.length === 0) throw new Error("auth is empty");
   return bytes;

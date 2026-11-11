@@ -1,14 +1,13 @@
 import type { ClientEvent } from "../domain/event.ts";
-import type { AgentIconStore } from "../stella/icons.ts";
+import { CoreError } from "../errors.ts";
+import type { MessageRepo } from "../session/messages.ts";
+import type { SessionRepo } from "../session/repo.ts";
+import type { Locale, StellaAgentSummary } from "../shared/mod.ts";
+import { translate } from "../shared/mod.ts";
 import type { AgentRepo, StellaAgent } from "../stella/agents.ts";
 import { DEFAULT_AGENT_NAME, normalizeAgentName } from "../stella/agents.ts";
+import type { AgentIconStore } from "../stella/icons.ts";
 import { latestPreview } from "../stella/previews.ts";
-import type { SessionRepo } from "../session/repo.ts";
-import type { MessageRepo } from "../session/messages.ts";
-import type { StellaAgentSummary } from "../shared/mod.ts";
-import { translate } from "../shared/mod.ts";
-import type { Locale } from "../shared/mod.ts";
-import { CoreError } from "../errors.ts";
 
 /**
  * The agents of stella mode: the rows in the sidebar, and what each looks
@@ -140,10 +139,13 @@ export class StellaAgentService {
    * One rule for creating and renaming, because the sidebar's reason for it
    * is the same in both: two rows the user cannot tell apart. */
   private requireUnusedAgentName(name: string, exceptId?: string): void {
-    const taken = this.deps.agents.list().some((agent) =>
-      agent.id !== exceptId &&
-      agent.name.toLowerCase() === name.toLowerCase()
-    );
+    const taken = this.deps.agents
+      .list()
+      .some(
+        (agent) =>
+          agent.id !== exceptId &&
+          agent.name.toLowerCase() === name.toLowerCase(),
+      );
     if (taken) {
       throw new CoreError(
         `An agent named "${name}" already exists. Choose another name.`,
@@ -211,9 +213,8 @@ export class StellaAgentService {
     if (agent === undefined) {
       throw new CoreError(`Agent not found: ${id}`, "not_found");
     }
-    const name = patch.name === undefined
-      ? undefined
-      : normalizeAgentName(patch.name);
+    const name =
+      patch.name === undefined ? undefined : normalizeAgentName(patch.name);
     if (name !== undefined) this.requireUnusedAgentName(name, id);
     const model = patch.model;
     const fields = {

@@ -12,13 +12,15 @@ const toolCallSchema = object({
   name: string(
     "The exact name of the tool to execute (returned by tool_search)",
   ),
-  args: optional(object(
-    {},
-    {
-      additionalProperties: true,
-      description: "Tool arguments as described by tool_search (optional)",
-    },
-  )),
+  args: optional(
+    object(
+      {},
+      {
+        additionalProperties: true,
+        description: "Tool arguments as described by tool_search (optional)",
+      },
+    ),
+  ),
 });
 
 /** Build the tool that executes a registry tool by name — the single
@@ -50,7 +52,7 @@ export function createToolCallTool(
       const content = result.content.map((block) =>
         block.type === "text"
           ? { type: "text" as const, text: `[${params.name}]\n${block.text}` }
-          : block
+          : block,
       );
       return {
         content,

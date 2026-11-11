@@ -50,8 +50,8 @@ declare global {
    * be fetched (see `shellCall`). Absent in a plain browser. */
   var __TAURI_INTERNALS__:
     | {
-      invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
-    }
+        invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
+      }
     | undefined;
 }
 
@@ -93,8 +93,8 @@ async function invokeShell<T>(
       typeof error === "string"
         ? error
         : error instanceof Error
-        ? error.message
-        : String(error),
+          ? error.message
+          : String(error),
     );
   }
 }
@@ -126,7 +126,9 @@ export async function shellCall<T>(
     if (invoke === undefined) throw error;
     return invokeShell<T>(action, params);
   }
-  const body = await res.json().catch(() => null) as { error?: string } | null;
+  const body = (await res.json().catch(() => null)) as {
+    error?: string;
+  } | null;
   if (!res.ok) {
     throw new Error(body?.error ?? `Request failed: ${res.status}`);
   }

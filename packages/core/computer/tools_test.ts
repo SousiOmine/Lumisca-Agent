@@ -1,5 +1,14 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import {
+  TOOL_COMPUTER_ACT,
+  TOOL_COMPUTER_LIST_WINDOWS,
+  TOOL_COMPUTER_SCREENSHOT,
+} from "../shared/mod.ts";
+import { toolText } from "../test-utils.ts";
+import { createToolCallTool } from "../tools/call-tool.ts";
+import { ToolRegistry } from "../tools/registry.ts";
+import { createToolSearchTool } from "../tools/search-tool.ts";
+import {
   COMPUTER_TOOL_NAMES,
   createComputerTools,
   MAX_TYPE_CHARS,
@@ -17,15 +26,6 @@ import type {
   Rect,
   WindowInfo,
 } from "./types.ts";
-import {
-  TOOL_COMPUTER_ACT,
-  TOOL_COMPUTER_LIST_WINDOWS,
-  TOOL_COMPUTER_SCREENSHOT,
-} from "../shared/mod.ts";
-import { toolText } from "../test-utils.ts";
-import { ToolRegistry } from "../tools/registry.ts";
-import { createToolSearchTool } from "../tools/search-tool.ts";
-import { createToolCallTool } from "../tools/call-tool.ts";
 
 /** A host that records what it was asked to do and serves tiny frames.
  * Deliberately small (256×144): the tool layer's own scaling is what the
@@ -96,14 +96,18 @@ class FakeHost implements ComputerHost {
 
   act(action: ComputerAction): Promise<ComputerActionResult> {
     this.actions.push(action);
-    const mouse = action.kind === "move" || action.kind === "click" ||
-      action.kind === "drag" || action.kind === "scroll";
+    const mouse =
+      action.kind === "move" ||
+      action.kind === "click" ||
+      action.kind === "drag" ||
+      action.kind === "scroll";
     return Promise.resolve({
       cursor: this.cursor(),
       steps: mouse ? 8 : 0,
       durationMs: mouse ? 104 : 5,
-      ...(action.kind === "type" || action.kind === "key" ||
-          action.kind === "focus_window"
+      ...(action.kind === "type" ||
+      action.kind === "key" ||
+      action.kind === "focus_window"
         ? { window: this.windowList[0]! }
         : {}),
     });
@@ -137,11 +141,10 @@ Deno.test("the computer family is exactly the three documented tools", () => {
     [family.screenshot.name, family.act.name, family.windows.name],
     [...COMPUTER_TOOL_NAMES],
   );
-  assertEquals([...COMPUTER_TOOL_NAMES], [
-    TOOL_COMPUTER_SCREENSHOT,
-    TOOL_COMPUTER_ACT,
-    TOOL_COMPUTER_LIST_WINDOWS,
-  ]);
+  assertEquals(
+    [...COMPUTER_TOOL_NAMES],
+    [TOOL_COMPUTER_SCREENSHOT, TOOL_COMPUTER_ACT, TOOL_COMPUTER_LIST_WINDOWS],
+  );
 });
 
 /** Assert that a tool call fails, whether it throws synchronously or
@@ -150,11 +153,7 @@ function rejectsWith(
   call: () => Promise<unknown>,
   message: string,
 ): Promise<unknown> {
-  return assertRejects(
-    () => Promise.resolve().then(call),
-    Error,
-    message,
-  );
+  return assertRejects(() => Promise.resolve().then(call), Error, message);
 }
 
 Deno.test("every tool fails clearly when no host is attached", async () => {
@@ -229,11 +228,13 @@ Deno.test("screenshot scales to max_dimension and reports the exact scale", asyn
 class NoisyHost extends FakeHost {
   constructor(width: number, height: number) {
     super();
-    this.displayList = [{
-      index: 0,
-      primary: true,
-      bounds: { x: 0, y: 0, width, height },
-    }];
+    this.displayList = [
+      {
+        index: 0,
+        primary: true,
+        bounds: { x: 0, y: 0, width, height },
+      },
+    ];
   }
 
   override capture(region: Rect): Promise<RawCapture> {
@@ -375,13 +376,15 @@ Deno.test("act converts image coordinates through the last screenshot", async ()
     y: 36,
   });
   // 64 / 0.5 = 128, 36 / 0.5 = 72 — the screen coordinates the host sees.
-  assertEquals(host.actions, [{
-    kind: "click",
-    x: 128,
-    y: 72,
-    button: "left",
-    count: 1,
-  }]);
+  assertEquals(host.actions, [
+    {
+      kind: "click",
+      x: 128,
+      y: 72,
+      button: "left",
+      count: 1,
+    },
+  ]);
   const text = toolText(result);
   assert(
     text.includes("clicked left at screen (128, 72) in 8 steps (104ms)."),
@@ -574,17 +577,14 @@ Deno.test("list_windows formats the z-order list and filters by title", async ()
 
 Deno.test("list_windows announces the windows it did not list", async () => {
   const host = new FakeHost();
-  host.windowList = Array.from(
-    { length: MAX_WINDOW_LINES + 7 },
-    (_, i) => ({
-      id: `0x${(i + 1).toString(16).padStart(8, "0")}`,
-      title: `window ${i}`,
-      bounds: { x: 0, y: 0, width: 100, height: 100 },
-      focused: false,
-      visible: true,
-      minimized: false,
-    }),
-  );
+  host.windowList = Array.from({ length: MAX_WINDOW_LINES + 7 }, (_, i) => ({
+    id: `0x${(i + 1).toString(16).padStart(8, "0")}`,
+    title: `window ${i}`,
+    bounds: { x: 0, y: 0, width: 100, height: 100 },
+    focused: false,
+    visible: true,
+    minimized: false,
+  }));
   const text = toolText(await tools(host).windows.execute("id", {}));
   const lines = text.split("\n");
   assertEquals(lines.length, 1 + MAX_WINDOW_LINES + 1);
@@ -633,9 +633,7 @@ Deno.test("a mouse action claims no cursor position when there is none", async (
 Deno.test("the tools are discoverable via tool_search and callable via tool_call", async () => {
   const host = new FakeHost();
   const registry = new ToolRegistry();
-  registry.addTools(
-    createComputerTools({ resolveHost: () => host }),
-  );
+  registry.addTools(createComputerTools({ resolveHost: () => host }));
   const search = createToolSearchTool(() => registry);
   const found = toolText(await search.execute("search", { query: "computer" }));
   assert(found.includes(TOOL_COMPUTER_SCREENSHOT), found);

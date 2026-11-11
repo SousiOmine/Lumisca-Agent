@@ -15,8 +15,7 @@ import type {
 } from "./types.ts";
 
 export type PushableAssistantMessageEventStream =
-  & AssistantMessageEventStream
-  & {
+  AssistantMessageEventStream & {
     push(event: StreamEvent): void;
     end(message?: AssistantMessage): void;
   };

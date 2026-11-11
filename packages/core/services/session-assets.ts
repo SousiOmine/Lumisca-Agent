@@ -1,5 +1,6 @@
 import { extname } from "node:path";
 import { CoreError } from "../errors.ts";
+import type { PromptFileRef } from "../shared/mod.ts";
 import { RASTER_IMAGE_MIME_BY_EXTENSION } from "../shared/mod.ts";
 import {
   MAX_PROMPT_IMAGE_BYTES,
@@ -7,7 +8,6 @@ import {
   saveUploads,
   type UploadFile,
 } from "../vm/uploads.ts";
-import type { PromptFileRef } from "../shared/mod.ts";
 import type { SessionServiceDeps } from "./session-deps.ts";
 
 type Deps = Pick<
@@ -96,8 +96,8 @@ export class SessionAssets {
     // the name is what the store generated, and a prompt picture was stored
     // under its own type's extension (see the prompt route).
     const extension = extname(read.name).toLowerCase();
-    const mimeType = RASTER_IMAGE_MIME_BY_EXTENSION[extension] ??
-      "application/octet-stream";
+    const mimeType =
+      RASTER_IMAGE_MIME_BY_EXTENSION[extension] ?? "application/octet-stream";
     return { bytes: read.bytes, mimeType };
   }
 }

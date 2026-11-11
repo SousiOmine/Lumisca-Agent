@@ -142,7 +142,8 @@ export async function prepareStoredImage(
     const height = Math.max(1, Math.round(sourceHeight * scale));
     const encoded = encode(canvas, source, width, height);
     if (
-      best === undefined || encoded.bytes.byteLength < best.bytes.byteLength
+      best === undefined ||
+      encoded.bytes.byteLength < best.bytes.byteLength
     ) {
       best = encoded;
     }

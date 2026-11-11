@@ -117,12 +117,10 @@ function findGitBash(): string | undefined {
     if (canRun(candidate)) return candidate;
   }
   const programFiles = Deno.env.get("ProgramFiles") ?? "C:\\Program Files";
-  for (
-    const candidate of [
-      `${programFiles}\\Git\\bin\\bash.exe`,
-      `${programFiles}\\Git\\usr\\bin\\bash.exe`,
-    ]
-  ) {
+  for (const candidate of [
+    `${programFiles}\\Git\\bin\\bash.exe`,
+    `${programFiles}\\Git\\usr\\bin\\bash.exe`,
+  ]) {
     if (canRun(candidate)) return candidate;
   }
   return undefined;
@@ -132,8 +130,10 @@ function findGitBash(): string | undefined {
  * WindowsApps) that launches WSL instead of a real shell. */
 function isWslBashStub(path: string): boolean {
   const lower = path.toLowerCase();
-  return lower.includes("system32\\bash.exe") ||
-    lower.includes("windowsapps\\bash.exe");
+  return (
+    lower.includes("system32\\bash.exe") ||
+    lower.includes("windowsapps\\bash.exe")
+  );
 }
 
 /** Whether the file exists and starts (probed with `--version`, harmless

@@ -1,3 +1,4 @@
+import { summarizeContextUsage } from "@lumisca/core/shared";
 import {
   type Dispatch,
   type SetStateAction,
@@ -5,10 +6,12 @@ import {
   useRef,
 } from "preact/compat";
 import { api, sessionApi } from "../api.ts";
+import type { ComposerModel } from "../components/Composer.tsx";
 import {
   setModelThinkingLevel,
   syncThinkingLevelInViews,
 } from "../providers.ts";
+import { splitTabKey, tabKey } from "../tabs.ts";
 import {
   type AskAnswer,
   emptyView,
@@ -18,9 +21,6 @@ import {
   type ThinkingLevel,
   type Workspace,
 } from "../types.ts";
-import type { ComposerModel } from "../components/Composer.tsx";
-import { splitTabKey, tabKey } from "../tabs.ts";
-import { summarizeContextUsage } from "@lumisca/core/shared";
 
 export interface UseSessionActionsOptions {
   setViews: Dispatch<SetStateAction<Map<string, SessionView>>>;
@@ -70,9 +70,11 @@ export interface SessionActions {
  * prompting/aborting/answering/rewinding an open one, switching its model,
  * and updating a model's thinking level (a per-model server setting that
  * every view of the same peer+model reflects). */
-export function useSessionActions(
-  { setViews, setViewError, onCreated }: UseSessionActionsOptions,
-) {
+export function useSessionActions({
+  setViews,
+  setViewError,
+  onCreated,
+}: UseSessionActionsOptions) {
   // Serial number for model switches: a stale response is discarded.
   const modelChangeSeq = useRef(0);
 
@@ -152,9 +154,14 @@ export function useSessionActions(
   /** Abort the running exchange. The failure surfaces on the view (the
    * banner above the composer): a silently ignored abort would leave the
    * user pressing a button that does nothing. */
-  const abort = useCallback((key: string) => {
-    sessionApi(key).abort().catch((error) => setViewError(key, error));
-  }, [setViewError]);
+  const abort = useCallback(
+    (key: string) => {
+      sessionApi(key)
+        .abort()
+        .catch((error) => setViewError(key, error));
+    },
+    [setViewError],
+  );
 
   /** Answer a pending ask (the ask tool): the answer is sent to the server
    * owning the session, which resolves the blocked run. Errors surface in
@@ -190,9 +197,9 @@ export function useSessionActions(
    * surfaces on the view. */
   const compact = useCallback(
     (key: string, instructions?: string) => {
-      sessionApi(key).compact(instructions).catch((error) =>
-        setViewError(key, error)
-      );
+      sessionApi(key)
+        .compact(instructions)
+        .catch((error) => setViewError(key, error));
     },
     [setViewError],
   );
@@ -246,7 +253,7 @@ export function useSessionActions(
             provider,
             modelId,
             thinkingLevel,
-          )
+          ),
         );
       } catch (error) {
         setViewError(key, error);

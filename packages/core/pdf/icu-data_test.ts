@@ -1,5 +1,5 @@
-import { assert, assertEquals } from "@std/assert";
 import { join } from "node:path";
+import { assert, assertEquals } from "@std/assert";
 import { findCanvasIcuDataFile } from "./icu-data.ts";
 
 Deno.test("findCanvasIcuDataFile takes LUMISCA_ICU_DATA from the injected env", async () => {

@@ -24,9 +24,9 @@ export interface FixtureFile {
 export async function deflateRaw(
   bytes: Uint8Array<ArrayBuffer>,
 ): Promise<Uint8Array<ArrayBuffer>> {
-  const stream = new Blob([bytes]).stream().pipeThrough(
-    new CompressionStream("deflate-raw"),
-  );
+  const stream = new Blob([bytes])
+    .stream()
+    .pipeThrough(new CompressionStream("deflate-raw"));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
@@ -41,9 +41,10 @@ export async function buildZip(
 
   for (const file of files) {
     const nameBytes = encoder.encode(file.name);
-    const content = typeof file.content === "string"
-      ? encoder.encode(file.content)
-      : file.content;
+    const content =
+      typeof file.content === "string"
+        ? encoder.encode(file.content)
+        : file.content;
     const method = file.stored ? 0 : 8;
     const data = file.stored ? content : await deflateRaw(content);
 
@@ -140,9 +141,10 @@ export async function buildTarGz(
   const encoder = new TextEncoder();
   const blocks: Uint8Array<ArrayBuffer>[] = [];
   for (const file of files) {
-    const content = typeof file.content === "string"
-      ? encoder.encode(file.content)
-      : file.content;
+    const content =
+      typeof file.content === "string"
+        ? encoder.encode(file.content)
+        : file.content;
     blocks.push(ustarHeader(file.name, content.length, "0"));
     const padded = new Uint8Array(Math.ceil(content.length / 512) * 512);
     padded.set(content);
@@ -157,9 +159,9 @@ export async function buildTarGz(
     tar.set(block, cursor);
     cursor += block.length;
   }
-  const stream = new Blob([tar]).stream().pipeThrough(
-    new CompressionStream("gzip"),
-  );
+  const stream = new Blob([tar])
+    .stream()
+    .pipeThrough(new CompressionStream("gzip"));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
@@ -180,10 +182,10 @@ export interface SigningKeys {
 }
 
 export async function createSigningKeys(): Promise<SigningKeys> {
-  const keys = await crypto.subtle.generateKey({ name: "Ed25519" }, true, [
+  const keys = (await crypto.subtle.generateKey({ name: "Ed25519" }, true, [
     "sign",
     "verify",
-  ]) as CryptoKeyPair;
+  ])) as CryptoKeyPair;
   const rawPublic = new Uint8Array(
     await crypto.subtle.exportKey("raw", keys.publicKey),
   );
@@ -193,10 +195,9 @@ export async function createSigningKeys(): Promise<SigningKeys> {
   blob.set(new TextEncoder().encode(MINISIGN_LAYOUT.publicKeyAlgorithm), 0);
   blob.set(rawPublic.slice(0, 8), 2);
   blob.set(rawPublic, MINISIGN_LAYOUT.headerBytes);
-  const publicText =
-    `untrusted comment: minisign public key: 0000000000000000\n${
-      base64(blob)
-    }\n`;
+  const publicText = `untrusted comment: minisign public key: 0000000000000000\n${base64(
+    blob,
+  )}\n`;
 
   return {
     publicKey: base64(new TextEncoder().encode(publicText)),
@@ -217,9 +218,10 @@ export async function createSigningKeys(): Promise<SigningKeys> {
       const text = [
         "untrusted comment: signature from tauri secret key",
         base64(signatureBlob),
-        `trusted comment: timestamp:1789188253\tfile:${
-          file.replace(/^.*[\\/]/, "")
-        }`,
+        `trusted comment: timestamp:1789188253\tfile:${file.replace(
+          /^.*[\\/]/,
+          "",
+        )}`,
         base64(signature),
         "",
       ].join("\n");

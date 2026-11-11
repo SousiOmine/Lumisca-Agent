@@ -74,10 +74,7 @@ export function parseStoredRecents(raw: string | null): StoredRecents {
 }
 
 /** The stored picks of one peer, newest first. */
-export function recentsOf(
-  raw: string | null,
-  peerId: string,
-): RecentModel[] {
+export function recentsOf(raw: string | null, peerId: string): RecentModel[] {
   return parseStoredRecents(raw)[peerId] ?? [];
 }
 
@@ -93,8 +90,8 @@ export function withRecentModel(
   model: RecentModel,
 ): string {
   const stored = parseStoredRecents(raw);
-  const kept = (stored[peerId] ?? []).filter((m) =>
-    m.provider !== model.provider || m.modelId !== model.modelId
+  const kept = (stored[peerId] ?? []).filter(
+    (m) => m.provider !== model.provider || m.modelId !== model.modelId,
   );
   const next = [model, ...kept].slice(0, RECENT_MODEL_LIMIT);
   return JSON.stringify({ ...stored, [peerId]: next });

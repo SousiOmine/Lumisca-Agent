@@ -1,7 +1,10 @@
 /** A small TTL cache: entries expire `ttlMs` after being set; with `max`
  * set, the oldest entry is evicted on overflow. Shared by the workspace
  * file cache and the provider auth cache so the pattern lives once. */
-export function ttlCache<K, V>(ttlMs: number, max?: number): {
+export function ttlCache<K, V>(
+  ttlMs: number,
+  max?: number,
+): {
   get(key: K): V | undefined;
   set(key: K, value: V): void;
   delete(key: K): void;

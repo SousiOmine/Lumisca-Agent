@@ -1,7 +1,7 @@
-import { IconListCheck } from "@tabler/icons-preact";
-import type { TodoPhase, TodoStatus, TodoTask } from "../types.ts";
-import { useT } from "../i18n.ts";
 import type { MessageKey } from "@lumisca/core/shared";
+import { IconListCheck } from "@tabler/icons-preact";
+import { useT } from "../i18n.ts";
+import type { TodoPhase, TodoStatus, TodoTask } from "../types.ts";
 import { CollapsiblePanel } from "./Panel.tsx";
 
 /** Marker glyph per status, mirroring the tool's text rendering. */
@@ -29,8 +29,8 @@ function summary(todoTasks: TodoTask[]): string {
  * dropped on purpose. The row then leaves the composer alone — an all-done
  * plan is read in the transcript, not above the field. */
 function settled(todoTasks: TodoTask[]): boolean {
-  return todoTasks.every((t) =>
-    t.status === "completed" || t.status === "abandoned"
+  return todoTasks.every(
+    (t) => t.status === "completed" || t.status === "abandoned",
   );
 }
 
@@ -74,10 +74,7 @@ export function TodoPanel({ todos }: { todos: TodoPhase[] }) {
 /** The catalogue key of one task status. Spelled out rather than built from
  * the status value: the catalogue test finds callers by their literal key,
  * and a template string would hide every one of these from it. */
-function statusLabel(
-  t: ReturnType<typeof useT>,
-  status: TodoStatus,
-): string {
+function statusLabel(t: ReturnType<typeof useT>, status: TodoStatus): string {
   const keys: Record<TodoStatus, MessageKey> = {
     pending: "panels.todo.status.pending",
     in_progress: "panels.todo.status.in_progress",

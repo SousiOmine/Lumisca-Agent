@@ -1,6 +1,6 @@
-import type { ModelInfo, ProviderInfo } from "./types.ts";
 import { filterByQuery } from "./providers.ts";
 import { RECENT_MODEL_LIMIT, type RecentModel } from "./recentModels.ts";
+import type { ModelInfo, ProviderInfo } from "./types.ts";
 
 /** One row of the model picker. The provider travels with the model because
  * the recent section mixes providers: a bare model id would not say which
@@ -77,9 +77,10 @@ export function buildModelList(input: ModelListInput): ModelPickerList {
 
   const listable = (providerId: string): ModelInfo[] => {
     const models = modelsByProvider.get(providerId) ?? [];
-    return models.filter((m) =>
-      (!enabledOnly || m.enabled !== false) &&
-      (!imageOnly || m.input?.includes("image") === true)
+    return models.filter(
+      (m) =>
+        (!enabledOnly || m.enabled !== false) &&
+        (!imageOnly || m.input?.includes("image") === true),
     );
   };
   const matches = (model: ModelInfo): boolean =>
@@ -104,8 +105,8 @@ export function buildModelList(input: ModelListInput): ModelPickerList {
   for (const entry of recent) {
     if (!canOffer(entry)) continue;
     if (
-      ordered.some((m) =>
-        m.provider === entry.provider && m.modelId === entry.modelId
+      ordered.some(
+        (m) => m.provider === entry.provider && m.modelId === entry.modelId,
       )
     ) {
       continue;
@@ -119,9 +120,9 @@ export function buildModelList(input: ModelListInput): ModelPickerList {
 
   const recentRows: ModelPickerRow[] = [];
   for (const entry of ordered) {
-    const model = offered.get(entry.provider)!.find((m) =>
-      m.id === entry.modelId
-    )!;
+    const model = offered
+      .get(entry.provider)!
+      .find((m) => m.id === entry.modelId)!;
     if (!matches(model)) continue;
     recentRows.push({
       provider: entry.provider,
@@ -134,11 +135,14 @@ export function buildModelList(input: ModelListInput): ModelPickerList {
   }
 
   for (const provider of providers) {
-    const rows = offered.get(provider.id)!.filter(matches).map((model) => ({
-      provider: provider.id,
-      providerName: provider.name,
-      model,
-    }));
+    const rows = offered
+      .get(provider.id)!
+      .filter(matches)
+      .map((model) => ({
+        provider: provider.id,
+        providerName: provider.name,
+        model,
+      }));
     if (rows.length === 0) continue;
     groups.push({
       key: provider.id,

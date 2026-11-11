@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "preact/compat";
 import { api, fed } from "../api.ts";
-import type { PeerStatus, SessionInfo } from "../types.ts";
+import { describeError, useT } from "../i18n.ts";
 import { peerLabel } from "../peers.ts";
 import { tabKey } from "../tabs.ts";
-import { describeError, useT } from "../i18n.ts";
+import type { PeerStatus, SessionInfo } from "../types.ts";
 import { NEVER, useVisibleInterval } from "./useVisibleInterval.ts";
 
 /** How often the list is re-read while a surface showing it is visible.
@@ -51,9 +51,7 @@ export interface RecentSessionItem {
  * components/SessionPane). A tick probes every registered peer, so a list
  * nobody is looking at must not keep asking; coming back reads once.
  */
-export function useRecentSessions(
-  options: { enabled?: boolean } = {},
-): {
+export function useRecentSessions(options: { enabled?: boolean } = {}): {
   items: RecentSessionItem[];
   loading: boolean;
   error: string | undefined;
@@ -107,26 +105,28 @@ export function useRecentSessions(
       setItems((prev) => {
         const merged = new Map(prev.map((row) => [row.key, row]));
         for (const row of localItems) merged.set(row.key, row);
-        return [...merged.values()].sort((a, b) =>
-          b.info.updatedAt - a.info.updatedAt
+        return [...merged.values()].sort(
+          (a, b) => b.info.updatedAt - a.info.updatedAt,
         );
       });
       const remote = await Promise.all(
-        probe.filter((p) => p.ok).map((p) => {
-          // The row label of a peer's session: the registry name, its host
-          // when the name field is empty, the id as the last resort.
-          const peerName = peerLabel(p, p.id);
-          return fed.listSessions(p.id).then(
-            (list) => ({ peerId: p.id, peerName, list }),
-            () => ({ peerId: p.id, peerName, list: [] as SessionInfo[] }),
-          );
-        }),
+        probe
+          .filter((p) => p.ok)
+          .map((p) => {
+            // The row label of a peer's session: the registry name, its host
+            // when the name field is empty, the id as the last resort.
+            const peerName = peerLabel(p, p.id);
+            return fed.listSessions(p.id).then(
+              (list) => ({ peerId: p.id, peerName, list }),
+              () => ({ peerId: p.id, peerName, list: [] as SessionInfo[] }),
+            );
+          }),
       );
       if (disposed.current) return;
       const merged: RecentSessionItem[] = [
         ...localItems,
         ...remote.flatMap(({ peerId, peerName, list }) =>
-          rows(list, peerId, peerName)
+          rows(list, peerId, peerName),
         ),
       ].sort((a, b) => b.info.updatedAt - a.info.updatedAt);
       setItems(merged);
@@ -154,11 +154,9 @@ export function useRecentSessions(
   // one they left, and the answer is one request away. A list whose surface is
   // behind another tab is not polled at all.
   const enabled = options.enabled !== false;
-  useVisibleInterval(
-    () => void load(),
-    enabled ? RECENT_REFRESH_MS : NEVER,
-    { immediate: false },
-  );
+  useVisibleInterval(() => void load(), enabled ? RECENT_REFRESH_MS : NEVER, {
+    immediate: false,
+  });
 
   // A surface that comes back reads once, the same way a freshly mounted one
   // does: it may have been behind another tab for as long as the reader was

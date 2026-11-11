@@ -25,8 +25,8 @@ import {
   DEFAULT_MAX_DIMENSION,
   encodeCapture,
 } from "../packages/core/computer/image.ts";
-import type { ComputerAction } from "../packages/core/computer/types.ts";
 import type { RestoreTokenStore } from "../packages/core/computer/portal/types.ts";
+import type { ComputerAction } from "../packages/core/computer/types.ts";
 
 const IMAGE_FILE = "probe-computer.png";
 /** The screen-sharing permission (the portal's restore token) is kept here

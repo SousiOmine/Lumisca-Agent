@@ -10,11 +10,11 @@ import {
   type RoutineSchedule,
   scheduleProblem,
 } from "../shared/routine.ts";
-import { machineWatchFetch, parseWatchState, runWatch } from "../vm/watch.ts";
 import type { CommandRunner } from "../tools/command-backend.ts";
 import type { FileBackend } from "../tools/file-backend.ts";
 import { HostCommandRunner } from "../tools/host/command-runner.ts";
 import { HostFileBackend } from "../tools/host/files.ts";
+import { machineWatchFetch, parseWatchState, runWatch } from "../vm/watch.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 
 function watch(
@@ -35,13 +35,11 @@ Deno.test("watch: an http watch is accepted and read back", () => {
 });
 
 Deno.test("watch: every source shape is accepted", () => {
-  for (
-    const source of [
-      { kind: "http", url: "https://example.com", expect: { hash: true } },
-      { kind: "file", path: "out/report.md", compare: "hash" },
-      { kind: "command", command: "test -f done", expect: { exitCode: 0 } },
-    ] as const
-  ) {
+  for (const source of [
+    { kind: "http", url: "https://example.com", expect: { hash: true } },
+    { kind: "file", path: "out/report.md", compare: "hash" },
+    { kind: "command", command: "test -f done", expect: { exitCode: 0 } },
+  ] as const) {
     assertEquals(scheduleProblem(watch(source)), null);
   }
 });
@@ -49,18 +47,19 @@ Deno.test("watch: every source shape is accepted", () => {
 Deno.test("watch: a bad interval, url, compare or expect is refused", () => {
   // Each message names what to fix, because the model wrote the value.
   assert(
-    scheduleProblem(watch({ kind: "file", path: "a", compare: "mtime" }, 1))!
-      .includes(String(MIN_WATCH_MINUTES)),
+    scheduleProblem(
+      watch({ kind: "file", path: "a", compare: "mtime" }, 1),
+    )!.includes(String(MIN_WATCH_MINUTES)),
   );
   assert(
-    scheduleProblem(watch({ kind: "http", url: "ftp://x", expect: {} }))!
-      .includes("http"),
+    scheduleProblem(
+      watch({ kind: "http", url: "ftp://x", expect: {} }),
+    )!.includes("http"),
   );
   assert(
     scheduleProblem(
       watch({ kind: "file", path: "a", compare: "size" } as never),
-    )!
-      .includes("mtime"),
+    )!.includes("mtime"),
   );
   // An empty expect is a watch with no question: refused rather than stored,
   // because it would fire on nothing.
@@ -73,11 +72,13 @@ Deno.test("watch: a bad interval, url, compare or expect is refused", () => {
 Deno.test("watch: a field the checker does not read is refused", () => {
   // A rule the user wrote and the server ignored would be worse than an
   // error: the routine would look like it watched something it does not.
-  const problem = scheduleProblem(watch({
-    kind: "http",
-    url: "https://example.com",
-    expect: { status: 200, contains: "x" },
-  } as never));
+  const problem = scheduleProblem(
+    watch({
+      kind: "http",
+      url: "https://example.com",
+      expect: { status: 200, contains: "x" },
+    } as never),
+  );
   assert(problem !== null);
   assert(problem.includes("expect.contains"));
 });
@@ -150,9 +151,7 @@ Deno.test("runWatch: an http watch compares only what it names", async () => {
   let status = 200;
   let body = "one";
   const fake = (() =>
-    Promise.resolve(
-      new Response(body, { status }),
-    )) as unknown as typeof fetch;
+    Promise.resolve(new Response(body, { status }))) as unknown as typeof fetch;
   const source = {
     kind: "http",
     url: "https://example.com",
@@ -179,8 +178,8 @@ Deno.test("runWatch: an http watch compares only what it names", async () => {
 Deno.test("runWatch: an unreachable address is a problem, not a change", async () => {
   // A machine offline or a site down must not fire the routine: there was
   // nothing to compare.
-  const fake =
-    (() => Promise.reject(new Error("offline"))) as unknown as typeof fetch;
+  const fake = (() =>
+    Promise.reject(new Error("offline"))) as unknown as typeof fetch;
   const outcome = await runWatch(
     { kind: "http", url: "https://example.com", expect: { status: 200 } },
     { kind: "http", status: 200, hash: null, hasIncludes: false },

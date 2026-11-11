@@ -1,4 +1,6 @@
 import { assertEquals } from "@std/assert";
+import { fauxAssistantMessage, fauxText, fauxToolCall } from "./ai/faux.ts";
+import type { AgentMessage, ImageContent } from "./ai/types.ts";
 import {
   compactionUsageRatio,
   contextTokensOf,
@@ -20,8 +22,6 @@ import {
   serializeModelPreference,
   summarizeContextUsage,
 } from "./shared/mod.ts";
-import { fauxAssistantMessage, fauxText, fauxToolCall } from "./ai/faux.ts";
-import type { AgentMessage, ImageContent } from "./ai/types.ts";
 
 Deno.test("model preference keys are distinct settings keys", () => {
   assertEquals(FAST_MODEL_KEY, "model_fast");
@@ -85,10 +85,7 @@ Deno.test("summarizeContextUsage takes the latest turn and averages cache hits",
   assertEquals(summary.currentCacheRead, 300000);
   assertEquals(summary.totalTokens, 311200);
   assertEquals(summary.totalCacheRead, 309000);
-  assertEquals(
-    summary.averageCacheHitRate,
-    309000 / 311200,
-  );
+  assertEquals(summary.averageCacheHitRate, 309000 / 311200);
 });
 
 Deno.test("summarizeContextUsage ignores rows without usage", () => {
@@ -126,10 +123,7 @@ Deno.test("contextUsageRatio is undefined without current tokens or window", () 
   assertEquals(contextUsageRatio(summary, 1000), 0.1);
   assertEquals(contextUsageRatio(summary, undefined), undefined);
   assertEquals(contextUsageRatio(summary, 0), undefined);
-  assertEquals(
-    contextUsageRatio(summarizeContextUsage([]), 1000),
-    undefined,
-  );
+  assertEquals(contextUsageRatio(summarizeContextUsage([]), 1000), undefined);
   // A transcript past the window reports above 1; the meter clamps it, so
   // the function must not clamp on its own.
   assertEquals(
@@ -262,11 +256,13 @@ Deno.test("estimateMessageTokens prices each role as the model receives it", () 
 Deno.test("estimateMessageTokens: images are priced by a fixed visual budget", () => {
   const withImage: AgentMessage = {
     role: "user",
-    content: [{
-      type: "image",
-      data: "A".repeat(100_000),
-      mimeType: "image/png",
-    }],
+    content: [
+      {
+        type: "image",
+        data: "A".repeat(100_000),
+        mimeType: "image/png",
+      },
+    ],
     timestamp: 1,
   };
   const tokens = estimateMessageTokens(withImage);
@@ -331,8 +327,7 @@ Deno.test("estimateMessagesTokens and estimateToolTokens are additive", () => {
   ];
   assertEquals(
     estimateMessagesTokens(messages),
-    estimateMessageTokens(messages[0]!) +
-      estimateMessageTokens(messages[1]!),
+    estimateMessageTokens(messages[0]!) + estimateMessageTokens(messages[1]!),
   );
   const tool = { name: "bash", description: "Run a command", parameters: {} };
   assertEquals(estimateToolTokens(tool) > 0, true);
@@ -344,16 +339,14 @@ Deno.test("isLoopbackHost accepts every spelling of this machine", () => {
   for (const host of ["127.0.0.1", "localhost", "LOCALHOST", "::1", "[::1]"]) {
     assertEquals(isLoopbackHost(host), true, host);
   }
-  for (
-    const host of [
-      "0.0.0.0",
-      "::",
-      "100.64.0.5",
-      "example.com",
-      "[2001:db8::1]",
-      "",
-    ]
-  ) {
+  for (const host of [
+    "0.0.0.0",
+    "::",
+    "100.64.0.5",
+    "example.com",
+    "[2001:db8::1]",
+    "",
+  ]) {
     assertEquals(isLoopbackHost(host), false, host);
   }
 });
@@ -372,16 +365,14 @@ Deno.test("hostForUrl output is usable in a URL for every bind host", () => {
   // The server builds its own origin with this helper. A bare
   // concatenation produced `http://::1:8000`, which throws — the hub could
   // then not recognise its own origin and listed itself as a peer.
-  for (
-    const host of [
-      "0.0.0.0",
-      "::",
-      "::1",
-      "127.0.0.1",
-      "localhost",
-      "100.64.0.5",
-    ]
-  ) {
+  for (const host of [
+    "0.0.0.0",
+    "::",
+    "::1",
+    "127.0.0.1",
+    "localhost",
+    "100.64.0.5",
+  ]) {
     const origin = `http://${hostForUrl(host)}:8000`;
     assertEquals(new URL(origin).port, "8000", origin);
   }

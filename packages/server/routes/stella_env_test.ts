@@ -1,4 +1,5 @@
-import { stellaApiStub } from "./test-stubs.ts";
+import type { SessionInfo, StellaAgent } from "@lumisca/core";
+import { CoreError } from "@lumisca/core";
 /**
  * The two answers to the `vm_env` dialog: the value, and a refusal.
  *
@@ -9,11 +10,10 @@ import { stellaApiStub } from "./test-stubs.ts";
  * recorded by the route.
  */
 import { assertEquals } from "@std/assert";
-import { CoreError } from "@lumisca/core";
-import type { SessionInfo, StellaAgent } from "@lumisca/core";
-import { stellaRoutes } from "./stella.ts";
-import { jsonError } from "./util.ts";
 import type { StellaApi } from "./stella.ts";
+import { stellaRoutes } from "./stella.ts";
+import { stellaApiStub } from "./test-stubs.ts";
+import { jsonError } from "./util.ts";
 
 const AGENT: StellaAgent = {
   id: "a1",
@@ -49,8 +49,8 @@ function fakeCore(
   received: Received,
   options: { failWith?: CoreError } = {},
 ): StellaApi {
-  const agentOf = (id: string) => id === AGENT.id ? AGENT : undefined;
-  const sessionOf = (id: string) => id === AGENT.id ? SESSION : undefined;
+  const agentOf = (id: string) => (id === AGENT.id ? AGENT : undefined);
+  const sessionOf = (id: string) => (id === AGENT.id ? SESSION : undefined);
   return stellaApiStub({
     getStellaAgent: agentOf,
     findStellaSession: sessionOf,
@@ -99,11 +99,13 @@ Deno.test("stella env: the value reaches the core and is not echoed", async () =
   assertEquals(await response.json(), { ok: true });
   // The name is not part of the body: the core takes it from the pending
   // request, so a dialog can only fill the question it was opened for.
-  assertEquals(received.provided, [{
-    sessionId: "s1",
-    value: "sk-abc",
-    toolCallId: "t1",
-  }]);
+  assertEquals(received.provided, [
+    {
+      sessionId: "s1",
+      value: "sk-abc",
+      toolCallId: "t1",
+    },
+  ]);
 });
 
 Deno.test("stella env: a refusal lets the run continue", async () => {

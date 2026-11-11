@@ -1,4 +1,5 @@
 import { assert, assertEquals, assertThrows } from "@std/assert";
+import { SERVER_STARTUP_ENV_KEYS } from "../startup.ts";
 import {
   DOCUMENT_KEYS,
   documentForDisplay,
@@ -10,7 +11,6 @@ import {
   type ServiceValues,
   splitHosts,
 } from "./document.ts";
-import { SERVER_STARTUP_ENV_KEYS } from "../startup.ts";
 
 function values(patch: Partial<ServiceValues> = {}): ServiceValues {
   return {

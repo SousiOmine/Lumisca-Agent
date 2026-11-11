@@ -1,19 +1,17 @@
-import { fakeModel } from "../test-utils.ts";
-import { assert, assertEquals, assertRejects } from "@std/assert";
+import type { StreamFn } from "@lumisca/core";
 import {
   type AssistantMessageEventStream,
   fauxAssistantMessage,
   type StreamRequest,
 } from "@lumisca/core";
-import type { StreamFn } from "@lumisca/core";
+import { assert, assertEquals, assertRejects } from "@std/assert";
 import { RATE_LIMIT_BASE_DELAY_MS, RetryAbortError } from "../ai/rate-limit.ts";
 import { streamText } from "../ai/stream.ts";
+import { fakeModel } from "../test-utils.ts";
 
 /** A stream function whose call N yields the Nth outcome: {fail} emits an
  * error event with that message, otherwise a single text_delta("hi"). */
-function fakeStreamFn(
-  outcomes: Array<{ fail?: string }>,
-): StreamFn {
+function fakeStreamFn(outcomes: Array<{ fail?: string }>): StreamFn {
   let i = 0;
   return (_model, _context: StreamRequest) => {
     const out = outcomes[i++] ?? {};
@@ -99,14 +97,9 @@ Deno.test("streamText does not retry non-rate errors", async () => {
   };
   await assertRejects(
     () =>
-      streamText(
-        streamFn,
-        fakeModel(),
-        { messages: [] },
-        "label",
-        undefined,
-        { sleep: () => Promise.resolve() },
-      ),
+      streamText(streamFn, fakeModel(), { messages: [] }, "label", undefined, {
+        sleep: () => Promise.resolve(),
+      }),
     Error,
     "boom",
   );

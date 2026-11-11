@@ -70,7 +70,9 @@ export function detectSlash(
     // `/usr/local/bin` is one token named `usr`, never a command.
     let end = i + 1;
     while (
-      end < value.length && !SPACE.test(value[end]!) && value[end] !== "/"
+      end < value.length &&
+      !SPACE.test(value[end]!) &&
+      value[end] !== "/"
     ) {
       end++;
     }
@@ -93,9 +95,10 @@ function filterSlashCommands(
 ): SlashCommand[] {
   if (query === "") return commands;
   const q = query.toLowerCase();
-  return commands.filter((command) =>
-    command.id.toLowerCase().includes(q) ||
-    command.label.toLowerCase().includes(q)
+  return commands.filter(
+    (command) =>
+      command.id.toLowerCase().includes(q) ||
+      command.label.toLowerCase().includes(q),
   );
 }
 
@@ -107,9 +110,9 @@ function filterSlashItems(
 ): SlashCommandItem[] {
   if (query.trim() === "") return items;
   const q = query.trim().toLowerCase();
-  return items.filter((item) =>
-    item.id.toLowerCase().includes(q) ||
-    item.label.toLowerCase().includes(q)
+  return items.filter(
+    (item) =>
+      item.id.toLowerCase().includes(q) || item.label.toLowerCase().includes(q),
   );
 }
 
@@ -162,11 +165,12 @@ export function useSlashMenu(options: {
   /** Entries shown in the slash menu right now: query-filtered commands at
    * the first level, the subcommand list (filtered by the text after the
    * command when present) inside a submenu. */
-  const slashEntries: SlashCommandItem[] = slash !== null
-    ? slash.submenu !== null
-      ? filterSlashItems(slash.submenu.items ?? [], slash.rest)
-      : filterSlashCommands(commands, slash.query)
-    : [];
+  const slashEntries: SlashCommandItem[] =
+    slash !== null
+      ? slash.submenu !== null
+        ? filterSlashItems(slash.submenu.items ?? [], slash.rest)
+        : filterSlashCommands(commands, slash.query)
+      : [];
 
   const updateSlash = useCallback(
     (nextValue: string, caret: number): boolean => {
@@ -180,7 +184,8 @@ export function useSlashMenu(options: {
         // after the command (e.g. `/prompt test` filters the prompt list
         // by "test" instead of closing the submenu).
         if (
-          prev !== null && prev.submenu !== null &&
+          prev !== null &&
+          prev.submenu !== null &&
           prev.start === det.start &&
           prev.query.toLowerCase() === det.query.toLowerCase() &&
           prev.submenu.id.toLowerCase() === det.query.toLowerCase()
@@ -194,14 +199,18 @@ export function useSlashMenu(options: {
         // `/prompt ` immediately shows the saved prompts).
         const filtered = filterSlashCommands(commands, det.query);
         const first = filtered[0];
-        const exact = filtered.length === 1 && first !== undefined &&
+        const exact =
+          filtered.length === 1 &&
+          first !== undefined &&
           (first.items?.length ?? 0) > 0 &&
           first.id.toLowerCase() === det.query.toLowerCase();
         if (exact && first !== undefined) {
           const submenu: SlashCommand = first;
           if (
-            prev !== null && prev.submenu?.id === submenu.id &&
-            prev.start === det.start && prev.query === det.query &&
+            prev !== null &&
+            prev.submenu?.id === submenu.id &&
+            prev.start === det.start &&
+            prev.query === det.query &&
             prev.rest === det.rest
           ) {
             return prev;
@@ -217,8 +226,11 @@ export function useSlashMenu(options: {
         }
 
         if (
-          prev && prev.start === det.start && prev.end === det.end &&
-          prev.query === det.query && prev.rest === det.rest &&
+          prev &&
+          prev.start === det.start &&
+          prev.end === det.end &&
+          prev.query === det.query &&
+          prev.rest === det.rest &&
           prev.submenu === null
         ) {
           return prev;
@@ -251,7 +263,8 @@ export function useSlashMenu(options: {
       const entry = slashEntries[index];
       if (!current || !entry) return;
       if (
-        current.submenu === null && isSlashCommand(entry) &&
+        current.submenu === null &&
+        isSlashCommand(entry) &&
         (entry.items?.length ?? 0) > 0
       ) {
         setSlash({ ...current, submenu: entry, active: 0 });
@@ -282,8 +295,8 @@ export function useSlashMenu(options: {
         e.preventDefault();
         setSlash({
           ...slash,
-          active: (slash.active - 1 + slashEntries.length) %
-            slashEntries.length,
+          active:
+            (slash.active - 1 + slashEntries.length) % slashEntries.length,
         });
         return true;
       }

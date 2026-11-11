@@ -89,27 +89,24 @@ export function htmlToText(html: string): string {
 
 /** Turn entities back into characters. */
 export function decodeEntities(text: string): string {
-  return text.replace(
-    /&(#x?[0-9a-f]+|[a-z]+);/gi,
-    (match, entity: string) => {
-      if (entity.startsWith("#")) {
-        const hex = entity[1]?.toLowerCase() === "x";
-        const digits = hex ? entity.slice(2) : entity.slice(1);
-        const code = Number.parseInt(digits, hex ? 16 : 10);
-        if (!Number.isInteger(code) || code <= 0 || code > 0x10ffff) {
-          return match;
-        }
-
-        try {
-          return String.fromCodePoint(code);
-        } catch {
-          return match;
-        }
+  return text.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (match, entity: string) => {
+    if (entity.startsWith("#")) {
+      const hex = entity[1]?.toLowerCase() === "x";
+      const digits = hex ? entity.slice(2) : entity.slice(1);
+      const code = Number.parseInt(digits, hex ? 16 : 10);
+      if (!Number.isInteger(code) || code <= 0 || code > 0x10ffff) {
+        return match;
       }
 
-      return NAMED_ENTITIES[entity.toLowerCase()] ?? match;
-    },
-  );
+      try {
+        return String.fromCodePoint(code);
+      } catch {
+        return match;
+      }
+    }
+
+    return NAMED_ENTITIES[entity.toLowerCase()] ?? match;
+  });
 }
 
 /** Collapse inner whitespace, keep at most one blank line, trim. */

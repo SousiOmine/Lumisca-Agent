@@ -16,21 +16,22 @@ import {
   errorMessage,
 } from "@lumisca/core/shared";
 import { disposeServer, startServer } from "./app.ts";
-import { validateHostConfig } from "./security.ts";
 import { stellaContainerDir } from "./paths.ts";
+import { validateHostConfig } from "./security.ts";
+import { createShutdown } from "./shutdown.ts";
 import {
   consumeServerStartupEnvironment,
   DEFAULT_HOST,
   DEFAULT_PORT,
+  DESKTOP_ENV_KEY,
   defaultAssetsFile,
   describeListenError,
-  DESKTOP_ENV_KEY,
   isAddressInUseError,
   isDesktopManaged,
+  PORT_WAIT_ENV_KEY,
   parsePortWaitMs,
   parseServerPort,
   parseUpdateRestartMode,
-  PORT_WAIT_ENV_KEY,
   resolveAllowedHosts,
   resolveDbPath,
   resolveRepoRoot,
@@ -38,7 +39,6 @@ import {
   UPDATE_RESTART_ENV_KEY,
   updateSupport,
 } from "./startup.ts";
-import { createShutdown } from "./shutdown.ts";
 import { runServiceCommand } from "./systemd/mod.ts";
 import { UpdateService } from "./update/service.ts";
 import { SERVER_VERSION } from "./version.ts";
@@ -110,9 +110,7 @@ if (launcherCommand === "service") {
   try {
     Deno.exit(await runServiceCommand(Deno.args.slice(1)));
   } catch (error) {
-    console.error(
-      `lumisca-server service: ${errorMessage(error)}`,
-    );
+    console.error(`lumisca-server service: ${errorMessage(error)}`);
     Deno.exit(1);
   }
 }
@@ -249,8 +247,8 @@ export async function main(): Promise<void> {
   // wins; otherwise a packaged release uses the manifest staged next to its
   // own binary (scripts/build-server.ts), so it runs without configuration.
   // (`||` so a blank value counts as unset, like every other startup value.)
-  const assetsFile = startupEnv.LUMISCA_ASSETS_FILE ||
-    defaultAssetsFile(Deno.execPath());
+  const assetsFile =
+    startupEnv.LUMISCA_ASSETS_FILE || defaultAssetsFile(Deno.execPath());
 
   let core: LumiscaCore;
   // A previous run may have left a request to rewrite the database file (see
@@ -262,9 +260,9 @@ export async function main(): Promise<void> {
     core = LumiscaCore.open(dbPath, settingsPath);
   } catch (error) {
     console.error(
-      `Lumisca: データベースを開けませんでした (${dbPath}): ${
-        errorMessage(error)
-      }`,
+      `Lumisca: データベースを開けませんでした (${dbPath}): ${errorMessage(
+        error,
+      )}`,
     );
     Deno.exit(1);
   }
@@ -290,28 +288,28 @@ export async function main(): Promise<void> {
   // instead of reporting an updater whose whole purpose is disabled here.
   const update = support.enabled
     ? new UpdateService({
-      environment: {
-        installDir: dirname(Deno.execPath()),
-        execPath: Deno.execPath(),
-      },
-      settings: core,
-      // The successor must start exactly like this process did, so the launch
-      // configuration captured at startup is replayed for it.
-      startupEnv,
-      cwd: Deno.cwd(),
-      manifestUrl: startupEnv[UPDATE_MANIFEST_ENV_KEY] || undefined,
-      restartMode: parseUpdateRestartMode(startupEnv[UPDATE_RESTART_ENV_KEY]),
-      shutdown: async () => {
-        if (server !== undefined) {
-          // Stop accepting first (the successor binds the same port), then let
-          // the core close its children and its database before the successor
-          // opens the same database file.
-          disposeServer(server);
-          server.shutdown();
-        }
-        await core.close();
-      },
-    })
+        environment: {
+          installDir: dirname(Deno.execPath()),
+          execPath: Deno.execPath(),
+        },
+        settings: core,
+        // The successor must start exactly like this process did, so the launch
+        // configuration captured at startup is replayed for it.
+        startupEnv,
+        cwd: Deno.cwd(),
+        manifestUrl: startupEnv[UPDATE_MANIFEST_ENV_KEY] || undefined,
+        restartMode: parseUpdateRestartMode(startupEnv[UPDATE_RESTART_ENV_KEY]),
+        shutdown: async () => {
+          if (server !== undefined) {
+            // Stop accepting first (the successor binds the same port), then let
+            // the core close its children and its database before the successor
+            // opens the same database file.
+            disposeServer(server);
+            server.shutdown();
+          }
+          await core.close();
+        },
+      })
     : undefined;
 
   // A taken port (usually a leftover `deno task dev:server`) must fail with
@@ -334,15 +332,13 @@ export async function main(): Promise<void> {
       break;
     } catch (error) {
       listenError = error;
-      if (
-        !isAddressInUseError(error) || Date.now() >= listenDeadline
-      ) {
+      if (!isAddressInUseError(error) || Date.now() >= listenDeadline) {
         break;
       }
       // The previous instance is still on the way out; wait for it instead of
       // starting on another port (the page's URL must stay stable).
       await new Promise((resolve) =>
-        setTimeout(resolve, PORT_RETRY_INTERVAL_MS)
+        setTimeout(resolve, PORT_RETRY_INTERVAL_MS),
       );
     }
   }

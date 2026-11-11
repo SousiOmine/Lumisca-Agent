@@ -5,17 +5,17 @@ import {
   assertRejects,
   assertStringIncludes,
 } from "@std/assert";
-import { MAX_VISUAL_SVG_BYTES, parseVisualRef } from "../shared/mod.ts";
-import { Sandbox } from "../workspace/sandbox.ts";
 import { SessionVisualStore } from "../session/visuals.ts";
+import { MAX_VISUAL_SVG_BYTES, parseVisualRef } from "../shared/mod.ts";
 import {
-  makeRealTempDir,
   MINI_PNG,
+  makeRealTempDir,
   removeDirRetry,
   toolText,
 } from "../test-utils.ts";
-import { createVisualTool } from "./visual.ts";
+import { Sandbox } from "../workspace/sandbox.ts";
 import { HostFileBackend } from "./host/files.ts";
+import { createVisualTool } from "./visual.ts";
 
 interface Fixture {
   /** Workspace root (also the sandbox root). */
@@ -184,7 +184,8 @@ Deno.test("visual refuses an oversized image", async () => {
 });
 
 Deno.test("visual refuses an SVG that carries a script", async () => {
-  const source = '<svg xmlns="http://www.w3.org/2000/svg">' +
+  const source =
+    '<svg xmlns="http://www.w3.org/2000/svg">' +
     "<script>alert(1)</script></svg>";
   await withFixture(
     "diagram.svg",

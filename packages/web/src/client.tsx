@@ -1,6 +1,6 @@
+import { DEFAULT_LOCALE } from "@lumisca/core/shared";
 import { Component } from "preact/compat";
 import { createRoot } from "preact/compat/client";
-import { DEFAULT_LOCALE } from "@lumisca/core/shared";
 import { App } from "./App.tsx";
 import { installFileDropGuard } from "./drop-guard.ts";
 import { initLocale, t } from "./i18n.ts";

@@ -1,9 +1,5 @@
 import { assertEquals, assertThrows } from "@std/assert";
 import {
-  FIRST_UPDATE_CHECK_DELAY_MS,
-  UPDATE_CHECK_INTERVAL_MS,
-} from "./service.ts";
-import {
   archiveAssetName,
   compareVersions,
   defaultManifestUrl,
@@ -12,10 +8,14 @@ import {
   parseReleaseManifest,
   parseVersion,
   RELEASE_TARGETS,
-  releaseAssetUrl,
   ReleaseManifestError,
+  releaseAssetUrl,
   releaseTargetFor,
 } from "./release.ts";
+import {
+  FIRST_UPDATE_CHECK_DELAY_MS,
+  UPDATE_CHECK_INTERVAL_MS,
+} from "./service.ts";
 
 const TARGET = "x86_64-pc-windows-msvc";
 
@@ -88,10 +88,7 @@ Deno.test("parseReleaseManifest rejects what cannot be installed", () => {
     ["fractional size", manifest({ size: 1.5 })],
     ["no signature", manifest({ signature: "" })],
   ];
-  assertThrows(
-    () => parseReleaseManifest(null, TARGET),
-    ReleaseManifestError,
-  );
+  assertThrows(() => parseReleaseManifest(null, TARGET), ReleaseManifestError);
   for (const [label, value] of cases.slice(1)) {
     assertThrows(
       () => parseReleaseManifest(value, TARGET),
@@ -131,10 +128,7 @@ Deno.test("the check cadence matches the desktop updater", async () => {
   // should not see them poll on different clocks. The Rust constant cannot be
   // imported, so its source is read.
   const rust = await Deno.readTextFile(
-    new URL(
-      "../../desktop/src-tauri/src/update.rs",
-      import.meta.url,
-    ),
+    new URL("../../desktop/src-tauri/src/update.rs", import.meta.url),
   );
   const seconds = (name: string): number | undefined => {
     const raw = rust.match(
@@ -143,10 +137,9 @@ Deno.test("the check cadence matches the desktop updater", async () => {
       ),
     )?.[1];
     if (raw === undefined) return undefined;
-    return raw.split("*").reduce(
-      (product, part) => product * Number(part.trim()),
-      1,
-    );
+    return raw
+      .split("*")
+      .reduce((product, part) => product * Number(part.trim()), 1);
   };
   assertEquals(
     seconds("UPDATE_CHECK_INTERVAL")! * 1000,

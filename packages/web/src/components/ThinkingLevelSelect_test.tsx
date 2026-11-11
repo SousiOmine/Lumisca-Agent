@@ -11,10 +11,7 @@ import { ThinkingLevelSelect } from "./ThinkingLevelSelect.tsx";
  * which is the label these assertions read.
  */
 
-function draw(
-  value: ThinkingLevel,
-  levels: ThinkingLevel[],
-): string {
+function draw(value: ThinkingLevel, levels: ThinkingLevel[]): string {
   return renderToString(
     createElement(ThinkingLevelSelect, {
       value,

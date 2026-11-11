@@ -1,8 +1,9 @@
 import { inspect } from "node:util";
 import { type Context, createContext, runInContext } from "node:vm";
-import { TOOL_EVAL, withTimeoutError } from "../shared/mod.ts";
-import type { CommandSafety } from "../safety/command-safety.ts";
 import { errorMessage } from "../errors.ts";
+import type { CommandSafety } from "../safety/command-safety.ts";
+import { TOOL_EVAL, withTimeoutError } from "../shared/mod.ts";
+import { safetyBlockResult } from "./safety.ts";
 import {
   boolean,
   integer,
@@ -13,7 +14,6 @@ import {
   type ToolResult,
 } from "./schema.ts";
 import { MAX_TOOL_OUTPUT, truncate, truncatedNote } from "./truncate.ts";
-import { safetyBlockResult } from "./safety.ts";
 
 const DEFAULT_TIMEOUT_MS = 5000;
 /** Longest a snippet may run. The sandbox shares the server process, so a
@@ -47,9 +47,12 @@ async function transpileToJs(code: string): Promise<string> {
 /** True when `value` is a promise-like completion that the host must await
  * before the call can report its result. */
 function isThenable(value: unknown): value is PromiseLike<unknown> {
-  return value !== null && value !== undefined &&
+  return (
+    value !== null &&
+    value !== undefined &&
     (typeof value === "object" || typeof value === "function") &&
-    typeof (value as { then?: unknown }).then === "function";
+    typeof (value as { then?: unknown }).then === "function"
+  );
 }
 
 /** V8 reports top-level await in a script in different ways depending on
@@ -118,10 +121,12 @@ class EvalSession {
             console.error(`[eval timer] ${errorMessage(error)}`);
           }
         };
-        const id: unknown = repeat ? setInterval(run, ms) : setTimeout(() => {
-          this.timers.delete(id);
-          run();
-        }, ms);
+        const id: unknown = repeat
+          ? setInterval(run, ms)
+          : setTimeout(() => {
+              this.timers.delete(id);
+              run();
+            }, ms);
         this.timers.add(id);
         return id as number;
       };
@@ -216,11 +221,9 @@ class EvalSession {
       // async interpretation); runtime errors and timeouts there are
       // reported as-is. The wrapper's promise IS the snippet: awaiting it
       // is what makes the timeout (and a failing await) observable at all.
-      value = runInContext(
-        `(async () => {\n${code}\n})()`,
-        this.context,
-        { timeout: timeoutMs },
-      );
+      value = runInContext(`(async () => {\n${code}\n})()`, this.context, {
+        timeout: timeoutMs,
+      });
     }
     if (isThenable(value)) {
       value = await withTimeoutError(
@@ -229,7 +232,8 @@ class EvalSession {
         () => new Error(`Script execution timed out after ${timeoutMs}ms`),
       );
     }
-    const output = this.output.join("\n") +
+    const output =
+      this.output.join("\n") +
       (this.outputTruncated ? truncatedNote("console output") : "");
     return { value, output };
   }
@@ -243,13 +247,13 @@ function composeResult(output: string, value: unknown): string {
   const parts: string[] = [];
   if (output.length > 0) parts.push(`[output]\n${output}`);
   if (value !== undefined) {
-    parts.push(`[result]\n${
-      inspect(value, {
+    parts.push(
+      `[result]\n${inspect(value, {
         depth: RESULT_DEPTH,
         maxArrayLength: RESULT_MAX_ARRAY,
         maxStringLength: RESULT_MAX_STRING,
-      })
-    }`);
+      })}`,
+    );
   }
   if (parts.length === 0) return "(no output)";
   const joined = parts.join("\n\n");
@@ -259,13 +263,17 @@ function composeResult(output: string, value: unknown): string {
 
 const evalSchema = object({
   code: string("JavaScript/TypeScript code to evaluate"),
-  timeout: optional(integer(
-    "Timeout in milliseconds (default 5000)",
-    { min: 1, max: MAX_TIMEOUT_MS },
-  )),
-  reset: optional(boolean(
-    "Clear the REPL state before evaluating (default: false — variables persist between calls)",
-  )),
+  timeout: optional(
+    integer("Timeout in milliseconds (default 5000)", {
+      min: 1,
+      max: MAX_TIMEOUT_MS,
+    }),
+  ),
+  reset: optional(
+    boolean(
+      "Clear the REPL state before evaluating (default: false — variables persist between calls)",
+    ),
+  ),
 });
 
 /** Options for the eval tool. `safety` (when present) makes the fast model
@@ -329,10 +337,12 @@ export function createEvalTool(
           // User-code failures (syntax, runtime, timeout) are results, not
           // tool failures; the session state stays for the next call.
           return {
-            content: [{
-              type: "text",
-              text: `[error]\n${errorMessage(error)}`,
-            }],
+            content: [
+              {
+                type: "text",
+                text: `[error]\n${errorMessage(error)}`,
+              },
+            ],
             details: { reset: params.reset === true, error: true },
           };
         }

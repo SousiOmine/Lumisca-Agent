@@ -1,17 +1,17 @@
-import { assertEquals } from "@std/assert";
+import type { StreamFn } from "@lumisca/core";
 import {
   type Api,
   type AssistantMessage,
   createAssistantMessageEventStream,
   type Model,
 } from "@lumisca/core";
-import type { StreamFn } from "@lumisca/core";
+import { assertEquals } from "@std/assert";
+import { createInMemorySettingsRepo } from "../settings/repo.ts";
 import type { CommandApproval } from "../shared/mod.ts";
 import {
   COMMAND_SAFETY_APPROVALS_KEY,
   COMMAND_SAFETY_ENABLED_KEY,
 } from "../shared/mod.ts";
-import { createInMemorySettingsRepo } from "../settings/repo.ts";
 import {
   CommandSafety,
   parseVerdict,
@@ -31,11 +31,13 @@ const CWD_B = "/elsewhere/B";
 /** Build a CommandSafety with an in-memory settings store and a fake
  * streamFn. `reply` is the streamed text (null → the call throws);
  * `fastModel` controls whether a judge model is configured. */
-function makeSafety(options: {
-  reply?: string | null;
-  fastModel?: boolean;
-  enabled?: boolean;
-} = {}) {
+function makeSafety(
+  options: {
+    reply?: string | null;
+    fastModel?: boolean;
+    enabled?: boolean;
+  } = {},
+) {
   const settings = createInMemorySettingsRepo();
   if (options.enabled !== false) {
     settings.set(COMMAND_SAFETY_ENABLED_KEY, "1");
@@ -68,7 +70,7 @@ function approvals(
   settings: ReturnType<typeof createInMemorySettingsRepo>,
 ): CommandApproval[] {
   const raw = settings.get(COMMAND_SAFETY_APPROVALS_KEY);
-  return raw === undefined ? [] : JSON.parse(raw) as CommandApproval[];
+  return raw === undefined ? [] : (JSON.parse(raw) as CommandApproval[]);
 }
 
 Deno.test("parseVerdict extracts plain JSON", () => {
@@ -208,8 +210,7 @@ Deno.test("very long commands are not recorded as approvals", async () => {
 
 Deno.test("secrets in safe commands are not persisted in plaintext", async () => {
   const { safety, settings, streamCalls } = makeSafety();
-  const cmd =
-    `curl -H "Authorization: Bearer sk-secret123" https://api.example/upload`;
+  const cmd = `curl -H "Authorization: Bearer sk-secret123" https://api.example/upload`;
   const verdict = await safety.check("bash", cmd, CWD_A);
   assertEquals(verdict.ok, true);
   assertEquals(streamCalls(), 1);

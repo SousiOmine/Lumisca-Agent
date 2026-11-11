@@ -162,13 +162,14 @@ export class SubagentRegistry {
           );
         },
       };
-      const timer = timeoutSec > 0
-        ? setTimeout(() => {
-          if (settled) return;
-          cleanup();
-          resolve(this.infoOf(sub));
-        }, timeoutSec * 1000)
-        : undefined;
+      const timer =
+        timeoutSec > 0
+          ? setTimeout(() => {
+              if (settled) return;
+              cleanup();
+              resolve(this.infoOf(sub));
+            }, timeoutSec * 1000)
+          : undefined;
       signal?.addEventListener("abort", onAbort);
       if (signal?.aborted) {
         waiter.cancel();

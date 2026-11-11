@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "preact/compat";
-import { connectEvents, sessionApi, type SessionSnapshot } from "../api.ts";
-import { describeError, useT } from "../i18n.ts";
+import { connectEvents, type SessionSnapshot, sessionApi } from "../api.ts";
 import {
   applyEvent,
   applySnapshot,
@@ -8,11 +7,12 @@ import {
   revisionGap,
   type SnapshotParts,
 } from "../events.ts";
-import { createStreamController } from "./useStreamController.ts";
-import { startRevisionProbe } from "./useRevisionProbe.ts";
-import { keysForPeer, tabKey } from "../tabs.ts";
+import { describeError, useT } from "../i18n.ts";
 import { maybeNotifyAgentEnd, maybeNotifyQuestion } from "../notify.ts";
+import { keysForPeer, tabKey } from "../tabs.ts";
 import type { ClientEvent, SessionView, TodoPhase } from "../types.ts";
+import { startRevisionProbe } from "./useRevisionProbe.ts";
+import { createStreamController } from "./useStreamController.ts";
 
 /** Period between opportunistic state re-syncs while the WebSocket is
  * disconnected (see syncState). While the socket is up the events are the
@@ -126,88 +126,96 @@ export function useSessionEvents(
    * state, which is what tells a view that (re)connected mid-run that the
    * run is still going — `agent_start` is never replayed (see
    * applyRunState). */
-  const syncState = useCallback(async (keys?: string[]) => {
-    const ids = keys ?? [...viewsRef.current.keys()];
-    // The live state as it stood when the fetch started. An event that
-    // changes a piece while the snapshot is in flight is newer than the
-    // snapshot, so that piece must not be applied on top (a run that just
-    // ended must not be resurrected by a snapshot read a moment earlier,
-    // and a question that just arrived must not be dropped by one). A tab
-    // that closed since the call has no entry: its snapshot is applied
-    // wholesale (and the view is gone anyway).
-    const stateBefore = new Map<string, {
-      started: number | undefined;
-      ended: number | undefined;
-      questions: SessionView["pendingQuestions"];
-      error: string | undefined;
-      name: string;
-    }>();
-    for (const id of ids) {
-      const v = viewsRef.current.get(id);
-      if (v === undefined) continue;
-      stateBefore.set(id, {
-        started: v.agentStartedAt,
-        ended: v.agentEndedAt,
-        questions: v.pendingQuestions,
-        error: v.error,
-        name: v.info.name,
-      });
-    }
-    const snapshots = new Map<string, SessionSnapshot>();
-    const todos = new Map<string, TodoPhase[]>();
-    const panels = new Map<string, SnapshotParts>();
-    await Promise.all(ids.map(async (id) => {
-      // Fetch independently: one failing (e.g. the session was deleted)
-      // must not drop the other.
-      try {
-        snapshots.set(id, await sessionApi(id).getMessages());
-      } catch {
-        // Server not reachable yet; keep the current transcript.
-      }
-      try {
-        const { todos: plan } = await sessionApi(id).getTodo();
-        todos.set(id, plan);
-      } catch {
-        // Server not reachable yet; keep the current plan.
-      }
-      const entry = await fetchPanels(id);
-      if (entry !== undefined) panels.set(id, entry);
-    }));
-    // Seed the revision marker of every session whose snapshot arrived: a
-    // later gap (or probe) can then tell whether this view has seen
-    // everything.
-    for (const [id, snapshot] of snapshots) {
-      seedRevision(id, snapshot.rev);
-    }
-    if (snapshots.size === 0 && todos.size === 0 && panels.size === 0) {
-      return;
-    }
-    setViews((prev) => {
-      // Nothing changed keeps the map's identity (so App does not re-render
-      // on a sync that learned nothing new).
-      let next: Map<string, SessionView> | null = null;
+  const syncState = useCallback(
+    async (keys?: string[]) => {
+      const ids = keys ?? [...viewsRef.current.keys()];
+      // The live state as it stood when the fetch started. An event that
+      // changes a piece while the snapshot is in flight is newer than the
+      // snapshot, so that piece must not be applied on top (a run that just
+      // ended must not be resurrected by a snapshot read a moment earlier,
+      // and a question that just arrived must not be dropped by one). A tab
+      // that closed since the call has no entry: its snapshot is applied
+      // wholesale (and the view is gone anyway).
+      const stateBefore = new Map<
+        string,
+        {
+          started: number | undefined;
+          ended: number | undefined;
+          questions: SessionView["pendingQuestions"];
+          error: string | undefined;
+          name: string;
+        }
+      >();
       for (const id of ids) {
-        // The rules (live state wins over the snapshot, panels merge or
-        // replace, nothing changed keeps the view's identity) live in
-        // events.applySnapshot, where they are unit-tested.
-        const v = (next ?? prev).get(id);
+        const v = viewsRef.current.get(id);
         if (v === undefined) continue;
-        const nextView = applySnapshot(
-          v,
-          {
-            ...panels.get(id),
-            snapshot: snapshots.get(id),
-            todos: todos.get(id),
-          },
-          stateBefore.get(id),
-        );
-        if (nextView === v) continue;
-        next ??= new Map(prev);
-        next.set(id, nextView);
+        stateBefore.set(id, {
+          started: v.agentStartedAt,
+          ended: v.agentEndedAt,
+          questions: v.pendingQuestions,
+          error: v.error,
+          name: v.info.name,
+        });
       }
-      return next ?? prev;
-    });
-  }, [seedRevision]);
+      const snapshots = new Map<string, SessionSnapshot>();
+      const todos = new Map<string, TodoPhase[]>();
+      const panels = new Map<string, SnapshotParts>();
+      await Promise.all(
+        ids.map(async (id) => {
+          // Fetch independently: one failing (e.g. the session was deleted)
+          // must not drop the other.
+          try {
+            snapshots.set(id, await sessionApi(id).getMessages());
+          } catch {
+            // Server not reachable yet; keep the current transcript.
+          }
+          try {
+            const { todos: plan } = await sessionApi(id).getTodo();
+            todos.set(id, plan);
+          } catch {
+            // Server not reachable yet; keep the current plan.
+          }
+          const entry = await fetchPanels(id);
+          if (entry !== undefined) panels.set(id, entry);
+        }),
+      );
+      // Seed the revision marker of every session whose snapshot arrived: a
+      // later gap (or probe) can then tell whether this view has seen
+      // everything.
+      for (const [id, snapshot] of snapshots) {
+        seedRevision(id, snapshot.rev);
+      }
+      if (snapshots.size === 0 && todos.size === 0 && panels.size === 0) {
+        return;
+      }
+      setViews((prev) => {
+        // Nothing changed keeps the map's identity (so App does not re-render
+        // on a sync that learned nothing new).
+        let next: Map<string, SessionView> | null = null;
+        for (const id of ids) {
+          // The rules (live state wins over the snapshot, panels merge or
+          // replace, nothing changed keeps the view's identity) live in
+          // events.applySnapshot, where they are unit-tested.
+          const v = (next ?? prev).get(id);
+          if (v === undefined) continue;
+          const nextView = applySnapshot(
+            v,
+            {
+              ...panels.get(id),
+              snapshot: snapshots.get(id),
+              todos: todos.get(id),
+            },
+            stateBefore.get(id),
+          );
+          if (nextView === v) continue;
+          next ??= new Map(prev);
+          next.set(id, nextView);
+        }
+        return next ?? prev;
+      });
+    },
+    [seedRevision],
+  );
 
   /** Re-read one open tab's panel snapshots (sub-agent tasks, background
    * commands) and merge them in. Asked for when a tab is opened on a
@@ -218,19 +226,22 @@ export function useSessionEvents(
    * since before the reopen would stay invisible until the next resync.
    * Panels only, so the live state a run may have changed meanwhile is never
    * overwritten (see events.applySnapshot). */
-  const resyncPanels = useCallback(async (key: string) => {
-    const panels = await fetchPanels(key);
-    if (panels === undefined) return;
-    setViews((prev) => {
-      const v = prev.get(key);
-      if (v === undefined) return prev;
-      const nextView = applySnapshot(v, panels, undefined);
-      if (nextView === v) return prev;
-      const next = new Map(prev);
-      next.set(key, nextView);
-      return next;
-    });
-  }, [setViews]);
+  const resyncPanels = useCallback(
+    async (key: string) => {
+      const panels = await fetchPanels(key);
+      if (panels === undefined) return;
+      setViews((prev) => {
+        const v = prev.get(key);
+        if (v === undefined) return prev;
+        const nextView = applySnapshot(v, panels, undefined);
+        if (nextView === v) return prev;
+        const next = new Map(prev);
+        next.set(key, nextView);
+        return next;
+      });
+    },
+    [setViews],
+  );
 
   /** Read the history before the window a tab has loaded (the reader
    * reached the top of the transcript) and put it in front.
@@ -260,46 +271,49 @@ export function useSessionEvents(
       return next;
     });
   }, []);
-  const loadOlder = useCallback((key: string): boolean => {
-    const view = viewsRef.current.get(key);
-    if (view === undefined || view.older === null) return false;
-    if (loadingOlder.current.has(key)) return false;
-    loadingOlder.current.add(key);
-    markLoading(key, true);
-    void (async () => {
-      try {
-        const page = await sessionApi(key).getMessages({
-          older: view.older ?? undefined,
-        });
-        setViews((prev) => {
-          const current = prev.get(key);
-          if (current === undefined || current.older !== view.older) {
-            // The tab was replaced (or synced to a newer cursor) while the
-            // page was in flight: placing it would splice two histories.
-            return prev;
-          }
-          const history = prependOlderWindow(
-            current,
-            page.messages,
-            page.older,
-          );
-          if (history === current) return prev;
-          const next = new Map(prev);
-          next.set(key, { ...current, ...history });
-          return next;
-        });
-      } catch {
-        // A conflict (the cursor's message is gone) or a dropped connection:
-        // re-read the newest window, which leaves the tab with a cursor that
-        // exists. The reader's position is kept by the scroll hook.
-        await syncState([key]);
-      } finally {
-        loadingOlder.current.delete(key);
-        markLoading(key, false);
-      }
-    })();
-    return true;
-  }, [markLoading, setViews, syncState]);
+  const loadOlder = useCallback(
+    (key: string): boolean => {
+      const view = viewsRef.current.get(key);
+      if (view === undefined || view.older === null) return false;
+      if (loadingOlder.current.has(key)) return false;
+      loadingOlder.current.add(key);
+      markLoading(key, true);
+      void (async () => {
+        try {
+          const page = await sessionApi(key).getMessages({
+            older: view.older ?? undefined,
+          });
+          setViews((prev) => {
+            const current = prev.get(key);
+            if (current === undefined || current.older !== view.older) {
+              // The tab was replaced (or synced to a newer cursor) while the
+              // page was in flight: placing it would splice two histories.
+              return prev;
+            }
+            const history = prependOlderWindow(
+              current,
+              page.messages,
+              page.older,
+            );
+            if (history === current) return prev;
+            const next = new Map(prev);
+            next.set(key, { ...current, ...history });
+            return next;
+          });
+        } catch {
+          // A conflict (the cursor's message is gone) or a dropped connection:
+          // re-read the newest window, which leaves the tab with a cursor that
+          // exists. The reader's position is kept by the scroll hook.
+          await syncState([key]);
+        } finally {
+          loadingOlder.current.delete(key);
+          markLoading(key, false);
+        }
+      })();
+      return true;
+    },
+    [markLoading, setViews, syncState],
+  );
 
   /** Text deltas of the frames received since the last animation frame, per
    * tab key. The server already batches one run's tokens into one frame per
@@ -442,8 +456,8 @@ export function useSessionEvents(
         // A notification for a session with no open tab must still name it:
         // the title then comes from the server, and only if the toast is
         // actually shown (see notify.SessionName).
-        const name: string | (() => Promise<string>) = view?.info.name ??
-          (() => detachedSessionName(key));
+        const name: string | (() => Promise<string>) =
+          view?.info.name ?? (() => detachedSessionName(key));
         if (event.type === "agent_end") {
           // A duplicate delivery (same run's end seen twice) must not
           // notify twice: the first end stamps agentEndedAt, and only a
@@ -457,8 +471,8 @@ export function useSessionEvents(
           // Same dedup contract as the reducer's pendingQuestions: a
           // re-delivered question (same tool call) notifies once.
           if (
-            !view?.pendingQuestions.some((q) =>
-              q.toolCallId === event.toolCallId
+            !view?.pendingQuestions.some(
+              (q) => q.toolCallId === event.toolCallId,
             )
           ) {
             void maybeNotifyQuestion(name, event.questions);
@@ -483,16 +497,19 @@ export function useSessionEvents(
    * described in the language the view is read in NOW: `view.error` is a
    * string, so the translation happens here, where the failure is still an
    * object that knows what kind of failure it was (see describeError). */
-  const setViewError = useCallback((key: string, error: unknown) => {
-    const text = describeError(error, t);
-    setViews((prev) => {
-      const current = prev.get(key);
-      if (!current) return prev;
-      const next = new Map(prev);
-      next.set(key, { ...current, error: text });
-      return next;
-    });
-  }, [t]);
+  const setViewError = useCallback(
+    (key: string, error: unknown) => {
+      const text = describeError(error, t);
+      setViews((prev) => {
+        const current = prev.get(key);
+        if (!current) return prev;
+        const next = new Map(prev);
+        next.set(key, { ...current, error: text });
+        return next;
+      });
+    },
+    [t],
+  );
 
   useEffect(() => {
     let disposed = false;

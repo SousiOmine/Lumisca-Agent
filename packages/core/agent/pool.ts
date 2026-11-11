@@ -1,15 +1,15 @@
 import type { AgentMessage } from "../ai/types.ts";
-import { CoreError } from "../errors.ts";
-import type { ThinkingLevel, TodoPhase } from "../shared/mod.ts";
 import type { SessionInfo } from "../domain/session.ts";
 import type { Workspace } from "../domain/workspace.ts";
-import type { BackgroundCommandInfo } from "../tools/background.ts";
-import type { PendingQuestion } from "../tools/ask.ts";
-import type { TaskInfo } from "../shared/mod.ts";
+import { CoreError } from "../errors.ts";
 import { errorMessage } from "../shared/misc.ts";
-import type { SessionAgent } from "./session-agent.ts";
-import { AgentFactory } from "./factory.ts";
+import type { TaskInfo, ThinkingLevel, TodoPhase } from "../shared/mod.ts";
+import type { PendingQuestion } from "../tools/ask.ts";
+import type { BackgroundCommandInfo } from "../tools/background.ts";
 import type { SessionPoolDeps, SessionResources } from "./deps.ts";
+import { AgentFactory } from "./factory.ts";
+import type { SessionAgent } from "./session-agent.ts";
+
 export type { SessionPoolDeps, SessionResources } from "./deps.ts";
 
 /**
@@ -232,9 +232,9 @@ export class SessionPool {
         resources,
       );
     } catch (error) {
-      const message = `Could not apply the change to this session: ${
-        errorMessage(error)
-      }`;
+      const message = `Could not apply the change to this session: ${errorMessage(
+        error,
+      )}`;
       resources.lastError = message;
       this.deps.emit({ type: "session_error", sessionId: session.id, message });
     }

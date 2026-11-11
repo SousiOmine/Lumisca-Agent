@@ -22,12 +22,10 @@
  * PROMPTS the modes send are uniformly English on purpose (see
  * core/modes/mod.ts). */
 
-import type { ReactNode } from "preact/compat";
-import { buildSkillPrompt } from "@lumisca/core/skills/slash";
-import { AGENT_MODES, findAgentMode } from "@lumisca/core/modes";
 import type { ModePrompt, SavedPrompt } from "@lumisca/core";
+import { AGENT_MODES, findAgentMode } from "@lumisca/core/modes";
 import type { Translator } from "@lumisca/core/shared";
-import type { SkillInfo } from "./types.ts";
+import { buildSkillPrompt } from "@lumisca/core/skills/slash";
 import {
   IconArrowsMinimize,
   IconCode,
@@ -38,6 +36,8 @@ import {
   IconMessage,
   IconSparkles,
 } from "@tabler/icons-preact";
+import type { ReactNode } from "preact/compat";
+import type { SkillInfo } from "./types.ts";
 
 /** One selectable entry of the slash-command menu: a command (first level)
  * or one of its subcommands (second level). */
@@ -86,9 +86,10 @@ export interface SlashCommand extends SlashCommandItem {
   takesText?: boolean;
 }
 
-type Icon = (
-  props: { size?: string | number; className?: string },
-) => ReactNode;
+type Icon = (props: {
+  size?: string | number;
+  className?: string;
+}) => ReactNode;
 
 /** Icons of known modes and their options, keyed by id. */
 const MODE_ICONS: Record<string, Icon> = {
@@ -132,14 +133,15 @@ function modeCommands(t: Translator): SlashCommand[] {
     description: t(mode.description),
     icon: MODE_ICONS[mode.id] ?? FALLBACK_ICON,
     kind: mode.buildPromptForText === undefined ? "run" : "complete",
-    items: mode.options.length > 0
-      ? mode.options.map((option) => ({
-        id: option.id,
-        label: t(option.label),
-        description: t(option.description),
-        icon: MODE_ICONS[option.id] ?? FALLBACK_ICON,
-      }))
-      : undefined,
+    items:
+      mode.options.length > 0
+        ? mode.options.map((option) => ({
+            id: option.id,
+            label: t(option.label),
+            description: t(option.description),
+            icon: MODE_ICONS[option.id] ?? FALLBACK_ICON,
+          }))
+        : undefined,
   }));
 }
 
@@ -200,18 +202,20 @@ export function skillMenu(
   t: Translator,
 ): SlashCommand[] {
   if (skills.length === 0) return [];
-  return [{
-    id: SKILL_COMMAND_ID,
-    label: t("chat.slash.skill.label"),
-    description: t("chat.slash.skill.description"),
-    icon: IconSparkles,
-    kind: "complete",
-    items: skills.map((skill) => ({
-      id: skill.name,
-      label: skill.name,
-      description: menuDescription(skill.description),
-    })),
-  }];
+  return [
+    {
+      id: SKILL_COMMAND_ID,
+      label: t("chat.slash.skill.label"),
+      description: t("chat.slash.skill.description"),
+      icon: IconSparkles,
+      kind: "complete",
+      items: skills.map((skill) => ({
+        id: skill.name,
+        label: skill.name,
+        description: menuDescription(skill.description),
+      })),
+    },
+  ];
 }
 
 /** Build the slash-commands menu including the /skill and /prompt submenus.
@@ -243,11 +247,7 @@ export function buildSlashCommands(
     ];
   }
   // Workspace mode: agent modes + skills + client-side actions + prompts.
-  const commands = [
-    ...modeCommands(t),
-    ...skillCommands,
-    ...actionCommands(t),
-  ];
+  const commands = [...modeCommands(t), ...skillCommands, ...actionCommands(t)];
   commands.push(...promptItemsMenu(promptItems, t));
   return commands;
 }
@@ -258,14 +258,16 @@ function promptItemsMenu(
   t: Translator,
 ): SlashCommand[] {
   if (promptItems.length === 0) return [];
-  return [{
-    id: "prompt",
-    label: t("chat.slash.prompt.label"),
-    description: t("chat.slash.prompt.description"),
-    icon: IconMessage,
-    kind: "insert",
-    items: promptItems,
-  }];
+  return [
+    {
+      id: "prompt",
+      label: t("chat.slash.prompt.label"),
+      description: t("chat.slash.prompt.description"),
+      icon: IconMessage,
+      kind: "insert",
+      items: promptItems,
+    },
+  ];
 }
 
 /** Build the user message + mode metadata a slash-command selection sends;
@@ -309,7 +311,8 @@ export function slashPrompt(
         // AgentMode.shortText).
         shortText: t(
           mode.options.find((option) => option.id === optionId)?.shortText ??
-            mode.shortText ?? mode.modeLabel,
+            mode.shortText ??
+            mode.modeLabel,
         ),
       },
     };
@@ -483,7 +486,8 @@ export function resolveComposerText(
     }
   }
   // Modes next: their token is a mode id, so the two never collide.
-  const line = (options.chat ? null : slashPromptFromText(text, options.t)) ??
+  const line =
+    (options.chat ? null : slashPromptFromText(text, options.t)) ??
     skillPromptFromText(text, options.skills ?? []);
   if (line !== null) {
     if (line.kind === "needs-text") return { kind: "incomplete" };

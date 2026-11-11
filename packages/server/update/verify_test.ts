@@ -1,6 +1,6 @@
-import { assertEquals, assertRejects } from "@std/assert";
-import { blake2b } from "@noble/hashes/blake2.js";
 import { removeDirRetry } from "@lumisca/core/test-utils";
+import { blake2b } from "@noble/hashes/blake2.js";
+import { assertEquals, assertRejects } from "@std/assert";
 import { createSigningKeys } from "./test-utils.ts";
 import {
   decodeMinisignPublicKey,
@@ -130,9 +130,9 @@ Deno.test("malformed containers are rejected with a readable reason", async () =
         verifyFileSignature({
           file,
           signature: btoa(
-            `untrusted comment: x\n${
-              btoa(String.fromCharCode(...new Uint8Array(10)))
-            }\n`,
+            `untrusted comment: x\n${btoa(
+              String.fromCharCode(...new Uint8Array(10)),
+            )}\n`,
           ),
           publicKey: keys.publicKey,
         }),
@@ -147,9 +147,9 @@ Deno.test("malformed containers are rejected with a readable reason", async () =
           file,
           signature: valid,
           publicKey: btoa(
-            `untrusted comment: x\n${
-              btoa(String.fromCharCode(...new Uint8Array(20)))
-            }\n`,
+            `untrusted comment: x\n${btoa(
+              String.fromCharCode(...new Uint8Array(20)),
+            )}\n`,
           ),
         }),
       SignatureError,

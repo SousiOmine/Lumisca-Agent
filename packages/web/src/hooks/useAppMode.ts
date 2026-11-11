@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "preact/compat";
 import { type AppMode, isAppMode } from "@lumisca/core/shared";
+import { useCallback, useEffect, useRef, useState } from "preact/compat";
 import { api } from "../api.ts";
-import { NEVER, useVisibleInterval } from "./useVisibleInterval.ts";
 import { errorText } from "../providers.ts";
 import type { StellaStatus } from "../types.ts";
+import { NEVER, useVisibleInterval } from "./useVisibleInterval.ts";
 
 /** localStorage key of this client's chosen mode. Per browser profile and per
  * origin, which is exactly the scope the choice has: two clients showing one

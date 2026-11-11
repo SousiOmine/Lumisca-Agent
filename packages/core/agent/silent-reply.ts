@@ -62,15 +62,18 @@ function proseRange(text: string): { start: number; end: number } {
   cursor = text.trimEnd().length;
   let end = text.length;
   while (
-    cursor - NO_RESPONSE.length >= start && text.endsWith(NO_RESPONSE, cursor)
+    cursor - NO_RESPONSE.length >= start &&
+    text.endsWith(NO_RESPONSE, cursor)
   ) {
     cursor -= NO_RESPONSE.length;
     if (cursor <= start || !IDENTIFIER_CHAR.test(text[cursor - 1] ?? "")) {
       while (cursor > start && WHITESPACE.test(text[cursor - 1]!)) cursor--;
       end = cursor;
     } else if (
-      !(cursor - NO_RESPONSE.length >= start &&
-        text.endsWith(NO_RESPONSE, cursor))
+      !(
+        cursor - NO_RESPONSE.length >= start &&
+        text.endsWith(NO_RESPONSE, cursor)
+      )
     ) {
       break;
     }

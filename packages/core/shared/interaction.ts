@@ -50,12 +50,14 @@ export function sameAsks(
   if (a.length !== b.length) return false;
   return a.every((turn, index) => {
     const other = b[index];
-    return other !== undefined &&
+    return (
+      other !== undefined &&
       turn.toolCallId === other.toolCallId &&
       turn.questions.length === other.questions.length &&
-      turn.questions.every((question, i) =>
-        question.id === other.questions[i]?.id
-      );
+      turn.questions.every(
+        (question, i) => question.id === other.questions[i]?.id,
+      )
+    );
   });
 }
 

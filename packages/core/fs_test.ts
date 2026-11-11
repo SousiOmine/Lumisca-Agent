@@ -1,7 +1,7 @@
-import { assertEquals } from "@std/assert";
 import { dirname, join } from "node:path";
-import { atomicWriteTextFileSync, readIfExists } from "./fs.ts";
+import { assertEquals } from "@std/assert";
 import { bytesToBase64 } from "./base64.ts";
+import { atomicWriteTextFileSync, readIfExists } from "./fs.ts";
 import { makeRealTempDir, removeDirRetry } from "./test-utils.ts";
 
 Deno.test("atomicWriteTextFileSync writes the file and creates the parent", async () => {

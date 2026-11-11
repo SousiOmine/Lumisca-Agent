@@ -27,9 +27,7 @@ export interface FileDragEvent {
 
 /** Whether this drag carries files. `types` is absent on a drag the page
  * started itself and on some synthetic events. */
-export function carriesFiles(
-  types: readonly string[] | undefined,
-): boolean {
+export function carriesFiles(types: readonly string[] | undefined): boolean {
   return types?.includes("Files") === true;
 }
 

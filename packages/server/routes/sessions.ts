@@ -1,5 +1,3 @@
-import { Hono } from "hono";
-import type { ContextUsageSummary } from "@lumisca/core/shared";
 import type {
   AgentMessage,
   AskAnswer,
@@ -16,13 +14,15 @@ import type {
   TodoPhase,
   WindowQuery,
 } from "@lumisca/core";
-import { AppError, parseBody, parseWindowQuery } from "./util.ts";
+import type { ContextUsageSummary } from "@lumisca/core/shared";
+import { Hono } from "hono";
+import { conversationRoutes } from "./conversation.ts";
 import {
+  type PromptBody,
   parsePromptBody,
   preparePromptImages,
-  type PromptBody,
 } from "./session-requests.ts";
-import { conversationRoutes } from "./conversation.ts";
+import { AppError, parseBody, parseWindowQuery } from "./util.ts";
 
 /** The slice of the core these routes need (interface segregation). */
 export interface SessionApi {
@@ -46,14 +46,12 @@ export interface SessionApi {
    * none resolves — including "no provider is configured at all", which
    * the draft renders as an unset model field with the start button
    * disabled. */
-  getDefaultModel(): Promise<
-    {
-      provider: string;
-      modelId: string;
-      thinkingLevel: ThinkingLevel;
-      thinkingLevels: ThinkingLevel[];
-    } | null
-  >;
+  getDefaultModel(): Promise<{
+    provider: string;
+    modelId: string;
+    thinkingLevel: ThinkingLevel;
+    thinkingLevels: ThinkingLevel[];
+  } | null>;
   startPrompt(
     id: string,
     text: string,
@@ -268,8 +266,7 @@ export function sessionRoutes(core: SessionApi): Hono {
     const body = await parseBody<SessionBody>(c);
     if (
       !body ||
-      (body.workspaceId !== undefined &&
-        typeof body.workspaceId !== "string")
+      (body.workspaceId !== undefined && typeof body.workspaceId !== "string")
     ) {
       throw new AppError(
         "workspaceId must be a string when given; omit it for a chat session",
@@ -284,13 +281,11 @@ export function sessionRoutes(core: SessionApi): Hono {
     // the model unset and disables the start button), so this is the
     // defensive layer for direct API callers.
     const session = await core.createSession({
-      workspaceId: typeof body.workspaceId === "string"
-        ? body.workspaceId
-        : undefined,
+      workspaceId:
+        typeof body.workspaceId === "string" ? body.workspaceId : undefined,
       name: typeof body.name === "string" ? body.name : undefined,
-      modelProvider: typeof body.modelProvider === "string"
-        ? body.modelProvider
-        : undefined,
+      modelProvider:
+        typeof body.modelProvider === "string" ? body.modelProvider : undefined,
       modelId: typeof body.modelId === "string" ? body.modelId : undefined,
     });
     return c.json(session, 201);
@@ -328,9 +323,8 @@ export function sessionRoutes(core: SessionApi): Hono {
     // prompt whose file could not be stored never reaches the model; that is
     // the one part of this call that is awaited. After it, the run is
     // fire-and-forget: its progress arrives on the event stream.
-    const saved = files === undefined
-      ? undefined
-      : await core.savePromptUploads(id, files);
+    const saved =
+      files === undefined ? undefined : await core.savePromptUploads(id, files);
     core.startPrompt(id, text, bounded, mode, saved);
     return c.json({ ok: true });
   });

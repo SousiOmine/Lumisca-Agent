@@ -1,8 +1,8 @@
 import { assert, assertEquals, assertThrows } from "@std/assert";
+import { fauxProvider } from "./ai/faux.ts";
 import { LumiscaCore } from "./core.ts";
 import { CoreError } from "./errors.ts";
 import { WEB_SEARCH_KEY } from "./shared/settings-keys.ts";
-import { fauxProvider } from "./ai/faux.ts";
 
 /**
  * The web-search setting through the core: the facade the server calls.
@@ -45,7 +45,10 @@ Deno.test("core: removing the default hands it to the remaining provider", async
     core.addWebSearchProvider({ id: "tavily", apiKey: "k" });
     const removed = core.removeWebSearchProvider("exa");
     assertEquals(removed.defaultId, "tavily");
-    assertEquals(removed.providers.map((p) => p.id), ["tavily"]);
+    assertEquals(
+      removed.providers.map((p) => p.id),
+      ["tavily"],
+    );
 
     // Removing the last provider leaves nothing to search with.
     const empty = core.removeWebSearchProvider("tavily");
@@ -69,10 +72,7 @@ Deno.test("core: unknown provider ids are refused", async () => {
       CoreError,
       "Unknown web search provider",
     );
-    assertThrows(
-      () => core.removeWebSearchProvider("nope"),
-      CoreError,
-    );
+    assertThrows(() => core.removeWebSearchProvider("nope"), CoreError);
     assertThrows(
       () => core.updateWebSearchProvider("exa", { apiKey: "k" }),
       CoreError,

@@ -1,8 +1,8 @@
 import { assertEquals, assertRejects } from "@std/assert";
 import type { ClientEvent } from "../domain/event.ts";
-import { createVmEnvTool } from "./env-tool.ts";
 import { EnvRequestHub } from "./env-request.ts";
 import type { VmEnvStore } from "./env-store.ts";
+import { createVmEnvTool } from "./env-tool.ts";
 
 /**
  * `vm_env` as the model sees it: one argument, a wait, and a sentence that
@@ -19,7 +19,7 @@ function storeWith(names: string[]): VmEnvStore {
 
 function textOf(result: { content: unknown[] }): string {
   const [first] = result.content as { type: string; text?: string }[];
-  return first?.type === "text" ? first.text ?? "" : "";
+  return first?.type === "text" ? (first.text ?? "") : "";
 }
 
 Deno.test("vm env: the only argument is the variable's name", () => {

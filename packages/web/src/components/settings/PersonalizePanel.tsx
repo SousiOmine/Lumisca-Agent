@@ -1,8 +1,8 @@
 import { useEffect, useState } from "preact/compat";
 import { api } from "../../api.ts";
-import { errorText } from "../../providers.ts";
 import { useDebouncedWrite, useSavedNotice } from "../../hooks/useSave.ts";
 import { useT } from "../../i18n.ts";
+import { errorText } from "../../providers.ts";
 
 /**
  * Settings → カスタマイズ: the machine-level AGENTS.md, which lives next to
@@ -27,7 +27,8 @@ export function PersonalizePanel() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.getPersonalization()
+    api
+      .getPersonalization()
       .then((info) => setContent(info.content))
       .catch((failure) => setError(errorText(failure)))
       .finally(() => setLoading(false));

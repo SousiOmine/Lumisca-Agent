@@ -1,6 +1,6 @@
 import { IconTerminal } from "@tabler/icons-preact";
-import type { BackgroundView } from "../types.ts";
 import { useT } from "../i18n.ts";
+import type { BackgroundView } from "../types.ts";
 import { CollapsiblePanel } from "./Panel.tsx";
 
 /** The session's running background commands (the async_bash tool). A

@@ -11,9 +11,7 @@
  * Language changes are applied optimistically by useLanguage (a failed save
  * rolls back), so the store must be written only through it or setLocale.
  */
-import { useMemo, useSyncExternalStore } from "preact/compat";
-import { createStore } from "./store.ts";
-import { ApiError } from "./api-client.ts";
+
 import {
   createTranslator,
   DEFAULT_LOCALE,
@@ -21,9 +19,12 @@ import {
   type Locale,
   type MessageKey,
   type MessageParams,
-  translate,
   type Translator,
+  translate,
 } from "@lumisca/core/shared";
+import { useMemo, useSyncExternalStore } from "preact/compat";
+import { ApiError } from "./api-client.ts";
+import { createStore } from "./store.ts";
 
 const store = createStore<Locale>(DEFAULT_LOCALE);
 
@@ -91,10 +92,10 @@ export function describeError(error: unknown, t: Translator): string {
     error.kind === "network"
       ? "common.error.network"
       : error.kind === "http-4xx"
-      ? "common.error.badRequest"
-      : error.kind === "http-5xx"
-      ? "common.error.server"
-      : "common.error.parse",
+        ? "common.error.badRequest"
+        : error.kind === "http-5xx"
+          ? "common.error.server"
+          : "common.error.parse",
   );
   return error.detail === null
     ? line

@@ -1,9 +1,9 @@
 import type { ComponentProps, ReactElement } from "preact/compat";
-import { AgentEditDialog } from "./stella/AgentEditDialog.tsx";
 import { CloseTabsDialog } from "./CloseTabsDialog.tsx";
 import { ModeGateDialog } from "./ModeGate.tsx";
 import { RecentSessionsModal } from "./RecentSessionsModal.tsx";
 import { SettingsModal } from "./SettingsModal.tsx";
+import { AgentEditDialog } from "./stella/AgentEditDialog.tsx";
 
 /**
  * The dialogs the app can have open, one optional set of props each.
@@ -22,9 +22,13 @@ export interface AppDialogsProps {
 
 /** The modal layer of the app: settings, the session list, the close
  * confirmation, the agent editor and the mode chooser. */
-export function AppDialogs(
-  { settings, recent, close, agentEdit, modeGate }: AppDialogsProps,
-): ReactElement {
+export function AppDialogs({
+  settings,
+  recent,
+  close,
+  agentEdit,
+  modeGate,
+}: AppDialogsProps): ReactElement {
   return (
     <>
       {settings !== null && <SettingsModal {...settings} />}

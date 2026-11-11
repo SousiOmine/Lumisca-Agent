@@ -247,7 +247,8 @@ export function parseModelPreference(
 ): ModelPreference | undefined {
   const parsed = parseStoredJson<unknown>(raw);
   if (
-    typeof parsed === "object" && parsed !== null &&
+    typeof parsed === "object" &&
+    parsed !== null &&
     typeof (parsed as ModelPreference).provider === "string" &&
     typeof (parsed as ModelPreference).modelId === "string"
   ) {
@@ -265,8 +266,10 @@ export function parseSavedPrompts(
   if (Array.isArray(parsed)) {
     return parsed.filter(
       (e): e is SavedPrompt =>
-        typeof e === "object" && e !== null &&
-        typeof e.id === "string" && e.id.length > 0 &&
+        typeof e === "object" &&
+        e !== null &&
+        typeof e.id === "string" &&
+        e.id.length > 0 &&
         typeof e.label === "string" &&
         typeof e.prompt === "string",
     );

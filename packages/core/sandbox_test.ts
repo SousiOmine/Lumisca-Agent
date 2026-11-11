@@ -1,8 +1,8 @@
-import { removeDirRetry } from "./test-utils.ts";
-import { basename, join } from "node:path";
 import { realpathSync } from "node:fs";
+import { basename, join } from "node:path";
 import { assertEquals } from "@std/assert";
 import { Sandbox } from "./mod.ts";
+import { removeDirRetry } from "./test-utils.ts";
 
 function tempDir(prefix: string): Promise<string> {
   return Deno.makeTempDir({ prefix });
@@ -99,7 +99,7 @@ Deno.test("sandbox roots are sorted by path regardless of registration order", a
   try {
     const sortKey = (p: string) => p.replace(/\\/g, "/").toLowerCase();
     const expected = [real(a), real(z)].sort((x, y) =>
-      sortKey(x) < sortKey(y) ? -1 : sortKey(x) > sortKey(y) ? 1 : 0
+      sortKey(x) < sortKey(y) ? -1 : sortKey(x) > sortKey(y) ? 1 : 0,
     );
 
     const sandbox = new Sandbox([z, a]);
@@ -269,10 +269,7 @@ Deno.test("sandbox: a workspace folder named like the extra root stays unambiguo
     const rel = await sandbox.resolve("skills/mine/SKILL.md");
     assertEquals(rel.ok, true);
     if (rel.ok) {
-      assertEquals(
-        rel.path,
-        join(real(workspaceSkills), "mine", "SKILL.md"),
-      );
+      assertEquals(rel.path, join(real(workspaceSkills), "mine", "SKILL.md"));
     }
   } finally {
     await Deno.remove(parent, { recursive: true });

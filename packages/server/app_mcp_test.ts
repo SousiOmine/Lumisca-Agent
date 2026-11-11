@@ -1,10 +1,7 @@
 import { join } from "node:path";
-
-import { assertEquals } from "@std/assert";
-
-import { json, setup } from "./test-utils.ts";
-
 import { removeDirRetry } from "@lumisca/core/test-utils";
+import { assertEquals } from "@std/assert";
+import { json, setup } from "./test-utils.ts";
 
 Deno.test("app-level MCP config API applies to every workspace", async () => {
   const { core, server, base, faux } = await setup();

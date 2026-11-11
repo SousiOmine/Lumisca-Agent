@@ -1,15 +1,15 @@
 import { assertEquals } from "@std/assert";
+import type { StellaEntry } from "../domain/stella-conversation.ts";
 import {
   compareAgentRows,
   PREVIEW_TEXT_CHARS,
   previewOf,
   previewText,
-  samePreview,
   type StellaAgentSummary,
   type StellaPreview,
+  samePreview,
   withAgentRow,
 } from "./mod.ts";
-import type { StellaEntry } from "../domain/stella-conversation.ts";
 
 /**
  * The second line of an agent's sidebar row.
@@ -115,12 +115,14 @@ Deno.test("previewOf: a message with no words is described", () => {
     at: 1_000,
   });
   // What the agent sent.
-  const attachments = [{
-    name: "x.png",
-    displayName: "x.png",
-    size: 1,
-    inline: true,
-  }];
+  const attachments = [
+    {
+      name: "x.png",
+      displayName: "x.png",
+      size: 1,
+      inline: true,
+    },
+  ];
   assertEquals(previewOf(entry({ attachments })), {
     kind: "files",
     count: 1,
@@ -128,9 +130,11 @@ Deno.test("previewOf: a message with no words is described", () => {
   });
   // A card alone names its kind (`card` wins over nothing).
   assertEquals(
-    previewOf(entry({
-      segments: [{ type: "card", markup: "<Card />" }],
-    })),
+    previewOf(
+      entry({
+        segments: [{ type: "card", markup: "<Card />" }],
+      }),
+    ),
     {
       kind: "card",
       at: 1_000,
@@ -144,20 +148,24 @@ Deno.test("previewOf: words win over a card and files", () => {
   // The message read as a sentence, not as "1 file": the words are what the
   // reader scans for.
   assertEquals(
-    previewOf(entry({
-      text: "確認してください。",
-      segments: [
-        { type: "text", text: "確認してください。" },
-        { type: "card", markup: "<Card />" },
-      ],
-      files: [{
-        name: "a.png",
-        path: "/a.png",
-        size: 1,
-        ref: "r1",
-        image: true,
-      }],
-    })),
+    previewOf(
+      entry({
+        text: "確認してください。",
+        segments: [
+          { type: "text", text: "確認してください。" },
+          { type: "card", markup: "<Card />" },
+        ],
+        files: [
+          {
+            name: "a.png",
+            path: "/a.png",
+            size: 1,
+            ref: "r1",
+            image: true,
+          },
+        ],
+      }),
+    ),
     { kind: "text", text: "確認してください。", at: 1_000 },
   );
 });
@@ -192,11 +200,10 @@ function row(
 
 Deno.test("compareAgentRows: the list is ordered by the time it shows", () => {
   const rows = [row("old", 100), row("new", 300), row("mid", 200)];
-  assertEquals(rows.sort(compareAgentRows).map((r) => r.id), [
-    "new",
-    "mid",
-    "old",
-  ]);
+  assertEquals(
+    rows.sort(compareAgentRows).map((r) => r.id),
+    ["new", "mid", "old"],
+  );
 });
 
 Deno.test("compareAgentRows: conversations with nothing said come last", () => {
@@ -207,11 +214,10 @@ Deno.test("compareAgentRows: conversations with nothing said come last", () => {
     row("said", 100),
     row("quiet-new", null, { updatedAt: 20 }),
   ];
-  assertEquals(rows.sort(compareAgentRows).map((r) => r.id), [
-    "said",
-    "quiet-new",
-    "quiet-old",
-  ]);
+  assertEquals(
+    rows.sort(compareAgentRows).map((r) => r.id),
+    ["said", "quiet-new", "quiet-old"],
+  );
 });
 
 Deno.test("compareAgentRows: the order is total", () => {
@@ -279,7 +285,10 @@ Deno.test("withAgentRow: a created agent is in the list before it is opened", ()
     createdAt: 300,
     updatedAt: 300,
   });
-  assertEquals(created.map((r) => r.id), ["said", "fresh", "quiet"]);
+  assertEquals(
+    created.map((r) => r.id),
+    ["said", "fresh", "quiet"],
+  );
   // A new agent has said nothing, so its row is one line.
   assertEquals(created.find((r) => r.id === "fresh")?.preview, null);
   // The list it came from is left alone (the hook keeps the old one until

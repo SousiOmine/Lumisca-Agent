@@ -61,9 +61,7 @@ function configHome(env: EnvReader): string {
 
 /** $XDG_CONFIG_HOME when set, otherwise `<home>/.config`; undefined when
  * neither XDG_CONFIG_HOME nor a home directory is present. */
-function configHomeOrUndefined(
-  env: EnvReader,
-): string | undefined {
+function configHomeOrUndefined(env: EnvReader): string | undefined {
   const values = env();
   const configured = values["XDG_CONFIG_HOME"];
   if (configured !== undefined && configured !== "") return configured;

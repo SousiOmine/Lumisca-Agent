@@ -42,9 +42,11 @@ function isStaticAsset(pathname) {
   if (pathname.startsWith("/pwa/")) return true;
   // The client build's chunks. `initial-data.js` is excluded by name: it
   // carries the auth token.
-  return pathname.startsWith("/assets/") &&
+  return (
+    pathname.startsWith("/assets/") &&
     pathname.endsWith(".js") &&
-    !pathname.endsWith("/initial-data.js");
+    !pathname.endsWith("/initial-data.js")
+  );
 }
 
 /** Whether the server asked for the answer not to be kept. The page's own
@@ -66,8 +68,8 @@ self.addEventListener("activate", (event) => {
       const names = await caches.keys();
       await Promise.all(
         names
-          .filter((name) =>
-            name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME
+          .filter(
+            (name) => name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME,
           )
           .map((name) => caches.delete(name)),
       );

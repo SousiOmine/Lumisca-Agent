@@ -1,13 +1,9 @@
 import { join } from "node:path";
-
-import { fauxAssistantMessage, fauxToolCall } from "@lumisca/core";
-import { assertEquals } from "@std/assert";
-import { LumiscaCore } from "@lumisca/core";
-
-import { json, setup } from "./test-utils.ts";
-import { startServer } from "./app.ts";
-
+import { fauxAssistantMessage, fauxToolCall, LumiscaCore } from "@lumisca/core";
 import { removeDirRetry } from "@lumisca/core/test-utils";
+import { assertEquals } from "@std/assert";
+import { startServer } from "./app.ts";
+import { json, setup } from "./test-utils.ts";
 
 Deno.test("session model switch API", async () => {
   const { core, server, faux, base } = await setup();
@@ -75,8 +71,9 @@ Deno.test("default model API follows the configured providers", async () => {
     // Storing a key makes the faux provider the configured one: now the
     // fallback resolves there, and a session without a model starts on it.
     await core.setProviderApiKey(faux.provider.id, "faux-key");
-    const fallback = await (await fetch(`${base}/api/sessions/default-model`))
-      .json();
+    const fallback = await (
+      await fetch(`${base}/api/sessions/default-model`)
+    ).json();
     assertEquals(fallback.provider, faux.provider.id);
     assertEquals(fallback.modelId, faux.getModel().id);
 
@@ -120,9 +117,11 @@ Deno.test("providers API ignores ambient env keys of built-in providers", async 
     // configured in Lumisca: it must not appear as "added".
     const res = await fetch(`${base}/api/providers`);
     assertEquals(res.status, 200);
-    const providers = await res.json() as Array<
-      { id: string; configured: boolean; source?: string }
-    >;
+    const providers = (await res.json()) as Array<{
+      id: string;
+      configured: boolean;
+      source?: string;
+    }>;
     const anthropic = providers.find((p) => p.id === "anthropic");
     assertEquals(anthropic?.configured, false);
     assertEquals(anthropic?.source, "ANTHROPIC_API_KEY");
@@ -135,8 +134,9 @@ Deno.test("providers API ignores ambient env keys of built-in providers", async 
       body: JSON.stringify({ key: "sk-stored" }),
     });
     assertEquals(set.status, 200);
-    const after = await (await fetch(`${base}/api/providers/anthropic/auth`))
-      .json() as { configured: boolean };
+    const after = (await (
+      await fetch(`${base}/api/providers/anthropic/auth`)
+    ).json()) as { configured: boolean };
     assertEquals(after.configured, true);
   } finally {
     server.shutdown();
@@ -154,7 +154,7 @@ Deno.test("settings API refuses to write credentials", async () => {
     assertEquals(res.status, 403);
     // Nothing was stored: the generic settings surface never sees the key.
     const list = await fetch(`${base}/api/settings`);
-    const settings = await list.json() as Record<string, string>;
+    const settings = (await list.json()) as Record<string, string>;
     assertEquals("api_key:anthropic" in settings, false);
   } finally {
     server.shutdown();
@@ -180,13 +180,15 @@ Deno.test("settings API writes the model preferences the dialog offers", async (
     });
     assertEquals(res.status, 200);
 
-    const settings = await (await fetch(`${base}/api/settings`))
-      .json() as Record<string, string>;
+    const settings = (await (
+      await fetch(`${base}/api/settings`)
+    ).json()) as Record<string, string>;
     assertEquals(settings.model_default, value);
 
     // The write is what a new conversation reads.
-    const resolved = await (await fetch(`${base}/api/sessions/default-model`))
-      .json() as { provider: string; modelId: string };
+    const resolved = (await (
+      await fetch(`${base}/api/sessions/default-model`)
+    ).json()) as { provider: string; modelId: string };
     assertEquals(resolved.provider, pref.provider);
     assertEquals(resolved.modelId, pref.modelId);
 
@@ -222,7 +224,7 @@ Deno.test("personalize API reads and writes AGENTS.md next to the settings file"
     // Absent file → empty content, but the expected path is reported.
     const empty = await fetch(`${base}/api/personalize`);
     assertEquals(empty.status, 200);
-    const emptyInfo = await empty.json() as { path: string; content: string };
+    const emptyInfo = (await empty.json()) as { path: string; content: string };
     assertEquals(emptyInfo.path, agentFile);
     assertEquals(emptyInfo.content, "");
 
@@ -234,7 +236,7 @@ Deno.test("personalize API reads and writes AGENTS.md next to the settings file"
     assertEquals(Deno.readTextFileSync(agentFile), "Answer in Japanese.\n");
 
     const get = await fetch(`${base}/api/personalize`);
-    const info = await get.json() as { path: string; content: string };
+    const info = (await get.json()) as { path: string; content: string };
     assertEquals(info.path, agentFile);
     assertEquals(info.content, "Answer in Japanese.\n");
 
@@ -256,15 +258,12 @@ Deno.test("settings API never exposes credentials", async () => {
     await core.setProviderApiKey("anthropic", "sk-secret-test-123");
     const res = await fetch(`${base}/api/settings`);
     assertEquals(res.status, 200);
-    const settings = await res.json() as Record<string, string>;
+    const settings = (await res.json()) as Record<string, string>;
     assertEquals(
       Object.keys(settings).some((k) => k.includes("api_key")),
       false,
     );
-    assertEquals(
-      Object.values(settings).includes("sk-secret-test-123"),
-      false,
-    );
+    assertEquals(Object.values(settings).includes("sk-secret-test-123"), false);
   } finally {
     server.shutdown();
     core.close();
@@ -302,19 +301,22 @@ Deno.test("stella API: the conversation carries the conversation, never the mode
       method: "POST",
       body: JSON.stringify({ name: "Aide", role: "Help with the work." }),
     });
-    const agent = await agentRes.json() as { id: string; name: string };
+    const agent = (await agentRes.json()) as { id: string; name: string };
 
     const opened = await json(base, `/api/stella/conversations/${agent.id}`);
-    const openedBody = await opened.json() as { sessionId: string };
+    const openedBody = (await opened.json()) as { sessionId: string };
     const sessionId = openedBody.sessionId;
 
     // The model's own text, plus a message it SENT. The run also publishes
     // the session's context (date, on-demand tools) ahead of it.
     faux.setResponses([
-      fauxAssistantMessage([
-        { type: "text", text: "作業メモ: 一覧を出すために bash を使った。" },
-        fauxToolCall("send_chat", { text: "一覧を出しました。" }, "call-1"),
-      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage(
+        [
+          { type: "text", text: "作業メモ: 一覧を出すために bash を使った。" },
+          fauxToolCall("send_chat", { text: "一覧を出しました。" }, "call-1"),
+        ],
+        { stopReason: "toolUse" },
+      ),
       fauxAssistantMessage("まだ書くことはある。"),
     ]);
     const prompt = await json(
@@ -332,7 +334,7 @@ Deno.test("stella API: the conversation carries the conversation, never the mode
         base,
         `/api/stella/conversations/${agent.id}/messages`,
       );
-      const body = await res.json() as { running: boolean };
+      const body = (await res.json()) as { running: boolean };
       if (!body.running) break;
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
@@ -341,7 +343,7 @@ Deno.test("stella API: the conversation carries the conversation, never the mode
       base,
       `/api/stella/conversations/${agent.id}/messages`,
     );
-    const snapshot = await snapshotRes.json() as {
+    const snapshot = (await snapshotRes.json()) as {
       entries: Array<{ role: string; text: string; card: string | null }>;
       running: boolean;
     };
@@ -350,13 +352,13 @@ Deno.test("stella API: the conversation carries the conversation, never the mode
     // model's context publications are not on the screen.
     assertEquals(snapshot.entries[0]?.role, "user");
     assertEquals(snapshot.entries[0]?.text, "bash で一覧を出して");
-    const answers = snapshot.entries.filter((entry) =>
-      entry.role === "assistant"
+    const answers = snapshot.entries.filter(
+      (entry) => entry.role === "assistant",
     );
-    assertEquals(answers.map((entry) => entry.text), [
-      "一覧を出しました。",
-      "まだ書くことはある。",
-    ]);
+    assertEquals(
+      answers.map((entry) => entry.text),
+      ["一覧を出しました。", "まだ書くことはある。"],
+    );
     for (const entry of snapshot.entries) {
       assertEquals(entry.role === "user" || entry.role === "assistant", true);
       // The model's context publications (date, on-demand tools) are not
@@ -371,7 +373,7 @@ Deno.test("stella API: the conversation carries the conversation, never the mode
     // The code-mode session endpoint still serves the whole transcript
     // (context included): the split is in the endpoint, not in the store.
     const sessionRes = await json(base, `/api/sessions/${sessionId}/messages`);
-    const session = await sessionRes.json() as {
+    const session = (await sessionRes.json()) as {
       messages: Array<{ role: string }>;
     };
     assertEquals(
@@ -382,10 +384,9 @@ Deno.test("stella API: the conversation carries the conversation, never the mode
     // The agent's own rows stay in the transcript too: the store and the
     // session endpoint keep the model's whole history, and a conversation
     // projects its replies out of it.
-    const assistant = await (await json(
-      base,
-      `/api/sessions/${sessionId}/messages`,
-    )).json() as {
+    const assistant = (await (
+      await json(base, `/api/sessions/${sessionId}/messages`)
+    ).json()) as {
       messages: Array<{ role: string; content?: unknown }>;
     };
     assertEquals(

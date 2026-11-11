@@ -46,12 +46,12 @@ export type WatchState =
   | { kind: "file"; mtimeMs: number | null; hash: string | null }
   | { kind: "command"; exitCode: number; hasIncludes: boolean }
   | {
-    kind: "mcp";
-    /** The ids the tool's result named, or null for a `hash` watch. */
-    ids: string[] | null;
-    /** The digest of the compared value, or null for an `ids` watch. */
-    hash: string | null;
-  };
+      kind: "mcp";
+      /** The ids the tool's result named, or null for a `hash` watch. */
+      ids: string[] | null;
+      /** The digest of the compared value, or null for an `ids` watch. */
+      hash: string | null;
+    };
 
 /** Why a check could not answer, or null when it did. A check that cannot
  * answer is NOT a change: a machine that is down, a URL that times out and a
@@ -148,11 +148,12 @@ export interface MachineWatchDeps {
  * internal one, and it is removed a moment later. */
 export function machineWatchFetch(deps: MachineWatchDeps): typeof fetch {
   const impl = async (input: unknown): Promise<Response> => {
-    const url = input instanceof Request
-      ? input.url
-      : input instanceof URL
-      ? input.href
-      : String(input);
+    const url =
+      input instanceof Request
+        ? input.url
+        : input instanceof URL
+          ? input.href
+          : String(input);
     const root = (deps.files.roots[0] ?? "/").replace(/[\\/]+$/, "");
     const bodyDir = `${root}/.lumisca-tool-output`;
     const bodyPath = `${bodyDir}/watch-${crypto.randomUUID()}.body`;
@@ -183,10 +184,9 @@ export function machineWatchFetch(deps: MachineWatchDeps): typeof fetch {
       // A body that is absent by definition (curl writes nothing for these)
       // must not be handed to Response: it refuses a body on them.
       const nullBody = status === 204 || status === 205 || status === 304;
-      return new Response(
-        nullBody ? null : new TextDecoder().decode(bytes),
-        { status },
-      );
+      return new Response(nullBody ? null : new TextDecoder().decode(bytes), {
+        status,
+      });
     } finally {
       await deps.files.removeFile(bodyPath).catch(() => {});
     }
@@ -268,7 +268,8 @@ function differs(
   if (previous.kind === "command" && current.kind === "command") {
     const expect = source.kind === "command" ? source.expect : {};
     if (
-      expect.exitCode !== undefined && previous.exitCode !== current.exitCode
+      expect.exitCode !== undefined &&
+      previous.exitCode !== current.exitCode
     ) {
       return true;
     }
@@ -290,8 +291,11 @@ function differs(
         ? false
         : current.ids.some((id) => !before.includes(id));
     }
-    return previous.hash !== null && current.hash !== null &&
-      previous.hash !== current.hash;
+    return (
+      previous.hash !== null &&
+      current.hash !== null &&
+      previous.hash !== current.hash
+    );
   }
   return false;
 }
@@ -354,8 +358,8 @@ async function observeMcp(
   } catch {
     return {
       state: null,
-      problem: "the tool's result is not JSON, so its fields cannot be " +
-        "compared",
+      problem:
+        "the tool's result is not JSON, so its fields cannot be " + "compared",
     };
   }
   if ("ids" in source.expect) {
@@ -435,9 +439,10 @@ async function observeFile(
   // The file is the machine's, so both the stat and the digest are taken
   // there: the host cannot see it.
   const quoted = shellQuote(source.path);
-  const command = source.compare === "hash"
-    ? `stat -c %Y -- ${quoted} && sha256sum -- ${quoted} | cut -d" " -f1`
-    : `stat -c %Y -- ${quoted}`;
+  const command =
+    source.compare === "hash"
+      ? `stat -c %Y -- ${quoted} && sha256sum -- ${quoted} | cut -d" " -f1`
+      : `stat -c %Y -- ${quoted}`;
   const result = await machine.runner.run(command, {
     cwd: machine.workdir,
     timeoutSec: 30,
@@ -447,14 +452,15 @@ async function observeFile(
   if (result.exitCode !== 0) {
     return {
       state: null,
-      problem: `the file could not be read at ${source.path} (${
-        firstLine(result.stderr)
-      })`,
+      problem: `the file could not be read at ${source.path} (${firstLine(
+        result.stderr,
+      )})`,
     };
   }
-  const lines = result.stdout.trim().split("\n").filter((line) =>
-    line.length > 0
-  );
+  const lines = result.stdout
+    .trim()
+    .split("\n")
+    .filter((line) => line.length > 0);
   const seconds = Number(lines[0]);
   if (!Number.isFinite(seconds)) {
     return {
@@ -466,7 +472,7 @@ async function observeFile(
     state: {
       kind: "file",
       mtimeMs: seconds * 1_000,
-      hash: source.compare === "hash" ? lines[1]?.trim() ?? null : null,
+      hash: source.compare === "hash" ? (lines[1]?.trim() ?? null) : null,
     },
   };
 }
@@ -493,9 +499,10 @@ async function observeCommand(
       problem: "the command did not finish within its time limit",
     };
   }
-  const hasIncludes = source.expect.includes === undefined
-    ? false
-    : result.stdout.includes(source.expect.includes);
+  const hasIncludes =
+    source.expect.includes === undefined
+      ? false
+      : result.stdout.includes(source.expect.includes);
   return {
     state: { kind: "command", exitCode: result.exitCode, hasIncludes },
   };

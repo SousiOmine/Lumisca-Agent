@@ -1,6 +1,6 @@
-import { assert, assertEquals } from "@std/assert";
 import type { ProviderMap } from "@opencode-ai/models";
 import snapshot from "@opencode-ai/models/snapshot";
+import { assert, assertEquals } from "@std/assert";
 import {
   buildCatalogProviders,
   builtinProvider,
@@ -47,7 +47,10 @@ function listedModels(
   models: Array<{ id: string } & Record<string, unknown>>,
 ): string[] {
   const built = buildCatalogProviders(catalogWith(models));
-  assertEquals(built.map((p) => p.id), ["openai"]);
+  assertEquals(
+    built.map((p) => p.id),
+    ["openai"],
+  );
   return built[0]!.getModels().map((m) => m.id);
 }
 
@@ -73,14 +76,16 @@ Deno.test("catalog lists only models that support tool calling", () => {
 });
 
 Deno.test("catalog carries the documented input cap onto the model", () => {
-  const built = buildCatalogProviders(catalogWith([
-    {
-      id: "capped",
-      tool_call: true,
-      limit: { context: 1_050_000, input: 922_000, output: 128_000 },
-    },
-    { id: "window-only", tool_call: true },
-  ]));
+  const built = buildCatalogProviders(
+    catalogWith([
+      {
+        id: "capped",
+        tool_call: true,
+        limit: { context: 1_050_000, input: 922_000, output: 128_000 },
+      },
+      { id: "window-only", tool_call: true },
+    ]),
+  );
   const byId = new Map(built[0]!.getModels().map((m) => [m.id, m]));
   // The window counts the completion, the cap is what one request may
   // carry: both travel, so the budgets can hang off the smaller number.
@@ -110,12 +115,16 @@ Deno.test("catalog still drops models that cannot answer in text", () => {
 });
 
 Deno.test("catalog preserves reasoning_content replay requirements", () => {
-  const providers = buildCatalogProviders(catalogWith([{
-    id: "interleaved-reasoner",
-    tool_call: true,
-    reasoning: true,
-    interleaved: { field: "reasoning_content" },
-  }]));
+  const providers = buildCatalogProviders(
+    catalogWith([
+      {
+        id: "interleaved-reasoner",
+        tool_call: true,
+        reasoning: true,
+        interleaved: { field: "reasoning_content" },
+      },
+    ]),
+  );
   const model = providers[0]!.getModels()[0]!;
 
   assertEquals(model.compat, {
@@ -146,7 +155,9 @@ Deno.test("every listed snapshot model declares tool calling", () => {
 
 Deno.test("snapshot hides embeddings, transcription and image models", () => {
   const ids = (providerId: string) =>
-    builtinProvider(providerId)!.getModels().map((m) => m.id);
+    builtinProvider(providerId)!
+      .getModels()
+      .map((m) => m.id);
 
   // Non-agent models the pickers used to offer.
   assertEquals(ids("openai").includes("text-embedding-3-small"), false);

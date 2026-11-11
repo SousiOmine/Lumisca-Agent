@@ -3,13 +3,15 @@ import type { ToolRegistryProvider } from "./registry.ts";
 import { integer, object, optional, string, type Tool } from "./schema.ts";
 
 const toolSearchSchema = object({
-  query: optional(string(
-    "Search terms: tool names, categories or keywords describing what the " +
-      "tool does. Omit to list everything (names only, no activation).",
-  )),
-  limit: optional(integer(
-    "Maximum number of matching tools to return (default 5, max 10)",
-  )),
+  query: optional(
+    string(
+      "Search terms: tool names, categories or keywords describing what the " +
+        "tool does. Omit to list everything (names only, no activation).",
+    ),
+  ),
+  limit: optional(
+    integer("Maximum number of matching tools to return (default 5, max 10)"),
+  ),
 });
 
 const DEFAULT_SEARCH_LIMIT = 5;
@@ -40,12 +42,10 @@ export function createToolSearchTool(
     execute: (
       _toolCallId,
       params,
-    ): Promise<
-      {
-        content: [{ type: "text"; text: string }];
-        details: Record<string, unknown>;
-      }
-    > => {
+    ): Promise<{
+      content: [{ type: "text"; text: string }];
+      details: Record<string, unknown>;
+    }> => {
       const registry = getRegistry();
       const query = (params.query ?? "").trim();
       const limit = Math.min(
@@ -61,10 +61,12 @@ export function createToolSearchTool(
       const matches = registry.search(query, limit);
       if (matches.length === 0) {
         return Promise.resolve({
-          content: [{
-            type: "text",
-            text: `No tools match "${query}".\n\n${registry.browse()}`,
-          }],
+          content: [
+            {
+              type: "text",
+              text: `No tools match "${query}".\n\n${registry.browse()}`,
+            },
+          ],
           details: { query, limit, matches: 0 },
         });
       }
@@ -72,12 +74,15 @@ export function createToolSearchTool(
         return `- ${match.name} (${match.label})\n  ${match.description}`;
       });
       return Promise.resolve({
-        content: [{
-          type: "text",
-          text: `Found ${matches.length} tool(s) matching "${query}".\n` +
-            `${lines.join("\n")}\n` +
-            "Call one with tool_call(name, args).",
-        }],
+        content: [
+          {
+            type: "text",
+            text:
+              `Found ${matches.length} tool(s) matching "${query}".\n` +
+              `${lines.join("\n")}\n` +
+              "Call one with tool_call(name, args).",
+          },
+        ],
         details: { query, limit, matches: matches.length },
       });
     },

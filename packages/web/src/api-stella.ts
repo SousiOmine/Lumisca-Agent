@@ -1,3 +1,5 @@
+import { promptBody, request } from "./api-client.ts";
+import { openEventStream } from "./event-stream.ts";
 import type {
   AskAnswer,
   PendingFile,
@@ -5,8 +7,6 @@ import type {
   StellaConversationSnapshot,
   StellaEvent,
 } from "./types.ts";
-import { promptBody, request } from "./api-client.ts";
-import { openEventStream } from "./event-stream.ts";
 
 /**
  * The stella conversation API: one surface of its own, bound to an agent.
@@ -37,9 +37,10 @@ export const stellaApi = {
   /** Re-read the snapshot after a WS drop or a page reload, or read the
    * window before a cursor (see StellaConversationSnapshot.older). */
   getSnapshot: (agentId: string, window: { older?: string } = {}) => {
-    const query = window.older === undefined
-      ? ""
-      : `?older=${encodeURIComponent(window.older)}`;
+    const query =
+      window.older === undefined
+        ? ""
+        : `?older=${encodeURIComponent(window.older)}`;
     return request<StellaConversationSnapshot>(
       conversationPath(agentId, `/messages${query}`),
       { method: "GET" },

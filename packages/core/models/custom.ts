@@ -6,8 +6,8 @@ import type {
   Provider,
 } from "../ai/types.ts";
 import { errorMessage } from "../errors.ts";
-import { parseJsonOrThrow } from "../shared/mod.ts";
 import { isRecord } from "../fs.ts";
+import { parseJsonOrThrow } from "../shared/mod.ts";
 
 /**
  * Custom OpenAI-compatible providers for headless/agent use.
@@ -112,10 +112,7 @@ function fixedKeyAuth(key: string): ApiKeyAuth {
 /** Auth that resolves from the stored credential first, then the matching
  * environment variable. This keeps the "credential store + key injection"
  * contract: a key the user stored in Lumisca wins over the ambient env. */
-export function envApiKeyAuth(
-  name: string,
-  envVars: string[],
-): ApiKeyAuth {
+export function envApiKeyAuth(name: string, envVars: string[]): ApiKeyAuth {
   return {
     name,
     resolve: ({ credential, env }) => {
@@ -195,7 +192,8 @@ export function buildModel(
     );
   }
   if (
-    definition.maxInputTokens !== undefined && definition.maxInputTokens <= 0
+    definition.maxInputTokens !== undefined &&
+    definition.maxInputTokens <= 0
   ) {
     throw new Error(
       `models.json provider "${providerId}", model "${definition.id}": ` +
@@ -274,16 +272,18 @@ export function customProviderFromEnv(
       "LUMISCA_API_KEY",
       "OPENAI_API_KEY",
     ]),
-    models: [{
-      id: modelId,
-      name: modelId,
-      api: "openai-completions",
-      provider: CUSTOM_PROVIDER_ID,
-      baseUrl,
-      reasoning: false,
-      input: ["text"],
-      cost: DEFAULT_COST,
-    }],
+    models: [
+      {
+        id: modelId,
+        name: modelId,
+        api: "openai-completions",
+        provider: CUSTOM_PROVIDER_ID,
+        baseUrl,
+        reasoning: false,
+        input: ["text"],
+        cost: DEFAULT_COST,
+      },
+    ],
   });
 }
 
@@ -318,7 +318,7 @@ export function customProvidersFromModelsFile(
   const providers: Provider[] = [];
   for (const [providerId, cfg] of Object.entries(parsed.providers)) {
     const models = (cfg.models ?? []).map((definition) =>
-      buildModel(providerId, definition, cfg)
+      buildModel(providerId, definition, cfg),
     );
     if (models.length === 0) {
       throw new Error(

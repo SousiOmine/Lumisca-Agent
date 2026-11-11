@@ -49,12 +49,10 @@ export async function readMonitorLayout(
     signature: "",
     body: [],
   });
-  const modeSizes = parseMonitorModes(
-    asArray(reply[1], "the monitors"),
-  );
+  const modeSizes = parseMonitorModes(asArray(reply[1], "the monitors"));
   const entries = asArray(reply[2], "the logical monitors");
   const monitors: LogicalMonitor[] = entries.map((entry, index) =>
-    parseLogicalMonitor(entry, index, modeSizes)
+    parseLogicalMonitor(entry, index, modeSizes),
   );
   if (monitors.length === 0) {
     throw new CoreError("the compositor reported no monitors", "unavailable");
@@ -81,12 +79,13 @@ export async function readMonitorLayout(
 
 /** `primary 1920×1080 at (-1280, 0) scale 2 [Virtual-1]`. */
 export function describeMonitor(monitor: LogicalMonitor): string {
-  const connectors = monitor.connectors.length > 0
-    ? ` [${monitor.connectors.join(", ")}]`
-    : "";
-  return `${monitor.primary ? "primary " : ""}${monitor.width}×` +
+  const connectors =
+    monitor.connectors.length > 0 ? ` [${monitor.connectors.join(", ")}]` : "";
+  return (
+    `${monitor.primary ? "primary " : ""}${monitor.width}×` +
     `${monitor.height} at (${monitor.x}, ${monitor.y}) scale ` +
-    `${monitor.scale}${connectors}`;
+    `${monitor.scale}${connectors}`
+  );
 }
 
 /** The size of each monitor's current mode, keyed by connector. */
@@ -139,7 +138,7 @@ function parseLogicalMonitor(
     asString(
       asArray(monitor, `logical monitor ${index} monitor`)[0],
       `logical monitor ${index} connector`,
-    )
+    ),
   );
   const size = connectors
     .map((connector) => modeSizes.get(connector))

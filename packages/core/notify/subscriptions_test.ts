@@ -1,15 +1,15 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
+import { createInMemorySettingsRepo } from "../settings/repo.ts";
 import {
   fromBase64Url,
-  parsePushSubscriptions,
   type PushSubscriptionRecord,
+  parsePushSubscriptions,
   serializePushSubscriptions,
   toBase64Url,
 } from "../shared/push.ts";
-import { createInMemorySettingsRepo } from "../settings/repo.ts";
+import { PUSH_SUBSCRIPTIONS_KEY } from "../shared/settings-keys.ts";
 import { PushSubscriptions } from "./subscriptions.ts";
 import { keysFromStoredJson, loadVapidKeys } from "./vapid.ts";
-import { PUSH_SUBSCRIPTIONS_KEY } from "../shared/settings-keys.ts";
 
 /** A P-256 point and a secret, in the shape a browser reports them. */
 async function subscriber(): Promise<{ p256dh: string; auth: string }> {
@@ -50,18 +50,20 @@ Deno.test("base64url round-trips and tolerates a missing pad", () => {
 });
 
 Deno.test("a stored subscription list drops what cannot be addressed", () => {
-  const parsed = parsePushSubscriptions(JSON.stringify([
-    record("https://push.example/1"),
-    // http is not a push endpoint: every push service is https.
-    record("http://push.example/2"),
-    // A missing key cannot be encrypted for.
-    { endpoint: "https://push.example/3", keys: { auth: "a" }, createdAt: 1 },
-    record("https://push.example/4"),
-  ]));
-  assertEquals(parsed.map((entry) => entry.endpoint), [
-    "https://push.example/1",
-    "https://push.example/4",
-  ]);
+  const parsed = parsePushSubscriptions(
+    JSON.stringify([
+      record("https://push.example/1"),
+      // http is not a push endpoint: every push service is https.
+      record("http://push.example/2"),
+      // A missing key cannot be encrypted for.
+      { endpoint: "https://push.example/3", keys: { auth: "a" }, createdAt: 1 },
+      record("https://push.example/4"),
+    ]),
+  );
+  assertEquals(
+    parsed.map((entry) => entry.endpoint),
+    ["https://push.example/1", "https://push.example/4"],
+  );
   assertEquals(parsePushSubscriptions("not json"), []);
   assertEquals(parsePushSubscriptions(undefined), []);
 });
@@ -74,10 +76,10 @@ Deno.test("the same endpoint stored twice reads once, newest first", () => {
       record("https://push.example/a", { createdAt: 2 }),
     ]),
   );
-  assertEquals(parsed.map((entry) => entry.endpoint), [
-    "https://push.example/a",
-    "https://push.example/b",
-  ]);
+  assertEquals(
+    parsed.map((entry) => entry.endpoint),
+    ["https://push.example/a", "https://push.example/b"],
+  );
   // The newest copy wins, not the first one read.
   assertEquals(parsed[0]!.createdAt, 2);
 });
@@ -105,13 +107,11 @@ Deno.test("removing an endpoint is idempotent and reports the first", () => {
 
 Deno.test("a bad subscription is refused, not stored", () => {
   const service = new PushSubscriptions(createInMemorySettingsRepo());
-  for (
-    const input of [
-      { endpoint: "http://push.example/1", keys: { p256dh: "p", auth: "a" } },
-      { endpoint: "https://push.example/1", keys: { p256dh: "", auth: "a" } },
-      { endpoint: "https://push.example/1", keys: { p256dh: "p", auth: "" } },
-    ]
-  ) {
+  for (const input of [
+    { endpoint: "http://push.example/1", keys: { p256dh: "p", auth: "a" } },
+    { endpoint: "https://push.example/1", keys: { p256dh: "", auth: "a" } },
+    { endpoint: "https://push.example/1", keys: { p256dh: "p", auth: "" } },
+  ]) {
     let refused = false;
     try {
       service.add(input);

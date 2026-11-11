@@ -1,9 +1,12 @@
 import type { ApiKeyAuth, Credential, Provider } from "../ai/types.ts";
-import type { SettingsRepo } from "../settings/repo.ts";
 import { CoreError } from "../errors.ts";
-import { ALLOWED_OPENAI_APIS, safeJsonParse } from "../shared/mod.ts";
-import { USER_PROVIDERS_KEY } from "../shared/mod.ts";
 import { isRecord } from "../fs.ts";
+import type { SettingsRepo } from "../settings/repo.ts";
+import {
+  ALLOWED_OPENAI_APIS,
+  safeJsonParse,
+  USER_PROVIDERS_KEY,
+} from "../shared/mod.ts";
 import { buildModel, buildProvider } from "./custom.ts";
 
 /**
@@ -72,8 +75,10 @@ export interface UserProviderSummary extends UserProviderConfig {
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 function isAllowedApi(value: unknown): value is AllowedApi {
-  return typeof value === "string" &&
-    (ALLOWED_OPENAI_APIS as readonly string[]).includes(value);
+  return (
+    typeof value === "string" &&
+    (ALLOWED_OPENAI_APIS as readonly string[]).includes(value)
+  );
 }
 
 function isHeaders(value: unknown): value is Record<string, string> {
@@ -83,8 +88,9 @@ function isHeaders(value: unknown): value is Record<string, string> {
 }
 
 function isModelInput(value: unknown): value is ("text" | "image")[] {
-  return Array.isArray(value) &&
-    value.every((v) => v === "text" || v === "image");
+  return (
+    Array.isArray(value) && value.every((v) => v === "text" || v === "image")
+  );
 }
 
 function isCost(value: unknown): value is UserProviderModel["cost"] {
@@ -136,10 +142,7 @@ export function parseUserProviderInput(
     throw new CoreError(`invalid baseUrl: ${baseUrl}`, "invalid");
   }
   if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
-    throw new CoreError(
-      `baseUrl must be http(s): ${baseUrl}`,
-      "invalid",
-    );
+    throw new CoreError(`baseUrl must be http(s): ${baseUrl}`, "invalid");
   }
 
   if (!isAllowedApi(raw.api)) {
@@ -200,18 +203,17 @@ export function parseUserProviderInput(
       baseUrl: typeof m.baseUrl === "string" ? m.baseUrl : undefined,
       reasoning: typeof m.reasoning === "boolean" ? m.reasoning : undefined,
       input: Array.isArray(m.input)
-        ? m.input as ("text" | "image")[]
+        ? (m.input as ("text" | "image")[])
         : undefined,
-      contextWindow: typeof m.contextWindow === "number"
-        ? m.contextWindow
-        : undefined,
-      maxInputTokens: typeof m.maxInputTokens === "number"
-        ? m.maxInputTokens
-        : undefined,
+      contextWindow:
+        typeof m.contextWindow === "number" ? m.contextWindow : undefined,
+      maxInputTokens:
+        typeof m.maxInputTokens === "number" ? m.maxInputTokens : undefined,
       maxTokens: typeof m.maxTokens === "number" ? m.maxTokens : undefined,
-      cost: typeof m.cost === "object" && m.cost !== null
-        ? m.cost as UserProviderModel["cost"]
-        : undefined,
+      cost:
+        typeof m.cost === "object" && m.cost !== null
+          ? (m.cost as UserProviderModel["cost"])
+          : undefined,
     };
   });
 
@@ -243,9 +245,9 @@ function credentialStoreApiKey(providerId: string): ApiKeyAuth {
       return Promise.resolve(
         credential?.type === "api_key" && credential.key.length > 0
           ? {
-            auth: { apiKey: credential.key },
-            source: "stored credential",
-          }
+              auth: { apiKey: credential.key },
+              source: "stored credential",
+            }
           : undefined,
       );
     },
@@ -253,15 +255,13 @@ function credentialStoreApiKey(providerId: string): ApiKeyAuth {
 }
 
 /** Build a runtime Provider from a stored config. */
-export function buildUserProvider(
-  config: UserProviderConfig,
-): Provider {
+export function buildUserProvider(config: UserProviderConfig): Provider {
   const models = config.models.map((m) =>
     buildModel(config.id, m, {
       baseUrl: config.baseUrl,
       api: config.api,
       headers: config.headers,
-    })
+    }),
   );
   return buildProvider({
     id: config.id,
@@ -284,8 +284,10 @@ export class UserProviderStore {
     if (!Array.isArray(parsed)) return [];
     return parsed.filter(
       (c): c is UserProviderConfig =>
-        isRecord(c) && typeof c.id === "string" &&
-        typeof c.baseUrl === "string" && Array.isArray(c.models),
+        isRecord(c) &&
+        typeof c.id === "string" &&
+        typeof c.baseUrl === "string" &&
+        Array.isArray(c.models),
     );
   }
 

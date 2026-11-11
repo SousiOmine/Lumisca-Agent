@@ -1,19 +1,17 @@
-import { useEffect, useState } from "preact/compat";
 import { IconPlus, IconTrash } from "@tabler/icons-preact";
-import type { WebSearchSettingsView } from "../../types.ts";
+import { useEffect, useState } from "preact/compat";
 import { api } from "../../api.ts";
-import { errorText } from "../../providers.ts";
-import { useT } from "../../i18n.ts";
-import { WebSearchProviderDialog } from "./WebSearchProviderDialog.tsx";
 import { confirmAction } from "../../confirm.ts";
-import { SettingsSection } from "./SettingsSection.tsx";
+import { useT } from "../../i18n.ts";
+import { errorText } from "../../providers.ts";
+import type { WebSearchSettingsView } from "../../types.ts";
 import { ProviderRow } from "./ProviderRow.tsx";
+import { SettingsSection } from "./SettingsSection.tsx";
+import { WebSearchProviderDialog } from "./WebSearchProviderDialog.tsx";
 
 /** Which provider the dialog is editing: adding one, or changing a stored
  * key. */
-type DialogMode =
-  | { kind: "add" }
-  | { kind: "edit"; id: string; name: string };
+type DialogMode = { kind: "add" } | { kind: "edit"; id: string; name: string };
 
 /**
  * Settings → プロバイダー → Web 検索: the search provider the agent's
@@ -127,10 +125,12 @@ export function WebSearchPanel() {
         <p className="settings-note">{t("settings.webSearch.empty")}</p>
       )}
 
-      {!loading && view !== null && view.providers.length > 0 &&
+      {!loading &&
+        view !== null &&
+        view.providers.length > 0 &&
         view.defaultId === null && (
-        <p className="settings-note">{t("settings.webSearch.noDefault")}</p>
-      )}
+          <p className="settings-note">{t("settings.webSearch.noDefault")}</p>
+        )}
 
       {!loading &&
         view?.providers.map((provider) => (
@@ -159,10 +159,10 @@ export function WebSearchPanel() {
                     className="btn small"
                     disabled={busy !== null}
                     onClick={() =>
-                      void mutate(
-                        provider.id,
-                        () => api.setDefaultWebSearchProvider(provider.id),
-                      )}
+                      void mutate(provider.id, () =>
+                        api.setDefaultWebSearchProvider(provider.id),
+                      )
+                    }
                   >
                     {t("settings.webSearch.makeDefault")}
                   </button>
@@ -176,7 +176,8 @@ export function WebSearchPanel() {
                       kind: "edit",
                       id: provider.id,
                       name: provider.name,
-                    })}
+                    })
+                  }
                 >
                   {t("common.edit")}
                 </button>

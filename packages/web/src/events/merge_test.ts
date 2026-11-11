@@ -32,7 +32,10 @@ Deno.test("merge: the newest window is folded in, keeping both sides' order", ()
     window(["2", "3", "4"]),
     rules,
   );
-  assertEquals(merged.items.map((i) => i.key), ["1", "2", "3", "4"]);
+  assertEquals(
+    merged.items.map((i) => i.key),
+    ["1", "2", "3", "4"],
+  );
 });
 
 Deno.test("merge: a window that shares no item replaces the history", () => {
@@ -43,7 +46,10 @@ Deno.test("merge: a window that shares no item replaces the history", () => {
     window(["8", "9"], "before-8"),
     rules,
   );
-  assertEquals(merged.items.map((i) => i.key), ["8", "9"]);
+  assertEquals(
+    merged.items.map((i) => i.key),
+    ["8", "9"],
+  );
   assertEquals(merged.older, "before-8");
 });
 
@@ -54,7 +60,10 @@ Deno.test("merge: an empty window changes nothing", () => {
 
 Deno.test("merge: an empty history takes the window whole", () => {
   const merged = mergeNewestWindow(window([]), window(["1", "2"], "c"), rules);
-  assertEquals(merged.items.map((i) => i.key), ["1", "2"]);
+  assertEquals(
+    merged.items.map((i) => i.key),
+    ["1", "2"],
+  );
   assertEquals(merged.older, "c");
 });
 
@@ -66,7 +75,10 @@ Deno.test("merge: an item spliced into the middle lands in its place", () => {
     window(["1", "2", "3"]),
     rules,
   );
-  assertEquals(merged.items.map((i) => i.key), ["1", "2", "3"]);
+  assertEquals(
+    merged.items.map((i) => i.key),
+    ["1", "2", "3"],
+  );
 });
 
 Deno.test("merge: the cursor stays the client's while its front survives", () => {
@@ -97,7 +109,10 @@ Deno.test("merge: a duplicated key consumes one anchor per incoming copy", () =>
     window(["b", "b"]),
     { ...rules, multiAnchor: true },
   );
-  assertEquals(merged.items.map((i) => i.key), ["a", "b", "b"]);
+  assertEquals(
+    merged.items.map((i) => i.key),
+    ["a", "b", "b"],
+  );
 });
 
 Deno.test("merge: without multiAnchor one key matches one position", () => {
@@ -106,7 +121,10 @@ Deno.test("merge: without multiAnchor one key matches one position", () => {
     window(["b"]),
     rules,
   );
-  assertEquals(merged.items.map((i) => i.key), ["a", "b", "b"]);
+  assertEquals(
+    merged.items.map((i) => i.key),
+    ["a", "b", "b"],
+  );
 });
 
 Deno.test("merge: a repeated resync does not grow the history", () => {
@@ -128,7 +146,10 @@ Deno.test("merge: an item the view holds earlier is not written twice", () => {
     window(["a", "t", "p", "b", "c"]),
     { ...rules, multiAnchor: true },
   );
-  assertEquals(merged.items.map((i) => i.key), ["p", "a", "t", "b", "c"]);
+  assertEquals(
+    merged.items.map((i) => i.key),
+    ["p", "a", "t", "b", "c"],
+  );
 });
 
 Deno.test("prepend: a page goes in front, and a known page ends the walk", () => {
@@ -138,7 +159,10 @@ Deno.test("prepend: a page goes in front, and a known page ends the walk", () =>
     "before-1",
     rules,
   );
-  assertEquals(first.items.map((i) => i.key), ["1", "2", "3", "4"]);
+  assertEquals(
+    first.items.map((i) => i.key),
+    ["1", "2", "3", "4"],
+  );
   assertEquals(first.older, "before-1");
   // The server answered with a page the client already holds: walking again
   // would land on the same rows forever.
@@ -163,7 +187,10 @@ Deno.test("prepend historic: live items above the page are not inserted", () => 
     "before-1",
     timed,
   );
-  assertEquals(merged.items.map((i) => i.key), ["1", "2", "3", "9"]);
+  assertEquals(
+    merged.items.map((i) => i.key),
+    ["1", "2", "3", "9"],
+  );
 });
 
 Deno.test("prepend historic: the page stops at the first item the client holds", () => {
@@ -173,7 +200,10 @@ Deno.test("prepend historic: the page stops at the first item the client holds",
     "before-1",
     timed,
   );
-  assertEquals(merged.items.map((i) => i.key), ["1", "2", "3"]);
+  assertEquals(
+    merged.items.map((i) => i.key),
+    ["1", "2", "3"],
+  );
 });
 
 Deno.test("prepend historic: a page that adds nothing ends the walk", () => {

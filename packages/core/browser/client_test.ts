@@ -1,6 +1,6 @@
 import { assert, assertEquals, assertMatch } from "@std/assert";
-import { HttpBrowserBackend } from "./client.ts";
 import { unusedPort } from "../test-utils.ts";
+import { HttpBrowserBackend } from "./client.ts";
 import {
   BrowserBackendError,
   RPC_TOKEN_HEADER,
@@ -30,14 +30,20 @@ async function expectCode(
 /** A minimal mock of the host side: records requests, replies per a
  * script queue. Serves the RPC protocol on 127.0.0.1. */
 class MockHost {
-  private readonly seen: Array<
-    { method: string; params: unknown; token: string | null }
-  > = [];
+  private readonly seen: Array<{
+    method: string;
+    params: unknown;
+    token: string | null;
+  }> = [];
   private replies: Array<
     | { status: number; body: string }
-    | ((req: { method: string; params: unknown; token: string | null }) =>
-      | { status: number; body: string }
-      | Promise<{ status: number; body: string }>)
+    | ((req: {
+        method: string;
+        params: unknown;
+        token: string | null;
+      }) =>
+        | { status: number; body: string }
+        | Promise<{ status: number; body: string }>)
   > = [];
   private server: Deno.HttpServer | null = null;
   url = "";
@@ -64,7 +70,10 @@ class MockHost {
       token: request.headers.get(RPC_TOKEN_HEADER),
     };
     try {
-      const body = await request.json() as { method: string; params: unknown };
+      const body = (await request.json()) as {
+        method: string;
+        params: unknown;
+      };
       record.method = body.method;
       record.params = body.params;
     } catch {
@@ -94,7 +103,11 @@ class MockHost {
   }
 
   queueFn(
-    fn: (req: { method: string; params: unknown; token: string | null }) =>
+    fn: (req: {
+      method: string;
+      params: unknown;
+      token: string | null;
+    }) =>
       | { status: number; body: string }
       | Promise<{ status: number; body: string }>,
   ): void {

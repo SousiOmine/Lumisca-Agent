@@ -22,25 +22,25 @@
  * cancels itself for a reader who asked for less motion; the fades stay.
  */
 import { useCallback, useEffect, useRef } from "preact/compat";
-import { useT } from "../i18n.ts";
+import { useReducedMotion } from "../hooks/useMediaQuery.ts";
 import { useModalKeyboard } from "../hooks/useModalKeyboard.ts";
 import { usePresence } from "../hooks/usePresence.ts";
-import { useReducedMotion } from "../hooks/useMediaQuery.ts";
-import { EASE_OUT, EXIT_SECONDS, play } from "../motion.ts";
+import { useT } from "../i18n.ts";
 import {
   type Box,
   clampOffset,
   distanceOf,
   midpointOf,
   type PinchStart,
-  pinchZoom,
   type Point,
+  pinchZoom,
   transformOf,
   wheelScale,
   ZOOM_FIT,
-  zoomAround,
   type ZoomState,
+  zoomAround,
 } from "../lightbox-zoom.ts";
+import { EASE_OUT, EXIT_SECONDS, play } from "../motion.ts";
 
 export interface LightboxProps {
   /** The picture to show, already a URL the browser can load. `null` closes
@@ -264,14 +264,15 @@ function LightboxSurface({
       state.pinch = null;
       // Only a press that lands on the picture can pan it; a press on the
       // backdrop is the click that closes.
-      state.drag = event.target instanceof HTMLImageElement
-        ? {
-          pointerId: event.pointerId,
-          from: { x: event.clientX, y: event.clientY },
-          origin: { x: zoom.current.x, y: zoom.current.y },
-          moved: false,
-        }
-        : null;
+      state.drag =
+        event.target instanceof HTMLImageElement
+          ? {
+              pointerId: event.pointerId,
+              from: { x: event.clientX, y: event.clientY },
+              origin: { x: zoom.current.x, y: zoom.current.y },
+              moved: false,
+            }
+          : null;
     };
 
     const onPointerMove = (event: PointerEvent) => {
@@ -380,9 +381,8 @@ function LightboxSurface({
     const image = imageRef.current;
     // Where the picture stands now: a reader who zoomed in sees it shrink from
     // there instead of jumping back to fit for one frame.
-    const from = image === null
-      ? "scale(1)"
-      : getComputedStyle(image).transform;
+    const from =
+      image === null ? "scale(1)" : getComputedStyle(image).transform;
     if (overlay !== null) overlay.dataset.exiting = "true";
     const options = {
       duration: EXIT_SECONDS,
@@ -392,10 +392,16 @@ function LightboxSurface({
     let cancelled = false;
     void Promise.all([
       play(overlay, { opacity: [1, 0] }, options),
-      image === null ? Promise.resolve(null) : play(image, {
-        opacity: [1, 0],
-        transform: [from === "none" ? "scale(1)" : from, "scale(0.96)"],
-      }, options),
+      image === null
+        ? Promise.resolve(null)
+        : play(
+            image,
+            {
+              opacity: [1, 0],
+              transform: [from === "none" ? "scale(1)" : from, "scale(0.96)"],
+            },
+            options,
+          ),
     ]).then(async (running) => {
       // Nothing to play (reduced motion, or the library could not be loaded):
       // the overlay goes now rather than waiting for an animation that never

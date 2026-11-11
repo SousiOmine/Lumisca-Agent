@@ -3,8 +3,9 @@
  * server). One home so the startup policy — never block startup, never
  * fail it when offline — stays in one place.
  */
-import { createLogger } from "../log.ts";
+
 import { errorMessage } from "../errors.ts";
+import { createLogger } from "../log.ts";
 import type { CatalogStatus } from "../shared/providers.ts";
 
 const log = createLogger("catalog");
@@ -24,11 +25,12 @@ export interface CatalogRefresher {
  * selected, leaving the session pointing at a model that no longer exists.
  */
 export function refreshCatalogInBackground(core: CatalogRefresher): void {
-  void core.refreshModelCatalog()
+  void core
+    .refreshModelCatalog()
     .then((status) =>
-      log.debug(`model catalog refreshed from ${status.source}`)
+      log.debug(`model catalog refreshed from ${status.source}`),
     )
     .catch((error) =>
-      log.debug(`model catalog refresh failed: ${errorMessage(error)}`)
+      log.debug(`model catalog refresh failed: ${errorMessage(error)}`),
     );
 }

@@ -27,17 +27,15 @@ export interface StreamController {
  * conversation's entries) stays in the hook that owns its state; this only
  * ensures the transport cannot be opened twice or outlive its owner.
  */
-export function createStreamController<E>(
-  options: {
-    /** Open one socket and return its closer. */
-    connect(handlers: StreamHandlers<E>): () => void;
-    onEvent(event: E): void;
-    onClose(): void;
-    onOpen(): void;
-    /** Whether the owner has gone away; a retry then never runs. */
-    stopped(): boolean;
-  },
-): StreamController {
+export function createStreamController<E>(options: {
+  /** Open one socket and return its closer. */
+  connect(handlers: StreamHandlers<E>): () => void;
+  onEvent(event: E): void;
+  onClose(): void;
+  onOpen(): void;
+  /** Whether the owner has gone away; a retry then never runs. */
+  stopped(): boolean;
+}): StreamController {
   let close: (() => void) | undefined;
   let disposed = false;
   const reconnect = createReconnectScheduler({

@@ -1,5 +1,5 @@
-import { assertEquals, assertRejects } from "@std/assert";
 import { removeDirRetry } from "@lumisca/core/test-utils";
+import { assertEquals, assertRejects } from "@std/assert";
 import { ArchiveError, extractArchive, packageEntryPath } from "./archive.ts";
 import { buildTarGz, buildZip, ustarHeader } from "./test-utils.ts";
 
@@ -50,26 +50,24 @@ Deno.test("packageEntryPath keeps the package layout and refuses the rest", () =
     "stella-container/a11y.py",
   );
 
-  for (
-    const rejected of [
-      "",
-      "/",
-      "assets.json",
-      "./assets.json",
-      "../escape.txt",
-      `${WINDOWS_PREFIX}/../../escape.txt`,
-      `${WINDOWS_PREFIX}/nested/deeper/file.txt`,
-      `${WINDOWS_PREFIX}/stella-container/helper/a11y.py`,
-      `C:/Windows/system32/evil.exe`,
-      `C:\\Windows\\system32\\evil.exe`,
-      `${WINDOWS_PREFIX}\\lumisca-server.exe`,
-      `${WINDOWS_PREFIX}/.hidden`,
-      `${WINDOWS_PREFIX}/name with spaces.txt`,
-      `${WINDOWS_PREFIX}/stella-container/.hidden`,
-      `${WINDOWS_PREFIX}/`,
-      `${WINDOWS_PREFIX}`,
-    ]
-  ) {
+  for (const rejected of [
+    "",
+    "/",
+    "assets.json",
+    "./assets.json",
+    "../escape.txt",
+    `${WINDOWS_PREFIX}/../../escape.txt`,
+    `${WINDOWS_PREFIX}/nested/deeper/file.txt`,
+    `${WINDOWS_PREFIX}/stella-container/helper/a11y.py`,
+    `C:/Windows/system32/evil.exe`,
+    `C:\\Windows\\system32\\evil.exe`,
+    `${WINDOWS_PREFIX}\\lumisca-server.exe`,
+    `${WINDOWS_PREFIX}/.hidden`,
+    `${WINDOWS_PREFIX}/name with spaces.txt`,
+    `${WINDOWS_PREFIX}/stella-container/.hidden`,
+    `${WINDOWS_PREFIX}/`,
+    `${WINDOWS_PREFIX}`,
+  ]) {
     assertEquals(
       packageEntryPath(rejected),
       undefined,
@@ -192,10 +190,12 @@ Deno.test("zip: unsafe paths and duplicate names are refused", async () => {
     "escape.zip",
   );
   const nested = await writeArchive(
-    await buildZip([{
-      name: `${WINDOWS_PREFIX}/nested/deeper/evil.txt`,
-      content: "x",
-    }]),
+    await buildZip([
+      {
+        name: `${WINDOWS_PREFIX}/nested/deeper/evil.txt`,
+        content: "x",
+      },
+    ]),
     "nested.zip",
   );
   const duplicate = await writeArchive(
@@ -314,9 +314,7 @@ Deno.test("tar.gz: metadata entries are skipped, long names are refused", async 
   // A PAX header that renames the next entry (a long path) is refused: the
   // name in the following header is truncated, so installing it would put a
   // file somewhere other than the archive says.
-  const rename = encoder.encode(
-    `40 path=${"a".repeat(200)}/assets.json\n`,
-  );
+  const rename = encoder.encode(`40 path=${"a".repeat(200)}/assets.json\n`);
   const withLongName = await writeArchive(
     await gzip(
       buildTar([

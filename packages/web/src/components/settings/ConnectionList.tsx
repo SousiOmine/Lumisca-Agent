@@ -1,14 +1,7 @@
-import { useEffect, useState } from "preact/compat";
-import type { CSSProperties } from "preact/compat";
 import { IconChevronDown, IconPlus, IconTrash } from "@tabler/icons-preact";
-import type { ConnectionEntry } from "../../types.ts";
-import {
-  shellAvailable,
-  shellCall,
-  type ShellState,
-  shellState,
-} from "../../shell.ts";
-import { errorText } from "../../providers.ts";
+import type { CSSProperties } from "preact/compat";
+import { useEffect, useState } from "preact/compat";
+import { confirmAction } from "../../confirm.ts";
 import {
   connectionLabel,
   isSupportedUrl,
@@ -18,9 +11,16 @@ import {
   useConnections,
   withUrl,
 } from "../../connections.ts";
-import { Field } from "../Field.tsx";
 import { useT } from "../../i18n.ts";
-import { confirmAction } from "../../confirm.ts";
+import { errorText } from "../../providers.ts";
+import {
+  type ShellState,
+  shellAvailable,
+  shellCall,
+  shellState,
+} from "../../shell.ts";
+import type { ConnectionEntry } from "../../types.ts";
+import { Field } from "../Field.tsx";
 
 const ACTIVE_TAG: CSSProperties = {
   fontSize: 11,
@@ -68,7 +68,10 @@ export function ConnectionList() {
       const ok = await shellAvailable();
       setDesktop(ok);
       if (ok) {
-        shellState.read().then(setState).catch(() => {});
+        shellState
+          .read()
+          .then(setState)
+          .catch(() => {});
       }
     })();
   }, []);
@@ -146,7 +149,7 @@ export function ConnectionList() {
 
   const update = (id: string, patch: Partial<ConnectionEntry>) =>
     setServers((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, ...patch } : s))
+      prev.map((s) => (s.id === id ? { ...s, ...patch } : s)),
     );
 
   /** Add an empty entry and open its fields: it has nothing to summarise. */
@@ -203,17 +206,19 @@ export function ConnectionList() {
           <p className="settings-note">
             {desktop
               ? state?.mode === "remote"
-                ? `${t("settings.connection.currentDisplay")} ${
-                  serverLabel(state.name, state.url)
-                }`
-                : `${t("settings.connection.currentDisplay")} ${
-                  t("settings.connection.localServer")
-                }`
-              : `${t("settings.connection.currentDisplay")} ${
-                t("settings.connection.thisServer", {
-                  origin: location.origin,
-                })
-              }`}
+                ? `${t("settings.connection.currentDisplay")} ${serverLabel(
+                    state.name,
+                    state.url,
+                  )}`
+                : `${t("settings.connection.currentDisplay")} ${t(
+                    "settings.connection.localServer",
+                  )}`
+              : `${t("settings.connection.currentDisplay")} ${t(
+                  "settings.connection.thisServer",
+                  {
+                    origin: location.origin,
+                  },
+                )}`}
           </p>
 
           {error && <p className="error-text">{error}</p>}
@@ -251,10 +256,13 @@ export function ConnectionList() {
               busy={busy}
               expanded={expanded.has(server.id)}
               onToggle={() =>
-                setExpandedId(server.id, !expanded.has(server.id))}
-              onProbe={desktop
-                ? (url, token) => bridgeTest(url, token)
-                : (url) => probe(url)}
+                setExpandedId(server.id, !expanded.has(server.id))
+              }
+              onProbe={
+                desktop
+                  ? (url, token) => bridgeTest(url, token)
+                  : (url) => probe(url)
+              }
               onChange={(patch) => update(server.id, patch)}
               onConnect={() => connect(server)}
               onSave={() => save(server)}
@@ -331,9 +339,10 @@ function ServerCard({
     }
   };
 
-  const title = server.name.trim() !== "" || server.url.trim() !== ""
-    ? connectionLabel(server)
-    : t("settings.connection.unnamed");
+  const title =
+    server.name.trim() !== "" || server.url.trim() !== ""
+      ? connectionLabel(server)
+      : t("settings.connection.unnamed");
 
   return (
     <div className="setting-card setting-card-stack">
@@ -343,9 +352,11 @@ function ServerCard({
           className="btn setting-card-open"
           onClick={onToggle}
           aria-expanded={expanded}
-          title={expanded
-            ? t("settings.connection.foldEntry")
-            : t("settings.connection.editEntry")}
+          title={
+            expanded
+              ? t("settings.connection.foldEntry")
+              : t("settings.connection.editEntry")
+          }
         >
           <span style={{ flex: 1, minWidth: 0 }}>
             <span style={{ fontWeight: 600 }}>{title}</span>
@@ -364,9 +375,7 @@ function ServerCard({
               </span>
             )}
           </span>
-          <span
-            className={`setting-card-chevron${expanded ? " open" : ""}`}
-          >
+          <span className={`setting-card-chevron${expanded ? " open" : ""}`}>
             <IconChevronDown size={14} />
           </span>
         </button>
@@ -407,9 +416,9 @@ function ServerCard({
           {result && (
             <p
               className={result.ok ? undefined : "error-text"}
-              style={result.ok
-                ? { color: "var(--ok)", fontSize: 12.5 }
-                : undefined}
+              style={
+                result.ok ? { color: "var(--ok)", fontSize: 12.5 } : undefined
+              }
             >
               {result.text}
             </p>

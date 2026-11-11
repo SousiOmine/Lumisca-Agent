@@ -11,24 +11,24 @@
  * hub imports the pieces, and the pieces import neither.
  */
 import type { Workspace } from "../domain/workspace.ts";
+import { discoverPlugins } from "../plugins/discover.ts";
+import type { CommandSafety } from "../safety/command-safety.ts";
+import { appSkillDirs as defaultAppSkillDirs } from "../settings/path.ts";
+import { builtinSkills } from "../skills/builtin/mod.ts";
+import { discoverSkills, type SkillDef } from "../skills/discover.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
-import { HostFileBackend } from "./host/files.ts";
-import { HostCommandRunner } from "./host/command-runner.ts";
-import type { FileBackend } from "./file-backend.ts";
+import { createBashTool } from "./bash.ts";
 import type { CommandRunner } from "./command-backend.ts";
+import type { FileBackend } from "./file-backend.ts";
 import {
   createEditFileTool,
   createListDirTool,
   createReadFileTool,
   createWriteFileTool,
 } from "./filesystem.ts";
-import { createBashTool } from "./bash.ts";
+import { HostCommandRunner } from "./host/command-runner.ts";
+import { HostFileBackend } from "./host/files.ts";
 import type { Tool } from "./schema.ts";
-import { discoverPlugins } from "../plugins/discover.ts";
-import { discoverSkills, type SkillDef } from "../skills/discover.ts";
-import { appSkillDirs as defaultAppSkillDirs } from "../settings/path.ts";
-import { builtinSkills } from "../skills/builtin/mod.ts";
-import type { CommandSafety } from "../safety/command-safety.ts";
 
 /** Skills for a session, in precedence order: workspace `.agents/skills`,
  * then agent plugin skills (`skills/` of `.agents/plugins` plugins), then
@@ -123,8 +123,8 @@ export function subagentSkills(
       subagents: options.subagents,
     }).map((skill) => skill.name),
   );
-  return catalog.filter((skill) =>
-    skill.source !== "builtin" || allowed.has(skill.name)
+  return catalog.filter(
+    (skill) => skill.source !== "builtin" || allowed.has(skill.name),
   );
 }
 

@@ -66,7 +66,8 @@
   .stella-handover,
   /* The gated entrances (styles/motion.css): the gate changes which rows
    * animate, not what "reduced" means for them. The one exception is the
-   * user's capsule, whose flag sits on the row above it. */ [data-enter] .msg.user {
+   * user's capsule, whose flag sits on the row above it. */ [data-enter]
+  .msg.user {
     animation-name: lum-fade-only;
   }
 

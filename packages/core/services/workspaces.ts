@@ -1,8 +1,8 @@
-import { CoreError } from "../errors.ts";
 import type { SessionInfo } from "../domain/session.ts";
 import type { Workspace } from "../domain/workspace.ts";
-import { Sandbox } from "../workspace/sandbox.ts";
+import { CoreError } from "../errors.ts";
 import type { WorkspaceRepo } from "../workspace/repo.ts";
+import { Sandbox } from "../workspace/sandbox.ts";
 
 /** Collaborators the workspace service needs from the core: session
  * lifecycle (rebuild guards, per-session teardown) around workspace
@@ -70,9 +70,10 @@ export class WorkspaceService {
       throw new CoreError("The chat workspace cannot be edited", "forbidden");
     }
     const name = input.name ?? current.name;
-    const folders = input.folders !== undefined
-      ? await WorkspaceService.resolveFolders(input.folders)
-      : current.folders;
+    const folders =
+      input.folders !== undefined
+        ? await WorkspaceService.resolveFolders(input.folders)
+        : current.folders;
     if (folders.length === 0) {
       throw new CoreError(
         "Workspace must contain at least one folder",

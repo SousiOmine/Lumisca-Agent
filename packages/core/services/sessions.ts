@@ -1,9 +1,10 @@
-import type { AgentMessage } from "../ai/types.ts";
-import type { ImageContent } from "../ai/types.ts";
 import type { SessionAgent } from "../agent/session-agent.ts";
-import type { PendingQuestion } from "../tools/ask.ts";
-import type { BackgroundCommandInfo } from "../tools/background.ts";
-import type { SkillInfo } from "../skills/discover.ts";
+import type { AgentMessage, ImageContent } from "../ai/types.ts";
+import type { ModePrompt } from "../domain/mode-message.ts";
+import type { SessionInfo } from "../domain/session.ts";
+import type { StellaEntry } from "../domain/stella-conversation.ts";
+import type { WindowPage, WindowQuery } from "../session/transcript-window.ts";
+import type { ContextUsageSummary } from "../shared/context-usage.ts";
 import type {
   AskAnswer,
   PromptFileRef,
@@ -11,11 +12,9 @@ import type {
   ThinkingLevel,
   TodoPhase,
 } from "../shared/mod.ts";
-import type { ContextUsageSummary } from "../shared/context-usage.ts";
-import type { WindowPage, WindowQuery } from "../session/transcript-window.ts";
-import type { ModePrompt } from "../domain/mode-message.ts";
-import type { SessionInfo } from "../domain/session.ts";
-import type { StellaEntry } from "../domain/stella-conversation.ts";
+import type { SkillInfo } from "../skills/discover.ts";
+import type { PendingQuestion } from "../tools/ask.ts";
+import type { BackgroundCommandInfo } from "../tools/background.ts";
 import type { UploadFile } from "../vm/uploads.ts";
 import { SessionAssets } from "./session-assets.ts";
 import type { SessionServiceDeps } from "./session-deps.ts";
@@ -29,8 +28,8 @@ import { SessionSkills } from "./session-skills.ts";
 import { SessionState } from "./session-state.ts";
 import { SessionTranscript } from "./session-transcript.ts";
 
-export type { CreateSessionInput, DefaultModel } from "./session-lifecycle.ts";
 export type { SessionServiceDeps } from "./session-deps.ts";
+export type { CreateSessionInput, DefaultModel } from "./session-lifecycle.ts";
 
 /**
  * The sessions an installation owns: one entry point over six collaborators.

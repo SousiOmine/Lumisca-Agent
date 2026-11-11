@@ -1,6 +1,6 @@
 import { assertEquals } from "@std/assert";
-import type { ModelInfo } from "./types.ts";
 import { buildModelList } from "./model-groups.ts";
+import type { ModelInfo } from "./types.ts";
 
 /**
  * The picker's one column: the recent picks first, then one section per
@@ -20,21 +20,22 @@ const providers = [
 ];
 
 const modelsByProvider = new Map<string, ModelInfo[]>([
-  ["anthropic", [
-    model("claude-sonnet"),
-    model("claude-haiku", { enabled: false }),
-  ]],
-  ["openai", [
-    model("gpt-5"),
-    model("gpt-5-mini", { input: ["text"] }),
-    model("vision", { input: ["text", "image"] }),
-  ]],
+  [
+    "anthropic",
+    [model("claude-sonnet"), model("claude-haiku", { enabled: false })],
+  ],
+  [
+    "openai",
+    [
+      model("gpt-5"),
+      model("gpt-5-mini", { input: ["text"] }),
+      model("vision", { input: ["text", "image"] }),
+    ],
+  ],
   ["empty", []],
 ]);
 
-function list(
-  overrides: Partial<Parameters<typeof buildModelList>[0]> = {},
-) {
+function list(overrides: Partial<Parameters<typeof buildModelList>[0]> = {}) {
   return buildModelList({
     providers,
     modelsByProvider,
@@ -56,18 +57,20 @@ Deno.test("model list: the recent section comes first, then the providers", () =
       { provider: "openai", modelId: "gpt-5" },
     ],
   });
-  assertEquals(result.groups.map((g) => g.key), [
-    "recent",
-    "anthropic",
-    "openai",
-  ]);
+  assertEquals(
+    result.groups.map((g) => g.key),
+    ["recent", "anthropic", "openai"],
+  );
   assertEquals(
     result.groups[0]!.rows.map((r) => `${r.provider}/${r.model.id}`),
     ["openai/gpt-5", "anthropic/claude-sonnet"],
   );
   // A provider with no models gets no section: an empty heading is one more
   // thing to scroll past.
-  assertEquals(result.groups.some((g) => g.key === "empty"), false);
+  assertEquals(
+    result.groups.some((g) => g.key === "empty"),
+    false,
+  );
   // Sections name their provider for the heading.
   assertEquals(result.groups[2]!.title, "OpenAI");
   assertEquals(result.empty, false);
@@ -82,8 +85,14 @@ Deno.test("model list: the recent section cannot offer what the filters hide", (
     ],
   });
   // Nothing survives, so the section is not drawn at all.
-  assertEquals(result.groups.some((g) => g.kind === "recent"), false);
-  assertEquals(result.groups.map((g) => g.key), ["anthropic", "openai"]);
+  assertEquals(
+    result.groups.some((g) => g.kind === "recent"),
+    false,
+  );
+  assertEquals(
+    result.groups.map((g) => g.key),
+    ["anthropic", "openai"],
+  );
   assertEquals(
     result.groups[0]!.rows.map((r) => r.model.id),
     ["claude-sonnet"],
@@ -107,7 +116,10 @@ Deno.test("model list: image-only keeps the models that take images", () => {
 
 Deno.test("model list: a search filters the sections, and empty sections go", () => {
   const result = list({ query: "gpt" });
-  assertEquals(result.groups.map((g) => g.key), ["openai"]);
+  assertEquals(
+    result.groups.map((g) => g.key),
+    ["openai"],
+  );
   assertEquals(
     result.groups[0]!.rows.map((r) => r.model.id),
     ["gpt-5", "gpt-5-mini"],

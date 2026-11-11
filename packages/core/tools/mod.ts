@@ -5,6 +5,13 @@
  *   (`sessionSkills`, `fileTools`, `createCodingTools`, ...),
  * - `./system-prompt.ts` — `buildSystemPrompt` / `buildChatSystemPrompt`.
  */
+
+export {
+  buildChatSystemPrompt,
+  buildStellaSystemPrompt,
+  buildSystemPrompt,
+} from "./system-prompt.ts";
+export type { ToolBackends, ToolFactoryOptions } from "./toolsets.ts";
 export {
   createChatTools,
   createCodingTools,
@@ -14,9 +21,3 @@ export {
   readOnlyInvestigationTools,
   sessionSkills,
 } from "./toolsets.ts";
-export type { ToolBackends, ToolFactoryOptions } from "./toolsets.ts";
-export {
-  buildChatSystemPrompt,
-  buildStellaSystemPrompt,
-  buildSystemPrompt,
-} from "./system-prompt.ts";

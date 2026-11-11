@@ -44,11 +44,13 @@ export function createSystemdRunner(): ServiceRunner {
       stdin: "null",
       stdout: "piped",
       stderr: "piped",
-    }).output().catch((error) => {
-      throw new ServiceCommandError(
-        `${program} を実行できません: ${errorMessage(error)}`,
-      );
-    });
+    })
+      .output()
+      .catch((error) => {
+        throw new ServiceCommandError(
+          `${program} を実行できません: ${errorMessage(error)}`,
+        );
+      });
     const decode = (bytes: Uint8Array) =>
       new TextDecoder().decode(bytes).trim();
     return {

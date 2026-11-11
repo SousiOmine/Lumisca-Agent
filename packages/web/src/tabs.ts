@@ -24,9 +24,10 @@ export function tabKey(peerId: string, sessionId: string): string {
 }
 
 /** Split a tab key back into (peerId, sessionId). */
-export function splitTabKey(
-  key: string,
-): { peerId: string; sessionId: string } {
+export function splitTabKey(key: string): {
+  peerId: string;
+  sessionId: string;
+} {
   const i = key.indexOf(SEPARATOR);
   if (i === -1) return { peerId: "", sessionId: key };
   return {
@@ -38,10 +39,7 @@ export function splitTabKey(
 /** The tab keys that belong to one peer ("" = this server). Used to re-sync
  * only the sessions of a peer whose event stream just came back, instead of
  * re-reading every open tab. */
-export function keysForPeer(
-  keys: Iterable<string>,
-  peerId: string,
-): string[] {
+export function keysForPeer(keys: Iterable<string>, peerId: string): string[] {
   return [...keys].filter((key) => splitTabKey(key).peerId === peerId);
 }
 

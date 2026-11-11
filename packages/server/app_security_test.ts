@@ -1,11 +1,9 @@
-import { fauxProvider } from "@lumisca/core";
-import { assert, assertEquals } from "@std/assert";
-import { LumiscaCore } from "@lumisca/core";
+import { fauxProvider, LumiscaCore } from "@lumisca/core";
 import { LANGUAGE_KEY } from "@lumisca/core/shared";
+import { assert, assertEquals } from "@std/assert";
 import { createApp } from "./app.ts";
-import { setup } from "./test-utils.ts";
-
 import { validateHostConfig } from "./security.ts";
+import { setup } from "./test-utils.ts";
 
 Deno.test("server rejects non-loopback Host headers (DNS rebinding guard)", async () => {
   // Deno's fetch forbids overriding Host, so exercise the handler directly
@@ -178,9 +176,11 @@ Deno.test("token auth guards the API, websocket and page", async () => {
     // The PWA surface is on the token-free list: a browser's install
     // pipeline asks for it without this server's cookie, and a 401 there
     // makes the app uninstallable rather than protected.
-    for (
-      const path of ["/manifest.webmanifest", "/sw.js", "/pwa/icon-192.png"]
-    ) {
+    for (const path of [
+      "/manifest.webmanifest",
+      "/sw.js",
+      "/pwa/icon-192.png",
+    ]) {
       const response = await app.fetch(
         new Request(`http://127.0.0.1:8000${path}`, { headers: HOST }),
       );

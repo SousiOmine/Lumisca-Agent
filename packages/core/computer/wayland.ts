@@ -25,10 +25,11 @@
  * portal asks for on the first capture.
  */
 import { CoreError } from "../errors.ts";
+import { sleep } from "../shared/misc.ts";
 import {
   charKeysym,
-  keyKeysym,
   KEYSYM_RETURN,
+  keyKeysym,
   MODIFIER_KEYSYMS,
 } from "./keysyms.ts";
 import {
@@ -42,9 +43,8 @@ import {
   parseKeyChord,
   splitTypeText,
 } from "./motion.ts";
-import { sleep } from "../shared/misc.ts";
-import { describeMonitor } from "./portal/display-config.ts";
 import { type PortalProbeOptions, probePortal } from "./portal/client.ts";
+import { describeMonitor } from "./portal/display-config.ts";
 import type {
   LogicalMonitor,
   MonitorLayout,
@@ -122,13 +122,13 @@ export class WaylandComputerHost implements ComputerHost {
   }
 
   describe(): string {
-    const monitors = this.layout.monitors.map((monitor) =>
-      `${monitor.width}×${monitor.height} scale ${monitor.scale}` +
-      (monitor.primary ? " primary" : "")
+    const monitors = this.layout.monitors.map(
+      (monitor) =>
+        `${monitor.width}×${monitor.height} scale ${monitor.scale}` +
+        (monitor.primary ? " primary" : ""),
     );
-    const count = monitors.length === 1
-      ? "1 display"
-      : `${monitors.length} displays`;
+    const count =
+      monitors.length === 1 ? "1 display" : `${monitors.length} displays`;
     return `GNOME (Wayland), ${count}: ${monitors.join(", ")}`;
   }
 
@@ -173,7 +173,10 @@ export class WaylandComputerHost implements ComputerHost {
     const width = Math.max(1, Math.round(region.width * scaleX));
     const height = Math.max(1, Math.round(region.height * scaleY));
     if (
-      x < 0 || y < 0 || x + width > image.width || y + height > image.height
+      x < 0 ||
+      y < 0 ||
+      x + width > image.width ||
+      y + height > image.height
     ) {
       throw new CoreError(
         `the region (${region.x}, ${region.y}) ${region.width}×` +
@@ -227,12 +230,12 @@ export class WaylandComputerHost implements ComputerHost {
         await sleep(HOVER_SETTLE_MS);
         if (action.deltaY !== 0) {
           await this.withSession((session) =>
-            session.pointerAxisDiscrete("vertical", action.deltaY)
+            session.pointerAxisDiscrete("vertical", action.deltaY),
           );
         }
         if (action.deltaX !== 0) {
           await this.withSession((session) =>
-            session.pointerAxisDiscrete("horizontal", action.deltaX)
+            session.pointerAxisDiscrete("horizontal", action.deltaX),
           );
         }
         return { steps, durationMs: Date.now() - started };
@@ -306,14 +309,14 @@ export class WaylandComputerHost implements ComputerHost {
   private monitorAt(point: Point): LogicalMonitor {
     const monitors = this.layout.monitors;
     const inside = monitors.find((monitor) =>
-      containsPoint(this.screenBounds(monitor), point)
+      containsPoint(this.screenBounds(monitor), point),
     );
     if (inside !== undefined) return inside;
     return monitors.reduce((best, monitor) =>
       distanceToRect(this.screenBounds(monitor), point) <
-          distanceToRect(this.screenBounds(best), point)
+      distanceToRect(this.screenBounds(best), point)
         ? monitor
-        : best
+        : best,
     );
   }
 
@@ -326,17 +329,18 @@ export class WaylandComputerHost implements ComputerHost {
   ): PortalStream {
     const byConnector = session.streams.find((stream) =>
       stream.connectors.some((connector) =>
-        monitor.connectors.includes(connector)
-      )
+        monitor.connectors.includes(connector),
+      ),
     );
     if (byConnector !== undefined) {
       return byConnector;
     }
-    const byGeometry = session.streams.find((stream) =>
-      stream.position.x === monitor.x &&
-      stream.position.y === monitor.y &&
-      stream.size.width === monitor.width &&
-      stream.size.height === monitor.height
+    const byGeometry = session.streams.find(
+      (stream) =>
+        stream.position.x === monitor.x &&
+        stream.position.y === monitor.y &&
+        stream.size.width === monitor.width &&
+        stream.size.height === monitor.height,
     );
     if (byGeometry !== undefined) {
       return byGeometry;
@@ -404,9 +408,8 @@ export class WaylandComputerHost implements ComputerHost {
     const started = Date.now();
     let steps = 0;
     for (;;) {
-      const ratio = durationMs <= 0
-        ? 1
-        : Math.min(1, (Date.now() - started) / durationMs);
+      const ratio =
+        durationMs <= 0 ? 1 : Math.min(1, (Date.now() - started) / durationMs);
       await this.sendAbsolute(interpolatePoint(from, target, ratio));
       steps++;
       if (ratio >= 1) break;
@@ -472,8 +475,12 @@ export class WaylandComputerHost implements ComputerHost {
 }
 
 function containsPoint(rect: Rect, point: Point): boolean {
-  return point.x >= rect.x && point.x < rect.x + rect.width &&
-    point.y >= rect.y && point.y < rect.y + rect.height;
+  return (
+    point.x >= rect.x &&
+    point.x < rect.x + rect.width &&
+    point.y >= rect.y &&
+    point.y < rect.y + rect.height
+  );
 }
 
 /** Distance from a point to a rectangle (0 inside it). */

@@ -1,4 +1,11 @@
 import { Agent } from "../ai/agent.ts";
+import type { CompactionStyle } from "../ai/compaction-style.ts";
+import {
+  type CompactionResult,
+  contextStart,
+} from "../ai/context-compaction.ts";
+import type { ContextProvider } from "../ai/context-providers.ts";
+import { contextMessage } from "../ai/context-providers.ts";
 import type {
   AgentEvent,
   AgentMessage,
@@ -12,62 +19,53 @@ import type {
   StreamFn,
   TextContent,
 } from "../ai/types.ts";
+import type { ClientEvent } from "../domain/event.ts";
+import type { ModePrompt } from "../domain/mode-message.ts";
+import { buildModeMessage } from "../domain/mode-message.ts";
+import type { NotificationPayload } from "../domain/notification.ts";
+import { notificationMessage, toLlmMessages } from "../domain/notification.ts";
 import { errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";
-import { RetryManager } from "./retry-manager.ts";
-import type { ClientEvent } from "../domain/event.ts";
-import type { MessageRepo } from "../session/messages.ts";
-import { TranscriptStore } from "./transcript.ts";
-import { messageIdentityOf } from "../session/transcript-window.ts";
-import type { PromptFileRef, ThinkingLevel } from "../shared/mod.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
-import { McpAttachmentHost } from "./mcp-host.ts";
-import { Rewinder } from "./rewinder.ts";
 import type { McpServerStatus } from "../mcp/manager.ts";
-import type { Tool } from "../tools/schema.ts";
-import { toAgentTool } from "../tools/pi-adapter.ts";
-import type { SessionToolRegistries } from "../tools/registries.ts";
-import type { AskHub, PendingQuestion } from "../tools/ask.ts";
-import { InterruptionHub } from "./interruption-hub.ts";
-import type { HandoverHub, PendingHandover } from "../vm/handover.ts";
-import type { EnvRequestHub, PendingEnvRequest } from "../vm/env-request.ts";
-import type { AskAnswer } from "../shared/mod.ts";
+import type { MessageRepo } from "../session/messages.ts";
+import { messageIdentityOf } from "../session/transcript-window.ts";
+import type { AskAnswer, PromptFileRef, ThinkingLevel } from "../shared/mod.ts";
 import {
   DEFAULT_LOCALE,
   type Locale,
   textWithFileNotice,
   translate,
 } from "../shared/mod.ts";
+import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
+import type { AskHub, PendingQuestion } from "../tools/ask.ts";
 import type {
   BackgroundCommandDone,
   BackgroundProcessManager,
 } from "../tools/background.ts";
 import { formatBackgroundNotification } from "../tools/background.ts";
-import { notificationMessage } from "../domain/notification.ts";
+import { toAgentTool } from "../tools/pi-adapter.ts";
+import type { SessionToolRegistries } from "../tools/registries.ts";
+import type { Tool } from "../tools/schema.ts";
 import type { TaskHub } from "../tools/task-hub.ts";
-import type { NotificationPayload } from "../domain/notification.ts";
-import { toLlmMessages } from "../domain/notification.ts";
-import type { ContextProvider } from "../ai/context-providers.ts";
-import { contextMessage } from "../ai/context-providers.ts";
-import type { ModePrompt } from "../domain/mode-message.ts";
-import { buildModeMessage } from "../domain/mode-message.ts";
-import { ImageAnalyzer } from "./image-analysis.ts";
-import { TitleGenerator } from "./title-generation.ts";
-import { TitleScheduler } from "./title-scheduler.ts";
-import { type RoutineDropHost, RoutineRun } from "./routine-run.ts";
-import { TextCards, translateRunEvent } from "./run-events.ts";
-import { RunReply } from "./run-reply.ts";
-import {
-  type CompactionResult,
-  contextStart,
-} from "../ai/context-compaction.ts";
-import type { CompactionStyle } from "../ai/compaction-style.ts";
+import type { EnvRequestHub, PendingEnvRequest } from "../vm/env-request.ts";
+import type { HandoverHub, PendingHandover } from "../vm/handover.ts";
 import {
   CompactionController,
   type IdleCompaction,
 } from "./compaction-controller.ts";
-import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
+import { ImageAnalyzer } from "./image-analysis.ts";
+import { InterruptionHub } from "./interruption-hub.ts";
+import { McpAttachmentHost } from "./mcp-host.ts";
+import { RetryManager } from "./retry-manager.ts";
+import { Rewinder } from "./rewinder.ts";
 import { ROUTINE_SILENCE_GUIDANCE } from "./routine-guidance.ts";
+import { type RoutineDropHost, RoutineRun } from "./routine-run.ts";
+import { TextCards, translateRunEvent } from "./run-events.ts";
+import { RunReply } from "./run-reply.ts";
+import { TitleGenerator } from "./title-generation.ts";
+import { TitleScheduler } from "./title-scheduler.ts";
+import { TranscriptStore } from "./transcript.ts";
 
 /** Module logger (debug-gated): title-generation misses and other
  * best-effort failures land here instead of vanishing silently. */
@@ -317,14 +315,15 @@ export class SessionAgent {
 
     // A vision-capable main model passes images through as-is; only a
     // text-only model with an analysis model configured needs rewriting.
-    this.imageAnalyzer = options.imageAnalysisModel !== undefined &&
-        !(options.model.input ?? []).includes("image")
-      ? new ImageAnalyzer(options.imageAnalysisModel, options.streamFn)
-      : null;
-    const titleGenerator = options.fastModel !== undefined &&
-        options.titleGeneration !== false
-      ? new TitleGenerator(options.fastModel, options.streamFn)
-      : null;
+    this.imageAnalyzer =
+      options.imageAnalysisModel !== undefined &&
+      !(options.model.input ?? []).includes("image")
+        ? new ImageAnalyzer(options.imageAnalysisModel, options.streamFn)
+        : null;
+    const titleGenerator =
+      options.fastModel !== undefined && options.titleGeneration !== false
+        ? new TitleGenerator(options.fastModel, options.streamFn)
+        : null;
     this.language = options.language ?? DEFAULT_LOCALE;
     this.titleScheduler = new TitleScheduler({
       titleGenerator,
@@ -334,11 +333,12 @@ export class SessionAgent {
     });
     this.retry = new RetryManager(options.rateLimitRetrySleep);
     this.backgroundManager = options.backgroundManager ?? null;
-    this.backgroundUnsubscribe = this.backgroundManager === null
-      ? null
-      : this.backgroundManager.onExit((done) => {
-        this.notifyBackgroundCommand(done);
-      });
+    this.backgroundUnsubscribe =
+      this.backgroundManager === null
+        ? null
+        : this.backgroundManager.onExit((done) => {
+            this.notifyBackgroundCommand(done);
+          });
     this.taskHub = options.taskHub ?? null;
     this.taskHub?.setParentDelivery({
       isActive: () => !this.closed,
@@ -440,9 +440,9 @@ export class SessionAgent {
       if (result.freedBytes > 0) this.onFreedBytes?.(result.freedBytes);
     } catch (error) {
       log.warn(
-        `session ${this.sessionId}: pruning condensed rows failed: ${
-          errorMessage(error)
-        }`,
+        `session ${this.sessionId}: pruning condensed rows failed: ${errorMessage(
+          error,
+        )}`,
       );
     }
   }
@@ -602,23 +602,24 @@ export class SessionAgent {
     // must precede the prompt in the transcript (and, with the timestamp,
     // in time — see Agent.nextTimestamp).
     this.publishContexts();
-    const message = options.announced ??
+    const message =
+      options.announced ??
       (options.mode !== undefined
         ? buildModeMessage(
-          options.mode,
-          text,
-          images ?? [],
-          this.agent.nextTimestamp(),
-          steered,
-        )
+            options.mode,
+            text,
+            images ?? [],
+            this.agent.nextTimestamp(),
+            steered,
+          )
         : this.buildUserMessage(
-          text,
-          images,
-          steered,
-          options.routine?.name,
-          options.files,
-          options.modelOnly,
-        ));
+            text,
+            images,
+            steered,
+            options.routine?.name,
+            options.files,
+            options.modelOnly,
+          ));
     if (options.announced === undefined) this.announceMessage(message);
     this.resetRetryState();
     if (options.routine !== undefined) {
@@ -628,9 +629,10 @@ export class SessionAgent {
     // Where the routine's own prompt will sit: the view's length now, since
     // `prompt` appends it and everything the run produces follows it. A
     // silent routine's run is removed from there (see below).
-    const promptIndex = options.routine === undefined
-      ? undefined
-      : this.agent.state.messages.length;
+    const promptIndex =
+      options.routine === undefined
+        ? undefined
+        : this.agent.state.messages.length;
     try {
       await this.agent.prompt(message);
     } catch (error) {
@@ -652,7 +654,8 @@ export class SessionAgent {
     // hidden message. Nothing is removed when the run failed or wrote
     // anything else.
     if (
-      options.routine !== undefined && failure === null &&
+      options.routine !== undefined &&
+      failure === null &&
       promptIndex !== undefined &&
       this.routineRuns.wasSilent(this.agent.state.messages, promptIndex)
     ) {
@@ -747,20 +750,13 @@ export class SessionAgent {
     this.publishContexts();
     const message = mode
       ? buildModeMessage(
-        mode,
-        text,
-        images ?? [],
-        this.agent.nextTimestamp(),
-        steered,
-      )
-      : this.buildUserMessage(
-        text,
-        images,
-        steered,
-        routine,
-        files,
-        modelOnly,
-      );
+          mode,
+          text,
+          images ?? [],
+          this.agent.nextTimestamp(),
+          steered,
+        )
+      : this.buildUserMessage(text, images, steered, routine, files, modelOnly);
     this.announceMessage(message);
     void this.deliverPrompt(message, mode);
   }
@@ -794,8 +790,7 @@ export class SessionAgent {
    * abort drops its queues, and a rewind is about to abort the run, so
    * neither takes a steer (see deliverPrompt). */
   private joinsActiveRun(): boolean {
-    return !this.rewinder.busy && this.isStreaming &&
-      !this.agent.isAborting;
+    return !this.rewinder.busy && this.isStreaming && !this.agent.isAborting;
   }
 
   /** Deliver an announced prompt to the agent loop: a healthy run takes it
@@ -1174,14 +1169,15 @@ export class SessionAgent {
       this.emit({
         type: "session_error",
         sessionId: this.sessionId,
-        message: decision.message === undefined
-          ? translate(this.language, "session.vacantResponse", {
-            count: decision.count,
-          })
-          : translate(this.language, "session.retryExhausted", {
-            count: decision.count,
-            message: decision.message,
-          }),
+        message:
+          decision.message === undefined
+            ? translate(this.language, "session.vacantResponse", {
+                count: decision.count,
+              })
+            : translate(this.language, "session.retryExhausted", {
+                count: decision.count,
+                message: decision.message,
+              }),
       });
     }
     // "park" decisions are consumed by resumeAfterErrorRun once the dead
@@ -1194,8 +1190,8 @@ export class SessionAgent {
       // server's output for copy-paste, and these failures used to be
       // invisible outside the transcript. A recoverable failure (a restart
       // is parked) stays at debug so a retry storm cannot flood the log.
-      const text = (message as AssistantMessage).errorMessage ??
-        "unknown error";
+      const text =
+        (message as AssistantMessage).errorMessage ?? "unknown error";
       const line = `session ${this.sessionId}: model call failed: ${text}`;
       if (decision.action === "park") log.debug(`${line} (retrying)`);
       else log.warn(line);
@@ -1232,9 +1228,7 @@ export class SessionAgent {
   /** Condense the history on demand (the manual `/compact` path). Resolves
    * with what was summarized, or undefined when no safe span existed or the
    * summarization failed — the transcript is then unchanged either way. */
-  compactNow(
-    instructions?: string,
-  ): Promise<CompactionResult | undefined> {
+  compactNow(instructions?: string): Promise<CompactionResult | undefined> {
     return this.compaction.compactNow(instructions);
   }
 

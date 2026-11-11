@@ -1,8 +1,8 @@
-import { useState } from "preact/compat";
-import { IconMessageQuestion, IconSend } from "@tabler/icons-preact";
-import type { AskAnswer, AskQuestion, PendingQuestion } from "../types.ts";
 import { errorMessage } from "@lumisca/core/shared";
+import { IconMessageQuestion, IconSend } from "@tabler/icons-preact";
+import { useState } from "preact/compat";
 import { useT } from "../i18n.ts";
+import type { AskAnswer, AskQuestion, PendingQuestion } from "../types.ts";
 
 /** Selected option indices per question id, inside one question card. */
 type Selections = Record<string, number[]>;
@@ -29,10 +29,7 @@ function toAnswer(
   if (question.multi === true) {
     return {
       id: question.id,
-      values: [
-        ...indices.map((i) => question.options[i]!.label),
-        trimmed,
-      ],
+      values: [...indices.map((i) => question.options[i]!.label), trimmed],
     };
   }
   return { id: question.id, values: [trimmed] };
@@ -53,9 +50,7 @@ function allAnswered(
 }
 
 /** Initial selection: the recommended option is preselected when given. */
-function initialSelections(
-  questions: AskQuestion[],
-): Selections {
+function initialSelections(questions: AskQuestion[]): Selections {
   const selections: Selections = {};
   for (const q of questions) {
     if (q.recommended !== undefined && q.options[q.recommended] !== undefined) {
@@ -74,7 +69,7 @@ function QuestionCard({
 }) {
   const t = useT();
   const [selections, setSelections] = useState<Selections>(() =>
-    initialSelections(pending.questions)
+    initialSelections(pending.questions),
   );
   const [customs, setCustoms] = useState<CustomInputs>({});
   const [submitting, setSubmitting] = useState(false);
@@ -95,7 +90,7 @@ function QuestionCard({
     });
     if (!multi) {
       setCustoms((prev) =>
-        prev[questionId] ? { ...prev, [questionId]: "" } : prev
+        prev[questionId] ? { ...prev, [questionId]: "" } : prev,
       );
     }
   };
@@ -108,7 +103,7 @@ function QuestionCard({
       setSelections((prev) =>
         (prev[questionId]?.length ?? 0) > 0
           ? { ...prev, [questionId]: [] }
-          : prev
+          : prev,
       );
     }
   };
@@ -120,7 +115,7 @@ function QuestionCard({
       await onAnswer(
         pending.toolCallId,
         pending.questions.map((q) =>
-          toAnswer(q, selections[q.id] ?? [], customs[q.id] ?? "")
+          toAnswer(q, selections[q.id] ?? [], customs[q.id] ?? ""),
         ),
       );
       // The panel disappears once the tool_end event arrives.
@@ -160,7 +155,7 @@ function QuestionCard({
                     onClick={() => select(q.id, index, multi)}
                   >
                     <span className="question-option-mark">
-                      {active ? (multi ? "☑" : "●") : (multi ? "☐" : "○")}
+                      {active ? (multi ? "☑" : "●") : multi ? "☐" : "○"}
                     </span>
                     <span className="question-option-label">
                       {option.label}
@@ -193,8 +188,9 @@ function QuestionCard({
           type="button"
           className="btn primary"
           onClick={submit}
-          disabled={submitting ||
-            !allAnswered(pending.questions, selections, customs)}
+          disabled={
+            submitting || !allAnswered(pending.questions, selections, customs)
+          }
         >
           <IconSend size={13} />
           {submitting

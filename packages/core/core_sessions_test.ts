@@ -8,6 +8,8 @@ import {
   fauxToolCall,
 } from "@lumisca/core";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
+import { DATE_PROVIDER } from "./agent/date-context.ts";
+import { SCHEMA_VERSION } from "./db/schema.ts";
 import type {
   AgentMessage,
   ClientEvent,
@@ -18,19 +20,14 @@ import type {
   RawCapture,
   Rect,
 } from "./mod.ts";
-import { LumiscaCore } from "./mod.ts";
-import { VISUALS_DIR_NAME } from "./mod.ts";
-import { LumiscaDb } from "./mod.ts";
-import { COMPACTION_KEEP_RECENT_PERCENT_KEY } from "./shared/settings-keys.ts";
-import { SCHEMA_VERSION } from "./db/schema.ts";
+import { LumiscaCore, LumiscaDb, VISUALS_DIR_NAME } from "./mod.ts";
 import { LANGUAGE_KEY, TOOL_SEARCH, TOOL_SKILL } from "./shared/mod.ts";
-
-import { DATE_PROVIDER } from "./agent/date-context.ts";
+import { COMPACTION_KEEP_RECENT_PERCENT_KEY } from "./shared/settings-keys.ts";
 
 import {
+  MINI_PNG,
   makeRealTempDir,
   makeWorkspace,
-  MINI_PNG,
   promptSession,
   removeDirRetry,
   setup,
@@ -50,9 +47,9 @@ function textsOf(messages: AgentMessage[]): string[] {
 
 /** The context messages (dynamic context snapshots) a session published
  * for one provider, in transcript order. */
-function conversationMessages(
-  agent: { messages: AgentMessage[] },
-): AgentMessage[] {
+function conversationMessages(agent: {
+  messages: AgentMessage[];
+}): AgentMessage[] {
   return agent.messages.filter((m) => m.role !== "context");
 }
 
@@ -63,9 +60,7 @@ const SMALL_WINDOW_MODEL_ID = "small-window";
 
 /** Register a small-window faux model on the provider so a session can be
  * compacted by the real code path (the faux stream answers every call). */
-function registerSmallWindowModel(
-  faux: ReturnType<typeof fauxProvider>,
-): void {
+function registerSmallWindowModel(faux: ReturnType<typeof fauxProvider>): void {
   const provider = faux.provider as unknown as {
     getModels(): Array<Record<string, unknown>>;
   };
@@ -101,12 +96,10 @@ async function fillHistory(
   turns: number,
 ): Promise<void> {
   faux.setResponses(
-    Array.from(
-      { length: turns * 2 },
-      (_, i) =>
-        fauxAssistantMessage([
-          fauxText(i % 2 === 0 ? "## Summary\n- condensed" : "ok"),
-        ]),
+    Array.from({ length: turns * 2 }, (_, i) =>
+      fauxAssistantMessage([
+        fauxText(i % 2 === 0 ? "## Summary\n- condensed" : "ok"),
+      ]),
     ),
   );
   for (let i = 0; i < turns; i++) {
@@ -154,11 +147,13 @@ class FakeComputerHost implements ComputerHost {
     return "fake, 256×144 primary";
   }
   displays() {
-    return [{
-      index: 0,
-      primary: true,
-      bounds: { x: 0, y: 0, width: 256, height: 144 },
-    }];
+    return [
+      {
+        index: 0,
+        primary: true,
+        bounds: { x: 0, y: 0, width: 256, height: 144 },
+      },
+    ];
   }
   cursor(): Point | undefined {
     return { x: 3, y: 4 };
@@ -257,7 +252,10 @@ Deno.test("session revisions count the events a session emitted", async () => {
     // 2, 3 … — the property the client's gap detection relies on.
     assert(seen.length > 0, "the run announced no events");
     assertEquals(seen[0], 1);
-    assertEquals(seen.every((rev, i) => rev === i + 1), true);
+    assertEquals(
+      seen.every((rev, i) => rev === i + 1),
+      true,
+    );
     assert(core.getSessionRevision(session.id) >= seen.length);
 
     // Closing drops the count with the session's in-memory state: a client
@@ -386,9 +384,9 @@ Deno.test("rewind deletes a user message and everything after it", async () => {
   assertEquals(conversationMessages(agent).length, 0);
   assert(
     agent.messages.every((m) => m.role === "context"),
-    `only the context publications may remain: ${
-      agent.messages.map((m) => m.role).join(",")
-    }`,
+    `only the context publications may remain: ${agent.messages
+      .map((m) => m.role)
+      .join(",")}`,
   );
 
   // Close and reopen: the database was truncated as well.
@@ -538,9 +536,9 @@ Deno.test("rewind while running aborts the run and truncates cleanly", async () 
   assertEquals(conversationMessages(agent).length, 0);
   assert(
     agent.messages.every((m) => m.role === "context"),
-    `only the context publications may remain: ${
-      agent.messages.map((m) => m.role).join(",")
-    }`,
+    `only the context publications may remain: ${agent.messages
+      .map((m) => m.role)
+      .join(",")}`,
   );
 
   core.closeSession(session.id);
@@ -599,9 +597,9 @@ Deno.test("rewind of a queued steer drops it without resurrecting it", async () 
   // to clients — the deletion notice must include it so they drop it
   // from the view.
   assert(
-    truncations.at(-1)!.some(
-      (m) => m.role === "user" && m.timestamp === fixTimestamp,
-    ),
+    truncations
+      .at(-1)!
+      .some((m) => m.role === "user" && m.timestamp === fixTimestamp),
     "messages_truncated must include the queued steer",
   );
 
@@ -803,8 +801,9 @@ Deno.test("session language: the setting reaches an open session, not a frozen p
     core.setSetting(LANGUAGE_KEY, "ja");
     faux.setResponses([fauxAssistantMessage("ok")]);
     await promptSession(core, english.id, "hello");
-    const contexts = core.getAgent(english.id)!.messages
-      .filter((message) => message.role === "context")
+    const contexts = core
+      .getAgent(english.id)!
+      .messages.filter((message) => message.role === "context")
       .map((message) => message.body);
     assert(
       contexts.some((body) => body.includes("Write every reply in Japanese")),
@@ -866,10 +865,7 @@ Deno.test("thinking level change while streaming applies from the next run witho
     "high",
   );
   assertEquals(core.getSession(session.id)!.thinkingLevel, "high");
-  assertEquals(
-    core.getAgent(session.id)!.agent.state.thinkingLevel,
-    "high",
-  );
+  assertEquals(core.getAgent(session.id)!.agent.state.thinkingLevel, "high");
 
   await core.getAgent(session.id)!.waitForIdle();
   // The in-flight run started before the change, so it used the old level.
@@ -889,10 +885,7 @@ Deno.test("thinking level change while streaming applies from the next run witho
 });
 
 /** Poll until `check` holds, or fail the test. */
-async function waitUntil(
-  check: () => boolean,
-  what: string,
-): Promise<void> {
+async function waitUntil(check: () => boolean, what: string): Promise<void> {
   const deadline = Date.now() + 3_000;
   while (!check()) {
     if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
@@ -998,8 +991,8 @@ Deno.test("a run's transcript order is also its timestamp order", async () => {
     m.role === "context"
       ? `${m.role}:${m.provider}:${m.timestamp}`
       : m.role === "toolResult"
-      ? `${m.role}:${m.toolCallId}`
-      : `${m.role}:${m.timestamp}`
+        ? `${m.role}:${m.toolCallId}`
+        : `${m.role}:${m.timestamp}`,
   );
   assertEquals(new Set(keys).size, keys.length, keys.join(" "));
 
@@ -1031,9 +1024,9 @@ Deno.test("computer use: enabling without a host reports the machine's reason", 
       "a refused enable stores nothing",
     );
     assertEquals(
-      core.getAgent(session.id)!.agent.state.tools.some((t) =>
-        t.name === TOOL_SEARCH
-      ),
+      core
+        .getAgent(session.id)!
+        .agent.state.tools.some((t) => t.name === TOOL_SEARCH),
       true,
       "the refusal must not disturb the session",
     );
@@ -1052,7 +1045,7 @@ Deno.test("computer use: a recheck that finds no host keeps the startup verdict"
     reason: "no display when the server started (test)",
   });
   core.setComputerHostProbe(() =>
-    Promise.resolve({ available: false, reason: "still no display (test)" })
+    Promise.resolve({ available: false, reason: "still no display (test)" }),
   );
   try {
     await assertRejects(
@@ -1096,7 +1089,7 @@ Deno.test("computer use: a recheck never replaces an attached host", async () =>
   const spare = new FakeComputerHost();
   core.setComputerHost({ available: true, host: attached });
   core.setComputerHostProbe(() =>
-    Promise.resolve({ available: true, host: spare })
+    Promise.resolve({ available: true, host: spare }),
   );
   try {
     const verdict = await core.recheckComputerHost();
@@ -1142,7 +1135,8 @@ Deno.test("computer use: toggling while a session streams reaches it without a r
     // The tools are seeded into the session's registry, so the run finds
     // them without one being rebuilt.
     const found = toolText(
-      await agent.agent.state.tools.find((t) => t.name === TOOL_SEARCH)!
+      await agent.agent.state.tools
+        .find((t) => t.name === TOOL_SEARCH)!
         .execute("search", { query: "computer" }, undefined),
     );
     assert(found.includes("computer_screenshot"), found);
@@ -1154,8 +1148,8 @@ Deno.test("computer use: toggling while a session streams reaches it without a r
     );
     // The session's own skill tool reads the gate per call, so the guide is
     // loadable in the run that is already going.
-    const skillTool = agent.agent.state.tools.find((t) =>
-      t.name === TOOL_SKILL
+    const skillTool = agent.agent.state.tools.find(
+      (t) => t.name === TOOL_SKILL,
     )!;
     await skillTool.execute("s", { name: "computer-use" }, undefined);
 
@@ -1177,7 +1171,8 @@ Deno.test("computer use: toggling while a session streams reaches it without a r
     assertEquals(core.isComputerUseEnabled(), false);
     assertEquals(core.getAgent(session.id), agent);
     const listing = toolText(
-      await agent.agent.state.tools.find((t) => t.name === TOOL_SEARCH)!
+      await agent.agent.state.tools
+        .find((t) => t.name === TOOL_SEARCH)!
         .execute("search", { query: "computer" }, undefined),
     );
     assertEquals(listing.includes("computer_screenshot"), false, listing);
@@ -1218,7 +1213,10 @@ Deno.test("compaction persists the checkpoint and survives a reopen", async () =
   // make more than one pass when the retained tail is still over the
   // threshold — see MAX_COMPACTION_ATTEMPTS — so what this asserts is that
   // the transcript was condensed, not how many passes that took.)
-  assertEquals(agent.messages.some((m) => m.role === "checkpoint"), true);
+  assertEquals(
+    agent.messages.some((m) => m.role === "checkpoint"),
+    true,
+  );
   const roles = agent.messages.map((m) => m.role);
 
   // Reopening restores the MODEL's view from the database: the newest
@@ -1229,7 +1227,7 @@ Deno.test("compaction persists the checkpoint and survives a reopen", async () =
   await core.closeSession(session.id);
   await core.openSession(session.id);
   const restored = core.getAgent(session.id)!.messages;
-  const checkpointAt = roles.findIndex((role) => role === "checkpoint");
+  const checkpointAt = roles.indexOf("checkpoint");
   assertEquals(
     restored.map((m) => m.role),
     roles.slice(checkpointAt),
@@ -1240,7 +1238,8 @@ Deno.test("compaction persists the checkpoint and survives a reopen", async () =
   assertEquals(restored[0]!.role, "checkpoint");
   // Nothing was deleted: the terminal's earlier turns are still rows, and
   // the screen reads them from there.
-  const whole = core.readTranscript(session.id, { limit: 200 })!
+  const whole = core
+    .readTranscript(session.id, { limit: 200 })!
     .items.map((m) => m.role);
   assertEquals(whole.length > restored.length, true);
   assertEquals(whole.includes("user"), true);
@@ -1279,8 +1278,8 @@ Deno.test("compactSession condenses on demand and reports the count", async () =
   // on-demand tools) are not turn messages.
   const after = conversationMessages(agent);
   assertEquals(after.length, before.length + 1);
-  const checkpointIndex = agent.messages.findIndex((m) =>
-    m.role === "checkpoint"
+  const checkpointIndex = agent.messages.findIndex(
+    (m) => m.role === "checkpoint",
   );
   assertEquals(checkpointIndex > 0, true);
   assertEquals(after[0]!.role, "user");
@@ -1288,9 +1287,9 @@ Deno.test("compactSession condenses on demand and reports the count", async () =
   // republished after it when the checkpoint left them behind: the model
   // still reads the date it works from.
   assert(
-    agent.messages.slice(checkpointIndex).some((m) =>
-      m.role === "context" && m.provider === DATE_PROVIDER
-    ),
+    agent.messages
+      .slice(checkpointIndex)
+      .some((m) => m.role === "context" && m.provider === DATE_PROVIDER),
     "the date must stay in the model's view after a compaction",
   );
 

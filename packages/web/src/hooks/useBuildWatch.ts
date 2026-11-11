@@ -78,8 +78,8 @@ export function useBuildWatch(
     loaded === ""
       ? NEVER
       : options.restartPending === true
-      ? RESTART_POLL_MS
-      : BUILD_WATCH_MS,
+        ? RESTART_POLL_MS
+        : BUILD_WATCH_MS,
   );
   return { stale };
 }

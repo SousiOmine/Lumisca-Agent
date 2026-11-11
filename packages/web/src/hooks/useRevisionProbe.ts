@@ -53,9 +53,7 @@ export function startRevisionProbe(options: RevisionProbeOptions): () => void {
 }
 
 /** One pass over the keys. Exported so a test can drive it without timers. */
-export async function probeOnce(
-  options: RevisionProbeOptions,
-): Promise<void> {
+export async function probeOnce(options: RevisionProbeOptions): Promise<void> {
   if (options.disposed() || !options.enabled()) return;
   // Snapshot the keys: a probe may open or close a tab while it runs.
   const keys = [...options.keys()];

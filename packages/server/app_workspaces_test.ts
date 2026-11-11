@@ -1,19 +1,18 @@
-import { basename, dirname, join, parse } from "node:path";
 import { realpathSync } from "node:fs";
+import { basename, dirname, join, parse } from "node:path";
 import {
   fauxAssistantMessage,
   fauxToolCall,
   type StreamRequest,
 } from "@lumisca/core";
-import { assert, assertEquals } from "@std/assert";
 import { COMMAND_SAFETY_APPROVALS_KEY } from "@lumisca/core/shared";
-import { conversationOf, json, pngBase64, setup } from "./test-utils.ts";
-
 import {
   MINI_PNG,
   promptSession,
   removeDirRetry,
 } from "@lumisca/core/test-utils";
+import { assert, assertEquals } from "@std/assert";
+import { conversationOf, json, pngBase64, setup } from "./test-utils.ts";
 
 function joinMissing(): string {
   return `Z:\\definitely\\not\\here\\lumisca-${crypto.randomUUID()}`;
@@ -24,7 +23,7 @@ Deno.test("health and workspaces API", async () => {
   try {
     const health = await fetch(`${base}/api/health`);
     assertEquals(health.status, 200);
-    const healthBody = await health.json() as {
+    const healthBody = (await health.json()) as {
       ok: boolean;
       now: number;
       instanceId?: unknown;
@@ -77,9 +76,10 @@ Deno.test("workspace files API returns @-mention suggestions", async () => {
     await Deno.writeTextFile(join(root, "src", "main.ts"), "m");
     await Deno.writeTextFile(join(root, "README.md"), "r");
 
-    const folderName = Deno.build.os === "windows"
-      ? root.split("\\").pop()!
-      : root.split("/").pop()!;
+    const folderName =
+      Deno.build.os === "windows"
+        ? root.split("\\").pop()!
+        : root.split("/").pop()!;
 
     const all = await json(base, `/api/workspaces/${ws.id}/files`);
     assertEquals(all.status, 200);
@@ -130,15 +130,12 @@ Deno.test("skills API lists the workspace catalog and the chat subset", async ()
     assert(mcpGuide !== undefined, "the MCP guide must be listed");
     // A workspace session has file tools, so its palette also offers the
     // guide that teaches writing a skill.
-    const skillGuide = core.listSkills(ws.id).find((s) =>
-      s.name === "skill-authoring"
-    );
+    const skillGuide = core
+      .listSkills(ws.id)
+      .find((s) => s.name === "skill-authoring");
     assert(skillGuide !== undefined, "the skill guide must be listed");
 
-    const forWorkspace = await json(
-      base,
-      `/api/skills?workspaceId=${ws.id}`,
-    );
+    const forWorkspace = await json(base, `/api/skills?workspaceId=${ws.id}`);
     assertEquals(forWorkspace.status, 200);
     assertEquals((await forWorkspace.json()).skills, [
       { name: "demo", description: "Demo skill." },
@@ -220,18 +217,22 @@ Deno.test("messages snapshot serves a window and the way back", async () => {
   const { core, server, faux, base } = await setup();
   try {
     const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
-    const ws = await (await json(base, "/api/workspaces", {
-      method: "POST",
-      body: JSON.stringify({ name: "ws", folders: [root] }),
-    })).json();
-    const session = await (await json(base, "/api/sessions", {
-      method: "POST",
-      body: JSON.stringify({
-        workspaceId: ws.id,
-        modelProvider: faux.provider.id,
-        modelId: faux.getModel().id,
-      }),
-    })).json();
+    const ws = await (
+      await json(base, "/api/workspaces", {
+        method: "POST",
+        body: JSON.stringify({ name: "ws", folders: [root] }),
+      })
+    ).json();
+    const session = await (
+      await json(base, "/api/sessions", {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: ws.id,
+          modelProvider: faux.provider.id,
+          modelId: faux.getModel().id,
+        }),
+      })
+    ).json();
 
     // Three exchanges: six messages, plus the context publications of the
     // first run.
@@ -257,10 +258,9 @@ Deno.test("messages snapshot serves a window and the way back", async () => {
 
     // One turn at a time: the newest window holds the last prompt and its
     // answer, and starts at the prompt.
-    const newest = await (await json(
-      base,
-      `/api/sessions/${session.id}/messages?limit=2`,
-    )).json() as Snapshot;
+    const newest = (await (
+      await json(base, `/api/sessions/${session.id}/messages?limit=2`)
+    ).json()) as Snapshot;
     assertEquals(conversationOf(newest.messages).length, 2);
     assertEquals(conversationOf(newest.messages)[0]!.role, "user");
     assert(newest.older !== null, "history exists before the window");
@@ -273,12 +273,14 @@ Deno.test("messages snapshot serves a window and the way back", async () => {
     let older: string | null = newest.older;
     let seen = newest.messages.length;
     for (let guard = 0; older !== null && guard < 10; guard++) {
-      const page = await (await json(
-        base,
-        `/api/sessions/${session.id}/messages?limit=2&older=${
-          encodeURIComponent(older)
-        }`,
-      )).json() as Snapshot;
+      const page = (await (
+        await json(
+          base,
+          `/api/sessions/${session.id}/messages?limit=2&older=${encodeURIComponent(
+            older,
+          )}`,
+        )
+      ).json()) as Snapshot;
       seen += page.messages.length;
       older = page.older;
     }
@@ -288,9 +290,9 @@ Deno.test("messages snapshot serves a window and the way back", async () => {
     // A cursor the transcript no longer has is a conflict, not a guess.
     const stale = await json(
       base,
-      `/api/sessions/${session.id}/messages?older=${
-        encodeURIComponent('["user",1,""]')
-      }`,
+      `/api/sessions/${session.id}/messages?older=${encodeURIComponent(
+        '["user",1,""]',
+      )}`,
     );
     assertEquals(stale.status, 409);
 
@@ -337,14 +339,16 @@ Deno.test("messages snapshot reports a run that is still going", async () => {
         return fauxAssistantMessage("done");
       },
     ]);
-    const session = await (await json(base, "/api/sessions", {
-      method: "POST",
-      body: JSON.stringify({
-        workspaceId: ws.id,
-        modelProvider: faux.provider.id,
-        modelId: faux.getModel().id,
-      }),
-    })).json();
+    const session = await (
+      await json(base, "/api/sessions", {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: ws.id,
+          modelProvider: faux.provider.id,
+          modelId: faux.getModel().id,
+        }),
+      })
+    ).json();
 
     // Fire-and-forget: the run announces itself through the events.
     await json(base, `/api/sessions/${session.id}/prompt`, {
@@ -365,14 +369,8 @@ Deno.test("messages snapshot reports a run that is still going", async () => {
     assertEquals(snapshot.running, true, "the live run is reported");
     // The live transcript carries the user message the run is answering,
     // with the context publications that precede it (counted separately).
-    const live = conversationOf(
-      snapshot.messages as Array<{ role: string }>,
-    );
-    assertEquals(
-      live.length,
-      1,
-      "the snapshot carries the transcript too",
-    );
+    const live = conversationOf(snapshot.messages as Array<{ role: string }>);
+    assertEquals(live.length, 1, "the snapshot carries the transcript too");
     assertEquals(live[0]!.role, "user");
 
     release();
@@ -401,30 +399,36 @@ Deno.test("messages snapshot carries a pending ask for a reconnecting client", a
   const { core, server, faux, base } = await setup();
   try {
     const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
-    const ws = await (await json(base, "/api/workspaces", {
-      method: "POST",
-      body: JSON.stringify({ name: "ws", folders: [root] }),
-    })).json();
+    const ws = await (
+      await json(base, "/api/workspaces", {
+        method: "POST",
+        body: JSON.stringify({ name: "ws", folders: [root] }),
+      })
+    ).json();
 
-    const questions = [{
-      id: "q1",
-      question: "Which language?",
-      options: [{ label: "Deno" }, { label: "Node" }],
-    }];
+    const questions = [
+      {
+        id: "q1",
+        question: "Which language?",
+        options: [{ label: "Deno" }, { label: "Node" }],
+      },
+    ];
     faux.setResponses([
       fauxAssistantMessage([fauxToolCall("ask", { questions })], {
         stopReason: "toolUse",
       }),
       fauxAssistantMessage("thanks"),
     ]);
-    const session = await (await json(base, "/api/sessions", {
-      method: "POST",
-      body: JSON.stringify({
-        workspaceId: ws.id,
-        modelProvider: faux.provider.id,
-        modelId: faux.getModel().id,
-      }),
-    })).json();
+    const session = await (
+      await json(base, "/api/sessions", {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: ws.id,
+          modelProvider: faux.provider.id,
+          modelId: faux.getModel().id,
+        }),
+      })
+    ).json();
 
     await json(base, `/api/sessions/${session.id}/prompt`, {
       method: "POST",
@@ -437,10 +441,9 @@ Deno.test("messages snapshot carries a pending ask for a reconnecting client", a
       questions: Array<{ toolCallId: string; questions: unknown[] }>;
     } = { running: false, questions: [] };
     for (let i = 0; i < 100; i++) {
-      snapshot = await (await json(
-        base,
-        `/api/sessions/${session.id}/messages`,
-      )).json();
+      snapshot = await (
+        await json(base, `/api/sessions/${session.id}/messages`)
+      ).json();
       if (snapshot.questions.length > 0) break;
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
@@ -458,10 +461,9 @@ Deno.test("messages snapshot carries a pending ask for a reconnecting client", a
       }),
     });
     await core.getAgent(session.id)!.waitForIdle();
-    snapshot = await (await json(
-      base,
-      `/api/sessions/${session.id}/messages`,
-    )).json();
+    snapshot = await (
+      await json(base, `/api/sessions/${session.id}/messages`)
+    ).json();
     assertEquals(snapshot.questions, []);
     assertEquals(snapshot.running, false);
 
@@ -479,9 +481,10 @@ Deno.test("model enablement API", async () => {
       `${base}/api/providers/${faux.provider.id}/models`,
     );
     assertEquals(modelsRes.status, 200);
-    const models = await modelsRes.json() as Array<
-      { id: string; enabled: boolean }
-    >;
+    const models = (await modelsRes.json()) as Array<{
+      id: string;
+      enabled: boolean;
+    }>;
     assertEquals(models.length > 0, true);
     assertEquals(
       models.every((m) => m.enabled === true),
@@ -491,9 +494,9 @@ Deno.test("model enablement API", async () => {
 
     const target = models[0]!;
     const put = await fetch(
-      `${base}/api/providers/${faux.provider.id}/models/${
-        encodeURIComponent(target.id)
-      }`,
+      `${base}/api/providers/${faux.provider.id}/models/${encodeURIComponent(
+        target.id,
+      )}`,
       {
         method: "PUT",
         headers: { "content-type": "application/json" },
@@ -502,9 +505,9 @@ Deno.test("model enablement API", async () => {
     );
     assertEquals(put.status, 200);
 
-    const models2 = await (
+    const models2 = (await (
       await fetch(`${base}/api/providers/${faux.provider.id}/models`)
-    ).json() as Array<{ id: string; enabled: boolean }>;
+    ).json()) as Array<{ id: string; enabled: boolean }>;
     assertEquals(models2.find((m) => m.id === target.id)?.enabled, false);
   } finally {
     server.shutdown();
@@ -519,9 +522,10 @@ Deno.test("filesystem browse API", async () => {
     // machine, then its filesystem roots.
     const placesRes = await fetch(`${base}/api/fs/places`);
     assertEquals(placesRes.status, 200);
-    const places = await placesRes.json() as Array<
-      { kind: string; path: string }
-    >;
+    const places = (await placesRes.json()) as Array<{
+      kind: string;
+      path: string;
+    }>;
     assertEquals(places.length > 0, true, "at least one place");
     for (const place of places) {
       assertEquals(
@@ -534,7 +538,10 @@ Deno.test("filesystem browse API", async () => {
       // Only directories that exist are offered.
       assertEquals((await Deno.stat(place.path)).isDirectory, true);
     }
-    assertEquals(places.some((place) => place.kind === "root"), true);
+    assertEquals(
+      places.some((place) => place.kind === "root"),
+      true,
+    );
     // The home folder of the server's environment is one of them.
     const home = Deno.env.get("USERPROFILE") ?? Deno.env.get("HOME") ?? "";
     if (home !== "") {
@@ -557,7 +564,7 @@ Deno.test("filesystem browse API", async () => {
       `${base}/api/fs/browse?path=${encodeURIComponent(root)}`,
     );
     assertEquals(browseRes.status, 200);
-    const browse = await browseRes.json() as {
+    const browse = (await browseRes.json()) as {
       path: string;
       parent: string | null;
       breadcrumbs: Array<{ name: string; path: string }>;
@@ -619,9 +626,11 @@ Deno.test("providers API includes auth state", async () => {
     await core.setProviderApiKey(faux.provider.id, "test-key");
     const res = await fetch(`${base}/api/providers`);
     assertEquals(res.status, 200);
-    const providers = await res.json() as Array<
-      { id: string; configured: boolean; source?: string }
-    >;
+    const providers = (await res.json()) as Array<{
+      id: string;
+      configured: boolean;
+      source?: string;
+    }>;
     assertEquals(providers.length > 0, true);
     assertEquals(typeof providers[0]!.configured, "boolean");
     const fauxEntry = providers.find((p) => p.id === faux.provider.id);
@@ -664,8 +673,9 @@ Deno.test("computer use toggle goes through the capability path", async () => {
     });
     assertEquals(enable.status, 503);
     assertEquals((await enable.json()).error.length > 0, true);
-    const settings = await (await fetch(`${base}/api/settings`))
-      .json() as Record<string, string>;
+    const settings = (await (
+      await fetch(`${base}/api/settings`)
+    ).json()) as Record<string, string>;
     assertEquals(settings["computer_use_enabled"], undefined);
 
     // Disabling is always accepted: it is the safe direction, and a session
@@ -791,7 +801,7 @@ Deno.test("connections API: registry roundtrip, validation and protection", asyn
     assertEquals(put.status, 200);
 
     const got = await fetch(`${base}/api/connections`);
-    const body = await got.json() as { connections: typeof entries };
+    const body = (await got.json()) as { connections: typeof entries };
     assertEquals(body.connections.length, 2);
     assertEquals(body.connections[1]?.name, "作業PC");
 
@@ -808,10 +818,16 @@ Deno.test("connections API: registry roundtrip, validation and protection", asyn
     // and the generic settings API refuses to touch it.
     const settings = await fetch(`${base}/api/settings`);
     const values = Object.values(
-      await settings.json() as Record<string, string>,
+      (await settings.json()) as Record<string, string>,
     );
-    assertEquals(values.some((v) => v.includes("srv-1")), false);
-    assertEquals(values.some((v) => v.includes("t1")), false);
+    assertEquals(
+      values.some((v) => v.includes("srv-1")),
+      false,
+    );
+    assertEquals(
+      values.some((v) => v.includes("t1")),
+      false,
+    );
     const forbidden = await json(base, "/api/settings/connections", {
       method: "PUT",
       body: JSON.stringify({ value: "x" }),
@@ -918,22 +934,21 @@ Deno.test("compact condenses the history via the API", async () => {
     // absent when nothing could be condensed — a valid answer, so the test
     // asks the route whether the history it built has anything to condense
     // rather than assuming one exists.
-    const compactRes = await json(
-      base,
-      `/api/sessions/${session.id}/compact`,
-      {
-        method: "POST",
-        body: JSON.stringify({ instructions: "keep the file paths" }),
-      },
-    );
+    const compactRes = await json(base, `/api/sessions/${session.id}/compact`, {
+      method: "POST",
+      body: JSON.stringify({ instructions: "keep the file paths" }),
+    });
     assertEquals(compactRes.status, 200);
-    const body = await compactRes.json() as { ok: boolean; compacted?: number };
+    const body = (await compactRes.json()) as {
+      ok: boolean;
+      compacted?: number;
+    };
     assertEquals(body.ok, true);
     if (body.compacted !== undefined) {
       assertEquals(typeof body.compacted, "number");
       assertEquals(
         summaryPrompts.some((prompt) =>
-          prompt.includes("Additional focus: keep the file paths")
+          prompt.includes("Additional focus: keep the file paths"),
         ),
         true,
         summaryPrompts.map((p) => p.slice(0, 80)).join("\n---\n"),
@@ -974,7 +989,7 @@ Deno.test("stella API: the status reports the availability and the machine", asy
     // and the reason is a sentence the selection screen shows.
     const status = await json(base, "/api/stella/status");
     assertEquals(status.status, 200);
-    const body = await status.json() as {
+    const body = (await status.json()) as {
       availability: { available: boolean; reason?: string };
       state: string;
     };
@@ -998,7 +1013,7 @@ Deno.test("stella API: the first agent list creates the starter agent", async ()
   const { core, server, base } = await setup();
   try {
     const first = await json(base, "/api/stella/agents");
-    const body = await first.json() as {
+    const body = (await first.json()) as {
       agents: Array<{ id: string; name: string; role: string }>;
     };
     // A fresh installation has someone to talk to: an empty sidebar in front
@@ -1018,7 +1033,7 @@ Deno.test("stella API: the first agent list creates the starter agent", async ()
     // usable state.
     await core.deleteStellaAgent(body.agents[0]!.id);
     const restored = await json(base, "/api/stella/agents");
-    const after = await restored.json() as {
+    const after = (await restored.json()) as {
       agents: Array<{ id: string }>;
     };
     assertEquals(after.agents.length, 1);
@@ -1048,15 +1063,18 @@ Deno.test("stella API: the conversation's stream carries only the conversation",
       method: "POST",
       body: JSON.stringify({ name: "Aide", role: "Help with the work." }),
     });
-    const agent = await agentRes.json() as { id: string; name: string };
+    const agent = (await agentRes.json()) as { id: string; name: string };
     const opened = await json(base, `/api/stella/conversations/${agent.id}`);
     assertEquals(opened.status, 200);
 
     faux.setResponses([
-      fauxAssistantMessage([
-        { type: "text", text: "作業メモを書いてから送る。" },
-        fauxToolCall("send_chat", { text: "はい、承知しました。" }, "call-1"),
-      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage(
+        [
+          { type: "text", text: "作業メモを書いてから送る。" },
+          fauxToolCall("send_chat", { text: "はい、承知しました。" }, "call-1"),
+        ],
+        { stopReason: "toolUse" },
+      ),
       fauxAssistantMessage("送り終えた。"),
     ]);
     const socket = new WebSocket(
@@ -1090,18 +1108,16 @@ Deno.test("stella API: the conversation's stream carries only the conversation",
     assertEquals(types.includes("entry"), true);
     // None of the model's own traffic, and none of the surfaces this mode
     // does not have.
-    for (
-      const forbidden of [
-        "message_start",
-        "message_end",
-        "tool_start",
-        "tool_end",
-        "todo",
-        "task_start",
-        "background_start",
-        "messages_checkpoint",
-      ]
-    ) {
+    for (const forbidden of [
+      "message_start",
+      "message_end",
+      "tool_start",
+      "tool_end",
+      "todo",
+      "task_start",
+      "background_start",
+      "messages_checkpoint",
+    ]) {
       assertEquals(types.includes(forbidden), false, forbidden);
     }
     // No frame names a session: the socket is the conversation.
@@ -1113,16 +1129,16 @@ Deno.test("stella API: the conversation's stream carries only the conversation",
     // ("作業メモを書いてから送る。") ended in a tool call, so it is narration —
     // the working notes the run thinks out loud — and never becomes an
     // entry. There is still no delta frame: a message arrives whole.
-    const entries = events.filter((e) => e.type === "entry").map((e) =>
-      e.entry as { role: string; text: string }
-    );
+    const entries = events
+      .filter((e) => e.type === "entry")
+      .map((e) => e.entry as { role: string; text: string });
     assertEquals(entries[0]?.role, "user");
     assertEquals(entries[0]?.text, "こんにちは");
     const answers = entries.filter((entry) => entry.role === "assistant");
-    assertEquals(answers.map((entry) => entry.text), [
-      "はい、承知しました。",
-      "送り終えた。",
-    ]);
+    assertEquals(
+      answers.map((entry) => entry.text),
+      ["はい、承知しました。", "送り終えた。"],
+    );
     assertEquals(types.includes("delta"), false, "no streaming text");
   } finally {
     server.shutdown();
@@ -1146,7 +1162,7 @@ Deno.test("stella API: a row carries what its conversation last said", async () 
     // A conversation that has not been opened says nothing: the row is one
     // line, and the client has no time to show.
     const before = await json(base, "/api/stella/agents");
-    const initial = await before.json() as {
+    const initial = (await before.json()) as {
       agents: Array<{ id: string; preview: unknown }>;
     };
     assertEquals(initial.agents[0]?.preview, null);
@@ -1158,16 +1174,17 @@ Deno.test("stella API: a row carries what its conversation last said", async () 
     const agentId = initial.agents[0]!.id;
     const session = await core.getOrCreateStellaSession(agentId);
     faux.setResponses([
-      fauxAssistantMessage([
-        fauxToolCall("send_chat", { text: "直しました。" }, "call-1"),
-      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage(
+        [fauxToolCall("send_chat", { text: "直しました。" }, "call-1")],
+        { stopReason: "toolUse" },
+      ),
       // The sentinel's spelling is the model-facing contract documented in
       // the core's agent/silent-reply.ts.
       fauxAssistantMessage("NO_RESPONSE"),
     ]);
     await promptSession(core, session.id, "直して");
     const listed = await json(base, "/api/stella/agents");
-    const body = await listed.json() as {
+    const body = (await listed.json()) as {
       agents: Array<{
         id: string;
         preview: { kind: string; text: string; at: number } | null;
@@ -1201,7 +1218,7 @@ Deno.test("stella API: agents are listed, renamed and deleted with their convers
     // The first read creates the starter agent (a fresh stella mode must
     // have someone to talk to), so the list is never empty.
     const initial = await json(base, "/api/stella/agents");
-    const starter = await initial.json() as {
+    const starter = (await initial.json()) as {
       agents: Array<{ id: string; name: string }>;
     };
     assertEquals(starter.agents.length, 1);
@@ -1210,10 +1227,10 @@ Deno.test("stella API: agents are listed, renamed and deleted with their convers
       method: "POST",
       body: JSON.stringify({ name: "Researcher", role: "Read papers." }),
     });
-    const agent = await created.json() as { id: string };
+    const agent = (await created.json()) as { id: string };
 
     const listed = await json(base, "/api/stella/agents");
-    const body = await listed.json() as {
+    const body = (await listed.json()) as {
       agents: Array<{ id: string; name: string }>;
     };
     assertEquals(body.agents.length, 2);
@@ -1229,10 +1246,7 @@ Deno.test("stella API: agents are listed, renamed and deleted with their convers
       body: JSON.stringify({ name: "Analyst" }),
     });
     assertEquals(renamed.status, 200);
-    assertEquals(
-      (await renamed.json() as { name: string }).name,
-      "Analyst",
-    );
+    assertEquals(((await renamed.json()) as { name: string }).name, "Analyst");
 
     // Delete takes the conversation with it: an orphaned session would be
     // invisible in every list while still holding its messages.
@@ -1243,8 +1257,11 @@ Deno.test("stella API: agents are listed, renamed and deleted with their convers
     assertEquals(deleted.status, 200);
     assertEquals(core.getSession(session.id), undefined);
     const after = await json(base, "/api/stella/agents");
-    const remaining = await after.json() as { agents: Array<{ id: string }> };
-    assertEquals(remaining.agents.map((a) => a.id), [starter.agents[0]!.id]);
+    const remaining = (await after.json()) as { agents: Array<{ id: string }> };
+    assertEquals(
+      remaining.agents.map((a) => a.id),
+      [starter.agents[0]!.id],
+    );
     void duplicate;
   } finally {
     server.shutdown();
@@ -1269,7 +1286,7 @@ Deno.test("stella API: an agent's name and icon are saved together and served", 
       method: "POST",
       body: JSON.stringify({ name: "Aide", role: "Help." }),
     });
-    const agent = await created.json() as { id: string; icon: string };
+    const agent = (await created.json()) as { id: string; icon: string };
     // No picture yet: the client draws the initial instead.
     assertEquals(agent.icon, "");
 
@@ -1284,7 +1301,7 @@ Deno.test("stella API: an agent's name and icon are saved together and served", 
       }),
     });
     assertEquals(saved.status, 200);
-    const withIcon = await saved.json() as {
+    const withIcon = (await saved.json()) as {
       id: string;
       name: string;
       icon: string;
@@ -1296,9 +1313,11 @@ Deno.test("stella API: an agent's name and icon are saved together and served", 
     // The row the list serves carries the same name, so the sidebar can draw
     // it without a second read.
     const listed = await json(base, "/api/stella/agents");
-    const agents = (await listed.json() as {
-      agents: Array<{ id: string; name: string; icon: string }>;
-    }).agents;
+    const agents = (
+      (await listed.json()) as {
+        agents: Array<{ id: string; name: string; icon: string }>;
+      }
+    ).agents;
     assertEquals(agents[0]?.name, "Analyst");
     assertEquals(agents[0]?.icon, withIcon.icon);
 
@@ -1313,10 +1332,7 @@ Deno.test("stella API: an agent's name and icon are saved together and served", 
       served.headers.get("cache-control"),
       "private, max-age=31536000, immutable",
     );
-    assertEquals(
-      (await served.arrayBuffer()).byteLength,
-      MINI_PNG.byteLength,
-    );
+    assertEquals((await served.arrayBuffer()).byteLength, MINI_PNG.byteLength);
 
     // A replacement gets a NEW name: a cached URL must keep showing the
     // picture it showed. A patch that names only the picture leaves the name
@@ -1327,20 +1343,21 @@ Deno.test("stella API: an agent's name and icon are saved together and served", 
         icon: { data: pngBase64(), mimeType: "image/png" },
       }),
     });
-    const next = await replaced.json() as { name: string; icon: string };
+    const next = (await replaced.json()) as { name: string; icon: string };
     assertEquals(next.name, "Analyst");
     assert(next.icon !== withIcon.icon);
     assertEquals(
-      (await fetch(
-        `${base}/api/stella/agents/${agent.id}/icon/${next.icon}`,
-      )).status,
+      (await fetch(`${base}/api/stella/agents/${agent.id}/icon/${next.icon}`))
+        .status,
       200,
     );
     // The old file is gone with it.
     assertEquals(
-      (await fetch(
-        `${base}/api/stella/agents/${agent.id}/icon/${withIcon.icon}`,
-      )).status,
+      (
+        await fetch(
+          `${base}/api/stella/agents/${agent.id}/icon/${withIcon.icon}`,
+        )
+      ).status,
       404,
     );
 
@@ -1351,16 +1368,15 @@ Deno.test("stella API: an agent's name and icon are saved together and served", 
       body: JSON.stringify({ icon: null }),
     });
     assertEquals(cleared.status, 200);
-    const clearedAgent = await cleared.json() as {
+    const clearedAgent = (await cleared.json()) as {
       name: string;
       icon: string;
     };
     assertEquals(clearedAgent.name, "Analyst");
     assertEquals(clearedAgent.icon, "");
     assertEquals(
-      (await fetch(
-        `${base}/api/stella/agents/${agent.id}/icon/${next.icon}`,
-      )).status,
+      (await fetch(`${base}/api/stella/agents/${agent.id}/icon/${next.icon}`))
+        .status,
       404,
     );
 
@@ -1369,7 +1385,7 @@ Deno.test("stella API: an agent's name and icon are saved together and served", 
       method: "PATCH",
       body: JSON.stringify({ name: "Notes" }),
     });
-    assertEquals((await renamed.json() as { name: string }).name, "Notes");
+    assertEquals(((await renamed.json()) as { name: string }).name, "Notes");
   } finally {
     server.shutdown();
     await core.close();
@@ -1392,7 +1408,7 @@ Deno.test("stella API: a refused name or picture changes nothing", async () => {
       method: "POST",
       body: JSON.stringify({ name: "Aide", role: "Help." }),
     });
-    const agent = await created.json() as { id: string };
+    const agent = (await created.json()) as { id: string };
     await json(base, "/api/stella/agents", {
       method: "POST",
       body: JSON.stringify({ name: "Taken", role: "" }),
@@ -1405,7 +1421,7 @@ Deno.test("stella API: a refused name or picture changes nothing", async () => {
         method: "PATCH",
         body: JSON.stringify(body),
       });
-      const parsed = await response.json() as { error: string };
+      const parsed = (await response.json()) as { error: string };
       return [response.status, parsed.error];
     };
 
@@ -1442,9 +1458,11 @@ Deno.test("stella API: a refused name or picture changes nothing", async () => {
 
     // Nothing above changed the row.
     const listed = await json(base, "/api/stella/agents");
-    const agents = (await listed.json() as {
-      agents: Array<{ id: string; name: string; icon: string }>;
-    }).agents;
+    const agents = (
+      (await listed.json()) as {
+        agents: Array<{ id: string; name: string; icon: string }>;
+      }
+    ).agents;
     assertEquals(agents.find((entry) => entry.id === agent.id)?.name, "Aide");
     assertEquals(agents.find((entry) => entry.id === agent.id)?.icon, "");
   } finally {
@@ -1469,7 +1487,7 @@ Deno.test("stella API: an icon patch is refused with the reason it failed", asyn
       method: "POST",
       body: JSON.stringify({ name: "Aide", role: "Help." }),
     });
-    const agent = await created.json() as { id: string };
+    const agent = (await created.json()) as { id: string };
     const path = `/api/stella/agents/${agent.id}`;
 
     /** The error message of a refused patch. */
@@ -1478,7 +1496,7 @@ Deno.test("stella API: an icon patch is refused with the reason it failed", asyn
         method: "PATCH",
         body: JSON.stringify({ icon }),
       });
-      const parsed = await response.json() as { error: string };
+      const parsed = (await response.json()) as { error: string };
       return [response.status, parsed.error];
     };
 
@@ -1505,7 +1523,7 @@ Deno.test("stella API: an icon patch is refused with the reason it failed", asyn
 
     // Over the size cap, refused before it is decoded.
     const [bigStatus, bigError] = await refusal({
-      data: "A".repeat(Math.ceil(512 * 1024 * 4 / 3) + 2048),
+      data: "A".repeat(Math.ceil((512 * 1024 * 4) / 3) + 2048),
       mimeType: "image/png",
     });
     assertEquals(bigStatus, 400);
@@ -1522,9 +1540,11 @@ Deno.test("stella API: an icon patch is refused with the reason it failed", asyn
 
     // Nothing above changed the row.
     const listed = await json(base, "/api/stella/agents");
-    const agents = (await listed.json() as {
-      agents: Array<{ icon: string }>;
-    }).agents;
+    const agents = (
+      (await listed.json()) as {
+        agents: Array<{ icon: string }>;
+      }
+    ).agents;
     assertEquals(agents[0]?.icon, "");
   } finally {
     server.shutdown();
@@ -1544,37 +1564,43 @@ Deno.test("stella API: an icon URL answers only for a name that agent has", asyn
       stop: () => Promise.resolve(),
       vncPort: () => Promise.resolve(1),
     });
-    const first = await (await json(base, "/api/stella/agents", {
-      method: "POST",
-      body: JSON.stringify({ name: "First", role: "r" }),
-    })).json() as { id: string };
-    const second = await (await json(base, "/api/stella/agents", {
-      method: "POST",
-      body: JSON.stringify({ name: "Second", role: "r" }),
-    })).json() as { id: string };
-    const withIcon = await (await json(
-      base,
-      `/api/stella/agents/${first.id}`,
-      {
+    const first = (await (
+      await json(base, "/api/stella/agents", {
+        method: "POST",
+        body: JSON.stringify({ name: "First", role: "r" }),
+      })
+    ).json()) as { id: string };
+    const second = (await (
+      await json(base, "/api/stella/agents", {
+        method: "POST",
+        body: JSON.stringify({ name: "Second", role: "r" }),
+      })
+    ).json()) as { id: string };
+    const withIcon = (await (
+      await json(base, `/api/stella/agents/${first.id}`, {
         method: "PATCH",
         body: JSON.stringify({
           icon: { data: pngBase64(), mimeType: "image/png" },
         }),
-      },
-    )).json() as { icon: string };
+      })
+    ).json()) as { icon: string };
 
     // Another agent cannot claim it by naming the file...
     assertEquals(
-      (await fetch(
-        `${base}/api/stella/agents/${second.id}/icon/${withIcon.icon}`,
-      )).status,
+      (
+        await fetch(
+          `${base}/api/stella/agents/${second.id}/icon/${withIcon.icon}`,
+        )
+      ).status,
       404,
     );
     // ...nor can a name the store did not generate.
     assertEquals(
-      (await fetch(
-        `${base}/api/stella/agents/${first.id}/icon/000000000000.png`,
-      )).status,
+      (
+        await fetch(
+          `${base}/api/stella/agents/${first.id}/icon/000000000000.png`,
+        )
+      ).status,
       404,
     );
     // An agent that does not exist is not a 404-only path either: the route
@@ -1588,9 +1614,11 @@ Deno.test("stella API: an icon URL answers only for a name that agent has", asyn
     // Deleting the agent takes the file with it.
     await json(base, `/api/stella/agents/${first.id}`, { method: "DELETE" });
     assertEquals(
-      (await fetch(
-        `${base}/api/stella/agents/${first.id}/icon/${withIcon.icon}`,
-      )).status,
+      (
+        await fetch(
+          `${base}/api/stella/agents/${first.id}/icon/${withIcon.icon}`,
+        )
+      ).status,
       404,
     );
   } finally {
@@ -1609,7 +1637,7 @@ Deno.test("routine routes: list, enable, run and remove", async () => {
     });
     const list = await json(base, `/api/stella/agents/${agent.id}/routines`);
     assertEquals(list.status, 200);
-    assertEquals((await list.json() as { routines: unknown[] }).routines, []);
+    assertEquals(((await list.json()) as { routines: unknown[] }).routines, []);
 
     // A routine created through the repo (the tool path) shows up in the
     // list, and the PATCH that toggles it answers the whole list.
@@ -1624,7 +1652,7 @@ Deno.test("routine routes: list, enable, run and remove", async () => {
       base,
       `/api/stella/agents/${agent.id}/routines`,
     );
-    const createdList = await afterCreate.json() as {
+    const createdList = (await afterCreate.json()) as {
       routines: { running: boolean; queued: boolean }[];
     };
     assertEquals(createdList.routines.length, 1);
@@ -1639,7 +1667,7 @@ Deno.test("routine routes: list, enable, run and remove", async () => {
     });
     assertEquals(disabled.status, 200);
     assertEquals(
-      (await disabled.json() as { routines: { enabled: boolean }[] })
+      ((await disabled.json()) as { routines: { enabled: boolean }[] })
         .routines[0]!.enabled,
       false,
     );
@@ -1656,7 +1684,7 @@ Deno.test("routine routes: list, enable, run and remove", async () => {
     });
     assertEquals(removed.status, 200);
     assertEquals(
-      (await removed.json() as { routines: unknown[] }).routines,
+      ((await removed.json()) as { routines: unknown[] }).routines,
       [],
     );
 

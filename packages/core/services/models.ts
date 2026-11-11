@@ -6,18 +6,17 @@ import type {
   Model,
   Provider,
 } from "../ai/types.ts";
-import type { ModelManager } from "../models/mod.ts";
-import type { CatalogStatus } from "../models/mod.ts";
+import { CoreError } from "../errors.ts";
+import type { CatalogStatus, ModelManager } from "../models/mod.ts";
+import {
+  getSupportedThinkingLevels,
+  isThinkingLevel,
+} from "../models/thinking.ts";
 import type {
   UserProviderConfig,
   UserProviderInput,
   UserProviderSummary,
 } from "../models/user-providers.ts";
-import { CoreError } from "../errors.ts";
-import {
-  getSupportedThinkingLevels,
-  isThinkingLevel,
-} from "../models/thinking.ts";
 import type { ThinkingLevel } from "../shared/mod.ts";
 
 /**
@@ -59,9 +58,7 @@ export class ModelService {
    * undefined for providers with only ambient auth (env vars etc.).
    * Static provider metadata — no credential required — so the settings UI
    * can offer a login button even before anything is configured. */
-  getProviderAuthType(
-    providerId: string,
-  ): "oauth" | "api_key" | undefined {
+  getProviderAuthType(providerId: string): "oauth" | "api_key" | undefined {
     const provider = this.models.getProvider(providerId);
     if (!provider) return undefined;
     if (provider.auth.oauth) return "oauth";

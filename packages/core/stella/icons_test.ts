@@ -1,7 +1,7 @@
-import { assert, assertEquals, assertRejects } from "@std/assert";
 import { join } from "node:path";
+import { assert, assertEquals, assertRejects } from "@std/assert";
 import { MAX_AGENT_ICON_BYTES } from "../shared/mod.ts";
-import { makeRealTempDir, MINI_PNG, removeDirRetry } from "../test-utils.ts";
+import { MINI_PNG, makeRealTempDir, removeDirRetry } from "../test-utils.ts";
 import { AgentIconStore, MAX_AGENT_ICONS_PER_AGENT } from "./icons.ts";
 
 /**
@@ -130,17 +130,7 @@ Deno.test("icons: bytes that are not the format they claim are refused", async (
         store.put(
           "a1",
           new Uint8Array([
-            0x52,
-            0x49,
-            0x46,
-            0x46,
-            0x00,
-            0x00,
-            0x00,
-            0x00,
-            0x57,
-            0x41,
-            0x56,
+            0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x41, 0x56,
             0x45,
           ]),
           ".webp",
@@ -173,16 +163,14 @@ Deno.test("icons: resolve answers only names the store generated", async () => {
     assert(name !== "");
     // A path, a traversal, a name of the wrong shape, an extension icons do
     // not serve: none of them is an address this store hands out.
-    for (
-      const asked of [
-        "../../etc/passwd",
-        "000000000000.png/../../x",
-        "passwd",
-        "000000000000.svg",
-        "9f3c2a1b4d5e.PNG",
-        "",
-      ]
-    ) {
+    for (const asked of [
+      "../../etc/passwd",
+      "000000000000.png/../../x",
+      "passwd",
+      "000000000000.svg",
+      "9f3c2a1b4d5e.PNG",
+      "",
+    ]) {
       assertEquals(await store.resolve("a1", asked), undefined, asked);
     }
     // A real name, but another agent's.

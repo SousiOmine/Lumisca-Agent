@@ -1,7 +1,7 @@
+import type { Tool } from "../tools/schema.ts";
 import type { McpConfig } from "./config.ts";
 import type { McpManager } from "./manager.ts";
 import { createMcpTools } from "./tools.ts";
-import type { Tool } from "../tools/schema.ts";
 
 /**
  * One session's shared MCP attachment, owned by the session pool: a single
@@ -21,16 +21,18 @@ export class McpAttachment {
     readonly manager: McpManager,
     readonly config: McpConfig,
   ) {
-    this.ready = createMcpTools(manager).then((tools) => {
-      this.tools = tools;
-      this.discovered = true;
-      return tools;
-    }).catch(() => {
-      // Only reachable if the manager was closed mid-discovery (session
-      // closed during attachment); awaiters must still settle.
-      this.discovered = true;
-      return [];
-    });
+    this.ready = createMcpTools(manager)
+      .then((tools) => {
+        this.tools = tools;
+        this.discovered = true;
+        return tools;
+      })
+      .catch(() => {
+        // Only reachable if the manager was closed mid-discovery (session
+        // closed during attachment); awaiters must still settle.
+        this.discovered = true;
+        return [];
+      });
   }
 
   /** The built tools (empty until discovery finished). */

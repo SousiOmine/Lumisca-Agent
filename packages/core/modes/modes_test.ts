@@ -1,8 +1,8 @@
 import { assertEquals, assertNotEquals } from "@std/assert";
+import { messages } from "../shared/mod.ts";
 import { AGENT_MODES, findAgentMode } from "./mod.ts";
 import { buildPlanPrompt, planMode } from "./plan.ts";
 import { buildReviewPrompt, reviewMode } from "./review.ts";
-import { messages } from "../shared/mod.ts";
 
 /** Any Japanese character: the prompts are uniformly English (the answer's
  * language is the session's, see tools/language.ts), so an accidental
@@ -56,10 +56,10 @@ Deno.test("findAgentMode finds registered modes and misses unknown ids", () => {
 });
 
 Deno.test("review mode: options cover both targets and build distinct prompts", () => {
-  assertEquals(reviewMode.options.map((o) => o.id), [
-    "base-diff",
-    "uncommitted",
-  ]);
+  assertEquals(
+    reviewMode.options.map((o) => o.id),
+    ["base-diff", "uncommitted"],
+  );
   const base = reviewMode.buildPrompt("base-diff");
   const uncommitted = reviewMode.buildPrompt("uncommitted");
   assertNotEquals(base, uncommitted);

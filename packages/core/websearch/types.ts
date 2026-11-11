@@ -7,15 +7,13 @@
  */
 
 /** Replaces `fetch` so tests answer without touching the network. */
-export type FetchLike = (
-  input: string,
-  init: RequestInit,
-) => Promise<Response>;
+export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
 /** The provider ids, owned by the wire shape (shared/web-search.ts) so the
  * settings screen and the provider table read one list. Adding a provider
  * means adding it to providers/registry.ts as well. */
 export type { WebSearchProviderId } from "../shared/web-search.ts";
+
 import type { WebSearchProviderId } from "../shared/web-search.ts";
 
 export interface SearchRequest {
@@ -77,9 +75,10 @@ export interface ProviderAdapter {
   readonly id: WebSearchProviderId;
   readonly name: string;
   readonly supportsFetch: boolean;
-  search(context: ProviderContext, request: SearchRequest): Promise<
-    SearchResponse
-  >;
+  search(
+    context: ProviderContext,
+    request: SearchRequest,
+  ): Promise<SearchResponse>;
   fetchPage?(
     context: ProviderContext,
     request: FetchRequest,

@@ -54,10 +54,10 @@ export function toBase64Url(bytes: Uint8Array<ArrayBufferLike>): string {
   for (let i = 0; i < bytes.length; i += CHUNK) {
     binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
   }
-  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(
-    /=+$/,
-    "",
-  );
+  return btoa(binary)
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/, "");
 }
 
 /** Decode base64url (padding optional). Throws on a character outside the
@@ -90,13 +90,19 @@ function isSubscription(value: unknown): value is PushSubscriptionRecord {
   if (typeof value !== "object" || value === null) return false;
   const entry = value as Record<string, unknown>;
   const keys = entry.keys as Record<string, unknown> | undefined;
-  return typeof entry.endpoint === "string" && isPushEndpoint(entry.endpoint) &&
-    typeof keys === "object" && keys !== null &&
-    typeof keys.p256dh === "string" && keys.p256dh.length > 0 &&
+  return (
+    typeof entry.endpoint === "string" &&
+    isPushEndpoint(entry.endpoint) &&
+    typeof keys === "object" &&
+    keys !== null &&
+    typeof keys.p256dh === "string" &&
+    keys.p256dh.length > 0 &&
     keys.p256dh.length <= PUSH_KEY_MAX_CHARS &&
-    typeof keys.auth === "string" && keys.auth.length > 0 &&
+    typeof keys.auth === "string" &&
+    keys.auth.length > 0 &&
     keys.auth.length <= PUSH_KEY_MAX_CHARS &&
-    typeof entry.createdAt === "number";
+    typeof entry.createdAt === "number"
+  );
 }
 
 /** Read the stored subscriptions. An absent, malformed or hand-edited value
@@ -122,8 +128,8 @@ export function parsePushSubscriptions(
       });
     }
   }
-  const records = [...byEndpoint.values()].sort((a, b) =>
-    a.createdAt - b.createdAt
+  const records = [...byEndpoint.values()].sort(
+    (a, b) => a.createdAt - b.createdAt,
   );
   return records.slice(-PUSH_MAX_SUBSCRIPTIONS);
 }

@@ -20,7 +20,8 @@
   animation: lum-fade var(--lum-dur-mid) var(--lum-ease-out);
   /* The exit: the scrim fades faster than the sheet leaves, so the page is
    * already readable behind it (see `.closing`). */
-  transition: background-color var(--lum-dur-fast) var(--lum-ease-out),
+  transition:
+    background-color var(--lum-dur-fast) var(--lum-ease-out),
     backdrop-filter var(--lum-dur-fast) var(--lum-ease-out);
 }
 
@@ -46,7 +47,8 @@
   /* The exit (see `.modal.closing`). A transition rather than a keyframe: it
    * can be interrupted, and it needs a `transitionend` for Modal.tsx to
    * unmount after. */
-  transition: opacity var(--lum-dur-fast) var(--lum-ease-out),
+  transition:
+    opacity var(--lum-dur-fast) var(--lum-ease-out),
     transform var(--lum-dur-fast) var(--lum-ease-out);
 }
 

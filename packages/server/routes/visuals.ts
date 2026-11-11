@@ -1,11 +1,11 @@
-import { Hono } from "hono";
 import type { SessionInfo } from "@lumisca/core";
-import { AppError } from "./util.ts";
-import { assetHeaders } from "./asset-headers.ts";
+import { Hono } from "hono";
 import {
   ensurePreview,
   previewPathOf,
 } from "../../core/media/preview-cache.ts";
+import { assetHeaders } from "./asset-headers.ts";
+import { AppError } from "./util.ts";
 
 /** The slice of the core these routes need (interface segregation). */
 export interface VisualApi {
@@ -53,10 +53,10 @@ export function visualRoutes(core: VisualApi): Hono {
     const wantsPreview = c.req.query("preview") !== "0";
     const preview = wantsPreview
       ? await ensurePreview(
-        visual.path,
-        previewPathOf(visual.path, name),
-        visual.mimeType,
-      )
+          visual.path,
+          previewPathOf(visual.path, name),
+          visual.mimeType,
+        )
       : undefined;
     if (preview !== undefined) {
       return c.newResponse(preview.buffer as ArrayBuffer, 200, headers);

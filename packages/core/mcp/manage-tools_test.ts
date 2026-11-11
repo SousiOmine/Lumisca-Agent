@@ -71,9 +71,7 @@ function serverInfo(
 }
 
 function byName(admin: McpAdmin): Map<string, Tool> {
-  return new Map(
-    createMcpAdminTools(admin).map((tool) => [tool.name, tool]),
-  );
+  return new Map(createMcpAdminTools(admin).map((tool) => [tool.name, tool]));
 }
 
 // --- mcp_list ---------------------------------------------------------------
@@ -161,13 +159,17 @@ Deno.test("mcp_add tests the connection, then saves exactly that server", async 
     }),
   });
   const add = byName(admin).get("mcp_add")!;
-  const result = await add.execute("1", {
-    name: " filesystem ",
-    command: " npx ",
-    args: ["-y", "@modelcontextprotocol/server-filesystem"],
-    env: { ROOT: "/data" },
-    cwd: " /data ",
-  } as never, undefined);
+  const result = await add.execute(
+    "1",
+    {
+      name: " filesystem ",
+      command: " npx ",
+      args: ["-y", "@modelcontextprotocol/server-filesystem"],
+      env: { ROOT: "/data" },
+      cwd: " /data ",
+    } as never,
+    undefined,
+  );
   // The probe body is a one-server config with what will be stored.
   assertEquals(log.tested.length, 1);
   const probed = parseMcpConfig(log.tested[0]!, "probe").servers[0]!;
@@ -181,10 +183,7 @@ Deno.test("mcp_add tests the connection, then saves exactly that server", async 
   assertEquals(log.added.length, 1);
   assertEquals(log.added[0]!.name, "filesystem");
   const text = toolText(result);
-  assert(
-    text.includes('Added MCP server "filesystem" (stdio)'),
-    text,
-  );
+  assert(text.includes('Added MCP server "filesystem" (stdio)'), text);
   assert(
     text.includes(
       "The connection test passed: 2 tool(s): read_file, write_file.",
@@ -207,7 +206,7 @@ Deno.test("mcp_add saves nothing when the connection test fails", async () => {
   await assertRejects(
     () =>
       Promise.resolve().then(() =>
-        add.execute("1", { name: "x", command: "npx" } as never)
+        add.execute("1", { name: "x", command: "npx" } as never),
       ),
     Error,
     "Nothing was saved",
@@ -225,10 +224,14 @@ Deno.test("mcp_add saves a server that needs a sign-in, and says where", async (
     }),
   });
   const add = byName(admin).get("mcp_add")!;
-  const result = await add.execute("1", {
-    name: "github",
-    url: "https://api.example.com/mcp",
-  } as never, undefined);
+  const result = await add.execute(
+    "1",
+    {
+      name: "github",
+      url: "https://api.example.com/mcp",
+    } as never,
+    undefined,
+  );
   assertEquals(log.added.length, 1);
   assertEquals(log.added[0]!.type, "http");
   const text = toolText(result);
@@ -242,12 +245,16 @@ Deno.test("mcp_add saves a server that needs a sign-in, and says where", async (
 Deno.test("mcp_add skips the test with verify: false and says so", async () => {
   const { admin, log } = fakeAdmin();
   const add = byName(admin).get("mcp_add")!;
-  const result = await add.execute("1", {
-    name: "slow",
-    command: "npx",
-    args: ["-y", "slow-to-download"],
-    verify: false,
-  } as never, undefined);
+  const result = await add.execute(
+    "1",
+    {
+      name: "slow",
+      command: "npx",
+      args: ["-y", "slow-to-download"],
+      verify: false,
+    } as never,
+    undefined,
+  );
   assertEquals(log.tested, []);
   assertEquals(log.added.length, 1);
   const text = toolText(result);
@@ -261,7 +268,7 @@ Deno.test("mcp_add refuses a taken name before it connects to anything", async (
   await assertRejects(
     () =>
       Promise.resolve().then(() =>
-        add.execute("1", { name: "filesystem", command: "npx" } as never)
+        add.execute("1", { name: "filesystem", command: "npx" } as never),
       ),
     Error,
     "already configured",

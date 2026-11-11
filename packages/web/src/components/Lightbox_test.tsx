@@ -51,9 +51,7 @@ Deno.test("Lightbox: a closed viewer is not on the page", () => {
 
 Deno.test("Lightbox: the picture is not draggable by the browser", () => {
   initLocale("ja");
-  const html = renderToString(
-    <Lightbox src="/x.png" onClose={() => {}} />,
-  );
+  const html = renderToString(<Lightbox src="/x.png" onClose={() => {}} />);
   // The browser's own image drag would take the pan away from the viewer's
   // pointer handlers (see Lightbox.tsx).
   assertStringIncludes(html, 'draggable="false"');

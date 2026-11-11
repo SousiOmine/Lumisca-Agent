@@ -15,10 +15,11 @@
  * what it sees into screen coordinates, so it is computed here and carried
  * in the result: `screen = round(image / scale) + (screen.x, screen.y)`.
  */
-import { CoreError } from "../errors.ts";
-import type { RawCapture } from "./types.ts";
+
 import { deflateSync, inflateSync } from "node:zlib";
 import { concatBytes, crc32 } from "../bytes.ts";
+import { CoreError } from "../errors.ts";
+import type { RawCapture } from "./types.ts";
 
 /** Longest side of the image a capture produces by default. Chosen to stay
  * inside the vision providers' image budget (1568 px long edge / ~1.15 MP):
@@ -66,9 +67,10 @@ export function encodeCapture(
   const scale = Math.min(1, maxDimension / longest);
   const width = Math.max(1, Math.round(raw.width * scale));
   const height = Math.max(1, Math.round(raw.height * scale));
-  const scaled = width === raw.width && height === raw.height
-    ? rgb
-    : resizeRgb(rgb, raw.width, raw.height, width, height);
+  const scaled =
+    width === raw.width && height === raw.height
+      ? rgb
+      : resizeRgb(rgb, raw.width, raw.height, width, height);
   return {
     png: encodePng(scaled, width, height),
     width,
@@ -152,14 +154,7 @@ export function resizeRgb(
 }
 
 const PNG_SIGNATURE = new Uint8Array([
-  0x89,
-  0x50,
-  0x4e,
-  0x47,
-  0x0d,
-  0x0a,
-  0x1a,
-  0x0a,
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
 ]);
 
 /** Encode an RGB buffer as an 8-bit truecolor PNG (no interlace, filter
@@ -182,10 +177,7 @@ export function encodePng(
   for (let y = 0; y < height; y++) {
     const rowStart = y * (stride + 1);
     filtered[rowStart] = 0;
-    filtered.set(
-      rgb.subarray(y * stride, (y + 1) * stride),
-      rowStart + 1,
-    );
+    filtered.set(rgb.subarray(y * stride, (y + 1) * stride), rowStart + 1);
   }
 
   const ihdr = new Uint8Array(13);
@@ -405,6 +397,11 @@ function toBgra(
 }
 
 function readUint32(bytes: Uint8Array, offset: number): number {
-  return ((bytes[offset]! << 24) | (bytes[offset + 1]! << 16) |
-    (bytes[offset + 2]! << 8) | bytes[offset + 3]!) >>> 0;
+  return (
+    ((bytes[offset]! << 24) |
+      (bytes[offset + 1]! << 16) |
+      (bytes[offset + 2]! << 8) |
+      bytes[offset + 3]!) >>>
+    0
+  );
 }

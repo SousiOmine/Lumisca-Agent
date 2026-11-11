@@ -1,36 +1,3 @@
-import type { ComponentType } from "preact/compat";
-import {
-  IconBrain,
-  IconCamera,
-  IconCheck,
-  IconChevronRight,
-  IconCode,
-  IconDeviceDesktop,
-  IconEdit,
-  IconFile,
-  IconFileText,
-  IconFolder,
-  IconHistory,
-  IconListCheck,
-  IconLoader,
-  IconLoader2,
-  IconMessageCircle,
-  IconMessageQuestion,
-  IconMouse,
-  IconPaperclip,
-  IconPhoto,
-  IconPlug,
-  IconRepeat,
-  IconSearch,
-  IconSend,
-  IconSparkles,
-  IconTerminal2,
-  IconUser,
-  IconUsers,
-  IconWindowMaximize,
-  IconWorld,
-  IconWorldSearch,
-} from "@tabler/icons-preact";
 import {
   contentImages,
   contentText,
@@ -78,10 +45,43 @@ import {
   TOOL_WEB_SEARCH,
   TOOL_WRITE,
 } from "@lumisca/core/shared";
-import type { ToolCallBlock, ToolResultMessage } from "../types.ts";
-import { ContentImages } from "./ContentImages.tsx";
+import {
+  IconBrain,
+  IconCamera,
+  IconCheck,
+  IconChevronRight,
+  IconCode,
+  IconDeviceDesktop,
+  IconEdit,
+  IconFile,
+  IconFileText,
+  IconFolder,
+  IconHistory,
+  IconListCheck,
+  IconLoader,
+  IconLoader2,
+  IconMessageCircle,
+  IconMessageQuestion,
+  IconMouse,
+  IconPaperclip,
+  IconPhoto,
+  IconPlug,
+  IconRepeat,
+  IconSearch,
+  IconSend,
+  IconSparkles,
+  IconTerminal2,
+  IconUser,
+  IconUsers,
+  IconWindowMaximize,
+  IconWorld,
+  IconWorldSearch,
+} from "@tabler/icons-preact";
+import type { ComponentType } from "preact/compat";
 import { useExpandableRow } from "../hooks/useExpandableRow.ts";
 import { useT } from "../i18n.ts";
+import type { ToolCallBlock, ToolResultMessage } from "../types.ts";
+import { ContentImages } from "./ContentImages.tsx";
 
 type Args = Readonly<Record<string, unknown>>;
 type IconComponent = ComponentType<{ size?: number }>;
@@ -115,10 +115,12 @@ const act = (args: Args) =>
 
 function todoProgress(args: Args): string {
   const phases = Array.isArray(args.phases)
-    ? args.phases as Array<{ tasks?: unknown }>
+    ? (args.phases as Array<{ tasks?: unknown }>)
     : [];
   const tasks = phases.flatMap((phase) =>
-    Array.isArray(phase.tasks) ? phase.tasks as Array<{ status?: unknown }> : []
+    Array.isArray(phase.tasks)
+      ? (phase.tasks as Array<{ status?: unknown }>)
+      : [],
   );
   if (tasks.length === 0) return "";
   const done = tasks.filter((task) => task.status === "completed").length;
@@ -275,10 +277,12 @@ export function ToolCall({ toolCall, result, running }: ToolCallProps) {
   const t = useT();
 
   const state = result
-    ? result.isError ? "error" : "done"
+    ? result.isError
+      ? "error"
+      : "done"
     : running
-    ? "running"
-    : "pending";
+      ? "running"
+      : "pending";
 
   const args = toolCall.arguments as Args;
   const summary = toolSummary(toolCall.name, args, t);
@@ -287,17 +291,16 @@ export function ToolCall({ toolCall, result, running }: ToolCallProps) {
 
   return (
     <div className="tool-timeline">
-      <div
-        className={`tool-line${open ? " open" : ""}`}
-        {...triggerProps}
-      >
+      <div className={`tool-line${open ? " open" : ""}`} {...triggerProps}>
         <span className="tool-line-chevron">
           <IconChevronRight size={12} />
         </span>
         <span className="tool-line-icon">
-          {state === "running"
-            ? <IconLoader2 size={13} className="spin" />
-            : <Icon size={13} />}
+          {state === "running" ? (
+            <IconLoader2 size={13} className="spin" />
+          ) : (
+            <Icon size={13} />
+          )}
         </span>
         <span className="tool-line-name">{toolCall.name}</span>
         {summary && (
@@ -317,20 +320,15 @@ export function ToolCall({ toolCall, result, running }: ToolCallProps) {
           </span>
         )}
         {state === "done" && (
-          <IconCheck
-            size={12}
-            className="tool-line-check"
-          />
+          <IconCheck size={12} className="tool-line-check" />
         )}
         {state === "error" && (
           <span className="tool-line-error">{t("common.error")}</span>
         )}
       </div>
-      {
-        /* Always mounted, with `data-open` carrying the state: a body that
-         * unmounts cannot animate its height (styles/motion.css,
-         * `.collapse`). */
-      }
+      {/* Always mounted, with `data-open` carrying the state: a body that
+       * unmounts cannot animate its height (styles/motion.css,
+       * `.collapse`). */}
       <div className="collapse below" data-open={open}>
         <div className="collapse-inner">
           <div className="tool-detail">

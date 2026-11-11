@@ -1,12 +1,12 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
+import type { PushControls } from "../../hooks/usePush.ts";
 import type {
   UpdateFailureKind,
   UpdateSource,
 } from "../../hooks/useUpdateStatus.ts";
 import type { UpdateStatus } from "../../shell.ts";
-import type { PushControls } from "../../hooks/usePush.ts";
 import { GeneralPanel } from "./GeneralPanel.tsx";
 
 function status(overrides: Partial<UpdateStatus> = {}): UpdateStatus {
@@ -100,14 +100,8 @@ Deno.test("no updater says which reason it is", () => {
     panel(null, null, "no-updater"),
     "このサーバーには更新機能がありません",
   );
-  assertStringIncludes(
-    panel(null, null, "unauthorized"),
-    "認証が切れています",
-  );
-  assertStringIncludes(
-    panel(null, null, "unreachable"),
-    "接続できない",
-  );
+  assertStringIncludes(panel(null, null, "unauthorized"), "認証が切れています");
+  assertStringIncludes(panel(null, null, "unreachable"), "接続できない");
 });
 
 Deno.test("before the first answer the panel says it is asking", () => {

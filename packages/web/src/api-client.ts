@@ -1,5 +1,5 @@
-import type { ModePrompt, PendingFile, PendingImage } from "./types.ts";
 import { stripDataUrlHeader } from "@lumisca/core/shared";
+import type { ModePrompt, PendingFile, PendingImage } from "./types.ts";
 
 /** The server serves both the UI and the API on the same origin. */
 const API_BASE = "";
@@ -94,10 +94,7 @@ export class TimeoutError extends ApiError {
   }
 }
 
-export async function request<T>(
-  path: string,
-  init?: RequestInit,
-): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   headers.set("content-type", "application/json");
   if (token) headers.set("x-lumisca-token", token);
@@ -111,9 +108,10 @@ export async function request<T>(
   // caller would be held open the same way).
   const deadline = new AbortController();
   const timer = setTimeout(() => deadline.abort(), requestTimeoutMs);
-  const signal = init?.signal === undefined || init.signal === null
-    ? deadline.signal
-    : AbortSignal.any([init.signal, deadline.signal]);
+  const signal =
+    init?.signal === undefined || init.signal === null
+      ? deadline.signal
+      : AbortSignal.any([init.signal, deadline.signal]);
   let res: Response;
   try {
     res = await fetch(`${API_BASE}${path}`, { ...init, headers, signal });
@@ -133,14 +131,13 @@ export async function request<T>(
     const body = await res.json().catch(() => null);
     const detail = body && typeof body.error === "string" ? body.error : null;
     const message = detail ?? `Request failed: ${res.status}`;
-    throw new ApiError(
-      message,
-      res.status < 500 ? "http-4xx" : "http-5xx",
-      { status: res.status, detail },
-    );
+    throw new ApiError(message, res.status < 500 ? "http-4xx" : "http-5xx", {
+      status: res.status,
+      detail,
+    });
   }
   try {
-    return await res.json() as T;
+    return (await res.json()) as T;
   } catch (error) {
     // A 2xx whose body is not JSON (a captive portal's login page, a proxy
     // that answered for the server): the call did not produce a value, and
@@ -220,9 +217,9 @@ export function sessionAttachmentBase(
  * store generated, which is why the icon changes URL when the picture
  * changes — the response is cached forever. */
 export function stellaAgentIconUrl(agentId: string, name: string): string {
-  return `/api/stella/agents/${encodeURIComponent(agentId)}/icon/${
-    encodeURIComponent(name)
-  }`;
+  return `/api/stella/agents/${encodeURIComponent(agentId)}/icon/${encodeURIComponent(
+    name,
+  )}`;
 }
 
 /** Where a prompt's own files are read back from: the conversation's upload
@@ -241,7 +238,8 @@ export function peerRouted<T, A extends unknown[]>(
   local: (...args: A) => Promise<T>,
   remote: (peerId: string, ...args: A) => Promise<T>,
 ): (...args: A) => Promise<T> {
-  return (...args) => peerId === "" ? local(...args) : remote(peerId, ...args);
+  return (...args) =>
+    peerId === "" ? local(...args) : remote(peerId, ...args);
 }
 
 /** Send one session-scoped request to the machine that owns the session:
@@ -276,7 +274,8 @@ export type SessionScoped<T> = {
   [K in keyof T]: T[K] extends (
     peerId: string,
     ...args: infer P
-  ) => Promise<infer R> ? (...args: P) => Promise<R>
+  ) => Promise<infer R>
+    ? (...args: P) => Promise<R>
     : never;
 };
 
@@ -287,7 +286,8 @@ export type TabScoped<T> = {
     peerId: string,
     sessionId: string,
     ...args: infer A
-  ) => Promise<infer R> ? (...args: A) => Promise<R>
+  ) => Promise<infer R>
+    ? (...args: A) => Promise<R>
     : never;
 };
 
@@ -341,21 +341,21 @@ export function promptBody(
     text,
     ...(images && images.length > 0
       ? {
-        images: images.map((image) => ({
-          data: stripDataUrlHeader(image.data),
-          mimeType: image.mimeType,
-        })),
-      }
+          images: images.map((image) => ({
+            data: stripDataUrlHeader(image.data),
+            mimeType: image.mimeType,
+          })),
+        }
       : {}),
     // Files travel as bytes plus a name: the server writes them into the
     // machine and tells the model where they are (see core's vm/uploads.ts).
     ...(files && files.length > 0
       ? {
-        files: files.map((file) => ({
-          name: file.name,
-          data: stripDataUrlHeader(file.data),
-        })),
-      }
+          files: files.map((file) => ({
+            name: file.name,
+            data: stripDataUrlHeader(file.data),
+          })),
+        }
       : {}),
     ...(mode ? { mode } : {}),
   };

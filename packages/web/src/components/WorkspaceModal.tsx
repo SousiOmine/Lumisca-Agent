@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState } from "preact/compat";
 import { IconPlus, IconTrash } from "@tabler/icons-preact";
+import { useEffect, useRef, useState } from "preact/compat";
 import { api } from "../api.ts";
-import type { Workspace } from "../types.ts";
-import { Modal } from "./Modal.tsx";
-import { FolderBrowser } from "./FolderBrowser.tsx";
+import { useT } from "../i18n.ts";
 import { errorText } from "../providers.ts";
 import { nativeFolderPickerAvailable, pickFolder } from "../shell.ts";
-import { useT } from "../i18n.ts";
+import type { Workspace } from "../types.ts";
+import { FolderBrowser } from "./FolderBrowser.tsx";
+import { Modal } from "./Modal.tsx";
 
 interface WorkspaceModalProps {
   /** Present → edit mode (rename / change folders / delete). */
@@ -19,9 +19,12 @@ interface WorkspaceModalProps {
 
 type View = { kind: "main" } | { kind: "browse" };
 
-export function WorkspaceModal(
-  { workspace, onSaved, onDelete, onClose }: WorkspaceModalProps,
-) {
+export function WorkspaceModal({
+  workspace,
+  onSaved,
+  onDelete,
+  onClose,
+}: WorkspaceModalProps) {
   const editing = workspace !== undefined;
   const t = useT();
   const [view, setView] = useState<View>({ kind: "main" });
@@ -88,9 +91,9 @@ export function WorkspaceModal(
     try {
       const ws = editing
         ? await api.updateWorkspace(workspace!.id, {
-          name: name.trim(),
-          folders,
-        })
+            name: name.trim(),
+            folders,
+          })
         : await api.createWorkspace(name.trim(), folders);
       // `onSaved` is the caller's bookkeeping (the new workspace becomes the
       // selected one); removing this dialog is `onClose`'s job, which happens
@@ -120,113 +123,116 @@ export function WorkspaceModal(
   return (
     <Modal
       onClose={onClose}
-      label={editing
-        ? t("chrome.workspaceModal.editTitle")
-        : t("chrome.workspaceModal.createTitle")}
+      label={
+        editing
+          ? t("chrome.workspaceModal.editTitle")
+          : t("chrome.workspaceModal.createTitle")
+      }
       // The two-pane browser wants the width of a file manager window; the
       // form view keeps the default dialog width.
-      width={view.kind === "browse"
-        ? "min(880px, calc(100vw - 48px))"
-        : undefined}
+      width={
+        view.kind === "browse" ? "min(880px, calc(100vw - 48px))" : undefined
+      }
     >
       {(close) => {
         closeRef.current = close;
-        return view.kind === "browse"
-          ? (
-            <FolderBrowser
-              onAdd={addFolder}
-              onBack={() => setView({ kind: "main" })}
-            />
-          )
-          : (
-            <>
-              <h2>
-                {editing
-                  ? t("chrome.workspaceModal.editTitle")
-                  : t("chrome.workspaceModal.createTitle")}
-              </h2>
+        return view.kind === "browse" ? (
+          <FolderBrowser
+            onAdd={addFolder}
+            onBack={() => setView({ kind: "main" })}
+          />
+        ) : (
+          <>
+            <h2>
+              {editing
+                ? t("chrome.workspaceModal.editTitle")
+                : t("chrome.workspaceModal.createTitle")}
+            </h2>
 
-              <label>
-                {t("chrome.workspaceModal.nameLabel")}
-                <input
-                  placeholder={t("chrome.workspaceModal.namePlaceholder")}
-                  value={name}
-                  onChange={(e) => setName(e.currentTarget.value)}
-                />
-              </label>
+            <label>
+              {t("chrome.workspaceModal.nameLabel")}
+              <input
+                placeholder={t("chrome.workspaceModal.namePlaceholder")}
+                value={name}
+                onChange={(e) => setName(e.currentTarget.value)}
+              />
+            </label>
 
-              <label>
-                {t("chrome.workspaceModal.foldersLabel")}
-                <div className="folder-picker">
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={chooseFolder}
-                    disabled={picking}
-                  >
-                    <IconPlus size={14} />
-                    {picking
-                      ? t("chrome.workspaceModal.picking")
-                      : t("chrome.workspaceModal.selectFolder")}
-                  </button>
-                </div>
-              </label>
-
-              {folders.length > 0 && (
-                <div className="folder-list">
-                  {folders.map((f) => (
-                    <div key={f} className="folder-item">
-                      <span className="mono folder-path" title={f}>{f}</span>
-                      <button
-                        type="button"
-                        className="btn small"
-                        onClick={() =>
-                          setFolders((prev) => prev.filter((p) => p !== f))}
-                      >
-                        <IconTrash size={13} />
-                        {t("chrome.workspaceModal.removeFolder")}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <p className="settings-note">
-                {t("chrome.workspaceModal.description")}
-              </p>
-
-              {error && <div className="error-text">{error}</div>}
-
-              <div className="modal-actions">
-                {editing && (
-                  <button
-                    type="button"
-                    className="btn danger"
-                    onClick={remove}
-                    disabled={busy}
-                  >
-                    <IconTrash size={14} />
-                    {t("common.delete")}
-                  </button>
-                )}
-                <button type="button" className="btn" onClick={() => close()}>
-                  {t("common.cancel")}
-                </button>
+            <label>
+              {t("chrome.workspaceModal.foldersLabel")}
+              <div className="folder-picker">
                 <button
                   type="button"
-                  className="btn primary"
-                  onClick={save}
-                  disabled={busy || !name.trim() || folders.length === 0}
+                  className="btn"
+                  onClick={chooseFolder}
+                  disabled={picking}
                 >
-                  {busy
-                    ? t("common.saving")
-                    : editing
-                    ? t("common.save")
-                    : t("chrome.workspaceModal.create")}
+                  <IconPlus size={14} />
+                  {picking
+                    ? t("chrome.workspaceModal.picking")
+                    : t("chrome.workspaceModal.selectFolder")}
                 </button>
               </div>
-            </>
-          );
+            </label>
+
+            {folders.length > 0 && (
+              <div className="folder-list">
+                {folders.map((f) => (
+                  <div key={f} className="folder-item">
+                    <span className="mono folder-path" title={f}>
+                      {f}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn small"
+                      onClick={() =>
+                        setFolders((prev) => prev.filter((p) => p !== f))
+                      }
+                    >
+                      <IconTrash size={13} />
+                      {t("chrome.workspaceModal.removeFolder")}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <p className="settings-note">
+              {t("chrome.workspaceModal.description")}
+            </p>
+
+            {error && <div className="error-text">{error}</div>}
+
+            <div className="modal-actions">
+              {editing && (
+                <button
+                  type="button"
+                  className="btn danger"
+                  onClick={remove}
+                  disabled={busy}
+                >
+                  <IconTrash size={14} />
+                  {t("common.delete")}
+                </button>
+              )}
+              <button type="button" className="btn" onClick={() => close()}>
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                className="btn primary"
+                onClick={save}
+                disabled={busy || !name.trim() || folders.length === 0}
+              >
+                {busy
+                  ? t("common.saving")
+                  : editing
+                    ? t("common.save")
+                    : t("chrome.workspaceModal.create")}
+              </button>
+            </div>
+          </>
+        );
       }}
     </Modal>
   );

@@ -1,10 +1,10 @@
-import { useEffect, useState } from "preact/compat";
 import { COMPUTER_USE_ENABLED_KEY } from "@lumisca/core/shared";
-import { errorText } from "../../providers.ts";
+import { useEffect, useState } from "preact/compat";
 import { useSaveAction } from "../../hooks/useSave.ts";
-import { SettingRow, Toggle } from "../SettingRow.tsx";
-import { settingsStore, useSettings } from "../../settingsStore.ts";
 import { useT } from "../../i18n.ts";
+import { errorText } from "../../providers.ts";
+import { settingsStore, useSettings } from "../../settingsStore.ts";
+import { SettingRow, Toggle } from "../SettingRow.tsx";
 
 /** Settings → セキュリティ: computer use — the agent captures this machine's
  * screen and drives its mouse and keyboard. The feature is opt-in, because
@@ -42,9 +42,9 @@ export function ComputerUsePanel() {
     <div className="settings-pane">
       <SettingRow
         label={t("settings.computerUse.title")}
-        description={loaded
-          ? t("settings.computerUse.description")
-          : t("common.loading")}
+        description={
+          loaded ? t("settings.computerUse.description") : t("common.loading")
+        }
         title={t("settings.computerUse.tooltip")}
       >
         <Toggle

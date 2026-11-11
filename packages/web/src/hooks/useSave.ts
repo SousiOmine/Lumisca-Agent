@@ -9,7 +9,10 @@ export interface SaveState {
 /** A clipboard copy that reports "copied" for a moment. Browsers without
  * the clipboard API (or a denied permission) stay silent: the text is still
  * selectable. */
-export function useCopy(text: string, ms = 1500): {
+export function useCopy(
+  text: string,
+  ms = 1500,
+): {
   copied: boolean;
   copy: () => Promise<void>;
 } {
@@ -116,15 +119,18 @@ export function useDebouncedWrite<T>(
     latestWrite.current = write;
   });
   useEffect(() => () => clearTimeout(timer.current), []);
-  const schedule = useCallback((value: T) => {
-    pending.current = { value };
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      const next = pending.current;
-      pending.current = undefined;
-      if (next !== undefined) void latestWrite.current(next.value);
-    }, ms);
-  }, [ms]);
+  const schedule = useCallback(
+    (value: T) => {
+      pending.current = { value };
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => {
+        const next = pending.current;
+        pending.current = undefined;
+        if (next !== undefined) void latestWrite.current(next.value);
+      }, ms);
+    },
+    [ms],
+  );
   const flush = useCallback(async () => {
     clearTimeout(timer.current);
     const next = pending.current;

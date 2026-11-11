@@ -45,16 +45,14 @@ async function waitForStatus(
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   throw new Error(
-    `${what} never happened: ${
-      JSON.stringify(
-        last.map((s) => ({
-          name: s.name,
-          tools: s.toolCount,
-          needsAuth: s.needsAuth,
-          error: s.error,
-        })),
-      )
-    }`,
+    `${what} never happened: ${JSON.stringify(
+      last.map((s) => ({
+        name: s.name,
+        tools: s.toolCount,
+        needsAuth: s.needsAuth,
+        error: s.error,
+      })),
+    )}`,
   );
 }
 
@@ -84,13 +82,19 @@ Deno.test("E2E: a stella conversation reaches an MCP server after signing in", a
     const session = await core.getOrCreateStellaSession(agent.id);
     const body = JSON.stringify({ mcpServers: { probe: { url: mcp.url } } });
     const status = () =>
-      core.getSession(session.id) === undefined ? null : (core as unknown as {
-        pool: {
-          get(
-            id: string,
-          ): { getMcpStatus(): McpServerStatus[] | null } | undefined;
-        };
-      }).pool.get(session.id)?.getMcpStatus() ?? null;
+      core.getSession(session.id) === undefined
+        ? null
+        : ((
+            core as unknown as {
+              pool: {
+                get(
+                  id: string,
+                ): { getMcpStatus(): McpServerStatus[] | null } | undefined;
+              };
+            }
+          ).pool
+            .get(session.id)
+            ?.getMcpStatus() ?? null);
 
     // 1. Added while the conversation exists. Without a grant the server
     //    answers 401: it is configured, enabled and unreachable.
@@ -120,7 +124,10 @@ Deno.test("E2E: a stella conversation reaches an MCP server after signing in", a
       (servers) => servers.every((s) => s.toolCount === 1),
       "the server's tools after signing in",
     );
-    assertEquals(after.map((s) => s.name), ["probe"]);
+    assertEquals(
+      after.map((s) => s.name),
+      ["probe"],
+    );
     assertEquals(after[0]?.needsAuth, undefined, "the sign-in cleared 401");
     assertEquals(after[0]?.toolCount, 1);
     // The same conversation, never rebuilt under the user.

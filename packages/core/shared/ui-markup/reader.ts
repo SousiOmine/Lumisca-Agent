@@ -24,9 +24,7 @@ export type RawAttribute = {
 };
 
 /** The content of a tag: text, or a child element. */
-export type RawChild =
-  | { kind: "text"; text: string; at: number }
-  | RawElement;
+export type RawChild = { kind: "text"; text: string; at: number } | RawElement;
 
 /** The tree of tags, before the grammar is checked. */
 export type RawElement = {
@@ -138,9 +136,10 @@ class MarkupReader {
       kind: "element",
       name,
       attrs,
-      children: name === "Data"
-        ? this.readRawData(at)
-        : this.readChildren(name, depth, at),
+      children:
+        name === "Data"
+          ? this.readRawData(at)
+          : this.readChildren(name, depth, at),
       at,
     };
   }
@@ -200,7 +199,8 @@ class MarkupReader {
       const textAt = this.index;
       this.index += 1;
       while (
-        this.source[this.index] !== undefined && this.source[this.index] !== "<"
+        this.source[this.index] !== undefined &&
+        this.source[this.index] !== "<"
       ) {
         this.index += 1;
       }
@@ -241,7 +241,8 @@ class MarkupReader {
 
       const valueAt = this.index;
       while (
-        this.source[this.index] !== undefined && this.source[this.index] !== '"'
+        this.source[this.index] !== undefined &&
+        this.source[this.index] !== '"'
       ) {
         this.index += 1;
       }

@@ -69,18 +69,20 @@ export async function bundleStylesCss(entryPath: string): Promise<string> {
     );
   }
   const dir = dirname(entryPath);
-  const bodies = await Promise.all(parts.map(async (rel) => {
-    if (!rel.endsWith(".css")) {
-      throw new Error(`${entryPath}: non-css import is not allowed: ${rel}`);
-    }
-    // join() normalizes `..`; anything left pointing outside the web
-    // sources is rejected instead of read.
-    const resolved = join(dir, rel);
-    if (relative(dir, resolved).startsWith("..")) {
-      throw new Error(`${entryPath}: import escapes the web sources: ${rel}`);
-    }
-    return await Deno.readTextFile(resolved);
-  }));
+  const bodies = await Promise.all(
+    parts.map(async (rel) => {
+      if (!rel.endsWith(".css")) {
+        throw new Error(`${entryPath}: non-css import is not allowed: ${rel}`);
+      }
+      // join() normalizes `..`; anything left pointing outside the web
+      // sources is rejected instead of read.
+      const resolved = join(dir, rel);
+      if (relative(dir, resolved).startsWith("..")) {
+        throw new Error(`${entryPath}: import escapes the web sources: ${rel}`);
+      }
+      return await Deno.readTextFile(resolved);
+    }),
+  );
   return bodies.join("\n");
 }
 
@@ -273,9 +275,10 @@ export class Assets {
         : undefined;
       // A build without the entry chunk is broken anyway; the fallback only
       // keeps the value total for the health answer.
-      this.buildIdCache = entry === undefined
-        ? contentEtag(Object.keys(client).sort().join("\n"))
-        : entry.etag;
+      this.buildIdCache =
+        entry === undefined
+          ? contentEtag(Object.keys(client).sort().join("\n"))
+          : entry.etag;
     }
     return this.buildIdCache;
   }

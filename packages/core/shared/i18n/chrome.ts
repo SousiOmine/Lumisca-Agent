@@ -78,16 +78,12 @@ export const chrome = {
     en: "Close a running tab?",
   },
   "chrome.tabClose.body": {
-    ja:
-      "「{name}」は実行中です。閉じると実行は中止され、バックグラウンドコマンドとサブエージェントも停止します。",
-    en:
-      '"{name}" is running. Closing it stops the run, along with its background commands and sub-agents.',
+    ja: "「{name}」は実行中です。閉じると実行は中止され、バックグラウンドコマンドとサブエージェントも停止します。",
+    en: '"{name}" is running. Closing it stops the run, along with its background commands and sub-agents.',
   },
   "chrome.tabClose.bodyMany": {
-    ja:
-      "対象のタブのうち {count} 件が実行中です。閉じるとそれらの実行は中止され、バックグラウンドコマンドとサブエージェントも停止します。",
-    en:
-      "The close includes {count} running tabs. Closing stops their runs, their background commands and their sub-agents.",
+    ja: "対象のタブのうち {count} 件が実行中です。閉じるとそれらの実行は中止され、バックグラウンドコマンドとサブエージェントも停止します。",
+    en: "The close includes {count} running tabs. Closing stops their runs, their background commands and their sub-agents.",
   },
   "chrome.tabClose.keepRunningNote": {
     ja: "閉じても実行は続きます",
@@ -182,8 +178,7 @@ export const chrome = {
     en: "The local server is unreachable",
   },
   "chrome.serverDown.note": {
-    ja:
-      "作業データは保持されています。サーバーを再起動すると作業を再開できます。",
+    ja: "作業データは保持されています。サーバーを再起動すると作業を再開できます。",
     en: "Your work data is preserved. Restart the server to resume.",
   },
   "chrome.serverDown.restartFailed": {
@@ -226,8 +221,7 @@ export const chrome = {
     en: "Could not fetch the model list",
   },
   "chrome.modelPicker.noProviders": {
-    ja:
-      "利用可能なプロバイダーが未設定です。設定画面でAPIキーを登録してください。",
+    ja: "利用可能なプロバイダーが未設定です。設定画面でAPIキーを登録してください。",
     en: "No providers are configured. Register your API keys in the settings.",
   },
   "chrome.modelPicker.settingsLink": {
@@ -322,10 +316,8 @@ export const chrome = {
     en: "Select folder",
   },
   "chrome.workspaceModal.description": {
-    ja:
-      "関連する複数のフォルダーをまとめて、作業環境（ワークスペース）を作成します。AIによるファイルの読み書きやコマンド実行は、指定したフォルダー内に限定されます。",
-    en:
-      "Group related folders into a workspace. AI file read/write and command execution are restricted to the specified folders.",
+    ja: "関連する複数のフォルダーをまとめて、作業環境（ワークスペース）を作成します。AIによるファイルの読み書きやコマンド実行は、指定したフォルダー内に限定されます。",
+    en: "Group related folders into a workspace. AI file read/write and command execution are restricted to the specified folders.",
   },
   "chrome.workspaceModal.removeFolder": {
     ja: "削除",

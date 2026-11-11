@@ -1,5 +1,5 @@
-import { decodeUtf8 } from "../../shared/mod.ts";
 import { sleep } from "../../shared/misc.ts";
+import { decodeUtf8 } from "../../shared/mod.ts";
 
 /** How many sweeps a POSIX tree gets before its root is killed, and how
  * long each waits: the sweep exists to catch a child spawned while the
@@ -12,7 +12,8 @@ const KILL_SWEEP_DELAY_MS = 100;
  * ParentProcessId recursively. A child keeps its dead parent's PID, so
  * descendants orphaned by an earlier kill are still found by this walk. */
 function windowsDescendantPids(rootPid: number): number[] {
-  const script = `$root=${rootPid};$found=@{};$queue=@($root);` +
+  const script =
+    `$root=${rootPid};$found=@{};$queue=@($root);` +
     `while($queue.Count -gt 0){$next=@();foreach($p in $queue){` +
     `$kids=Get-CimInstance Win32_Process -Filter "ParentProcessId=$p" -ErrorAction SilentlyContinue;` +
     `foreach($k in $kids){$id=[int]$k.ProcessId;if(-not $found.ContainsKey($id)){$found[$id]=$true;$next+=$id}}}` +
@@ -139,9 +140,7 @@ async function killPosixTree(rootPid: number): Promise<void> {
  * process the caller holds — and everything the command started keeps
  * running (a reported kill that stopped nothing, and pipes and working
  * directories held by survivors). */
-export async function killProcessTree(
-  child: { pid: number },
-): Promise<void> {
+export async function killProcessTree(child: { pid: number }): Promise<void> {
   if (Deno.build.os === "windows") {
     taskkillPids([...windowsDescendantPids(child.pid), child.pid]);
     for (let attempt = 0; attempt < 3; attempt++) {

@@ -17,18 +17,16 @@ import {
 } from "./guard.ts";
 
 Deno.test("the settings guard hides every credential category", () => {
-  for (
-    const key of [
-      `${CREDENTIAL_KEY_PREFIX}anthropic`,
-      // MCP OAuth tokens and client registrations (see mcp/oauth.ts).
-      `${MCP_OAUTH_KEY_PREFIX}https://agent.example/mcp`,
-      APP_MCP_SETTINGS_KEY,
-      CONNECTIONS_KEY,
-      // Web Push: the signing key, and the endpoints that can be notified.
-      PUSH_VAPID_KEY,
-      PUSH_SUBSCRIPTIONS_KEY,
-    ]
-  ) {
+  for (const key of [
+    `${CREDENTIAL_KEY_PREFIX}anthropic`,
+    // MCP OAuth tokens and client registrations (see mcp/oauth.ts).
+    `${MCP_OAUTH_KEY_PREFIX}https://agent.example/mcp`,
+    APP_MCP_SETTINGS_KEY,
+    CONNECTIONS_KEY,
+    // Web Push: the signing key, and the endpoints that can be notified.
+    PUSH_VAPID_KEY,
+    PUSH_SUBSCRIPTIONS_KEY,
+  ]) {
     assertEquals(
       typeof protectedKeyReason(key) !== "undefined",
       true,

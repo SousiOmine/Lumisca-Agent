@@ -14,8 +14,8 @@
  * that does not know it can look would never try.
  */
 import { bytesToBase64 } from "../base64.ts";
-import { prepareStoredImage } from "../media/stored-image.ts";
 import { CoreError } from "../errors.ts";
+import { prepareStoredImage } from "../media/stored-image.ts";
 import {
   abortError,
   sleepAbortable,
@@ -44,6 +44,7 @@ function requireCoord(name: string, value: number | undefined): number {
   }
   return requireInteger(name, value);
 }
+
 import {
   VM_SCREEN_HEIGHT,
   VM_SCREEN_WIDTH,
@@ -70,25 +71,33 @@ const actSchema = object({
   to_x: optional(integer("Drag end x in screen pixels (drag only)")),
   to_y: optional(integer("Drag end y in screen pixels (drag only)")),
   button: optional(string('Mouse button: "left" (default), "right", "middle"')),
-  count: optional(integer(
-    "Clicks to perform: 1 (default), 2 (double-click), 3 (triple-click)",
-  )),
+  count: optional(
+    integer(
+      "Clicks to perform: 1 (default), 2 (double-click), 3 (triple-click)",
+    ),
+  ),
   text: optional(string("Text to type (type only)")),
-  key: optional(string(
-    "Key or key combination by xdotool name, e.g. `Return`, `Escape`, " +
-      "`Tab`, `ctrl+a`, `super` (key only)",
-  )),
-  vertical: optional(integer(
-    `Scroll amount in wheel notches (${VM_SCROLL_NOTCH} per notch, at most ` +
-      "20 notches): positive scrolls down, negative up (scroll only)",
-  )),
-  horizontal: optional(integer(
-    `Scroll amount in wheel notches (${VM_SCROLL_NOTCH} per notch, at most ` +
-      "20 notches): positive scrolls right, negative left (scroll only)",
-  )),
-  duration_ms: optional(integer(
-    `Milliseconds to wait (wait only, at most ${MAX_WAIT_MS})`,
-  )),
+  key: optional(
+    string(
+      "Key or key combination by xdotool name, e.g. `Return`, `Escape`, " +
+        "`Tab`, `ctrl+a`, `super` (key only)",
+    ),
+  ),
+  vertical: optional(
+    integer(
+      `Scroll amount in wheel notches (${VM_SCROLL_NOTCH} per notch, at most ` +
+        "20 notches): positive scrolls down, negative up (scroll only)",
+    ),
+  ),
+  horizontal: optional(
+    integer(
+      `Scroll amount in wheel notches (${VM_SCROLL_NOTCH} per notch, at most ` +
+        "20 notches): positive scrolls right, negative left (scroll only)",
+    ),
+  ),
+  duration_ms: optional(
+    integer(`Milliseconds to wait (wait only, at most ${MAX_WAIT_MS})`),
+  ),
 });
 
 export interface VmToolsOptions {
@@ -97,10 +106,7 @@ export interface VmToolsOptions {
 
 /** Build the screen tool set of a stella session. */
 export function createVmTools(options: VmToolsOptions): Tool[] {
-  return [
-    createScreenshotTool(options),
-    createActTool(options),
-  ];
+  return [createScreenshotTool(options), createActTool(options)];
 }
 
 /** The picture against the screen it shows. A copy the store scaled down is
@@ -109,18 +115,22 @@ export function createVmTools(options: VmToolsOptions): Tool[] {
 function describeScreenshot(width: number, height: number): string {
   const screen = `The screen is ${VM_SCREEN_WIDTH}x${VM_SCREEN_HEIGHT} pixels`;
   if (width === VM_SCREEN_WIDTH && height === VM_SCREEN_HEIGHT) {
-    return `${screen}; this image is 1:1 with it, so a position read off ` +
-      "the image is a screen pixel as-is.";
+    return (
+      `${screen}; this image is 1:1 with it, so a position read off ` +
+      "the image is a screen pixel as-is."
+    );
   }
   const factor = VM_SCREEN_WIDTH / width;
-  return `${screen}; this image is ${width}x${height}, so multiply a ` +
+  return (
+    `${screen}; this image is ${width}x${height}, so multiply a ` +
     `position read off the image by ${factor.toFixed(3)} to get the screen ` +
-    "pixel vm_act takes.";
+    "pixel vm_act takes."
+  );
 }
 
-function createScreenshotTool(
-  { screen }: VmToolsOptions,
-): Tool<typeof screenshotSchema> {
+function createScreenshotTool({
+  screen,
+}: VmToolsOptions): Tool<typeof screenshotSchema> {
   return {
     name: TOOL_VM_SCREENSHOT,
     label: "VM Screenshot",
@@ -185,15 +195,11 @@ function createActTool({ screen }: VmToolsOptions): Tool<typeof actSchema> {
         case "click": {
           const x = requireCoord("x", params.x);
           const y = requireCoord("y", params.y);
-          const button = requireOneOf(
-            "button",
-            params.button ?? "left",
-            [
-              "left",
-              "right",
-              "middle",
-            ] as const,
-          );
+          const button = requireOneOf("button", params.button ?? "left", [
+            "left",
+            "right",
+            "middle",
+          ] as const);
           const count = requireIntegerInRange("count", params.count ?? 1, 1, 3);
           await screen.click(x, y, { button, count }, signal);
           return result(
@@ -207,15 +213,11 @@ function createActTool({ screen }: VmToolsOptions): Tool<typeof actSchema> {
           const y = requireCoord("y", params.y);
           const toX = requireCoord("to_x", params.to_x);
           const toY = requireCoord("to_y", params.to_y);
-          const button = requireOneOf(
-            "button",
-            params.button ?? "left",
-            [
-              "left",
-              "right",
-              "middle",
-            ] as const,
-          );
+          const button = requireOneOf("button", params.button ?? "left", [
+            "left",
+            "right",
+            "middle",
+          ] as const);
           await screen.drag(x, y, toX, toY, button, signal);
           return result(
             `dragged ${button} from (${x}, ${y}) to (${toX}, ${toY}).`,
@@ -286,9 +288,6 @@ function createActTool({ screen }: VmToolsOptions): Tool<typeof actSchema> {
 
 /** One tool result: the sentence above plus the resolved arguments, so a
  * mis-click is diagnosable from the transcript alone. */
-function result(
-  text: string,
-  details: Record<string, unknown>,
-): ToolResult {
+function result(text: string, details: Record<string, unknown>): ToolResult {
   return { content: [{ type: "text", text }], details };
 }

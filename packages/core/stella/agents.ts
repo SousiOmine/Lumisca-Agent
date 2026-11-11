@@ -159,9 +159,10 @@ function toAgent(row: AgentRow): StellaAgent {
     icon: row.icon ?? "",
     // Both columns or neither: a half-written pair is not a model, and a
     // conversation built from it would fail to open.
-    model: row.model_provider && row.model_id
-      ? { provider: row.model_provider, modelId: row.model_id }
-      : null,
+    model:
+      row.model_provider && row.model_id
+        ? { provider: row.model_provider, modelId: row.model_id }
+        : null,
     onboardedAt: row.onboarded_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -170,10 +171,10 @@ function toAgent(row: AgentRow): StellaAgent {
 
 /** Normalize and validate what a caller (or the agent-creation tool) passes.
  * Throws with a sentence the model can act on — never silently truncates. */
-export function normalizeAgentInput(input: {
+export function normalizeAgentInput(input: { name: string; role: string }): {
   name: string;
   role: string;
-}): { name: string; role: string } {
+} {
   // Both fields are the user's to fill in or leave alone: creating an agent
   // is how someone starts talking to one, and a form that refuses to submit
   // until two free-text answers are written is a wall in front of that. An
@@ -333,18 +334,21 @@ export function createAgentRepo(db: LumiscaDb): AgentRepo {
       if (current === undefined) {
         throw new CoreError(`Agent not found: ${id}`, "not_found");
       }
-      const name = patch.name === undefined
-        ? current.name
-        : normalizeAgentName(patch.name);
+      const name =
+        patch.name === undefined
+          ? current.name
+          : normalizeAgentName(patch.name);
       const icon = patch.icon ?? current.icon;
-      const model = patch.model === undefined
-        ? current.model
-        : normalizeAgentModel(patch.model);
+      const model =
+        patch.model === undefined
+          ? current.model
+          : normalizeAgentModel(patch.model);
       // A patch that changes nothing is not an error, and it is also not a
       // write: an edit dialog opened and saved untouched must not touch the
       // row (a future column would otherwise be stamped by a no-op).
       if (
-        name === current.name && icon === current.icon &&
+        name === current.name &&
+        icon === current.icon &&
         model?.provider === current.model?.provider &&
         model?.modelId === current.model?.modelId
       ) {

@@ -1,5 +1,5 @@
-import { useEffect, useState } from "preact/compat";
 import { IconChevronRight, IconLoader2 } from "@tabler/icons-preact";
+import { useEffect, useState } from "preact/compat";
 import { useT } from "../i18n.ts";
 
 /** Format elapsed milliseconds as "Xm Ys" or "Ys". */
@@ -57,11 +57,13 @@ export function AgentActivity({
       aria-expanded={expandable ? expanded : undefined}
       disabled={!expandable}
     >
-      {running
-        ? <IconLoader2 size={14} className="spin" />
-        : expandable
-        ? <IconChevronRight size={14} className="agent-activity-chevron" />
-        : <span className="agent-activity-spacer" />}
+      {running ? (
+        <IconLoader2 size={14} className="spin" />
+      ) : expandable ? (
+        <IconChevronRight size={14} className="agent-activity-chevron" />
+      ) : (
+        <span className="agent-activity-spacer" />
+      )}
       <span>{label}</span>
     </button>
   );

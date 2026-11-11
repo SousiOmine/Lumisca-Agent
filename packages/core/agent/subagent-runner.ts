@@ -13,14 +13,19 @@
  * `Agent` class stays private to `agent/`.
  */
 import { Agent } from "./../ai/agent.ts";
-import type { AgentEvent, AgentMessage, StreamFn } from "../ai/types.ts";
-import type { Api, Model } from "../ai/types.ts";
-import type { AgentTool } from "../ai/types.ts";
-import { ContextCompactor } from "../ai/context-compaction.ts";
 import { WORK_COMPACTION_STYLE } from "../ai/compaction-style.ts";
-import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
-import type { ThinkingLevel } from "../shared/mod.ts";
+import { ContextCompactor } from "../ai/context-compaction.ts";
+import type {
+  AgentEvent,
+  AgentMessage,
+  AgentTool,
+  Api,
+  Model,
+  StreamFn,
+} from "../ai/types.ts";
 import { toLlmMessages } from "../domain/notification.ts";
+import type { ThinkingLevel } from "../shared/mod.ts";
+import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 
 /** What one sub-agent's agent is built from. */
 export interface SubagentAgentInit {

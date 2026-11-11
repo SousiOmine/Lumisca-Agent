@@ -1,5 +1,5 @@
-import { Hono } from "hono";
 import type { SkillInfo } from "@lumisca/core";
+import { Hono } from "hono";
 
 /** The slice of the core these routes need (interface segregation). */
 export interface SkillApi {

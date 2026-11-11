@@ -1,7 +1,7 @@
+import type { ClientEvent } from "../domain/event.ts";
 import { CoreError } from "../errors.ts";
 import type { TodoPhase, TodoStatus } from "../shared/mod.ts";
 import { TOOL_TODO } from "../shared/mod.ts";
-import type { ClientEvent } from "../domain/event.ts";
 import {
   array,
   object,
@@ -96,9 +96,7 @@ export class TodoHub {
 }
 
 /** Count tasks by status across the whole plan. */
-function countsOf(
-  phases: TodoPhase[],
-): Record<TodoStatus, number> {
+function countsOf(phases: TodoPhase[]): Record<TodoStatus, number> {
   const counts: Record<TodoStatus, number> = {
     pending: 0,
     in_progress: 0,
@@ -119,8 +117,9 @@ export function formatTodoCounts(phases: TodoPhase[]): string {
   const counts = countsOf(phases);
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
   if (total === 0) return "Cleared the todo list.";
-  const parts = STATUSES.filter((status) => counts[status] > 0)
-    .map((status) => `${counts[status]} ${status.replace("_", " ")}`);
+  const parts = STATUSES.filter((status) => counts[status] > 0).map(
+    (status) => `${counts[status]} ${status.replace("_", " ")}`,
+  );
   return `Updated todo list: ${parts.join(", ")}.`;
 }
 
@@ -131,9 +130,11 @@ const todoSchema = object({
       tasks: array(
         object({
           name: string("The task"),
-          status: optional(string(
-            `The task's status: ${STATUSES.join(" | ")} (default: pending)`,
-          )),
+          status: optional(
+            string(
+              `The task's status: ${STATUSES.join(" | ")} (default: pending)`,
+            ),
+          ),
         }),
         "The tasks of the phase, in order (at least one)",
       ),
@@ -146,9 +147,10 @@ const todoSchema = object({
 
 /** Validate a plan and normalize its names (trimmed, no duplicates). */
 function normalizePlan(
-  phases: Array<
-    { name: string; tasks: Array<{ name: string; status?: string }> }
-  >,
+  phases: Array<{
+    name: string;
+    tasks: Array<{ name: string; status?: string }>;
+  }>,
 ): TodoPlanInput[] {
   const phaseNames = new Set<string>();
   return phases.map((phase) => {
@@ -179,9 +181,10 @@ function normalizePlan(
         );
       }
       taskNames.add(taskName);
-      const status = task.status === undefined
-        ? undefined
-        : requireOneOf("status", task.status, STATUSES);
+      const status =
+        task.status === undefined
+          ? undefined
+          : requireOneOf("status", task.status, STATUSES);
       return { name: taskName, status };
     });
     return { name, tasks };

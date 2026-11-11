@@ -58,9 +58,9 @@ export class PeerEventStream {
   connect(): void {
     if (this.closed || this.isClosed() || this.ws !== null) return;
     // The registry stores http:// URLs; the event stream speaks ws(s)://.
-    const wsUrl = `${
-      this.peer.url.replace(/^http/, "ws").replace(/\/+$/, "")
-    }/ws?token=${encodeURIComponent(this.peer.token)}`;
+    const wsUrl = `${this.peer.url
+      .replace(/^http/, "ws")
+      .replace(/\/+$/, "")}/ws?token=${encodeURIComponent(this.peer.token)}`;
     let ws: WebSocket;
     try {
       ws = new WebSocket(wsUrl);

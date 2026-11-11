@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from "preact/compat";
 import { serializeMcpServers } from "@lumisca/core/shared";
-import type { McpAuthSnapshot, McpServerInfo } from "../types.ts";
+import { useEffect, useRef, useState } from "preact/compat";
 import { api } from "../api.ts";
-import { errorText } from "../providers.ts";
-import { useSavedNotice } from "./useSave.ts";
 import { useT } from "../i18n.ts";
+import { errorText } from "../providers.ts";
+import type { McpAuthSnapshot, McpServerInfo } from "../types.ts";
+import { useSavedNotice } from "./useSave.ts";
 
 /** Cadence of the status poll while a sign-in waits for the browser. The
  * flow itself runs on the server (the OAuth callback finishes it); the UI

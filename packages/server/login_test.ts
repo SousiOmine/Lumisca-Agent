@@ -1,7 +1,6 @@
+import type { AuthInteraction, ProviderLoginSnapshot } from "@lumisca/core";
 import { assert, assertEquals } from "@std/assert";
 import { friendlyLoginError, LoginSession } from "./login.ts";
-import type { AuthInteraction } from "@lumisca/core";
-import type { ProviderLoginSnapshot } from "@lumisca/core";
 
 function create(
   script: (interaction: AuthInteraction) => Promise<void> | void,
@@ -47,11 +46,13 @@ Deno.test("LoginSession carries the chosen method to the flow", async () => {
     assertEquals(seen, "browser");
     const snap = session.snapshot();
     assertEquals(snap.status, "done");
-    assertEquals(snap.events, [{
-      type: "device_code",
-      userCode: "ABCD-EFGH",
-      verificationUri: "https://auth.openai.com/codex/device",
-    }]);
+    assertEquals(snap.events, [
+      {
+        type: "device_code",
+        userCode: "ABCD-EFGH",
+        verificationUri: "https://auth.openai.com/codex/device",
+      },
+    ]);
     assertEquals(snap.prompt, undefined);
   } finally {
     session.dispose();
@@ -85,10 +86,12 @@ Deno.test("LoginSession forwards even a device-code-looking select prompt", asyn
     // Re-responding the same id must fail.
     assert(!session.respond(promptId, "x"));
     await wait("done");
-    assertEquals(session.snapshot().events, [{
-      type: "progress",
-      message: "chose browser",
-    }]);
+    assertEquals(session.snapshot().events, [
+      {
+        type: "progress",
+        message: "chose browser",
+      },
+    ]);
   } finally {
     session.dispose();
   }

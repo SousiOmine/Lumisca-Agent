@@ -58,10 +58,7 @@ Deno.test("probe implements the required observation surface", () => {
     "ref_not_found",
   ];
   for (const needle of needs) {
-    assert(
-      PROBE_SOURCE.includes(needle),
-      `probe must cover "${needle}"`,
-    );
+    assert(PROBE_SOURCE.includes(needle), `probe must cover "${needle}"`);
   }
   // The probe must not be installed twice.
   assert(PROBE_SOURCE.includes("window.__lumiscaProbe) { return; }"));

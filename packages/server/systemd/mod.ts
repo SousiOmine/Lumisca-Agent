@@ -29,11 +29,13 @@
  * and plan.ts / compose.ts / document.ts / template.ts / runner.ts the
  * definition and the systemd boundary underneath.
  */
+
+import { errorMessage } from "@lumisca/core";
+import type { EnvironmentSource } from "../startup.ts";
 import { runConfig } from "./config.ts";
 import { defaultServiceDeps, type ServiceDeps } from "./deps.ts";
 import { ServiceDefinitionError } from "./document.ts";
 import { runInstall } from "./install.ts";
-import type { EnvironmentSource } from "../startup.ts";
 import {
   parseServiceArgs,
   SERVICE_USAGE,
@@ -42,7 +44,6 @@ import {
 } from "./plan.ts";
 import { runStatus } from "./status.ts";
 import { runUninstall } from "./uninstall.ts";
-import { errorMessage } from "@lumisca/core";
 
 /**
  * Run one `service` invocation and return the process exit code:
@@ -88,9 +89,7 @@ export async function runServiceCommand(
     // Without a resolved host there is no `err` to use yet; the fallback
     // writes to the console directly (the same stream the real one uses).
     const report = service?.err ?? ((line: string) => console.error(line));
-    report(
-      `lumisca-server service: ${errorMessage(error)}`,
-    );
+    report(`lumisca-server service: ${errorMessage(error)}`);
     if (
       error instanceof ServiceUsageError ||
       error instanceof ServiceDefinitionError

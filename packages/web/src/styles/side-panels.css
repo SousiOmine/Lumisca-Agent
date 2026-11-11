@@ -368,7 +368,8 @@
   font-size: 13px;
   color: var(--text-dim);
   cursor: pointer;
-  transition: background var(--lum-dur-fast) var(--lum-ease-out),
+  transition:
+    background var(--lum-dur-fast) var(--lum-ease-out),
     border-color var(--lum-dur-fast) var(--lum-ease-out),
     color var(--lum-dur-fast) var(--lum-ease-out);
 }

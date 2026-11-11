@@ -1,6 +1,18 @@
-import { useEffect, useMemo, useRef, useState } from "preact/compat";
 import { IconArrowUp } from "@tabler/icons-preact";
+import { useEffect, useMemo, useRef, useState } from "preact/compat";
 import { api } from "../api.ts";
+import { rememberDefaultModel } from "../defaultModel.ts";
+import { useAsyncEffect } from "../hooks/useAsync.ts";
+import { useRecentSessions } from "../hooks/useRecentSessions.ts";
+import { useSavedPrompts } from "../hooks/useSavedPrompts.ts";
+import { useSkills } from "../hooks/useSkills.ts";
+import { describeError, useT } from "../i18n.ts";
+import { setModelThinkingLevel } from "../providers.ts";
+import {
+  buildSlashCommands,
+  resolveComposerText,
+  slashPrompt,
+} from "../slashCommands.ts";
 import type {
   ModelInfo,
   ModePrompt,
@@ -8,17 +20,6 @@ import type {
   ThinkingLevel,
   Workspace,
 } from "../types.ts";
-import { useSavedPrompts } from "../hooks/useSavedPrompts.ts";
-import { useSkills } from "../hooks/useSkills.ts";
-import { useAsyncEffect } from "../hooks/useAsync.ts";
-import { describeError, useT } from "../i18n.ts";
-import { rememberDefaultModel } from "../defaultModel.ts";
-import { setModelThinkingLevel } from "../providers.ts";
-import {
-  buildSlashCommands,
-  resolveComposerText,
-  slashPrompt,
-} from "../slashCommands.ts";
 import {
   Composer,
   type ComposerModel,
@@ -26,7 +27,6 @@ import {
   type SlashCommandItem,
 } from "./Composer.tsx";
 import { RecentSessionsList } from "./RecentSessionsList.tsx";
-import { useRecentSessions } from "../hooks/useRecentSessions.ts";
 import { WorkspaceModal } from "./WorkspaceModal.tsx";
 import { WorkspacePicker } from "./WorkspacePicker.tsx";
 
@@ -115,23 +115,21 @@ function loadLastWorkspaceKey(): string {
  * The workspaces are those of the server this window displays; another
  * machine is a different view of the app, reached from the desktop title
  * bar's connection picker (which navigates the window there). */
-export function NewSessionView(
-  {
-    workspaces,
-    workspacesLoaded,
-    input,
-    onInputChange,
-    images,
-    onImagesChange,
-    onStart,
-    onWorkspaceChanged,
-    onDeleteWorkspace,
-    onReopenSession,
-    onOpenSettings,
-    settingsVersion,
-    active = true,
-  }: NewSessionViewProps,
-) {
+export function NewSessionView({
+  workspaces,
+  workspacesLoaded,
+  input,
+  onInputChange,
+  images,
+  onImagesChange,
+  onStart,
+  onWorkspaceChanged,
+  onDeleteWorkspace,
+  onReopenSession,
+  onOpenSettings,
+  settingsVersion,
+  active = true,
+}: NewSessionViewProps) {
   // The last selected workspace, restored from localStorage. Kept in a ref
   // until the (possibly async) workspace list can validate it.
   const pendingWorkspaceKey = useRef<string | null>(loadLastWorkspaceKey());
@@ -142,9 +140,9 @@ export function NewSessionView(
     pendingWorkspaceKey.current ?? "",
   );
   const [model, setModel] = useState<DraftModel | null>(null);
-  const [modalWorkspace, setModalWorkspace] = useState<
-    Workspace | undefined
-  >(undefined);
+  const [modalWorkspace, setModalWorkspace] = useState<Workspace | undefined>(
+    undefined,
+  );
   const [showWorkspaceModal, setShowWorkspaceModal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
@@ -183,31 +181,36 @@ export function NewSessionView(
   // `modelTouched` keeps a response that was already in flight from
   // overwriting a pick made while it ran; re-reading is a new round, so the
   // flag is cleared first — the value it brings now IS that pick.
-  useAsyncEffect(async (isStale) => {
-    modelTouched.current = false;
-    try {
-      const m = await api.getDefaultModel();
-      if (isStale()) return;
-      setDefaultModelError(null);
-      setNoDefaultModel(m === null);
-      if (!modelTouched.current) {
-        // A null answer clears a previously resolved model too: the draft
-        // must not keep offering a model whose provider is gone.
-        setModel(
-          m === null ? null : {
-            provider: m.provider,
-            modelId: m.modelId,
-            thinkingLevel: m.thinkingLevel,
-            thinkingLevels: m.thinkingLevels,
-          },
-        );
+  useAsyncEffect(
+    async (isStale) => {
+      modelTouched.current = false;
+      try {
+        const m = await api.getDefaultModel();
+        if (isStale()) return;
+        setDefaultModelError(null);
+        setNoDefaultModel(m === null);
+        if (!modelTouched.current) {
+          // A null answer clears a previously resolved model too: the draft
+          // must not keep offering a model whose provider is gone.
+          setModel(
+            m === null
+              ? null
+              : {
+                  provider: m.provider,
+                  modelId: m.modelId,
+                  thinkingLevel: m.thinkingLevel,
+                  thinkingLevels: m.thinkingLevels,
+                },
+          );
+        }
+      } catch (error) {
+        // Non-critical for starting a session (the server resolves its own
+        // default), but the user must know why the picker is empty.
+        if (!isStale()) setDefaultModelError(describeError(error, t));
       }
-    } catch (error) {
-      // Non-critical for starting a session (the server resolves its own
-      // default), but the user must know why the picker is empty.
-      if (!isStale()) setDefaultModelError(describeError(error, t));
-    }
-  }, [settingsVersion]);
+    },
+    [settingsVersion],
+  );
 
   // The server already hides chat workspaces from the list API; the flag
   // filter here is defensive (e.g. against an older server), since chat rows
@@ -290,7 +293,9 @@ export function NewSessionView(
     let trimmed = (message ?? input).trim();
     if (
       (!trimmed && images.length === 0) ||
-      !selectedWorkspace || busy || noModelToStart
+      !selectedWorkspace ||
+      busy ||
+      noModelToStart
     ) {
       return;
     }
@@ -355,10 +360,11 @@ export function NewSessionView(
         level,
       );
       setModel((current) =>
-        current && current.provider === model.provider &&
-          current.modelId === model.modelId
+        current &&
+        current.provider === model.provider &&
+        current.modelId === model.modelId
           ? { ...current, thinkingLevel }
-          : current
+          : current,
       );
     } catch (e) {
       setError(describeError(e, t));
@@ -416,12 +422,10 @@ export function NewSessionView(
                 )}
               </div>
             )}
-            {
-              /* The slash menu's two lists. A failed read leaves the menu
+            {/* The slash menu's two lists. A failed read leaves the menu
                 with fewer entries than the user expects and no reason; the
                 note says which list is missing (an empty catalog and an
-                unreachable machine must not read the same). */
-            }
+                unreachable machine must not read the same). */}
             {skillsError !== null && (
               <p className="settings-note" role="status">
                 {t("chat.skills.unavailable")}
@@ -459,23 +463,29 @@ export function NewSessionView(
               thinkingLevel={model?.thinkingLevel}
               thinkingLevels={model?.thinkingLevels}
               onThinkingLevelChange={changeThinkingLevel}
-              submitLabel={busy
-                ? t("chat.newSession.submitCreating")
-                : t("chat.newSession.submitStart")}
+              submitLabel={
+                busy
+                  ? t("chat.newSession.submitCreating")
+                  : t("chat.newSession.submitStart")
+              }
               submitIcon={IconArrowUp}
               submitIconOnly
-              submitDisabled={busy || noModelToStart ||
+              submitDisabled={
+                busy ||
+                noModelToStart ||
                 (!input.trim() && images.length === 0) ||
-                !selectedWorkspace}
+                !selectedWorkspace
+              }
               onSubmit={() => void submit()}
               onOpenSettings={onOpenSettings}
-              mentionWorkspaceId={selectedWorkspace === undefined ||
-                  selectedWorkspace.chat
-                ? undefined
-                : selectedWorkspace.id}
-              slashCommands={allSlashCommands.length > 0
-                ? allSlashCommands
-                : undefined}
+              mentionWorkspaceId={
+                selectedWorkspace === undefined || selectedWorkspace.chat
+                  ? undefined
+                  : selectedWorkspace.id
+              }
+              slashCommands={
+                allSlashCommands.length > 0 ? allSlashCommands : undefined
+              }
               onSlashCommand={handleSlashCommand}
               images={images}
               onImagesChange={onImagesChange}

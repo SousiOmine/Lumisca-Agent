@@ -22,11 +22,12 @@
  * request is served, and only when the previous run recorded enough freed
  * bytes to be worth the wait (see requestVacuum).
  */
-import { DatabaseSync } from "node:sqlite";
-import { basename, dirname, join } from "node:path";
+
 import { rename, rm, stat } from "node:fs/promises";
-import { createLogger } from "../log.ts";
+import { basename, dirname, join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { errorMessage } from "../errors.ts";
+import { createLogger } from "../log.ts";
 
 const log = createLogger("vacuum");
 
@@ -86,9 +87,9 @@ export async function vacuumOnStartup(dbPath: string): Promise<void> {
     await rm(`${dbPath}-wal`, { force: true });
     await rm(`${dbPath}-shm`, { force: true });
     log.info(
-      `database rewritten on startup: ${formatMiB(before)} → ${
-        formatMiB(after)
-      } in ${Math.round(performance.now() - startedAt)} ms`,
+      `database rewritten on startup: ${formatMiB(before)} → ${formatMiB(
+        after,
+      )} in ${Math.round(performance.now() - startedAt)} ms`,
     );
     await rm(marker, { force: true });
   } catch (error) {
@@ -131,9 +132,9 @@ function copyDatabase(from: string, to: string): void {
         if (rows.length === 0) continue;
         const columns = Object.keys(rows[0]!);
         const insert = target.prepare(
-          `INSERT INTO "${name}" (${
-            columns.map((column) => `"${column}"`).join(", ")
-          }) VALUES (${columns.map(() => "?").join(", ")})`,
+          `INSERT INTO "${name}" (${columns
+            .map((column) => `"${column}"`)
+            .join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`,
         );
         for (const row of rows) {
           insert.run(...columns.map((column) => row[column] as never));

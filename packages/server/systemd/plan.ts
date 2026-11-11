@@ -10,11 +10,10 @@
  * non-loopback bind must name the authorities clients will use.
  */
 import { dirname, join } from "node:path";
-import { SETTINGS_DIR_NAME } from "@lumisca/core";
+import { errorMessage, SETTINGS_DIR_NAME } from "@lumisca/core";
 import { parsePortValue } from "../startup.ts";
 import type { LaunchFlags, ServicePaths } from "./compose.ts";
 import { hasControlCharacter, splitHosts } from "./document.ts";
-import { errorMessage } from "@lumisca/core";
 
 /** Unit name of the installation (`lumisca.service`, a user unit). */
 export const UNIT_NAME = "lumisca.service";
@@ -67,8 +66,7 @@ export class ServiceUsageError extends Error {
   }
 }
 
-export const SERVICE_USAGE =
-  `lumisca-server service — systemd ユーザーユニットとして常駐させます
+export const SERVICE_USAGE = `lumisca-server service — systemd ユーザーユニットとして常駐させます
 
 使い方:
   lumisca-server service install [options]   ユニットを書き込み、有効化して起動します
@@ -106,7 +104,9 @@ export function servicePaths(host: ServiceHost): ServicePaths {
 
 function requireVerb(value: string): ServiceVerb {
   if (
-    value === "install" || value === "config" || value === "status" ||
+    value === "install" ||
+    value === "config" ||
+    value === "status" ||
     value === "uninstall"
   ) {
     return value;
@@ -137,9 +137,7 @@ function requirePort(value: string): number {
   try {
     return parsePortValue(value);
   } catch (error) {
-    throw new ServiceUsageError(
-      errorMessage(error),
-    );
+    throw new ServiceUsageError(errorMessage(error));
   }
 }
 
@@ -149,9 +147,7 @@ function requirePort(value: string): number {
  * silently ignored `--port` would install a server on the default port while
  * the operator believes otherwise.
  */
-export function parseServiceArgs(
-  args: readonly string[],
-): ServiceInvocation {
+export function parseServiceArgs(args: readonly string[]): ServiceInvocation {
   const flags: LaunchFlags = {};
   let verb: ServiceVerb | undefined;
   let defaults = false;

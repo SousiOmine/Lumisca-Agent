@@ -45,9 +45,10 @@ function render(
   return renderToString(
     createElement(StellaView, {
       agent,
-      conversation: overrides.conversation === null
-        ? null
-        : { ...emptyStellaState("Aide"), ...overrides.conversation },
+      conversation:
+        overrides.conversation === null
+          ? null
+          : { ...emptyStellaState("Aide"), ...overrides.conversation },
       sessionId: "s1",
       conversationError: null,
       status: overrides.status ?? status(),
@@ -162,14 +163,16 @@ Deno.test("StellaView: a failed send leaves the conversation on screen", () => {
   // because one send failed throws away the history the user retries from.
   const html = render({
     conversation: {
-      entries: [{
-        role: "user",
-        text: "README を直して",
-        segments: [{ type: "text", text: "README を直して" }],
-        attachments: [],
-        files: [],
-        timestamp: 1,
-      }],
+      entries: [
+        {
+          role: "user",
+          text: "README を直して",
+          segments: [{ type: "text", text: "README を直して" }],
+          attachments: [],
+          files: [],
+          timestamp: 1,
+        },
+      ],
       error: "サーバー側でエラーが起きました",
     },
   });

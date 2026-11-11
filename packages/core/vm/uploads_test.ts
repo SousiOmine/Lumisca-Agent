@@ -21,9 +21,7 @@ function fakeMachine(files = new Map<string, Uint8Array>()) {
     }
     if (command[0] === "sh" && command[2] === 'test -f "$1"') {
       const path = String(command[4]);
-      return Promise.resolve(
-        files.has(path) ? ok() : { ...ok(), exitCode: 1 },
-      );
+      return Promise.resolve(files.has(path) ? ok() : { ...ok(), exitCode: 1 });
     }
     throw new Error(`unexpected command: ${command.join(" ")}`);
   };
@@ -76,15 +74,20 @@ function okBytes(stdout: Uint8Array = new Uint8Array()): {
 
 Deno.test("uploads: a file is written under the agent's folder and usable as a ref", async () => {
   const machine = fakeMachine();
-  const saved = await saveUploads([{
-    name: "shot.png",
-    bytes: new Uint8Array([1]),
-  }], {
-    exec: machine.exec,
-    agentId: "a1",
-    now: () => 1000,
-    randomId: () => "abcd1234",
-  });
+  const saved = await saveUploads(
+    [
+      {
+        name: "shot.png",
+        bytes: new Uint8Array([1]),
+      },
+    ],
+    {
+      exec: machine.exec,
+      agentId: "a1",
+      now: () => 1000,
+      randomId: () => "abcd1234",
+    },
+  );
   assertEquals(saved.length, 1);
   assertEquals(saved[0]!.ref, "uploads/1000-abcd1234/01-shot.png");
   assertEquals(
@@ -97,15 +100,20 @@ Deno.test("uploads: a file is written under the agent's folder and usable as a r
 
 Deno.test("uploads: a document is not marked as a picture", async () => {
   const machine = fakeMachine();
-  const saved = await saveUploads([{
-    name: "notes.txt",
-    bytes: new Uint8Array([1]),
-  }], {
-    exec: machine.exec,
-    agentId: "a1",
-    now: () => 1,
-    randomId: () => "aaaaaaaa",
-  });
+  const saved = await saveUploads(
+    [
+      {
+        name: "notes.txt",
+        bytes: new Uint8Array([1]),
+      },
+    ],
+    {
+      exec: machine.exec,
+      agentId: "a1",
+      now: () => 1,
+      randomId: () => "aaaaaaaa",
+    },
+  );
   assertEquals(saved[0]!.image, false);
 });
 
@@ -120,15 +128,20 @@ Deno.test("uploads: only names this module generates are refs", () => {
 
 Deno.test("uploads: a file that exists is read back as bytes", async () => {
   const machine = fakeMachine();
-  const saved = await saveUploads([{
-    name: "p.png",
-    bytes: new Uint8Array([7, 8]),
-  }], {
-    exec: machine.exec,
-    agentId: "a1",
-    now: () => 1,
-    randomId: () => "aaaaaaaa",
-  });
+  const saved = await saveUploads(
+    [
+      {
+        name: "p.png",
+        bytes: new Uint8Array([7, 8]),
+      },
+    ],
+    {
+      exec: machine.exec,
+      agentId: "a1",
+      now: () => 1,
+      randomId: () => "aaaaaaaa",
+    },
+  );
   const read = await readUpload(machine.exec, machine.execBytes, {
     agentId: "a1",
     ref: saved[0]!.ref,
@@ -171,15 +184,20 @@ Deno.test("uploads: a malformed ref never reaches the machine", async () => {
 
 Deno.test("uploads: a file over the limit is an error, not 'gone'", async () => {
   const machine = fakeMachine();
-  const saved = await saveUploads([{
-    name: "big.png",
-    bytes: new Uint8Array(64),
-  }], {
-    exec: machine.exec,
-    agentId: "a1",
-    now: () => 1,
-    randomId: () => "aaaaaaaa",
-  });
+  const saved = await saveUploads(
+    [
+      {
+        name: "big.png",
+        bytes: new Uint8Array(64),
+      },
+    ],
+    {
+      exec: machine.exec,
+      agentId: "a1",
+      now: () => 1,
+      randomId: () => "aaaaaaaa",
+    },
+  );
   await assertRejects(
     () =>
       readUpload(machine.exec, machine.execBytes, {

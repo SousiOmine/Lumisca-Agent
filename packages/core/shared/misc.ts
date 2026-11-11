@@ -1,5 +1,5 @@
 /** Error-message helper (see shared/mod.ts for the frontend-safe contract). */
-import type { ThemeSetting } from "./settings-keys.ts";
+
 import type { Workspace } from "../domain/workspace.ts";
 import {
   DEFAULT_LOCALE,
@@ -7,6 +7,7 @@ import {
   localeTag,
   translate,
 } from "./i18n/mod.ts";
+import type { ThemeSetting } from "./settings-keys.ts";
 
 // ---- errors ---------------------------------------------------------------
 
@@ -75,9 +76,9 @@ export function decodeUtf8(bytes: Uint8Array): string {
  * names is the mistake this exists to prevent. */
 export function formatLocalDateTime(at: number | Date): string {
   const date = typeof at === "number" ? new Date(at) : at;
-  return `${formatLocalDate(date)} ${pad2(date.getHours())}:${
-    pad2(date.getMinutes())
-  }`;
+  return `${formatLocalDate(date)} ${pad2(date.getHours())}:${pad2(
+    date.getMinutes(),
+  )}`;
 }
 
 /** The inverse of {@link formatLocalDateTime}: `YYYY-MM-DD HH:MM` on the
@@ -97,8 +98,10 @@ export function parseLocalDateTime(text: string): number | null {
   const minutes = Number(match[5]);
   const date = new Date(year, month - 1, day, hours, minutes, 0, 0);
   if (
-    date.getFullYear() !== year || date.getMonth() !== month - 1 ||
-    date.getDate() !== day || date.getHours() !== hours ||
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day ||
+    date.getHours() !== hours ||
     date.getMinutes() !== minutes
   ) {
     return null;
@@ -109,9 +112,9 @@ export function parseLocalDateTime(text: string): number | null {
 /** `YYYY-MM-DD` on the machine's clock (local time, not UTC). */
 export function formatLocalDate(at: number | Date): string {
   const date = typeof at === "number" ? new Date(at) : at;
-  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${
-    pad2(date.getDate())
-  }`;
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(
+    date.getDate(),
+  )}`;
 }
 
 function pad2(value: number): string {
@@ -123,13 +126,10 @@ function pad2(value: number): string {
  * come from the same `Date`, so the date and the weekday can never
  * describe different days (a UTC date next to a local weekday name would
  * be off by one for the first hours of a JST day). */
-export function formatLocalDay(
-  at: Date,
-  localeTag: string,
-): string {
-  return `${formatLocalDate(at)} (${
-    at.toLocaleDateString(localeTag, { weekday: "long" })
-  })`;
+export function formatLocalDay(at: Date, localeTag: string): string {
+  return `${formatLocalDate(at)} (${at.toLocaleDateString(localeTag, {
+    weekday: "long",
+  })})`;
 }
 /** Display name for a newly created session ("Session <date>" /
  * "セッション <date>"), shown until the title generator replaces it. The

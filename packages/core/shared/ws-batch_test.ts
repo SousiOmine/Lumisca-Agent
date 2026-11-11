@@ -89,9 +89,7 @@ Deno.test("ws-batch: a batch reports the last revision it contains", () => {
   batcher.delta("s1", "b", 12);
   batcher.delta("s1", "c", 13);
   batcher.flush();
-  assertEquals(frames, [
-    { key: "s1", delta: "abc", rev: 13, events: 3 },
-  ]);
+  assertEquals(frames, [{ key: "s1", delta: "abc", rev: 13, events: 3 }]);
 });
 
 Deno.test("ws-batch: an empty delta contributes nothing", () => {
@@ -131,9 +129,15 @@ Deno.test("ws-batch: a large batch does not strand another session", () => {
   batcher.delta("s1", "a");
   batcher.delta("s2", "x".repeat(WS_DELTA_MAX_CHARS));
   // s2 went out on its own; s1 is still waiting for the interval.
-  assertEquals(frames.map((frame) => frame.key), ["s2"]);
+  assertEquals(
+    frames.map((frame) => frame.key),
+    ["s2"],
+  );
   batcher.flush();
-  assertEquals(frames.map((frame) => frame.key), ["s2", "s1"]);
+  assertEquals(
+    frames.map((frame) => frame.key),
+    ["s2", "s1"],
+  );
 });
 
 Deno.test("ws-batch: close flushes what was produced, then stops", () => {

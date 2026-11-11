@@ -34,11 +34,6 @@
  * the message in the wrong place).
  */
 import type { AgentMessage } from "../ai/types.ts";
-import { chatMessageOfDetails } from "../shared/chat-message.ts";
-import { segmentsText, splitChatText } from "../shared/ui-markup/segments.ts";
-import type { UiSegment } from "../shared/ui-markup/types.ts";
-import { assistantTextVerdict } from "./silent-reply.ts";
-import { TOOL_SEND_CHAT } from "../shared/tool-names.ts";
 import type { ClientEvent } from "../domain/event.ts";
 import type {
   StellaEntry,
@@ -47,6 +42,11 @@ import type {
   StellaHandover,
   StellaQuestion,
 } from "../domain/stella-conversation.ts";
+import { chatMessageOfDetails } from "../shared/chat-message.ts";
+import { TOOL_SEND_CHAT } from "../shared/tool-names.ts";
+import { segmentsText, splitChatText } from "../shared/ui-markup/segments.ts";
+import type { UiSegment } from "../shared/ui-markup/types.ts";
+import { assistantTextVerdict } from "./silent-reply.ts";
 
 /** A message that carries content blocks: the three conversational roles. */
 type ContentMessage = Extract<
@@ -59,8 +59,8 @@ function textOf(message: ContentMessage): string {
   const content = message.content;
   if (typeof content === "string") return content;
   return content
-    .filter((block): block is { type: "text"; text: string } =>
-      block.type === "text"
+    .filter(
+      (block): block is { type: "text"; text: string } => block.type === "text",
     )
     .map((block) => block.text)
     .join("");
@@ -87,9 +87,8 @@ export function stellaEntryOf(message: AgentMessage): StellaEntry | null {
   switch (message.role) {
     case "user":
     case "mode": {
-      const text = message.role === "mode"
-        ? message.shortText
-        : textOf(message);
+      const text =
+        message.role === "mode" ? message.shortText : textOf(message);
       // A message is worth showing when it says something OR brings
       // something: a prompt that was a screenshot alone is a real message,
       // and dropping it would leave a reply with nothing it answered.
@@ -107,7 +106,7 @@ export function stellaEntryOf(message: AgentMessage): StellaEntry | null {
       // stella/onboarding.ts): the app writes the instruction, the model
       // reads it through `modelContent`, and the conversation shows only the
       // agent's greeting and the questions it chose.
-      const files = message.role === "mode" ? [] : message.files ?? [];
+      const files = message.role === "mode" ? [] : (message.files ?? []);
       if (text.length === 0 && files.length === 0) return null;
       // A routine's run is delivered as a prompt, so it sits on the user's
       // side — but it is not something the user said, and a client does not
@@ -217,9 +216,7 @@ export function stellaEntryCursorOf(entry: StellaEntry): string {
 /** The conversation's view of a pending-question list. The shapes are the
  * same today; the named type keeps the conversation's contract from drifting
  * with the ask hub's. */
-function questionsOf(
-  questions: readonly StellaQuestion[],
-): StellaQuestion[] {
+function questionsOf(questions: readonly StellaQuestion[]): StellaQuestion[] {
   return questions.map((q) => ({
     toolCallId: q.toolCallId,
     questions: q.questions,
@@ -228,12 +225,14 @@ function questionsOf(
 
 /** The conversation's view of a hand-over (same reason as questionsOf). */
 function handoverOf(handover: StellaHandover | null): StellaHandover | null {
-  return handover === null ? null : {
-    toolCallId: handover.toolCallId,
-    reason: handover.reason,
-    instructions: handover.instructions,
-    expiresAt: handover.expiresAt,
-  };
+  return handover === null
+    ? null
+    : {
+        toolCallId: handover.toolCallId,
+        reason: handover.reason,
+        instructions: handover.instructions,
+        expiresAt: handover.expiresAt,
+      };
 }
 
 /** The conversation's view of an environment-variable request (same reason
@@ -242,12 +241,14 @@ function handoverOf(handover: StellaHandover | null): StellaHandover | null {
 function envRequestOf(
   request: StellaEnvRequest | null,
 ): StellaEnvRequest | null {
-  return request === null ? null : {
-    toolCallId: request.toolCallId,
-    name: request.name,
-    exists: request.exists,
-    expiresAt: request.expiresAt,
-  };
+  return request === null
+    ? null
+    : {
+        toolCallId: request.toolCallId,
+        name: request.name,
+        exists: request.exists,
+        expiresAt: request.expiresAt,
+      };
 }
 
 /**
@@ -282,35 +283,43 @@ export function stellaEventsOf(event: ClientEvent): StellaEvent[] {
       return entry === null ? [] : [{ type: "entry", entry }];
     }
     case "question":
-      return [{
-        type: "questions",
-        questions: questionsOf([{
-          toolCallId: event.toolCallId,
-          questions: event.questions,
-        }]),
-      }];
+      return [
+        {
+          type: "questions",
+          questions: questionsOf([
+            {
+              toolCallId: event.toolCallId,
+              questions: event.questions,
+            },
+          ]),
+        },
+      ];
     case "handover":
-      return [{
-        type: "handover",
-        handover: handoverOf({
-          toolCallId: event.toolCallId,
-          reason: event.reason,
-          instructions: event.instructions,
-          expiresAt: event.expiresAt,
-        }),
-      }];
+      return [
+        {
+          type: "handover",
+          handover: handoverOf({
+            toolCallId: event.toolCallId,
+            reason: event.reason,
+            instructions: event.instructions,
+            expiresAt: event.expiresAt,
+          }),
+        },
+      ];
     case "handover_end":
       return [{ type: "handover", handover: null }];
     case "env_request":
-      return [{
-        type: "env_request",
-        request: envRequestOf({
-          toolCallId: event.toolCallId,
-          name: event.name,
-          exists: event.exists,
-          expiresAt: event.expiresAt,
-        }),
-      }];
+      return [
+        {
+          type: "env_request",
+          request: envRequestOf({
+            toolCallId: event.toolCallId,
+            name: event.name,
+            exists: event.exists,
+            expiresAt: event.expiresAt,
+          }),
+        },
+      ];
     case "env_request_end":
       return [{ type: "env_request", request: null }];
     case "card_delta":
@@ -318,11 +327,13 @@ export function stellaEventsOf(event: ClientEvent): StellaEvent[] {
       // TEXT (a reply arrives whole), but a card is drawn while the model
       // writes it: it is presentation, not words, so there is no
       // half-sentence to guard against.
-      return [{
-        type: "card_delta",
-        toolCallId: event.toolCallId,
-        delta: event.delta,
-      }];
+      return [
+        {
+          type: "card_delta",
+          toolCallId: event.toolCallId,
+          delta: event.delta,
+        },
+      ];
     case "card_end":
       return [{ type: "card_end" }];
     case "session_error":

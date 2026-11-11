@@ -101,9 +101,10 @@ export function readTranscriptPage<T>(
   // Every position here is in `rows`' scope, so a page counts what the client
   // draws (see TranscriptRows).
   const total = repo.count(sessionId, rows);
-  const end = older === null
-    ? total
-    : positionOfCursor(repo, sessionId, older, rules.project, rows);
+  const end =
+    older === null
+      ? total
+      : positionOfCursor(repo, sessionId, older, rules.project, rows);
 
   // One contiguous read of the transcript's rows from position `at` up to
   // (not including) `until`. The read that reaches the transcript's end has
@@ -116,12 +117,7 @@ export function readTranscriptPage<T>(
       rows,
     });
   const pageStart = Math.max(0, end - limit);
-  let start = turnStartAtOrBefore(
-    pageStart,
-    end,
-    rules.startsWindow,
-    readRows,
-  );
+  let start = turnStartAtOrBefore(pageStart, end, rules.startsWindow, readRows);
   let projected = projectPage(readRows(start, end), rules);
   // The scope is a SUPERSET of what the client draws (the projection, not
   // SQL, decides what an entry is), so a page of scoped rows can still
@@ -147,9 +143,10 @@ export function readTranscriptPage<T>(
     items: projected.items,
     // `older` names the entry that begins the page: the reader can hold only
     // something it draws, so a page with nothing drawable names nothing.
-    older: start > 0 && projected.firstCursor !== undefined
-      ? projected.firstCursor
-      : null,
+    older:
+      start > 0 && projected.firstCursor !== undefined
+        ? projected.firstCursor
+        : null,
   };
 }
 

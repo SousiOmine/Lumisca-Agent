@@ -22,7 +22,8 @@
  * fixed by the session's system prompt (tools/language.ts). */
 export function buildSkillPrompt(name: string, request: string): string {
   const subject = request.trim();
-  const head = `Invoke the skill "${name}": load it with the skill tool and ` +
+  const head =
+    `Invoke the skill "${name}": load it with the skill tool and ` +
     (subject.length === 0
       ? "follow the instructions it provides."
       : "then carry out the request below.");

@@ -1,6 +1,6 @@
 import {
-  contextUsageRatio,
   type ContextUsageSummary,
+  contextUsageRatio,
   formatCompactTokens,
   formatContextUsageLine,
   formatPercent1,
@@ -42,17 +42,20 @@ export function ContextUsageTrigger({
 }: ContextUsageTriggerProps) {
   const t = useT();
   const ratio = contextUsageRatio(summary, contextWindow);
-  const label = ratio !== undefined
-    ? formatPercent1(ratio)
-    : formatCompactTokens(summary.currentTokens ?? 0);
+  const label =
+    ratio !== undefined
+      ? formatPercent1(ratio)
+      : formatCompactTokens(summary.currentTokens ?? 0);
   const detail = formatContextUsageLine(summary, contextWindow) || label;
   return (
     <button
       type="button"
       className={`ctx-meter${open ? " open" : ""}`}
       onClick={onToggle}
-      title={formatContextUsageLine(summary, contextWindow) ||
-        t("panels.context.title")}
+      title={
+        formatContextUsageLine(summary, contextWindow) ||
+        t("panels.context.title")
+      }
       aria-expanded={open}
       aria-haspopup="dialog"
       aria-label={`${t("panels.context.title")}: ${detail}`}
@@ -73,14 +76,14 @@ export function ContextUsageCard({
   const t = useT();
   const current = summary.currentTokens ?? 0;
   const ratio = contextUsageRatio(summary, contextWindow);
-  const headRight = contextWindow !== undefined && contextWindow > 0
-    ? `${formatCompactTokens(current)}/${formatCompactTokens(contextWindow)}${
-      ratio === undefined ? "" : ` (${formatPercent1(ratio)})`
-    }`
-    : formatCompactTokens(current);
-  const barPercent = ratio === undefined
-    ? 0
-    : Math.min(100, Math.max(0, ratio * 100));
+  const headRight =
+    contextWindow !== undefined && contextWindow > 0
+      ? `${formatCompactTokens(current)}/${formatCompactTokens(contextWindow)}${
+          ratio === undefined ? "" : ` (${formatPercent1(ratio)})`
+        }`
+      : formatCompactTokens(current);
+  const barPercent =
+    ratio === undefined ? 0 : Math.min(100, Math.max(0, ratio * 100));
   return (
     <div
       className="ctx-popover"

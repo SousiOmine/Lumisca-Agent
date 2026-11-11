@@ -105,7 +105,10 @@ export class ToolRegistry {
   /** Ranked keyword search over names, labels and descriptions. An empty
    * query matches nothing — callers use `browse()` for the overview. */
   search(query: string, limit: number): ToolSearchEntry[] {
-    const terms = query.toLowerCase().split(/\s+/).filter((t) => t.length > 0);
+    const terms = query
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((t) => t.length > 0);
     if (terms.length === 0) return [];
     const ranked = [...this.tools.values()]
       .map((tool) => ({ tool, score: score(tool, terms) }))
@@ -123,11 +126,9 @@ export class ToolRegistry {
   browse(groupLimit = 50): string {
     const groups = new Map<string, string[]>();
     const overflow = new Map<string, number>();
-    for (
-      const tool of [...this.tools.values()].sort((a, b) =>
-        a.name.localeCompare(b.name)
-      )
-    ) {
+    for (const tool of [...this.tools.values()].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )) {
       const group = labelPrefix(tool.label);
       const names = groups.get(group) ?? [];
       if (names.length < groupLimit) {
@@ -139,7 +140,7 @@ export class ToolRegistry {
     }
     const lines = [
       `${this.tools.size} tools available across ${groups.size} groups; ` +
-      "search for a specific tool with tool_search.",
+        "search for a specific tool with tool_search.",
     ];
     for (const [group, names] of groups) {
       const hidden = overflow.get(group) ?? 0;
@@ -198,15 +199,10 @@ export class ToolRegistry {
         `Unknown tool ${name}. Use tool_search to find available tools.`,
       );
     }
-    const prepared = tool.prepareArguments !== undefined
-      ? tool.prepareArguments(args)
-      : args;
+    const prepared =
+      tool.prepareArguments !== undefined ? tool.prepareArguments(args) : args;
     assertSchemaBounds(tool.parameters, prepared);
-    return await tool.execute(
-      toolCallId,
-      prepared as never,
-      signal,
-    );
+    return await tool.execute(toolCallId, prepared as never, signal);
   }
 }
 

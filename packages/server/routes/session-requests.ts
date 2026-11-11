@@ -7,18 +7,20 @@
  * on one surface and silently dropped on the other — which is what a second,
  * narrower parser had become.
  */
+
+import type { AskAnswer, ImageContent, ModePrompt } from "@lumisca/core";
 import { base64ToBytes } from "@lumisca/core";
-import { bytesToBase64 } from "../../core/base64.ts";
-import { prepareStoredImage } from "../../core/media/stored-image.ts";
 import {
   MAX_PROMPT_FILE_BASE64_LENGTH,
   MAX_PROMPT_FILES,
   MAX_PROMPT_TEXT_LENGTH,
   stripDataUrlHeader,
 } from "@lumisca/core/shared";
-import type { AskAnswer, ImageContent, ModePrompt } from "@lumisca/core";
+import { bytesToBase64 } from "../../core/base64.ts";
+import { prepareStoredImage } from "../../core/media/stored-image.ts";
 
 export type { AskAnswer, ModePrompt };
+
 import { AppError, requireNonEmptyString } from "./util.ts";
 
 /** Decode a base64 payload that may still carry a data-URL header (a
@@ -135,10 +137,7 @@ export function parsePromptBody(body: PromptBody): {
         );
       }
       if (data.length > MAX_PROMPT_FILE_BASE64_LENGTH) {
-        throw new AppError(
-          "image exceeds the size limit (15MB binary)",
-          400,
-        );
+        throw new AppError("image exceeds the size limit (15MB binary)", 400);
       }
       images.push({ type: "image", data, mimeType });
     }
@@ -223,10 +222,10 @@ export async function preparePromptImages(
     prepared.push(
       stored.changed
         ? {
-          type: "image",
-          data: bytesToBase64(stored.bytes),
-          mimeType: stored.mimeType,
-        }
+            type: "image",
+            data: bytesToBase64(stored.bytes),
+            mimeType: stored.mimeType,
+          }
         : image,
     );
   }

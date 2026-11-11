@@ -19,8 +19,11 @@ function keepsFront(
 ): boolean {
   const front = before[0];
   const next = after[0];
-  return front !== undefined && next !== undefined &&
-    messageKey(front) === messageKey(next);
+  return (
+    front !== undefined &&
+    next !== undefined &&
+    messageKey(front) === messageKey(next)
+  );
 }
 
 /** Insert or replace a message at its existing position (dedup by key);
@@ -60,8 +63,8 @@ function applyMessage(
   view: SessionView,
   message: AgentMessage,
 ): SessionView | null {
-  const previous = view.messages.find((m) =>
-    messageKey(m) === messageKey(message)
+  const previous = view.messages.find(
+    (m) => messageKey(m) === messageKey(message),
   );
   if (previous === undefined && isOlderThanLoaded(view.messages, message)) {
     return null;
@@ -95,7 +98,7 @@ function holdsToolCall(
   toolCallId: string,
 ): boolean {
   return messages.some((message) =>
-    toolCallsOf(message).some((call) => call.id === toolCallId)
+    toolCallsOf(message).some((call) => call.id === toolCallId),
   );
 }
 
@@ -103,7 +106,7 @@ function holdsToolCall(
  * record. */
 function toolArguments(args: unknown): Record<string, unknown> {
   return typeof args === "object" && args !== null && !Array.isArray(args)
-    ? args as Record<string, unknown>
+    ? (args as Record<string, unknown>)
     : {};
 }
 
@@ -232,11 +235,11 @@ export function applyEvent(
       const liveTools = holdsToolCall(view.messages, event.toolCallId)
         ? view.liveTools
         : withLiveTool(view.liveTools, {
-          type: "toolCall",
-          id: event.toolCallId,
-          name: event.toolName,
-          arguments: toolArguments(event.args),
-        });
+            type: "toolCall",
+            id: event.toolCallId,
+            name: event.toolName,
+            arguments: toolArguments(event.args),
+          });
       return { ...view, runningTools, liveTools };
     }
     case "tool_end": {
@@ -301,7 +304,7 @@ export function applyEvent(
     case "task_end": {
       // A sub-agent settled; the panel shows its final status.
       const tasks = view.tasks.map((t) =>
-        t.agentId === event.agentId ? { ...t, status: event.status } : t
+        t.agentId === event.agentId ? { ...t, status: event.status } : t,
       );
       return { ...view, tasks };
     }
@@ -343,16 +346,17 @@ export function applyEvent(
       // behind the live view), so it replaces the accumulated text when
       // longer.
       const backgrounds = view.backgrounds.map((b) =>
-        b.commandId !== event.commandId ? b : {
-          ...b,
-          state: event.state,
-          exitCode: event.exitCode,
-          finishedAt: event.finishedAt,
-          tail: event.tail,
-          liveText: event.tail.length > b.liveText.length
-            ? event.tail
-            : b.liveText,
-        }
+        b.commandId !== event.commandId
+          ? b
+          : {
+              ...b,
+              state: event.state,
+              exitCode: event.exitCode,
+              finishedAt: event.finishedAt,
+              tail: event.tail,
+              liveText:
+                event.tail.length > b.liveText.length ? event.tail : b.liveText,
+            },
       );
       return { ...view, backgrounds };
     }
@@ -408,12 +412,12 @@ export function applyEvent(
       // would put a "summarized" row above messages it does not summarize, so
       // it is dropped here. Paging back reaches it in place, and so does the
       // next snapshot.
-      const existing = view.messages.findIndex((m) =>
-        messageKey(m) === messageKey(event.message)
+      const existing = view.messages.findIndex(
+        (m) => messageKey(m) === messageKey(event.message),
       );
       if (existing !== -1) return null;
-      const anchor = view.messages.findIndex((m) =>
-        messageKey(m) === messageKey(event.before)
+      const anchor = view.messages.findIndex(
+        (m) => messageKey(m) === messageKey(event.before),
       );
       if (anchor === -1) return null;
       const messages = [...view.messages];
@@ -427,15 +431,14 @@ export function applyEvent(
     case "agent_end":
       // The run ended (a stop may leave a call that never reported its end):
       // nothing is live any more.
-      return view.agentStartedAt === undefined &&
-          view.liveTools.length === 0
+      return view.agentStartedAt === undefined && view.liveTools.length === 0
         ? null
         : {
-          ...view,
-          pendingQuestions: [],
-          liveTools: [],
-          agentEndedAt: Date.now(),
-        };
+            ...view,
+            pendingQuestions: [],
+            liveTools: [],
+            agentEndedAt: Date.now(),
+          };
     case "session_renamed":
       // The session title changed (e.g. auto-generated from the first
       // message); the tab shows the new name.

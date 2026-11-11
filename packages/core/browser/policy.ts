@@ -41,9 +41,8 @@ export function checkBrowserUrl(input: string): string | undefined {
   if (!isLoopbackHost(parsed.hostname)) {
     return `refused: cannot open a non-localhost URL (only localhost / 127.0.0.1 / ::1): ${input}`;
   }
-  const port = parsed.port === "" ? (scheme === "https" ? 443 : 80) : Number(
-    parsed.port,
-  );
+  const port =
+    parsed.port === "" ? (scheme === "https" ? 443 : 80) : Number(parsed.port);
   if (Number.isNaN(port)) {
     return `refused: invalid port: ${input}`;
   }
@@ -63,8 +62,11 @@ export function requireAllowedUrl(input: string): AllowedUrl {
     url: parsed.href,
     scheme,
     host: parsed.hostname.toLowerCase(),
-    port: parsed.port === "" ? (scheme === "https" ? 443 : 80) : Number(
-      parsed.port,
-    ),
+    port:
+      parsed.port === ""
+        ? scheme === "https"
+          ? 443
+          : 80
+        : Number(parsed.port),
   };
 }

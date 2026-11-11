@@ -94,11 +94,9 @@ export function renderHtmlDocument(
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
     />
-    <meta http-equiv="Content-Security-Policy" content="${
-    pageCsp(
+    <meta http-equiv="Content-Security-Policy" content="${pageCsp(
       options.pageHost,
-    )
-  }" />
+    )}" />
     <title>Lumisca Agent</title>
     <!-- The page's own canvas colour: the browser paints its chrome (the
          address bar, an installed app's system bars) with it, and useTheme
@@ -115,10 +113,10 @@ export function renderHtmlDocument(
   <body>
     <div id="root"></div>
     <script type="module" src="/assets/initial-data.js${
-    options.token === undefined
-      ? ""
-      : `?token=${encodeURIComponent(options.token)}`
-  }"></script>
+      options.token === undefined
+        ? ""
+        : `?token=${encodeURIComponent(options.token)}`
+    }"></script>
     <script type="module" src="/assets/app.js"></script>
   </body>
 </html>`;
@@ -156,9 +154,9 @@ export function renderTokenRequiredPage(language: Locale): string {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Lumisca Agent — ${
-    escapeHtml(translate(language, "common.tokenRequired.title"))
-  }</title>
+    <title>Lumisca Agent — ${escapeHtml(
+      translate(language, "common.tokenRequired.title"),
+    )}</title>
     <style>
       :root { color-scheme: dark light; }
       body {
@@ -204,13 +202,13 @@ export function renderTokenRequiredPage(language: Locale): string {
         ${escapeHtml(translate(language, "common.tokenRequired.why"))}
       </p>
       <p>${escapeHtml(translate(language, "common.tokenRequired.how"))}</p>
-      <pre><code>${
-    escapeHtml(translate(language, "common.tokenRequired.example"))
-  }</code></pre>
+      <pre><code>${escapeHtml(
+        translate(language, "common.tokenRequired.example"),
+      )}</code></pre>
       <form method="get" action="/">
-        <label for="token">${
-    escapeHtml(translate(language, "common.tokenRequired.formLabel"))
-  }</label>
+        <label for="token">${escapeHtml(
+          translate(language, "common.tokenRequired.formLabel"),
+        )}</label>
         <input
           id="token"
           name="token"
@@ -219,9 +217,9 @@ export function renderTokenRequiredPage(language: Locale): string {
           autocapitalize="off"
           spellcheck="false"
         />
-        <button type="submit">${
-    escapeHtml(translate(language, "common.tokenRequired.submit"))
-  }</button>
+        <button type="submit">${escapeHtml(
+          translate(language, "common.tokenRequired.submit"),
+        )}</button>
       </form>
       <p class="note">
         ${escapeHtml(translate(language, "common.tokenRequired.note"))}
@@ -245,11 +243,12 @@ export function renderMcpAuthPage(
   outcome: McpAuthOutcome,
   detail?: string,
 ): string {
-  const message = outcome === "done"
-    ? translate(language, "common.mcpAuth.done")
-    : outcome === "failed"
-    ? translate(language, "common.mcpAuth.failed", { error: detail ?? "" })
-    : translate(language, "common.mcpAuth.missing");
+  const message =
+    outcome === "done"
+      ? translate(language, "common.mcpAuth.done")
+      : outcome === "failed"
+        ? translate(language, "common.mcpAuth.failed", { error: detail ?? "" })
+        : translate(language, "common.mcpAuth.missing");
   const title = translate(language, "common.mcpAuth.title");
   return `<!doctype html>
 <html lang="${language}">

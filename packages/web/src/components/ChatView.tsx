@@ -1,4 +1,12 @@
 import {
+  COMPACTION_DEFAULT_RESERVE_PERCENT,
+  COMPACTION_RESERVE_PERCENT_KEY,
+  compactionUsageRatio,
+  inputBudgetTokens,
+  parsePercentSetting,
+} from "@lumisca/core/shared";
+import { IconSend } from "@tabler/icons-preact";
+import {
   type KeyboardEvent,
   useCallback,
   useEffect,
@@ -6,42 +14,34 @@ import {
   useRef,
   useState,
 } from "preact/compat";
-import { IconSend } from "@tabler/icons-preact";
-import {
-  COMPACTION_DEFAULT_RESERVE_PERCENT,
-  COMPACTION_RESERVE_PERCENT_KEY,
-  compactionUsageRatio,
-  inputBudgetTokens,
-  parsePercentSetting,
-} from "@lumisca/core/shared";
 import { sessionAttachmentBase, sessionVisualBase } from "../api-client.ts";
-import { isViewRunning, type SessionView } from "../types.ts";
+import { useSavedPrompts } from "../hooks/useSavedPrompts.ts";
+import { useSkills } from "../hooks/useSkills.ts";
+import { useT } from "../i18n.ts";
+import { useProviderModels } from "../providers.ts";
+import { useSetting } from "../settingsStore.ts";
+import {
+  buildSlashCommands,
+  resolveComposerText,
+  slashPrompt,
+} from "../slashCommands.ts";
 import type {
   AskAnswer,
   ModePrompt,
   PendingImage,
   ThinkingLevel,
 } from "../types.ts";
+import { isViewRunning, type SessionView } from "../types.ts";
+import { BackgroundPanel } from "./BackgroundPanel.tsx";
 import {
   Composer,
   type SlashCommand,
   type SlashCommandItem,
 } from "./Composer.tsx";
-import {
-  buildSlashCommands,
-  resolveComposerText,
-  slashPrompt,
-} from "../slashCommands.ts";
-import { QuestionPanel } from "./QuestionPanel.tsx";
-import { TodoPanel } from "./TodoPanel.tsx";
-import { TaskPanel } from "./TaskPanel.tsx";
-import { BackgroundPanel } from "./BackgroundPanel.tsx";
 import type { UserMessageImage } from "./chat/types.ts";
-import { useProviderModels } from "../providers.ts";
-import { useSavedPrompts } from "../hooks/useSavedPrompts.ts";
-import { useSetting } from "../settingsStore.ts";
-import { useSkills } from "../hooks/useSkills.ts";
-import { useT } from "../i18n.ts";
+import { QuestionPanel } from "./QuestionPanel.tsx";
+import { TaskPanel } from "./TaskPanel.tsx";
+import { TodoPanel } from "./TodoPanel.tsx";
 import { Transcript } from "./Transcript.tsx";
 
 export { buildTurns } from "./chat/ConversationTurn.tsx";
@@ -97,27 +97,25 @@ interface ChatViewProps {
   active?: boolean;
 }
 
-export function ChatView(
-  {
-    view,
-    peerId,
-    input,
-    onInputChange,
-    images,
-    onImagesChange,
-    onPrompt,
-    onAbort,
-    onRewind,
-    onAnswer,
-    onModelChange,
-    onThinkingLevelChange,
-    onActionCommand,
-    onLoadOlder,
-    loadingOlder,
-    onOpenSettings,
-    active = true,
-  }: ChatViewProps,
-) {
+export function ChatView({
+  view,
+  peerId,
+  input,
+  onInputChange,
+  images,
+  onImagesChange,
+  onPrompt,
+  onAbort,
+  onRewind,
+  onAnswer,
+  onModelChange,
+  onThinkingLevelChange,
+  onActionCommand,
+  onLoadOlder,
+  loadingOlder,
+  onOpenSettings,
+  active = true,
+}: ChatViewProps) {
   // The transcript owns the scroll element, so a submit can only ASK it to
   // jump (see TranscriptScrollOptions.pinToken): this view holds the intent,
   // not the ref.
@@ -325,10 +323,12 @@ export function ChatView(
     async (timestamp: number, text: string, images: UserMessageImage[]) => {
       await onRewindRef.current(timestamp);
       onInputChangeRef.current(text);
-      onImagesChangeRef.current(images.map(({ data, mimeType }) => ({
-        data: `data:${mimeType};base64,${data}`,
-        mimeType,
-      })));
+      onImagesChangeRef.current(
+        images.map(({ data, mimeType }) => ({
+          data: `data:${mimeType};base64,${data}`,
+          mimeType,
+        })),
+      );
     },
     [],
   );
@@ -341,21 +341,22 @@ export function ChatView(
   // (the view holds a window of it) and the reducer keeps it current as
   // messages stream in, so the meter is not recomputed here.
   const summary = view.usage;
-  const currentModel = modelsByProvider.get(view.info.modelProvider)?.find(
-    (m) => m.id === view.info.modelId,
-  );
+  const currentModel = modelsByProvider
+    .get(view.info.modelProvider)
+    ?.find((m) => m.id === view.info.modelId);
   // The meter measures against the prompt budget, not the raw window: a
   // model that publishes an input cap (models.dev `limit.input`) rejects a
   // prompt past the cap, and the window counts the completion too.
   const contextWindow = inputBudgetTokens({
-    contextWindow: currentModel?.contextWindow ??
-      view.info.model?.contextWindow,
-    maxInputTokens: currentModel?.maxInputTokens ??
-      view.info.model?.maxInputTokens,
+    contextWindow:
+      currentModel?.contextWindow ?? view.info.model?.contextWindow,
+    maxInputTokens:
+      currentModel?.maxInputTokens ?? view.info.model?.maxInputTokens,
   });
-  const contextUsage = summary.currentTokens === undefined
-    ? undefined
-    : { summary, contextWindow };
+  const contextUsage =
+    summary.currentTokens === undefined
+      ? undefined
+      : { summary, contextWindow };
   // Where the meter turns amber: the point the next compaction check
   // condenses the history from (`window - reserveShare`). The reservation
   // comes from the shared settings store (read once for the page, so a tab
@@ -389,9 +390,13 @@ export function ChatView(
         onRewind={handleRewind}
         onCardSend={handleCardSend}
         active={active}
-        empty={view.info.chat
-          ? <p>{t("chat.empty.chat")}</p>
-          : <p>{t("chat.empty.workspace")}</p>}
+        empty={
+          view.info.chat ? (
+            <p>{t("chat.empty.chat")}</p>
+          ) : (
+            <p>{t("chat.empty.workspace")}</p>
+          )
+        }
       />
       <div className="input-area">
         <div className="progress-panels">
@@ -400,13 +405,11 @@ export function ChatView(
           <BackgroundPanel commands={view.backgrounds} />
         </div>
         <QuestionPanel pending={view.pendingQuestions} onAnswer={onAnswer} />
-        {
-          /* The slash menu is the only place these lists appear, and a menu
+        {/* The slash menu is the only place these lists appear, and a menu
             that opens with no entries says nothing about why. The failure is
             said here, above the composer, where the user would have typed the
             command: an empty palette is not an empty catalog, and the two must
-            not read the same. */
-        }
+            not read the same. */}
         {skillsError !== null && (
           <p className="settings-note" role="status">
             {t("chat.skills.unavailable")}
@@ -453,18 +456,21 @@ export function ChatView(
           submitLabel={t("chat.composer.submit")}
           submitIcon={IconSend}
           submitIconOnly
-          submitDisabled={(!input.trim() && images.length === 0) ||
-            providerUnconfigured || sending}
+          submitDisabled={
+            (!input.trim() && images.length === 0) ||
+            providerUnconfigured ||
+            sending
+          }
           onAbort={isRunning ? onAbort : undefined}
           onSubmit={() => submit()}
           onOpenSettings={onOpenSettings}
-          mentionWorkspaceId={view.info.chat
-            ? undefined
-            : view.info.workspaceId}
+          mentionWorkspaceId={
+            view.info.chat ? undefined : view.info.workspaceId
+          }
           mentionPeerId={peerId}
-          slashCommands={allSlashCommands.length > 0
-            ? allSlashCommands
-            : undefined}
+          slashCommands={
+            allSlashCommands.length > 0 ? allSlashCommands : undefined
+          }
           onSlashCommand={handleSlashCommand}
           images={images}
           onImagesChange={onImagesChange}

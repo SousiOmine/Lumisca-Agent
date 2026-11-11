@@ -1,12 +1,12 @@
 import { isAbsolute, join, normalize, sep } from "node:path";
-import { repoChain } from "../memory/agents-md.ts";
-import { isWithinRealpath } from "../workspace/path-util.ts";
 import {
   readIfExists,
   resolveGlobalDirs as resolveGlobalDirsBase,
 } from "../fs.ts";
+import { repoChain } from "../memory/agents-md.ts";
 import { appSkillDirs as resolveAppSkillDirs } from "../settings/path.ts";
 import { truncatedHeadNote, truncateHead } from "../tools/truncate.ts";
+import { isWithinRealpath } from "../workspace/path-util.ts";
 import { parseSkillFrontmatter } from "./frontmatter.ts";
 
 /** Directory holding skills inside a repository level or in the home
@@ -152,9 +152,10 @@ export async function loadSkillContent(
   skill: SkillDef,
   relativePath?: string,
 ): Promise<string> {
-  const content = skill.read !== undefined
-    ? await skill.read(relativePath)
-    : readSkillFile(skill, relativePath);
+  const content =
+    skill.read !== undefined
+      ? await skill.read(relativePath)
+      : readSkillFile(skill, relativePath);
   const { text, truncated } = truncateHead(content, MAX_SKILL_FILE_BYTES);
   return truncated
     ? text + truncatedHeadNote("file", MAX_SKILL_FILE_BYTES)
@@ -169,14 +170,13 @@ function readSkillFile(skill: SkillDef, relativePath?: string): string {
       `Skill "${skill.name}" has no file to read (missing path/dir)`,
     );
   }
-  const path = relativePath === undefined
-    ? skill.path
-    : resolveInside(skill.dir, relativePath);
+  const path =
+    relativePath === undefined
+      ? skill.path
+      : resolveInside(skill.dir, relativePath);
   const text = readIfExists(path);
   if (text === undefined) {
-    throw new Error(
-      `No such file in skill "${skill.name}": ${relativePath}`,
-    );
+    throw new Error(`No such file in skill "${skill.name}": ${relativePath}`);
   }
   return text;
 }

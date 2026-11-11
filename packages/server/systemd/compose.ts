@@ -110,9 +110,10 @@ export function renderTemplate(
  * splits at the space).
  */
 export function quoteUnitValue(value: string): string {
-  return `"${
-    value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/%/g, "%%")
-  }"`;
+  return `"${value
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/%/g, "%%")}"`;
 }
 
 /**
@@ -185,20 +186,25 @@ export function resolveValues(options: ResolveOptions): ServiceValues {
     "LUMISCA_HOST",
     options.flags.host ?? options.installed.host ?? options.defaults.host,
   );
-  const port = options.flags.port ?? options.installed.port ??
-    options.defaults.port;
+  const port =
+    options.flags.port ?? options.installed.port ?? options.defaults.port;
   if (!isValidPort(port)) {
     throw new ServiceDefinitionError(
       `LUMISCA_PORT が不正です: "${port}" (1〜65535 の整数を指定してください)`,
     );
   }
   const dbValue = options.flags.db ?? options.installed.db;
-  const db = dbValue === undefined ? undefined : assertText(
-    "LUMISCA_DB",
-    isAbsolute(dbValue) ? dbValue : resolve(options.cwd, dbValue),
-  );
+  const db =
+    dbValue === undefined
+      ? undefined
+      : assertText(
+          "LUMISCA_DB",
+          isAbsolute(dbValue) ? dbValue : resolve(options.cwd, dbValue),
+        );
   const allowedHosts = (
-    options.flags.allowedHosts ?? options.installed.allowedHosts ?? []
+    options.flags.allowedHosts ??
+    options.installed.allowedHosts ??
+    []
   ).map((entry) => assertAtom("LUMISCA_ALLOWED_HOSTS", entry));
   if (!isLoopbackHost(host) && allowedHosts.length === 0) {
     throw new ServiceDefinitionError(
@@ -211,16 +217,17 @@ export function resolveValues(options: ResolveOptions): ServiceValues {
     "LUMISCA_TOKEN",
     options.flags.token ?? options.installed.token ?? options.generateToken(),
   );
-  const xdgConfigHome = options.xdgConfigHome ??
-    options.installed.xdgConfigHome;
+  const xdgConfigHome =
+    options.xdgConfigHome ?? options.installed.xdgConfigHome;
   return {
     host,
     port,
     db,
     allowedHosts,
     token,
-    xdgConfigHome: xdgConfigHome === undefined
-      ? undefined
-      : assertText("XDG_CONFIG_HOME", xdgConfigHome),
+    xdgConfigHome:
+      xdgConfigHome === undefined
+        ? undefined
+        : assertText("XDG_CONFIG_HOME", xdgConfigHome),
   };
 }

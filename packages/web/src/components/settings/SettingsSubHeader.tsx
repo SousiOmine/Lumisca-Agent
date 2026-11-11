@@ -1,5 +1,5 @@
-import type { ReactNode } from "preact/compat";
 import { IconArrowLeft } from "@tabler/icons-preact";
+import type { ReactNode } from "preact/compat";
 import { useT } from "../../i18n.ts";
 
 /**

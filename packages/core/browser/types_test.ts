@@ -46,10 +46,7 @@ import {
  */
 
 const PROBE_URL = new URL("./probe.js", import.meta.url);
-const RUST_LIB_URL = new URL(
-  "../../browser-rpc/src/lib.rs",
-  import.meta.url,
-);
+const RUST_LIB_URL = new URL("../../browser-rpc/src/lib.rs", import.meta.url);
 
 /** The `limits` module body of the Rust crate, or the whole file when the
  * module is missing (the comparison then fails with a useful message). */
@@ -62,10 +59,9 @@ function rustModule(source: string, name: string): string {
 
 /** Evaluate the `N * M * …` shape the Rust limits use. */
 function rustUsize(expr: string): number {
-  return expr.split("*").reduce(
-    (value, part) => value * Number(part.trim()),
-    1,
-  );
+  return expr
+    .split("*")
+    .reduce((value, part) => value * Number(part.trim()), 1);
 }
 
 Deno.test("probe.js mirrors the snapshot limits in types.ts", () => {
@@ -96,16 +92,11 @@ Deno.test("probe.js mirrors the snapshot limits in types.ts", () => {
 });
 
 Deno.test("the Rust host mirrors the RPC size limits in types.ts", () => {
-  const limits = rustModule(
-    Deno.readTextFileSync(RUST_LIB_URL),
-    "limits",
-  );
+  const limits = rustModule(Deno.readTextFileSync(RUST_LIB_URL), "limits");
   const declared = new Map<string, number>();
-  for (
-    const match of limits.matchAll(
-      /pub const (\w+): usize = ([0-9*\s]+);/g,
-    )
-  ) {
+  for (const match of limits.matchAll(
+    /pub const (\w+): usize = ([0-9*\s]+);/g,
+  )) {
     declared.set(match[1]!, rustUsize(match[2]!));
   }
   assertEquals(declared.size > 0, true, "the limits module declares nothing");
@@ -128,11 +119,9 @@ Deno.test("the Rust host mirrors the RPC methods and error codes", () => {
   const source = Deno.readTextFileSync(RUST_LIB_URL);
 
   const methods = new Map<string, string>();
-  for (
-    const match of rustModule(source, "methods").matchAll(
-      /pub const (\w+): &str = "([^"]*)";/g,
-    )
-  ) {
+  for (const match of rustModule(source, "methods").matchAll(
+    /pub const (\w+): &str = "([^"]*)";/g,
+  )) {
     methods.set(match[1]!, match[2]!);
   }
   assertEquals(
@@ -148,11 +137,9 @@ Deno.test("the Rust host mirrors the RPC methods and error codes", () => {
   );
 
   const codes = new Map<string, string>();
-  for (
-    const match of rustModule(source, "error_codes").matchAll(
-      /pub const (\w+): &str = "([^"]*)";/g,
-    )
-  ) {
+  for (const match of rustModule(source, "error_codes").matchAll(
+    /pub const (\w+): &str = "([^"]*)";/g,
+  )) {
     codes.set(match[1]!, match[2]!);
   }
   assertEquals(

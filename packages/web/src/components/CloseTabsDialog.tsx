@@ -1,5 +1,5 @@
-import { Modal } from "./Modal.tsx";
 import { useT } from "../i18n.ts";
+import { Modal } from "./Modal.tsx";
 
 interface CloseTabsDialogProps {
   /** Names of the running tabs this close targets, in tab order. */
@@ -45,7 +45,9 @@ export function CloseTabsDialog({
             // One tab per row: the names are session titles (free text), so no
             // sentence tries to carry them inline.
             <ul className="confirm-list">
-              {names.map((name, index) => <li key={index}>{name}</li>)}
+              {names.map((name, index) => (
+                <li key={index}>{name}</li>
+              ))}
             </ul>
           )}
           <p className="settings-note">

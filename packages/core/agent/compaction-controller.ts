@@ -1,8 +1,8 @@
+import type { CompactionStyle } from "../ai/compaction-style.ts";
 import {
   type CompactionResult,
   ContextCompactor,
 } from "../ai/context-compaction.ts";
-import type { CompactionStyle } from "../ai/compaction-style.ts";
 import type {
   AgentMessage,
   AgentTool,
@@ -114,9 +114,9 @@ export class CompactionController {
       return result;
     } catch (error) {
       log.warn(
-        `session ${this.host.sessionId}: overflow compaction failed: ${
-          errorMessage(error)
-        }`,
+        `session ${this.host.sessionId}: overflow compaction failed: ${errorMessage(
+          error,
+        )}`,
       );
       return null;
     }
@@ -134,9 +134,9 @@ export class CompactionController {
       if (result !== null) this.republishContextsAfter(result);
     } catch (error) {
       log.warn(
-        `session ${this.host.sessionId}: compaction failed: ${
-          errorMessage(error)
-        }`,
+        `session ${this.host.sessionId}: compaction failed: ${errorMessage(
+          error,
+        )}`,
       );
     }
   }
@@ -213,16 +213,17 @@ export class CompactionController {
         // Zero: keep no tail (see IdleCompaction).
         keepRecentTokens: 0,
         canCommit: () =>
-          !this.host.isClosed() && !this.host.isStreaming() &&
+          !this.host.isClosed() &&
+          !this.host.isStreaming() &&
           this.host.messages().length === length &&
           this.host.messages().at(-1)?.timestamp === newest,
       });
       if (result !== null) this.republishContextsAfter(result);
     } catch (error) {
       log.warn(
-        `session ${this.host.sessionId}: idle compaction failed: ${
-          errorMessage(error)
-        }`,
+        `session ${this.host.sessionId}: idle compaction failed: ${errorMessage(
+          error,
+        )}`,
       );
     }
   }

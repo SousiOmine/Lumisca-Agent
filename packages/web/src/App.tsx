@@ -1,3 +1,4 @@
+import type { AppMode } from "@lumisca/core/shared";
 import {
   type ReactElement,
   useCallback,
@@ -6,70 +7,60 @@ import {
   useRef,
   useState,
 } from "preact/compat";
-import type { AppMode } from "@lumisca/core/shared";
-import type { InitialData } from "./types.ts";
-import { isViewRunning } from "./types.ts";
-import { closeTargets, DRAFT_TAB } from "./tabs.ts";
-import type { UrlState } from "./route.ts";
-import { useRoute } from "./hooks/useRoute.ts";
-import { useT } from "./i18n.ts";
-import { useTheme } from "./hooks/useTheme.ts";
-import { useLanguage } from "./hooks/useLanguage.ts";
-import { useWorkspaces } from "./hooks/useWorkspaces.ts";
-import { useSessionEvents } from "./hooks/useSessionEvents.ts";
-import { useServerHealth } from "./hooks/useServerHealth.ts";
+import { AppDialogs } from "./components/AppDialogs.tsx";
+import { AppMenu } from "./components/AppMenu.tsx";
+import { MacosTitleBarDrag } from "./components/MacosTitleBarDrag.tsx";
+import { ModeGate } from "./components/ModeGate.tsx";
+import { ServerDownBanner } from "./components/ServerDownBanner.tsx";
+import { DraftPane, SessionPane } from "./components/SessionPane.tsx";
+import type { SettingsCategory } from "./components/SettingsModal.tsx";
+import { StellaModeScreen } from "./components/StellaModeScreen.tsx";
+import { StellaTitleBarHeader } from "./components/stella/StellaTitleBarHeader.tsx";
+import { TabBar, type TabSummary } from "./components/TabBar.tsx";
+import { TitleBar } from "./components/TitleBar.tsx";
+import { UpdateBanner } from "./components/UpdateBanner.tsx";
+import { useAppHeight } from "./hooks/useAppHeight.ts";
+import { rememberMode, storedMode, useAppMode } from "./hooks/useAppMode.ts";
+import { useBackspaceGuard } from "./hooks/useBackspaceGuard.ts";
 import { useBuildWatch } from "./hooks/useBuildWatch.ts";
-import { useUpdateStatus } from "./hooks/useUpdateStatus.ts";
+import { EMPTY_DRAFT, useDrafts } from "./hooks/useDrafts.ts";
+import { useLanguage } from "./hooks/useLanguage.ts";
 import { useCompactViewport } from "./hooks/useMediaQuery.ts";
+import { usePush } from "./hooks/usePush.ts";
+import { useRoute } from "./hooks/useRoute.ts";
+import { useRoutines } from "./hooks/useRoutines.ts";
+import { useServerHealth } from "./hooks/useServerHealth.ts";
 import {
   type SessionActions,
   useSessionActions,
 } from "./hooks/useSessionActions.ts";
-import { useAppHeight } from "./hooks/useAppHeight.ts";
-import { useBackspaceGuard } from "./hooks/useBackspaceGuard.ts";
-import { inDesktopShell, quit, shellPlatform } from "./shell.ts";
-import { isNotifyEnabled, setNotifyEnabled } from "./notify.ts";
-import { useTabs } from "./hooks/useTabs.ts";
-import { useTabClose } from "./hooks/useTabClose.ts";
-import { EMPTY_DRAFT, useDrafts } from "./hooks/useDrafts.ts";
-import { TabBar, type TabSummary } from "./components/TabBar.tsx";
-import { TitleBar } from "./components/TitleBar.tsx";
-import { MacosTitleBarDrag } from "./components/MacosTitleBarDrag.tsx";
-import { AppMenu } from "./components/AppMenu.tsx";
-import { DraftPane, SessionPane } from "./components/SessionPane.tsx";
-import type { SettingsCategory } from "./components/SettingsModal.tsx";
-import { AppDialogs } from "./components/AppDialogs.tsx";
-import { UpdateBanner } from "./components/UpdateBanner.tsx";
-import { ServerDownBanner } from "./components/ServerDownBanner.tsx";
-import { ModeGate } from "./components/ModeGate.tsx";
-import { StellaModeScreen } from "./components/StellaModeScreen.tsx";
-import { StellaTitleBarHeader } from "./components/stella/StellaTitleBarHeader.tsx";
-import { rememberMode, storedMode, useAppMode } from "./hooks/useAppMode.ts";
+import { useSessionEvents } from "./hooks/useSessionEvents.ts";
 import { useStella } from "./hooks/useStella.ts";
-import { usePush } from "./hooks/usePush.ts";
-import { useRoutines } from "./hooks/useRoutines.ts";
+import { useTabClose } from "./hooks/useTabClose.ts";
+import { useTabs } from "./hooks/useTabs.ts";
+import { useTheme } from "./hooks/useTheme.ts";
+import { useUpdateStatus } from "./hooks/useUpdateStatus.ts";
+import { useWorkspaces } from "./hooks/useWorkspaces.ts";
+import { useT } from "./i18n.ts";
+import { isNotifyEnabled, setNotifyEnabled } from "./notify.ts";
+import type { UrlState } from "./route.ts";
+import { inDesktopShell, quit, shellPlatform } from "./shell.ts";
+import { closeTargets, DRAFT_TAB } from "./tabs.ts";
+import type { InitialData } from "./types.ts";
+import { isViewRunning } from "./types.ts";
 
 export interface AppProps {
   /** Preloaded data from the bootstrap script; undefined when not served. */
   initialData?: InitialData;
 }
 
-/** A close operation waiting for the user's answer (CloseTabsDialog): the
- * tabs it targets, and the running ones among them — those are what the
- * dialog warns about and what "keep running" exempts from `POST /close`. */
-interface PendingClose {
-  ids: string[];
-  running: Set<string>;
-  /** Display names of the running tabs, in tab order. */
-  names: string[];
-}
-
 /** The address of a mode's top screen. */
 function modeTop(mode: AppMode): UrlState {
   return {
-    route: mode === "code"
-      ? { kind: "code", tabKey: null }
-      : { kind: "stella", agentId: null },
+    route:
+      mode === "code"
+        ? { kind: "code", tabKey: null }
+        : { kind: "stella", agentId: null },
     settings: null,
   };
 }
@@ -97,17 +88,15 @@ export function App({ initialData }: AppProps): ReactElement {
   const router = useRoute();
   const url = router.state;
   const { push: pushUrl, replace: replaceUrl } = router;
-  const { theme, setTheme, error: themeError } = useTheme(
-    initialData?.theme ?? "dark",
-  );
+  const {
+    theme,
+    setTheme,
+    error: themeError,
+  } = useTheme(initialData?.theme ?? "dark");
   // The language store was seeded from InitialData before the first render
   // (client.tsx); this hook owns the settings-dialog state and the persist
   // (a failed save rolls the UI back).
-  const {
-    language,
-    setLanguage,
-    error: languageError,
-  } = useLanguage();
+  const { language, setLanguage, error: languageError } = useLanguage();
 
   // Which mode this page shows. The address names it, except at `/`: that is
   // the address the desktop shell and an installed PWA open, and it resolves
@@ -117,9 +106,8 @@ export function App({ initialData }: AppProps): ReactElement {
   // Memoized on the route kind: the store is a `localStorage` read, and the
   // App re-renders on every streamed event of a conversation.
   const resolved = useMemo(storedMode, [url.route.kind]);
-  const mode: AppMode | null = url.route.kind === "modeSelect"
-    ? resolved
-    : url.route.kind;
+  const mode: AppMode | null =
+    url.route.kind === "modeSelect" ? resolved : url.route.kind;
   // The resolution is a REPLACE: `/` is not a place to come back to, and a
   // back from a mode's top must leave the app rather than bounce off the
   // chooser it never meant to show.
@@ -200,9 +188,8 @@ export function App({ initialData }: AppProps): ReactElement {
 
   // --- code mode: the tab the address names --------------------------------
   /** The session the address names, or null for the new-session screen. */
-  const activeTab: string | null = url.route.kind === "code"
-    ? url.route.tabKey
-    : null;
+  const activeTab: string | null =
+    url.route.kind === "code" ? url.route.tabKey : null;
   const goToTab = useCallback(
     (key: string | null) => pushUrl(codeUrl(key)),
     [pushUrl],
@@ -230,19 +217,19 @@ export function App({ initialData }: AppProps): ReactElement {
   // The navigation runs BEFORE the close: `closeTabs` drops the tab and its
   // view, and a body rendered against an address that still named it would
   // show the wait for a session that is being closed.
-  const closeAndLeave = useCallback((
-    ids: string[],
-    keepRunning?: ReadonlySet<string>,
-  ) => {
-    const shown = activeTab ?? DRAFT_TAB;
-    if (ids.includes(shown)) {
-      const remaining = tabs.filter((id) =>
-        id !== DRAFT_TAB && id !== shown && !ids.includes(id)
-      );
-      replaceUrl(codeUrl(remaining.at(-1) ?? null));
-    }
-    tabsControl.closeTabs(ids, keepRunning);
-  }, [activeTab, tabs, tabsControl, replaceUrl]);
+  const closeAndLeave = useCallback(
+    (ids: string[], keepRunning?: ReadonlySet<string>) => {
+      const shown = activeTab ?? DRAFT_TAB;
+      if (ids.includes(shown)) {
+        const remaining = tabs.filter(
+          (id) => id !== DRAFT_TAB && id !== shown && !ids.includes(id),
+        );
+        replaceUrl(codeUrl(remaining.at(-1) ?? null));
+      }
+      tabsControl.closeTabs(ids, keepRunning);
+    },
+    [activeTab, tabs, tabsControl, replaceUrl],
+  );
   const tabClose = useTabClose({ views, closeTabs: closeAndLeave });
   const pendingClose = tabClose.pending;
 
@@ -289,10 +276,13 @@ export function App({ initialData }: AppProps): ReactElement {
   /** A session was created and its first prompt was sent: the tab appears and
    * the address moves to it. Stable, so every action built on it is stable
    * too (the panes are memoized, see SessionPane). */
-  const onSessionCreated = useCallback((key: string) => {
-    adopt(key);
-    goToTab(key);
-  }, [adopt, goToTab]);
+  const onSessionCreated = useCallback(
+    (key: string) => {
+      adopt(key);
+      goToTab(key);
+    },
+    [adopt, goToTab],
+  );
   const {
     startSession,
     prompt,
@@ -417,9 +407,12 @@ export function App({ initialData }: AppProps): ReactElement {
   useEffect(() => {
     urlRef.current = url;
   }, [url]);
-  const openSettingsAt = useCallback((category: SettingsCategory | null) => {
-    pushUrl({ ...urlRef.current, settings: { category } });
-  }, [pushUrl]);
+  const openSettingsAt = useCallback(
+    (category: SettingsCategory | null) => {
+      pushUrl({ ...urlRef.current, settings: { category } });
+    },
+    [pushUrl],
+  );
   // Every opener is a stable callback with a fixed argument: the tab bar and
   // the app menu compare their props by value.
   const openSettings = useCallback(
@@ -471,10 +464,13 @@ export function App({ initialData }: AppProps): ReactElement {
    * the address. It REPLACES: the screen it is chosen from is the chooser,
    * and `/` resolves to the very mode just chosen, so a back would bounce
    * through it instead of leaving. */
-  const chooseMode = useCallback(async (next: AppMode) => {
-    await appMode.choose(next);
-    replaceUrl(modeTop(next));
-  }, [appMode, replaceUrl]);
+  const chooseMode = useCallback(
+    async (next: AppMode) => {
+      await appMode.choose(next);
+      replaceUrl(modeTop(next));
+    },
+    [appMode, replaceUrl],
+  );
   // Ctrl+T (the shortcut the app menu advertises): open the draft tab. Only
   // code mode has tabs; stella's conversation is the whole surface. The
   // handler is on the window because the shortcut must work from the
@@ -510,9 +506,12 @@ export function App({ initialData }: AppProps): ReactElement {
       settings: null,
     });
   }, [router]);
-  const goToStellaAgent = useCallback((id: string) => {
-    pushUrl({ route: { kind: "stella", agentId: id }, settings: null });
-  }, [pushUrl]);
+  const goToStellaAgent = useCallback(
+    (id: string) => {
+      pushUrl({ route: { kind: "stella", agentId: id }, settings: null });
+    },
+    [pushUrl],
+  );
   // An address naming a conversation that does not exist (deleted here or in
   // another window) is the list: an empty conversation screen would say the
   // agent is there and silent. The list is awaited first — before it lands,
@@ -546,12 +545,13 @@ export function App({ initialData }: AppProps): ReactElement {
   // here, above both the bar and the conversation it names.
   const [stellaScreenOpen, setStellaScreenOpen] = useState(false);
   const [editingStellaAgent, setEditingStellaAgent] = useState(false);
-  const stellaHandedOver = stella.conversation?.handover !== null &&
+  const stellaHandedOver =
+    stella.conversation?.handover !== null &&
     stella.conversation?.handover !== undefined;
   // The settings dialog's routine list: the active agent's routines
   // (code mode has no agent, so the list stays empty and says so).
   const routines = useRoutines(stellaActive ? stellaAgentId : null);
-  const routineAgentName = stellaActive ? stellaAgent?.name ?? null : null;
+  const routineAgentName = stellaActive ? (stellaAgent?.name ?? null) : null;
 
   // The mode-selection screen, and nothing else, until this client picks a
   // mode. The choice is per client (hooks/useAppMode.ts), so a second window
@@ -560,13 +560,11 @@ export function App({ initialData }: AppProps): ReactElement {
     return (
       <div className={appClass}>
         {macos && <MacosTitleBarDrag />}
-        {
-          /* The selection screen is the first thing a new origin shows, and
+        {/* The selection screen is the first thing a new origin shows, and
          * a remote server is a new origin (the mode is stored per client,
          * per origin). The window is undecorated there, so this screen has
          * to carry the same chrome as the app: without it a connected
-         * window had no way to be moved, maximized or closed. */
-        }
+         * window had no way to be moved, maximized or closed. */}
         <TitleBar
           onNew={() => goToTab(null)}
           onOpenRecent={openRecent}
@@ -578,11 +576,9 @@ export function App({ initialData }: AppProps): ReactElement {
         >
           <div className="titlebar-blank" />
         </TitleBar>
-        {
-          /* A plain browser has no title bar, so the menu stays where the
+        {/* A plain browser has no title bar, so the menu stays where the
          * tab bar would put it: this screen is the only way into settings
-         * and the mode switch before a mode exists. */
-        }
+         * and the mode switch before a mode exists. */}
         {!desktop && (
           <AppMenu
             onNew={() => goToTab(null)}
@@ -595,22 +591,20 @@ export function App({ initialData }: AppProps): ReactElement {
           />
         )}
         <div className="app-body">
-          {machineStatus === null
-            ? (
-              <div className="mode-select-loading">
-                {appMode.error === null
-                  ? t("common.loading")
-                  : t("common.serverUnreachable", { error: appMode.error })}
-              </div>
-            )
-            : (
-              <ModeGate
-                status={machineStatus}
-                mode={mode}
-                error={appMode.error}
-                choose={chooseMode}
-              />
-            )}
+          {machineStatus === null ? (
+            <div className="mode-select-loading">
+              {appMode.error === null
+                ? t("common.loading")
+                : t("common.serverUnreachable", { error: appMode.error })}
+            </div>
+          ) : (
+            <ModeGate
+              status={machineStatus}
+              mode={mode}
+              error={appMode.error}
+              choose={chooseMode}
+            />
+          )}
         </div>
       </div>
     );
@@ -619,11 +613,9 @@ export function App({ initialData }: AppProps): ReactElement {
   return (
     <div className={appClass}>
       {macos && <MacosTitleBarDrag />}
-      {
-        /* The desktop window is undecorated; the title bar strip holds the
-         * tab bar, the app menu and the window controls (in a plain browser
-         * the tab bar renders on its own). */
-      }
+      {/* The desktop window is undecorated; the title bar strip holds the
+       * tab bar, the app menu and the window controls (in a plain browser
+       * the tab bar renders on its own). */}
       <TitleBar
         onNew={() => goToTab(null)}
         onOpenRecent={openRecent}
@@ -633,64 +625,65 @@ export function App({ initialData }: AppProps): ReactElement {
         onManageConnections={openServers}
         tabs={!stellaActive}
       >
-        {stellaActive
+        {stellaActive ? (
           // stella mode has no tab strip: one conversation is the whole
           // surface, so the strip names that conversation instead of listing
           // sessions. See StellaTitleBarHeader: the agent's face and name are
           // here because they were a second strip inside the sheet, saying
           // the same thing one line lower.
-          ? (
-            <div className="stella-titlebar-strip">
-              <StellaTitleBarHeader
-                agent={stellaAgent ?? null}
-                machineRunning={machineStatus?.state === "running"}
-                onBack={stellaSingleScreen && stellaAgentId !== null
+          <div className="stella-titlebar-strip">
+            <StellaTitleBarHeader
+              agent={stellaAgent ?? null}
+              machineRunning={machineStatus?.state === "running"}
+              onBack={
+                stellaSingleScreen && stellaAgentId !== null
                   ? goToStellaList
-                  : undefined}
-                onEditAgent={() => setEditingStellaAgent(true)}
-                onToggleScreen={machineStatus?.state === "running" &&
-                    !stellaHandedOver && stellaAgentId !== null
-                  ? () => setStellaScreenOpen((open) => !open)
-                  : undefined}
-                screenOpen={stellaScreenOpen}
-              />
-              {
-                /* On desktop the app menu lives in the title bar's controls; in
-               * a plain browser this strip is the only chrome stella mode
-               * has, so the menu (settings, mode switch, session history)
-               * has to stay reachable from here. */
+                  : undefined
               }
-              {!desktop && (
-                <div className="tabbar-actions">
-                  <AppMenu
-                    onNew={() => goToTab(null)}
-                    onOpenRecent={openRecent}
-                    onOpenSettings={openSettings}
-                    onQuit={quit}
-                    onSwitchMode={openModeSelect}
-                    isDesktop={false}
-                    tabs={false}
-                  />
-                </div>
-              )}
-            </div>
-          )
-          : (
-            <TabBar
-              tabs={tabSummaries}
-              onSelect={selectTab}
-              onClose={closeTab}
-              onCloseToRight={closeTabsToRight}
-              onCloseToLeft={closeTabsToLeft}
-              onCloseOthers={closeOtherTabs}
-              onNew={() => goToTab(null)}
-              onOpenRecent={openRecent}
-              onOpenSettings={openSettings}
-              isDesktop={desktop}
-              onQuit={quit}
-              onSwitchMode={openModeSelect}
+              onEditAgent={() => setEditingStellaAgent(true)}
+              onToggleScreen={
+                machineStatus?.state === "running" &&
+                !stellaHandedOver &&
+                stellaAgentId !== null
+                  ? () => setStellaScreenOpen((open) => !open)
+                  : undefined
+              }
+              screenOpen={stellaScreenOpen}
             />
-          )}
+            {/* On desktop the app menu lives in the title bar's controls; in
+             * a plain browser this strip is the only chrome stella mode
+             * has, so the menu (settings, mode switch, session history)
+             * has to stay reachable from here. */}
+            {!desktop && (
+              <div className="tabbar-actions">
+                <AppMenu
+                  onNew={() => goToTab(null)}
+                  onOpenRecent={openRecent}
+                  onOpenSettings={openSettings}
+                  onQuit={quit}
+                  onSwitchMode={openModeSelect}
+                  isDesktop={false}
+                  tabs={false}
+                />
+              </div>
+            )}
+          </div>
+        ) : (
+          <TabBar
+            tabs={tabSummaries}
+            onSelect={selectTab}
+            onClose={closeTab}
+            onCloseToRight={closeTabsToRight}
+            onCloseToLeft={closeTabsToLeft}
+            onCloseOthers={closeOtherTabs}
+            onNew={() => goToTab(null)}
+            onOpenRecent={openRecent}
+            onOpenSettings={openSettings}
+            isDesktop={desktop}
+            onQuit={quit}
+            onSwitchMode={openModeSelect}
+          />
+        )}
       </TitleBar>
       {/* Everything below the title bar. */}
       <div className="app-body">
@@ -719,150 +712,157 @@ export function App({ initialData }: AppProps): ReactElement {
             </div>
           </div>
         )}
-        {stellaActive
-          ? (
-            // stella mode: the agents, the open conversation and the
-            // machine's screen (see StellaModeScreen). Rendered instead of
-            // the tab branch (not beside it): a tab strip is exactly the
-            // session-list surface this mode exists to remove.
-            <StellaModeScreen
-              stella={stella}
-              agent={stellaAgent ?? null}
-              status={machineStatus}
-              input={draft.input}
-              onInputChange={(input) => updateDraft(draftKey, { input })}
-              images={draft.images}
-              onImagesChange={(images) => updateDraft(draftKey, { images })}
-              files={draft.files}
-              onFilesChange={(files) => updateDraft(draftKey, { files })}
-              onAgentChanged={stella.applyAgent}
-              onSelectAgent={goToStellaAgent}
-              onOpenSettings={openProviders}
-              screenOpen={stellaScreenOpen}
-              onScreenOpenChange={setStellaScreenOpen}
-            />
-          )
-          : (
-            // One pane per open tab, all of them mounted: the tab the address
-            // does not name is hidden, not rebuilt, so switching costs an
-            // attribute rather than a transcript (see SessionPane). The draft
-            // screen is the last pane and is mounted once it has been shown.
-            <>
-              {panes.map((key) => {
-                const view = views.get(key);
-                // A pane exists only once its view has landed; the address
-                // reaches this page before the read does.
-                if (view === undefined) return null;
-                return (
-                  <SessionPane
-                    key={key}
-                    tabKey={key}
-                    view={view}
-                    active={key === activeTab}
-                    draft={drafts.get(key) ?? EMPTY_DRAFT}
-                    loadingOlder={olderLoading.has(key)}
-                    actions={sessionActions}
-                    loadOlder={loadOlder}
-                    updateDraft={updateDraft}
-                    onOpenSettings={openProviders}
-                  />
-                );
-              })}
-              {draftPaneShown && (
-                <DraftPane
-                  active={activeTab === null}
-                  draft={drafts.get(DRAFT_TAB) ?? EMPTY_DRAFT}
-                  workspaces={workspaces}
-                  workspacesLoaded={workspacesLoaded}
-                  settingsVersion={settingsVersion}
+        {stellaActive ? (
+          // stella mode: the agents, the open conversation and the
+          // machine's screen (see StellaModeScreen). Rendered instead of
+          // the tab branch (not beside it): a tab strip is exactly the
+          // session-list surface this mode exists to remove.
+          <StellaModeScreen
+            stella={stella}
+            agent={stellaAgent ?? null}
+            status={machineStatus}
+            input={draft.input}
+            onInputChange={(input) => updateDraft(draftKey, { input })}
+            images={draft.images}
+            onImagesChange={(images) => updateDraft(draftKey, { images })}
+            files={draft.files}
+            onFilesChange={(files) => updateDraft(draftKey, { files })}
+            onAgentChanged={stella.applyAgent}
+            onSelectAgent={goToStellaAgent}
+            onOpenSettings={openProviders}
+            screenOpen={stellaScreenOpen}
+            onScreenOpenChange={setStellaScreenOpen}
+          />
+        ) : (
+          // One pane per open tab, all of them mounted: the tab the address
+          // does not name is hidden, not rebuilt, so switching costs an
+          // attribute rather than a transcript (see SessionPane). The draft
+          // screen is the last pane and is mounted once it has been shown.
+          <>
+            {panes.map((key) => {
+              const view = views.get(key);
+              // A pane exists only once its view has landed; the address
+              // reaches this page before the read does.
+              if (view === undefined) return null;
+              return (
+                <SessionPane
+                  key={key}
+                  tabKey={key}
+                  view={view}
+                  active={key === activeTab}
+                  draft={drafts.get(key) ?? EMPTY_DRAFT}
+                  loadingOlder={olderLoading.has(key)}
+                  actions={sessionActions}
+                  loadOlder={loadOlder}
                   updateDraft={updateDraft}
-                  clearDraft={clearDraft}
-                  startSession={startSession}
-                  onWorkspaceChanged={handleWorkspaceChanged}
-                  onDeleteWorkspace={deleteWorkspace}
-                  onReopenSession={goToTab}
                   onOpenSettings={openProviders}
                 />
-              )}
-              {activeTab !== null && !activePane && (
-                // The address names a session this page has not drawn yet (a
-                // bookmark, a reload, a link followed from elsewhere). Its
-                // read is in flight, so the body says so rather than flashing
-                // the new-session screen under the address of a session.
-                <div className="chat-empty" role="status">
-                  <div className="chat-empty-inner">
-                    <p>{t("common.loading")}</p>
-                  </div>
+              );
+            })}
+            {draftPaneShown && (
+              <DraftPane
+                active={activeTab === null}
+                draft={drafts.get(DRAFT_TAB) ?? EMPTY_DRAFT}
+                workspaces={workspaces}
+                workspacesLoaded={workspacesLoaded}
+                settingsVersion={settingsVersion}
+                updateDraft={updateDraft}
+                clearDraft={clearDraft}
+                startSession={startSession}
+                onWorkspaceChanged={handleWorkspaceChanged}
+                onDeleteWorkspace={deleteWorkspace}
+                onReopenSession={goToTab}
+                onOpenSettings={openProviders}
+              />
+            )}
+            {activeTab !== null && !activePane && (
+              // The address names a session this page has not drawn yet (a
+              // bookmark, a reload, a link followed from elsewhere). Its
+              // read is in flight, so the body says so rather than flashing
+              // the new-session screen under the address of a session.
+              <div className="chat-empty" role="status">
+                <div className="chat-empty-inner">
+                  <p>{t("common.loading")}</p>
                 </div>
-              )}
-            </>
-          )}
+              </div>
+            )}
+          </>
+        )}
       </div>
       <AppDialogs
-        settings={settingsOpen && settingsRoute !== null
-          ? {
-            theme,
-            themeError,
-            onThemeChange: setTheme,
-            language,
-            languageError,
-            onLanguageChange: setLanguage,
-            update,
-            notifyEnabled,
-            onNotifyEnabledChange: handleNotifyEnabledChange,
-            push,
-            category: settingsRoute.category,
-            onOpenCategory: openSettingsAt,
-            onBackToList: backToSettingsList,
-            routines,
-            routineAgent: routineAgentName,
-            onClose: closeSettings,
-          }
-          : null}
-        recent={showRecent
-          ? {
-            // Every session tab this page has open; the draft tab is not a
-            // session (it is the new-session screen, which every closed
-            // session's re-open leaves anyway).
-            openKeys: new Set(openSessions),
-            onOpen: (key) => {
-              goToTab(key);
-              setShowRecent(false);
-            },
-            onClose: closeRecent,
-          }
-          : null}
-        close={pendingClose !== null
-          ? {
-            names: pendingClose.names,
-            onCancel: tabClose.cancel,
-            onStopAndClose: () => tabClose.resolve(false),
-            onKeepRunning: () => tabClose.resolve(true),
-          }
-          : null}
-        agentEdit={stellaActive && stellaAgent !== undefined &&
-            editingStellaAgent
-          ? {
-            agent: stellaAgent,
-            onChanged: (updated) => {
-              stella.applyAgent(updated);
-              setEditingStellaAgent(false);
-            },
-            onClose: () => setEditingStellaAgent(false),
-          }
-          : null}
-        modeGate={showModeSelect
-          ? {
-            status: machineStatus,
-            mode,
-            error: appMode.error,
-            choose: async (next) => {
-              await chooseMode(next);
-              setShowModeSelect(false);
-            },
-            onClose: closeModeSelect,
-          }
-          : null}
+        settings={
+          settingsOpen && settingsRoute !== null
+            ? {
+                theme,
+                themeError,
+                onThemeChange: setTheme,
+                language,
+                languageError,
+                onLanguageChange: setLanguage,
+                update,
+                notifyEnabled,
+                onNotifyEnabledChange: handleNotifyEnabledChange,
+                push,
+                category: settingsRoute.category,
+                onOpenCategory: openSettingsAt,
+                onBackToList: backToSettingsList,
+                routines,
+                routineAgent: routineAgentName,
+                onClose: closeSettings,
+              }
+            : null
+        }
+        recent={
+          showRecent
+            ? {
+                // Every session tab this page has open; the draft tab is not a
+                // session (it is the new-session screen, which every closed
+                // session's re-open leaves anyway).
+                openKeys: new Set(openSessions),
+                onOpen: (key) => {
+                  goToTab(key);
+                  setShowRecent(false);
+                },
+                onClose: closeRecent,
+              }
+            : null
+        }
+        close={
+          pendingClose !== null
+            ? {
+                names: pendingClose.names,
+                onCancel: tabClose.cancel,
+                onStopAndClose: () => tabClose.resolve(false),
+                onKeepRunning: () => tabClose.resolve(true),
+              }
+            : null
+        }
+        agentEdit={
+          stellaActive && stellaAgent !== undefined && editingStellaAgent
+            ? {
+                agent: stellaAgent,
+                onChanged: (updated) => {
+                  stella.applyAgent(updated);
+                  setEditingStellaAgent(false);
+                },
+                onClose: () => setEditingStellaAgent(false),
+              }
+            : null
+        }
+        modeGate={
+          showModeSelect
+            ? {
+                status: machineStatus,
+                mode,
+                error: appMode.error,
+                choose: async (next) => {
+                  await chooseMode(next);
+                  setShowModeSelect(false);
+                },
+                onClose: closeModeSelect,
+              }
+            : null
+        }
       />
     </div>
   );

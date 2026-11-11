@@ -1,6 +1,6 @@
+import { stellaEntryOf } from "../agent/stella-stream.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import { previewOf, type StellaPreview } from "../shared/stella-preview.ts";
-import { stellaEntryOf } from "../agent/stella-stream.ts";
 
 /**
  * What each agent's conversation last said, for the sidebar's second line.

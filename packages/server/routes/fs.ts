@@ -1,5 +1,4 @@
 import { join, parse, relative, sep } from "node:path";
-import { Hono } from "hono";
 import { isDirectory } from "@lumisca/core";
 import type {
   FsBreadcrumb,
@@ -7,6 +6,7 @@ import type {
   FsPlace,
   FsPlaceKind,
 } from "@lumisca/core/shared";
+import { Hono } from "hono";
 import { AppError, requireNonEmptyString } from "./util.ts";
 
 /** The picker's wire shapes (FsPlace, FsEntry, FsBreadcrumb, FsBrowse) and
@@ -66,8 +66,9 @@ export async function readUserDirs(
     return (key) => dirs.get(key);
   }
   for (const line of text.split("\n")) {
-    const match = /^\s*(XDG_[A-Z_]+_DIR)\s*=\s*(?:"([^"]*)"|(\S+))\s*$/
-      .exec(line);
+    const match = /^\s*(XDG_[A-Z_]+_DIR)\s*=\s*(?:"([^"]*)"|(\S+))\s*$/.exec(
+      line,
+    );
     if (!match) continue;
     const [, key = "", quoted, bare] = match;
     // The file writes its values as `"$HOME/ドキュメント"`; the only
@@ -80,8 +81,8 @@ export async function readUserDirs(
 
 /** Where a desktop session records its user folders. */
 function userDirsFile(env: (key: string) => string | undefined): string {
-  const configHome = env("XDG_CONFIG_HOME") ||
-    join(env("HOME") ?? "", ".config");
+  const configHome =
+    env("XDG_CONFIG_HOME") || join(env("HOME") ?? "", ".config");
   return join(configHome, "user-dirs.dirs");
 }
 
@@ -101,9 +102,10 @@ export function placeCandidates(
     // Linux names its user folders through XDG: the variables a desktop
     // session exports, or the config file for a process without one.
     // macOS and Windows use the English names.
-    const xdg = os === "linux"
-      ? (key: string) => env(key) || userDirs(key)
-      : () => undefined;
+    const xdg =
+      os === "linux"
+        ? (key: string) => env(key) || userDirs(key)
+        : () => undefined;
     /** One user folder: the declared path, the English name while nothing
      * declares it, or nothing at all when the user turned it off. */
     const userFolder = (key: string, englishName: string): string | null => {
@@ -173,15 +175,16 @@ export function fsRoutes(): Hono {
     const env = (key: string) => Deno.env.get(key);
     const os = Deno.build.os;
     // Only Linux keeps its user folders in the XDG config file.
-    const userDirs = os === "linux"
-      ? await readUserDirs(userDirsFile(env), env("HOME") ?? "")
-      : () => undefined;
+    const userDirs =
+      os === "linux"
+        ? await readUserDirs(userDirsFile(env), env("HOME") ?? "")
+        : () => undefined;
     return c.json(await buildPlaces(placeCandidates(env, os, userDirs)));
   });
 
   app.get("/fs/browse", async (c) => {
     const path = requireNonEmptyString(c.req.query("path") ?? "", "path");
-    if (!await isDirectory(path)) {
+    if (!(await isDirectory(path))) {
       throw new AppError(`not a directory: ${path}`, 400);
     }
     const entries: FsEntry[] = [];
@@ -190,8 +193,9 @@ export function fsRoutes(): Hono {
       // A dirent describes the link itself, so a symlinked folder would read
       // as a file (and could never be picked as a workspace folder): resolve
       // the links only, one stat each.
-      const dir = entry.isDirectory ||
-        (entry.isSymlink && await isDirectory(entryPath));
+      const dir =
+        entry.isDirectory ||
+        (entry.isSymlink && (await isDirectory(entryPath)));
       entries.push({
         name: entry.name,
         path: entryPath,

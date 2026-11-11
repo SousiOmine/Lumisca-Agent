@@ -25,28 +25,30 @@ Deno.test("catalog maps the account's models", async () => {
       `${CHATGPT_API_BASE}/models?client_version=1.0.0`,
     );
     headers = new Headers(init?.headers);
-    return Promise.resolve(json({
-      models: [
-        {
-          slug: "gpt-5.3-codex",
-          display_name: "GPT-5.3 Codex",
-          context_window: 400_000,
-          supported_reasoning_levels: [
-            { effort: "none" },
-            { effort: "low" },
-            { effort: "high" },
-          ],
-        },
-        {
-          slug: "gpt-5.3-codex-spark",
-          display_name: "GPT-5.3 Codex Spark",
-          max_context_window: 128_000,
-        },
-        { id: "id-only" },
-        { display_name: "no id" },
-        "not an entry",
-      ],
-    }));
+    return Promise.resolve(
+      json({
+        models: [
+          {
+            slug: "gpt-5.3-codex",
+            display_name: "GPT-5.3 Codex",
+            context_window: 400_000,
+            supported_reasoning_levels: [
+              { effort: "none" },
+              { effort: "low" },
+              { effort: "high" },
+            ],
+          },
+          {
+            slug: "gpt-5.3-codex-spark",
+            display_name: "GPT-5.3 Codex Spark",
+            max_context_window: 128_000,
+          },
+          { id: "id-only" },
+          { display_name: "no id" },
+          "not an entry",
+        ],
+      }),
+    );
   };
 
   const models = await fetchChatGptModels(fetchImpl, {

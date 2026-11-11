@@ -1,7 +1,6 @@
 import { dirname, join } from "node:path";
-import { CoreError } from "./errors.ts";
+import { CoreError, errorMessage } from "./errors.ts";
 import { createLogger } from "./log.ts";
-import { errorMessage } from "./errors.ts";
 import type { SettingsRepo } from "./settings/repo.ts";
 
 const log = createLogger("personalization");

@@ -1,5 +1,4 @@
 import { assert, assertEquals, assertNotEquals } from "@std/assert";
-import type { StellaEvent, ThinkingLevel } from "./types.ts";
 import {
   applyStellaEvent,
   emptyStellaState,
@@ -9,6 +8,7 @@ import {
   stellaStateOf,
   transcriptEntries,
 } from "./stella-state.ts";
+import type { StellaEvent, ThinkingLevel } from "./types.ts";
 
 function entry(
   role: "user" | "assistant",
@@ -20,9 +20,10 @@ function entry(
   return {
     role,
     text,
-    segments: card === null
-      ? segments
-      : [...segments, { type: "card" as const, markup: card }],
+    segments:
+      card === null
+        ? segments
+        : [...segments, { type: "card" as const, markup: card }],
     attachments: [],
     files: [],
     timestamp,
@@ -148,7 +149,10 @@ Deno.test("applyStellaEvent: the same message twice replaces in place", () => {
     type: "entry",
     entry: entry("user", "A", 1),
   })!;
-  assertEquals(current.entries.map((e) => e.text), ["A", "B"]);
+  assertEquals(
+    current.entries.map((e) => e.text),
+    ["A", "B"],
+  );
   assertEquals(entryKey(current.entries[0]!), "user:1:::::A");
 });
 
@@ -173,10 +177,12 @@ Deno.test("applyStellaEvent: the run state and its error", () => {
 });
 
 Deno.test("applyStellaEvent: questions and the hand-over replace wholesale", () => {
-  const questions = [{
-    toolCallId: "t1",
-    questions: [{ id: "q1", question: "どれ？", options: [] }],
-  }];
+  const questions = [
+    {
+      toolCallId: "t1",
+      questions: [{ id: "q1", question: "どれ？", options: [] }],
+    },
+  ];
   let current = state();
   current = applyStellaEvent(current, { type: "questions", questions })!;
   assertEquals(current.questions, questions);
@@ -232,18 +238,21 @@ Deno.test("stellaStateOf: a re-read snapshot merges into paged history", () => {
     older: "cursor-old",
   });
 
-  const merged = stellaStateOf({
-    entries: [second, third, entry("assistant", "新しい返答", 4)],
-    older: "cursor-newer",
-    running: false,
-    questions: [],
-    handover: null,
-    envRequest: null,
-    agentName: "Aide",
-    sessionId: "s1",
-    model: { provider: "faux", modelId: "model" },
-    rev: 9,
-  }, current);
+  const merged = stellaStateOf(
+    {
+      entries: [second, third, entry("assistant", "新しい返答", 4)],
+      older: "cursor-newer",
+      running: false,
+      questions: [],
+      handover: null,
+      envRequest: null,
+      agentName: "Aide",
+      sessionId: "s1",
+      model: { provider: "faux", modelId: "model" },
+      rev: 9,
+    },
+    current,
+  );
 
   assertEquals(merged.entries.map(entryKey), [
     entryKey(first),
@@ -263,18 +272,21 @@ Deno.test("stellaStateOf: an empty window keeps the conversation it holds", () =
   // conversation — and, because the cursor went with it, leave no way back.
   const first = entry("user", "最初", 1);
   const current = state({ entries: [first], older: "cursor-old" });
-  const merged = stellaStateOf({
-    entries: [],
-    older: null,
-    running: true,
-    questions: [],
-    handover: null,
-    envRequest: null,
-    agentName: "Aide",
-    sessionId: "s1",
-    model: { provider: "faux", modelId: "model" },
-    rev: 9,
-  }, current);
+  const merged = stellaStateOf(
+    {
+      entries: [],
+      older: null,
+      running: true,
+      questions: [],
+      handover: null,
+      envRequest: null,
+      agentName: "Aide",
+      sessionId: "s1",
+      model: { provider: "faux", modelId: "model" },
+      rev: 9,
+    },
+    current,
+  );
   assertEquals(merged.entries.map(entryKey), [entryKey(first)]);
   assertEquals(merged.older, "cursor-old");
   // The run state still comes from the snapshot: that is what it is for.
@@ -286,19 +298,25 @@ Deno.test("stellaStateOf: a window that shares nothing replaces the state", () =
     entries: [entry("user", "古い", 1)],
     older: "stale-cursor",
   });
-  const merged = stellaStateOf({
-    entries: [entry("user", "新しい", 5)],
-    older: "fresh-cursor",
-    running: false,
-    questions: [],
-    handover: null,
-    envRequest: null,
-    agentName: "Aide",
-    sessionId: "s1",
-    model: { provider: "faux", modelId: "model" },
-    rev: 9,
-  }, current);
-  assertEquals(merged.entries.map((e) => e.text), ["新しい"]);
+  const merged = stellaStateOf(
+    {
+      entries: [entry("user", "新しい", 5)],
+      older: "fresh-cursor",
+      running: false,
+      questions: [],
+      handover: null,
+      envRequest: null,
+      agentName: "Aide",
+      sessionId: "s1",
+      model: { provider: "faux", modelId: "model" },
+      rev: 9,
+    },
+    current,
+  );
+  assertEquals(
+    merged.entries.map((e) => e.text),
+    ["新しい"],
+  );
   // The held cursor names a position in a conversation the client is no
   // longer at the end of: the window's cursor takes over.
   assertEquals(merged.older, "fresh-cursor");
@@ -314,7 +332,10 @@ Deno.test("prependOlderEntries: a page goes in front; an empty one ends the walk
     [entry("user", "前", 1), entry("assistant", "返答", 2)],
     "cursor-a",
   );
-  assertEquals(next.entries.map((e) => e.timestamp), [1, 2, 3]);
+  assertEquals(
+    next.entries.map((e) => e.timestamp),
+    [1, 2, 3],
+  );
   assertEquals(next.older, "cursor-a");
 
   // Nothing new means the beginning was reached: the client must not ask for
@@ -337,7 +358,10 @@ Deno.test("applyStellaEvent: two sends in one millisecond stay two entries", () 
   let current = state();
   current = applyStellaEvent(current, { type: "entry", entry: first })!;
   current = applyStellaEvent(current, { type: "entry", entry: second })!;
-  assertEquals(current.entries.map((e) => e.text), ["連続 1", "連続 2"]);
+  assertEquals(
+    current.entries.map((e) => e.text),
+    ["連続 1", "連続 2"],
+  );
 });
 
 Deno.test("applyStellaEvent: the same message announced twice is one entry", () => {
@@ -363,11 +387,18 @@ Deno.test("prependOlderEntries: a page never inserts live entries above", () => 
     entries: [entry("user", "今の依頼", 5000)],
     older: "cursor-1",
   });
-  current = prependOlderEntries(current, [
-    entry("user", "今の依頼", 5000), // already held: the page stops here
-    entry("assistant", "作業中の返事", 6000), // newer than the live edge
-  ], "cursor-0");
-  assertEquals(current.entries.map((e) => e.text), ["今の依頼"]);
+  current = prependOlderEntries(
+    current,
+    [
+      entry("user", "今の依頼", 5000), // already held: the page stops here
+      entry("assistant", "作業中の返事", 6000), // newer than the live edge
+    ],
+    "cursor-0",
+  );
+  assertEquals(
+    current.entries.map((e) => e.text),
+    ["今の依頼"],
+  );
 });
 
 Deno.test("prependOlderEntries: an entry newer than the edge is never added", () => {
@@ -378,7 +409,10 @@ Deno.test("prependOlderEntries: an entry newer than the edge is never added", ()
     [entry("assistant", "まだ届いていない返事", 9000)],
     "cursor-0",
   );
-  assertEquals(current.entries.map((e) => e.text), ["今の依頼"]);
+  assertEquals(
+    current.entries.map((e) => e.text),
+    ["今の依頼"],
+  );
 });
 
 Deno.test("stella: a card being written grows, and the entry replaces it", () => {
@@ -476,10 +510,7 @@ Deno.test("entryKey: a routine's prompt and the same words typed differ", () => 
     files: [],
     timestamp: 5,
   };
-  assert(
-    entryKey(typed) !==
-      entryKey({ ...typed, routine: "毎朝の確認" }),
-  );
+  assert(entryKey(typed) !== entryKey({ ...typed, routine: "毎朝の確認" }));
 });
 
 Deno.test("transcriptEntries: a routine's prompt is not drawn", () => {

@@ -107,9 +107,7 @@ function hex(bytes: Uint8Array): string {
  * `"Ed" + keyId(8) + key(32)`.
  */
 export function decodeMinisignPublicKey(encoded: string): DecodedPublicKey {
-  const text = new TextDecoder().decode(
-    decodeBase64(encoded, "公開鍵"),
-  );
+  const text = new TextDecoder().decode(decodeBase64(encoded, "公開鍵"));
   const lines = minisignLines(text).filter((line) => line.trim() !== "");
   const payloadLine = lines[1];
   if (payloadLine === undefined) {
@@ -138,9 +136,7 @@ export function decodeMinisignPublicKey(encoded: string): DecodedPublicKey {
  * and URL from the manifest, never from the comment.
  */
 export function decodeMinisignSignature(encoded: string): DecodedSignature {
-  const text = new TextDecoder().decode(
-    decodeBase64(encoded, "署名"),
-  );
+  const text = new TextDecoder().decode(decodeBase64(encoded, "署名"));
   const lines = minisignLines(text).filter((line) => line.trim() !== "");
   const payloadLine = lines[1];
   if (payloadLine === undefined) {

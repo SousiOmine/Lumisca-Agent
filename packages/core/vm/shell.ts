@@ -14,6 +14,9 @@
  * process's liveness. Killing it targets the process group, so a `npm run
  * dev` does not leave the server behind.
  */
+
+import { firstLine } from "../lines.ts";
+import { sleep } from "../shared/misc.ts";
 import type {
   BackgroundProcess,
   BackgroundSpawner,
@@ -24,11 +27,9 @@ import type {
   RunOptions,
   ShellRunResult,
 } from "../tools/command-backend.ts";
-import { firstLine } from "../lines.ts";
+import type { VmExec } from "./container.ts";
 import { VM_BG_DIR } from "./contract.ts";
 import { VM_ENV_SOURCE } from "./env-store.ts";
-import type { VmExec } from "./container.ts";
-import { sleep } from "../shared/misc.ts";
 import { shellQuote } from "./quote.ts";
 
 /** Bound for starting a background command (the tool must return promptly). */
@@ -114,17 +115,15 @@ export class VmBackgroundSpawner implements BackgroundSpawner {
       `mkdir -p ${shellQuote(BG_DIR)}`,
       `: > ${shellQuote(log)}`,
       `cd ${shellQuote(input.cwd)} && ` +
-      // `$!` is the setsid child's pid; setsid makes it the group leader, so
-      // `kill -<pid>` reaches the whole tree. The saved variables are sourced
-      // inside the same login shell the foreground runner uses, before the
-      // per-call ones, so both paths hand a command the same environment.
-      `setsid bash -lc ${
-        shellQuote(
+        // `$!` is the setsid child's pid; setsid makes it the group leader, so
+        // `kill -<pid>` reaches the whole tree. The saved variables are sourced
+        // inside the same login shell the foreground runner uses, before the
+        // per-call ones, so both paths hand a command the same environment.
+        `setsid bash -lc ${shellQuote(
           `${VM_ENV_SOURCE}${envPrefix(input.env)}${input.command}`,
-        )
-      } ` +
-      `>> ${shellQuote(log)} 2>&1 & ` +
-      `printf '%s' "$!" > ${shellQuote(pidFile)}`,
+        )} ` +
+        `>> ${shellQuote(log)} 2>&1 & ` +
+        `printf '%s' "$!" > ${shellQuote(pidFile)}`,
       `cat ${shellQuote(pidFile)}`,
     ].join("\n");
     const result = await this.#exec(["sh", "-c", script], {
@@ -141,9 +140,9 @@ export class VmBackgroundSpawner implements BackgroundSpawner {
     const pid = Number(result.stdout.trim());
     if (!Number.isInteger(pid) || pid <= 0) {
       throw new Error(
-        `Could not start the background command (it reported no process id: ${
-          firstLine(result.stdout)
-        })`,
+        `Could not start the background command (it reported no process id: ${firstLine(
+          result.stdout,
+        )})`,
       );
     }
 
@@ -155,7 +154,7 @@ export class VmBackgroundSpawner implements BackgroundSpawner {
           "sh",
           "-c",
           'pid=$(cat "$1" 2>/dev/null); ' +
-          '[ -n "$pid" ] && kill -0 "$pid" 2>/dev/null && echo alive || echo gone',
+            '[ -n "$pid" ] && kill -0 "$pid" 2>/dev/null && echo alive || echo gone',
           "sh",
           pidFile,
         ],
@@ -178,7 +177,7 @@ export class VmBackgroundSpawner implements BackgroundSpawner {
             "sh",
             "-c",
             `kill -TERM -${pid} 2>/dev/null || true; ` +
-            `sleep 0.2; kill -KILL -${pid} 2>/dev/null || true`,
+              `sleep 0.2; kill -KILL -${pid} 2>/dev/null || true`,
           ],
           { timeoutMs: 15_000, maxOutput: 4096 },
         ).catch(() => undefined);
@@ -252,7 +251,7 @@ export class VmBackgroundSpawner implements BackgroundSpawner {
 function envPrefix(env: Record<string, string> | undefined): string {
   const entries = Object.entries(env ?? {});
   if (entries.length === 0) return "";
-  return `env ${
-    entries.map(([name, value]) => `${name}=${shellQuote(value)}`).join(" ")
-  } `;
+  return `env ${entries
+    .map(([name, value]) => `${name}=${shellQuote(value)}`)
+    .join(" ")} `;
 }

@@ -1,10 +1,10 @@
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { LumiscaDb } from "../db/mod.ts";
+import { formatLocalDateTime } from "../shared/misc.ts";
+import { ROUTINES_PER_AGENT_MAX } from "../shared/routine.ts";
 import { createRoutineRepo, type RoutineRepo } from "./repo.ts";
 import { createRoutineScheduler, type RoutineRunner } from "./scheduler.ts";
 import { createRoutineTools } from "./tools.ts";
-import { ROUTINES_PER_AGENT_MAX } from "../shared/routine.ts";
-import { formatLocalDateTime } from "../shared/misc.ts";
 
 /**
  * Routines at the repository / scheduler / tool level.
@@ -22,14 +22,18 @@ function repo(): { repo: RoutineRepo; close: () => void } {
   const db = LumiscaDb.openInMemory();
   // The routines table references stella_agents: the agent rows must exist
   // before a routine can be created.
-  db.db.prepare(
-    "INSERT INTO stella_agents (id, name, role, created_at, updated_at) " +
-      "VALUES (?, ?, ?, ?, ?)",
-  ).run(AGENT, "Worker", "Works.", 1, 1);
-  db.db.prepare(
-    "INSERT INTO stella_agents (id, name, role, created_at, updated_at) " +
-      "VALUES (?, ?, ?, ?, ?)",
-  ).run(OTHER, "Other", "Also works.", 1, 1);
+  db.db
+    .prepare(
+      "INSERT INTO stella_agents (id, name, role, created_at, updated_at) " +
+        "VALUES (?, ?, ?, ?, ?)",
+    )
+    .run(AGENT, "Worker", "Works.", 1, 1);
+  db.db
+    .prepare(
+      "INSERT INTO stella_agents (id, name, role, created_at, updated_at) " +
+        "VALUES (?, ?, ?, ?, ?)",
+    )
+    .run(OTHER, "Other", "Also works.", 1, 1);
   return { repo: createRoutineRepo(db), close: () => db.close() };
 }
 
@@ -75,8 +79,10 @@ function runner(
     check: () => {
       checks.push("checked");
       return Promise.resolve(
-        options.check ??
-          { kind: "same", state: { kind: "file", mtimeMs: 1, hash: null } },
+        options.check ?? {
+          kind: "same",
+          state: { kind: "file", mtimeMs: 1, hash: null },
+        },
       );
     },
   };
@@ -170,7 +176,10 @@ Deno.test("routine repo: due returns only enabled rows that are due", () => {
     routines.update(early.id, { nextRunAt: now - 1_000 });
     routines.update(late.id, { nextRunAt: now + 60_000 });
     const due = routines.due(now);
-    assertEquals(due.map((routine) => routine.name), ["Early"]);
+    assertEquals(
+      due.map((routine) => routine.name),
+      ["Early"],
+    );
 
     // A disabled routine is not due even with a stale next run.
     routines.update(early.id, { enabled: false, nextRunAt: null });
@@ -522,16 +531,16 @@ Deno.test("routine tools: create, list, update, delete and run", async () => {
       prompt: "check the deploy",
       schedule: { kind: "daily", time: "08:30" },
     } as never);
-    const createdText = created.content.map((block) =>
-      block.type === "text" ? block.text : ""
-    ).join("");
+    const createdText = created.content
+      .map((block) => (block.type === "text" ? block.text : ""))
+      .join("");
     assertEquals(createdText.includes("Morning"), true);
     assertEquals(createdText.includes("daily at 08:30"), true);
 
     const listed = await byName.get("routine_list")!.execute("c2", {} as never);
-    const listText = listed.content.map((block) =>
-      block.type === "text" ? block.text : ""
-    ).join("");
+    const listText = listed.content
+      .map((block) => (block.type === "text" ? block.text : ""))
+      .join("");
     assertEquals(listText.includes("Morning"), true);
 
     const id = routines.listOf(AGENT)[0]!.id;
@@ -539,9 +548,9 @@ Deno.test("routine tools: create, list, update, delete and run", async () => {
       id,
       enabled: 0,
     } as never);
-    const updatedText = updated.content.map((block) =>
-      block.type === "text" ? block.text : ""
-    ).join("");
+    const updatedText = updated.content
+      .map((block) => (block.type === "text" ? block.text : ""))
+      .join("");
     assertEquals(updatedText.includes("disabled"), true);
     assertEquals(routines.get(id)?.enabled, false);
 
@@ -590,9 +599,9 @@ Deno.test("routine tools: a one-off in the past is refused", async () => {
       prompt: "p",
       schedule: { kind: "once", at: future },
     } as never);
-    const text = created.content.map((block) =>
-      block.type === "text" ? block.text : ""
-    ).join("");
+    const text = created.content
+      .map((block) => (block.type === "text" ? block.text : ""))
+      .join("");
     assertEquals(text.includes(`once at ${future}`), true);
     // The model is told the routine will not stay in the list.
     assertEquals(text.includes("removed from the list"), true);
@@ -633,9 +642,9 @@ Deno.test("routine tools: another agent's routine is refused", async () => {
     // The list of the other agent does not show it either.
     const listTool = mine.find((tool) => tool.name === "routine_list")!;
     const listed = await listTool.execute("c2", {} as never);
-    const text = listed.content.map((block) =>
-      block.type === "text" ? block.text : ""
-    ).join("");
+    const text = listed.content
+      .map((block) => (block.type === "text" ? block.text : ""))
+      .join("");
     assertEquals(text.includes("Mine"), true);
   } finally {
     close();
@@ -682,9 +691,7 @@ Deno.test("routine tools: the per-agent limit is enforced", async () => {
  * can stop it) would keep the scheduler's promise pending past close() —
  * close() does not interrupt a run, so the test would never finish. */
 function promptRunner(
-  options: {
-    check?: Awaited<ReturnType<RoutineRunner["check"]>>;
-  } = {},
+  options: { check?: Awaited<ReturnType<RoutineRunner["check"]>> } = {},
 ): RoutineRunner & { started: string[]; checks: string[] } {
   const started: string[] = [];
   const checks: string[] = [];
@@ -700,8 +707,10 @@ function promptRunner(
     check: () => {
       checks.push("checked");
       return Promise.resolve(
-        options.check ??
-          { kind: "same", state: { kind: "file", mtimeMs: 1, hash: null } },
+        options.check ?? {
+          kind: "same",
+          state: { kind: "file", mtimeMs: 1, hash: null },
+        },
       );
     },
   };

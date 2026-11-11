@@ -105,7 +105,10 @@ function defaultSpillPath(files: FileBackend): string {
   return `${root}/.lumisca-tool-output`;
 }
 
-export function truncate(text: string, max = MAX_TOOL_OUTPUT): {
+export function truncate(
+  text: string,
+  max = MAX_TOOL_OUTPUT,
+): {
   text: string;
   truncated: boolean;
 } {
@@ -124,7 +127,10 @@ export function truncatedHeadNote(kind: string, max: number): string {
  * tail): for a listing, a description or a snapshot the beginning is what
  * carries the meaning, so the cut removes the end. Callers append
  * {@link truncatedHeadNote} when `truncated` is true. */
-export function truncateHead(text: string, max: number): {
+export function truncateHead(
+  text: string,
+  max: number,
+): {
   text: string;
   truncated: boolean;
 } {

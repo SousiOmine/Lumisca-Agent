@@ -12,9 +12,10 @@
  * without the marker therefore arrives as a record the browser cannot
  * terminate, and the message is dropped without an error anyone sees.
  */
-import type { VapidKeys } from "./vapid.ts";
-import { toBase64Url } from "../shared/push.ts";
+
 import type { PushSubscriptionRecord } from "../shared/push.ts";
+import { toBase64Url } from "../shared/push.ts";
+import type { VapidKeys } from "./vapid.ts";
 import { subscriptionAuthSecret, subscriptionPublicKey } from "./vapid.ts";
 
 /** Record size of the body (RFC 8188 `rs`). The browser allocates its buffer
@@ -131,9 +132,7 @@ export async function encryptPushPayload(
     contentKey,
     "AES-GCM",
     false,
-    [
-      "encrypt",
-    ],
+    ["encrypt"],
   );
   const ciphertext = new Uint8Array(
     await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, key, record),
@@ -190,11 +189,13 @@ export async function buildVapidAuth(
     new TextEncoder().encode(JSON.stringify({ typ: "JWT", alg: "ES256" })),
   );
   const claims = toBase64Url(
-    new TextEncoder().encode(JSON.stringify({
-      aud: origin,
-      exp: Math.floor(now / 1000) + VAPID_TOKEN_LIFETIME_SECONDS,
-      sub: keys.subject,
-    })),
+    new TextEncoder().encode(
+      JSON.stringify({
+        aud: origin,
+        exp: Math.floor(now / 1000) + VAPID_TOKEN_LIFETIME_SECONDS,
+        sub: keys.subject,
+      }),
+    ),
   );
   const signature = await crypto.subtle.sign(
     { name: "ECDSA", hash: "SHA-256" },
@@ -202,9 +203,9 @@ export async function buildVapidAuth(
     new TextEncoder().encode(`${header}.${claims}`),
   );
   // WebCrypto already answers JWS's raw r||s form, which is what ES256 is.
-  return `vapid t=${header}.${claims}.${
-    toBase64Url(new Uint8Array(signature))
-  }, k=${keys.publicKey}`;
+  return `vapid t=${header}.${claims}.${toBase64Url(
+    new Uint8Array(signature),
+  )}, k=${keys.publicKey}`;
 }
 
 /** Send one message to one subscription. Failures are classified, never
@@ -228,11 +229,11 @@ export async function sendPush(
     const response = await fetchImpl(subscription.endpoint, {
       method: "POST",
       headers: {
-        "authorization": authorization,
+        authorization: authorization,
         "content-encoding": "aes128gcm",
         "content-type": "application/octet-stream",
-        "ttl": String(PUSH_TTL_SECONDS),
-        "urgency": options.urgency ?? "normal",
+        ttl: String(PUSH_TTL_SECONDS),
+        urgency: options.urgency ?? "normal",
       },
       body,
       signal: controller.signal,
@@ -310,9 +311,7 @@ export async function decryptPushPayload(
     contentKey,
     "AES-GCM",
     false,
-    [
-      "decrypt",
-    ],
+    ["decrypt"],
   );
   const record = new Uint8Array(
     await crypto.subtle.decrypt(

@@ -38,10 +38,7 @@ Deno.test("an entry a desktop hides is not offered", () => {
   // machine cannot see either.
   const hidden = CHROMIUM.replace("Type=Application", "NoDisplay=true");
   assertEquals(applicationFromDesktopFile("x.desktop", hidden), undefined);
-  const reallyHidden = CHROMIUM.replace(
-    "Type=Application",
-    "Hidden=true",
-  );
+  const reallyHidden = CHROMIUM.replace("Type=Application", "Hidden=true");
   assertEquals(
     applicationFromDesktopFile("x.desktop", reallyHidden),
     undefined,
@@ -98,8 +95,5 @@ Deno.test("the list reads the way a menu does, and says what it found", () => {
   assertEquals(text.includes("3 program(s)"), true, text);
   assertEquals(text.includes("`a`"), true, text);
   // An empty machine says so rather than returning a bare "0 program(s)".
-  assertEquals(
-    describeApplications([]).includes("No programs"),
-    true,
-  );
+  assertEquals(describeApplications([]).includes("No programs"), true);
 });

@@ -1,6 +1,7 @@
-import { assertEquals, assertRejects } from "@std/assert";
 import { join } from "node:path";
 import { withTempDir } from "@lumisca/core/test-utils";
+import { assertEquals, assertRejects } from "@std/assert";
+import { PORT_WAIT_ENV_KEY } from "../startup.ts";
 import {
   applyStagedUpdate,
   cleanupStaleFiles,
@@ -15,7 +16,6 @@ import {
   stagingDir,
 } from "./stage.ts";
 import { buildTarGz, buildZip } from "./test-utils.ts";
-import { PORT_WAIT_ENV_KEY } from "../startup.ts";
 
 const BINARY = "lumisca-server.exe";
 const NEXT = "0.7.8";
@@ -38,9 +38,8 @@ async function newPackage(
     name: `${prefix}/${file.name}`,
     content: file.content,
   }));
-  const archive = format === "zip"
-    ? await buildZip(entries)
-    : await buildTarGz(entries);
+  const archive =
+    format === "zip" ? await buildZip(entries) : await buildTarGz(entries);
   const archivePath = join(
     stagingDir(installDir),
     format === "zip" ? "update.zip" : "update.tar.gz",
@@ -205,7 +204,10 @@ Deno.test("applyStagedUpdate installs the stella container directory as one entr
       ),
       "left over",
     );
-    assertEquals(list(installDir).filter((name) => name.endsWith(".new")), []);
+    assertEquals(
+      list(installDir).filter((name) => name.endsWith(".new")),
+      [],
+    );
   });
 });
 
@@ -351,8 +353,8 @@ Deno.test("applyStagedUpdate rolls a container directory back as one entry", asy
       "old-containerfile",
     );
     assertEquals(
-      [...Deno.readDirSync(join(installDir, "stella-container"))].map((e) =>
-        e.name
+      [...Deno.readDirSync(join(installDir, "stella-container"))].map(
+        (e) => e.name,
       ),
       ["Containerfile"],
     );

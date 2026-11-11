@@ -1,5 +1,5 @@
-import { join } from "node:path";
 import { realpathSync } from "node:fs";
+import { join } from "node:path";
 import { assert, assertEquals } from "@std/assert";
 import { findRepoRoot, loadProjectMemoryFiles } from "./agents-md.ts";
 
@@ -58,11 +58,10 @@ Deno.test("loadProjectMemoryFiles collects the chain root-first", async () => {
       "DEEP_MEMORY",
     );
     const files = loadProjectMemoryFiles([join(root, "sub", "deep")]);
-    assertEquals(files.map((f) => f.content), [
-      "ROOT_MEMORY",
-      "SUB_MEMORY",
-      "DEEP_MEMORY",
-    ]);
+    assertEquals(
+      files.map((f) => f.content),
+      ["ROOT_MEMORY", "SUB_MEMORY", "DEEP_MEMORY"],
+    );
   } finally {
     await Deno.remove(root, { recursive: true });
   }
@@ -93,7 +92,10 @@ Deno.test("loadProjectMemoryFiles reaches the repo root above the folder", async
     await Deno.writeTextFile(join(root, "AGENTS.md"), "REPO_ROOT");
     await Deno.writeTextFile(join(root, "sub", "AGENTS.md"), "SUBDIR");
     const files = loadProjectMemoryFiles([join(root, "sub")]);
-    assertEquals(files.map((f) => f.content), ["REPO_ROOT", "SUBDIR"]);
+    assertEquals(
+      files.map((f) => f.content),
+      ["REPO_ROOT", "SUBDIR"],
+    );
   } finally {
     await Deno.remove(root, { recursive: true });
   }

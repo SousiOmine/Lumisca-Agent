@@ -24,16 +24,15 @@
 
 /** Content type per raster extension: the formats a vision model can read
  * and a browser renders as an `<img>` without deciding a script policy. */
-export const RASTER_IMAGE_MIME_BY_EXTENSION: Readonly<
-  Record<string, string>
-> = {
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".bmp": "image/bmp",
-};
+export const RASTER_IMAGE_MIME_BY_EXTENSION: Readonly<Record<string, string>> =
+  {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".bmp": "image/bmp",
+  };
 
 /** The extension a raster image of this content type is stored with, or
  * undefined when the type is not one of the raster formats. The inverse of
@@ -44,9 +43,9 @@ export function rasterExtensionOfMimeType(
   mimeType: string,
 ): string | undefined {
   const wanted = mimeType.trim().toLowerCase();
-  for (
-    const [extension, type] of Object.entries(RASTER_IMAGE_MIME_BY_EXTENSION)
-  ) {
+  for (const [extension, type] of Object.entries(
+    RASTER_IMAGE_MIME_BY_EXTENSION,
+  )) {
     if (type === wanted) return extension;
   }
   return undefined;

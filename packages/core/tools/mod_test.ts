@@ -1,12 +1,5 @@
 import { assert, assertEquals } from "@std/assert";
 import type { Workspace } from "../domain/workspace.ts";
-import { CARD_HELP } from "../shared/ui-markup/help.ts";
-import {
-  buildChatSystemPrompt,
-  buildStellaSystemPrompt,
-  buildSystemPrompt,
-  sessionSkills,
-} from "./mod.ts";
 import {
   TOOL_ASK,
   TOOL_ASYNC_BASH,
@@ -19,6 +12,14 @@ import {
   TOOL_TODO,
   TOOL_WRITE,
 } from "../shared/tool-names.ts";
+import { CARD_HELP } from "../shared/ui-markup/help.ts";
+import {
+  buildChatSystemPrompt,
+  buildStellaSystemPrompt,
+  buildSystemPrompt,
+  sessionSkills,
+} from "./mod.ts";
+
 /** Every tool a coding session preloads (the set the prompt must not
  * name). */
 const CODING_TOOLS = [
@@ -52,13 +53,7 @@ Deno.test("sessionSkills advertises the web-browser skill only with a browser ba
     withBrowser.some((s) => s.name === "web-browser"),
     "web-browser must be advertised when the browser backend is attached",
   );
-  for (
-    const opts of [
-      undefined,
-      {},
-      { browserAvailable: false },
-    ]
-  ) {
+  for (const opts of [undefined, {}, { browserAvailable: false }]) {
     const without = sessionSkills([], opts as { browserAvailable?: boolean });
     assertEquals(
       without.some((s) => s.name === "web-browser"),
@@ -74,14 +69,12 @@ Deno.test("sessionSkills advertises the computer-use skill only when the machine
     withComputer.some((s) => s.name === "computer-use"),
     "computer-use must be advertised when the session may drive the machine",
   );
-  for (
-    const opts of [
-      undefined,
-      {},
-      { computerAvailable: false },
-      { browserAvailable: true },
-    ]
-  ) {
+  for (const opts of [
+    undefined,
+    {},
+    { computerAvailable: false },
+    { browserAvailable: true },
+  ]) {
     const without = sessionSkills(
       [],
       opts as { computerAvailable?: boolean; browserAvailable?: boolean },
@@ -140,13 +133,11 @@ Deno.test("every prompt whose reply a person reads teaches the card grammar", ()
   // sub-agent prompt rendered, so no main session was ever told how to write
   // a card: the screen drew plain lists where a Choice belonged, and nothing
   // failed. The three builders are the whole set of prompts a reader sees.
-  for (
-    const prompt of [
-      buildSystemPrompt(workspace),
-      buildChatSystemPrompt(),
-      buildStellaSystemPrompt(),
-    ]
-  ) {
+  for (const prompt of [
+    buildSystemPrompt(workspace),
+    buildChatSystemPrompt(),
+    buildStellaSystemPrompt(),
+  ]) {
     assert(prompt.includes(CARD_HELP), prompt.slice(0, 200));
     // The fence is what makes a block a card; a prompt that named the tags
     // but not the fence would still produce plain markdown.

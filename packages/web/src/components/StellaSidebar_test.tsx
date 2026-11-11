@@ -33,11 +33,13 @@ const AT = new Date(2026, 8, 15, 12, 0, 0).getTime();
 /** Render the list. `loading` is the optional prop the App passes while the
  * first read of the agents is in flight. */
 function render(
-  agents: StellaAgentSummary[] = [agent("a1", {
-    kind: "text",
-    text: "3件の不具合を直しました。",
-    at: AT,
-  })],
+  agents: StellaAgentSummary[] = [
+    agent("a1", {
+      kind: "text",
+      text: "3件の不具合を直しました。",
+      at: AT,
+    }),
+  ],
   running = false,
   loading?: boolean,
 ): string {
@@ -191,20 +193,15 @@ Deno.test("StellaSidebar: the create dialog asks for the job, and names it later
     "してほしい",
   );
   // A name can be decided later, and the field says so.
-  assertStringIncludes(
-    translate("ja", "chat.stella.agents.nameHint"),
-    "自動",
-  );
+  assertStringIncludes(translate("ja", "chat.stella.agents.nameHint"), "自動");
   // The examples are sentences the user can edit in the same field — not
   // labels hiding a prompt. Each names a job on its own.
-  for (
-    const key of [
-      "chat.stella.agents.preset.secretaryText",
-      "chat.stella.agents.preset.bookkeepingText",
-      "chat.stella.agents.preset.researchText",
-      "chat.stella.agents.preset.travelText",
-    ] as const
-  ) {
+  for (const key of [
+    "chat.stella.agents.preset.secretaryText",
+    "chat.stella.agents.preset.bookkeepingText",
+    "chat.stella.agents.preset.researchText",
+    "chat.stella.agents.preset.travelText",
+  ] as const) {
     assert(translate("ja", key).length > 20, key);
   }
 });

@@ -24,9 +24,10 @@ export const SKILL_AUTHORING_NAME = "skill-authoring";
 /** Build the built-in skill-authoring guide. `stella` selects the wording
  * for the machine (the session's files are inside the VM, so the shared
  * folder is the machine's, not the host's). */
-export function skillAuthoringSkill(
-  options: { sharedDir?: string; stella: boolean },
-): SkillDef {
+export function skillAuthoringSkill(options: {
+  sharedDir?: string;
+  stella: boolean;
+}): SkillDef {
   return {
     name: SKILL_AUTHORING_NAME,
     description:
@@ -59,25 +60,27 @@ function body(options: { sharedDir?: string; stella: boolean }): string {
     ? "Only you read this one: it is your own skill, on your machine."
     : "This one belongs to the project: every session that opens this " +
       "workspace sees it, and it is versioned with the repository.";
-  const shared = options.sharedDir === undefined
-    ? "this installation has none, so every skill you write belongs to the " +
-      "session or the project that needs it."
-    : `\`${options.sharedDir}\`. Every agent ` +
-      `${options.stella ? "on this machine" : "of this mode"} reads it, so ` +
-      "put a skill there when it is not about one project. Address it by " +
-      `absolute path: it is not inside ${
-        options.stella ? "your working folder" : "the workspace"
-      }, and a relative path cannot name it.`;
-  const sharedScope = options.sharedDir === undefined
-    ? ""
-    : options.stella
-    ? "A skill there is read by every conversation on this machine. The " +
-      "host's own `~/.agents/skills` is separate and read-only to you; do " +
-      "not try to write there."
-    : "A skill there is read by every session of this mode (a stella " +
-      "conversation has its own machine and its own shared folder, so it " +
-      "does not see this one). The user's own `~/.agents/skills` is " +
-      "separate and read-only to you; do not try to write there.";
+  const shared =
+    options.sharedDir === undefined
+      ? "this installation has none, so every skill you write belongs to the " +
+        "session or the project that needs it."
+      : `\`${options.sharedDir}\`. Every agent ` +
+        `${options.stella ? "on this machine" : "of this mode"} reads it, so ` +
+        "put a skill there when it is not about one project. Address it by " +
+        `absolute path: it is not inside ${
+          options.stella ? "your working folder" : "the workspace"
+        }, and a relative path cannot name it.`;
+  const sharedScope =
+    options.sharedDir === undefined
+      ? ""
+      : options.stella
+        ? "A skill there is read by every conversation on this machine. The " +
+          "host's own `~/.agents/skills` is separate and read-only to you; do " +
+          "not try to write there."
+        : "A skill there is read by every session of this mode (a stella " +
+          "conversation has its own machine and its own shared folder, so it " +
+          "does not see this one). The user's own `~/.agents/skills` is " +
+          "separate and read-only to you; do not try to write there.";
 
   return `# Authoring skills
 

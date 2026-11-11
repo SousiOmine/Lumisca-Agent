@@ -109,10 +109,7 @@ export function resolveLocale(
  * `undefined` render as the empty string: interpolated values often come
  * from optional fields (the version of a pending update, an error that may
  * not have arrived), and a sentence with a gap beats "null" in the UI. */
-export type MessageParams = Record<
-  string,
-  string | number | null | undefined
->;
+export type MessageParams = Record<string, string | number | null | undefined>;
 
 /** The BCP-47 tag used for `Intl` formatting (dates, numbers, relative
  * times) in a locale. Pinned per language instead of left to the runtime:
@@ -157,5 +154,5 @@ export function createTranslator(locale: Locale): Translator {
   return (key, params) => translate(locale, key, params);
 }
 
-export { type MessageKey, messages };
 export type { LocalizedText } from "./types.ts";
+export { type MessageKey, messages };

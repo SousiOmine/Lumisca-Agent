@@ -78,23 +78,29 @@ export async function checkRoutine(
         "The machine for this agent is not running, so its checks cannot run",
     };
   }
-  const previous = routine.watchState === undefined
-    ? undefined
-    : parseWatchState(routine.watchState);
+  const previous =
+    routine.watchState === undefined
+      ? undefined
+      : parseWatchState(routine.watchState);
   const outcome = await runWatch(source, previous, {
-    ...(machine === undefined ? {} : {
-      machine: { runner: machine.runner, workdir: machine.workdir },
-    }),
-    ...(deps.callTool === undefined ? {} : { callTool: deps.callTool }),
-    ...(source.kind === "mcp" || machine === undefined ? {} : {
-      fetch: deps.fetch ??
-        machineWatchFetch({
-          runner: machine.runner,
-          files: machine.files,
-          workdir: machine.workdir,
-          ...(deps.signal === undefined ? {} : { signal: deps.signal }),
+    ...(machine === undefined
+      ? {}
+      : {
+          machine: { runner: machine.runner, workdir: machine.workdir },
         }),
-    }),
+    ...(deps.callTool === undefined ? {} : { callTool: deps.callTool }),
+    ...(source.kind === "mcp" || machine === undefined
+      ? {}
+      : {
+          fetch:
+            deps.fetch ??
+            machineWatchFetch({
+              runner: machine.runner,
+              files: machine.files,
+              workdir: machine.workdir,
+              ...(deps.signal === undefined ? {} : { signal: deps.signal }),
+            }),
+        }),
     ...(deps.signal === undefined ? {} : { signal: deps.signal }),
   });
   if (outcome.state === null) {

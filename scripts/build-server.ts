@@ -27,13 +27,13 @@
  */
 import "../packages/core/runtime/deno.ts";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { buildAssetsManifest } from "../packages/server/assets.ts";
+import { findCanvasIcuDataFile } from "../packages/core/pdf/icu-data.ts";
 import { VM_CONTAINER_DIR_NAME } from "../packages/core/vm/contract.ts";
+import { buildAssetsManifest } from "../packages/server/assets.ts";
 import {
   ASSETS_FILE_NAME,
   ICU_DATA_FILE_NAME,
 } from "../packages/server/layout.ts";
-import { findCanvasIcuDataFile } from "../packages/core/pdf/icu-data.ts";
 import { binaryName, repoRoot, reportUsage } from "./lib.ts";
 
 /**
@@ -87,11 +87,12 @@ function parseArgs(args: readonly string[]): Options {
   }
   // A relative --out resolves against the caller's working directory (the
   // desktop build passes `src-tauri/resources/server` from packages/desktop).
-  const outDir = out === undefined
-    ? defaultOutDir()
-    : isAbsolute(out)
-    ? out
-    : resolve(Deno.cwd(), out);
+  const outDir =
+    out === undefined
+      ? defaultOutDir()
+      : isAbsolute(out)
+        ? out
+        : resolve(Deno.cwd(), out);
   return { outDir, compile };
 }
 

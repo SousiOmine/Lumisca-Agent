@@ -1,5 +1,5 @@
-import { assertEquals } from "@std/assert";
 import { WS_HEARTBEAT_TYPE } from "@lumisca/core/shared";
+import { assertEquals } from "@std/assert";
 import { openEventStream } from "./event-stream.ts";
 
 /**

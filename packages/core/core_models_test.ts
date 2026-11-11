@@ -8,18 +8,16 @@ import {
   type StreamRequest,
 } from "@lumisca/core";
 import { assertEquals, assertRejects } from "@std/assert";
+import { bytesToBase64 } from "./base64.ts";
 import { CoreError, LumiscaCore } from "./mod.ts";
-
 import {
+  DEFAULT_MODEL_KEY,
   FAST_MODEL_KEY,
   IMAGE_MODEL_KEY,
   LANGUAGE_KEY,
   serializeModelPreference,
 } from "./shared/mod.ts";
-
-import { bytesToBase64 } from "./base64.ts";
-import { makeWorkspace, MINI_PNG, promptSession, setup } from "./test-utils.ts";
-import { DEFAULT_MODEL_KEY } from "./shared/mod.ts";
+import { MINI_PNG, makeWorkspace, promptSession, setup } from "./test-utils.ts";
 
 /** First-block text of every transcript message (test messages are
  * text-only). Narrowed explicitly: AgentMessage also includes custom
@@ -41,20 +39,20 @@ function makeImageAnalysisResponses(
 ) {
   return script.map(
     (step) =>
-    (
-      StreamRequest: StreamRequest,
-      _options: unknown,
-      _state: unknown,
-      model: { id: string },
-    ) => {
-      const call: CapturedCall = {
-        model: model.id,
-        systemPrompt: StreamRequest.systemPrompt,
-        messages: StreamRequest.messages as CapturedCall["messages"],
-      };
-      captured.push(call);
-      return step(call);
-    },
+      (
+        StreamRequest: StreamRequest,
+        _options: unknown,
+        _state: unknown,
+        model: { id: string },
+      ) => {
+        const call: CapturedCall = {
+          model: model.id,
+          systemPrompt: StreamRequest.systemPrompt,
+          messages: StreamRequest.messages as CapturedCall["messages"],
+        };
+        captured.push(call);
+        return step(call);
+      },
   );
 }
 
@@ -279,16 +277,20 @@ Deno.test("text-only model: user images are analyzed and passed as text", async 
   });
 
   const captured: CapturedCall[] = [];
-  faux.setResponses(makeImageAnalysisResponses(captured, [
-    () => fauxAssistantMessage("analysis text"),
-    () => fauxAssistantMessage("done"),
-  ]));
+  faux.setResponses(
+    makeImageAnalysisResponses(captured, [
+      () => fauxAssistantMessage("analysis text"),
+      () => fauxAssistantMessage("done"),
+    ]),
+  );
 
-  await promptSession(core, session.id, "what is this?", [{
-    type: "image",
-    data: bytesToBase64(MINI_PNG),
-    mimeType: "image/png",
-  }]);
+  await promptSession(core, session.id, "what is this?", [
+    {
+      type: "image",
+      data: bytesToBase64(MINI_PNG),
+      mimeType: "image/png",
+    },
+  ]);
 
   assertEquals(captured.length, 2);
   // The analysis call went to the vision model with the image attached.
@@ -304,10 +306,14 @@ Deno.test("text-only model: user images are analyzed and passed as text", async 
   // provider as user-role messages of their own (see toLlmMessages), so
   // the actual prompt is the newest user message of the request.
   assertEquals(captured[1]!.model, "text-only");
-  const mainUser = captured[1]!.messages.filter((m) => m.role === "user")
+  const mainUser = captured[1]!.messages
+    .filter((m) => m.role === "user")
     .at(-1)!;
   const mainContent = mainUser.content;
-  assertEquals(mainContent.some((b) => b.type === "image"), false);
+  assertEquals(
+    mainContent.some((b) => b.type === "image"),
+    false,
+  );
   assertEquals(
     mainContent.some(
       (b) => b.type === "text" && b.text?.includes("analysis text"),
@@ -315,12 +321,15 @@ Deno.test("text-only model: user images are analyzed and passed as text", async 
     true,
   );
   // The transcript (what the UI shows and the DB stores) keeps the image.
-  const userMessage = core.getAgent(session.id)!.messages.find((m) =>
-    m.role === "user"
-  )!;
+  const userMessage = core
+    .getAgent(session.id)!
+    .messages.find((m) => m.role === "user")!;
   const userContent = (userMessage as { content: Array<{ type: string }> })
     .content;
-  assertEquals(userContent.some((b) => b.type === "image"), true);
+  assertEquals(
+    userContent.some((b) => b.type === "image"),
+    true,
+  );
   core.close();
 });
 
@@ -336,17 +345,19 @@ Deno.test("text-only model: read tool images are analyzed and passed as text", a
   });
 
   const captured: CapturedCall[] = [];
-  faux.setResponses(makeImageAnalysisResponses(captured, [
-    // Turn 1: the main model asks to read the image file.
-    () =>
-      fauxAssistantMessage([
-        fauxText("Reading the image."),
-        fauxToolCall("read", { path: join(root, "pic.png") }),
-      ]),
-    // Turn 2: the analysis model interprets the tool result image.
-    () => fauxAssistantMessage("tool result described"),
-    () => fauxAssistantMessage("done"),
-  ]));
+  faux.setResponses(
+    makeImageAnalysisResponses(captured, [
+      // Turn 1: the main model asks to read the image file.
+      () =>
+        fauxAssistantMessage([
+          fauxText("Reading the image."),
+          fauxToolCall("read", { path: join(root, "pic.png") }),
+        ]),
+      // Turn 2: the analysis model interprets the tool result image.
+      () => fauxAssistantMessage("tool result described"),
+      () => fauxAssistantMessage("done"),
+    ]),
+  );
 
   await promptSession(core, session.id, "read pic.png");
 
@@ -363,7 +374,10 @@ Deno.test("text-only model: read tool images are analyzed and passed as text", a
   // The text-only main model saw the analysis text, not the image.
   const toolResult = captured[2]!.messages.find((m) => m.role === "toolResult");
   assertEquals(toolResult !== undefined, true);
-  assertEquals(toolResult!.content.some((b) => b.type === "image"), false);
+  assertEquals(
+    toolResult!.content.some((b) => b.type === "image"),
+    false,
+  );
   assertEquals(
     toolResult!.content.some(
       (b) => b.type === "text" && b.text?.includes("tool result described"),
@@ -394,11 +408,13 @@ Deno.test("fast model: first prompt auto-generates the session title", async () 
   assertEquals(session.name.startsWith("セッション "), true); // provisional
 
   const captured: CapturedCall[] = [];
-  faux.setResponses(makeImageAnalysisResponses(captured, [
-    // The title call (fast model) fires concurrently with the run.
-    () => fauxAssistantMessage('"Fix login bug"'),
-    () => fauxAssistantMessage("Hello!"),
-  ]));
+  faux.setResponses(
+    makeImageAnalysisResponses(captured, [
+      // The title call (fast model) fires concurrently with the run.
+      () => fauxAssistantMessage('"Fix login bug"'),
+      () => fauxAssistantMessage("Hello!"),
+    ]),
+  );
 
   await promptSession(core, session.id, "Please fix the login bug");
 

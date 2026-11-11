@@ -22,8 +22,7 @@
  * (see tools/system-prompt.ts); the cards the agent writes are in the user's
  * language, which the language context supplies.
  */
-export const STELLA_ONBOARDING_PROMPT =
-  `This turn was started by the app, not by the user, and none of this text is
+export const STELLA_ONBOARDING_PROMPT = `This turn was started by the app, not by the user, and none of this text is
 shown to them.
 
 The role in your system prompt is what they asked you to do. Your job in this

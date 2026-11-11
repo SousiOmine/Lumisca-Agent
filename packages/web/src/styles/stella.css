@@ -69,7 +69,8 @@
   box-shadow: var(--shadow-panel);
   color: var(--text);
   cursor: pointer;
-  transition: border-color var(--lum-dur-mid) var(--lum-ease-out),
+  transition:
+    border-color var(--lum-dur-mid) var(--lum-ease-out),
     transform var(--lum-dur-mid) var(--lum-ease-in-out);
 }
 
@@ -1025,7 +1026,8 @@
   box-shadow: 0 0 0 1px var(--accent-soft);
   /* The change of ownership: the border and the ring fade in rather than
    * switching, so the pane reads as "yours now" instead of as a repaint. */
-  transition: border-color var(--lum-dur-mid) var(--lum-ease-out),
+  transition:
+    border-color var(--lum-dur-mid) var(--lum-ease-out),
     box-shadow var(--lum-dur-mid) var(--lum-ease-out);
 }
 

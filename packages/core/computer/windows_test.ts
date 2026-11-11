@@ -1,4 +1,5 @@
 import { assert, assertEquals, assertThrows } from "@std/assert";
+import { concatBytes } from "../bytes.ts";
 import {
   buildKeyChordInputs,
   buildKeyInput,
@@ -13,7 +14,6 @@ import {
   pointerSizeFor,
   resolveKeyChord,
 } from "./windows.ts";
-import { concatBytes } from "../bytes.ts";
 
 /** The layout lookup a test stands in for VkKeyScanW: the virtual key of a
  * character is its upper-case ASCII code (VK for "s" is 0x53), which is
@@ -27,9 +27,8 @@ const asciiScan = (char: string): number | undefined => {
  * tests need to know whether this machine has a usable host before any test
  * runs. Creating it here also covers the "no display / no libraries" path
  * (the result is then a reason, and the live tests are skipped). */
-const probe = Deno.build.os === "windows"
-  ? createWindowsComputerHost()
-  : undefined;
+const probe =
+  Deno.build.os === "windows" ? createWindowsComputerHost() : undefined;
 const liveHost = probe?.available === true ? probe.host : undefined;
 if (probe?.available === true) probe.host.close();
 
@@ -165,10 +164,13 @@ Deno.test("resolveKeyChord resolves single characters through the layout", () =>
   );
   // "+" is the chord separator, so it is only expressible as a lone
   // character — which must not be split.
-  assertEquals(resolveKeyChord("+", () => 0xbb | (1 << 8)), {
-    vk: 0xbb,
-    modifiers: [0x10],
-  });
+  assertEquals(
+    resolveKeyChord("+", () => 0xbb | (1 << 8)),
+    {
+      vk: 0xbb,
+      modifiers: [0x10],
+    },
+  );
 });
 
 Deno.test("resolveKeyChord refuses chords it cannot honour", () => {
@@ -187,11 +189,7 @@ Deno.test("resolveKeyChord refuses chords it cannot honour", () => {
     Error,
     "more than one key",
   );
-  assertThrows(
-    () => resolveKeyChord("nope", asciiScan),
-    Error,
-    "unknown key",
-  );
+  assertThrows(() => resolveKeyChord("nope", asciiScan), Error, "unknown key");
   assertThrows(
     () => resolveKeyChord("あ", asciiScan),
     Error,
@@ -237,7 +235,10 @@ Deno.test("the Windows host describes itself and lists its displays", {
     }
     // Left to right, which is the order the indices promise.
     const xs = displays.map((display) => display.bounds.x);
-    assertEquals([...xs].sort((a, b) => a - b), xs);
+    assertEquals(
+      [...xs].sort((a, b) => a - b),
+      xs,
+    );
     assert(host.host.describe().includes("Windows"));
     host.host.close();
   } finally {

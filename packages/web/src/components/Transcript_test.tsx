@@ -1,31 +1,35 @@
+import { fauxToolCall } from "@lumisca/core";
 import { assert, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
-import { fauxToolCall } from "@lumisca/core";
 import type { AgentMessage, ToolCallBlock } from "../types.ts";
 import { Transcript } from "./Transcript.tsx";
 
 /** A transcript with no loaded history, so what these tests read is exactly
  * the live edge it draws. */
-function render(parts: {
-  streamingText?: string;
-  liveTools?: ToolCallBlock[];
-  runningTools?: Map<string, string>;
-} = {}): string {
-  return renderToString(createElement(Transcript, {
-    messages: [] as AgentMessage[],
-    onLoadOlder: () => false,
-    hasOlder: false,
-    loadingOlder: false,
-    streamingText: parts.streamingText ?? "",
-    liveTools: parts.liveTools ?? [],
-    runningTools: parts.runningTools ?? new Map(),
-    running: true,
-    visualBase: "/api/sessions/s/visual/",
-    attachBase: "/api/sessions/s/attachment/",
-    onRewind: () => Promise.resolve(),
-    onCardSend: () => {},
-  }));
+function render(
+  parts: {
+    streamingText?: string;
+    liveTools?: ToolCallBlock[];
+    runningTools?: Map<string, string>;
+  } = {},
+): string {
+  return renderToString(
+    createElement(Transcript, {
+      messages: [] as AgentMessage[],
+      onLoadOlder: () => false,
+      hasOlder: false,
+      loadingOlder: false,
+      streamingText: parts.streamingText ?? "",
+      liveTools: parts.liveTools ?? [],
+      runningTools: parts.runningTools ?? new Map(),
+      running: true,
+      visualBase: "/api/sessions/s/visual/",
+      attachBase: "/api/sessions/s/attachment/",
+      onRewind: () => Promise.resolve(),
+      onCardSend: () => {},
+    }),
+  );
 }
 
 Deno.test("Transcript: a call that is executing is drawn before its message", () => {

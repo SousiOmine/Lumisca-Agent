@@ -41,9 +41,8 @@ export const MAX_ATTACHMENTS_TOTAL_BYTES = 16 * 1024 * 1024;
  * wants anyway. SVG is deliberately absent: an SVG is a document that can
  * carry script, and serving one inline would mean deciding a script policy
  * for it. As a download it is just a file. */
-export const INLINE_IMAGE_MIME_BY_EXTENSION: Readonly<
-  Record<string, string>
-> = RASTER_IMAGE_MIME_BY_EXTENSION;
+export const INLINE_IMAGE_MIME_BY_EXTENSION: Readonly<Record<string, string>> =
+  RASTER_IMAGE_MIME_BY_EXTENSION;
 
 /** Whether a file with this extension is shown inline rather than offered
  * as a download. Accepts the extension with its dot, in any case. */
@@ -58,8 +57,11 @@ export function isInlineImageExtension(extension: string): boolean {
  * only the formats that are unambiguous are named. */
 export function attachmentMimeType(extension: string): string {
   const suffix = extension.toLowerCase();
-  return INLINE_IMAGE_MIME_BY_EXTENSION[suffix] ??
-    DOWNLOAD_MIME_BY_EXTENSION[suffix] ?? "application/octet-stream";
+  return (
+    INLINE_IMAGE_MIME_BY_EXTENSION[suffix] ??
+    DOWNLOAD_MIME_BY_EXTENSION[suffix] ??
+    "application/octet-stream"
+  );
 }
 
 /** Content types of the non-image formats worth naming. Everything else is
@@ -209,8 +211,9 @@ export function promptFileNotice(files: readonly PromptFileRef[]): string {
   return [
     "[Attached files]",
     "The user attached these files. They are inside the machine:",
-    ...files.map((file) =>
-      `- ${file.name}: ${file.path} (${formatAttachmentSize(file.size)})`
+    ...files.map(
+      (file) =>
+        `- ${file.name}: ${file.path} (${formatAttachmentSize(file.size)})`,
     ),
     "",
     images > 0

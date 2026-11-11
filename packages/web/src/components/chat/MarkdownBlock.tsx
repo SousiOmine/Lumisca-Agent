@@ -1,6 +1,6 @@
 import { memo, useMemo, useState } from "preact/compat";
-import { renderMarkdown } from "../../markdown.ts";
 import { useT } from "../../i18n.ts";
+import { renderMarkdown } from "../../markdown.ts";
 import { Lightbox } from "../Lightbox.tsx";
 
 /** Memoized markdown rendering: message text is static once a message is
@@ -8,9 +8,13 @@ import { Lightbox } from "../Lightbox.tsx";
  * `visualBase` (the session's asset base) is a plain string, so the memo
  * comparison stays cheap; a language switch re-renders in place — the block
  * subscribes to the language itself. */
-export const MarkdownBlock = memo(function MarkdownBlock(
-  { text, visualBase }: { text: string; visualBase: string },
-) {
+export const MarkdownBlock = memo(function MarkdownBlock({
+  text,
+  visualBase,
+}: {
+  text: string;
+  visualBase: string;
+}) {
   const t = useT();
   const [open, setOpen] = useState<string | null>(null);
   const html = useMemo(
@@ -33,10 +37,8 @@ export const MarkdownBlock = memo(function MarkdownBlock(
   return (
     <>
       <div onClick={onClick} dangerouslySetInnerHTML={{ __html: html }} />
-      {
-        /* Rendered even when closed: the overlay stays up while it shrinks
-          (see Lightbox). */
-      }
+      {/* Rendered even when closed: the overlay stays up while it shrinks
+          (see Lightbox). */}
       <Lightbox
         src={open === null ? null : openFullSize(open)}
         onClose={() => setOpen(null)}

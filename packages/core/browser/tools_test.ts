@@ -1,23 +1,6 @@
-import { noisyPng, removeDirRetry, toolText } from "../test-utils.ts";
 import { assert, assertEquals, assertMatch } from "@std/assert";
-import {
-  BROWSER_TOOL_NAMES,
-  createBrowserTools,
-  createBrowserToolsFrom,
-  formatSnapshot,
-} from "./tools.ts";
 import { base64ToBytes, bytesToBase64 } from "../base64.ts";
-import { createChatTools, createCodingTools } from "../tools/mod.ts";
-import { ToolRegistry } from "../tools/registry.ts";
 import type { Workspace } from "../domain/workspace.ts";
-import type {
-  ActionResult,
-  BrowserBackend,
-  ImageResult,
-  PageInfo,
-  PageSnapshot,
-  WaitResult,
-} from "./types.ts";
 import {
   TOOL_BROWSER_ACT,
   TOOL_BROWSER_CLOSE,
@@ -26,6 +9,23 @@ import {
   TOOL_BROWSER_SCREENSHOT,
   TOOL_BROWSER_WAIT,
 } from "../shared/mod.ts";
+import { noisyPng, removeDirRetry, toolText } from "../test-utils.ts";
+import { createChatTools, createCodingTools } from "../tools/mod.ts";
+import { ToolRegistry } from "../tools/registry.ts";
+import {
+  BROWSER_TOOL_NAMES,
+  createBrowserTools,
+  createBrowserToolsFrom,
+  formatSnapshot,
+} from "./tools.ts";
+import type {
+  ActionResult,
+  BrowserBackend,
+  ImageResult,
+  PageInfo,
+  PageSnapshot,
+  WaitResult,
+} from "./types.ts";
 
 /** Run fn, return the thrown error (asserting one was thrown). */
 async function expectThrow(fn: () => Promise<unknown>): Promise<Error> {
@@ -42,9 +42,7 @@ class FakeBackend implements BrowserBackend {
   calls: Array<{ method: string; args: unknown[] }> = [];
   closeCount = 0;
 
-  constructor(
-    private readonly replies: Record<string, unknown>,
-  ) {}
+  constructor(private readonly replies: Record<string, unknown>) {}
 
   open(options: Parameters<BrowserBackend["open"]>[0]): Promise<PageInfo> {
     this.calls.push({ method: "open", args: [options] });
@@ -166,7 +164,7 @@ Deno.test("browser tools resolve the backend at execute time", async () => {
   // Detach: a clear error instead of a stale reference.
   current = undefined;
   const error = await expectThrow(() =>
-    open.execute("3", { url: "http://127.0.0.1:5173/" }, undefined)
+    open.execute("3", { url: "http://127.0.0.1:5173/" }, undefined),
   );
   assertMatch(error.message, /browser backend is not available/);
 });
@@ -197,11 +195,13 @@ Deno.test("browser_open validates the URL against the policy and calls the backe
   );
 
   // Agent-specified sizes pass through as-is.
-  await tools.find((t) => t.name === TOOL_BROWSER_OPEN)!.execute(
-    "3",
-    { url: "http://127.0.0.1:5173/", width: 390, height: 844 },
-    undefined,
-  );
+  await tools
+    .find((t) => t.name === TOOL_BROWSER_OPEN)!
+    .execute(
+      "3",
+      { url: "http://127.0.0.1:5173/", width: 390, height: 844 },
+      undefined,
+    );
   assertEquals(backend2.calls[1]?.args[0], {
     url: "http://127.0.0.1:5173/",
     width: 390,
@@ -210,23 +210,33 @@ Deno.test("browser_open validates the URL against the policy and calls the backe
 
   // Out-of-range sizes are rejected before reaching the backend.
   await assertMatch(
-    (await expectThrow(() =>
-      tools.find((t) => t.name === TOOL_BROWSER_OPEN)!.execute(
-        "4",
-        { url: "http://127.0.0.1:5173/", width: 0, height: 600 },
-        undefined,
+    (
+      await expectThrow(() =>
+        tools
+          .find((t) => t.name === TOOL_BROWSER_OPEN)!
+          .execute(
+            "4",
+            { url: "http://127.0.0.1:5173/", width: 0, height: 600 },
+            undefined,
+          ),
       )
-    )).message,
+    ).message,
     /width must be an integer between 1 and 10000/,
   );
   assertEquals(backend2.calls.length, 2);
 
   await assertMatch(
-    (await expectThrow(() =>
-      byName.get(TOOL_BROWSER_OPEN)!.execute("2", {
-        url: "https://example.com/",
-      }, undefined)
-    )).message,
+    (
+      await expectThrow(() =>
+        byName.get(TOOL_BROWSER_OPEN)!.execute(
+          "2",
+          {
+            url: "https://example.com/",
+          },
+          undefined,
+        ),
+      )
+    ).message,
     /refused: cannot open a non-localhost URL/,
   );
   // The rejected URL must never reach the backend.
@@ -235,9 +245,9 @@ Deno.test("browser_open validates the URL against the policy and calls the backe
   // Invalid widths are schema-level; width validation happens at build
   // time in the LLM layer, but the tool must still reject nonsense via
   // the schema. The DSL schema is plain JSON Schema — check its shape.
-  const schema =
-    (byName.get(TOOL_BROWSER_OPEN)!.parameters as { required: string[] })
-      .required;
+  const schema = (
+    byName.get(TOOL_BROWSER_OPEN)!.parameters as { required: string[] }
+  ).required;
   assert(schema.includes("url"));
 });
 
@@ -246,9 +256,8 @@ Deno.test("browser_observe formats the snapshot for the LLM", async () => {
   const tools = createBrowserTools(backend);
   const observe = tools.find((t) => t.name === TOOL_BROWSER_OBSERVE)!;
   const result = await observe.execute("1", {}, undefined);
-  const text = result.content[0]!.type === "text"
-    ? result.content[0]!.text
-    : "";
+  const text =
+    result.content[0]!.type === "text" ? result.content[0]!.text : "";
   assertMatch(
     text,
     /Page: Test — http:\/\/127\.0\.0\.1:5173\/ \(complete · 1200×800\)/,
@@ -272,9 +281,8 @@ Deno.test("browser_observe says so when the page has no actionable elements", as
     (t) => t.name === TOOL_BROWSER_OBSERVE,
   )!;
   const result = await observe.execute("1", {}, undefined);
-  const text = result.content[0]!.type === "text"
-    ? result.content[0]!.text
-    : "";
+  const text =
+    result.content[0]!.type === "text" ? result.content[0]!.text : "";
   assertMatch(text, /\(no actionable elements\)/);
 });
 
@@ -295,7 +303,8 @@ Deno.test("browser_observe announces a snapshot cut at the cap", () => {
 Deno.test("browser_observe include_text=false skips the digest", async () => {
   const backend = new FakeBackend({ observe: snapshot() });
   const tools = createBrowserTools(backend);
-  await tools.find((t) => t.name === TOOL_BROWSER_OBSERVE)!
+  await tools
+    .find((t) => t.name === TOOL_BROWSER_OBSERVE)!
     .execute("1", { include_text: false }, undefined);
   const callArgs = backend.calls[0]!.args[0] as { includeText: boolean };
   assertEquals(callArgs.includeText, false);
@@ -308,29 +317,26 @@ Deno.test("browser_act builds every action kind and throws on page failures", as
   const tools = createBrowserTools(okBackend);
   const act = tools.find((t) => t.name === TOOL_BROWSER_ACT)!;
 
-  for (
-    const params of [
-      { action: "click", ref: "e12" },
-      { action: "fill", ref: "e13", value: "bob" },
-      { action: "type", ref: "e13", value: "x" },
-      { action: "press", ref: "e13", key: "Enter" },
-      { action: "press", key: "Escape" },
-      { action: "select", ref: "e15", value: "jp" },
-      { action: "check", ref: "e16" },
-      { action: "uncheck", ref: "e16" },
-      { action: "scroll", ref: "e12" },
-      { action: "scroll", x: 0, y: 400 },
-      { action: "reload" },
-    ] as const
-  ) {
+  for (const params of [
+    { action: "click", ref: "e12" },
+    { action: "fill", ref: "e13", value: "bob" },
+    { action: "type", ref: "e13", value: "x" },
+    { action: "press", ref: "e13", key: "Enter" },
+    { action: "press", key: "Escape" },
+    { action: "select", ref: "e15", value: "jp" },
+    { action: "check", ref: "e16" },
+    { action: "uncheck", ref: "e16" },
+    { action: "scroll", ref: "e12" },
+    { action: "scroll", x: 0, y: 400 },
+    { action: "reload" },
+  ] as const) {
     const result = await act.execute("1", { ...params } as never, undefined);
-    const text = result.content[0]!.type === "text"
-      ? result.content[0]!.text
-      : "";
+    const text =
+      result.content[0]!.type === "text" ? result.content[0]!.text : "";
     assertMatch(text, /ok/);
   }
-  const kinds = okBackend.calls.map((c) =>
-    (c.args[0] as { kind: string }).kind
+  const kinds = okBackend.calls.map(
+    (c) => (c.args[0] as { kind: string }).kind,
   );
   assertEquals(kinds, [
     "click",
@@ -354,7 +360,7 @@ Deno.test("browser_act builds every action kind and throws on page failures", as
     (t) => t.name === TOOL_BROWSER_ACT,
   )!;
   const error = await expectThrow(() =>
-    failing.execute("2", { action: "click", ref: "e99" }, undefined)
+    failing.execute("2", { action: "click", ref: "e99" }, undefined),
   );
   assertMatch(error.message, /ref not found: e99/);
 });
@@ -371,7 +377,7 @@ Deno.test("browser_act validates its arguments", async () => {
   ];
   for (const [params, pattern] of cases) {
     const error = await expectThrow(() =>
-      act.execute("1", params as never, undefined)
+      act.execute("1", params as never, undefined),
     );
     assertMatch(error.message, pattern);
   }
@@ -392,21 +398,18 @@ Deno.test("browser_wait passes options through and reports the result", async ()
   assertEquals(args.until, "idle");
   assertEquals(args.timeoutMs, 5000);
   assertEquals(args.idleMs, 300);
-  const text = result.content[0]!.type === "text"
-    ? result.content[0]!.text
-    : "";
+  const text =
+    result.content[0]!.type === "text" ? result.content[0]!.text : "";
   assertMatch(text, /Network idle/);
 
   // Validation: url needs url_contains; time needs duration_ms; timeout range.
-  for (
-    const params of [
-      { until: "url" },
-      { until: "time" },
-      { until: "load", timeout_ms: 0 },
-    ]
-  ) {
+  for (const params of [
+    { until: "url" },
+    { until: "time" },
+    { until: "load", timeout_ms: 0 },
+  ]) {
     const error = await expectThrow(() =>
-      wait.execute("2", params as never, undefined)
+      wait.execute("2", params as never, undefined),
     );
     assert(error instanceof Error, `must throw for ${JSON.stringify(params)}`);
   }
@@ -432,7 +435,7 @@ Deno.test("browser_screenshot returns the image as ToolResult content", async ()
   assertEquals(result.details?.width, 640);
 
   const bad = await expectThrow(() =>
-    shot.execute("2", { format: "gif" }, undefined)
+    shot.execute("2", { format: "gif" }, undefined),
   );
   assertMatch(bad.message, /format must be one of png, jpeg/);
 });
@@ -447,8 +450,8 @@ Deno.test("browser_screenshot keeps a bounded copy of a large capture", async ()
       height: 1500,
     },
   });
-  const shot = createBrowserTools(backend).find((t) =>
-    t.name === TOOL_BROWSER_SCREENSHOT
+  const shot = createBrowserTools(backend).find(
+    (t) => t.name === TOOL_BROWSER_SCREENSHOT,
   )!;
   const result = await shot.execute("1", {}, undefined);
   const images = result.content.filter((c) => c.type === "image");
@@ -485,13 +488,11 @@ Deno.test("browser tools are never preloaded — they live in the registry", asy
     // Whether or not a browser backend exists, the preloaded tool sets
     // never carry the browser tools: they are discoverable through the
     // session's tool registry via tool_search, exactly like MCP tools.
-    for (
-      const tools of [
-        createCodingTools(workspace, {}),
-        createCodingTools(workspace),
-        createChatTools({}),
-      ]
-    ) {
+    for (const tools of [
+      createCodingTools(workspace, {}),
+      createCodingTools(workspace),
+      createChatTools({}),
+    ]) {
       assertEquals(
         tools.some((t) => t.name.startsWith("browser_")),
         false,

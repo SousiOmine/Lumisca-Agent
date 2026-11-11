@@ -1,16 +1,16 @@
 import { join } from "node:path";
-import { assert, assertEquals } from "@std/assert";
 import {
   ATTACHMENTS_DIR_NAME,
+  LumiscaCore as Core,
   fauxProvider,
   type LumiscaCore,
-  LumiscaCore as Core,
 } from "@lumisca/core";
 import {
-  makeRealTempDir,
   MINI_PNG,
+  makeRealTempDir,
   removeDirRetry,
 } from "@lumisca/core/test-utils";
+import { assert, assertEquals } from "@std/assert";
 import { createApp } from "../app.ts";
 
 /** Host header the fixture requests carry: the app's Host guard refuses a
@@ -96,9 +96,9 @@ Deno.test("any other attachment is a download under the sender's name", async ()
     // is what the user recognises in their downloads folder.
     assertEquals(
       res.headers.get("content-disposition"),
-      `attachment; filename*=UTF-8''${
-        encodeURIComponent("summary of the run.txt")
-      }`,
+      `attachment; filename*=UTF-8''${encodeURIComponent(
+        "summary of the run.txt",
+      )}`,
     );
     assertEquals(await res.text(), "the run summary\n");
   });
@@ -125,14 +125,12 @@ Deno.test("the route serves only names the session's store made", async () => {
     // A file the store never named — even one in the session's own
     // directory — is not reachable.
     await Deno.writeTextFile(join(storeDir, "notes.txt"), "secret");
-    for (
-      const name of [
-        "notes.txt",
-        "9f3c2a1b4d5e.pdf",
-        "..%2f..%2fnotes.txt",
-        "%2Fetc%2Fpasswd",
-      ]
-    ) {
+    for (const name of [
+      "notes.txt",
+      "9f3c2a1b4d5e.pdf",
+      "..%2f..%2fnotes.txt",
+      "%2Fetc%2Fpasswd",
+    ]) {
       const res = await get(`/api/sessions/${sessionId}/attachment/${name}`);
       assertEquals(res.status, 404, `${name} must not be served`);
     }
@@ -143,7 +141,7 @@ Deno.test("the route serves only names the session's store made", async () => {
       `/api/sessions/${sessionId}/attachment/000000000000.png`,
     );
     assertEquals(unknown.status, 404);
-    const body = await unknown.json() as { error?: unknown };
+    const body = (await unknown.json()) as { error?: unknown };
     assert(typeof body.error === "string", "the API answers JSON errors");
   });
 });

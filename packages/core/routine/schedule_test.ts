@@ -1,18 +1,16 @@
 import { assertEquals } from "@std/assert";
+import { formatLocalDateTime } from "../shared/misc.ts";
 import {
+  MAX_EVERY_MINUTES,
+  MIN_EVERY_MINUTES,
   nextRunAt,
   parseSchedule,
+  ROUTINE_NAME_MAX_CHARS,
+  ROUTINES_PER_AGENT_MAX,
   type RoutineSchedule,
   scheduleKey,
   scheduleProblem,
 } from "../shared/routine.ts";
-import {
-  MAX_EVERY_MINUTES,
-  MIN_EVERY_MINUTES,
-  ROUTINE_NAME_MAX_CHARS,
-  ROUTINES_PER_AGENT_MAX,
-} from "../shared/routine.ts";
-import { formatLocalDateTime } from "../shared/misc.ts";
 
 /** Monday 2026-10-26 09:00 local time (a fixed instant for the schedule
  * arithmetic; the tests build dates with local setters so the machine's
@@ -32,10 +30,11 @@ Deno.test("routine schedule: a stored value is read strictly", () => {
     kind: "daily",
     time: "08:30",
   });
-  assertEquals(
-    parseSchedule({ kind: "weekly", days: [1, 5], time: "18:00" }),
-    { kind: "weekly", days: [1, 5], time: "18:00" },
-  );
+  assertEquals(parseSchedule({ kind: "weekly", days: [1, 5], time: "18:00" }), {
+    kind: "weekly",
+    days: [1, 5],
+    time: "18:00",
+  });
   assertEquals(parseSchedule({ kind: "every", minutes: 30 }), {
     kind: "every",
     minutes: 30,
@@ -148,16 +147,14 @@ Deno.test("routine schedule: a one-off is one local date and time", () => {
 
 Deno.test("routine schedule: a one-off must be a real minute", () => {
   assertEquals(scheduleProblem({ kind: "once", at: "2026-11-12 09:00" }), null);
-  for (
-    const at of [
-      "2026-11-12", // no time
-      "2026-11-12T09:00", // not the stored shape
-      "2026-11-12 9:00", // not zero-padded
-      "2026-11-12 24:00", // no such hour
-      "2026-02-30 09:00", // `Date` would roll this over into March
-      "",
-    ]
-  ) {
+  for (const at of [
+    "2026-11-12", // no time
+    "2026-11-12T09:00", // not the stored shape
+    "2026-11-12 9:00", // not zero-padded
+    "2026-11-12 24:00", // no such hour
+    "2026-02-30 09:00", // `Date` would roll this over into March
+    "",
+  ]) {
     assertEquals(parseSchedule({ kind: "once", at }), null, at);
     assertEquals(scheduleProblem({ kind: "once", at }) !== null, true, at);
   }
@@ -225,15 +222,16 @@ Deno.test("routine schedule: the same meaning has the same key", () => {
 
   // A different condition is a different watch.
   assertEquals(
-    scheduleKey(watch) === scheduleKey({
-      kind: "watch",
-      everyMinutes: 10,
-      source: {
-        kind: "http",
-        url: "https://example.com",
-        expect: { status: 500 },
-      },
-    }),
+    scheduleKey(watch) ===
+      scheduleKey({
+        kind: "watch",
+        everyMinutes: 10,
+        source: {
+          kind: "http",
+          url: "https://example.com",
+          expect: { status: 500 },
+        },
+      }),
     false,
   );
   // Two sources that would read as one line keep their own identity.
@@ -242,11 +240,12 @@ Deno.test("routine schedule: the same meaning has the same key", () => {
       kind: "watch",
       everyMinutes: 10,
       source: { kind: "file", path: "a", compare: "hash" },
-    }) === scheduleKey({
-      kind: "watch",
-      everyMinutes: 10,
-      source: { kind: "file", path: "a", compare: "mtime" },
-    }),
+    }) ===
+      scheduleKey({
+        kind: "watch",
+        everyMinutes: 10,
+        source: { kind: "file", path: "a", compare: "mtime" },
+      }),
     false,
   );
 });

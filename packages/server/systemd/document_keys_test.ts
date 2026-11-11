@@ -34,7 +34,8 @@ Deno.test("every service-document key is one the server reads", () => {
     unknown,
     [],
     "a service document may only carry keys startup.SERVER_STARTUP_ENV_KEYS " +
-      "names (plus XDG_CONFIG_HOME): " + unknown.join(", "),
+      "names (plus XDG_CONFIG_HOME): " +
+      unknown.join(", "),
   );
 });
 
@@ -42,14 +43,12 @@ Deno.test("the document exposes the keys a unit needs to configure a server", ()
   // A unit that cannot say where its database, port or token is cannot be
   // installed. These are the minimum; the list may grow, never shrink.
   const document = new Set<string>(DOCUMENT_KEYS);
-  for (
-    const required of [
-      "LUMISCA_HOST",
-      "LUMISCA_PORT",
-      "LUMISCA_DB",
-      "LUMISCA_TOKEN",
-    ]
-  ) {
+  for (const required of [
+    "LUMISCA_HOST",
+    "LUMISCA_PORT",
+    "LUMISCA_DB",
+    "LUMISCA_TOKEN",
+  ]) {
     assertEquals(
       document.has(required),
       true,

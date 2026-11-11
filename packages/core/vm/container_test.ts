@@ -1,13 +1,13 @@
-import { assert, assertEquals, assertRejects } from "@std/assert";
 import { join } from "node:path";
+import { assert, assertEquals, assertRejects } from "@std/assert";
+import { stellaAvailability } from "./availability.ts";
+import type { VmCommandResult, VmCommandRunner } from "./command.ts";
 import {
   containerFilesDigest,
   createVmManager,
   type VmProgress,
   type VmStatus,
 } from "./container.ts";
-import type { VmCommandResult, VmCommandRunner } from "./command.ts";
-import { stellaAvailability } from "./availability.ts";
 import {
   VM_A11Y_HELPER,
   VM_CONTAINER_NAME,
@@ -102,7 +102,8 @@ async function currentDigest(dir: string): Promise<string> {
  * works, and whether the semantic tools' bus, accessibility setting and helper
  * are in place. A probe that cannot run leaves its own line out, so tests
  * change one line to state one drift. */
-const CONTRACT_OK = `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
+const CONTRACT_OK =
+  `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
   `geometry=${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n` +
   `sudo=ok\n` +
   `dbus=${VM_DBUS_ADDRESS}\n` +
@@ -111,7 +112,8 @@ const CONTRACT_OK = `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
 
 /** The three lines the accessibility probes print when everything is in
  * place. A test that states one drift keeps them and changes that one line. */
-const A11Y_LINES = `dbus=${VM_DBUS_ADDRESS}\ntoolkit=true\n` +
+const A11Y_LINES =
+  `dbus=${VM_DBUS_ADDRESS}\ntoolkit=true\n` +
   `helper={"error":"no running application matches 'x'"}\n`;
 
 /** The answer of one `podman container inspect`: the instance, its state and
@@ -124,16 +126,21 @@ function containerFacts(
     port?: number | null;
   } = {},
 ): string {
-  const ports = options.port == null ? {} : {
-    [`${VM_VNC_PORT}/tcp`]: [{
-      HostIp: "127.0.0.1",
-      HostPort: String(options.port),
-    }],
-  };
-  return `${options.id ?? "c0ffee"}\t${options.status ?? "running"}\t` +
-    `${options.startedAt ?? "2026-01-01T00:00:00Z"}\t${
-      JSON.stringify(ports)
-    }\n`;
+  const ports =
+    options.port == null
+      ? {}
+      : {
+          [`${VM_VNC_PORT}/tcp`]: [
+            {
+              HostIp: "127.0.0.1",
+              HostPort: String(options.port),
+            },
+          ],
+        };
+  return (
+    `${options.id ?? "c0ffee"}\t${options.status ?? "running"}\t` +
+    `${options.startedAt ?? "2026-01-01T00:00:00Z"}\t${JSON.stringify(ports)}\n`
+  );
 }
 
 /** The answers of a healthy, running machine whose image matches the files on
@@ -169,10 +176,12 @@ function runningMachine(
 Deno.test("status: podman missing is reported with its reason", async () => {
   const dir = await containerDir();
   const { run } = makeRunner({
-    answers: [{
-      match: /^podman --version/,
-      result: fail("podman: command not found"),
-    }],
+    answers: [
+      {
+        match: /^podman --version/,
+        result: fail("podman: command not found"),
+      },
+    ],
   });
   try {
     const manager = createVmManager({ containerDir: dir, run });
@@ -259,14 +268,17 @@ Deno.test("status: a drifted contract is reported as stopped with the reason", a
   // The override stands first so it wins over the built-in contract answer
   // (answers are matched in order).
   const { run } = makeRunner({
-    answers: [{
-      match: /printf .*DISPLAY/,
-      result: ok(
-        `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
-          `geometry=1024 768\nsudo=ok\n` +
-          A11Y_LINES,
-      ),
-    }, ...runningMachine(digest).answers],
+    answers: [
+      {
+        match: /printf .*DISPLAY/,
+        result: ok(
+          `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
+            `geometry=1024 768\nsudo=ok\n` +
+            A11Y_LINES,
+        ),
+      },
+      ...runningMachine(digest).answers,
+    ],
   });
   try {
     const manager = createVmManager({ containerDir: dir, run });
@@ -285,15 +297,18 @@ Deno.test("status: a machine without passwordless sudo is refused", async () => 
   const dir = await containerDir();
   const digest = await currentDigest(dir);
   const { run } = makeRunner({
-    answers: [{
-      match: /printf .*DISPLAY/,
-      result: ok(
-        `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
-          `geometry=${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n` +
-          `sudo_error=sudo: a password is required\n` +
-          A11Y_LINES,
-      ),
-    }, ...runningMachine(digest).answers],
+    answers: [
+      {
+        match: /printf .*DISPLAY/,
+        result: ok(
+          `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
+            `geometry=${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n` +
+            `sudo_error=sudo: a password is required\n` +
+            A11Y_LINES,
+        ),
+      },
+      ...runningMachine(digest).answers,
+    ],
   });
   try {
     const manager = createVmManager({ containerDir: dir, run });
@@ -317,14 +332,17 @@ Deno.test("status: a machine whose screen is not up is refused", async () => {
   // other values are right and only the screen is missing. It must read as
   // "the screen is not up", not as a wrong display.
   const { run } = makeRunner({
-    answers: [{
-      match: /printf .*DISPLAY/,
-      result: ok(
-        `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
-          `geometry_error=Can't open display: :99\nsudo=ok\n` +
-          A11Y_LINES,
-      ),
-    }, ...runningMachine(digest).answers],
+    answers: [
+      {
+        match: /printf .*DISPLAY/,
+        result: ok(
+          `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
+            `geometry_error=Can't open display: :99\nsudo=ok\n` +
+            A11Y_LINES,
+        ),
+      },
+      ...runningMachine(digest).answers,
+    ],
   });
   try {
     const manager = createVmManager({ containerDir: dir, run });
@@ -347,16 +365,19 @@ Deno.test("status: a machine without the accessibility bus is refused", async ()
   const dir = await containerDir();
   const digest = await currentDigest(dir);
   const { run } = makeRunner({
-    answers: [{
-      match: /printf .*DISPLAY/,
-      result: ok(
-        `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
-          `geometry=${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n` +
-          `sudo=ok\n` +
-          `dbus=unix:path=/run/user/1000/bus\ntoolkit=true\n` +
-          `helper={"error":"no running application matches 'x'"}\n`,
-      ),
-    }, ...runningMachine(digest).answers],
+    answers: [
+      {
+        match: /printf .*DISPLAY/,
+        result: ok(
+          `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
+            `geometry=${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n` +
+            `sudo=ok\n` +
+            `dbus=unix:path=/run/user/1000/bus\ntoolkit=true\n` +
+            `helper={"error":"no running application matches 'x'"}\n`,
+        ),
+      },
+      ...runningMachine(digest).answers,
+    ],
   });
   try {
     const status = await createVmManager({ containerDir: dir, run }).status();
@@ -377,15 +398,18 @@ Deno.test("status: a machine with accessibility off is refused", async () => {
   const dir = await containerDir();
   const digest = await currentDigest(dir);
   const { run } = makeRunner({
-    answers: [{
-      match: /printf .*DISPLAY/,
-      result: ok(
-        `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
-          `geometry=${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n` +
-          `sudo=ok\ndbus=${VM_DBUS_ADDRESS}\ntoolkit=false\n` +
-          `helper={"error":"no running application matches 'x'"}\n`,
-      ),
-    }, ...runningMachine(digest).answers],
+    answers: [
+      {
+        match: /printf .*DISPLAY/,
+        result: ok(
+          `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
+            `geometry=${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n` +
+            `sudo=ok\ndbus=${VM_DBUS_ADDRESS}\ntoolkit=false\n` +
+            `helper={"error":"no running application matches 'x'"}\n`,
+        ),
+      },
+      ...runningMachine(digest).answers,
+    ],
   });
   try {
     const status = await createVmManager({ containerDir: dir, run }).status();
@@ -406,16 +430,19 @@ Deno.test("status: a machine whose accessibility helper is missing is refused", 
   const dir = await containerDir();
   const digest = await currentDigest(dir);
   const { run } = makeRunner({
-    answers: [{
-      match: /printf .*DISPLAY/,
-      result: ok(
-        `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
-          `geometry=${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n` +
-          `sudo=ok\ndbus=${VM_DBUS_ADDRESS}\ntoolkit=true\n` +
-          `helper_error=python3: can't open file '/usr/local/lib/lumisca/a11y.py': ` +
-          `[Errno 2] No such file or directory\n`,
-      ),
-    }, ...runningMachine(digest).answers],
+    answers: [
+      {
+        match: /printf .*DISPLAY/,
+        result: ok(
+          `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
+            `geometry=${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n` +
+            `sudo=ok\ndbus=${VM_DBUS_ADDRESS}\ntoolkit=true\n` +
+            `helper_error=python3: can't open file '/usr/local/lib/lumisca/a11y.py': ` +
+            `[Errno 2] No such file or directory\n`,
+        ),
+      },
+      ...runningMachine(digest).answers,
+    ],
   });
   try {
     const status = await createVmManager({ containerDir: dir, run }).status();
@@ -438,8 +465,7 @@ Deno.test("status: the accessibility helper is probed with a request that finds 
   const { run, calls } = makeRunner(runningMachine(digest));
   try {
     assertEquals(
-      (await createVmManager({ containerDir: dir, run }).status())
-        .state,
+      (await createVmManager({ containerDir: dir, run }).status()).state,
       "running",
     );
     const probe = calls.find((call) => call.join(" ").includes("printf"));
@@ -480,8 +506,10 @@ Deno.test("status: an image without a digest label counts as stale", async () =>
     assertEquals((await manager.status()).state, "image_stale");
     // Sanity: with the label present the same script is a current image.
     const { run: labelled } = makeRunner(runningMachine(digest));
-    const status = await createVmManager({ containerDir: dir, run: labelled })
-      .status();
+    const status = await createVmManager({
+      containerDir: dir,
+      run: labelled,
+    }).status();
     assertEquals(status.state, "running");
   } finally {
     await Deno.remove(dir, { recursive: true });
@@ -622,8 +650,8 @@ Deno.test("start: a running machine is left alone", async () => {
     assertEquals(status.state, "running");
     const joined = calls.map((c) => c.join(" "));
     assertEquals(
-      joined.some((c) =>
-        c.includes("podman start") || c.includes("podman build")
+      joined.some(
+        (c) => c.includes("podman start") || c.includes("podman build"),
       ),
       false,
       `nothing must be started: ${joined.join("\n")}`,
@@ -704,7 +732,7 @@ Deno.test("start: a broken container is recreated on the same home volume", asyn
     assert(created > removed, "a fresh container must follow the removal");
     assert(
       joined.some((c) =>
-        c.includes(`--volume ${VM_HOME_VOLUME}:${VM_WORKDIR}`)
+        c.includes(`--volume ${VM_HOME_VOLUME}:${VM_WORKDIR}`),
       ),
       `the new container must mount the home volume: ${joined.join("\n")}`,
     );
@@ -767,7 +795,7 @@ Deno.test("start: a stale image is rebuilt from the container files", async () =
     );
     assert(
       joined.some((c) =>
-        c.includes(`--volume ${VM_HOME_VOLUME}:${VM_WORKDIR}`)
+        c.includes(`--volume ${VM_HOME_VOLUME}:${VM_WORKDIR}`),
       ),
       `the rebuilt machine must mount the home volume: ${joined.join("\n")}`,
     );
@@ -855,10 +883,13 @@ Deno.test("status: the VNC port is null when the machine publishes none", async 
   const dir = await containerDir();
   const digest = await currentDigest(dir);
   const { run } = makeRunner({
-    answers: [{
-      match: /^podman container inspect/,
-      result: ok(containerFacts({ port: null })),
-    }, ...runningMachine(digest).answers],
+    answers: [
+      {
+        match: /^podman container inspect/,
+        result: ok(containerFacts({ port: null })),
+      },
+      ...runningMachine(digest).answers,
+    ],
   });
   try {
     const manager = createVmManager({ containerDir: dir, run });
@@ -891,19 +922,24 @@ Deno.test("status: the contract is proven once per container instance", async ()
     // A new instance (the container was restarted or recreated) is verified
     // again: it is the one thing that can have drifted since.
     const restarted = makeRunner(
-      runningMachine(digest, [{
-        match: /^podman container inspect/,
-        result: ok(containerFacts({ port: 49153, startedAt: "later" })),
-      }]),
+      runningMachine(digest, [
+        {
+          match: /^podman container inspect/,
+          result: ok(containerFacts({ port: 49153, startedAt: "later" })),
+        },
+      ]),
     );
     assertEquals(
-      (await createVmManager({ containerDir: dir, run: restarted.run })
-        .status())
-        .state,
+      (
+        await createVmManager({
+          containerDir: dir,
+          run: restarted.run,
+        }).status()
+      ).state,
       "running",
     );
     const secondProbes = restarted.calls.filter((call) =>
-      call.join(" ").includes("printf")
+      call.join(" ").includes("printf"),
     ).length;
     assertEquals(secondProbes, 1, "a fresh manager asks once");
   } finally {
@@ -954,12 +990,12 @@ Deno.test("status: a second fresh read does not ask about the image again", asyn
     const manager = createVmManager({ containerDir: dir, run });
     assertEquals((await manager.status({ fresh: true })).state, "running");
     const afterFirst = calls.filter((call) =>
-      call.join(" ").startsWith("podman image exists")
+      call.join(" ").startsWith("podman image exists"),
     ).length;
     assertEquals(afterFirst, 1);
     assertEquals((await manager.status({ fresh: true })).state, "running");
     const afterSecond = calls.filter((call) =>
-      call.join(" ").startsWith("podman image exists")
+      call.join(" ").startsWith("podman image exists"),
     ).length;
     assertEquals(afterSecond, 1);
   } finally {
@@ -982,8 +1018,8 @@ Deno.test("status: concurrent reads share one round of podman calls", async () =
     ]);
     assertEquals(a.state, "running");
     assertEquals(b.state, "running");
-    const versionCalls = calls.filter((call) =>
-      call.join(" ") === "podman --version"
+    const versionCalls = calls.filter(
+      (call) => call.join(" ") === "podman --version",
     ).length;
     assertEquals(versionCalls, 1);
   } finally {
@@ -1000,13 +1036,17 @@ Deno.test("status: podman that cannot start a container is not offered", async (
   const dir = await containerDir();
   const digest = await currentDigest(dir);
   try {
-    const { run } = makeRunner(runningMachine(digest, [{
-      match: /^podman run --rm --network=none/,
-      result: fail(
-        "Error: OCI runtime error: crun: open " +
-          "/proc/sys/net/ipv4/ping_group_range: Read-only file system",
-      ),
-    }]));
+    const { run } = makeRunner(
+      runningMachine(digest, [
+        {
+          match: /^podman run --rm --network=none/,
+          result: fail(
+            "Error: OCI runtime error: crun: open " +
+              "/proc/sys/net/ipv4/ping_group_range: Read-only file system",
+          ),
+        },
+      ]),
+    );
     const manager = createVmManager({ containerDir: dir, run });
     const status = await manager.status({ fresh: true });
     assertEquals(status.state, "podman_unusable");
@@ -1123,13 +1163,14 @@ Deno.test("an install older than the volume has its home moved onto it", async (
     const joined = calls.map((c) => c.join(" "));
     // The files are read out of the OLD container before it is removed...
     const copyOut = joined.findIndex((c) =>
-      c.startsWith(`podman cp ${VM_CONTAINER_NAME}:${VM_WORKDIR}`)
+      c.startsWith(`podman cp ${VM_CONTAINER_NAME}:${VM_WORKDIR}`),
     );
     const removed = joined.findIndex((c) => c.startsWith("podman rm"));
     const created = joined.findIndex((c) => c.startsWith("podman create "));
-    const copyIn = joined.findIndex((c) =>
-      c.startsWith("podman cp ") &&
-      c.endsWith(`${VM_CONTAINER_NAME}:${VM_WORKDIR}/`)
+    const copyIn = joined.findIndex(
+      (c) =>
+        c.startsWith("podman cp ") &&
+        c.endsWith(`${VM_CONTAINER_NAME}:${VM_WORKDIR}/`),
     );
     assert(copyOut !== -1, `the home must be read out: ${joined.join("\n")}`);
     assert(

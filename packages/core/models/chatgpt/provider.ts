@@ -27,8 +27,8 @@ import {
   CHATGPT_API_BASE,
   CHATGPT_ORIGINATOR,
   CHATGPT_REFRESH_MARGIN_MS,
-  chatGptAccountId,
   type ChatGptTokens,
+  chatGptAccountId,
   expiresAtFor,
   loginWithBrowser,
   loginWithDeviceCode,
@@ -54,8 +54,8 @@ interface ChatGptCredential extends OAuthCredential {
 /** Build the provider. The model list is loaded once here and replaced
  * after a login; a restart reads the same list back from settings. */
 export function chatgptProvider(deps: ChatGptProviderDeps): Provider {
-  const fetchImpl: FetchLike = deps.fetch ??
-    ((input, init) => globalThis.fetch(input, init));
+  const fetchImpl: FetchLike =
+    deps.fetch ?? ((input, init) => globalThis.fetch(input, init));
   let models: readonly Model<Api>[] = readChatGptModels(deps.settings);
   let pendingRefresh: Promise<ChatGptCredential> | undefined;
 
@@ -100,7 +100,8 @@ export function chatgptProvider(deps: ChatGptProviderDeps): Provider {
       // writing this one would silently sign the user back in.
       current?.type === "oauth" && current.refreshToken === refreshToken
         ? Promise.resolve(next)
-        : Promise.resolve(current));
+        : Promise.resolve(current),
+    );
     return next;
   }
 
@@ -162,7 +163,8 @@ export function chatgptProvider(deps: ChatGptProviderDeps): Provider {
 
 /** Turn a token response into the credential stored under the provider. */
 function credentialFrom(tokens: ChatGptTokens): ChatGptCredential {
-  const accountId = chatGptAccountId(tokens.accessToken) ??
+  const accountId =
+    chatGptAccountId(tokens.accessToken) ??
     (tokens.idToken !== undefined
       ? chatGptAccountId(tokens.idToken)
       : undefined);
@@ -183,8 +185,7 @@ function credentialFrom(tokens: ChatGptTokens): ChatGptCredential {
 /** A credential stored before `accountId` was recorded still has it in the
  * token's claims; refuse only when neither knows it. */
 function asChatGptCredential(credential: OAuthCredential): ChatGptCredential {
-  const accountId = credential.accountId ??
-    chatGptAccountId(credential.token);
+  const accountId = credential.accountId ?? chatGptAccountId(credential.token);
   if (accountId === undefined) {
     throw new Error(
       "the ChatGPT credential does not name an account; sign in again",

@@ -1,5 +1,5 @@
-import type { WebSearchErrorCode } from "./errors.ts";
 import type { Locale } from "../shared/i18n/mod.ts";
+import type { WebSearchErrorCode } from "./errors.ts";
 
 /** One failure code, phrased for each reader it has. */
 interface FailureWording {

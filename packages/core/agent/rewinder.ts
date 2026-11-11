@@ -1,10 +1,10 @@
-import { CoreError } from "../errors.ts";
 import type { Agent } from "../ai/agent.ts";
 import type { AgentMessage } from "../ai/types.ts";
+import type { MessageIdentity } from "../domain/event.ts";
+import { CoreError } from "../errors.ts";
+import { messageIdentityOf } from "../session/transcript-window.ts";
 import type { RetryManager } from "./retry-manager.ts";
 import type { TranscriptStore } from "./transcript.ts";
-import { messageIdentityOf } from "../session/transcript-window.ts";
-import type { MessageIdentity } from "../domain/event.ts";
 
 /** What a rewind needs from its session: the live transcript and the pieces
  * that hold state derived from it. Everything else (the event stream, the
@@ -17,9 +17,10 @@ export interface RewindDeps {
   abort: () => void;
   /** Re-anchor context publications after the truncation. */
   rebaseContexts: (messages: readonly AgentMessage[]) => void;
-  emit: (
-    event: { type: "messages_truncated"; removed: RemovedMessage[] },
-  ) => void;
+  emit: (event: {
+    type: "messages_truncated";
+    removed: RemovedMessage[];
+  }) => void;
 }
 
 /** One message the truncation dropped, as clients know it (see
@@ -94,13 +95,13 @@ export class Rewinder {
     // before the view is handled by re-reading the view afterwards.
     const index = messages.findIndex(
       (m) =>
-        (m.role === "user" || m.role === "mode") &&
-        m.timestamp === timestamp,
+        (m.role === "user" || m.role === "mode") && m.timestamp === timestamp,
     );
     if (index === -1) {
-      const stored = deps.transcript.positionOf((message) =>
-        (message.role === "user" || message.role === "mode") &&
-        message.timestamp === timestamp
+      const stored = deps.transcript.positionOf(
+        (message) =>
+          (message.role === "user" || message.role === "mode") &&
+          message.timestamp === timestamp,
       );
       if (stored !== undefined) {
         // Everything from `stored` on goes, and the view is rebuilt from what
@@ -127,8 +128,7 @@ export class Rewinder {
     } else if (
       messages.every(
         (m) =>
-          (m.role !== "user" && m.role !== "mode") ||
-          m.timestamp < timestamp,
+          (m.role !== "user" && m.role !== "mode") || m.timestamp < timestamp,
       )
     ) {
       // A queued steer: announced to clients but not in the transcript yet.

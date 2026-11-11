@@ -15,8 +15,7 @@ import type { SkillDef } from "../discover.ts";
 
 /** The SKILL.md body. English, like the tool descriptions it quotes; kept
  * deliberately compact so the session listing stays small. */
-const SKILL_MD =
-  `# Built-in computer use (this machine's screen, mouse and keyboard)
+const SKILL_MD = `# Built-in computer use (this machine's screen, mouse and keyboard)
 
 A skill for driving the machine the Lumisca server runs on: capturing the
 screen, clicking, dragging and typing. The tools are not preloaded, so find

@@ -154,7 +154,8 @@ Deno.test("measurePlacement: the window's bar stays clear", () => {
   const topEdge = (style: Record<string, string>) =>
     // The panel opens upward, so its top edge is the layout height minus the
     // bottom offset minus the height it may take.
-    600 - Number.parseFloat(style["--mp-bottom"] ?? "0") -
+    600 -
+    Number.parseFloat(style["--mp-bottom"] ?? "0") -
     Number.parseFloat(style["--mp-space"] ?? "0");
   assertEquals(withBar.style["--mp-top"], "auto");
   // The room is the limiting factor here, so the panel's own top edge lands

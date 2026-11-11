@@ -12,8 +12,8 @@ import {
   localeTag,
   type MessageKey,
   type ThinkingLevel,
-  translate,
   type Translator,
+  translate,
 } from "@lumisca/core/shared";
 
 /** Catalogue key of each reasoning-effort level's display name. The level

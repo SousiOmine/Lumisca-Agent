@@ -225,9 +225,9 @@ async function requestUserCode(
   }
   if (!response.ok) {
     throw new Error(
-      `device code request failed: HTTP ${response.status}: ${
-        truncateBody(text)
-      }`,
+      `device code request failed: HTTP ${response.status}: ${truncateBody(
+        text,
+      )}`,
     );
   }
   const data = parseJsonObject(text, "device code response");
@@ -272,7 +272,8 @@ async function pollForApproval(
     // 403/404 are the current "not approved yet" answers; older builds
     // answered 409. All three mean the same thing here.
     if (
-      response.status === 403 || response.status === 404 ||
+      response.status === 403 ||
+      response.status === 404 ||
       response.status === 409
     ) {
       await response.body?.cancel();
@@ -280,17 +281,14 @@ async function pollForApproval(
       if (remaining <= 0) {
         throw new Error("device authorization timed out");
       }
-      await sleep(
-        Math.min(intervalSeconds * 1000, remaining),
-        signal,
-      );
+      await sleep(Math.min(intervalSeconds * 1000, remaining), signal);
       continue;
     }
     const text = await response.text();
     throw new Error(
-      `device authorization failed: HTTP ${response.status}: ${
-        truncateBody(text)
-      }`,
+      `device authorization failed: HTTP ${response.status}: ${truncateBody(
+        text,
+      )}`,
     );
   }
 }
@@ -362,10 +360,7 @@ function startCallbackServer(state: string): CallbackServer {
 
   for (const candidate of BROWSER_PORTS) {
     try {
-      server = Deno.serve(
-        { hostname: "127.0.0.1", port: candidate },
-        handler,
-      );
+      server = Deno.serve({ hostname: "127.0.0.1", port: candidate }, handler);
       port = candidate;
       break;
     } catch (error) {
@@ -374,9 +369,9 @@ function startCallbackServer(state: string): CallbackServer {
   }
   if (server === undefined || port === undefined) {
     throw new Error(
-      `cannot listen for the browser callback on 127.0.0.1:${
-        BROWSER_PORTS.join(" or ")
-      }; use the device code method`,
+      `cannot listen for the browser callback on 127.0.0.1:${BROWSER_PORTS.join(
+        " or ",
+      )}; use the device code method`,
     );
   }
 
@@ -458,9 +453,8 @@ async function readTokenResponse(response: Response): Promise<ChatGptTokens> {
   }
   const data = parseJsonObject(text, "token response");
   const accessToken = stringField(data, "access_token");
-  const refreshToken = typeof data.refresh_token === "string"
-    ? data.refresh_token
-    : undefined;
+  const refreshToken =
+    typeof data.refresh_token === "string" ? data.refresh_token : undefined;
   const idToken = typeof data.id_token === "string" ? data.id_token : undefined;
   const expiresIn = numberOrUndefined(data.expires_in);
   return {
@@ -493,10 +487,10 @@ function randomToken(bytes: number = 32): string {
 function base64Url(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(
-    /=+$/,
-    "",
-  );
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 }
 
 function jwtClaims(token: string): Record<string, unknown> | undefined {
@@ -504,7 +498,7 @@ function jwtClaims(token: string): Record<string, unknown> | undefined {
   if (parts.length !== 3) return undefined;
   const payload = parts[1]!;
   try {
-    const padded = payload + "=".repeat((4 - payload.length % 4) % 4);
+    const padded = payload + "=".repeat((4 - (payload.length % 4)) % 4);
     const binary = atob(padded.replace(/-/g, "+").replace(/_/g, "/"));
     const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
     const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes));
@@ -522,10 +516,7 @@ function jwtNumber(token: string, claim: string): number | undefined {
     : undefined;
 }
 
-function parseJsonObject(
-  text: string,
-  what: string,
-): Record<string, unknown> {
+function parseJsonObject(text: string, what: string): Record<string, unknown> {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -553,11 +544,12 @@ function positiveNumber(value: unknown, what: string): number {
 }
 
 function numberOrUndefined(value: unknown): number | undefined {
-  const n = typeof value === "number"
-    ? value
-    : typeof value === "string" && value.trim() !== ""
-    ? Number(value)
-    : Number.NaN;
+  const n =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim() !== ""
+        ? Number(value)
+        : Number.NaN;
   return Number.isFinite(n) ? n : undefined;
 }
 

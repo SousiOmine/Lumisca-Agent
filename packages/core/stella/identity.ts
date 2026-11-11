@@ -57,18 +57,24 @@ const identitySchema = object({
     'The operation: "read" shows the identity you wrote, "write" replaces ' +
       'the whole text, "edit" changes one passage of it.',
   ),
-  content: optional(string(
-    `The new identity for action "write" (at most ` +
-      `${MAX_AGENT_IDENTITY_CHARS} characters). An empty string clears it.`,
-  )),
-  old_string: optional(string(
-    'For action "edit": the exact text to replace. It must appear exactly ' +
-      "once in the identity — include surrounding lines to make it unique.",
-  )),
-  new_string: optional(string(
-    'For action "edit": the replacement text. An empty string deletes the ' +
-      "matched passage.",
-  )),
+  content: optional(
+    string(
+      `The new identity for action "write" (at most ` +
+        `${MAX_AGENT_IDENTITY_CHARS} characters). An empty string clears it.`,
+    ),
+  ),
+  old_string: optional(
+    string(
+      'For action "edit": the exact text to replace. It must appear exactly ' +
+        "once in the identity — include surrounding lines to make it unique.",
+    ),
+  ),
+  new_string: optional(
+    string(
+      'For action "edit": the replacement text. An empty string deletes the ' +
+        "matched passage.",
+    ),
+  ),
 });
 
 /**
@@ -89,9 +95,9 @@ const identitySchema = object({
  * the wrong one. There is no `append`: the note is meant to stay short and
  * organized, and appending is how it becomes neither.
  */
-export function createIdentityTool(target: IdentityTarget): Tool<
-  typeof identitySchema
-> {
+export function createIdentityTool(
+  target: IdentityTarget,
+): Tool<typeof identitySchema> {
   return {
     name: TOOL_IDENTITY,
     label: "Identity",
@@ -115,27 +121,33 @@ export function createIdentityTool(target: IdentityTarget): Tool<
       // What a successful change answers (write and edit share it): the
       // model must not assume the change is visible in the run that made it.
       const changed = (text: string): ToolResult => ({
-        content: [{
-          type: "text",
-          text: text.length === 0
-            ? "Your identity was cleared. Your context keeps the previous " +
-              "text until your next turn, and then carries none."
-            : "Your identity was updated. Your context keeps the previous " +
-              "text until your next turn, and then carries this one.",
-        }],
+        content: [
+          {
+            type: "text",
+            text:
+              text.length === 0
+                ? "Your identity was cleared. Your context keeps the previous " +
+                  "text until your next turn, and then carries none."
+                : "Your identity was updated. Your context keeps the previous " +
+                  "text until your next turn, and then carries this one.",
+          },
+        ],
         details: { action, length: text.length },
       });
       switch (action) {
         case "read": {
           const text = target.read();
           return Promise.resolve({
-            content: [{
-              type: "text",
-              text: text.length === 0
-                ? "You have not written an identity yet. Write one with " +
-                  'action "write" when you know the role you take.'
-                : `Your identity:\n<identity>\n${text}\n</identity>`,
-            }],
+            content: [
+              {
+                type: "text",
+                text:
+                  text.length === 0
+                    ? "You have not written an identity yet. Write one with " +
+                      'action "write" when you know the role you take.'
+                    : `Your identity:\n<identity>\n${text}\n</identity>`,
+              },
+            ],
             details: { action, length: text.length },
           });
         }
@@ -151,11 +163,10 @@ export function createIdentityTool(target: IdentityTarget): Tool<
         }
         case "edit": {
           if (
-            params.old_string === undefined || params.new_string === undefined
+            params.old_string === undefined ||
+            params.new_string === undefined
           ) {
-            throw new Error(
-              'action "edit" needs old_string and new_string.',
-            );
+            throw new Error('action "edit" needs old_string and new_string.');
           }
           if (params.old_string.length === 0) {
             throw new Error(
@@ -249,12 +260,15 @@ export function createIdentityProvider(
         // one message: the earlier text is stale now.
         if (published === undefined || published === emptyHash) return [];
         published = emptyHash;
-        return [{
-          title: "Identity (cleared)",
-          body: "Your identity was cleared. The text you wrote about " +
-            "yourself no longer applies.",
-          state: { hash } satisfies IdentityState,
-        }];
+        return [
+          {
+            title: "Identity (cleared)",
+            body:
+              "Your identity was cleared. The text you wrote about " +
+              "yourself no longer applies.",
+            state: { hash } satisfies IdentityState,
+          },
+        ];
       }
       if (published === hash) return [];
       const replaces = published !== undefined && published !== emptyHash;
@@ -267,11 +281,13 @@ one stays as they wrote it.${
       }
 
 ${framed(text)}`;
-      return [{
-        title: "Identity (written by you)",
-        body,
-        state: { hash } satisfies IdentityState,
-      }];
+      return [
+        {
+          title: "Identity (written by you)",
+          body,
+          state: { hash } satisfies IdentityState,
+        },
+      ];
     },
     rebase(state: unknown): void {
       published = hashOf(state);

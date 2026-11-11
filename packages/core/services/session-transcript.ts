@@ -1,15 +1,15 @@
-import type { AgentMessage } from "../ai/types.ts";
 import { stellaEntryCursorOf, stellaEntryOf } from "../agent/stella-stream.ts";
-import type { ContextUsageSummary } from "../shared/context-usage.ts";
-import { summarizeContextUsage } from "../shared/context-usage.ts";
+import type { AgentMessage } from "../ai/types.ts";
+import type { StellaEntry } from "../domain/stella-conversation.ts";
+import { readTranscriptPage } from "../session/transcript-pager.ts";
 import {
   messageCursorOf,
   startsTranscriptTurn,
   type WindowPage,
   type WindowQuery,
 } from "../session/transcript-window.ts";
-import { readTranscriptPage } from "../session/transcript-pager.ts";
-import type { StellaEntry } from "../domain/stella-conversation.ts";
+import type { ContextUsageSummary } from "../shared/context-usage.ts";
+import { summarizeContextUsage } from "../shared/context-usage.ts";
 import type { SessionServiceDeps } from "./session-deps.ts";
 
 type Deps = Pick<SessionServiceDeps, "messages" | "pool">;

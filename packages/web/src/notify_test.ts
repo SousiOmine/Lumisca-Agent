@@ -1,5 +1,5 @@
-import { assert, assertEquals } from "@std/assert";
 import { createTranslator } from "@lumisca/core/shared";
+import { assert, assertEquals } from "@std/assert";
 import {
   buildAgentEndNotification,
   buildEnvNotification,
@@ -76,16 +76,20 @@ Deno.test("buildAgentEndNotification carries the start of the reply", () => {
 });
 
 Deno.test("buildQuestionNotification prefers the header", () => {
-  const { body } = buildQuestionNotification("S", [
-    question({ header: "確認", question: "本文" }),
-  ], ja);
+  const { body } = buildQuestionNotification(
+    "S",
+    [question({ header: "確認", question: "本文" })],
+    ja,
+  );
   assert(body.includes("質問"), `body says question: ${body}`);
   assert(body.includes("確認"), `body carries the header: ${body}`);
   assert(!body.includes("本文"), `body omits the long form: ${body}`);
 
-  const english = buildQuestionNotification("S", [
-    question({ header: "Confirm", question: "Body" }),
-  ], en).body;
+  const english = buildQuestionNotification(
+    "S",
+    [question({ header: "Confirm", question: "Body" })],
+    en,
+  ).body;
   assert(
     english.startsWith('"S" has a question: Confirm'),
     `english wording: ${english}`,
@@ -93,9 +97,11 @@ Deno.test("buildQuestionNotification prefers the header", () => {
 });
 
 Deno.test("buildQuestionNotification falls back to the question text", () => {
-  const { body } = buildQuestionNotification("S", [
-    question({ header: undefined }),
-  ], ja);
+  const { body } = buildQuestionNotification(
+    "S",
+    [question({ header: undefined })],
+    ja,
+  );
   assert(body.includes("どれにしますか?"), `body carries the text: ${body}`);
 });
 

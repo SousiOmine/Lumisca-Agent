@@ -1,7 +1,7 @@
-import { useCallback, useLayoutEffect } from "preact/compat";
 import { THEME_KEY } from "@lumisca/core/shared";
-import { usePreference } from "./usePreference.ts";
+import { useCallback, useLayoutEffect } from "preact/compat";
 import type { ThemeSetting } from "../types.ts";
+import { usePreference } from "./usePreference.ts";
 
 /** Resolve a theme setting to the color scheme applied to <html data-theme>.
  * "system" follows the OS color scheme via prefers-color-scheme. */

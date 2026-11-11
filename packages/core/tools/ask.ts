@@ -1,3 +1,4 @@
+import type { ClientEvent } from "../domain/event.ts";
 import { CoreError } from "../errors.ts";
 import {
   type AskAnswer,
@@ -5,7 +6,6 @@ import {
   type AskTurn,
   TOOL_ASK,
 } from "../shared/mod.ts";
-import type { ClientEvent } from "../domain/event.ts";
 import {
   array,
   boolean,
@@ -98,24 +98,15 @@ export class AskHub {
     }
     const byId = new Map(pending.questions.map((q) => [q.id, q]));
     if (answers.length !== pending.questions.length) {
-      throw new CoreError(
-        "answers must cover every question",
-        "invalid",
-      );
+      throw new CoreError("answers must cover every question", "invalid");
     }
     for (const answer of answers) {
       const question = byId.get(answer.id);
       if (!question) {
-        throw new CoreError(
-          `Unknown question id: ${answer.id}`,
-          "invalid",
-        );
+        throw new CoreError(`Unknown question id: ${answer.id}`, "invalid");
       }
       if (!Array.isArray(answer.values) || answer.values.length === 0) {
-        throw new CoreError(
-          `Question "${answer.id}" has no answer`,
-          "invalid",
-        );
+        throw new CoreError(`Question "${answer.id}" has no answer`, "invalid");
       }
       for (const value of answer.values) {
         if (typeof value !== "string" || value.trim().length === 0) {
@@ -153,18 +144,20 @@ const askSchema = object({
       options: array(
         object({
           label: string("The option label shown to the user"),
-          description: optional(string(
-            "An optional explanation of the option, shown under the label",
-          )),
+          description: optional(
+            string(
+              "An optional explanation of the option, shown under the label",
+            ),
+          ),
         }),
         "The choices the user can pick from (at least one)",
       ),
-      multi: optional(boolean(
-        "Allow selecting several options (default: single choice)",
-      )),
-      recommended: optional(integer(
-        "Index of the option to preselect when the question appears",
-      )),
+      multi: optional(
+        boolean("Allow selecting several options (default: single choice)"),
+      ),
+      recommended: optional(
+        integer("Index of the option to preselect when the question appears"),
+      ),
     }),
     "The questions to ask the user (at least one)",
   ),
@@ -207,17 +200,11 @@ export function createAskTool(hub: AskHub): Tool<typeof askSchema> {
           );
         }
         if (ids.has(q.id)) {
-          throw new CoreError(
-            `Duplicate question id: ${q.id}`,
-            "invalid",
-          );
+          throw new CoreError(`Duplicate question id: ${q.id}`, "invalid");
         }
         ids.add(q.id);
         if (q.options.length === 0) {
-          throw new CoreError(
-            `Question "${q.id}" has no options`,
-            "invalid",
-          );
+          throw new CoreError(`Question "${q.id}" has no options`, "invalid");
         }
         if (
           q.recommended !== undefined &&
@@ -236,10 +223,12 @@ export function createAskTool(hub: AskHub): Tool<typeof askSchema> {
         return `- ${text}: ${answer.values.join(", ")}`;
       });
       return {
-        content: [{
-          type: "text",
-          text: `Answers from the user:\n${lines.join("\n")}`,
-        }],
+        content: [
+          {
+            type: "text",
+            text: `Answers from the user:\n${lines.join("\n")}`,
+          },
+        ],
         details: { answers },
       };
     },

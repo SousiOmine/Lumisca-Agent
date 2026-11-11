@@ -1,4 +1,4 @@
-import { useEffect, useState } from "preact/compat";
+import { serializeMcpServers } from "@lumisca/core/shared";
 import {
   IconAlertTriangle,
   IconCheck,
@@ -12,15 +12,15 @@ import {
   IconPlus,
   IconTrash,
 } from "@tabler/icons-preact";
-import { serializeMcpServers } from "@lumisca/core/shared";
-import type { McpInfo, McpServerInfo } from "../../types.ts";
+import { useEffect, useState } from "preact/compat";
 import { api } from "../../api.ts";
-import { errorText } from "../../providers.ts";
-import { useT } from "../../i18n.ts";
+import { confirmAction } from "../../confirm.ts";
 import { useMcpSignIn } from "../../hooks/useMcpSignIn.ts";
+import { useT } from "../../i18n.ts";
+import { errorText } from "../../providers.ts";
+import type { McpInfo, McpServerInfo } from "../../types.ts";
 import { McpDetail } from "./McpDetail.tsx";
 import { mcpConfigFields } from "./mcpDraft.ts";
-import { confirmAction } from "../../confirm.ts";
 import { SettingsSection } from "./SettingsSection.tsx";
 
 /** Config-relevant key of a whole server list; the live status fields are
@@ -74,11 +74,7 @@ export function McpList() {
       if (baseline) {
         const current = await api.getMcpConfig();
         if (configKey(current.servers) !== configKey(baseline.servers)) {
-          if (
-            !confirmAction(
-              t("settings.mcp.configConflict"),
-            )
-          ) {
+          if (!confirmAction(t("settings.mcp.configConflict"))) {
             return false;
           }
         }
@@ -97,7 +93,7 @@ export function McpList() {
     if (!config) return;
     void save(
       config.servers.map((s) =>
-        s.name === name ? { ...s, enabled: !s.enabled } : s
+        s.name === name ? { ...s, enabled: !s.enabled } : s,
       ),
     );
   };
@@ -116,10 +112,7 @@ export function McpList() {
         saveError={error}
         onSave={(server) => {
           const servers = config
-            ? [
-              ...config.servers.filter((s) => s.name !== server.name),
-              server,
-            ]
+            ? [...config.servers.filter((s) => s.name !== server.name), server]
             : [server];
           void save(servers).then((ok) => {
             if (ok) setEditing(undefined);
@@ -149,9 +142,7 @@ export function McpList() {
         {signIn.error && <p className="error-text">{signIn.error}</p>}
         {loading && <p className="settings-note">{t("common.loading")}</p>}
         {!loading && config && config.servers.length === 0 && (
-          <div className="faint-box">
-            {t("settings.mcp.noServers")}
-          </div>
+          <div className="faint-box">{t("settings.mcp.noServers")}</div>
         )}
         {!loading &&
           config?.servers.map((s) => (
@@ -168,32 +159,30 @@ export function McpList() {
                   </span>
                 </span>
                 <span className="provider-state configured">
-                  {s.status === "ok"
-                    ? (
-                      <>
-                        <IconPlugConnected size={12} />
-                        {t("settings.mcp.toolCount", {
-                          count: s.toolCount,
-                        })}
-                      </>
-                    )
-                    : s.status === "error"
-                    ? (
-                      <>
-                        {s.needsAuth
-                          ? <IconLogin2 size={12} />
-                          : <IconAlertTriangle size={12} />}
-                        {s.needsAuth
-                          ? t("settings.mcp.authNeeded")
-                          : t("common.error")}
-                      </>
-                    )
-                    : (
-                      <>
-                        <IconCircleDashed size={12} />
-                        {t("settings.mcp.notStarted")}
-                      </>
-                    )}
+                  {s.status === "ok" ? (
+                    <>
+                      <IconPlugConnected size={12} />
+                      {t("settings.mcp.toolCount", {
+                        count: s.toolCount,
+                      })}
+                    </>
+                  ) : s.status === "error" ? (
+                    <>
+                      {s.needsAuth ? (
+                        <IconLogin2 size={12} />
+                      ) : (
+                        <IconAlertTriangle size={12} />
+                      )}
+                      {s.needsAuth
+                        ? t("settings.mcp.authNeeded")
+                        : t("common.error")}
+                    </>
+                  ) : (
+                    <>
+                      <IconCircleDashed size={12} />
+                      {t("settings.mcp.notStarted")}
+                    </>
+                  )}
                 </span>
                 <IconChevronRight size={14} />
               </button>
@@ -220,29 +209,34 @@ export function McpList() {
                   disabled={signIn.pending}
                   onClick={() => void signIn.start(s)}
                 >
-                  {signIn.pending
-                    ? <IconLoader2 size={13} className="spin" />
-                    : <IconExternalLink size={13} />}
+                  {signIn.pending ? (
+                    <IconLoader2 size={13} className="spin" />
+                  ) : (
+                    <IconExternalLink size={13} />
+                  )}
                   {signIn.pending
                     ? t("settings.mcp.authWaiting")
                     : t("settings.mcp.authStart")}
                 </button>
               )}
-              {s.needsAuth && signIn.pending &&
+              {s.needsAuth &&
+                signIn.pending &&
                 signIn.authorizationUrl !== null && (
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => void signIn.copyUrl()}
-                >
-                  {signIn.copied
-                    ? <IconCheck size={13} />
-                    : <IconCopy size={13} />}
-                  {signIn.copied
-                    ? t("settings.mcp.authCopied")
-                    : t("settings.mcp.authCopyUrl")}
-                </button>
-              )}
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => void signIn.copyUrl()}
+                  >
+                    {signIn.copied ? (
+                      <IconCheck size={13} />
+                    ) : (
+                      <IconCopy size={13} />
+                    )}
+                    {signIn.copied
+                      ? t("settings.mcp.authCopied")
+                      : t("settings.mcp.authCopyUrl")}
+                  </button>
+                )}
               <button
                 type="button"
                 className="btn"

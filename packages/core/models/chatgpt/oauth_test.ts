@@ -23,16 +23,20 @@ function json(data: unknown, status = 200): Response {
 
 function jwt(claims: Record<string, unknown>): string {
   const b64 = (value: unknown) =>
-    btoa(JSON.stringify(value)).replace(/\+/g, "-").replace(/\//g, "_")
+    btoa(JSON.stringify(value))
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
       .replace(/=+$/, "");
   return `${b64({ alg: "none" })}.${b64(claims)}.signature`;
 }
 
 Deno.test("chatGptAccountId reads the nested and top-level claims", () => {
   assertEquals(
-    chatGptAccountId(jwt({
-      "https://api.openai.com/auth": { chatgpt_account_id: "acct-nested" },
-    })),
+    chatGptAccountId(
+      jwt({
+        "https://api.openai.com/auth": { chatgpt_account_id: "acct-nested" },
+      }),
+    ),
     "acct-nested",
   );
   assertEquals(
@@ -49,10 +53,7 @@ Deno.test("expiresAtFor prefers expires_in and falls back to exp", () => {
     61_000,
   );
   const exp = 1_800_000_000;
-  assertEquals(
-    expiresAtFor({ accessToken: jwt({ exp }) }, 0),
-    exp * 1000,
-  );
+  assertEquals(expiresAtFor({ accessToken: jwt({ exp }) }, 0), exp * 1000);
   assertThrowsMessage(
     () => expiresAtFor({ accessToken: "not-a-jwt" }, 0),
     "no expiry",
@@ -60,11 +61,13 @@ Deno.test("expiresAtFor prefers expires_in and falls back to exp", () => {
 });
 
 Deno.test("the authorize URL carries the Codex client's parameters", () => {
-  const url = new URL(buildAuthorizeUrl({
-    state: "state-1",
-    challenge: "challenge-1",
-    redirectUri: "http://localhost:1455/auth/callback",
-  }));
+  const url = new URL(
+    buildAuthorizeUrl({
+      state: "state-1",
+      challenge: "challenge-1",
+      redirectUri: "http://localhost:1455/auth/callback",
+    }),
+  );
   assertEquals(
     url.origin + url.pathname,
     `${CHATGPT_AUTH_BASE}/oauth/authorize`,
@@ -94,30 +97,36 @@ Deno.test("device login polls through pending and exchanges the code", async () 
     const url = String(input);
     requests.push({ url, ...(init !== undefined ? { init } : {}) });
     if (url === `${CHATGPT_AUTH_BASE}/api/accounts/deviceauth/usercode`) {
-      return Promise.resolve(json({
-        device_auth_id: "dev_1",
-        user_code: "ABCD-EFGH",
-        interval: 0.001,
-      }));
+      return Promise.resolve(
+        json({
+          device_auth_id: "dev_1",
+          user_code: "ABCD-EFGH",
+          interval: 0.001,
+        }),
+      );
     }
     if (url === `${CHATGPT_AUTH_BASE}/api/accounts/deviceauth/token`) {
       polls += 1;
       if (polls < 3) return Promise.resolve(new Response("", { status: 403 }));
-      return Promise.resolve(json({
-        authorization_code: "code_1",
-        code_verifier: "verifier_1",
-      }));
+      return Promise.resolve(
+        json({
+          authorization_code: "code_1",
+          code_verifier: "verifier_1",
+        }),
+      );
     }
     if (url === `${CHATGPT_AUTH_BASE}/oauth/token`) {
-      return Promise.resolve(json({
-        access_token: jwt({
-          "https://api.openai.com/auth": { chatgpt_account_id: "acct_1" },
-          exp: 1_800_000_000,
+      return Promise.resolve(
+        json({
+          access_token: jwt({
+            "https://api.openai.com/auth": { chatgpt_account_id: "acct_1" },
+            exp: 1_800_000_000,
+          }),
+          refresh_token: "refresh_1",
+          id_token: jwt({ "https://api.openai.com/auth": {} }),
+          expires_in: 3600,
         }),
-        refresh_token: "refresh_1",
-        id_token: jwt({ "https://api.openai.com/auth": {} }),
-        expires_in: 3600,
-      }));
+      );
     }
     return Promise.reject(new Error(`unexpected request: ${url}`));
   };
@@ -132,19 +141,21 @@ Deno.test("device login polls through pending and exchanges the code", async () 
   const tokens = await loginWithDeviceCode(interaction, fetchImpl);
 
   assertEquals(polls, 3);
-  assertEquals(events, [{
-    type: "device_code",
-    userCode: "ABCD-EFGH",
-    verificationUri: CHATGPT_DEVICE_VERIFICATION_URI,
-    intervalSeconds: 0.001,
-    expiresInSeconds: CHATGPT_DEVICE_CODE_LIFETIME_SECONDS,
-  }]);
+  assertEquals(events, [
+    {
+      type: "device_code",
+      userCode: "ABCD-EFGH",
+      verificationUri: CHATGPT_DEVICE_VERIFICATION_URI,
+      intervalSeconds: 0.001,
+      expiresInSeconds: CHATGPT_DEVICE_CODE_LIFETIME_SECONDS,
+    },
+  ]);
   assertEquals(tokens.refreshToken, "refresh_1");
   assertEquals(tokens.expiresIn, 3600);
   assert(chatGptAccountId(tokens.accessToken) === "acct_1");
 
-  const exchange = requests.find((request) =>
-    request.url === `${CHATGPT_AUTH_BASE}/oauth/token`
+  const exchange = requests.find(
+    (request) => request.url === `${CHATGPT_AUTH_BASE}/oauth/token`,
   )!;
   const form = exchange.init?.body as URLSearchParams;
   assertEquals(form.get("grant_type"), "authorization_code");
@@ -177,10 +188,12 @@ Deno.test("refresh sends the refresh grant", async () => {
   let form: URLSearchParams | undefined;
   const fetchImpl: FetchLike = (_input, init) => {
     form = init?.body as URLSearchParams;
-    return Promise.resolve(json({
-      access_token: jwt({ exp: 1_800_000_000 }),
-      expires_in: 60,
-    }));
+    return Promise.resolve(
+      json({
+        access_token: jwt({ exp: 1_800_000_000 }),
+        expires_in: 60,
+      }),
+    );
   };
   const tokens = await refreshChatGptToken(fetchImpl, "refresh_1");
   assertEquals(form?.get("grant_type"), "refresh_token");

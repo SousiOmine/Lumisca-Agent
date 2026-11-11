@@ -8,8 +8,8 @@
  */
 
 import { errorMessage } from "../shared/misc.ts";
-import { WebSearchError } from "./errors.ts";
 import { MAX_ERROR_DETAIL_CHARS } from "./constants.ts";
+import { WebSearchError } from "./errors.ts";
 import type { FetchLike } from "./types.ts";
 
 export interface JsonRequestOptions {
@@ -56,9 +56,10 @@ async function send(
   options: JsonRequestOptions,
 ): Promise<Response> {
   const timeout = AbortSignal.timeout(options.timeoutMs);
-  const signal = options.signal === undefined
-    ? timeout
-    : AbortSignal.any([options.signal, timeout]);
+  const signal =
+    options.signal === undefined
+      ? timeout
+      : AbortSignal.any([options.signal, timeout]);
 
   try {
     return await fetchImpl(url, { ...init, signal });

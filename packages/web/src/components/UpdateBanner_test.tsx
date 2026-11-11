@@ -50,10 +50,12 @@ function banner(
   overrides: Partial<UpdateControls> = {},
   stale = false,
 ): string {
-  return renderToString(createElement(UpdateBanner, {
-    update: controls(overrides),
-    stale,
-  }));
+  return renderToString(
+    createElement(UpdateBanner, {
+      update: controls(overrides),
+      stale,
+    }),
+  );
 }
 
 Deno.test("a downloaded package offers the install", () => {

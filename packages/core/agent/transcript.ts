@@ -1,7 +1,7 @@
 import type { AgentMessage } from "../ai/types.ts";
+import type { MessageIdentity } from "../domain/event.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import { messageIdentityOf } from "../session/transcript-window.ts";
-import type { MessageIdentity } from "../domain/event.ts";
 
 /**
  * The persisted part of a session's transcript, and where it sits in the
@@ -104,9 +104,7 @@ export class TranscriptStore {
   /** The whole-transcript position of the first message matching `match`, or
    * undefined. A rewind names its target by identity, and the target may be
    * older than the view the agent holds: the store is what knows where. */
-  positionOf(
-    match: (message: AgentMessage) => boolean,
-  ): number | undefined {
+  positionOf(match: (message: AgentMessage) => boolean): number | undefined {
     return this.repo.positionOf(
       this.sessionId,
       (row) => match(row.message),

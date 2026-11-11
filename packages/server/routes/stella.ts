@@ -1,5 +1,3 @@
-import { Hono } from "hono";
-import { upgradeWebSocket } from "hono/deno";
 import type {
   AskAnswer,
   ClientEvent,
@@ -14,18 +12,26 @@ import type {
   StellaQuestion,
   WindowQuery,
 } from "@lumisca/core";
+import { base64ToBytes, stellaEventsOf } from "@lumisca/core";
 import type {
   StellaAvailability,
   StellaStatus,
   ThinkingLevel,
 } from "@lumisca/core/shared";
-import { base64ToBytes, stellaEventsOf } from "@lumisca/core";
 import {
   AGENT_ICON_FORMATS,
   agentIconExtensionOfMimeType,
   MAX_AGENT_ICON_BYTES,
   rasterExtensionOfMimeType,
 } from "@lumisca/core/shared";
+import { Hono } from "hono";
+import { upgradeWebSocket } from "hono/deno";
+import { conversationRoutes } from "./conversation.ts";
+import {
+  type PromptBody,
+  parsePromptBody,
+  preparePromptImages,
+} from "./session-requests.ts";
 import {
   AppError,
   optionalString,
@@ -33,12 +39,6 @@ import {
   parseWindowQuery,
   requireNonEmptyString,
 } from "./util.ts";
-import {
-  parsePromptBody,
-  preparePromptImages,
-  type PromptBody,
-} from "./session-requests.ts";
-import { conversationRoutes } from "./conversation.ts";
 import { createEventStream } from "./ws-stream.ts";
 
 /** The slice of the core these routes need (interface segregation). */
@@ -52,9 +52,10 @@ export interface StellaApi {
   ensureStellaAgent(): Promise<StellaAgent>;
   /** Create an agent: its row, and its working folder with MEMORY.md in it
    * when the machine is up (see LumiscaCore.createStellaAgent). */
-  createStellaAgent(
-    input: { name: string; role: string },
-  ): Promise<StellaAgent>;
+  createStellaAgent(input: {
+    name: string;
+    role: string;
+  }): Promise<StellaAgent>;
   /** Change an agent's name, its picture, its model and/or that model's
    * thinking strength, in one call: the sidebar's edit dialog saves them
    * together, and a request that stored one but refused the other would leave
@@ -118,9 +119,10 @@ export interface StellaApi {
   /** The thinking level the conversation's model runs at, and the levels it
    * supports (the model's own settings row, read through the session). The
    * composer shows its strength rail from this. */
-  getThinkingState(
-    sessionId: string,
-  ): { thinkingLevel: ThinkingLevel; thinkingLevels: ThinkingLevel[] };
+  getThinkingState(sessionId: string): {
+    thinkingLevel: ThinkingLevel;
+    thinkingLevels: ThinkingLevel[];
+  };
   getAgent(sessionId: string): { isStreaming: boolean } | undefined;
   getStellaAgent(id: string): StellaAgent | undefined;
   openSession(sessionId: string): SessionInfo;
@@ -147,11 +149,7 @@ export interface StellaApi {
   /** Part of the shared conversation API's type, not of this surface: a
    * conversation's model is its agent's, so the model route is not mounted
    * here (see ConversationRoutesOptions.modelRoute). */
-  setSessionModel(
-    sessionId: string,
-    provider: string,
-    modelId: string,
-  ): void;
+  setSessionModel(sessionId: string, provider: string, modelId: string): void;
   answerQuestion(
     sessionId: string,
     toolCallId: string,
@@ -199,7 +197,7 @@ function parseIconBody(
   // Measured on the encoded text first: a payload far past the limit is
   // rejected without being decoded, and base64 is 4/3 of the bytes it
   // carries (plus the data-URL header some clients leave on).
-  if (data.length > Math.ceil(MAX_AGENT_ICON_BYTES * 4 / 3) + 1024) {
+  if (data.length > Math.ceil((MAX_AGENT_ICON_BYTES * 4) / 3) + 1024) {
     throw new AppError(
       `The icon is too large (limit ${MAX_AGENT_ICON_BYTES} bytes)`,
       400,
@@ -263,10 +261,14 @@ function parseModelRef(
   // Trimmed before the emptiness check: a body of {"provider": "  "}
   // describes the request, so it is a 400 here rather than an id no catalog
   // has, which the core would refuse with a confusing 404.
-  const provider = requireNonEmptyString(body.provider, `${field}.provider`)
-    .trim();
-  const modelId = requireNonEmptyString(body.modelId, `${field}.modelId`)
-    .trim();
+  const provider = requireNonEmptyString(
+    body.provider,
+    `${field}.provider`,
+  ).trim();
+  const modelId = requireNonEmptyString(
+    body.modelId,
+    `${field}.modelId`,
+  ).trim();
   if (provider === "" || modelId === "") {
     throw new AppError(
       `${field}.provider and ${field}.modelId must not be blank`,
@@ -339,10 +341,7 @@ function parseThinkingLevelPatch(
 function imageName(index: number, mimeType: string): string {
   const extension = rasterExtensionOfMimeType(mimeType);
   if (extension === undefined) {
-    throw new AppError(
-      `Unsupported image type: ${mimeType}`,
-      400,
-    );
+    throw new AppError(`Unsupported image type: ${mimeType}`, 400);
   }
   return `image-${index + 1}${extension}`;
 }
@@ -434,9 +433,10 @@ export function stellaRoutes(core: StellaApi): Hono {
       model?: unknown;
       thinkingLevel?: unknown;
     }>(c);
-    const name = body?.name === undefined
-      ? undefined
-      : requireNonEmptyString(body.name, "name");
+    const name =
+      body?.name === undefined
+        ? undefined
+        : requireNonEmptyString(body.name, "name");
     const icon = parseIconPatch(body?.icon);
     const model = parseModelPatch(body?.model);
     const thinkingLevel = parseThinkingLevelPatch(body?.thinkingLevel);
@@ -483,11 +483,7 @@ export function stellaRoutes(core: StellaApi): Hono {
     // is the setup turn — the only moment the app may speak before the user
     // does. It is claimed once, so a reload or a second client does not greet
     // anyone twice.
-    const snapshot = snapshotOf(
-      session,
-      agentId,
-      parseWindowQuery(c.req.url),
-    );
+    const snapshot = snapshotOf(session, agentId, parseWindowQuery(c.req.url));
     core.startStellaOnboarding(agentId);
     return c.json(snapshot);
   });
@@ -557,9 +553,10 @@ export function stellaRoutes(core: StellaApi): Hono {
         bytes: base64ToBytes(image.data),
       })),
     ];
-    const saved = attachments.length === 0
-      ? undefined
-      : await core.savePromptUploads(session.id, attachments);
+    const saved =
+      attachments.length === 0
+        ? undefined
+        : await core.savePromptUploads(session.id, attachments);
     core.startPrompt(session.id, text, undefined, undefined, saved);
     return c.json({ ok: true });
   });
@@ -684,9 +681,8 @@ export function stellaRoutes(core: StellaApi): Hono {
     "/stella/conversations/:agentId/events",
     upgradeWebSocket((c) => {
       const agentId = c.req.param("agentId");
-      const session = agentId === undefined
-        ? undefined
-        : core.findStellaSession(agentId);
+      const session =
+        agentId === undefined ? undefined : core.findStellaSession(agentId);
       // A conversation is only streamed once it exists (the open endpoint
       // creates it); a socket for an unknown agent has nothing to carry.
       if (session === undefined) {
@@ -713,7 +709,7 @@ export function stellaRoutes(core: StellaApi): Hono {
         delta: {
           accepts: (event) =>
             event.type === "card_delta" && event.sessionId === id,
-          key: (event) => event.type === "card_delta" ? event.toolCallId : "",
+          key: (event) => (event.type === "card_delta" ? event.toolCallId : ""),
           frame: ({ key, delta, rev, events }) => ({
             type: "card_delta",
             toolCallId: key,

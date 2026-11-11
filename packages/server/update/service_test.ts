@@ -1,12 +1,12 @@
-import { assertEquals } from "@std/assert";
 import { join } from "node:path";
-import { withTempDir } from "@lumisca/core/test-utils";
 import { UPDATE_AUTO_KEY, UPDATE_AUTO_RESTART_KEY } from "@lumisca/core/shared";
-import type { ReleaseManifest } from "./release.ts";
-import { readAppliedUpdate, readStagedUpdate, stageUpdate } from "./stage.ts";
-import { UpdateService, type UpdateServiceOptions } from "./service.ts";
-import { buildTarGz, createSigningKeys } from "./test-utils.ts";
+import { withTempDir } from "@lumisca/core/test-utils";
+import { assertEquals } from "@std/assert";
 import { PORT_WAIT_ENV_KEY } from "../startup.ts";
+import type { ReleaseManifest } from "./release.ts";
+import { UpdateService, type UpdateServiceOptions } from "./service.ts";
+import { readAppliedUpdate, readStagedUpdate, stageUpdate } from "./stage.ts";
+import { buildTarGz, createSigningKeys } from "./test-utils.ts";
 
 const TARGET = "x86_64-unknown-linux-gnu";
 const BINARY = "lumisca-server";
@@ -289,9 +289,7 @@ Deno.test("a failed check reports the reason and keeps the server usable", async
       fixture,
       overrides: {
         fetch: (() =>
-          Promise.resolve(
-            new Response(null, { status: 503 }),
-          )) as typeof fetch,
+          Promise.resolve(new Response(null, { status: 503 }))) as typeof fetch,
       },
     });
     const status = await failing.service.check();

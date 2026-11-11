@@ -72,18 +72,18 @@ export const ALLOWED_OPENAI_APIS = [
  * SDK so the frontend bundle stays free of them. */
 export type ProviderLoginEvent =
   | {
-    type: "info";
-    message: string;
-    links?: { url: string; label?: string }[];
-  }
+      type: "info";
+      message: string;
+      links?: { url: string; label?: string }[];
+    }
   | { type: "auth_url"; url: string; instructions?: string }
   | {
-    type: "device_code";
-    userCode: string;
-    verificationUri: string;
-    intervalSeconds?: number;
-    expiresInSeconds?: number;
-  }
+      type: "device_code";
+      userCode: string;
+      verificationUri: string;
+      intervalSeconds?: number;
+      expiresInSeconds?: number;
+    }
   | { type: "progress"; message: string };
 
 /** A prompt a login flow needs the user to answer; the UI renders the
@@ -92,10 +92,10 @@ export type ProviderLoginPrompt =
   | { type: "text"; message: string; placeholder?: string }
   | { type: "secret"; message: string; placeholder?: string }
   | {
-    type: "select";
-    message: string;
-    options: { id: string; label: string; description?: string }[];
-  }
+      type: "select";
+      message: string;
+      options: { id: string; label: string; description?: string }[];
+    }
   | { type: "manual_code"; message: string; placeholder?: string };
 
 /** Polled snapshot of one in-flight login session (the server runs the

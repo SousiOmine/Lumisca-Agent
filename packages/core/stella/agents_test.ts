@@ -1,6 +1,10 @@
-import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
+import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
+import { LumiscaDb } from "../db/mod.ts";
+import { CoreError } from "../errors.ts";
+import { HostFileBackend } from "../tools/host/files.ts";
+import { Sandbox } from "../workspace/sandbox.ts";
 import {
   createAgentRepo,
   DEFAULT_AGENT_NAME,
@@ -11,10 +15,6 @@ import {
   type StellaAgent,
 } from "./agents.ts";
 import { createAgentCreateTool } from "./tools.ts";
-import { LumiscaDb } from "../db/mod.ts";
-import { CoreError } from "../errors.ts";
-import { HostFileBackend } from "../tools/host/files.ts";
-import { Sandbox } from "../workspace/sandbox.ts";
 
 /**
  * stella's agents: the counterparts a user talks to.
@@ -64,7 +64,10 @@ Deno.test("agents: a touch inside the creation millisecond still wins", () => {
       Date.now = realNow;
     }
     assertEquals(repo.latest()?.name, "First");
-    assertEquals(repo.list().map((a) => a.name), ["First", "Second"]);
+    assertEquals(
+      repo.list().map((a) => a.name),
+      ["First", "Second"],
+    );
   } finally {
     db.close();
   }
@@ -403,20 +406,22 @@ async function agentToolFixture(
   const created: Array<{ name: string; role: string }> = [];
   const tool = createAgentCreateTool({
     files: new HostFileBackend(new Sandbox([root])),
-    create: options.create ?? ((input) => {
-      created.push(input);
-      return Promise.resolve({
-        id: `a${created.length}`,
-        name: input.name,
-        role: input.role,
-        identity: "",
-        icon: "",
-        model: null,
-        onboardedAt: null,
-        createdAt: 0,
-        updatedAt: 0,
-      });
-    }),
+    create:
+      options.create ??
+      ((input) => {
+        created.push(input);
+        return Promise.resolve({
+          id: `a${created.length}`,
+          name: input.name,
+          role: input.role,
+          identity: "",
+          icon: "",
+          model: null,
+          onboardedAt: null,
+          createdAt: 0,
+          updatedAt: 0,
+        });
+      }),
   });
   return {
     tool,
@@ -434,10 +439,12 @@ Deno.test("agent_create: creates through the core's own entry point", async () =
       { name: "Researcher", role: "Read papers and summarize." },
       undefined,
     );
-    assertEquals(test.created, [{
-      name: "Researcher",
-      role: "Read papers and summarize.",
-    }]);
+    assertEquals(test.created, [
+      {
+        name: "Researcher",
+        role: "Read papers and summarize.",
+      },
+    ]);
     const text = result.content[0];
     assert(text?.type === "text");
     assert(text.text.includes('"Researcher"'), text.text);

@@ -3,6 +3,7 @@ import {
   contentText,
   splitChatText,
 } from "@lumisca/core/shared";
+import { modeRewindText } from "../../slashCommands.ts";
 import type {
   AgentMessage,
   AssistantMessage,
@@ -11,14 +12,12 @@ import type {
   ToolCallBlock,
   ToolResultMessage,
 } from "../../types.ts";
-import { ToolCall } from "../ToolCall.tsx";
-
-import { NotificationRow } from "../NotificationRow.tsx";
 import { CheckpointRow } from "../CheckpointRow.tsx";
+import { NotificationRow } from "../NotificationRow.tsx";
+import { ToolCall } from "../ToolCall.tsx";
 import { CardView } from "./CardView.tsx";
 import { CopyableUserMessage } from "./CopyableUserMessage.tsx";
 import { MarkdownBlock } from "./MarkdownBlock.tsx";
-import { modeRewindText } from "../../slashCommands.ts";
 import type { UserMessageImage } from "./types.ts";
 
 /** One message of a turn: user messages get the action row, notifications
@@ -113,21 +112,15 @@ export function MessageRow({
     <div className="msg">
       <div className="msg-body markdown">
         {segments.map((segment, index) =>
-          segment.type === "card"
-            ? (
-              <CardView
-                key={index}
-                markup={segment.markup}
-                onSend={onCardSend}
-              />
-            )
-            : (
-              <MarkdownBlock
-                key={index}
-                text={segment.text}
-                visualBase={visualBase}
-              />
-            )
+          segment.type === "card" ? (
+            <CardView key={index} markup={segment.markup} onSend={onCardSend} />
+          ) : (
+            <MarkdownBlock
+              key={index}
+              text={segment.text}
+              visualBase={visualBase}
+            />
+          ),
         )}
         {toolCalls.map((tc) => (
           <ToolCall

@@ -36,7 +36,7 @@ Deno.test("stella prompt: attached images travel as base64 blocks", async () => 
         mimeType: "image/png",
         name: "shot.png",
       },
-    ])
+    ]),
   );
   // The body is the shared prompt body: the data-URL header is stripped, so
   // the server receives the same shape code mode sends.
@@ -50,7 +50,7 @@ Deno.test("stella prompt: an image with no text is still a body", async () => {
   const sent = await record(() =>
     stellaApi.prompt("a1", "", [
       { data: dataUrl("aGVsbG8=", "image/png"), mimeType: "image/png" },
-    ])
+    ]),
   );
   assertEquals(bodyOf(sent), {
     text: "",

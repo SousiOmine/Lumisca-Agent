@@ -2,9 +2,9 @@ import type { ClientEvent, ConnectionEntry } from "@lumisca/core";
 import { createLogger } from "@lumisca/core";
 import { isLoopbackHost } from "@lumisca/core/shared";
 import type { ContentfulStatusCode } from "hono/http-status";
-import { AppError } from "./routes/util.ts";
 import { isSelf } from "./health-probe.ts";
 import { PeerEventStream, RECONNECT_BASE_MS } from "./peer-stream.ts";
+import { AppError } from "./routes/util.ts";
 
 /** Error thrown when a peer cannot be reached or answers with an error;
  * carries the HTTP status to return to the UI. */
@@ -135,10 +135,7 @@ export class FederationClient {
       // The hub bound to a loopback address is reachable under several
       // spellings (localhost vs 127.0.0.1 vs [::1]): same loopback host +
       // same port means the hub itself.
-      if (
-        url.port === selfUrl.port &&
-        isLoopbackHost(url.hostname)
-      ) {
+      if (url.port === selfUrl.port && isLoopbackHost(url.hostname)) {
         return false;
       }
       return true;
@@ -193,8 +190,8 @@ export class FederationClient {
           ...(hasBody ? { "content-type": "application/json" } : {}),
           "x-lumisca-token": peer.token,
         },
-        body: rawBody ??
-          (body === undefined ? undefined : JSON.stringify(body)),
+        body:
+          rawBody ?? (body === undefined ? undefined : JSON.stringify(body)),
         signal: AbortSignal.timeout(timeoutMs),
       });
     } catch {
@@ -290,10 +287,12 @@ export class FederationClient {
     const key = peerKey(peer);
     const known = this.identities.get(key);
     if (known !== undefined) return known;
-    const probe = this.probeIdentity(peer).then((self) => {
-      if (self) this.selfPeers.add(key);
-      return self;
-    }).catch(() => false);
+    const probe = this.probeIdentity(peer)
+      .then((self) => {
+        if (self) this.selfPeers.add(key);
+        return self;
+      })
+      .catch(() => false);
     this.identities.set(key, probe);
     return probe;
   }

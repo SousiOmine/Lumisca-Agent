@@ -1,10 +1,9 @@
+import type { SubagentType } from "../shared/mod.ts";
 import {
   TOOL_SEND_MESSAGE,
   TOOL_TASK,
   TOOL_TASK_OUTPUT,
 } from "../shared/mod.ts";
-import type { SubagentType } from "../shared/mod.ts";
-import type { SubagentHub } from "./subagent-registry.ts";
 import {
   boolean,
   integer,
@@ -15,7 +14,9 @@ import {
   type ToolResult,
 } from "./schema.ts";
 import { formatTaskOutput } from "./subagent-format.ts";
+import type { SubagentHub } from "./subagent-registry.ts";
 import { requireIntegerInRange, requireOneOf } from "./validate.ts";
+
 // --- tools -------------------------------------------------------------------
 
 /** Sub-agent kinds the task tool accepts, in the order it documents them. */
@@ -67,15 +68,17 @@ export function createTaskTool(
         params.prompt,
       );
       return Promise.resolve({
-        content: [{
-          type: "text",
-          text:
-            `Task started: ${info.agentId} (${info.subagentType}) — ${info.description}\n` +
-            `It runs in the background: continue with other work. Its ` +
-            `completion arrives as a "[Task ${info.agentId} ...]" ` +
-            `notification; check progress with task_output or reach it with ` +
-            `send_message.`,
-        }],
+        content: [
+          {
+            type: "text",
+            text:
+              `Task started: ${info.agentId} (${info.subagentType}) — ${info.description}\n` +
+              `It runs in the background: continue with other work. Its ` +
+              `completion arrives as a "[Task ${info.agentId} ...]" ` +
+              `notification; check progress with task_output or reach it with ` +
+              `send_message.`,
+          },
+        ],
         details: { ...info },
       });
     },
@@ -86,12 +89,16 @@ const taskOutputSchema = object({
   agent_id: string(
     "The id of the sub-agent (returned by the task tool when it was started)",
   ),
-  wait: optional(boolean(
-    "Wait until the agent finishes instead of returning immediately (default false)",
-  )),
-  timeout_sec: optional(integer(
-    "With wait: how long to wait in seconds before returning the current state (default 30, max 300)",
-  )),
+  wait: optional(
+    boolean(
+      "Wait until the agent finishes instead of returning immediately (default false)",
+    ),
+  ),
+  timeout_sec: optional(
+    integer(
+      "With wait: how long to wait in seconds before returning the current state (default 30, max 300)",
+    ),
+  ),
 });
 
 /** Build the tool that reports on a sub-agent: its status and, when
@@ -119,9 +126,10 @@ export function createTaskOutputTool(
         1,
         300,
       );
-      const info = params.wait === true
-        ? await hub.wait(params.agent_id, agentId, timeoutSec, signal)
-        : hub.info(params.agent_id);
+      const info =
+        params.wait === true
+          ? await hub.wait(params.agent_id, agentId, timeoutSec, signal)
+          : hub.info(params.agent_id);
       return {
         content: [{ type: "text", text: formatTaskOutput(info) }],
         details: { ...info },
@@ -161,10 +169,12 @@ export function createSendMessageTool(
         params.message,
       );
       return Promise.resolve({
-        content: [{
-          type: "text",
-          text: `Message sent to ${deliveredTo}: ${params.summary}`,
-        }],
+        content: [
+          {
+            type: "text",
+            text: `Message sent to ${deliveredTo}: ${params.summary}`,
+          },
+        ],
         details: { from: agentId, to: deliveredTo, summary: params.summary },
       });
     },

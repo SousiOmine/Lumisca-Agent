@@ -54,16 +54,14 @@ export interface StellaTitleBarHeaderProps {
  * state while it is worth saying, and the screen toggle at the right edge
  * where the pane it shows appears.
  */
-export function StellaTitleBarHeader(
-  {
-    agent,
-    machineRunning,
-    onBack,
-    onEditAgent,
-    onToggleScreen,
-    screenOpen,
-  }: StellaTitleBarHeaderProps,
-) {
+export function StellaTitleBarHeader({
+  agent,
+  machineRunning,
+  onBack,
+  onEditAgent,
+  onToggleScreen,
+  screenOpen,
+}: StellaTitleBarHeaderProps) {
   const t = useT();
   // A toggle that promises a pane that will not appear is worse than no
   // toggle, so the caller's offer is not enough: the machine must be up.
@@ -71,11 +69,9 @@ export function StellaTitleBarHeader(
 
   return (
     <div className="stella-titlebar">
-      {
-        /* A phone shows one screen at a time (the list, then the
-         * conversation), so the way back has to be a control on the
-         * conversation rather than a column that is simply not there. */
-      }
+      {/* A phone shows one screen at a time (the list, then the
+       * conversation), so the way back has to be a control on the
+       * conversation rather than a column that is simply not there. */}
       {onBack !== undefined && (
         <button
           type="button"
@@ -123,9 +119,11 @@ export function StellaTitleBarHeader(
               : "chat.stella.machine.showScreen",
           )}
         >
-          {screenOpen
-            ? <IconDeviceDesktop size={15} />
-            : <IconDeviceDesktopOff size={15} />}
+          {screenOpen ? (
+            <IconDeviceDesktop size={15} />
+          ) : (
+            <IconDeviceDesktopOff size={15} />
+          )}
         </button>
       )}
     </div>

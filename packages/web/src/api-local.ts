@@ -1,4 +1,16 @@
-import type { SessionSnapshot } from "@lumisca/core/shared";
+import type {
+  CommandApproval,
+  SavedPrompt,
+  SessionSnapshot,
+} from "@lumisca/core/shared";
+import {
+  promptBody,
+  request,
+  type SessionRoute,
+  sessionCalls,
+  sessionPath,
+  sessionRequest,
+} from "./api-client.ts";
 import type {
   AskAnswer,
   BackgroundCommandInfo,
@@ -34,15 +46,6 @@ import type {
   Workspace,
   WorkspaceFileEntry,
 } from "./types.ts";
-import type { CommandApproval, SavedPrompt } from "@lumisca/core/shared";
-import {
-  promptBody,
-  request,
-  sessionCalls,
-  sessionPath,
-  sessionRequest,
-  type SessionRoute,
-} from "./api-client.ts";
 
 /** Session info as served by the API: includes the last run error, if any. */
 export type SessionInfoDto = SessionInfo & { lastError?: string };
@@ -201,17 +204,17 @@ export const peerRoutes = {
   ) =>
     sessionRequest<{ ok: boolean; thinkingLevel: ThinkingLevel }>(
       peerId,
-      `/providers/${encodeURIComponent(providerId)}/models/${
-        encodeURIComponent(modelId)
-      }/thinking-level`,
+      `/providers/${encodeURIComponent(providerId)}/models/${encodeURIComponent(
+        modelId,
+      )}/thinking-level`,
       { method: "PUT", body: JSON.stringify({ level }) },
     ),
   workspaceFiles: (peerId: string, workspaceId: string, query: string) =>
     sessionRequest<{ entries: WorkspaceFileEntry[] }>(
       peerId,
-      `/workspaces/${encodeURIComponent(workspaceId)}/files?query=${
-        encodeURIComponent(query)
-      }`,
+      `/workspaces/${encodeURIComponent(workspaceId)}/files?query=${encodeURIComponent(
+        query,
+      )}`,
     ),
   getSkills: (peerId: string, workspaceId?: string) =>
     sessionRequest<{ skills: SkillInfo[] }>(
@@ -256,16 +259,12 @@ export const api = {
       : peerRoutes.getSkills("", workspaceId),
 
   getDefaultModel: () =>
-    request<
-      {
-        provider: string;
-        modelId: string;
-        thinkingLevel: ThinkingLevel;
-        thinkingLevels: ThinkingLevel[];
-      } | null
-    >(
-      "/api/sessions/default-model",
-    ),
+    request<{
+      provider: string;
+      modelId: string;
+      thinkingLevel: ThinkingLevel;
+      thinkingLevels: ThinkingLevel[];
+    } | null>("/api/sessions/default-model"),
   createSession: (input: {
     workspaceId?: string;
     name?: string;
@@ -328,10 +327,9 @@ export const api = {
       body: JSON.stringify(patch),
     }),
   deleteStellaAgent: (id: string) =>
-    request<{ ok: boolean }>(
-      `/api/stella/agents/${encodeURIComponent(id)}`,
-      { method: "DELETE" },
-    ),
+    request<{ ok: boolean }>(`/api/stella/agents/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
   /** Ask the agent to set itself up again (the row menu's redo). Answers
    * whether a setup turn started: false while its conversation is running,
    * which the client reports rather than pretending the click did nothing. */
@@ -390,16 +388,12 @@ export const api = {
       { method: "PUT", body: JSON.stringify({ enabled }) },
     ),
   providerAuth: (providerId: string) =>
-    request<
-      {
-        providerId: string;
-        configured: boolean;
-        source?: string;
-        authType?: ProviderAuthType;
-      }
-    >(
-      `/api/providers/${providerId}/auth`,
-    ),
+    request<{
+      providerId: string;
+      configured: boolean;
+      source?: string;
+      authType?: ProviderAuthType;
+    }>(`/api/providers/${providerId}/auth`),
   setApiKey: (providerId: string, key: string) =>
     request<{ ok: boolean }>(`/api/providers/${providerId}/api-key`, {
       method: "POST",
@@ -408,14 +402,11 @@ export const api = {
   /** Start an OAuth login flow; returns a session id to poll with
    * providerLoginPoll. The method is required: the two are not
    * interchangeable and the server never picks one. */
-  providerLogin: (
-    providerId: string,
-    method: ProviderLoginMethod,
-  ) =>
-    request<{ sessionId: string }>(
-      `/api/providers/${providerId}/login`,
-      { method: "POST", body: JSON.stringify({ method }) },
-    ),
+  providerLogin: (providerId: string, method: ProviderLoginMethod) =>
+    request<{ sessionId: string }>(`/api/providers/${providerId}/login`, {
+      method: "POST",
+      body: JSON.stringify({ method }),
+    }),
   providerLoginPoll: (providerId: string, sessionId: string) =>
     request<ProviderLoginSnapshot>(
       `/api/providers/${providerId}/login/${sessionId}`,
@@ -473,9 +464,7 @@ export const api = {
    * exist on this machine, then its filesystem roots). */
   fsPlaces: () => request<FsPlace[]>("/api/fs/places"),
   fsBrowse: (path: string) =>
-    request<FsBrowse>(
-      `/api/fs/browse?path=${encodeURIComponent(path)}`,
-    ),
+    request<FsBrowse>(`/api/fs/browse?path=${encodeURIComponent(path)}`),
   /** App-level (global) MCP config; applies to every workspace. */
   getMcpConfig: () => request<McpInfo>("/api/mcp"),
   putMcpConfig: (text: string) =>
@@ -501,9 +490,7 @@ export const api = {
     }),
   /** How a running sign-in is doing (the flow itself lives server-side). */
   getMcpAuth: (sessionId: string) =>
-    request<McpAuthSnapshot>(
-      `/api/mcp/auth/${encodeURIComponent(sessionId)}`,
-    ),
+    request<McpAuthSnapshot>(`/api/mcp/auth/${encodeURIComponent(sessionId)}`),
   cancelMcpAuth: (sessionId: string) =>
     request<{ ok: boolean }>(
       `/api/mcp/auth/${encodeURIComponent(sessionId)}/cancel`,
@@ -520,9 +507,7 @@ export const api = {
    * the fast model). The enable toggle is a plain setting
    * (`command_safety_enabled`) read through getSettings. */
   getCommandSafety: () =>
-    request<{ approvals: CommandApproval[] }>(
-      "/api/settings/command-safety",
-    ),
+    request<{ approvals: CommandApproval[] }>("/api/settings/command-safety"),
   deleteCommandApproval: (hash: string) =>
     request<{ ok: boolean }>("/api/settings/command-safety/approvals", {
       method: "DELETE",
@@ -550,10 +535,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  updateSavedPrompt: (
-    id: string,
-    input: { label?: string; prompt?: string },
-  ) =>
+  updateSavedPrompt: (id: string, input: { label?: string; prompt?: string }) =>
     request<SavedPrompt>(
       `/api/settings/saved-prompts/${encodeURIComponent(id)}`,
       {

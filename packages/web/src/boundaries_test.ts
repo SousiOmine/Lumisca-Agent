@@ -1,5 +1,5 @@
-import { assert, assertEquals } from "@std/assert";
 import { BROWSER_CORE_ENTRIES } from "@lumisca/core/browser-entries";
+import { assert, assertEquals } from "@std/assert";
 
 /**
  * The web bundle's dependency rule (ARCHITECTURE.md 1): at runtime it may
@@ -30,10 +30,7 @@ interface SourceFile {
   path: string;
 }
 
-async function* sourceFiles(
-  dir: URL,
-  prefix = "",
-): AsyncGenerator<SourceFile> {
+async function* sourceFiles(dir: URL, prefix = ""): AsyncGenerator<SourceFile> {
   for await (const entry of Deno.readDir(dir)) {
     if (entry.isDirectory) {
       yield* sourceFiles(
@@ -53,8 +50,8 @@ async function* sourceFiles(
 /** Import/export statements of a module, as written (deno fmt starts each
  * one on its own line and ends it with a semicolon). */
 function statements(source: string): string[] {
-  return [...source.matchAll(/^(?:import|export)\b[\s\S]*?;/gm)].map((m) =>
-    m[0]
+  return [...source.matchAll(/^(?:import|export)\b[\s\S]*?;/gm)].map(
+    (m) => m[0],
   );
 }
 

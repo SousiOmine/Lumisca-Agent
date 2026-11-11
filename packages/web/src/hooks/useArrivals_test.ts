@@ -50,10 +50,7 @@ Deno.test("newArrivals: an empty list that gets its first row is an arrival", ()
 
 Deno.test("newArrivals: a batch above the cap is a load, not a live burst", () => {
   const previous = Array.from({ length: 10 }, (_, i) => `m${i}`);
-  const batch = Array.from(
-    { length: MAX_ARRIVALS + 1 },
-    (_, i) => `n${i}`,
-  );
+  const batch = Array.from({ length: MAX_ARRIVALS + 1 }, (_, i) => `n${i}`);
   assertEquals(newArrivals(previous, [...previous, ...batch]), []);
   const atCap = batch.slice(0, MAX_ARRIVALS);
   assertEquals(newArrivals(previous, [...previous, ...atCap]), atCap);

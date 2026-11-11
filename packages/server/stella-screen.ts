@@ -79,9 +79,10 @@ export function stellaScreenRoute(options: StellaScreenOptions) {
       },
       onMessage(event, ws) {
         if (data === undefined) return;
-        const payload = typeof event.data === "string"
-          ? event.data
-          : new Uint8Array(event.data as ArrayBuffer);
+        const payload =
+          typeof event.data === "string"
+            ? event.data
+            : new Uint8Array(event.data as ArrayBuffer);
         const upstream = data.upstream;
         if (upstream === null) {
           // Hold the handshake until the container side is up; drop the

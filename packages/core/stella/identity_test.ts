@@ -1,15 +1,14 @@
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
+import { LumiscaDb } from "../db/mod.ts";
+import { CoreError } from "../errors.ts";
+import { toolText } from "../test-utils.ts";
+import { createAgentRepo, MAX_AGENT_IDENTITY_CHARS } from "./agents.ts";
 import {
   createIdentityProvider,
   createIdentityTool,
   IDENTITY_PROVIDER,
   type IdentityTarget,
 } from "./identity.ts";
-import { MAX_AGENT_IDENTITY_CHARS } from "./agents.ts";
-import { CoreError } from "../errors.ts";
-import { createAgentRepo } from "./agents.ts";
-import { LumiscaDb } from "../db/mod.ts";
-import { toolText } from "../test-utils.ts";
 
 /**
  * The identity: the text an agent writes about itself, and how it reaches the

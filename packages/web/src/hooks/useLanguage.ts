@@ -1,5 +1,5 @@
-import { useCallback } from "preact/compat";
 import { LANGUAGE_KEY, type Locale } from "@lumisca/core/shared";
+import { useCallback } from "preact/compat";
 import { getLocale, setLocale } from "../i18n.ts";
 import { usePreference } from "./usePreference.ts";
 

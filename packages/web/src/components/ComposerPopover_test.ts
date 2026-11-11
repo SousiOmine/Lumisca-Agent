@@ -18,13 +18,15 @@ interface Row {
   label: string;
 }
 
-function draw(options: {
-  className?: string;
-  placementClass?: string;
-  items?: Row[];
-  active?: number;
-  commit?: "mousedown" | "click";
-} = {}): string {
+function draw(
+  options: {
+    className?: string;
+    placementClass?: string;
+    items?: Row[];
+    active?: number;
+    commit?: "mousedown" | "click";
+  } = {},
+): string {
   return renderToString(
     createElement(ComposerPopover<Row>, {
       className: options.className ?? "mention-popover",
@@ -67,7 +69,10 @@ Deno.test("ComposerPopover: an upward placement appends its class", () => {
 
 Deno.test("ComposerPopover: the active row is the only one marked", () => {
   const html = draw({
-    items: [{ id: "a", label: "A" }, { id: "b", label: "B" }],
+    items: [
+      { id: "a", label: "A" },
+      { id: "b", label: "B" },
+    ],
     active: 1,
   });
   assertStringIncludes(html, 'class="mention-item">A');

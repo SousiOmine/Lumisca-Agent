@@ -10,9 +10,10 @@
  * Every mutation answers with the list of the agent's routines, so the client
  * replaces its view wholesale instead of keeping a diff in step.
  */
-import { Hono } from "hono";
+
 import type { Routine, StellaAgent } from "@lumisca/core";
 import type { RoutineView } from "@lumisca/core/shared";
+import { Hono } from "hono";
 import { AppError, parseBody, requireBoolean } from "./util.ts";
 
 export interface RoutineApi {
@@ -32,10 +33,7 @@ export interface RoutineApi {
   listStellaAgents(): StellaAgent[];
   /** The next-run rule (shared with the core so the client's toggle and the
    * scheduler agree about when a routine fires). */
-  nextRoutineRun(
-    schedule: Routine["schedule"],
-    from: number,
-  ): number;
+  nextRoutineRun(schedule: Routine["schedule"], from: number): number;
 }
 
 /**

@@ -30,9 +30,10 @@ export function formatDuration(ms: number): string {
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
   if (h > 0) {
-    return `${h}h ${String(m).padStart(2, "0")}m ${
-      String(s).padStart(2, "0")
-    }s`;
+    return `${h}h ${String(m).padStart(2, "0")}m ${String(s).padStart(
+      2,
+      "0",
+    )}s`;
   }
   if (m > 0) return `${m}m ${String(s).padStart(2, "0")}s`;
   return `${s}s`;

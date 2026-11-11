@@ -1,8 +1,8 @@
 import { basename, join } from "node:path";
 import { assert, assertEquals } from "@std/assert";
-import { HostFileBackend } from "./host/files.ts";
-import { Sandbox } from "../workspace/sandbox.ts";
 import { removeDirRetry } from "../test-utils.ts";
+import { Sandbox } from "../workspace/sandbox.ts";
+import { HostFileBackend } from "./host/files.ts";
 import {
   MAX_SPILL_FILES,
   MAX_TOOL_OUTPUT,

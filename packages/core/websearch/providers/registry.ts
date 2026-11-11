@@ -87,9 +87,10 @@ export function createSearchProvider(
 
     async fetchPage(request) {
       const maxChars = clampChars(request.maxChars ?? DEFAULT_FETCH_CHARS);
-      const page = adapter.fetchPage === undefined
-        ? await fetchDirect(context.fetch, { ...request, maxChars })
-        : await adapter.fetchPage(context, { ...request, maxChars });
+      const page =
+        adapter.fetchPage === undefined
+          ? await fetchDirect(context.fetch, { ...request, maxChars })
+          : await adapter.fetchPage(context, { ...request, maxChars });
       // Cut here rather than in each adapter: one place decides the unit
       // (characters) and the note that says text was dropped.
       return { ...page, text: cutText(page.text, maxChars) };

@@ -1,16 +1,17 @@
-import { Hono } from "hono";
 import type {
   PushSubscriptionKeys,
   PushSubscriptionRecord,
 } from "@lumisca/core";
+import { Hono } from "hono";
 import { AppError, parseBody, requireNonEmptyString } from "./util.ts";
 
 /** The slice of the core (and the notifier) these routes need. */
 export interface PushApi {
   listPushSubscriptions(): PushSubscriptionRecord[];
-  addPushSubscription(
-    input: { endpoint: string; keys: PushSubscriptionKeys },
-  ): PushSubscriptionRecord;
+  addPushSubscription(input: {
+    endpoint: string;
+    keys: PushSubscriptionKeys;
+  }): PushSubscriptionRecord;
   removePushSubscription(endpoint: string): boolean;
   pushVapidKeys(): Promise<{ publicKey: string }>;
   /** Sends a notification to the stored subscriptions right now (the
@@ -21,9 +22,10 @@ export interface PushApi {
 
 /** One subscription as a client posts it. The endpoint and both keys are
  * strings; everything else the store derives (the timestamp). */
-function subscriptionInput(
-  value: unknown,
-): { endpoint: string; keys: PushSubscriptionKeys } {
+function subscriptionInput(value: unknown): {
+  endpoint: string;
+  keys: PushSubscriptionKeys;
+} {
   if (typeof value !== "object" || value === null) {
     throw new AppError("a subscription must be an object", 400);
   }

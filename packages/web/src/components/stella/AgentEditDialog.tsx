@@ -1,5 +1,5 @@
-import { useRef, useState } from "preact/compat";
 import { DEFAULT_MODEL_KEY, parseModelPreference } from "@lumisca/core/shared";
+import { useRef, useState } from "preact/compat";
 import { api } from "../../api.ts";
 import { useT } from "../../i18n.ts";
 import {
@@ -13,8 +13,8 @@ import type {
   StellaAgentSummary,
   ThinkingLevel,
 } from "../../types.ts";
-import { Modal } from "../Modal.tsx";
 import { Field } from "../Field.tsx";
+import { Modal } from "../Modal.tsx";
 import { ModelPickerPopover } from "../ModelPickerPopover.tsx";
 import { ThinkingLevelSelect } from "../ThinkingLevelSelect.tsx";
 import { AgentAvatar } from "./AgentAvatar.tsx";
@@ -70,9 +70,11 @@ type ModelChoice = { provider: string; modelId: string };
  * component: choosing a file is not a commit (the save is), so what is shown
  * until then is what saving will produce.
  */
-export function AgentEditDialog(
-  { agent, onChanged, onClose }: AgentEditDialogProps,
-) {
+export function AgentEditDialog({
+  agent,
+  onChanged,
+  onClose,
+}: AgentEditDialogProps) {
   const t = useT();
   const inputRef = useRef<HTMLInputElement>(null);
   /** The button the model picker is placed against (it is portaled to the
@@ -89,9 +91,10 @@ export function AgentEditDialog(
    * picked for. A draft like the name, the picture and the model — it is part
    * of the save, so Cancel leaves the stored level alone — and the key is what
    * keeps a level picked for one model from being written for another. */
-  const [level, setLevel] = useState<
-    { key: string; level: ThinkingLevel } | null
-  >(null);
+  const [level, setLevel] = useState<{
+    key: string;
+    level: ThinkingLevel;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // The dialog's own exit (see Modal): a successful save leaves through it,
@@ -115,14 +118,14 @@ export function AgentEditDialog(
   // offer for that model.
   const { modelsByProvider } = useProviderModels();
   const effective = model ?? defaultModel ?? null;
-  const info = effective === null
-    ? undefined
-    : modelsByProvider.get(effective.provider)?.find((m) =>
-      m.id === effective.modelId
-    );
-  const levelKey = effective === null
-    ? ""
-    : `${effective.provider}/${effective.modelId}`;
+  const info =
+    effective === null
+      ? undefined
+      : modelsByProvider
+          .get(effective.provider)
+          ?.find((m) => m.id === effective.modelId);
+  const levelKey =
+    effective === null ? "" : `${effective.provider}/${effective.modelId}`;
   // The levels the model in effect supports: more than one is a choice worth
   // showing (a model with only "off" has nothing to choose).
   const supportedLevels = info?.thinkingLevels ?? [];
@@ -148,7 +151,8 @@ export function AgentEditDialog(
     if (!canSave) return;
     setBusy(true);
     setError(null);
-    const modelChanged = model?.provider !== agent.model?.provider ||
+    const modelChanged =
+      model?.provider !== agent.model?.provider ||
       model?.modelId !== agent.model?.modelId;
     // The level of the model in effect, when this dialog would change it. It
     // is sent with the rest because it is part of the same decision ("make
@@ -166,8 +170,8 @@ export function AgentEditDialog(
         ...(icon.kind === "unchanged"
           ? {}
           : icon.kind === "cleared"
-          ? { icon: null }
-          : { icon: { data: icon.data, mimeType: icon.mimeType } }),
+            ? { icon: null }
+            : { icon: { data: icon.data, mimeType: icon.mimeType } }),
         // Only what changed: an absent key leaves the stored choice alone,
         // and a model the user did not touch must not cost a rebuild of the
         // conversation.
@@ -221,11 +225,9 @@ export function AgentEditDialog(
                     {t("chat.stella.agents.iconHint")}
                   </p>
                   <div className="agent-icon-actions">
-                    {
-                      /* Hidden and triggered by the button beside it: a bare
+                    {/* Hidden and triggered by the button beside it: a bare
                   file input is a browser control with its own wording, and it
-                  cannot be styled to sit in this dialog. */
-                    }
+                  cannot be styled to sit in this dialog. */}
                     <input
                       ref={inputRef}
                       type="file"
@@ -244,12 +246,10 @@ export function AgentEditDialog(
                     >
                       {t("chat.stella.agents.iconChoose")}
                     </button>
-                    {
-                      /* Offered only when there is a picture to remove —
+                    {/* Offered only when there is a picture to remove —
                         the saved one, or one picked in this dialog that has
                         not been saved yet. A control that does nothing is one
-                        more thing to read. */
-                    }
+                        more thing to read. */}
                     {(agent.icon !== "" || icon.kind === "new") && (
                       <button
                         type="button"
@@ -285,30 +285,31 @@ export function AgentEditDialog(
               </span>
               <div className="agent-model-row">
                 <div className="agent-model-value">
-                  {model === null
-                    ? (
-                      <>
-                        <span>{t("chat.stella.agents.modelDefault")}</span>
-                        {defaultModel !== undefined && (
-                          <span className="mono">
-                            {defaultModel.provider}/{defaultModel.modelId}
-                          </span>
-                        )}
-                      </>
-                    )
-                    : (
-                      <span className="mono">
-                        {model.provider}/{model.modelId}
-                      </span>
-                    )}
+                  {model === null ? (
+                    <>
+                      <span>{t("chat.stella.agents.modelDefault")}</span>
+                      {defaultModel !== undefined && (
+                        <span className="mono">
+                          {defaultModel.provider}/{defaultModel.modelId}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="mono">
+                      {model.provider}/{model.modelId}
+                    </span>
+                  )}
                   {effective !== null && supportedLevels.length > 1 && (
                     <ThinkingLevelSelect
-                      value={level?.key === levelKey
-                        ? level.level
-                        : info?.thinkingLevel ?? "off"}
+                      value={
+                        level?.key === levelKey
+                          ? level.level
+                          : (info?.thinkingLevel ?? "off")
+                      }
                       levels={supportedLevels}
                       onChange={(next) =>
-                        setLevel({ key: levelKey, level: next })}
+                        setLevel({ key: levelKey, level: next })
+                      }
                       disabled={busy}
                     />
                   )}
@@ -357,7 +358,9 @@ export function AgentEditDialog(
               />
             </div>
             {error !== null && (
-              <p className="error-text" role="alert">{error}</p>
+              <p className="error-text" role="alert">
+                {error}
+              </p>
             )}
             <div className="modal-actions">
               <button

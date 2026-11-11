@@ -93,10 +93,12 @@ for await (const chunk of process.stdin) {
       const toolName = params.name ?? "";
       if (toolName === "echo") {
         respond(message.id as number, {
-          content: [{
-            type: "text",
-            text: `echo:${String(params.arguments?.text ?? "")}`,
-          }],
+          content: [
+            {
+              type: "text",
+              text: `echo:${String(params.arguments?.text ?? "")}`,
+            },
+          ],
         });
       } else if (toolName === "fail") {
         respond(message.id as number, {

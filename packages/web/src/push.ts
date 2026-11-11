@@ -48,7 +48,9 @@ export function pushSupported(): boolean {
   return canUsePush({
     protocol: location.protocol,
     shell: inDesktopShell(),
-    api: "serviceWorker" in navigator && "PushManager" in globalThis &&
+    api:
+      "serviceWorker" in navigator &&
+      "PushManager" in globalThis &&
       "Notification" in globalThis,
   });
 }
@@ -115,17 +117,19 @@ export async function readPushState(): Promise<PushState> {
  * without subscribing anything. */
 export async function enablePush(): Promise<PushState> {
   if (!pushSupported()) return "unsupported";
-  const permission = Notification.permission === "granted"
-    ? "granted"
-    : await Notification.requestPermission();
+  const permission =
+    Notification.permission === "granted"
+      ? "granted"
+      : await Notification.requestPermission();
   if (permission !== "granted") {
     return permission === "denied" ? "denied" : "off";
   }
   // The key is what the browser stores in the subscription and what it
   // verifies each message against, so it is read first.
   const { publicKey } = await request<{ publicKey: string }>("/api/notify/key");
-  const registration = await navigator.serviceWorker.getRegistration("/") ??
-    await navigator.serviceWorker.register("/sw.js");
+  const registration =
+    (await navigator.serviceWorker.getRegistration("/")) ??
+    (await navigator.serviceWorker.register("/sw.js"));
   const subscription = await registration.pushManager.subscribe({
     // Required by every browser: each push must show something to the user.
     userVisibleOnly: true,

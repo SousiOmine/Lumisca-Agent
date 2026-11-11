@@ -1,5 +1,5 @@
-import { assertEquals } from "@std/assert";
 import { fauxAssistantMessage, fauxProvider, LumiscaCore } from "@lumisca/core";
+import { assertEquals } from "@std/assert";
 import { startServer } from "./app.ts";
 import { json } from "./test-utils.ts";
 
@@ -66,13 +66,13 @@ Deno.test("stella clipboard: the machine's text crosses the server, in UTF-8", a
       method: "POST",
       body: JSON.stringify({ name: "Aide", role: "Help with the work." }),
     });
-    const agent = await created.json() as { id: string };
+    const agent = (await created.json()) as { id: string };
     // Opening an agent starts the app's setup turn; a scripted reply keeps
     // that turn from reaching the log (the clipboard is the subject here).
     faux.setResponses([fauxAssistantMessage("Hello.")]);
     const opened = await json(base, `/api/stella/conversations/${agent.id}`);
     assertEquals(opened.status, 200);
-    const session = await opened.json() as { sessionId: string };
+    const session = (await opened.json()) as { sessionId: string };
 
     // Nothing has been copied in the machine yet. That is an empty clipboard,
     // not a failure: the pane shows "nothing yet" rather than an error.
@@ -81,7 +81,7 @@ Deno.test("stella clipboard: the machine's text crosses the server, in UTF-8", a
       `/api/stella/conversations/${agent.id}/clipboard`,
     );
     assertEquals(empty.status, 200);
-    assertEquals((await empty.json() as { text: string }).text, "");
+    assertEquals(((await empty.json()) as { text: string }).text, "");
 
     // The agent is working, so the screen (and its clipboard) is still the
     // agent's: a write is refused until the agent asks for help.
@@ -101,7 +101,7 @@ Deno.test("stella clipboard: the machine's text crosses the server, in UTF-8", a
       `/api/stella/conversations/${agent.id}/clipboard`,
     );
     assertEquals(
-      (await read.json() as { text: string }).text,
+      ((await read.json()) as { text: string }).text,
       "日本語\n二行目",
     );
 

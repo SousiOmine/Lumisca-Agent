@@ -13,6 +13,18 @@
  * is always the one the tools talk to; a missing backend fails with a
  * clear error instead of a stale reference.
  */
+
+import { base64ToBytes, bytesToBase64 } from "../base64.ts";
+import { CoreError } from "../errors.ts";
+import { prepareStoredImage } from "../media/stored-image.ts";
+import {
+  TOOL_BROWSER_ACT,
+  TOOL_BROWSER_CLOSE,
+  TOOL_BROWSER_OBSERVE,
+  TOOL_BROWSER_OPEN,
+  TOOL_BROWSER_SCREENSHOT,
+  TOOL_BROWSER_WAIT,
+} from "../shared/mod.ts";
 import {
   boolean,
   integer,
@@ -22,6 +34,13 @@ import {
   type Tool,
   type ToolResult,
 } from "../tools/schema.ts";
+import { truncatedHeadNote, truncateHead } from "../tools/truncate.ts";
+import {
+  requireInteger,
+  requireIntegerInRange,
+  requireOneOf,
+} from "../tools/validate.ts";
+import { requireAllowedUrl } from "./policy.ts";
 import {
   type BrowserAction,
   type BrowserBackend,
@@ -31,24 +50,6 @@ import {
   type PageSnapshot,
   type WaitResult,
 } from "./types.ts";
-import { requireAllowedUrl } from "./policy.ts";
-import { CoreError } from "../errors.ts";
-import { base64ToBytes, bytesToBase64 } from "../base64.ts";
-import { prepareStoredImage } from "../media/stored-image.ts";
-import { truncatedHeadNote, truncateHead } from "../tools/truncate.ts";
-import {
-  requireInteger,
-  requireIntegerInRange,
-  requireOneOf,
-} from "../tools/validate.ts";
-import {
-  TOOL_BROWSER_ACT,
-  TOOL_BROWSER_CLOSE,
-  TOOL_BROWSER_OBSERVE,
-  TOOL_BROWSER_OPEN,
-  TOOL_BROWSER_SCREENSHOT,
-  TOOL_BROWSER_WAIT,
-} from "../shared/mod.ts";
 
 /** Text cap for one observe result (the format below). The cut keeps the
  * head — the page header and the first elements carry the meaning — and the
@@ -90,11 +91,12 @@ function shorten(text: string, max: number): string {
  * network, digest text — bounded and LLM-shaped. */
 export function formatSnapshot(snapshot: PageSnapshot): string {
   const lines: string[] = [];
-  const state = snapshot.readyState === "complete"
-    ? "complete"
-    : snapshot.readyState === "interactive"
-    ? "interactive"
-    : "loading";
+  const state =
+    snapshot.readyState === "complete"
+      ? "complete"
+      : snapshot.readyState === "interactive"
+        ? "interactive"
+        : "loading";
   lines.push(
     `Page: ${snapshot.title || "(untitled)"} — ${snapshot.url} ` +
       `(${state} · ${snapshot.viewport.width}×${snapshot.viewport.height})`,
@@ -125,10 +127,7 @@ export function formatSnapshot(snapshot: PageSnapshot): string {
   let idle = "idle";
   if (net.active > 0) idle = `${net.active} active`;
   else if (net.idleMs !== null && net.idleMs > 0) idle = `idle ${net.idleMs}ms`;
-  const netParts = [
-    `network: ${idle}`,
-    `${net.completed} completed`,
-  ];
+  const netParts = [`network: ${idle}`, `${net.completed} completed`];
   if (net.failed > 0) netParts.push(`${net.failed} failed`);
   lines.push(
     `${netParts.join(" · ")} · ${
@@ -141,14 +140,9 @@ export function formatSnapshot(snapshot: PageSnapshot): string {
     lines.push(snapshot.pageText);
   }
   if (snapshot.truncated.length > 0) {
-    lines.push(
-      `(truncated: ${snapshot.truncated.join(", ")})`,
-    );
+    lines.push(`(truncated: ${snapshot.truncated.join(", ")})`);
   }
-  const { text, truncated } = truncateHead(
-    lines.join("\n"),
-    OBSERVE_TEXT_CAP,
-  );
+  const { text, truncated } = truncateHead(lines.join("\n"), OBSERVE_TEXT_CAP);
   return truncated
     ? text + truncatedHeadNote("snapshot", OBSERVE_TEXT_CAP)
     : text;
@@ -169,20 +163,22 @@ const openSchema = object({
         "390×844 to debug a phone layout.",
     ),
   ),
-  height: optional(
-    integer("Viewport height in CSS pixels (default 600)"),
+  height: optional(integer("Viewport height in CSS pixels (default 600)")),
+  visible: optional(
+    boolean(
+      "Whether the browser view is shown (default true). A hidden browser " +
+        "still renders, but screenshots may be blank on some platforms.",
+    ),
   ),
-  visible: optional(boolean(
-    "Whether the browser view is shown (default true). A hidden browser " +
-      "still renders, but screenshots may be blank on some platforms.",
-  )),
 });
 
 const observeSchema = object({
-  include_text: optional(boolean(
-    "Include the page-text digest (default true). Set false to keep " +
-      "repeated observations light.",
-  )),
+  include_text: optional(
+    boolean(
+      "Include the page-text digest (default true). Set false to keep " +
+        "repeated observations light.",
+    ),
+  ),
 });
 
 const actSchema = object({
@@ -193,10 +189,12 @@ const actSchema = object({
       '"check" | "uncheck" | "scroll" (a ref, or x/y coordinates) | ' +
       '"reload"',
   ),
-  ref: optional(string(
-    "The element ref from browser_observe, e.g. e12. Required for every " +
-      "action except scroll-by-coordinates and reload.",
-  )),
+  ref: optional(
+    string(
+      "The element ref from browser_observe, e.g. e12. Required for every " +
+        "action except scroll-by-coordinates and reload.",
+    ),
+  ),
   value: optional(string("Value for fill / type / select")),
   key: optional(string("Key name for press, e.g. Enter, Escape, Tab")),
   x: optional(integer("Horizontal scroll target (scroll without a ref)")),
@@ -217,9 +215,9 @@ const waitSchema = object({
 
 const screenshotSchema = object({
   format: optional(string('"png" (default) or "jpeg"')),
-  quality: optional(integer(
-    "JPEG quality 1-100 (default 80; ignored for png)",
-  )),
+  quality: optional(
+    integer("JPEG quality 1-100 (default 80; ignored for png)"),
+  ),
 });
 
 const closeSchema = object({});
@@ -322,13 +320,15 @@ function createBrowserOpenTool(
         signal,
       );
       return {
-        content: [{
-          type: "text",
-          text:
-            `Opened ${info.url} in the browser (viewport ${width}×${height}).` +
-            (info.title ? ` Title: "${info.title}"` : "") +
-            ` Use browser_observe to inspect it.`,
-        }],
+        content: [
+          {
+            type: "text",
+            text:
+              `Opened ${info.url} in the browser (viewport ${width}×${height}).` +
+              (info.title ? ` Title: "${info.title}"` : "") +
+              ` Use browser_observe to inspect it.`,
+          },
+        ],
         details: { ...info },
       };
     },
@@ -373,9 +373,11 @@ function createBrowserObserveTool(
 
 /** Turn a PageActionResult failure into a thrown error (tools throw on
  * failure — see schema.ts). */
-function actResultOrThrow(
-  result: { ok: boolean; code?: string; error?: string },
-): void {
+function actResultOrThrow(result: {
+  ok: boolean;
+  code?: string;
+  error?: string;
+}): void {
   if (result.ok) return;
   throw new CoreError(
     `browser_act failed (${result.code ?? "action_failed"}): ${
@@ -458,11 +460,13 @@ function buildAction(params: {
       if (params.key === undefined) {
         throw new CoreError("press requires key (e.g. Enter)", "invalid");
       }
-      return ref === undefined ? { kind: "press", key: params.key } : {
-        kind: "press",
-        ref,
-        key: params.key,
-      };
+      return ref === undefined
+        ? { kind: "press", key: params.key }
+        : {
+            kind: "press",
+            ref,
+            key: params.key,
+          };
     case "select":
       requireRef(params, ref);
       requireValue(params, params.value);
@@ -501,10 +505,7 @@ function requireValue(
   value: string | undefined,
 ): asserts value is string {
   if (value === undefined) {
-    throw new CoreError(
-      `${params.action} requires a value`,
-      "invalid",
-    );
+    throw new CoreError(`${params.action} requires a value`, "invalid");
   }
 }
 
@@ -514,7 +515,8 @@ function createBrowserWaitTool(
   return {
     name: TOOL_BROWSER_WAIT,
     label: "Browser Wait",
-    description: "Wait for the page in the browser: until=load (readyState " +
+    description:
+      "Wait for the page in the browser: until=load (readyState " +
       "complete), idle (no active fetch/XHR for idle_ms — WebSockets like " +
       "dev-server hot reload do not count), url (URL contains " +
       "url_contains), or time. Event-driven in the page; returns when the " +
@@ -543,9 +545,10 @@ function buildWait(params: {
   duration_ms?: number;
 }) {
   const until = requireOneOf("until", params.until, WAIT_UNTIL_VALUES);
-  const timeoutMs = params.timeout_ms === undefined
-    ? undefined
-    : requireIntegerInRange("timeout_ms", params.timeout_ms, 1, 300_000);
+  const timeoutMs =
+    params.timeout_ms === undefined
+      ? undefined
+      : requireIntegerInRange("timeout_ms", params.timeout_ms, 1, 300_000);
   switch (until) {
     case "load":
       return {
@@ -560,10 +563,7 @@ function buildWait(params: {
       };
     case "url":
       if (params.url_contains === undefined || params.url_contains === "") {
-        throw new CoreError(
-          "until=url requires url_contains",
-          "invalid",
-        );
+        throw new CoreError("until=url requires url_contains", "invalid");
       }
       return {
         until: "url" as const,
@@ -572,10 +572,7 @@ function buildWait(params: {
       };
     case "time": {
       if (params.duration_ms === undefined) {
-        throw new CoreError(
-          "until=time requires duration_ms",
-          "invalid",
-        );
+        throw new CoreError("until=time requires duration_ms", "invalid");
       }
       // Only a lower bound exists: a duration beyond timeout_ms is not an
       // error, the wait simply ends with a timeout.
@@ -600,10 +597,10 @@ function formatWaitResult(result: WaitResult): string {
     ? result.reason === "loaded"
       ? "Page loaded"
       : result.reason === "idle"
-      ? "Network idle"
-      : result.reason === "url"
-      ? `URL matched: ${result.detail ?? ""}`
-      : "Wait duration elapsed"
+        ? "Network idle"
+        : result.reason === "url"
+          ? `URL matched: ${result.detail ?? ""}`
+          : "Wait duration elapsed"
     : `Timeout (${result.durationMs}ms)`;
   return `${state} (${result.durationMs}ms)`;
 }
@@ -630,9 +627,10 @@ function createBrowserScreenshotTool(
         params.format ?? "png",
         SCREENSHOT_FORMATS,
       );
-      const quality = params.quality === undefined
-        ? undefined
-        : requireIntegerInRange("quality", params.quality, 1, 100);
+      const quality =
+        params.quality === undefined
+          ? undefined
+          : requireIntegerInRange("quality", params.quality, 1, 100);
       const image = await requireBackend(resolveBackend).screenshot(
         { format, ...(quality !== undefined ? { quality } : {}) },
         signal,
@@ -645,13 +643,15 @@ function createBrowserScreenshotTool(
       );
       const width = stored.size?.width ?? image.width;
       const height = stored.size?.height ?? image.height;
-      const scaled = stored.downscaledFrom === undefined
-        ? ""
-        : `, downscaled from ${stored.downscaledFrom.width}×` +
-          `${stored.downscaledFrom.height}`;
-      const size = width !== undefined && height !== undefined
-        ? ` (${width}×${height}${scaled})`
-        : "";
+      const scaled =
+        stored.downscaledFrom === undefined
+          ? ""
+          : `, downscaled from ${stored.downscaledFrom.width}×` +
+            `${stored.downscaledFrom.height}`;
+      const size =
+        width !== undefined && height !== undefined
+          ? ` (${width}×${height}${scaled})`
+          : "";
       return {
         content: [
           {
@@ -689,10 +689,12 @@ function createBrowserCloseTool(
     execute: async (_id, _params, signal): Promise<ToolResult> => {
       await requireBackend(resolveBackend).close(signal);
       return {
-        content: [{
-          type: "text",
-          text: "Browser closed. Run browser_open to open it again.",
-        }],
+        content: [
+          {
+            type: "text",
+            text: "Browser closed. Run browser_open to open it again.",
+          },
+        ],
         details: { closed: true },
       };
     },

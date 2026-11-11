@@ -339,8 +339,7 @@
 .collapse[data-open="true"] > .collapse-inner > * {
   opacity: 1;
   /* Arrives once the row has opened enough to see it. */
-  transition: opacity var(--lum-dur-mid) var(--lum-ease-out)
-    var(--lum-dur-fast);
+  transition: opacity var(--lum-dur-mid) var(--lum-ease-out) var(--lum-dur-fast);
 }
 
 /* The grid item is this wrapper, not the caller's body: the body keeps its

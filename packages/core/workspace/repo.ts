@@ -23,12 +23,15 @@ export interface WorkspaceRepo {
   delete(id: string): void;
 }
 
-function toWorkspace(row: {
-  id: string;
-  name: string;
-  created_at: number;
-  chat: number;
-}, folders: string[]): Workspace {
+function toWorkspace(
+  row: {
+    id: string;
+    name: string;
+    created_at: number;
+    chat: number;
+  },
+  folders: string[],
+): Workspace {
   return {
     id: row.id,
     name: row.name,
@@ -100,18 +103,16 @@ export function createWorkspaceRepo(db: LumiscaDb): WorkspaceRepo {
       }>;
       // Load folders for every workspace in a single query (no N+1).
       const foldersByWorkspace = new Map<string, string[]>();
-      for (
-        const folder of allFoldersStmt.all() as Array<{
-          workspace_id: string;
-          path: string;
-        }>
-      ) {
+      for (const folder of allFoldersStmt.all() as Array<{
+        workspace_id: string;
+        path: string;
+      }>) {
         const list = foldersByWorkspace.get(folder.workspace_id);
         if (list) list.push(folder.path);
         else foldersByWorkspace.set(folder.workspace_id, [folder.path]);
       }
       return rows.map((row) =>
-        toWorkspace(row, foldersByWorkspace.get(row.id) ?? [])
+        toWorkspace(row, foldersByWorkspace.get(row.id) ?? []),
       );
     },
 

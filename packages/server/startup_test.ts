@@ -2,17 +2,17 @@ import { assert, assertEquals, assertThrows } from "@std/assert";
 import {
   consumeServerStartupEnvironment,
   DEFAULT_PORT,
+  DESKTOP_ENV_KEY,
   defaultAssetsFile,
   describeListenError,
-  DESKTOP_ENV_KEY,
   isAddressInUseError,
   isDesktopManaged,
   isValidPort,
+  PORT_WAIT_ENV_KEY,
   parsePortValue,
   parsePortWaitMs,
   parseServerPort,
   parseUpdateRestartMode,
-  PORT_WAIT_ENV_KEY,
   resolveAllowedHosts,
   resolveDbPath,
   SERVER_STARTUP_ENV_KEYS,
@@ -169,12 +169,14 @@ Deno.test("isAddressInUseError matches Deno's AddrInUse", () => {
 });
 
 Deno.test("defaultAssetsFile picks up the manifest staged next to the binary", () => {
-  const execPath = Deno.build.os === "windows"
-    ? "C:\\opt\\lumisca\\lumisca-server.exe"
-    : "/opt/lumisca/lumisca-server";
-  const beside = Deno.build.os === "windows"
-    ? "C:\\opt\\lumisca\\assets.json"
-    : "/opt/lumisca/assets.json";
+  const execPath =
+    Deno.build.os === "windows"
+      ? "C:\\opt\\lumisca\\lumisca-server.exe"
+      : "/opt/lumisca/lumisca-server";
+  const beside =
+    Deno.build.os === "windows"
+      ? "C:\\opt\\lumisca\\assets.json"
+      : "/opt/lumisca/assets.json";
   const seen: string[] = [];
   const resolved = defaultAssetsFile(execPath, (path) => {
     seen.push(path);
@@ -220,9 +222,14 @@ Deno.test("isValidPort accepts exactly the TCP range", () => {
   for (const port of [1, 80, 8000, 65535]) {
     assertEquals(isValidPort(port), true, String(port));
   }
-  for (
-    const port of [0, -1, 65536, 1.5, Number.NaN, Number.POSITIVE_INFINITY]
-  ) {
+  for (const port of [
+    0,
+    -1,
+    65536,
+    1.5,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+  ]) {
     assertEquals(isValidPort(port), false, String(port));
   }
 });
@@ -262,9 +269,9 @@ Deno.test("the desktop shell mirrors this module's port contract", () => {
   assertEquals(
     unknown,
     [],
-    `server.rs passes keys the launcher does not consume: ${
-      unknown.join(", ")
-    }`,
+    `server.rs passes keys the launcher does not consume: ${unknown.join(
+      ", ",
+    )}`,
   );
 });
 
@@ -304,10 +311,11 @@ Deno.test("spawned commands inherit the cleaned process environment", async () =
     }).output();
 
     assertEquals(output.success, true, new TextDecoder().decode(output.stderr));
-    assertEquals(
-      JSON.parse(new TextDecoder().decode(output.stdout)),
-      [null, null, "test-model"],
-    );
+    assertEquals(JSON.parse(new TextDecoder().decode(output.stdout)), [
+      null,
+      null,
+      "test-model",
+    ]);
   } finally {
     for (const [key, value] of saved) {
       if (value === undefined) Deno.env.delete(key);
@@ -326,17 +334,14 @@ Deno.test("resolveDbPath prefers the explicit file, then the home, then cwd", ()
     resolveDbPath({ LUMISCA_HOME: "/home/me" } as never, "/work"),
     "/home/me/lumisca.db",
   );
-  assertEquals(
-    resolveDbPath({} as never, "/work"),
-    "/work/lumisca.db",
-  );
+  assertEquals(resolveDbPath({} as never, "/work"), "/work/lumisca.db");
 });
 
 Deno.test("resolveAllowedHosts lowercases and drops blank entries", () => {
   assertEquals(
-    resolveAllowedHosts(
-      { LUMISCA_ALLOWED_HOSTS: " A.example ,, B.example " } as never,
-    ),
+    resolveAllowedHosts({
+      LUMISCA_ALLOWED_HOSTS: " A.example ,, B.example ",
+    } as never),
     ["a.example", "b.example"],
   );
   assertEquals(resolveAllowedHosts({} as never), []);

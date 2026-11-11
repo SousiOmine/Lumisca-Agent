@@ -1,3 +1,16 @@
+import type {
+  MessageKey,
+  MessageParams,
+  RoutineSchedule,
+  RoutineStatus,
+} from "@lumisca/core/shared";
+import { errorMessage } from "@lumisca/core/shared";
+import {
+  IconPlayerPlay,
+  IconPlayerStop,
+  IconRefresh,
+  IconTrash,
+} from "@tabler/icons-preact";
 import {
   useCallback,
   useEffect,
@@ -5,18 +18,9 @@ import {
   useRef,
   useState,
 } from "preact/compat";
-import {
-  IconPlayerPlay,
-  IconPlayerStop,
-  IconRefresh,
-  IconTrash,
-} from "@tabler/icons-preact";
-import { errorMessage } from "@lumisca/core/shared";
-import type { RoutineSchedule, RoutineStatus } from "@lumisca/core/shared";
-import type { RoutineView } from "../../types.ts";
-import { useLocale, useT } from "../../i18n.ts";
 import { NEVER, useVisibleInterval } from "../../hooks/useVisibleInterval.ts";
-import type { MessageKey, MessageParams } from "@lumisca/core/shared";
+import { useLocale, useT } from "../../i18n.ts";
+import type { RoutineView } from "../../types.ts";
 import { SettingsSection } from "./SettingsSection.tsx";
 
 /**
@@ -91,34 +95,37 @@ export function watchSourceLabel(
 ): string {
   switch (source.kind) {
     case "http": {
-      const condition = source.expect.status !== undefined
-        ? t("panels.routine.watch.status", {
-          status: String(source.expect.status),
-        })
-        : source.expect.hash === true
-        ? t("panels.routine.watch.bodyChanged")
-        : t("panels.routine.watch.contains", {
-          text: JSON.stringify(source.expect.includes ?? ""),
-        });
+      const condition =
+        source.expect.status !== undefined
+          ? t("panels.routine.watch.status", {
+              status: String(source.expect.status),
+            })
+          : source.expect.hash === true
+            ? t("panels.routine.watch.bodyChanged")
+            : t("panels.routine.watch.contains", {
+                text: JSON.stringify(source.expect.includes ?? ""),
+              });
       return t("panels.routine.watch.http", { url: source.url, condition });
     }
     case "file": {
-      const condition = source.compare === "hash"
-        ? t("panels.routine.watch.content")
-        : t("panels.routine.watch.modified");
+      const condition =
+        source.compare === "hash"
+          ? t("panels.routine.watch.content")
+          : t("panels.routine.watch.modified");
       return t("panels.routine.watch.file", {
         path: source.path,
         condition,
       });
     }
     case "command": {
-      const condition = source.expect.exitCode !== undefined
-        ? t("panels.routine.watch.exit", {
-          code: String(source.expect.exitCode),
-        })
-        : t("panels.routine.watch.contains", {
-          text: JSON.stringify(source.expect.includes ?? ""),
-        });
+      const condition =
+        source.expect.exitCode !== undefined
+          ? t("panels.routine.watch.exit", {
+              code: String(source.expect.exitCode),
+            })
+          : t("panels.routine.watch.contains", {
+              text: JSON.stringify(source.expect.includes ?? ""),
+            });
       return t("panels.routine.watch.command", {
         command: source.command,
         condition,
@@ -128,9 +135,10 @@ export function watchSourceLabel(
       // The args are left out: this list row is one line, and the tool's
       // name is what the user recognizes. The condition is what makes two
       // watches of the same tool different routines.
-      const condition = "ids" in source.expect
-        ? t("panels.routine.watch.newItem")
-        : t("panels.routine.watch.valueChanged");
+      const condition =
+        "ids" in source.expect
+          ? t("panels.routine.watch.newItem")
+          : t("panels.routine.watch.valueChanged");
       return t("panels.routine.watch.mcp", {
         server: source.server,
         tool: source.tool,
@@ -225,28 +233,25 @@ export function RoutinePanel({
     hasRunning ? RUNNING_POLL_MS : NEVER,
   );
 
-  const act = useCallback(
-    async (id: string, action: () => Promise<void>) => {
-      setBusy(id);
-      setActionError(null);
-      try {
-        await action();
-      } catch (failure) {
-        setActionError(
-          errorMessage(failure),
-        );
-      } finally {
-        setBusy(null);
-      }
-    },
-    [],
-  );
+  const act = useCallback(async (id: string, action: () => Promise<void>) => {
+    setBusy(id);
+    setActionError(null);
+    try {
+      await action();
+    } catch (failure) {
+      setActionError(errorMessage(failure));
+    } finally {
+      setBusy(null);
+    }
+  }, []);
 
   return (
     <SettingsSection
-      description={agentName === null
-        ? t("panels.routine.noAgent")
-        : t("panels.routine.description", { agent: agentName })}
+      description={
+        agentName === null
+          ? t("panels.routine.noAgent")
+          : t("panels.routine.description", { agent: agentName })
+      }
       action={
         <button
           type="button"
@@ -260,9 +265,15 @@ export function RoutinePanel({
       }
     >
       {loading && <p className="settings-note">{t("common.loading")}</p>}
-      {error !== null && <p className="error-text" role="alert">{error}</p>}
+      {error !== null && (
+        <p className="error-text" role="alert">
+          {error}
+        </p>
+      )}
       {actionError !== null && (
-        <p className="error-text" role="alert">{actionError}</p>
+        <p className="error-text" role="alert">
+          {actionError}
+        </p>
       )}
 
       {!loading && error === null && routines.length === 0 && (
@@ -311,9 +322,11 @@ export function RoutinePanel({
                     <>
                       <span>·</span>
                       <span
-                        className={routine.lastStatus === "error"
-                          ? "error-text"
-                          : undefined}
+                        className={
+                          routine.lastStatus === "error"
+                            ? "error-text"
+                            : undefined
+                        }
                       >
                         {t("panels.routine.last", {
                           status: t(status),
@@ -322,25 +335,25 @@ export function RoutinePanel({
                       </span>
                     </>
                   )}
-                  {
-                    /* A check is not a run: its own line keeps "last run"
-                      honest while a stopped machine keeps being checked. */
-                  }
+                  {/* A check is not a run: its own line keeps "last run"
+                      honest while a stopped machine keeps being checked. */}
                   {routine.watchCheckedAt !== undefined && (
                     <>
                       <span>·</span>
                       <span
-                        className={routine.watchError === undefined
-                          ? undefined
-                          : "error-text"}
+                        className={
+                          routine.watchError === undefined
+                            ? undefined
+                            : "error-text"
+                        }
                       >
                         {routine.watchError === undefined
                           ? t("panels.routine.checked", {
-                            when: formatWhen(routine.watchCheckedAt, locale),
-                          })
+                              when: formatWhen(routine.watchCheckedAt, locale),
+                            })
                           : t("panels.routine.checkFailed", {
-                            when: formatWhen(routine.watchCheckedAt, locale),
-                          })}
+                              when: formatWhen(routine.watchCheckedAt, locale),
+                            })}
                       </span>
                     </>
                   )}
@@ -356,81 +369,78 @@ export function RoutinePanel({
                 )}
               </div>
               <div className="routine-actions">
-                {inFlight
-                  ? (
+                {inFlight ? (
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={busy === routine.id}
+                    onClick={() => act(routine.id, () => onStop(routine.id))}
+                  >
+                    <IconPlayerStop size={14} />
+                    {t("panels.routine.stop")}
+                  </button>
+                ) : (
+                  <>
                     <button
                       type="button"
                       className="btn"
                       disabled={busy === routine.id}
-                      onClick={() => act(routine.id, () => onStop(routine.id))}
+                      onClick={() => act(routine.id, () => onRun(routine.id))}
                     >
-                      <IconPlayerStop size={14} />
-                      {t("panels.routine.stop")}
+                      <IconPlayerPlay size={14} />
+                      {t("panels.routine.run")}
                     </button>
-                  )
-                  : (
-                    <>
-                      <button
-                        type="button"
-                        className="btn"
-                        disabled={busy === routine.id}
-                        onClick={() => act(routine.id, () => onRun(routine.id))}
-                      >
-                        <IconPlayerPlay size={14} />
-                        {t("panels.routine.run")}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn"
-                        disabled={busy === routine.id}
-                        onClick={() =>
-                          act(
-                            routine.id,
-                            () => onSetEnabled(routine.id, !routine.enabled),
-                          )}
-                      >
-                        {routine.enabled
-                          ? t("panels.routine.disable")
-                          : t("panels.routine.enable")}
-                      </button>
-                    </>
-                  )}
-                {confirming === routine.id
-                  ? (
-                    <>
-                      <button
-                        type="button"
-                        className="btn danger"
-                        disabled={busy === routine.id}
-                        onClick={() =>
-                          act(routine.id, async () => {
-                            await onDelete(routine.id);
-                            setConfirming(null);
-                          })}
-                      >
-                        {t("common.delete")}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn"
-                        onClick={() => setConfirming(null)}
-                      >
-                        {t("common.cancel")}
-                      </button>
-                    </>
-                  )
-                  : (
                     <button
                       type="button"
                       className="btn"
                       disabled={busy === routine.id}
-                      onClick={() => setConfirming(routine.id)}
-                      title={t("common.delete")}
-                      aria-label={t("common.delete")}
+                      onClick={() =>
+                        act(routine.id, () =>
+                          onSetEnabled(routine.id, !routine.enabled),
+                        )
+                      }
                     >
-                      <IconTrash size={14} />
+                      {routine.enabled
+                        ? t("panels.routine.disable")
+                        : t("panels.routine.enable")}
                     </button>
-                  )}
+                  </>
+                )}
+                {confirming === routine.id ? (
+                  <>
+                    <button
+                      type="button"
+                      className="btn danger"
+                      disabled={busy === routine.id}
+                      onClick={() =>
+                        act(routine.id, async () => {
+                          await onDelete(routine.id);
+                          setConfirming(null);
+                        })
+                      }
+                    >
+                      {t("common.delete")}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => setConfirming(null)}
+                    >
+                      {t("common.cancel")}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={busy === routine.id}
+                    onClick={() => setConfirming(routine.id)}
+                    title={t("common.delete")}
+                    aria-label={t("common.delete")}
+                  >
+                    <IconTrash size={14} />
+                  </button>
+                )}
               </div>
             </li>
           );

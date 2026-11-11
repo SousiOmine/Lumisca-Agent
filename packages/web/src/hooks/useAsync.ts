@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "preact/compat";
 import { errorMessage as errorText } from "@lumisca/core/shared";
+import { useEffect, useRef, useState } from "preact/compat";
 
 /** Stale probe passed to async effects: true once the effect was cleaned
  * up (unmount or deps change), so late responses never write state. */

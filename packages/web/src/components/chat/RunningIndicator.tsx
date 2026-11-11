@@ -18,7 +18,9 @@ export function RunningIndicator({ avatar }: { avatar?: ReactNode }) {
   const t = useT();
   return (
     <div className="stella-msg stella-running" role="status">
-      <div className="stella-msg-avatar" aria-hidden="true">{avatar}</div>
+      <div className="stella-msg-avatar" aria-hidden="true">
+        {avatar}
+      </div>
       <div className="stella-msg-main">
         <div className="stella-typing">
           <span className="stella-typing-dot" />

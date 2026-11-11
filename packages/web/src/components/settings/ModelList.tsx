@@ -1,5 +1,6 @@
-import { useMemo, useState } from "preact/compat";
 import { IconChevronRight, IconPlugConnected } from "@tabler/icons-preact";
+import { useMemo, useState } from "preact/compat";
+import { useT } from "../../i18n.ts";
 import {
   errorText,
   filterByQuery,
@@ -7,7 +8,6 @@ import {
   useProviderModels,
 } from "../../providers.ts";
 import type { ModelInfo } from "../../types.ts";
-import { useT } from "../../i18n.ts";
 import { Toggle } from "../SettingRow.tsx";
 import { SettingsSection } from "./SettingsSection.tsx";
 
@@ -101,8 +101,9 @@ export function ModelList() {
         {filtered.map((pm) => {
           const isExpanded = expanded[pm.providerId] ?? false;
           // Enabled is the default; only a disabled model carries the flag.
-          const enabledCount = pm.models.filter((m) => m.enabled !== false)
-            .length;
+          const enabledCount = pm.models.filter(
+            (m) => m.enabled !== false,
+          ).length;
 
           return (
             <div key={pm.providerId} className="model-group">
@@ -134,7 +135,8 @@ export function ModelList() {
                       <Toggle
                         checked={m.enabled !== false}
                         onChange={(next) =>
-                          toggleModel(pm.providerId, m.id, next)}
+                          toggleModel(pm.providerId, m.id, next)
+                        }
                         label={m.name ?? m.id}
                       />
                     </div>

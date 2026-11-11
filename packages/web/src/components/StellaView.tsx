@@ -5,7 +5,10 @@ import {
   sessionVisualBase,
   stellaUploadBase,
 } from "../api-client.ts";
+import { useReducedMotion } from "../hooks/useMediaQuery.ts";
+import { usePresence } from "../hooks/usePresence.ts";
 import { useT } from "../i18n.ts";
+import type { StellaConversationState } from "../stella-state.ts";
 import type {
   PendingFile,
   PendingImage,
@@ -16,9 +19,6 @@ import { Composer } from "./Composer.tsx";
 import { StellaPane } from "./StellaPane.tsx";
 import { EnvRequestDialog } from "./stella/EnvRequestDialog.tsx";
 import { StellaTranscript } from "./stella/StellaTranscript.tsx";
-import { usePresence } from "../hooks/usePresence.ts";
-import { useReducedMotion } from "../hooks/useMediaQuery.ts";
-import type { StellaConversationState } from "../stella-state.ts";
 
 interface StellaViewProps {
   /** The agent whose conversation this is (the sidebar picks it). Its name
@@ -107,33 +107,31 @@ interface StellaViewProps {
  * therefore has nothing to filter — the difference is in the data, not in a
  * flag.
  */
-export function StellaView(
-  {
-    agent,
-    conversation,
-    sessionId,
-    conversationError,
-    loading,
-    status,
-    screenOpen,
-    onScreenOpenChange,
-    input,
-    onInputChange,
-    images,
-    onImagesChange,
-    files,
-    onFilesChange,
-    onPrompt,
-    onAbort,
-    onRewind,
-    onLoadOlder,
-    loadingOlder,
-    onFinishHandover,
-    onProvideEnv,
-    onDeclineEnv,
-    onOpenSettings,
-  }: StellaViewProps,
-) {
+export function StellaView({
+  agent,
+  conversation,
+  sessionId,
+  conversationError,
+  loading,
+  status,
+  screenOpen,
+  onScreenOpenChange,
+  input,
+  onInputChange,
+  images,
+  onImagesChange,
+  files,
+  onFilesChange,
+  onPrompt,
+  onAbort,
+  onRewind,
+  onLoadOlder,
+  loadingOlder,
+  onFinishHandover,
+  onProvideEnv,
+  onDeclineEnv,
+  onOpenSettings,
+}: StellaViewProps) {
   const t = useT();
   // The transcript owns the scroll element (see TranscriptScrollOptions.
   // pinToken): this view only records that a submit happened.
@@ -185,69 +183,69 @@ export function StellaView(
   return (
     <div className="stella">
       <div className="stella-main">
-        {conversationError !== null
-          ? (
-            <div className="chat-scroll">
-              <div className="chat-column">
-                <p className="error-text" role="alert">
-                  {t("chat.stella.conversationError", {
-                    error: conversationError,
-                  })}
-                </p>
-              </div>
+        {conversationError !== null ? (
+          <div className="chat-scroll">
+            <div className="chat-column">
+              <p className="error-text" role="alert">
+                {t("chat.stella.conversationError", {
+                  error: conversationError,
+                })}
+              </p>
             </div>
-          )
-          : conversation === null
-          ? (
-            <div className="chat-scroll">
-              <div className="chat-column">
+          </div>
+        ) : conversation === null ? (
+          <div className="chat-scroll">
+            <div className="chat-column">
+              <p className="stella-loading" role="status">
+                {loading ? t("chat.stella.loading") : t("chat.stella.empty")}
+              </p>
+              {/* The first-run build is the one wait this mode cannot
+               * hide. It lives here rather than in the title bar: it is
+               * a sentence, and the title bar is one line of a name. */}
+              {status?.starting === true && (
                 <p className="stella-loading" role="status">
-                  {loading ? t("chat.stella.loading") : t("chat.stella.empty")}
+                  {t("chat.stella.machine.starting")}
                 </p>
-                {
-                  /* The first-run build is the one wait this mode cannot
-                   * hide. It lives here rather than in the title bar: it is
-                   * a sentence, and the title bar is one line of a name. */
-                }
-                {status?.starting === true && (
-                  <p className="stella-loading" role="status">
-                    {t("chat.stella.machine.starting")}
+              )}
+              {/* A failure explains why nothing works, so it must be
+               * visible even while the conversation is empty. */}
+              {status !== null &&
+                status.state !== "running" &&
+                !status.starting &&
+                status.reason !== "" && (
+                  <p className="error-text" role="alert">
+                    {status.reason}
                   </p>
                 )}
-                {
-                  /* A failure explains why nothing works, so it must be
-                   * visible even while the conversation is empty. */
-                }
-                {status !== null && status.state !== "running" &&
-                  !status.starting && status.reason !== "" && (
-                  <p className="error-text" role="alert">{status.reason}</p>
-                )}
-              </div>
             </div>
-          )
-          : (
-            <StellaTranscript
-              conversation={conversation}
-              author={agent === null
+          </div>
+        ) : (
+          <StellaTranscript
+            conversation={conversation}
+            author={
+              agent === null
                 ? { id: "", name: "", icon: "" }
-                : { id: agent.id, name: agent.name, icon: agent.icon }}
-              visualBase={visualBase}
-              attachBase={attachBase}
-              uploadBase={uploadBase}
-              onRewind={handleRewind}
-              onSend={(text) => onPrompt(text, [], [])}
-              onLoadOlder={onLoadOlder}
-              loadingOlder={loadingOlder}
-              pinToken={pinToken}
-            />
-          )}
+                : { id: agent.id, name: agent.name, icon: agent.icon }
+            }
+            visualBase={visualBase}
+            attachBase={attachBase}
+            uploadBase={uploadBase}
+            onRewind={handleRewind}
+            onSend={(text) => onPrompt(text, [], [])}
+            onLoadOlder={onLoadOlder}
+            loadingOlder={loadingOlder}
+            pinToken={pinToken}
+          />
+        )}
         <div className="input-area">
           <Composer
             value={input}
             onChange={onInputChange}
-            placeholder={agent === null
-              ? t("chat.stella.noAgent")
-              : t("chat.stella.placeholder")}
+            placeholder={
+              agent === null
+                ? t("chat.stella.noAgent")
+                : t("chat.stella.placeholder")
+            }
             // No model line here. A stella conversation is one ongoing
             // chat, so its model belongs to the AGENT and is set once in the
             // agent's edit dialog (AgentEditDialog) rather than chosen per
@@ -263,8 +261,10 @@ export function StellaView(
             // Nothing can be sent before the conversation exists (it is
             // created once an agent is picked and the machine runs), so the
             // button says so instead of accepting a prompt that goes nowhere.
-            submitDisabled={(!input.trim() && images.length === 0 &&
-              files.length === 0) || conversation === null}
+            submitDisabled={
+              (!input.trim() && images.length === 0 && files.length === 0) ||
+              conversation === null
+            }
             onAbort={isRunning ? onAbort : undefined}
             onSubmit={submit}
             onOpenSettings={onOpenSettings}
@@ -287,12 +287,16 @@ export function StellaView(
           running={machineRunning}
           vncPort={status?.vncPort ?? null}
           agentId={agent?.id ?? null}
-          handover={handover === null ? null : {
-            toolCallId: handover.toolCallId,
-            reason: handover.reason,
-            instructions: handover.instructions,
-            expiresAt: handover.expiresAt,
-          }}
+          handover={
+            handover === null
+              ? null
+              : {
+                  toolCallId: handover.toolCallId,
+                  reason: handover.reason,
+                  instructions: handover.instructions,
+                  expiresAt: handover.expiresAt,
+                }
+          }
           onFinishHandover={onFinishHandover}
           // The pane's own × means the same thing as the header's toggle. A
           // hand-over is the one state where leaving is not the user's call

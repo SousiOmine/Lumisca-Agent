@@ -1,8 +1,8 @@
 import { assert, assertEquals } from "@std/assert";
 import { CoreError } from "../errors.ts";
+import type { Tool } from "../tools/schema.ts";
 import type { VmExec, VmExecOptions } from "./container.ts";
 import { createVmSemanticTools } from "./semantic.ts";
-import type { Tool } from "../tools/schema.ts";
 
 /**
  * The semantic tools are a slim layer: they build one helper request, run it
@@ -51,10 +51,7 @@ function requestOf(call: string): Record<string, unknown> {
 }
 
 /** Run a tool and return the error message it refused with. */
-async function refusal(
-  tool: Tool,
-  args: unknown,
-): Promise<CoreError> {
+async function refusal(tool: Tool, args: unknown): Promise<CoreError> {
   try {
     await tool.execute("1", args as never, undefined);
   } catch (error) {
@@ -68,11 +65,10 @@ async function refusal(
 
 Deno.test("vm semantic: the three tools carry the names the prompt keys on", () => {
   const { tools } = toolsFor({});
-  assertEquals(tools.map((tool) => tool.name), [
-    "vm_find",
-    "vm_do",
-    "vm_wait",
-  ]);
+  assertEquals(
+    tools.map((tool) => tool.name),
+    ["vm_find", "vm_do", "vm_wait"],
+  );
 });
 
 // --- vm_find ----------------------------------------------------------------
@@ -81,15 +77,17 @@ Deno.test("vm_find asks the helper for the filters it was given", async () => {
   const { tools, calls } = toolsFor({
     snapshot: "s12345",
     complete: true,
-    matches: [{
-      ref: "@s12345:e7",
-      role: "push button",
-      name: "Save",
-      text: "",
-      states: ["enabled"],
-      actions: ["press", "showContextMenu"],
-      bounds: { x: 10, y: 20, width: 60, height: 24 },
-    }],
+    matches: [
+      {
+        ref: "@s12345:e7",
+        role: "push button",
+        name: "Save",
+        text: "",
+        states: ["enabled"],
+        actions: ["press", "showContextMenu"],
+        bounds: { x: 10, y: 20, width: 60, height: 24 },
+      },
+    ],
   });
   const find = tools[0]!;
   const result = await find.execute(
@@ -149,15 +147,17 @@ Deno.test("vm_find marks a truncated walk instead of implying it saw everything"
   const { tools } = toolsFor({
     snapshot: "s1",
     complete: false,
-    matches: [{
-      ref: "@s1:e2",
-      role: "entry",
-      name: "Name",
-      text: "",
-      states: ["enabled"],
-      actions: [],
-      bounds: null,
-    }],
+    matches: [
+      {
+        ref: "@s1:e2",
+        role: "entry",
+        name: "Name",
+        text: "",
+        states: ["enabled"],
+        actions: [],
+        bounds: null,
+      },
+    ],
   });
   const find = tools[0]!;
   const result = await find.execute("1", { app: "chromium" }, undefined);
@@ -169,15 +169,17 @@ Deno.test("vm_find marks a truncated walk instead of implying it saw everything"
 Deno.test("vm_find spells out a disabled control", async () => {
   const { tools } = toolsFor({
     snapshot: "s1",
-    matches: [{
-      ref: "@s1:e9",
-      role: "push button",
-      name: "Submit",
-      text: "",
-      states: ["focused"],
-      actions: ["press"],
-      bounds: { x: 0, y: 0, width: 10, height: 10 },
-    }],
+    matches: [
+      {
+        ref: "@s1:e9",
+        role: "push button",
+        name: "Submit",
+        text: "",
+        states: ["focused"],
+        actions: ["press"],
+        bounds: { x: 0, y: 0, width: 10, height: 10 },
+      },
+    ],
   });
   const find = tools[0]!;
   const result = await find.execute("1", { app: "chromium" }, undefined);

@@ -48,10 +48,12 @@ Deno.test("shellCall: a transport failure falls back to Tauri IPC", async () => 
     async () => {
       const result = await shellCall<{ ok: boolean }>("state");
       assertEquals(result, { ok: true });
-      assertEquals(invocations, [{
-        command: "shell_action",
-        args: { action: "state", params: { key: "token" } },
-      }]);
+      assertEquals(invocations, [
+        {
+          command: "shell_action",
+          args: { action: "state", params: { key: "token" } },
+        },
+      ]);
     },
   );
 });
@@ -89,10 +91,12 @@ Deno.test("shellCall: a page without a bridge origin still reaches IPC", async (
     );
     const result = await shellCallWithoutBridge<{ ok: boolean }>("state");
     assertEquals(result, { ok: true });
-    assertEquals(invocations, [{
-      command: "shell_action",
-      args: { action: "state", params: { key: "token" } },
-    }]);
+    assertEquals(invocations, [
+      {
+        command: "shell_action",
+        args: { action: "state", params: { key: "token" } },
+      },
+    ]);
   } finally {
     globals.__LUMISCA_BRIDGE__ = withBridge;
   }

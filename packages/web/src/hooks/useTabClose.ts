@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "preact/compat";
-import { isViewRunning, type SessionView } from "../types.ts";
 import { useT } from "../i18n.ts";
+import { isViewRunning, type SessionView } from "../types.ts";
 
 /** A close waiting for the user's answer. */
 export interface PendingClose {
@@ -58,24 +58,27 @@ export function useTabClose(options: {
     viewsRef.current = views;
   }, [views]);
 
-  const request = useCallback((ids: string[]) => {
-    const live = viewsRef.current;
-    const running = ids.filter((id) => {
-      const view = live.get(id);
-      return view !== undefined && isViewRunning(view);
-    });
-    if (running.length === 0) {
-      closeTabs(ids);
-      return;
-    }
-    setPending({
-      ids,
-      running: new Set(running),
-      names: running.map((id) =>
-        live.get(id)?.info.name || t("chrome.tabBar.newSession")
-      ),
-    });
-  }, [closeTabs, t]);
+  const request = useCallback(
+    (ids: string[]) => {
+      const live = viewsRef.current;
+      const running = ids.filter((id) => {
+        const view = live.get(id);
+        return view !== undefined && isViewRunning(view);
+      });
+      if (running.length === 0) {
+        closeTabs(ids);
+        return;
+      }
+      setPending({
+        ids,
+        running: new Set(running),
+        names: running.map(
+          (id) => live.get(id)?.info.name || t("chrome.tabBar.newSession"),
+        ),
+      });
+    },
+    [closeTabs, t],
+  );
 
   const resolve = (keepRunning: boolean) => {
     if (pending === null) return;

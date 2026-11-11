@@ -51,10 +51,11 @@ export class ComputerUseService {
       const host = this.host;
       return host === undefined
         ? {
-          available: false,
-          reason: this.unavailableReason ??
-            "computer use is not available on this machine",
-        }
+            available: false,
+            reason:
+              this.unavailableReason ??
+              "computer use is not available on this machine",
+          }
         : { available: true, host };
     }
     const result = await probe();

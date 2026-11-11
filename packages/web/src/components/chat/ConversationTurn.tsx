@@ -1,10 +1,10 @@
-import { memo, useState } from "preact/compat";
 import {
   type AttachmentRef,
   attachmentsOfDetails,
   contentText,
   TOOL_CHAT_ATTACH,
 } from "@lumisca/core/shared";
+import { memo, useState } from "preact/compat";
 import type {
   AgentMessage,
   AssistantMessage,
@@ -12,10 +12,10 @@ import type {
   ToolResultMessage,
 } from "../../types.ts";
 import { AgentActivity } from "../AgentActivity.tsx";
-import { AttachmentCard } from "./AttachmentCard.tsx";
-import { MessageRow } from "./MessageRow.tsx";
 import { AssistantText } from "./AssistantText.tsx";
 import { AssistantTools } from "./AssistantTools.tsx";
+import { AttachmentCard } from "./AttachmentCard.tsx";
+import { MessageRow } from "./MessageRow.tsx";
 import type { ConversationTurnData, UserMessageImage } from "./types.ts";
 
 export type { ConversationTurnData } from "./types.ts";
@@ -103,7 +103,8 @@ export function buildTurns(messages: AgentMessage[]): ConversationTurnData[] {
     // on a row this drops.
     if (message.role === "notification" && message.kind === "retry") continue;
     if (
-      message.role === "user" || message.role === "mode" ||
+      message.role === "user" ||
+      message.role === "mode" ||
       message.role === "notification"
     ) {
       // A steered message joins the turn that is open — including a fragment,
@@ -181,10 +182,7 @@ export const ConversationTurn = memo(function ConversationTurn({
   // (nothing ran for it), no timing.
   if (turn.standalone) {
     return (
-      <section
-        className="conversation-turn"
-        data-enter={entering || undefined}
-      >
+      <section className="conversation-turn" data-enter={entering || undefined}>
         {turn.user !== undefined && (
           <MessageRow
             message={turn.user}
@@ -215,19 +213,20 @@ export const ConversationTurn = memo(function ConversationTurn({
   // which is where they belong. A user message inside the log (a prompt
   // steered into the run) keeps its action row: rewind works on it like on
   // a turn's own prompt.
-  const workLog = finalAssistant === undefined
-    ? turn.responses
-    : turn.responses.filter((message) => message !== finalAssistant);
-  const finalToolCalls = finalAssistant?.content.filter(
-    (block): block is ToolCallBlock => block.type === "toolCall",
-  ) ?? [];
+  const workLog =
+    finalAssistant === undefined
+      ? turn.responses
+      : turn.responses.filter((message) => message !== finalAssistant);
+  const finalToolCalls =
+    finalAssistant?.content.filter(
+      (block): block is ToolCallBlock => block.type === "toolCall",
+    ) ?? [];
   const expandable = workLog.length > 0 || finalToolCalls.length > 0;
   // A fragment (the tail of a turn whose prompt is on an earlier page) has
   // no prompt to time from and nothing to head: its rows ARE the turn's
   // content, so they are drawn open, without an activity header.
   const fragment = turn.user === undefined;
-  const startedAt = turn.user?.timestamp ??
-    turn.responses[0]?.timestamp ?? 0;
+  const startedAt = turn.user?.timestamp ?? turn.responses[0]?.timestamp ?? 0;
   const lastTimestamp = turn.responses.reduce(
     (latest, message) => Math.max(latest, message.timestamp),
     startedAt,
@@ -235,10 +234,7 @@ export const ConversationTurn = memo(function ConversationTurn({
   const completionTime = endedAt ?? lastTimestamp;
 
   return (
-    <section
-      className="conversation-turn"
-      data-enter={entering || undefined}
-    >
+    <section className="conversation-turn" data-enter={entering || undefined}>
       {turn.user !== undefined && (
         <MessageRow
           message={turn.user}
@@ -261,12 +257,10 @@ export const ConversationTurn = memo(function ConversationTurn({
           }}
         />
       )}
-      {
-        /* Open while running (the reader watches the work) and while a
-         * fragment is drawn (its rows ARE the turn). Both are states the
-         * reader did not toggle, but the row still has a height either way,
-         * so it goes through the same disclosure. */
-      }
+      {/* Open while running (the reader watches the work) and while a
+       * fragment is drawn (its rows ARE the turn). Both are states the
+       * reader did not toggle, but the row still has a height either way,
+       * so it goes through the same disclosure. */}
       <div className="collapse" data-open={fragment || running || expanded}>
         <div className="collapse-inner">
           <div className="agent-work-log">

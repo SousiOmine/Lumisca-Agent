@@ -1,8 +1,8 @@
-import type { ThemeSetting } from "../../types.ts";
 import type { MessageKey } from "@lumisca/core/shared";
 import { useT } from "../../i18n.ts";
-import { SettingRow } from "../SettingRow.tsx";
+import type { ThemeSetting } from "../../types.ts";
 import { Select } from "../Select.tsx";
+import { SettingRow } from "../SettingRow.tsx";
 
 interface AppearancePanelProps {
   theme: ThemeSetting;
@@ -24,9 +24,11 @@ const THEME_OPTIONS: { value: ThemeSetting; label: MessageKey }[] = [
  * persisted to the server settings, so it survives reloads. The app
  * language has its own panel (LanguagePanel): it is a separate concern and
  * additionally decides what new sessions answer in. */
-export function AppearancePanel(
-  { theme, error, onThemeChange }: AppearancePanelProps,
-) {
+export function AppearancePanel({
+  theme,
+  error,
+  onThemeChange,
+}: AppearancePanelProps) {
   const t = useT();
   return (
     <div className="settings-pane">

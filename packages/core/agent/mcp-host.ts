@@ -1,9 +1,9 @@
-import { addToolsToAgent, registryToolPair } from "../mcp/tools.ts";
+import type { Agent } from "../ai/agent.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
 import type { McpServerStatus } from "../mcp/manager.ts";
+import { addToolsToAgent, registryToolPair } from "../mcp/tools.ts";
 import type { SessionToolRegistries } from "../tools/registries.ts";
 import type { Tool } from "../tools/schema.ts";
-import type { Agent } from "../ai/agent.ts";
 
 /** The session's MCP attachment as one conversation sees it: which servers
  * the status panel reports, and which of their tools the tool_search /
@@ -66,7 +66,9 @@ export class McpAttachmentHost {
   replace(attachment: McpAttachment): void {
     const previous = this.#attachment;
     if (
-      previous !== null && previous !== attachment && this.registries !== null
+      previous !== null &&
+      previous !== attachment &&
+      this.registries !== null
     ) {
       // The tools of the servers that just went away must not survive them.
       this.registries.removeShared(
@@ -98,13 +100,15 @@ export class McpAttachmentHost {
       return Promise.resolve();
     }
     this.#readyDone = false;
-    this.#ready = attachment.ready.then((tools) => {
-      if (this.isClosed() || generation !== this.#generation) return;
-      this.#addTools(tools);
-    }).finally(() => {
-      // A newer attachment's discovery owns the flag from here on.
-      if (generation === this.#generation) this.#readyDone = true;
-    });
+    this.#ready = attachment.ready
+      .then((tools) => {
+        if (this.isClosed() || generation !== this.#generation) return;
+        this.#addTools(tools);
+      })
+      .finally(() => {
+        // A newer attachment's discovery owns the flag from here on.
+        if (generation === this.#generation) this.#readyDone = true;
+      });
     return this.#ready;
   }
 

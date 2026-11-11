@@ -53,15 +53,13 @@ export async function listWorkspaceFiles(
     if (!stat || !stat.isDirectory) continue;
     const folderName = basename(folder);
     entries.push({ path: folderName, name: folderName, isDir: true });
-    for await (
-      const item of walkEntries(folder, {
-        skipHidden: true,
-        excludedDirs: EXCLUDED_DIRS,
-        maxDepth: MAX_DEPTH,
-        maxEntries: max,
-        filesFirst: true,
-      })
-    ) {
+    for await (const item of walkEntries(folder, {
+      skipHidden: true,
+      excludedDirs: EXCLUDED_DIRS,
+      maxDepth: MAX_DEPTH,
+      maxEntries: max,
+      filesFirst: true,
+    })) {
       if (entries.length >= max) break;
       const rel = item.rel.replace(/\\/g, "/");
       entries.push({
@@ -100,9 +98,7 @@ export function suggestWorkspaceFiles(
     ranked.push({ entry, score });
   }
   ranked.sort(
-    (a, b) =>
-      a.score - b.score ||
-      a.entry.path.localeCompare(b.entry.path),
+    (a, b) => a.score - b.score || a.entry.path.localeCompare(b.entry.path),
   );
   return ranked.slice(0, limit).map((r) => r.entry);
 }

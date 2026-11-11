@@ -1,6 +1,6 @@
 import { IconUsers } from "@tabler/icons-preact";
-import type { TaskView } from "../types.ts";
 import { useT } from "../i18n.ts";
+import type { TaskView } from "../types.ts";
 import { CollapsiblePanel } from "./Panel.tsx";
 
 /** The session's running sub-agent tasks (the task tool). A settled task

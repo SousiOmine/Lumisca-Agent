@@ -111,10 +111,7 @@ Deno.test("shouldSwallowBackspace: the settings dialog survives Backspace", () =
     true,
   );
   // Selected static text (the current server URL, a test result, ...).
-  assertEquals(
-    shouldSwallowBackspace(key({}), target({ tagName: "P" })),
-    true,
-  );
+  assertEquals(shouldSwallowBackspace(key({}), target({ tagName: "P" })), true);
 });
 
 Deno.test("shouldSwallowBackspace: text editing is never touched", () => {

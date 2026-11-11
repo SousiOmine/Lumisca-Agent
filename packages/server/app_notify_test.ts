@@ -1,6 +1,6 @@
-import { assert, assertEquals } from "@std/assert";
 import { fauxProvider, LumiscaCore } from "@lumisca/core";
 import { toBase64Url } from "@lumisca/core/shared";
+import { assert, assertEquals } from "@std/assert";
 import { createApp } from "./app.ts";
 
 const HOST = { host: "127.0.0.1:8000" };
@@ -47,14 +47,14 @@ Deno.test("the VAPID public key is served and created on first ask", async () =>
   try {
     const response = await request(core, "/api/notify/key");
     assertEquals(response.status, 200);
-    const body = await response.json() as { publicKey: string };
+    const body = (await response.json()) as { publicKey: string };
     // An uncompressed P-256 point is 87 base64url characters.
     assertEquals(body.publicKey.length, 87);
     // Asking again answers the same key: replacing it would silently orphan
     // every subscription made with the first one.
     const again = await request(core, "/api/notify/key");
     assertEquals(
-      (await again.json() as { publicKey: string }).publicKey,
+      ((await again.json()) as { publicKey: string }).publicKey,
       body.publicKey,
     );
   } finally {

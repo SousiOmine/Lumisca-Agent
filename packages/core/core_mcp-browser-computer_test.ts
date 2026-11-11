@@ -2,11 +2,9 @@ import { join } from "node:path";
 
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@lumisca/core";
 import { assert, assertEquals, assertThrows } from "@std/assert";
-import type { AgentMessage, BrowserBackend } from "./mod.ts";
-import type { LumiscaCore } from "./mod.ts";
-
-import { TOOL_CALL, TOOL_PDF_READ_PAGES, TOOL_SEARCH } from "./shared/mod.ts";
 import { MCP_TOOLS_PROVIDER, ON_DEMAND_TOOLS_NOTE } from "./mcp/context.ts";
+import type { AgentMessage, BrowserBackend, LumiscaCore } from "./mod.ts";
+import { TOOL_CALL, TOOL_PDF_READ_PAGES, TOOL_SEARCH } from "./shared/mod.ts";
 
 import {
   makeRealTempDir,
@@ -328,14 +326,20 @@ Deno.test("an MCP config saved while a session streams reaches that session", as
         },
       }),
     );
-    assertEquals(info.servers.map((s) => s.name), ["fake"]);
+    assertEquals(
+      info.servers.map((s) => s.name),
+      ["fake"],
+    );
     assertEquals(core.getAppMcpInfo().exists, true);
     // Saving did not disturb the run: the same agent, still streaming.
     assertEquals(core.getAgent(session.id), agent);
     assertEquals(agent.isStreaming, true);
     // The new server is this session's (the status is read from its
     // attachment, which the save swapped in place).
-    assertEquals(agent.getMcpStatus()?.map((s) => s.name), ["fake"]);
+    assertEquals(
+      agent.getMcpStatus()?.map((s) => s.name),
+      ["fake"],
+    );
 
     // Its tools are discoverable without a rebuild: the running session's
     // tool_search reads the session's registry, which the reconnect filled.
@@ -433,8 +437,9 @@ Deno.test("workspace .mcp.json overrides same-named app servers", async () => {
       fauxAssistantMessage("Done."),
     ]);
     await promptSession(core, session.id, "List the available tools");
-    const browse = core.getAgent(session.id)!.messages
-      .filter((m) => m.role === "toolResult")
+    const browse = core
+      .getAgent(session.id)!
+      .messages.filter((m) => m.role === "toolResult")
       .at(-1) as { content: Array<{ type: string; text: string }> };
     const text = browse.content[0]!.text;
     assert(text.includes("mcp__fake__echo"), "workspace override must win");
@@ -555,10 +560,7 @@ Deno.test("detaching the browser backend removes browser tools on rebuild", asyn
     core.setBrowserBackend(undefined);
     core.setSessionModel(session.id, providerId, modelId);
     const detached = core.getAgent(session.id)!;
-    assert(
-      detached !== seeded,
-      "setSessionModel must rebuild the agent",
-    );
+    assert(detached !== seeded, "setSessionModel must rebuild the agent");
     assertEquals(
       detached.agent.state.tools.some((t) => t.name === TOOL_SEARCH),
       true,
@@ -590,9 +592,9 @@ Deno.test("detaching the browser backend removes browser tools on rebuild", asyn
       "the on-demand-tools note stays while the registry holds tools",
     );
     assertEquals(
-      core.getAgent(session.id)!.agent.state.systemPrompt.includes(
-        "tool_search",
-      ),
+      core
+        .getAgent(session.id)!
+        .agent.state.systemPrompt.includes("tool_search"),
       false,
       "the rebuilt prompt must stay free of the on-demand-tools note",
     );
@@ -662,19 +664,26 @@ Deno.test("the agent adds and removes an MCP server with its own tools", async (
     }
 
     const added = toolText(
-      await call.execute("add", {
-        name: "mcp_add",
-        args: {
-          name: "fake",
-          command: Deno.execPath(),
-          args: ["run", fakeServer],
+      await call.execute(
+        "add",
+        {
+          name: "mcp_add",
+          args: {
+            name: "fake",
+            command: Deno.execPath(),
+            args: ["run", fakeServer],
+          },
         },
-      }, undefined),
+        undefined,
+      ),
     );
     // The connection test ran (the fake server's tools are named), and the
     // server is in the app-level config.
     assert(added.includes("echo"), added);
-    assertEquals(core.getAppMcpInfo().servers.map((s) => s.name), ["fake"]);
+    assertEquals(
+      core.getAppMcpInfo().servers.map((s) => s.name),
+      ["fake"],
+    );
     assertEquals(
       core.getAgent(session.id),
       agent,
@@ -692,10 +701,14 @@ Deno.test("the agent adds and removes an MCP server with its own tools", async (
 
     // Removing it takes the tools away again, in the same run.
     const removed = toolText(
-      await call.execute("remove", {
-        name: "mcp_remove",
-        args: { name: "fake" },
-      }, undefined),
+      await call.execute(
+        "remove",
+        {
+          name: "mcp_remove",
+          args: { name: "fake" },
+        },
+        undefined,
+      ),
     );
     assert(removed.includes('"fake"'), removed);
     assertEquals(core.getAppMcpInfo().servers, []);

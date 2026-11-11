@@ -1,6 +1,6 @@
 import { IconRefresh } from "@tabler/icons-preact";
-import type { RecentSessionItem } from "../hooks/useRecentSessions.ts";
 import { formatRelativeTime } from "../format.ts";
+import type { RecentSessionItem } from "../hooks/useRecentSessions.ts";
 import { useLocale, useT } from "../i18n.ts";
 
 interface RecentSessionsListProps {
@@ -40,27 +40,27 @@ export function RecentSessionsList({
 }: RecentSessionsListProps) {
   const t = useT();
   const locale = useLocale();
-  const visible = items.filter((item) => !openKeys.has(item.key)).slice(
-    0,
-    limit,
-  );
+  const visible = items
+    .filter((item) => !openKeys.has(item.key))
+    .slice(0, limit);
 
-  const failure = error === undefined ? null : (
-    <div className="recent-error">
-      <span className="error-text">{error}</span>
-      {onReload && (
-        <button
-          type="button"
-          className="btn small"
-          onClick={onReload}
-          title={t("common.reload")}
-        >
-          <IconRefresh size={13} />
-          {t("common.reload")}
-        </button>
-      )}
-    </div>
-  );
+  const failure =
+    error === undefined ? null : (
+      <div className="recent-error">
+        <span className="error-text">{error}</span>
+        {onReload && (
+          <button
+            type="button"
+            className="btn small"
+            onClick={onReload}
+            title={t("common.reload")}
+          >
+            <IconRefresh size={13} />
+            {t("common.reload")}
+          </button>
+        )}
+      </div>
+    );
 
   if (visible.length === 0) {
     if (failure !== null) return failure;

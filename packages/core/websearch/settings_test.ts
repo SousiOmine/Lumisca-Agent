@@ -1,10 +1,12 @@
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import { CoreError } from "../errors.ts";
 import { WEB_SEARCH_KEY } from "../shared/settings-keys.ts";
-import type { FetchLike } from "./types.ts";
-import { createWebSearchSettingsStore } from "./settings.ts";
 import { WebSearchService } from "./service.ts";
-import { parseWebSearchSettings } from "./settings.ts";
+import {
+  createWebSearchSettingsStore,
+  parseWebSearchSettings,
+} from "./settings.ts";
+import type { FetchLike } from "./types.ts";
 
 /** In-memory settings, the shape the repo exposes to consumers. */
 function memorySettings() {
@@ -21,11 +23,13 @@ const okFetch: FetchLike = () =>
   Promise.resolve(
     new Response(
       JSON.stringify({
-        results: [{
-          title: "Hit",
-          url: "https://example.com/",
-          snippet: "text",
-        }],
+        results: [
+          {
+            title: "Hit",
+            url: "https://example.com/",
+            snippet: "text",
+          },
+        ],
       }),
       { headers: { "content-type": "application/json" } },
     ),
@@ -80,7 +84,10 @@ Deno.test("the first provider added becomes the default", () => {
   const { web, settings } = service();
   const view = web.add({ id: "exa", apiKey: "  key  " });
   assertEquals(view.defaultId, "exa");
-  assertEquals(view.providers.map((p) => p.id), ["exa"]);
+  assertEquals(
+    view.providers.map((p) => p.id),
+    ["exa"],
+  );
   assertEquals(view.providers[0]?.hasApiKey, true);
   // The key is stored trimmed, and it stays in the settings entry (never
   // through the generic surface).
@@ -121,7 +128,10 @@ Deno.test("removing the default hands it to the next provider", () => {
   web.add({ id: "brave", apiKey: "k" });
   const afterFirst = web.remove("exa");
   assertEquals(afterFirst.defaultId, "brave");
-  assertEquals(afterFirst.providers.map((p) => p.id), ["brave"]);
+  assertEquals(
+    afterFirst.providers.map((p) => p.id),
+    ["brave"],
+  );
   assertEquals(web.provider()?.id, "brave");
 
   // Removing the last one leaves nothing to search with.

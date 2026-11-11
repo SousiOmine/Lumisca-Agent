@@ -1,4 +1,5 @@
 import { CoreError } from "../errors.ts";
+import { MCP_OAUTH_KEY_PREFIX } from "../mcp/oauth.ts";
 import {
   APP_MCP_SETTINGS_KEY,
   COMMAND_SAFETY_APPROVALS_KEY,
@@ -22,7 +23,6 @@ import {
   WEB_SEARCH_KEY,
 } from "../shared/mod.ts";
 import { CREDENTIAL_KEY_PREFIX } from "./credentials.ts";
-import { MCP_OAUTH_KEY_PREFIX } from "../mcp/oauth.ts";
 
 /** The protected-key category of a settings key, or undefined when the
  * key is safe to expose through the generic settings surface. Credentials

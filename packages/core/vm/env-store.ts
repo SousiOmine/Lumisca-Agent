@@ -130,9 +130,9 @@ export function parseEnvJson(text: string): Record<string, string> {
 /** The shell script a command sources: one `export` per entry, sorted so the
  * file reads the same way whenever it is rewritten. */
 export function envScript(entries: Record<string, string>): string {
-  const lines = Object.keys(entries).sort().map((name) =>
-    `export ${name}=${shellQuote(entries[name]!)}`
-  );
+  const lines = Object.keys(entries)
+    .sort()
+    .map((name) => `export ${name}=${shellQuote(entries[name]!)}`);
   return `${lines.join("\n")}\n`;
 }
 
@@ -217,7 +217,10 @@ export class VmEnvStore {
 
   #serial<T>(task: () => Promise<T>): Promise<T> {
     const run = this.#tail.then(task, task);
-    this.#tail = run.then(() => {}, () => {});
+    this.#tail = run.then(
+      () => {},
+      () => {},
+    );
     return run;
   }
 }

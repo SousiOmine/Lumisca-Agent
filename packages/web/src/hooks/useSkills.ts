@@ -1,5 +1,5 @@
-import { useState } from "preact/compat";
 import { errorMessage as errorText } from "@lumisca/core/shared";
+import { useState } from "preact/compat";
 import { api, fed } from "../api.ts";
 import { peerRouted } from "../api-client.ts";
 import type { SkillInfo } from "../types.ts";
@@ -22,21 +22,26 @@ export function useSkills(
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  useAsyncEffect(async (isStale) => {
-    try {
-      const result = await peerRouted(peerId, api.getSkills, fed.getSkills)(
-        workspaceId,
-      );
-      if (isStale()) return;
-      setSkills(result.skills);
-      setError(null);
-    } catch (failure) {
-      if (!isStale()) {
-        setSkills([]);
-        setError(errorText(failure));
+  useAsyncEffect(
+    async (isStale) => {
+      try {
+        const result = await peerRouted(
+          peerId,
+          api.getSkills,
+          fed.getSkills,
+        )(workspaceId);
+        if (isStale()) return;
+        setSkills(result.skills);
+        setError(null);
+      } catch (failure) {
+        if (!isStale()) {
+          setSkills([]);
+          setError(errorText(failure));
+        }
       }
-    }
-  }, [peerId, workspaceId]);
+    },
+    [peerId, workspaceId],
+  );
 
   return { skills, error };
 }

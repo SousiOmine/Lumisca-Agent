@@ -1,10 +1,10 @@
 import { assertEquals, assertRejects } from "@std/assert";
-import { VmBackgroundSpawner, VmCommandRunner } from "./shell.ts";
+import type { VmCommandResult } from "./command.ts";
+import type { VmExec, VmExecOptions } from "./container.ts";
 import { VM_ENV_SH } from "./contract.ts";
 import { VM_ENV_SOURCE } from "./env-store.ts";
 import { shellQuote } from "./quote.ts";
-import type { VmExec, VmExecOptions } from "./container.ts";
-import type { VmCommandResult } from "./command.ts";
+import { VmBackgroundSpawner, VmCommandRunner } from "./shell.ts";
 
 /** A scripted exec seam with per-call answers, so a spawn's follow-up
  * liveness probes can answer differently from its start. */
@@ -48,15 +48,8 @@ Deno.test("vm shell: the runner wraps the command in one login shell", async () 
   // re-interpreted, so a command that works in the host's bash works here.
   // The saved variables are sourced first (an absent file is not an error),
   // so a command sees what the user entered through `vm_env`.
-  assertEquals(argv?.slice(0, 3), [
-    "bash",
-    "-lc",
-    `${VM_ENV_SOURCE}echo hi`,
-  ]);
-  assertEquals(
-    argv?.[2],
-    `[ -f ${VM_ENV_SH} ] && . ${VM_ENV_SH}; echo hi`,
-  );
+  assertEquals(argv?.slice(0, 3), ["bash", "-lc", `${VM_ENV_SOURCE}echo hi`]);
+  assertEquals(argv?.[2], `[ -f ${VM_ENV_SH} ] && . ${VM_ENV_SH}; echo hi`);
 });
 
 Deno.test("vm shell: per-call env vars travel through env, quoted", async () => {
@@ -144,9 +137,9 @@ Deno.test("vm shell: kill targets the process group", async () => {
     cwd: "/home/agent",
   });
   await process.kill();
-  const kill = calls.map((call) => call.join(" ")).find((c) =>
-    c.includes("kill -TERM")
-  );
+  const kill = calls
+    .map((call) => call.join(" "))
+    .find((c) => c.includes("kill -TERM"));
   assertEquals(kill?.includes("-777"), true);
   // Idempotent: a second kill sends nothing more.
   const before = calls.length;

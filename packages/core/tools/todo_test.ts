@@ -1,8 +1,8 @@
 import { assert, assertEquals, assertThrows } from "@std/assert";
-import type { TodoPhase } from "../shared/mod.ts";
 import type { ClientEvent } from "../domain/event.ts";
-import { createTodoTool, formatTodoCounts, TodoHub } from "./todo.ts";
+import type { TodoPhase } from "../shared/mod.ts";
 import { toolText } from "../test-utils.ts";
+import { createTodoTool, formatTodoCounts, TodoHub } from "./todo.ts";
 
 /** A hub whose emitted events are recorded, so tests can observe the
  * `todo` snapshot events. */
@@ -18,8 +18,8 @@ const TOOL_CALL_ID = "call-1";
 /** The todo payload of the last `todo` event emitted so far. */
 function lastTodo(events: ClientEvent[]): TodoPhase[] {
   const event = events
-    .filter((e): e is Extract<ClientEvent, { type: "todo" }> =>
-      e.type === "todo"
+    .filter(
+      (e): e is Extract<ClientEvent, { type: "todo" }> => e.type === "todo",
     )
     .at(-1);
   if (event === undefined) throw new Error("expected a todo event");
@@ -65,10 +65,13 @@ Deno.test("todo sets the whole plan, defaults statuses, and emits a snapshot", a
     phases: [
       {
         name: "実装",
-        tasks: [{ name: "調査する" }, {
-          name: "実装する",
-          status: "in_progress",
-        }],
+        tasks: [
+          { name: "調査する" },
+          {
+            name: "実装する",
+            status: "in_progress",
+          },
+        ],
       },
     ],
   });
@@ -76,11 +79,14 @@ Deno.test("todo sets the whole plan, defaults statuses, and emits a snapshot", a
   const todos = lastTodo(events);
   assertEquals(todos.length, 1);
   assertEquals(todos[0]!.name, "実装");
-  assertEquals(todos[0]!.tasks.map((t) => t.name), ["調査する", "実装する"]);
-  assertEquals(todos[0]!.tasks.map((t) => t.status), [
-    "pending",
-    "in_progress",
-  ]);
+  assertEquals(
+    todos[0]!.tasks.map((t) => t.name),
+    ["調査する", "実装する"],
+  );
+  assertEquals(
+    todos[0]!.tasks.map((t) => t.status),
+    ["pending", "in_progress"],
+  );
   assertEquals(
     toolText(result),
     "Updated todo list: 1 pending, 1 in progress.",
@@ -102,7 +108,10 @@ Deno.test("todo replaces the previous plan on every call", async () => {
 
   const todos = lastTodo(events);
   assertEquals(events.length, before + 1, "one snapshot event per call");
-  assertEquals(todos.map((p) => p.name), ["A", "B"]);
+  assertEquals(
+    todos.map((p) => p.name),
+    ["A", "B"],
+  );
   assertEquals(statusOf(todos, "t1"), "completed");
   assertEquals(toolText(result), "Updated todo list: 1 pending, 1 completed.");
 });
@@ -115,27 +124,34 @@ Deno.test("todo keeps ids stable for unchanged phases and tasks", async () => {
   });
   const first = hub.getPlan();
   assertEquals(first[0]!.id, "p1");
-  assertEquals(first[0]!.tasks.map((t) => t.id), ["t1", "t2"]);
+  assertEquals(
+    first[0]!.tasks.map((t) => t.id),
+    ["t1", "t2"],
+  );
 
   // The same plan with a new status, plus one added task: existing ids stay.
   await run(tool, {
-    phases: [{
-      name: "A",
-      tasks: [
-        { name: "a1", status: "completed" },
-        { name: "a2", status: "in_progress" },
-        { name: "a3" },
-      ],
-    }],
+    phases: [
+      {
+        name: "A",
+        tasks: [
+          { name: "a1", status: "completed" },
+          { name: "a2", status: "in_progress" },
+          { name: "a3" },
+        ],
+      },
+    ],
   });
   const second = hub.getPlan();
   assertEquals(second[0]!.id, "p1");
-  assertEquals(second[0]!.tasks.map((t) => t.id), ["t1", "t2", "t3"]);
-  assertEquals(second[0]!.tasks.map((t) => t.status), [
-    "completed",
-    "in_progress",
-    "pending",
-  ]);
+  assertEquals(
+    second[0]!.tasks.map((t) => t.id),
+    ["t1", "t2", "t3"],
+  );
+  assertEquals(
+    second[0]!.tasks.map((t) => t.status),
+    ["completed", "in_progress", "pending"],
+  );
 });
 
 Deno.test("todo ids are never reused after a plan is cleared", async () => {
@@ -153,19 +169,21 @@ Deno.test("todo carries parallel in_progress tasks", async () => {
   const { hub } = makeHub();
   const tool = createTodoTool(hub, { panel: true });
   await run(tool, {
-    phases: [{
-      name: "A",
-      tasks: [
-        { name: "a1", status: "in_progress" },
-        { name: "a2", status: "in_progress" },
-      ],
-    }],
+    phases: [
+      {
+        name: "A",
+        tasks: [
+          { name: "a1", status: "in_progress" },
+          { name: "a2", status: "in_progress" },
+        ],
+      },
+    ],
   });
   const todos = hub.getPlan();
-  assertEquals(todos[0]!.tasks.map((t) => t.status), [
-    "in_progress",
-    "in_progress",
-  ]);
+  assertEquals(
+    todos[0]!.tasks.map((t) => t.status),
+    ["in_progress", "in_progress"],
+  );
 });
 
 Deno.test("todo clearing the plan reports it and emits an empty snapshot", async () => {
@@ -182,23 +200,27 @@ Deno.test("todo accepts every status and trims names", async () => {
   const { hub } = makeHub();
   const tool = createTodoTool(hub, { panel: true });
   await run(tool, {
-    phases: [{
-      name: " 実装 ",
-      tasks: [
-        { name: " a ", status: "completed" },
-        { name: " b ", status: "abandoned" },
-        { name: " c ", status: "blocked" },
-      ],
-    }],
+    phases: [
+      {
+        name: " 実装 ",
+        tasks: [
+          { name: " a ", status: "completed" },
+          { name: " b ", status: "abandoned" },
+          { name: " c ", status: "blocked" },
+        ],
+      },
+    ],
   });
   const todos = hub.getPlan();
   assertEquals(todos[0]!.name, "実装");
-  assertEquals(todos[0]!.tasks.map((t) => t.name), ["a", "b", "c"]);
-  assertEquals(todos[0]!.tasks.map((t) => t.status), [
-    "completed",
-    "abandoned",
-    "blocked",
-  ]);
+  assertEquals(
+    todos[0]!.tasks.map((t) => t.name),
+    ["a", "b", "c"],
+  );
+  assertEquals(
+    todos[0]!.tasks.map((t) => t.status),
+    ["completed", "abandoned", "blocked"],
+  );
 });
 
 Deno.test("todo rejects malformed plans", async () => {

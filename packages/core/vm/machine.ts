@@ -1,20 +1,20 @@
-import { createVmExec, createVmExecBytes } from "./container.ts";
+import type { StellaStatus } from "../shared/wire.ts";
+import { builtinSkills } from "../skills/builtin/mod.ts";
+import type { SkillDef } from "../skills/discover.ts";
+import { ensureAgentMemory } from "./agent-memory.ts";
+import type { StellaAvailability } from "./availability.ts";
+import { stellaAvailability } from "./availability.ts";
+import type { VmCommandBytesRunner, VmCommandRunner } from "./command.ts";
+import { runVmCommand, runVmCommandBytes } from "./command.ts";
 import type {
   VmExec,
   VmExecBytes,
   VmManager,
   VmProgress,
 } from "./container.ts";
-import { runVmCommand, runVmCommandBytes } from "./command.ts";
-import type { VmCommandBytesRunner, VmCommandRunner } from "./command.ts";
-import { stellaAvailability } from "./availability.ts";
-import type { StellaAvailability } from "./availability.ts";
-import type { StellaStatus } from "../shared/wire.ts";
-import { discoverVmSkills } from "./skills.ts";
-import { builtinSkills } from "../skills/builtin/mod.ts";
-import type { SkillDef } from "../skills/discover.ts";
+import { createVmExec, createVmExecBytes } from "./container.ts";
 import { VM_SKILLS_DIR } from "./contract.ts";
-import { ensureAgentMemory } from "./agent-memory.ts";
+import { discoverVmSkills } from "./skills.ts";
 
 /** Everything the stella machine holds between calls: the manager, the exec
  * seams built over it, the cached availability verdict and the skill catalog.
@@ -61,14 +61,15 @@ export class StellaMachine {
    * image takes effect without a restart. */
   async availability(): Promise<StellaAvailability> {
     const vm = this.#vm;
-    const verdict = vm === undefined
-      ? {
-        available: false as const,
-        reason:
-          "stella mode is not available: the virtual machine is not set up " +
-          "for this installation",
-      }
-      : stellaAvailability(await vm.status());
+    const verdict =
+      vm === undefined
+        ? {
+            available: false as const,
+            reason:
+              "stella mode is not available: the virtual machine is not set up " +
+              "for this installation",
+          }
+        : stellaAvailability(await vm.status());
     this.#verdict = verdict;
     return verdict;
   }

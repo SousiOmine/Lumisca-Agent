@@ -35,7 +35,10 @@ Deno.test("stored recents: the list stops at the limit", () => {
   assertEquals(list.length, RECENT_MODEL_LIMIT);
   // The newest is kept and the oldest is the one dropped.
   assertEquals(list[0]!.modelId, `m${RECENT_MODEL_LIMIT + 2}`);
-  assertEquals(list.some((m) => m.modelId === "m0"), false);
+  assertEquals(
+    list.some((m) => m.modelId === "m0"),
+    false,
+  );
 });
 
 Deno.test("stored recents: peers keep separate lists", () => {

@@ -1,4 +1,3 @@
-import { removeDirRetry } from "../test-utils.ts";
 import { basename, join } from "node:path";
 import { assertEquals } from "@std/assert";
 import {
@@ -7,6 +6,7 @@ import {
   type Workspace,
   type WorkspaceFileEntry,
 } from "../mod.ts";
+import { removeDirRetry } from "../test-utils.ts";
 
 function workspace(root: string): Workspace {
   return { id: "w1", name: "ws", folders: [root], createdAt: 0, chat: false };
@@ -72,11 +72,26 @@ Deno.test("listWorkspaceFiles skips hidden entries, excluded dirs and symlinks",
     assertEquals(paths.includes(`${folderName}/visible.txt`), true);
     assertEquals(paths.includes(`${folderName}/.env`), false);
     assertEquals(paths.includes(`${folderName}/.hidden`), false);
-    assertEquals(paths.some((p) => p.includes("node_modules")), false);
-    assertEquals(paths.some((p) => p.includes(".git")), false);
-    assertEquals(paths.some((p) => p.includes("link.txt")), false);
-    assertEquals(paths.some((p) => p.includes("/bin/")), false);
-    assertEquals(paths.some((p) => p.includes("/obj/")), false);
+    assertEquals(
+      paths.some((p) => p.includes("node_modules")),
+      false,
+    );
+    assertEquals(
+      paths.some((p) => p.includes(".git")),
+      false,
+    );
+    assertEquals(
+      paths.some((p) => p.includes("link.txt")),
+      false,
+    );
+    assertEquals(
+      paths.some((p) => p.includes("/bin/")),
+      false,
+    );
+    assertEquals(
+      paths.some((p) => p.includes("/obj/")),
+      false,
+    );
   } finally {
     await removeDirRetry(root);
   }
@@ -127,9 +142,13 @@ Deno.test("listWorkspaceFiles covers every folder of a multi-folder workspace", 
   try {
     await Deno.writeTextFile(join(a, "one.txt"), "1");
     await Deno.writeTextFile(join(b, "two.txt"), "2");
-    const entries = await listWorkspaceFiles(
-      { id: "w2", name: "ws2", folders: [a, b], createdAt: 0, chat: false },
-    );
+    const entries = await listWorkspaceFiles({
+      id: "w2",
+      name: "ws2",
+      folders: [a, b],
+      createdAt: 0,
+      chat: false,
+    });
     const paths = entries.map((e) => e.path);
     assertEquals(paths.includes(basename(a)), true);
     assertEquals(paths.includes(`${basename(a)}/one.txt`), true);
@@ -178,7 +197,10 @@ Deno.test("suggestWorkspaceFiles ranks basename prefix above contains", () => {
 
 Deno.test("suggestWorkspaceFiles matches case-insensitively", () => {
   const result = suggestWorkspaceFiles(sample, "MOD");
-  assertEquals(result.some((e) => e.name === "mod.ts"), true);
+  assertEquals(
+    result.some((e) => e.name === "mod.ts"),
+    true,
+  );
 });
 
 Deno.test("suggestWorkspaceFiles honors the limit", () => {

@@ -9,8 +9,11 @@ import {
   type Tool,
   type ToolResult,
 } from "../tools/schema.ts";
-import { loadSkillContent, type SkillDef } from "./discover.ts";
-import { MAX_SKILL_FILE_BYTES } from "./discover.ts";
+import {
+  loadSkillContent,
+  MAX_SKILL_FILE_BYTES,
+  type SkillDef,
+} from "./discover.ts";
 
 const skillSchema: SchemaObject<{
   name: SchemaString;
@@ -38,9 +41,9 @@ const skillSchema: SchemaObject<{
  * model would read a name in the catalog and get "unknown skill" from the
  * tool. Resolving per call costs one directory scan (the same discovery the
  * catalog runs) and is what keeps the list and the tool the same set. */
-export function createSkillTool(
-  ctx: { skills: () => SkillDef[] },
-): Tool<typeof skillSchema> {
+export function createSkillTool(ctx: {
+  skills: () => SkillDef[];
+}): Tool<typeof skillSchema> {
   return {
     name: TOOL_SKILL,
     label: "Skill",
@@ -58,9 +61,10 @@ export function createSkillTool(
       const skills = ctx.skills();
       const skill = skills.find((candidate) => candidate.name === params.name);
       if (skill === undefined) {
-        const known = skills.length === 0
-          ? "(none)"
-          : skills.map((candidate) => candidate.name).join(", ");
+        const known =
+          skills.length === 0
+            ? "(none)"
+            : skills.map((candidate) => candidate.name).join(", ");
         throw new Error(
           `Unknown skill "${params.name}". Available skills: ${known}`,
         );

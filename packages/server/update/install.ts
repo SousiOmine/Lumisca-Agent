@@ -28,6 +28,9 @@
  * applied-update record next to it (stage.ts) and by the release manifest.
  */
 import { basename, join } from "node:path";
+import { errorMessage } from "@lumisca/core";
+import { installedFileNames } from "../layout.ts";
+import { PORT_WAIT_ENV_KEY } from "../startup.ts";
 import { extractArchive } from "./archive.ts";
 import {
   EXTRACT_DIR_NAME,
@@ -36,9 +39,6 @@ import {
   stagingDir,
   writeAppliedUpdate,
 } from "./stage.ts";
-import { PORT_WAIT_ENV_KEY } from "../startup.ts";
-import { errorMessage } from "@lumisca/core";
-import { installedFileNames } from "../layout.ts";
 
 /** Where the running server lives. */
 export interface InstallEnvironment {
@@ -71,9 +71,9 @@ export async function runVersionCommand(binary: string): Promise<string> {
   }).output();
   if (!output.success) {
     throw new InstallError(
-      `新しいバイナリを実行できませんでした (終了コード ${output.code})${
-        messageFromStderr(output.stderr)
-      }`,
+      `新しいバイナリを実行できませんでした (終了コード ${output.code})${messageFromStderr(
+        output.stderr,
+      )}`,
     );
   }
   return new TextDecoder().decode(output.stdout);
@@ -215,9 +215,11 @@ export async function applyStagedUpdate(
     ...entries.filter((entry) => entry.name !== binaryName),
   ];
   const backupSuffix = `.old-${options.currentVersion}`;
-  const backups: Array<
-    { backup: string; target: string; isDirectory: boolean }
-  > = [];
+  const backups: Array<{
+    backup: string;
+    target: string;
+    isDirectory: boolean;
+  }> = [];
   /** Targets this apply created (nothing was there before): rolling back
    * means deleting them, not restoring a backup. */
   const added: Array<{ target: string; isDirectory: boolean }> = [];
@@ -230,9 +232,9 @@ export async function applyStagedUpdate(
     const backupPath = join(installDir, `${name}${backupSuffix}`);
     try {
       await removeQuietly(backupPath, { recursive: isDirectory });
-      const existing = await Deno.stat(target).then(() => true).catch(() =>
-        false
-      );
+      const existing = await Deno.stat(target)
+        .then(() => true)
+        .catch(() => false);
       if (existing) {
         await Deno.rename(target, backupPath);
         backups.push({ backup: backupPath, target, isDirectory });
@@ -240,9 +242,7 @@ export async function applyStagedUpdate(
       await Deno.rename(newPath, target);
       if (!existing) added.push({ target, isDirectory });
     } catch (error) {
-      failures.push(
-        `${name}: ${errorMessage(error)}`,
-      );
+      failures.push(`${name}: ${errorMessage(error)}`);
       break;
     }
   }
@@ -266,9 +266,9 @@ export async function applyStagedUpdate(
     }
     await Deno.remove(extractDir, { recursive: true }).catch(() => {});
     throw new InstallError(
-      `更新の適用に失敗しました (以前のファイルに戻しました): ${
-        failures.join(" / ")
-      }`,
+      `更新の適用に失敗しました (以前のファイルに戻しました): ${failures.join(
+        " / ",
+      )}`,
     );
   }
 
@@ -396,9 +396,10 @@ export async function cleanupStaleFiles(
     // A backup of a directory entry (the stella machine's container files)
     // is a directory too, so this looks at files and directories alike.
     const isBackup = [...names].some((name) =>
-      entry.name.startsWith(`${name}.old-`)
+      entry.name.startsWith(`${name}.old-`),
     );
-    const isStaged = entry.name.endsWith(".new") &&
+    const isStaged =
+      entry.name.endsWith(".new") &&
       names.has(entry.name.slice(0, -".new".length));
     if (!isBackup && !isStaged) continue;
     try {

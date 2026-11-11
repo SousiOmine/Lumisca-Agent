@@ -6,8 +6,9 @@
  * keeps its format, and that an image already small enough is left alone
  * (re-encoding it would only cost bytes).
  */
-import { assert, assertEquals } from "@std/assert";
+
 import { createCanvas, loadImage } from "@napi-rs/canvas";
+import { assert, assertEquals } from "@std/assert";
 import {
   isPreviewable,
   PREVIEW_EDGE,
@@ -65,24 +66,21 @@ Deno.test("renderPreview: an image within the edge produces nothing", async () =
   assertEquals(await renderPreview(makePng(320, 200), "image/png"), undefined);
 });
 
-Deno.test(
-  "renderPreview: an unsupported or broken source produces nothing",
-  async () => {
-    // SVG is a document, not pixels; bytes that do not decode have no
-    // preview. Both fall back to the original rather than to an error.
-    assertEquals(
-      await renderPreview(new Uint8Array(), "image/svg+xml"),
-      undefined,
-    );
-    assertEquals(
-      await renderPreview(new Uint8Array([1, 2, 3]), "image/png"),
-      undefined,
-    );
-    // An empty body of a type this module does decode: loadImage refuses it,
-    // and the route answers with the original.
-    assertEquals(await renderPreview(new Uint8Array(), "image/png"), undefined);
-  },
-);
+Deno.test("renderPreview: an unsupported or broken source produces nothing", async () => {
+  // SVG is a document, not pixels; bytes that do not decode have no
+  // preview. Both fall back to the original rather than to an error.
+  assertEquals(
+    await renderPreview(new Uint8Array(), "image/svg+xml"),
+    undefined,
+  );
+  assertEquals(
+    await renderPreview(new Uint8Array([1, 2, 3]), "image/png"),
+    undefined,
+  );
+  // An empty body of a type this module does decode: loadImage refuses it,
+  // and the route answers with the original.
+  assertEquals(await renderPreview(new Uint8Array(), "image/png"), undefined);
+});
 
 Deno.test("isPreviewable names the raster formats the route can scale", () => {
   for (const type of ["image/png", "image/jpeg", "image/webp"]) {

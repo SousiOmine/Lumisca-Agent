@@ -1,9 +1,12 @@
-import { fakeModel } from "../test-utils.ts";
-import { assert, assertEquals, assertRejects } from "@std/assert";
+import type {
+  AssistantMessageEventStream,
+  StreamFn,
+  StreamRequest,
+} from "@lumisca/core";
 import { fauxAssistantMessage } from "@lumisca/core";
-import type { AssistantMessageEventStream, StreamRequest } from "@lumisca/core";
+import { assert, assertEquals, assertRejects } from "@std/assert";
 import type { StreamOptions } from "../ai/types.ts";
-import type { StreamFn } from "@lumisca/core";
+import { fakeModel } from "../test-utils.ts";
 import {
   cleanTitle,
   MAX_TITLE_CHARS,
@@ -128,18 +131,10 @@ Deno.test("generateTitle throws on stream errors", async () => {
     fakeModel("fast"),
     fakeStreamFn("", { fail: true }),
   );
-  await assertRejects(
-    () => generator.generateTitle("hi"),
-    Error,
-    "boom",
-  );
+  await assertRejects(() => generator.generateTitle("hi"), Error, "boom");
 });
 
 Deno.test("generateTitle throws when the model returns no text", async () => {
   const generator = new TitleGenerator(fakeModel("fast"), fakeStreamFn("   "));
-  await assertRejects(
-    () => generator.generateTitle("hi"),
-    Error,
-    "no text",
-  );
+  await assertRejects(() => generator.generateTitle("hi"), Error, "no text");
 });

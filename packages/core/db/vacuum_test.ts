@@ -1,6 +1,6 @@
-import { assertEquals } from "@std/assert";
 import { basename, dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { assertEquals } from "@std/assert";
 import { LumiscaDb } from "./mod.ts";
 import {
   MIN_VACUUM_BYTES,
@@ -43,9 +43,10 @@ Deno.test("vacuum: the marker sits beside the database on any platform's path", 
   // `dirname` on Windows is one long file name (`/home/me/...`), so only the
   // shapes this OS uses can be asserted. The other separator is covered by
   // `basename` itself, and by this test running on every OS in CI.
-  const paths = Deno.build.os === "windows"
-    ? ["C:\\Users\\me\\AppData\\l.db", "l.db"]
-    : ["/home/me/.lumisca/l.db", "l.db"];
+  const paths =
+    Deno.build.os === "windows"
+      ? ["C:\\Users\\me\\AppData\\l.db", "l.db"]
+      : ["/home/me/.lumisca/l.db", "l.db"];
   for (const path of paths) {
     const marker = vacuumMarkerPath(path);
     assertEquals(dirname(marker), dirname(path), path);
@@ -78,9 +79,9 @@ Deno.test("vacuum: a marker below the threshold is dropped untouched", async () 
     assertEquals(await sizeOf(path), before);
     // The marker is gone: it described a request that no longer applies.
     assertEquals(
-      await Deno.stat(vacuumMarkerPath(path)).then(() => true).catch(() =>
-        false
-      ),
+      await Deno.stat(vacuumMarkerPath(path))
+        .then(() => true)
+        .catch(() => false),
       false,
     );
   } finally {
@@ -118,9 +119,9 @@ Deno.test("vacuum: a due request rewrites the file and keeps its contents", asyn
     }
     // The request was consumed.
     assertEquals(
-      await Deno.stat(vacuumMarkerPath(path)).then(() => true).catch(() =>
-        false
-      ),
+      await Deno.stat(vacuumMarkerPath(path))
+        .then(() => true)
+        .catch(() => false),
       false,
     );
   } finally {
@@ -165,20 +166,28 @@ Deno.test("vacuum: a real database keeps its schema version, indexes and rows", 
     const path = join(dir, "lumisca.db");
     // A database this build creates: migrations, indexes and all.
     const original = LumiscaDb.open(path);
-    original.db.prepare(
-      "INSERT INTO workspaces (id, name, created_at) VALUES ('w1', 't', 0)",
-    ).run();
-    original.db.prepare(
-      `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
+    original.db
+      .prepare(
+        "INSERT INTO workspaces (id, name, created_at) VALUES ('w1', 't', 0)",
+      )
+      .run();
+    original.db
+      .prepare(
+        `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
        VALUES ('s1', 'w1', 'n', 'p', 'm', 0, 0)`,
-    ).run();
-    original.db.prepare(
-      `INSERT INTO messages (id, session_id, role, content, timestamp)
+      )
+      .run();
+    original.db
+      .prepare(
+        `INSERT INTO messages (id, session_id, role, content, timestamp)
        VALUES ('m1', 's1', 'user', '{}', 1)`,
-    ).run();
-    const version = (original.db.prepare("PRAGMA user_version").get() as {
-      user_version: number;
-    }).user_version;
+      )
+      .run();
+    const version = (
+      original.db.prepare("PRAGMA user_version").get() as {
+        user_version: number;
+      }
+    ).user_version;
     original.close();
 
     await Deno.writeTextFile(vacuumMarkerPath(path), String(MIN_VACUUM_BYTES));
@@ -192,9 +201,11 @@ Deno.test("vacuum: a real database keeps its schema version, indexes and rows", 
         .prepare("SELECT COUNT(*) AS n FROM messages")
         .get() as { n: number };
       assertEquals(Number(row.n), 1);
-      const stamped = (reread.db.prepare("PRAGMA user_version").get() as {
-        user_version: number;
-      }).user_version;
+      const stamped = (
+        reread.db.prepare("PRAGMA user_version").get() as {
+          user_version: number;
+        }
+      ).user_version;
       assertEquals(stamped, version);
       // The indexes came across, which is what paging and the checkpoint
       // lookup rely on.

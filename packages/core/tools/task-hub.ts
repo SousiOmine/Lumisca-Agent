@@ -1,25 +1,35 @@
+import { createSubagentAgent } from "../agent/subagent-runner.ts";
 import type { Agent } from "../ai/agent.ts";
-import type { AgentEvent, AgentMessage, StreamFn } from "../ai/types.ts";
-import type { Api, AssistantMessage, Model } from "../ai/types.ts";
-import { CoreError, errorMessage } from "../errors.ts";
-import { createLogger } from "../log.ts";
+import { contextMessage } from "../ai/context-providers.ts";
+import { isRetryableRateLimit } from "../ai/llm-retry.ts";
+import {
+  MAX_RATE_LIMIT_RETRIES,
+  rateLimitRetryDelayMs,
+  sleepAbortable,
+} from "../ai/rate-limit.ts";
 import {
   buildInterruptedRetryNotification,
   buildRetryNotification,
   hasNoVisibleOutput,
   isTransientStreamError,
 } from "../ai/retry-policy.ts";
-import {
-  MAX_RATE_LIMIT_RETRIES,
-  rateLimitRetryDelayMs,
-  sleepAbortable,
-} from "../ai/rate-limit.ts";
-import { isRetryableRateLimit } from "../ai/llm-retry.ts";
-import type { McpAttachment } from "../mcp/attachment.ts";
-import { addToolsToAgent, registryToolPair } from "../mcp/tools.ts";
-import { withOnDemandToolsNote } from "../mcp/context.ts";
-import type { ToolRegistry } from "./registry.ts";
+import type {
+  AgentEvent,
+  AgentMessage,
+  Api,
+  AssistantMessage,
+  Model,
+  StreamFn,
+} from "../ai/types.ts";
+import type { ClientEvent } from "../domain/event.ts";
 import type { NotificationPayload } from "../domain/notification.ts";
+import { notificationMessage } from "../domain/notification.ts";
+import { CoreError, errorMessage } from "../errors.ts";
+import { createLogger } from "../log.ts";
+import type { McpAttachment } from "../mcp/attachment.ts";
+import { withOnDemandToolsNote } from "../mcp/context.ts";
+import { addToolsToAgent, registryToolPair } from "../mcp/tools.ts";
+import type { CommandSafety } from "../safety/command-safety.ts";
 import type {
   SubagentStatus,
   SubagentType,
@@ -27,31 +37,21 @@ import type {
   ThinkingLevel,
 } from "../shared/mod.ts";
 import { DEFAULT_LOCALE, type Locale } from "../shared/mod.ts";
-import type { ClientEvent } from "../domain/event.ts";
+import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
+import { createSkillCatalogProvider } from "../skills/catalog.ts";
+import type { SkillDef } from "../skills/discover.ts";
+import { createSkillTool } from "../skills/tool.ts";
+import type { SearchProvider } from "../websearch/types.ts";
 import { createBashTool } from "./bash.ts";
 import { createEvalTool } from "./eval.ts";
-import type { CommandSafety } from "../safety/command-safety.ts";
 import { toAgentTool } from "./pi-adapter.ts";
-import { createSubagentAgent } from "../agent/subagent-runner.ts";
+import type { ToolRegistry } from "./registry.ts";
 import type { Tool } from "./schema.ts";
-import {
-  fileTools,
-  readOnlyInvestigationTools,
-  type ToolBackends,
-} from "./tool-pieces.ts";
-import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
-import type { SkillDef } from "../skills/discover.ts";
-import { createSkillCatalogProvider } from "../skills/catalog.ts";
-import { contextMessage } from "../ai/context-providers.ts";
-import { createSkillTool } from "../skills/tool.ts";
-import { createWebSearchTools } from "./web.ts";
-import type { SearchProvider } from "../websearch/types.ts";
 import {
   formatTaskCompletion,
   lastAssistantText,
   subagentSystemPrompt,
 } from "./subagent-format.ts";
-import { notificationMessage } from "../domain/notification.ts";
 import type { Subagent } from "./subagent-registry.ts";
 import { type SubagentHub, SubagentRegistry } from "./subagent-registry.ts";
 import {
@@ -59,6 +59,12 @@ import {
   createTaskOutputTool,
   createTaskTool,
 } from "./task.ts";
+import {
+  fileTools,
+  readOnlyInvestigationTools,
+  type ToolBackends,
+} from "./tool-pieces.ts";
+import { createWebSearchTools } from "./web.ts";
 
 /** Concurrent sub-agents per session. Bounds LLM parallelism and memory;
  * the task tool reports the limit so the agent can wait for a slot. */
@@ -196,7 +202,8 @@ export interface TaskHubOptions {
 /** The hub the task-family tools are written against (see SubagentHub): a
  * signature that moves on this class and not on the interface fails to
  * compile here. */
-export type TaskHubImplementsToolsSeam = TaskHub extends SubagentHub ? true
+export type TaskHubImplementsToolsSeam = TaskHub extends SubagentHub
+  ? true
   : never;
 
 export class TaskHub {
@@ -215,9 +222,7 @@ export class TaskHub {
   private language: Locale;
   /** The compaction tuning read from the settings store (see
    * shared/settings-keys.ts); read on every check, like the main agent. */
-  private readonly compactionPolicy:
-    | (() => CompactionPolicyInput)
-    | undefined;
+  private readonly compactionPolicy: (() => CompactionPolicyInput) | undefined;
   /** Sleeps the retry backoff (see backoff()). */
   private readonly backoffSleep: (
     ms: number,
@@ -286,7 +291,7 @@ export class TaskHub {
     if (attachment !== null && attachment !== this.handledAttachment) {
       this.handledAttachment = attachment;
       attachment.whenReady((tools) =>
-        this.attachMcpToRunning(attachment, tools)
+        this.attachMcpToRunning(attachment, tools),
       );
     }
   }
@@ -377,8 +382,9 @@ export class TaskHub {
     if (this.closed) {
       throw new CoreError("The session is closed", "unavailable");
     }
-    const running = [...this.subagents.all()]
-      .filter((sub) => sub.status === "running").length;
+    const running = [...this.subagents.all()].filter(
+      (sub) => sub.status === "running",
+    ).length;
     if (running >= MAX_SUBAGENTS) {
       throw new CoreError(
         `Too many agents running (max ${MAX_SUBAGENTS}); wait for one to ` +
@@ -398,37 +404,27 @@ export class TaskHub {
     const tools = [
       ...(type === "general"
         ? generalTools(
-          runtime.backends,
-          runtime.eval,
-          this.safety,
-          this.webSearch,
-          runtime.skills,
-        )
-        : exploreTools(
-          runtime.backends,
-          this.safety,
-          runtime.skills,
-        )),
+            runtime.backends,
+            runtime.eval,
+            this.safety,
+            this.webSearch,
+            runtime.skills,
+          )
+        : exploreTools(runtime.backends, this.safety, runtime.skills)),
       ...searchable,
       ...this.agentTools(id, depth, canDelegate),
     ];
-    const basePrompt = subagentSystemPrompt(
-      id,
-      parentId,
-      type,
-      this.language,
-    );
-    const systemPrompt = searchable.length > 0
-      ? withOnDemandToolsNote(basePrompt)
-      : basePrompt;
+    const basePrompt = subagentSystemPrompt(id, parentId, type, this.language);
+    const systemPrompt =
+      searchable.length > 0 ? withOnDemandToolsNote(basePrompt) : basePrompt;
     // A sub-agent's transcript is memory-only and nothing republishes its
     // context, so the skill catalog is seeded once, at spawn, in the same
     // shape the main agent publishes. Without it the `skill` tool points at
     // a listing the sub-agent never received.
     const catalog = createSkillCatalogProvider({ skills: runtime.skills });
-    const messages = catalog.next().map((update) =>
-      contextMessage(catalog.name, update, Date.now())
-    );
+    const messages = catalog
+      .next()
+      .map((update) => contextMessage(catalog.name, update, Date.now()));
     // The agent is built by the agent layer (agent/subagent-runner.ts): this
     // hub owns the delegation protocol, not how an agent is assembled.
     const { agent, compactor } = createSubagentAgent(

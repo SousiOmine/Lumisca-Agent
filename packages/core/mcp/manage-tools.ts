@@ -61,42 +61,52 @@ const addSchema = object({
     "The server's name: its label in Settings → MCP servers and the group " +
       "its tools are listed under.",
   ),
-  command: optional(string(
-    "stdio servers: the program to run (for example npx). Pass either " +
-      "command or url, never both.",
-  )),
-  args: optional(array(
-    string(),
-    "stdio servers: one argument per element (each element is passed " +
-      "as-is; do not quote or join them).",
-  )),
-  env: optional(stringMap(
-    "stdio servers: environment variables for the process, each value a " +
-      "string (for example TOKEN=...).",
-  )),
-  cwd: optional(string(
-    "stdio servers: working directory. The app-level config is shared by " +
-      "every session, and a relative path resolves against each session's " +
-      "own workspace, so prefer an absolute path.",
-  )),
-  url: optional(string(
-    "HTTP servers: the streamable HTTP endpoint (http or https). Pass " +
-      "either command or url, never both.",
-  )),
-  headers: optional(stringMap(
-    "HTTP servers: request headers, for example Authorization.",
-  )),
-  verify: optional(boolean(
-    "Test the connection before saving (default true). A failed test saves " +
-      "nothing, so a wrong command is caught here; false saves without the " +
-      "test, for a first run that takes longer than the test allows.",
-  )),
+  command: optional(
+    string(
+      "stdio servers: the program to run (for example npx). Pass either " +
+        "command or url, never both.",
+    ),
+  ),
+  args: optional(
+    array(
+      string(),
+      "stdio servers: one argument per element (each element is passed " +
+        "as-is; do not quote or join them).",
+    ),
+  ),
+  env: optional(
+    stringMap(
+      "stdio servers: environment variables for the process, each value a " +
+        "string (for example TOKEN=...).",
+    ),
+  ),
+  cwd: optional(
+    string(
+      "stdio servers: working directory. The app-level config is shared by " +
+        "every session, and a relative path resolves against each session's " +
+        "own workspace, so prefer an absolute path.",
+    ),
+  ),
+  url: optional(
+    string(
+      "HTTP servers: the streamable HTTP endpoint (http or https). Pass " +
+        "either command or url, never both.",
+    ),
+  ),
+  headers: optional(
+    stringMap("HTTP servers: request headers, for example Authorization."),
+  ),
+  verify: optional(
+    boolean(
+      "Test the connection before saving (default true). A failed test saves " +
+        "nothing, so a wrong command is caught here; false saves without the " +
+        "test, for a first run that takes longer than the test allows.",
+    ),
+  ),
 });
 
 const removeSchema = object({
-  name: string(
-    "The name of the server to remove, as mcp_list reports it.",
-  ),
+  name: string("The name of the server to remove, as mcp_list reports it."),
 });
 
 const listSchema = object({});
@@ -127,8 +137,10 @@ function testSummary(tools: McpTestResult["tools"]): string {
   }
   const names = tools.slice(0, MAX_REPORTED_TOOLS).map((tool) => tool.name);
   const hidden = tools.length - names.length;
-  return `The connection test passed: ${tools.length} tool(s): ` +
-    `${names.join(", ")}${hidden > 0 ? `, +${hidden} more` : ""}.`;
+  return (
+    `The connection test passed: ${tools.length} tool(s): ` +
+    `${names.join(", ")}${hidden > 0 ? `, +${hidden} more` : ""}.`
+  );
 }
 
 /** Build the three MCP administration tools over one admin surface. */
@@ -224,7 +236,7 @@ export function createMcpAdminTools(admin: McpAdmin): Tool[] {
       admin.addAppServer(server);
       const lines = [
         `Added MCP server "${name}" (${server.type}) to the app-level ` +
-        "config; every workspace and every session uses it.",
+          "config; every workspace and every session uses it.",
       ];
       if (tested?.ok === true) lines.push(testSummary(tested.tools));
       if (tested?.needsAuth === true) {
@@ -270,14 +282,17 @@ export function createMcpAdminTools(admin: McpAdmin): Tool[] {
       const after = admin.removeAppServer(name);
       const remaining = after.servers.length;
       return Promise.resolve({
-        content: [{
-          type: "text",
-          text: `Removed MCP server "${name}" from the app-level config. ` +
-            "Its tools are no longer available in any session.\n" +
-            (remaining === 0
-              ? "No MCP servers are configured now."
-              : `${remaining} server(s) remain.`),
-        }],
+        content: [
+          {
+            type: "text",
+            text:
+              `Removed MCP server "${name}" from the app-level config. ` +
+              "Its tools are no longer available in any session.\n" +
+              (remaining === 0
+                ? "No MCP servers are configured now."
+                : `${remaining} server(s) remain.`),
+          },
+        ],
         details: { server: name, remaining },
       });
     },
@@ -297,26 +312,30 @@ export function createMcpAdminTools(admin: McpAdmin): Tool[] {
       const info = admin.getAppMcpInfo();
       if (info.servers.length === 0) {
         return Promise.resolve({
-          content: [{
-            type: "text",
-            text: "No MCP servers are configured in the app-level config " +
-              "(Settings → MCP servers). Add one with mcp_add.",
-          }],
+          content: [
+            {
+              type: "text",
+              text:
+                "No MCP servers are configured in the app-level config " +
+                "(Settings → MCP servers). Add one with mcp_add.",
+            },
+          ],
           details: { count: 0 },
         });
       }
       const lines = [
         "MCP servers in the app-level config (Settings → MCP servers):",
-        ...info.servers.map((server) =>
-          `- ${server.name} (${server.type}${
-            server.enabled ? "" : ", disabled"
-          }): ${statusText(server)}`
+        ...info.servers.map(
+          (server) =>
+            `- ${server.name} (${server.type}${
+              server.enabled ? "" : ", disabled"
+            }): ${statusText(server)}`,
         ),
         "",
         "Every workspace and session uses these. A workspace's .mcp.json or " +
-        "an agent plugin can add more servers (a workspace entry with the " +
-        "same name overrides one of these); this tool edits only the " +
-        "app-level config.",
+          "an agent plugin can add more servers (a workspace entry with the " +
+          "same name overrides one of these); this tool edits only the " +
+          "app-level config.",
       ];
       return Promise.resolve({
         content: [{ type: "text", text: lines.join("\n") }],

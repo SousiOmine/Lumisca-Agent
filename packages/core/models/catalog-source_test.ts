@@ -1,9 +1,11 @@
-import { assert, assertEquals } from "@std/assert";
+import { join } from "node:path";
 import type { ProviderMap } from "@opencode-ai/models";
 import snapshot, {
   generatedAt as snapshotGeneratedAt,
 } from "@opencode-ai/models/snapshot";
-import { buildCatalogProviders, builtinProviders } from "./dev-catalog.ts";
+import { assert, assertEquals } from "@std/assert";
+import { createInMemorySettingsRepo } from "../settings/repo.ts";
+import { withTempDir } from "../test-utils.ts";
 import {
   CACHED_CATALOG_FILE,
   fetchLiveCatalog,
@@ -13,9 +15,7 @@ import {
   saveCachedCatalog,
   snapshotCatalog,
 } from "./catalog-source.ts";
-import { createInMemorySettingsRepo } from "../settings/repo.ts";
-import { withTempDir } from "../test-utils.ts";
-import { join } from "node:path";
+import { buildCatalogProviders, builtinProviders } from "./dev-catalog.ts";
 
 function minimalProviders(): ProviderMap {
   return {
@@ -180,10 +180,13 @@ Deno.test("saveCachedCatalog is a no-op without a directory", () =>
     // would scatter `models.json` wherever the process happened to start.
     const before = [...Deno.readDirSync(root)].map((e) => e.name);
     saveCachedCatalog(undefined, { providers: minimalProviders() });
-    assertEquals([...Deno.readDirSync(root)].map((e) => e.name), before);
     assertEquals(
-      [...Deno.readDirSync(Deno.cwd())].some((e) =>
-        e.name === CACHED_CATALOG_FILE
+      [...Deno.readDirSync(root)].map((e) => e.name),
+      before,
+    );
+    assertEquals(
+      [...Deno.readDirSync(Deno.cwd())].some(
+        (e) => e.name === CACHED_CATALOG_FILE,
       ),
       false,
     );
@@ -217,8 +220,14 @@ Deno.test("buildCatalogProviders maps a foreign provider map like the snapshot p
     },
   } as unknown as ProviderMap;
   const built = buildCatalogProviders(extended);
-  assertEquals(built.map((p) => p.id), ["openai"]);
-  assertEquals(built[0]?.getModels().map((m) => m.id), ["test-model"]);
+  assertEquals(
+    built.map((p) => p.id),
+    ["openai"],
+  );
+  assertEquals(
+    built[0]?.getModels().map((m) => m.id),
+    ["test-model"],
+  );
 });
 
 Deno.test("isProviderMap rejects empty maps", () => {

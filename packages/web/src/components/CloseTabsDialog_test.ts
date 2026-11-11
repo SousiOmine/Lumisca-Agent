@@ -1,8 +1,8 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
-import { CloseTabsDialog } from "./CloseTabsDialog.tsx";
 import { initLocale } from "../i18n.ts";
+import { CloseTabsDialog } from "./CloseTabsDialog.tsx";
 
 /** Render the dialog in the app's original language, so the assertions read
  * as the user sees them. */
@@ -26,9 +26,7 @@ Deno.test("CloseTabsDialog warns about the single tab it would stop", () => {
   assertEquals(html.includes("confirm-list"), false);
   // All three answers, and nothing else, are offered.
   assertEquals(html.match(/<button/g)?.length, 3);
-  for (
-    const label of ["キャンセル", "実行を続けて閉じる", "中止して閉じる"]
-  ) {
+  for (const label of ["キャンセル", "実行を続けて閉じる", "中止して閉じる"]) {
     assertStringIncludes(html, label);
   }
 });

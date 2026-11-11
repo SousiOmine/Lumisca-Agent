@@ -1,5 +1,5 @@
-import { Modal } from "./Modal.tsx";
 import { useT } from "../i18n.ts";
+import { Modal } from "./Modal.tsx";
 
 interface ConfirmDialogProps {
   /** What the dialog asks, as its heading. */

@@ -1,9 +1,9 @@
-import { assertEquals, assertNotEquals } from "@std/assert";
 import {
   createTranslator,
   type Locale,
   type SavedPrompt,
 } from "@lumisca/core/shared";
+import { assertEquals, assertNotEquals } from "@std/assert";
 import { detectSlash } from "./hooks/useSlashMenu.ts";
 import {
   actionCommandFromText,
@@ -58,18 +58,18 @@ Deno.test("buildSlashCommands: the menu text follows the app language", () => {
   assertNotEquals(jaPlan?.description, enPlan?.description);
 
   // The review target submenu too (its items are catalogue entries).
-  const jaTargets = commandsFor("ja").find((c) => c.id === "review")?.items ??
-    [];
-  const enTargets = commandsFor("en").find((c) => c.id === "review")?.items ??
-    [];
-  assertEquals(jaTargets.map((i) => i.label), [
-    "ベースブランチとの差分",
-    "未コミットの変更",
-  ]);
-  assertEquals(enTargets.map((i) => i.label), [
-    "Changes against the base branch",
-    "Uncommitted changes",
-  ]);
+  const jaTargets =
+    commandsFor("ja").find((c) => c.id === "review")?.items ?? [];
+  const enTargets =
+    commandsFor("en").find((c) => c.id === "review")?.items ?? [];
+  assertEquals(
+    jaTargets.map((i) => i.label),
+    ["ベースブランチとの差分", "未コミットの変更"],
+  );
+  assertEquals(
+    enTargets.map((i) => i.label),
+    ["Changes against the base branch", "Uncommitted changes"],
+  );
 });
 
 Deno.test("slashPrompt: text-taking mode wraps the trailing text", () => {
@@ -173,10 +173,7 @@ Deno.test("slashPromptFromText: mid-text token keeps the other side as request",
   assertEquals(slashPromptFromText("/plan", ja)?.kind, "needs-text");
   assertEquals(slashPromptFromText("/plan ", ja)?.kind, "needs-text");
   // Both sides are joined.
-  assertEquals(
-    slashPromptFromText("メモ /plan 履歴", ja)?.kind,
-    "wrap",
-  );
+  assertEquals(slashPromptFromText("メモ /plan 履歴", ja)?.kind, "wrap");
 });
 
 Deno.test("slashPromptFromText: word-start boundary (no slash inside words)", () => {
@@ -276,19 +273,34 @@ Deno.test("buildSlashCommands: /compact is offered as an action command", () => 
   // Chat sessions (no workspace) get it too: condensing history needs no
   // workspace, unlike the agent modes.
   const chat = commandsFor("ja", true);
-  assertEquals(chat.map((c) => c.id), ["compact"]);
+  assertEquals(
+    chat.map((c) => c.id),
+    ["compact"],
+  );
   assertEquals(chat[0]!.kind, "action");
 
   // Workspace sessions keep the agent modes and add the action command.
   const workspace = commandsFor("ja", false);
-  assertEquals(workspace.some((c) => c.id === "compact"), true);
-  assertEquals(workspace.some((c) => c.id === "plan"), true);
+  assertEquals(
+    workspace.some((c) => c.id === "compact"),
+    true,
+  );
+  assertEquals(
+    workspace.some((c) => c.id === "plan"),
+    true,
+  );
 
   // Saved prompts stay a separate submenu, after the action commands.
-  const withPrompts = commandsFor("ja", true, [], [
-    { id: "p1", label: "P", prompt: "text" },
-  ]);
-  assertEquals(withPrompts.map((c) => c.id), ["compact", "prompt"]);
+  const withPrompts = commandsFor(
+    "ja",
+    true,
+    [],
+    [{ id: "p1", label: "P", prompt: "text" }],
+  );
+  assertEquals(
+    withPrompts.map((c) => c.id),
+    ["compact", "prompt"],
+  );
   assertEquals(withPrompts[1]!.kind, "insert");
   assertEquals(withPrompts[1]!.label, "保存済みプロンプト");
 });
@@ -311,31 +323,39 @@ Deno.test("buildSlashCommands: /skill lists the session catalog", () => {
   assertEquals(skill!.kind, "complete");
   assertEquals(skill!.label, "スキル");
   const items = skill!.items ?? [];
-  assertEquals(items.map((i) => i.id), [
-    "canvas-design",
-    "diagnosing-bugs",
-  ]);
+  assertEquals(
+    items.map((i) => i.id),
+    ["canvas-design", "diagnosing-bugs"],
+  );
   assertEquals(items[0]?.label, "canvas-design");
   assertEquals(items[0]?.description, "Posters and static art.");
   // Skills sit right after the agent modes, before the action commands
   // (the no-skill workspace list is the modes + the action command).
-  assertEquals(workspace.map((c) => c.id), [
-    ...jaCommands.filter((c) => c.id !== "compact").map((c) => c.id),
-    "skill",
-    "compact",
-  ]);
+  assertEquals(
+    workspace.map((c) => c.id),
+    [
+      ...jaCommands.filter((c) => c.id !== "compact").map((c) => c.id),
+      "skill",
+      "compact",
+    ],
+  );
 
   // Chat sessions offer skills too (global and built-in ones), unlike the
   // agent modes.
   const chat = commandsFor("ja", true, SKILLS);
-  assertEquals(chat.map((c) => c.id), ["skill", "compact"]);
+  assertEquals(
+    chat.map((c) => c.id),
+    ["skill", "compact"],
+  );
 });
 
 Deno.test("skillMenu: long descriptions are capped for the menu", () => {
-  const [command] = commandsFor("ja", true, [{
-    name: "long",
-    description: "x".repeat(500),
-  }]);
+  const [command] = commandsFor("ja", true, [
+    {
+      name: "long",
+      description: "x".repeat(500),
+    },
+  ]);
   const description = (command?.items ?? [])[0]?.description ?? "";
   assertEquals(description.length, 81);
   assertEquals(description.endsWith("…"), true);
@@ -359,10 +379,7 @@ Deno.test("skillPromptFromText: /skill <name> invokes the skill (English prompt)
   // No mode metadata: the transcript shows a plain user message.
   assertEquals(line.mode, undefined);
   assertEquals(line.text.includes('Invoke the skill "canvas-design"'), true);
-  assertEquals(
-    line.text.includes("load it with the skill tool"),
-    true,
-  );
+  assertEquals(line.text.includes("load it with the skill tool"), true);
   // No request → no subject section.
   assertEquals(line.text.includes("# Request"), false);
 });
@@ -377,10 +394,7 @@ Deno.test("skillPromptFromText: the request travels with the skill", () => {
 
   // The text around the command is the request too (like the modes): a
   // memo before the token is not dropped.
-  const before = skillPromptFromText(
-    "A4で /skill canvas-design",
-    SKILLS,
-  );
+  const before = skillPromptFromText("A4で /skill canvas-design", SKILLS);
   if (before === null || before.kind !== "wrap") {
     throw new Error("expected wrap");
   }
@@ -414,8 +428,8 @@ Deno.test("skillPromptFromText: the palette's completion round-trips", () => {
   // What the composer leaves in the input after picking a skill (see
   // slashCompletion) is exactly what the submit path parses.
   const [skill] = commandsFor("ja", true, SKILLS);
-  const typed = slashCompletion(skill!, (skill?.items ?? [])[0]) +
-    "ポスターを作って";
+  const typed =
+    slashCompletion(skill!, (skill?.items ?? [])[0]) + "ポスターを作って";
   assertEquals(typed, "/skill canvas-design ポスターを作って");
   const line = skillPromptFromText(typed, SKILLS);
   if (line === null || line.kind !== "wrap") throw new Error("expected wrap");
@@ -428,15 +442,15 @@ Deno.test("actionCommandFromText: /compact runs with the typed focus", () => {
   assertEquals(actionCommandFromText("  /compact  "), {
     commandId: "compact",
   });
-  assertEquals(
-    actionCommandFromText("/compact ファイル操作を詳しく記録して"),
-    { commandId: "compact", instructions: "ファイル操作を詳しく記録して" },
-  );
+  assertEquals(actionCommandFromText("/compact ファイル操作を詳しく記録して"), {
+    commandId: "compact",
+    instructions: "ファイル操作を詳しく記録して",
+  });
   // Multi-line focus keeps its inner newlines.
-  assertEquals(
-    actionCommandFromText("/compact 一つ目\n二つ目"),
-    { commandId: "compact", instructions: "一つ目\n二つ目" },
-  );
+  assertEquals(actionCommandFromText("/compact 一つ目\n二つ目"), {
+    commandId: "compact",
+    instructions: "一つ目\n二つ目",
+  });
 });
 
 Deno.test("actionCommandFromText: only a leading token, and only this client's commands", () => {

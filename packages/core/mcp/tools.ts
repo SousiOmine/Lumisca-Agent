@@ -1,11 +1,11 @@
 import type { Agent } from "../ai/agent.ts";
-import { toAgentTool } from "../tools/pi-adapter.ts";
-import type { Tool } from "../tools/schema.ts";
-import type { McpManager, McpToolDef } from "./manager.ts";
-import type { ToolRegistry } from "../tools/registry.ts";
-import { createToolSearchTool } from "../tools/search-tool.ts";
 import { createToolCallTool } from "../tools/call-tool.ts";
+import { toAgentTool } from "../tools/pi-adapter.ts";
+import type { ToolRegistry } from "../tools/registry.ts";
+import type { Tool } from "../tools/schema.ts";
 import { object } from "../tools/schema.ts";
+import { createToolSearchTool } from "../tools/search-tool.ts";
+import type { McpManager, McpToolDef } from "./manager.ts";
 
 /** Argument schemas larger than this are omitted from the description. */
 const MAX_SCHEMA_CHARS = 8192;
@@ -23,9 +23,7 @@ export function sanitizeServerName(name: string): string {
 const mcpArgsSchema = object({}, { additionalProperties: true });
 
 /** Build Tool wrappers for every tool of an McpManager. */
-export async function createMcpTools(
-  manager: McpManager,
-): Promise<Tool[]> {
+export async function createMcpTools(manager: McpManager): Promise<Tool[]> {
   const defs = await manager.listTools();
   return defs.map((def) => createMcpTool(manager, def));
 }
@@ -47,10 +45,7 @@ export function addToolsToAgent(agent: Agent, tools: Tool[]): void {
  * Shared by the session agent and the sub-agent hub so the pair cannot
  * drift. */
 export function registryToolPair(getRegistry: () => ToolRegistry): Tool[] {
-  return [
-    createToolSearchTool(getRegistry),
-    createToolCallTool(getRegistry),
-  ];
+  return [createToolSearchTool(getRegistry), createToolCallTool(getRegistry)];
 }
 
 function createMcpTool(manager: McpManager, def: McpToolDef): Tool {
@@ -74,8 +69,8 @@ function createMcpTool(manager: McpManager, def: McpToolDef): Tool {
 }
 
 function buildDescription(def: McpToolDef): string {
-  let description = def.description ??
-    `MCP tool "${def.name}" of server "${def.server}"`;
+  let description =
+    def.description ?? `MCP tool "${def.name}" of server "${def.server}"`;
   if (def.inputSchema !== undefined && def.inputSchema !== null) {
     const schema = JSON.stringify(def.inputSchema);
     if (schema.length <= MAX_SCHEMA_CHARS) {

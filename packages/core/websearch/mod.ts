@@ -23,6 +23,7 @@ export {
   WEB_SEARCH_PROVIDER_IDS,
   WEB_SEARCH_PROVIDERS,
 } from "./providers/registry.ts";
+export { WebSearchService, type WebSearchServiceOptions } from "./service.ts";
 export {
   addWebSearchProvider,
   availableProviderIds,
@@ -32,15 +33,14 @@ export {
   normalizeApiKey,
   parseWebSearchSettings,
   removeWebSearchProvider,
-  serializeWebSearchSettings,
-  setDefaultWebSearchProvider,
   type StoredWebSearchProvider,
   type StoredWebSearchSettings,
+  serializeWebSearchSettings,
+  setDefaultWebSearchProvider,
   updateWebSearchProvider,
-  webSearchProviderName,
   type WebSearchSettingsStore,
+  webSearchProviderName,
 } from "./settings.ts";
-export { WebSearchService, type WebSearchServiceOptions } from "./service.ts";
 export type {
   CreateSearchProviderOptions,
   FetchLike,

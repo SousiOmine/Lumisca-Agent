@@ -57,7 +57,8 @@ export function useDrafts(openKeys: readonly string[]) {
       const current = prev.get(key) ?? EMPTY_DRAFT;
       const next = { ...current, ...patch };
       if (
-        next.input === current.input && next.images === current.images &&
+        next.input === current.input &&
+        next.images === current.images &&
         next.files === current.files
       ) {
         return prev;

@@ -1,13 +1,13 @@
-import { basename, join } from "node:path";
 import { realpathSync } from "node:fs";
+import { basename, join } from "node:path";
 import { assert, assertEquals } from "@std/assert";
+import { removeDirRetry, toolText } from "../test-utils.ts";
+import { Sandbox } from "../workspace/sandbox.ts";
 import { createBashTool } from "./bash.ts";
+import { formatDuration } from "./duration.ts";
 import { HostCommandRunner } from "./host/command-runner.ts";
 import { HostFileBackend } from "./host/files.ts";
-import { Sandbox } from "../workspace/sandbox.ts";
-import { formatDuration } from "./duration.ts";
 import { MAX_TOOL_OUTPUT } from "./truncate.ts";
-import { removeDirRetry, toolText } from "../test-utils.ts";
 
 /** The host tool over a fresh temp workspace. */
 function hostTool(
@@ -89,14 +89,11 @@ Deno.test("bash tool reports how long the command took", async () => {
   try {
     // A command that sleeps ~300ms: the measurement has to cover the wait,
     // not only the process creation.
-    const command = Deno.build.os === "windows"
-      ? "Start-Sleep -Milliseconds 300"
-      : "sleep 0.3";
-    const result = await tool.execute(
-      "1",
-      { cwd: root, command },
-      undefined,
-    );
+    const command =
+      Deno.build.os === "windows"
+        ? "Start-Sleep -Milliseconds 300"
+        : "sleep 0.3";
+    const result = await tool.execute("1", { cwd: root, command }, undefined);
     const text = toolText(result);
     const durationMs = result.details?.durationMs;
     assert(typeof durationMs === "number", `durationMs: ${durationMs}`);
@@ -115,14 +112,11 @@ Deno.test("bash tool reports how long the command took", async () => {
 Deno.test("bash tool merges stdout and stderr", async () => {
   const { tool, root } = makeTool();
   try {
-    const command = Deno.build.os === "windows"
-      ? "echo hello; [Console]::Error.WriteLine('boom')"
-      : "echo hello; echo boom 1>&2";
-    const result = await tool.execute(
-      "1",
-      { cwd: root, command },
-      undefined,
-    );
+    const command =
+      Deno.build.os === "windows"
+        ? "echo hello; [Console]::Error.WriteLine('boom')"
+        : "echo hello; echo boom 1>&2";
+    const result = await tool.execute("1", { cwd: root, command }, undefined);
     const text = toolText(result);
     assertEquals(text.includes("hello"), true);
     assertEquals(text.includes("boom"), true);
@@ -153,11 +147,7 @@ Deno.test("bash tool rejects an unknown cwd", async () => {
   try {
     let message = "";
     try {
-      await tool.execute(
-        "1",
-        { cwd: "nope", command: "echo x" },
-        undefined,
-      );
+      await tool.execute("1", { cwd: "nope", command: "echo x" }, undefined);
     } catch (error) {
       message = error instanceof Error ? error.message : String(error);
     }
@@ -182,19 +172,13 @@ Deno.test({
         undefined,
       );
       const text = toolText(result);
-      assert(
-        !text.includes("\uFFFD"),
-        `output contains mojibake: ${text}`,
-      );
+      assert(!text.includes("\uFFFD"), `output contains mojibake: ${text}`);
       // The code page number must be visible — `chcp` prints a localized
       // label ("Active code page: 932" / "現在のコード ページ: 932"), so
       // only the number itself is asserted, never the label text. Real code
       // pages are 3 to 5 digits (932 = Shift_JIS, 65001 = UTF-8), and CI
       // runs Windows with the UTF-8 page, so 3 digits alone is too narrow.
-      assert(
-        /(^|\D)\d{3,5}(\D|$)/.test(text),
-        `code page missing: ${text}`,
-      );
+      assert(/(^|\D)\d{3,5}(\D|$)/.test(text), `code page missing: ${text}`);
     } finally {
       await removeDirRetry(root);
     }
@@ -235,9 +219,10 @@ Deno.test({
 Deno.test("bash tool passes env vars to the command", async () => {
   const { tool, root } = makeTool();
   try {
-    const echo = Deno.build.os === "windows"
-      ? "echo $env:LUMISCA_TEST_VAR"
-      : "echo $LUMISCA_TEST_VAR";
+    const echo =
+      Deno.build.os === "windows"
+        ? "echo $env:LUMISCA_TEST_VAR"
+        : "echo $LUMISCA_TEST_VAR";
     const result = await tool.execute(
       "1",
       { cwd: root, command: echo, env: { LUMISCA_TEST_VAR: "hello-env" } },
@@ -253,9 +238,10 @@ Deno.test("bash tool passes the tool-level env to the command", async () => {
   const root = Deno.makeTempDirSync({ prefix: "lumisca-bash-" });
   const tool = hostTool(root, { env: { LUMISCA_TEST_VAR: "tool-level" } });
   try {
-    const echo = Deno.build.os === "windows"
-      ? "echo $env:LUMISCA_TEST_VAR"
-      : "echo $LUMISCA_TEST_VAR";
+    const echo =
+      Deno.build.os === "windows"
+        ? "echo $env:LUMISCA_TEST_VAR"
+        : "echo $LUMISCA_TEST_VAR";
     const result = await tool.execute("1", { cwd: root, command: echo });
     assertEquals(toolText(result).includes("tool-level"), true);
   } finally {
@@ -267,9 +253,10 @@ Deno.test("bash tool per-call env overrides the tool-level env", async () => {
   const root = Deno.makeTempDirSync({ prefix: "lumisca-bash-" });
   const tool = hostTool(root, { env: { LUMISCA_TEST_VAR: "tool-level" } });
   try {
-    const echo = Deno.build.os === "windows"
-      ? "echo $env:LUMISCA_TEST_VAR"
-      : "echo $LUMISCA_TEST_VAR";
+    const echo =
+      Deno.build.os === "windows"
+        ? "echo $env:LUMISCA_TEST_VAR"
+        : "echo $LUMISCA_TEST_VAR";
     const result = await tool.execute(
       "1",
       { cwd: root, command: echo, env: { LUMISCA_TEST_VAR: "call-level" } },
@@ -410,9 +397,10 @@ Deno.test("bash tool spills the complete stdout when it is truncated", async () 
 Deno.test("bash tool spills the complete stderr when it is truncated", async () => {
   const { tool, root } = makeTool();
   try {
-    const command = Deno.build.os === "windows"
-      ? "[Console]::Error.WriteLine((Get-Content big.txt -Raw))"
-      : "cat big.txt 1>&2";
+    const command =
+      Deno.build.os === "windows"
+        ? "[Console]::Error.WriteLine((Get-Content big.txt -Raw))"
+        : "cat big.txt 1>&2";
     const text = toolText(await runBigCommand(tool, root, command));
     assert(
       text.includes("[stderr truncated to the last 65536 bytes;"),
@@ -439,7 +427,10 @@ Deno.test("bash tool spills nothing when the output fits", async () => {
     assertEquals(text.includes("full output:"), false);
     assertEquals(text.includes("truncated"), false);
     // The directory is created lazily: a run that cut nothing leaves none.
-    const created = await Deno.stat(spillDir).then(() => true, () => false);
+    const created = await Deno.stat(spillDir).then(
+      () => true,
+      () => false,
+    );
     assertEquals(created, false, `spill directory was created: ${spillDir}`);
   } finally {
     await removeDirRetry(root);
@@ -577,9 +568,10 @@ Deno.test({
 Deno.test("bash tool kills a command that outlives its timeout", async () => {
   const { tool, root } = makeTool();
   try {
-    const command = Deno.build.os === "windows"
-      ? "Write-Output before; Start-Sleep 30"
-      : "echo before; sleep 30";
+    const command =
+      Deno.build.os === "windows"
+        ? "Write-Output before; Start-Sleep 30"
+        : "echo before; sleep 30";
     const result = await bounded(
       tool.execute("1", { cwd: root, command, timeout: 1 }, undefined),
       "a command that outlives its timeout",

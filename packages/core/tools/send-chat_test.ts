@@ -1,7 +1,7 @@
-import { assert, assertEquals, assertRejects } from "@std/assert";
 import { join } from "node:path";
-import { type ChatMessage, MAX_ATTACHMENTS_PER_CALL } from "../shared/mod.ts";
+import { assert, assertEquals, assertRejects } from "@std/assert";
 import { SessionAttachmentStore } from "../session/attachments.ts";
+import { type ChatMessage, MAX_ATTACHMENTS_PER_CALL } from "../shared/mod.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 import { HostFileBackend } from "./host/files.ts";
 import type { ToolResult } from "./schema.ts";
@@ -54,7 +54,7 @@ function sent(result: ToolResult): ChatMessage {
 /** The text of a tool result (what the model reads back). */
 function receipt(result: ToolResult): string {
   return result.content
-    .map((block) => block.type === "text" ? block.text : "")
+    .map((block) => (block.type === "text" ? block.text : ""))
     .join("");
 }
 
@@ -140,7 +140,7 @@ Deno.test("send_chat: a missing file fails the whole call", async () => {
       test.tool.execute("t", {
         text: "送ります。",
         paths: [test.at("ok.txt"), test.at("missing.txt")],
-      })
+      }),
     );
   } finally {
     await test.cleanup();
@@ -158,7 +158,7 @@ Deno.test("send_chat: too many files in one call is refused", async () => {
       test.tool.execute("t", {
         text: "たくさん。",
         paths: Object.keys(files).map((name) => test.at(name)),
-      })
+      }),
     );
     assert(String(error).includes("up to"), String(error));
   } finally {
@@ -198,8 +198,5 @@ function assertDescription(description: string): void {
     );
   }
   // Why it matters: the user sees only tool names until the model speaks.
-  assert(
-    description.includes("only a timer and tool names"),
-    description,
-  );
+  assert(description.includes("only a timer and tool names"), description);
 }

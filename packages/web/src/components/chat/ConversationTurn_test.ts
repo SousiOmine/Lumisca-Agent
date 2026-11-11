@@ -1,14 +1,14 @@
+import { fauxAssistantMessage, fauxToolCall } from "@lumisca/core";
+import { summarizeContextUsage } from "@lumisca/core/shared";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
-import { fauxAssistantMessage, fauxToolCall } from "@lumisca/core";
+import { applyEvent, applyRunState } from "../../events.ts";
 import type {
   AgentMessage,
   NotificationKind,
   NotificationMessage,
 } from "../../types.ts";
-import { applyEvent, applyRunState } from "../../events.ts";
-import { summarizeContextUsage } from "@lumisca/core/shared";
 import { emptyView, isViewRunning } from "../../types.ts";
 import { buildTurns, ConversationTurn } from "./ConversationTurn.tsx";
 
@@ -122,22 +122,19 @@ Deno.test("buildTurns: a steered notification joins the run's turn", () => {
     turns[0]!.responses.map((m) => m.role),
     ["assistant", "notification", "assistant"],
   );
-  assertEquals(
-    (turns[0]!.responses[1] as NotificationMessage).steered,
-    true,
-  );
+  assertEquals((turns[0]!.responses[1] as NotificationMessage).steered, true);
 });
 
 Deno.test("buildTurns: a steered notification with no open turn starts one", () => {
   // A leading steered notification has no turn to join: it must still be
   // rendered, so it falls back to starting a turn of its own.
-  const turns = buildTurns([
-    notification("task", 1, true),
-    assistant(2),
-  ]);
+  const turns = buildTurns([notification("task", 1, true), assistant(2)]);
   assertEquals(turns.length, 1);
   assertEquals(turns[0]!.user!.role, "notification");
-  assertEquals(turns[0]!.responses.map((m) => m.role), ["assistant"]);
+  assertEquals(
+    turns[0]!.responses.map((m) => m.role),
+    ["assistant"],
+  );
 });
 
 Deno.test("buildTurns: a steered notification after a checkpoint starts one", () => {
@@ -160,7 +157,10 @@ Deno.test("buildTurns: a steered notification after a checkpoint starts one", ()
   assertEquals(turns.length, 3);
   assertEquals(turns[1]!.standalone, true);
   assertEquals(turns[2]!.user!.role, "notification");
-  assertEquals(turns[2]!.responses.map((m) => m.role), ["assistant"]);
+  assertEquals(
+    turns[2]!.responses.map((m) => m.role),
+    ["assistant"],
+  );
 });
 
 Deno.test("buildTurns: a prompt steered mid-run joins the run's turn", () => {
@@ -193,11 +193,10 @@ Deno.test("buildTurns: a steered mode prompt joins the run's turn", () => {
     assistant(4),
   ]);
   assertEquals(turns.length, 1);
-  assertEquals(turns[0]!.responses.map((m) => m.role), [
-    "assistant",
-    "mode",
-    "assistant",
-  ]);
+  assertEquals(
+    turns[0]!.responses.map((m) => m.role),
+    ["assistant", "mode", "assistant"],
+  );
 });
 
 Deno.test("buildTurns: a steered prompt with no open turn starts one", () => {
@@ -207,7 +206,10 @@ Deno.test("buildTurns: a steered prompt with no open turn starts one", () => {
   assertEquals(turns.length, 1);
   assertEquals(turns[0]!.user!.role, "user");
   assertEquals(turns[0]!.user!.timestamp, 1);
-  assertEquals(turns[0]!.responses.map((m) => m.role), ["assistant"]);
+  assertEquals(
+    turns[0]!.responses.map((m) => m.role),
+    ["assistant"],
+  );
 });
 
 Deno.test("buildTurns: a steered prompt after a checkpoint starts one", () => {
@@ -230,7 +232,10 @@ Deno.test("buildTurns: a steered prompt after a checkpoint starts one", () => {
   assertEquals(turns.length, 3);
   assertEquals(turns[1]!.standalone, true);
   assertEquals(turns[2]!.user!.role, "user");
-  assertEquals(turns[2]!.responses.map((m) => m.role), ["assistant"]);
+  assertEquals(
+    turns[2]!.responses.map((m) => m.role),
+    ["assistant"],
+  );
 });
 
 Deno.test("buildTurns: mode messages (slash-command prompts) start a turn", () => {
@@ -243,12 +248,7 @@ Deno.test("buildTurns: mode messages (slash-command prompts) start a turn", () =
   assertEquals(turns[0]!.responses.length, 2);
 
   // A mode message mid-history starts its own turn (like a user prompt).
-  const mixed = buildTurns([
-    user(1),
-    assistant(2),
-    mode(3),
-    assistant(4),
-  ]);
+  const mixed = buildTurns([user(1), assistant(2), mode(3), assistant(4)]);
   assertEquals(mixed.length, 2);
   assertEquals(mixed[0]!.user!.role, "user");
   assertEquals(mixed[1]!.user!.role, "mode");
@@ -268,15 +268,14 @@ Deno.test("buildTurns: retry notifications do not split the turn", () => {
   assertEquals(turns[0]!.user!.role, "user");
   const responses = turns[0]!.responses;
   assertEquals(responses.length, 2);
-  assertEquals(responses.every((m) => m.role === "assistant"), true);
+  assertEquals(
+    responses.every((m) => m.role === "assistant"),
+    true,
+  );
 });
 
 Deno.test("buildTurns: retry notifications are skipped entirely", () => {
-  const turns = buildTurns([
-    user(1),
-    assistant(2),
-    notification("retry", 3),
-  ]);
+  const turns = buildTurns([user(1), assistant(2), notification("retry", 3)]);
   assertEquals(turns.length, 1);
   assertEquals(turns[0]!.responses.length, 1);
 });
@@ -293,27 +292,21 @@ Deno.test("buildTurns: context snapshots are not part of any turn", () => {
   // A fresh session publishes its context before the first prompt: the
   // snapshot is the model's reading, not something said or done, so it is
   // neither a turn of its own nor part of the one below.
-  const leading = buildTurns([
-    context(1),
-    user(2),
-    assistant(3),
-  ]);
+  const leading = buildTurns([context(1), user(2), assistant(3)]);
   assertEquals(leading.length, 1);
   assertEquals(leading[0]!.user!.role, "user");
-  assertEquals(leading[0]!.responses.map((m) => m.role), ["assistant"]);
+  assertEquals(
+    leading[0]!.responses.map((m) => m.role),
+    ["assistant"],
+  );
 
   // A later snapshot between two assistant messages is dropped the same way.
-  const between = buildTurns([
-    user(1),
-    assistant(2),
-    context(3),
-    assistant(4),
-  ]);
+  const between = buildTurns([user(1), assistant(2), context(3), assistant(4)]);
   assertEquals(between.length, 1);
-  assertEquals(between[0]!.responses.map((m) => m.role), [
-    "assistant",
-    "assistant",
-  ]);
+  assertEquals(
+    between[0]!.responses.map((m) => m.role),
+    ["assistant", "assistant"],
+  );
 });
 
 Deno.test("buildTurns: a compaction checkpoint is a turn of its own", () => {
@@ -368,17 +361,19 @@ Deno.test("ConversationTurn: a steered notification renders in the work log", ()
     },
     fauxAssistantMessage("the reaction", { timestamp: 4 }) as AgentMessage,
   ];
-  const html = renderToString(createElement(ConversationTurn, {
-    turn: { user: user(1), responses },
-    entering: false,
-    visualBase: "/api/sessions/s/visual/",
-    attachBase: "/api/sessions/s/attachment/",
-    toolResults: new Map(),
-    runningTools: new Map(),
-    running: true,
-    onRewind: () => {},
-    onCardSend: () => {},
-  }));
+  const html = renderToString(
+    createElement(ConversationTurn, {
+      turn: { user: user(1), responses },
+      entering: false,
+      visualBase: "/api/sessions/s/visual/",
+      attachBase: "/api/sessions/s/attachment/",
+      toolResults: new Map(),
+      runningTools: new Map(),
+      running: true,
+      onRewind: () => {},
+      onCardSend: () => {},
+    }),
+  );
 
   // One activity header for the whole run: the notification did not start a
   // turn of its own — splitting the turn is what used to collapse the work
@@ -414,17 +409,19 @@ Deno.test("ConversationTurn: a context snapshot reaches neither the log nor a di
     fauxAssistantMessage("done", { timestamp: 3 }) as AgentMessage,
   ]);
   assertEquals(turns.length, 1);
-  const html = renderToString(createElement(ConversationTurn, {
-    turn: turns[0]!,
-    entering: false,
-    visualBase: "/api/sessions/s/visual/",
-    attachBase: "/api/sessions/s/attachment/",
-    toolResults: new Map(),
-    runningTools: new Map(),
-    running: false,
-    onRewind: () => {},
-    onCardSend: () => {},
-  }));
+  const html = renderToString(
+    createElement(ConversationTurn, {
+      turn: turns[0]!,
+      entering: false,
+      visualBase: "/api/sessions/s/visual/",
+      attachBase: "/api/sessions/s/attachment/",
+      toolResults: new Map(),
+      runningTools: new Map(),
+      running: false,
+      onRewind: () => {},
+      onCardSend: () => {},
+    }),
+  );
 
   assertEquals(html.includes("スキル (3 件)"), false, html);
   // Nothing to open: the header is drawn without the chevron and stays
@@ -453,17 +450,19 @@ Deno.test("ConversationTurn: a context snapshot stays out of a running turn", ()
       timestamp: 3,
     }) as AgentMessage,
   ]);
-  const html = renderToString(createElement(ConversationTurn, {
-    turn: turns[0]!,
-    entering: false,
-    visualBase: "/api/sessions/s/visual/",
-    attachBase: "/api/sessions/s/attachment/",
-    toolResults: new Map(),
-    runningTools: new Map(),
-    running: true,
-    onRewind: () => {},
-    onCardSend: () => {},
-  }));
+  const html = renderToString(
+    createElement(ConversationTurn, {
+      turn: turns[0]!,
+      entering: false,
+      visualBase: "/api/sessions/s/visual/",
+      attachBase: "/api/sessions/s/attachment/",
+      toolResults: new Map(),
+      runningTools: new Map(),
+      running: true,
+      onRewind: () => {},
+      onCardSend: () => {},
+    }),
+  );
 
   assertEquals(html.includes("Date: 2026-11-07"), false, html);
   // The work itself is still there, open, under the running header.
@@ -509,10 +508,10 @@ Deno.test("a notification steered mid-run keeps the running turn last", () => {
   const turns = buildTurns(view.messages);
   assertEquals(turns.length, 1);
   assertEquals(turns[0]!.user!.role, "user");
-  assertEquals(turns[0]!.responses.map((m) => m.role), [
-    "assistant",
-    "notification",
-  ]);
+  assertEquals(
+    turns[0]!.responses.map((m) => m.role),
+    ["assistant", "notification"],
+  );
 });
 
 Deno.test("a prompt steered mid-run keeps the running turn last", () => {
@@ -551,10 +550,10 @@ Deno.test("a prompt steered mid-run keeps the running turn last", () => {
   const turns = buildTurns(view.messages);
   assertEquals(turns.length, 1);
   assertEquals(turns[0]!.user!.role, "user");
-  assertEquals(turns[0]!.responses.map((m) => m.role), [
-    "assistant",
-    "user",
-  ]);
+  assertEquals(
+    turns[0]!.responses.map((m) => m.role),
+    ["assistant", "user"],
+  );
 });
 
 Deno.test("a view restored mid-run keeps its turn running", () => {
@@ -580,18 +579,20 @@ Deno.test("a view restored mid-run keeps its turn running", () => {
   ];
   const render = (view: ReturnType<typeof emptyView>) => {
     const turns = buildTurns(view.messages);
-    return renderToString(createElement(ConversationTurn, {
-      turn: turns[turns.length - 1]!,
-      entering: false,
-      visualBase: "/api/sessions/s/visual/",
-      attachBase: "/api/sessions/s/attachment/",
-      toolResults: new Map(),
-      runningTools: new Map(),
-      running: isViewRunning(view),
-      endedAt: view.agentEndedAt,
-      onRewind: () => {},
-      onCardSend: () => {},
-    }));
+    return renderToString(
+      createElement(ConversationTurn, {
+        turn: turns[turns.length - 1]!,
+        entering: false,
+        visualBase: "/api/sessions/s/visual/",
+        attachBase: "/api/sessions/s/attachment/",
+        toolResults: new Map(),
+        runningTools: new Map(),
+        running: isViewRunning(view),
+        endedAt: view.agentEndedAt,
+        onRewind: () => {},
+        onCardSend: () => {},
+      }),
+    );
   };
 
   const restored = applyRunState(
@@ -620,17 +621,19 @@ Deno.test("ConversationTurn: a mode prompt renders the images attached to it", (
     mimeType: "image/png",
   };
   const turns = buildTurns([mode(1, false, [image]), assistant(2)]);
-  const html = renderToString(createElement(ConversationTurn, {
-    turn: turns[0]!,
-    entering: false,
-    visualBase: "/api/sessions/s/visual/",
-    attachBase: "/api/sessions/s/attachment/",
-    toolResults: new Map(),
-    runningTools: new Map(),
-    running: false,
-    onRewind: () => {},
-    onCardSend: () => {},
-  }));
+  const html = renderToString(
+    createElement(ConversationTurn, {
+      turn: turns[0]!,
+      entering: false,
+      visualBase: "/api/sessions/s/visual/",
+      attachBase: "/api/sessions/s/attachment/",
+      toolResults: new Map(),
+      runningTools: new Map(),
+      running: false,
+      onRewind: () => {},
+      onCardSend: () => {},
+    }),
+  );
   assertStringIncludes(html, 'class="msg-images"');
   assertStringIncludes(html, "data:image/png;base64,QUJD");
   // The short text and the mode badge keep describing the prompt.
@@ -650,7 +653,10 @@ Deno.test("buildTurns: a window that begins inside a turn draws its tail", () =>
   ]);
   assertEquals(turns.length, 1);
   assertEquals(turns[0]!.user, undefined);
-  assertEquals(turns[0]!.responses.map((m) => m.timestamp), [1, 2]);
+  assertEquals(
+    turns[0]!.responses.map((m) => m.timestamp),
+    [1, 2],
+  );
 
   // A prompt after the fragment opens its own turn; the fragment keeps its
   // rows instead of them being absorbed by that turn.
@@ -661,9 +667,15 @@ Deno.test("buildTurns: a window that begins inside a turn draws its tail", () =>
   ]);
   assertEquals(withPrompt.length, 2);
   assertEquals(withPrompt[0]!.user, undefined);
-  assertEquals(withPrompt[0]!.responses.map((m) => m.timestamp), [1]);
+  assertEquals(
+    withPrompt[0]!.responses.map((m) => m.timestamp),
+    [1],
+  );
   assertEquals(withPrompt[1]!.user!.timestamp, 2);
-  assertEquals(withPrompt[1]!.responses.map((m) => m.timestamp), [3]);
+  assertEquals(
+    withPrompt[1]!.responses.map((m) => m.timestamp),
+    [3],
+  );
 });
 
 Deno.test("buildTurns: leading context does not open a fragment", () => {
@@ -681,30 +693,35 @@ Deno.test("buildTurns: leading context does not open a fragment", () => {
   const turns = buildTurns([context(1), user(2), assistant(3)]);
   assertEquals(turns.length, 1);
   assertEquals(turns[0]!.user!.timestamp, 2);
-  assertEquals(turns[0]!.responses.map((m) => m.timestamp), [3]);
+  assertEquals(
+    turns[0]!.responses.map((m) => m.timestamp),
+    [3],
+  );
 });
 
 Deno.test("ConversationTurn: a fragment renders its rows without a header", () => {
   // A fragment has no prompt to head it and no start to time: it is the
   // middle of a run, so its rows are drawn open. An activity header here
   // would date the whole turn from the first row the window happens to hold.
-  const html = renderToString(createElement(ConversationTurn, {
-    turn: {
-      responses: [
-        fauxAssistantMessage([fauxToolCall("read", { path: "a.ts" })], {
-          timestamp: 2,
-        }) as AgentMessage,
-      ],
-    },
-    entering: false,
-    visualBase: "/api/sessions/s/visual/",
-    attachBase: "/api/sessions/s/attachment/",
-    toolResults: new Map(),
-    runningTools: new Map(),
-    running: false,
-    onRewind: () => {},
-    onCardSend: () => {},
-  }));
+  const html = renderToString(
+    createElement(ConversationTurn, {
+      turn: {
+        responses: [
+          fauxAssistantMessage([fauxToolCall("read", { path: "a.ts" })], {
+            timestamp: 2,
+          }) as AgentMessage,
+        ],
+      },
+      entering: false,
+      visualBase: "/api/sessions/s/visual/",
+      attachBase: "/api/sessions/s/attachment/",
+      toolResults: new Map(),
+      runningTools: new Map(),
+      running: false,
+      onRewind: () => {},
+      onCardSend: () => {},
+    }),
+  );
   assertEquals(html.match(/class="agent-activity/g), null);
   // The rows themselves are drawn, inside the work log.
   assertStringIncludes(html, 'class="agent-work-log"');
@@ -724,17 +741,19 @@ Deno.test("ConversationTurn: a card written in the reply is drawn where it was w
   ];
 
   const turns = buildTurns(messages);
-  const html = renderToString(createElement(ConversationTurn, {
-    turn: turns[turns.length - 1]!,
-    entering: false,
-    visualBase: "/api/sessions/s/visual/",
-    attachBase: "/api/sessions/s/attachment/",
-    toolResults: new Map(),
-    runningTools: new Map(),
-    running: false,
-    onRewind: () => {},
-    onCardSend: () => {},
-  }));
+  const html = renderToString(
+    createElement(ConversationTurn, {
+      turn: turns[turns.length - 1]!,
+      entering: false,
+      visualBase: "/api/sessions/s/visual/",
+      attachBase: "/api/sessions/s/attachment/",
+      toolResults: new Map(),
+      runningTools: new Map(),
+      running: false,
+      onRewind: () => {},
+      onCardSend: () => {},
+    }),
+  );
 
   assertStringIncludes(html, "ui-card");
   assertStringIncludes(html, "カードの中");

@@ -2,8 +2,8 @@ import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import {
   intercept,
   jsonError,
-  record,
   type Responder,
+  record,
 } from "./api-test-utils.ts";
 
 import type { UserProviderInput } from "./types.ts";
@@ -70,7 +70,8 @@ const USER_PROVIDER_INPUT: UserProviderInput = {
   apiKey: "sk-1",
 };
 
-const USER_PROVIDER_JSON = '{"id":"local-llm","name":"Local LLM",' +
+const USER_PROVIDER_JSON =
+  '{"id":"local-llm","name":"Local LLM",' +
   '"baseUrl":"http://127.0.0.1:11434/v1","api":"openai-completions",' +
   '"models":[{"id":"llama3"}],"apiKey":"sk-1"}';
 
@@ -219,7 +220,8 @@ const SESSION_CASES: Case[] = [
           shortText: "Review this",
         },
       ),
-    body: '{"text":"look at these","images":[{"data":"QUJD",' +
+    body:
+      '{"text":"look at these","images":[{"data":"QUJD",' +
       '"mimeType":"image/png"},{"data":"UkFX","mimeType":"image/jpeg"}],' +
       '"mode":{"modeId":"review","optionId":"quick","modeLabel":"Review",' +
       '"shortText":"Review this"}}',
@@ -520,7 +522,8 @@ const SETTINGS_CASES: Case[] = [
       api.putConnections([
         { id: "peer-1", name: "Peer", url: "http://peer:8000", token: "t" },
       ]),
-    body: '{"connections":[{"id":"peer-1","name":"Peer",' +
+    body:
+      '{"connections":[{"id":"peer-1","name":"Peer",' +
       '"url":"http://peer:8000","token":"t"}]}',
   },
 ];

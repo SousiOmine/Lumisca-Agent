@@ -68,7 +68,8 @@ export function rateLimitRetryDelayMs(attempt: number): number {
     Math.min(
       RATE_LIMIT_BASE_DELAY_MS * 2 ** (attempt - 1),
       RATE_LIMIT_MAX_DELAY_MS,
-    ) * (1 - Math.random() * 0.25),
+    ) *
+      (1 - Math.random() * 0.25),
   );
 }
 
@@ -99,7 +100,7 @@ export async function retryOnRateLimitError<T>(
   const maxRetries = opts.maxRetries ?? MAX_RATE_LIMIT_RETRIES;
   const sleepFn = opts.sleep ?? sleepAbortable;
   let lastError: unknown;
-  for (let n = 0;; n++) {
+  for (let n = 0; ; n++) {
     try {
       return await attempt();
     } catch (error) {

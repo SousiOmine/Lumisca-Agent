@@ -1,10 +1,10 @@
 import { assertEquals, assertThrows } from "@std/assert";
+import { opencodeGoProvider } from "../models/dev-catalog.ts";
 import {
   languageModelFor,
   sessionHeadersFor,
   toolResultTakesImages,
 } from "./lang-model.ts";
-import { opencodeGoProvider } from "../models/dev-catalog.ts";
 import { reasoningForceOption } from "./stream.ts";
 import type { Api, Model } from "./types.ts";
 
@@ -16,18 +16,14 @@ const openaiModel: Model<Api> = {
   provider: "openai",
 };
 
-Deno.test(
-  "sessionHeadersFor sends the conversation id as x-opencode-session for OpenCode Go",
-  () => {
-    // The model comes from the real models.dev catalog so the test also
-    // pins the transport's provider-id constant against catalog renames.
-    const model = opencodeGoProvider().getModels()[0]!;
-    assertEquals(
-      sessionHeadersFor(model, { sessionId: "conv-1" }),
-      { "x-opencode-session": "conv-1" },
-    );
-  },
-);
+Deno.test("sessionHeadersFor sends the conversation id as x-opencode-session for OpenCode Go", () => {
+  // The model comes from the real models.dev catalog so the test also
+  // pins the transport's provider-id constant against catalog renames.
+  const model = opencodeGoProvider().getModels()[0]!;
+  assertEquals(sessionHeadersFor(model, { sessionId: "conv-1" }), {
+    "x-opencode-session": "conv-1",
+  });
+});
 
 Deno.test("sessionHeadersFor is a no-op for providers without session affinity", () => {
   assertEquals(
@@ -39,11 +35,7 @@ Deno.test("sessionHeadersFor is a no-op for providers without session affinity",
 
 Deno.test("sessionHeadersFor fails fast when an OpenCode Go request has no conversation id", () => {
   const model = opencodeGoProvider().getModels()[0]!;
-  assertThrows(
-    () => sessionHeadersFor(model),
-    Error,
-    "x-opencode-session",
-  );
+  assertThrows(() => sessionHeadersFor(model), Error, "x-opencode-session");
   assertThrows(
     () => sessionHeadersFor(model, { sessionId: "" }),
     Error,
@@ -53,9 +45,9 @@ Deno.test("sessionHeadersFor fails fast when an OpenCode Go request has no conve
 
 Deno.test("openai-responses resolves to the official Responses model even for third-party gateways", () => {
   const go = opencodeGoProvider();
-  const muse = go.getModels().find((m) =>
-    m.id === "muse-spark-1.3-contributor"
-  )!;
+  const muse = go
+    .getModels()
+    .find((m) => m.id === "muse-spark-1.3-contributor")!;
   assertEquals(muse.api, "openai-responses");
 
   const lm = languageModelFor(muse, { apiKey: "test-key", source: "test" });
@@ -106,9 +98,9 @@ Deno.test("OpenCode Go chat/anthropic models resolve to their declared transport
 
 Deno.test("reasoningForceOption forces unknown Responses-API models into reasoning mode", () => {
   const go = opencodeGoProvider();
-  const muse = go.getModels().find((m) =>
-    m.id === "muse-spark-1.3-contributor"
-  )!;
+  const muse = go
+    .getModels()
+    .find((m) => m.id === "muse-spark-1.3-contributor")!;
   // A reasoning hint is sent, so the SDK must be told this unknown model
   // id is a reasoning model — otherwise the hint is dropped silently.
   assertEquals(reasoningForceOption(muse, "xhigh"), {
@@ -136,9 +128,9 @@ Deno.test("muse-spark actually sends reasoning.effort on the wire", async () => 
   // classifies unknown model ids as non-reasoning and drops the hint, so
   // the transport must attach forceReasoning (see reasoningForceOption).
   const go = opencodeGoProvider();
-  const muse = go.getModels().find((m) =>
-    m.id === "muse-spark-1.3-contributor"
-  )!;
+  const muse = go
+    .getModels()
+    .find((m) => m.id === "muse-spark-1.3-contributor")!;
   const lm = languageModelFor(muse, {
     apiKey: "test-key",
     source: "test",
@@ -148,10 +140,7 @@ Deno.test("muse-spark actually sends reasoning.effort on the wire", async () => 
   const prompt = [{ role: "user", content: [{ type: "text", text: "hi" }] }];
   const without = await lm.getArgs({ prompt, reasoning: "xhigh" });
   // Sanity: without the override the SDK drops the hint (the reported bug).
-  assertEquals(
-    (without.args as Record<string, unknown>).reasoning,
-    undefined,
-  );
+  assertEquals((without.args as Record<string, unknown>).reasoning, undefined);
   const forced = await lm.getArgs({
     prompt,
     reasoning: "xhigh",
@@ -192,9 +181,7 @@ Deno.test("toolResultTakesImages follows the transport that carries the result",
     true,
   );
   assertEquals(
-    toolResultTakesImages(
-      gateway("bedrock-converse-stream", "amazon-bedrock"),
-    ),
+    toolResultTakesImages(gateway("bedrock-converse-stream", "amazon-bedrock")),
     true,
   );
   // ...and so does the compatible factory, which this app builds with
@@ -263,11 +250,7 @@ Deno.test("toolResultTakesImages follows the transport that carries the result",
   );
   assertEquals(
     toolResultTakesImages(
-      gateway(
-        "openai-completions",
-        "custom",
-        "https://api.openai.com/v1",
-      ),
+      gateway("openai-completions", "custom", "https://api.openai.com/v1"),
     ),
     false,
   );

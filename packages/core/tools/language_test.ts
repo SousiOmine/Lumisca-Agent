@@ -1,11 +1,11 @@
 import { assert, assertEquals } from "@std/assert";
+import type { Workspace } from "../domain/workspace.ts";
 import { DEFAULT_LOCALE } from "../shared/mod.ts";
 import { TOOL_READ, TOOL_TODO } from "../shared/tool-names.ts";
-import { outputLanguageRule, outputLanguageSentence } from "./language.ts";
-import { buildChatSystemPrompt, buildSystemPrompt } from "./system-prompt.ts";
-import { subagentSystemPrompt } from "./subagent-format.ts";
 import { CARD_HELP } from "../shared/ui-markup/help.ts";
-import type { Workspace } from "../domain/workspace.ts";
+import { outputLanguageRule, outputLanguageSentence } from "./language.ts";
+import { subagentSystemPrompt } from "./subagent-format.ts";
+import { buildChatSystemPrompt, buildSystemPrompt } from "./system-prompt.ts";
 
 /** A folder-less workspace for prompt tests. */
 const workspace: Workspace = {
@@ -45,7 +45,10 @@ Deno.test("the system prompt carries no guidelines at all", () => {
   // context message now (agent/language-context.ts), because it is a setting
   // that can change while the session lives.
   const prompt = buildSystemPrompt(workspace);
-  assertEquals(prompt.split("\n").filter((line) => line.startsWith("- ")), []);
+  assertEquals(
+    prompt.split("\n").filter((line) => line.startsWith("- ")),
+    [],
+  );
   assertEquals(prompt.includes("- Prioritize correctness."), false);
   assertEquals(prompt.includes("Write every reply in"), false);
 });
@@ -87,10 +90,7 @@ Deno.test("subagentSystemPrompt: reports come back in the session language", () 
   // Omitted → the fallback language (sub-agents of a session built before
   // the language existed still get a rule).
   const fallback = subagentSystemPrompt("a", "b", "explore");
-  assertEquals(
-    fallback.includes(outputLanguageRule(DEFAULT_LOCALE)),
-    true,
-  );
+  assertEquals(fallback.includes(outputLanguageRule(DEFAULT_LOCALE)), true);
 });
 
 Deno.test("outputLanguageSentence: one sentence for the title prompt", () => {

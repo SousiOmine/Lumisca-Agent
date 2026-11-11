@@ -14,12 +14,10 @@ Deno.test("parsePluginMcp rejects invalid JSON", () => {
 });
 
 Deno.test("parsePluginMcp rejects a missing or mismatched $schema", () => {
-  for (
-    const text of [
-      '{"mcpServers": {}}',
-      '{"$schema": "https://x/1", "mcpServers": {}}',
-    ]
-  ) {
+  for (const text of [
+    '{"mcpServers": {}}',
+    '{"$schema": "https://x/1", "mcpServers": {}}',
+  ]) {
     const result = parsePluginMcp(text, "C:\\plugin", "p");
     assertFatal(result.fatal, "$schema");
   }
@@ -171,14 +169,12 @@ Deno.test("parsePluginMcp rejects a stdio entry without a command", () => {
 });
 
 Deno.test("parsePluginMcp rejects entries with unknown fields or transports", () => {
-  for (
-    const entry of [
-      { type: "stdio", command: "x", bogus: 1 },
-      { type: "unknown", command: "x" },
-      { type: "stdio" },
-      "not-an-object",
-    ]
-  ) {
+  for (const entry of [
+    { type: "stdio", command: "x", bogus: 1 },
+    { type: "unknown", command: "x" },
+    { type: "stdio" },
+    "not-an-object",
+  ]) {
     const result = parsePluginMcp(doc({ server: entry }), "C:\\plugin", "p");
     assertEquals(result.servers, [], JSON.stringify(entry));
     assertEquals(result.warnings.length, 1);
@@ -198,7 +194,10 @@ Deno.test("parsePluginMcp isolates bad entries from good siblings", () => {
     { pluginDataRoot: dataRoot },
   );
   assertEquals(result.fatal, undefined);
-  assertEquals(result.servers.map((s) => s.name), ["good", "remote"]);
+  assertEquals(
+    result.servers.map((s) => s.name),
+    ["good", "remote"],
+  );
   assertEquals(result.warnings.length, 1);
 });
 
@@ -263,10 +262,7 @@ function tempDataRoot(): string {
   return Deno.makeTempDirSync({ prefix: "lumisca-data-" });
 }
 
-function assertFatal(
-  fatal: string | undefined,
-  needle: string,
-): void {
+function assertFatal(fatal: string | undefined, needle: string): void {
   assertEquals(
     typeof fatal === "string" && fatal.includes(needle),
     true,

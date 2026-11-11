@@ -1,10 +1,10 @@
-import { useMemo } from "preact/compat";
-import { IconBrain } from "@tabler/icons-preact";
 import { THINKING_LEVEL_ORDER } from "@lumisca/core/shared";
-import type { ThinkingLevel } from "../types.ts";
-import { useT } from "../i18n.ts";
+import { IconBrain } from "@tabler/icons-preact";
+import { useMemo } from "preact/compat";
 import { thinkingLevelLabel } from "../format.ts";
 import type { SelectSide } from "../hooks/useSelectPlacement.ts";
+import { useT } from "../i18n.ts";
+import type { ThinkingLevel } from "../types.ts";
 import { Select } from "./Select.tsx";
 
 export interface ThinkingLevelSelectProps {

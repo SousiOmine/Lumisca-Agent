@@ -1,5 +1,5 @@
-import { assertEquals } from "@std/assert";
 import { THEME_COLORS } from "@lumisca/core/shared";
+import { assertEquals } from "@std/assert";
 import {
   pageCsp,
   renderHtmlDocument,
@@ -42,7 +42,10 @@ Deno.test("pageCsp names loopback only when the Host header is missing", () => {
   assertEquals(sources.includes("ws://127.0.0.1:*"), true);
   // A page served over TLS always carries a Host header, so the fallback
   // branch never needs a wss: source.
-  assertEquals(sources.some((source) => source.startsWith("wss:")), false);
+  assertEquals(
+    sources.some((source) => source.startsWith("wss:")),
+    false,
+  );
 });
 
 Deno.test("pageCsp keeps inline scripts and foreign frames out", () => {

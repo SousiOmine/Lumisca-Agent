@@ -1,8 +1,8 @@
 import { assertEquals } from "@std/assert";
 import {
   connectionLabel,
-  displayedConnectionId,
   type DisplayedServer,
+  displayedConnectionId,
   originOf,
   pageUrl,
   serverLabel,
@@ -106,10 +106,7 @@ Deno.test("connectionLabel prefers the name, then the host, then the id", () => 
 Deno.test("serverLabel prefers the shell's name, then the URL's host", () => {
   // The name the shell was switched with: the only place that knows it,
   // because a remote page's registry is that server's own.
-  assertEquals(
-    serverLabel("自宅", "https://home.example/?token=abc"),
-    "自宅",
-  );
+  assertEquals(serverLabel("自宅", "https://home.example/?token=abc"), "自宅");
   assertEquals(serverLabel("  自宅  ", null), "自宅");
   // No recorded name (a server reached from the startup screen): never the
   // page URL, which carries the auth token — its host identifies it.

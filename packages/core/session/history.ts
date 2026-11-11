@@ -1,8 +1,8 @@
+import type { StellaEntry } from "../domain/stella-conversation.ts";
 import { CoreError } from "../errors.ts";
 import type { MessageWindow } from "../session/messages.ts";
-import type { StellaEntry } from "../domain/stella-conversation.ts";
-import { TOOL_HISTORY_SEARCH } from "../shared/mod.ts";
 import { formatLocalDateTime } from "../shared/misc.ts";
+import { TOOL_HISTORY_SEARCH } from "../shared/mod.ts";
 import {
   integer,
   object,
@@ -91,23 +91,31 @@ const historySchema: SchemaObject<{
   to: SchemaOptional<SchemaString>;
   limit: SchemaOptional<SchemaInteger>;
 }> = object({
-  query: optional(string(
-    "Words to look for, separated by spaces. A message matches when EVERY " +
-      "word appears in its text, in any order and any case. Omit the query " +
-      "to list what happened in the period instead.",
-  )),
-  from: optional(string(
-    "Start of the period, YYYY-MM-DD in local time (inclusive). Omit for no " +
-      "lower bound.",
-  )),
-  to: optional(string(
-    "End of the period, YYYY-MM-DD in local time (inclusive). Omit for no " +
-      "upper bound.",
-  )),
-  limit: optional(integer(
-    `How many of the newest matching messages to return (default ` +
-      `${DEFAULT_HISTORY_LIMIT}, max ${MAX_HISTORY_LIMIT}).`,
-  )),
+  query: optional(
+    string(
+      "Words to look for, separated by spaces. A message matches when EVERY " +
+        "word appears in its text, in any order and any case. Omit the query " +
+        "to list what happened in the period instead.",
+    ),
+  ),
+  from: optional(
+    string(
+      "Start of the period, YYYY-MM-DD in local time (inclusive). Omit for no " +
+        "lower bound.",
+    ),
+  ),
+  to: optional(
+    string(
+      "End of the period, YYYY-MM-DD in local time (inclusive). Omit for no " +
+        "upper bound.",
+    ),
+  ),
+  limit: optional(
+    integer(
+      `How many of the newest matching messages to return (default ` +
+        `${DEFAULT_HISTORY_LIMIT}, max ${MAX_HISTORY_LIMIT}).`,
+    ),
+  ),
 });
 
 export interface HistorySearchTarget {
@@ -147,20 +155,23 @@ export function createHistorySearchTool(
       const window = dayWindow(params.from, params.to);
       const terms = termsOf(params.query ?? "");
       const entries = target.entries(window);
-      const matches = terms.length === 0
-        ? entries
-        : entries.filter((entry) => matchesEvery(entry, terms));
+      const matches =
+        terms.length === 0
+          ? entries
+          : entries.filter((entry) => matchesEvery(entry, terms));
       return Promise.resolve({
-        content: [{
-          type: "text",
-          text: render({
-            matches,
-            terms,
-            limit,
-            from: params.from,
-            to: params.to,
-          }),
-        }],
+        content: [
+          {
+            type: "text",
+            text: render({
+              matches,
+              terms,
+              limit,
+              from: params.from,
+              to: params.to,
+            }),
+          },
+        ],
         details: {
           matches: matches.length,
           shown: Math.min(matches.length, limit),
@@ -217,7 +228,7 @@ function noMatchText(scope: string, period: string): string {
   return [
     `No message${scope}${period}.`,
     "Try fewer or shorter words, a wider period, or omit the query to list " +
-    "what happened in the period.",
+      "what happened in the period.",
   ].join(" ");
 }
 
@@ -246,10 +257,9 @@ export function stellaEntryText(entry: StellaEntry): string {
 /** The searchable text of an entry: the words the conversation shows.
  * Cards are presentation, not words, so they are not part of it. */
 function searchableText(entry: StellaEntry): string {
-  return entry.text.length === 0 ? "" : truncateHead(
-    entry.text,
-    MAX_SEARCH_CHARS,
-  ).text;
+  return entry.text.length === 0
+    ? ""
+    : truncateHead(entry.text, MAX_SEARCH_CHARS).text;
 }
 
 /** One rendered entry: the head line (local time and who) and the body, cut
@@ -261,9 +271,10 @@ function formatEntry(entry: StellaEntry): string {
   );
   // The head names the routine when one asked: a listing that said "user"
   // would credit the user with a request they scheduled.
-  const who = entry.role === "user" && entry.routine !== undefined
-    ? `user (routine "${entry.routine}")`
-    : entry.role;
+  const who =
+    entry.role === "user" && entry.routine !== undefined
+      ? `user (routine "${entry.routine}")`
+      : entry.role;
   return `[${formatTime(entry.timestamp)}] ${who}\n${body}${
     truncated ? truncatedHeadNote("message", MAX_MESSAGE_CHARS) : ""
   }`;
@@ -287,10 +298,7 @@ function termsOf(query: string): string[] {
 
 /** True when every term appears in the entry (case-insensitive, literal: no
  * regular expression to explain and no backtracking to bound). */
-function matchesEvery(
-  entry: StellaEntry,
-  terms: readonly string[],
-): boolean {
+function matchesEvery(entry: StellaEntry, terms: readonly string[]): boolean {
   const haystack = searchableText(entry).toLowerCase();
   return terms.every((term) => haystack.includes(term));
 }
@@ -302,7 +310,7 @@ function describeQuery(terms: readonly string[]): string {
     .map((term) =>
       term.length <= MAX_SHOWN_TERM_CHARS
         ? term
-        : `${term.slice(0, MAX_SHOWN_TERM_CHARS)}…`
+        : `${term.slice(0, MAX_SHOWN_TERM_CHARS)}…`,
     )
     .join(" ");
   return ` matching "${shown}"`;
@@ -375,7 +383,8 @@ function parseDay(value: string, field: string): Day {
   const day = Number(match[3]);
   const date = new Date(year, month - 1, day);
   if (
-    date.getFullYear() !== year || date.getMonth() !== month - 1 ||
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
     date.getDate() !== day
   ) {
     throw new CoreError(`${field} is not a real date: "${value}"`, "invalid");

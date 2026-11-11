@@ -21,12 +21,14 @@ function render(
 }
 
 Deno.test("AttachmentCard: an image is drawn from the session's base", () => {
-  const html = render([{
-    name: "9f3c2a1b4d5e.png",
-    displayName: "chart.png",
-    size: 4096,
-    inline: true,
-  }]);
+  const html = render([
+    {
+      name: "9f3c2a1b4d5e.png",
+      displayName: "chart.png",
+      size: 4096,
+      inline: true,
+    },
+  ]);
   assertStringIncludes(html, `src="${BASE}9f3c2a1b4d5e.png"`);
   assertStringIncludes(html, "attach-image");
   // The picture is the control's content, so the CONTROL carries the name
@@ -43,12 +45,14 @@ Deno.test("AttachmentCard: the picture opens in the app, not in a new tab", () =
   // A new tab would leave the conversation behind and lose the scroll
   // position on the way back; the lightbox is the app's own way of showing
   // one picture whole (see Lightbox).
-  const html = render([{
-    name: "9f3c2a1b4d5e.png",
-    displayName: "chart.png",
-    size: 4096,
-    inline: true,
-  }]);
+  const html = render([
+    {
+      name: "9f3c2a1b4d5e.png",
+      displayName: "chart.png",
+      size: 4096,
+      inline: true,
+    },
+  ]);
   // A button, not a link.
   assertStringIncludes(html, 'type="button"');
   assertEquals(
@@ -66,12 +70,14 @@ Deno.test("AttachmentCard: the picture opens in the app, not in a new tab", () =
 });
 
 Deno.test("AttachmentCard: anything else is a download row", () => {
-  const html = render([{
-    name: "0f1e2d3c4b5a.txt",
-    displayName: "run.log",
-    size: 1536,
-    inline: false,
-  }]);
+  const html = render([
+    {
+      name: "0f1e2d3c4b5a.txt",
+      displayName: "run.log",
+      size: 1536,
+      inline: false,
+    },
+  ]);
   assertStringIncludes(html, `href="${BASE}0f1e2d3c4b5a.txt"`);
   assertStringIncludes(html, 'download="run.log"');
   assertStringIncludes(html, "run.log");

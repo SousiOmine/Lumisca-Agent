@@ -1,13 +1,13 @@
 import { assert, assertEquals } from "@std/assert";
+import type { SessionInfo } from "../domain/session.ts";
+import type { Workspace } from "../domain/workspace.ts";
 import { createInMemorySettingsRepo } from "../settings/repo.ts";
+import { APP_MCP_SETTINGS_KEY } from "../shared/settings-keys.ts";
 import { parseMcpConfig } from "./config.ts";
+import { startFakeAuthServer, startFakeMcpServer } from "./fake-http.ts";
 import { McpManager } from "./manager.ts";
 import { McpOAuthStore } from "./oauth.ts";
 import { McpService } from "./service.ts";
-import { startFakeAuthServer, startFakeMcpServer } from "./fake-http.ts";
-import { APP_MCP_SETTINGS_KEY } from "../shared/settings-keys.ts";
-import type { SessionInfo } from "../domain/session.ts";
-import type { Workspace } from "../domain/workspace.ts";
 
 /** The callback path of a server reached at its own origin — the shape the
  * route builds (see routes/mcp.ts). */
@@ -92,7 +92,10 @@ Deno.test("OAuth: the sign-in grants what the next connection uses", async () =>
     //    token, and the poll can still see how the sign-in ended.
     const after = await service.testServer(body, 10_000);
     assertEquals(after.ok, true);
-    assertEquals(after.tools.map((tool) => tool.name), ["echo"]);
+    assertEquals(
+      after.tools.map((tool) => tool.name),
+      ["echo"],
+    );
     assertEquals(service.getAuth(started.sessionId)?.status, "done");
     assertEquals(
       mcp.requests.at(-1)!.headers.authorization,
@@ -255,7 +258,10 @@ Deno.test("OAuth: a session's connections use the stored grant", async () => {
     const manager = new McpManager(config, Deno.cwd(), service.oauth);
     try {
       const tools = await manager.listTools();
-      assertEquals(tools.map((tool) => tool.name), ["echo"]);
+      assertEquals(
+        tools.map((tool) => tool.name),
+        ["echo"],
+      );
       const status = manager.getStatus()[0]!;
       assertEquals(status.status, "ok");
       assertEquals(status.needsAuth, undefined);

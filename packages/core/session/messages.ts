@@ -1,6 +1,6 @@
 import type { AgentMessage } from "../ai/types.ts";
-import type { ContextUsageMessageLike } from "../shared/context-usage.ts";
 import type { LumiscaDb } from "../db/mod.ts";
+import type { ContextUsageMessageLike } from "../shared/context-usage.ts";
 import { reduceMessage } from "./prune.ts";
 
 export interface StoredMessage {
@@ -160,9 +160,7 @@ export interface MessageRepo {
    * changed and the bytes their payloads held, which is what a caller needs
    * to decide whether the file is worth rewriting (db/vacuum.ts). Idempotent:
    * a row already reduced is left alone. */
-  pruneCondensed(
-    sessionId: string,
-  ): { changed: number; freedBytes: number };
+  pruneCondensed(sessionId: string): { changed: number; freedBytes: number };
   /** Delete every row at or after `index` (a 0-based transcript position;
    * rows are inserted in transcript order, so rowid == position). Used by
    * the rewind feature: positional (not timestamp-based) so messages that
@@ -261,9 +259,7 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
     WHERE session_id = ? AND timestamp <= ?
     ORDER BY rowid
   `);
-  const deleteStmt = db.db.prepare(
-    "DELETE FROM messages WHERE session_id = ?",
-  );
+  const deleteStmt = db.db.prepare("DELETE FROM messages WHERE session_id = ?");
   // The stored payload length of one row: what the row held before a prune
   // replaced it (see pruneCondensed).
   const contentLengthStmt = db.db.prepare(
@@ -430,16 +426,15 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
     },
 
     listBetween(sessionId: string, window): StoredMessage[] {
-      const rows =
-        (window.from === null
+      const rows = (
+        window.from === null
           ? window.to === null
             ? listStmt.all(sessionId)
             : listUntilStmt.all(sessionId, window.to)
           : window.to === null
-          ? listSinceStmt.all(sessionId, window.from)
-          : listBetweenStmt.all(sessionId, window.from, window.to)) as Array<
-            Parameters<typeof toStored>[0]
-          >;
+            ? listSinceStmt.all(sessionId, window.from)
+            : listBetweenStmt.all(sessionId, window.from, window.to)
+      ) as Array<Parameters<typeof toStored>[0]>;
       return rows.map(toStored);
     },
 
@@ -454,19 +449,19 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
       // `beforeIndex` is a position in the SAME scope the page is read in: a
       // conversation's positions count the rows it draws (see
       // TranscriptRows), so its page ends at an entry.
-      const statement = query.rows === "conversation"
-        ? query.beforeIndex === null
-          ? windowConversationNewestStmt
-          : windowConversationStmt
-        : query.beforeIndex === null
-        ? windowAllNewestStmt
-        : windowAllStmt;
-      const rows =
-        (query.beforeIndex === null
+      const statement =
+        query.rows === "conversation"
+          ? query.beforeIndex === null
+            ? windowConversationNewestStmt
+            : windowConversationStmt
+          : query.beforeIndex === null
+            ? windowAllNewestStmt
+            : windowAllStmt;
+      const rows = (
+        query.beforeIndex === null
           ? statement.all(sessionId, query.limit)
-          : statement.all(sessionId, query.limit, query.beforeIndex)) as Array<
-            Parameters<typeof toStored>[0]
-          >;
+          : statement.all(sessionId, query.limit, query.beforeIndex)
+      ) as Array<Parameters<typeof toStored>[0]>;
       return rows.map(toStored);
     },
 
@@ -489,9 +484,8 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
       // cursor against every row would land somewhere else than the page it
       // came from. The scope is the SQL filter, so one definition answers
       // both (see CONVERSATION_ROWS_SQL).
-      const scoped = rows === "conversation"
-        ? conversationRows(sessionId)
-        : list(sessionId);
+      const scoped =
+        rows === "conversation" ? conversationRows(sessionId) : list(sessionId);
       for (let index = 0; index < scoped.length; index++) {
         if (match(scoped[index]!)) return index;
       }
@@ -499,14 +493,16 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
     },
 
     count(sessionId, rows): number {
-      const row = (rows === "conversation"
-        ? db.db.prepare(`
+      const row = (
+        rows === "conversation"
+          ? db.db.prepare(`
           SELECT COUNT(*) AS n FROM messages
           WHERE session_id = ? AND ${CONVERSATION_ROWS_SQL}
         `)
-        : db.db.prepare(
-          "SELECT COUNT(*) AS n FROM messages WHERE session_id = ?",
-        )).get(sessionId) as { n: number };
+          : db.db.prepare(
+              "SELECT COUNT(*) AS n FROM messages WHERE session_id = ?",
+            )
+      ).get(sessionId) as { n: number };
       return Number(row.n);
     },
 
@@ -515,7 +511,8 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
       // long conversation does not pay for decoding every row's content just
       // to read four numbers (and its images, on a session with screenshots,
       // would otherwise be materialized on every snapshot).
-      const rows = db.db.prepare(`
+      const rows = db.db
+        .prepare(`
         SELECT
           json_extract(content, '$.message.usage.input') AS input,
           json_extract(content, '$.message.usage.cacheRead') AS cacheRead,
@@ -523,7 +520,8 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
         FROM messages
         WHERE session_id = ? AND role = 'assistant'
         ORDER BY rowid
-      `).all(sessionId) as Array<{
+      `)
+        .all(sessionId) as Array<{
         input: number | null;
         cacheRead: number | null;
         cacheWrite: number | null;
@@ -618,13 +616,7 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
       if (suffix.length > 0) deleteFromStmt.run(sessionId, sessionId, index);
       const stored = insertRow(sessionId, message);
       for (const row of suffix) {
-        insertStmt.run(
-          row.id,
-          sessionId,
-          row.role,
-          row.content,
-          row.timestamp,
-        );
+        insertStmt.run(row.id, sessionId, row.role, row.content, row.timestamp);
       }
       return stored;
     };

@@ -51,8 +51,9 @@ Deno.test("no tools module imports a value from the ai runtime", async () => {
     for (const [index, line] of lines.entries()) {
       // A value import of the agent runtime or its loop.
       if (
-        /^import\s+(?!type\b)[^;]*from\s+"\.\.\/ai\/(agent|context-compaction)\.ts";/
-          .test(line)
+        /^import\s+(?!type\b)[^;]*from\s+"\.\.\/ai\/(agent|context-compaction)\.ts";/.test(
+          line,
+        )
       ) {
         offenders.push({ file, line: index + 1, text: line.trim() });
       }

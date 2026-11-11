@@ -14,6 +14,7 @@
  *   itself.
  */
 import type { LumiscaDb } from "../db/mod.ts";
+import { CoreError } from "../errors.ts";
 import {
   nextRunAt,
   parseSchedule,
@@ -22,7 +23,6 @@ import {
   type RoutineStatus,
   scheduleKey,
 } from "../shared/mod.ts";
-import { CoreError } from "../errors.ts";
 
 interface RoutineRow {
   id: string;
@@ -95,8 +95,10 @@ function parseJsonOrUndefined(value: string): unknown {
 }
 
 function statusOf(value: string | null): RoutineStatus | null {
-  return value === "ok" || value === "error" || value === "stopped" ||
-      value === "skipped"
+  return value === "ok" ||
+    value === "error" ||
+    value === "stopped" ||
+    value === "skipped"
     ? value
     : null;
 }
@@ -178,9 +180,7 @@ export function createRoutineRepo(db: LumiscaDb): RoutineRepo {
     `SELECT ${COLUMNS} FROM routines WHERE agent_id = ?
      ORDER BY created_at ASC, rowid ASC`,
   );
-  const getStmt = db.db.prepare(
-    `SELECT ${COLUMNS} FROM routines WHERE id = ?`,
-  );
+  const getStmt = db.db.prepare(`SELECT ${COLUMNS} FROM routines WHERE id = ?`);
   const byNameStmt = db.db.prepare(
     `SELECT ${COLUMNS} FROM routines WHERE agent_id = ? AND name = ?`,
   );
@@ -300,16 +300,16 @@ export function createRoutineRepo(db: LumiscaDb): RoutineRepo {
       // the watched thing may have moved while nobody looked: in both cases
       // the next check must record a baseline instead of comparing against a
       // value it never saw for this watch.
-      const retargeted = patch.schedule !== undefined &&
+      const retargeted =
+        patch.schedule !== undefined &&
         scheduleKey(patch.schedule) !== scheduleKey(stored.schedule);
       const resumed = enabled && !stored.enabled;
       const watchState = retargeted || resumed ? null : current.watch_state;
       // The caller decides the next run when it changed anything that
       // affects it (a schedule edit, a toggle); otherwise the stored value
       // survives the update untouched.
-      const next = patch.nextRunAt !== undefined
-        ? patch.nextRunAt
-        : current.next_run_at;
+      const next =
+        patch.nextRunAt !== undefined ? patch.nextRunAt : current.next_run_at;
       updateStmt.run(
         name,
         patch.prompt ?? current.prompt,

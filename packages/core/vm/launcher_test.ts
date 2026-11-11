@@ -38,7 +38,11 @@ function makeExec(
     calls.push(command);
     if (command.startsWith("sh -c ls -1")) {
       return Promise.resolve(
-        ok(Object.keys(entries).map((name) => `/apps/${name}`).join("\n")),
+        ok(
+          Object.keys(entries)
+            .map((name) => `/apps/${name}`)
+            .join("\n"),
+        ),
       );
     }
     if (command.startsWith("cat ")) {
@@ -68,11 +72,7 @@ function tool(
 
 Deno.test("vm_launch: list names what the machine installed", async () => {
   const { launch } = tool({ "files.desktop": ENTRY });
-  const result = await launch.execute(
-    "t1",
-    { action: "list" },
-    undefined,
-  );
+  const result = await launch.execute("t1", { action: "list" }, undefined);
   const text = result.content[0];
   assertEquals(text?.type === "text" && text.text.includes("Files"), true);
 });
@@ -117,16 +117,13 @@ Deno.test("vm_launch: start needs an id", async () => {
 Deno.test("vm_launch: a shell that refuses to start is reported", async () => {
   // The command line itself can fail (a missing binary): the tool says what
   // the shell said instead of claiming the program started.
-  const { launch } = tool(
-    { "files.desktop": ENTRY },
-    () => ({
-      exitCode: 127,
-      stdout: "",
-      stderr: "sh: nautilus: not found",
-      timedOut: false,
-      truncated: false,
-    }),
-  );
+  const { launch } = tool({ "files.desktop": ENTRY }, () => ({
+    exitCode: 127,
+    stdout: "",
+    stderr: "sh: nautilus: not found",
+    timedOut: false,
+    truncated: false,
+  }));
   const error = await assertRejects(
     () =>
       launch.execute(

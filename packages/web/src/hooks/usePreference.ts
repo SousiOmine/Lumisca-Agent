@@ -1,6 +1,6 @@
+import { errorMessage as errorText } from "@lumisca/core/shared";
 import { useCallback, useRef, useState } from "preact/compat";
 import { settingsStore } from "../settingsStore.ts";
-import { errorMessage as errorText } from "@lumisca/core/shared";
 
 /**
  * A preference that lives on the server, edited optimistically.
@@ -47,26 +47,29 @@ export function usePreference<T extends string>(options: {
   /** The value the last persist attempt wrote — see the module comment. */
   const chosen = useRef(value);
 
-  const set = useCallback((next: T) => {
-    const previous = chosen.current;
-    if (previous === next) return;
-    chosen.current = next;
-    setError(null);
-    // Optimistic: the value applies immediately; a failed persist rolls back
-    // to the one the server still holds.
-    setValue(next);
-    apply?.(next);
-    // Through the settings store, not `api.setSetting` directly: the store is
-    // what every other screen reads, so a value picked here must land there
-    // too (a panel open beside this one would otherwise keep the old value).
-    settingsStore.set(key, next).catch((failure) => {
-      setError(errorText(failure));
-      if (chosen.current !== next) return; // a newer choice superseded this
-      chosen.current = previous;
-      setValue(previous);
-      apply?.(previous);
-    });
-  }, [key, apply]);
+  const set = useCallback(
+    (next: T) => {
+      const previous = chosen.current;
+      if (previous === next) return;
+      chosen.current = next;
+      setError(null);
+      // Optimistic: the value applies immediately; a failed persist rolls back
+      // to the one the server still holds.
+      setValue(next);
+      apply?.(next);
+      // Through the settings store, not `api.setSetting` directly: the store is
+      // what every other screen reads, so a value picked here must land there
+      // too (a panel open beside this one would otherwise keep the old value).
+      settingsStore.set(key, next).catch((failure) => {
+        setError(errorText(failure));
+        if (chosen.current !== next) return; // a newer choice superseded this
+        chosen.current = previous;
+        setValue(previous);
+        apply?.(previous);
+      });
+    },
+    [key, apply],
+  );
 
   return { value, set, error };
 }

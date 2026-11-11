@@ -1,7 +1,7 @@
+import { summarizeContextUsage } from "@lumisca/core/shared";
 import { assert, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
-import { summarizeContextUsage } from "@lumisca/core/shared";
 import { EMPTY_DRAFT } from "../hooks/useDrafts.ts";
 import type { SessionActions } from "../hooks/useSessionActions.ts";
 import { emptyView, type SessionInfo } from "../types.ts";
@@ -47,25 +47,29 @@ function rootTag(html: string): string {
 
 function render(active: boolean): string {
   const view = emptyView(INFO, {
-    messages: [{
-      role: "user",
-      content: "hidden but still drawn",
-      timestamp: 1,
-    }],
+    messages: [
+      {
+        role: "user",
+        content: "hidden but still drawn",
+        timestamp: 1,
+      },
+    ],
     older: null,
     usage: summarizeContextUsage([]),
   });
-  return renderToString(createElement(SessionPane, {
-    tabKey: INFO.id,
-    view,
-    active,
-    draft: EMPTY_DRAFT,
-    loadingOlder: false,
-    actions: ACTIONS,
-    loadOlder: () => false,
-    updateDraft: () => {},
-    onOpenSettings: () => {},
-  }));
+  return renderToString(
+    createElement(SessionPane, {
+      tabKey: INFO.id,
+      view,
+      active,
+      draft: EMPTY_DRAFT,
+      loadingOlder: false,
+      actions: ACTIONS,
+      loadOlder: () => false,
+      updateDraft: () => {},
+      onOpenSettings: () => {},
+    }),
+  );
 }
 
 Deno.test("SessionPane: a pane behind another tab is hidden, not rebuilt", () => {

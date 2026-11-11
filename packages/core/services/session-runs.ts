@@ -1,6 +1,6 @@
 import type { ImageContent } from "../ai/types.ts";
-import type { AskAnswer, PromptFileRef } from "../shared/mod.ts";
 import type { ModePrompt } from "../domain/mode-message.ts";
+import type { AskAnswer, PromptFileRef } from "../shared/mod.ts";
 import type { SessionServiceDeps } from "./session-deps.ts";
 
 type Deps = Pick<SessionServiceDeps, "sessions" | "pool">;

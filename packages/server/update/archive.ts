@@ -87,9 +87,9 @@ export function packageEntryPath(path: string): string | undefined {
   if (path.includes("\\") || path.includes("\0")) return undefined;
   // A trailing separator names a directory, which is never a file to write.
   if (path.endsWith("/")) return undefined;
-  const components = path.split("/").filter((part) =>
-    part !== "" && part !== "."
-  );
+  const components = path
+    .split("/")
+    .filter((part) => part !== "" && part !== ".");
   // The top-level directory plus at least one file inside it. An entry that
   // is the directory itself carries no file either.
   if (components.length < 2) return undefined;
@@ -202,7 +202,8 @@ async function readZipEntries(file: Deno.FsFile): Promise<ZipEntry[]> {
   const centralSize = tailView.getUint32(eocd + 12, true);
   const centralOffset = tailView.getUint32(eocd + 16, true);
   if (
-    entryCount === 0xffff || centralSize === 0xffffffff ||
+    entryCount === 0xffff ||
+    centralSize === 0xffffffff ||
     centralOffset === 0xffffffff
   ) {
     throw new ArchiveError("ZIP64 形式のアーカイブには対応していません");
@@ -238,7 +239,8 @@ async function readZipEntries(file: Deno.FsFile): Promise<ZipEntry[]> {
     // Directory entries end in "/"; they carry no payload.
     if (rawName.endsWith("/")) continue;
     if (
-      compressedSize === 0xffffffff || uncompressedSize === 0xffffffff ||
+      compressedSize === 0xffffffff ||
+      uncompressedSize === 0xffffffff ||
       localOffset === 0xffffffff
     ) {
       throw new ArchiveError("ZIP64 形式のアーカイブには対応していません");
@@ -270,8 +272,11 @@ async function readZipEntries(file: Deno.FsFile): Promise<ZipEntry[]> {
     if (localView.getUint32(0, true) !== ZIP_LOCAL_SIGNATURE) {
       throw new ArchiveError(`ローカルヘッダが壊れています: ${rawName}`);
     }
-    const dataOffset = localOffset + 30 +
-      localView.getUint16(26, true) + localView.getUint16(28, true);
+    const dataOffset =
+      localOffset +
+      30 +
+      localView.getUint16(26, true) +
+      localView.getUint16(28, true);
     if (dataOffset + compressedSize > size) {
       throw new ArchiveError(`データが範囲外です: ${rawName}`);
     }

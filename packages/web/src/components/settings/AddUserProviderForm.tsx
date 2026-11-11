@@ -1,12 +1,12 @@
-import { useEffect, useState } from "preact/compat";
+// The picker and the core's validation read one list (shared/providers.ts).
+import { ALLOWED_OPENAI_APIS } from "@lumisca/core/shared";
 import { IconCheck, IconPlus, IconTrash } from "@tabler/icons-preact";
+import { useEffect, useState } from "preact/compat";
 import { api } from "../../api.ts";
 import { confirmAction } from "../../confirm.ts";
 import { useT } from "../../i18n.ts";
 import { errorText } from "../../providers.ts";
 import type { UserProviderSummary } from "../../types.ts";
-// The picker and the core's validation read one list (shared/providers.ts).
-import { ALLOWED_OPENAI_APIS } from "@lumisca/core/shared";
 import { Field } from "../Field.tsx";
 import { SettingsSubHeader } from "./SettingsSubHeader.tsx";
 
@@ -196,13 +196,13 @@ export function AddUserProviderForm({
   const [models, setModels] = useState<ModelRow[]>(
     initial?.models?.length
       ? initial.models.map((m) => ({
-        id: m.id,
-        name: m.name ?? "",
-        reasoning: m.reasoning ?? false,
-        image: (m.input ?? []).includes("image"),
-        contextWindow: m.contextWindow ? String(m.contextWindow) : "",
-        maxTokens: m.maxTokens ? String(m.maxTokens) : "",
-      }))
+          id: m.id,
+          name: m.name ?? "",
+          reasoning: m.reasoning ?? false,
+          image: (m.input ?? []).includes("image"),
+          contextWindow: m.contextWindow ? String(m.contextWindow) : "",
+          maxTokens: m.maxTokens ? String(m.maxTokens) : "",
+        }))
       : [emptyModel()],
   );
   const [apiKey, setApiKey] = useState("");
@@ -221,21 +221,21 @@ export function AddUserProviderForm({
       setHeaders(
         initial.headers
           ? Object.entries(initial.headers).map(([k, v]) => ({
-            key: k,
-            value: v,
-          }))
+              key: k,
+              value: v,
+            }))
           : [],
       );
       setModels(
         initial.models?.length
           ? initial.models.map((m) => ({
-            id: m.id,
-            name: m.name ?? "",
-            reasoning: m.reasoning ?? false,
-            image: (m.input ?? []).includes("image"),
-            contextWindow: m.contextWindow ? String(m.contextWindow) : "",
-            maxTokens: m.maxTokens ? String(m.maxTokens) : "",
-          }))
+              id: m.id,
+              name: m.name ?? "",
+              reasoning: m.reasoning ?? false,
+              image: (m.input ?? []).includes("image"),
+              contextWindow: m.contextWindow ? String(m.contextWindow) : "",
+              maxTokens: m.maxTokens ? String(m.maxTokens) : "",
+            }))
           : [emptyModel()],
       );
       setApiKey("");
@@ -282,9 +282,10 @@ export function AddUserProviderForm({
 
     setSaving(true);
     try {
-      const result = mode === "create"
-        ? await api.createUserProvider(input)
-        : await api.updateUserProvider(id.trim(), input);
+      const result =
+        mode === "create"
+          ? await api.createUserProvider(input)
+          : await api.updateUserProvider(id.trim(), input);
       onDone(result.id);
     } catch (e) {
       setError(errorText(e));
@@ -310,7 +311,8 @@ export function AddUserProviderForm({
       !confirmAction(
         t("settings.provider.deleteConfirm", { name: initial.name }),
       )
-    ) return;
+    )
+      return;
     setDeleting(true);
     setError(undefined);
     try {
@@ -328,9 +330,11 @@ export function AddUserProviderForm({
     <>
       <SettingsSubHeader
         onBack={onBack}
-        title={mode === "create"
-          ? t("settings.userProvider.createTitle")
-          : t("settings.userProvider.editTitle")}
+        title={
+          mode === "create"
+            ? t("settings.userProvider.createTitle")
+            : t("settings.userProvider.editTitle")
+        }
       />
 
       <div className="settings-pane" style={{ gap: 10 }}>
@@ -376,7 +380,9 @@ export function AddUserProviderForm({
             onChange={(e) => setProviderApi(e.currentTarget.value)}
           >
             {ALLOWED_OPENAI_APIS.map((a) => (
-              <option key={a} value={a}>{a}</option>
+              <option key={a} value={a}>
+                {a}
+              </option>
             ))}
           </select>
           <p className="settings-note">
@@ -391,9 +397,11 @@ export function AddUserProviderForm({
         >
           <input
             type="password"
-            placeholder={initial?.hasApiKey
-              ? t("settings.userProvider.apiKeyPlaceholderSet")
-              : t("settings.userProvider.apiKeyPlaceholder")}
+            placeholder={
+              initial?.hasApiKey
+                ? t("settings.userProvider.apiKeyPlaceholderSet")
+                : t("settings.userProvider.apiKeyPlaceholder")
+            }
             value={apiKey}
             onChange={(e) => setApiKey(e.currentTarget.value)}
           />
@@ -415,7 +423,8 @@ export function AddUserProviderForm({
             type="button"
             className="btn small"
             onClick={() =>
-              setHeaders((cur) => [...cur, { key: "", value: "" }])}
+              setHeaders((cur) => [...cur, { key: "", value: "" }])
+            }
           >
             <IconPlus size={14} /> {t("settings.userProvider.addHeader")}
           </button>

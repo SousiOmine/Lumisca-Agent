@@ -1,7 +1,7 @@
-import { notificationText, withTimeout } from "@lumisca/core/shared";
 import type { Translator } from "@lumisca/core/shared";
-import { notifyApi, type WindowState, windowStateApi } from "./shell.ts";
+import { notificationText, withTimeout } from "@lumisca/core/shared";
 import { t } from "./i18n.ts";
+import { notifyApi, type WindowState, windowStateApi } from "./shell.ts";
 import type { AskQuestion } from "./types.ts";
 
 /** Background agent-event notifications (desktop only).
@@ -110,12 +110,14 @@ export function buildQuestionNotification(
   tr: Translator = t,
 ): { title: string; body: string } {
   const first = questions[0];
-  const gist = first === undefined
-    ? ""
-    : (first.header?.trim() || first.question.trim());
-  const detail = gist === "" ? "" : tr("notify.questionDetail", {
-    gist: truncate(gist, MAX_QUESTION_CHARS),
-  });
+  const gist =
+    first === undefined ? "" : first.header?.trim() || first.question.trim();
+  const detail =
+    gist === ""
+      ? ""
+      : tr("notify.questionDetail", {
+          gist: truncate(gist, MAX_QUESTION_CHARS),
+        });
   return {
     title: "Lumisca",
     body: tr("notify.question", {
@@ -217,10 +219,9 @@ async function maybeNotify(
 ): Promise<void> {
   try {
     if (!isNotifyEnabled()) return;
-    if (!await isAppHidden()) return;
-    const name = typeof sessionName === "string"
-      ? sessionName
-      : await sessionName();
+    if (!(await isAppHidden())) return;
+    const name =
+      typeof sessionName === "string" ? sessionName : await sessionName();
     const { title, body } = build(name);
     await notifyApi.notify(title, body, urgent);
   } catch {
@@ -234,10 +235,8 @@ export function maybeNotifyAgentEnd(
   sessionName: SessionName,
   detail?: string,
 ): Promise<void> {
-  return maybeNotify(
-    sessionName,
-    false,
-    (name) => buildAgentEndNotification(name, t, detail),
+  return maybeNotify(sessionName, false, (name) =>
+    buildAgentEndNotification(name, t, detail),
   );
 }
 
@@ -248,10 +247,8 @@ export function maybeNotifyQuestion(
   sessionName: SessionName,
   questions: AskQuestion[],
 ): Promise<void> {
-  return maybeNotify(
-    sessionName,
-    true,
-    (name) => buildQuestionNotification(name, questions),
+  return maybeNotify(sessionName, true, (name) =>
+    buildQuestionNotification(name, questions),
   );
 }
 
@@ -262,10 +259,8 @@ export function maybeNotifyHandover(
   sessionName: SessionName,
   reason: string,
 ): Promise<void> {
-  return maybeNotify(
-    sessionName,
-    true,
-    (name) => buildHandoverNotification(name, reason),
+  return maybeNotify(sessionName, true, (name) =>
+    buildHandoverNotification(name, reason),
   );
 }
 
@@ -275,9 +270,7 @@ export function maybeNotifyEnv(
   sessionName: SessionName,
   variable: string,
 ): Promise<void> {
-  return maybeNotify(
-    sessionName,
-    true,
-    (name) => buildEnvNotification(name, variable),
+  return maybeNotify(sessionName, true, (name) =>
+    buildEnvNotification(name, variable),
   );
 }

@@ -43,8 +43,7 @@ export const chat = {
   },
   "chat.mode.plan.label": { ja: "プラン", en: "Plan" },
   "chat.mode.plan.description": {
-    ja:
-      "作業計画を立案します（ユーザーの承認があるまでファイル編集は行いません）",
+    ja: "作業計画を立案します（ユーザーの承認があるまでファイル編集は行いません）",
     en: "Draft a plan (no file edits until you approve)",
   },
   "chat.mode.plan.modeLabel": { ja: "プラン作成モード", en: "Plan mode" },
@@ -68,14 +67,11 @@ export const chat = {
 
   // --- chat view -----------------------------------------------------------
   "chat.empty.workspace": {
-    ja:
-      "作業内容（タスク）を入力してください。ワークスペース内のファイル操作やコマンド実行をAIが自律的に進めます。",
-    en:
-      "Enter a task. The AI will autonomously operate files and run commands in your workspace.",
+    ja: "作業内容（タスク）を入力してください。ワークスペース内のファイル操作やコマンド実行をAIが自律的に進めます。",
+    en: "Enter a task. The AI will autonomously operate files and run commands in your workspace.",
   },
   "chat.empty.chat": {
-    ja:
-      "メッセージを入力してください。フォルダー連携を行わないシンプルなチャットです。",
+    ja: "メッセージを入力してください。フォルダー連携を行わないシンプルなチャットです。",
     en: "Enter a message. This is a simple chat without folder collaboration.",
   },
 
@@ -114,8 +110,7 @@ export const chat = {
    * nowhere for the bytes to go. */
   "chat.composer.attach.imageOnly": {
     ja: "「{name}」は添付できません。このモードで添付できるのは画像だけです",
-    en:
-      '"{name}" cannot be attached: only pictures can be attached in this mode',
+    en: '"{name}" cannot be attached: only pictures can be attached in this mode',
   },
   "chat.composer.mention.noMatch": {
     ja: "一致するファイルが見つかりません",
@@ -141,10 +136,8 @@ export const chat = {
     en: "Change model",
   },
   "chat.composer.providerUnconfigured": {
-    ja:
-      "プロバイダー「{provider}」が未設定のため送信できません。設定画面でAPIキーを登録するか、モデルを切り替えてください。",
-    en:
-      'This session\'s provider "{provider}" is not configured, so nothing can be sent. Register an API key in the settings, or switch to another model.',
+    ja: "プロバイダー「{provider}」が未設定のため送信できません。設定画面でAPIキーを登録するか、モデルを切り替えてください。",
+    en: 'This session\'s provider "{provider}" is not configured, so nothing can be sent. Register an API key in the settings, or switch to another model.',
   },
   "chat.composer.stop": { ja: "処理を停止", en: "Stop" },
 
@@ -160,10 +153,8 @@ export const chat = {
     en: "Could not save the chosen model as the default:",
   },
   "chat.newSession.noProvider": {
-    ja:
-      "プロバイダーが未設定のため、モデルを選べません。設定画面でAPIキーを登録してください。",
-    en:
-      "No provider is configured, so no model can be selected. Register an API key in the settings.",
+    ja: "プロバイダーが未設定のため、モデルを選べません。設定画面でAPIキーを登録してください。",
+    en: "No provider is configured, so no model can be selected. Register an API key in the settings.",
   },
   "chat.newSession.placeholder": {
     ja: "メッセージを入力...",
@@ -279,10 +270,8 @@ export const chat = {
     en: "What should it do for you?",
   },
   "chat.stella.agents.roleHint": {
-    ja:
-      "例）毎朝の予定と未読メールをまとめて、返信が必要なものだけ知らせてください",
-    en:
-      "e.g. Summarize my morning schedule and unread mail, and tell me only what needs a reply",
+    ja: "例）毎朝の予定と未読メールをまとめて、返信が必要なものだけ知らせてください",
+    en: "e.g. Summarize my morning schedule and unread mail, and tell me only what needs a reply",
   },
   /** The examples under the wish field. A click writes the sentence into the
    * field: the preset IS the role, and the user can edit it first. */
@@ -292,31 +281,23 @@ export const chat = {
   },
   "chat.stella.agents.preset.secretary": { ja: "秘書", en: "Secretary" },
   "chat.stella.agents.preset.secretaryText": {
-    ja:
-      "毎朝の予定と未読メールをまとめて、返信が必要なものだけ知らせてください。予定の調整や下調べもお願いします。",
-    en:
-      "Summarize my morning schedule and unread mail, and tell me only what needs a reply. Help me move appointments and look things up.",
+    ja: "毎朝の予定と未読メールをまとめて、返信が必要なものだけ知らせてください。予定の調整や下調べもお願いします。",
+    en: "Summarize my morning schedule and unread mail, and tell me only what needs a reply. Help me move appointments and look things up.",
   },
   "chat.stella.agents.preset.bookkeeping": { ja: "家計", en: "Money" },
   "chat.stella.agents.preset.bookkeepingText": {
-    ja:
-      "家計の記録を手伝ってください。レシートや明細の内容を整理して、月ごとの支出をまとめて知らせてください。",
-    en:
-      "Help me keep track of household money: sort receipts and statements, and summarize each month's spending.",
+    ja: "家計の記録を手伝ってください。レシートや明細の内容を整理して、月ごとの支出をまとめて知らせてください。",
+    en: "Help me keep track of household money: sort receipts and statements, and summarize each month's spending.",
   },
   "chat.stella.agents.preset.research": { ja: "調べもの", en: "Research" },
   "chat.stella.agents.preset.researchText": {
-    ja:
-      "調べものを手伝ってください。気になったことを伝えるので、複数の情報源を比べて、要点と注意点を短くまとめてください。",
-    en:
-      "Help me look things up: when I mention something, compare several sources and give me the key points and the caveats, briefly.",
+    ja: "調べものを手伝ってください。気になったことを伝えるので、複数の情報源を比べて、要点と注意点を短くまとめてください。",
+    en: "Help me look things up: when I mention something, compare several sources and give me the key points and the caveats, briefly.",
   },
   "chat.stella.agents.preset.travel": { ja: "旅行", en: "Travel" },
   "chat.stella.agents.preset.travelText": {
-    ja:
-      "旅行の計画を手伝ってください。行き先の候補、移動、宿、予算を整理して、比べられる形で出してください。",
-    en:
-      "Help me plan trips: organize destinations, transport, places to stay and budget in a form I can compare.",
+    ja: "旅行の計画を手伝ってください。行き先の候補、移動、宿、予算を整理して、比べられる形で出してください。",
+    en: "Help me plan trips: organize destinations, transport, places to stay and budget in a form I can compare.",
   },
   "chat.stella.agents.create": { ja: "作成", en: "Create" },
   "chat.stella.agents.creating": { ja: "作成中…", en: "Creating…" },
@@ -367,23 +348,19 @@ export const chat = {
     en: "Use the default",
   },
   "chat.stella.agents.modelHint": {
-    ja:
-      "このエージェントの会話が使うモデルです。未設定なら既定のモデルを使います。",
-    en:
-      "The model this agent's conversation runs on. Unset means the app's default model.",
+    ja: "このエージェントの会話が使うモデルです。未設定なら既定のモデルを使います。",
+    en: "The model this agent's conversation runs on. Unset means the app's default model.",
   },
   "chat.stella.agents.deleteTitle": {
     ja: "「{name}」を削除しますか？",
     en: 'Delete "{name}"?',
   },
   "chat.stella.agents.deleteBody": {
-    ja:
-      "このエージェントとの会話履歴もすべて削除されます。この操作は取り消せません。",
+    ja: "このエージェントとの会話履歴もすべて削除されます。この操作は取り消せません。",
     en: "Its whole conversation is deleted too. This cannot be undone.",
   },
   "chat.stella.agents.empty": {
-    ja:
-      "登録されているエージェントがありません。「新しいエージェント」から作成してください。",
+    ja: "登録されているエージェントがありません。「新しいエージェント」から作成してください。",
     en: "No agent yet. Create one.",
   },
   /** The starter agent the server creates on a fresh installation, so the
@@ -392,10 +369,8 @@ export const chat = {
    * machine it lives in. */
   "chat.stella.agents.starterName": { ja: "アシスタント", en: "Assistant" },
   "chat.stella.agents.starterRole": {
-    ja:
-      "毎日の予定やメール、調べものを手伝う秘書。わからないことは短く聞き、小さなことは自分で進めて、結果だけを報告します。",
-    en:
-      "A secretary who helps with the day's schedule, mail and research: asks briefly when unsure, does small things on its own, and reports only the result.",
+    ja: "毎日の予定やメール、調べものを手伝う秘書。わからないことは短く聞き、小さなことは自分で進めて、結果だけを報告します。",
+    en: "A secretary who helps with the day's schedule, mail and research: asks briefly when unsure, does small things on its own, and reports only the result.",
   },
   "chat.stella.conversationError": {
     ja: "会話を開けませんでした: {error}",
@@ -496,7 +471,8 @@ export const chat = {
   },
   "chat.stella.env.hint": {
     ja: "値はマシンの中に保存され、以降のコマンドが環境変数として使います。",
-    en: "The value is stored in the machine; later commands use it as an " +
+    en:
+      "The value is stored in the machine; later commands use it as an " +
       "environment variable.",
   },
   /** The button is the generic save (common.save); only the busy state is

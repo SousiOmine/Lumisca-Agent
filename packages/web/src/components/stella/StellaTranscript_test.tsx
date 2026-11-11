@@ -13,17 +13,19 @@ import { StellaTranscript } from "./StellaTranscript.tsx";
  * are about what a conversation looks like, not about filtering. */
 function render(state: Partial<StellaConversationState>): string {
   initLocale("ja");
-  return renderToString(createElement(StellaTranscript, {
-    conversation: { ...emptyStellaState("Aide"), ...state },
-    author: { id: "a1", name: "Aide", icon: "" },
-    visualBase: "/api/sessions/s/visual/",
-    attachBase: "/api/sessions/s/attachment/",
-    uploadBase: "/api/stella/conversations/a1/upload",
-    onRewind: () => {},
-    onSend: () => {},
-    onLoadOlder: () => false,
-    loadingOlder: false,
-  }));
+  return renderToString(
+    createElement(StellaTranscript, {
+      conversation: { ...emptyStellaState("Aide"), ...state },
+      author: { id: "a1", name: "Aide", icon: "" },
+      visualBase: "/api/sessions/s/visual/",
+      attachBase: "/api/sessions/s/attachment/",
+      uploadBase: "/api/stella/conversations/a1/upload",
+      onRewind: () => {},
+      onSend: () => {},
+      onLoadOlder: () => false,
+      loadingOlder: false,
+    }),
+  );
 }
 
 Deno.test("StellaTranscript: the words come out in order", () => {
@@ -70,10 +72,13 @@ Deno.test("StellaTranscript: a card renders with its markup", () => {
       {
         role: "assistant",
         text: "確認します。",
-        segments: [{ type: "text", text: "確認します。" }, {
-          type: "card",
-          markup,
-        }],
+        segments: [
+          { type: "text", text: "確認します。" },
+          {
+            type: "card",
+            markup,
+          },
+        ],
         attachments: [],
         files: [],
         timestamp: 1,
@@ -117,23 +122,23 @@ Deno.test("StellaTranscript: nothing of the model's machinery can appear", () =>
   // structural check: the component has no way to draw a tool row, a work
   // log or a context row even if one were passed.
   const html = render({
-    entries: [{
-      role: "assistant",
-      text: "答えです。",
-      segments: [{ type: "text", text: "答えです。" }],
-      attachments: [],
-      files: [],
-      timestamp: 1,
-    }],
+    entries: [
+      {
+        role: "assistant",
+        text: "答えです。",
+        segments: [{ type: "text", text: "答えです。" }],
+        attachments: [],
+        files: [],
+        timestamp: 1,
+      },
+    ],
   });
-  for (
-    const forbidden of [
-      "tool-timeline",
-      "agent-work-log",
-      "agent-activity",
-      "notification-timeline",
-    ]
-  ) {
+  for (const forbidden of [
+    "tool-timeline",
+    "agent-work-log",
+    "agent-activity",
+    "notification-timeline",
+  ]) {
     assertEquals(html.includes(forbidden), false, forbidden);
   }
 });
@@ -174,8 +179,9 @@ Deno.test("StellaTranscript: a conversation reads as messages, not rows", () => 
     html.indexOf('class="msg-meta"'),
     html.indexOf('class="msg-meta start"'),
   );
-  const order = [...userMeta.matchAll(/class="(msg-action-btn|msg-time)"/g)]
-    .map((match) => match[1]);
+  const order = [
+    ...userMeta.matchAll(/class="(msg-action-btn|msg-time)"/g),
+  ].map((match) => match[1]);
   assertEquals(order.at(-1), "msg-time", order.join(","));
   // …and the agent's answer can be copied too, after its clock.
   const agentMeta = html.slice(html.indexOf('class="msg-meta start"'));
@@ -291,13 +297,15 @@ Deno.test("StellaTranscript: a prompt's pictures are drawn in the bubble", () =>
         text: "",
         segments: [],
         attachments: [],
-        files: [{
-          name: "image-1.png",
-          path: "/home/agent/agents/a1/uploads/1-ab/01-image-1.png",
-          size: 5,
-          ref: "uploads/1-ab/01-image-1.png",
-          image: true,
-        }],
+        files: [
+          {
+            name: "image-1.png",
+            path: "/home/agent/agents/a1/uploads/1-ab/01-image-1.png",
+            size: 5,
+            ref: "uploads/1-ab/01-image-1.png",
+            image: true,
+          },
+        ],
         timestamp: 1,
       },
     ],
@@ -333,10 +341,12 @@ Deno.test("StellaTranscript: an answer's code scrolls inside the message", () =>
       {
         role: "assistant",
         text: "```ts\nconst veryLongIdentifierName = 1;\n```",
-        segments: [{
-          type: "text",
-          text: "```ts\nconst veryLongIdentifierName = 1;\n```",
-        }],
+        segments: [
+          {
+            type: "text",
+            text: "```ts\nconst veryLongIdentifierName = 1;\n```",
+          },
+        ],
         attachments: [],
         files: [],
         timestamp: Date.now(),

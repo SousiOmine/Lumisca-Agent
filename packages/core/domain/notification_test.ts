@@ -1,10 +1,10 @@
-import { assert, assertEquals } from "@std/assert";
 import type {
   AgentMessage,
   ImageContent,
   ModeMessage,
   NotificationMessage,
 } from "@lumisca/core";
+import { assert, assertEquals } from "@std/assert";
 import {
   notificationMessage,
   notificationText,
@@ -62,11 +62,12 @@ Deno.test("toLlmMessages converts notifications to user messages", () => {
   assertEquals(converted[0], messages[0]);
   assertEquals(converted[1], {
     role: "user",
-    content: [{
-      type: "text",
-      text:
-        "[Background command #2 finished after 12s (exit code 0)]\nlistening on :3000",
-    }],
+    content: [
+      {
+        type: "text",
+        text: "[Background command #2 finished after 12s (exit code 0)]\nlistening on :3000",
+      },
+    ],
     timestamp: 1700000000000,
   });
   // The notification keeps its structured fields for the UI/DB; only the

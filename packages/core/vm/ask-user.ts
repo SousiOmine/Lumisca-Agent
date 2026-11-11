@@ -43,10 +43,12 @@ const askUserSchema: SchemaObject<{
     'Why you need the user at the screen, in one sentence (e.g. "the ' +
       'login form needs a password only they know")',
   ),
-  instructions: optional(string(
-    "What the user should do, step by step. Omit when the reason says it " +
-      "already",
-  )),
+  instructions: optional(
+    string(
+      "What the user should do, step by step. Omit when the reason says it " +
+        "already",
+    ),
+  ),
 });
 
 export interface VmAskUserOptions {
@@ -103,40 +105,46 @@ export function createVmAskUserTool(
           "conflict",
         );
       }
-      return hub.wait(
-        toolCallId,
-        reason,
-        instructions === undefined || instructions.length === 0
-          ? null
-          : instructions,
-        signal,
-      ).then((outcome) => {
-        if (outcome.kind === "timed_out") {
+      return hub
+        .wait(
+          toolCallId,
+          reason,
+          instructions === undefined || instructions.length === 0
+            ? null
+            : instructions,
+          signal,
+        )
+        .then((outcome) => {
+          if (outcome.kind === "timed_out") {
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text:
+                    "The user did not come to the screen within " +
+                    `${TIMEOUT_MINUTES} minutes, so the hand-over ended on its ` +
+                    "own and you may continue. They may be at the screen right " +
+                    "now, so do not take the pointer back to finish this step: " +
+                    "do what you can without them, try another way, or stop and " +
+                    "say what you still need. Calling this tool again starts a " +
+                    "new wait.",
+                },
+              ],
+              details: { timedOut: true },
+            };
+          }
+          const note = outcome.note;
+          const text =
+            note.trim().length === 0
+              ? "The user finished at the screen. Take a vm_screenshot to see " +
+                "the result before continuing."
+              : `The user finished at the screen and reported: ${note.trim()}\n\n` +
+                "Take a vm_screenshot to see the result before continuing.";
           return {
-            content: [{
-              type: "text" as const,
-              text: "The user did not come to the screen within " +
-                `${TIMEOUT_MINUTES} minutes, so the hand-over ended on its ` +
-                "own and you may continue. They may be at the screen right " +
-                "now, so do not take the pointer back to finish this step: " +
-                "do what you can without them, try another way, or stop and " +
-                "say what you still need. Calling this tool again starts a " +
-                "new wait.",
-            }],
-            details: { timedOut: true },
+            content: [{ type: "text", text }],
+            details: { note: note.trim() },
           };
-        }
-        const note = outcome.note;
-        const text = note.trim().length === 0
-          ? "The user finished at the screen. Take a vm_screenshot to see " +
-            "the result before continuing."
-          : `The user finished at the screen and reported: ${note.trim()}\n\n` +
-            "Take a vm_screenshot to see the result before continuing.";
-        return {
-          content: [{ type: "text", text }],
-          details: { note: note.trim() },
-        };
-      });
+        });
     },
   };
 }

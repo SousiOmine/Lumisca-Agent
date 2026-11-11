@@ -81,6 +81,6 @@ export function dismissSteps(depth: number, next: UrlState): number {
 
 function read(state: unknown): Record<string, unknown> | null {
   return state !== null && typeof state === "object"
-    ? state as Record<string, unknown>
+    ? (state as Record<string, unknown>)
     : null;
 }

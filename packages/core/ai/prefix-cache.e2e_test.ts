@@ -18,10 +18,10 @@
  * comfortably span one from the very first request.
  */
 import { assert } from "@std/assert";
-import { Agent } from "./agent.ts";
-import { createStreamFn } from "./stream.ts";
-import { languageModelFor } from "./lang-model.ts";
 import { toLlmMessages } from "../domain/notification.ts";
+import { Agent } from "./agent.ts";
+import { languageModelFor } from "./lang-model.ts";
+import { createStreamFn } from "./stream.ts";
 import type {
   AgentTool,
   Api,
@@ -30,11 +30,11 @@ import type {
   StreamFn,
 } from "./types.ts";
 
-const API_KEY = Deno.env.get("LUMISCA_E2E_API_KEY") ??
-  Deno.env.get("DEEPSEEK_API_KEY");
+const API_KEY =
+  Deno.env.get("LUMISCA_E2E_API_KEY") ?? Deno.env.get("DEEPSEEK_API_KEY");
 const MODEL_ID = Deno.env.get("LUMISCA_E2E_MODEL") ?? "deepseek-chat";
-const BASE_URL = Deno.env.get("LUMISCA_E2E_BASE_URL") ??
-  "https://api.deepseek.com/v1";
+const BASE_URL =
+  Deno.env.get("LUMISCA_E2E_BASE_URL") ?? "https://api.deepseek.com/v1";
 
 const SYSTEM_PROMPT =
   "You are a terse coding assistant used in an automated cache test. " +
@@ -62,15 +62,18 @@ function e2eModel(): Model<Api> {
  * the model it was built with (see `e2eModel`), so the request is routed to
  * the configured endpoint. */
 function e2eStreamFn(): StreamFn {
-  return createStreamFn({
-    languageModelFor: (requested) =>
-      Promise.resolve(
-        languageModelFor(requested, {
-          apiKey: API_KEY!,
-          source: "LUMISCA_E2E_API_KEY",
-        }),
-      ),
-  }, () => ({ reservePercent: 0 }));
+  return createStreamFn(
+    {
+      languageModelFor: (requested) =>
+        Promise.resolve(
+          languageModelFor(requested, {
+            apiKey: API_KEY!,
+            source: "LUMISCA_E2E_API_KEY",
+          }),
+        ),
+    },
+    () => ({ reservePercent: 0 }),
+  );
 }
 
 function lookupTool(): AgentTool {
@@ -85,18 +88,19 @@ function lookupTool(): AgentTool {
     },
     execute: () =>
       Promise.resolve({
-        content: [{
-          type: "text",
-          text: "value(deploy-color) = azure-falcon-42",
-        }],
+        content: [
+          {
+            type: "text",
+            text: "value(deploy-color) = azure-falcon-42",
+          },
+        ],
         details: {},
       }),
   } as AgentTool;
 }
 
 Deno.test({
-  name:
-    "prefix cache: every request after the first is served from the provider's cache",
+  name: "prefix cache: every request after the first is served from the provider's cache",
   ignore: API_KEY === undefined,
   fn: async () => {
     const agent = new Agent({
@@ -119,8 +123,8 @@ Deno.test({
     await agent.prompt("Thanks. Repeat that value one more time.");
 
     const usages = agent.state.messages
-      .filter((message): message is AssistantMessage =>
-        message.role === "assistant"
+      .filter(
+        (message): message is AssistantMessage => message.role === "assistant",
       )
       .map((message) => message.usage);
     assert(
@@ -147,12 +151,11 @@ Deno.test({
     // The turn really did what it was asked (the value made it through the
     // tool into the answer), so the cache reads above describe a real turn.
     const finalText = agent.state.messages
-      .filter((message): message is AssistantMessage =>
-        message.role === "assistant"
+      .filter(
+        (message): message is AssistantMessage => message.role === "assistant",
       )
       .at(-1)!
-      .content
-      .filter((block) => block.type === "text")
+      .content.filter((block) => block.type === "text")
       .map((block) => block.text)
       .join("");
     assert(

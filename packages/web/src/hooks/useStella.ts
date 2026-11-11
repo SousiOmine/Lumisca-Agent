@@ -1,4 +1,10 @@
 import {
+  compareAgentRows,
+  previewOf,
+  samePreview,
+  withAgentRow,
+} from "@lumisca/core/shared";
+import {
   useCallback,
   useEffect,
   useMemo,
@@ -19,15 +25,6 @@ import {
   type StellaConversationState,
   stellaStateOf,
 } from "../stella-state.ts";
-import {
-  compareAgentRows,
-  previewOf,
-  samePreview,
-  withAgentRow,
-} from "@lumisca/core/shared";
-import { createStreamController } from "./useStreamController.ts";
-import { NEVER, useVisibleInterval } from "./useVisibleInterval.ts";
-import { startRevisionProbe } from "./useRevisionProbe.ts";
 import type {
   PendingFile,
   PendingImage,
@@ -35,6 +32,9 @@ import type {
   StellaAgentSummary,
   StellaEvent,
 } from "../types.ts";
+import { startRevisionProbe } from "./useRevisionProbe.ts";
+import { createStreamController } from "./useStreamController.ts";
+import { NEVER, useVisibleInterval } from "./useVisibleInterval.ts";
 
 /** How often the agent list is re-read while the page is visible.
  *
@@ -141,9 +141,8 @@ export function useStella(
    * the very first paint already says "reading" instead of flashing the
    * empty state for a frame. */
   const [agentsSettled, setAgentsSettled] = useState(false);
-  const [conversation, setConversation] = useState<
-    StellaConversationState | null
-  >(null);
+  const [conversation, setConversation] =
+    useState<StellaConversationState | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -205,11 +204,9 @@ export function useStella(
   // routine, writes into conversations this client has no stream for. A
   // re-read is the only thing that moves those rows, and it is cheap (a
   // bounded read per agent, see stella/previews.ts).
-  useVisibleInterval(
-    reloadAgents,
-    enabled ? AGENT_LIST_REFRESH_MS : NEVER,
-    { immediate: false },
-  );
+  useVisibleInterval(reloadAgents, enabled ? AGENT_LIST_REFRESH_MS : NEVER, {
+    immediate: false,
+  });
 
   // The row of the conversation that is open, advanced from its own entries:
   // the list re-reads every 30 seconds, but the message the user just
@@ -304,7 +301,7 @@ export function useStella(
         if (!closed) {
           wasRunning = snapshot.running;
           setConversation((current) =>
-            stellaStateOf(snapshot, current ?? undefined)
+            stellaStateOf(snapshot, current ?? undefined),
           );
         }
       } catch {
@@ -331,7 +328,8 @@ export function useStella(
           lastReply = event.entry.text;
         }
         if (
-          event.type === "handover" && event.handover !== null &&
+          event.type === "handover" &&
+          event.handover !== null &&
           event.handover.toolCallId !== notifiedHandover
         ) {
           notifiedHandover = event.handover.toolCallId;
@@ -341,7 +339,8 @@ export function useStella(
           );
         }
         if (
-          event.type === "env_request" && event.request !== null &&
+          event.type === "env_request" &&
+          event.request !== null &&
           event.request.toolCallId !== notifiedEnv
         ) {
           notifiedEnv = event.request.toolCallId;
@@ -442,10 +441,12 @@ export function useStella(
         await stellaApi.prompt(agentId, text, images, files);
       } catch (failure) {
         setConversation((current) =>
-          current === null ? current : {
-            ...current,
-            error: describeError(failure, t),
-          }
+          current === null
+            ? current
+            : {
+                ...current,
+                error: describeError(failure, t),
+              },
         );
         throw failure;
       }
@@ -459,19 +460,18 @@ export function useStella(
     // the transcript beside it, not a reason to hide the conversation.
     void stellaApi.abort(agentId).catch((failure: unknown) => {
       setConversation((current) =>
-        current === null ? current : {
-          ...current,
-          error: describeError(failure, t),
-        }
+        current === null
+          ? current
+          : {
+              ...current,
+              error: describeError(failure, t),
+            },
       );
     });
   }, [requireAgent, t]);
 
   const answer = useCallback(
-    async (
-      toolCallId: string,
-      answers: { id: string; values: string[] }[],
-    ) => {
+    async (toolCallId: string, answers: { id: string; values: string[] }[]) => {
       await stellaApi.answer(requireAgent(), toolCallId, answers);
     },
     [requireAgent],
@@ -530,7 +530,7 @@ export function useStella(
         try {
           const snapshot = await stellaApi.getSnapshot(agentId);
           setConversation((current) =>
-            current === null ? current : stellaStateOf(snapshot, current)
+            current === null ? current : stellaStateOf(snapshot, current),
           );
         } catch {
           // The next scroll attempt tries again.

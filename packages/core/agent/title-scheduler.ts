@@ -1,6 +1,6 @@
-import type { Locale } from "../shared/mod.ts";
 import { errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";
+import type { Locale } from "../shared/mod.ts";
 import type { TitleGenerator } from "./title-generation.ts";
 
 const log = createLogger("session-agent");

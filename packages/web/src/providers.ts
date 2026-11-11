@@ -1,5 +1,5 @@
-import { useCallback, useSyncExternalStore } from "preact/compat";
 import { errorMessage as errorText } from "@lumisca/core/shared";
+import { useCallback, useSyncExternalStore } from "preact/compat";
 import { api, modelApi } from "./api.ts";
 import { modelCatalog, type PeerCatalogState } from "./modelCatalog.ts";
 import { createResourceStore, useStore } from "./store.ts";
@@ -28,9 +28,10 @@ const userProvidersStore = createResourceStore<UserProvidersValue, string>({
   // catalog does not re-render the settings dialog.
   same: (a, b) =>
     a.providers.length === b.providers.length &&
-    a.providers.every((provider, index) =>
-      provider.id === b.providers[index]?.id &&
-      provider.name === b.providers[index]?.name
+    a.providers.every(
+      (provider, index) =>
+        provider.id === b.providers[index]?.id &&
+        provider.name === b.providers[index]?.name,
     ),
 });
 
@@ -78,9 +79,8 @@ export function useProviderModels(peerId = ""): UseProviderModelsResult {
     (listener: () => void) => modelCatalog.subscribe(peerId, listener),
     [peerId],
   );
-  const state = useSyncExternalStore(
-    subscribe,
-    () => modelCatalog.state(peerId),
+  const state = useSyncExternalStore(subscribe, () =>
+    modelCatalog.state(peerId),
   );
   const reload = useCallback(() => {
     void modelCatalog.reload(peerId);

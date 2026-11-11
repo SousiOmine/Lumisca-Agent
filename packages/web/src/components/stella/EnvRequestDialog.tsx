@@ -1,10 +1,10 @@
-import { useState } from "preact/compat";
 import { errorMessage } from "@lumisca/core/shared";
-import { useLocale, useT } from "../../i18n.ts";
+import { useState } from "preact/compat";
 import { formatClockTime } from "../../format.ts";
+import { useLocale, useT } from "../../i18n.ts";
 import type { StellaEnvRequest } from "../../types.ts";
-import { Modal } from "../Modal.tsx";
 import { Field } from "../Field.tsx";
+import { Modal } from "../Modal.tsx";
 
 interface EnvRequestDialogProps {
   /** The variable the run is waiting for. The name is all this dialog
@@ -33,9 +33,11 @@ interface EnvRequestDialogProps {
  * refusal that cannot be delivered is not shown: the sheet is already
  * leaving by then, and the request ends at its deadline.
  */
-export function EnvRequestDialog(
-  { request, onProvide, onDecline }: EnvRequestDialogProps,
-) {
+export function EnvRequestDialog({
+  request,
+  onProvide,
+  onDecline,
+}: EnvRequestDialogProps) {
   const t = useT();
   const locale = useLocale();
   const [value, setValue] = useState("");
@@ -110,7 +112,11 @@ export function EnvRequestDialog(
             time: formatClockTime(request.expiresAt, locale),
           })}
         </p>
-        {error !== null && <p className="error-text" role="alert">{error}</p>}
+        {error !== null && (
+          <p className="error-text" role="alert">
+            {error}
+          </p>
+        )}
         <div className="modal-actions">
           <button
             type="button"

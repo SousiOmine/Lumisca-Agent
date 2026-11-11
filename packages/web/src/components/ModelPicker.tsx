@@ -1,15 +1,15 @@
-import { useMemo, useState } from "preact/compat";
-import { IconBrain, IconCheck, IconSettings } from "@tabler/icons-preact";
 import { formatModelMeta, type Translator } from "@lumisca/core/shared";
-import type { ModelInfo } from "../types.ts";
-import { useProviderModels } from "../providers.ts";
+import { IconBrain, IconCheck, IconSettings } from "@tabler/icons-preact";
+import { useMemo, useState } from "preact/compat";
+import { useT } from "../i18n.ts";
 import {
   buildModelList,
   type ModelPickerList,
   type ModelPickerRow,
 } from "../model-groups.ts";
+import { useProviderModels } from "../providers.ts";
 import { recentModels, rememberRecentModel } from "../recentModels.ts";
-import { useT } from "../i18n.ts";
+import type { ModelInfo } from "../types.ts";
 
 export interface ModelPickerProps {
   /** The model in effect, or null when the caller's subject has none (the
@@ -26,11 +26,7 @@ export interface ModelPickerProps {
   peerId?: string;
   /** Called with the selected model; the ModelInfo lets the caller know
    * the model's thinking levels without another fetch. */
-  onSelect: (
-    provider: string,
-    modelId: string,
-    info?: ModelInfo,
-  ) => void;
+  onSelect: (provider: string, modelId: string, info?: ModelInfo) => void;
   /** Open the provider settings (the row at the panel's foot). Omitted → no
    * row: a caller with no settings screen to reach from where it is (the
    * agent edit dialog) must not offer one that does nothing. */
@@ -67,8 +63,12 @@ export function ModelPicker({
   onClose,
 }: ModelPickerProps) {
   const t = useT();
-  const { providers: fetchedProviders, modelsByProvider, loading, error } =
-    useProviderModels(peerId);
+  const {
+    providers: fetchedProviders,
+    modelsByProvider,
+    loading,
+    error,
+  } = useProviderModels(peerId);
   const [search, setSearch] = useState("");
   // Read once per opening: a pick records itself and closes the panel, so
   // nothing else can change the list while it is open.
@@ -81,10 +81,13 @@ export function ModelPicker({
     const configured = fetchedProviders.filter((p) => p.configured !== false);
     const current = value?.provider;
     if (current && !configured.some((p) => p.id === current)) {
-      return [...configured, {
-        id: current,
-        name: fetchedProviders.find((p) => p.id === current)?.name ?? current,
-      }];
+      return [
+        ...configured,
+        {
+          id: current,
+          name: fetchedProviders.find((p) => p.id === current)?.name ?? current,
+        },
+      ];
     }
     return configured;
   }, [fetchedProviders, value?.provider]);
@@ -202,9 +205,11 @@ export function ModelPicker({
 }
 
 /** The foot of the panel: the way to the provider settings. */
-function ManageRow(
-  { onOpenSettings }: { onOpenSettings?: (() => void) | undefined },
-) {
+function ManageRow({
+  onOpenSettings,
+}: {
+  onOpenSettings?: (() => void) | undefined;
+}) {
   const t = useT();
   if (onOpenSettings === undefined) return null;
   return (

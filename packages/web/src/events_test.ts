@@ -1,3 +1,6 @@
+import { fauxAssistantMessage, fauxToolCall } from "@lumisca/core";
+import type { SessionSnapshot } from "@lumisca/core/shared";
+import { summarizeContextUsage } from "@lumisca/core/shared";
 import { assert, assertEquals } from "@std/assert";
 import {
   applyEvent,
@@ -15,9 +18,6 @@ import {
   sameQuestions,
   sameTodoPlan,
 } from "./events.ts";
-import { summarizeContextUsage } from "@lumisca/core/shared";
-import { fauxAssistantMessage, fauxToolCall } from "@lumisca/core";
-import type { SessionSnapshot } from "@lumisca/core/shared";
 import {
   type AgentMessage,
   type BackgroundCommandInfo,
@@ -164,14 +164,8 @@ Deno.test("events: assistant stream accumulates deltas and clears on start", () 
     },
     v,
   )!;
-  v = applyEvent(
-    { type: "message_delta", sessionId: "s1", delta: "Hel" },
-    v,
-  )!;
-  v = applyEvent(
-    { type: "message_delta", sessionId: "s1", delta: "lo" },
-    v,
-  )!;
+  v = applyEvent({ type: "message_delta", sessionId: "s1", delta: "Hel" }, v)!;
+  v = applyEvent({ type: "message_delta", sessionId: "s1", delta: "lo" }, v)!;
   assertEquals(v.streamingText, "Hello");
   v = applyEvent(
     {
@@ -237,12 +231,14 @@ Deno.test("events: a tool call is drawn from tool_start, before its message land
     },
     v,
   )!;
-  assertEquals(v.liveTools, [{
-    type: "toolCall",
-    id: "t1",
-    name: "bash",
-    arguments: { command: "sleep 10" },
-  }]);
+  assertEquals(v.liveTools, [
+    {
+      type: "toolCall",
+      id: "t1",
+      name: "bash",
+      arguments: { command: "sleep 10" },
+    },
+  ]);
 
   // The tool returned, but its message has not landed: the row stays (the
   // spinner stops, the message replaces the row).
@@ -405,11 +401,8 @@ Deno.test("events: tool results are keyed by tool call id, not by timestamp", ()
   // A resync that fetches the same two messages neither duplicates nor
   // drops one.
   assertEquals(
-    mergeNewestWindow(
-      v,
-      { messages: [first, second], older: null },
-      new Set(),
-    ).messages.length,
+    mergeNewestWindow(v, { messages: [first, second], older: null }, new Set())
+      .messages.length,
     2,
   );
 
@@ -425,8 +418,11 @@ Deno.test("events: tool results are keyed by tool call id, not by timestamp", ()
   )!;
   assertEquals(v.messages.length, 1);
   assertEquals(
-    mergeNewestWindow(v, { messages: [first, second], older: null }, v.removed)
-      .messages.map((m) => (m as { toolCallId?: string }).toolCallId),
+    mergeNewestWindow(
+      v,
+      { messages: [first, second], older: null },
+      v.removed,
+    ).messages.map((m) => (m as { toolCallId?: string }).toolCallId),
     ["t2"],
   );
 });
@@ -462,10 +458,7 @@ Deno.test("events: other sessions and non-view events are ignored", () => {
     null,
   );
   // No-op events return the same view reference.
-  assertEquals(
-    applyEvent({ type: "agent_end", sessionId: "s1" }, v),
-    null,
-  );
+  assertEquals(applyEvent({ type: "agent_end", sessionId: "s1" }, v), null);
 });
 
 Deno.test("events: applyRunState seeds a run the view never saw start", () => {
@@ -570,10 +563,7 @@ Deno.test("events: messages_truncated drops the exact removed messages", () => {
   assertEquals(v.agentEndedAt, undefined);
   assertEquals(v.thinkingStartAt, undefined);
   // The removed keys are tombstoned for the append-only resync.
-  assertEquals(
-    [...v.removed].sort(),
-    ["user:300", "assistant:400"].sort(),
-  );
+  assertEquals([...v.removed].sort(), ["user:300", "assistant:400"].sort());
 
   // Other sessions are ignored.
   assertEquals(
@@ -615,11 +605,14 @@ Deno.test("events: session_renamed updates the session name", () => {
 
   // Same name: no-op (same reference).
   assertEquals(
-    applyEvent({
-      type: "session_renamed",
-      sessionId: "s1",
-      name: "Fix login bug",
-    }, v),
+    applyEvent(
+      {
+        type: "session_renamed",
+        sessionId: "s1",
+        name: "Fix login bug",
+      },
+      v,
+    ),
     null,
   );
 
@@ -675,15 +668,17 @@ Deno.test("events: question is shown and cleared by tool_end", () => {
   assertEquals(v.pendingQuestions.length, 0);
 });
 
-const TODOS: TodoPhase[] = [{
-  id: "p1",
-  name: "実装",
-  tasks: [
-    { id: "t1", name: "調査する", status: "completed" },
-    { id: "t2", name: "実装する", status: "in_progress" },
-    { id: "t3", name: "テストする", status: "pending" },
-  ],
-}];
+const TODOS: TodoPhase[] = [
+  {
+    id: "p1",
+    name: "実装",
+    tasks: [
+      { id: "t1", name: "調査する", status: "completed" },
+      { id: "t2", name: "実装する", status: "in_progress" },
+      { id: "t3", name: "テストする", status: "pending" },
+    ],
+  },
+];
 
 Deno.test("events: todo snapshot replaces the plan", () => {
   let v = view();
@@ -720,11 +715,13 @@ Deno.test("events: sameTodoPlan compares snapshots exactly", () => {
 Deno.test("events: sameQuestions compares pending asks by tool call id", () => {
   const ask = (toolCallId: string): PendingQuestion => ({
     toolCallId,
-    questions: [{
-      id: "q1",
-      question: "Which?",
-      options: [{ label: "A" }, { label: "B" }],
-    }],
+    questions: [
+      {
+        id: "q1",
+        question: "Which?",
+        options: [{ label: "A" }, { label: "B" }],
+      },
+    ],
   });
   assertEquals(sameQuestions([], []), true);
   // The resync parses fresh objects every time, so identity must not matter
@@ -751,14 +748,18 @@ Deno.test("events: applySnapshot applies the live state, or keeps identity", () 
   const window = {
     messages: [message("user", 1), message("assistant", 2, "hi")],
     running: true,
-    questions: [{
-      toolCallId: "c1",
-      questions: [{
-        id: "q1",
-        question: "Which?",
-        options: [{ label: "A" }],
-      }],
-    }],
+    questions: [
+      {
+        toolCallId: "c1",
+        questions: [
+          {
+            id: "q1",
+            question: "Which?",
+            options: [{ label: "A" }],
+          },
+        ],
+      },
+    ],
     error: "boom",
     name: "renamed",
     rev: 4,
@@ -796,14 +797,18 @@ Deno.test("events: applySnapshot lets an event win over the snapshot it raced", 
   };
   const running = applyEvent({ type: "agent_start", sessionId: "s1" }, v)!;
   const ended = applyEvent({ type: "agent_end", sessionId: "s1" }, running)!;
-  const applied = applySnapshot(ended, {
-    snapshot: snapshot({
-      messages: [],
-      running: true,
-      name: "old-name",
-      rev: 3,
-    }),
-  }, prior);
+  const applied = applySnapshot(
+    ended,
+    {
+      snapshot: snapshot({
+        messages: [],
+        running: true,
+        name: "old-name",
+        rev: 3,
+      }),
+    },
+    prior,
+  );
 
   assertEquals(isViewRunning(applied), false, "the ended run stays ended");
   assertEquals(applied.agentEndedAt, ended.agentEndedAt);
@@ -819,13 +824,17 @@ Deno.test("events: applySnapshot merges panels and respects tombstones", () => {
     messages: [kept],
     removed: new Set([messageKey(rewound)]),
   };
-  const applied = applySnapshot(v, {
-    snapshot: snapshot({
-      messages: [rewound, kept, message("assistant", 3, "hi")],
-      rev: 2,
-    }),
-    todos: TODOS,
-  }, undefined);
+  const applied = applySnapshot(
+    v,
+    {
+      snapshot: snapshot({
+        messages: [rewound, kept, message("assistant", 3, "hi")],
+        rev: 2,
+      }),
+      todos: TODOS,
+    },
+    undefined,
+  );
 
   // The append-only merge brings in what was missed, but never the message
   // a rewind deleted while the socket was down.
@@ -853,13 +862,17 @@ Deno.test("events: a steered prompt reordered by the transcript is not duplicate
     timestamp: 4,
   } as AgentMessage;
   const v = view({ messages: [prompt, reply, result], older: "before-prompt" });
-  const applied = applySnapshot(v, {
-    snapshot: snapshot({
-      messages: [reply, result, prompt],
-      older: "before-reply",
-      rev: 2,
-    }),
-  }, undefined);
+  const applied = applySnapshot(
+    v,
+    {
+      snapshot: snapshot({
+        messages: [reply, result, prompt],
+        older: "before-reply",
+        rev: 2,
+      }),
+    },
+    undefined,
+  );
 
   assertEquals(applied.messages.map(messageKey), [
     messageKey(prompt),
@@ -901,7 +914,10 @@ Deno.test("events: two pending asks coexist and resolve independently", () => {
     },
     v,
   )!;
-  assertEquals(v.pendingQuestions.map((q) => q.toolCallId), ["t2"]);
+  assertEquals(
+    v.pendingQuestions.map((q) => q.toolCallId),
+    ["t2"],
+  );
 });
 
 Deno.test("events: pending questions are cleared on run teardown", () => {
@@ -986,13 +1002,15 @@ Deno.test("events: task events add, feed, and settle tasks", () => {
 });
 
 Deno.test("events: mergeTasks merges snapshots without losing live deltas", () => {
-  const existing: TaskView[] = [{
-    agentId: "agent_1",
-    subagentType: "general",
-    description: "調査",
-    status: "running",
-    liveText: "a longer live response",
-  }];
+  const existing: TaskView[] = [
+    {
+      agentId: "agent_1",
+      subagentType: "general",
+      description: "調査",
+      status: "running",
+      liveText: "a longer live response",
+    },
+  ];
   const fetched: TaskInfo[] = [
     {
       agentId: "agent_1",
@@ -1093,16 +1111,18 @@ Deno.test("events: background_end keeps a longer live view", () => {
   // The end event's tail is a point-in-time snapshot: when the live view
   // (deltas) is already longer, it must not be truncated back.
   let v = view({
-    backgrounds: [{
-      commandId: "1",
-      pid: 1,
-      command: "echo",
-      cwd: "/ws",
-      state: "running",
-      startedAt: 1,
-      tail: "",
-      liveText: "a very long live output that exceeds the snapshot",
-    }],
+    backgrounds: [
+      {
+        commandId: "1",
+        pid: 1,
+        command: "echo",
+        cwd: "/ws",
+        state: "running",
+        startedAt: 1,
+        tail: "",
+        liveText: "a very long live output that exceeds the snapshot",
+      },
+    ],
   });
   v = applyEvent(
     {
@@ -1124,16 +1144,18 @@ Deno.test("events: background_end keeps a longer live view", () => {
 });
 
 Deno.test("events: mergeBackgrounds merges snapshots without losing live deltas", () => {
-  const existing: BackgroundView[] = [{
-    commandId: "1",
-    pid: 1,
-    command: "npm run dev",
-    cwd: "/ws",
-    state: "running",
-    startedAt: 1,
-    tail: "",
-    liveText: "a longer live output",
-  }];
+  const existing: BackgroundView[] = [
+    {
+      commandId: "1",
+      pid: 1,
+      command: "npm run dev",
+      cwd: "/ws",
+      state: "running",
+      startedAt: 1,
+      tail: "",
+      liveText: "a longer live output",
+    },
+  ];
   const fetched: BackgroundCommandInfo[] = [
     {
       commandId: "1",
@@ -1169,16 +1191,18 @@ Deno.test("events: mergeBackgrounds merges snapshots without losing live deltas"
 });
 
 Deno.test("events: sameBackgrounds compares snapshots exactly", () => {
-  const list: BackgroundView[] = [{
-    commandId: "1",
-    pid: 1,
-    command: "npm run dev",
-    cwd: "/ws",
-    state: "running",
-    startedAt: 1,
-    tail: "",
-    liveText: "x",
-  }];
+  const list: BackgroundView[] = [
+    {
+      commandId: "1",
+      pid: 1,
+      command: "npm run dev",
+      cwd: "/ws",
+      state: "running",
+      startedAt: 1,
+      tail: "",
+      liveText: "x",
+    },
+  ];
   assertEquals(sameBackgrounds([], []), true);
   assertEquals(sameBackgrounds(list, structuredClone(list)), true);
   // A state change is detected (live text is deliberately not compared).
@@ -1255,10 +1279,7 @@ Deno.test("events: messages_checkpoint inserts the row and keeps run state", () 
     ),
     null,
   );
-  assertEquals(
-    v.messages.filter((m) => m.role === "checkpoint").length,
-    1,
-  );
+  assertEquals(v.messages.filter((m) => m.role === "checkpoint").length, 1);
 
   // Other sessions are ignored.
   assertEquals(
@@ -1334,7 +1355,10 @@ Deno.test("events: mergeNewestWindow replaces a view that shares nothing", () =>
     },
     new Set(),
   );
-  assertEquals(merged.messages.map((m) => m.timestamp), [300, 400]);
+  assertEquals(
+    merged.messages.map((m) => m.timestamp),
+    [300, 400],
+  );
   // The window took the view's place, so its cursor is the way back now.
   assertEquals(merged.older, "window-cursor");
 });
@@ -1373,10 +1397,11 @@ Deno.test("events: prependOlderWindow keeps a page's second copy of a key", () =
     message("user", 400),
   ];
   const next = prependOlderWindow(current, page, "cursor-a");
-  assertEquals(
-    next.messages.map(messageKey),
-    ["context:skills:100", "context:date:300", "user:400"],
-  );
+  assertEquals(next.messages.map(messageKey), [
+    "context:skills:100",
+    "context:date:300",
+    "user:400",
+  ]);
   assertEquals(next.older, "cursor-a");
 });
 
@@ -1486,10 +1511,13 @@ Deno.test("events: a rewound turn is dropped from the meter", () => {
     {
       type: "messages_truncated",
       sessionId: "s1",
-      removed: [{ role: "user", timestamp: 100 }, {
-        role: "assistant",
-        timestamp: 200,
-      }],
+      removed: [
+        { role: "user", timestamp: 100 },
+        {
+          role: "assistant",
+          timestamp: 200,
+        },
+      ],
     },
     v,
   )!;

@@ -1,0 +1,73 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.6/schema.json",
+  "files": {
+    "includes": [
+      "**",
+      "!.lumisca-cache",
+      "!node_modules",
+      "!dist",
+      "!coverage",
+      "!packages/desktop/src-tauri/target",
+      "!packages/desktop/src-tauri/icons",
+      "!packages/desktop/src-tauri/resources",
+      "!**/*.md",
+      "!**/*.svg",
+      "!**/*.html",
+      "!lumisca.db"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 80,
+    "lineEnding": "lf"
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "jsxQuoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all",
+      "arrowParentheses": "always",
+      "bracketSpacing": true
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "suspicious": {
+        "noAssignInExpressions": "off",
+        "noDoubleEquals": "off",
+        "noThenProperty": "off",
+        "noProto": "off",
+        "noFallthroughSwitchClause": "off",
+        "noTemplateCurlyInString": "off",
+        "useIterableCallbackReturn": "off",
+        "noControlCharactersInRegex": "off",
+        "noLabelVar": "off",
+        "noExplicitAny": "off"
+      },
+      "complexity": {
+        "noCommaOperator": "off",
+        "useOptionalChain": "off",
+        "useLiteralKeys": "off",
+        "useMathMinMax": "off"
+      },
+      "style": {
+        "noNonNullAssertion": "off",
+        "useTemplate": "off",
+        "noDescendingSpecificity": "off"
+      },
+      "correctness": {
+        "noInnerDeclarations": "off",
+        "noUnusedFunctionParameters": "off",
+        "noUnusedVariables": "error"
+      },
+      "a11y": {
+        "recommended": false
+      }
+    }
+  }
+}

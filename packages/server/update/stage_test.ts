@@ -1,5 +1,5 @@
-import { assertEquals, assertRejects } from "@std/assert";
 import { withTempDir } from "@lumisca/core/test-utils";
+import { assertEquals, assertRejects } from "@std/assert";
 import type { ReleaseManifest } from "./release.ts";
 import {
   clearStaging,
@@ -20,15 +20,14 @@ function fakeFetch(
   options: { status?: number } = {},
 ): typeof fetch {
   return ((_input: RequestInfo | URL) => {
-    const bytes = typeof body === "string"
-      ? new TextEncoder().encode(body)
-      : body;
+    const bytes =
+      typeof body === "string" ? new TextEncoder().encode(body) : body;
     return Promise.resolve(
       options.status === undefined || options.status === 200
         ? new Response(bytes, {
-          status: 200,
-          headers: { "content-length": String(bytes.length) },
-        })
+            status: 200,
+            headers: { "content-length": String(bytes.length) },
+          })
         : new Response(null, { status: options.status }),
     );
   }) as typeof fetch;

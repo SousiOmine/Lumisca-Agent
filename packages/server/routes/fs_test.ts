@@ -1,6 +1,6 @@
-import { assertEquals } from "@std/assert";
 import { join, parse, sep } from "node:path";
 import { withTempDir } from "@lumisca/core/test-utils";
+import { assertEquals } from "@std/assert";
 import {
   breadcrumbs,
   buildPlaces,
@@ -18,13 +18,10 @@ function env(
 
 Deno.test("placeCandidates: the home folders first, then the root", () => {
   const places = placeCandidates(env({ HOME: "/Users/me" }), "darwin");
-  assertEquals(places.map((place) => place.kind), [
-    "home",
-    "desktop",
-    "documents",
-    "downloads",
-    "root",
-  ]);
+  assertEquals(
+    places.map((place) => place.kind),
+    ["home", "desktop", "documents", "downloads", "root"],
+  );
   assertEquals(places[0], { kind: "home", path: "/Users/me" });
   // macOS (and Windows) use the English names; `join` keeps the expectation
   // platform-independent.
@@ -56,12 +53,10 @@ Deno.test("placeCandidates: the XDG file fills in for a process without a sessio
     "linux",
     (key) => declared[key],
   );
-  assertEquals(places.map((place) => place.kind), [
-    "home",
-    "desktop",
-    "documents",
-    "root",
-  ]);
+  assertEquals(
+    places.map((place) => place.kind),
+    ["home", "desktop", "documents", "root"],
+  );
   assertEquals(places[1]!.path, "/home/me/デスクトップ");
   // Nothing declares the documents folder: the English name is the fallback.
   assertEquals(places[2]!.path, join("/home/me", "Documents"));
@@ -73,7 +68,10 @@ Deno.test("placeCandidates: a folder the user turned off is not offered", () => 
     env({ HOME: "/home/me", XDG_DOWNLOAD_DIR: "/home/me" }),
     "linux",
   );
-  assertEquals(places.some((place) => place.kind === "downloads"), false);
+  assertEquals(
+    places.some((place) => place.kind === "downloads"),
+    false,
+  );
 });
 
 Deno.test("readUserDirs: the localized folders of a desktop session", async () => {

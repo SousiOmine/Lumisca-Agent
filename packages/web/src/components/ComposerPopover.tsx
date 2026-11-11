@@ -67,31 +67,37 @@ export function ComposerPopover<T>({
   const itemClass = `${className.replace("-popover", "")}-item`;
   return (
     <div
-      className={placementClass === undefined
-        ? className
-        : `${className} ${placementClass}`}
+      className={
+        placementClass === undefined
+          ? className
+          : `${className} ${placementClass}`
+      }
       {...(style === undefined ? {} : { style })}
     >
       {header}
-      {items.length === 0 ? empty : items.map((item, index) => (
-        <button
-          key={keyOf(item)}
-          type="button"
-          className={`${itemClass}${index === active ? " active" : ""}`}
-          // Never let a row take the focus: these menus live off the
-          // textarea's caret, and a blur closes them before the click
-          // lands. This is also why the row takes only one of the two
-          // commit events (see `commit`).
-          onMouseDown={(e) => {
-            e.preventDefault();
-            if (commit === "mousedown") onSelect(index);
-          }}
-          onMouseEnter={() => onHover(index)}
-          {...(commit === "click" ? { onClick: () => onSelect(index) } : {})}
-        >
-          {renderRow(item)}
-        </button>
-      ))}
+      {items.length === 0
+        ? empty
+        : items.map((item, index) => (
+            <button
+              key={keyOf(item)}
+              type="button"
+              className={`${itemClass}${index === active ? " active" : ""}`}
+              // Never let a row take the focus: these menus live off the
+              // textarea's caret, and a blur closes them before the click
+              // lands. This is also why the row takes only one of the two
+              // commit events (see `commit`).
+              onMouseDown={(e) => {
+                e.preventDefault();
+                if (commit === "mousedown") onSelect(index);
+              }}
+              onMouseEnter={() => onHover(index)}
+              {...(commit === "click"
+                ? { onClick: () => onSelect(index) }
+                : {})}
+            >
+              {renderRow(item)}
+            </button>
+          ))}
     </div>
   );
 }

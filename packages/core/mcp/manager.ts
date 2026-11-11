@@ -2,6 +2,7 @@ import type { McpConfig, McpServerConfig } from "./config.ts";
 import type { McpServerStatus } from "./status.ts";
 
 export type { McpServerStatus } from "./status.ts";
+
 import { errorMessage } from "../errors.ts";
 import {
   formatContent,
@@ -11,8 +12,8 @@ import {
   McpToolError,
   type McpToolInfo,
 } from "./client.ts";
-import { connectionOAuthProvider, isMcpAuthRequired } from "./oauth.ts";
 import type { McpOAuthStore } from "./oauth.ts";
+import { connectionOAuthProvider, isMcpAuthRequired } from "./oauth.ts";
 
 /** A tool exposed by an MCP server, ready to be wrapped as an AgentTool:
  * the shape reported by {@link McpServerClient.listTools} plus the owning
@@ -62,9 +63,7 @@ export class McpManager {
     }
   }
 
-  private getClient(
-    server: McpServerConfig,
-  ): Promise<McpServerClient> {
+  private getClient(server: McpServerConfig): Promise<McpServerClient> {
     this.assertOpen();
     const existing = this.clients.get(server.name);
     if (existing !== undefined) return Promise.resolve(existing);
@@ -77,9 +76,10 @@ export class McpManager {
       // Only a server that already has a grant is connected through OAuth:
       // the tokens are then used (and refreshed) transparently, while a
       // server without one fails with the 401 that reports "sign in".
-      const authProvider = this.oauth === undefined
-        ? undefined
-        : connectionOAuthProvider(this.oauth, server);
+      const authProvider =
+        this.oauth === undefined
+          ? undefined
+          : connectionOAuthProvider(this.oauth, server);
       pending = McpServerClient.connect(server, this.cwd, undefined, {
         ...(authProvider !== undefined ? { authProvider } : {}),
       }).then(
@@ -123,10 +123,7 @@ export class McpManager {
           tools.push({ server: server.name, ...info });
         }
       } catch (error) {
-        this.errors.set(
-          server.name,
-          errorMessage(error),
-        );
+        this.errors.set(server.name, errorMessage(error));
         if (isMcpAuthRequired(error)) {
           this.authRequired.add(server.name);
         } else {
@@ -172,12 +169,7 @@ export class McpManager {
       if (isFinalCallFailure(error)) throw error;
       this.dropClient(server.name);
       const retried = await this.getClient(server);
-      const content = await retried.callTool(
-        toolName,
-        args,
-        signal,
-        timeoutMs,
-      );
+      const content = await retried.callTool(toolName, args, signal, timeoutMs);
       return formatContent(content);
     }
   }

@@ -45,16 +45,15 @@ const ESCAPE_MARK = "\uE000";
 
 function protectEscapes(text: string): string {
   return text.replace(
-    /\\([\\`*_{}\[\]()#+\-.!>~|])/g,
+    /\\([\\`*_{}[\]()#+\-.!>~|])/g,
     (_, character: string) =>
       `${ESCAPE_MARK}${character.charCodeAt(0)}${ESCAPE_MARK}`,
   );
 }
 
 function restoreEscapes(text: string): string {
-  return text.replace(
-    /\uE000(\d+)\uE000/g,
-    (_, code: string) => String.fromCharCode(Number(code)),
+  return text.replace(/\uE000(\d+)\uE000/g, (_, code: string) =>
+    String.fromCharCode(Number(code)),
   );
 }
 
@@ -79,10 +78,7 @@ function inline(text: string): string {
       .replace(/\*([^\s*](?:[^*\n]*[^\s*])?)\*/g, "$1")
       // Underscores are emphasis only between spaces or punctuation; a name
       // like `my_file_name` must not lose its separators.
-      .replace(
-        /(^|[\s(「『])_([^_\n]+)_(?=$|[\s)、。,.!?」』])/g,
-        "$1$2",
-      )
+      .replace(/(^|[\s(「『])_([^_\n]+)_(?=$|[\s)、。,.!?」』])/g, "$1$2")
       .replace(/\s+/g, " ")
       .trim(),
   );
@@ -104,7 +100,8 @@ export function markdownToText(markdown: string): string {
     if (fence !== null) {
       const close = FENCE_CLOSE.exec(line);
       if (
-        close !== null && close[1]![0] === fence.character &&
+        close !== null &&
+        close[1]![0] === fence.character &&
         close[1]!.length >= fence.length
       ) {
         fence = null;
@@ -123,9 +120,7 @@ export function markdownToText(markdown: string): string {
       continue;
     }
 
-    if (
-      line.trim() === "" || RULE.test(line) || SETEXT_UNDERLINE.test(line)
-    ) {
+    if (line.trim() === "" || RULE.test(line) || SETEXT_UNDERLINE.test(line)) {
       continue;
     }
 

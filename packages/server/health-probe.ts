@@ -57,9 +57,13 @@ export interface HealthProbeOptions {
 export async function probeHealth(
   options: HealthProbeOptions,
 ): Promise<HealthBody | undefined> {
-  const signal = options.signal === undefined
-    ? AbortSignal.timeout(options.timeoutMs)
-    : AbortSignal.any([options.signal, AbortSignal.timeout(options.timeoutMs)]);
+  const signal =
+    options.signal === undefined
+      ? AbortSignal.timeout(options.timeoutMs)
+      : AbortSignal.any([
+          options.signal,
+          AbortSignal.timeout(options.timeoutMs),
+        ]);
   try {
     const response = await fetch(
       `${options.url.replace(/\/+$/, "")}/api/health`,
@@ -71,7 +75,7 @@ export async function probeHealth(
       },
     );
     if (!response.ok) return undefined;
-    const body = await response.json() as Partial<HealthBody>;
+    const body = (await response.json()) as Partial<HealthBody>;
     if (typeof body.instanceId !== "string") return undefined;
     return {
       ok: body.ok === true,

@@ -113,7 +113,8 @@ try {
   );
 }
 
-const out = options.out ??
+const out =
+  options.out ??
   join(dirname(options.archive), manifestAssetName(options.target));
 const manifest = {
   version,

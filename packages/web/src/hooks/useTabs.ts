@@ -7,9 +7,9 @@ import {
   useState,
 } from "preact/compat";
 import {
-  sessionApi,
   type SessionInfoDto,
   type SessionSnapshot,
+  sessionApi,
 } from "../api.ts";
 import { applyRunState } from "../events.ts";
 import { DRAFT_TAB } from "../tabs.ts";
@@ -118,37 +118,40 @@ export function useTabs(
   onUnopenableRef.current = onUnopenable;
 
   /** Read one session into a tab, or do nothing when it is already there. */
-  const open = useCallback((key: string) => {
-    if (key === DRAFT_TAB || pending.current.has(key)) return;
-    pending.current.add(key);
-    void (async () => {
-      try {
-        const [info, snapshot, todo] = await Promise.all([
-          sessionApi(key).getSession(),
-          sessionApi(key).getMessages(),
-          sessionApi(key).getTodo(),
-        ]);
-        setTabs((prev) => (prev.includes(key) ? prev : [...prev, key]));
-        setViews((prev) => {
-          const next = new Map(prev);
-          next.set(key, viewOf(info, snapshot, todo.todos));
-          return next;
-        });
-        // The tab starts watching for lost frames from this snapshot.
-        seedRevision(key, snapshot.rev);
-        if (snapshot.running) resyncPanels(key);
-      } catch {
-        // The session is gone, or its peer does not answer. The App
-        // navigates to the mode's top, which clears the markers below.
-        failed.current.add(key);
-        onUnopenableRef.current(key);
-      } finally {
-        pending.current.delete(key);
-      }
-    })();
-    // The three callbacks are the App's own (stable); the ref carries the
-    // one value that changes.
-  }, [setViews, seedRevision, resyncPanels]);
+  const open = useCallback(
+    (key: string) => {
+      if (key === DRAFT_TAB || pending.current.has(key)) return;
+      pending.current.add(key);
+      void (async () => {
+        try {
+          const [info, snapshot, todo] = await Promise.all([
+            sessionApi(key).getSession(),
+            sessionApi(key).getMessages(),
+            sessionApi(key).getTodo(),
+          ]);
+          setTabs((prev) => (prev.includes(key) ? prev : [...prev, key]));
+          setViews((prev) => {
+            const next = new Map(prev);
+            next.set(key, viewOf(info, snapshot, todo.todos));
+            return next;
+          });
+          // The tab starts watching for lost frames from this snapshot.
+          seedRevision(key, snapshot.rev);
+          if (snapshot.running) resyncPanels(key);
+        } catch {
+          // The session is gone, or its peer does not answer. The App
+          // navigates to the mode's top, which clears the markers below.
+          failed.current.add(key);
+          onUnopenableRef.current(key);
+        } finally {
+          pending.current.delete(key);
+        }
+      })();
+      // The three callbacks are the App's own (stable); the ref carries the
+      // one value that changes.
+    },
+    [setViews, seedRevision, resyncPanels],
+  );
 
   // The address names the session: open it unless the strip already holds
   // it. A tab the strip holds keeps its live state — reading it again would
@@ -173,24 +176,24 @@ export function useTabs(
    * open, and reopening it from the session history rejoins the run). The
    * App asks before it takes the `POST /close` route for a running tab (see
    * CloseTabsDialog) and navigates away from the shown one first. */
-  const closeTabs = useCallback((
-    ids: string[],
-    keepRunning?: ReadonlySet<string>,
-  ) => {
-    const toClose = new Set(ids);
-    for (const id of ids) {
-      if (id !== DRAFT_TAB && !keepRunning?.has(id)) {
-        sessionApi(id).close().catch(console.error);
+  const closeTabs = useCallback(
+    (ids: string[], keepRunning?: ReadonlySet<string>) => {
+      const toClose = new Set(ids);
+      for (const id of ids) {
+        if (id !== DRAFT_TAB && !keepRunning?.has(id)) {
+          sessionApi(id).close().catch(console.error);
+        }
       }
-    }
-    forgetRevisions(ids);
-    setTabs((prev) => prev.filter((id) => !toClose.has(id)));
-    setViews((prev) => {
-      const next = new Map(prev);
-      for (const id of ids) next.delete(id);
-      return next;
-    });
-  }, [setViews, forgetRevisions]);
+      forgetRevisions(ids);
+      setTabs((prev) => prev.filter((id) => !toClose.has(id)));
+      setViews((prev) => {
+        const next = new Map(prev);
+        for (const id of ids) next.delete(id);
+        return next;
+      });
+    },
+    [setViews, forgetRevisions],
+  );
 
   const adopt = useCallback((key: string) => {
     setTabs((prev) => (prev.includes(key) ? prev : [...prev, key]));

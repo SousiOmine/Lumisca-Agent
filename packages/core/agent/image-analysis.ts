@@ -1,6 +1,11 @@
-import type { Api, ImageContent, Model, TextContent } from "../ai/types.ts";
-import type { StreamFn } from "../ai/types.ts";
 import { streamText } from "../ai/stream.ts";
+import type {
+  Api,
+  ImageContent,
+  Model,
+  StreamFn,
+  TextContent,
+} from "../ai/types.ts";
 
 /** System prompt for the image analysis model: it must produce a
  * description complete enough for a text-only model to work from. */
@@ -105,14 +110,16 @@ export class ImageAnalyzer {
       this.model,
       {
         systemPrompt: ANALYSIS_SYSTEM_PROMPT,
-        messages: [{
-          role: "user",
-          content: [
-            { type: "text", text: "Describe this image in detail." },
-            { type: "image", data: image.data, mimeType: image.mimeType },
-          ],
-          timestamp: Date.now(),
-        }],
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Describe this image in detail." },
+              { type: "image", data: image.data, mimeType: image.mimeType },
+            ],
+            timestamp: Date.now(),
+          },
+        ],
       },
       "image analysis failed",
       // One-off conversation: a fresh id per analysis request

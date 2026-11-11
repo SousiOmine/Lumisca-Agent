@@ -1,10 +1,10 @@
-import { useMemo } from "preact/compat";
 import {
   parseUiMarkup,
   parseUiMarkupPartial,
   resolveUiView,
   type UiResolvedView,
 } from "@lumisca/core/shared";
+import { useMemo } from "preact/compat";
 import { UiCard } from "./UiCard.tsx";
 
 /**

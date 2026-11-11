@@ -122,9 +122,10 @@ export function applicationFromDesktopFile(
 export function sortApplications(
   applications: readonly VmApplication[],
 ): VmApplication[] {
-  return [...applications].sort((a, b) =>
-    a.name.localeCompare(b.name, "en", { sensitivity: "base" }) ||
-    a.id.localeCompare(b.id)
+  return [...applications].sort(
+    (a, b) =>
+      a.name.localeCompare(b.name, "en", { sensitivity: "base" }) ||
+      a.id.localeCompare(b.id),
   );
 }
 
@@ -137,9 +138,10 @@ export function describeApplications(
   }
   return [
     `${applications.length} program(s) can be started on the screen:`,
-    ...applications.map((app) =>
-      `- ${app.name} (\`${app.id}\`)` +
-      `${app.comment === undefined ? "" : ` — ${app.comment}`}`
+    ...applications.map(
+      (app) =>
+        `- ${app.name} (\`${app.id}\`)` +
+        `${app.comment === undefined ? "" : ` — ${app.comment}`}`,
     ),
   ].join("\n");
 }

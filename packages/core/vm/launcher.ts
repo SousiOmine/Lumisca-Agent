@@ -43,15 +43,19 @@ const launchSchema = object({
     'What to do: "list" (the programs installed in the machine) or "start" ' +
       "(run one of them on the screen).",
   ),
-  id: optional(string(
-    "The program to start, as `list` named it (the `.desktop` id). Required " +
-      "for `start`.",
-  )),
-  wait_ms: optional(integer(
-    "How long to wait after starting before returning, so the window has a " +
-      "chance to appear (default 1500, at most 10000). Take a screenshot " +
-      "afterwards to see it.",
-  )),
+  id: optional(
+    string(
+      "The program to start, as `list` named it (the `.desktop` id). Required " +
+        "for `start`.",
+    ),
+  ),
+  wait_ms: optional(
+    integer(
+      "How long to wait after starting before returning, so the window has a " +
+        "chance to appear (default 1500, at most 10000). Take a screenshot " +
+        "afterwards to see it.",
+    ),
+  ),
 });
 
 export interface VmLaunchOptions {
@@ -75,7 +79,9 @@ export async function listApplications(
       ["sh", "-c", `ls -1 ${quoteAll(dir)}/*.desktop 2>/dev/null || true`],
       { timeoutMs: LIST_TIMEOUT_MS },
     );
-    const names = listed.stdout.split("\n").map((line) => line.trim())
+    const names = listed.stdout
+      .split("\n")
+      .map((line) => line.trim())
       .filter((line) => line !== "");
     for (const file of names) {
       const name = file.slice(file.lastIndexOf("/") + 1);
@@ -111,11 +117,7 @@ async function startApplication(
   // outlive this shell (it is a window the user will interact with), and a
   // child holding the pipe would make this call wait for the program to exit.
   const started = await options.exec(
-    [
-      "sh",
-      "-c",
-      `setsid ${app.exec} >/dev/null 2>&1 < /dev/null & echo $!`,
-    ],
+    ["sh", "-c", `setsid ${app.exec} >/dev/null 2>&1 < /dev/null & echo $!`],
     { timeoutMs: START_TIMEOUT_MS },
   );
   if (started.exitCode !== 0) {
@@ -158,10 +160,12 @@ export function createVmLaunchTool(
         case "list": {
           const applications = await listApplications(options);
           return {
-            content: [{
-              type: "text",
-              text: describeApplications(applications),
-            }],
+            content: [
+              {
+                type: "text",
+                text: describeApplications(applications),
+              },
+            ],
             details: { applications },
           };
         }
@@ -182,12 +186,14 @@ export function createVmLaunchTool(
           }
           const app = await startApplication(options, id, waitMs);
           return {
-            content: [{
-              type: "text",
-              text:
-                `Started ${app.name}. Its window may take a moment; take a ` +
-                "screenshot to see the screen.",
-            }],
+            content: [
+              {
+                type: "text",
+                text:
+                  `Started ${app.name}. Its window may take a moment; take a ` +
+                  "screenshot to see the screen.",
+              },
+            ],
             details: { id: app.id, name: app.name, exec: app.exec },
           };
         }

@@ -1,8 +1,8 @@
-import { removeDirRetry } from "../test-utils.ts";
-import { inputBudgetTokens } from "../shared/context-usage.ts";
 import { join } from "node:path";
 import { assertEquals, assertThrows } from "@std/assert";
 import { LumiscaCore } from "../mod.ts";
+import { inputBudgetTokens } from "../shared/context-usage.ts";
+import { removeDirRetry } from "../test-utils.ts";
 import {
   CUSTOM_PROVIDER_ID,
   customProviderFromEnv,
@@ -30,10 +30,12 @@ async function writeModelsFile(content: string): Promise<string> {
 }
 
 Deno.test("env vars register the custom provider", () => {
-  const provider = customProviderFromEnv(envOf({
-    LUMISCA_BASE_URL: "http://localhost:5002/v1",
-    LUMISCA_MODEL: "deepseek-chat",
-  }));
+  const provider = customProviderFromEnv(
+    envOf({
+      LUMISCA_BASE_URL: "http://localhost:5002/v1",
+      LUMISCA_MODEL: "deepseek-chat",
+    }),
+  );
   assertEquals(provider !== undefined, true);
   assertEquals(provider!.id, CUSTOM_PROVIDER_ID);
   assertEquals(provider!.name, "Custom (OpenAI-compatible)");
@@ -64,23 +66,25 @@ Deno.test("env custom provider requires LUMISCA_MODEL", () => {
 });
 
 Deno.test("models.json registers multiple providers and models", async () => {
-  const path = await writeModelsFile(JSON.stringify({
-    providers: {
-      "distill-gym": {
-        name: "distill-gym proxy",
-        baseUrl: "http://host.containers.internal:5002/v1",
-        apiKey: "${DISTILL_GYM_KEY}",
-        models: [
-          { id: "deepseek-chat", contextWindow: 64000, maxTokens: 8000 },
-          { id: "deepseek-reasoner", reasoning: true },
-        ],
+  const path = await writeModelsFile(
+    JSON.stringify({
+      providers: {
+        "distill-gym": {
+          name: "distill-gym proxy",
+          baseUrl: "http://host.containers.internal:5002/v1",
+          apiKey: "${DISTILL_GYM_KEY}",
+          models: [
+            { id: "deepseek-chat", contextWindow: 64000, maxTokens: 8000 },
+            { id: "deepseek-reasoner", reasoning: true },
+          ],
+        },
+        other: {
+          baseUrl: "http://other:8000/v1",
+          models: [{ id: "m1" }],
+        },
       },
-      other: {
-        baseUrl: "http://other:8000/v1",
-        models: [{ id: "m1" }],
-      },
-    },
-  }));
+    }),
+  );
   const providers = customProvidersFromModelsFile(
     envOf({ LUMISCA_MODELS_FILE: path }),
   );
@@ -103,15 +107,17 @@ Deno.test("models.json registers multiple providers and models", async () => {
 });
 
 Deno.test("models.json apiKey ${ENV} resolves from the environment", async () => {
-  const path = await writeModelsFile(JSON.stringify({
-    providers: {
-      custom: {
-        baseUrl: "http://localhost:5002/v1",
-        apiKey: "${LUMISCA_TEST_PROXY_KEY}",
-        models: [{ id: "m" }],
+  const path = await writeModelsFile(
+    JSON.stringify({
+      providers: {
+        custom: {
+          baseUrl: "http://localhost:5002/v1",
+          apiKey: "${LUMISCA_TEST_PROXY_KEY}",
+          models: [{ id: "m" }],
+        },
       },
-    },
-  }));
+    }),
+  );
   const core = LumiscaCore.forTesting(
     [],
     envOf({
@@ -135,19 +141,18 @@ Deno.test("models.json apiKey ${ENV} resolves from the environment", async () =>
 });
 
 Deno.test("models.json literal apiKey resolves without env vars", async () => {
-  const path = await writeModelsFile(JSON.stringify({
-    providers: {
-      custom: {
-        baseUrl: "http://localhost:5002/v1",
-        apiKey: "literal-key",
-        models: [{ id: "m" }],
+  const path = await writeModelsFile(
+    JSON.stringify({
+      providers: {
+        custom: {
+          baseUrl: "http://localhost:5002/v1",
+          apiKey: "literal-key",
+          models: [{ id: "m" }],
+        },
       },
-    },
-  }));
-  const core = LumiscaCore.forTesting(
-    [],
-    envOf({ LUMISCA_MODELS_FILE: path }),
+    }),
   );
+  const core = LumiscaCore.forTesting([], envOf({ LUMISCA_MODELS_FILE: path }));
   try {
     const check = await core.checkAuth("custom");
     assertEquals(check?.source, "models.json");
@@ -158,18 +163,20 @@ Deno.test("models.json literal apiKey resolves without env vars", async () => {
 });
 
 Deno.test("models.json provider headers propagate to every model", async () => {
-  const path = await writeModelsFile(JSON.stringify({
-    providers: {
-      proxied: {
-        baseUrl: "http://proxy:8000/v1",
-        headers: {
-          "x-api-key": "proxy-secret",
-          "X-Custom": "yes",
+  const path = await writeModelsFile(
+    JSON.stringify({
+      providers: {
+        proxied: {
+          baseUrl: "http://proxy:8000/v1",
+          headers: {
+            "x-api-key": "proxy-secret",
+            "X-Custom": "yes",
+          },
+          models: [{ id: "m1" }, { id: "m2", baseUrl: "http://direct:1/v1" }],
         },
-        models: [{ id: "m1" }, { id: "m2", baseUrl: "http://direct:1/v1" }],
       },
-    },
-  }));
+    }),
+  );
   const providers = customProvidersFromModelsFile(
     envOf({ LUMISCA_MODELS_FILE: path }),
   );
@@ -186,14 +193,16 @@ Deno.test("models.json provider headers propagate to every model", async () => {
 });
 
 Deno.test("models.json without apiKey falls back to LUMISCA_API_KEY_<ID>", async () => {
-  const path = await writeModelsFile(JSON.stringify({
-    providers: {
-      custom: {
-        baseUrl: "http://localhost:5002/v1",
-        models: [{ id: "m" }],
+  const path = await writeModelsFile(
+    JSON.stringify({
+      providers: {
+        custom: {
+          baseUrl: "http://localhost:5002/v1",
+          models: [{ id: "m" }],
+        },
       },
-    },
-  }));
+    }),
+  );
   const core = LumiscaCore.forTesting(
     [],
     envOf({
@@ -211,9 +220,11 @@ Deno.test("models.json without apiKey falls back to LUMISCA_API_KEY_<ID>", async
 });
 
 Deno.test("models.json without baseUrl throws", async () => {
-  const path = await writeModelsFile(JSON.stringify({
-    providers: { custom: { models: [{ id: "m" }] } },
-  }));
+  const path = await writeModelsFile(
+    JSON.stringify({
+      providers: { custom: { models: [{ id: "m" }] } },
+    }),
+  );
   assertThrows(
     () => customProvidersFromModelsFile(envOf({ LUMISCA_MODELS_FILE: path })),
     Error,
@@ -223,14 +234,16 @@ Deno.test("models.json without baseUrl throws", async () => {
 });
 
 Deno.test("models.json with unsupported api throws", async () => {
-  const path = await writeModelsFile(JSON.stringify({
-    providers: {
-      custom: {
-        baseUrl: "http://localhost:5002/v1",
-        models: [{ id: "m", api: "not-a-real-api" }],
+  const path = await writeModelsFile(
+    JSON.stringify({
+      providers: {
+        custom: {
+          baseUrl: "http://localhost:5002/v1",
+          models: [{ id: "m", api: "not-a-real-api" }],
+        },
       },
-    },
-  }));
+    }),
+  );
   assertThrows(
     () => customProvidersFromModelsFile(envOf({ LUMISCA_MODELS_FILE: path })),
     Error,
@@ -259,18 +272,20 @@ Deno.test("models.json invalid shape and missing file throw", async () => {
 });
 
 Deno.test("env provider wins id collisions with models.json", async () => {
-  const path = await writeModelsFile(JSON.stringify({
-    providers: {
-      custom: {
-        baseUrl: "http://models-json:1/v1",
-        models: [{ id: "from-file" }],
+  const path = await writeModelsFile(
+    JSON.stringify({
+      providers: {
+        custom: {
+          baseUrl: "http://models-json:1/v1",
+          models: [{ id: "from-file" }],
+        },
+        other: {
+          baseUrl: "http://other:1/v1",
+          models: [{ id: "m" }],
+        },
       },
-      other: {
-        baseUrl: "http://other:1/v1",
-        models: [{ id: "m" }],
-      },
-    },
-  }));
+    }),
+  );
   const core = LumiscaCore.forTesting(
     [],
     envOf({
@@ -282,9 +297,9 @@ Deno.test("env provider wins id collisions with models.json", async () => {
   try {
     // The env provider is registered last: it replaces the models.json
     // entry with the same id.
-    const custom = core.listProviders().find((p) =>
-      p.id === CUSTOM_PROVIDER_ID
-    )!;
+    const custom = core
+      .listProviders()
+      .find((p) => p.id === CUSTOM_PROVIDER_ID)!;
     assertEquals(custom.baseUrl, "http://env:2/v1");
     assertEquals(custom.getModels()[0]!.id, "from-env");
     // The other models.json provider survives untouched.
@@ -334,18 +349,22 @@ Deno.test("a models.json entry may declare the input cap it publishes", async ()
   // models.dev publishes limit.input separately from limit.context; a
   // provider rejects a prompt past the smaller number, so the app's budgets
   // must be able to see it. models.json could express neither before.
-  const path = await writeModelsFile(JSON.stringify({
-    providers: {
-      gw: {
-        baseUrl: "http://localhost:1234/v1",
-        models: [{
-          id: "capped",
-          contextWindow: 1_050_000,
-          maxInputTokens: 922_000,
-        }],
+  const path = await writeModelsFile(
+    JSON.stringify({
+      providers: {
+        gw: {
+          baseUrl: "http://localhost:1234/v1",
+          models: [
+            {
+              id: "capped",
+              contextWindow: 1_050_000,
+              maxInputTokens: 922_000,
+            },
+          ],
+        },
       },
-    },
-  }));
+    }),
+  );
   const core = LumiscaCore.forTesting([], envOf({ LUMISCA_MODELS_FILE: path }));
   try {
     const model = core.getModel("gw", "capped");

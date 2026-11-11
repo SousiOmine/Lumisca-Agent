@@ -57,20 +57,16 @@ export const panels = {
   // --- routines (scheduled requests) ----------------------------------------
   "panels.routine.title": { ja: "ルーチン", en: "Routines" },
   "panels.routine.description": {
-    ja:
-      "{agent} との会話で、設定したスケジュールに従って依頼を実行します。作成や変更は会話内でエージェントに依頼してください。",
-    en:
-      "Requests {agent}'s conversation runs on a schedule. Ask the agent in the conversation to create or change one.",
+    ja: "{agent} との会話で、設定したスケジュールに従って依頼を実行します。作成や変更は会話内でエージェントに依頼してください。",
+    en: "Requests {agent}'s conversation runs on a schedule. Ask the agent in the conversation to create or change one.",
   },
   "panels.routine.noAgent": {
     ja: "エージェントを選択すると、そのエージェントのルーチンが表示されます。",
     en: "Pick an agent to see the routines of its conversation.",
   },
   "panels.routine.empty": {
-    ja:
-      "登録されたルーチンはありません。「毎朝 8 時にデプロイを確認して」のようにエージェントに依頼すると作成できます。",
-    en:
-      'None yet. Ask the agent for one ("check the deploy every morning at 8").',
+    ja: "登録されたルーチンはありません。「毎朝 8 時にデプロイを確認して」のようにエージェントに依頼すると作成できます。",
+    en: 'None yet. Ask the agent for one ("check the deploy every morning at 8").',
   },
   "panels.routine.schedule.daily": {
     ja: "毎日 {time}",

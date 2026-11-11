@@ -1,11 +1,11 @@
 import { CoreError } from "./errors.ts";
+import type { SettingsRepo } from "./settings/repo.ts";
 import {
   parseSavedPrompts,
   SAVED_PROMPTS_KEY,
   type SavedPrompt,
   serializeSavedPrompts,
 } from "./shared/mod.ts";
-import type { SettingsRepo } from "./settings/repo.ts";
 
 /** User-defined prompt snippets (`/prompt` slash menu). Extracted from
  * LumiscaCore so the parse/validate/persist cycle lives in one testable
@@ -41,10 +41,7 @@ export class SavedPromptsService {
 
   /** Update a saved prompt's label and/or prompt by id. Throws when the
    * id does not exist. */
-  update(
-    id: string,
-    input: { label?: string; prompt?: string },
-  ): SavedPrompt {
+  update(id: string, input: { label?: string; prompt?: string }): SavedPrompt {
     const prompts = this.list();
     const existing = prompts.find((p) => p.id === id);
     if (existing === undefined) {
@@ -57,7 +54,7 @@ export class SavedPromptsService {
     };
     this.settings.set(
       SAVED_PROMPTS_KEY,
-      serializeSavedPrompts(prompts.map((p) => p.id === id ? updated : p)),
+      serializeSavedPrompts(prompts.map((p) => (p.id === id ? updated : p))),
     );
     return updated;
   }

@@ -1,31 +1,30 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
+import { NO_RESPONSE } from "./agent/silent-reply.ts";
 import {
   fauxAssistantMessage,
   fauxProvider,
   fauxText,
   fauxToolCall,
 } from "./ai/faux.ts";
-import { NO_RESPONSE } from "./agent/silent-reply.ts";
-import { LumiscaCore } from "./core.ts";
-import type { VmManager, VmStatus } from "./vm/container.ts";
-import { createStellaTools } from "./tools/toolsets.ts";
-import { hostBackends } from "./tools/toolsets.ts";
-import { createVmTools } from "./vm/tools.ts";
-import { createHistorySearchTool } from "./session/history.ts";
-import { BackgroundProcessManager } from "./tools/background.ts";
-import { TodoHub } from "./tools/todo.ts";
-import { TaskHub } from "./tools/task-hub.ts";
 import type { StreamFn } from "./ai/types.ts";
-import type { WindowPage } from "./session/transcript-window.ts";
+import { LumiscaCore } from "./core.ts";
 import type { StellaEntry } from "./domain/stella-conversation.ts";
-import type { VmScreen } from "./vm/screen.ts";
 import { CoreError } from "./errors.ts";
-import { MINI_PNG, promptSession, withTempDir } from "./test-utils.ts";
+import { SessionAttachmentStore } from "./session/attachments.ts";
+import { createHistorySearchTool } from "./session/history.ts";
+import type { WindowPage } from "./session/transcript-window.ts";
 import { DEFAULT_AGENT_NAME } from "./stella/agents.ts";
 import { STELLA_ONBOARDING_PROMPT } from "./stella/onboarding.ts";
-import { SessionAttachmentStore } from "./session/attachments.ts";
+import { MINI_PNG, promptSession, withTempDir } from "./test-utils.ts";
+import { BackgroundProcessManager } from "./tools/background.ts";
+import { TaskHub } from "./tools/task-hub.ts";
+import { TodoHub } from "./tools/todo.ts";
+import { createStellaTools, hostBackends } from "./tools/toolsets.ts";
 import { AGENT_MEMORY_FILE, vmMemoryPath } from "./vm/agent-memory.ts";
+import type { VmManager, VmStatus } from "./vm/container.ts";
 import { vmAgentDir } from "./vm/contract.ts";
+import type { VmScreen } from "./vm/screen.ts";
+import { createVmTools } from "./vm/tools.ts";
 
 /**
  * stella mode at the core level: the mode switch, the single conversation and
@@ -106,10 +105,7 @@ Deno.test("stella availability: no machine attached reports its own reason", asy
     if (!availability.available) {
       assert(availability.reason.includes("not set up"), availability.reason);
     }
-    await assertRejects(
-      () => core.getOrCreateStellaSession(),
-      CoreError,
-    );
+    await assertRejects(() => core.getOrCreateStellaSession(), CoreError);
   } finally {
     void core.close();
   }
@@ -154,7 +150,10 @@ Deno.test("stella agents: the starter agent exists once and is the default", asy
     assert(starter.role.length > 0, starter.role);
     // A second call returns the same row (the list is the check).
     assertEquals((await core.ensureStellaAgent()).id, starter.id);
-    assertEquals(core.listStellaAgents().map((a) => a.id), [starter.id]);
+    assertEquals(
+      core.listStellaAgents().map((a) => a.id),
+      [starter.id],
+    );
   } finally {
     await core.close();
   }
@@ -186,7 +185,7 @@ Deno.test("stella agents: creating one prepares its folder and memory file", asy
   try {
     const agent = await core.createStellaAgent({ name: "Keeper", role: "r" });
     const memory = runner.calls.filter((command) =>
-      command.includes(vmMemoryPath(agent.id))
+      command.includes(vmMemoryPath(agent.id)),
     );
     assertEquals(memory.length, 1, JSON.stringify(runner.calls));
     const [call] = memory;
@@ -274,19 +273,22 @@ Deno.test("stella onboarding: starts once and stays out of the conversation", as
     assertEquals(core.startStellaOnboarding(agent.id), false);
 
     // The MODEL was given the instruction...
-    const instruction = core.getAgent(session.id)!.messages.find(
-      (message) =>
-        message.role === "user" &&
-        message.modelContent === STELLA_ONBOARDING_PROMPT,
-    );
+    const instruction = core
+      .getAgent(session.id)!
+      .messages.find(
+        (message) =>
+          message.role === "user" &&
+          message.modelContent === STELLA_ONBOARDING_PROMPT,
+      );
     assert(instruction !== undefined, "the setup instruction was not sent");
     // Persisted, not only in the live agent: a reload resumes the same setup
     // turn (the model still knows what it was asked to do).
     const stored = core.readTranscript(session.id, {})!.items;
     assert(
-      stored.some((message) =>
-        message.role === "user" &&
-        message.modelContent === STELLA_ONBOARDING_PROMPT
+      stored.some(
+        (message) =>
+          message.role === "user" &&
+          message.modelContent === STELLA_ONBOARDING_PROMPT,
       ),
       "the setup instruction was not stored",
     );
@@ -313,11 +315,13 @@ Deno.test("stella onboarding: redo runs the setup turn again", async () => {
     assertEquals(core.restartStellaOnboarding(agent.id), true);
     await core.getAgent(session.id)!.waitForIdle();
 
-    const turns = core.getAgent(session.id)!.messages.filter(
-      (message) =>
-        message.role === "user" &&
-        message.modelContent === STELLA_ONBOARDING_PROMPT,
-    );
+    const turns = core
+      .getAgent(session.id)!
+      .messages.filter(
+        (message) =>
+          message.role === "user" &&
+          message.modelContent === STELLA_ONBOARDING_PROMPT,
+      );
     assertEquals(turns.length, 2);
   } finally {
     await core.close();
@@ -401,10 +405,7 @@ Deno.test("stella conversation: the dialog's model choice moves the conversation
     // The choice is on the agent too, so the sidebar's row (and the dialog
     // that reads it) shows it without opening the conversation.
     assertEquals(core.getStellaAgent(agent.id)?.model?.modelId, chosen);
-    assertEquals(
-      core.listStellaAgentSummaries()[0]?.model?.modelId,
-      chosen,
-    );
+    assertEquals(core.listStellaAgentSummaries()[0]?.model?.modelId, chosen);
 
     // Clearing it returns the conversation to the app's default model.
     await core.updateStellaAgent(agent.id, { model: null });
@@ -779,11 +780,7 @@ Deno.test("stella tool set: eval is absent, the screen tools present", () => {
   // Searching is the shell's job (the same rule code mode follows), so
   // there are no dedicated search tools to learn.
   for (const gone of ["grep", "glob"]) {
-    assertEquals(
-      names.includes(gone),
-      false,
-      `${gone} must not exist at all`,
-    );
+    assertEquals(names.includes(gone), false, `${gone} must not exist at all`);
   }
   // ...and eval is not: it would run JavaScript in the SERVER process, which
   // is the one thing a stella session must not be able to reach.
@@ -865,13 +862,7 @@ Deno.test("stella tool set: the conversation's tools are preloaded", () => {
 
   // The tools the conversation itself needs: one silently missing would
   // make the checks below vacuous.
-  for (
-    const expected of [
-      "history_search",
-      "vm_screenshot",
-      "send_chat",
-    ]
-  ) {
+  for (const expected of ["history_search", "vm_screenshot", "send_chat"]) {
     assertEquals(
       stellaTools.includes(expected),
       true,
@@ -915,14 +906,17 @@ async function stellaConversation(name: string) {
 
 /** The text of the last history_search tool result of a session. */
 function lastHistoryResult(core: LumiscaCore, sessionId: string): string {
-  const result = core.getAgent(sessionId)!.messages.findLast((message) =>
-    message.role === "toolResult" && message.toolName === "history_search"
-  );
+  const result = core
+    .getAgent(sessionId)!
+    .messages.findLast(
+      (message) =>
+        message.role === "toolResult" && message.toolName === "history_search",
+    );
   if (result === undefined || result.role !== "toolResult") {
     throw new Error("history_search did not run");
   }
   return result.content
-    .map((block) => block.type === "text" ? block.text : "")
+    .map((block) => (block.type === "text" ? block.text : ""))
     .join("");
 }
 
@@ -937,9 +931,10 @@ Deno.test("stella conversation: history_search is preloaded and reads its own ro
     await promptSession(core, session.id, "The code word is pelican.");
 
     faux.setResponses([
-      fauxAssistantMessage([
-        fauxToolCall("history_search", { query: "pelican" }),
-      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage(
+        [fauxToolCall("history_search", { query: "pelican" })],
+        { stopReason: "toolUse" },
+      ),
       fauxAssistantMessage("found it"),
     ]);
     await promptSession(core, session.id, "Which code word did I give you?");
@@ -963,13 +958,11 @@ Deno.test("stella conversation: the background-command tools are preloaded", asy
   const { core, session } = await stellaConversation("Builder");
   try {
     const names = core.getAgent(session.id)!.toolNames;
-    for (
-      const expected of [
-        "async_bash",
-        "async_bash_status",
-        "async_bash_kill",
-      ]
-    ) {
+    for (const expected of [
+      "async_bash",
+      "async_bash_status",
+      "async_bash_kill",
+    ]) {
       assert(
         names.includes(expected),
         `missing ${expected}: ${names.join(", ")}`,
@@ -986,27 +979,38 @@ Deno.test("stella conversation: todo keeps a plan the conversation does not draw
     // The tool is preloaded (the factory hands the session's hub to the
     // tool set), so a run with two requests does not have to find it first.
     faux.setResponses([
-      fauxAssistantMessage([
-        fauxToolCall("todo", {
-          phases: [{
-            name: "修正",
-            tasks: [
-              { name: "余白を直す", status: "in_progress" },
-              { name: "色を直す" },
+      fauxAssistantMessage(
+        [
+          fauxToolCall("todo", {
+            phases: [
+              {
+                name: "修正",
+                tasks: [
+                  { name: "余白を直す", status: "in_progress" },
+                  { name: "色を直す" },
+                ],
+              },
             ],
-          }],
-        }),
-      ], { stopReason: "toolUse" }),
+          }),
+        ],
+        { stopReason: "toolUse" },
+      ),
       fauxAssistantMessage("両方直します。"),
     ]);
     await promptSession(core, session.id, "余白と色を直して");
 
     // The plan belongs to the session, so it is there after the turn...
     const plan = core.getTodo(session.id);
-    assertEquals(plan.map((phase) => phase.name), ["修正"]);
+    assertEquals(
+      plan.map((phase) => phase.name),
+      ["修正"],
+    );
     assertEquals(
       plan[0]!.tasks.map((task) => [task.name, task.status]),
-      [["余白を直す", "in_progress"], ["色を直す", "pending"]],
+      [
+        ["余白を直す", "in_progress"],
+        ["色を直す", "pending"],
+      ],
     );
 
     // ...and it stays out of the conversation: no tool row and no plan, only
@@ -1035,15 +1039,18 @@ Deno.test("stella conversation: a run that says nothing leaves nothing on screen
 
     const page = core.readStellaConversation(session.id, {})!;
     // The prompt is there; the sentinel is not a message.
-    assertEquals(page.items.map((entry) => entry.role), ["user"]);
+    assertEquals(
+      page.items.map((entry) => entry.role),
+      ["user"],
+    );
     assertEquals(page.items[0]?.text, "定期チェックを実行して");
 
     // It IS in the model's history: the notes are what the model reasons
     // with, and dropping them would make the next turn amnesiac.
     assert(
-      core.getAgent(session.id)!.messages.some((message) =>
-        message.role === "assistant"
-      ),
+      core
+        .getAgent(session.id)!
+        .messages.some((message) => message.role === "assistant"),
       "the agent's own turn stays in its history",
     );
   } finally {
@@ -1075,9 +1082,9 @@ Deno.test("stella conversation: the agent's reply is what the store serves", asy
 
     // The sidebar's second line is the same projection: the newest thing the
     // conversation shows is the reply, not the prompt before it.
-    const row = core.listStellaAgentSummaries().find((item) =>
-      item.id === agent.id
-    );
+    const row = core
+      .listStellaAgentSummaries()
+      .find((item) => item.id === agent.id);
     assertEquals(row?.preview?.kind, "text");
     if (row?.preview?.kind !== "text") throw new Error("unreachable");
     assertEquals(row.preview.text, "了解しました。進めます。");
@@ -1091,15 +1098,22 @@ Deno.test("stella conversation: what send_chat sends is the conversation", async
   try {
     const markup = '<Card title="確認"><Text>進めますか。</Text></Card>';
     faux.setResponses([
-      fauxAssistantMessage([
-        // The working notes: never shown.
-        { type: "text", text: "まず報告を送ろう。" },
-        fauxToolCall("send_chat", {
-          // The card is written into the message's own text (see
-          // shared/ui-markup/segments.ts): words, a block, more words.
-          text: `3件の不具合を直しました。\n\n\`\`\`card\n${markup}\n\`\`\``,
-        }, "call-1"),
-      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage(
+        [
+          // The working notes: never shown.
+          { type: "text", text: "まず報告を送ろう。" },
+          fauxToolCall(
+            "send_chat",
+            {
+              // The card is written into the message's own text (see
+              // shared/ui-markup/segments.ts): words, a block, more words.
+              text: `3件の不具合を直しました。\n\n\`\`\`card\n${markup}\n\`\`\``,
+            },
+            "call-1",
+          ),
+        ],
+        { stopReason: "toolUse" },
+      ),
       // A second turn that has nothing to add: silence, spelled out.
       fauxAssistantMessage(NO_RESPONSE),
     ]);
@@ -1107,7 +1121,10 @@ Deno.test("stella conversation: what send_chat sends is the conversation", async
 
     const page = core.readStellaConversation(session.id, {})!;
     const entries = page.items;
-    assertEquals(entries.map((entry) => entry.role), ["user", "assistant"]);
+    assertEquals(
+      entries.map((entry) => entry.role),
+      ["user", "assistant"],
+    );
     const sent = entries[1]!;
     assertEquals(sent.text, "3件の不具合を直しました。");
     assertEquals(sent.segments, [
@@ -1119,13 +1136,16 @@ Deno.test("stella conversation: what send_chat sends is the conversation", async
     // The words also went nowhere near the tool's model-facing result: a
     // message is in the transcript once (as the call's arguments), and the
     // receipt is all the model reads back.
-    const result = core.getAgent(session.id)!.messages.find((message) =>
-      message.role === "toolResult" && message.toolName === "send_chat"
-    );
+    const result = core
+      .getAgent(session.id)!
+      .messages.find(
+        (message) =>
+          message.role === "toolResult" && message.toolName === "send_chat",
+      );
     assert(result !== undefined, "send_chat must have run");
     if (result.role !== "toolResult") throw new Error("unreachable");
     const receipt = result.content
-      .map((block) => block.type === "text" ? block.text : "")
+      .map((block) => (block.type === "text" ? block.text : ""))
       .join("");
     assertEquals(receipt.includes("3件の不具合を直しました。"), false, receipt);
     assert(receipt.includes("Sent"), receipt);
@@ -1144,9 +1164,7 @@ Deno.test("stella conversation: a tool-heavy run still shows the conversation", 
   const { faux, core, session } = await stellaConversation("Surveyor");
   try {
     // A prompt, then one turn that runs more tools than a page holds rows.
-    faux.setResponses([
-      fauxAssistantMessage("まず調べます。"),
-    ]);
+    faux.setResponses([fauxAssistantMessage("まず調べます。")]);
     await promptSession(core, session.id, "調べて");
 
     const responses = [];
@@ -1247,20 +1265,28 @@ Deno.test("stella conversation: history_search reads the message after a prune",
   const { faux, core, session } = await stellaConversation("Scribe");
   try {
     faux.setResponses([
-      fauxAssistantMessage([
-        fauxToolCall("send_chat", {
-          text: "見積もりは 42 万円です。",
-        }, "call-1"),
-      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage(
+        [
+          fauxToolCall(
+            "send_chat",
+            {
+              text: "見積もりは 42 万円です。",
+            },
+            "call-1",
+          ),
+        ],
+        { stopReason: "toolUse" },
+      ),
       fauxAssistantMessage("送りました。"),
     ]);
     await promptSession(core, session.id, "見積もりを出して");
 
     // A later search finds it (the same conversation, read back by words).
     faux.setResponses([
-      fauxAssistantMessage([
-        fauxToolCall("history_search", { query: "見積もり" }),
-      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage(
+        [fauxToolCall("history_search", { query: "見積もり" })],
+        { stopReason: "toolUse" },
+      ),
       fauxAssistantMessage("思い出しました。"),
     ]);
     await promptSession(core, session.id, "さっきの見積もりは？");
@@ -1282,9 +1308,10 @@ Deno.test("stella conversation: history_search never reads another agent's rows"
     await promptSession(core, sessionA.id, "The code word is pelican.");
 
     faux.setResponses([
-      fauxAssistantMessage([
-        fauxToolCall("history_search", { query: "pelican" }),
-      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage(
+        [fauxToolCall("history_search", { query: "pelican" })],
+        { stopReason: "toolUse" },
+      ),
       fauxAssistantMessage("nothing found"),
     ]);
     await promptSession(core, sessionB.id, "Which code word did I give you?");
@@ -1303,8 +1330,8 @@ Deno.test("stella conversation: history_search never reads another agent's rows"
 /** The identity context messages of a session, in transcript order. */
 function identityMessages(core: LumiscaCore, sessionId: string) {
   const agent = core.getAgent(sessionId)!;
-  return agent.messages.filter((message) =>
-    message.role === "context" && message.provider === "identity"
+  return agent.messages.filter(
+    (message) => message.role === "context" && message.provider === "identity",
   );
 }
 
@@ -1319,18 +1346,22 @@ Deno.test("stella conversation: the identity a write produces reaches the next r
     // (main registry), so the turn finds it first and then calls it —
     // exactly the path a real agent takes.
     faux.setResponses([
-      fauxAssistantMessage([
-        fauxToolCall("tool_search", { query: "identity" }),
-      ], { stopReason: "toolUse" }),
-      fauxAssistantMessage([
-        fauxToolCall("tool_call", {
-          name: "identity",
-          args: {
-            action: "write",
-            content: "I keep the project's notes and know where things are.",
-          },
-        }),
-      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage(
+        [fauxToolCall("tool_search", { query: "identity" })],
+        { stopReason: "toolUse" },
+      ),
+      fauxAssistantMessage(
+        [
+          fauxToolCall("tool_call", {
+            name: "identity",
+            args: {
+              action: "write",
+              content: "I keep the project's notes and know where things are.",
+            },
+          }),
+        ],
+        { stopReason: "toolUse" },
+      ),
       fauxAssistantMessage("Wrote it."),
     ]);
     await promptSession(core, session.id, "Write down what your job is.");
@@ -1352,10 +1383,7 @@ Deno.test("stella conversation: the identity a write produces reaches the next r
     assertEquals(published.length, 1);
     const message = published[0]!;
     if (message.role !== "context") throw new Error("unreachable");
-    assert(
-      message.body.includes("I keep the project's notes"),
-      message.body,
-    );
+    assert(message.body.includes("I keep the project's notes"), message.body);
     // The prompt still carries the role the USER wrote, unchanged: the
     // identity is context, not a prompt edit.
     assertEquals(
@@ -1376,15 +1404,19 @@ Deno.test("stella conversation: each agent's identity is its own", async () => {
     const sessionB = await core.getOrCreateStellaSession(second.id);
 
     faux.setResponses([
-      fauxAssistantMessage([
-        fauxToolCall("tool_search", { query: "identity" }),
-      ], { stopReason: "toolUse" }),
-      fauxAssistantMessage([
-        fauxToolCall("tool_call", {
-          name: "identity",
-          args: { action: "write", content: "I am the first." },
-        }),
-      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage(
+        [fauxToolCall("tool_search", { query: "identity" })],
+        { stopReason: "toolUse" },
+      ),
+      fauxAssistantMessage(
+        [
+          fauxToolCall("tool_call", {
+            name: "identity",
+            args: { action: "write", content: "I am the first." },
+          }),
+        ],
+        { stopReason: "toolUse" },
+      ),
       fauxAssistantMessage("done"),
     ]);
     await promptSession(core, sessionA.id, "Who are you?");
@@ -1407,9 +1439,10 @@ Deno.test("stella conversation: each agent's identity is its own", async () => {
  * so the crossing (machine skills → session catalog) is testable here. */
 function vmSkillsRunner(skills: Array<{ name: string; description: string }>) {
   const stdout = skills
-    .map((skill) =>
-      `\n__SKILL__${skill.name}\n---\nname: ${skill.name}\n` +
-      `description: ${skill.description}\n---\n\nBody.\n`
+    .map(
+      (skill) =>
+        `\n__SKILL__${skill.name}\n---\nname: ${skill.name}\n` +
+        `description: ${skill.description}\n---\n\nBody.\n`,
     )
     .join("");
   return {
@@ -1444,10 +1477,12 @@ Deno.test("stella conversation: a skill in the machine reaches the published cat
   const core = LumiscaCore.forTesting(
     [faux.provider],
     () => ({}),
-    vmSkillsRunner([{
-      name: "vm-notes",
-      description: "How notes are kept inside the machine.",
-    }]),
+    vmSkillsRunner([
+      {
+        name: "vm-notes",
+        description: "How notes are kept inside the machine.",
+      },
+    ]),
   );
   core.models.models.setProvider(faux.provider);
   await core.setProviderApiKey(faux.provider.id, "faux-key");
@@ -1469,9 +1504,12 @@ Deno.test("stella conversation: a skill in the machine reaches the published cat
     // ...and the catalog the model reads names it too.
     faux.setResponses([fauxAssistantMessage("Noted.")]);
     await promptSession(core, session.id, "What can you do?");
-    const published = core.getAgent(session.id)!.messages.find((message) =>
-      message.role === "context" && message.provider === "skills"
-    );
+    const published = core
+      .getAgent(session.id)!
+      .messages.find(
+        (message) =>
+          message.role === "context" && message.provider === "skills",
+      );
     assert(published !== undefined, "the skill catalog must be published");
     if (published.role !== "context") throw new Error("unreachable");
     assert(
@@ -1490,10 +1528,12 @@ Deno.test("stella conversation: a sub-agent loads a skill from the machine", asy
   const core = LumiscaCore.forTesting(
     [faux.provider],
     () => ({}),
-    vmSkillsRunner([{
-      name: "vm-notes",
-      description: "How notes are kept inside the machine.",
-    }]),
+    vmSkillsRunner([
+      {
+        name: "vm-notes",
+        description: "How notes are kept inside the machine.",
+      },
+    ]),
   );
   core.models.models.setProvider(faux.provider);
   await core.setProviderApiKey(faux.provider.id, "faux-key");
@@ -1505,8 +1545,8 @@ Deno.test("stella conversation: a sub-agent loads a skill from the machine", asy
     });
     const session = await core.getOrCreateStellaSession(agent.id);
     const parent = core.getAgent(session.id)!;
-    const taskTool = parent.agent.state.tools.find((tool) =>
-      tool.name === "task"
+    const taskTool = parent.agent.state.tools.find(
+      (tool) => tool.name === "task",
     );
     assert(taskTool !== undefined, "the stella agent must have the task tool");
 
@@ -1571,32 +1611,28 @@ Deno.test("stella conversation: two agents do not share their own skills", async
   // machine-wide folder hold different lists, which is what makes a
   // per-agent catalog observable here.
   const byDir = new Map<string, Array<{ name: string; description: string }>>();
-  const core = LumiscaCore.forTesting(
-    [faux.provider],
-    () => ({}),
-    {
-      run: (command: readonly string[]) => {
-        const stdout = command.join(" ").includes(".agents/skills")
-          ? listingOf(byDir.get(command[command.length - 1] ?? "") ?? [])
-          : "";
-        return Promise.resolve({
-          exitCode: 0,
-          stdout,
-          stderr: "",
-          truncated: false,
-          timedOut: false,
-        });
-      },
-      runBytes: () =>
-        Promise.resolve({
-          exitCode: 0,
-          stdout: new Uint8Array(),
-          stderr: "",
-          truncated: false,
-          timedOut: false,
-        }),
+  const core = LumiscaCore.forTesting([faux.provider], () => ({}), {
+    run: (command: readonly string[]) => {
+      const stdout = command.join(" ").includes(".agents/skills")
+        ? listingOf(byDir.get(command[command.length - 1] ?? "") ?? [])
+        : "";
+      return Promise.resolve({
+        exitCode: 0,
+        stdout,
+        stderr: "",
+        truncated: false,
+        timedOut: false,
+      });
     },
-  );
+    runBytes: () =>
+      Promise.resolve({
+        exitCode: 0,
+        stdout: new Uint8Array(),
+        stderr: "",
+        truncated: false,
+        timedOut: false,
+      }),
+  });
   core.models.models.setProvider(faux.provider);
   await core.setProviderApiKey(faux.provider.id, "faux-key");
   core.setStellaVm(fakeVm(RUNNING));
@@ -1606,14 +1642,18 @@ Deno.test("stella conversation: two agents do not share their own skills", async
       name: "Second",
       role: "Two.",
     });
-    byDir.set(`/home/agent/agents/${first.id}/.agents/skills`, [{
-      name: "only-for-first",
-      description: "First's own skill.",
-    }]);
-    byDir.set("/home/agent/.agents/skills", [{
-      name: "for-everyone",
-      description: "The machine-wide skill.",
-    }]);
+    byDir.set(`/home/agent/agents/${first.id}/.agents/skills`, [
+      {
+        name: "only-for-first",
+        description: "First's own skill.",
+      },
+    ]);
+    byDir.set("/home/agent/.agents/skills", [
+      {
+        name: "for-everyone",
+        description: "The machine-wide skill.",
+      },
+    ]);
 
     const sessionA = await core.getOrCreateStellaSession(first.id);
     await core.getOrCreateStellaSession(second.id);
@@ -1637,9 +1677,12 @@ Deno.test("stella conversation: two agents do not share their own skills", async
     // The catalog the model reads is the same per-agent list.
     faux.setResponses([fauxAssistantMessage("ok")]);
     await promptSession(core, sessionA.id, "what can you do?");
-    const published = core.getAgent(sessionA.id)!.messages.find((message) =>
-      message.role === "context" && message.provider === "skills"
-    );
+    const published = core
+      .getAgent(sessionA.id)!
+      .messages.find(
+        (message) =>
+          message.role === "context" && message.provider === "skills",
+      );
     assert(published !== undefined, "the skill catalog must be published");
     if (published.role !== "context") throw new Error("unreachable");
     assert(published.body.includes("only-for-first"), published.body);
@@ -1654,9 +1697,10 @@ function listingOf(
   skills: Array<{ name: string; description: string }>,
 ): string {
   return skills
-    .map((skill) =>
-      `\n__SKILL__${skill.name}\n---\nname: ${skill.name}\n` +
-      `description: ${skill.description}\n---\n\nBody.\n`
+    .map(
+      (skill) =>
+        `\n__SKILL__${skill.name}\n---\nname: ${skill.name}\n` +
+        `description: ${skill.description}\n---\n\nBody.\n`,
     )
     .join("");
 }
@@ -1753,11 +1797,18 @@ Deno.test("stella agents: a row says what its conversation last said", async () 
   const { faux, core, agent, session } = await stellaConversation("Aide");
   try {
     faux.setResponses([
-      fauxAssistantMessage([
-        fauxToolCall("send_chat", {
-          text: "3件の不具合を直しました。",
-        }, "call-1"),
-      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage(
+        [
+          fauxToolCall(
+            "send_chat",
+            {
+              text: "3件の不具合を直しました。",
+            },
+            "call-1",
+          ),
+        ],
+        { stopReason: "toolUse" },
+      ),
       fauxAssistantMessage(NO_RESPONSE),
     ]);
     await promptSession(core, session.id, "直して");
@@ -1780,9 +1831,9 @@ Deno.test("stella agents: a row says what its conversation last said", async () 
     // An agent whose conversation was never opened says nothing: nothing has
     // been said in it, and a row must not invent a line.
     const quiet = await core.createStellaAgent({ name: "Quiet", role: "r" });
-    const quietRow = core.listStellaAgentSummaries().find((item) =>
-      item.id === quiet.id
-    );
+    const quietRow = core
+      .listStellaAgentSummaries()
+      .find((item) => item.id === quiet.id);
     assertEquals(quietRow?.preview, null);
   } finally {
     await core.close();
@@ -1795,19 +1846,21 @@ Deno.test("stella agents: the preview is the newest entry, not the newest row", 
   const { faux, core, agent, session } = await stellaConversation("Aide");
   try {
     faux.setResponses([
-      fauxAssistantMessage([
-        fauxToolCall("send_chat", { text: "一行目" }, "call-1"),
-      ], { stopReason: "toolUse" }),
-      fauxAssistantMessage([
-        fauxToolCall("bash", { command: "echo hi" }, "call-2"),
-      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage(
+        [fauxToolCall("send_chat", { text: "一行目" }, "call-1")],
+        { stopReason: "toolUse" },
+      ),
+      fauxAssistantMessage(
+        [fauxToolCall("bash", { command: "echo hi" }, "call-2")],
+        { stopReason: "toolUse" },
+      ),
       fauxAssistantMessage(NO_RESPONSE),
     ]);
     await promptSession(core, session.id, "やって");
 
-    const row = core.listStellaAgentSummaries().find((item) =>
-      item.id === agent.id
-    );
+    const row = core
+      .listStellaAgentSummaries()
+      .find((item) => item.id === agent.id);
     assertEquals(row?.preview?.kind, "text");
     if (row?.preview?.kind !== "text") throw new Error("unreachable");
     assertEquals(row.preview.text, "一行目");

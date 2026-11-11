@@ -1,7 +1,7 @@
 import { assert, assertEquals, assertThrows } from "@std/assert";
+import type { AgentMessage } from "../ai/types.ts";
 import { LumiscaDb } from "../db/mod.ts";
 import { CoreError } from "../errors.ts";
-import type { AgentMessage } from "../ai/types.ts";
 import {
   createMessageRepo,
   type MessageRepo,
@@ -17,13 +17,17 @@ import { startsTranscriptTurn } from "./transcript-window.ts";
 /** A session with `count` user prompts, one millisecond apart. */
 function setup(count: number): { db: LumiscaDb; repo: MessageRepo } {
   const db = LumiscaDb.openInMemory();
-  db.db.prepare(
-    "INSERT INTO workspaces (id, name, created_at) VALUES ('ws', 't', 0)",
-  ).run();
-  db.db.prepare(
-    `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
+  db.db
+    .prepare(
+      "INSERT INTO workspaces (id, name, created_at) VALUES ('ws', 't', 0)",
+    )
+    .run();
+  db.db
+    .prepare(
+      `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
      VALUES ('s1', 'ws', 't', 'faux', 'model', 0, 0)`,
-  ).run();
+    )
+    .run();
   const repo = createMessageRepo(db);
   for (let i = 1; i <= count; i++) {
     repo.append("s1", {
@@ -248,10 +252,12 @@ Deno.test("transcript pager: a dropped row still marks the page's turn", () => {
       rows: "all",
       startsWindow: () => true,
       project: (row) =>
-        row.role === "toolResult" ? undefined : {
-          item: row.timestamp,
-          cursor: messageCursor(row.message),
-        },
+        row.role === "toolResult"
+          ? undefined
+          : {
+              item: row.timestamp,
+              cursor: messageCursor(row.message),
+            },
     };
     const page = readTranscriptPage(repo, "s1", { limit: 2 }, dropped);
     // The page is the last two rows; the dropped result is not drawn, but the

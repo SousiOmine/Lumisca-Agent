@@ -71,8 +71,14 @@ export function useMention(options: {
    * was consumed by the popover. */
   handleKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => boolean;
 } {
-  const { textareaRef, workspaceId, peerId = "", value, onChange, clearCaret } =
-    options;
+  const {
+    textareaRef,
+    workspaceId,
+    peerId = "",
+    value,
+    onChange,
+    clearCaret,
+  } = options;
   const [mention, setMention] = useState<MentionState | null>(null);
   // Bumped per fetch so a stale response can never overwrite a newer one.
   const fetchSeq = useRef(0);
@@ -100,12 +106,12 @@ export function useMention(options: {
         setMention((prev) =>
           prev
             ? { ...prev, items: result.entries, loading: false, failed: false }
-            : prev
+            : prev,
         );
       } catch {
         if (fetchSeq.current !== seq || !mention) return;
         setMention((prev) =>
-          prev ? { ...prev, items: [], loading: false, failed: true } : prev
+          prev ? { ...prev, items: [], loading: false, failed: true } : prev,
         );
       }
     }, 150);
@@ -129,13 +135,13 @@ export function useMention(options: {
         prev && prev.start === det.start
           ? { ...prev, query: det.query, loading: true, failed: false }
           : {
-            start: det.start,
-            query: det.query,
-            items: [],
-            active: 0,
-            loading: true,
-            failed: false,
-          }
+              start: det.start,
+              query: det.query,
+              items: [],
+              active: 0,
+              loading: true,
+              failed: false,
+            },
       );
       return true;
     },
@@ -152,8 +158,8 @@ export function useMention(options: {
       if (!item) return;
       const caret = ta.selectionStart;
       const inserted = item.path;
-      const next = value.slice(0, current.start) + inserted + " " +
-        value.slice(caret);
+      const next =
+        value.slice(0, current.start) + inserted + " " + value.slice(caret);
       onChange(next);
       setMention(null);
       clearCaret();

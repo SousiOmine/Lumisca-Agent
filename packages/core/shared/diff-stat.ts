@@ -27,7 +27,8 @@ export function diffLineCounts(
   const newLines = splitDiffLines(newText);
   let start = 0;
   while (
-    start < oldLines.length && start < newLines.length &&
+    start < oldLines.length &&
+    start < newLines.length &&
     oldLines[start] === newLines[start]
   ) {
     start++;
@@ -35,7 +36,8 @@ export function diffLineCounts(
   let endOld = oldLines.length - 1;
   let endNew = newLines.length - 1;
   while (
-    endOld >= start && endNew >= start &&
+    endOld >= start &&
+    endNew >= start &&
     oldLines[endOld] === newLines[endNew]
   ) {
     endOld--;

@@ -22,10 +22,10 @@ Deno.test("interpolatePoint walks the straight line and hits both ends", () => {
 });
 
 Deno.test("interpolatePoint rounds to whole pixels", () => {
-  assertEquals(
-    interpolatePoint({ x: 0, y: 0 }, { x: 3, y: 3 }, 1 / 3),
-    { x: 1, y: 1 },
-  );
+  assertEquals(interpolatePoint({ x: 0, y: 0 }, { x: 3, y: 3 }, 1 / 3), {
+    x: 1,
+    y: 1,
+  });
 });
 
 // --- typing -----------------------------------------------------------------

@@ -1,7 +1,7 @@
 import { createPortal, type RefObject, useRef } from "preact/compat";
-import type { ModelInfo } from "../types.ts";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { usePopoverPlacement } from "../hooks/usePopoverPlacement.ts";
+import type { ModelInfo } from "../types.ts";
 import { ModelPicker } from "./ModelPicker.tsx";
 
 export interface ModelPickerPopoverProps {

@@ -1,10 +1,10 @@
+import { CoreError } from "../errors.ts";
+import { AssetDir } from "../session/asset-dir.ts";
 import {
   AGENT_ICON_FORMATS,
   agentIconMimeType,
   MAX_AGENT_ICON_BYTES,
 } from "../shared/mod.ts";
-import { CoreError } from "../errors.ts";
-import { AssetDir } from "../session/asset-dir.ts";
 
 /**
  * The pictures stella's agents show instead of their initial.
@@ -155,16 +155,10 @@ function extensionOf(name: string): string {
 function matchesFormat(bytes: Uint8Array, extension: string): boolean {
   switch (extension) {
     case ".png":
-      return startsWith(bytes, [
-        0x89,
-        0x50,
-        0x4e,
-        0x47,
-        0x0d,
-        0x0a,
-        0x1a,
-        0x0a,
-      ]);
+      return startsWith(
+        bytes,
+        [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+      );
     case ".jpg":
     case ".jpeg":
       // SOI marker; the third byte distinguishes the JPEG family (JFIF/Exif)
@@ -174,9 +168,11 @@ function matchesFormat(bytes: Uint8Array, extension: string): boolean {
       return startsWith(bytes, [0x47, 0x49, 0x46, 0x38]);
     case ".webp":
       // RIFF container with the "WEBP" form: 12 bytes carry both halves.
-      return startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) &&
+      return (
+        startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) &&
         bytes.length >= 12 &&
-        String.fromCharCode(...bytes.subarray(8, 12)) === "WEBP";
+        String.fromCharCode(...bytes.subarray(8, 12)) === "WEBP"
+      );
     case ".bmp":
       return startsWith(bytes, [0x42, 0x4d]);
     default:

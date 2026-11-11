@@ -1,13 +1,13 @@
-import { makeRealTempDir, removeDirRetry } from "../test-utils.ts";
 import { join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
+import { makeRealTempDir, removeDirRetry } from "../test-utils.ts";
+import { subagentSkills } from "../tools/tool-pieces.ts";
+import { builtinSkills } from "./builtin/mod.ts";
 import {
   discoverSkills,
   formatAvailableSkills,
   loadSkillContent,
 } from "./discover.ts";
-import { builtinSkills } from "./builtin/mod.ts";
-import { subagentSkills } from "../tools/tool-pieces.ts";
 
 /** A user skill named "web-browser" — the same name as the built-in one —
  * used by the precedence tests. A user skill with this name must shadow
@@ -54,13 +54,10 @@ Deno.test("builtinSkills advertises the stella-only skills for a stella session"
     stella: true,
     subagents: false,
   });
-  assertEquals(skills.map((s) => s.name), [
-    "desktop-apps",
-    "agent-create",
-    "identity",
-    "routines",
-    "vm-env",
-  ]);
+  assertEquals(
+    skills.map((s) => s.name),
+    ["desktop-apps", "agent-create", "identity", "routines", "vm-env"],
+  );
 
   // Each guide teaches the tool_search → tool_call path, because neither
   // tool is preloaded (they live in the session's main registry).
@@ -107,11 +104,12 @@ Deno.test("builtinSkills advertises the stella-only skills for a stella session"
   // A code-mode session has no agents to manage and no routines of its own:
   // none of these skills is offered.
   assertEquals(
-    builtinSkills({ browser: false, computer: false, subagents: false }).some((
-      s,
-    ) =>
-      s.name === "agent-create" || s.name === "identity" ||
-      s.name === "routines" || s.name === "vm-env"
+    builtinSkills({ browser: false, computer: false, subagents: false }).some(
+      (s) =>
+        s.name === "agent-create" ||
+        s.name === "identity" ||
+        s.name === "routines" ||
+        s.name === "vm-env",
     ),
     false,
   );
@@ -142,7 +140,10 @@ Deno.test("builtinSkills advertises vm-env only in a stella session", async () =
   const subagent = subagentSkills([skill!], {
     subagents: true,
   });
-  assertEquals(subagent.some((s) => s.name === "vm-env"), false);
+  assertEquals(
+    subagent.some((s) => s.name === "vm-env"),
+    false,
+  );
 });
 
 Deno.test("builtinSkills advertises desktop-apps only in a stella session", async () => {
@@ -157,9 +158,13 @@ Deno.test("builtinSkills advertises desktop-apps only in a stella session", asyn
   // The guide's whole job is to make the semantic path the default, so it has
   // to name the tools the agent will call and say which one wins.
   const guide = await loadSkillContent(skill!);
-  for (
-    const tool of ["vm_find", "vm_do", "vm_wait", "vm_screenshot", "vm_act"]
-  ) {
+  for (const tool of [
+    "vm_find",
+    "vm_do",
+    "vm_wait",
+    "vm_screenshot",
+    "vm_act",
+  ]) {
     assert(guide.includes(tool), `the guide does not mention ${tool}`);
   }
   assert(guide.includes("delivered_unverified"));
@@ -167,16 +172,19 @@ Deno.test("builtinSkills advertises desktop-apps only in a stella session", asyn
   // Code mode drives THIS machine's screen with the computer-use tools, not
   // the machine's own GUI, so it must not advertise this one.
   assertEquals(
-    builtinSkills({ browser: false, computer: true, subagents: false }).some((
-      s,
-    ) => s.name === "desktop-apps"),
+    builtinSkills({ browser: false, computer: true, subagents: false }).some(
+      (s) => s.name === "desktop-apps",
+    ),
     false,
   );
 });
 
 Deno.test("builtinSkills advertises web-browser when the browser is available", () => {
   const skills = browserBuiltins();
-  assertEquals(skills.map((s) => s.name), ["web-browser"]);
+  assertEquals(
+    skills.map((s) => s.name),
+    ["web-browser"],
+  );
   const skill = skills[0]!;
   assertEquals(skill.source, "builtin");
   assert(skill.description.includes("tool_search"));
@@ -195,7 +203,10 @@ Deno.test("builtinSkills hides web-browser without a browser backend", () => {
 
 Deno.test("builtinSkills advertises computer-use only when the machine can be driven", () => {
   const skills = computerBuiltins();
-  assertEquals(skills.map((s) => s.name), ["computer-use"]);
+  assertEquals(
+    skills.map((s) => s.name),
+    ["computer-use"],
+  );
   const skill = skills[0]!;
   assertEquals(skill.source, "builtin");
   assert(skill.description.includes("tool_search"));
@@ -208,14 +219,17 @@ Deno.test("builtinSkills advertises computer-use only when the machine can be dr
     builtinSkills({ browser: false, computer: false, subagents: false }),
     [],
   );
-  assertEquals(browserBuiltins().some((s) => s.name === "computer-use"), false);
+  assertEquals(
+    browserBuiltins().some((s) => s.name === "computer-use"),
+    false,
+  );
 });
 
 Deno.test("both built-in skills are advertised when both capabilities are present", () => {
   assertEquals(
-    builtinSkills({ browser: true, computer: true, subagents: false }).map((
-      s,
-    ) => s.name),
+    builtinSkills({ browser: true, computer: true, subagents: false }).map(
+      (s) => s.name,
+    ),
     ["web-browser", "computer-use"],
   );
 });
@@ -292,10 +306,7 @@ Deno.test("workspace skills shadow built-in skills of the same name", async () =
     assertEquals(browser.source, "workspace");
     assertEquals(browser.description, "User's own browser skill.");
     // The shadowed built-in is not listed at all.
-    assertEquals(
-      skills.filter((s) => s.name === "web-browser").length,
-      1,
-    );
+    assertEquals(skills.filter((s) => s.name === "web-browser").length, 1);
   } finally {
     await removeDirRetry(root);
   }
@@ -360,10 +371,7 @@ Deno.test("the coding-agents skill teaches the discovery flow it needs", async (
   });
   const coding = skills.find((skill) => skill.name === "coding-agents");
   assert(coding !== undefined, "the coding-agents skill must be advertised");
-  assert(
-    coding.description.includes("sub-agent"),
-    coding.description,
-  );
+  assert(coding.description.includes("sub-agent"), coding.description);
 
   const read = coding.read;
   assert(read !== undefined, "the skill must be readable");
@@ -385,7 +393,10 @@ Deno.test("a session without a sub-agent hub is not pointed at one", () => {
     stella: false,
     subagents: false,
   });
-  assertEquals(skills.some((skill) => skill.name === "coding-agents"), false);
+  assertEquals(
+    skills.some((skill) => skill.name === "coding-agents"),
+    false,
+  );
 });
 
 Deno.test("builtinSkills advertises the MCP guide only where the tools are", async () => {
@@ -407,15 +418,13 @@ Deno.test("builtinSkills advertises the MCP guide only where the tools are", asy
   const body = await loadSkillContent(skill!);
   // The flow the feature is built around: read the guide → find the tools
   // → call them.
-  for (
-    const tool of [
-      "mcp_add",
-      "mcp_remove",
-      "mcp_list",
-      "tool_search",
-      "tool_call",
-    ]
-  ) {
+  for (const tool of [
+    "mcp_add",
+    "mcp_remove",
+    "mcp_list",
+    "tool_search",
+    "tool_call",
+  ]) {
     assert(body.includes(tool), `the guide does not mention ${tool}`);
   }
   // What the agent has to be able to tell the user: which list the tools

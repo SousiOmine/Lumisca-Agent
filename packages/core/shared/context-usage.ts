@@ -54,8 +54,11 @@ function usageNumber(value: number | null | undefined): number {
  * model actually received. */
 export function contextTokensOf(usage?: ContextUsageLike | null): number {
   if (!usage) return 0;
-  return usageNumber(usage.input) + usageNumber(usage.cacheRead) +
-    usageNumber(usage.cacheWrite);
+  return (
+    usageNumber(usage.input) +
+    usageNumber(usage.cacheRead) +
+    usageNumber(usage.cacheWrite)
+  );
 }
 
 /** Summarize context usage over a transcript. Only `role === "assistant"`
@@ -102,9 +105,10 @@ export function summarizeContextUsage(
  * the output clamp and the context meter all measure against this budget;
  * a model that publishes no cap keeps its window. Undefined when neither
  * number is usable, which leaves compaction off. */
-export function inputBudgetTokens(
-  model: { contextWindow?: number; maxInputTokens?: number },
-): number | undefined {
+export function inputBudgetTokens(model: {
+  contextWindow?: number;
+  maxInputTokens?: number;
+}): number | undefined {
   const usable = [model.contextWindow, model.maxInputTokens].filter(
     (value): value is number =>
       typeof value === "number" && Number.isFinite(value) && value > 0,
@@ -120,8 +124,10 @@ export function contextUsageRatio(
   contextWindow?: number,
 ): number | undefined {
   if (
-    summary.currentTokens === undefined || contextWindow === undefined ||
-    !Number.isFinite(contextWindow) || contextWindow <= 0
+    summary.currentTokens === undefined ||
+    contextWindow === undefined ||
+    !Number.isFinite(contextWindow) ||
+    contextWindow <= 0
   ) {
     return undefined;
   }
@@ -144,9 +150,12 @@ export function compactionUsageRatio(
   reservePercent: number,
 ): number | undefined {
   if (
-    contextWindow === undefined || !Number.isFinite(contextWindow) ||
-    contextWindow <= 0 || !Number.isFinite(reservePercent) ||
-    reservePercent <= 0 || reservePercent >= 100
+    contextWindow === undefined ||
+    !Number.isFinite(contextWindow) ||
+    contextWindow <= 0 ||
+    !Number.isFinite(reservePercent) ||
+    reservePercent <= 0 ||
+    reservePercent >= 100
   ) {
     return undefined;
   }
@@ -159,9 +168,8 @@ export function formatCompactTokens(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "0";
   if (value >= 1_000_000) {
     const m = value / 1_000_000;
-    const text = m >= 100
-      ? String(Math.round(m))
-      : String(Math.round(m * 100) / 100);
+    const text =
+      m >= 100 ? String(Math.round(m)) : String(Math.round(m * 100) / 100);
     return `${text}M`;
   }
   if (value >= 1000) {
@@ -190,11 +198,12 @@ export function formatContextUsageLine(
   if (summary.currentTokens === undefined) return "";
   const used = formatCompactTokens(summary.currentTokens);
   const ratio = contextUsageRatio(summary, contextWindow);
-  const head = contextWindow && contextWindow > 0
-    ? `${used}/${formatCompactTokens(contextWindow)}${
-      ratio === undefined ? "" : ` (${formatPercent1(ratio)})`
-    }`
-    : used;
+  const head =
+    contextWindow && contextWindow > 0
+      ? `${used}/${formatCompactTokens(contextWindow)}${
+          ratio === undefined ? "" : ` (${formatPercent1(ratio)})`
+        }`
+      : used;
   return summary.averageCacheHitRate === undefined
     ? head
     : `${head} · Avg cache hit ${formatPercent1(summary.averageCacheHitRate)}`;

@@ -1,10 +1,5 @@
-import { hostBackends } from "./toolsets.ts";
-import { promptSession, removeDirRetry } from "../test-utils.ts";
-import { assert, assertEquals, assertRejects } from "@std/assert";
 import { join } from "node:path";
-import type { StreamFn } from "@lumisca/core";
-import type { Model } from "@lumisca/core";
-import type { Api } from "@lumisca/core";
+import type { Api, Model, StreamFn } from "@lumisca/core";
 import {
   createAssistantMessageEventStream,
   fauxAssistantMessage,
@@ -12,24 +7,26 @@ import {
   fauxText,
   fauxToolCall,
 } from "@lumisca/core";
-import { CoreError, LumiscaCore } from "../mod.ts";
+import { assert, assertEquals, assertRejects } from "@std/assert";
+import { createBrowserTools } from "../browser/tools.ts";
+import type { BrowserBackend } from "../browser/types.ts";
+import type { ClientEvent } from "../domain/event.ts";
+import type { NotificationPayload } from "../domain/notification.ts";
+import type { Workspace } from "../domain/workspace.ts";
 import { McpAttachment } from "../mcp/attachment.ts";
 import { parseMcpConfig } from "../mcp/config.ts";
 import { McpManager } from "../mcp/manager.ts";
-import { createBrowserTools } from "../browser/tools.ts";
-import type { BrowserBackend } from "../browser/types.ts";
+import { CoreError, LumiscaCore } from "../mod.ts";
 import {
   type ThinkingLevel,
   TOOL_BROWSER_OPEN,
   TOOL_CALL,
   TOOL_SEARCH,
 } from "../shared/mod.ts";
-import type { ClientEvent } from "../domain/event.ts";
-import type { NotificationPayload } from "../domain/notification.ts";
-import type { Workspace } from "../domain/workspace.ts";
 import type { SkillDef } from "../skills/discover.ts";
-import { ToolRegistry } from "./registry.ts";
+import { promptSession, removeDirRetry } from "../test-utils.ts";
 import { SessionToolRegistries } from "./registries.ts";
+import { ToolRegistry } from "./registry.ts";
 import { object, type Tool } from "./schema.ts";
 import {
   createSendMessageTool,
@@ -37,6 +34,7 @@ import {
   createTaskTool,
 } from "./task.ts";
 import { MAX_SUBAGENTS, TaskHub } from "./task-hub.ts";
+import { hostBackends } from "./toolsets.ts";
 
 function makeWorkspace(root: string): Workspace {
   return {
@@ -322,8 +320,10 @@ function messageText(message: unknown): string {
   const content = m.content;
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
-  return content.filter((b) => (b as { type?: string }).type === "text")
-    .map((b) => (b as { text?: string }).text ?? "").join("");
+  return content
+    .filter((b) => (b as { type?: string }).type === "text")
+    .map((b) => (b as { text?: string }).text ?? "")
+    .join("");
 }
 
 // --- hub: spawn and lifecycle -------------------------------------------------
@@ -369,10 +369,7 @@ Deno.test("the sub-agent runtime is resolved at spawn time", () => {
     level = "high";
     hub.spawn("session-1", 0, "explore", "調査2", "Do research");
     assertEquals(resolutions, 2);
-    assertEquals(
-      events.filter((e) => e.type === "task_start").length,
-      2,
-    );
+    assertEquals(events.filter((e) => e.type === "task_start").length, 2);
   } finally {
     hub.close();
   }
@@ -463,12 +460,14 @@ Deno.test("send_message delivers to the parent and to a running sub-agent", () =
       "Which file?",
     );
     assertEquals(toParent.deliveredTo, "session-1");
-    assertEquals(received, [{
-      kind: "message",
-      title: "[Message from agent_1 (need input)]",
-      body: "Which file?",
-      status: "neutral",
-    }]);
+    assertEquals(received, [
+      {
+        kind: "message",
+        title: "[Message from agent_1 (need input)]",
+        body: "Which file?",
+        status: "neutral",
+      },
+    ]);
 
     // Main agent → running sub-agent: steered into its loop.
     const toSub = hub.sendMessage(
@@ -594,10 +593,7 @@ Deno.test("a depth-2 agent has no task tool: the call fails instead of spawning"
     await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
     assertEquals(hub.list().length, 1, "a grandchild was spawned");
     const snapshot = hub.list()[0]!;
-    assert(
-      snapshot.text.includes("Delegation failed."),
-      snapshot.text,
-    );
+    assert(snapshot.text.includes("Delegation failed."), snapshot.text);
   } finally {
     hub.close();
   }
@@ -633,11 +629,15 @@ Deno.test("the task tool rejects an unknown subagent type", () => {
     const tool = createTaskTool(hub, "session-1", 0);
     assertThrowsCoreError(
       () =>
-        tool.execute("1", {
-          subagent_type: "intern" as "explore",
-          description: "調査",
-          prompt: "Do research",
-        }, undefined),
+        tool.execute(
+          "1",
+          {
+            subagent_type: "intern" as "explore",
+            description: "調査",
+            prompt: "Do research",
+          },
+          undefined,
+        ),
       "subagent_type must be one of general, explore (got intern)",
       "invalid",
     );
@@ -677,11 +677,15 @@ Deno.test("the send_message tool reports the delivery target", () => {
   try {
     hub.spawn("session-1", 0, "explore", "調査", "Do research");
     const tool = createSendMessageTool(hub, "agent_1");
-    const result = tool.execute("1", {
-      to: "parent",
-      summary: "question",
-      message: "Where?",
-    }, undefined);
+    const result = tool.execute(
+      "1",
+      {
+        to: "parent",
+        summary: "question",
+        message: "Where?",
+      },
+      undefined,
+    );
     return result.then((r) => {
       assertEquals(r.details.to, "session-1");
       assertEquals(received[0], {
@@ -756,9 +760,10 @@ Deno.test("a task runs in the background and its completion reaches the parent",
     );
     const transcript = agent.messages.map(messageText);
     assert(
-      transcript.some((t) =>
-        t.startsWith("[Task agent_1 (調査) finished]") &&
-        t.includes("Answer: 42")
+      transcript.some(
+        (t) =>
+          t.startsWith("[Task agent_1 (調査) finished]") &&
+          t.includes("Answer: 42"),
       ),
       `completion notification missing: ${JSON.stringify(transcript)}`,
     );
@@ -767,9 +772,11 @@ Deno.test("a task runs in the background and its completion reaches the parent",
       "task_start missing",
     );
     assert(
-      events.some((e) =>
-        e.type === "task_end" && e.agentId === "agent_1" &&
-        e.status === "finished"
+      events.some(
+        (e) =>
+          e.type === "task_end" &&
+          e.agentId === "agent_1" &&
+          e.status === "finished",
       ),
       "task_end missing",
     );
@@ -832,9 +839,9 @@ Deno.test("a waiting task_output receives the result and suppresses the notifica
     );
     assert(
       !transcript.some((t) => t.startsWith("[Task agent_1")),
-      `the completion notification was not suppressed: ${
-        JSON.stringify(transcript)
-      }`,
+      `the completion notification was not suppressed: ${JSON.stringify(
+        transcript,
+      )}`,
     );
   } finally {
     core.close();
@@ -890,16 +897,17 @@ Deno.test("sub-agents survive a session rebuild and remain listed", async () => 
  * mcp_test.ts): answers initialize with a session id and tools/call over
  * plain JSON. `delayMs` stalls the tools/list answer — tests use it to make
  * one attachment's discovery land deterministically after another's. */
-function startPingMcpServer(
-  delayMs = 0,
-): { port: number; shutdown: () => void } {
+function startPingMcpServer(delayMs = 0): {
+  port: number;
+  shutdown: () => void;
+} {
   let sessionId: string | null = null;
   const controller = new AbortController();
   const server = Deno.serve(
     { port: 0, onListen: () => {}, signal: controller.signal },
     async (req) => {
       if (req.method !== "POST") return new Response("nope", { status: 405 });
-      const body = await req.json() as {
+      const body = (await req.json()) as {
         id?: string;
         method?: string;
       };
@@ -931,19 +939,22 @@ function startPingMcpServer(
           jsonrpc: "2.0",
           id: body.id,
           result: {
-            tools: [{
-              name: "ping",
-              description: "Pings",
-              inputSchema: { type: "object" },
-            }],
+            tools: [
+              {
+                name: "ping",
+                description: "Pings",
+                inputSchema: { type: "object" },
+              },
+            ],
           },
         });
       }
       if (body.method === "tools/call") {
         const sentSession = req.headers.get("mcp-session-id");
-        const text = sentSession === sessionId
-          ? "pong (session ok)"
-          : `pong (session missing: ${sentSession ?? "none"})`;
+        const text =
+          sentSession === sessionId
+            ? "pong (session ok)"
+            : `pong (session missing: ${sentSession ?? "none"})`;
         return Response.json({
           jsonrpc: "2.0",
           id: body.id,
@@ -1195,10 +1206,7 @@ Deno.test("a code-mode sub-agent keeps eval", async () => {
       (context) => {
         const text = JSON.stringify(context);
         // The tool ran: its result carries the completion value.
-        assert(
-          text.includes("[result]"),
-          `eval should have run: ${text}`,
-        );
+        assert(text.includes("[result]"), `eval should have run: ${text}`);
         return fauxAssistantMessage("Evaluated.");
       },
     ]);

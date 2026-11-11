@@ -12,12 +12,13 @@
  * Moved out because it is the one part of the composer that has nothing to do
  * with rendering: it reads bytes and enforces the API's limits.
  */
-import { useEffect, useRef, useState } from "preact/compat";
+
 import {
   MAX_PROMPT_FILE_BASE64_LENGTH,
   MAX_PROMPT_FILES,
   stripDataUrlHeader,
 } from "@lumisca/core/shared";
+import { useEffect, useRef, useState } from "preact/compat";
 import type { PendingFile, PendingImage } from "../types.ts";
 
 /**
@@ -90,10 +91,7 @@ export function useAttachments(options: UseAttachmentsOptions): Attachments {
     Math.ceil(size / 3) * 4 > MAX_PROMPT_FILE_BASE64_LENGTH;
 
   /** Read `file` and hand the result to `accept`, or explain why not. */
-  const read = (
-    file: File,
-    accept: (dataUrl: string) => void,
-  ): void => {
+  const read = (file: File, accept: (dataUrl: string) => void): void => {
     if (tooLarge(file.size)) {
       setError(t("chat.composer.attach.tooLarge", { name: file.name }));
       return;

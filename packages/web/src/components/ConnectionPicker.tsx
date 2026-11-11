@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState } from "preact/compat";
 import {
   IconChevronDown,
   IconPlus,
   IconServer,
   IconSettings,
 } from "@tabler/icons-preact";
-import { errorText } from "../providers.ts";
+import { useEffect, useRef, useState } from "preact/compat";
 import {
   connectionLabel,
   displayedConnectionId,
@@ -14,7 +13,8 @@ import {
 } from "../connections.ts";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { useT } from "../i18n.ts";
-import { shellCall, type ShellState, shellState } from "../shell.ts";
+import { errorText } from "../providers.ts";
+import { type ShellState, shellCall, shellState } from "../shell.ts";
 import type { ConnectionEntry } from "../types.ts";
 
 interface ConnectionPickerProps {
@@ -69,19 +69,21 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
   /** The displayed server, as the shell reports it. */
   useEffect(() => {
     let stale = false;
-    shellState.read().then((shell) => {
-      if (!stale) setState(shell);
-    }).catch((failure: unknown) => {
-      if (!stale) setError(errorText(failure));
-    });
+    shellState
+      .read()
+      .then((shell) => {
+        if (!stale) setState(shell);
+      })
+      .catch((failure: unknown) => {
+        if (!stale) setError(errorText(failure));
+      });
     return () => {
       stale = true;
     };
   }, []);
 
-  const selected = state === null
-    ? null
-    : displayedConnectionId(servers, state);
+  const selected =
+    state === null ? null : displayedConnectionId(servers, state);
 
   /** The current server's label: the name the shell was switched with, or —
    * for a server this page's registry knows nothing about — its origin. */
@@ -96,17 +98,18 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
   const connect = (target: ConnectionEntry | "local") => {
     setBusy(target === "local" ? "" : target.id);
     setError(null);
-    const switching = target === "local"
-      ? shellCall("connect-local")
-      // The shell owns the navigation: passing the URL through the bridge
-      // keeps the token out of this page's own history. The name travels
-      // with it because the page that loads next cannot look it up: a
-      // remote page's registry is that server's own.
-      : shellCall("connect-remote", {
-        url: target.url.trim(),
-        token: target.token,
-        name: connectionLabel(target),
-      });
+    const switching =
+      target === "local"
+        ? shellCall("connect-local")
+        : // The shell owns the navigation: passing the URL through the bridge
+          // keeps the token out of this page's own history. The name travels
+          // with it because the page that loads next cannot look it up: a
+          // remote page's registry is that server's own.
+          shellCall("connect-remote", {
+            url: target.url.trim(),
+            token: target.token,
+            name: connectionLabel(target),
+          });
     void switching.then(
       () => {
         setBusy(null);

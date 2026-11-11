@@ -36,7 +36,10 @@ export class TextCards {
     // needs the scan after the delta that completes it.
     const mayOpen = /^ {0,3}(`{3,}|~{3,})/.test(beforeLine);
     if (
-      !this.open && !delta.includes("`") && !delta.includes("~") && !mayOpen
+      !this.open &&
+      !delta.includes("`") &&
+      !delta.includes("~") &&
+      !mayOpen
     ) {
       return null;
     }
@@ -125,11 +128,13 @@ export function translateRunEvent(
     case "message_update": {
       const update = event.assistantMessageEvent;
       if (update.type !== "text_delta") return { events: [] };
-      const events: ClientEvent[] = [{
-        type: "message_delta",
-        sessionId,
-        delta: update.delta,
-      }];
+      const events: ClientEvent[] = [
+        {
+          type: "message_delta",
+          sessionId,
+          delta: update.delta,
+        },
+      ];
       const piece = textCards?.push(update.delta) ?? null;
       if (piece !== null) {
         events.push({
@@ -142,48 +147,54 @@ export function translateRunEvent(
       return { events };
     }
     case "message_end": {
-      const events: ClientEvent[] = [{
-        type: "message_end",
-        sessionId,
-        message: event.message,
-      }];
+      const events: ClientEvent[] = [
+        {
+          type: "message_end",
+          sessionId,
+          message: event.message,
+        },
+      ];
       // A message that was narration ends here without becoming one (see
       // agent/stella-stream.ts): the card it drew has nowhere to land.
-      if (
-        event.message.role === "assistant" && textCards?.end() === true
-      ) {
+      if (event.message.role === "assistant" && textCards?.end() === true) {
         events.push({ type: "card_end", sessionId });
       }
       return { events, persist: true, modelError: event.message };
     }
     case "tool_execution_start":
       return {
-        events: [{
-          type: "tool_start",
-          sessionId,
-          toolCallId: event.toolCallId,
-          toolName: event.toolName,
-          args: event.args,
-        }],
+        events: [
+          {
+            type: "tool_start",
+            sessionId,
+            toolCallId: event.toolCallId,
+            toolName: event.toolName,
+            args: event.args,
+          },
+        ],
       };
     case "tool_execution_end":
       return {
-        events: [{
-          type: "tool_end",
-          sessionId,
-          toolCallId: event.toolCallId,
-          toolName: event.toolName,
-        }],
+        events: [
+          {
+            type: "tool_end",
+            sessionId,
+            toolCallId: event.toolCallId,
+            toolName: event.toolName,
+          },
+        ],
       };
     case "turn_end":
       return { events: [], turnEnded: event.message };
     case "agent_end":
       return {
-        events: [{
-          type: "agent_end",
-          sessionId,
-          ...(reply === undefined || reply.length === 0 ? {} : { reply }),
-        }],
+        events: [
+          {
+            type: "agent_end",
+            sessionId,
+            ...(reply === undefined || reply.length === 0 ? {} : { reply }),
+          },
+        ],
       };
   }
 }

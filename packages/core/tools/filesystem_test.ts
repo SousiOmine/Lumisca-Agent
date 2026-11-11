@@ -1,19 +1,19 @@
 import { basename, join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
+import {
+  MINI_PNG,
+  makeRealTempDir,
+  noisyPng,
+  removeDirRetry,
+  toolText,
+} from "../test-utils.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
-import { HostFileBackend } from "./host/files.ts";
 import {
   createEditFileTool,
   createReadFileTool,
   createWriteFileTool,
 } from "./filesystem.ts";
-import {
-  makeRealTempDir,
-  MINI_PNG,
-  noisyPng,
-  removeDirRetry,
-  toolText,
-} from "../test-utils.ts";
+import { HostFileBackend } from "./host/files.ts";
 
 function hostFiles(root: string) {
   return new HostFileBackend(new Sandbox([root]));
@@ -49,9 +49,8 @@ Deno.test("read passes raster images to the model as image blocks", async () => 
     const images = result.content.filter((c) => c.type === "image");
     assertEquals(images.length, 1);
     assertEquals(images[0]?.mimeType, "image/png");
-    const decoded = Uint8Array.from(
-      atob(images[0]!.data),
-      (c) => c.charCodeAt(0),
+    const decoded = Uint8Array.from(atob(images[0]!.data), (c) =>
+      c.charCodeAt(0),
     );
     assertEquals(decoded, MINI_PNG);
     // A text note keeps the image visible in text-only UIs.
@@ -95,16 +94,14 @@ Deno.test("read stores a bounded copy of a large image", async () => {
 Deno.test("read maps common image extensions to mime types", async () => {
   const { root, folder } = await fixture();
   try {
-    for (
-      const [ext, mime] of [
-        [".jpg", "image/jpeg"],
-        [".jpeg", "image/jpeg"],
-        [".gif", "image/gif"],
-        [".webp", "image/webp"],
-        [".bmp", "image/bmp"],
-        [".PNG", "image/png"], // case-insensitive
-      ] as const
-    ) {
+    for (const [ext, mime] of [
+      [".jpg", "image/jpeg"],
+      [".jpeg", "image/jpeg"],
+      [".gif", "image/gif"],
+      [".webp", "image/webp"],
+      [".bmp", "image/bmp"],
+      [".PNG", "image/png"], // case-insensitive
+    ] as const) {
       const name = `photo${ext}`;
       await Deno.writeFile(join(root, name), MINI_PNG);
       const result = await makeRead(root).execute("id", {
@@ -192,13 +189,11 @@ Deno.test("read rejects invalid line ranges", async () => {
   const { root, folder } = await fixture();
   try {
     const read = makeRead(root);
-    for (
-      const path of [
-        `${folder}/main.ts:50-2`, // end before start
-        `${folder}/main.ts:0-5`, // line numbers start at 1
-        `${folder}/main.ts:50+0`, // empty range
-      ]
-    ) {
+    for (const path of [
+      `${folder}/main.ts:50-2`, // end before start
+      `${folder}/main.ts:0-5`, // line numbers start at 1
+      `${folder}/main.ts:50+0`, // empty range
+    ]) {
       await assertRejects(
         () => read.execute("id", { path }),
         Error,
@@ -504,10 +499,7 @@ Deno.test("write creates new files with line endings as sent", async () => {
       path: `${folder}/new.txt`,
       content: "a\nb\n",
     });
-    assertEquals(
-      await Deno.readTextFile(file),
-      "a\nb\n",
-    );
+    assertEquals(await Deno.readTextFile(file), "a\nb\n");
   } finally {
     await removeDirRetry(root);
   }
@@ -533,65 +525,62 @@ Deno.test("read strips CR so CRLF files display as clean LF lines", async () => 
   }
 });
 
-Deno.test(
-  "parallel edits to the same file are serialized (no lost update)",
-  async () => {
-    const { root, folder } = await fsFixture();
-    const file = join(root, "sample.txt");
-    try {
-      const edit = makeFs(root).edit;
-      // pi-agent-core executes the tool calls of one assistant message in
-      // parallel (toolExecution defaults to "parallel"). Without the
-      // per-file lock, concurrent read-modify-write edits to the same
-      // file would both read the pre-edit content and the later write
-      // would silently discard the earlier edit — while both report
-      // "Edited". Each round runs three concurrent edits; a lost update
-      // must never happen.
-      for (let round = 0; round < 10; round++) {
-        const lines = Array.from({ length: 10000 }, (_, i) => `line-${i}`);
-        await Deno.writeTextFile(file, lines.join("\n"));
-        const [r1, r2, r3] = await Promise.all([
-          edit.execute("id-1", {
-            path: `${folder}/sample.txt`,
-            old_string: "line-1000",
-            new_string: "line-1000-EDITED",
-          }),
-          edit.execute("id-2", {
-            path: `${folder}/sample.txt`,
-            old_string: "line-2000",
-            new_string: "line-2000-EDITED",
-          }),
-          edit.execute("id-3", {
-            path: `${folder}/sample.txt`,
-            old_string: "line-3000",
-            new_string: "line-3000-EDITED",
-          }),
-        ]);
-        for (const result of [r1, r2, r3]) {
-          assert(
-            toolText(result).startsWith("Edited"),
-            `round ${round}: ${toolText(result)}`,
-          );
-        }
-        const text = await Deno.readTextFile(file);
+Deno.test("parallel edits to the same file are serialized (no lost update)", async () => {
+  const { root, folder } = await fsFixture();
+  const file = join(root, "sample.txt");
+  try {
+    const edit = makeFs(root).edit;
+    // pi-agent-core executes the tool calls of one assistant message in
+    // parallel (toolExecution defaults to "parallel"). Without the
+    // per-file lock, concurrent read-modify-write edits to the same
+    // file would both read the pre-edit content and the later write
+    // would silently discard the earlier edit — while both report
+    // "Edited". Each round runs three concurrent edits; a lost update
+    // must never happen.
+    for (let round = 0; round < 10; round++) {
+      const lines = Array.from({ length: 10000 }, (_, i) => `line-${i}`);
+      await Deno.writeTextFile(file, lines.join("\n"));
+      const [r1, r2, r3] = await Promise.all([
+        edit.execute("id-1", {
+          path: `${folder}/sample.txt`,
+          old_string: "line-1000",
+          new_string: "line-1000-EDITED",
+        }),
+        edit.execute("id-2", {
+          path: `${folder}/sample.txt`,
+          old_string: "line-2000",
+          new_string: "line-2000-EDITED",
+        }),
+        edit.execute("id-3", {
+          path: `${folder}/sample.txt`,
+          old_string: "line-3000",
+          new_string: "line-3000-EDITED",
+        }),
+      ]);
+      for (const result of [r1, r2, r3]) {
         assert(
-          text.includes("line-1000-EDITED"),
-          `round ${round}: first edit was lost`,
-        );
-        assert(
-          text.includes("line-2000-EDITED"),
-          `round ${round}: second edit was lost`,
-        );
-        assert(
-          text.includes("line-3000-EDITED"),
-          `round ${round}: third edit was lost`,
+          toolText(result).startsWith("Edited"),
+          `round ${round}: ${toolText(result)}`,
         );
       }
-    } finally {
-      await removeDirRetry(root);
+      const text = await Deno.readTextFile(file);
+      assert(
+        text.includes("line-1000-EDITED"),
+        `round ${round}: first edit was lost`,
+      );
+      assert(
+        text.includes("line-2000-EDITED"),
+        `round ${round}: second edit was lost`,
+      );
+      assert(
+        text.includes("line-3000-EDITED"),
+        `round ${round}: third edit was lost`,
+      );
     }
-  },
-);
+  } finally {
+    await removeDirRetry(root);
+  }
+});
 
 Deno.test("parallel writes to the same file are serialized", async () => {
   const { root, folder } = await fsFixture();

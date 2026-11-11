@@ -1,7 +1,7 @@
-import { assert, assertEquals, assertRejects } from "@std/assert";
 import { join } from "node:path";
+import { assert, assertEquals, assertRejects } from "@std/assert";
 import { MAX_VISUAL_SVG_BYTES } from "../shared/mod.ts";
-import { makeRealTempDir, MINI_PNG, removeDirRetry } from "../test-utils.ts";
+import { MINI_PNG, makeRealTempDir, removeDirRetry } from "../test-utils.ts";
 import { SessionVisualStore } from "./visuals.ts";
 
 /** Run `fn` against a store rooted in a fresh temp directory. */
@@ -81,16 +81,14 @@ Deno.test("resolve refuses anything that is not an asset name", async () => {
     // A file the store did not name is not reachable through it, even when
     // it sits in the session's own directory.
     await Deno.writeTextFile(join(root, "s1", "notes.txt"), "secret");
-    for (
-      const requested of [
-        "../notes.txt",
-        "s1/../notes.txt",
-        "notes.txt",
-        name.replace(".png", ".pdf"),
-        name.toUpperCase(),
-        "",
-      ]
-    ) {
+    for (const requested of [
+      "../notes.txt",
+      "s1/../notes.txt",
+      "notes.txt",
+      name.replace(".png", ".pdf"),
+      name.toUpperCase(),
+      "",
+    ]) {
       assertEquals(
         await store.resolve("s1", requested),
         undefined,

@@ -1,13 +1,13 @@
-import { fakeModel } from "../test-utils.ts";
-import { assertEquals } from "@std/assert";
-import { fauxAssistantMessage } from "@lumisca/core";
 import type {
   AssistantMessageEventStream,
   ImageContent,
+  StreamFn,
   StreamRequest,
   TextContent,
 } from "@lumisca/core";
-import type { StreamFn } from "@lumisca/core";
+import { fauxAssistantMessage } from "@lumisca/core";
+import { assertEquals } from "@std/assert";
+import { fakeModel } from "../test-utils.ts";
 import { ImageAnalyzer } from "./image-analysis.ts";
 
 const IMAGE: ImageContent = {

@@ -1,13 +1,13 @@
-import { Hono } from "hono";
 import type { Workspace, WorkspaceFileEntry } from "@lumisca/core";
 import { listWorkspaceFiles, suggestWorkspaceFiles } from "@lumisca/core";
+import { Hono } from "hono";
+import { ttlCache } from "../cache.ts";
 import {
   AppError,
   parseBody,
   requireNonEmptyString,
   requireStringArray,
 } from "./util.ts";
-import { ttlCache } from "../cache.ts";
 
 interface WorkspaceBody {
   name?: unknown;
@@ -78,11 +78,11 @@ export function workspaceRoutes(core: WorkspaceApi): Hono {
       ...(typeof body.name === "string" ? { name: body.name } : {}),
       ...(body.folders !== undefined
         ? {
-          folders: requireStringArray(
-            body.folders,
-            "folders (non-empty string[])",
-          ),
-        }
+            folders: requireStringArray(
+              body.folders,
+              "folders (non-empty string[])",
+            ),
+          }
         : {}),
     });
     return c.json(ws);

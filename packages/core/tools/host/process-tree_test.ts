@@ -1,7 +1,7 @@
 import { assertEquals } from "@std/assert";
+import { removeDirRetry, waitUntil } from "../../test-utils.ts";
 import { killProcessTree } from "./process-tree.ts";
 import { shellCommand } from "./shell.ts";
-import { removeDirRetry, waitUntil } from "../../test-utils.ts";
 
 /**
  * `killProcessTree` stops the tree a command grew, not only the shell the
@@ -28,20 +28,16 @@ Deno.test({
       // (and holding the shell's pipes, which is what made a killed
       // command's output look alive).
       const child = shellCommand({
-        command:
-          `sh -c 'while :; do echo tick >> ${marker}; sleep 0.2; done' & wait`,
+        command: `sh -c 'while :; do echo tick >> ${marker}; sleep 0.2; done' & wait`,
         cwd: root,
       }).spawn();
-      await waitUntil(
-        () => {
-          try {
-            return Deno.statSync(`${root}/${marker}`).size > 0;
-          } catch {
-            return false;
-          }
-        },
-        "the command's child to write its first tick",
-      );
+      await waitUntil(() => {
+        try {
+          return Deno.statSync(`${root}/${marker}`).size > 0;
+        } catch {
+          return false;
+        }
+      }, "the command's child to write its first tick");
 
       await killProcessTree(child);
 

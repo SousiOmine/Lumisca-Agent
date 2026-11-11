@@ -1,10 +1,10 @@
-import type { Context, Hono } from "hono";
-import { TOKEN_HEADER } from "./health-probe.ts";
-import { getCookie, setCookie } from "hono/cookie";
-import { cors } from "hono/cors";
 import { MCP_OAUTH_CALLBACK_PATH } from "@lumisca/core";
 import { isLoopbackHost, type Locale } from "@lumisca/core/shared";
+import type { Context, Hono } from "hono";
+import { getCookie, setCookie } from "hono/cookie";
+import { cors } from "hono/cors";
 import { TOKEN_COOKIE_OPTIONS, tokenCookieName } from "./auth-cookie.ts";
+import { TOKEN_HEADER } from "./health-probe.ts";
 import { renderTokenRequiredPage } from "./render.ts";
 
 /** What the guards need from the launcher. */
@@ -23,8 +23,10 @@ export function validateHostConfig(
   token: string | undefined,
 ): string | null {
   if (isLoopbackHost(host) || token) return null;
-  return `binding to "${host}" without LUMISCA_TOKEN would expose the agent ` +
-    "to the network; set LUMISCA_TOKEN or bind a loopback address";
+  return (
+    `binding to "${host}" without LUMISCA_TOKEN would expose the agent ` +
+    "to the network; set LUMISCA_TOKEN or bind a loopback address"
+  );
 }
 
 /** Validate the Host header for embedding into the page (the CSP names
@@ -68,13 +70,17 @@ export function hostnameOf(host: string | undefined): string {
  * element (render.ts), and nothing else ever requested that URL, so both the
  * route and this exemption are gone. */
 function unguardedPath(path: string): boolean {
-  return path === "/assets/app.js" ||
-    path === "/favicon.png" || path === MCP_OAUTH_CALLBACK_PATH ||
-    path === "/manifest.webmanifest" || path === "/sw.js" ||
+  return (
+    path === "/assets/app.js" ||
+    path === "/favicon.png" ||
+    path === MCP_OAUTH_CALLBACK_PATH ||
+    path === "/manifest.webmanifest" ||
+    path === "/sw.js" ||
     // Every `/pwa/` file is a committed icon: the route there serves only
     // the names in `PWA_ICON_FILES`, so the prefix cannot expose anything
     // else.
-    path.startsWith("/pwa/");
+    path.startsWith("/pwa/")
+  );
 }
 
 /** Origins allowed to read cross-origin responses (the Tauri WebView). */
@@ -125,9 +131,11 @@ export function sameServerAuthority(
     // Host and port together: a different port must never pass (any other
     // local dev server would otherwise read the API cross-origin).
     if (actual.host === expected.host) return true;
-    return actual.port === expected.port &&
+    return (
+      actual.port === expected.port &&
       isLoopbackHost(actual.hostname) &&
-      isLoopbackHost(hostnameOf(host));
+      isLoopbackHost(hostnameOf(host))
+    );
   } catch {
     return false;
   }
@@ -190,8 +198,7 @@ export function installSecurityMiddleware(
       if (!unguardedPath(c.req.path)) {
         const cookieName = tokenCookieName(c.req.header("host"));
         const remembered = getCookie(c, cookieName);
-        const presented = c.req.header(TOKEN_HEADER) ??
-          c.req.query("token");
+        const presented = c.req.header(TOKEN_HEADER) ?? c.req.query("token");
         if (presented !== token && remembered !== token) {
           // A browser (Accept: text/html) is told what to do; every other
           // client keeps the JSON error it can parse. The page renders in
@@ -199,10 +206,7 @@ export function installSecurityMiddleware(
           // loads, so the catalogue is the only source of its text).
           return c.req.header("accept")?.includes("text/html")
             ? c.html(renderTokenRequiredPage(language(c)), 401)
-            : c.json(
-              { error: "Unauthorized: missing or invalid token" },
-              401,
-            );
+            : c.json({ error: "Unauthorized: missing or invalid token" }, 401);
         }
         // The client presented the token itself, so let the browser
         // remember it: the next visit — an address without any credential —
@@ -236,7 +240,8 @@ export function installSecurityMiddleware(
   app.use("/ws", async (c, next) => {
     const origin = c.req.header("origin");
     if (
-      origin !== undefined && !isAllowedOrigin(origin, c.req.header("host"))
+      origin !== undefined &&
+      !isAllowedOrigin(origin, c.req.header("host"))
     ) {
       return c.text("Forbidden: cross-origin WebSocket", 403);
     }

@@ -1,4 +1,5 @@
 import { CoreError } from "../errors.ts";
+import type { SessionAttachmentStore } from "../session/attachments.ts";
 import {
   type AttachmentRef,
   MAX_ATTACHMENT_BYTES,
@@ -6,7 +7,6 @@ import {
   MAX_ATTACHMENTS_TOTAL_BYTES,
   TOOL_CHAT_ATTACH,
 } from "../shared/mod.ts";
-import type { SessionAttachmentStore } from "../session/attachments.ts";
 import type { FileBackend } from "./file-backend.ts";
 import { requireExistingFileWithSize } from "./resolve.ts";
 import { array, object, string, type Tool, type ToolResult } from "./schema.ts";
@@ -143,10 +143,12 @@ export function createChatAttachTool(
         ...(signal !== undefined ? { signal } : {}),
       });
       return {
-        content: [{
-          type: "text",
-          text: receipt(attachments.length),
-        }],
+        content: [
+          {
+            type: "text",
+            text: receipt(attachments.length),
+          },
+        ],
         details: { attachments },
       };
     },

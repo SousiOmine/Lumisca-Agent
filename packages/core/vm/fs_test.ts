@@ -1,9 +1,9 @@
 import { assert, assertEquals } from "@std/assert";
+import type { VmCommandResult } from "./command.ts";
+import type { VmExec, VmExecOptions } from "./container.ts";
+import { VM_WORKDIR } from "./contract.ts";
 import { VmFileBackend } from "./fs.ts";
 import { shellQuote } from "./quote.ts";
-import { VM_WORKDIR } from "./contract.ts";
-import type { VmExec, VmExecOptions } from "./container.ts";
-import type { VmCommandResult } from "./command.ts";
 
 /**
  * The VM backends are tested against a scripted exec seam: each test states
@@ -72,8 +72,8 @@ Deno.test("vm fs: resolve confines every path to the machine's home", async () =
   assertEquals(absolute, { ok: true, path: `${VM_WORKDIR}/a/b` });
 
   // Escapes are normalized away and then refused.
-  const escape = await files.resolve("../../etc/passwd");
-  assertEquals(escape.ok, false);
+  const escaped = await files.resolve("../../etc/passwd");
+  assertEquals(escaped.ok, false);
   const absoluteEscape = await files.resolve("/etc/passwd");
   assertEquals(absoluteEscape.ok, false);
   if (!absoluteEscape.ok) {
@@ -113,9 +113,7 @@ Deno.test("vm fs: stat answers undefined for a missing path", async () => {
 
 Deno.test("vm fs: readHead decodes base64 and reports the size", async () => {
   // "hello" in base64.
-  const { run } = script([
-    { match: /^base64 --wrap=0/, stdout: "aGVsbG8=\n" },
-  ]);
+  const { run } = script([{ match: /^base64 --wrap=0/, stdout: "aGVsbG8=\n" }]);
   const result = await backend(run).readHead("/home/agent/x.txt", 1024);
   assertEquals(new TextDecoder().decode(result.bytes), "hello");
   assertEquals(result.size, 5);
@@ -135,9 +133,7 @@ Deno.test("vm fs: an oversized read fails with the range hint", async () => {
 });
 
 Deno.test("vm fs: writeText sends the payload over stdin, never inline", async () => {
-  const { run, calls } = script([
-    { match: /^sh -c mkdir -p/, stdout: "" },
-  ]);
+  const { run, calls } = script([{ match: /^sh -c mkdir -p/, stdout: "" }]);
   await backend(run).writeText("/home/agent/a.txt", "content");
   const [argv] = calls;
   assert(argv !== undefined);
@@ -147,9 +143,7 @@ Deno.test("vm fs: writeText sends the payload over stdin, never inline", async (
 });
 
 Deno.test("vm fs: a private write is owner-only inside the machine", async () => {
-  const { run, calls } = script([
-    { match: /^sh -c umask 077/, stdout: "" },
-  ]);
+  const { run, calls } = script([{ match: /^sh -c umask 077/, stdout: "" }]);
   await backend(run).writeText("/home/agent/spill.txt", "secret", {
     private: true,
   });
@@ -177,9 +171,7 @@ Deno.test("vm fs: readRanges returns the lines and the file length", async () =>
 });
 
 Deno.test("vm fs: readRanges reports a range past the end", async () => {
-  const { run } = script([
-    { match: /^sh -c wc -l/, stdout: "2\nonly\n" },
-  ]);
+  const { run } = script([{ match: /^sh -c wc -l/, stdout: "2\nonly\n" }]);
   const result = await backend(run).readRanges("/home/agent/log.txt", [
     { from: 10, to: 20 },
   ]);

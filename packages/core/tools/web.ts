@@ -33,18 +33,22 @@ const MAX_SEARCH_LISTING_CHARS = 20_000;
 
 const searchSchema = object({
   query: string("What to search for. Write it the way a person would search."),
-  limit: optional(integer(
-    `How many results to return (default ${DEFAULT_SEARCH_LIMIT}, at most ` +
-      `${MAX_SEARCH_LIMIT}).`,
-  )),
+  limit: optional(
+    integer(
+      `How many results to return (default ${DEFAULT_SEARCH_LIMIT}, at most ` +
+        `${MAX_SEARCH_LIMIT}).`,
+    ),
+  ),
 });
 
 const fetchSchema = object({
   url: string("The URL to read. Only http and https URLs can be fetched."),
-  maxChars: optional(integer(
-    `Characters of the page to return (default ${DEFAULT_FETCH_CHARS}, at ` +
-      `most ${MAX_FETCH_CHARS}).`,
-  )),
+  maxChars: optional(
+    integer(
+      `Characters of the page to return (default ${DEFAULT_FETCH_CHARS}, at ` +
+        `most ${MAX_FETCH_CHARS}).`,
+    ),
+  ),
 });
 
 /** The tools of one configured provider. */
@@ -65,10 +69,12 @@ export function createWebSearchTools(provider: SearchProvider): Tool[] {
           ...(signal === undefined ? {} : { signal }),
         });
         return {
-          content: [{
-            type: "text" as const,
-            text: formatSearch(provider.name, params.query, response),
-          }],
+          content: [
+            {
+              type: "text" as const,
+              text: formatSearch(provider.name, params.query, response),
+            },
+          ],
           details: {
             provider: provider.id,
             query: params.query,
@@ -97,10 +103,12 @@ export function createWebSearchTools(provider: SearchProvider): Tool[] {
           ...(signal === undefined ? {} : { signal }),
         });
         return {
-          content: [{
-            type: "text" as const,
-            text: formatFetch(response),
-          }],
+          content: [
+            {
+              type: "text" as const,
+              text: formatFetch(response),
+            },
+          ],
           details: { provider: provider.id, url: response.url },
         };
       } catch (error) {
@@ -141,8 +149,10 @@ function formatSearch(
   const text = lines.join("\n");
   if (text.length <= MAX_SEARCH_LISTING_CHARS) return text;
   const omitted = text.length - MAX_SEARCH_LISTING_CHARS;
-  return `${text.slice(0, MAX_SEARCH_LISTING_CHARS)}\n\n` +
-    `[${omitted} characters omitted]`;
+  return (
+    `${text.slice(0, MAX_SEARCH_LISTING_CHARS)}\n\n` +
+    `[${omitted} characters omitted]`
+  );
 }
 
 /** Title, URL, then the text. */

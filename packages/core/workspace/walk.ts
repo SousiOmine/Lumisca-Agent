@@ -197,8 +197,10 @@ export class GitignoreMatcher {
     for (const [root, rules] of this.rulesByRoot) {
       if (!isWithin(root, walkRoot)) continue;
       // Rules are root-relative; re-base the walk-relative path.
-      const rootRelative = relative(root, join(walkRoot, relPath))
-        .replace(/\\/g, "/");
+      const rootRelative = relative(root, join(walkRoot, relPath)).replace(
+        /\\/g,
+        "/",
+      );
       return applyRules(rules, rootRelative, isDir);
     }
     return false;

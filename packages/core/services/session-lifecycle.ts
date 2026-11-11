@@ -1,6 +1,6 @@
+import type { SessionInfo } from "../domain/session.ts";
 import { CoreError } from "../errors.ts";
 import { formatSessionName, type ThinkingLevel } from "../shared/mod.ts";
-import type { SessionInfo } from "../domain/session.ts";
 import type { SessionServiceDeps } from "./session-deps.ts";
 
 /** The default model a new session gets, with the thinking control data the
@@ -77,9 +77,10 @@ export class SessionLifecycle {
   async createSession(input: CreateSessionInput): Promise<SessionInfo> {
     // No workspaceId → a chat session in the folder-less chat workspace
     // (created on first use).
-    const workspace = input.workspaceId !== undefined
-      ? this.deps.requireWorkspace(input.workspaceId)
-      : this.deps.chatWorkspace();
+    const workspace =
+      input.workspaceId !== undefined
+        ? this.deps.requireWorkspace(input.workspaceId)
+        : this.deps.chatWorkspace();
     const model = await this.deps.resolveDefaultModel(
       input.modelProvider,
       input.modelId,
@@ -108,9 +109,9 @@ export class SessionLifecycle {
   }
 
   listSessions(workspaceId?: string): SessionInfo[] {
-    return this.deps.sessions.list(workspaceId).map((s) =>
-      this.deps.decorate(s)
-    );
+    return this.deps.sessions
+      .list(workspaceId)
+      .map((s) => this.deps.decorate(s));
   }
 
   getSession(id: string): SessionInfo | undefined {

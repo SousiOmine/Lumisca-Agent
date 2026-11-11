@@ -1,8 +1,8 @@
-import { join } from "node:path";
 import { realpathSync } from "node:fs";
+import { join } from "node:path";
 import { assertEquals } from "@std/assert";
-import { HostCommandRunner } from "./command-runner.ts";
 import { removeDirRetry } from "../../test-utils.ts";
+import { HostCommandRunner } from "./command-runner.ts";
 
 /** A temp workspace both shells can read (`cat` is a real binary on POSIX
  * and a Get-Content alias in PowerShell), resolved so macOS's /var symlink

@@ -4,16 +4,15 @@ import {
   IconClipboard,
 } from "@tabler/icons-preact";
 import type { ComponentChildren } from "preact";
-
-import { useLocale, useT } from "../../i18n.ts";
 import { formatClockTime } from "../../format.ts";
 import { useCopy } from "../../hooks/useSave.ts";
+import { useLocale, useT } from "../../i18n.ts";
 import type { StellaEntry } from "../../types.ts";
-import { PromptFiles } from "./PromptFiles.tsx";
 import { AttachmentCard } from "../chat/AttachmentCard.tsx";
-import { MarkdownBlock } from "../chat/MarkdownBlock.tsx";
 import { CardView } from "../chat/CardView.tsx";
+import { MarkdownBlock } from "../chat/MarkdownBlock.tsx";
 import { AgentAvatar } from "./AgentAvatar.tsx";
+import { PromptFiles } from "./PromptFiles.tsx";
 
 /**
  * The agent a conversation's messages are drawn with: enough to name it and
@@ -138,11 +137,9 @@ function UserBubble({
       <div className="msg user">
         <div className="msg-body">
           {entry.text && <p className="msg-user-text">{entry.text}</p>}
-          {
-            /* The pictures and files the user attached are part of what they
+          {/* The pictures and files the user attached are part of what they
               said, so they sit inside the bubble, under its text. Their bytes
-              are read back from the machine, which is where they live. */
-          }
+              are read back from the machine, which is where they live. */}
           {entry.files.length > 0 && (
             <PromptFiles files={entry.files} base={uploadBase} />
           )}
@@ -164,15 +161,15 @@ function UserBubble({
             aria-label={t("chat.message.copy")}
             onClick={() => void copy()}
           >
-            {copied
-              ? <IconCheck size={16} stroke={2} />
-              : <IconClipboard size={16} stroke={1.5} />}
+            {copied ? (
+              <IconCheck size={16} stroke={2} />
+            ) : (
+              <IconClipboard size={16} stroke={1.5} />
+            )}
           </button>
         )}
-        {
-          /* Mounted empty and filled on success: a live region has to be in
-            the tree before its text changes to be announced. */
-        }
+        {/* Mounted empty and filled on success: a live region has to be in
+            the tree before its text changes to be announced. */}
         <span className="visually-hidden" role="status">
           {copied ? t("chat.message.copied") : null}
         </span>
@@ -210,11 +207,9 @@ function AgentBubble({
       className={`stella-msg${showAvatar ? "" : " continued"}`}
       data-enter={entering || undefined}
     >
-      {
-        /* The face is decorative: the header names the agent the whole
+      {/* The face is decorative: the header names the agent the whole
           conversation is with, so a label on every message would be noise.
-          A continuation keeps the column so the text stays aligned. */
-      }
+          A continuation keeps the column so the text stays aligned. */}
       <div className="stella-msg-avatar" aria-hidden="true">
         {showAvatar && (
           <AgentAvatar
@@ -226,49 +221,37 @@ function AgentBubble({
         )}
       </div>
       <div className="stella-msg-main">
-        {
-          /* `msg-body` as well as stella's own class: the body's shared
-           * language (code blocks, inline code, paragraph rhythm) is written
-           * once, in chat.css, keyed on that class — the same one the user's
-           * bubble and every code-mode body carry. Without it a `<pre>` is
-           * an unstyled element with `overflow-x: visible`, so one long line
-           * stretched the column and made the whole transcript scroll
-           * sideways instead of the code block scrolling inside itself. */
-        }
+        {/* `msg-body` as well as stella's own class: the body's shared
+         * language (code blocks, inline code, paragraph rhythm) is written
+         * once, in chat.css, keyed on that class — the same one the user's
+         * bubble and every code-mode body carry. Without it a `<pre>` is
+         * an unstyled element with `overflow-x: visible`, so one long line
+         * stretched the column and made the whole transcript scroll
+         * sideways instead of the code block scrolling inside itself. */}
         <div className="stella-msg-body msg-body markdown">
-          {
-            /* The message in the order it was written: its words and the
-             * cards the agent put between them (see
-             * shared/ui-markup/segments.ts). */
-          }
+          {/* The message in the order it was written: its words and the
+           * cards the agent put between them (see
+           * shared/ui-markup/segments.ts). */}
           {entry.segments.map((segment, index) =>
-            segment.type === "card"
-              ? (
-                <CardView
-                  key={index}
-                  markup={segment.markup}
-                  onSend={onSend}
-                />
-              )
-              : (
-                <MarkdownBlock
-                  key={index}
-                  text={segment.text}
-                  visualBase={visualBase}
-                />
-              )
+            segment.type === "card" ? (
+              <CardView key={index} markup={segment.markup} onSend={onSend} />
+            ) : (
+              <MarkdownBlock
+                key={index}
+                text={segment.text}
+                visualBase={visualBase}
+              />
+            ),
           )}
           <AttachmentCard attachments={entry.attachments} base={attachBase} />
         </div>
-        {
-          /* The time, then the copy control — the same shape as the reader's
-           * own message, only mirrored: there the buttons come before the
-           * clock because the bubble is right-aligned, here the text starts
-           * on the left, so the clock comes first and the button closes the
-           * row. Copying the agent's words is what a reader does with an
-           * answer (a command, a path, a paragraph) and it was the one
-           * message they could not take away. */
-        }
+        {/* The time, then the copy control — the same shape as the reader's
+         * own message, only mirrored: there the buttons come before the
+         * clock because the bubble is right-aligned, here the text starts
+         * on the left, so the clock comes first and the button closes the
+         * row. Copying the agent's words is what a reader does with an
+         * answer (a command, a path, a paragraph) and it was the one
+         * message they could not take away. */}
         <div className="msg-meta start">
           {time}
           {entry.text && (
@@ -279,9 +262,11 @@ function AgentBubble({
               title={t("chat.message.copy")}
               aria-label={t("chat.message.copy")}
             >
-              {copied
-                ? <IconCheck size={16} stroke={2} />
-                : <IconClipboard size={16} stroke={1.5} />}
+              {copied ? (
+                <IconCheck size={16} stroke={2} />
+              ) : (
+                <IconClipboard size={16} stroke={1.5} />
+              )}
             </button>
           )}
         </div>

@@ -8,6 +8,8 @@
  * so tests can inspect the request and model the provider's behavior (e.g.
  * capture the reasoning option).
  */
+
+import { errorMessage } from "../errors.ts";
 import { createAssistantMessageEventStream } from "./event-stream.ts";
 import type {
   Api,
@@ -26,7 +28,6 @@ import type {
   ToolCall,
   Usage,
 } from "./types.ts";
-import { errorMessage } from "../errors.ts";
 
 export function fauxText(text: string): TextContent {
   return { type: "text", text };
@@ -58,9 +59,8 @@ export function fauxAssistantMessage(
     usage?: Usage;
   } = {},
 ): AssistantMessage {
-  const normalized: AssistantMessageContent = typeof content === "string"
-    ? [{ type: "text", text: content }]
-    : content;
+  const normalized: AssistantMessageContent =
+    typeof content === "string" ? [{ type: "text", text: content }] : content;
   return {
     role: "assistant",
     content: normalized,
@@ -80,11 +80,11 @@ export function fauxAssistantMessage(
 export type FauxResponse =
   | AssistantMessage
   | ((
-    context: StreamRequest,
-    options: StreamOptions & { reasoning?: ModelThinkingLevel },
-    state: unknown,
-    model: Model<Api>,
-  ) => AssistantMessage | Promise<AssistantMessage>);
+      context: StreamRequest,
+      options: StreamOptions & { reasoning?: ModelThinkingLevel },
+      state: unknown,
+      model: Model<Api>,
+    ) => AssistantMessage | Promise<AssistantMessage>);
 
 /** Model config the faux provider registers (subset of the Model shape). */
 export interface FauxModelConfig {
@@ -159,38 +159,42 @@ export function fauxProvider(options: FauxOptions = {}): FauxProvider {
       stream.end();
       return stream;
     }
-    const produce = typeof entry === "function"
-      ? entry(
-        context,
-        {
-          ...options,
-          reasoning: context.thinkingLevel !== undefined &&
-              context.thinkingLevel !== "off"
-            ? context.thinkingLevel
-            : undefined,
-        },
-        undefined,
-        _model,
-      )
-      : entry;
-    Promise.resolve(produce).then((message) => {
-      // Emit start(partial) first, then text/thinking deltas (so
-      // accumulate-text helpers such as streamText see the content), then
-      // close. The agent reads the message from the start event's partial
-      // when no done event follows.
-      stream.push({ type: "start", partial: message });
-      for (const block of message.content) {
-        if (block.type === "text") {
-          stream.push({ type: "text_delta", delta: block.text });
-        } else if (block.type === "thinking") {
-          stream.push({ type: "thinking_delta", delta: block.thinking });
+    const produce =
+      typeof entry === "function"
+        ? entry(
+            context,
+            {
+              ...options,
+              reasoning:
+                context.thinkingLevel !== undefined &&
+                context.thinkingLevel !== "off"
+                  ? context.thinkingLevel
+                  : undefined,
+            },
+            undefined,
+            _model,
+          )
+        : entry;
+    Promise.resolve(produce)
+      .then((message) => {
+        // Emit start(partial) first, then text/thinking deltas (so
+        // accumulate-text helpers such as streamText see the content), then
+        // close. The agent reads the message from the start event's partial
+        // when no done event follows.
+        stream.push({ type: "start", partial: message });
+        for (const block of message.content) {
+          if (block.type === "text") {
+            stream.push({ type: "text_delta", delta: block.text });
+          } else if (block.type === "thinking") {
+            stream.push({ type: "thinking_delta", delta: block.thinking });
+          }
         }
-      }
-      stream.end(message);
-    }).catch((error) => {
-      const message = errorMessage(error);
-      stream.push({ type: "error", errorMessage: message });
-    });
+        stream.end(message);
+      })
+      .catch((error) => {
+        const message = errorMessage(error);
+        stream.push({ type: "error", errorMessage: message });
+      });
     return stream;
   };
 

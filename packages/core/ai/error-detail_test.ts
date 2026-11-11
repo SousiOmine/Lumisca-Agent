@@ -10,11 +10,13 @@ function apiCallError(
 }
 
 Deno.test("describeFailedCall renders the HTTP context", () => {
-  const failed = describeFailedCall(apiCallError("Invalid JSON response", {
-    statusCode: 502,
-    url: "https://gateway.example/v1/chat/completions",
-    responseBody: "<html>bad gateway</html>",
-  }));
+  const failed = describeFailedCall(
+    apiCallError("Invalid JSON response", {
+      statusCode: 502,
+      url: "https://gateway.example/v1/chat/completions",
+      responseBody: "<html>bad gateway</html>",
+    }),
+  );
   assertEquals(failed.message, "Invalid JSON response");
   assertEquals(
     failed.detail,
@@ -66,9 +68,11 @@ Deno.test("describeFailedCall handles non-Error throws", () => {
 });
 
 Deno.test("describeFailedCall bounds the rendered detail", () => {
-  const failed = describeFailedCall(apiCallError("boom", {
-    responseBody: "x".repeat(5000),
-  }));
+  const failed = describeFailedCall(
+    apiCallError("boom", {
+      responseBody: "x".repeat(5000),
+    }),
+  );
   // A failure must not flood a banner or a transcript row.
   assertEquals(
     failed.detail !== undefined && failed.detail.length <= 241,

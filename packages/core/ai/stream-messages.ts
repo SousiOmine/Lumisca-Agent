@@ -7,20 +7,21 @@
  * are the awkward part of this module, and they are easier to follow without
  * the streaming machinery in the same file.
  */
-import { jsonSchema, tool } from "ai";
+
 import type { AssistantContent, ModelMessage, ToolSet, UserContent } from "ai";
-import type { AgentTool, Api, LlmMessage, Model } from "./types.ts";
+import { jsonSchema, tool } from "ai";
 import { toolResultTakesImages } from "./lang-model.ts";
 import {
   imageFilePart,
   readToolOutput,
-  toolDetails,
   type ToolImage,
+  type ToolOutput,
+  toolDetails,
   toolImages,
   toolModelOutput,
-  type ToolOutput,
   toolResultOutput,
 } from "./tool-envelope.ts";
+import type { AgentTool, Api, LlmMessage, Model } from "./types.ts";
 
 /** The SDK shapes the converters index into: the two content unions, and the
  * provider-options record the reasoning flag goes into. */
@@ -62,7 +63,8 @@ export function toCoreMessages(
       content: [
         {
           type: "text",
-          text: queuedImages.map((entry) => `[image from ${entry.toolName}]`)
+          text: queuedImages
+            .map((entry) => `[image from ${entry.toolName}]`)
             .join("\n"),
         },
         ...queuedImages.flatMap((entry) => entry.images.map(imageFilePart)),
@@ -77,15 +79,17 @@ export function toCoreMessages(
       const toolCallId = String(m.toolCallId ?? "");
       const toolName = String(m.toolName ?? "");
       const isError = m.isError === true;
-      const blocks = typeof m.content === "object" && Array.isArray(m.content)
-        ? m.content as Array<Record<string, unknown>>
-        : [];
-      const text = blocks.length > 0
-        ? blocks
-          .filter((b) => b.type === "text")
-          .map((b) => String(b.text ?? ""))
-          .join("\n")
-        : String(m.content ?? "");
+      const blocks =
+        typeof m.content === "object" && Array.isArray(m.content)
+          ? (m.content as Array<Record<string, unknown>>)
+          : [];
+      const text =
+        blocks.length > 0
+          ? blocks
+              .filter((b) => b.type === "text")
+              .map((b) => String(b.text ?? ""))
+              .join("\n")
+          : String(m.content ?? "");
       // The tool's images only travel to a model that can see them. For any
       // other model the image analysis already replaced them (see
       // agent/image-analysis.ts); a block that survived a failed analysis
@@ -97,17 +101,19 @@ export function toCoreMessages(
       const takesImages = !isError && toolResultTakesImages(model);
       out.push({
         role: "tool",
-        content: [{
-          type: "tool-result",
-          toolCallId,
-          toolName,
-          output: toolResultOutput(
-            text || "Tool completed.",
-            images,
-            isError,
-            takesImages,
-          ),
-        }],
+        content: [
+          {
+            type: "tool-result",
+            toolCallId,
+            toolName,
+            output: toolResultOutput(
+              text || "Tool completed.",
+              images,
+              isError,
+              takesImages,
+            ),
+          },
+        ],
       });
       if (images.length > 0 && !takesImages) {
         queuedImages.push({ toolName, images });
@@ -160,7 +166,7 @@ export function toCoreMessages(
     if (message.role === "assistant") {
       out.push({
         role: "assistant",
-        content: parts.length > 0 ? parts as VercelAssistantParts : "",
+        content: parts.length > 0 ? (parts as VercelAssistantParts) : "",
         ...(requiresReasoningContent && !hasReasoningContent
           ? { providerOptions: emptyReasoningContentOption() }
           : {}),
@@ -223,8 +229,8 @@ export function toExecutableToolSet(
           );
           return {
             text: result.content
-              .filter((c): c is { type: "text"; text: string } =>
-                c.type === "text"
+              .filter(
+                (c): c is { type: "text"; text: string } => c.type === "text",
               )
               .map((c) => c.text)
               .join("\n"),
@@ -234,11 +240,15 @@ export function toExecutableToolSet(
             // the image analysis, and the model gets them back as image
             // parts (see toolModelOutput and toCoreMessages).
             images: result.content
-              .filter((c): c is {
-                type: "image";
-                data: string;
-                mimeType: string;
-              } => c.type === "image" && c.data !== "" && c.mimeType !== "")
+              .filter(
+                (
+                  c,
+                ): c is {
+                  type: "image";
+                  data: string;
+                  mimeType: string;
+                } => c.type === "image" && c.data !== "" && c.mimeType !== "",
+              )
               .map((c) => ({ data: c.data, mimeType: c.mimeType })),
           };
         },

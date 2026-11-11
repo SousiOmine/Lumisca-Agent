@@ -1,3 +1,23 @@
+import type { NotificationStatus } from "../ai/types.ts";
+import type { ClientEvent } from "../domain/event.ts";
+import type { NotificationPayload } from "../domain/notification.ts";
+import { CoreError } from "../errors.ts";
+import type { CommandSafety } from "../safety/command-safety.ts";
+import {
+  TOOL_ASYNC_BASH,
+  TOOL_ASYNC_BASH_KILL,
+  TOOL_ASYNC_BASH_STATUS,
+} from "../shared/mod.ts";
+import type {
+  BackgroundProcess,
+  BackgroundSpawner,
+} from "./background-backend.ts";
+import { decodeOutput, detectOemLabel } from "./decode.ts";
+import { formatDuration } from "./duration.ts";
+import type { FileBackend } from "./file-backend.ts";
+import { HostBackgroundSpawner } from "./host/background.ts";
+import { requireResolved } from "./resolve.ts";
+import { safetyBlockResult } from "./safety.ts";
 import {
   integer,
   object,
@@ -6,28 +26,7 @@ import {
   stringMap,
   type Tool,
 } from "./schema.ts";
-import {
-  TOOL_ASYNC_BASH,
-  TOOL_ASYNC_BASH_KILL,
-  TOOL_ASYNC_BASH_STATUS,
-} from "../shared/mod.ts";
-
-import type { CommandSafety } from "../safety/command-safety.ts";
-import { decodeOutput, detectOemLabel } from "./decode.ts";
-import { formatDuration } from "./duration.ts";
-import { HostBackgroundSpawner } from "./host/background.ts";
-import type {
-  BackgroundProcess,
-  BackgroundSpawner,
-} from "./background-backend.ts";
-import { requireResolved } from "./resolve.ts";
-import type { FileBackend } from "./file-backend.ts";
-import { safetyBlockResult } from "./safety.ts";
 import { MAX_TOOL_OUTPUT } from "./truncate.ts";
-import { CoreError } from "../errors.ts";
-import type { NotificationPayload } from "../domain/notification.ts";
-import type { NotificationStatus } from "../ai/types.ts";
-import type { ClientEvent } from "../domain/event.ts";
 
 /** Concurrent background commands per session. Bounds resource usage; the
  * agent is told to wait or kill when the limit is reached. Only running
@@ -146,15 +145,12 @@ export function formatBackgroundNotification(
       done.exitCode ?? "?"
     })]`;
   } else if (done.reason === "timeout") {
-    title =
-      `[Background command #${id} was killed after ${duration} (timeout)]`;
+    title = `[Background command #${id} was killed after ${duration} (timeout)]`;
   } else {
     title = `[Background command #${id} was killed]`;
   }
-  const status: NotificationStatus = done.reason === "exited" &&
-      done.exitCode === 0
-    ? "success"
-    : "error";
+  const status: NotificationStatus =
+    done.reason === "exited" && done.exitCode === 0 ? "success" : "error";
   return {
     kind: "background",
     title,
@@ -194,9 +190,7 @@ export class BackgroundProcessManager {
    * Kept so status/list/tail still answer for finished commands; the
    * heavy output buffer is dropped with the record itself. */
   private readonly completed: BackgroundCommandInfo[] = [];
-  private readonly listeners = new Set<
-    (done: BackgroundCommandDone) => void
-  >();
+  private readonly listeners = new Set<(done: BackgroundCommandDone) => void>();
   private nextId = 1;
   private oemLabel: Promise<string | null> | null = null;
 
@@ -301,8 +295,10 @@ export class BackgroundProcessManager {
 
   /** One command's info, or undefined when the id is unknown. */
   get(commandId: string): BackgroundCommandInfo | undefined {
-    return this.records.get(commandId)?.info ??
-      this.completed.find((c) => c.commandId === commandId);
+    return (
+      this.records.get(commandId)?.info ??
+      this.completed.find((c) => c.commandId === commandId)
+    );
   }
 
   /** Decode the current output tail of a command (undefined when unknown).
@@ -383,7 +379,7 @@ export class BackgroundProcessManager {
     return await Promise.race([
       record.settled.then(() => true),
       new Promise<boolean>((resolve) =>
-        setTimeout(() => resolve(false), timeoutMs)
+        setTimeout(() => resolve(false), timeoutMs),
       ),
     ]);
   }
@@ -459,18 +455,15 @@ export class BackgroundProcessManager {
     return (this.oemLabel ??= detectOemLabel());
   }
 
-  private finalize(
-    record: RunningRecord,
-    exitCode: number | undefined,
-  ): void {
+  private finalize(record: RunningRecord, exitCode: number | undefined): void {
     if (record.finalized) return;
     record.finalized = true;
     if (record.timer !== undefined) clearTimeout(record.timer);
     const reason: BackgroundCommandReason = record.killedByTimeout
       ? "timeout"
       : record.killedByUser
-      ? "killed"
-      : "exited";
+        ? "killed"
+        : "exited";
     record.info.state = reason === "exited" ? "finished" : "killed";
     record.info.finishedAt = Date.now();
     record.info.exitCode = exitCode;
@@ -494,9 +487,7 @@ export class BackgroundProcessManager {
         reason,
         durationSec: Math.max(
           0,
-          Math.round(
-            (record.info.finishedAt! - record.info.startedAt) / 1000,
-          ),
+          Math.round((record.info.finishedAt! - record.info.startedAt) / 1000),
         ),
         tail,
       };
@@ -556,14 +547,16 @@ const killSchema = object({
 
 function formatStatusText(info: BackgroundCommandInfo, tail: string): string {
   const end = info.finishedAt ?? Date.now();
-  const state = info.state === "running"
-    ? `running (pid ${info.pid}) for ${formatDuration(end - info.startedAt)}`
-    : info.state === "finished"
-    ? `finished after ${formatDuration(end - info.startedAt)} (exit code ${
-      info.exitCode ?? "?"
-    })`
-    : "killed";
-  const body = `Background command #${info.commandId}: ${state}\n` +
+  const state =
+    info.state === "running"
+      ? `running (pid ${info.pid}) for ${formatDuration(end - info.startedAt)}`
+      : info.state === "finished"
+        ? `finished after ${formatDuration(end - info.startedAt)} (exit code ${
+            info.exitCode ?? "?"
+          })`
+        : "killed";
+  const body =
+    `Background command #${info.commandId}: ${state}\n` +
     `command: ${info.command}\ncwd: ${info.cwd}`;
   const trimmed = tail.trim();
   return trimmed.length > 0 ? `${body}\n\n[output tail]\n${trimmed}` : body;
@@ -571,11 +564,12 @@ function formatStatusText(info: BackgroundCommandInfo, tail: string): string {
 
 function formatListLine(info: BackgroundCommandInfo): string {
   const end = info.finishedAt ?? Date.now();
-  const state = info.state === "running"
-    ? "running"
-    : info.state === "finished"
-    ? `finished (exit ${info.exitCode ?? "?"})`
-    : "killed";
+  const state =
+    info.state === "running"
+      ? "running"
+      : info.state === "finished"
+        ? `finished (exit ${info.exitCode ?? "?"})`
+        : "killed";
   return (
     `#${info.commandId}  ${state}  ${formatDuration(end - info.startedAt)}  ` +
     `${info.command} (cwd: ${info.cwd})`
@@ -585,9 +579,7 @@ function formatListLine(info: BackgroundCommandInfo): string {
 /** The async_bash tool family: start a command in the background, check on
  * it, kill it. Completion notifications are injected by the session agent
  * (which subscribes to the manager's onExit), not by the tools. */
-export function createAsyncBashTools(
-  options: AsyncBashToolOptions,
-): Tool[] {
+export function createAsyncBashTools(options: AsyncBashToolOptions): Tool[] {
   const { manager, files, safety } = options;
 
   const startTool: Tool<typeof startSchema> = {
@@ -604,15 +596,16 @@ export function createAsyncBashTools(
     // BashToolOptions.defaultCwd).
     ...(options.defaultCwd !== undefined
       ? {
-        prepareArguments: (args: unknown) => {
-          const record = typeof args === "object" && args !== null
-            ? args as Record<string, unknown>
-            : {};
-          return record.cwd === undefined
-            ? { ...record, cwd: options.defaultCwd as string }
-            : record;
-        },
-      }
+          prepareArguments: (args: unknown) => {
+            const record =
+              typeof args === "object" && args !== null
+                ? (args as Record<string, unknown>)
+                : {};
+            return record.cwd === undefined
+              ? { ...record, cwd: options.defaultCwd as string }
+              : record;
+          },
+        }
       : {}),
     execute: async (_id, params) => {
       const cwd = await requireResolved(files, params.cwd);
@@ -630,11 +623,14 @@ export function createAsyncBashTools(
         env: params.env,
       });
       return {
-        content: [{
-          type: "text",
-          text: `Started background command #${commandId} (pid ${pid}) in ` +
-            `${cwd}: ${params.command}`,
-        }],
+        content: [
+          {
+            type: "text",
+            text:
+              `Started background command #${commandId} (pid ${pid}) in ` +
+              `${cwd}: ${params.command}`,
+          },
+        ],
         details: { commandId, pid, cwd },
       };
     },
@@ -658,12 +654,14 @@ export function createAsyncBashTools(
           };
         }
         return {
-          content: [{
-            type: "text",
-            text: `Background commands:\n${
-              list.map(formatListLine).join("\n")
-            }`,
-          }],
+          content: [
+            {
+              type: "text",
+              text: `Background commands:\n${list
+                .map(formatListLine)
+                .join("\n")}`,
+            },
+          ],
           details: { commands: list },
         };
       }
@@ -695,10 +693,10 @@ export function createAsyncBashTools(
       const text = alreadyExited
         ? `Background command #${params.id} was already finished; nothing to kill.`
         : timedOut
-        ? `Kill requested for background command #${params.id}, but the process did not settle within ${
-          KILL_SETTLE_WAIT_MS / 1000
-        }s.`
-        : `Killed background command #${params.id}.`;
+          ? `Kill requested for background command #${params.id}, but the process did not settle within ${
+              KILL_SETTLE_WAIT_MS / 1000
+            }s.`
+          : `Killed background command #${params.id}.`;
       return {
         content: [{ type: "text", text }],
         details: { commandId: params.id, alreadyExited, timedOut },

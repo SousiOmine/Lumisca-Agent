@@ -1,15 +1,14 @@
-import type { Api, Model } from "../ai/types.ts";
 import type { SessionPool } from "../agent/pool.ts";
+import type { Api, Model } from "../ai/types.ts";
 import type { ClientEvent } from "../domain/event.ts";
-import type { Locale } from "../shared/mod.ts";
-import type { ThinkingLevel } from "../shared/mod.ts";
-import type { SkillDef } from "../skills/discover.ts";
-import type { SessionRepo } from "../session/repo.ts";
-import type { MessageRepo } from "../session/messages.ts";
-import type { SessionVisualStore } from "../session/visuals.ts";
-import type { SessionAttachmentStore } from "../session/attachments.ts";
 import type { SessionInfo } from "../domain/session.ts";
 import type { Workspace } from "../domain/workspace.ts";
+import type { SessionAttachmentStore } from "../session/attachments.ts";
+import type { MessageRepo } from "../session/messages.ts";
+import type { SessionRepo } from "../session/repo.ts";
+import type { SessionVisualStore } from "../session/visuals.ts";
+import type { Locale, ThinkingLevel } from "../shared/mod.ts";
+import type { SkillDef } from "../skills/discover.ts";
 import type { StellaMachine } from "../vm/machine.ts";
 
 /**
@@ -26,10 +25,7 @@ export interface SessionServiceDeps {
   stella: StellaMachine;
   models: {
     getModel(provider: string, modelId: string): Model<Api> | undefined;
-    getSessionModel(
-      provider: string,
-      modelId: string,
-    ): Model<Api> | undefined;
+    getSessionModel(provider: string, modelId: string): Model<Api> | undefined;
     thinkingState(
       provider: string,
       modelId: string,

@@ -1,4 +1,11 @@
-import { assert, assertEquals } from "@std/assert";
+import type {
+  AgentMessage,
+  Api,
+  AssistantMessage,
+  Model,
+  StreamFn,
+  TextContent,
+} from "@lumisca/core";
 import {
   createAssistantMessageEventStream,
   fauxAssistantMessage,
@@ -6,24 +13,22 @@ import {
   fauxThinking,
   fauxToolCall,
 } from "@lumisca/core";
-import type { Api, AssistantMessage, Model, TextContent } from "@lumisca/core";
-import type { AgentMessage, StreamFn } from "@lumisca/core";
+import { assert, assertEquals } from "@std/assert";
+import { WORK_COMPACTION_STYLE } from "../ai/compaction-style.ts";
+import { MAX_RATE_LIMIT_RETRIES } from "../ai/rate-limit.ts";
+import { MAX_EMPTY_RESPONSE_RETRIES } from "../ai/retry-policy.ts";
+import type { NotificationMessage, StreamOptions } from "../ai/types.ts";
+import type { ClientEvent } from "../domain/event.ts";
 import { contentText } from "../shared/mod.ts";
-import type { StreamOptions } from "../ai/types.ts";
 import { AskHub } from "../tools/ask.ts";
 import type {
   BackgroundCommandDone,
   BackgroundProcessManager,
 } from "../tools/background.ts";
 import { object, type Tool } from "../tools/schema.ts";
-import type { ClientEvent } from "../domain/event.ts";
-import type { NotificationMessage } from "../ai/types.ts";
-import { MAX_EMPTY_RESPONSE_RETRIES } from "../ai/retry-policy.ts";
-import { SessionAgent } from "./session-agent.ts";
-import type { SessionAgentOptions } from "./session-agent.ts";
-import { WORK_COMPACTION_STYLE } from "../ai/compaction-style.ts";
-import { MAX_RATE_LIMIT_RETRIES } from "../ai/rate-limit.ts";
 import { ROUTINE_SILENCE_GUIDANCE } from "./routine-guidance.ts";
+import type { SessionAgentOptions } from "./session-agent.ts";
+import { SessionAgent } from "./session-agent.ts";
 import { NO_RESPONSE } from "./silent-reply.ts";
 
 /** A tool that succeeds immediately; a tool call keeps the loop going, so
@@ -82,7 +87,8 @@ function makeAgent(
   return new SessionAgent({
     sessionId: "s1",
     systemPrompt: "You are a test agent.",
-    model: extra.model ?? { id: "test", name: "test" } as unknown as Model<Api>,
+    model:
+      extra.model ?? ({ id: "test", name: "test" } as unknown as Model<Api>),
     tools,
     streamFn,
     compactionStyle: WORK_COMPACTION_STYLE,
@@ -125,9 +131,7 @@ function makeAgent(
 }
 
 /** The retry notifications queued into the transcript (kind "retry"). */
-function retryNotifications(
-  messages: AgentMessage[],
-): NotificationMessage[] {
+function retryNotifications(messages: AgentMessage[]): NotificationMessage[] {
   return messages.filter(
     (m): m is NotificationMessage =>
       m.role === "notification" && m.kind === "retry",
@@ -250,10 +254,12 @@ function fauxQuotaError(): AssistantMessage {
 const instantSleep = (): Promise<void> => Promise.resolve();
 
 Deno.test("a vacant response is retried within the same run", async () => {
-  const agent = makeAgent(streamSequence([
-    fauxAssistantMessage(""),
-    fauxAssistantMessage("Here is the answer."),
-  ]));
+  const agent = makeAgent(
+    streamSequence([
+      fauxAssistantMessage(""),
+      fauxAssistantMessage("Here is the answer."),
+    ]),
+  );
   await agent.prompt("hello");
 
   const messages = agent.messages;
@@ -269,9 +275,8 @@ Deno.test("consecutive vacant responses stop retrying after the limit", async ()
   const { errors, onEvent } = collectSessionErrors();
   const agent = makeAgent(
     streamSequence(
-      Array.from(
-        { length: MAX_EMPTY_RESPONSE_RETRIES + 1 },
-        () => fauxAssistantMessage(""),
+      Array.from({ length: MAX_EMPTY_RESPONSE_RETRIES + 1 }, () =>
+        fauxAssistantMessage(""),
       ),
     ),
     [],
@@ -319,14 +324,16 @@ Deno.test("a tool call resets the retry counter within a run", async () => {
 Deno.test("the retry counter resets between runs", async () => {
   // The first run burns through the retry limit; a new prompt starts a
   // fresh run, so its vacant response is retried again.
-  const agent = makeAgent(streamSequence([
-    fauxAssistantMessage(""),
-    fauxAssistantMessage(""),
-    fauxAssistantMessage(""),
-    fauxAssistantMessage(""),
-    fauxAssistantMessage(""),
-    fauxAssistantMessage("done"),
-  ]));
+  const agent = makeAgent(
+    streamSequence([
+      fauxAssistantMessage(""),
+      fauxAssistantMessage(""),
+      fauxAssistantMessage(""),
+      fauxAssistantMessage(""),
+      fauxAssistantMessage(""),
+      fauxAssistantMessage("done"),
+    ]),
+  );
   await agent.prompt("hello");
   await agent.prompt("hello again");
 
@@ -349,12 +356,14 @@ Deno.test("a silent stream error restarts the run and recovers", async () => {
 });
 
 Deno.test("silent stream errors stop restarting after the limit", async () => {
-  const agent = makeAgent(streamSequence([
-    fauxSilentError(),
-    fauxSilentError(),
-    fauxSilentError(),
-    fauxSilentError(),
-  ]));
+  const agent = makeAgent(
+    streamSequence([
+      fauxSilentError(),
+      fauxSilentError(),
+      fauxSilentError(),
+      fauxSilentError(),
+    ]),
+  );
   await agent.prompt("hello");
 
   // Three restarts (the limit), then the fourth silent error ends the
@@ -369,12 +378,14 @@ Deno.test("silent stream errors stop restarting after the limit", async () => {
 Deno.test("the retry budget spans in-run vacancies and silent errors", async () => {
   // error → vacant → error → vacant: four outputless turns share one
   // budget; only the first three are retried.
-  const agent = makeAgent(streamSequence([
-    fauxSilentError(),
-    fauxAssistantMessage(""),
-    fauxSilentError(),
-    fauxAssistantMessage(""),
-  ]));
+  const agent = makeAgent(
+    streamSequence([
+      fauxSilentError(),
+      fauxAssistantMessage(""),
+      fauxSilentError(),
+      fauxAssistantMessage(""),
+    ]),
+  );
   await agent.prompt("hello");
 
   assertEquals(
@@ -385,10 +396,12 @@ Deno.test("the retry budget spans in-run vacancies and silent errors", async () 
 });
 
 Deno.test("an aborted silent turn is never retried", async () => {
-  const agent = makeAgent(streamSequence([
-    fauxAssistantMessage("", { stopReason: "aborted" }),
-    fauxAssistantMessage("should never be produced"),
-  ]));
+  const agent = makeAgent(
+    streamSequence([
+      fauxAssistantMessage("", { stopReason: "aborted" }),
+      fauxAssistantMessage("should never be produced"),
+    ]),
+  );
   await agent.prompt("hello");
 
   const last = agent.messages.at(-1) as AssistantMessage;
@@ -398,14 +411,16 @@ Deno.test("an aborted silent turn is never retried", async () => {
 Deno.test("a new user prompt resets the silent-error retry count", async () => {
   // First prompt burns through the limit; the second prompt starts a
   // fresh exchange and gets its own retries.
-  const agent = makeAgent(streamSequence([
-    fauxSilentError(),
-    fauxSilentError(),
-    fauxSilentError(),
-    fauxSilentError(),
-    fauxSilentError(),
-    fauxAssistantMessage("Recovered on the third attempt."),
-  ]));
+  const agent = makeAgent(
+    streamSequence([
+      fauxSilentError(),
+      fauxSilentError(),
+      fauxSilentError(),
+      fauxSilentError(),
+      fauxSilentError(),
+      fauxAssistantMessage("Recovered on the third attempt."),
+    ]),
+  );
   await agent.prompt("hello");
   await agent.prompt("hello again");
 
@@ -421,13 +436,15 @@ Deno.test("a new user prompt resets the silent-error retry count", async () => {
 });
 
 Deno.test("a transient error turn with visible output continues the run", async () => {
-  const agent = makeAgent(streamSequence([
-    fauxAssistantMessage([fauxText("partial answer")], {
-      stopReason: "error",
-      errorMessage: "connection reset",
-    }),
-    fauxAssistantMessage("continued answer"),
-  ]));
+  const agent = makeAgent(
+    streamSequence([
+      fauxAssistantMessage([fauxText("partial answer")], {
+        stopReason: "error",
+        errorMessage: "connection reset",
+      }),
+      fauxAssistantMessage("continued answer"),
+    ]),
+  );
   await agent.prompt("hello");
 
   // The partial answer stays in the transcript and the run resumes with a
@@ -437,20 +454,19 @@ Deno.test("a transient error turn with visible output continues the run", async 
   assertEquals(notifications[0]!.title.includes("cut off"), true);
   const last = agent.messages.at(-1) as AssistantMessage;
   assertEquals(last.stopReason, "stop");
-  assertEquals(
-    (last.content[0] as TextContent).text,
-    "continued answer",
-  );
+  assertEquals((last.content[0] as TextContent).text, "continued answer");
 });
 
 Deno.test("a permanent error turn with visible output is not restarted", async () => {
-  const agent = makeAgent(streamSequence([
-    fauxAssistantMessage([fauxText("partial answer")], {
-      stopReason: "error",
-      errorMessage: "invalid api key",
-    }),
-    fauxAssistantMessage("never produced"),
-  ]));
+  const agent = makeAgent(
+    streamSequence([
+      fauxAssistantMessage([fauxText("partial answer")], {
+        stopReason: "error",
+        errorMessage: "invalid api key",
+      }),
+      fauxAssistantMessage("never produced"),
+    ]),
+  );
   await agent.prompt("hello");
 
   assertEquals(retryNotifications(agent.messages).length, 0);
@@ -459,13 +475,15 @@ Deno.test("a permanent error turn with visible output is not restarted", async (
 });
 
 Deno.test("a permanent silent error is not restarted", async () => {
-  const agent = makeAgent(streamSequence([
-    fauxAssistantMessage([fauxThinking("...")], {
-      stopReason: "error",
-      errorMessage: "Provider is not configured: amazon-bedrock",
-    }),
-    fauxAssistantMessage("never produced"),
-  ]));
+  const agent = makeAgent(
+    streamSequence([
+      fauxAssistantMessage([fauxThinking("...")], {
+        stopReason: "error",
+        errorMessage: "Provider is not configured: amazon-bedrock",
+      }),
+      fauxAssistantMessage("never produced"),
+    ]),
+  );
   await agent.prompt("hello");
 
   // The unconfigured provider surfaces immediately: one failed turn, no
@@ -511,10 +529,9 @@ Deno.test("rate-limit turns stop restarting after the limit", async () => {
 });
 
 Deno.test("quota exhaustion (non-rate) is not restarted", async () => {
-  const agent = makeAgent(streamSequence([
-    fauxQuotaError(),
-    fauxAssistantMessage("never produced"),
-  ]));
+  const agent = makeAgent(
+    streamSequence([fauxQuotaError(), fauxAssistantMessage("never produced")]),
+  );
   await agent.prompt("hello");
 
   // The quota error surfaces immediately: one failed turn, no retries.
@@ -523,14 +540,16 @@ Deno.test("quota exhaustion (non-rate) is not restarted", async () => {
 });
 
 Deno.test("a rate-limit turn with partial output surfaces (no restart)", async () => {
-  const agent = makeAgent(streamSequence([
-    fauxAssistantMessage([fauxText("partial answer")], {
-      stopReason: "error",
-      errorMessage:
-        "OpenAI API error (429): rate_limit_exceeded Rate limit exceeded",
-    }),
-    fauxAssistantMessage("never produced"),
-  ]));
+  const agent = makeAgent(
+    streamSequence([
+      fauxAssistantMessage([fauxText("partial answer")], {
+        stopReason: "error",
+        errorMessage:
+          "OpenAI API error (429): rate_limit_exceeded Rate limit exceeded",
+      }),
+      fauxAssistantMessage("never produced"),
+    ]),
+  );
   await agent.prompt("hello");
 
   // Visible output means the run made progress — the turn is not restarted.
@@ -667,11 +686,12 @@ Deno.test("a stop while a tool never returns leaves the session usable", async (
   const streamFn: StreamFn = () => {
     const stream = createAssistantMessageEventStream();
     calls++;
-    const message = calls === 1
-      ? fauxAssistantMessage([fauxToolCall("stuck", {}, "t1")], {
-        stopReason: "toolUse",
-      })
-      : fauxAssistantMessage("after the stop");
+    const message =
+      calls === 1
+        ? fauxAssistantMessage([fauxToolCall("stuck", {}, "t1")], {
+            stopReason: "toolUse",
+          })
+        : fauxAssistantMessage("after the stop");
     stream.push({ type: "start", partial: message });
     stream.end(message);
     return stream;
@@ -686,10 +706,7 @@ Deno.test("a stop while a tool never returns leaves the session usable", async (
   // else can.
   await agent.waitForIdle();
   assertEquals(agent.isStreaming, false);
-  assertEquals(
-    events.filter((e) => e.type === "agent_end").length >= 1,
-    true,
-  );
+  assertEquals(events.filter((e) => e.type === "agent_end").length >= 1, true);
 
   agent.promptWhileRunning("again");
   await waitFor(() => calls === 2, "the model call after the stop");
@@ -743,10 +760,9 @@ Deno.test("a rewind names removed tool results by their call id", async () => {
   const events: ClientEvent[] = [];
   const agent = makeAgent(
     streamSequence([
-      fauxAssistantMessage(
-        [fauxToolCall("mock_tool", {}, "t1")],
-        { stopReason: "toolUse" },
-      ),
+      fauxAssistantMessage([fauxToolCall("mock_tool", {}, "t1")], {
+        stopReason: "toolUse",
+      }),
       fauxAssistantMessage("done"),
     ]),
     [mockTool],
@@ -814,9 +830,10 @@ function summaryResponse(text: string): AssistantMessage {
 
 /** A stream function that serves the given responses and emits text deltas
  * for every one of them (the compactor reads the deltas). */
-function deltaStreamSequence(
-  responses: AssistantMessage[],
-): { streamFn: StreamFn; calls: () => number } {
+function deltaStreamSequence(responses: AssistantMessage[]): {
+  streamFn: StreamFn;
+  calls: () => number;
+} {
   let index = 0;
   const streamFn: StreamFn = () => {
     const stream = createAssistantMessageEventStream();
@@ -854,15 +871,10 @@ Deno.test("compaction condenses the history before a request crosses the window"
     fauxAssistantMessage([fauxText("finished")]),
   ]);
   const events: ClientEvent[] = [];
-  const agent = makeAgent(
-    streamFn,
-    [bigTool],
-    (event) => events.push(event),
-    {
-      model: smallWindowModel(),
-      compactionPolicy: () => TEST_COMPACTION_POLICY,
-    },
-  );
+  const agent = makeAgent(streamFn, [bigTool], (event) => events.push(event), {
+    model: smallWindowModel(),
+    compactionPolicy: () => TEST_COMPACTION_POLICY,
+  });
 
   await agent.prompt("go");
   await agent.waitForIdle();
@@ -870,8 +882,8 @@ Deno.test("compaction condenses the history before a request crosses the window"
   // A checkpoint was INSERTED where the retained tail starts: the messages
   // it summarizes are still in the transcript (and in the database), only
   // the model's view starts later.
-  const checkpointIndex = agent.messages.findIndex((m) =>
-    m.role === "checkpoint"
+  const checkpointIndex = agent.messages.findIndex(
+    (m) => m.role === "checkpoint",
   );
   assertEquals(checkpointIndex > 0, true);
   assertEquals(agent.messages[0]!.role, "user");
@@ -929,11 +941,7 @@ Deno.test("compaction keeps the transcript and the stored rows in step", async (
     deleteFrom: (_sessionId: string, index: number) => {
       rows.splice(index);
     },
-    insertAt: (
-      _sessionId: string,
-      index: number,
-      message: AgentMessage,
-    ) => {
+    insertAt: (_sessionId: string, index: number, message: AgentMessage) => {
       rows.splice(index, 0, message);
       return {
         id: "id",
@@ -972,7 +980,10 @@ Deno.test("compaction keeps the transcript and the stored rows in step", async (
   // The insert is durable: the stored rows reproduce the in-memory
   // transcript exactly (no stale rows, no duplicates) — and nothing was
   // deleted, so the rows are the full history plus the checkpoint.
-  assertEquals(agent.messages.some((m) => m.role === "checkpoint"), true);
+  assertEquals(
+    agent.messages.some((m) => m.role === "checkpoint"),
+    true,
+  );
   assertEquals(rows.length, agent.messages.length);
   assertEquals(
     rows.map((m) => m.role),
@@ -1002,15 +1013,10 @@ Deno.test("a context overflow condenses the history and restarts the run", async
     fauxAssistantMessage([fauxText("resumed")]),
   ]);
   const events: ClientEvent[] = [];
-  const agent = makeAgent(
-    streamFn,
-    [bigTool],
-    (event) => events.push(event),
-    {
-      model: smallWindowModel(),
-      compactionPolicy: () => TEST_COMPACTION_POLICY,
-    },
-  );
+  const agent = makeAgent(streamFn, [bigTool], (event) => events.push(event), {
+    model: smallWindowModel(),
+    compactionPolicy: () => TEST_COMPACTION_POLICY,
+  });
 
   await agent.prompt("go");
   await agent.waitForIdle();
@@ -1018,7 +1024,10 @@ Deno.test("a context overflow condenses the history and restarts the run", async
   // The overflow was recovered: a checkpoint condensed the older span, the
   // restart produced an answer, and the original error is no longer the
   // last word.
-  assertEquals(agent.messages.some((m) => m.role === "checkpoint"), true);
+  assertEquals(
+    agent.messages.some((m) => m.role === "checkpoint"),
+    true,
+  );
   assertEquals(
     agent.messages.filter((m) => m.role === "assistant").at(-1)?.stopReason,
     "stop",
@@ -1049,15 +1058,10 @@ Deno.test("a second context overflow surfaces the provider's error", async () =>
     overflow,
   ]);
   const events: ClientEvent[] = [];
-  const agent = makeAgent(
-    streamFn,
-    [bigTool],
-    (event) => events.push(event),
-    {
-      model: smallWindowModel(),
-      compactionPolicy: () => TEST_COMPACTION_POLICY,
-    },
-  );
+  const agent = makeAgent(streamFn, [bigTool], (event) => events.push(event), {
+    model: smallWindowModel(),
+    compactionPolicy: () => TEST_COMPACTION_POLICY,
+  });
 
   await agent.prompt("go");
   await agent.waitForIdle();
@@ -1078,7 +1082,10 @@ Deno.test("compaction does not run when the model documents no window", async ()
   const agent = makeAgent(streamFn, [bigTool]);
   await agent.prompt("go");
   await agent.waitForIdle();
-  assertEquals(agent.messages.some((m) => m.role === "checkpoint"), false);
+  assertEquals(
+    agent.messages.some((m) => m.role === "checkpoint"),
+    false,
+  );
 });
 
 Deno.test("compactNow condenses on demand and reports the outcome", async () => {
@@ -1291,8 +1298,8 @@ Deno.test("a compaction republishes the context its checkpoint left behind", asy
   await agent.prompt("next");
   await agent.waitForIdle();
 
-  const checkpointIndex = agent.messages.findIndex((m) =>
-    m.role === "checkpoint"
+  const checkpointIndex = agent.messages.findIndex(
+    (m) => m.role === "checkpoint",
   );
   assertEquals(checkpointIndex > 0, true);
   // The seeded publication sits before the checkpoint (outside the model's
@@ -1493,7 +1500,7 @@ Deno.test("a mode prompt delivered mid-run carries steered", async () => {
           optionId: "",
           modeLabel: "Plan",
           shortText: "plan it",
-        })
+        }),
       ),
     ],
     (event) => events.push(event),
@@ -1741,13 +1748,15 @@ Deno.test("a prompt's file notice reaches the model, not the transcript", async 
     return base(model, context, options);
   };
   const agent = makeAgent(streamFn);
-  const files = [{
-    name: "run.log",
-    path: "/home/agent/agents/a1/uploads/1-ab/01-run.log",
-    size: 12,
-    ref: "uploads/1-ab/01-run.log",
-    image: false,
-  }];
+  const files = [
+    {
+      name: "run.log",
+      path: "/home/agent/agents/a1/uploads/1-ab/01-run.log",
+      size: 12,
+      ref: "uploads/1-ab/01-run.log",
+      image: false,
+    },
+  ];
   agent.promptWhileRunning(
     "このログを見て",
     undefined,
@@ -1766,11 +1775,12 @@ Deno.test("a prompt's file notice reaches the model, not the transcript", async 
 
   // What the model received: the same words, then the notice.
   const sent = requests[0]!.messages.at(-1) as { content: unknown };
-  const text = typeof sent.content === "string"
-    ? sent.content
-    : (sent.content as Array<{ text?: string }>).map((b) => b.text ?? "").join(
-      "",
-    );
+  const text =
+    typeof sent.content === "string"
+      ? sent.content
+      : (sent.content as Array<{ text?: string }>)
+          .map((b) => b.text ?? "")
+          .join("");
   assert(text.includes("このログを見て"));
   assert(text.includes("[Attached files]"));
   assert(text.includes("/home/agent/agents/a1/uploads/1-ab/01-run.log"));
@@ -1785,13 +1795,15 @@ Deno.test("a prompt that is only files still reaches the model", async () => {
     return base(model, context, options);
   };
   const agent = makeAgent(streamFn);
-  agent.promptWhileRunning("", undefined, undefined, undefined, [{
-    name: "run.log",
-    path: "/vm/run.log",
-    size: 3,
-    ref: "uploads/1-ab/01-run.log",
-    image: false,
-  }]);
+  agent.promptWhileRunning("", undefined, undefined, undefined, [
+    {
+      name: "run.log",
+      path: "/vm/run.log",
+      size: 3,
+      ref: "uploads/1-ab/01-run.log",
+      image: false,
+    },
+  ]);
   await agent.waitForIdle();
 
   assertEquals(requests.length, 1);
@@ -1808,9 +1820,9 @@ Deno.test("runRoutine: the silence guidance travels in modelContent, not the bub
 
   const stored = agent.messages.find((m) => m.role === "user") as
     | {
-      content: string | Array<{ type: string; text?: string }>;
-      modelContent?: string;
-    }
+        content: string | Array<{ type: string; text?: string }>;
+        modelContent?: string;
+      }
     | undefined;
   assert(stored !== undefined);
   // The bubble: exactly what the routine says.

@@ -17,9 +17,10 @@
  * another way instead of the run being killed (a conversation blocked
  * forever also blocks the same agent's routines).
  */
+
+import type { ClientEvent } from "../domain/event.ts";
 import { CoreError } from "../errors.ts";
 import { abortError } from "../shared/misc.ts";
-import type { ClientEvent } from "../domain/event.ts";
 
 /** How long the dialog stays up before the run continues without a value.
  * The same 15 minutes the screen hand-over waits: long enough to fetch a key

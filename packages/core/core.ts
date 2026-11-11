@@ -1,76 +1,111 @@
-import { LumiscaDb } from "./db/mod.ts";
-import { MIN_VACUUM_BYTES, vacuumMarkerPath } from "./db/vacuum.ts";
-import { createLogger } from "./log.ts";
-import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import type { ClientEvent } from "./domain/event.ts";
-import { EventHub } from "./events/hub.ts";
-import type { AgentMessage } from "./ai/types.ts";
-import type { SessionInfo } from "./domain/session.ts";
-import type { StellaEntry } from "./domain/stella-conversation.ts";
-import type { Workspace } from "./domain/workspace.ts";
-import {
-  createFileSettingsRepo,
-  createInMemorySettingsRepo,
-  type SettingsRepo,
-} from "./settings/repo.ts";
-import { appSkillDirs, resolveSettingsPath } from "./settings/path.ts";
-import {
-  type ConnectionEntry,
-  parseConnections,
-} from "./settings/connections.ts";
-import {
-  assertMutableKey,
-  assertNotProtected,
-  filterExposedSettings,
-} from "./settings/guard.ts";
-import {
-  createWebSearchSettingsStore,
-  type FetchLike,
-} from "./websearch/mod.ts";
-import { WebSearchService } from "./websearch/service.ts";
-import { PushSubscriptions } from "./notify/subscriptions.ts";
-import type { VapidKeys } from "./notify/vapid.ts";
+import { dirname, join } from "node:path";
+import { SessionPool } from "./agent/pool.ts";
+import type { SessionAgent } from "./agent/session-agent.ts";
+import { withProviderRetryDefaults } from "./ai/llm-retry.ts";
 import type {
-  PushSubscriptionKeys,
-  PushSubscriptionRecord,
-} from "./shared/push.ts";
-import type {
-  ProviderAuthType,
-  WebSearchSettingsView,
-  WebSearchTestView,
-} from "./shared/mod.ts";
-import { createDbCredentialStore, setApiKey } from "./settings/credentials.ts";
-import type { CredentialStore, Provider } from "./ai/types.ts";
-import type {
+  AgentMessage,
   Api,
   AuthCheck,
   AuthInteraction,
   AuthType,
+  CredentialStore,
   ImageContent,
   Model,
+  Provider,
 } from "./ai/types.ts";
+import { type CoreServices, createCoreServices } from "./bootstrap.ts";
+import type { BrowserBackend } from "./browser/types.ts";
+import type { ComputerHost, ComputerHostResult } from "./computer/types.ts";
+import { LumiscaDb } from "./db/mod.ts";
+import { MIN_VACUUM_BYTES, vacuumMarkerPath } from "./db/vacuum.ts";
+import type { ClientEvent } from "./domain/event.ts";
 import type { ModePrompt } from "./domain/mode-message.ts";
+import type { SessionInfo } from "./domain/session.ts";
+import type { StellaEntry } from "./domain/stella-conversation.ts";
+import type { Workspace } from "./domain/workspace.ts";
+import { CoreError, errorMessage } from "./errors.ts";
+import { EventHub } from "./events/hub.ts";
+import { systemLanguageTags } from "./locale.ts";
+import { createLogger } from "./log.ts";
+import type { McpInfo } from "./mcp/config.ts";
+import { McpOAuthStore } from "./mcp/oauth.ts";
+import type { McpAuthSnapshot } from "./mcp/oauth-session.ts";
+import type { McpTestResult } from "./mcp/service.ts";
+import { McpService } from "./mcp/service.ts";
+import type { EnvReader } from "./models/custom.ts";
+import type { CatalogStatus } from "./models/mod.ts";
 import { ModelManager } from "./models/mod.ts";
 import { isThinkingLevel } from "./models/thinking.ts";
-import type { EnvReader } from "./models/custom.ts";
 import type {
   UserProviderConfig,
   UserProviderInput,
   UserProviderSummary,
 } from "./models/user-providers.ts";
-import type { ThinkingLevel } from "./shared/mod.ts";
-import type { StellaAgentSummary } from "./shared/mod.ts";
-import type { CatalogStatus } from "./models/mod.ts";
-import type { AskAnswer } from "./shared/mod.ts";
-import type { TaskInfo, TodoPhase } from "./shared/mod.ts";
-import type { CommandApproval } from "./shared/mod.ts";
-import type { CompactionPolicyInput } from "./shared/mod.ts";
-import type { BackgroundCommandInfo } from "./tools/background.ts";
-import type { PendingQuestion } from "./tools/ask.ts";
+import { PushSubscriptions } from "./notify/subscriptions.ts";
+import type { VapidKeys } from "./notify/vapid.ts";
+import { PersonalizationService } from "./personalization.ts";
+import { checkRoutine } from "./routine/check.ts";
+import { createRoutineRepo, type RoutineRepo } from "./routine/repo.ts";
+import {
+  createRoutineScheduler,
+  type RoutineRunner,
+  type RoutineScheduler,
+  type RoutineTrigger,
+} from "./routine/scheduler.ts";
+import { CommandSafety } from "./safety/command-safety.ts";
+import { SavedPromptsService } from "./saved-prompts.ts";
+import { ComputerUseService } from "./services/computer.ts";
+import { ModelService } from "./services/models.ts";
+import type { DefaultModel, SessionService } from "./services/sessions.ts";
+import { WorkspaceService } from "./services/workspaces.ts";
+import {
+  ATTACHMENTS_DIR_NAME,
+  SessionAttachmentStore,
+} from "./session/attachments.ts";
+import { createMessageRepo, type MessageRepo } from "./session/messages.ts";
+import { createSessionRepo, type SessionRepo } from "./session/repo.ts";
+import {
+  createRequestShapeRepo,
+  type RequestShapeRepo,
+} from "./session/request-shapes.ts";
+import type { WindowPage, WindowQuery } from "./session/transcript-window.ts";
+import { SessionVisualStore, VISUALS_DIR_NAME } from "./session/visuals.ts";
+import {
+  type ConnectionEntry,
+  parseConnections,
+} from "./settings/connections.ts";
+import { createDbCredentialStore, setApiKey } from "./settings/credentials.ts";
+import {
+  assertMutableKey,
+  assertNotProtected,
+  filterExposedSettings,
+} from "./settings/guard.ts";
+import { appSkillDirs, resolveSettingsPath } from "./settings/path.ts";
+import {
+  createFileSettingsRepo,
+  createInMemorySettingsRepo,
+  type SettingsRepo,
+} from "./settings/repo.ts";
+import type { ContextUsageSummary } from "./shared/context-usage.ts";
+import type {
+  AskAnswer,
+  CommandApproval,
+  CompactionPolicyInput,
+  PromptFileRef,
+  ProviderAuthType,
+  Routine,
+  StellaAgentSummary,
+  TaskInfo,
+  ThinkingLevel,
+  TodoPhase,
+  WebSearchSettingsView,
+  WebSearchTestView,
+} from "./shared/mod.ts";
 import {
   CONNECTIONS_KEY,
   DEFAULT_MODEL_KEY,
+  formatLocalDateTime,
   LANGUAGE_KEY,
   type Locale,
   parseCompactionPolicyInput,
@@ -78,41 +113,12 @@ import {
   resolveLocale,
   type SavedPrompt,
 } from "./shared/mod.ts";
-import { systemLanguageTags } from "./locale.ts";
-import { CoreError, errorMessage } from "./errors.ts";
-import { createWorkspaceRepo } from "./workspace/repo.ts";
-import { WorkspaceService } from "./services/workspaces.ts";
-import { type CoreServices, createCoreServices } from "./bootstrap.ts";
-import { ComputerUseService } from "./services/computer.ts";
-import { ModelService } from "./services/models.ts";
-import type { DefaultModel, SessionService } from "./services/sessions.ts";
-import { PersonalizationService } from "./personalization.ts";
-import { SavedPromptsService } from "./saved-prompts.ts";
-import { createSessionRepo, type SessionRepo } from "./session/repo.ts";
-import { createMessageRepo, type MessageRepo } from "./session/messages.ts";
-import { SessionVisualStore, VISUALS_DIR_NAME } from "./session/visuals.ts";
-import {
-  ATTACHMENTS_DIR_NAME,
-  SessionAttachmentStore,
-} from "./session/attachments.ts";
-import {
-  createRequestShapeRepo,
-  type RequestShapeRepo,
-} from "./session/request-shapes.ts";
-import type { SessionAgent } from "./agent/session-agent.ts";
-import { SessionPool } from "./agent/pool.ts";
-import { withProviderRetryDefaults } from "./ai/llm-retry.ts";
-import {
-  buildChatSystemPrompt,
-  buildStellaSystemPrompt,
-  buildSystemPrompt,
-} from "./tools/mod.ts";
-import type { VmCommandBytesRunner, VmCommandRunner } from "./vm/command.ts";
-import type { VmManager, VmProgress } from "./vm/container.ts";
-import type { StellaAvailability } from "./vm/availability.ts";
+import type {
+  PushSubscriptionKeys,
+  PushSubscriptionRecord,
+} from "./shared/push.ts";
 import type { StellaStatus } from "./shared/wire.ts";
-import { StellaMachine } from "./vm/machine.ts";
-import type { StellaRuntime } from "./vm/runtime.ts";
+import type { SkillInfo } from "./skills/discover.ts";
 import {
   type AgentRepo,
   createAgentRepo,
@@ -121,33 +127,30 @@ import {
 } from "./stella/agents.ts";
 import { AGENT_ICONS_DIR_NAME, AgentIconStore } from "./stella/icons.ts";
 import { STELLA_ONBOARDING_PROMPT } from "./stella/onboarding.ts";
-import type { WindowPage, WindowQuery } from "./session/transcript-window.ts";
-import type { ContextUsageSummary } from "./shared/context-usage.ts";
-import { createRoutineRepo, type RoutineRepo } from "./routine/repo.ts";
+import type { PendingQuestion } from "./tools/ask.ts";
+import type { BackgroundCommandInfo } from "./tools/background.ts";
 import {
-  createRoutineScheduler,
-  type RoutineRunner,
-  type RoutineScheduler,
-  type RoutineTrigger,
-} from "./routine/scheduler.ts";
-import type { PendingHandover } from "./vm/handover.ts";
-import { HandoverRegistry } from "./vm/handover-registry.ts";
+  buildChatSystemPrompt,
+  buildStellaSystemPrompt,
+  buildSystemPrompt,
+} from "./tools/mod.ts";
+import type { StellaAvailability } from "./vm/availability.ts";
+import type { VmCommandBytesRunner, VmCommandRunner } from "./vm/command.ts";
+import type { VmManager, VmProgress } from "./vm/container.ts";
+import { vmAgentDir } from "./vm/contract.ts";
 import type { PendingEnvRequest } from "./vm/env-request.ts";
 import { EnvRequestRegistry } from "./vm/env-request.ts";
-import { checkRoutine } from "./routine/check.ts";
-import { vmAgentDir } from "./vm/contract.ts";
-import type { PromptFileRef, Routine } from "./shared/mod.ts";
-import { formatLocalDateTime } from "./shared/mod.ts";
-import type { SkillInfo } from "./skills/discover.ts";
+import type { PendingHandover } from "./vm/handover.ts";
+import { HandoverRegistry } from "./vm/handover-registry.ts";
+import { StellaMachine } from "./vm/machine.ts";
+import type { StellaRuntime } from "./vm/runtime.ts";
 import type { UploadFile } from "./vm/uploads.ts";
-import type { McpInfo } from "./mcp/config.ts";
-import { McpService } from "./mcp/service.ts";
-import type { McpTestResult } from "./mcp/service.ts";
-import { McpOAuthStore } from "./mcp/oauth.ts";
-import type { McpAuthSnapshot } from "./mcp/oauth-session.ts";
-import { CommandSafety } from "./safety/command-safety.ts";
-import type { BrowserBackend } from "./browser/types.ts";
-import type { ComputerHost, ComputerHostResult } from "./computer/types.ts";
+import {
+  createWebSearchSettingsStore,
+  type FetchLike,
+} from "./websearch/mod.ts";
+import { WebSearchService } from "./websearch/service.ts";
+import { createWorkspaceRepo } from "./workspace/repo.ts";
 
 /** Module logger (debug-gated). */
 const log = createLogger("core");
@@ -254,12 +257,12 @@ export class LumiscaCore {
   private readonly stella: StellaMachine;
   /** Hand-over hubs per session. Dropped with the session. */
   private readonly handovers = new HandoverRegistry((event) =>
-    this.events.emit(event)
+    this.events.emit(event),
   );
   /** Environment-variable request hubs per session (`vm_env`). Dropped with
    * the session, like the hand-over hubs. */
   private readonly envRequests = new EnvRequestRegistry((event) =>
-    this.events.emit(event)
+    this.events.emit(event),
   );
 
   private constructor(
@@ -312,8 +315,8 @@ export class LumiscaCore {
     } = {},
   ) {
     this.globalSkillDirs = overrides.globalSkillDirs;
-    const sharedSkillDirs = overrides.appSkillDirs ??
-      appSkillDirs(overrides.env);
+    const sharedSkillDirs =
+      overrides.appSkillDirs ?? appSkillDirs(overrides.env);
     this.appSkillDirs = sharedSkillDirs;
     this.stella = new StellaMachine(
       overrides.globalSkillDirs,
@@ -328,12 +331,13 @@ export class LumiscaCore {
       applyCapabilityChange: (mutate) =>
         this.pool.applyCapabilityChange(this.sessions.list(), mutate),
     });
-    this.models = overrides.models ??
+    this.models =
+      overrides.models ??
       new ModelManager(this.credentials, this.settings, overrides.env);
-    this.personalization = overrides.personalization ??
-      new PersonalizationService(this.settings);
-    this.savedPrompts = overrides.savedPrompts ??
-      new SavedPromptsService(this.settings);
+    this.personalization =
+      overrides.personalization ?? new PersonalizationService(this.settings);
+    this.savedPrompts =
+      overrides.savedPrompts ?? new SavedPromptsService(this.settings);
     this.push = new PushSubscriptions(this.settings);
     this.sessions = overrides.sessions ?? createSessionRepo(db);
     this.stellaAgents = overrides.stellaAgents ?? createAgentRepo(db);
@@ -349,14 +353,14 @@ export class LumiscaCore {
         : {}),
     });
     this.messages = overrides.messages ?? createMessageRepo(db);
-    this.requestShapes = overrides.requestShapes ??
-      createRequestShapeRepo(db);
+    this.requestShapes = overrides.requestShapes ?? createRequestShapeRepo(db);
     const streamFn = withProviderRetryDefaults(
       this.models.models.streamFn((providerId) =>
-        this.models.getProviderWithRetired(providerId)
+        this.models.getProviderWithRetired(providerId),
       ),
     );
-    this.commandSafety = overrides.commandSafety ??
+    this.commandSafety =
+      overrides.commandSafety ??
       new CommandSafety({
         getSetting: (key) => this.settings.get(key),
         setSetting: (key, value) => this.settings.set(key, value),
@@ -384,98 +388,107 @@ export class LumiscaCore {
     // directory, which nothing creates until a session actually publishes
     // (SessionVisualStore.put), so a core that never shows an image leaves
     // nothing behind.
-    this.visuals = overrides.visuals ??
+    this.visuals =
+      overrides.visuals ??
       new SessionVisualStore(
         join(tmpdir(), `lumisca-visuals-${crypto.randomUUID()}`),
       );
     // Attachments follow the same rule: beside the database when there is
     // one, a temp directory for an in-memory core, and nothing on disk until
     // a session actually sends a file.
-    this.attachments = overrides.attachments ??
+    this.attachments =
+      overrides.attachments ??
       new SessionAttachmentStore(
         join(tmpdir(), `lumisca-attachments-${crypto.randomUUID()}`),
       );
     // Icons follow the two stores above: beside the database when there is
     // one, a temp directory for an in-memory core, and nothing on disk until
     // an agent actually gets a picture.
-    this.agentIcons = overrides.agentIcons ??
+    this.agentIcons =
+      overrides.agentIcons ??
       new AgentIconStore(
         join(tmpdir(), `lumisca-agent-icons-${crypto.randomUUID()}`),
       );
     this.dbPath = overrides.dbPath;
-    this.pool = overrides.pool ?? new SessionPool({
-      mcpOAuth: this.mcpOAuth,
-      requireModel: (provider, modelId) => this.requireModel(provider, modelId),
-      getImageAnalysisModel: () => this.models.getImageAnalysisModel(),
-      getFastModel: () => this.models.getFastModel(),
-      getFastModelInfo: () => this.models.getFastModelInfo(),
-      renameSession: (id, name) => this.setSessionName(id, name),
-      getThinkingLevel: (provider, modelId) =>
-        this.models.getThinkingLevel(provider, modelId),
-      getLanguage: () => this.getLanguage(),
-      getCompactionPolicy: () => this.getCompactionPolicy(),
-      recordFreedBytes: (bytes) => {
-        this.freedBytes += bytes;
-      },
-      buildGeneratedPrompt: (workspace, stella) =>
-        this.buildGeneratedPrompt(
-          workspace,
-          stella === undefined ? false : { role: stella.role, id: stella.id },
-        ),
-      personalInstructions: () => {
-        const personal = this.personalization.get();
-        return personal.path === "" ? undefined : personal;
-      },
-      updateSystemPrompt: (id, systemPrompt) =>
-        this.sessions.updateSystemPrompt(id, systemPrompt),
-      streamFn,
-      messageRepo: this.messages,
-      requestShapeRepo: this.requestShapes,
-      commandSafety: this.commandSafety,
-      visuals: this.visuals,
-      attachments: this.attachments,
-      // Resolved lazily (open) so the circular wiring stays one-way:
-      // the pool references the service, the service references the pool
-      // via the injected applyMcpConfigChange / agentMcpStatus below.
-      loadMergedMcp: (workspace) => this.mcp.loadMergedConfig(workspace),
-      // The agent's own MCP administration (mcp_add / mcp_remove /
-      // mcp_list) goes through the same service the settings routes use, so
-      // a change made from a conversation is applied exactly like one made
-      // in Settings → MCP servers.
-      mcpAdmin: () => this.mcp,
-      requireWorkspace: (id) => this.requireWorkspace(id),
-      emit: (event) => this.emit(event),
-      browser: () => this.browserBackend,
-      computer: () => this.computerHostForSession(),
-      webSearch: () => this.webSearch.provider() ?? undefined,
-      stellaRuntime: (session) => this.stellaRuntimeFor(session),
-      stellaAgentPersona: (session) => {
-        const agentId = session.agentId;
-        if (agentId === undefined) return undefined;
-        const agent = this.stellaAgents.get(agentId);
-        return agent === undefined
-          ? undefined
-          : { role: agent.role, id: agentId };
-      },
-      globalSkillDirs: this.globalSkillDirs,
-      appSkillDirs: this.appSkillDirs,
-    });
-    this.mcp = overrides.mcp ?? new McpService({
-      settings: this.settings,
-      oauth: this.mcpOAuth,
-      // Every session, stella's conversation included: a sign-in must
-      // reconnect the conversation the user is talking to, and stella has one
-      // row that `list()` hides because it is not a session in the UI.
-      listSessions: (workspaceId) => this.sessions.listEvery(workspaceId),
-      agentMcpStatus: (sessionId) =>
-        this.pool.get(sessionId)?.getMcpStatus() ?? null,
-      requireWorkspace: (id) => this.requireWorkspace(id),
-      applyMcpConfigChange: (sessions, mutate) =>
-        this.pool.applyMcpConfigChange(sessions, mutate),
-      refreshSessionMcp: (sessions) => this.pool.refreshMcp(sessions),
-    });
+    this.pool =
+      overrides.pool ??
+      new SessionPool({
+        mcpOAuth: this.mcpOAuth,
+        requireModel: (provider, modelId) =>
+          this.requireModel(provider, modelId),
+        getImageAnalysisModel: () => this.models.getImageAnalysisModel(),
+        getFastModel: () => this.models.getFastModel(),
+        getFastModelInfo: () => this.models.getFastModelInfo(),
+        renameSession: (id, name) => this.setSessionName(id, name),
+        getThinkingLevel: (provider, modelId) =>
+          this.models.getThinkingLevel(provider, modelId),
+        getLanguage: () => this.getLanguage(),
+        getCompactionPolicy: () => this.getCompactionPolicy(),
+        recordFreedBytes: (bytes) => {
+          this.freedBytes += bytes;
+        },
+        buildGeneratedPrompt: (workspace, stella) =>
+          this.buildGeneratedPrompt(
+            workspace,
+            stella === undefined ? false : { role: stella.role, id: stella.id },
+          ),
+        personalInstructions: () => {
+          const personal = this.personalization.get();
+          return personal.path === "" ? undefined : personal;
+        },
+        updateSystemPrompt: (id, systemPrompt) =>
+          this.sessions.updateSystemPrompt(id, systemPrompt),
+        streamFn,
+        messageRepo: this.messages,
+        requestShapeRepo: this.requestShapes,
+        commandSafety: this.commandSafety,
+        visuals: this.visuals,
+        attachments: this.attachments,
+        // Resolved lazily (open) so the circular wiring stays one-way:
+        // the pool references the service, the service references the pool
+        // via the injected applyMcpConfigChange / agentMcpStatus below.
+        loadMergedMcp: (workspace) => this.mcp.loadMergedConfig(workspace),
+        // The agent's own MCP administration (mcp_add / mcp_remove /
+        // mcp_list) goes through the same service the settings routes use, so
+        // a change made from a conversation is applied exactly like one made
+        // in Settings → MCP servers.
+        mcpAdmin: () => this.mcp,
+        requireWorkspace: (id) => this.requireWorkspace(id),
+        emit: (event) => this.emit(event),
+        browser: () => this.browserBackend,
+        computer: () => this.computerHostForSession(),
+        webSearch: () => this.webSearch.provider() ?? undefined,
+        stellaRuntime: (session) => this.stellaRuntimeFor(session),
+        stellaAgentPersona: (session) => {
+          const agentId = session.agentId;
+          if (agentId === undefined) return undefined;
+          const agent = this.stellaAgents.get(agentId);
+          return agent === undefined
+            ? undefined
+            : { role: agent.role, id: agentId };
+        },
+        globalSkillDirs: this.globalSkillDirs,
+        appSkillDirs: this.appSkillDirs,
+      });
+    this.mcp =
+      overrides.mcp ??
+      new McpService({
+        settings: this.settings,
+        oauth: this.mcpOAuth,
+        // Every session, stella's conversation included: a sign-in must
+        // reconnect the conversation the user is talking to, and stella has one
+        // row that `list()` hides because it is not a session in the UI.
+        listSessions: (workspaceId) => this.sessions.listEvery(workspaceId),
+        agentMcpStatus: (sessionId) =>
+          this.pool.get(sessionId)?.getMcpStatus() ?? null,
+        requireWorkspace: (id) => this.requireWorkspace(id),
+        applyMcpConfigChange: (sessions, mutate) =>
+          this.pool.applyMcpConfigChange(sessions, mutate),
+        refreshSessionMcp: (sessions) => this.pool.refreshMcp(sessions),
+      });
     this.modelService = new ModelService(this.models);
-    this.workspaces = overrides.workspaces ??
+    this.workspaces =
+      overrides.workspaces ??
       new WorkspaceService(createWorkspaceRepo(db), {
         listSessions: (workspaceId) => this.sessions.list(workspaceId),
         applyChange: (sessions, mutate) =>
@@ -663,9 +676,7 @@ export class LumiscaCore {
         { mode: 0o600 },
       );
     } catch (error) {
-      log.warn(
-        `could not request a database rewrite: ${errorMessage(error)}`,
-      );
+      log.warn(`could not request a database rewrite: ${errorMessage(error)}`);
     }
   }
 
@@ -779,13 +790,15 @@ export class LumiscaCore {
         // calls through, so it works while the machine is down.
         const stella = this.stellaRuntimeFor(session);
         return await checkRoutine(routine, {
-          ...(stella === undefined ? {} : {
-            machine: {
-              runner: stella.runner,
-              files: stella.files,
-              workdir: stella.cwd,
-            },
-          }),
+          ...(stella === undefined
+            ? {}
+            : {
+                machine: {
+                  runner: stella.runner,
+                  files: stella.files,
+                  workdir: stella.cwd,
+                },
+              }),
           callTool: (server, tool, args, signal) =>
             this.mcp.callToolForCheck(server, tool, args, signal),
         });
@@ -1017,9 +1030,11 @@ export class LumiscaCore {
   }
 
   /** Add a saved prompt. Throws when the id already exists. */
-  addSavedPrompt(
-    input: { id: string; label: string; prompt: string },
-  ): SavedPrompt {
+  addSavedPrompt(input: {
+    id: string;
+    label: string;
+    prompt: string;
+  }): SavedPrompt {
     return this.savedPrompts.add(input);
   }
 
@@ -1049,9 +1064,10 @@ export class LumiscaCore {
 
   /** Store one subscription. Re-subscribing the same endpoint replaces its
    * keys instead of adding a second row. */
-  addPushSubscription(
-    input: { endpoint: string; keys: PushSubscriptionKeys },
-  ): PushSubscriptionRecord {
+  addPushSubscription(input: {
+    endpoint: string;
+    keys: PushSubscriptionKeys;
+  }): PushSubscriptionRecord {
     return this.push.add(input);
   }
 
@@ -1111,9 +1127,10 @@ export class LumiscaCore {
    * is skipped when the machine is not running, and the first conversation
    * prepares it then (see StellaMachineService.prepareAgentFolder).
    */
-  async createStellaAgent(
-    input: { name: string; role: string },
-  ): Promise<StellaAgent> {
+  async createStellaAgent(input: {
+    name: string;
+    role: string;
+  }): Promise<StellaAgent> {
     const agent = this.services.stellaAgents.createStellaAgent(input);
     await this.prepareStellaAgentFolder(agent.id);
     return agent;
@@ -1162,11 +1179,11 @@ export class LumiscaCore {
     if (agent === undefined) {
       throw new CoreError(`Agent not found: ${id}`, "not_found");
     }
-    const model = patch.model === undefined
-      ? undefined
-      : normalizeAgentModel(patch.model);
+    const model =
+      patch.model === undefined ? undefined : normalizeAgentModel(patch.model);
     if (
-      model !== undefined && model !== null &&
+      model !== undefined &&
+      model !== null &&
       this.models.getModel(model.provider, model.modelId) === undefined
     ) {
       throw new CoreError(
@@ -1501,9 +1518,10 @@ export class LumiscaCore {
    * provider and model), not to the session, so it is read through the
    * session's current model every time: switching models in the picker
    * changes both halves. */
-  getThinkingState(
-    sessionId: string,
-  ): { thinkingLevel: ThinkingLevel; thinkingLevels: ThinkingLevel[] } {
+  getThinkingState(sessionId: string): {
+    thinkingLevel: ThinkingLevel;
+    thinkingLevels: ThinkingLevel[];
+  } {
     const session = this.getSession(sessionId);
     if (session === undefined) {
       throw new CoreError(`Session not found: ${sessionId}`, "not_found");
@@ -1683,9 +1701,7 @@ export class LumiscaCore {
     // The level is the model's, but a session already running on it must
     // apply it to the run in progress (see SessionPool.setThinkingLevel).
     for (const session of this.sessions.list()) {
-      if (
-        session.modelProvider === providerId && session.modelId === modelId
-      ) {
+      if (session.modelProvider === providerId && session.modelId === modelId) {
         this.pool.setThinkingLevel(session.id, effective);
       }
     }
@@ -1745,9 +1761,10 @@ export class LumiscaCore {
     return this.webSearch.view();
   }
 
-  addWebSearchProvider(
-    input: { id: string; apiKey: string },
-  ): WebSearchSettingsView {
+  addWebSearchProvider(input: {
+    id: string;
+    apiKey: string;
+  }): WebSearchSettingsView {
     return this.webSearch.add(input);
   }
 
@@ -1806,9 +1823,11 @@ export class LumiscaCore {
     return this.mcp.cancelAuth(sessionId);
   }
 
-  completeMcpAuth(
-    input: { state: string; code?: string; error?: string },
-  ): Promise<McpAuthSnapshot | undefined> {
+  completeMcpAuth(input: {
+    state: string;
+    code?: string;
+    error?: string;
+  }): Promise<McpAuthSnapshot | undefined> {
     return this.mcp.completeAuth(input);
   }
 
@@ -1926,10 +1945,12 @@ export class LumiscaCore {
     // run anything, which is the opposite of what it can do.
     if (stella !== false) {
       return buildStellaSystemPrompt(
-        stella === true ? {} : {
-          agent: { role: stella.role },
-          workdir: vmAgentDir(stella.id),
-        },
+        stella === true
+          ? {}
+          : {
+              agent: { role: stella.role },
+              workdir: vmAgentDir(stella.id),
+            },
       );
     }
     return workspace.chat
@@ -1973,14 +1994,15 @@ export class LumiscaCore {
       preferred !== undefined &&
       this.models.getModel(preferred.provider, preferred.modelId) !==
         undefined &&
-      await this.models.hasConfiguredAuth(preferred.provider)
+      (await this.models.hasConfiguredAuth(preferred.provider))
     ) {
       return { provider: preferred.provider, modelId: preferred.modelId };
     }
     const latest = this.sessions.list()[0];
     if (
-      latest && this.models.getModel(latest.modelProvider, latest.modelId) &&
-      await this.models.hasConfiguredAuth(latest.modelProvider)
+      latest &&
+      this.models.getModel(latest.modelProvider, latest.modelId) &&
+      (await this.models.hasConfiguredAuth(latest.modelProvider))
     ) {
       return { provider: latest.modelProvider, modelId: latest.modelId };
     }
@@ -2032,8 +2054,10 @@ export class LumiscaCore {
  * A scheduled run gets the prompt alone: nothing fired it but the clock. */
 function withTrigger(prompt: string, trigger?: RoutineTrigger): string {
   if (trigger === undefined) return prompt;
-  return `${trigger.newItems} new item(s) appeared at ${
-    formatLocalDateTime(trigger.at)
-  }, and the routine's watch check started this run with that observation.\n\n` +
-    prompt;
+  return (
+    `${trigger.newItems} new item(s) appeared at ${formatLocalDateTime(
+      trigger.at,
+    )}, and the routine's watch check started this run with that observation.\n\n` +
+    prompt
+  );
 }

@@ -1,4 +1,5 @@
 import { basename, extname } from "node:path";
+import type { SessionVisualStore } from "../session/visuals.ts";
 import {
   isVisualExtension,
   maxVisualBytes,
@@ -8,10 +9,9 @@ import {
   VISUAL_MIME_BY_EXTENSION,
   visualRef,
 } from "../shared/mod.ts";
-import type { SessionVisualStore } from "../session/visuals.ts";
 import type { FileBackend } from "./file-backend.ts";
-import { object, optional, string, type Tool } from "./schema.ts";
 import { requireExistingFile } from "./resolve.ts";
+import { object, optional, string, type Tool } from "./schema.ts";
 
 const visualSchema = object({
   path: string(
@@ -19,10 +19,12 @@ const visualSchema = object({
       "absolute, or relative with a workspace folder name as the first " +
       "segment, e.g. `Aaa/docs/chart.png`",
   ),
-  caption: optional(string(
-    "Short description of the image for the user (one line). It becomes the " +
-      "image's alternative text; the file name is used when omitted.",
-  )),
+  caption: optional(
+    string(
+      "Short description of the image for the user (one line). It becomes the " +
+        "image's alternative text; the file name is used when omitted.",
+    ),
+  ),
 });
 
 /** What the tool publishes for: the session's asset store and its id. The
@@ -86,18 +88,17 @@ export function createVisualTool(
       }
       const name = await store.put(sessionId, bytes, extension);
       const ref = visualRef(name);
-      const caption = snippetCaption(
-        params.caption,
-        basename(filePath),
-        name,
-      );
+      const caption = snippetCaption(params.caption, basename(filePath), name);
       return {
-        content: [{
-          type: "text" as const,
-          text: `Published as \`${ref}\`.\n\n` +
-            "Put this markdown where the image belongs in your reply:\n\n" +
-            `![${caption}](${ref})`,
-        }],
+        content: [
+          {
+            type: "text" as const,
+            text:
+              `Published as \`${ref}\`.\n\n` +
+              "Put this markdown where the image belongs in your reply:\n\n" +
+              `![${caption}](${ref})`,
+          },
+        ],
         details: {
           ref,
           mimeType: VISUAL_MIME_BY_EXTENSION[extension],
@@ -124,5 +125,8 @@ function snippetCaption(
 /** Drop what would break the markdown the agent pastes: a closing bracket
  * ends the link text and a line break ends the line. */
 function cleanCaption(text: string): string {
-  return text.replace(/[[\]\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+  return text
+    .replace(/[[\]\r\n]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }

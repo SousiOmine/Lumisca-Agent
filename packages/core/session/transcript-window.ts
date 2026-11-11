@@ -117,6 +117,9 @@ export function identityCursor(identity: MessageIdentity): string {
  */
 export function startsTranscriptTurn(message: AgentMessage): boolean {
   if (message.role === "notification") return message.kind !== "retry";
-  return message.role === "user" || message.role === "mode" ||
-    message.role === "checkpoint";
+  return (
+    message.role === "user" ||
+    message.role === "mode" ||
+    message.role === "checkpoint"
+  );
 }

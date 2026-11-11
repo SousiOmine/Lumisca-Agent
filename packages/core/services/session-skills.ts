@@ -1,5 +1,5 @@
-import { skillInfo } from "../skills/discover.ts";
 import type { SkillInfo } from "../skills/discover.ts";
+import { skillInfo } from "../skills/discover.ts";
 import { sessionSkills } from "../tools/toolsets.ts";
 import type { SessionServiceDeps } from "./session-deps.ts";
 
@@ -28,9 +28,10 @@ export class SessionSkills {
 
   /** The skills a session in this workspace would get. */
   listSkills(workspaceId?: string): SkillInfo[] {
-    const folders = workspaceId === undefined
-      ? []
-      : this.deps.requireWorkspace(workspaceId).folders;
+    const folders =
+      workspaceId === undefined
+        ? []
+        : this.deps.requireWorkspace(workspaceId).folders;
     return sessionSkills(folders, {
       browserAvailable: this.deps.browserAvailable(),
       computerAvailable: this.deps.computerAvailable(),

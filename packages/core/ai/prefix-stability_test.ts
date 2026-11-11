@@ -1,4 +1,3 @@
-import { fakeModel } from "../test-utils.ts";
 /**
  * Prefix stability: the property the provider's prompt cache depends on.
  *
@@ -16,10 +15,11 @@ import { fakeModel } from "../test-utils.ts";
  * reason, so a cache-read drop can be explained afterwards.
  */
 import { assert, assertEquals } from "@std/assert";
+import { toLlmMessages } from "../domain/notification.ts";
+import { fakeModel } from "../test-utils.ts";
 import { Agent } from "./agent.ts";
 import { createAssistantMessageEventStream } from "./event-stream.ts";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "./faux.ts";
-import { toLlmMessages } from "../domain/notification.ts";
 import type {
   AgentMessage,
   AgentTool,
@@ -46,10 +46,12 @@ function echoTool(): AgentTool {
     parameters: { type: "object", properties: { value: { type: "string" } } },
     execute: (_id, params) =>
       Promise.resolve({
-        content: [{
-          type: "text",
-          text: `value = ${(params as { value: string }).value}`,
-        }],
+        content: [
+          {
+            type: "text",
+            text: `value = ${(params as { value: string }).value}`,
+          },
+        ],
         details: {},
       }),
   } as AgentTool;
@@ -119,10 +121,13 @@ function assertPrefixExtension(previous: unknown[], current: unknown[]): void {
 function toolScript(): Array<(call: number) => AssistantMessage> {
   return [
     () =>
-      fauxAssistantMessage([
-        fauxText("Looking it up."),
-        fauxToolCall("echo", { value: "alpha" }, "call_1"),
-      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage(
+        [
+          fauxText("Looking it up."),
+          fauxToolCall("echo", { value: "alpha" }, "call_1"),
+        ],
+        { stopReason: "toolUse" },
+      ),
     () => fauxAssistantMessage("The value is alpha."),
     () => fauxAssistantMessage("Second turn."),
   ];
@@ -233,10 +238,13 @@ Deno.test("prefix: the loop reports the shape and the two changes that cost the 
 
 Deno.test("repeat guard: an identical call repeated three times earns one reminder", async () => {
   const call = (n: number) => () =>
-    fauxAssistantMessage([
-      fauxText(`Try ${n}.`),
-      fauxToolCall("echo", { value: "same" }, `call_${n}`),
-    ], { stopReason: "toolUse" });
+    fauxAssistantMessage(
+      [
+        fauxText(`Try ${n}.`),
+        fauxToolCall("echo", { value: "same" }, `call_${n}`),
+      ],
+      { stopReason: "toolUse" },
+    );
   const { agent } = makeAgent({
     script: [call(1), call(2), call(3), () => fauxAssistantMessage("Done.")],
     tools: [echoTool()],
@@ -267,13 +275,15 @@ Deno.test("repeat guard: an identical call repeated three times earns one remind
 
 Deno.test("repeat guard: a different call and a new prompt both reset the count", async () => {
   const repeated = (n: number) => () =>
-    fauxAssistantMessage([
-      fauxToolCall("echo", { value: "same" }, `call_${n}`),
-    ], { stopReason: "toolUse" });
+    fauxAssistantMessage(
+      [fauxToolCall("echo", { value: "same" }, `call_${n}`)],
+      { stopReason: "toolUse" },
+    );
   const other = () =>
-    fauxAssistantMessage([
-      fauxToolCall("echo", { value: "different" }, "call_other"),
-    ], { stopReason: "toolUse" });
+    fauxAssistantMessage(
+      [fauxToolCall("echo", { value: "different" }, "call_other")],
+      { stopReason: "toolUse" },
+    );
   const { agent } = makeAgent({
     script: [
       repeated(1),

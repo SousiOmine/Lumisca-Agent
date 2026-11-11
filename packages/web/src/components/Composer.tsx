@@ -1,13 +1,7 @@
 import {
-  type ClipboardEvent,
-  type DragEvent,
-  type KeyboardEvent,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "preact/compat";
+  formatAttachmentSize,
+  MAX_PROMPT_TEXT_LENGTH,
+} from "@lumisca/core/shared";
 import {
   IconArrowLeft,
   IconChevronRight,
@@ -18,19 +12,27 @@ import {
   IconX,
 } from "@tabler/icons-preact";
 import {
-  formatAttachmentSize,
-  MAX_PROMPT_TEXT_LENGTH,
-} from "@lumisca/core/shared";
+  type ClipboardEvent,
+  type DragEvent,
+  type KeyboardEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "preact/compat";
 import {
   ContextUsageCard,
   type ContextUsageData,
   ContextUsageTrigger,
 } from "./ContextUsage.tsx";
+
 export type { ContextUsageData };
-import { ComposerPopover } from "./ComposerPopover.tsx";
-import { ComposerModelBar } from "./ComposerModelBar.tsx";
-import { useClickOutside } from "../hooks/useClickOutside.ts";
+
+import { useAttachments } from "../hooks/useAttachments.ts";
+import { useAutoGrow } from "../hooks/useAutoGrow.ts";
 import { useCaretPosition } from "../hooks/useCaretPosition.ts";
+import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { useMention } from "../hooks/useMention.ts";
 import { usePopoverPlacement } from "../hooks/usePopoverPlacement.ts";
 import {
@@ -38,21 +40,23 @@ import {
   type SlashState,
   useSlashMenu,
 } from "../hooks/useSlashMenu.ts";
-import { useAttachments } from "../hooks/useAttachments.ts";
-import { useAutoGrow } from "../hooks/useAutoGrow.ts";
 import {
   type SlashCommand,
   type SlashCommandItem,
   slashCompletion,
 } from "../slashCommands.ts";
+import { ComposerModelBar } from "./ComposerModelBar.tsx";
+import { ComposerPopover } from "./ComposerPopover.tsx";
+
 export type { SlashCommand, SlashCommandItem };
+
+import { useT } from "../i18n.ts";
 import type {
   ModelInfo,
   PendingFile,
   PendingImage,
   ThinkingLevel,
 } from "../types.ts";
-import { useT } from "../i18n.ts";
 
 export interface ComposerModel {
   provider: string;
@@ -68,11 +72,7 @@ interface ComposerProps {
   /** Taller, vertically resizable textarea (new-session use). */
   large?: boolean;
   model: ComposerModel | null;
-  onModelSelect: (
-    provider: string,
-    modelId: string,
-    info?: ModelInfo,
-  ) => void;
+  onModelSelect: (provider: string, modelId: string, info?: ModelInfo) => void;
   /** Thinking level of the current model; the select appears only when the
    * model supports levels besides "off" (see thinkingLevels). */
   thinkingLevel?: ThinkingLevel;
@@ -115,10 +115,7 @@ interface ComposerProps {
    * the start of the input: the parent builds the mode prompt and submits
    * it, or runs the client-side command. The other kinds never reach the
    * parent (the text is edited here). */
-  onSlashCommand?: (
-    command: SlashCommand,
-    item?: SlashCommandItem,
-  ) => void;
+  onSlashCommand?: (command: SlashCommand, item?: SlashCommandItem) => void;
   /** Images attached for the next send (data URLs). Dropped/pasted files
    * are appended here; the parent clears them after a successful submit. */
   images?: PendingImage[];
@@ -216,10 +213,7 @@ export function Composer({
   // second "inside": a click on the popover is not a click outside.
   const modelPickerRef = useRef<HTMLDivElement>(null);
   const modelPopoverRef = useRef<HTMLDivElement>(null);
-  const modelPlacement = usePopoverPlacement(
-    modelPickerRef,
-    showModelPicker,
-  );
+  const modelPlacement = usePopoverPlacement(modelPickerRef, showModelPicker);
   const ctxRef = useRef<HTMLDivElement>(null);
   useClickOutside(
     modelPickerRef,
@@ -231,9 +225,11 @@ export function Composer({
 
   const slashEnabled = slashCommands !== undefined;
 
-  const { caretPos, setCaretPos, measure: measureCaret } = useCaretPosition(
-    textareaRef,
-  );
+  const {
+    caretPos,
+    setCaretPos,
+    measure: measureCaret,
+  } = useCaretPosition(textareaRef);
   const clearCaret = useCallback(() => setCaretPos(null), [setCaretPos]);
   const {
     mention,
@@ -467,7 +463,8 @@ export function Composer({
                 className="input-file-remove"
                 title={t("chat.composer.image.remove")}
                 onClick={() =>
-                  onFilesChange?.(files.filter((_, i) => i !== index))}
+                  onFilesChange?.(files.filter((_, i) => i !== index))
+                }
               >
                 <IconX size={11} />
               </button>
@@ -491,7 +488,8 @@ export function Composer({
                 className="input-image-remove"
                 title={t("chat.composer.image.remove")}
                 onClick={() =>
-                  onImagesChange?.(images.filter((_, i) => i !== index))}
+                  onImagesChange?.(images.filter((_, i) => i !== index))
+                }
               >
                 <IconX size={12} />
               </button>
@@ -512,15 +510,13 @@ export function Composer({
         </p>
       )}
       <div className="input-box-wrap">
-        {
-          /* A picker is the only way to attach on a phone: there is no drag
-           * and nothing to paste. The control sits at the LEFT of the field,
-           * where the writing starts — the row below belongs to what the
-           * message will be (model, context, send), and a paperclip there
-           * read as one more thing about sending. Hidden input, visible
-           * button: the native control is drawn by the OS and cannot take
-           * the app's styling. */
-        }
+        {/* A picker is the only way to attach on a phone: there is no drag
+         * and nothing to paste. The control sits at the LEFT of the field,
+         * where the writing starts — the row below belongs to what the
+         * message will be (model, context, send), and a paperclip there
+         * read as one more thing about sending. Hidden input, visible
+         * button: the native control is drawn by the OS and cannot take
+         * the app's styling. */}
         <input
           ref={pickerRef}
           type="file"
@@ -583,25 +579,28 @@ export function Composer({
             keyOf={(item) => item.path}
             onSelect={selectMention}
             onHover={(index) =>
-              setMention((prev) => prev ? { ...prev, active: index } : prev)}
-            empty={mention.loading && mention.items.length === 0
-              ? <div className="mention-status">{t("common.loading")}</div>
-              : mention.failed
-              ? (
+              setMention((prev) => (prev ? { ...prev, active: index } : prev))
+            }
+            empty={
+              mention.loading && mention.items.length === 0 ? (
+                <div className="mention-status">{t("common.loading")}</div>
+              ) : mention.failed ? (
                 <div className="mention-status">
                   {t("chat.composer.mention.failed")}
                 </div>
-              )
-              : (
+              ) : (
                 <div className="mention-status">
                   {t("chat.composer.mention.noMatch")}
                 </div>
-              )}
+              )
+            }
             renderRow={(item) => (
               <>
-                {item.isDir
-                  ? <IconFolder size={13} className="mention-icon" />
-                  : <IconFile size={13} className="mention-icon" />}
+                {item.isDir ? (
+                  <IconFolder size={13} className="mention-icon" />
+                ) : (
+                  <IconFile size={13} className="mention-icon" />
+                )}
                 <span className="mention-item-name">{item.name}</span>
                 <span className="mention-item-path">{item.path}</span>
               </>
@@ -621,9 +620,10 @@ export function Composer({
             keyOf={(item) => item.id}
             onSelect={selectSlash}
             onHover={(index) =>
-              setSlash((prev) => (prev ? { ...prev, active: index } : prev))}
-            header={slash.submenu
-              ? (
+              setSlash((prev) => (prev ? { ...prev, active: index } : prev))
+            }
+            header={
+              slash.submenu ? (
                 <div className="slash-submenu-header">
                   <button
                     type="button"
@@ -631,14 +631,15 @@ export function Composer({
                     title={t("chat.composer.slash.back")}
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() =>
-                      setSlash({ ...slash, submenu: null, active: 0 })}
+                      setSlash({ ...slash, submenu: null, active: 0 })
+                    }
                   >
                     <IconArrowLeft size={13} />
                     <span>{slash.submenu.label}</span>
                   </button>
                 </div>
-              )
-              : undefined}
+              ) : undefined
+            }
             empty={
               <div className="slash-status">
                 {t("chat.composer.slash.empty")}
@@ -650,15 +651,14 @@ export function Composer({
                 <span className="slash-item-text">
                   <span className="slash-item-label">{item.label}</span>
                   {item.description && (
-                    <span className="slash-item-desc">
-                      {item.description}
-                    </span>
+                    <span className="slash-item-desc">{item.description}</span>
                   )}
                 </span>
-                {slash.submenu === null && isSlashCommand(item) &&
+                {slash.submenu === null &&
+                  isSlashCommand(item) &&
                   (item.items?.length ?? 0) > 0 && (
-                  <IconChevronRight size={13} className="slash-chevron" />
-                )}
+                    <IconChevronRight size={13} className="slash-chevron" />
+                  )}
               </>
             )}
           />

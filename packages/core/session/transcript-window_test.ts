@@ -7,10 +7,7 @@ import {
 } from "./transcript-window.ts";
 
 /** One transcript message of a role, stamped with a timestamp. */
-function message(
-  role: AgentMessage["role"],
-  timestamp: number,
-): AgentMessage {
+function message(role: AgentMessage["role"], timestamp: number): AgentMessage {
   switch (role) {
     case "toolResult":
       return {

@@ -9,9 +9,32 @@ import type {
   Model,
   Provider,
 } from "../ai/types.ts";
+import { CoreError, errorMessage } from "../errors.ts";
+import { createLogger } from "../log.ts";
+import { setApiKey } from "../settings/credentials.ts";
 import type { SettingsRepo } from "../settings/repo.ts";
 import type { ModelInfo, ThinkingLevel } from "../shared/mod.ts";
-import { CoreError, errorMessage } from "../errors.ts";
+import {
+  FAST_MODEL_KEY,
+  IMAGE_MODEL_KEY,
+  MODEL_ENABLED_PREFIX,
+  MODEL_THINKING_PREFIX,
+  parseCompactionPolicyInput,
+  parseModelPreference,
+} from "../shared/settings-keys.ts";
+import {
+  type CatalogStatus,
+  resolveCatalogSource,
+  snapshotCatalog,
+} from "./catalog-source.ts";
+import { chatgptProvider } from "./chatgpt/provider.ts";
+import { type EnvReader, loadCustomProviders, processEnv } from "./custom.ts";
+import {
+  buildCatalogProviders,
+  builtinProviders,
+  DEV_PROVIDER_IDS,
+} from "./dev-catalog.ts";
+import { clampThinkingLevel, getSupportedThinkingLevels } from "./thinking.ts";
 import type {
   UserProviderConfig,
   UserProviderInput,
@@ -22,29 +45,6 @@ import {
   parseUserProviderInput,
   UserProviderStore,
 } from "./user-providers.ts";
-import { type EnvReader, loadCustomProviders, processEnv } from "./custom.ts";
-import {
-  buildCatalogProviders,
-  builtinProviders,
-  DEV_PROVIDER_IDS,
-} from "./dev-catalog.ts";
-import { chatgptProvider } from "./chatgpt/provider.ts";
-import {
-  type CatalogStatus,
-  resolveCatalogSource,
-  snapshotCatalog,
-} from "./catalog-source.ts";
-import { clampThinkingLevel, getSupportedThinkingLevels } from "./thinking.ts";
-import { setApiKey } from "../settings/credentials.ts";
-import {
-  FAST_MODEL_KEY,
-  IMAGE_MODEL_KEY,
-  MODEL_ENABLED_PREFIX,
-  MODEL_THINKING_PREFIX,
-  parseCompactionPolicyInput,
-  parseModelPreference,
-} from "../shared/settings-keys.ts";
-import { createLogger } from "../log.ts";
 
 const log = createLogger("catalog");
 
@@ -166,8 +166,10 @@ export class ModelManager {
     providerId: string,
     modelId: string,
   ): Model<Api> | undefined {
-    return this.models.getModel(providerId, modelId) ??
-      this.retired.get(providerId)?.models.get(modelId);
+    return (
+      this.models.getModel(providerId, modelId) ??
+      this.retired.get(providerId)?.models.get(modelId)
+    );
   }
 
   /** The configured image-analysis model (the `model_image` setting), or
@@ -209,15 +211,19 @@ export class ModelManager {
    * credential resolution keeps working: a stored key or an env var resolved
    * before the removal resolves after it too. */
   getProviderWithRetired(providerId: string): Provider | undefined {
-    return this.models.getProvider(providerId) ??
-      this.retired.get(providerId)?.provider;
+    return (
+      this.models.getProvider(providerId) ??
+      this.retired.get(providerId)?.provider
+    );
   }
 
   /** Whether a retired model is still referenced (kept alive for existing
    * sessions rather than listed). */
   isRetiredModel(providerId: string, modelId: string): boolean {
-    return this.models.getModel(providerId, modelId) === undefined &&
-      this.retired.get(providerId)?.models.has(modelId) === true;
+    return (
+      this.models.getModel(providerId, modelId) === undefined &&
+      this.retired.get(providerId)?.models.has(modelId) === true
+    );
   }
 
   /** Refresh the built-in catalog from models.dev (`live → cache →
@@ -273,9 +279,10 @@ export class ModelManager {
       log.debug(`custom providers unreadable, keeping previous: ${message}`);
       return {
         ...status,
-        error: status.error === undefined
-          ? `custom providers unavailable: ${message}`
-          : `${status.error}; custom providers unavailable: ${message}`,
+        error:
+          status.error === undefined
+            ? `custom providers unavailable: ${message}`
+            : `${status.error}; custom providers unavailable: ${message}`,
       };
     }
     const freshCustomIds = new Set([
@@ -401,9 +408,12 @@ export class ModelManager {
     if (!this.userStore.get(id)) {
       throw new CoreError(`User provider not found: ${id}`, "not_found");
     }
-    const parsed = parseUserProviderInput({ ...input, id }, {
-      requireId: true,
-    });
+    const parsed = parseUserProviderInput(
+      { ...input, id },
+      {
+        requireId: true,
+      },
+    );
     this.userStore.upsert(parsed);
     this.models.setProvider(buildUserProvider(parsed));
     if (parsed.apiKey !== undefined) {
@@ -454,10 +464,7 @@ export class ModelManager {
 
   /** The model for an existing session's prompt/build, including retired
    * models (removed upstream, kept for existing sessions). */
-  getSessionModel(
-    providerId: string,
-    modelId: string,
-  ): Model<Api> | undefined {
+  getSessionModel(providerId: string, modelId: string): Model<Api> | undefined {
     return this.getModelWithRetired(providerId, modelId);
   }
 
@@ -485,9 +492,7 @@ export class ModelManager {
     await setApiKey(this.credentials, providerId, key);
   }
 
-  async checkAuth(
-    providerId: string,
-  ): Promise<AuthCheck | undefined> {
+  async checkAuth(providerId: string): Promise<AuthCheck | undefined> {
     return await this.models.checkAuth(providerId);
   }
 
@@ -510,8 +515,10 @@ export class ModelManager {
     if ((await this.credentials.read(providerId)) !== undefined) {
       return true;
     }
-    return this.isCustomProvider(providerId) &&
-      await this.hasProviderAuth(providerId);
+    return (
+      this.isCustomProvider(providerId) &&
+      (await this.hasProviderAuth(providerId))
+    );
   }
 
   /** Enable or disable a model for the UI. Disabled models are hidden
@@ -526,10 +533,10 @@ export class ModelManager {
   }
 
   isModelEnabled(providerId: string, modelId: string): boolean {
-    return this.settings.get(
-      `${MODEL_ENABLED_PREFIX}${providerId}:${modelId}`,
-    ) !==
-      "0";
+    return (
+      this.settings.get(`${MODEL_ENABLED_PREFIX}${providerId}:${modelId}`) !==
+      "0"
+    );
   }
 
   /** The stored thinking level of a model, clamped to what it supports.
@@ -541,7 +548,7 @@ export class ModelManager {
     const stored = this.settings.get(
       `${MODEL_THINKING_PREFIX}${providerId}:${modelId}`,
     );
-    return clampThinkingLevel(model, stored as ThinkingLevel ?? "off");
+    return clampThinkingLevel(model, (stored as ThinkingLevel) ?? "off");
   }
 
   /** The catalog metadata of one model, shaped for the UI (context window,
@@ -600,13 +607,14 @@ export class ModelManager {
    * must never become a default model by itself. Returns null when nothing
    * is configured — the caller then has no default model at all (see
    * `LumiscaCore.getDefaultModel`). */
-  async getFallbackModel(): Promise<
-    { provider: string; modelId: string } | null
-  > {
+  async getFallbackModel(): Promise<{
+    provider: string;
+    modelId: string;
+  } | null> {
     for (const p of this.getProviders()) {
-      if (!await this.hasConfiguredAuth(p.id)) continue;
+      if (!(await this.hasConfiguredAuth(p.id))) continue;
       const model = this.getModels(p.id).find((m) =>
-        this.isModelEnabled(p.id, m.id)
+        this.isModelEnabled(p.id, m.id),
       );
       if (model) return { provider: p.id, modelId: model.id };
     }
@@ -614,14 +622,14 @@ export class ModelManager {
   }
 }
 
+export type {
+  CatalogSource,
+  CatalogSourceKind,
+  CatalogStatus,
+} from "./catalog-source.ts";
 // Re-exported types for the server layer's user-provider surface.
 export type {
   UserProviderConfig,
   UserProviderInput,
   UserProviderSummary,
 } from "./user-providers.ts";
-export type {
-  CatalogSource,
-  CatalogSourceKind,
-  CatalogStatus,
-} from "./catalog-source.ts";

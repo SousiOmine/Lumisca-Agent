@@ -118,54 +118,59 @@ async function collect(
 
 Deno.test("a rejected request is re-sent with the room the provider reports", async () => {
   const caps: Array<number | undefined> = [];
-  const events = await collect(withOutputCapRecovery({
-    initialCap: 384_000,
-    open: scripted([
-      { events: [START, failure(REPORTED)] },
-      { events: [START, delta("hi"), DONE] },
-    ], caps),
-  }));
+  const events = await collect(
+    withOutputCapRecovery({
+      initialCap: 384_000,
+      open: scripted(
+        [
+          { events: [START, failure(REPORTED)] },
+          { events: [START, delta("hi"), DONE] },
+        ],
+        caps,
+      ),
+    }),
+  );
 
   // The retry asked for exactly the room the provider's counts leave.
-  assertEquals(caps, [
-    384_000,
-    1_048_576 - 666_931 - OVERFLOW_SAFETY_TOKENS,
-  ]);
+  assertEquals(caps, [384_000, 1_048_576 - 666_931 - OVERFLOW_SAFETY_TOKENS]);
   // The caller sees one start, the successful attempt's output and no error:
   // the turn completed as if the first request had fit.
   assertEquals(events.filter((event) => event.type === "start").length, 1);
   assertEquals(events.filter((event) => event.type === "error").length, 0);
-  assertEquals(events.map((event) => event.type), [
-    "start",
-    "text_delta",
-    "done",
-  ]);
+  assertEquals(
+    events.map((event) => event.type),
+    ["start", "text_delta", "done"],
+  );
 });
 
 Deno.test("output that already streamed is never replayed", async () => {
   // A cap cannot be the cause once content arrived, and re-sending would
   // duplicate it in the transcript.
   const caps: Array<number | undefined> = [];
-  const events = await collect(withOutputCapRecovery({
-    initialCap: 384_000,
-    open: scripted([
-      { events: [START, delta("par"), failure(REPORTED)] },
-    ], caps),
-  }));
+  const events = await collect(
+    withOutputCapRecovery({
+      initialCap: 384_000,
+      open: scripted(
+        [{ events: [START, delta("par"), failure(REPORTED)] }],
+        caps,
+      ),
+    }),
+  );
   assertEquals(caps.length, 1);
-  assertEquals(events.map((event) => event.type), [
-    "start",
-    "text_delta",
-    "error",
-  ]);
+  assertEquals(
+    events.map((event) => event.type),
+    ["start", "text_delta", "error"],
+  );
 });
 
 Deno.test("a failure that is not a window rejection is untouched", async () => {
   const caps: Array<number | undefined> = [];
-  const events = await collect(withOutputCapRecovery({
-    initialCap: 384_000,
-    open: scripted([{ events: [START, failure("invalid api key")] }], caps),
-  }));
+  const events = await collect(
+    withOutputCapRecovery({
+      initialCap: 384_000,
+      open: scripted([{ events: [START, failure("invalid api key")] }], caps),
+    }),
+  );
   assertEquals(caps, [384_000]);
   assertEquals(events.at(-1)!.type, "error");
 });
@@ -173,10 +178,12 @@ Deno.test("a failure that is not a window rejection is untouched", async () => {
 Deno.test("the recovery budget bounds a provider that keeps refusing", async () => {
   const caps: Array<number | undefined> = [];
   const always = { events: [START, failure(REPORTED)] };
-  const events = await collect(withOutputCapRecovery({
-    initialCap: 384_000,
-    open: scripted([always, always, always, always], caps),
-  }));
+  const events = await collect(
+    withOutputCapRecovery({
+      initialCap: 384_000,
+      open: scripted([always, always, always, always], caps),
+    }),
+  );
   // One request plus MAX_OUTPUT_CAP_RECOVERIES retries, each strictly
   // smaller than its predecessor.
   assertEquals(caps.length, 1 + MAX_OUTPUT_CAP_RECOVERIES);
@@ -190,24 +197,28 @@ Deno.test("a cancelled call is not retried", async () => {
   const caps: Array<number | undefined> = [];
   const controller = new AbortController();
   controller.abort();
-  const events = await collect(withOutputCapRecovery({
-    initialCap: 384_000,
-    signal: controller.signal,
-    open: scripted([{ events: [START, failure(REPORTED)] }], caps),
-  }));
+  const events = await collect(
+    withOutputCapRecovery({
+      initialCap: 384_000,
+      signal: controller.signal,
+      open: scripted([{ events: [START, failure(REPORTED)] }], caps),
+    }),
+  );
   assertEquals(caps.length, 1);
   assertEquals(events.at(-1)!.type, "error");
 });
 
 Deno.test("a thrown overflow is recovered the same way", async () => {
   const caps: Array<number | undefined> = [];
-  const events = await collect(withOutputCapRecovery({
-    initialCap: 384_000,
-    open: scripted([
-      { throws: REPORTED },
-      { events: [START, delta("hi"), DONE] },
-    ], caps),
-  }));
+  const events = await collect(
+    withOutputCapRecovery({
+      initialCap: 384_000,
+      open: scripted(
+        [{ throws: REPORTED }, { events: [START, delta("hi"), DONE] }],
+        caps,
+      ),
+    }),
+  );
   assertEquals(caps.length, 2);
   // The first attempt never reached its start, so the retry's start is the
   // caller's one placeholder for this turn.

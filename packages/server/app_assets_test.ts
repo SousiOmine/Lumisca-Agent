@@ -1,7 +1,6 @@
-import { fauxProvider } from "@lumisca/core";
-import { assert, assertEquals } from "@std/assert";
-import { LumiscaCore } from "@lumisca/core";
+import { fauxProvider, LumiscaCore } from "@lumisca/core";
 import { LANGUAGE_KEY, THEME_COLORS } from "@lumisca/core/shared";
+import { assert, assertEquals } from "@std/assert";
 import { createApp, startServer } from "./app.ts";
 
 /**
@@ -118,23 +117,17 @@ Deno.test("server serves the app shell", async () => {
   // Every screen the client addresses answers with the shell too: a
   // bookmark or a shared link is opened by the browser directly, and the
   // app renders the screen from the path (see packages/web/src/route.ts).
-  for (
-    const path of [
-      "/code",
-      "/code/s/0f6a1d1e-0000-4000-8000-000000000000",
-      "/code/p/1b2c3d4e-0000-4000-8000-000000000000/s/0f6a1d1e-0000-4000-8000-000000000000",
-      "/stella",
-      "/stella/a/1b2c3d4e-0000-4000-8000-000000000000",
-      "/code/s/0f6a1d1e-0000-4000-8000-000000000000/settings/providers",
-    ]
-  ) {
+  for (const path of [
+    "/code",
+    "/code/s/0f6a1d1e-0000-4000-8000-000000000000",
+    "/code/p/1b2c3d4e-0000-4000-8000-000000000000/s/0f6a1d1e-0000-4000-8000-000000000000",
+    "/stella",
+    "/stella/a/1b2c3d4e-0000-4000-8000-000000000000",
+    "/code/s/0f6a1d1e-0000-4000-8000-000000000000/settings/providers",
+  ]) {
     const deep = await fetch(`${base}${path}`);
     assertEquals(deep.status, 200, path);
-    assertEquals(
-      (await deep.text()).includes('id="root"'),
-      true,
-      path,
-    );
+    assertEquals((await deep.text()).includes('id="root"'), true, path);
   }
 
   // API must not be shadowed.
@@ -302,8 +295,14 @@ Deno.test("the client's chunks are served and the entry loads them lazily", asyn
   }
   // The chunks the build makes are the dynamic imports the entry names:
   // noVNC for the stella screen, motion/mini for an exit animation.
-  assertEquals(chunks.some((name) => name.startsWith("rfb-")), true);
-  assertEquals(chunks.some((name) => name.startsWith("mini-")), true);
+  assertEquals(
+    chunks.some((name) => name.startsWith("rfb-")),
+    true,
+  );
+  assertEquals(
+    chunks.some((name) => name.startsWith("mini-")),
+    true,
+  );
 });
 
 Deno.test("the app's files are compressed and revalidated", async () => {
@@ -368,7 +367,7 @@ Deno.test("the PWA surface is installable and never secret", async () => {
     manifestRes.headers.get("content-type"),
     "application/manifest+json",
   );
-  const manifest = await manifestRes.json() as {
+  const manifest = (await manifestRes.json()) as {
     start_url?: string;
     display?: string;
     theme_color?: string;
@@ -393,11 +392,7 @@ Deno.test("the PWA surface is installable and never secret", async () => {
       icon.src,
     );
     // The PNG header carries width and height big-endian at 16..24.
-    const view = new DataView(
-      bytes.buffer,
-      bytes.byteOffset,
-      bytes.byteLength,
-    );
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     assertEquals(`${view.getUint32(16)}x${view.getUint32(20)}`, icon.sizes);
   }
 
@@ -412,10 +407,7 @@ Deno.test("the PWA surface is installable and never secret", async () => {
   assertEquals(revalidated.status, 304);
 
   // iOS reads the touch icon from the page's <link>, so it is served too.
-  assertEquals(
-    (await fetch(`${base}/pwa/apple-touch-icon.png`)).status,
-    200,
-  );
+  assertEquals((await fetch(`${base}/pwa/apple-touch-icon.png`)).status, 200);
   // Anything else under /pwa/ is not a file of this build, and must not
   // fall through to the app shell.
   const unknown = await fetch(`${base}/pwa/icon-1024.png`);
@@ -446,13 +438,11 @@ Deno.test("the PWA surface is installable and never secret", async () => {
   // existing window, and a replaced subscription is re-registered. Without
   // the first the channel delivers nothing; without the last the app stops
   // notifying a device whose browser rotated its subscription.
-  for (
-    const listener of [
-      'addEventListener("push"',
-      'addEventListener("notificationclick"',
-      'addEventListener("pushsubscriptionchange"',
-    ]
-  ) {
+  for (const listener of [
+    'addEventListener("push"',
+    'addEventListener("notificationclick"',
+    'addEventListener("pushsubscriptionchange"',
+  ]) {
     assertEquals(swBody.includes(listener), true, listener);
   }
   // A notification is suppressed while the app is on screen, and that

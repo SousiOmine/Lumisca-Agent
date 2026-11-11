@@ -118,20 +118,21 @@ export interface PendingFile {
 /** Initial data served by the server's bootstrap script (/assets/initial-data.js).
  * Canonical definition lives in `@lumisca/core/shared` (so the server never
  * imports from `@lumisca/web`); re-exported here for web consumers. */
-export type { InitialData } from "@lumisca/core/shared";
-
 /** One routine as the settings list shows it — the stored row plus the
  * agent's name and whether it is running now. Defined in
  * `@lumisca/core/shared/routine.ts` (the route that produces it and this
  * panel both name it). */
-export type { RoutineView } from "@lumisca/core/shared";
-
 /** One row of the sidebar: the agent plus what its conversation last said,
  * and the preview itself (the text, or how many files, or that it was a
  * card). Defined in `@lumisca/core/shared/stella-preview.ts`, because the
  * server projects the preview with the same functions the client uses to
  * update the row it has open. */
-export type { StellaAgentSummary, StellaPreview } from "@lumisca/core/shared";
+export type {
+  InitialData,
+  RoutineView,
+  StellaAgentSummary,
+  StellaPreview,
+} from "@lumisca/core/shared";
 
 /** One pending ask (the `ask` tool): questions awaiting the user's answers,
  * tied to the tool call that asked them. */

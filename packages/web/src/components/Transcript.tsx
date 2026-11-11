@@ -1,17 +1,17 @@
+import { splitChatText } from "@lumisca/core/shared";
+import type { ComponentChildren } from "preact";
 import { useMemo, useRef } from "preact/compat";
 import { messageKey } from "../events.ts";
 import { useArrivals, withoutHandoff } from "../hooks/useArrivals.ts";
+import { useTranscriptScroll } from "../hooks/useTranscriptScroll.ts";
 import { useT } from "../i18n.ts";
-import type { ComponentChildren } from "preact";
 import type { AgentMessage, SessionView, ToolResultMessage } from "../types.ts";
-import type { ConversationTurnData, UserMessageImage } from "./chat/types.ts";
-import { buildTurns, ConversationTurn } from "./chat/ConversationTurn.tsx";
-import { splitChatText } from "@lumisca/core/shared";
 import { CardView } from "./chat/CardView.tsx";
+import { buildTurns, ConversationTurn } from "./chat/ConversationTurn.tsx";
 import { ErrorBanner } from "./chat/ErrorBanner.tsx";
 import { MarkdownBlock } from "./chat/MarkdownBlock.tsx";
+import type { ConversationTurnData, UserMessageImage } from "./chat/types.ts";
 import { ToolCall } from "./ToolCall.tsx";
-import { useTranscriptScroll } from "../hooks/useTranscriptScroll.ts";
 
 interface TranscriptProps {
   messages: AgentMessage[];
@@ -84,27 +84,25 @@ function lastAssistantText(turn: ConversationTurnData): string {
  * row, and the follow-the-bottom scroll. A stella conversation has its own
  * (components/stella/StellaTranscript.tsx): it receives different data, so
  * it is a different component rather than a flag here. */
-export function Transcript(
-  {
-    messages,
-    onLoadOlder,
-    loadingOlder,
-    hasOlder,
-    streamingText,
-    liveTools,
-    runningTools,
-    running,
-    agentEndedAt,
-    error,
-    visualBase,
-    attachBase,
-    onRewind,
-    onCardSend,
-    empty,
-    pinToken,
-    active = true,
-  }: TranscriptProps,
-) {
+export function Transcript({
+  messages,
+  onLoadOlder,
+  loadingOlder,
+  hasOlder,
+  streamingText,
+  liveTools,
+  runningTools,
+  running,
+  agentEndedAt,
+  error,
+  visualBase,
+  attachBase,
+  onRewind,
+  onCardSend,
+  empty,
+  pinToken,
+  active = true,
+}: TranscriptProps) {
   // The transcript holds a WINDOW of the session's history (see the core's
   // session/transcript-window.ts): reaching the top reads the page before it
   // and keeps the line the reader was on.
@@ -114,9 +112,8 @@ export function Transcript(
   const { scrollRef } = useTranscriptScroll({
     onReachTop: () => hasOlder && onLoadOlder(),
     loadingOlder,
-    firstMessageKey: messages[0] === undefined
-      ? undefined
-      : messageKey(messages[0]),
+    firstMessageKey:
+      messages[0] === undefined ? undefined : messageKey(messages[0]),
     pinToken,
     active,
   });
@@ -150,10 +147,7 @@ export function Transcript(
   streamed.current = streamingText;
   // The tail is read the same way a finished message is: its prose is drawn
   // as it arrives, and a card written into it is drawn while it is written.
-  const segments = useMemo(
-    () => splitChatText(streamingText),
-    [streamingText],
-  );
+  const segments = useMemo(() => splitChatText(streamingText), [streamingText]);
   const writingText = segments.at(-1)?.type === "text";
   const toolResults = useMemo(() => {
     const map = new Map<string, ToolResultMessage>();
@@ -171,12 +165,13 @@ export function Transcript(
             {t("chat.history.loadingOlder")}
           </p>
         )}
-        {messages.length === 0 && streamingText.length === 0 &&
+        {messages.length === 0 &&
+          streamingText.length === 0 &&
           liveTools.length === 0 && (
-          <div className="chat-empty">
-            <div className="chat-empty-inner">{empty}</div>
-          </div>
-        )}
+            <div className="chat-empty">
+              <div className="chat-empty-inner">{empty}</div>
+            </div>
+          )}
         {rows.map(({ turn, key }, index) => (
           <ConversationTurn
             key={`${key}-${index}`}
@@ -196,37 +191,31 @@ export function Transcript(
           <div className="msg">
             <div className="msg-body markdown">
               {segments.map((segment, index) =>
-                segment.type === "card"
-                  ? (
-                    <CardView
-                      key={index}
-                      markup={segment.markup}
-                      streaming
-                      onSend={onCardSend}
-                    />
-                  )
-                  : (
-                    <MarkdownBlock
-                      key={index}
-                      text={segment.text}
-                      visualBase={visualBase}
-                    />
-                  )
+                segment.type === "card" ? (
+                  <CardView
+                    key={index}
+                    markup={segment.markup}
+                    streaming
+                    onSend={onCardSend}
+                  />
+                ) : (
+                  <MarkdownBlock
+                    key={index}
+                    text={segment.text}
+                    visualBase={visualBase}
+                  />
+                ),
               )}
-              {
-                /* The step's text is finished once a tool of that step
-                 * runs: a caret would claim it is still being written. And
-                 * a caret under a card would claim the card is prose. */
-              }
+              {/* The step's text is finished once a tool of that step
+               * runs: a caret would claim it is still being written. And
+               * a caret under a card would claim the card is prose. */}
               {writingText && liveTools.length === 0 && (
                 <span className="cursor" />
               )}
-              {
-                /* The calls of the step that is running, drawn from the
-                 * tool_start events: their assistant message only arrives
-                 * once the step (and its tools) ended, so a row taken from
-                 * the message alone appears after the work is done. */
-              }
+              {/* The calls of the step that is running, drawn from the
+               * tool_start events: their assistant message only arrives
+               * once the step (and its tools) ended, so a row taken from
+               * the message alone appears after the work is done. */}
               {liveTools.map((toolCall, index) => (
                 <ToolCall
                   key={toolCall.id || `live-${index}`}

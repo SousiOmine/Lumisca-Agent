@@ -1,9 +1,9 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
+import type { RecentSessionItem } from "../hooks/useRecentSessions.ts";
 import { initLocale } from "../i18n.ts";
 import type { SessionInfo } from "../types.ts";
-import type { RecentSessionItem } from "../hooks/useRecentSessions.ts";
 import { RecentSessionsList } from "./RecentSessionsList.tsx";
 
 /**

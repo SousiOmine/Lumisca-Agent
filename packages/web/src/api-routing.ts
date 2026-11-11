@@ -1,9 +1,9 @@
-import type { ClientEvent, ThinkingLevel } from "./types.ts";
 import { peerRouted, tabCalls } from "./api-client.ts";
-import { type EventStreamOptions, openEventStream } from "./event-stream.ts";
-import { api, sessionRoutes } from "./api-local.ts";
 import { fed } from "./api-federation.ts";
+import { api, sessionRoutes } from "./api-local.ts";
+import { type EventStreamOptions, openEventStream } from "./event-stream.ts";
 import { splitTabKey } from "./tabs.ts";
+import type { ClientEvent, ThinkingLevel } from "./types.ts";
 
 /** Per-session API routed to the peer that owns the session ("" = this
  * server). Every call targets the machine running the agent: the methods are

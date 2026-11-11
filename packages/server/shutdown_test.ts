@@ -9,10 +9,7 @@ const delay = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
 /** A shutdown whose drain is controlled by the test. */
 function harness(
-  options: {
-    drain?: () => Promise<void>;
-    graceMs?: number;
-  } = {},
+  options: { drain?: () => Promise<void>; graceMs?: number } = {},
 ) {
   const exits: number[] = [];
   const signals: ShutdownSignal[] = [];

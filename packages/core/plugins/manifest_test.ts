@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { parsePluginManifest, PLUGIN_SCHEMA_URL } from "./manifest.ts";
+import { PLUGIN_SCHEMA_URL, parsePluginManifest } from "./manifest.ts";
 
 const FULL = {
   $schema: PLUGIN_SCHEMA_URL,
@@ -74,17 +74,15 @@ Deno.test("parsePluginManifest rejects an unsupported $schema", () => {
 });
 
 Deno.test("parsePluginManifest rejects invalid names", () => {
-  for (
-    const name of [
-      "",
-      "My-Plugin",
-      "-start",
-      "end-",
-      "has--double",
-      "too.many..dots",
-      "x".repeat(65),
-    ]
-  ) {
+  for (const name of [
+    "",
+    "My-Plugin",
+    "-start",
+    "end-",
+    "has--double",
+    "too.many..dots",
+    "x".repeat(65),
+  ]) {
     const result = parsePluginManifest(
       JSON.stringify({ $schema: PLUGIN_SCHEMA_URL, name }),
       "plugin.json",
@@ -94,16 +92,14 @@ Deno.test("parsePluginManifest rejects invalid names", () => {
 });
 
 Deno.test("parsePluginManifest rejects wrong-typed known fields", () => {
-  for (
-    const [key, value] of [
-      ["version", 1],
-      ["description", []],
-      ["homepage", true],
-      ["license", null],
-      ["keywords", "not-an-array"],
-      ["keywords", ["ok", 42]],
-    ] as const
-  ) {
+  for (const [key, value] of [
+    ["version", 1],
+    ["description", []],
+    ["homepage", true],
+    ["license", null],
+    ["keywords", "not-an-array"],
+    ["keywords", ["ok", 42]],
+  ] as const) {
     const result = parsePluginManifest(
       JSON.stringify({ $schema: PLUGIN_SCHEMA_URL, name: "x", [key]: value }),
       "plugin.json",

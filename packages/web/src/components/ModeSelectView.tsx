@@ -1,7 +1,7 @@
+import type { AppMode } from "@lumisca/core/shared";
 import { IconCode, IconSparkles } from "@tabler/icons-preact";
 import { useT } from "../i18n.ts";
 import type { StellaStatus } from "../types.ts";
-import type { AppMode } from "@lumisca/core/shared";
 
 export interface ModeSelectViewProps {
   /** What this server can do; null while the first read is in flight (both
@@ -26,9 +26,13 @@ export interface ModeSelectViewProps {
  * deliberately no "continue anyway": picking code mode is the alternative, and
  * it is right there.
  */
-export function ModeSelectView(
-  { status, mode, error, busy, onChoose }: ModeSelectViewProps,
-) {
+export function ModeSelectView({
+  status,
+  mode,
+  error,
+  busy,
+  onChoose,
+}: ModeSelectViewProps) {
   const t = useT();
   const stellaAvailable = status?.availability.available === true;
   return (
@@ -74,27 +78,28 @@ export function ModeSelectView(
             <span className="mode-card-description">
               {t("chat.modeSelect.stella.description")}
             </span>
-            {stellaAvailable
-              ? (
-                <span className="mode-card-action">
-                  {mode === "stella"
-                    ? t("chat.modeSelect.current")
-                    : t("chat.modeSelect.choose")}
-                </span>
-              )
-              : (
-                <span className="mode-card-unavailable">
-                  {t("chat.modeSelect.stella.unavailable", {
-                    reason: status?.availability.available === false
+            {stellaAvailable ? (
+              <span className="mode-card-action">
+                {mode === "stella"
+                  ? t("chat.modeSelect.current")
+                  : t("chat.modeSelect.choose")}
+              </span>
+            ) : (
+              <span className="mode-card-unavailable">
+                {t("chat.modeSelect.stella.unavailable", {
+                  reason:
+                    status?.availability.available === false
                       ? status.availability.reason
                       : "",
-                  })}
-                </span>
-              )}
+                })}
+              </span>
+            )}
           </button>
         </div>
         {error && (
-          <p className="error-text mode-select-error" role="alert">{error}</p>
+          <p className="error-text mode-select-error" role="alert">
+            {error}
+          </p>
         )}
       </div>
     </div>

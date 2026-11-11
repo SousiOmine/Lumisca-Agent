@@ -120,7 +120,9 @@ export function unixSocketPath(address: string): string | undefined {
  * needs to know that. */
 export function unwrapVariant(value: unknown): unknown {
   if (
-    typeof value === "object" && value !== null && "signature" in value &&
+    typeof value === "object" &&
+    value !== null &&
+    "signature" in value &&
     "value" in value
   ) {
     return (value as { value: unknown }).value;
@@ -136,8 +138,10 @@ export function signalMatchRule(
   interfaceName: string,
   member: string,
 ): string {
-  return `type='signal',path='${path}',interface='${interfaceName}',` +
-    `member='${member}'`;
+  return (
+    `type='signal',path='${path}',interface='${interfaceName}',` +
+    `member='${member}'`
+  );
 }
 
 /** Reject when `work` does not settle within `timeoutMs`. */
@@ -217,9 +221,8 @@ export async function connectPortalBus(
   const bus = sessionBus({ busAddress: address }) as MessageBus;
   let connectionFailure: Error | undefined;
   (bus as unknown as ErrorEmittingBus).on("error", (error) => {
-    connectionFailure ??= error instanceof Error
-      ? error
-      : new Error(String(error));
+    connectionFailure ??=
+      error instanceof Error ? error : new Error(String(error));
   });
 
   const call = async (
@@ -249,12 +252,16 @@ export async function connectPortalBus(
     }
     let reply: Message | null;
     try {
-      reply = await withTimeout(pending, timeoutMs, () =>
-        new CoreError(
-          `${request.interface}.${request.member} did not answer within ` +
-            `${timeoutMs}ms`,
-          "unavailable",
-        ));
+      reply = await withTimeout(
+        pending,
+        timeoutMs,
+        () =>
+          new CoreError(
+            `${request.interface}.${request.member} did not answer within ` +
+              `${timeoutMs}ms`,
+            "unavailable",
+          ),
+      );
     } catch (error) {
       throw callFailure(request, error);
     }
@@ -268,14 +275,17 @@ export async function connectPortalBus(
   };
 
   try {
-    await call({
-      destination: "org.freedesktop.DBus",
-      path: "/org/freedesktop/DBus",
-      interface: "org.freedesktop.DBus",
-      member: "GetId",
-      signature: "",
-      body: [],
-    }, CONNECT_TIMEOUT_MS);
+    await call(
+      {
+        destination: "org.freedesktop.DBus",
+        path: "/org/freedesktop/DBus",
+        interface: "org.freedesktop.DBus",
+        member: "GetId",
+        signature: "",
+        body: [],
+      },
+      CONNECT_TIMEOUT_MS,
+    );
   } catch (error) {
     bus.disconnect();
     throw new CoreError(

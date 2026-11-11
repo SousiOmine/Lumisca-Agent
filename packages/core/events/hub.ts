@@ -30,10 +30,7 @@ export class EventHub {
   emit(event: ClientEvent): void {
     if ("sessionId" in event) {
       const sessionId = event.sessionId;
-      this.revisions.set(
-        sessionId,
-        (this.revisions.get(sessionId) ?? 0) + 1,
-      );
+      this.revisions.set(sessionId, (this.revisions.get(sessionId) ?? 0) + 1);
     }
     for (const listener of this.listeners) {
       try {

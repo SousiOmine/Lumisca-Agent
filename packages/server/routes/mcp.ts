@@ -1,5 +1,3 @@
-import { Hono } from "hono";
-import type { Context } from "hono";
 import {
   type Locale,
   MCP_OAUTH_CALLBACK_PATH,
@@ -7,9 +5,11 @@ import {
   type McpInfo,
   type McpTestResult,
 } from "@lumisca/core";
-import { AppError, requireNonEmptyString } from "./util.ts";
-import { sameServerAuthority } from "../security.ts";
+import type { Context } from "hono";
+import { Hono } from "hono";
 import { renderMcpAuthPage } from "../render.ts";
+import { sameServerAuthority } from "../security.ts";
+import { AppError, requireNonEmptyString } from "./util.ts";
 
 /** The slice of the core these routes need (interface segregation). */
 export interface McpApi {
@@ -32,9 +32,11 @@ export interface McpApi {
   getMcpAuth(sessionId: string): McpAuthSnapshot | undefined;
   cancelMcpAuth(sessionId: string): boolean;
   /** Finish the sign-in the browser came back to. */
-  completeMcpAuth(
-    input: { state: string; code?: string; error?: string },
-  ): Promise<McpAuthSnapshot | undefined>;
+  completeMcpAuth(input: {
+    state: string;
+    code?: string;
+    error?: string;
+  }): Promise<McpAuthSnapshot | undefined>;
 }
 
 async function putConfig(
@@ -148,12 +150,14 @@ export function mcpRoutes(
     const state = c.req.query("state");
     const code = c.req.query("code");
     const hasError = c.req.query("error") !== undefined;
-    const snapshot = state === undefined ? undefined : await core
-      .completeMcpAuth({
-        state,
-        ...(code !== undefined ? { code } : {}),
-        ...(hasError ? { error: authorizationFailure(c) } : {}),
-      });
+    const snapshot =
+      state === undefined
+        ? undefined
+        : await core.completeMcpAuth({
+            state,
+            ...(code !== undefined ? { code } : {}),
+            ...(hasError ? { error: authorizationFailure(c) } : {}),
+          });
     if (snapshot === undefined) {
       return c.html(renderMcpAuthPage(language(c), "missing"), 404);
     }
@@ -171,9 +175,8 @@ export function mcpRoutes(
   });
 
   app.put("/workspaces/:id/mcp", async (c) => {
-    return await putConfig(
-      c,
-      (text) => core.setMcpConfig(c.req.param("id"), text),
+    return await putConfig(c, (text) =>
+      core.setMcpConfig(c.req.param("id"), text),
     );
   });
 

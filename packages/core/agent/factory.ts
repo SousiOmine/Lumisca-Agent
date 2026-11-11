@@ -1,56 +1,28 @@
-import type { AgentMessage } from "../ai/types.ts";
-import type { Api, Model } from "../ai/types.ts";
-import type { Tool } from "../tools/schema.ts";
-import type { StellaRuntime } from "../vm/runtime.ts";
+import { WORK_COMPACTION_STYLE } from "../ai/compaction-style.ts";
 import type { ContextProvider } from "../ai/context-providers.ts";
+import type { AgentMessage, Api, Model } from "../ai/types.ts";
+import {
+  BROWSER_TOOL_NAMES,
+  createBrowserToolsFrom,
+} from "../browser/tools.ts";
+import { COMPUTER_TOOL_NAMES, createComputerTools } from "../computer/tools.ts";
 import type { ClientEvent } from "../domain/event.ts";
 import type { SessionInfo } from "../domain/session.ts";
 import type { Workspace } from "../domain/workspace.ts";
-import {
-  createChatTools,
-  createCodingTools,
-  createStellaTools,
-} from "../tools/mod.ts";
-import { BackgroundProcessManager } from "../tools/background.ts";
-import { AskHub } from "../tools/ask.ts";
-import { TodoHub } from "../tools/todo.ts";
-import { TaskHub } from "../tools/task-hub.ts";
+import { CoreError } from "../errors.ts";
+import { createLogger } from "../log.ts";
+import { McpAttachment } from "../mcp/attachment.ts";
 import type { McpConfig } from "../mcp/config.ts";
+import { createMcpToolsProvider } from "../mcp/context.ts";
 import {
   createMcpAdminTools,
   MCP_ADMIN_TOOL_NAMES,
   type McpAdmin,
 } from "../mcp/manage-tools.ts";
 import { McpManager } from "../mcp/manager.ts";
-import { McpAttachment } from "../mcp/attachment.ts";
-import { SessionToolRegistries } from "../tools/registries.ts";
-import { createSkillCatalogProvider } from "../skills/catalog.ts";
 import { createInstructionsProvider } from "../memory/instructions.ts";
-import { createDateProvider } from "./date-context.ts";
-import { createLanguageProvider } from "./language-context.ts";
-import { createModelProvider } from "./model-context.ts";
-import { createMcpToolsProvider } from "../mcp/context.ts";
-import { SessionAgent as SessionAgentImpl } from "./session-agent.ts";
-import type { SessionAgent } from "./session-agent.ts";
-import { WORK_COMPACTION_STYLE } from "../ai/compaction-style.ts";
-import { STELLA_COMPACTION_STYLE } from "./stella-compaction.ts";
-import {
-  BROWSER_TOOL_NAMES,
-  createBrowserToolsFrom,
-} from "../browser/tools.ts";
-import { COMPUTER_TOOL_NAMES, createComputerTools } from "../computer/tools.ts";
 import { createPdfTools, PDF_TOOL_NAMES } from "../pdf/tools.ts";
-import {
-  hostBackends,
-  sessionSkills,
-  subagentSkills,
-  type ToolBackends,
-} from "../tools/toolsets.ts";
-import { CoreError } from "../errors.ts";
-import { createLogger } from "../log.ts";
-import type { SearchProvider } from "../websearch/types.ts";
-import type { SessionPoolDeps } from "./deps.ts";
-import type { SessionResources } from "./deps.ts";
+import { canonicalJson } from "../shared/digest.ts";
 import {
   TOOL_AGENT_CREATE,
   TOOL_IDENTITY,
@@ -61,7 +33,33 @@ import {
   TOOL_ROUTINE_UPDATE,
   TOOL_VM_ENV,
 } from "../shared/mod.ts";
-import { canonicalJson } from "../shared/digest.ts";
+import { createSkillCatalogProvider } from "../skills/catalog.ts";
+import { AskHub } from "../tools/ask.ts";
+import { BackgroundProcessManager } from "../tools/background.ts";
+import {
+  createChatTools,
+  createCodingTools,
+  createStellaTools,
+} from "../tools/mod.ts";
+import { SessionToolRegistries } from "../tools/registries.ts";
+import type { Tool } from "../tools/schema.ts";
+import { TaskHub } from "../tools/task-hub.ts";
+import { TodoHub } from "../tools/todo.ts";
+import {
+  hostBackends,
+  sessionSkills,
+  subagentSkills,
+  type ToolBackends,
+} from "../tools/toolsets.ts";
+import type { StellaRuntime } from "../vm/runtime.ts";
+import type { SearchProvider } from "../websearch/types.ts";
+import { createDateProvider } from "./date-context.ts";
+import type { SessionPoolDeps, SessionResources } from "./deps.ts";
+import { createLanguageProvider } from "./language-context.ts";
+import { createModelProvider } from "./model-context.ts";
+import type { SessionAgent } from "./session-agent.ts";
+import { SessionAgent as SessionAgentImpl } from "./session-agent.ts";
+import { STELLA_COMPACTION_STYLE } from "./stella-compaction.ts";
 
 /** Names of the routine tools (discoverable through tool_search): removed
  * from every session that is not stella's, added back when it is. */
@@ -238,9 +236,9 @@ export class AgentFactory {
       askHub: hubs.ask,
       ...(where.stella !== undefined
         ? {
-          handoverHub: where.stella.handoverHub,
-          envRequestHub: where.stella.envRequestHub,
-        }
+            handoverHub: where.stella.handoverHub,
+            envRequestHub: where.stella.envRequestHub,
+          }
         : {}),
       taskHub: hubs.tasks,
       toolRegistry: registries,
@@ -259,20 +257,21 @@ export class AgentFactory {
       compactionPolicy: () => this.deps.getCompactionPolicy(),
       // A stella conversation remembers the conversation (the record the
       // search can fill in); every other session remembers the work.
-      compactionStyle: where.stella !== undefined
-        ? STELLA_COMPACTION_STYLE
-        : WORK_COMPACTION_STYLE,
+      compactionStyle:
+        where.stella !== undefined
+          ? STELLA_COMPACTION_STYLE
+          : WORK_COMPACTION_STYLE,
       ...(where.stella !== undefined
         ? {
-          idleCompaction: STELLA_IDLE_COMPACTION,
-          // A stella conversation is the only one whose transcript outlives
-          // every window it crosses: what its checkpoints summarized is work
-          // nothing reads again (see session/prune.ts).
-          pruneCondensed: true,
-          ...(this.deps.recordFreedBytes === undefined
-            ? {}
-            : { onFreedBytes: this.deps.recordFreedBytes }),
-        }
+            idleCompaction: STELLA_IDLE_COMPACTION,
+            // A stella conversation is the only one whose transcript outlives
+            // every window it crosses: what its checkpoints summarized is work
+            // nothing reads again (see session/prune.ts).
+            pruneCondensed: true,
+            ...(this.deps.recordFreedBytes === undefined
+              ? {}
+              : { onFreedBytes: this.deps.recordFreedBytes }),
+          }
         : {}),
       renameSession: (name) => this.deps.renameSession(session.id, name),
       onEvent: (event) => {
@@ -309,7 +308,8 @@ export class AgentFactory {
     const merged = this.deps.loadMergedMcp(workspace);
     const existing = resources.mcp;
     if (
-      existing !== undefined && sameMcpConfig(existing.config, merged.config)
+      existing !== undefined &&
+      sameMcpConfig(existing.config, merged.config)
     ) {
       return existing;
     }
@@ -348,9 +348,8 @@ export class AgentFactory {
   ): SessionWhere {
     // A stella session works inside its virtual machine; every other session
     // works in this machine's workspace.
-    const stella = session.stella === true
-      ? this.deps.stellaRuntime?.(session)
-      : undefined;
+    const stella =
+      session.stella === true ? this.deps.stellaRuntime?.(session) : undefined;
     if (session.stella === true && stella === undefined) {
       // Only reachable if the machine was detached while its session stayed
       // open. Failing loudly beats building a stella agent with host tools —
@@ -360,9 +359,10 @@ export class AgentFactory {
         "unavailable",
       );
     }
-    const backends: ToolBackends = stella !== undefined
-      ? { files: stella.files, runner: stella.runner }
-      : hostBackends(workspace, { appSkillDirs: this.deps.appSkillDirs });
+    const backends: ToolBackends =
+      stella !== undefined
+        ? { files: stella.files, runner: stella.runner }
+        : hostBackends(workspace, { appSkillDirs: this.deps.appSkillDirs });
     // A stella conversation row lives in the folder-less chat workspace (it
     // has no folders of its own — its files are in the machine), but it is
     // NOT a chat session: it has a shell, background commands and
@@ -443,9 +443,7 @@ export class AgentFactory {
     registries: SessionToolRegistries,
   ): void {
     if (where.browserAvailable) {
-      registries.addShared(
-        createBrowserToolsFrom(() => this.deps.browser?.()),
-      );
+      registries.addShared(createBrowserToolsFrom(() => this.deps.browser?.()));
     } else {
       registries.removeShared(BROWSER_TOOL_NAMES);
     }
@@ -547,26 +545,27 @@ export class AgentFactory {
         // catalog lives inside the machine, so only its runtime can name the
         // skills; the filter keeps the main-only guides out either way.
         const stella = where.stella;
-        const skills = stella !== undefined
-          ? () =>
-            subagentSkills(stella.skills(), {
-              browserAvailable: where.browserAvailable,
-              computerAvailable: where.computerAvailable(),
-              // A sub-agent has no hub of its own: the guide that teaches
-              // the task tool has no reader here.
-              subagents: false,
-            })
-          : () =>
-            sessionSkills(workspace.folders, {
-              browserAvailable: where.browserAvailable,
-              computerAvailable: where.computerAvailable(),
-              ...(this.deps.appSkillDirs !== undefined
-                ? { appSkillDirs: this.deps.appSkillDirs }
-                : {}),
-              ...(this.deps.globalSkillDirs !== undefined
-                ? { globalDirs: this.deps.globalSkillDirs }
-                : {}),
-            });
+        const skills =
+          stella !== undefined
+            ? () =>
+                subagentSkills(stella.skills(), {
+                  browserAvailable: where.browserAvailable,
+                  computerAvailable: where.computerAvailable(),
+                  // A sub-agent has no hub of its own: the guide that teaches
+                  // the task tool has no reader here.
+                  subagents: false,
+                })
+            : () =>
+                sessionSkills(workspace.folders, {
+                  browserAvailable: where.browserAvailable,
+                  computerAvailable: where.computerAvailable(),
+                  ...(this.deps.appSkillDirs !== undefined
+                    ? { appSkillDirs: this.deps.appSkillDirs }
+                    : {}),
+                  ...(this.deps.globalSkillDirs !== undefined
+                    ? { globalDirs: this.deps.globalSkillDirs }
+                    : {}),
+                });
         // `eval` runs in the server process, so a stella session's
         // sub-agents must not have it (its tools all run inside the
         // machine; see generalTools).
@@ -585,10 +584,7 @@ export class AgentFactory {
         }
         return {
           backends: where.backends,
-          model: this.deps.requireModel(
-            session.modelProvider,
-            session.modelId,
-          ),
+          model: this.deps.requireModel(session.modelProvider, session.modelId),
           thinkingLevel: this.deps.getThinkingLevel(
             session.modelProvider,
             session.modelId,
@@ -738,8 +734,10 @@ export class AgentFactory {
       // pool. A session without an agent id still says the machine's part —
       // stella is the mode, not a property of the row.
       session.stella === true
-        ? (this.deps.stellaAgentPersona?.(session) ??
-          { role: "", id: session.agentId ?? "" })
+        ? (this.deps.stellaAgentPersona?.(session) ?? {
+            role: "",
+            id: session.agentId ?? "",
+          })
         : undefined,
     );
     if (generated !== session.systemPrompt) {
@@ -769,26 +767,27 @@ export class AgentFactory {
       // (vm/skills.ts). Both resolve through the same seam, so the published
       // listing is exactly what the session's skill tool can load.
       createSkillCatalogProvider({
-        skills: stella !== undefined
-          ? () => stella.skills()
-          : () =>
-            sessionSkills(workspace.folders, {
-              browserAvailable,
-              computerAvailable: where.computerAvailable(),
-              // A chat session has no tool hub, so it cannot start one.
-              subagents: !chat,
-              // This catalog is the main agent's: it holds the MCP
-              // administration tools when the session has them.
-              mcpAdmin: where.mcpAdmin !== undefined,
-              // Only a session with file tools can write a skill.
-              skillAuthoring: !chat,
-              ...(this.deps.appSkillDirs !== undefined
-                ? { appSkillDirs: this.deps.appSkillDirs }
-                : {}),
-              ...(this.deps.globalSkillDirs !== undefined
-                ? { globalDirs: this.deps.globalSkillDirs }
-                : {}),
-            }),
+        skills:
+          stella !== undefined
+            ? () => stella.skills()
+            : () =>
+                sessionSkills(workspace.folders, {
+                  browserAvailable,
+                  computerAvailable: where.computerAvailable(),
+                  // A chat session has no tool hub, so it cannot start one.
+                  subagents: !chat,
+                  // This catalog is the main agent's: it holds the MCP
+                  // administration tools when the session has them.
+                  mcpAdmin: where.mcpAdmin !== undefined,
+                  // Only a session with file tools can write a skill.
+                  skillAuthoring: !chat,
+                  ...(this.deps.appSkillDirs !== undefined
+                    ? { appSkillDirs: this.deps.appSkillDirs }
+                    : {}),
+                  ...(this.deps.globalSkillDirs !== undefined
+                    ? { globalDirs: this.deps.globalSkillDirs }
+                    : {}),
+                }),
       }),
       createInstructionsProvider({
         folders: workspace.folders,
@@ -850,7 +849,8 @@ export class AgentFactory {
     // (and was dropped) is the whole reason to reload: skipping it would
     // keep the session on a manager that never sees the new grant.
     if (
-      options.reloadCredentials !== true && previous !== undefined &&
+      options.reloadCredentials !== true &&
+      previous !== undefined &&
       sameMcpConfig(previous.config, merged.config)
     ) {
       return;
@@ -909,9 +909,9 @@ export class AgentFactory {
         .filter((s) => s.status === "error");
       if (failed.length > 0) {
         emitError(
-          `MCP servers failed: ${
-            failed.map((s) => `${s.name}: ${s.error}`).join("; ")
-          }`,
+          `MCP servers failed: ${failed
+            .map((s) => `${s.name}: ${s.error}`)
+            .join("; ")}`,
         );
       }
     });

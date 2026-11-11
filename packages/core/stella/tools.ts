@@ -28,19 +28,23 @@ const createSchema = object({
     `Name shown in the sidebar (1-${MAX_AGENT_NAME_CHARS} characters), in ` +
       "the user's words",
   ),
-  role: optional(string(
-    "What this agent is for and how it works, in the user's words: its job, " +
-      "the tone it keeps, what it checks and when it asks. This becomes its " +
-      `system prompt (at most ${MAX_AGENT_ROLE_CHARS} characters). Send this ` +
-      "or role_file, not both",
-  )),
-  role_file: optional(string(
-    "Path of a file in the machine holding the role text, in the same form " +
-      "the file tools take (absolute, or relative to the working folder). " +
-      "Read as UTF-8 and trimmed. Use this instead of role when the role is " +
-      `long. At most ${MAX_AGENT_ROLE_CHARS} characters. Send this or role, ` +
-      "not both",
-  )),
+  role: optional(
+    string(
+      "What this agent is for and how it works, in the user's words: its job, " +
+        "the tone it keeps, what it checks and when it asks. This becomes its " +
+        `system prompt (at most ${MAX_AGENT_ROLE_CHARS} characters). Send this ` +
+        "or role_file, not both",
+    ),
+  ),
+  role_file: optional(
+    string(
+      "Path of a file in the machine holding the role text, in the same form " +
+        "the file tools take (absolute, or relative to the working folder). " +
+        "Read as UTF-8 and trimmed. Use this instead of role when the role is " +
+        `long. At most ${MAX_AGENT_ROLE_CHARS} characters. Send this or role, ` +
+        "not both",
+    ),
+  ),
 });
 
 export interface AgentCreateOptions {
@@ -162,17 +166,19 @@ export function createAgentCreateTool(
       const agent = await create({ name: params.name, role });
       // Saying where the role came from is what lets the model tell the user
       // which file was used; the file itself is not kept anywhere.
-      const origin = source === undefined
-        ? ""
-        : `\nIts role was read from ${source}.`;
+      const origin =
+        source === undefined ? "" : `\nIts role was read from ${source}.`;
       return {
-        content: [{
-          type: "text",
-          text: `Created the agent "${agent.name}".${origin}\n\n` +
-            "Its role is in its system prompt, so it works that way from its " +
-            "first turn. It appears in the sidebar; the user opens it there, " +
-            "and this conversation does not switch to it.",
-        }],
+        content: [
+          {
+            type: "text",
+            text:
+              `Created the agent "${agent.name}".${origin}\n\n` +
+              "Its role is in its system prompt, so it works that way from its " +
+              "first turn. It appears in the sidebar; the user opens it there, " +
+              "and this conversation does not switch to it.",
+          },
+        ],
         details: { id: agent.id, name: agent.name },
       };
     },

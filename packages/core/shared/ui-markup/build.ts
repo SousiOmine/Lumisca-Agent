@@ -108,7 +108,7 @@ function buildData(node: RawElement): UiData {
   checkAttributes(node, []);
 
   const raw = node.children
-    .map((child) => child.kind === "text" ? child.text : "")
+    .map((child) => (child.kind === "text" ? child.text : ""))
     .join("")
     .trim();
   if (raw.length === 0) {
@@ -177,12 +177,7 @@ function buildBlock(node: RawElement, scope: Scope): UiBlock {
       checkAttributes(node, []);
       return {
         type: "text",
-        text: contentText(
-          node,
-          UI_MARKUP_LIMITS.textChars,
-          "the text",
-          scope,
-        ),
+        text: contentText(node, UI_MARKUP_LIMITS.textChars, "the text", scope),
       };
 
     case "List":
@@ -279,8 +274,9 @@ function buildLayout(node: RawElement, scope: Scope): UiLayoutBlock {
 }
 
 function layoutChildren(node: RawElement, scope: Scope): UiBlock[] {
-  const blocks = elementChildren(node, BLOCK_TAGS)
-    .map((child) => buildBlock(child, scope));
+  const blocks = elementChildren(node, BLOCK_TAGS).map((child) =>
+    buildBlock(child, scope),
+  );
   if (blocks.length === 0) {
     fail(node.at, `<${node.name}> needs at least one block`);
   }
@@ -300,11 +296,7 @@ function buildRepeat(node: RawElement, scope: Scope): UiBlock {
     fail(node.at, "a <Repeat> cannot sit inside another <Repeat>");
   }
 
-  const over = requiredAttribute(
-    node,
-    "over",
-    UI_MARKUP_LIMITS.dataPathChars,
-  );
+  const over = requiredAttribute(node, "over", UI_MARKUP_LIMITS.dataPathChars);
   checkPath(over, node.at);
 
   const value = valueAt(scope.data, over);
@@ -324,8 +316,9 @@ function buildRepeat(node: RawElement, scope: Scope): UiBlock {
   }
 
   const inner: Scope = { data: scope.data, items };
-  const blocks = elementChildren(node, BLOCK_TAGS)
-    .map((child) => buildBlock(child, inner));
+  const blocks = elementChildren(node, BLOCK_TAGS).map((child) =>
+    buildBlock(child, inner),
+  );
   if (blocks.length === 0) fail(node.at, "<Repeat> needs at least one block");
   return { type: "repeat", over, blocks };
 }
@@ -342,8 +335,9 @@ function buildIf(node: RawElement, scope: Scope): UiBlock {
   const field = itemReference(test, node.at, scope);
   assertFieldOnItems(field, node.at, scope);
 
-  const blocks = elementChildren(node, BLOCK_TAGS)
-    .map((child) => buildBlock(child, scope));
+  const blocks = elementChildren(node, BLOCK_TAGS).map((child) =>
+    buildBlock(child, scope),
+  );
   if (blocks.length === 0) fail(node.at, "<If> needs at least one block");
 
   const condition: UiCondition = { field, eq, ne };
@@ -528,7 +522,9 @@ function flowShape(node: RawElement): UiFlowShape {
   const value = stringAttribute(node, "shape", 20);
   if (value === null) return "box";
   if (
-    value === "box" || value === "round" || value === "diamond" ||
+    value === "box" ||
+    value === "round" ||
+    value === "diamond" ||
     value === "pill"
   ) {
     return value;
@@ -592,7 +588,7 @@ function buildForm(node: RawElement, scope: Scope): UiFormBlock {
     scope,
   );
   const fields = elementChildren(node, ["Field"]).map((field) =>
-    readField(field, scope)
+    readField(field, scope),
   );
 
   if (fields.length === 0) fail(node.at, "<Form> needs at least one <Field>");
@@ -647,7 +643,9 @@ function fieldType(node: RawElement): UiFieldType {
   const value = stringAttribute(node, "type", 20);
   if (value === null) return "text";
   if (
-    value === "text" || value === "number" || value === "select" ||
+    value === "text" ||
+    value === "number" ||
+    value === "select" ||
     value === "checkbox"
   ) {
     return value;
@@ -716,10 +714,7 @@ function countBlocks(blocks: readonly UiBlock[]): number {
  *
  * An `<If>` is counted as drawn: whether it is depends on an item, and the
  * bound has to hold for every item the card could carry. */
-function expandedBlocks(
-  blocks: readonly UiBlock[],
-  data: UiData,
-): number {
+function expandedBlocks(blocks: readonly UiBlock[], data: UiData): number {
   let total = 0;
   for (const block of blocks) {
     if (block.type === "repeat") {
@@ -753,8 +748,11 @@ function interactiveCount(blocks: readonly UiBlock[]): number {
       continue;
     }
     if (
-      block.type === "stack" || block.type === "columns" ||
-      block.type === "grid" || block.type === "repeat" || block.type === "if"
+      block.type === "stack" ||
+      block.type === "columns" ||
+      block.type === "grid" ||
+      block.type === "repeat" ||
+      block.type === "if"
     ) {
       total += interactiveCount(block.blocks);
     }
@@ -767,10 +765,7 @@ function interactiveCount(blocks: readonly UiBlock[]): number {
 /** A path into the card's data: dotted keys, no brackets. */
 function checkPath(path: string, at: number): void {
   if (!/^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/.test(path)) {
-    fail(
-      at,
-      `"${path}" is not a data path (write it as keys joined by dots)`,
-    );
+    fail(at, `"${path}" is not a data path (write it as keys joined by dots)`);
   }
   if (path.length > UI_MARKUP_LIMITS.dataPathChars) {
     fail(at, `the path "${path}" is too long`);
@@ -850,7 +845,9 @@ export function valueAt(
   let current = root;
   for (const key of path.split(".")) {
     if (
-      typeof current !== "object" || current === null || Array.isArray(current)
+      typeof current !== "object" ||
+      current === null ||
+      Array.isArray(current)
     ) {
       return { found: false, value: undefined };
     }
@@ -861,8 +858,11 @@ export function valueAt(
 }
 
 function isScalar(value: unknown): boolean {
-  return typeof value === "string" || typeof value === "number" ||
-    typeof value === "boolean";
+  return (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  );
 }
 
 // --- attributes -------------------------------------------------------------
@@ -872,9 +872,10 @@ function checkAttributes(node: RawElement, allowed: readonly string[]): void {
   for (const attribute of node.attrs) {
     if (allowed.includes(attribute.name)) continue;
 
-    const hint = allowed.length === 0
-      ? "it takes no attributes"
-      : `allowed: ${allowed.join(", ")}`;
+    const hint =
+      allowed.length === 0
+        ? "it takes no attributes"
+        : `allowed: ${allowed.join(", ")}`;
     fail(
       attribute.at,
       `<${node.name}> does not take the attribute "${attribute.name}" (${hint})`,
@@ -955,10 +956,7 @@ function flagAttribute(node: RawElement, name: string): boolean {
   const attribute = node.attrs.find((entry) => entry.name === name);
   if (attribute === undefined) return false;
   if (attribute.value !== null) {
-    fail(
-      attribute.at,
-      `attribute "${name}" of <${node.name}> takes no value`,
-    );
+    fail(attribute.at, `attribute "${name}" of <${node.name}> takes no value`);
   }
   return true;
 }
@@ -1018,9 +1016,8 @@ function elementChildren(
       );
     }
     if (!allowed.includes(child.name)) {
-      const hint = allowed.length === 0
-        ? ""
-        : ` (allowed: ${allowed.join(", ")})`;
+      const hint =
+        allowed.length === 0 ? "" : ` (allowed: ${allowed.join(", ")})`;
       fail(
         child.at,
         `<${child.name}> is not allowed inside <${node.name}>${hint}`,
@@ -1055,7 +1052,8 @@ function normalizeText(raw: string): string {
     lines.shift();
   }
   while (
-    lines.length > 0 && (lines[lines.length - 1] ?? "").trim().length === 0
+    lines.length > 0 &&
+    (lines[lines.length - 1] ?? "").trim().length === 0
   ) {
     lines.pop();
   }
@@ -1068,7 +1066,7 @@ function normalizeText(raw: string): string {
   }
 
   const dedented = lines.map((line) =>
-    line.trim().length === 0 ? "" : line.slice(indent)
+    line.trim().length === 0 ? "" : line.slice(indent),
   );
   return dedented.join("\n").trim();
 }
@@ -1086,8 +1084,7 @@ export function parseUiMarkup(source: string): UiParseResult {
   if (text.length > UI_MARKUP_LIMITS.chars) {
     return {
       ok: false,
-      problem:
-        `the markup is ${text.length} characters; the limit is ${UI_MARKUP_LIMITS.chars}`,
+      problem: `the markup is ${text.length} characters; the limit is ${UI_MARKUP_LIMITS.chars}`,
     };
   }
 

@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from "preact/compat";
 import {
   IconDownload,
   IconLoader2,
   IconRefresh,
   IconX,
 } from "@tabler/icons-preact";
+import { useEffect, useRef, useState } from "preact/compat";
 import type { UpdateControls } from "../hooks/useUpdateStatus.ts";
 import { useT } from "../i18n.ts";
 
@@ -23,9 +23,13 @@ import { useT } from "../i18n.ts";
  * button away. Without it the click looks ignored until the restart offer
  * appears.
  */
-export function UpdateBanner(
-  { update, stale }: { update: UpdateControls; stale: boolean },
-) {
+export function UpdateBanner({
+  update,
+  stale,
+}: {
+  update: UpdateControls;
+  stale: boolean;
+}) {
   const t = useT();
   const [dismissed, setDismissed] = useState(false);
   const status = update.status;
@@ -42,10 +46,10 @@ export function UpdateBanner(
     const current = !actionable
       ? null
       : installing
-      ? `install:${status?.latestVersion}`
-      : restartPending
-      ? `restart:${status?.appliedVersion}`
-      : `ready:${status?.latestVersion}`;
+        ? `install:${status?.latestVersion}`
+        : restartPending
+          ? `restart:${status?.appliedVersion}`
+          : `ready:${status?.latestVersion}`;
     if (current !== null && current !== previousRef.current) {
       setDismissed(false);
     }
@@ -87,45 +91,47 @@ export function UpdateBanner(
   const readyText = t("chrome.update.ready", {
     version: status?.latestVersion ?? "",
   });
-  const restartText = status?.restartMode === "supervisor"
-    ? t("chrome.update.restartNote") + t("chrome.update.systemdNote")
-    : canRestart
-    ? t("chrome.update.restartNote")
-    : t("chrome.update.nextStart");
+  const restartText =
+    status?.restartMode === "supervisor"
+      ? t("chrome.update.restartNote") + t("chrome.update.systemdNote")
+      : canRestart
+        ? t("chrome.update.restartNote")
+        : t("chrome.update.nextStart");
   const text = installing
     ? t("chrome.update.installing", { version: status?.latestVersion ?? "" })
     : restartPending
-    ? t("chrome.update.downloaded", { version: status?.appliedVersion ?? "" }) +
-      restartText
-    : server
-    ? readyText
-    : readyText + t("chrome.update.installRestart");
+      ? t("chrome.update.downloaded", {
+          version: status?.appliedVersion ?? "",
+        }) + restartText
+      : server
+        ? readyText
+        : readyText + t("chrome.update.installRestart");
 
   return (
     <div className="update-banner">
-      {installing
-        ? <IconLoader2 size={16} className="spin" />
-        : restartPending
-        ? <IconRefresh size={16} />
-        : <IconDownload size={16} />}
+      {installing ? (
+        <IconLoader2 size={16} className="spin" />
+      ) : restartPending ? (
+        <IconRefresh size={16} />
+      ) : (
+        <IconDownload size={16} />
+      )}
       <span className="update-banner-text">{text}</span>
-      {installing
-        ? (
-          <button type="button" className="btn push" disabled>
-            {t("chrome.update.installingButton")}
-          </button>
-        )
-        : restartPending
-        ? canRestart && (
+      {installing ? (
+        <button type="button" className="btn push" disabled>
+          {t("chrome.update.installingButton")}
+        </button>
+      ) : restartPending ? (
+        canRestart && (
           <button type="button" className="btn push" onClick={update.restart}>
             {t("chrome.update.restartNow")}
           </button>
         )
-        : (
-          <button type="button" className="btn push" onClick={update.install}>
-            {t("chrome.update.installNow")}
-          </button>
-        )}
+      ) : (
+        <button type="button" className="btn push" onClick={update.install}>
+          {t("chrome.update.installNow")}
+        </button>
+      )}
       <button
         type="button"
         className="btn"

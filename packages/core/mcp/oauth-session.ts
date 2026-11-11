@@ -174,10 +174,7 @@ export class McpAuthSession {
     }
   }
 
-  private settle(
-    status: "done" | "error" | "cancelled",
-    error?: string,
-  ): void {
+  private settle(status: "done" | "error" | "cancelled", error?: string): void {
     if (this.status !== "starting" && this.status !== "waiting") return;
     this.status = status;
     this.error = error;

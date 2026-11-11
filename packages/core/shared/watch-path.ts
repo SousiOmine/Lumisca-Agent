@@ -31,8 +31,10 @@ export function watchPathProblem(path: unknown): string | null {
   for (const segment of path.split(".")) {
     const name = segment.endsWith("[]") ? segment.slice(0, -2) : segment;
     if (!FIELD.test(name)) {
-      return `"${segment}" is not a field name (letters, digits, "_" and ` +
-        '"-", with "[]" after a name whose value is an array to map over)';
+      return (
+        `"${segment}" is not a field name (letters, digits, "_" and ` +
+        '"-", with "[]" after a name whose value is an array to map over)'
+      );
     }
   }
   return null;

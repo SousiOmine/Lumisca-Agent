@@ -14,7 +14,6 @@
 import { posix } from "node:path";
 import { base64ToBytes, textToBase64 } from "../base64.ts";
 import { firstLine, mergeRanges, stripTrailingCR } from "../lines.ts";
-import type { ResolvedPath } from "../workspace/sandbox.ts";
 import type {
   BackendDirEntry,
   BackendStat,
@@ -22,8 +21,9 @@ import type {
   LineRange,
   RangeReadResult,
 } from "../tools/file-backend.ts";
-import { VM_WORKDIR } from "./contract.ts";
+import type { ResolvedPath } from "../workspace/sandbox.ts";
 import type { VmExec } from "./container.ts";
+import { VM_WORKDIR } from "./contract.ts";
 import { shellQuote } from "./quote.ts";
 
 /** Bound for one file operation (a local call; this only guards against a
@@ -96,14 +96,11 @@ export class VmFileBackend implements FileBackend {
   ): Promise<{ bytes: Uint8Array; size: number }> {
     // base64: a read hands binary files (images) to the model as image
     // blocks, so the payload must not pass through a text decode.
-    const result = await this.#exec(
-      ["base64", "--wrap=0", "--", path],
-      {
-        timeoutMs: FILE_TIMEOUT_MS,
-        maxOutput: Math.ceil(maxBytes / 3) * 4 + 8,
-        keep: "head",
-      },
-    );
+    const result = await this.#exec(["base64", "--wrap=0", "--", path], {
+      timeoutMs: FILE_TIMEOUT_MS,
+      maxOutput: Math.ceil(maxBytes / 3) * 4 + 8,
+      keep: "head",
+    });
     if (result.exitCode !== 0) {
       throw new Error(`Could not read ${path}: ${firstLine(result.stderr)}`);
     }
@@ -127,10 +124,11 @@ export class VmFileBackend implements FileBackend {
     const maxTo = merged[merged.length - 1]!.to;
     const script = [
       `wc -l < ${shellQuote(path)} 2>/dev/null || echo 0`,
-      ...merged.map((range) =>
-        `sed -n ${shellQuote(`${range.from},${range.to}p`)} ${
-          shellQuote(path)
-        } 2>/dev/null`
+      ...merged.map(
+        (range) =>
+          `sed -n ${shellQuote(`${range.from},${range.to}p`)} ${shellQuote(
+            path,
+          )} 2>/dev/null`,
       ),
     ].join("\n");
     const result = await this.#exec(["sh", "-c", script], {
@@ -144,13 +142,15 @@ export class VmFileBackend implements FileBackend {
     // The first line is the file's line count; the rest are the requested
     // ranges in order.
     const newline = result.stdout.indexOf("\n");
-    const reported = newline === -1
-      ? Number(result.stdout.trim())
-      : Number(result.stdout.slice(0, newline).trim());
+    const reported =
+      newline === -1
+        ? Number(result.stdout.trim())
+        : Number(result.stdout.slice(0, newline).trim());
     const body = newline === -1 ? "" : result.stdout.slice(newline + 1);
-    const lines = body.length === 0
-      ? []
-      : body.replace(/\n$/, "").split("\n").map(stripTrailingCR);
+    const lines =
+      body.length === 0
+        ? []
+        : body.replace(/\n$/, "").split("\n").map(stripTrailingCR);
     return {
       lines,
       endOfFile: Number.isFinite(reported) && reported < maxTo,
@@ -208,11 +208,11 @@ export class VmFileBackend implements FileBackend {
         "sh",
         "-c",
         'cd "$1" 2>/dev/null || exit 3; ' +
-        "for entry in * .[!.]* ..?*; do " +
-        '[ -e "$entry" ] || [ -L "$entry" ] || continue; ' +
-        'if [ -L "$entry" ]; then printf "l|%s\\n" "$entry"; ' +
-        'elif [ -d "$entry" ]; then printf "d|%s\\n" "$entry"; ' +
-        'else printf "f|%s\\n" "$entry"; fi; done',
+          "for entry in * .[!.]* ..?*; do " +
+          '[ -e "$entry" ] || [ -L "$entry" ] || continue; ' +
+          'if [ -L "$entry" ]; then printf "l|%s\\n" "$entry"; ' +
+          'elif [ -d "$entry" ]; then printf "d|%s\\n" "$entry"; ' +
+          'else printf "f|%s\\n" "$entry"; fi; done',
         "sh",
         path,
       ],
@@ -241,9 +241,7 @@ export class VmFileBackend implements FileBackend {
       timeoutMs: FILE_TIMEOUT_MS,
     });
     if (result.exitCode !== 0) {
-      throw new Error(
-        `Could not create ${path}: ${firstLine(result.stderr)}`,
-      );
+      throw new Error(`Could not create ${path}: ${firstLine(result.stderr)}`);
     }
   }
 }
@@ -261,11 +259,12 @@ export function resolveVmPath(
   if (typeof requested !== "string" || requested.length === 0) {
     return { ok: false, reason: "Path must be a non-empty string" };
   }
-  const expanded = requested === "~"
-    ? VM_WORKDIR
-    : requested.startsWith("~/")
-    ? posix.join(VM_WORKDIR, requested.slice(2))
-    : requested;
+  const expanded =
+    requested === "~"
+      ? VM_WORKDIR
+      : requested.startsWith("~/")
+        ? posix.join(VM_WORKDIR, requested.slice(2))
+        : requested;
   const absolute = posix.isAbsolute(expanded)
     ? posix.normalize(expanded)
     : posix.resolve(cwd, expanded);

@@ -1,4 +1,9 @@
 import {
+  errorMessage,
+  type MessageKey,
+  type MessageParams,
+} from "@lumisca/core/shared";
+import {
   IconArrowsMaximize,
   IconArrowsMinimize,
   IconX,
@@ -10,22 +15,17 @@ import {
   useRef,
   useState,
 } from "preact/compat";
-import {
-  errorMessage,
-  type MessageKey,
-  type MessageParams,
-} from "@lumisca/core/shared";
 import { token } from "../api-client.ts";
 import { stellaApi } from "../api-stella.ts";
+import { formatClockTime } from "../format.ts";
+import { useNarrowViewport, useReducedMotion } from "../hooks/useMediaQuery.ts";
+import { useLocale, useT } from "../i18n.ts";
+import { EASE_OUT, EXIT_SECONDS, play } from "../motion.ts";
 import {
   normalizeClipboardText,
   type PasteChord,
   pasteChordOf,
 } from "../stella-clipboard.ts";
-import { useLocale, useT } from "../i18n.ts";
-import { formatClockTime } from "../format.ts";
-import { EASE_OUT, EXIT_SECONDS, play } from "../motion.ts";
-import { useNarrowViewport, useReducedMotion } from "../hooks/useMediaQuery.ts";
 import type { StellaHandover } from "../types.ts";
 
 /**
@@ -299,9 +299,11 @@ export function StellaPane({
   // clipboard), so only a failure needs a sentence.
   const clipboardAvailable = interactive && agentId !== null;
   const [clipboardBusy, setClipboardBusy] = useState(false);
-  const [clipboardNote, setClipboardNote] = useState<
-    { tone: "ok" | "error"; key: MessageKey; params?: MessageParams } | null
-  >(null);
+  const [clipboardNote, setClipboardNote] = useState<{
+    tone: "ok" | "error";
+    key: MessageKey;
+    params?: MessageParams;
+  } | null>(null);
   /** The text last handed to either side. A write of ours comes back as an
    * announcement from the machine, and reading it in again would overwrite
    * whatever this PC's clipboard holds now; this is what stops that. */
@@ -476,7 +478,7 @@ export function StellaPane({
       try {
         await waitForSize(host, 10_000);
         if (disposed) return;
-        const { default: RFB } = await import("@novnc/novnc") as {
+        const { default: RFB } = (await import("@novnc/novnc")) as {
           default: RfbConstructor;
         };
         if (disposed) return;
@@ -484,9 +486,8 @@ export function StellaPane({
         // it. The token rides as a query parameter because a browser cannot
         // set headers on a WebSocket handshake.
         const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-        const query = token === undefined
-          ? ""
-          : `?token=${encodeURIComponent(token)}`;
+        const query =
+          token === undefined ? "" : `?token=${encodeURIComponent(token)}`;
         const url = `${protocol}//${location.host}/api/stella/screen${query}`;
         const rfb = new RFB(host, url);
         client = rfb;
@@ -535,9 +536,8 @@ export function StellaPane({
         setState("disconnected");
         setError(
           t("chat.stella.machine.screenFailed", {
-            reason: failure instanceof Error
-              ? failure.message
-              : String(failure),
+            reason:
+              failure instanceof Error ? failure.message : String(failure),
           }),
         );
       }
@@ -589,9 +589,11 @@ export function StellaPane({
           )}
           aria-pressed={fullscreen}
         >
-          {fullscreen
-            ? <IconArrowsMinimize size={15} />
-            : <IconArrowsMaximize size={15} />}
+          {fullscreen ? (
+            <IconArrowsMinimize size={15} />
+          ) : (
+            <IconArrowsMaximize size={15} />
+          )}
         </button>
         {onClose !== undefined && (
           <button
@@ -616,9 +618,7 @@ export function StellaPane({
             onFinishHandover(note.trim(), handover.toolCallId)
               .then(() => setNote(""))
               .catch((failure) => {
-                setFinishError(
-                  errorMessage(failure),
-                );
+                setFinishError(errorMessage(failure));
               })
               .finally(() => setFinishing(false));
           }}
@@ -646,11 +646,7 @@ export function StellaPane({
               value={note}
               onChange={(event) => setNote(event.currentTarget.value)}
             />
-            <button
-              type="submit"
-              className="btn primary"
-              disabled={finishing}
-            >
+            <button type="submit" className="btn primary" disabled={finishing}>
               {finishing
                 ? t("chat.stella.handover.finishing")
                 : t("chat.stella.handover.done")}
@@ -690,7 +686,9 @@ export function StellaPane({
             </div>
           )}
           {finishError !== null && (
-            <p className="error-text" role="alert">{finishError}</p>
+            <p className="error-text" role="alert">
+              {finishError}
+            </p>
           )}
         </form>
       )}
@@ -706,12 +704,12 @@ export function StellaPane({
           </p>
         )}
         {error !== null && (
-          <p className="error-text stella-pane-note" role="alert">{error}</p>
+          <p className="error-text stella-pane-note" role="alert">
+            {error}
+          </p>
         )}
-        {
-          /* noVNC renders into this element; it must not be replaced while the
-            connection lives (the client holds the node). */
-        }
+        {/* noVNC renders into this element; it must not be replaced while the
+            connection lives (the client holds the node). */}
         <div ref={hostRef} className="stella-pane-screen" />
       </div>
     </aside>

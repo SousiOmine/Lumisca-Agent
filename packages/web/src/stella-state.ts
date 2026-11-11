@@ -85,9 +85,10 @@ export function stellaStateOf(
   snapshot: StellaConversationSnapshot,
   current?: StellaConversationState,
 ): StellaConversationState {
-  const merged = current === undefined
-    ? { entries: snapshot.entries, replaced: true }
-    : mergeEntries(current.entries, snapshot.entries);
+  const merged =
+    current === undefined
+      ? { entries: snapshot.entries, replaced: true }
+      : mergeEntries(current.entries, snapshot.entries);
   return {
     entries: merged.entries,
     // The client keeps the cursor of the oldest entry it loaded unless the
@@ -244,8 +245,9 @@ export function applyStellaEvent(
 ): StellaConversationState | null {
   switch (event.type) {
     case "agent_start":
-      return state.running && state.error === undefined &&
-          state.liveCard === null
+      return state.running &&
+        state.error === undefined &&
+        state.liveCard === null
         ? null
         : { ...state, running: true, error: undefined, liveCard: null };
     case "agent_end":
@@ -253,9 +255,10 @@ export function applyStellaEvent(
         ? null
         : { ...state, running: false, liveCard: null };
     case "card_delta": {
-      const markup = state.liveCard?.toolCallId === event.toolCallId
-        ? state.liveCard.markup + event.delta
-        : event.delta;
+      const markup =
+        state.liveCard?.toolCallId === event.toolCallId
+          ? state.liveCard.markup + event.delta
+          : event.delta;
       return {
         ...state,
         liveCard: { toolCallId: event.toolCallId, markup },
@@ -273,20 +276,26 @@ export function applyStellaEvent(
         : { ...state, entries, liveCard: null };
     }
     case "questions":
-      return sameAsks(event.questions, state.questions) ? null : {
-        ...state,
-        questions: event.questions,
-      };
+      return sameAsks(event.questions, state.questions)
+        ? null
+        : {
+            ...state,
+            questions: event.questions,
+          };
     case "handover":
-      return sameHandover(event.handover, state.handover) ? null : {
-        ...state,
-        handover: event.handover,
-      };
+      return sameHandover(event.handover, state.handover)
+        ? null
+        : {
+            ...state,
+            handover: event.handover,
+          };
     case "env_request":
-      return sameEnvRequest(event.request, state.envRequest) ? null : {
-        ...state,
-        envRequest: event.request,
-      };
+      return sameEnvRequest(event.request, state.envRequest)
+        ? null
+        : {
+            ...state,
+            envRequest: event.request,
+          };
     case "error":
       return { ...state, error: event.message, liveCard: null };
   }
@@ -298,8 +307,12 @@ function sameHandover(
 ): boolean {
   if (a === b) return true;
   if (a === null || b === null) return false;
-  return a.toolCallId === b.toolCallId && a.reason === b.reason &&
-    a.instructions === b.instructions && a.expiresAt === b.expiresAt;
+  return (
+    a.toolCallId === b.toolCallId &&
+    a.reason === b.reason &&
+    a.instructions === b.instructions &&
+    a.expiresAt === b.expiresAt
+  );
 }
 
 function sameEnvRequest(
@@ -308,8 +321,12 @@ function sameEnvRequest(
 ): boolean {
   if (a === b) return true;
   if (a === null || b === null) return false;
-  return a.toolCallId === b.toolCallId && a.name === b.name &&
-    a.exists === b.exists && a.expiresAt === b.expiresAt;
+  return (
+    a.toolCallId === b.toolCallId &&
+    a.name === b.name &&
+    a.exists === b.exists &&
+    a.expiresAt === b.expiresAt
+  );
 }
 
 /** An empty conversation (the sidebar can be shown before one is open). The

@@ -104,8 +104,8 @@ export function createResourceStore<T, E = string>(
   options: ResourceOptions<T, E>,
 ): ResourceStore<T, E> {
   const same = options.same ?? Object.is;
-  const describeError = options.describeError ??
-    ((error: unknown) => describeThrown(error) as E);
+  const describeError =
+    options.describeError ?? ((error: unknown) => describeThrown(error) as E);
   let value: T & ResourceStatus<E> = {
     ...options.initial,
     loading: false,
@@ -133,8 +133,10 @@ export function createResourceStore<T, E = string>(
    * re-render every subscriber (the tab-switch case the stores exist for). */
   const publish = (next: T & ResourceStatus<E>) => {
     if (
-      value.loading === next.loading && value.loaded === next.loaded &&
-      value.error === next.error && same(value, next)
+      value.loading === next.loading &&
+      value.loaded === next.loaded &&
+      value.error === next.error &&
+      same(value, next)
     ) {
       return;
     }

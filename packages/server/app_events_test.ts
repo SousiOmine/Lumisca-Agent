@@ -1,11 +1,9 @@
 import { basename, join } from "node:path";
 
 import { fauxAssistantMessage, fauxToolCall } from "@lumisca/core";
-import { assert, assertEquals } from "@std/assert";
-
-import { json, setup } from "./test-utils.ts";
-
 import { removeDirRetry } from "@lumisca/core/test-utils";
+import { assert, assertEquals } from "@std/assert";
+import { json, setup } from "./test-utils.ts";
 
 Deno.test("the event stream batches a reply's deltas into few frames", async () => {
   // A run streams one text delta per token. Forwarding each as its own frame
@@ -18,24 +16,28 @@ Deno.test("the event stream batches a reply's deltas into few frames", async () 
   });
   try {
     const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
-    const ws = await (await json(base, "/api/workspaces", {
-      method: "POST",
-      body: JSON.stringify({ name: "ws", folders: [root] }),
-    })).json();
+    const ws = await (
+      await json(base, "/api/workspaces", {
+        method: "POST",
+        body: JSON.stringify({ name: "ws", folders: [root] }),
+      })
+    ).json();
     // Many text blocks = many text deltas (the faux stream emits one delta
     // per text block).
     const words = Array.from({ length: 120 }, (_, i) => `w${i} `);
     faux.setResponses([
       fauxAssistantMessage(words.map((text) => ({ type: "text", text }))),
     ]);
-    const session = await (await json(base, "/api/sessions", {
-      method: "POST",
-      body: JSON.stringify({
-        workspaceId: ws.id,
-        modelProvider: faux.provider.id,
-        modelId: faux.getModel().id,
-      }),
-    })).json();
+    const session = await (
+      await json(base, "/api/sessions", {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: ws.id,
+          modelProvider: faux.provider.id,
+          modelId: faux.getModel().id,
+        }),
+      })
+    ).json();
 
     const socket = new WebSocket(`ws://127.0.0.1:${server.addr.port}/ws`);
     const frames: Array<Record<string, unknown>> = [];
@@ -64,7 +66,10 @@ Deno.test("the event stream batches a reply's deltas into few frames", async () 
     // transcript's text), the text in order, and the count they cover.
     const text = deltas.map((f) => f.delta as string).join("");
     assertEquals(text, words.join(""));
-    assertEquals(deltas.every((f) => f.sessionId === session.id), true);
+    assertEquals(
+      deltas.every((f) => f.sessionId === session.id),
+      true,
+    );
     assertEquals(
       deltas.reduce((sum, f) => sum + (f.events as number), 0),
       words.length,
@@ -95,11 +100,13 @@ Deno.test("websocket streams agent events", async () => {
     // happens to re-read the transcript snapshot.
     faux.setResponses([
       fauxAssistantMessage(
-        [fauxToolCall("edit", {
-          path: `${basename(root)}/a.txt`,
-          old_string: "one",
-          new_string: "one\ntwo",
-        })],
+        [
+          fauxToolCall("edit", {
+            path: `${basename(root)}/a.txt`,
+            old_string: "one",
+            new_string: "one\ntwo",
+          }),
+        ],
         { stopReason: "toolUse" },
       ),
       fauxAssistantMessage("Streamed!"),
@@ -137,9 +144,10 @@ Deno.test("websocket streams agent events", async () => {
     assertEquals(types.includes("message_end"), true);
     assertEquals(types.includes("agent_end"), true);
 
-    const resultEnd = events.find((e) =>
-      e.type === "message_end" &&
-      (e.message as { role?: string }).role === "toolResult"
+    const resultEnd = events.find(
+      (e) =>
+        e.type === "message_end" &&
+        (e.message as { role?: string }).role === "toolResult",
     );
     assert(
       resultEnd !== undefined,
@@ -167,7 +175,7 @@ Deno.test("websocket streams agent events", async () => {
     for (const frame of tracked) {
       assertEquals(
         frame.rev,
-        expected + (frame.events as number ?? 1) - 1,
+        expected + ((frame.events as number) ?? 1) - 1,
         `revision ${frame.rev} does not follow ${expected - 1}`,
       );
       expected = (frame.rev as number) + 1;
@@ -203,7 +211,10 @@ Deno.test("the event stream carries heartbeat frames while it is idle", async ()
     socket.close();
     // Nothing else happens on an idle stream, and the heartbeat frame is
     // transport-level: it carries no peer id and no session id.
-    assertEquals(frames.every((f) => f.type === "heartbeat"), true);
+    assertEquals(
+      frames.every((f) => f.type === "heartbeat"),
+      true,
+    );
     assertEquals(frames[0], { type: "heartbeat" });
   } finally {
     server.shutdown();

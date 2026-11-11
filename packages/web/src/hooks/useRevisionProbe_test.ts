@@ -58,7 +58,10 @@ Deno.test("a later change is reported once per move", async () => {
 });
 
 Deno.test("each key is compared on its own", async () => {
-  const revisions = new Map([["a", 1], ["b", 1]]);
+  const revisions = new Map([
+    ["a", 1],
+    ["b", 1],
+  ]);
   const { probe, moved } = harness(revisions);
   await probeOnce(probe); // seed both
   revisions.set("b", 2);
@@ -88,7 +91,10 @@ Deno.test("a disposed or disconnected owner is not probed", async () => {
 });
 
 Deno.test("a key closed mid-flight is not re-read", async () => {
-  const revisions = new Map([["a", 1], ["b", 1]]);
+  const revisions = new Map([
+    ["a", 1],
+    ["b", 1],
+  ]);
   const open = new Set(["a", "b"]);
   const { probe, moved } = harness(revisions);
   await probeOnce(probe); // seed

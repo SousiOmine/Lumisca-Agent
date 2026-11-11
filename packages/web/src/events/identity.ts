@@ -1,5 +1,5 @@
-import { isViewRunning } from "../types.ts";
 import type { AgentMessage, SessionView } from "../types.ts";
+import { isViewRunning } from "../types.ts";
 import {
   type LoadedWindow,
   mergeNewestWindow as mergeWindow,
@@ -21,14 +21,12 @@ import {
  *
  * The minimal shape also accepts the entries carried by the
  * messages_truncated event, which name the same fields. */
-export function messageKey(
-  m: {
-    role: string;
-    timestamp: number;
-    toolCallId?: unknown;
-    provider?: unknown;
-  },
-): string {
+export function messageKey(m: {
+  role: string;
+  timestamp: number;
+  toolCallId?: unknown;
+  provider?: unknown;
+}): string {
   if (m.role === "toolResult" && typeof m.toolCallId === "string") {
     return `${m.role}:${m.toolCallId}`;
   }
@@ -68,11 +66,10 @@ export function mergeNewestWindow(
   removed: Set<string>,
 ): LoadedHistory {
   return fromWindow(
-    mergeWindow(
-      toWindow(history),
-      toWindow(window),
-      { key: (message) => messageKey(message), multiAnchor: true },
-    ),
+    mergeWindow(toWindow(history), toWindow(window), {
+      key: (message) => messageKey(message),
+      multiAnchor: true,
+    }),
     removed,
   );
 }
@@ -86,12 +83,9 @@ export function prependOlderWindow(
   nextOlder: string | null,
 ): LoadedHistory {
   return fromWindow(
-    prependWindow(
-      toWindow(history),
-      fetched,
-      nextOlder,
-      { key: (message) => messageKey(message) },
-    ),
+    prependWindow(toWindow(history), fetched, nextOlder, {
+      key: (message) => messageKey(message),
+    }),
     new Set(),
   );
 }

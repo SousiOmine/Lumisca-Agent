@@ -6,8 +6,8 @@
  * library to its configuration store.
  */
 
-import { errorMessage } from "../shared/misc.ts";
 import type { Locale } from "../shared/i18n/mod.ts";
+import { errorMessage } from "../shared/misc.ts";
 import type { WebSearchTestView } from "../shared/web-search.ts";
 import { WebSearchError } from "./errors.ts";
 import { failureText } from "./failure-text.ts";
@@ -64,11 +64,7 @@ export function createWebSearchManager(options: {
       if (key.length === 0) {
         return {
           ok: false,
-          detail: failureText(
-            options.locale(),
-            "auth",
-            "the API key is empty",
-          ),
+          detail: failureText(options.locale(), "auth", "the API key is empty"),
           results: 0,
         };
       }

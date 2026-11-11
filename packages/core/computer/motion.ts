@@ -50,9 +50,7 @@ export function interpolatePoint(from: Point, to: Point, ratio: number): Point {
  * newline cannot ride along as a character — most controls drop a CR/LF code
  * unit (measured on Windows: "a\r\nb" arrives as "ab") — so it becomes an
  * Enter key press, which is also what a person would do. */
-export type TypeSegment =
-  | { kind: "text"; value: string }
-  | { kind: "enter" };
+export type TypeSegment = { kind: "text"; value: string } | { kind: "enter" };
 
 /** Split typed text into text runs and Enter presses. */
 export function splitTypeText(text: string): TypeSegment[] {

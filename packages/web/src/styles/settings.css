@@ -491,7 +491,8 @@
   text-align: left;
   font-size: 13px;
   color: var(--text-dim);
-  transition: background var(--lum-dur-fast) var(--lum-ease-out),
+  transition:
+    background var(--lum-dur-fast) var(--lum-ease-out),
     color var(--lum-dur-fast) var(--lum-ease-out);
 }
 
@@ -556,7 +557,8 @@
   margin-top: -2px;
   border-radius: var(--radius-pill);
   color: var(--text-dim);
-  transition: background var(--lum-dur-fast) var(--lum-ease-out),
+  transition:
+    background var(--lum-dur-fast) var(--lum-ease-out),
     color var(--lum-dur-fast) var(--lum-ease-out);
 }
 

@@ -63,8 +63,11 @@ export interface ToolCall {
   arguments: Record<string, unknown>;
 }
 
-export type AssistantMessageContent =
-  (TextContent | ThinkingContent | ToolCall)[];
+export type AssistantMessageContent = (
+  | TextContent
+  | ThinkingContent
+  | ToolCall
+)[];
 
 // ---- usage / cost ----------------------------------------------------------
 
@@ -510,29 +513,29 @@ export interface AuthPromptOption {
 
 export type AuthPrompt =
   | {
-    type: "secret";
-    message: string;
-    placeholder?: string;
-    signal?: AbortSignal;
-  }
+      type: "secret";
+      message: string;
+      placeholder?: string;
+      signal?: AbortSignal;
+    }
   | {
-    type: "text";
-    message: string;
-    placeholder?: string;
-    signal?: AbortSignal;
-  }
+      type: "text";
+      message: string;
+      placeholder?: string;
+      signal?: AbortSignal;
+    }
   | {
-    type: "manual_code";
-    message: string;
-    placeholder?: string;
-    signal?: AbortSignal;
-  }
+      type: "manual_code";
+      message: string;
+      placeholder?: string;
+      signal?: AbortSignal;
+    }
   | {
-    type: "select";
-    message: string;
-    options: readonly AuthPromptOption[];
-    signal?: AbortSignal;
-  };
+      type: "select";
+      message: string;
+      options: readonly AuthPromptOption[];
+      signal?: AbortSignal;
+    };
 
 /** A login-flow notice (device code, auth URL, info, progress). Common
  * Fields are typed for the server bus; provider-specific extras ride
@@ -576,43 +579,41 @@ export type StreamEvent =
   | { type: "text_delta"; delta: string; [k: string]: unknown }
   | { type: "thinking_delta"; delta: string; [k: string]: unknown }
   | {
-    type: "error";
-    errorMessage?: string;
-    /** Non-message detail of the failure (HTTP status, URL, body, cause
-     * chain — see ai/error-detail.ts). The agent renders it beside the
-     * message so a failure is diagnosable without debug logging. */
-    errorDetail?: string;
-    /** The provider marked the failure retryable (APICallError.isRetryable).
-     * The retry policy prefers this over matching the message text. */
-    errorRetryable?: boolean;
-    [k: string]: unknown;
-  }
+      type: "error";
+      errorMessage?: string;
+      /** Non-message detail of the failure (HTTP status, URL, body, cause
+       * chain — see ai/error-detail.ts). The agent renders it beside the
+       * message so a failure is diagnosable without debug logging. */
+      errorDetail?: string;
+      /** The provider marked the failure retryable (APICallError.isRetryable).
+       * The retry policy prefers this over matching the message text. */
+      errorRetryable?: boolean;
+      [k: string]: unknown;
+    }
   | {
-    type: "toolcall_start";
-    toolCallId: string;
-    toolName: string;
-    args: Record<string, unknown>;
-    [k: string]: unknown;
-  }
+      type: "toolcall_start";
+      toolCallId: string;
+      toolName: string;
+      args: Record<string, unknown>;
+      [k: string]: unknown;
+    }
   | {
-    type: "toolcall_result";
-    toolCallId: string;
-    toolName: string;
-    content: Array<
-      {
+      type: "toolcall_result";
+      toolCallId: string;
+      toolName: string;
+      content: Array<{
         type: "text" | "image";
         text?: string;
         data?: string;
         mimeType?: string;
-      }
-    >;
-    /** Structured details of the result (see tools/schema.ts
-     * `ToolResult.details`): the UI reads them for the diff badge. `{}`
-     * when the result carried none. */
-    details?: Record<string, unknown>;
-    isError: boolean;
-    [k: string]: unknown;
-  }
+      }>;
+      /** Structured details of the result (see tools/schema.ts
+       * `ToolResult.details`): the UI reads them for the diff badge. `{}`
+       * when the result carried none. */
+      details?: Record<string, unknown>;
+      isError: boolean;
+      [k: string]: unknown;
+    }
   | { type: "done"; message: AssistantMessage; [k: string]: unknown };
 
 /**
@@ -669,27 +670,27 @@ export type AgentEvent =
   | { type: "agent_start" }
   | { type: "message_start"; message: AgentMessage }
   | {
-    type: "message_update";
-    assistantMessageEvent:
-      | { type: "text_delta"; delta: string }
-      | { type: "thinking_delta"; delta: string };
-  }
+      type: "message_update";
+      assistantMessageEvent:
+        | { type: "text_delta"; delta: string }
+        | { type: "thinking_delta"; delta: string };
+    }
   | { type: "message_end"; message: AgentMessage }
   | {
-    type: "tool_execution_start";
-    toolCallId: string;
-    toolName: string;
-    args: unknown;
-  }
+      type: "tool_execution_start";
+      toolCallId: string;
+      toolName: string;
+      args: unknown;
+    }
   /** A tool call finished running. The outcome (content, details, isError)
    * is NOT carried here: it travels as the toolResult message the agent
    * appends to the transcript and announces with `message_end` (one
    * payload, one carrier — see the web's tool-line rendering). */
   | {
-    type: "tool_execution_end";
-    toolCallId: string;
-    toolName: string;
-  }
+      type: "tool_execution_end";
+      toolCallId: string;
+      toolName: string;
+    }
   | { type: "turn_end"; message: AgentMessage }
   | { type: "agent_end"; message?: AssistantMessage };
 

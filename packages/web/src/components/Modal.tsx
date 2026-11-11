@@ -34,9 +34,7 @@ interface ModalProps {
    * `onClose` — for the decisions that unmount the dialog from the caller's
    * side (a dialog that asks "stop the run or keep it going?" hands the
    * answer to its parent, which is what removes it). */
-  children:
-    | ReactNode
-    | ((close: (after?: () => void) => void) => ReactNode);
+  children: ReactNode | ((close: (after?: () => void) => void) => ReactNode);
 }
 
 /** Anything the focus trap will let the user Tab to. */
@@ -142,10 +140,12 @@ export function Modal({
     if (!captured.current) {
       captured.current = true;
       const before = document.activeElement;
-      opener.current = before instanceof HTMLElement &&
-          before !== document.body && !dialog.contains(before)
-        ? before
-        : null;
+      opener.current =
+        before instanceof HTMLElement &&
+        before !== document.body &&
+        !dialog.contains(before)
+          ? before
+          : null;
     }
     // Move focus into the dialog: without this the keyboard stays on the
     // control behind the backdrop. A dialog whose child carries `autoFocus`
@@ -195,11 +195,14 @@ export function Modal({
   // Restored on unmount, not when the exit starts: the sheet is still on
   // screen while it fades, and moving the keyboard behind it first would put
   // the focus where the reader cannot see it.
-  useEffect(() => () => {
-    const target = opener.current;
-    opener.current = null;
-    if (target !== null && target.isConnected) target.focus();
-  }, []);
+  useEffect(
+    () => () => {
+      const target = opener.current;
+      opener.current = null;
+      if (target !== null && target.isConnected) target.focus();
+    },
+    [],
+  );
 
   /** The exit ended on the sheet. The backdrop's transition bubbles through
    * here too, and so do the children's, so the target is checked. */

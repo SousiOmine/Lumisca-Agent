@@ -1,6 +1,6 @@
+import { CoreError, errorMessage, type WindowQuery } from "@lumisca/core";
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/http-status";
-import { CoreError, errorMessage, type WindowQuery } from "@lumisca/core";
 
 /** Error with an explicit HTTP status. Thrown by route handlers when the
  * status matters (e.g. 404); everything else is classified by errorStatus. */
@@ -36,10 +36,7 @@ export function jsonError(
   error: unknown,
   status?: ContentfulStatusCode,
 ) {
-  return c.json(
-    { error: errorMessage(error) },
-    status ?? errorStatus(error),
-  );
+  return c.json({ error: errorMessage(error) }, status ?? errorStatus(error));
 }
 
 /** Parse a JSON request body. Throws 400 on malformed JSON — a syntax

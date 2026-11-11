@@ -1,9 +1,9 @@
-import { Marked, type RendererObject, type Tokens } from "marked";
 import {
   MAX_VISUAL_SVG_BYTES,
   parseVisualRef,
   type Translator,
 } from "@lumisca/core/shared";
+import { Marked, type RendererObject, type Tokens } from "marked";
 
 function escapeHtml(text: string): string {
   return text
@@ -59,24 +59,23 @@ function rendererFor(options: MarkdownOptions): RendererObject {
     },
     link(token: Tokens.Link) {
       const href = SAFE_PROTOCOLS.test(token.href) ? token.href : "#";
-      return `<a href="${
-        escapeHtml(href)
-      }" target="_blank" rel="noopener noreferrer">${
-        escapeHtml(token.text)
-      }</a>`;
+      return `<a href="${escapeHtml(
+        href,
+      )}" target="_blank" rel="noopener noreferrer">${escapeHtml(
+        token.text,
+      )}</a>`;
     },
     image(token: Tokens.Image) {
       const name = parseVisualRef(token.href);
       // A published visual is drawn from its downscaled preview by default
       // (the route produces one when the picture is big); the click opens the
       // original through the lightbox, which asks for `preview=0`.
-      const href = name === undefined
-        ? safeImageHref(token.href)
-        : `${visualBase}${name}`;
+      const href =
+        name === undefined ? safeImageHref(token.href) : `${visualBase}${name}`;
       if (!href) return "";
-      return `<img src="${escapeHtml(href)}" alt="${
-        escapeHtml(token.text)
-      }" />`;
+      return `<img src="${escapeHtml(href)}" alt="${escapeHtml(
+        token.text,
+      )}" />`;
     },
     code(token: Tokens.Code) {
       // Returning false keeps marked's own code rendering (`false` = "use the
@@ -118,22 +117,24 @@ function svgVisual(source: string, t: Translator): string {
   // The SVG's own title names the picture for assistive technology; an SVG
   // without one is embedded without alt text.
   const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(svg)?.[1] ?? "";
-  return `<img class="visual-svg" src="data:image/svg+xml;charset=utf-8,${
-    encodeURIComponent(svg)
-  }" alt="${escapeHtml(title.trim())}" />`;
+  return `<img class="visual-svg" src="data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+    svg,
+  )}" alt="${escapeHtml(title.trim())}" />`;
 }
 
 /** The card a visual that cannot be shown renders. */
 function visualError(reason: string, source: string, t: Translator): string {
-  return `<figure class="visual-error">` +
-    `<figcaption class="visual-error-title">${
-      escapeHtml(t("chat.visual.error.title"))
-    }</figcaption>` +
+  return (
+    `<figure class="visual-error">` +
+    `<figcaption class="visual-error-title">${escapeHtml(
+      t("chat.visual.error.title"),
+    )}</figcaption>` +
     `<p class="visual-error-reason">${escapeHtml(reason)}</p>` +
-    `<details class="visual-error-source"><summary>${
-      escapeHtml(t("chat.visual.error.source"))
-    }</summary><pre>${escapeHtml(source)}</pre></details>` +
-    `</figure>`;
+    `<details class="visual-error-source"><summary>${escapeHtml(
+      t("chat.visual.error.source"),
+    )}</summary><pre>${escapeHtml(source)}</pre></details>` +
+    `</figure>`
+  );
 }
 
 /** The parser of the last call, with the options it was built for. A parser
@@ -151,7 +152,8 @@ let last: { visualBase: string; t: Translator; marked: Marked } | null = null;
 
 function markedFor(options: MarkdownOptions): Marked {
   if (
-    last !== null && last.visualBase === options.visualBase &&
+    last !== null &&
+    last.visualBase === options.visualBase &&
     last.t === options.t
   ) {
     return last.marked;
@@ -162,10 +164,7 @@ function markedFor(options: MarkdownOptions): Marked {
 }
 
 /** Render model output as sanitized markdown HTML. */
-export function renderMarkdown(
-  text: string,
-  options: MarkdownOptions,
-): string {
+export function renderMarkdown(text: string, options: MarkdownOptions): string {
   // The instance keeps no state of its own between parses: each call merges
   // its own options over the defaults and builds a fresh lexer and parser
   // (markdown_test.ts renders twice on one instance to hold that).

@@ -1,11 +1,10 @@
 import { assert, assertEquals } from "@std/assert";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "./ai/faux.ts";
-import { LumiscaCore } from "./core.ts";
-import { createVmManager } from "./vm/container.ts";
-
-import { VM_WORKDIR, vmAgentDir } from "./vm/contract.ts";
 import type { AgentMessage } from "./ai/types.ts";
+import { LumiscaCore } from "./core.ts";
 import { promptSession } from "./test-utils.ts";
+import { createVmManager } from "./vm/container.ts";
+import { VM_WORKDIR, vmAgentDir } from "./vm/contract.ts";
 
 /**
  * The stella conversation, end to end inside a real container.
@@ -78,12 +77,15 @@ Deno.test("stella live: a tool call runs inside the machine", {
     await Deno.remove(target).catch(() => {});
 
     faux.setResponses([
-      fauxAssistantMessage([
-        fauxToolCall("write", {
-          path: target,
-          content: "written from inside the machine\n",
-        }),
-      ], { stopReason: "toolUse" }),
+      fauxAssistantMessage(
+        [
+          fauxToolCall("write", {
+            path: target,
+            content: "written from inside the machine\n",
+          }),
+        ],
+        { stopReason: "toolUse" },
+      ),
       fauxAssistantMessage("done"),
     ]);
     // `agent.prompt` resolves once the run settles (tool calls included), so
@@ -91,22 +93,15 @@ Deno.test("stella live: a tool call runs inside the machine", {
     await promptSession(core, session.id, "write the file");
 
     const exists = await new Deno.Command("podman", {
-      args: [
-        "exec",
-        "--workdir",
-        VM_WORKDIR,
-        "lumisca-stella",
-        "cat",
-        target,
-      ],
+      args: ["exec", "--workdir", VM_WORKDIR, "lumisca-stella", "cat", target],
       stdout: "piped",
       stderr: "piped",
     }).output();
     assert(
       exists.success,
-      `the file is not in the machine: ${
-        new TextDecoder().decode(exists.stderr)
-      }`,
+      `the file is not in the machine: ${new TextDecoder().decode(
+        exists.stderr,
+      )}`,
     );
     assertEquals(
       new TextDecoder().decode(exists.stdout),
@@ -136,196 +131,203 @@ Deno.test("stella live: a tool call runs inside the machine", {
   }
 });
 
-Deno.test(
-  "stella live: history_search reads a turn back from the machine's conversation",
-  {
-    ignore: !(await machineReady()),
-  },
-  async () => {
-    const vm = createVmManager({ containerDir });
-    const faux = fauxProvider();
-    const core = LumiscaCore.forTesting([faux.provider]);
-    try {
-      await core.setProviderApiKey(faux.provider.id, "faux-key");
-      core.setStellaVm(vm);
-      await core.getStellaAvailability();
+Deno.test("stella live: history_search reads a turn back from the machine's conversation", {
+  ignore: !(await machineReady()),
+}, async () => {
+  const vm = createVmManager({ containerDir });
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider]);
+  try {
+    await core.setProviderApiKey(faux.provider.id, "faux-key");
+    core.setStellaVm(vm);
+    await core.getStellaAvailability();
 
-      const counterpart = await core.createStellaAgent({
-        name: "History Reader",
-        role: "Looks back at earlier turns.",
-      });
-      const session = await core.getOrCreateStellaSession(counterpart.id);
-      assert(core.getAgent(session.id) !== undefined, "the agent must be open");
+    const counterpart = await core.createStellaAgent({
+      name: "History Reader",
+      role: "Looks back at earlier turns.",
+    });
+    const session = await core.getOrCreateStellaSession(counterpart.id);
+    assert(core.getAgent(session.id) !== undefined, "the agent must be open");
 
-      // The tool is in the agent's preloaded set, without going through
-      // tool_search: a condensed conversation has to know it can look back.
-      faux.setResponses([
-        fauxAssistantMessage("Noted: the code word is pelican."),
-        fauxAssistantMessage([
-          fauxToolCall("history_search", { query: "pelican" }),
-        ], { stopReason: "toolUse" }),
-        fauxAssistantMessage("found it"),
-      ]);
-      await promptSession(core, session.id, "Remember the code word pelican.");
-      await promptSession(core, session.id, "What was the code word?");
+    // The tool is in the agent's preloaded set, without going through
+    // tool_search: a condensed conversation has to know it can look back.
+    faux.setResponses([
+      fauxAssistantMessage("Noted: the code word is pelican."),
+      fauxAssistantMessage(
+        [fauxToolCall("history_search", { query: "pelican" })],
+        { stopReason: "toolUse" },
+      ),
+      fauxAssistantMessage("found it"),
+    ]);
+    await promptSession(core, session.id, "Remember the code word pelican.");
+    await promptSession(core, session.id, "What was the code word?");
 
-      // The result the model received carries the earlier turn, which is the
-      // whole point: it came from the rows, not from the visible context.
-      const result = core.getAgent(session.id)?.messages.find((message) =>
-        message.role === "toolResult" && message.toolName === "history_search"
+    // The result the model received carries the earlier turn, which is the
+    // whole point: it came from the rows, not from the visible context.
+    const result = core
+      .getAgent(session.id)
+      ?.messages.find(
+        (message) =>
+          message.role === "toolResult" &&
+          message.toolName === "history_search",
       );
-      assert(result !== undefined, "history_search must have run");
-      const text = result.role === "toolResult"
-        ? result.content.map((block) => block.type === "text" ? block.text : "")
-          .join("")
+    assert(result !== undefined, "history_search must have run");
+    const text =
+      result.role === "toolResult"
+        ? result.content
+            .map((block) => (block.type === "text" ? block.text : ""))
+            .join("")
         : "";
-      assert(text.includes("pelican"), text);
-      assert(text.includes("Remember the code word"), text);
-    } finally {
-      await closeTestCore(core);
-    }
-  },
-);
+    assert(text.includes("pelican"), text);
+    assert(text.includes("Remember the code word"), text);
+  } finally {
+    await closeTestCore(core);
+  }
+});
 
-Deno.test(
-  "stella live: the working folder is per agent and the others stay reachable",
-  {
-    ignore: !(await machineReady()),
-  },
-  async () => {
-    const vm = createVmManager({ containerDir });
-    const faux = fauxProvider();
-    const core = LumiscaCore.forTesting([faux.provider]);
-    try {
-      await core.setProviderApiKey(faux.provider.id, "faux-key");
-      core.setStellaVm(vm);
-      await core.getStellaAvailability();
-      const agent = await core.createStellaAgent({
-        name: "Live Worker",
-        role: "Writes files where it is asked to.",
-      });
-      const session = await core.getOrCreateStellaSession(agent.id);
-      const open = core.getAgent(session.id);
-      assert(open !== undefined, "the agent must be open");
+Deno.test("stella live: the working folder is per agent and the others stay reachable", {
+  ignore: !(await machineReady()),
+}, async () => {
+  const vm = createVmManager({ containerDir });
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider]);
+  try {
+    await core.setProviderApiKey(faux.provider.id, "faux-key");
+    core.setStellaVm(vm);
+    await core.getStellaAvailability();
+    const agent = await core.createStellaAgent({
+      name: "Live Worker",
+      role: "Writes files where it is asked to.",
+    });
+    const session = await core.getOrCreateStellaSession(agent.id);
+    const open = core.getAgent(session.id);
+    assert(open !== undefined, "the agent must be open");
 
-      // A relative path lands in THIS agent's folder (the working folder),
-      // and bash starts there without being told.
-      const workdir = vmAgentDir(agent.id);
-      faux.setResponses([
-        fauxAssistantMessage([
+    // A relative path lands in THIS agent's folder (the working folder),
+    // and bash starts there without being told.
+    const workdir = vmAgentDir(agent.id);
+    faux.setResponses([
+      fauxAssistantMessage(
+        [
           fauxToolCall("write", {
             path: "relative.txt",
             content: "from the working folder\n",
           }),
-        ], { stopReason: "toolUse" }),
-        fauxAssistantMessage([
-          fauxToolCall("bash", { command: "pwd" }),
-        ], { stopReason: "toolUse" }),
-        fauxAssistantMessage("done"),
-      ]);
-      await promptSession(core, session.id, "write a relative file");
+        ],
+        { stopReason: "toolUse" },
+      ),
+      fauxAssistantMessage([fauxToolCall("bash", { command: "pwd" })], {
+        stopReason: "toolUse",
+      }),
+      fauxAssistantMessage("done"),
+    ]);
+    await promptSession(core, session.id, "write a relative file");
 
-      const read = await runInMachine(["cat", `${workdir}/relative.txt`]);
-      assertEquals(read, "from the working folder\n");
+    const read = await runInMachine(["cat", `${workdir}/relative.txt`]);
+    assertEquals(read, "from the working folder\n");
 
-      const bashResult = open.messages.find((message) =>
-        message.role === "toolResult" && message.toolName === "bash"
-      );
-      assert(bashResult !== undefined, "bash must have run");
-      const bashText = bashResult.role === "toolResult"
-        ? bashResult.content.map((block) =>
-          block.type === "text" ? block.text : ""
-        ).join("")
+    const bashResult = open.messages.find(
+      (message) => message.role === "toolResult" && message.toolName === "bash",
+    );
+    assert(bashResult !== undefined, "bash must have run");
+    const bashText =
+      bashResult.role === "toolResult"
+        ? bashResult.content
+            .map((block) => (block.type === "text" ? block.text : ""))
+            .join("")
         : "";
-      assert(bashText.includes(workdir), bashText);
+    assert(bashText.includes(workdir), bashText);
 
-      // The root is the machine's home, not the working folder: an absolute
-      // path into another agent's folder is reachable (Terasuma's rule — the
-      // folder is a default place, not a wall).
-      const other = `/home/agent/agents/live-other`;
-      await runInMachine(["mkdir", "-p", other]);
-      await runInMachine(["sh", "-c", `printf 'other' > ${other}/f.txt`]);
-      faux.setResponses([
-        fauxAssistantMessage([
-          fauxToolCall("read", { path: `${other}/f.txt` }),
-        ], { stopReason: "toolUse" }),
-        fauxAssistantMessage("read it"),
-      ]);
-      await promptSession(core, session.id, "read the other folder");
-      const readResult = open.messages.filter((message) =>
-        message.role === "toolResult" && message.toolName === "read"
-      ).at(-1);
-      assert(readResult !== undefined, "read must have run");
-      const readText = readResult.role === "toolResult"
-        ? readResult.content.map((block) =>
-          block.type === "text" ? block.text : ""
-        ).join("")
+    // The root is the machine's home, not the working folder: an absolute
+    // path into another agent's folder is reachable (Terasuma's rule — the
+    // folder is a default place, not a wall).
+    const other = `/home/agent/agents/live-other`;
+    await runInMachine(["mkdir", "-p", other]);
+    await runInMachine(["sh", "-c", `printf 'other' > ${other}/f.txt`]);
+    faux.setResponses([
+      fauxAssistantMessage([fauxToolCall("read", { path: `${other}/f.txt` })], {
+        stopReason: "toolUse",
+      }),
+      fauxAssistantMessage("read it"),
+    ]);
+    await promptSession(core, session.id, "read the other folder");
+    const readResult = open.messages
+      .filter(
+        (message) =>
+          message.role === "toolResult" && message.toolName === "read",
+      )
+      .at(-1);
+    assert(readResult !== undefined, "read must have run");
+    const readText =
+      readResult.role === "toolResult"
+        ? readResult.content
+            .map((block) => (block.type === "text" ? block.text : ""))
+            .join("")
         : "";
-      assert(readText.includes("other"), readText);
-      assert(!readText.includes("outside the workspace"), readText);
-    } finally {
-      await runInMachine(["rm", "-rf", "/home/agent/agents/live-other"])
-        .catch(() => {});
-      await closeTestCore(core);
-    }
-  },
-);
+    assert(readText.includes("other"), readText);
+    assert(!readText.includes("outside the workspace"), readText);
+  } finally {
+    await runInMachine(["rm", "-rf", "/home/agent/agents/live-other"]).catch(
+      () => {},
+    );
+    await closeTestCore(core);
+  }
+});
 
-Deno.test(
-  "stella live: MEMORY.md is there from creation and survives reopening",
-  {
-    ignore: !(await machineReady()),
-  },
-  async () => {
-    const vm = createVmManager({ containerDir });
-    const faux = fauxProvider();
-    const core = LumiscaCore.forTesting([faux.provider]);
-    try {
-      await core.setProviderApiKey(faux.provider.id, "faux-key");
-      core.setStellaVm(vm);
-      await core.getStellaAvailability();
-      // Creating an agent does not start the machine, so the machine is up
-      // first — this is the case where creation prepares the folder.
-      await core.ensureStellaReady();
+Deno.test("stella live: MEMORY.md is there from creation and survives reopening", {
+  ignore: !(await machineReady()),
+}, async () => {
+  const vm = createVmManager({ containerDir });
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider]);
+  try {
+    await core.setProviderApiKey(faux.provider.id, "faux-key");
+    core.setStellaVm(vm);
+    await core.getStellaAvailability();
+    // Creating an agent does not start the machine, so the machine is up
+    // first — this is the case where creation prepares the folder.
+    await core.ensureStellaReady();
 
-      const agent = await core.createStellaAgent({
-        name: "Live Memory",
-        role: "Keeps notes for later runs.",
-      });
-      // Made with the agent, before it has ever spoken.
-      const path = `${vmAgentDir(agent.id)}/MEMORY.md`;
-      assertEquals(await runInMachine(["cat", path]), "");
+    const agent = await core.createStellaAgent({
+      name: "Live Memory",
+      role: "Keeps notes for later runs.",
+    });
+    // Made with the agent, before it has ever spoken.
+    const path = `${vmAgentDir(agent.id)}/MEMORY.md`;
+    assertEquals(await runInMachine(["cat", path]), "");
 
-      // The agent writes to it the way it is told to: the file tools.
-      const session = await core.getOrCreateStellaSession(agent.id);
-      faux.setResponses([
-        fauxAssistantMessage([
+    // The agent writes to it the way it is told to: the file tools.
+    const session = await core.getOrCreateStellaSession(agent.id);
+    faux.setResponses([
+      fauxAssistantMessage(
+        [
           fauxToolCall("write", {
             path: "MEMORY.md",
             content: "- the user writes in Japanese\n",
           }),
-        ], { stopReason: "toolUse" }),
-        fauxAssistantMessage("noted"),
-      ]);
-      await promptSession(core, session.id, "remember that");
-      assertEquals(
-        await runInMachine(["cat", path]),
-        "- the user writes in Japanese\n",
-      );
+        ],
+        { stopReason: "toolUse" },
+      ),
+      fauxAssistantMessage("noted"),
+    ]);
+    await promptSession(core, session.id, "remember that");
+    assertEquals(
+      await runInMachine(["cat", path]),
+      "- the user writes in Japanese\n",
+    );
 
-      // Reopening the conversation prepares the folder again — this is the
-      // regression that would cost the notes: `: >` without the guard.
-      core.closeSession(session.id);
-      await core.getOrCreateStellaSession(agent.id);
-      assertEquals(
-        await runInMachine(["cat", path]),
-        "- the user writes in Japanese\n",
-      );
-    } finally {
-      await closeTestCore(core);
-    }
-  },
-);
+    // Reopening the conversation prepares the folder again — this is the
+    // regression that would cost the notes: `: >` without the guard.
+    core.closeSession(session.id);
+    await core.getOrCreateStellaSession(agent.id);
+    assertEquals(
+      await runInMachine(["cat", path]),
+      "- the user writes in Japanese\n",
+    );
+  } finally {
+    await closeTestCore(core);
+  }
+});
 
 /** Run a command in the machine for an assertion outside the core. */
 async function runInMachine(args: string[]): Promise<string> {

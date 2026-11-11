@@ -6,17 +6,18 @@
  * what a valid subscription is. Sending itself lives in web-push.ts (the
  * protocol) and server/push.ts (which events become messages).
  */
+
+import { CoreError } from "../errors.ts";
 import type { SettingsRepo } from "../settings/repo.ts";
-import { PUSH_SUBSCRIPTIONS_KEY } from "../shared/settings-keys.ts";
 import {
   isPushEndpoint,
-  parsePushSubscriptions,
   PUSH_KEY_MAX_CHARS,
   type PushSubscriptionKeys,
   type PushSubscriptionRecord,
+  parsePushSubscriptions,
   serializePushSubscriptions,
 } from "../shared/push.ts";
-import { CoreError } from "../errors.ts";
+import { PUSH_SUBSCRIPTIONS_KEY } from "../shared/settings-keys.ts";
 import { loadVapidKeys, type VapidKeys } from "./vapid.ts";
 
 /** What a client posts to subscribe. Validated here, not at the route: the
@@ -34,9 +35,13 @@ function validate(input: PushSubscriptionInput): PushSubscriptionRecord {
     );
   }
   const { p256dh, auth } = input.keys;
-  for (const [name, value] of [["p256dh", p256dh], ["auth", auth]] as const) {
+  for (const [name, value] of [
+    ["p256dh", p256dh],
+    ["auth", auth],
+  ] as const) {
     if (
-      typeof value !== "string" || value.length === 0 ||
+      typeof value !== "string" ||
+      value.length === 0 ||
       value.length > PUSH_KEY_MAX_CHARS
     ) {
       throw new CoreError(

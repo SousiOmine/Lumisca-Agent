@@ -9,8 +9,8 @@
  */
 
 import { isRecord } from "../../fs.ts";
-import { htmlToText } from "../html.ts";
 import { MAX_SEARCH_LIMIT, MAX_SNIPPET_CHARS } from "../constants.ts";
+import { htmlToText } from "../html.ts";
 import { clip, oneLine } from "../http.ts";
 
 /** The records inside `value[key]`, skipping anything malformed. */

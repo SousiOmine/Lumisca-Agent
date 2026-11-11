@@ -1,12 +1,12 @@
-import { assertEquals } from "@std/assert";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@lumisca/core";
-import type { AgentMessage } from "../ai/types.ts";
+import { assertEquals } from "@std/assert";
 import { MAX_RATE_LIMIT_RETRIES } from "../ai/rate-limit.ts";
-import { MAX_OUTPUT_CAP_RETRIES, RetryManager } from "./retry-manager.ts";
 import {
   isContextOverflowError,
   MAX_EMPTY_RESPONSE_RETRIES,
 } from "../ai/retry-policy.ts";
+import type { AgentMessage } from "../ai/types.ts";
+import { MAX_OUTPUT_CAP_RETRIES, RetryManager } from "./retry-manager.ts";
 
 /** An error-stopped, outputless assistant turn with the given message. */
 function errored(errorMessage: string): AgentMessage {
@@ -67,10 +67,7 @@ Deno.test("classify: a rate-limited turn parks a restart with its own budget", (
       false,
     );
     assertEquals(decision.action, "park");
-    assertEquals(
-      decision.action === "park" ? decision.rateLimit : false,
-      true,
-    );
+    assertEquals(decision.action === "park" ? decision.rateLimit : false, true);
     assertEquals(retries.hasPendingRestart, true);
   }
   // The rate-limit budget is spent; the notification stops being parked and
@@ -188,7 +185,7 @@ Deno.test("abort: a later rate-limit backoff is still interruptible", async () =
   const retries = new RetryManager((_ms, signal) =>
     signal?.aborted === true
       ? Promise.reject(new Error("aborted"))
-      : Promise.resolve()
+      : Promise.resolve(),
   );
   retries.abort();
   retries.reset();
@@ -325,29 +322,35 @@ Deno.test("reset clears the budgets and the parked restarts", () => {
 Deno.test("isContextOverflowError: provider window rejections are classified", () => {
   // The reported failure (OpenCode Go / Console Go wording).
   assertEquals(
-    isContextOverflowError(fauxAssistantMessage("", {
-      stopReason: "error",
-      errorMessage:
-        "Error from provider (Console Go): This model's maximum context " +
-        "length is 1048576 tokens. However, you requested 1049871 tokens " +
-        "(665871 in the messages, 384000 in the completion). Please reduce " +
-        "the length of the messages or completion.",
-    })),
+    isContextOverflowError(
+      fauxAssistantMessage("", {
+        stopReason: "error",
+        errorMessage:
+          "Error from provider (Console Go): This model's maximum context " +
+          "length is 1048576 tokens. However, you requested 1049871 tokens " +
+          "(665871 in the messages, 384000 in the completion). Please reduce " +
+          "the length of the messages or completion.",
+      }),
+    ),
     true,
   );
   // Other providers' wordings for the same condition.
   assertEquals(
-    isContextOverflowError(fauxAssistantMessage("", {
-      stopReason: "error",
-      errorMessage: "context_length_exceeded: your prompt is too long",
-    })),
+    isContextOverflowError(
+      fauxAssistantMessage("", {
+        stopReason: "error",
+        errorMessage: "context_length_exceeded: your prompt is too long",
+      }),
+    ),
     true,
   );
   assertEquals(
-    isContextOverflowError(fauxAssistantMessage("", {
-      stopReason: "error",
-      errorMessage: "The input token count exceeds the maximum",
-    })),
+    isContextOverflowError(
+      fauxAssistantMessage("", {
+        stopReason: "error",
+        errorMessage: "The input token count exceeds the maximum",
+      }),
+    ),
     true,
   );
 });
@@ -355,18 +358,22 @@ Deno.test("isContextOverflowError: provider window rejections are classified", (
 Deno.test("isContextOverflowError: other failures are not overflows", () => {
   // A transport cut is retried by the transient path, not by compaction.
   assertEquals(
-    isContextOverflowError(fauxAssistantMessage("", {
-      stopReason: "error",
-      errorMessage: "Stream ended without finish_reason",
-    })),
+    isContextOverflowError(
+      fauxAssistantMessage("", {
+        stopReason: "error",
+        errorMessage: "Stream ended without finish_reason",
+      }),
+    ),
     false,
   );
   // A permanent configuration failure has nothing to compact away.
   assertEquals(
-    isContextOverflowError(fauxAssistantMessage("", {
-      stopReason: "error",
-      errorMessage: "invalid api key",
-    })),
+    isContextOverflowError(
+      fauxAssistantMessage("", {
+        stopReason: "error",
+        errorMessage: "invalid api key",
+      }),
+    ),
     false,
   );
   // A normal stop is never an overflow, whatever it says.

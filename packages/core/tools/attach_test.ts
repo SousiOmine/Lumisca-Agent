@@ -1,5 +1,5 @@
-import { assert, assertEquals, assertRejects } from "@std/assert";
 import { join } from "node:path";
+import { assert, assertEquals, assertRejects } from "@std/assert";
 import { SessionAttachmentStore } from "../session/attachments.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 import { createChatAttachTool } from "./attach.ts";
@@ -66,9 +66,13 @@ Deno.test("chat_attach: an image is inline, other files are downloads", async ()
     "report.md": "# notes\n",
   });
   try {
-    const result = await test.tool.execute("t", {
-      paths: [join(test.root, "chart.png"), join(test.root, "report.md")],
-    }, undefined);
+    const result = await test.tool.execute(
+      "t",
+      {
+        paths: [join(test.root, "chart.png"), join(test.root, "report.md")],
+      },
+      undefined,
+    );
     const attachments = details(result).attachments;
     assertEquals(attachments.length, 2);
     // The extension decides how the card and the route treat the file.
@@ -158,9 +162,8 @@ Deno.test("chat_attach: a missing file or a directory fails", async () => {
 Deno.test("chat_attach: too many files in one call is refused", async () => {
   const test = await fixture();
   try {
-    const paths = Array.from(
-      { length: 11 },
-      (_, i) => join(test.root, `f${i}.txt`),
+    const paths = Array.from({ length: 11 }, (_, i) =>
+      join(test.root, `f${i}.txt`),
     );
     for (const path of paths) await test.write(path, "x");
     await assertRejects(

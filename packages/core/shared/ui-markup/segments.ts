@@ -106,8 +106,9 @@ export function splitChatText(text: string): UiSegment[] {
  * agent's source rather than its words. */
 export function segmentsText(segments: readonly UiSegment[]): string {
   return segments
-    .filter((segment): segment is Extract<UiSegment, { type: "text" }> =>
-      segment.type === "text"
+    .filter(
+      (segment): segment is Extract<UiSegment, { type: "text" }> =>
+        segment.type === "text",
     )
     .map((segment) => segment.text)
     .join("\n\n");

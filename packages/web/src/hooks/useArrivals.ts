@@ -76,10 +76,7 @@ const NONE: ReadonlySet<string> = new Set();
  * Compared with the ends trimmed, because the server may keep a trailing
  * newline the stream never produced and the other way round.
  */
-export function isStreamHandoff(
-  streamed: string,
-  settled: string,
-): boolean {
+export function isStreamHandoff(streamed: string, settled: string): boolean {
   const from = streamed.trim();
   const to = settled.trim();
   if (from.length === 0 || to.length === 0) return false;
@@ -147,9 +144,12 @@ export function useArrivals(keys: readonly string[]): ReadonlySet<string> {
   }, [joined]);
 
   // A list that unmounts mid-animation leaves no timer behind.
-  useEffect(() => () => {
-    if (timer.current !== null) clearTimeout(timer.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (timer.current !== null) clearTimeout(timer.current);
+    },
+    [],
+  );
 
   return flagged;
 }

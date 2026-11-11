@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "preact/compat";
-import { IconChevronDown } from "@tabler/icons-preact";
+import type { ModelPreference, ThinkingLevel } from "@lumisca/core/shared";
 import {
   DEFAULT_MODEL_KEY,
   FAST_MODEL_KEY,
@@ -7,14 +6,15 @@ import {
   parseModelPreference,
   serializeModelPreference,
 } from "@lumisca/core/shared";
-import type { ModelPreference, ThinkingLevel } from "@lumisca/core/shared";
-import { settingsStore, useSettings } from "../../settingsStore.ts";
+import { IconChevronDown } from "@tabler/icons-preact";
+import { useEffect, useMemo, useRef, useState } from "preact/compat";
 import { useT } from "../../i18n.ts";
 import {
   errorText,
   setModelThinkingLevel,
   useProviderModels,
 } from "../../providers.ts";
+import { settingsStore, useSettings } from "../../settingsStore.ts";
 import { ModelPickerPopover } from "../ModelPickerPopover.tsx";
 import { ThinkingLevelSelect } from "../ThinkingLevelSelect.tsx";
 import { SettingsSection } from "./SettingsSection.tsx";
@@ -34,9 +34,11 @@ interface ModelPrefRow {
  * chatbox picker. The default model starts new conversations; the fast
  * model runs the sub-agents (the task tool) and generates session titles.
  * Each row's thinking level is the stored per-model reasoning level. */
-export function ModelPreferencePanel(
-  { onOpenProviders }: { onOpenProviders: () => void },
-) {
+export function ModelPreferencePanel({
+  onOpenProviders,
+}: {
+  onOpenProviders: () => void;
+}) {
   const t = useT();
   const [values, setValues] = useState<
     Record<string, ModelPreference | undefined>
@@ -62,27 +64,30 @@ export function ModelPreferencePanel(
   const { modelsByProvider, reload: reloadModels } = useProviderModels();
 
   // Localized ROWS, built inside the component so t() is available.
-  const localizedRows = useMemo<ModelPrefRow[]>(() => [
-    {
-      key: DEFAULT_MODEL_KEY,
-      label: t("settings.model.defaultModel"),
-      description: t("settings.model.defaultModelDesc"),
-      thinking: true,
-    },
-    {
-      key: FAST_MODEL_KEY,
-      label: t("settings.model.fastModel"),
-      description: t("settings.model.fastModelDesc"),
-      thinking: true,
-    },
-    {
-      key: IMAGE_MODEL_KEY,
-      label: t("settings.model.imageAnalysisModel"),
-      description: t("settings.model.imageAnalysisModelDesc"),
-      imageOnly: true,
-      thinking: true,
-    },
-  ], [t]);
+  const localizedRows = useMemo<ModelPrefRow[]>(
+    () => [
+      {
+        key: DEFAULT_MODEL_KEY,
+        label: t("settings.model.defaultModel"),
+        description: t("settings.model.defaultModelDesc"),
+        thinking: true,
+      },
+      {
+        key: FAST_MODEL_KEY,
+        label: t("settings.model.fastModel"),
+        description: t("settings.model.fastModelDesc"),
+        thinking: true,
+      },
+      {
+        key: IMAGE_MODEL_KEY,
+        label: t("settings.model.imageAnalysisModel"),
+        description: t("settings.model.imageAnalysisModelDesc"),
+        imageOnly: true,
+        thinking: true,
+      },
+    ],
+    [t],
+  );
 
   /** Load the stored preferences once, from the shared settings store. */
   const settingsState = useSettings();
@@ -118,15 +123,20 @@ export function ModelPreferencePanel(
       if (!row.thinking) continue;
       const pref = values[row.key];
       if (pref === undefined) continue;
-      const model = modelsByProvider.get(pref.provider)?.find(
-        (m) => m.id === pref.modelId,
-      );
+      const model = modelsByProvider
+        .get(pref.provider)
+        ?.find((m) => m.id === pref.modelId);
       const supported = model?.thinkingLevels ?? [];
-      out[row.key] = supported.length <= 1 ? undefined : {
-        current: levelOverrides[`${pref.provider}/${pref.modelId}`] ??
-          model?.thinkingLevel ?? "off",
-        supported,
-      };
+      out[row.key] =
+        supported.length <= 1
+          ? undefined
+          : {
+              current:
+                levelOverrides[`${pref.provider}/${pref.modelId}`] ??
+                model?.thinkingLevel ??
+                "off",
+              supported,
+            };
     }
     return out;
   }, [modelsByProvider, values, levelOverrides, localizedRows]);
@@ -200,10 +210,8 @@ export function ModelPreferencePanel(
               <span className="model-pref-label">{row.label}</span>
               <span className="model-pref-desc">{row.description}</span>
             </div>
-            {
-              /* The pair IS the control: it reads as the row's value and
-              opens the picker, so the row needs no separate edit button. */
-            }
+            {/* The pair IS the control: it reads as the row's value and
+              opens the picker, so the row needs no separate edit button. */}
             <button
               type="button"
               className={`model-pref-picker${
@@ -213,23 +221,17 @@ export function ModelPreferencePanel(
               disabled={saving === row.key}
               onClick={(e) => openPicker(row.key, e.currentTarget)}
             >
-              {!loaded && !loadError
-                ? (
-                  <span className="model-pref-unset">
-                    {t("common.loading")}
-                  </span>
-                )
-                : value
-                ? (
-                  <span className="mono">
-                    {value.provider}/{value.modelId}
-                  </span>
-                )
-                : (
-                  <span className="model-pref-unset">
-                    {t("settings.model.unset")}
-                  </span>
-                )}
+              {!loaded && !loadError ? (
+                <span className="model-pref-unset">{t("common.loading")}</span>
+              ) : value ? (
+                <span className="mono">
+                  {value.provider}/{value.modelId}
+                </span>
+              ) : (
+                <span className="model-pref-unset">
+                  {t("settings.model.unset")}
+                </span>
+              )}
               <span className={`chevron${openRow === row.key ? " open" : ""}`}>
                 <IconChevronDown size={14} />
               </span>
@@ -259,7 +261,7 @@ export function ModelPreferencePanel(
       <ModelPickerPopover
         anchor={anchor}
         open={openRow !== null && openRowDef !== undefined}
-        value={openRow === null ? null : values[openRow] ?? null}
+        value={openRow === null ? null : (values[openRow] ?? null)}
         imageOnly={openRowDef?.imageOnly}
         onClose={() => setOpenRow(null)}
         onSelect={(provider, modelId) => {

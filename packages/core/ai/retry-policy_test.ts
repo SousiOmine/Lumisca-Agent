@@ -1,11 +1,10 @@
-import { assertEquals } from "@std/assert";
 import {
   fauxAssistantMessage,
   fauxText,
   fauxThinking,
   fauxToolCall,
 } from "@lumisca/core";
-import type { AssistantMessage } from "./types.ts";
+import { assertEquals } from "@std/assert";
 import { isRetryableRateLimit } from "./llm-retry.ts";
 import {
   buildInterruptedRetryNotification,
@@ -14,6 +13,7 @@ import {
   isSilentErrorResponse,
   isTransientStreamError,
 } from "./retry-policy.ts";
+import type { AssistantMessage } from "./types.ts";
 
 function errored(
   errorMessage: string,
@@ -42,10 +42,7 @@ Deno.test("isTransientStreamError classifies the AI SDK body-read wrapper", () =
     ),
     true,
   );
-  assertEquals(
-    isTransientStreamError(errored("Invalid JSON response")),
-    true,
-  );
+  assertEquals(isTransientStreamError(errored("Invalid JSON response")), true);
 });
 
 Deno.test("a 429 stays the rate-limit classifier's job", () => {
@@ -75,9 +72,7 @@ Deno.test("isTransientStreamError leaves permanent failures alone", () => {
   // Only error stops qualify: a normal finish is never a failure.
   assertEquals(isTransientStreamError(fauxAssistantMessage("done")), false);
   assertEquals(
-    isTransientStreamError(
-      fauxAssistantMessage("", { stopReason: "aborted" }),
-    ),
+    isTransientStreamError(fauxAssistantMessage("", { stopReason: "aborted" })),
     false,
   );
 });

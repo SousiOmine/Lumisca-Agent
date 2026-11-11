@@ -21,9 +21,11 @@ interface Served {
 }
 
 /** A server on a real port, so the probe exercises its own fetch. */
-function serve(
-  served: Served,
-): { url: string; close: () => void; seen: { headers: Headers | null } } {
+function serve(served: Served): {
+  url: string;
+  close: () => void;
+  seen: { headers: Headers | null };
+} {
   const seen: { headers: Headers | null } = { headers: null };
   const server = Deno.serve(
     { hostname: "127.0.0.1", port: 0, onListen() {} },

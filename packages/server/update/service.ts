@@ -197,9 +197,10 @@ export class UpdateService {
     // The composition root only builds an updater for an installation that
     // may update itself (startup.updateSupport); the only unsupported case
     // left here is a target with no published server distribution.
-    const unsupported = releaseTargetFor(this.#target) === undefined
-      ? `この構成 (${this.#target}) 向けのサーバー配布はありません`
-      : null;
+    const unsupported =
+      releaseTargetFor(this.#target) === undefined
+        ? `この構成 (${this.#target}) 向けのサーバー配布はありません`
+        : null;
 
     this.#status = {
       supported: unsupported === null,
@@ -248,7 +249,8 @@ export class UpdateService {
     const applied = readAppliedUpdate(this.#environment.installDir);
     const staged = readStagedUpdate(this.#environment.installDir);
     if (
-      staged !== null && staged !== undefined &&
+      staged !== null &&
+      staged !== undefined &&
       isNewerVersion(staged.version, this.#currentVersion)
     ) {
       this.#staged = staged;

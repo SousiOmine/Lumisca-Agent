@@ -4,8 +4,10 @@
  * LLM calls go through the Vercel-backed StreamFn built by
  * {@link buildStreamFn}.
  */
-import { createStreamFn, type StreamTransport } from "./stream.ts";
+
+import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import { languageModelFor, type ResolvedApiKey } from "./lang-model.ts";
+import { createStreamFn, type StreamTransport } from "./stream.ts";
 import type {
   AuthCheck,
   AuthInteraction,
@@ -16,7 +18,6 @@ import type {
   Provider,
   StreamFn,
 } from "./types.ts";
-import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 
 export interface LumiscaModelsOptions {
   credentials?: CredentialStore;
@@ -62,9 +63,10 @@ export class LumiscaModels {
   }
 
   getModel(providerId: string, modelId: string): Model | undefined {
-    return this.providers.get(providerId)?.getModels().find((m) =>
-      m.id === modelId
-    );
+    return this.providers
+      .get(providerId)
+      ?.getModels()
+      .find((m) => m.id === modelId);
   }
 
   getModels(providerId?: string): readonly Model[] {
@@ -108,9 +110,8 @@ export class LumiscaModels {
     }
     const credential = await login(interaction);
     if (this.credentials !== undefined) {
-      const stored = this.credentials.modify(
-        providerId,
-        () => Promise.resolve(credential),
+      const stored = this.credentials.modify(providerId, () =>
+        Promise.resolve(credential),
       );
       await stored;
     }
@@ -136,7 +137,8 @@ export class LumiscaModels {
         this.compactionPolicy,
       );
       this.cachedStreamFn = (model, context, options) => {
-        const provider = this.providers.get(model.provider) ??
+        const provider =
+          this.providers.get(model.provider) ??
           retiredProviderFor?.(model.provider);
         if (provider?.customStream !== undefined) {
           return provider.customStream(model, context, options);
@@ -164,8 +166,8 @@ export class LumiscaModels {
     providerId: string,
     retiredProviderFor?: (providerId: string) => Provider | undefined,
   ): Promise<ResolvedApiKey | undefined> {
-    const provider = this.providers.get(providerId) ??
-      retiredProviderFor?.(providerId);
+    const provider =
+      this.providers.get(providerId) ?? retiredProviderFor?.(providerId);
     if (provider === undefined) return undefined;
     const credential = await this.credentials?.read(providerId);
     const result = await provider.resolveCredential({

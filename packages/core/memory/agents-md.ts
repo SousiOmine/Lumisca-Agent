@@ -92,10 +92,7 @@ export function loadProjectMemoryFiles(folders: string[]): MemoryFile[] {
         // against the cap (a room too small for the note publishes the note
         // alone — dropping the file silently would be worse).
         const note = truncatedHeadNote("instructions", room);
-        const { text } = truncateHead(
-          content,
-          Math.max(0, room - note.length),
-        );
+        const { text } = truncateHead(content, Math.max(0, room - note.length));
         files.push({ path, content: text + note });
         return files;
       }

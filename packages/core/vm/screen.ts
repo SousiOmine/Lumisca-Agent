@@ -8,13 +8,14 @@
  * The screen is therefore a fixed 1280x800 (vm/contract.ts) and a capture is
  * never resized: what the agent sees is 1:1 with what it clicks.
  */
+
+import type { VmExec, VmExecBytes } from "./container.ts";
 import {
   VM_SCREEN_HEIGHT,
   VM_SCREEN_WIDTH,
   VM_SCROLL_MAX_NOTCHES,
   VM_SCROLL_NOTCH,
 } from "./contract.ts";
-import type { VmExec, VmExecBytes } from "./container.ts";
 
 /** Screenshot bounds: enough for a 1280x800 PNG and nothing more. */
 const SCREENSHOT_TIMEOUT_MS = 20_000;
@@ -95,8 +96,12 @@ async function xdotool(
  * position: a silently moved click is a wrong action, not a corrected one. */
 function requireOnScreen(x: number, y: number): void {
   if (
-    !Number.isInteger(x) || !Number.isInteger(y) ||
-    x < 0 || y < 0 || x >= VM_SCREEN_WIDTH || y >= VM_SCREEN_HEIGHT
+    !Number.isInteger(x) ||
+    !Number.isInteger(y) ||
+    x < 0 ||
+    y < 0 ||
+    x >= VM_SCREEN_WIDTH ||
+    y >= VM_SCREEN_HEIGHT
   ) {
     throw new Error(
       `The position (${x}, ${y}) is outside the screen ` +
@@ -114,13 +119,7 @@ export function createVmScreen(options: VmScreenOptions): VmScreen {
       // scrot draws the pointer into the image (X does not include it in a
       // plain capture), and `--overwrite` is what lets it write to stdout.
       const result = await options.execBytes(
-        [
-          "scrot",
-          "--pointer",
-          "--overwrite",
-          "--silent",
-          "/dev/stdout",
-        ],
+        ["scrot", "--pointer", "--overwrite", "--silent", "/dev/stdout"],
         {
           timeoutMs: SCREENSHOT_TIMEOUT_MS,
           maxOutput: SCREENSHOT_MAX_BYTES,
@@ -226,12 +225,10 @@ export function createVmScreen(options: VmScreenOptions): VmScreen {
       // moves: button 5 rolls down and the page scrolls down. A positive
       // amount therefore means "down"/"right", matching the tool's schema
       // ("positive scrolls down") and what a person reading a page expects.
-      const vertical = delta.vertical === 0
-        ? []
-        : [delta.vertical > 0 ? "5" : "4"];
-      const horizontal = delta.horizontal === 0
-        ? []
-        : [delta.horizontal > 0 ? "7" : "6"];
+      const vertical =
+        delta.vertical === 0 ? [] : [delta.vertical > 0 ? "5" : "4"];
+      const horizontal =
+        delta.horizontal === 0 ? [] : [delta.horizontal > 0 ? "7" : "6"];
       const buttons = [...vertical, ...horizontal];
       if (buttons.length === 0) return;
       // One wheel click is one notch, so an amount is divided by the notch

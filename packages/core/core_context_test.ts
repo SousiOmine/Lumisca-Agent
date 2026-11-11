@@ -6,21 +6,19 @@ import {
   type StreamRequest,
 } from "@lumisca/core";
 import { assert, assertEquals } from "@std/assert";
+import { DATE_PROVIDER } from "./agent/date-context.ts";
+import { bytesToBase64 } from "./base64.ts";
+import { today } from "./environment.ts";
 import type { AgentMessage, ImageContent } from "./mod.ts";
 import { LumiscaCore } from "./mod.ts";
-
 import {
   FAST_MODEL_KEY,
   LANGUAGE_KEY,
   serializeModelPreference,
 } from "./shared/mod.ts";
-
-import { DATE_PROVIDER } from "./agent/date-context.ts";
-import { today } from "./environment.ts";
-import { bytesToBase64 } from "./base64.ts";
 import {
-  makeWorkspace,
   MINI_PNG,
+  makeWorkspace,
   promptSession,
   removeDirRetry,
   setup,
@@ -66,20 +64,20 @@ function makeImageAnalysisResponses(
 ) {
   return script.map(
     (step) =>
-    (
-      StreamRequest: StreamRequest,
-      _options: unknown,
-      _state: unknown,
-      model: { id: string },
-    ) => {
-      const call: CapturedCall = {
-        model: model.id,
-        systemPrompt: StreamRequest.systemPrompt,
-        messages: StreamRequest.messages as CapturedCall["messages"],
-      };
-      captured.push(call);
-      return step(call);
-    },
+      (
+        StreamRequest: StreamRequest,
+        _options: unknown,
+        _state: unknown,
+        model: { id: string },
+      ) => {
+        const call: CapturedCall = {
+          model: model.id,
+          systemPrompt: StreamRequest.systemPrompt,
+          messages: StreamRequest.messages as CapturedCall["messages"],
+        };
+        captured.push(call);
+        return step(call);
+      },
   );
 }
 
@@ -145,9 +143,11 @@ Deno.test("mode prompt keeps the images attached in the composer", async () => {
 
   // The transcript stores the image on the mode message (the UI renders it
   // in the bubble; the rewind action restores it to the composer).
-  const modeMessage = core.getAgent(session.id)!.messages.find(
-    (m): m is Extract<AgentMessage, { role: "mode" }> => m.role === "mode",
-  )!;
+  const modeMessage = core
+    .getAgent(session.id)!
+    .messages.find(
+      (m): m is Extract<AgentMessage, { role: "mode" }> => m.role === "mode",
+    )!;
   assertEquals(modeMessage.images, [image]);
 
   // The model receives the full prompt text together with the image.
@@ -157,7 +157,10 @@ Deno.test("mode prompt keeps the images attached in the composer", async () => {
     prompt.content.some((b) => b.type === "text" && b.text === fullPrompt),
     true,
   );
-  assertEquals(prompt.content.some((b) => b.type === "image"), true);
+  assertEquals(
+    prompt.content.some((b) => b.type === "image"),
+    true,
+  );
   core.close();
 });
 
@@ -324,11 +327,13 @@ Deno.test("startPrompt (web path): first prompt auto-generates the session title
   assertEquals(session.name.startsWith("セッション "), true); // provisional
 
   const captured: CapturedCall[] = [];
-  faux.setResponses(makeImageAnalysisResponses(captured, [
-    // The title call (fast model) fires concurrently with the run.
-    () => fauxAssistantMessage('"Fix login bug"'),
-    () => fauxAssistantMessage("Hello!"),
-  ]));
+  faux.setResponses(
+    makeImageAnalysisResponses(captured, [
+      // The title call (fast model) fires concurrently with the run.
+      () => fauxAssistantMessage('"Fix login bug"'),
+      () => fauxAssistantMessage("Hello!"),
+    ]),
+  );
 
   // The web/HTTP path is fire-and-forget (startPrompt): the title must
   // still be generated from the first message.
@@ -358,11 +363,13 @@ Deno.test("reopened session with history does not regenerate the title", async (
   });
 
   const captured: CapturedCall[] = [];
-  faux.setResponses(makeImageAnalysisResponses(captured, [
-    () => fauxAssistantMessage("Title A"),
-    () => fauxAssistantMessage("first reply"),
-    () => fauxAssistantMessage("second reply"),
-  ]));
+  faux.setResponses(
+    makeImageAnalysisResponses(captured, [
+      () => fauxAssistantMessage("Title A"),
+      () => fauxAssistantMessage("first reply"),
+      () => fauxAssistantMessage("second reply"),
+    ]),
+  );
 
   await promptSession(core, session.id, "first message");
   assertEquals(core.getSession(session.id)!.name, "Title A");

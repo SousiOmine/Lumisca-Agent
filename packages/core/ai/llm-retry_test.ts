@@ -1,11 +1,11 @@
-import { assertEquals } from "@std/assert";
 import { fauxAssistantMessage } from "@lumisca/core";
-import type { StreamOptions } from "./types.ts";
+import { assertEquals } from "@std/assert";
 import {
   applyProviderRetryDefaults,
   isRetryableRateLimit,
   PROVIDER_DEFAULT_MAX_RETRIES,
 } from "./llm-retry.ts";
+import type { StreamOptions } from "./types.ts";
 
 /**
  * `llm-retry.ts` is two thin adapters: a message-level view of the shared
@@ -54,10 +54,12 @@ Deno.test("isRetryableRateLimit: only an error stop is a candidate", () => {
     false,
   );
   assertEquals(
-    isRetryableRateLimit(fauxAssistantMessage("", {
-      stopReason: "error",
-      errorMessage: "",
-    })),
+    isRetryableRateLimit(
+      fauxAssistantMessage("", {
+        stopReason: "error",
+        errorMessage: "",
+      }),
+    ),
     false,
   );
 });

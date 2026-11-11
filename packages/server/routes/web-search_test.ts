@@ -1,10 +1,10 @@
-import { assert, assertEquals } from "@std/assert";
 import type {
   WebSearchSettingsView,
   WebSearchTestView,
 } from "@lumisca/core/shared";
-import { webSearchRoutes } from "./web-search.ts";
+import { assert, assertEquals } from "@std/assert";
 import { jsonError } from "./util.ts";
+import { webSearchRoutes } from "./web-search.ts";
 
 /** A stand-in for the core that records what the routes forwarded and
  * answers with a fixed view. */
@@ -52,7 +52,7 @@ Deno.test("/web-search serves the setting without keys", async () => {
   const fake = new FakeWebSearchApi();
   const response = await makeApp(fake).request("/web-search");
   assertEquals(response.status, 200);
-  const view = await response.json() as WebSearchSettingsView;
+  const view = (await response.json()) as WebSearchSettingsView;
   assertEquals(view.defaultId, null);
   // The view carries whether a key is stored, never the key.
   assert(!("apiKey" in view));
@@ -66,10 +66,12 @@ Deno.test("/web-search/providers adds with the id and key it was given", async (
     body: JSON.stringify({ id: "exa", apiKey: "k" }),
   });
   assertEquals(response.status, 201);
-  assertEquals(fake.calls, [{
-    method: "add",
-    args: [{ id: "exa", apiKey: "k" }],
-  }]);
+  assertEquals(fake.calls, [
+    {
+      method: "add",
+      args: [{ id: "exa", apiKey: "k" }],
+    },
+  ]);
 });
 
 Deno.test("/web-search/providers rejects a missing or empty field", async () => {

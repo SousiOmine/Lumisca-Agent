@@ -1,4 +1,3 @@
-import { useRef, useState } from "preact/compat";
 import {
   IconArrowsLeftRight,
   IconHistory,
@@ -7,6 +6,7 @@ import {
   IconPower,
   IconSettings,
 } from "@tabler/icons-preact";
+import { useRef, useState } from "preact/compat";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { useT } from "../i18n.ts";
 
@@ -29,16 +29,17 @@ export type AppMenuEntry =
  * machinery inside a conversation view. The rest — switch mode, settings,
  * quit — belong to the app and stay in both.
  */
-export function menuEntries(
-  options: { tabs: boolean; isDesktop: boolean },
-): AppMenuEntry[] {
+export function menuEntries(options: {
+  tabs: boolean;
+  isDesktop: boolean;
+}): AppMenuEntry[] {
   return [
     ...(options.tabs
       ? [
-        { kind: "newTab" } as const,
-        { kind: "history" } as const,
-        { kind: "separator" } as const,
-      ]
+          { kind: "newTab" } as const,
+          { kind: "history" } as const,
+          { kind: "separator" } as const,
+        ]
       : []),
     { kind: "switchMode" },
     { kind: "settings" },

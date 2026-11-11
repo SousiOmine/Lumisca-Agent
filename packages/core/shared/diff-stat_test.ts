@@ -19,10 +19,10 @@ Deno.test("splitDiffLines drops the trailing break and normalizes CRLF", () => {
 Deno.test("diffLineCounts charges only the lines that changed", () => {
   // Untouched prefix and suffix lines are not counted: one changed line in
   // a 3-line block is +1 -1, not +3 -3.
-  assertEquals(
-    diffLineCounts("one\ntwo\nthree", "one\nTWO\nthree"),
-    { addedLines: 1, removedLines: 1 },
-  );
+  assertEquals(diffLineCounts("one\ntwo\nthree", "one\nTWO\nthree"), {
+    addedLines: 1,
+    removedLines: 1,
+  });
   // A block that shares nothing is counted whole.
   assertEquals(
     diffLineCounts("a\nb\nc\nd\ne", "1\n2\n3\n4\n5\n6\n7\n8\n9\n10"),

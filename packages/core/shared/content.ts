@@ -47,7 +47,8 @@ export function contentImages(
   if (typeof content === "string") return [];
   return content.filter(
     (b): b is { type: "image"; data: string; mimeType: string } =>
-      b.type === "image" && typeof b.data === "string" &&
+      b.type === "image" &&
+      typeof b.data === "string" &&
       typeof b.mimeType === "string",
   );
 }

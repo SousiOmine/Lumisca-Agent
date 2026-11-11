@@ -1,12 +1,12 @@
 import { basename, join } from "node:path";
-import { repoChain } from "../memory/agents-md.ts";
 import { readIfExists, resolveGlobalDirs } from "../fs.ts";
-import { parseSkillFrontmatter } from "../skills/frontmatter.ts";
-import type { SkillDef } from "../skills/discover.ts";
 import type { McpServerConfig } from "../mcp/config.ts";
-import { parsePluginManifest, type PluginManifest } from "./manifest.ts";
-import { parsePluginMcp } from "./mcp.ts";
+import { repoChain } from "../memory/agents-md.ts";
+import type { SkillDef } from "../skills/discover.ts";
+import { parseSkillFrontmatter } from "../skills/frontmatter.ts";
 import { isWithinRealpath } from "../workspace/path-util.ts";
+import { type PluginManifest, parsePluginManifest } from "./manifest.ts";
+import { parsePluginMcp } from "./mcp.ts";
 
 /** Directory holding agent plugins (each immediate child directory is one
  * plugin root with a plugin.json manifest). Workspace and global

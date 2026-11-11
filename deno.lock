@@ -17,9 +17,15 @@
     "npm:@ai-sdk/openai-compatible@3.0.82": "3.0.82_zod@4.4.3",
     "npm:@ai-sdk/openai@4.0.106": "4.0.106_zod@4.4.3",
     "npm:@ai-sdk/provider@4.0.10": "4.0.10",
+    "npm:@biomejs/biome@^2.6.6": "2.6.6",
     "npm:@jellybrick/dbus-next@0.11.4": "0.11.4",
+    "npm:@jsr/std__assert@1.0.19": "1.0.19",
+    "npm:@jsr/std__jsonc@1.0.3": "1.0.3",
+    "npm:@jsr/std__tar@0.1.10": "0.1.10",
+    "npm:@jsr/std__yaml@1.3.0": "1.3.0",
     "npm:@modelcontextprotocol/sdk@1.32.2": "1.32.2_zod@4.4.3",
     "npm:@napi-rs/canvas@1.1.0": "1.1.0",
+    "npm:@noble/hashes@2.4.0": "2.4.0",
     "npm:@novnc/novnc@*": "1.7.0",
     "npm:@novnc/novnc@1.7.0": "1.7.0",
     "npm:@opencode-ai/models@*": "0.0.112",
@@ -27,6 +33,7 @@
     "npm:@opencode-ai/models@0.0.99": "0.0.99",
     "npm:@preact/preset-vite@2.10.6": "2.10.6_vite@8.3.6_@types+node@26.1.2_esbuild@0.28.2",
     "npm:@tabler/icons-preact@3.50.0": "3.50.0_preact@11.1.1_preact-render-to-string@6.8.2",
+    "npm:@types/deno@^2.7.0": "2.7.0",
     "npm:@types/node@*": "26.1.2",
     "npm:ai@7.0.159": "7.0.159_zod@4.4.3",
     "npm:esbuild@0.28.2": "0.28.2",
@@ -41,6 +48,7 @@
     "npm:ts-blank-space@*": "0.9.0",
     "npm:typescript@5.9.2": "5.9.2",
     "npm:typescript@7.0.2": "7.0.2",
+    "npm:typescript@^7.0.2": "7.0.2",
     "npm:unpdf@2.1.0": "2.1.0_@napi-rs+canvas@1.1.0",
     "npm:vite@8.3.6": "8.3.6_@types+node@26.1.2_esbuild@0.28.2",
     "npm:zod@4.4.3": "4.4.3"
@@ -338,6 +346,72 @@
         "@babel/helper-validator-identifier"
       ]
     },
+    "@biomejs/biome@2.6.6": {
+      "integrity": "sha512-NCgVJRyrU1+hsW1ILNaRqNAb9fRL4n49bwyef+wjVJQ488/bXbp0BfnNqTTExkiNQT3ugkgYKR1vK8NxsjlNSQ==",
+      "optionalDependencies": [
+        "@biomejs/cli-android-arm64",
+        "@biomejs/cli-android-x64",
+        "@biomejs/cli-darwin-arm64",
+        "@biomejs/cli-darwin-x64",
+        "@biomejs/cli-linux-arm64",
+        "@biomejs/cli-linux-arm64-musl",
+        "@biomejs/cli-linux-x64",
+        "@biomejs/cli-linux-x64-musl",
+        "@biomejs/cli-win32-arm64",
+        "@biomejs/cli-win32-x64"
+      ],
+      "bin": true
+    },
+    "@biomejs/cli-android-arm64@2.6.6": {
+      "integrity": "sha512-bicnqNNxEX7pjkDQaptYvPRIWDfgXJLl/Ok7iZjC+F1AhfReor3FSS7SgPYnOvUy/jf++5U/KYN4T8OKH5rrNA==",
+      "os": ["android"],
+      "cpu": ["arm64"]
+    },
+    "@biomejs/cli-android-x64@2.6.6": {
+      "integrity": "sha512-N443kDSElF4kDMKjarsL+ymj/ewLA5R9VAdawA7fJ7pwgN3JVDZp0K+xhKBglH8EwsKi2+K8xC6WxXSkgziFfw==",
+      "os": ["android"],
+      "cpu": ["x64"]
+    },
+    "@biomejs/cli-darwin-arm64@2.6.6": {
+      "integrity": "sha512-/vSAqWx3by3p8w5ew+HVJDgguuaTK3U6Fb5gk/oDUH21iWOopm3gOlhT6tZfy5mTaM5R4CVc3uFWkxBtEDrKyw==",
+      "os": ["darwin"],
+      "cpu": ["arm64"]
+    },
+    "@biomejs/cli-darwin-x64@2.6.6": {
+      "integrity": "sha512-lLdOAJKbrAoDs+3GvTyVmMW345D9IhrIE3GgoL2eeHwO1boN4VhrSlALtFYsP0p+Jy4udUp4bTguij0qjKrH8w==",
+      "os": ["darwin"],
+      "cpu": ["x64"]
+    },
+    "@biomejs/cli-linux-arm64-musl@2.6.6": {
+      "integrity": "sha512-rw2Vsoi/WZGDyRjMXx9KZH9zsHe79LIzkdWHkLqsIkeKZm6qiGxtiIApxn7cmJSoEPaSvHaH5pRj1FhTcyL/XA==",
+      "os": ["linux"],
+      "cpu": ["arm64"]
+    },
+    "@biomejs/cli-linux-arm64@2.6.6": {
+      "integrity": "sha512-UzJdUCg9dbEGpZOuZRyehEPrnwKjx9z4Um7sWLG5x6txu7UjeWdJZuBXVGlyAdD39w2Hx0nZeK1jKC4NFUTCNQ==",
+      "os": ["linux"],
+      "cpu": ["arm64"]
+    },
+    "@biomejs/cli-linux-x64-musl@2.6.6": {
+      "integrity": "sha512-DiKejs+GnFbOVQsBnukUpiB+T13tqUDFGwwjsTq51vatAsaflzFzVD0BOgjVUGRrqKgE0K0Xf+wNtkcmdN2chw==",
+      "os": ["linux"],
+      "cpu": ["x64"]
+    },
+    "@biomejs/cli-linux-x64@2.6.6": {
+      "integrity": "sha512-l8/aPXc1cz8VpUyd4hb5Pm5zx+X3voQBks4aLYbp5pC8KSchuHyvqDfY5xax39qCHomI/2xn6NKEot+zebG38g==",
+      "os": ["linux"],
+      "cpu": ["x64"]
+    },
+    "@biomejs/cli-win32-arm64@2.6.6": {
+      "integrity": "sha512-DjVXwQAQeHrO1JEZAEus54k40Tnh4glyU3VFLcDBKwoz0xnxCEnqw6TCMXoujcQMQynWd3AY8bLrbR1o0XNqow==",
+      "os": ["win32"],
+      "cpu": ["arm64"]
+    },
+    "@biomejs/cli-win32-x64@2.6.6": {
+      "integrity": "sha512-B7KMG26A4I9lAuxwBGMmiVcjMGAeJRoz+pzFt9brRvOAsIrgOu8ptJld5rUWui6tM1uiJwxeJhhDPuAiZtxXdw==",
+      "os": ["win32"],
+      "cpu": ["x64"]
+    },
     "@esbuild/aix-ppc64@0.28.2": {
       "integrity": "sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ==",
       "os": ["aix"],
@@ -519,6 +593,53 @@
         "@jridgewell/sourcemap-codec"
       ]
     },
+    "@jsr/std__assert@1.0.19": {
+      "integrity": "sha512-pEj6RPkGbqlgRmyKwATp4cUs6+ijxtdrv3bq8v1d2I2CEcMEyPaO8cVKro61wGRDH4cNg8Zx6haztvK/9m7gkA==",
+      "dependencies": [
+        "@jsr/std__internal"
+      ],
+      "tarball": "https://npm.jsr.io/~/11/@jsr/std__assert/1.0.19.tgz"
+    },
+    "@jsr/std__bytes@1.0.6": {
+      "integrity": "sha512-St6yKggjFGhxS52IFLJWvkchRFbAKg2Xh8UxA4S1EGz7GJ2Ui+ssDDldj/w2c8vCxvl6qgR0HaYbKeFJNqujmA==",
+      "tarball": "https://npm.jsr.io/~/11/@jsr/std__bytes/1.0.6.tgz"
+    },
+    "@jsr/std__internal@1.0.14": {
+      "integrity": "sha512-JT8b/t40WcR9q0GDwRZUooY7aXeXnFal8iidE/5TckdAFtvpVAsaJ71/Xgf1SfoChs41s6CZkuCYM8toaNgdvA==",
+      "tarball": "https://npm.jsr.io/~/11/@jsr/std__internal/1.0.14.tgz"
+    },
+    "@jsr/std__json@1.1.0": {
+      "integrity": "sha512-a9Eylh7ox33tFn5RxhESnvI4akpefQP5Qn+ePz3Ih4IJ/EPA8p0SKq0aztRfN1sGDhfyWMPWwlUcwNxONt+Ncg==",
+      "dependencies": [
+        "@jsr/std__streams"
+      ],
+      "tarball": "https://npm.jsr.io/~/11/@jsr/std__json/1.1.0.tgz"
+    },
+    "@jsr/std__jsonc@1.0.3": {
+      "integrity": "sha512-NALyuVr8/MJsdKnVFCXKNyWzCJTbLlXASTF/4YyfQN2evCRWaZoTeQ17estdejU5a/xhdPfJ4aDv6MP0b17UHQ==",
+      "dependencies": [
+        "@jsr/std__json"
+      ],
+      "tarball": "https://npm.jsr.io/~/11/@jsr/std__jsonc/1.0.3.tgz"
+    },
+    "@jsr/std__streams@1.2.0": {
+      "integrity": "sha512-cQnU2wdP12rYRy+gGAiFarEK9YmWjVwnFMiOGIe0wMKmRLY68INH9hB/mqjKdPX/ruUhNYB70x5YRPLzUYIrbg==",
+      "dependencies": [
+        "@jsr/std__bytes"
+      ],
+      "tarball": "https://npm.jsr.io/~/11/@jsr/std__streams/1.2.0.tgz"
+    },
+    "@jsr/std__tar@0.1.10": {
+      "integrity": "sha512-ikXNVN4gBptpqTctaF0j1El/vhxv1WVw4pMC+3TAFugCDFBe2OtG3DqeDFMkWMHvJ/JGITdk/B9O5bM0bxFdeA==",
+      "dependencies": [
+        "@jsr/std__streams"
+      ],
+      "tarball": "https://npm.jsr.io/~/11/@jsr/std__tar/0.1.10.tgz"
+    },
+    "@jsr/std__yaml@1.3.0": {
+      "integrity": "sha512-TuFbXlSy3nRuQuR8co2t7yzhv53ObdYZZidn8M958Glj6vBp5b7nxg7wTN8VTyCwC3vpbr6Mfdx9auNe/BMAVA==",
+      "tarball": "https://npm.jsr.io/~/11/@jsr/std__yaml/1.3.0.tgz"
+    },
     "@modelcontextprotocol/sdk@1.32.2_zod@4.4.3": {
       "integrity": "sha512-SWsVtH/0vULSQStoZ6xxH2K09Li8fXYTMC64ZeogCdpZ3XSi1eCPOByV1OpuJxuI3OcmHhosDWYyii07tpPsLw==",
       "dependencies": [
@@ -611,6 +732,9 @@
         "@napi-rs/canvas-win32-arm64-msvc",
         "@napi-rs/canvas-win32-x64-msvc"
       ]
+    },
+    "@noble/hashes@2.4.0": {
+      "integrity": "sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA=="
     },
     "@nodable/entities@3.1.0": {
       "integrity": "sha512-LsS/DjHr+uDM647Gru/cA8+J3a3HfhttwCKLyuoyN7yXTFCxKBtSgMQBvrW9yNPa2/zDRUNuGPaH5QUFoa4arQ=="
@@ -803,6 +927,9 @@
     },
     "@tabler/icons@3.50.0": {
       "integrity": "sha512-HflLxyrH1cqC7s7jzQGSjpsTAVIoaf7+/yHjbdM59rJQBMjliibp+LYhDPFxOMcwa1M8DNpOk6ENzQiWn9a1Dg=="
+    },
+    "@types/deno@2.7.0": {
+      "integrity": "sha512-Y6fWcV8KpYeO3Lik/RiYnUxtr/LWqoeACciU0CA+dr1U/45tGgaX3HWQQAPCNN53raN4Rr4Fht4y6qsUH57fDA=="
     },
     "@types/estree@1.0.9": {
       "integrity": "sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg=="
@@ -2170,6 +2297,40 @@
       "npm:sucrase@3.35.1",
       "npm:unpdf@2.1.0"
     ],
+    "packageJson": {
+      "dependencies": [
+        "npm:@ai-sdk/amazon-bedrock@5.0.130",
+        "npm:@ai-sdk/anthropic@4.0.94",
+        "npm:@ai-sdk/azure@4.0.114",
+        "npm:@ai-sdk/google@4.0.109",
+        "npm:@ai-sdk/mistral@4.0.77",
+        "npm:@ai-sdk/openai-compatible@3.0.82",
+        "npm:@ai-sdk/openai@4.0.106",
+        "npm:@biomejs/biome@^2.6.6",
+        "npm:@jellybrick/dbus-next@0.11.4",
+        "npm:@jsr/std__assert@1.0.19",
+        "npm:@jsr/std__jsonc@1.0.3",
+        "npm:@jsr/std__tar@0.1.10",
+        "npm:@jsr/std__yaml@1.3.0",
+        "npm:@modelcontextprotocol/sdk@1.32.2",
+        "npm:@napi-rs/canvas@1.1.0",
+        "npm:@noble/hashes@2.4.0",
+        "npm:@novnc/novnc@1.7.0",
+        "npm:@opencode-ai/models@0.0.112",
+        "npm:@tabler/icons-preact@3.50.0",
+        "npm:@types/deno@^2.7.0",
+        "npm:ai@7.0.159",
+        "npm:esbuild@0.28.2",
+        "npm:hono@4.13.16",
+        "npm:marked@18.1.3",
+        "npm:motion@14.10.1",
+        "npm:preact-render-to-string@6.8.2",
+        "npm:preact@11.1.1",
+        "npm:sucrase@3.35.1",
+        "npm:typescript@^7.0.2",
+        "npm:unpdf@2.1.0"
+      ]
+    },
     "members": {
       "packages/web": {
         "dependencies": [

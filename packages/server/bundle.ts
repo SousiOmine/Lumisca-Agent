@@ -1,6 +1,6 @@
-import { build } from "esbuild";
 import { join, relative, resolve } from "node:path";
 import { BROWSER_CORE_ENTRIES } from "@lumisca/core/browser-entries";
+import { build } from "esbuild";
 
 export interface BundleOptions {
   /** Repository root (used as esbuild working directory for node_modules resolution). */
@@ -70,7 +70,7 @@ export async function bundleClient(
   return {
     entry: `${ENTRY_CHUNK}.js`,
     files: Object.keys(result.metafile.outputs).map((path) =>
-      relative(resolve(options.outdir), resolve(options.cwd, path))
+      relative(resolve(options.outdir), resolve(options.cwd, path)),
     ),
   };
 }

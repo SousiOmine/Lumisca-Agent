@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "preact/compat";
+import type { Translator } from "@lumisca/core/shared";
 import {
   type Icon,
   IconArrowUp,
@@ -12,13 +12,13 @@ import {
   IconFolder,
   IconHome,
 } from "@tabler/icons-preact";
-import type { Translator } from "@lumisca/core/shared";
+import { Fragment, useEffect, useRef, useState } from "preact/compat";
 import { api } from "../api.ts";
-import type { FsBrowse, FsEntry, FsPlace, FsPlaceKind } from "../types.ts";
-import { errorText } from "../providers.ts";
 import { useAsyncEffect } from "../hooks/useAsync.ts";
-import { useT } from "../i18n.ts";
 import { useTouchInput } from "../hooks/useMediaQuery.ts";
+import { useT } from "../i18n.ts";
+import { errorText } from "../providers.ts";
+import type { FsBrowse, FsEntry, FsPlace, FsPlaceKind } from "../types.ts";
 import { BackHeader } from "./BackHeader.tsx";
 
 /** Sidebar icon of each place: a root is a drive/volume, so it reads as a
@@ -76,16 +76,20 @@ export function visibleEntries(
  * selecting: there is no double click to descend with, and the folder the
  * user is in is what the "select" button adds, so tapping to descend is the
  * whole interaction. */
-function EntryRow(
-  { entry, selected, onSelect, onOpen, tapOpens }: {
-    entry: FsEntry;
-    selected: boolean;
-    onSelect: (path: string) => void;
-    onOpen: (path: string) => void;
-    /** Whether a single click opens the folder (see above). */
-    tapOpens: boolean;
-  },
-) {
+function EntryRow({
+  entry,
+  selected,
+  onSelect,
+  onOpen,
+  tapOpens,
+}: {
+  entry: FsEntry;
+  selected: boolean;
+  onSelect: (path: string) => void;
+  onOpen: (path: string) => void;
+  /** Whether a single click opens the folder (see above). */
+  tapOpens: boolean;
+}) {
   const t = useT();
   if (entry.kind === "file") {
     return (
@@ -98,10 +102,8 @@ function EntryRow(
         <span className="folder-icon">
           <IconFile size={15} />
         </span>
-        {
-          /* The hint rides on the name, not the row: a title on the row would
-         * replace the file name as its accessible name. */
-        }
+        {/* The hint rides on the name, not the row: a title on the row would
+         * replace the file name as its accessible name. */}
         <span
           className="folder-browser-name"
           title={t("chrome.folderBrowser.fileNotSelectable")}
@@ -138,12 +140,13 @@ function EntryRow(
  * folder — or the open one while nothing is selected — to the workspace. A
  * touch screen has no double click, so a single tap opens there (see
  * EntryRow), and the button adds the folder the user is in. */
-export function FolderBrowser(
-  { onAdd, onBack }: {
-    onAdd: (path: string) => void;
-    onBack: () => void;
-  },
-) {
+export function FolderBrowser({
+  onAdd,
+  onBack,
+}: {
+  onAdd: (path: string) => void;
+  onBack: () => void;
+}) {
   const t = useT();
   // A finger has no double click: the rows open on the first tap there.
   const touch = useTouchInput();
@@ -209,9 +212,12 @@ export function FolderBrowser(
     if (folders.length === 0) return;
     const index = folders.findIndex((entry) => entry.path === selected);
     // With nothing selected yet, both directions enter the list at its edge.
-    const next = index === -1
-      ? (step > 0 ? 0 : folders.length - 1)
-      : Math.min(Math.max(index + step, 0), folders.length - 1);
+    const next =
+      index === -1
+        ? step > 0
+          ? 0
+          : folders.length - 1
+        : Math.min(Math.max(index + step, 0), folders.length - 1);
     setSelected(folders[next]!.path);
   };
 
@@ -245,13 +251,8 @@ export function FolderBrowser(
 
   return (
     <>
-      <BackHeader
-        onBack={onBack}
-        title={t("chrome.folderBrowser.title")}
-      />
-      <p className="settings-note">
-        {t("chrome.folderBrowser.selectPrompt")}
-      </p>
+      <BackHeader onBack={onBack} title={t("chrome.folderBrowser.title")} />
+      <p className="settings-note">{t("chrome.folderBrowser.selectPrompt")}</p>
 
       <div className="folder-browser-panes">
         <div className="folder-browser-sidebar">
@@ -303,8 +304,7 @@ export function FolderBrowser(
                     }`}
                     title={crumb.path}
                     disabled={index === open.breadcrumbs.length - 1}
-                    onClick={() =>
-                      void openFolder(crumb.path)}
+                    onClick={() => void openFolder(crumb.path)}
                   >
                     {crumb.name}
                   </button>
@@ -316,12 +316,16 @@ export function FolderBrowser(
               className={`btn small folder-browser-toggle${
                 showHidden ? " on" : ""
               }`}
-              title={showHidden
-                ? t("chrome.folderBrowser.hideHidden")
-                : t("chrome.folderBrowser.showHidden")}
-              aria-label={showHidden
-                ? t("chrome.folderBrowser.hideHidden")
-                : t("chrome.folderBrowser.showHidden")}
+              title={
+                showHidden
+                  ? t("chrome.folderBrowser.hideHidden")
+                  : t("chrome.folderBrowser.showHidden")
+              }
+              aria-label={
+                showHidden
+                  ? t("chrome.folderBrowser.hideHidden")
+                  : t("chrome.folderBrowser.showHidden")
+              }
               onClick={() => {
                 setShowHidden((prev) => !prev);
                 // The toggle is not a place to stay: the keyboard returns to
@@ -379,11 +383,9 @@ export function FolderBrowser(
                 {t("chrome.folderBrowser.emptyFolder")}
               </div>
             )}
-            {
-              /* An empty *listing* is not an empty folder: the hidden entries
+            {/* An empty *listing* is not an empty folder: the hidden entries
              * are simply out of sight (and the toggle in the toolbar brings
-             * them back). */
-            }
+             * them back). */}
             {open && open.entries.length > 0 && entries.length === 0 && (
               <div className="folder-browser-empty">
                 {t("chrome.folderBrowser.hiddenOnly")}

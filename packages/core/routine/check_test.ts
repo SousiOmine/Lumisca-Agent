@@ -1,11 +1,11 @@
 import { assert, assertEquals } from "@std/assert";
+import { LumiscaDb } from "../db/mod.ts";
+import type { RoutineSchedule } from "../shared/routine.ts";
 import type { CommandRunner } from "../tools/command-backend.ts";
 import type { FileBackend } from "../tools/file-backend.ts";
-import { LumiscaDb } from "../db/mod.ts";
+import { checkRoutine } from "./check.ts";
 import type { RoutineRepo } from "./repo.ts";
 import { createRoutineRepo } from "./repo.ts";
-import { checkRoutine } from "./check.ts";
-import type { RoutineSchedule } from "../shared/routine.ts";
 
 /**
  * The check as the scheduler drives it: a routine from the repository, its
@@ -22,18 +22,17 @@ const AGENT = "agent-1";
 
 function repo(): { repo: RoutineRepo; close: () => void } {
   const db = LumiscaDb.openInMemory();
-  db.db.prepare(
-    "INSERT INTO stella_agents (id, name, role, created_at, updated_at) " +
-      "VALUES (?, ?, ?, ?, ?)",
-  ).run(AGENT, "Worker", "Works.", 1, 1);
+  db.db
+    .prepare(
+      "INSERT INTO stella_agents (id, name, role, created_at, updated_at) " +
+        "VALUES (?, ?, ?, ?, ?)",
+    )
+    .run(AGENT, "Worker", "Works.", 1, 1);
   return { repo: createRoutineRepo(db), close: () => db.close() };
 }
 
 /** A machine whose commands answer from a queue (the file check's stat). */
-function runnerOf(
-  stdout: string[],
-  seen: string[] = [],
-): CommandRunner {
+function runnerOf(stdout: string[], seen: string[] = []): CommandRunner {
   let index = 0;
   return {
     run: (command: string) => {
@@ -262,9 +261,11 @@ Deno.test("checkRoutine: an mcp check runs without the machine", async () => {
     });
     const check = await checkRoutine(routines.get(created.id)!, {
       callTool: () =>
-        Promise.resolve(JSON.stringify({
-          data: { messages: [{ id: "m1" }, { id: "m2" }] },
-        })),
+        Promise.resolve(
+          JSON.stringify({
+            data: { messages: [{ id: "m1" }, { id: "m2" }] },
+          }),
+        ),
     });
     assertEquals(check.kind, "changed");
     assert(check.kind === "changed");

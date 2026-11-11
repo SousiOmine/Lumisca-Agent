@@ -1,9 +1,9 @@
-import { Hono } from "hono";
 import {
-  type CommandApproval,
   COMPUTER_USE_ENABLED_KEY,
+  type CommandApproval,
   type SavedPrompt,
 } from "@lumisca/core/shared";
+import { Hono } from "hono";
 import {
   AppError,
   parseBody,
@@ -33,9 +33,11 @@ export interface SettingsApi {
   clearCommandApprovals(): void;
   /** Saved prompts (user-defined prompt snippets). */
   getSavedPrompts(): SavedPrompt[];
-  addSavedPrompt(
-    input: { id: string; label: string; prompt: string },
-  ): SavedPrompt;
+  addSavedPrompt(input: {
+    id: string;
+    label: string;
+    prompt: string;
+  }): SavedPrompt;
   updateSavedPrompt(
     id: string,
     input: { label?: string; prompt?: string },
@@ -86,9 +88,11 @@ export function settingRoutes(core: SettingsApi): Hono {
   });
 
   app.post("/settings/saved-prompts", async (c) => {
-    const body = await parseBody<
-      { id?: unknown; label?: unknown; prompt?: unknown }
-    >(c);
+    const body = await parseBody<{
+      id?: unknown;
+      label?: unknown;
+      prompt?: unknown;
+    }>(c);
     const prompt = core.addSavedPrompt({
       id: requireNonEmptyString(body?.id, "id (string)"),
       label: requireNonEmptyString(body?.label, "label (string)"),

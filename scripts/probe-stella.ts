@@ -21,9 +21,11 @@
  */
 import "../packages/core/runtime/deno.ts";
 import { LumiscaCore } from "../packages/core/mod.ts";
-import { createVmManager } from "../packages/core/vm/container.ts";
-import { createVmExec } from "../packages/core/vm/container.ts";
 import { runVmCommand } from "../packages/core/vm/command.ts";
+import {
+  createVmExec,
+  createVmManager,
+} from "../packages/core/vm/container.ts";
 import { VM_CONTAINER_NAME, VM_DISPLAY } from "../packages/core/vm/contract.ts";
 import { createVmSemanticTools } from "../packages/core/vm/semantic.ts";
 import { stellaContainerDir } from "../packages/server/paths.ts";
@@ -36,17 +38,13 @@ function log(message: string): void {
   console.log(message);
 }
 
-const containerDir = stellaContainerDir(
-  repoRoot,
-  Deno.execPath(),
-  (path) => {
-    try {
-      return Deno.statSync(path).isDirectory;
-    } catch {
-      return false;
-    }
-  },
-);
+const containerDir = stellaContainerDir(repoRoot, Deno.execPath(), (path) => {
+  try {
+    return Deno.statSync(path).isDirectory;
+  } catch {
+    return false;
+  }
+});
 log(`container files: ${containerDir}`);
 
 const vm = createVmManager({ containerDir });
@@ -89,13 +87,12 @@ const started = await vm.start();
 log(`started: ${started.state} (VNC port ${started.vncPort})`);
 
 const exec = createVmExec({ run: runVmCommand });
-const probe = await exec([
-  "sh",
-  "-c",
-  'printf "%s|%s|%s" "$DISPLAY" "$(id -u)" "$(pwd)"',
-], {
-  timeoutMs: 30_000,
-});
+const probe = await exec(
+  ["sh", "-c", 'printf "%s|%s|%s" "$DISPLAY" "$(id -u)" "$(pwd)"'],
+  {
+    timeoutMs: 30_000,
+  },
+);
 log(
   `inside the machine: ${probe.stdout} (expected ${VM_DISPLAY}|1000|/home/agent)`,
 );
@@ -128,9 +125,9 @@ const shot = await new Deno.Command("podman", {
 }).output();
 log(
   shot.success
-    ? `screenshot: ${shot.stdout.byteLength} bytes (PNG signature ${
-      new Uint8Array(shot.stdout.slice(0, 4)).join(",")
-    })`
+    ? `screenshot: ${shot.stdout.byteLength} bytes (PNG signature ${new Uint8Array(
+        shot.stdout.slice(0, 4),
+      ).join(",")})`
     : `screenshot FAILED: ${new TextDecoder().decode(shot.stderr)}`,
 );
 

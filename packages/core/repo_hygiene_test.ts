@@ -147,7 +147,8 @@ Deno.test("a packaged install directory carries no version", async () => {
   // (a step may be split or added without meaning anything); what matters is
   // that the packaging is found at all — a renamed variable would otherwise
   // make this check pass by inspecting nothing.
-  const assignments = workflow.split("\n")
+  const assignments = workflow
+    .split("\n")
     .map((line) => line.trim())
     .filter((line) => /^(DIR=|\$dir = )/.test(line));
   assert(
@@ -213,8 +214,8 @@ Deno.test("every i18n catalogue key is referenced by some source", async () => {
   assert(sources.length > 300, `only ${sources.length} sources were read`);
 
   const haystack = sources.join("\n");
-  const unused = Object.keys(messages).filter((key) =>
-    !haystack.includes(`"${key}"`)
+  const unused = Object.keys(messages).filter(
+    (key) => !haystack.includes(`"${key}"`),
   );
   assertEquals(
     unused,
@@ -248,15 +249,17 @@ Deno.test("every export of the core barrel is imported by a consumer", async () 
   assert(barrel !== undefined, "the core barrel was not read");
 
   const exported = new Set<string>();
-  for (
-    const block of barrel.matchAll(
-      /export\s+(?:type\s+)?\{([\s\S]*?)\}\s+from/g,
-    )
-  ) {
+  for (const block of barrel.matchAll(
+    /export\s+(?:type\s+)?\{([\s\S]*?)\}\s+from/g,
+  )) {
     for (const part of (block[1] ?? "").split(",")) {
       const text = part.trim().replace(/^type\s+/, "");
       if (text === "") continue;
-      const name = text.split(/\s+as\s+/).pop()?.trim() ?? "";
+      const name =
+        text
+          .split(/\s+as\s+/)
+          .pop()
+          ?.trim() ?? "";
       if (/^[A-Za-z0-9_]+$/.test(name)) exported.add(name);
     }
   }
@@ -275,22 +278,27 @@ Deno.test("every export of the core barrel is imported by a consumer", async () 
     // `../packages/core/mod.ts`). Resolving the specifier rather than matching
     // its spelling is what keeps a third spelling from going unnoticed.
     const dir = path.slice(0, path.lastIndexOf("/"));
-    for (
-      const block of text.matchAll(
-        /(?:import|export)\s+(?:type\s+)?\{([^}]*)\}\s*from\s*"([^"]+)"/g,
-      )
-    ) {
+    for (const block of text.matchAll(
+      /(?:import|export)\s+(?:type\s+)?\{([^}]*)\}\s*from\s*"([^"]+)"/g,
+    )) {
       const specifier = block[2] ?? "";
-      const reachesBarrel = specifier === "@lumisca/core" ||
-        (!specifier.startsWith("@") && !specifier.startsWith("node:") &&
-          !specifier.startsWith("jsr:") && !specifier.startsWith("npm:") &&
-          !specifier.startsWith("http") && !/^\w+:/.test(specifier) &&
+      const reachesBarrel =
+        specifier === "@lumisca/core" ||
+        (!specifier.startsWith("@") &&
+          !specifier.startsWith("node:") &&
+          !specifier.startsWith("jsr:") &&
+          !specifier.startsWith("npm:") &&
+          !specifier.startsWith("http") &&
+          !/^\w+:/.test(specifier) &&
           resolvePath(dir, specifier) === barrelPath);
       if (!reachesBarrel) continue;
       for (const part of (block[1] ?? "").split(",")) {
-        const name = (part.trim().replace(/^type\s+/, "").split(
-          /\s+as\s+/,
-        )[0] ?? "").trim();
+        const name = (
+          part
+            .trim()
+            .replace(/^type\s+/, "")
+            .split(/\s+as\s+/)[0] ?? ""
+        ).trim();
         if (/^[A-Za-z0-9_]+$/.test(name)) used.add(name);
       }
     }
@@ -368,8 +376,9 @@ Deno.test("the design documents only name files that exist", async () => {
     const text = texts.get(doc);
     assert(text !== undefined, `${doc} was not read`);
     const refs = new Set(
-      [...text.matchAll(/`([A-Za-z0-9_./-]+\.(?:ts|tsx|rs|css|yml|toml))`/g)]
-        .map((match) => match[1]!),
+      [
+        ...text.matchAll(/`([A-Za-z0-9_./-]+\.(?:ts|tsx|rs|css|yml|toml))`/g),
+      ].map((match) => match[1]!),
     );
     for (const ref of refs) {
       if (roots.some((root) => fileExistsAt(root, ref))) continue;
@@ -405,11 +414,12 @@ Deno.test("the core's own modules form a DAG", async () => {
   // what made `shared/` (bundled into the browser) depend on the SQLite-backed
   // stella repo, and nothing noticed until the type was needed as a value.
   const texts = await sourceTexts();
-  const files = [...texts.keys()].filter((path) =>
-    path.startsWith("packages/core/") &&
-    (path.endsWith(".ts") || path.endsWith(".tsx")) &&
-    !path.includes("_test.") &&
-    path !== "packages/core/mod.ts"
+  const files = [...texts.keys()].filter(
+    (path) =>
+      path.startsWith("packages/core/") &&
+      (path.endsWith(".ts") || path.endsWith(".tsx")) &&
+      !path.includes("_test.") &&
+      path !== "packages/core/mod.ts",
   );
   const known = new Set(files);
 
@@ -432,11 +442,9 @@ Deno.test("the core's own modules form a DAG", async () => {
   for (const path of files) {
     const deps: string[] = [];
     const source = texts.get(path) ?? "";
-    for (
-      const match of source.matchAll(
-        /(?:import|export)[\s\S]*?from\s*"(\.[^"]+)"/g,
-      )
-    ) {
+    for (const match of source.matchAll(
+      /(?:import|export)[\s\S]*?from\s*"(\.[^"]+)"/g,
+    )) {
       const target = resolve(path.slice(0, path.lastIndexOf("/")), match[1]!);
       if (target !== undefined) deps.push(target);
     }

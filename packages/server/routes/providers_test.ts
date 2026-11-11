@@ -1,12 +1,14 @@
-import { assert, assertEquals } from "@std/assert";
-import type { AuthInteraction, AuthType, Provider } from "@lumisca/core";
 import type {
   AuthCheck,
+  AuthInteraction,
+  AuthType,
   CatalogStatus,
   ModelInfo,
+  Provider,
   ProviderAuthType,
   ProviderLoginSnapshot,
 } from "@lumisca/core";
+import { assert, assertEquals } from "@std/assert";
 import { type ProviderApi, providerRoutes } from "./providers.ts";
 import { jsonError } from "./util.ts";
 
@@ -25,27 +27,28 @@ class FakeProviderApi implements ProviderApi {
     | undefined;
 
   listProviders(): readonly Provider[] {
-    return [...this.oauthProviders, "anthropic"].map((id) =>
-      ({
-        id,
-        name: id,
-        getModels: () => [],
-        resolveCredential: () => Promise.resolve(undefined),
-        auth: this.oauthProviders.has(id)
-          ? {
-            oauth: {
-              name: id,
-              methods: ["browser", "device_code"] as const,
-              login: () => Promise.reject(new Error("unused")),
-            },
-          }
-          : {
-            apiKey: {
-              name: id,
-              resolve: () => Promise.resolve(undefined),
-            },
-          },
-      }) as Provider
+    return [...this.oauthProviders, "anthropic"].map(
+      (id) =>
+        ({
+          id,
+          name: id,
+          getModels: () => [],
+          resolveCredential: () => Promise.resolve(undefined),
+          auth: this.oauthProviders.has(id)
+            ? {
+                oauth: {
+                  name: id,
+                  methods: ["browser", "device_code"] as const,
+                  login: () => Promise.reject(new Error("unused")),
+                },
+              }
+            : {
+                apiKey: {
+                  name: id,
+                  resolve: () => Promise.resolve(undefined),
+                },
+              },
+        }) as Provider,
     );
   }
   listModelsDetailed(): ModelInfo[] {
@@ -148,9 +151,7 @@ async function snapshot(
   app: ReturnType<typeof providerRoutes>,
   sessionId: string,
 ): Promise<ProviderLoginSnapshot> {
-  const res = await app.request(
-    `/providers/openai-codex/login/${sessionId}`,
-  );
+  const res = await app.request(`/providers/openai-codex/login/${sessionId}`);
   assertEquals(res.status, 200);
   return await res.json();
 }
@@ -241,11 +242,13 @@ Deno.test("OAuth login runs a device-code flow and marks the provider configured
   const { sessionId } = await start.json();
 
   const snap = await pollUntil(app, sessionId, "done");
-  assertEquals(snap.events, [{
-    type: "device_code",
-    userCode: "ABCD-EFGH",
-    verificationUri: "https://auth.openai.com/codex/device",
-  }]);
+  assertEquals(snap.events, [
+    {
+      type: "device_code",
+      userCode: "ABCD-EFGH",
+      verificationUri: "https://auth.openai.com/codex/device",
+    },
+  ]);
   assertEquals(snap.prompt, undefined);
   assert(fake.loggedIn.has("openai-codex"));
 
@@ -314,10 +317,12 @@ Deno.test("browser login runs when the page is on this machine", async () => {
   assertEquals(start.status, 200);
   const { sessionId } = await start.json();
   const snap = await pollUntil(app, sessionId, "done");
-  assertEquals(snap.events, [{
-    type: "auth_url",
-    url: "https://auth.openai.com/oauth/authorize?x=1",
-  }]);
+  assertEquals(snap.events, [
+    {
+      type: "auth_url",
+      url: "https://auth.openai.com/oauth/authorize?x=1",
+    },
+  ]);
 });
 
 Deno.test("a forwarded prompt resolves through POST respond", async () => {
@@ -326,7 +331,10 @@ Deno.test("a forwarded prompt resolves through POST respond", async () => {
     const picked = await interaction.prompt({
       type: "select",
       message: "Pick one:",
-      options: [{ id: "a", label: "A" }, { id: "b", label: "B" }],
+      options: [
+        { id: "a", label: "A" },
+        { id: "b", label: "B" },
+      ],
     });
     interaction.notify({ type: "progress", message: `chose ${picked}` });
   };
@@ -395,10 +403,9 @@ Deno.test("a second login request reuses the running session", async () => {
   assertEquals((second as { sessionId: string }).sessionId, first.sessionId);
   assertEquals(started, 1);
   // Clean up so no dangling session keeps polling.
-  await app.request(
-    `/providers/openai-codex/login/${first.sessionId}/cancel`,
-    { method: "POST" },
-  );
+  await app.request(`/providers/openai-codex/login/${first.sessionId}/cancel`, {
+    method: "POST",
+  });
 });
 
 Deno.test("a failing login surfaces as error without configuring the provider", async () => {

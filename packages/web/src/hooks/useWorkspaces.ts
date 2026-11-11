@@ -1,10 +1,10 @@
 import { useCallback, useState } from "preact/compat";
 import { api } from "../api.ts";
-import { errorText } from "../providers.ts";
-import { useT } from "../i18n.ts";
-import { useAsyncEffect } from "./useAsync.ts";
-import type { InitialData, Workspace } from "../types.ts";
 import { confirmAction } from "../confirm.ts";
+import { useT } from "../i18n.ts";
+import { errorText } from "../providers.ts";
+import type { InitialData, Workspace } from "../types.ts";
+import { useAsyncEffect } from "./useAsync.ts";
 
 /** Workspace state of the server this window displays: the list, plus the
  * shared create/update/delete flows. `loaded` tells whether that list has
@@ -47,7 +47,7 @@ export function useWorkspaces(initialData?: InitialData) {
     setWorkspaces((prev) =>
       prev.some((w) => w.id === ws.id)
         ? prev.map((w) => (w.id === ws.id ? ws : w))
-        : [ws, ...prev]
+        : [ws, ...prev],
     );
   }, []);
 
@@ -57,17 +57,18 @@ export function useWorkspaces(initialData?: InitialData) {
 
   /** The single delete flow (confirm + API + state), shared by the draft
    * tab and the workspace edit modal. */
-  const deleteWorkspace = useCallback(async (ws: Workspace) => {
-    if (
-      !confirmAction(
-        t("common.workspaceDeleteConfirm", { name: ws.name }),
-      )
-    ) {
-      return;
-    }
-    await api.deleteWorkspace(ws.id);
-    handleWorkspaceDeleted(ws.id);
-  }, [handleWorkspaceDeleted, t]);
+  const deleteWorkspace = useCallback(
+    async (ws: Workspace) => {
+      if (
+        !confirmAction(t("common.workspaceDeleteConfirm", { name: ws.name }))
+      ) {
+        return;
+      }
+      await api.deleteWorkspace(ws.id);
+      handleWorkspaceDeleted(ws.id);
+    },
+    [handleWorkspaceDeleted, t],
+  );
 
   return {
     workspaces,

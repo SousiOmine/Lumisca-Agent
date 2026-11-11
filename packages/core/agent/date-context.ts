@@ -1,8 +1,8 @@
-import { today } from "../environment.ts";
 import type {
   ContextProvider,
   ContextUpdate,
 } from "../ai/context-providers.ts";
+import { today } from "../environment.ts";
 
 /**
  * The date context provider: publishes the current date as a durable
@@ -49,15 +49,17 @@ export function createDateProvider(
       if (published === date) return [];
       const replaced = published !== undefined;
       published = date;
-      return [{
-        title: `Date: ${date}`,
-        body: `The current date is ${date}.${
-          replaced
-            ? " This reading replaces the earlier one: the previous date is no longer current."
-            : ""
-        }`,
-        state: { date } satisfies DateState,
-      }];
+      return [
+        {
+          title: `Date: ${date}`,
+          body: `The current date is ${date}.${
+            replaced
+              ? " This reading replaces the earlier one: the previous date is no longer current."
+              : ""
+          }`,
+          state: { date } satisfies DateState,
+        },
+      ];
     },
     rebase(state: unknown): void {
       published = dateOf(state);

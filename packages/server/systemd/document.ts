@@ -249,10 +249,7 @@ export function renderDocument(values: ServiceValues): string {
 /** The document as `service config` may print it: the credential replaced
  * with {@link REDACTED_TOKEN}. Only ever used for display. */
 export function documentForDisplay(text: string): string {
-  return text.replace(
-    /^LUMISCA_TOKEN=.*$/m,
-    `LUMISCA_TOKEN=${REDACTED_TOKEN}`,
-  );
+  return text.replace(/^LUMISCA_TOKEN=.*$/m, `LUMISCA_TOKEN=${REDACTED_TOKEN}`);
 }
 
 /** A fresh credential for a first install: 32 random bytes, hex. */

@@ -38,9 +38,9 @@ Deno.test("confirm.ts is the only place that calls the browser dialog", async ()
   assertEquals(
     offenders,
     [],
-    `use confirmAction from confirm.ts instead of the browser dialog: ${
-      offenders.join(", ")
-    }`,
+    `use confirmAction from confirm.ts instead of the browser dialog: ${offenders.join(
+      ", ",
+    )}`,
   );
 });
 

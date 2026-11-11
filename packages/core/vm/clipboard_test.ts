@@ -1,7 +1,7 @@
 import { assertEquals, assertRejects } from "@std/assert";
 import { createVmClipboard, VM_CLIPBOARD_MAX_CHARS } from "./clipboard.ts";
-import type { VmExec, VmExecOptions } from "./container.ts";
 import type { VmCommandResult } from "./command.ts";
+import type { VmExec, VmExecOptions } from "./container.ts";
 
 const decoder = new TextDecoder();
 
@@ -12,9 +12,10 @@ interface Call {
 
 /** A scripted exec seam: every call is recorded (argv and stdin) and answered
  * by `answer`. */
-function exec(
-  answer: (call: Call) => Partial<VmCommandResult>,
-): { run: VmExec; calls: Call[] } {
+function exec(answer: (call: Call) => Partial<VmCommandResult>): {
+  run: VmExec;
+  calls: Call[];
+} {
   const calls: Call[] = [];
   return {
     calls,
@@ -79,7 +80,7 @@ Deno.test("vm clipboard: a write goes in through stdin, in one shape", async () 
   // machine would insert the `\r` literally, so the text is normalized on the
   // way in. The text itself never appears in argv: it may be a password.
   const { run, calls } = exec((call) =>
-    isWrite(call) ? {} : { stdout: "パスワード\n二行目" }
+    isWrite(call) ? {} : { stdout: "パスワード\n二行目" },
   );
   const clipboard = createVmClipboard({ exec: run });
   await clipboard.write("パスワード\r\n二行目");
@@ -93,7 +94,7 @@ Deno.test("vm clipboard: a write the machine did not keep fails", async () => {
   // background. If it did not survive, the paste that follows would be empty,
   // so the write must not answer "ok" here.
   const { run } = exec((call) =>
-    isWrite(call) ? {} : { stdout: "something else" }
+    isWrite(call) ? {} : { stdout: "something else" },
   );
   const clipboard = createVmClipboard({ exec: run });
   await assertRejects(() => clipboard.write("テキスト"), Error, "did not keep");

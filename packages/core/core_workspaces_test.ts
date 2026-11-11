@@ -1,5 +1,5 @@
-import { basename, join } from "node:path";
 import { realpathSync } from "node:fs";
+import { basename, join } from "node:path";
 
 import {
   fauxAssistantMessage,
@@ -9,13 +9,12 @@ import {
 } from "@lumisca/core";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import type { AgentMessage } from "./mod.ts";
-import { LumiscaCore } from "./mod.ts";
-import { VISUALS_DIR_NAME } from "./mod.ts";
+import { LumiscaCore, VISUALS_DIR_NAME } from "./mod.ts";
 
 import {
+  MINI_PNG,
   makeRealTempDir,
   makeWorkspace,
-  MINI_PNG,
   promptSession,
   removeDirRetry,
   setup,
@@ -43,9 +42,9 @@ function contextMessages(
  * instructions, date, on-demand tools). Those are prepended before the
  * first user message of a run and are not part of a turn, so a test that
  * counts or positions turns must count this array. */
-function conversationMessages(
-  agent: { messages: AgentMessage[] },
-): AgentMessage[] {
+function conversationMessages(agent: {
+  messages: AgentMessage[];
+}): AgentMessage[] {
   return agent.messages.filter((m) => m.role !== "context");
 }
 
@@ -221,10 +220,7 @@ Deno.test("renaming a workspace does not touch the prompt; changing folders does
     // The row kept what the session runs on: reopening is the same prompt.
     core.closeSession(session.id);
     await core.openSession(session.id);
-    assertEquals(
-      core.getAgent(session.id)!.agent.state.systemPrompt,
-      updated,
-    );
+    assertEquals(core.getAgent(session.id)!.agent.state.systemPrompt, updated);
   } finally {
     core.close();
     await removeDirRetry(root);
@@ -345,17 +341,15 @@ Deno.test("chat session: created without a workspace, chat prompt, no file tools
 
   // No file/shell/sub-agent tools; ask / todo / skill stay.
   const toolNames = agent.agent.state.tools.map((t) => t.name);
-  for (
-    const forbidden of [
-      "read",
-      "write",
-      "edit",
-      "list_dir",
-      "bash",
-      "async_bash",
-      "eval",
-    ]
-  ) {
+  for (const forbidden of [
+    "read",
+    "write",
+    "edit",
+    "list_dir",
+    "bash",
+    "async_bash",
+    "eval",
+  ]) {
     assert(
       !toolNames.includes(forbidden),
       `chat session must not have the ${forbidden} tool`,

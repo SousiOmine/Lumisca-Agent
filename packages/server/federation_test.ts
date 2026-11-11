@@ -1,7 +1,7 @@
-import { assert, assertEquals } from "@std/assert";
 import { type ConnectionEntry, fauxProvider, LumiscaCore } from "@lumisca/core";
-import { FederationClient, proxyTimeoutFor } from "./federation.ts";
+import { assert, assertEquals } from "@std/assert";
 import { startServer } from "./app.ts";
+import { FederationClient, proxyTimeoutFor } from "./federation.ts";
 
 /** The first reconnect backoff the restart test gives the client. Small
  * enough that a leaked stream would retry many times during the wait, so the
@@ -15,10 +15,7 @@ function peer(url: string): ConnectionEntry {
 }
 
 /** The peer URLs the hub would show for these registry entries. */
-function visiblePeers(
-  selfOrigin: string,
-  urls: readonly string[],
-): string[] {
+function visiblePeers(selfOrigin: string, urls: readonly string[]): string[] {
   const client = new FederationClient(
     () => urls.map(peer),
     () => selfOrigin,
@@ -82,10 +79,9 @@ Deno.test("federation: remote peers are never mistaken for the hub", () => {
 Deno.test("federation: without a known origin every peer is listed", () => {
   // The origin is only known after the listener binds (port 0 =
   // ephemeral); until then nothing may be hidden.
-  assertEquals(
-    visiblePeers("", ["http://127.0.0.1:8000"]),
-    ["http://127.0.0.1:8000"],
-  );
+  assertEquals(visiblePeers("", ["http://127.0.0.1:8000"]), [
+    "http://127.0.0.1:8000",
+  ]);
 });
 
 /** Poll until `done()` or a 2s deadline: the streams connect (and drop)
@@ -103,20 +99,23 @@ Deno.test("federation: a peer's stream state is relayed to the UI", async () => 
   // peer's sessions miss events, and the UI's own socket to the hub says
   // nothing about it.
   const sockets = new Set<WebSocket>();
-  const peerServer = Deno.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    // Keep the test output clean: the stub's address is not interesting.
-    onListen: () => {},
-  }, (req) => {
-    if (new URL(req.url).pathname !== "/ws") {
-      return new Response("not found", { status: 404 });
-    }
-    const { socket, response } = Deno.upgradeWebSocket(req);
-    sockets.add(socket);
-    socket.onclose = () => sockets.delete(socket);
-    return response;
-  });
+  const peerServer = Deno.serve(
+    {
+      hostname: "127.0.0.1",
+      port: 0,
+      // Keep the test output clean: the stub's address is not interesting.
+      onListen: () => {},
+    },
+    (req) => {
+      if (new URL(req.url).pathname !== "/ws") {
+        return new Response("not found", { status: 404 });
+      }
+      const { socket, response } = Deno.upgradeWebSocket(req);
+      sockets.add(socket);
+      socket.onclose = () => sockets.delete(socket);
+      return response;
+    },
+  );
   const peerUrl = `http://127.0.0.1:${(peerServer.addr as Deno.NetAddr).port}`;
   const client = new FederationClient(
     () => [{ id: "peer1", name: "peer1", url: peerUrl, token: "t" }],
@@ -149,17 +148,20 @@ Deno.test("federation: restart leaves one live stream per peer", async () => {
   // orphan socket relays the peer's events a second time and nothing keeps a
   // reference to close it.
   let connections = 0;
-  const peerServer = Deno.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    onListen: () => {},
-  }, (req) => {
-    if (new URL(req.url).pathname !== "/ws") {
-      return new Response("not found", { status: 404 });
-    }
-    connections++;
-    return Deno.upgradeWebSocket(req).response;
-  });
+  const peerServer = Deno.serve(
+    {
+      hostname: "127.0.0.1",
+      port: 0,
+      onListen: () => {},
+    },
+    (req) => {
+      if (new URL(req.url).pathname !== "/ws") {
+        return new Response("not found", { status: 404 });
+      }
+      connections++;
+      return Deno.upgradeWebSocket(req).response;
+    },
+  );
   const peerUrl = `http://127.0.0.1:${(peerServer.addr as Deno.NetAddr).port}`;
   const client = new FederationClient(
     () => [{ id: "peer1", name: "peer1", url: peerUrl, token: "t" }],
@@ -193,29 +195,36 @@ Deno.test("federation: a frame the peer relayed from its own peer is not relayed
   // under another URL, the relayed copy comes back as an input and the relay
   // never stops: the loop pegged a core and grew the process until the OOM
   // killer took it down (taking every session with it).
-  const peerServer = Deno.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    onListen: () => {},
-  }, (req) => {
-    if (new URL(req.url).pathname !== "/ws") {
-      return new Response("not found", { status: 404 });
-    }
-    const { socket, response } = Deno.upgradeWebSocket(req);
-    socket.onopen = () => {
-      socket.send(JSON.stringify({
-        type: "agent_end",
-        sessionId: "local",
-        peerId: "",
-      }));
-      socket.send(JSON.stringify({
-        type: "agent_end",
-        sessionId: "relayed",
-        peerId: "someone-else",
-      }));
-    };
-    return response;
-  });
+  const peerServer = Deno.serve(
+    {
+      hostname: "127.0.0.1",
+      port: 0,
+      onListen: () => {},
+    },
+    (req) => {
+      if (new URL(req.url).pathname !== "/ws") {
+        return new Response("not found", { status: 404 });
+      }
+      const { socket, response } = Deno.upgradeWebSocket(req);
+      socket.onopen = () => {
+        socket.send(
+          JSON.stringify({
+            type: "agent_end",
+            sessionId: "local",
+            peerId: "",
+          }),
+        );
+        socket.send(
+          JSON.stringify({
+            type: "agent_end",
+            sessionId: "relayed",
+            peerId: "someone-else",
+          }),
+        );
+      };
+      return response;
+    },
+  );
   const peerUrl = `http://127.0.0.1:${(peerServer.addr as Deno.NetAddr).port}`;
   const client = new FederationClient(
     () => [{ id: "peer1", name: "peer1", url: peerUrl, token: "t" }],
@@ -246,23 +255,26 @@ Deno.test("federation: the hub recognises itself under any URL", async () => {
   // identity is its instanceId (a per-process uuid), not its address.
   const selfId = crypto.randomUUID();
   const sockets = new Set<WebSocket>();
-  const peerServer = Deno.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    onListen: () => {},
-  }, (req) => {
-    const path = new URL(req.url).pathname;
-    if (path === "/api/health") {
-      return Response.json({ ok: true, now: Date.now(), instanceId: selfId });
-    }
-    if (path === "/ws") {
-      const { socket, response } = Deno.upgradeWebSocket(req);
-      sockets.add(socket);
-      socket.onclose = () => sockets.delete(socket);
-      return response;
-    }
-    return new Response("not found", { status: 404 });
-  });
+  const peerServer = Deno.serve(
+    {
+      hostname: "127.0.0.1",
+      port: 0,
+      onListen: () => {},
+    },
+    (req) => {
+      const path = new URL(req.url).pathname;
+      if (path === "/api/health") {
+        return Response.json({ ok: true, now: Date.now(), instanceId: selfId });
+      }
+      if (path === "/ws") {
+        const { socket, response } = Deno.upgradeWebSocket(req);
+        sockets.add(socket);
+        socket.onclose = () => sockets.delete(socket);
+        return response;
+      }
+      return new Response("not found", { status: 404 });
+    },
+  );
   const url = `http://127.0.0.1:${(peerServer.addr as Deno.NetAddr).port}`;
   const client = new FederationClient(
     () => [{ id: "self", name: "self", url, token: "t" }],
@@ -290,23 +302,20 @@ Deno.test("federation: a slow path gets a longer budget than an ordinary one", (
   // what made the remote path fail on the slow ones (a 10 s cut-off turned a
   // slow answer into an error the peer never produced).
   assert(
-    proxyTimeoutFor("/api/sessions/s1/messages") > proxyTimeoutFor(
-      "/api/sessions",
-    ),
+    proxyTimeoutFor("/api/sessions/s1/messages") >
+      proxyTimeoutFor("/api/sessions"),
   );
   assert(
     proxyTimeoutFor("/api/sessions/s1/messages?limit=40") >
       proxyTimeoutFor("/api/sessions/s1"),
   );
-  for (
-    const slow of [
-      "/api/sessions/s1/open",
-      "/api/sessions/s1/compact",
-      "/api/sessions/s1/rewind",
-      "/api/stella/conversations/a/messages",
-      "/api/stella/conversations/a/prompt",
-    ]
-  ) {
+  for (const slow of [
+    "/api/sessions/s1/open",
+    "/api/sessions/s1/compact",
+    "/api/sessions/s1/rewind",
+    "/api/stella/conversations/a/messages",
+    "/api/stella/conversations/a/prompt",
+  ]) {
     assert(
       proxyTimeoutFor(slow) > proxyTimeoutFor("/api/providers"),
       `${slow} must get the slow budget`,
@@ -325,25 +334,28 @@ Deno.test("the fed proxy keeps the headers only the peer can set", async () => {
   // SVG may execute; dropping those made a remote file arrive under a random
   // name. `content-encoding` is deliberately absent: the hub's fetch decoded
   // the body, so passing it on would make the client decompress plain text.
-  const peerServer = Deno.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    onListen: () => {},
-  }, (req) => {
-    if (new URL(req.url).pathname === "/api/health") {
-      return Response.json({ ok: true, now: Date.now(), instanceId: "peer" });
-    }
-    return new Response("hello", {
-      headers: {
-        "content-type": "image/svg+xml",
-        "content-disposition": "inline; filename*=UTF-8''a%20b.svg",
-        "cache-control": "private, max-age=31536000, immutable",
-        etag: 'W/"abc"',
-        "x-content-type-options": "nosniff",
-        "content-security-policy": "default-src 'none'; sandbox",
-      },
-    });
-  });
+  const peerServer = Deno.serve(
+    {
+      hostname: "127.0.0.1",
+      port: 0,
+      onListen: () => {},
+    },
+    (req) => {
+      if (new URL(req.url).pathname === "/api/health") {
+        return Response.json({ ok: true, now: Date.now(), instanceId: "peer" });
+      }
+      return new Response("hello", {
+        headers: {
+          "content-type": "image/svg+xml",
+          "content-disposition": "inline; filename*=UTF-8''a%20b.svg",
+          "cache-control": "private, max-age=31536000, immutable",
+          etag: 'W/"abc"',
+          "x-content-type-options": "nosniff",
+          "content-security-policy": "default-src 'none'; sandbox",
+        },
+      });
+    },
+  );
   const peerUrl = `http://127.0.0.1:${(peerServer.addr as Deno.NetAddr).port}`;
   const core = LumiscaCore.forTesting([fauxProvider().provider]);
   core.setConnections([{ id: "p1", name: "p1", url: peerUrl, token: "t" }]);

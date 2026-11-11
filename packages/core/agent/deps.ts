@@ -1,29 +1,27 @@
-import type { Api, Model } from "../ai/types.ts";
-import type { StreamFn } from "../ai/types.ts";
-import type { ThinkingLevel } from "../shared/mod.ts";
-import type { Locale } from "../shared/mod.ts";
-import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
+import type { Api, Model, StreamFn } from "../ai/types.ts";
+import type { BrowserBackend } from "../browser/types.ts";
+import type { ComputerHost } from "../computer/types.ts";
 import type { ClientEvent } from "../domain/event.ts";
 import type { SessionInfo } from "../domain/session.ts";
 import type { Workspace } from "../domain/workspace.ts";
-import type { BackgroundProcessManager } from "../tools/background.ts";
-import type { TodoHub } from "../tools/todo.ts";
-import type { TaskHub } from "../tools/task-hub.ts";
+import type { McpAttachment } from "../mcp/attachment.ts";
 import type { McpConfig } from "../mcp/config.ts";
 import type { McpAdmin } from "../mcp/manage-tools.ts";
 import type { McpOAuthStore } from "../mcp/oauth.ts";
-import type { McpAttachment } from "../mcp/attachment.ts";
-import type { SessionToolRegistries } from "../tools/registries.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
-import type { SessionAgent } from "./session-agent.ts";
-import type { SessionVisualStore } from "../session/visuals.ts";
 import type { SessionAttachmentStore } from "../session/attachments.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import type { RequestShapeRepo } from "../session/request-shapes.ts";
-import type { BrowserBackend } from "../browser/types.ts";
-import type { ComputerHost } from "../computer/types.ts";
-import type { SearchProvider } from "../websearch/types.ts";
+import type { SessionVisualStore } from "../session/visuals.ts";
+import type { Locale, ThinkingLevel } from "../shared/mod.ts";
+import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
+import type { BackgroundProcessManager } from "../tools/background.ts";
+import type { SessionToolRegistries } from "../tools/registries.ts";
+import type { TaskHub } from "../tools/task-hub.ts";
+import type { TodoHub } from "../tools/todo.ts";
 import type { StellaRuntime } from "../vm/runtime.ts";
+import type { SearchProvider } from "../websearch/types.ts";
+import type { SessionAgent } from "./session-agent.ts";
 /** Model resolution the agent factory needs (catalog + stored levels). */
 export interface ModelResolver {
   /** Resolve a model or throw `not_found` (the pool's model guard shares

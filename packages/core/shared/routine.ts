@@ -58,68 +58,68 @@ export type RoutineSchedule =
  * fire. */
 export type WatchSource =
   | {
-    kind: "http";
-    url: string;
-    /** Default GET. HEAD is refused for a body watch: there is no body. */
-    method?: "GET";
-    /** What counts as "changed". The first check only records a baseline:
-     * nothing has been compared yet, so nothing can differ. */
-    expect: {
-      /** The status the check compares. A different status is a change. */
-      status?: number;
-      /** The body must contain this; absence is a change. */
-      includes?: string;
-      /** SHA-256 of the body; a different digest is a change. */
-      hash?: boolean;
-    };
-  }
-  | {
-    kind: "file";
-    path: string;
-    /** What to compare. `mtime` is the cheaper one; `hash` notices an
-     * edit that kept the timestamp. */
-    compare: "mtime" | "hash";
-  }
-  | {
-    kind: "command";
-    /** Run through the same shell the agent uses, in its working folder:
-     * a check the user could type into its terminal. */
-    command: string;
-    /** What counts as a change. At least one is required. */
-    expect: {
-      /** The exit status the check compares. */
-      exitCode?: number;
-      /** The stdout must contain this; absence is a change. */
-      includes?: string;
-    };
-  }
-  | {
-    kind: "mcp";
-    /** A server of the app-level config (Settings → MCP servers). A watch
-     * cannot name a workspace's or a plugin's server: its agent has no
-     * workspace, and a plugin's servers come and go with the plugin. */
-    server: string;
-    /** The tool's own name on that server (`GMAIL_FETCH_EMAILS`). Only a
-     * read-only tool may be watched (see mcp/service.ts). */
-    tool: string;
-    /** The tool's arguments, fixed for every check: a watch is one question
-     * asked again and again, not a search the check is free to change. */
-    args: Record<string, unknown>;
-    /** What counts as a change. Exactly one of the two. */
-    expect:
-      | {
-        /** The field holding each item's identity. A watch on this fires
-         * when an id appears that the previous check did not see, and stays
-         * quiet when an item it already knew about is edited or removed. */
-        ids: string;
-      }
-      | {
-        /** The field whose value is compared: a different value is a
-         * change. For "this number / this status changed", where there is
-         * no list of items to compare. */
-        hash: string;
+      kind: "http";
+      url: string;
+      /** Default GET. HEAD is refused for a body watch: there is no body. */
+      method?: "GET";
+      /** What counts as "changed". The first check only records a baseline:
+       * nothing has been compared yet, so nothing can differ. */
+      expect: {
+        /** The status the check compares. A different status is a change. */
+        status?: number;
+        /** The body must contain this; absence is a change. */
+        includes?: string;
+        /** SHA-256 of the body; a different digest is a change. */
+        hash?: boolean;
       };
-  };
+    }
+  | {
+      kind: "file";
+      path: string;
+      /** What to compare. `mtime` is the cheaper one; `hash` notices an
+       * edit that kept the timestamp. */
+      compare: "mtime" | "hash";
+    }
+  | {
+      kind: "command";
+      /** Run through the same shell the agent uses, in its working folder:
+       * a check the user could type into its terminal. */
+      command: string;
+      /** What counts as a change. At least one is required. */
+      expect: {
+        /** The exit status the check compares. */
+        exitCode?: number;
+        /** The stdout must contain this; absence is a change. */
+        includes?: string;
+      };
+    }
+  | {
+      kind: "mcp";
+      /** A server of the app-level config (Settings → MCP servers). A watch
+       * cannot name a workspace's or a plugin's server: its agent has no
+       * workspace, and a plugin's servers come and go with the plugin. */
+      server: string;
+      /** The tool's own name on that server (`GMAIL_FETCH_EMAILS`). Only a
+       * read-only tool may be watched (see mcp/service.ts). */
+      tool: string;
+      /** The tool's arguments, fixed for every check: a watch is one question
+       * asked again and again, not a search the check is free to change. */
+      args: Record<string, unknown>;
+      /** What counts as a change. Exactly one of the two. */
+      expect:
+        | {
+            /** The field holding each item's identity. A watch on this fires
+             * when an id appears that the previous check did not see, and stays
+             * quiet when an item it already knew about is edited or removed. */
+            ids: string;
+          }
+        | {
+            /** The field whose value is compared: a different value is a
+             * change. For "this number / this status changed", where there is
+             * no list of items to compare. */
+            hash: string;
+          };
+    };
 
 /** Shortest `watch` interval. A check makes no inference call, so it can be
  * frequent — but it still touches the machine or the network, and a routine
@@ -225,14 +225,16 @@ export function scheduleProblem(value: unknown): string | null {
         return "time must be HH:MM in 24-hour local time (e.g. 18:00)";
       }
       if (!Array.isArray(raw.days) || raw.days.length === 0) {
-        return "days must be a non-empty array of 1 (Monday) through 7 " +
-          "(Sunday)";
+        return (
+          "days must be a non-empty array of 1 (Monday) through 7 " + "(Sunday)"
+        );
       }
       const seen = new Set<number>();
       for (const day of raw.days) {
         if (!Number.isInteger(day) || typeof day !== "number") {
-          return "days must contain whole numbers from 1 (Monday) to 7 " +
-            "(Sunday)";
+          return (
+            "days must contain whole numbers from 1 (Monday) to 7 " + "(Sunday)"
+          );
         }
         if (day < 1 || day > 7) {
           return "days must be 1 (Monday) through 7 (Sunday)";
@@ -244,12 +246,12 @@ export function scheduleProblem(value: unknown): string | null {
     }
     case "every":
       return typeof raw.minutes === "number" &&
-          Number.isInteger(raw.minutes) &&
-          raw.minutes >= MIN_EVERY_MINUTES &&
-          raw.minutes <= MAX_EVERY_MINUTES
+        Number.isInteger(raw.minutes) &&
+        raw.minutes >= MIN_EVERY_MINUTES &&
+        raw.minutes <= MAX_EVERY_MINUTES
         ? null
         : `minutes must be a whole number from ${MIN_EVERY_MINUTES} to ` +
-          `${MAX_EVERY_MINUTES}`;
+            `${MAX_EVERY_MINUTES}`;
     case "once":
       return onceAtProblem(raw.at);
     case "watch":
@@ -264,8 +266,10 @@ export function scheduleProblem(value: unknown): string | null {
  * be written straight into a schedule. */
 function onceAtProblem(value: unknown): string | null {
   if (typeof value !== "string") {
-    return 'at must be "YYYY-MM-DD HH:MM" in local time, e.g. ' +
-      '"2026-11-12 09:00"';
+    return (
+      'at must be "YYYY-MM-DD HH:MM" in local time, e.g. ' +
+      '"2026-11-12 09:00"'
+    );
   }
   return parseLocalDateTime(value) === null
     ? `at must be a real "YYYY-MM-DD HH:MM" local time, got "${value}"`
@@ -277,17 +281,23 @@ function onceAtProblem(value: unknown): string | null {
 function watchProblem(raw: Record<string, unknown>): string | null {
   const everyMinutes = raw.everyMinutes;
   if (
-    typeof everyMinutes !== "number" || !Number.isInteger(everyMinutes) ||
-    everyMinutes < MIN_WATCH_MINUTES || everyMinutes > MAX_WATCH_MINUTES
+    typeof everyMinutes !== "number" ||
+    !Number.isInteger(everyMinutes) ||
+    everyMinutes < MIN_WATCH_MINUTES ||
+    everyMinutes > MAX_WATCH_MINUTES
   ) {
-    return `everyMinutes must be a whole number from ${MIN_WATCH_MINUTES} ` +
-      `to ${MAX_WATCH_MINUTES}`;
+    return (
+      `everyMinutes must be a whole number from ${MIN_WATCH_MINUTES} ` +
+      `to ${MAX_WATCH_MINUTES}`
+    );
   }
   const source = raw.source;
   if (typeof source !== "object" || source === null) {
-    return 'source must be an object: {"kind":"http","url":...}, ' +
+    return (
+      'source must be an object: {"kind":"http","url":...}, ' +
       '{"kind":"file","path":...}, {"kind":"command","command":...} or ' +
-      '{"kind":"mcp","server":...,"tool":...}';
+      '{"kind":"mcp","server":...,"tool":...}'
+    );
   }
   const watch = source as Record<string, unknown>;
   switch (watch.kind) {
@@ -300,11 +310,7 @@ function watchProblem(raw: Record<string, unknown>): string | null {
       }
       return expectProblem(
         watch.expect,
-        [
-          "status",
-          "includes",
-          "hash",
-        ],
+        ["status", "includes", "hash"],
         'expect must name what counts as a change: {"status":200}, ' +
           '{"includes":"..."} or {"hash":true}',
       );
@@ -317,9 +323,7 @@ function watchProblem(raw: Record<string, unknown>): string | null {
         ? null
         : 'compare must be "mtime" or "hash"';
     case "command": {
-      if (
-        typeof watch.command !== "string" || watch.command.trim() === ""
-      ) {
+      if (typeof watch.command !== "string" || watch.command.trim() === "") {
         return "command must be the command to run";
       }
       return expectProblem(
@@ -334,17 +338,22 @@ function watchProblem(raw: Record<string, unknown>): string | null {
         return "server must name an MCP server from the app settings";
       }
       if (typeof watch.tool !== "string" || watch.tool.trim() === "") {
-        return "tool must be the tool's own name on that server " +
-          '(e.g. "GMAIL_FETCH_EMAILS")';
+        return (
+          "tool must be the tool's own name on that server " +
+          '(e.g. "GMAIL_FETCH_EMAILS")'
+        );
       }
       const args = watch.args;
       if (typeof args !== "object" || args === null || Array.isArray(args)) {
-        return "args must be an object of the tool's arguments ({} when it " +
-          "takes none)";
+        return (
+          "args must be an object of the tool's arguments ({} when it " +
+          "takes none)"
+        );
       }
       if (JSON.stringify(args).length > MAX_WATCH_ARGS_CHARS) {
-        return `args must be at most ${MAX_WATCH_ARGS_CHARS} characters of ` +
-          "JSON";
+        return (
+          `args must be at most ${MAX_WATCH_ARGS_CHARS} characters of ` + "JSON"
+        );
       }
       const problem = expectProblem(
         watch.expect,
@@ -354,8 +363,8 @@ function watchProblem(raw: Record<string, unknown>): string | null {
       );
       if (problem !== null) return problem;
       const expect = watch.expect as Record<string, unknown>;
-      const named = Object.keys(expect).filter((key) =>
-        expect[key] !== undefined
+      const named = Object.keys(expect).filter(
+        (key) => expect[key] !== undefined,
       );
       const key = named[0];
       if (named.length !== 1 || key === undefined) {
@@ -382,8 +391,10 @@ function expectProblem(
   if (named.length === 0) return message;
   const unknown = named.find((key) => !allowed.includes(key));
   if (unknown !== undefined) {
-    return `expect.${unknown} is not something a watch can compare; ` +
-      `use ${allowed.join(", ")}`;
+    return (
+      `expect.${unknown} is not something a watch can compare; ` +
+      `use ${allowed.join(", ")}`
+    );
   }
   return null;
 }

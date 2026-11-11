@@ -1,9 +1,9 @@
 import { WS_HEARTBEAT_TYPE } from "@lumisca/core/shared";
+import { token } from "./api-client.ts";
 import {
   createHeartbeatWatchdog,
   type HeartbeatWatchdog,
 } from "./heartbeat.ts";
-import { token } from "./api-client.ts";
 
 /**
  * One WebSocket event stream, with the liveness and lifecycle handling every

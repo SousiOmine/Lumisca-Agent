@@ -1,5 +1,6 @@
 import type { Workspace } from "../domain/workspace.ts";
 import { CARD_HELP } from "../shared/ui-markup/help.ts";
+
 /** The machine's home, the folder its agents work in, and the account the
  * tools run as.
  *

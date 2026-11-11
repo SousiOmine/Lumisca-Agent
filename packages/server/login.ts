@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
-import type { AuthInteraction, AuthNotice, AuthPrompt } from "@lumisca/core";
-import { errorMessage } from "@lumisca/core";
 import type {
+  AuthInteraction,
+  AuthNotice,
+  AuthPrompt,
   ProviderLoginEvent,
   ProviderLoginPrompt,
   ProviderLoginSnapshot,
 } from "@lumisca/core";
+import { errorMessage } from "@lumisca/core";
 
 /** A finished login session is kept briefly so the client can poll the
  * final state; a session that never settles (stuck flow) is swept after
@@ -58,10 +60,7 @@ export class LoginSession {
   ) {
     this.providerId = providerId;
     this.method = method;
-    this.idleTimer = setTimeout(
-      () => this.expire(),
-      IDLE_TIMEOUT_MS,
-    );
+    this.idleTimer = setTimeout(() => this.expire(), IDLE_TIMEOUT_MS);
     void this.begin(startLogin);
   }
 
@@ -73,12 +72,13 @@ export class LoginSession {
       providerId: this.providerId,
       status: this.status,
       events: [...this.events],
-      prompt: this.awaiting.length > 0
-        ? {
-          id: this.awaiting[0]!.id,
-          ...this.pendingPrompt(this.awaiting[0]!.prompt),
-        }
-        : undefined,
+      prompt:
+        this.awaiting.length > 0
+          ? {
+              id: this.awaiting[0]!.id,
+              ...this.pendingPrompt(this.awaiting[0]!.prompt),
+            }
+          : undefined,
       error: this.error,
     };
   }
@@ -156,10 +156,7 @@ export class LoginSession {
     this.error = message;
     clearTimeout(this.idleTimer);
     // Keep the final state around briefly so the client can poll it.
-    this.retentionTimer = setTimeout(
-      () => this.expire(),
-      DONE_RETENTION_MS,
-    );
+    this.retentionTimer = setTimeout(() => this.expire(), DONE_RETENTION_MS);
   }
 
   private expire(): void {
@@ -220,11 +217,8 @@ export class LoginSessions {
     method: "browser" | "device_code",
     startLogin: (interaction: AuthInteraction) => Promise<void>,
   ): LoginSession {
-    const session = new LoginSession(
-      providerId,
-      method,
-      startLogin,
-      (id) => this.sessions.delete(id),
+    const session = new LoginSession(providerId, method, startLogin, (id) =>
+      this.sessions.delete(id),
     );
     this.sessions.set(session.sessionId, session);
     return session;

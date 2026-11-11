@@ -1,7 +1,7 @@
-import { useMemo, useState } from "preact/compat";
 import { IconPlugConnected } from "@tabler/icons-preact";
-import { filterByQuery, useProviderModels } from "../../providers.ts";
+import { useMemo, useState } from "preact/compat";
 import { useT } from "../../i18n.ts";
+import { filterByQuery, useProviderModels } from "../../providers.ts";
 import { SettingsSubHeader } from "./SettingsSubHeader.tsx";
 
 /** Settings → add provider: searchable list of every known provider, plus
@@ -30,9 +30,7 @@ export function AddProviderFlow({
         onBack={onBack}
         title={t("settings.provider.addProvider")}
       />
-      <p className="settings-note">
-        {t("settings.provider.selectToAdd")}
-      </p>
+      <p className="settings-note">{t("settings.provider.selectToAdd")}</p>
       <input
         placeholder={t("settings.provider.searchPlaceholder")}
         aria-label={t("settings.provider.searchPlaceholder")}
@@ -41,19 +39,13 @@ export function AddProviderFlow({
       />
       <div className="model-list" style={{ maxHeight: 360 }}>
         {visible.map((p) => (
-          <div
-            key={p.id}
-            className="model-item"
-            onClick={() => onSelect(p.id)}
-          >
+          <div key={p.id} className="model-item" onClick={() => onSelect(p.id)}>
             <span className="model-id">{p.name}</span>
             <span className="model-meta">{p.id}</span>
           </div>
         ))}
         {visible.length === 0 && (
-          <div className="faint-box">
-            {t("settings.provider.noMatch")}
-          </div>
+          <div className="faint-box">{t("settings.provider.noMatch")}</div>
         )}
       </div>
 

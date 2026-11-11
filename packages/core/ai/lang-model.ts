@@ -8,14 +8,15 @@
  * auth), so the Vercel provider factory is built per request with the key the
  * app already resolved — never read from the process env by the SDK.
  */
-import type { LanguageModel } from "ai";
-import { createOpenAI } from "@ai-sdk/openai";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+
+import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { createAzure } from "@ai-sdk/azure";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createMistral } from "@ai-sdk/mistral";
-import { createAzure } from "@ai-sdk/azure";
-import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
+import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import type { LanguageModel } from "ai";
 import type { Api, Model, StreamOptions } from "./types.ts";
 
 export interface ResolvedApiKey {
@@ -203,9 +204,11 @@ export function sessionHeadersFor(
  * go through the official @ai-sdk/openai chat model (rather than the
  * compatible factory) because they hit api.openai.com. */
 function isFirstPartyOpenAI(model: Model<Api>): boolean {
-  return model.provider === "openai" ||
+  return (
+    model.provider === "openai" ||
     model.baseUrl === undefined ||
-    /api\.openai\.com/i.test(model.baseUrl ?? "");
+    /api\.openai\.com/i.test(model.baseUrl ?? "")
+  );
 }
 
 /** True for the OpenCode gateway (Zen and Go). The host decides, not the

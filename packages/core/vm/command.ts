@@ -7,8 +7,9 @@
  * the argument building, the output caps and the abort handling have exactly
  * one definition instead of drifting apart per caller.
  */
-import { errorMessage } from "../errors.ts";
+
 import { concatBytes } from "../bytes.ts";
+import { errorMessage } from "../errors.ts";
 
 /** The result of one command, already decoded and capped. */
 export interface VmCommandResult {
@@ -70,9 +71,10 @@ export async function runVmCommand(
   options: VmCommandOptions,
 ): Promise<VmCommandResult> {
   const timeout = AbortSignal.timeout(options.timeoutMs);
-  const signal = options.signal === undefined
-    ? timeout
-    : AbortSignal.any([options.signal, timeout]);
+  const signal =
+    options.signal === undefined
+      ? timeout
+      : AbortSignal.any([options.signal, timeout]);
   let process: Deno.ChildProcess;
   try {
     process = new Deno.Command(command[0]!, {
@@ -93,9 +95,10 @@ export async function runVmCommand(
       timedOut: false,
     };
   }
-  const writing = options.stdin === undefined
-    ? Promise.resolve()
-    : writeStdin(process, options.stdin);
+  const writing =
+    options.stdin === undefined
+      ? Promise.resolve()
+      : writeStdin(process, options.stdin);
   const limit = options.maxOutput ?? VM_TEXT_OUTPUT_LIMIT;
   const [stdout, stderr] = await Promise.all([
     readText(process.stdout, limit, options.keep ?? "tail"),
@@ -118,9 +121,10 @@ export async function runVmCommandBytes(
   options: VmCommandOptions,
 ): Promise<VmCommandBytesResult> {
   const timeout = AbortSignal.timeout(options.timeoutMs);
-  const signal = options.signal === undefined
-    ? timeout
-    : AbortSignal.any([options.signal, timeout]);
+  const signal =
+    options.signal === undefined
+      ? timeout
+      : AbortSignal.any([options.signal, timeout]);
   let process: Deno.ChildProcess;
   try {
     process = new Deno.Command(command[0]!, {
@@ -139,9 +143,10 @@ export async function runVmCommandBytes(
       timedOut: false,
     };
   }
-  const writing = options.stdin === undefined
-    ? Promise.resolve()
-    : writeStdin(process, options.stdin);
+  const writing =
+    options.stdin === undefined
+      ? Promise.resolve()
+      : writeStdin(process, options.stdin);
   const limit = options.maxOutput ?? VM_BYTES_OUTPUT_LIMIT;
   const [stdout, stderr] = await Promise.all([
     readBytes(process.stdout, limit, options.keep ?? "tail"),

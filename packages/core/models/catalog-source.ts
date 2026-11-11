@@ -1,13 +1,14 @@
+import { join } from "node:path";
+import type { ProviderMap } from "@opencode-ai/models";
 import snapshot, {
   generatedAt as snapshotGeneratedAt,
 } from "@opencode-ai/models/snapshot";
-import type { ProviderMap } from "@opencode-ai/models";
-import { join } from "node:path";
-import { createLogger } from "../log.ts";
 import { errorMessage } from "../errors.ts";
-import type { SettingsRepo } from "../settings/repo.ts";
 import { atomicWriteTextFileSync, isRecord } from "../fs.ts";
+import { createLogger } from "../log.ts";
+import type { SettingsRepo } from "../settings/repo.ts";
 import type { CatalogSourceKind, CatalogStatus } from "../shared/providers.ts";
+
 export type { CatalogSourceKind, CatalogStatus };
 
 const log = createLogger("catalog");
@@ -67,7 +68,8 @@ export async function fetchLiveCatalog(
   const timeoutMs = options.timeoutMs ?? LIVE_CATALOG_TIMEOUT_MS;
   const base = options.baseUrl ?? MODELS_DEV_BASE_URL;
   const url = base.endsWith("/") ? `${base}api.json` : `${base}/api.json`;
-  const signal = options.signal ??
+  const signal =
+    options.signal ??
     (typeof AbortSignal.timeout === "function"
       ? AbortSignal.timeout(timeoutMs)
       : undefined);
@@ -135,9 +137,8 @@ export function loadCachedCatalog(
     log.debug("cached catalog has an unexpected shape");
     return undefined;
   }
-  const generatedAt = typeof parsed.generatedAt === "string"
-    ? parsed.generatedAt
-    : undefined;
+  const generatedAt =
+    typeof parsed.generatedAt === "string" ? parsed.generatedAt : undefined;
   return {
     providers: parsed.providers as ProviderMap,
     generatedAt,
@@ -180,14 +181,12 @@ export function snapshotCatalog(): CatalogSource {
 /** Resolve the catalog in `live → cache → snapshot` order. Never throws:
  * every failure is recorded on the returned status (`error`) and logged
  * at debug level, so the app always starts with a usable catalog. */
-export async function resolveCatalogSource(
-  options: {
-    settings: Pick<SettingsRepo, "dir">;
-    fetch?: typeof globalThis.fetch;
-    timeoutMs?: number;
-    baseUrl?: string;
-  },
-): Promise<{ source: CatalogSource; status: CatalogStatus }> {
+export async function resolveCatalogSource(options: {
+  settings: Pick<SettingsRepo, "dir">;
+  fetch?: typeof globalThis.fetch;
+  timeoutMs?: number;
+  baseUrl?: string;
+}): Promise<{ source: CatalogSource; status: CatalogStatus }> {
   const lastCheckAt = Date.now();
   try {
     const live = await fetchLiveCatalog({

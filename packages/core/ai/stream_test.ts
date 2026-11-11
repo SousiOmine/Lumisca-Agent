@@ -1,9 +1,20 @@
-import { assertEquals } from "@std/assert";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { summarizeContextUsage } from "../shared/mod.ts";
+import { assertEquals } from "@std/assert";
 import { bytesToBase64 } from "../base64.ts";
+import { summarizeContextUsage } from "../shared/mod.ts";
+import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
+import { estimateLlmMessagesTokens } from "../shared/token-estimate.ts";
 import { MINI_PNG } from "../test-utils.ts";
+import {
+  CONTEXT_SAFETY_RATIO,
+  CONTEXT_SAFETY_TOKENS,
+  clampMaxTokensToContext,
+  contextSafetyTokens,
+  MIN_MAX_TOKENS,
+} from "./budget.ts";
+import { OVERFLOW_SAFETY_TOKENS } from "./output-cap-recovery.ts";
+import { createStreamFn, type StreamTransport } from "./stream.ts";
 import type {
   AgentTool,
   Api,
@@ -12,17 +23,6 @@ import type {
   StreamOptions,
   StreamRequest,
 } from "./types.ts";
-import { createStreamFn, type StreamTransport } from "./stream.ts";
-import {
-  clampMaxTokensToContext,
-  CONTEXT_SAFETY_RATIO,
-  CONTEXT_SAFETY_TOKENS,
-  contextSafetyTokens,
-  MIN_MAX_TOKENS,
-} from "./budget.ts";
-import { OVERFLOW_SAFETY_TOKENS } from "./output-cap-recovery.ts";
-import { estimateLlmMessagesTokens } from "../shared/token-estimate.ts";
-import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 
 /** A policy that reserves nothing. The transport tests below are about the
  * clamp, so the model's own cap has to reach the request unchanged; the
@@ -183,10 +183,7 @@ function shotTool(): AgentTool {
 }
 
 /** The tool result message such a tool leaves in the transcript. */
-function toolResultWithImage(
-  toolCallId = "t1",
-  toolName = "shot",
-): LlmMessage {
+function toolResultWithImage(toolCallId = "t1", toolName = "shot"): LlmMessage {
   return {
     role: "toolResult",
     toolCallId,
@@ -209,11 +206,13 @@ function chatAnswer(text: string): Response {
       object: "chat.completion.chunk",
       created: 0,
       model: "m",
-      choices: [{
-        index: 0,
-        delta: { role: "assistant", content: text },
-        finish_reason: null,
-      }],
+      choices: [
+        {
+          index: 0,
+          delta: { role: "assistant", content: text },
+          finish_reason: null,
+        },
+      ],
     },
     {
       id: "chatcmpl-image-test",
@@ -261,8 +260,10 @@ function firstPartyChatModel(fetchFn: FetchLike, model: Model<Api>) {
 async function runToChatBody(
   model: Model<Api>,
   messages: LlmMessage[],
-  buildModel: (fetchFn: FetchLike, model: Model<Api>) => unknown =
-    compatibleChatModel,
+  buildModel: (
+    fetchFn: FetchLike,
+    model: Model<Api>,
+  ) => unknown = compatibleChatModel,
   options?: StreamOptions,
 ): Promise<Array<Record<string, unknown>>> {
   let sentBody: Record<string, unknown> | undefined;
@@ -270,10 +271,13 @@ async function runToChatBody(
     sentBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
     return Promise.resolve(chatAnswer("seen"));
   };
-  const streamFn = createStreamFn({
-    languageModelFor: () =>
-      Promise.resolve(buildModel(fetchFn, model) as never),
-  }, NO_RESERVATION);
+  const streamFn = createStreamFn(
+    {
+      languageModelFor: () =>
+        Promise.resolve(buildModel(fetchFn, model) as never),
+    },
+    NO_RESERVATION,
+  );
   for await (const _ of streamFn(model, { messages }, options)) {
     // drain
   }
@@ -281,9 +285,7 @@ async function runToChatBody(
 }
 
 /** Shorthand for the parameters the image tests share. */
-function imageModel(
-  overrides: Partial<Model<Api>> = {},
-): Model<Api> {
+function imageModel(overrides: Partial<Model<Api>> = {}): Model<Api> {
   return {
     id: "m",
     name: "m",
@@ -340,13 +342,10 @@ function v4AnswerParts(text: string): unknown[] {
 }
 
 Deno.test("an SDK-executed tool result keeps its image blocks", async () => {
-  const events = await runStream(
-    toolCallParts("t1", "shot", {}),
-    {
-      messages: [{ role: "user", content: "screenshot" }],
-      tools: [shotTool()],
-    },
-  );
+  const events = await runStream(toolCallParts("t1", "shot", {}), {
+    messages: [{ role: "user", content: "screenshot" }],
+    tools: [shotTool()],
+  });
 
   const result = events.find((e) => e.type === "toolcall_result");
   // The transcript (and with it the DB, the UI's thumbnails and the image
@@ -398,8 +397,8 @@ Deno.test("a tool image on the OpenCode gateway follows in a user message", asyn
 
   const toolMessage = messages.find((m) => m.role === "tool")!;
   assertEquals(toolMessage.content, "[image: shot.png (67 bytes)]");
-  const imageMessages = messages.filter((m) =>
-    m.role === "user" && Array.isArray(m.content)
+  const imageMessages = messages.filter(
+    (m) => m.role === "user" && Array.isArray(m.content),
   );
   assertEquals(imageMessages.length, 1);
   assertEquals(imageMessages[0]!.content, [
@@ -423,8 +422,8 @@ Deno.test("a tool image of the OpenAI chat model follows in a user message", asy
 
   const toolMessage = messages.find((m) => m.role === "tool")!;
   assertEquals(toolMessage.content, "[image: shot.png (67 bytes)]");
-  const imageMessage = messages.find((m) =>
-    m.role === "user" && Array.isArray(m.content)
+  const imageMessage = messages.find(
+    (m) => m.role === "user" && Array.isArray(m.content),
   )!;
   assertEquals(imageMessage.content, [
     { type: "text", text: "[image from shot]" },
@@ -438,14 +437,14 @@ Deno.test("images of parallel tool results leave the tool messages contiguous", 
   // the direct answer to that turn, so both images follow the pair.
   const messages = await runToChatBody(
     imageModel({ provider: "openai", baseUrl: "https://api.openai.com/v1" }),
-    [
-      toolResultWithImage("t1", "shot"),
-      toolResultWithImage("t2", "read"),
-    ],
+    [toolResultWithImage("t1", "shot"), toolResultWithImage("t2", "read")],
     firstPartyChatModel,
   );
 
-  assertEquals(messages.map((m) => m.role), ["tool", "tool", "user"]);
+  assertEquals(
+    messages.map((m) => m.role),
+    ["tool", "tool", "user"],
+  );
   assertEquals(messages[2]!.content, [
     { type: "text", text: "[image from shot]\n[image from read]" },
     IMAGE_URL_PART,
@@ -458,13 +457,11 @@ Deno.test("an api that carries tool images gets them inside the tool result", as
   // blocks natively, so the image needs no message of its own there.
   const { model, prompts } = recordingV4LanguageModel();
   const streamFn = createStreamFn(transportFor(model), NO_RESERVATION);
-  for await (
-    const _ of streamFn(
-      imageModel({ api: "anthropic-messages", provider: "fake" }),
-      { messages: [toolResultWithImage()] },
-      undefined,
-    )
-  ) {
+  for await (const _ of streamFn(
+    imageModel({ api: "anthropic-messages", provider: "fake" }),
+    { messages: [toolResultWithImage()] },
+    undefined,
+  )) {
     // drain
   }
 
@@ -486,7 +483,10 @@ Deno.test("an api that carries tool images gets them inside the tool result", as
     ],
   });
   // No extra message: nothing follows the tool result.
-  assertEquals(prompt.some((m) => m.role === "user"), false);
+  assertEquals(
+    prompt.some((m) => m.role === "user"),
+    false,
+  );
 });
 
 Deno.test("a text-only model is never handed a tool image", async () => {
@@ -496,17 +496,15 @@ Deno.test("a text-only model is never handed a tool image", async () => {
   // the whole request instead of reading the text around it.
   const { model, prompts } = recordingV4LanguageModel();
   const streamFn = createStreamFn(transportFor(model), NO_RESERVATION);
-  for await (
-    const _ of streamFn(
-      imageModel({
-        api: "anthropic-messages",
-        provider: "fake",
-        input: ["text"],
-      }),
-      { messages: [toolResultWithImage()] },
-      undefined,
-    )
-  ) {
+  for await (const _ of streamFn(
+    imageModel({
+      api: "anthropic-messages",
+      provider: "fake",
+      input: ["text"],
+    }),
+    { messages: [toolResultWithImage()] },
+    undefined,
+  )) {
     // drain
   }
 
@@ -517,7 +515,10 @@ Deno.test("a text-only model is never handed a tool image", async () => {
     type: "text",
     value: "[image: shot.png (67 bytes)]",
   });
-  assertEquals(prompt.some((m) => m.role === "user"), false);
+  assertEquals(
+    prompt.some((m) => m.role === "user"),
+    false,
+  );
   assertEquals(JSON.stringify(prompt).includes(MINI_PNG_BASE64), false);
 });
 
@@ -684,9 +685,9 @@ Deno.test("an aborted stream ends the turn as an aborted assistant message (neve
 
   const events: Array<{ type: string } & Record<string, unknown>> = [];
   let aborted = false;
-  for await (
-    const event of streamFn(model, request, { signal: controller.signal })
-  ) {
+  for await (const event of streamFn(model, request, {
+    signal: controller.signal,
+  })) {
     events.push(event as never);
     // Abort mid-stream: the run's promise must still settle normally, so
     // the session agent's rewind (waitForIdle) and the following prompt can
@@ -697,7 +698,10 @@ Deno.test("an aborted stream ends the turn as an aborted assistant message (neve
     }
   }
 
-  assertEquals(events.some((e) => e.type === "error"), false);
+  assertEquals(
+    events.some((e) => e.type === "error"),
+    false,
+  );
   const done = events.at(-1)!;
   assertEquals(done.type, "done");
   const message = done.message as {
@@ -706,10 +710,7 @@ Deno.test("an aborted stream ends the turn as an aborted assistant message (neve
   };
   assertEquals(message.stopReason, "aborted");
   // The output the provider already delivered stays in the transcript.
-  assertEquals(
-    message.content.map((b) => b.text).join(""),
-    "partial answer",
-  );
+  assertEquals(message.content.map((b) => b.text).join(""), "partial answer");
 });
 
 /** A model whose stream fails with a TimeoutError (what `AbortSignal.timeout`
@@ -751,19 +752,20 @@ Deno.test("a timeout that is not the caller's abort surfaces as an error turn", 
     NO_RESERVATION,
   );
   const events: Array<{ type: string } & Record<string, unknown>> = [];
-  for await (
-    const event of streamFn(
-      model,
-      { messages: [{ role: "user", content: "hi" }] },
-      { signal: new AbortController().signal },
-    )
-  ) {
+  for await (const event of streamFn(
+    model,
+    { messages: [{ role: "user", content: "hi" }] },
+    { signal: new AbortController().signal },
+  )) {
     events.push(event as never);
   }
 
   const failure = events.find((e) => e.type === "error")!;
   assertEquals(failure !== undefined, true);
-  assertEquals(events.some((e) => e.type === "done"), false);
+  assertEquals(
+    events.some((e) => e.type === "done"),
+    false,
+  );
   assertEquals(failure.errorRetryable, true);
 });
 
@@ -776,9 +778,10 @@ Deno.test("interleaved reasoning is passed back as reasoning_content", async () 
     fetch: (_input, init) => {
       sentBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
       const messages = sentBody.messages as Array<Record<string, unknown>>;
-      const missingReasoning = messages.some((message) =>
-        message.role === "assistant" &&
-        typeof message.reasoning_content !== "string"
+      const missingReasoning = messages.some(
+        (message) =>
+          message.role === "assistant" &&
+          typeof message.reasoning_content !== "string",
       );
       if (missingReasoning) {
         return Promise.resolve(
@@ -804,11 +807,13 @@ Deno.test("interleaved reasoning is passed back as reasoning_content", async () 
           object: "chat.completion.chunk",
           created: 0,
           model: "reasoning-model",
-          choices: [{
-            index: 0,
-            delta: { role: "assistant", content: "continued" },
-            finish_reason: null,
-          }],
+          choices: [
+            {
+              index: 0,
+              delta: { role: "assistant", content: "continued" },
+              finish_reason: null,
+            },
+          ],
         },
         {
           id: "chatcmpl-test",
@@ -820,9 +825,9 @@ Deno.test("interleaved reasoning is passed back as reasoning_content", async () 
       ];
       return Promise.resolve(
         new Response(
-          `${
-            chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("")
-          }data: [DONE]\n\n`,
+          `${chunks
+            .map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`)
+            .join("")}data: [DONE]\n\n`,
           { headers: { "content-type": "text/event-stream" } },
         ),
       );
@@ -868,7 +873,10 @@ Deno.test("interleaved reasoning is passed back as reasoning_content", async () 
   assertEquals(assistants[0]?.reasoning_content, "");
   assertEquals(assistants[1]?.content, "first answer");
   assertEquals(assistants[1]?.reasoning_content, "prior reasoning");
-  assertEquals(events.some((event) => event.type === "error"), false);
+  assertEquals(
+    events.some((event) => event.type === "error"),
+    false,
+  );
   assertEquals(events.at(-1)?.type, "done");
 });
 
@@ -942,17 +950,15 @@ Deno.test("the output cap clamp measures the room against the input cap", () => 
   const cappedWindow = 922_000;
   assertEquals(
     clampMaxTokensToContext(capped, cappedPrompt, 128_000),
-    cappedWindow - cappedPrompt -
+    cappedWindow -
+      cappedPrompt -
       contextSafetyTokens(cappedPrompt, cappedWindow),
   );
   // Far from the window the margin still leaves more room than the cap asks
   // for, so the requested cap stands unchanged.
   const wide = windowedModel(1_050_000, 128_000);
   const widePrompt = 500_000;
-  assertEquals(
-    clampMaxTokensToContext(wide, widePrompt, 128_000),
-    128_000,
-  );
+  assertEquals(clampMaxTokensToContext(wide, widePrompt, 128_000), 128_000);
   // A cap wider than the window never widens the room.
   const narrow = {
     ...windowedModel(10_000, 8_000),
@@ -978,10 +984,7 @@ Deno.test("the clamp charges a share of a large prompt as margin", () => {
     prompt,
     384_000,
   );
-  assertEquals(
-    cap,
-    window - prompt - Math.ceil(prompt * CONTEXT_SAFETY_RATIO),
-  );
+  assertEquals(cap, window - prompt - Math.ceil(prompt * CONTEXT_SAFETY_RATIO));
   // The real prompt (666,931) plus that cap fits the window the provider
   // enforces (1,048,576) — the rejection does not happen.
   assertEquals((cap as number) + 666_931 <= 1_048_576, true);
@@ -1004,14 +1007,18 @@ Deno.test("the transport clamps the output cap to the room the prompt leaves", a
   const { model, calls } = recordingLanguageModel(v2Parts(USAGE));
   const streamFn = createStreamFn(transportFor(model), NO_RESERVATION);
   const request: StreamRequest = {
-    messages: [{
-      role: "user",
-      content: [{ type: "text", text: "x".repeat(12_000) }],
-    }],
+    messages: [
+      {
+        role: "user",
+        content: [{ type: "text", text: "x".repeat(12_000) }],
+      },
+    ],
   };
-  for await (
-    const _ of streamFn(windowedModel(10_000, 8_000), request, undefined)
-  ) {
+  for await (const _ of streamFn(
+    windowedModel(10_000, 8_000),
+    request,
+    undefined,
+  )) {
     // drain
   }
   assertEquals(calls.length, 1);
@@ -1029,18 +1036,18 @@ Deno.test("the transport clamps a caller's override the same way", async () => {
   const { model, calls } = recordingLanguageModel(v2Parts(USAGE));
   const streamFn = createStreamFn(transportFor(model), NO_RESERVATION);
   const request: StreamRequest = {
-    messages: [{
-      role: "user",
-      content: [{ type: "text", text: "x".repeat(12_000) }],
-    }],
+    messages: [
+      {
+        role: "user",
+        content: [{ type: "text", text: "x".repeat(12_000) }],
+      },
+    ],
   };
   // The compaction summarizer's smaller cap is clamped too, so its
   // auxiliary request stays inside the window.
-  for await (
-    const _ of streamFn(windowedModel(10_000, 8_000), request, {
-      maxOutputTokens: 4_000,
-    })
-  ) {
+  for await (const _ of streamFn(windowedModel(10_000, 8_000), request, {
+    maxOutputTokens: 4_000,
+  })) {
     // drain
   }
   const promptTokens = estimateLlmMessagesTokens(request.messages);
@@ -1059,11 +1066,13 @@ Deno.test("the completion cap stops at the room the compaction reserves", async 
   const streamFn = createStreamFn(transportFor(model), () => ({
     reservePercent: 8,
   }));
-  for await (
-    const _ of streamFn(windowedModel(1_000_000, 384_000), {
+  for await (const _ of streamFn(
+    windowedModel(1_000_000, 384_000),
+    {
       messages: [{ role: "user", content: "hi" }],
-    }, undefined)
-  ) {
+    },
+    undefined,
+  )) {
     // drain
   }
   assertEquals(calls[0]!.maxOutputTokens, 80_000);
@@ -1076,11 +1085,13 @@ Deno.test("a policy that reserves nothing leaves the model's cap alone", async (
   const streamFn = createStreamFn(transportFor(model), () => ({
     enabled: false,
   }));
-  for await (
-    const _ of streamFn(windowedModel(1_000_000, 384_000), {
+  for await (const _ of streamFn(
+    windowedModel(1_000_000, 384_000),
+    {
       messages: [{ role: "user", content: "hi" }],
-    }, undefined)
-  ) {
+    },
+    undefined,
+  )) {
     // drain
   }
   assertEquals(calls[0]!.maxOutputTokens, 384_000);
@@ -1126,11 +1137,13 @@ Deno.test("a request the provider rejects as too large is re-sent with a smaller
           object: "chat.completion.chunk",
           created: 0,
           model: "m",
-          choices: [{
-            index: 0,
-            delta: { role: "assistant", content: "very well" },
-            finish_reason: null,
-          }],
+          choices: [
+            {
+              index: 0,
+              delta: { role: "assistant", content: "very well" },
+              finish_reason: null,
+            },
+          ],
         },
         {
           id: "chatcmpl-test",
@@ -1142,9 +1155,9 @@ Deno.test("a request the provider rejects as too large is re-sent with a smaller
       ];
       return Promise.resolve(
         new Response(
-          `${
-            chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("")
-          }data: [DONE]\n\n`,
+          `${chunks
+            .map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`)
+            .join("")}data: [DONE]\n\n`,
           { headers: { "content-type": "text/event-stream" } },
         ),
       );
@@ -1156,11 +1169,13 @@ Deno.test("a request the provider rejects as too large is re-sent with a smaller
   );
   const model = windowedModel(1_000_000, 384_000);
   const events: Array<{ type: string } & Record<string, unknown>> = [];
-  for await (
-    const event of streamFn(model, {
+  for await (const event of streamFn(
+    model,
+    {
       messages: [{ role: "user", content: "x".repeat(12_000) }],
-    }, undefined)
-  ) {
+    },
+    undefined,
+  )) {
     events.push(event as never);
   }
 
@@ -1172,7 +1187,10 @@ Deno.test("a request the provider rejects as too large is re-sent with a smaller
   );
   // One turn, no error: the retry stands in for the rejected request.
   assertEquals(events.filter((event) => event.type === "start").length, 1);
-  assertEquals(events.some((event) => event.type === "error"), false);
+  assertEquals(
+    events.some((event) => event.type === "error"),
+    false,
+  );
   assertEquals(events.at(-1)!.type, "done");
   const done = events.at(-1)! as unknown as {
     message: { content: Array<{ text?: string }> };
