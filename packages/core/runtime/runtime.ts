@@ -13,8 +13,8 @@
  * `runtime` export; the `Deno` global stays for the test runner's
  * `Deno.test` and for the browser probe.
  *
- * FFI (`dlopen`) is not implemented yet; the Windows computer host is the
- * one caller and needs `bun:ffi` before that platform can move.
+ * FFI is not implemented here: the one caller, the Windows computer host,
+ * uses `computer/windows-ffi.ts`, a Deno-shaped bridge over `bun:ffi`.
  */
 
 import { spawn, spawnSync } from "node:child_process";
@@ -712,6 +712,9 @@ const target =
       ? `${arch}-apple-darwin`
       : `${arch}-unknown-linux-gnu`;
 
+/** The process's stdin as a stream, built on first use (see `stdin` below). */
+let stdinStream: ReadableStream<Uint8Array> | undefined;
+
 const DenoShim = {
   build: {
     os: platformOs,
@@ -852,23 +855,29 @@ const DenoShim = {
   },
   stdin: {
     read: (_p: Uint8Array) => Promise.resolve(null),
-    readable: new ReadableStream<Uint8Array>({
-      start(controller) {
-        Bun.stdin
-          .stream()
-          .pipeTo(
-            new WritableStream({
-              write(chunk) {
-                controller.enqueue(chunk);
-              },
-              close() {
-                controller.close();
-              },
-            }),
-          )
-          .catch(() => controller.close());
-      },
-    }),
+    // Built on first access, not at import: opening the pipe to the process's
+    // stdin keeps Bun's event loop alive, so a script that only imports the
+    // runtime (every script here) would never exit on its own.
+    get readable(): ReadableStream<Uint8Array> {
+      stdinStream ??= new ReadableStream<Uint8Array>({
+        start(controller) {
+          Bun.stdin
+            .stream()
+            .pipeTo(
+              new WritableStream({
+                write(chunk) {
+                  controller.enqueue(chunk);
+                },
+                close() {
+                  controller.close();
+                },
+              }),
+            )
+            .catch(() => controller.close());
+        },
+      });
+      return stdinStream;
+    },
   },
   stdout: {
     writeSync: (p: Uint8Array) => fs.writeSync(1, p),
@@ -884,9 +893,9 @@ const DenoShim = {
   upgradeWebSocket,
   PointerValue: undefined,
   // A pointer value the shim can carry but not dereference: `dlopen` below
-  // throws, so nothing reaches a call that would hand it to native code. The
-  // Windows host uses these to parse and format window handles, which is all
-  // that runs before `bun:ffi` replaces this (see the module header).
+  // throws, so nothing reaches a call that would hand it to native code.
+  // The Windows host parses and formats window handles through its own
+  // bridge (see the module header).
   UnsafePointer: {
     create: (value: bigint) => ({ value }),
     value: (pointer: { value: bigint }) => pointer.value,
@@ -895,7 +904,10 @@ const DenoShim = {
   },
   UnsafeCallback: undefined,
   dlopen: () => {
-    throw new Error("Deno.dlopen is not available on Bun yet");
+    throw new Error(
+      "Deno.dlopen is not implemented: FFI goes through bun:ffi " +
+        "(see computer/windows-ffi.ts)",
+    );
   },
 };
 
