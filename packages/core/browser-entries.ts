@@ -4,9 +4,9 @@
  * the browser as types, which the bundler erases (see ARCHITECTURE.md 1).
  *
  * The list lives here — beside the modules it names — because three
- * consumers have to agree on it and none of them can read the workspace
- * exports in `deno.json`: the web package's boundary test, Vite's dev-server
- * aliases, and the server's esbuild aliases. `path` is relative to the
+ * consumers have to agree on it and none of them reads an exports map: the
+ * web package's boundary test, Vite's dev-server aliases, and the server's
+ * esbuild aliases. `path` is relative to the
  * repository root; each consumer resolves it against its own root.
  *
  * Adding an entry means the module is browser-safe (no `node:` imports, no

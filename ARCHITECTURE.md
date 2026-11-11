@@ -434,17 +434,13 @@ stella の会話でエージェントの発言になるのは 2 つです。タ�
 
 ## 7. バージョン管理
 
-アプリケーションのバージョンは、次の 9 箇所のマニフェストで管理します。
+アプリケーションのバージョンは、次の 5 箇所のマニフェストで管理します。
 
-1. `packages/core/deno.json`
-2. `packages/server/deno.json`
-3. `packages/web/deno.json`
-4. `packages/desktop/deno.json`
-5. `packages/desktop/package.json`
-6. `packages/desktop/package-lock.json`
-7. `packages/desktop/src-tauri/tauri.conf.json`
-8. `packages/desktop/src-tauri/Cargo.toml`
-9. `packages/server/version.ts`
+1. `packages/desktop/package.json`
+2. `packages/desktop/package-lock.json`
+3. `packages/desktop/src-tauri/tauri.conf.json`
+4. `packages/desktop/src-tauri/Cargo.toml`
+5. `packages/server/version.ts`
 
 `packages/server/version.ts` の値は、コンパイル後の単体サーバーが自身のバージョンを把握し、自動更新の比較に使います。各ファイルの整合性は `scripts/check-versions.ts` で検証され、CI とリリースフローで不整合を防ぎます。
 

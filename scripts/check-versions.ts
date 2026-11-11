@@ -1,8 +1,7 @@
 /**
  * Assert that every manifest carrying the app version agrees.
  *
- * The version lives in nine files (three workspace `deno.json`s, the
- * desktop `deno.json`, the desktop `package.json`, the desktop
+ * The version lives in five files (the desktop `package.json`, the desktop
  * `package-lock.json`, `tauri.conf.json`, `Cargo.toml`, and
  * `packages/server/version.ts` — the constant a packaged server reads at
  * runtime, since the compiled binary has no manifests) because each
@@ -50,11 +49,7 @@ const REFERENCE = "packages/desktop/src-tauri/tauri.conf.json";
 
 const MANIFESTS: Manifest[] = [
   { path: REFERENCE, read: jsonVersion },
-  { path: "packages/core/deno.json", read: jsonVersion },
-  { path: "packages/server/deno.json", read: jsonVersion },
   { path: "packages/server/version.ts", read: serverVersion },
-  { path: "packages/web/deno.json", read: jsonVersion },
-  { path: "packages/desktop/deno.json", read: jsonVersion },
   { path: "packages/desktop/package.json", read: jsonVersion },
   // The lockfile carries the same version twice (its own and the root
   // entry's) and drifts silently otherwise: npm does not validate it.

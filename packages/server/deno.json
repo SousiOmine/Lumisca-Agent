@@ -1,5 +1,0 @@
-{
-  "name": "@lumisca/server",
-  "version": "0.10.28",
-  "exports": "./mod.ts"
-}
