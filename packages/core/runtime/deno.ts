@@ -44,6 +44,17 @@ class AddrInUseError extends Error {
   override name = "AddrInUse";
 }
 
+/** Windows can report a real path with the `\\?\` extended-length prefix
+ * (or `\\?\UNC\` for a share); Deno's paths do not carry it, and a
+ * comparison against an ordinary path would fail on the prefix alone. */
+function normalizeRealPath(resolved: string): string {
+  if (resolved.startsWith("\\\\?\\UNC\\")) {
+    return "\\\\" + resolved.slice(8);
+  }
+  if (resolved.startsWith("\\\\?\\")) return resolved.slice(4);
+  return resolved;
+}
+
 function mapError(error: unknown): never {
   const err = error as NodeJS.ErrnoException;
   if (err?.code === "ENOENT") throw new NotFoundError(err.message);
@@ -225,12 +236,64 @@ function pipeToStream(
   });
 }
 
+/** Resolve a command before spawning it, the way Deno does: a bare name is
+ * looked up in PATH (with PATHEXT on Windows), a path is taken as given.
+ * Deno's `spawn()` throws synchronously when the program is missing, and
+ * callers rely on that (`runVmCommand` turns it into "podman is not
+ * installed"); Node instead emits an `error` event on the child, which
+ * becomes an uncaught exception when nobody listens. */
+function findExecutable(command: string): string {
+  const windows = process.platform === "win32";
+  const isPath = command.includes("/") || (windows && command.includes("\\"));
+  const extensions = windows
+    ? (process.env["PATHEXT"] ?? ".COM;.EXE;.BAT;.CMD")
+        .split(";")
+        .filter((ext) => ext !== "")
+    : [""];
+  const withExtensions = (base: string): string[] => {
+    if (!windows) return [base];
+    const lower = base.toLowerCase();
+    if (extensions.some((ext) => lower.endsWith(ext.toLowerCase()))) {
+      return [base];
+    }
+    return extensions.map((ext) => base + ext);
+  };
+  const usable = (candidate: string): boolean => {
+    try {
+      const stat = fs.statSync(candidate);
+      if (!stat.isFile()) return false;
+      fs.accessSync(candidate, fs.constants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  if (isPath) {
+    for (const candidate of withExtensions(command)) {
+      if (usable(candidate)) return candidate;
+    }
+    throw new NotFoundError(`No such file or directory: ${command}`);
+  }
+  for (const dir of (process.env["PATH"] ?? "").split(windows ? ";" : ":")) {
+    if (dir === "") continue;
+    for (const candidate of withExtensions(path.join(dir, command))) {
+      if (usable(candidate)) return candidate;
+    }
+  }
+  throw new NotFoundError(`Executable not found in $PATH: "${command}"`);
+}
+
 class ChildProcess {
   #child: ReturnType<typeof spawn>;
   readonly stdout: ReadableStream<Uint8Array>;
   readonly stderr: ReadableStream<Uint8Array>;
   constructor(child: ReturnType<typeof spawn>) {
     this.#child = child;
+    // Without a listener, Node (and Bun) turn a failed spawn into an
+    // uncaught exception from the event loop.
+    child.on("error", (error) => {
+      this.#startError = error;
+    });
     this.stdout = pipeToStream(child.stdout);
     this.stderr = pipeToStream(child.stderr);
   }
@@ -256,11 +319,18 @@ class ChildProcess {
   get pid(): number {
     return this.#child.pid ?? -1;
   }
+  /** Set when the child failed before it started (permission, too many
+   * files, …). Its streams never open, so status answers like a shell does. */
+  #startError: Error | undefined;
+
   get status(): Promise<{
     code: number;
     success: boolean;
     signal: string | null;
   }> {
+    if (this.#startError !== undefined) {
+      return Promise.resolve({ code: 127, success: false, signal: null });
+    }
     // Deno's `status` settles when the process exits, not when its pipes
     // close: a descendant the command left behind inherits the pipes and can
     // outlive it (a `server &`), and waiting for "close" would hang the call
@@ -271,12 +341,16 @@ class ChildProcess {
       success: boolean;
       signal: string | null;
     } => {
-      const code = this.#child.exitCode ?? 1;
-      return {
-        code,
-        success: code === 0,
-        signal: this.#child.signalCode ?? null,
-      };
+      const signal = this.#child.signalCode ?? null;
+      // A signal-killed child exits with 128 + the signal number (137 for
+      // SIGKILL), which is what Deno reports and what callers assert on.
+      // Bun sets `exitCode` to that already on Linux but leaves it null on
+      // macOS, so the code is derived here instead of trusted.
+      const code =
+        signal === null
+          ? (this.#child.exitCode ?? 1)
+          : 128 + (os.constants.signals[signal as NodeJS.Signals] ?? 0);
+      return { code, success: code === 0, signal };
     };
     if (this.#child.exitCode !== null || this.#child.signalCode !== null) {
       return Promise.resolve(settled());
@@ -314,7 +388,7 @@ class Command {
     return args;
   }
   spawn(): ChildProcess {
-    const child = spawn(this.#cmd, this.#args(), {
+    const child = spawn(findExecutable(this.#cmd), this.#args(), {
       cwd: this.#options.cwd,
       env: this.#options.env ?? process.env,
       stdio: [
@@ -669,8 +743,17 @@ const DenoShim = {
   copyFile: (a: string, b: string) => fsp.copyFile(a, b).catch(mapError),
   rename: (a: string, b: string) => fsp.rename(a, b).catch(mapError),
   renameSync: (a: string, b: string) => sync(() => fs.renameSync(a, b)),
-  realPath: (p: string) => fsp.realpath(p).catch(mapError),
-  realPathSync: (p: string) => sync(() => fs.realpathSync(p)),
+  realPath: (p: string) =>
+    fsp.realpath(p).then(normalizeRealPath).catch(mapError),
+  // `native` on Windows returns the long, canonical spelling of every
+  // component. The JS implementation keeps the spelling it was given (an
+  // 8.3 name such as RUNNER~1 stays short), which then fails a containment
+  // check against a path the async call canonicalized.
+  realPathSync: (p: string) =>
+    sync(() => {
+      const native = fs.realpathSync.native ?? fs.realpathSync;
+      return normalizeRealPath(native(p));
+    }),
   chmod: (p: string, mode: number) => fsp.chmod(p, mode).catch(mapError),
   symlink: (a: string, b: string) => fsp.symlink(a, b).catch(mapError),
   open: (p: string, o?: Parameters<typeof openFile>[1]) =>
