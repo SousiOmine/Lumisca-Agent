@@ -159,7 +159,17 @@ export class McpOAuthProvider implements OAuthClientProvider {
    * flow reads it to open the browser. */
   authorizationUrl?: URL;
 
-  constructor(private readonly options: McpOAuthProviderOptions) {}
+  /** The OAuth `state` of this flow, present only when the caller passed
+   * one. The SDK asks for it as `provider.state ? await provider.state() :
+   * undefined`, so a provider without a state must leave the method off
+   * entirely — a method that returned `undefined` would still claim the
+   * parameter is available, and the type says it never is. */
+  readonly state?: () => string;
+
+  constructor(private readonly options: McpOAuthProviderOptions) {
+    const state = options.state;
+    if (state !== undefined) this.state = () => state;
+  }
 
   private get store(): McpOAuthStore {
     return this.options.store;
@@ -198,10 +208,6 @@ export class McpOAuthProvider implements OAuthClientProvider {
       // there is no secret to store (or to leak).
       token_endpoint_auth_method: "none",
     };
-  }
-
-  state(): string | undefined {
-    return this.options.state;
   }
 
   clientInformation(): OAuthClientInformationMixed | undefined {

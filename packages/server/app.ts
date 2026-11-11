@@ -345,9 +345,13 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   // SPA fallback (registered last): any other page renders the app shell.
   // The /api next() guard is defensive only — API routes above already
   // matched — but keeps unknown API paths on the JSON error path.
-  app.get("*", (c, next) => {
+  app.get("*", async (c, next) => {
     if (c.req.path.startsWith("/api") || c.req.path === "/ws") {
-      return next();
+      // `next()` settles after the notFound handler has answered; returning
+      // its void result would make the handler's type a union that Hono's
+      // overloads reject, so the response is left to the dispatcher.
+      await next();
+      return;
     }
     // Unknown static assets (e.g. /favicon.ico) get a real 404 instead of
     // the HTML shell, so browsers and CDNs do not cache a wrong document.

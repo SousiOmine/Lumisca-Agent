@@ -37,7 +37,8 @@
     "test:server": "bun test --parallel packages/server",
     "test:web": "bun test --parallel packages/web",
     "fmt": "biome check --write .",
-    "fmt:check": "biome check ."
+    "fmt:check": "biome check .",
+    "check": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.6",

@@ -29,8 +29,9 @@ interface ScreenSocketData {
   port: number;
   upstream: WebSocket | null;
   /** Messages from the page that arrived before the container side was up.
-   * Dropped if the upstream never connects. */
-  queue: (string | Uint8Array)[];
+   * Dropped if the upstream never connects. Binary frames stay ArrayBuffers
+   * so they can be handed to `send` without a copy. */
+  queue: (string | ArrayBuffer)[];
   closed: boolean;
 }
 
@@ -64,7 +65,7 @@ export function stellaScreenRoute(options: StellaScreenOptions) {
           ws.send(
             typeof event.data === "string"
               ? event.data
-              : new Uint8Array(event.data as ArrayBuffer),
+              : (event.data as ArrayBuffer),
           );
         };
         // The container side closing means the machine stopped: close the
@@ -79,10 +80,12 @@ export function stellaScreenRoute(options: StellaScreenOptions) {
       },
       onMessage(event, ws) {
         if (data === undefined) return;
+        // Binary frames arrive as an ArrayBuffer (binaryType is set to
+        // "arraybuffer" on the upstream socket); pass it through as is.
         const payload =
           typeof event.data === "string"
             ? event.data
-            : new Uint8Array(event.data as ArrayBuffer);
+            : (event.data as ArrayBuffer);
         const upstream = data.upstream;
         if (upstream === null) {
           // Hold the handshake until the container side is up; drop the

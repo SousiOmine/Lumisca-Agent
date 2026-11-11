@@ -15,7 +15,7 @@ import { randomUUID } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { errorMessage } from "../errors.ts";
-import { createMcpTransport } from "./client.ts";
+import { createHttpTransport } from "./client.ts";
 import type { McpServerConfig } from "./config.ts";
 import { McpOAuthProvider, type McpOAuthStore } from "./oauth.ts";
 
@@ -151,7 +151,7 @@ export class McpAuthSession {
       redirectUri: this.redirectUri,
       state: this.state,
     });
-    const transport = createMcpTransport(this.config, Deno.cwd(), {
+    const transport = createHttpTransport(this.config, {
       authProvider: provider,
     });
     this.transport = transport;

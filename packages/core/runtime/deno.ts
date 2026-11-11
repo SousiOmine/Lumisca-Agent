@@ -667,7 +667,12 @@ const DenoShim = {
   kill: (pid: number, signal?: string) => {
     process.kill(pid, signal as NodeJS.Signals | undefined);
   },
-  unrefTimer: (_id: number) => {},
+  // Deno's signature is `(id: number)`; Bun's setTimeout hands back a timer
+  // object with `unref()`, so the caller casts and this unrefs the object.
+  unrefTimer: (id: number) => {
+    const timer = id as unknown as { unref?: () => void };
+    if (typeof timer === "object" && timer !== null) timer.unref?.();
+  },
   stdin: {
     read: (_p: Uint8Array) => Promise.resolve(null),
     readable: new ReadableStream<Uint8Array>({

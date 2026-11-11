@@ -125,3 +125,8 @@ for await (const chunk of process.stdin) {
     }
   }
 }
+
+// A module marker: the top-level `await` above is only legal in a module.
+// Nothing imports this file — it is spawned as a process — so this export
+// exists for the type checker alone.
+export {};

@@ -1,6 +1,6 @@
 import { CoreError, errorMessage, type WindowQuery } from "@lumisca/core";
 import type { Context } from "hono";
-import type { ContentfulStatusCode } from "hono/http-status";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 
 /** Error with an explicit HTTP status. Thrown by route handlers when the
  * status matters (e.g. 404); everything else is classified by errorStatus. */

@@ -1,7 +1,7 @@
 import { errorMessage } from "@lumisca/core";
 import type { PeerStatus } from "@lumisca/core/shared";
 import { type Context, Hono } from "hono";
-import type { ContentfulStatusCode } from "hono/http-status";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { FederationClient } from "../federation.ts";
 import { probeHealth } from "../health-probe.ts";
 import { AppError } from "./util.ts";

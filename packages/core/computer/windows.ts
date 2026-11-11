@@ -246,7 +246,7 @@ export function buildMouseInput(
   flags: number,
   mouseData: number,
   pointerSize: number,
-): Uint8Array {
+): Uint8Array<ArrayBuffer> {
   const buffer = new Uint8Array(inputSize(pointerSize));
   const view = new DataView(buffer.buffer);
   const base = unionOffset(pointerSize);
@@ -266,7 +266,7 @@ export function buildKeyInput(
   scan: number,
   flags: number,
   pointerSize: number,
-): Uint8Array {
+): Uint8Array<ArrayBuffer> {
   const buffer = new Uint8Array(inputSize(pointerSize));
   const view = new DataView(buffer.buffer);
   const base = unionOffset(pointerSize);
@@ -284,8 +284,8 @@ export function buildKeyInput(
 export function buildUnicodeInputs(
   codeUnits: readonly number[],
   pointerSize: number,
-): Uint8Array {
-  const parts: Uint8Array[] = [];
+): Uint8Array<ArrayBuffer> {
+  const parts: Uint8Array<ArrayBuffer>[] = [];
   for (const unit of codeUnits) {
     parts.push(buildKeyInput(0, unit, KEYEVENTF_UNICODE, pointerSize));
     parts.push(
@@ -304,8 +304,8 @@ export function buildKeyChordInputs(
   vk: number,
   modifiers: readonly number[],
   pointerSize: number,
-): Uint8Array {
-  const parts: Uint8Array[] = [];
+): Uint8Array<ArrayBuffer> {
+  const parts: Uint8Array<ArrayBuffer>[] = [];
   for (const modifier of modifiers) {
     parts.push(buildKeyInput(modifier, 0, 0, pointerSize));
   }
@@ -915,7 +915,12 @@ class WindowsComputerHost implements ComputerHost {
     command: number,
     value: number,
   ): bigint {
-    const result = new BigUint64Array(1);
+    // The buffer is spelled out so its type is ArrayBuffer (a plain
+    // `new BigUint64Array(1)` widens to ArrayBufferLike, which Deno's FFI
+    // signature does not accept).
+    const result: BigUint64Array<ArrayBuffer> = new BigUint64Array(
+      new ArrayBuffer(8),
+    );
     const answered = this.user32.symbols.SendMessageTimeoutW(
       imeWnd,
       WM_IME_CONTROL,
@@ -923,12 +928,12 @@ class WindowsComputerHost implements ComputerHost {
       Deno.UnsafePointer.create(BigInt(value)),
       SMTO_ABORTIFHUNG,
       IME_MESSAGE_TIMEOUT_MS,
-      new Uint8Array(result.buffer),
+      result,
     );
     return answered === null ? 0n : result[0]!;
   }
 
-  private sendInput(buffer: Uint8Array, count: number): void {
+  private sendInput(buffer: Uint8Array<ArrayBuffer>, count: number): void {
     const inserted = this.user32.symbols.SendInput(
       count,
       buffer,
@@ -1089,7 +1094,9 @@ class WindowsComputerHost implements ComputerHost {
         );
       }
       const info = bitmapInfo(region.width, region.height);
-      const pixels = new Uint8Array(region.width * region.height * 4);
+      const pixels: Uint8Array<ArrayBuffer> = new Uint8Array(
+        region.width * region.height * 4,
+      );
       const lines = this.gdi32.symbols.GetDIBits(
         memDC,
         bitmap,
@@ -1125,7 +1132,7 @@ class WindowsComputerHost implements ComputerHost {
 
 /** BITMAPINFO for a top-down 32-bit DIB (negative height = top-down, so the
  * rows come back in screen order). */
-function bitmapInfo(width: number, height: number): Uint8Array {
+function bitmapInfo(width: number, height: number): Uint8Array<ArrayBuffer> {
   const info = new Uint8Array(44); // BITMAPINFOHEADER + one RGBQUAD
   const view = new DataView(info.buffer);
   view.setUint32(0, 40, true); // biSize

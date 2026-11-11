@@ -47,8 +47,7 @@
     "hono/compress": "npm:hono@4.13.16/compress",
     "hono/cookie": "npm:hono@4.13.16/cookie",
     "hono/cors": "npm:hono@4.13.16/cors",
-    "hono/deno": "npm:hono@4.13.16/deno",
-    "hono/http-status": "npm:hono@4.13.16/utils/http-status"
+    "hono/deno": "npm:hono@4.13.16/deno"
   },
   "fmt": {
     "exclude": [

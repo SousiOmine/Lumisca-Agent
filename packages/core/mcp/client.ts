@@ -46,6 +46,16 @@ export function createMcpTransport(
       cwd: resolveServerCwd(config, workspaceRoot),
     });
   }
+  return createHttpTransport(config, options);
+}
+
+/** The HTTP transport alone. The sign-in flow needs this one specifically —
+ * it calls `finishAuth` on it, which a stdio transport does not have — so it
+ * shares the construction here rather than the union-returning entry point. */
+export function createHttpTransport(
+  config: McpServerConfig,
+  options: McpTransportOptions = {},
+): StreamableHTTPClientTransport {
   return new StreamableHTTPClientTransport(new URL(config.url!), {
     // Configured headers ride in `requestInit`: the transport builds its
     // request headers from `requestInit.headers`, and an unknown top-level
@@ -195,13 +205,16 @@ export class McpServerClient {
   ): Promise<McpContentBlock[]> {
     // Note: the SDK signature is callTool(params, resultSchema?, options?);
     // options (signal/timeout) belong in the third position.
+    // The SDK types the answer as a union of a tool result and (only when a
+    // task was asked for) a task handle. Nothing here asks for a task, so the
+    // answer is a tool result; `arguments` is the tool's untyped input.
     let result: { isError?: boolean; content: unknown };
     try {
-      result = await this.client.callTool(
-        { name, arguments: args },
+      result = (await this.client.callTool(
+        { name, arguments: args as Record<string, unknown> | undefined },
         undefined,
         { signal, timeout: timeoutMs },
-      );
+      )) as { isError?: boolean; content: unknown };
     } catch (error) {
       // The caller's abort is a stop, not a broken server: the SDK
       // reports a cancelled request with the same ErrorCode as its own

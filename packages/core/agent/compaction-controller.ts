@@ -185,7 +185,10 @@ export class CompactionController {
       },
       Math.max(0, newest + rule.afterMs - Date.now()),
     );
-    Deno.unrefTimer(timer);
+    // Deno's signature says `number`; Bun hands back a timer object, and the
+    // shim's `unrefTimer` unrefs it. The cast states that difference once,
+    // here, instead of typing every timer in the agent as Deno's.
+    Deno.unrefTimer(timer as unknown as number);
     this.idleTimer = timer;
   }
 
