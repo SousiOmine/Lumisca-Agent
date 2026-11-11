@@ -234,33 +234,21 @@ Deno.test("compareAgentRows: the order is total", () => {
   assertEquals(compareAgentRows(newer, older) < 0, true);
 });
 
-Deno.test("previewOf: a routine's prompt is named, not quoted as the user's", () => {
-  const preview = previewOf(
-    entry({
-      role: "user",
-      text: "毎朝デプロイを確認して",
-      routine: "朝のデプロイ確認",
-    }),
-  );
-  assertEquals(preview, {
-    kind: "routine",
-    name: "朝のデプロイ確認",
-    at: 1_000,
-  });
-  // The name is what the row shows, so two routines differ.
+Deno.test("previewOf: a routine's prompt is not a message of the row", () => {
+  // The conversation does not draw a routine's prompt (it is the
+  // instruction the agent wrote), so the row must not speak for it either:
+  // the caller reads the next older entry.
   assertEquals(
-    samePreview(preview, {
-      kind: "routine",
-      name: "朝のデプロイ確認",
-      at: 1_000,
-    }),
-    true,
+    previewOf(
+      entry({
+        role: "user",
+        text: "毎朝デプロイを確認して",
+        routine: "朝のデプロイ確認",
+      }),
+    ),
+    null,
   );
-  assertEquals(
-    samePreview(preview, { kind: "routine", name: "別のルーチン", at: 1_000 }),
-    false,
-  );
-  // A typed prompt of the same words still reads as words.
+  // A typed prompt of the same words is still the user's message.
   assertEquals(
     previewOf(entry({ role: "user", text: "毎朝デプロイを確認して" })),
     {

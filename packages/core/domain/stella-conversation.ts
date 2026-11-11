@@ -61,9 +61,10 @@ export interface StellaEntry {
    * type the message. Its text is the routine's standing instruction — the
    * request the agent wrote down when the routine was created — so a client
    * must NOT draw the entry as the user's words: a request they scheduled is
-   * not a sentence they wrote. The name still travels — it is part of the
-   * entry's identity, and it is what the agent list's second line says.
-   * Absent for everything they typed. */
+   * not a sentence they wrote, and the agent list's second line does not
+   * speak for it either (see shared/stella-preview.ts). The name still
+   * travels — it is part of the entry's identity and what rewind and the
+   * cursor key on. Absent for everything they typed. */
   routine?: string;
   /** Epoch ms, from the message itself: rewind names a message by it. */
   timestamp: number;

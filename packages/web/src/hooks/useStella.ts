@@ -1,6 +1,7 @@
 import {
   compareAgentRows,
   previewOf,
+  type StellaPreview,
   samePreview,
   withAgentRow,
 } from "@lumisca/core/shared";
@@ -216,9 +217,17 @@ export function useStella(
   // only say the same thing.
   const rows = useMemo<StellaAgentSummary[]>(() => {
     if (!enabled || activeAgentId === null) return agents;
-    const newest = conversation?.entries.at(-1);
-    if (newest === undefined) return agents;
-    const preview = previewOf(newest);
+    const entries = conversation?.entries ?? [];
+    // The newest entry the conversation DRAWS: a routine's prompt is at the
+    // end while the run arrives, and it is not a message, so the row keeps
+    // the last one that is (the same walk the server does in latestPreview).
+    let preview: StellaPreview | null = null;
+    for (let index = entries.length - 1; index >= 0; index--) {
+      const candidate = entries[index];
+      if (candidate === undefined) continue;
+      preview = previewOf(candidate);
+      if (preview !== null) break;
+    }
     if (preview === null) return agents;
     let changed = false;
     const next = agents.map((agent) => {

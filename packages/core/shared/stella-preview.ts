@@ -8,15 +8,15 @@
  * the conversation was last OPENED, which is a fact about the reader, not
  * about the conversation.
  *
- * What the line may show is what the conversation shows, with one exception: a
- * routine's prompt is named here although the conversation does not draw it
- * (see previewOf). Otherwise the rule is whole: the entry a client draws (see
- * the core's
- * agent/stella-stream.ts) — the user's words and the agent's reply (its final
- * text, and what `send_chat` sent with it). Its narration, tool calls, their
- * output and the context publications the model runs on are not part of it. The server
- * projects the newest row through that same function, so the list cannot
- * show something the conversation would not (the same reason
+ * What the line may show is what the conversation shows: the entry a client
+ * draws (see the core's agent/stella-stream.ts) — the user's words and the
+ * agent's reply (its final text, and what `send_chat` sent with it). Its
+ * narration, tool calls, their output, the context publications the model
+ * runs on and a routine's prompt are not part of it: a routine's request is
+ * an instruction the agent wrote, not something the user said, and the
+ * conversation does not draw it, so the row must not speak for it either.
+ * The server projects the newest row through that same function, so the list
+ * cannot show something the conversation would not (the same reason
  * `history_search` projects its results rather than reading rows).
  *
  * Two callers share this module, and they MUST agree:
@@ -50,11 +50,7 @@ export type StellaPreview =
   /** A message that showed only a card (no words, no files): the card's own
    * markup is presentation, and a table of it in a 216px row would be
    * noise, so the row names the thing instead. */
-  | { kind: "card"; at: number }
-  /** A request a routine ran, named by the routine. It is on the user's side
-   * of the conversation but the user did not write it, so the row says what
-   * asked instead of quoting the request as their last words. */
-  | { kind: "routine"; name: string; at: number };
+  | { kind: "card"; at: number };
 
 /** Most characters of a message kept as a preview.
  *
@@ -73,14 +69,13 @@ export const PREVIEW_TEXT_CHARS = 200;
  * with the preview instead of being read from the agent row (which records
  * when the conversation was opened, not when it was last spoken in). */
 export function previewOf(entry: StellaEntry): StellaPreview | null {
-  // A routine's request is not something the user said (see #37): the row
-  // names the routine rather than putting the scheduled words in their
-  // mouth. The conversation itself does not draw the prompt at all (it is the
-  // routine's standing instruction), so this line is where the routine stays
-  // visible.
-  if (entry.routine !== undefined) {
-    return { kind: "routine", name: entry.routine, at: entry.timestamp };
-  }
+  // A routine's request is not something the user said and is not drawn in
+  // the conversation either (it is the routine's standing instruction), so
+  // the row says nothing about it: the caller reads the next older entry.
+  // Naming the routine here put a message on the list that the conversation
+  // beside it does not show, which is the one disagreement this line exists
+  // to avoid.
+  if (entry.routine !== undefined) return null;
   const text = previewText(entry.text);
   if (text.length > 0) return { kind: "text", text, at: entry.timestamp };
   // A message that carried files is the user's attachment or what the agent
@@ -118,8 +113,6 @@ export function samePreview(
       return b.kind === "files" && a.count === b.count;
     case "card":
       return true;
-    case "routine":
-      return b.kind === "routine" && a.name === b.name;
   }
 }
 

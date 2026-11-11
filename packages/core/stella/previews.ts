@@ -54,10 +54,10 @@ export function latestPreview(
       const entry = stellaEntryOf(row.message);
       if (entry === null) continue;
       const preview = previewOf(entry);
-      // `previewOf` returns null only for an entry with nothing to show, and
-      // `stellaEntryOf` refuses to build one of those — so this is the
-      // newest entry, or the search continues past a row the projection
-      // accepted but nothing can be drawn from.
+      // `previewOf` returns null for the entries the conversation does not
+      // draw (a routine's prompt) and for one with nothing to show, so the
+      // search continues past both: the answer is the newest entry the
+      // conversation would actually show.
       if (preview !== null) return preview;
     }
     // The query answered fewer rows than it was allowed: that is the whole

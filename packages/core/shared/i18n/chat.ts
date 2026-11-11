@@ -404,10 +404,6 @@ export const chat = {
     en: "{count} files",
   },
   "chat.stella.agents.preview.card": { ja: "カード", en: "Card" },
-  "chat.stella.agents.preview.routine": {
-    ja: "ルーチン「{name}」",
-    en: 'Routine "{name}"',
-  },
   "chat.stella.machine.screen": { ja: "画面", en: "Screen" },
   /** Filling the window with the machine's screen: the picture is small in a
    * column, and looking at something in it means seeing more than a thumbnail
