@@ -20,6 +20,9 @@ concurrency:
 jobs:
   check:
     strategy:
+      # One OS failing must not cancel the other two: the whole point of the
+      # matrix is to see all three results in one run.
+      fail-fast: false
       matrix:
         # Windows (cmd.exe shell, OEM code pages, case-insensitive paths)
         # and macOS are just as first-class as Linux — they must run the
