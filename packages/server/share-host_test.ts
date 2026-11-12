@@ -28,7 +28,6 @@ function grant(path: string, overrides: Partial<LocalGrant> = {}): LocalGrant {
     path,
     write: true,
     exec: true,
-    expiresAt: Date.now() + 60_000,
     ...overrides,
   };
 }
@@ -215,6 +214,52 @@ Deno.test("a withdrawn loan stops answering", async () => {
       "the withdrawal",
     );
     // The server refuses before a frame is even sent.
+    await assertRejects(
+      () => core.shares.call("g1", "stat", { path: [] }),
+      Error,
+      "no longer lent",
+    );
+  } finally {
+    lender.close();
+    disposeServer(server);
+    server.shutdown();
+    await core.close();
+    await removeDirRetry(root);
+  }
+});
+
+Deno.test("a loan ends after 30 idle minutes, and an access restarts the clock", async () => {
+  const { core, server, base } = setup();
+  const root = folder();
+  // The production deadline is half an hour; the rule is the same one at any
+  // length, so the test shrinks it instead of waiting.
+  const lender = createShareHost({ retryMs: 10, idleMs: 600 });
+  const sleep = (ms: number) =>
+    new Promise((resolve) => setTimeout(resolve, ms));
+  try {
+    lender.command(JSON.stringify({ type: "hello", url: base, token: "" }));
+    lender.command(JSON.stringify({ type: "grants", grants: [grant(root)] }));
+    await until(
+      () => core.shares.grantsFor(SESSION).length === 1,
+      "the loan to reach the server",
+    );
+
+    // An access part-way through the loan pushes the deadline out: the loan
+    // is still there 600ms after it was lent.
+    await sleep(300);
+    await core.shares.call("g1", "stat", { path: [] });
+    await sleep(300);
+    assertEquals(core.shares.grantsFor(SESSION).length, 1);
+
+    // …and gone 600ms after that access, with no withdrawal from the shell.
+    // The lender drops it from its own list, not only from the server's
+    // filtered view — the UI reads the list it announced.
+    await until(
+      () =>
+        core.shares.grantsFor(SESSION).length === 0 &&
+        core.shares.connections()[0]!.grants.length === 0,
+      "the idle loan to expire",
+    );
     await assertRejects(
       () => core.shares.call("g1", "stat", { path: [] }),
       Error,

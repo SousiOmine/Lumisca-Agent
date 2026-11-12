@@ -213,6 +213,7 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 - **ワイヤは相対セグメントのみ**: 絶対パスを送ると、受け取る側の `join` が別の場所を作ります。境界は両端が持ちます（サーバーの `relativeSegments`、貸し手の `Mount.absolute` と `Sandbox`）。
 - **読み取り専用は backend で拒否**: ツールごとに確かめません（`write` / `edit` / 添付のどれかが漏れます）。貸し手も自分の記録で拒否します。
 - **貸し手は stdin が閉じたら終わる**: 貸出はアプリが開いている間だけです。`share` はランチャーのサブコマンドで、環境を読む前に分岐してください（DB もポートも要りません）。接続先とトークンは argv に載せず、stdin の hello 行で渡します。
+- **期限は最後のアクセスから30分**（`SHARE_IDLE_MS`）。時計は貸し手のプロセスにあり、op を受けるたびに `expiresAt` を延ばして再アナウンスします。アクセスを見るのは貸し手だけなので、サーバーやアプリ側に同じ規則を置かないこと。サーバーは `grantsFor` が `expiresAt` で外し、貸し手はタイマーで自分の一覧から外して知らせます（利用者が見る一覧は最後のアナウンス）。`LocalGrant` に期限は載せません。
 - **名前の重複はサーバーが解消**: 2 台が同じ `proj` を貸したら 2 台目が `proj-2` になります。再アナウンスで名前を変えないこと（会話が既に知っている住所が動きます）。
 - **確認**: `bun test packages/core/share packages/server/app_share_test.ts packages/server/share-host_test.ts`。手元では `bun run probe:share --url <url> --session <id> --folder <path>` で UI 抜きに一巡できます。
 

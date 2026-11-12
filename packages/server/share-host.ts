@@ -40,6 +40,20 @@ import { runtime } from "../core/runtime/runtime.ts";
  * A file past it is refused with a note pointing at a line range. */
 const MAX_READ_BYTES = 4 * 1024 * 1024;
 
+/** How long a folder stays lent after the agent last touched it.
+ *
+ * The loan is not a session with a start and an end: it follows the work. A
+ * conversation that reads a file and then sits for an hour on something else
+ * should not keep the user's disk open just because the window is open, and a
+ * conversation that keeps reading the same folder should not have to be
+ * re-lent every half hour. Both are answered by one clock that every access
+ * pushes forward.
+ *
+ * The lender owns that clock because the lender is what sees the accesses:
+ * the server only forwards calls, and a rule kept on both sides would drift.
+ */
+export const SHARE_IDLE_MS = 30 * 60_000;
+
 /** One folder the shell allows this process to lend. */
 export interface LocalGrant {
   id: string;
@@ -49,9 +63,6 @@ export interface LocalGrant {
   path: string;
   write: boolean;
   exec: boolean;
-  /** Epoch ms; the shell withdraws it by announcing a list without it, but the
-   * value travels so the server can stop trusting a stale announcement. */
-  expiresAt: number;
 }
 
 /** What the shell writes on this process's stdin, one JSON object per line. */
@@ -65,6 +76,10 @@ export interface ShareHostOptions {
   /** First reconnect delay; doubles up to `maxRetryMs`. */
   retryMs?: number;
   maxRetryMs?: number;
+  /** How long a loan survives without an access; tests shorten it. */
+  idleMs?: number;
+  /** The clock every deadline is measured with; tests pin it. */
+  now?: () => number;
 }
 
 /** The lending process, as the shell (or a test) drives it. */
@@ -92,6 +107,8 @@ export function createShareHost(
   const log = options.log ?? (() => {});
   const retryMs = options.retryMs ?? 500;
   const maxRetryMs = options.maxRetryMs ?? 30_000;
+  const idleMs = options.idleMs ?? SHARE_IDLE_MS;
+  const now = options.now ?? Date.now;
   const clientId = crypto.randomUUID();
   const host = describeHost();
   let endpoint: { url: string; token: string } | undefined;
@@ -103,6 +120,10 @@ export function createShareHost(
   const running = new Map<string, AbortController>();
   /** One mount per grant id: the sandbox that holds the disk boundary. */
   const mounts = new Map<string, Mount>();
+  /** When each grant was last used (an access, or the moment it was lent).
+   * The deadline announced to the server is this plus `idleMs`. */
+  const lastUsed = new Map<string, number>();
+  let idleTimer: ReturnType<typeof setInterval> | undefined;
   let stopped = false;
 
   const send = (frame: unknown): void => {
@@ -118,10 +139,15 @@ export function createShareHost(
     // Names are unique within this app's list; the server resolves collisions
     // with another computer's folders for the same conversation.
     const taken: string[] = [];
+    const at = now();
     return grants.map((grant) => {
       const name = shareNameFrom(grant.path, taken);
       taken.push(name);
-      return { ...describeGrant(grant, host), name };
+      const used = lastUsed.get(grant.id) ?? at;
+      return {
+        ...describeGrant(grant, host, used + idleMs),
+        name,
+      };
     });
   };
 
@@ -140,6 +166,14 @@ export function createShareHost(
   };
 
   const handleOp = (id: string, grantId: string, call: ShareCall): void => {
+    // The access itself is what keeps the loan alive, so the clock starts
+    // here and the server hears the new deadline before it answers the next
+    // call it forwards. A withdrawn grant is not extended: `announcement()`
+    // only includes what the shell still lends.
+    if (grants.some((grant) => grant.id === grantId)) {
+      lastUsed.set(grantId, now());
+      announce();
+    }
     const controller = new AbortController();
     running.set(id, controller);
     const started = Date.now();
@@ -256,6 +290,15 @@ export function createShareHost(
   };
 
   const applyGrants = (next: readonly LocalGrant[]): void => {
+    const at = now();
+    // A grant that is still lent keeps its clock: re-announcing the list
+    // (another folder was added, a term changed) must not hand every loan a
+    // fresh half hour.
+    for (const grant of next) {
+      if (!lastUsed.has(grant.id)) lastUsed.set(grant.id, at);
+    }
+    const ids = new Set(next.map((grant) => grant.id));
+    for (const id of lastUsed.keys()) if (!ids.has(id)) lastUsed.delete(id);
     grants = [...next];
     // The mounts are rebuilt rather than kept: a grant can come back with
     // different terms (writing taken away, the shell closed), and serving the
@@ -265,6 +308,34 @@ export function createShareHost(
     mounts.clear();
     announce();
   };
+
+  /** Drop the loans nobody has touched for `idleMs` and say so. The server
+   * filters an expired grant out of the tools by itself, but the UI draws the
+   * list it was last told about — a folder that quietly stopped working would
+   * sit there looking available. */
+  const expireIdle = (): void => {
+    const at = now();
+    const kept = grants.filter(
+      (grant) => (lastUsed.get(grant.id) ?? at) + idleMs > at,
+    );
+    if (kept.length === grants.length) return;
+    for (const grant of grants) {
+      if (!kept.includes(grant)) lastUsed.delete(grant.id);
+    }
+    grants = kept;
+    mounts.clear();
+    announce();
+    log(`loan expired after ${Math.round(idleMs / 60_000)} min of no use`);
+  };
+  // A quarter of the deadline (at most every 30 s): the delivery of an
+  // expiry is allowed to be late, but never early.
+  idleTimer = setInterval(
+    expireIdle,
+    Math.max(10, Math.min(30_000, Math.floor(idleMs / 4))),
+  );
+  // The process lives as long as its stdin; the timer alone must not keep
+  // it (or a test) alive.
+  (idleTimer as { unref?: () => void }).unref?.();
 
   return {
     command(line: string): void {
@@ -284,6 +355,10 @@ export function createShareHost(
       if (retryTimer !== undefined) {
         clearTimeout(retryTimer);
         retryTimer = undefined;
+      }
+      if (idleTimer !== undefined) {
+        clearInterval(idleTimer);
+        idleTimer = undefined;
       }
       for (const controller of running.values()) controller.abort();
       running.clear();
@@ -432,6 +507,7 @@ export function describeHost(): ShareHostInfo {
 function describeGrant(
   grant: LocalGrant,
   host: ShareHostInfo,
+  expiresAt: number,
 ): Omit<FolderGrant, "name"> {
   return {
     id: grant.id,
@@ -440,7 +516,7 @@ function describeGrant(
     host,
     write: grant.write,
     exec: grant.exec,
-    expiresAt: grant.expiresAt,
+    expiresAt,
   };
 }
 
@@ -484,9 +560,7 @@ function parseLocalGrant(value: unknown): LocalGrant | undefined {
     typeof record.path !== "string" ||
     record.path === "" ||
     typeof record.write !== "boolean" ||
-    typeof record.exec !== "boolean" ||
-    typeof record.expiresAt !== "number" ||
-    !Number.isFinite(record.expiresAt)
+    typeof record.exec !== "boolean"
   ) {
     return undefined;
   }
@@ -496,7 +570,6 @@ function parseLocalGrant(value: unknown): LocalGrant | undefined {
     path: record.path,
     write: record.write,
     exec: record.exec,
-    expiresAt: record.expiresAt,
   };
 }
 
