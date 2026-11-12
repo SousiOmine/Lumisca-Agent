@@ -212,6 +212,7 @@ pub(crate) fn grant(
 
     let state = app.state::<AppState>();
     let mut lender = state.share.lock_recover();
+    let mut added = false;
     let view = if let Some(existing) = lender
         .grants
         .iter_mut()
@@ -232,9 +233,18 @@ pub(crate) fn grant(
             exec,
         };
         lender.grants.push(view.clone());
+        added = true;
         view
     };
-    lender.prepare(app, &url, &token)?;
+    if let Err(error) = lender.prepare(app, &url, &token) {
+        // Nothing reached the server, so the list must not keep promising a
+        // folder no process is serving. (An updated grant keeps its place:
+        // its folder was already lent and is still served.)
+        if added {
+            lender.grants.retain(|grant| grant.id != view.id);
+        }
+        return Err(error);
+    }
     server_log::note(
         app,
         format!(
