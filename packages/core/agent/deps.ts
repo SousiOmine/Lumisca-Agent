@@ -13,6 +13,7 @@ import type { SessionAttachmentStore } from "../session/attachments.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import type { RequestShapeRepo } from "../session/request-shapes.ts";
 import type { SessionVisualStore } from "../session/visuals.ts";
+import type { ShareHub } from "../share/hub.ts";
 import type { Locale, ThinkingLevel } from "../shared/mod.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import type { BackgroundProcessManager } from "../tools/background.ts";
@@ -142,6 +143,12 @@ export interface AgentRuntime {
    * open, so a machine attached after the pool was built still reaches new
    * agents. Omitted → no stella session can be built. */
   stellaRuntime?: (session: SessionInfo) => StellaRuntime | undefined;
+  /** The computers lending folders to conversations (see share/hub.ts), or
+   * undefined when this pool has no share channel (a pool built by hand).
+   * A getter because the hub is read on every open; the grants themselves are
+   * read on every call, so a loan made while a session runs is reachable
+   * without rebuilding its agent. */
+  shares?: () => ShareHub | undefined;
   /** The persona of a stella session: the role its agent works from, which
    * is what makes one conversation different from another (see
    * stella/agents.ts). The agent's NAME is not part of it: it is a label the

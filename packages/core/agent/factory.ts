@@ -23,6 +23,8 @@ import { McpManager } from "../mcp/manager.ts";
 import { createInstructionsProvider } from "../memory/instructions.ts";
 import { createPdfTools, PDF_TOOL_NAMES } from "../pdf/tools.ts";
 import { runtime } from "../runtime/runtime.ts";
+import { createShareProvider } from "../share/context.ts";
+import { mountedBackends } from "../share/mounted-backends.ts";
 import { canonicalJson } from "../shared/digest.ts";
 import {
   TOOL_AGENT_CREATE,
@@ -193,6 +195,7 @@ export class AgentFactory {
     const tools = this.buildToolSet(session, workspace, where, hubs);
     const systemPrompt = this.ensureSystemPrompt(session, workspace);
     const contextProviders = this.buildContextProviders(
+      session,
       workspace,
       where,
       registries,
@@ -360,10 +363,16 @@ export class AgentFactory {
         "unavailable",
       );
     }
-    const backends: ToolBackends =
+    // The session's own place, plus every folder lent to it from the user's
+    // computer: the tools do not know which machine a path is on, so the two
+    // are folded together here, once (see share/mounted-backends.ts).
+    const backends: ToolBackends = mountedBackends(
       stella !== undefined
         ? { files: stella.files, runner: stella.runner }
-        : hostBackends(workspace, { appSkillDirs: this.deps.appSkillDirs });
+        : hostBackends(workspace, { appSkillDirs: this.deps.appSkillDirs }),
+      this.deps.shares?.(),
+      session.id,
+    );
     // A stella conversation row lives in the folder-less chat workspace (it
     // has no folders of its own — its files are in the machine), but it is
     // NOT a chat session: it has a shell, background commands and
@@ -616,6 +625,7 @@ export class AgentFactory {
       // (the machine or this workspace) answers for.
       tasks.setMcp(mcp, resources.registries!.subagent);
       tasks.setWebSearch(where.webSearch);
+      tasks.setShares(this.deps.shares?.());
       tasks.setLanguage(this.deps.getLanguage());
     } else {
       tasks = undefined;
@@ -755,12 +765,13 @@ export class AgentFactory {
    * what the provider's prompt cache serves.
    */
   private buildContextProviders(
+    session: SessionInfo,
     workspace: Workspace,
     where: SessionWhere,
     registries: SessionToolRegistries,
     model: Model<Api>,
   ): ContextProvider[] {
-    const { stella, chat, browserAvailable } = where;
+    const { stella, chat, chatOnly, browserAvailable } = where;
     return [
       // What the catalog IS depends on where the session works: a workspace
       // session discovers `.agents/skills`, and a stella session discovers
@@ -797,6 +808,17 @@ export class AgentFactory {
       // The identity is a stella agent's own text about itself; a session
       // without one (every other session) has nothing to publish.
       ...(stella !== undefined ? [stella.identityProvider] : []),
+      // The folders lent from the user's own computer: a temporary addition to
+      // what this session can reach, so it is published rather than written
+      // into the prompt, and withdrawn the same way. A chat session has no
+      // file tools, so there is nothing it could reach.
+      ...(chatOnly
+        ? []
+        : [
+            createShareProvider({
+              grants: () => this.deps.shares?.()?.grantsFor(session.id) ?? [],
+            }),
+          ]),
       createDateProvider(),
       // The model the session runs on. Published rather than put in the
       // prompt for the same reason as the date: a session can be switched to

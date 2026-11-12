@@ -5,6 +5,7 @@ import {
   prependHistoricWindow as prependHistoric,
 } from "./events.ts";
 import type {
+  FolderShare,
   StellaConversationSnapshot,
   StellaEntry,
   StellaEnvRequest,
@@ -53,6 +54,10 @@ export interface StellaConversationState {
   /** The environment variable the run waits for the user to fill in, or
    * null. Carries the name only — a value never reaches the client. */
   envRequest: StellaEnvRequest | null;
+  /** The folders the user lent this conversation from their own computer.
+   * A security fact, not progress: the view shows it for as long as it
+   * lasts, and the whole list travels on every change. */
+  shares: FolderShare[];
   error?: string;
   /** The agent's name: the conversation's title. */
   agentName: string;
@@ -103,6 +108,7 @@ export function stellaStateOf(
     questions: snapshot.questions,
     handover: snapshot.handover,
     envRequest: snapshot.envRequest,
+    shares: snapshot.shares,
     ...(snapshot.error !== undefined ? { error: snapshot.error } : {}),
     agentName: snapshot.agentName,
     model: snapshot.model,
@@ -296,6 +302,10 @@ export function applyStellaEvent(
             ...state,
             envRequest: event.request,
           };
+    case "shares":
+      return sameShares(event.shares, state.shares)
+        ? null
+        : { ...state, shares: event.shares };
     case "error":
       return { ...state, error: event.message, liveCard: null };
   }
@@ -329,6 +339,30 @@ function sameEnvRequest(
   );
 }
 
+/** Whether two loan lists say the same thing. Every field is compared: a
+ * folder re-lent with narrower terms (writing taken away, the shell closed) is
+ * a different fact even though the folder is the same one. */
+function sameShares(
+  a: readonly FolderShare[],
+  b: readonly FolderShare[],
+): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  return a.every((share, index) => {
+    const other = b[index];
+    return (
+      other !== undefined &&
+      share.id === other.id &&
+      share.name === other.name &&
+      share.write === other.write &&
+      share.exec === other.exec &&
+      share.expiresAt === other.expiresAt &&
+      share.host.platform === other.host.platform &&
+      share.host.shell === other.host.shell
+    );
+  });
+}
+
 /** An empty conversation (the sidebar can be shown before one is open). The
  * model, and with it the thinking strength, is unknown until a snapshot
  * arrives; the picker stays hidden while it is `null`. */
@@ -341,6 +375,7 @@ export function emptyStellaState(agentName: string): StellaConversationState {
     questions: [],
     handover: null,
     envRequest: null,
+    shares: [],
     agentName,
     model: null,
     thinking: null,

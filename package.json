@@ -43,6 +43,7 @@
     "fmt": "biome check --write .",
     "fmt:check": "biome check .",
     "probe:computer": "bun run scripts/probe-computer.ts",
+    "probe:share": "bun run scripts/probe-share.ts",
     "probe:stella": "bun run scripts/probe-stella.ts",
     "probe:token": "bun run scripts/token-probe.ts",
     "seed:history": "bun run scripts/seed-test-history.ts",

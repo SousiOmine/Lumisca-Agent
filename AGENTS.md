@@ -201,6 +201,21 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 - **パスの境界**: 相対パスと `bash` の基点は `/home/agent/agents/<agent id>`、境界は `/home/agent` です（`packages/core/vm/fs.ts` の `resolveVmPath`）。変えるときは `packages/core/tools/system-prompt.ts` も合わせてください。
 - **ファイルの送受信**: ユーザーへは `send_chat` の `paths`（code mode は `chat_attach`）で送ります。上限は `attachFiles()` の 1 箇所で、1 件 4 MiB・1 回 10 件・合計 16 MiB、累計に上限はありません。ユーザーからの添付はマシンの中に書き（`packages/core/vm/uploads.ts`）、メッセージは参照と表示名・サイズだけを持ちます。表示はマシンから読み、消えていれば 404 です。
 
+### ローカルフォルダの貸出（lend）
+
+デスクトップアプリを開いている PC のフォルダを、サーバーの会話へ期限つきで貸せます。実装は `packages/core/share/`（名前空間の合成・ハブ・context）と `packages/server/share-host.ts`（貸し手のプロセス）にあります。
+
+- **合成は `mountedBackends` の 1 か所**: `AgentFactory.resolveWhere` がここを通します。ツール側に「貸出フォルダか」を書かないでください（`read` から `send_chat` まで同じ backend を通ります）。
+- **`roots[0]` は必ずセッション自身の根**（`MountedFiles`）。切り詰め出力の退避先（`OutputSpiller`）がそこを見ており、貸出フォルダへ書くと、貸し手が消えたあとに読めなくなります。
+- **`/lend` そのものへの読み書きは拒否**。素の backend に流すと、サーバー側に `/lend` というファイルを作ります。
+- **システムプロンプトには書かない**: 貸出の存在も中身も context メッセージ（`createShareProvider`）だけが告知します。プロンプトを変えると全会話のキャッシュ先頭が 1 回失われます。
+- **サブエージェントには spawn 時に 1 回だけ**: `TaskHub.setShares` が保持し、`shareSeedMessages` でスキル一覧と並べて seed します。あちらは context を出し直さないので、走っているサブエージェントに後から貸しても届きません。
+- **ワイヤは相対セグメントのみ**: 絶対パスを送ると、受け取る側の `join` が別の場所を作ります。境界は両端が持ちます（サーバーの `relativeSegments`、貸し手の `Mount.absolute` と `Sandbox`）。
+- **読み取り専用は backend で拒否**: ツールごとに確かめません（`write` / `edit` / 添付のどれかが漏れます）。貸し手も自分の記録で拒否します。
+- **貸し手は stdin が閉じたら終わる**: 貸出はアプリが開いている間だけです。`share` はランチャーのサブコマンドで、環境を読む前に分岐してください（DB もポートも要りません）。接続先とトークンは argv に載せず、stdin の hello 行で渡します。
+- **名前の重複はサーバーが解消**: 2 台が同じ `proj` を貸したら 2 台目が `proj-2` になります。再アナウンスで名前を変えないこと（会話が既に知っている住所が動きます）。
+- **確認**: `bun test packages/core/share packages/server/app_share_test.ts packages/server/share-host_test.ts`。手元では `bun run probe:share --url <url> --session <id> --folder <path>` で UI 抜きに一巡できます。
+
 ### 記憶（MEMORY.md）
 
 エージェントは自分の作業フォルダに `MEMORY.md` を持ち、`read` / `write` / `edit` で読み書きします。専用のツールはありません（`identity` とは別物です。あちらは DB の行で、毎ターン context メッセージとして届きます）。
@@ -280,6 +295,7 @@ API キーやトークンは、ツールの引数にも戻り値にも会話に�
 - `bun run probe:token`: 認証トークンのガードを確認
 - `bun run probe:computer`: computer use が使えるかを確認（`--click x,y` で操作も）
 - `bun run probe:stella`: stella mode が使えるかを確認（`--start` でビルドから停止まで）
+- `bun run probe:share --url <url> --session <id> --folder <path>`: その PC のフォルダを会話へ貸す（`--write` / `--exec` / `--minutes`）
 
 引数の詳細は各スクリプトの先頭コメントにあります。
 

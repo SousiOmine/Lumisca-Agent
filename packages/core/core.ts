@@ -22,6 +22,7 @@ import { MIN_VACUUM_BYTES, vacuumMarkerPath } from "./db/vacuum.ts";
 import type { ClientEvent } from "./domain/event.ts";
 import type { ModePrompt } from "./domain/mode-message.ts";
 import type { SessionInfo } from "./domain/session.ts";
+import type { FolderShare } from "./domain/share.ts";
 import type { StellaEntry } from "./domain/stella-conversation.ts";
 import type { Workspace } from "./domain/workspace.ts";
 import { CoreError, errorMessage } from "./errors.ts";
@@ -88,6 +89,7 @@ import {
   createInMemorySettingsRepo,
   type SettingsRepo,
 } from "./settings/repo.ts";
+import { ShareHub } from "./share/hub.ts";
 import type { ContextUsageSummary } from "./shared/context-usage.ts";
 import type {
   AskAnswer,
@@ -265,6 +267,10 @@ export class LumiscaCore {
   private readonly envRequests = new EnvRequestRegistry((event) =>
     this.events.emit(event),
   );
+  /** The computers lending folders to conversations (see share/hub.ts), and
+   * the calls the tools make into them. In memory only: a loan belongs to the
+   * app that lent it, so a restart lends nothing until that app reconnects. */
+  private readonly shareHub = new ShareHub();
 
   private constructor(
     db: LumiscaDb,
@@ -460,6 +466,7 @@ export class LumiscaCore {
         computer: () => this.computerHostForSession(),
         webSearch: () => this.webSearch.provider() ?? undefined,
         stellaRuntime: (session) => this.stellaRuntimeFor(session),
+        shares: () => this.shareHub,
         stellaAgentPersona: (session) => {
           const agentId = session.agentId;
           if (agentId === undefined) return undefined;
@@ -538,6 +545,19 @@ export class LumiscaCore {
     this.events.subscribe((event) => {
       if (event.type === "agent_end") {
         this.services.sessions.releasePendingRebuild(event.sessionId);
+      }
+    });
+    // A loan change reaches the client as the whole list for the session it
+    // belongs to: a lent folder is a security fact the user must always be
+    // able to see, and a delta would leave a client that missed one frame
+    // showing a folder nobody is serving.
+    this.shareHub.onSharesChange((sessions) => {
+      for (const sessionId of sessions) {
+        this.emit({
+          type: "shares",
+          sessionId,
+          shares: this.shareHub.sharesFor(sessionId),
+        });
       }
     });
   }
@@ -632,6 +652,10 @@ export class LumiscaCore {
     // The checks' own MCP connections are not any session's (see
     // McpService.checkManager), so nothing else closes them.
     this.mcp.close();
+    // Calls into the lending apps still in flight fail now, before the
+    // sessions waiting on them are torn down: a client that is shutting down
+    // either side must not leave a tool awaiting a socket.
+    this.shareHub.close();
     await this.pool.closeAll();
     // Every session is gone now, so the per-session structures are too. A
     // core is not reopened after close, but releasing them here is what
@@ -1402,6 +1426,21 @@ export class LumiscaCore {
    * can still answer the dialog). */
   getPendingEnvRequest(sessionId: string): PendingEnvRequest | null {
     return this.pool.get(sessionId)?.getPendingEnvRequest() ?? null;
+  }
+
+  // --- folders lent from the user's own computer (see share/hub.ts) ---------
+
+  /** The computers lending folders, and the calls the tools make into them.
+   * The server's share endpoint registers a lending app here; nothing is
+   * persisted, because a loan is the lending app's to give and to withdraw. */
+  get shares(): ShareHub {
+    return this.shareHub;
+  }
+
+  /** The folders lent to one session. The conversation snapshot and the
+   * per-session `shares` event both carry this list. */
+  getShares(sessionId: string): FolderShare[] {
+    return this.shareHub.sharesFor(sessionId);
   }
 
   /** The user entered a value for the environment variable the run is

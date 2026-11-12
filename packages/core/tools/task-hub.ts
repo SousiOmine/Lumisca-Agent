@@ -30,6 +30,8 @@ import type { McpAttachment } from "../mcp/attachment.ts";
 import { withOnDemandToolsNote } from "../mcp/context.ts";
 import { addToolsToAgent, registryToolPair } from "../mcp/tools.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
+import { createShareProvider, shareSeedMessages } from "../share/context.ts";
+import type { ShareHub } from "../share/hub.ts";
 import type {
   SubagentStatus,
   SubagentType,
@@ -232,6 +234,10 @@ export class TaskHub {
    * `general` sub-agent searches the web exactly like the main agent does;
    * omitted → no web tools in its set. */
   private webSearch: SearchProvider | undefined;
+  /** The computers lending folders to this session (set by the pool on every
+   * open). A sub-agent reaches those folders through the session's backends,
+   * so it is told about them at spawn (see shareSeedMessages). */
+  private sharesHub: ShareHub | undefined;
   /** The session's tool registry (set by the pool on every open): holds
    * every discoverable tool (MCP tools, browser-lab tools, future
    * extensions) whose definitions stay out of the LLM context. General
@@ -275,6 +281,14 @@ export class TaskHub {
    * sub-agents spawned after it). */
   setWebSearch(provider: SearchProvider | undefined): void {
     this.webSearch = provider;
+  }
+
+  /** Set the computers lending folders to this session (called on every
+   * session open/rebuild, like the web provider). Read at spawn: a loan made
+   * after a sub-agent started does not reach it, exactly like the skill
+   * catalog it was seeded with. */
+  setShares(hub: ShareHub | undefined): void {
+    this.sharesHub = hub;
   }
 
   /** Attach the session's shared MCP attachment and tool registry: general
@@ -425,6 +439,13 @@ export class TaskHub {
     const messages = catalog
       .next()
       .map((update) => contextMessage(catalog.name, update, Date.now()));
+    // The folders lent to this session, in the same one-shot form: the
+    // sub-agent's backends hold them, and nothing else would ever name them
+    // (see shareSeedMessages).
+    const shares = createShareProvider({
+      grants: () => this.sharesHub?.grantsFor(this.sessionId) ?? [],
+    });
+    messages.push(...shareSeedMessages(shares, Date.now()));
     // The agent is built by the agent layer (agent/subagent-runner.ts): this
     // hub owns the delegation protocol, not how an agent is assembled.
     const { agent, compactor } = createSubagentAgent(

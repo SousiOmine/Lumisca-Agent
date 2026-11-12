@@ -61,6 +61,7 @@ function fakeCore(calls: string[], started: boolean): StellaApi {
     getPendingQuestions: () => [],
     getPendingHandover: () => null,
     getPendingEnvRequest: () => null,
+    getShares: () => [],
     getSessionLastError: () => undefined,
     getStellaAgent: () => agent(),
     getThinkingState: () => ({ thinkingLevel: "off", thinkingLevels: [] }),

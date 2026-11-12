@@ -237,14 +237,21 @@ export function installSecurityMiddleware(
   // they are already gated by the loopback-only Host check above. What the
   // origin has to match is the host (see isAllowedOrigin): a page behind a
   // TLS front end is same-host over https, not a foreign origin.
-  app.use("/ws", async (c, next) => {
-    const origin = c.req.header("origin");
-    if (
-      origin !== undefined &&
-      !isAllowedOrigin(origin, c.req.header("host"))
-    ) {
-      return c.text("Forbidden: cross-origin WebSocket", 403);
-    }
-    await next();
-  });
+  //
+  // `/api/share/host` is the same kind of socket (a desktop app lending
+  // folders, see server/routes/share.ts). Its clients are not browsers and
+  // send no Origin either; the rule is stated once for both so neither can
+  // be left as the one socket a foreign page may open.
+  for (const path of ["/ws", "/api/share/host"]) {
+    app.use(path, async (c, next) => {
+      const origin = c.req.header("origin");
+      if (
+        origin !== undefined &&
+        !isAllowedOrigin(origin, c.req.header("host"))
+      ) {
+        return c.text("Forbidden: cross-origin WebSocket", 403);
+      }
+      await next();
+    });
+  }
 }

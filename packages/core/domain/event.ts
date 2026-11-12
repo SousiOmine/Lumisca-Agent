@@ -6,6 +6,7 @@ import type {
   TodoPhase,
 } from "../shared/mod.ts";
 import type { SessionInfo } from "./session.ts";
+import type { FolderShare } from "./share.ts";
 
 /**
  * How a client tells two messages of one transcript apart: the role and the
@@ -124,6 +125,11 @@ export type ClientEvent =
    * carried so clients can replace their view idempotently (resync-safe).
    * Emitted on every mutation (plan / update / clear). */
   | { type: "todo"; sessionId: string; todos: TodoPhase[] }
+  /** The folders lent to this session from the user's own computer changed
+   * (lent, withdrawn or expired — see share/hub.ts). The whole list travels,
+   * the same contract as `todo`: a client replaces what it shows, so a frame
+   * that arrives after a reconnect cannot leave half a list behind. */
+  | { type: "shares"; sessionId: string; shares: FolderShare[] }
   /** The agent handed the machine's screen to the user (`vm_ask_user`) and
    * the run is blocked until they finish. Clients make the screen pane
    * interactive while it lasts; the resync snapshot carries the same

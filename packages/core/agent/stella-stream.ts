@@ -327,6 +327,8 @@ export function stellaEventsOf(event: ClientEvent): StellaEvent[] {
       ];
     case "env_request_end":
       return [{ type: "env_request", request: null }];
+    case "shares":
+      return [{ type: "shares", shares: event.shares }];
     case "card_delta":
       // A card being written into the reply. The conversation has no streaming
       // TEXT (a reply arrives whole), but a card is drawn while the model

@@ -20,6 +20,7 @@ export type {
   CheckpointMessage,
   ClientEvent,
   ConnectionEntry,
+  FolderShare,
   Locale,
   McpAuthSnapshot,
   McpAuthStatus,

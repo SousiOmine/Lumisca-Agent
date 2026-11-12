@@ -46,7 +46,7 @@ export type {
   TextContent,
   ToolCall,
 } from "./ai/types.ts";
-export { base64ToBytes } from "./base64.ts";
+export { base64ToBytes, bytesToBase64 } from "./base64.ts";
 export { HttpBrowserBackend } from "./browser/client.ts";
 export type { BrowserBackend } from "./browser/types.ts";
 export { createComputerHost } from "./computer/host.ts";
@@ -64,6 +64,7 @@ export { vacuumOnStartup } from "./db/vacuum.ts";
 export type { ClientEvent } from "./domain/event.ts";
 export type { ModePrompt } from "./domain/mode-message.ts";
 export type { SessionInfo } from "./domain/session.ts";
+export type { FolderShare, ShareHostInfo } from "./domain/share.ts";
 export type {
   StellaConversationSnapshot,
   StellaEntry,
@@ -93,6 +94,12 @@ export { VISUALS_DIR_NAME } from "./session/visuals.ts";
 export type { ConnectionEntry } from "./settings/connections.ts";
 export { resolveSettingsPath, SETTINGS_DIR_NAME } from "./settings/path.ts";
 export { THEME_KEY } from "./settings/repo.ts";
+export type { FolderGrant } from "./share/grant.ts";
+export { parseGrant, shareNameFrom } from "./share/grant.ts";
+export type { ShareSink } from "./share/hub.ts";
+export { ShareHub } from "./share/hub.ts";
+export type { ShareCall, ShareServerFrame } from "./share/ops.ts";
+export { parseHostFrame, parseServerFrame } from "./share/ops.ts";
 export type {
   PushSubscriptionKeys,
   PushSubscriptionRecord,
@@ -101,6 +108,9 @@ export type { SkillInfo } from "./skills/discover.ts";
 export type { StellaAgent } from "./stella/agents.ts";
 export type { PendingQuestion } from "./tools/ask.ts";
 export type { BackgroundCommandInfo } from "./tools/background.ts";
+export { HostCommandRunner } from "./tools/host/command-runner.ts";
+export { HostFileBackend } from "./tools/host/files.ts";
+export { getShell } from "./tools/host/shell.ts";
 export type { StellaAvailability } from "./vm/availability.ts";
 export { createVmManager } from "./vm/container.ts";
 export { VM_CONTAINER_DIR_NAME } from "./vm/contract.ts";

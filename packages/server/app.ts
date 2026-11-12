@@ -23,6 +23,7 @@ import { providerRoutes } from "./routes/providers.ts";
 import { routineRoutes } from "./routes/routines.ts";
 import { sessionRoutes } from "./routes/sessions.ts";
 import { settingRoutes } from "./routes/settings.ts";
+import { shareHostRoutes } from "./routes/share.ts";
 import { skillRoutes } from "./routes/skills.ts";
 import { stellaRoutes } from "./routes/stella.ts";
 import { stellaAssetRoutes } from "./routes/stella-assets.ts";
@@ -331,6 +332,11 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
     }),
   );
   app.get("/ws", ws);
+  // The lending apps' socket (desktop computers that lend folders to a
+  // conversation, see core/share). Under /api so the Host guard, the token
+  // and the middleware above apply unchanged; the app sends no Origin, which
+  // the Origin rule allows.
+  app.get("/api/share/host", shareHostRoutes(core.shares));
   // The stella machine's screen relay. Mounted under /api so the Host guard,
   // the token and the CORS/Origin middleware above all apply — the container's
   // VNC port stays unreachable from the page.

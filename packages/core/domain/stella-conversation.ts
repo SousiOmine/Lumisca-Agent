@@ -21,6 +21,7 @@ import type { AttachmentRef, PromptFileRef } from "../shared/attachments.ts";
 import type { AskTurn } from "../shared/interaction.ts";
 import type { ThinkingLevel } from "../shared/providers.ts";
 import type { UiSegment } from "../shared/ui-markup/types.ts";
+import type { FolderShare } from "./share.ts";
 
 /** One thing the user or the agent said, as the conversation shows it.
  *
@@ -119,6 +120,9 @@ export interface StellaConversationSnapshot {
    * (`vm_env`), or null. Carries the name and whether it already has a
    * value — never a value. */
   envRequest: StellaEnvRequest | null;
+  /** The folders the user lent this conversation from their own computer
+   * (see core/share). Empty when none — the usual case. */
+  shares: FolderShare[];
   /** The last run's failure, cleared when a new run starts. */
   error?: string;
   /** The agent's name: the conversation's title. */
@@ -185,4 +189,7 @@ export type StellaEvent =
   | { type: "handover"; handover: StellaHandover | null }
   /** The environment-variable request began or ended (`null`). */
   | { type: "env_request"; request: StellaEnvRequest | null }
+  /** The folders lent to this conversation from the user's own computer
+   * changed. The whole list travels, so the client replaces it. */
+  | { type: "shares"; shares: FolderShare[] }
   | { type: "error"; message: string };

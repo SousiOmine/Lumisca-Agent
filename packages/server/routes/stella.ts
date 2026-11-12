@@ -1,6 +1,7 @@
 import type {
   AskAnswer,
   ClientEvent,
+  FolderShare,
   PromptFileRef,
   SessionInfo,
   StellaAgent,
@@ -114,6 +115,9 @@ export interface StellaApi {
   /** The environment variable the run is waiting for the user to fill in,
    * or null (`vm_env`). */
   getPendingEnvRequest(sessionId: string): StellaEnvRequest | null;
+  /** The folders lent to this conversation from the user's own computer
+   * (see core/share). Empty when none — the usual case. */
+  getShares(sessionId: string): FolderShare[];
   getSessionLastError(sessionId: string): string | undefined;
   getSession(sessionId: string): SessionInfo | undefined;
   /** The thinking level the conversation's model runs at, and the levels it
@@ -767,6 +771,7 @@ export function stellaRoutes(core: StellaApi): Hono {
       questions: core.getPendingQuestions(session.id),
       handover: core.getPendingHandover(session.id),
       envRequest: core.getPendingEnvRequest(session.id),
+      shares: core.getShares(session.id),
       ...(lastErrorOf(session.id) !== undefined
         ? { error: lastErrorOf(session.id) }
         : {}),

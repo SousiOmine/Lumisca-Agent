@@ -85,6 +85,7 @@ const LAUNCHER_USAGE = [
   "使い方:",
   "  lumisca-server                      サーバーを起動します",
   "  lumisca-server service <サブコマンド>  systemd ユーザーユニットを管理します",
+  "  lumisca-server share                この PC のフォルダをサーバーへ貸します（デスクトップアプリが起動します）",
   "",
   "詳細: lumisca-server service --help",
 ].join("\n");
@@ -100,10 +101,28 @@ if (launcherCommand === "--help" || launcherCommand === "-h") {
   console.log(LAUNCHER_USAGE);
   exit(0);
 }
-if (launcherCommand !== undefined && launcherCommand !== "service") {
+if (
+  launcherCommand !== undefined &&
+  launcherCommand !== "service" &&
+  launcherCommand !== "share"
+) {
   console.error(`lumisca-server: 不明な引数です: ${runtime.args.join(" ")}\n`);
   console.error(LAUNCHER_USAGE);
   exit(2);
+}
+
+if (launcherCommand === "share") {
+  // The lending side of the desktop app (see share-host.ts): a headless
+  // process that serves the folders the shell lends over one WebSocket. It
+  // reads no startup environment and opens no database — it is not this
+  // installation's server, it is the agent's hands on this computer.
+  try {
+    const { runShareHost } = await import("./share-host.ts");
+    exit(await runShareHost());
+  } catch (error) {
+    console.error(`lumisca-server share: ${errorMessage(error)}`);
+    exit(1);
+  }
 }
 
 if (launcherCommand === "service") {
