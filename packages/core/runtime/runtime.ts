@@ -139,8 +139,14 @@ async function* readDir(pathname: string) {
 class ShimFsFile {
   #fd: number;
   #pos = 0;
-  constructor(fd: number) {
+  /** Opened for appending: every write goes to the end whatever `#pos`
+   * says. Kept so `write` can pass a null position — a pwrite at an explicit
+   * offset does NOT append on macOS even with O_APPEND, which put the second
+   * chunk of a file at the front of it. */
+  #append = false;
+  constructor(fd: number, append = false) {
     this.#fd = fd;
+    this.#append = append;
   }
   read(p: Uint8Array): Promise<number | null> {
     const n = fs.readSync(this.#fd, p, 0, p.length, this.#pos);
@@ -149,7 +155,13 @@ class ShimFsFile {
     return Promise.resolve(n);
   }
   write(p: Uint8Array): Promise<number> {
-    const n = fs.writeSync(this.#fd, p, 0, p.length, this.#pos);
+    const n = fs.writeSync(
+      this.#fd,
+      p,
+      0,
+      p.length,
+      this.#append ? null : this.#pos,
+    );
     this.#pos += n;
     return Promise.resolve(n);
   }
@@ -200,7 +212,10 @@ function openFile(
   if (options?.create) flags |= fs.constants.O_CREAT;
   if (options?.truncate) flags |= fs.constants.O_TRUNC;
   if (options?.append) flags |= fs.constants.O_APPEND;
-  return new ShimFsFile(fs.openSync(pathname, flags, options?.mode));
+  return new ShimFsFile(
+    fs.openSync(pathname, flags, options?.mode),
+    options?.append === true,
+  );
 }
 
 type CommandOptions = {
