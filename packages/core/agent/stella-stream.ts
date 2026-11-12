@@ -271,7 +271,12 @@ export function stellaEventsOf(event: ClientEvent): StellaEvent[] {
     case "agent_start":
       return [{ type: "agent_start" }];
     case "agent_end":
-      return [{ type: "agent_end" }];
+      return [
+        {
+          type: "agent_end",
+          ...(event.silent === true ? { silent: true } : {}),
+        },
+      ];
     case "message_start":
     case "message_end": {
       const entry = stellaEntryOf(event.message);

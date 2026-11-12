@@ -166,7 +166,10 @@ export interface StellaConversationSnapshot {
  * its segments and replaces what was drawn from the fragments. */
 export type StellaEvent =
   | { type: "agent_start" }
-  | { type: "agent_end" }
+  /** The run ended. `silent` marks a routine's run that said nothing and was
+   * removed from the conversation: the run is over, but there is nothing to
+   * notify (see ClientEvent's `agent_end`). */
+  | { type: "agent_end"; silent?: boolean }
   /** One finished message (a prompt, or what the agent sent). */
   | { type: "entry"; entry: StellaEntry }
   /** A fragment of a card being written into a `send_chat` call: the markup

@@ -62,8 +62,13 @@ export type NotifiableEvent = Extract<
 /** Whether the event is one the installed app is notified about. A
  * hand-over is included: the run is blocked at the screen, and the user is
  * the only one who can release it — a message nobody sees is a run that
- * waits until the deadline. */
+ * waits until the deadline.
+ *
+ * A silent routine's end is excluded: the run left nothing in the
+ * conversation, so "finished" would be the only trace of it — a notification
+ * that asks the user to open an app that shows no change. */
 export function isNotifiable(event: ClientEvent): event is NotifiableEvent {
+  if (event.type === "agent_end" && event.silent === true) return false;
   return (
     event.type === "agent_end" ||
     event.type === "question" ||

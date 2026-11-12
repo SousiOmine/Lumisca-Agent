@@ -69,8 +69,18 @@ export type ClientEvent =
    * shows in place of "finished", capped by the core (see
    * agent/run-reply.ts). Absent for a run that said nothing: a silent turn
    * (`NO_RESPONSE`), a run that ended before replying, or a message that
-   * carried only a card or files. */
-  | { type: "agent_end"; sessionId: string; reply?: string }
+   * carried only a card or files.
+   *
+   * `silent` marks the end of a routine that said nothing and was removed
+   * from the conversation (see agent/routine-run.ts). There is nothing to
+   * open the app for, so clients do not notify it; the event still ends the
+   * run they are drawing. */
+  | {
+      type: "agent_end";
+      sessionId: string;
+      reply?: string;
+      silent?: boolean;
+    }
   | { type: "session_error"; sessionId: string; message: string }
   /** The transcript was rewound from a user message onward. `removed` is
    * the exact list of messages deleted (memory + database); clients drop

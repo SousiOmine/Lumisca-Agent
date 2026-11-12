@@ -1922,6 +1922,99 @@ Deno.test("a silent run's agent_end carries no reply", async () => {
   assertEquals(end.type === "agent_end" ? end.reply : "missing", undefined);
 });
 
+Deno.test("runRoutine: a silent run's end is marked so it does not notify", async () => {
+  // The run leaves no row, so a "finished" toast would be its only trace:
+  // the end is still sent (the client stops drawing the run), marked quiet.
+  const events: ClientEvent[] = [];
+  const agent = makeAgent(
+    streamSequence([fauxAssistantMessage(NO_RESPONSE)]),
+    [],
+    (event) => events.push(event),
+  );
+
+  await agent.runRoutine("check the deploy", { id: "r1", name: "check" });
+
+  const end = events.find((e) => e.type === "agent_end");
+  assert(end !== undefined);
+  assertEquals(end.type === "agent_end" ? end.silent : undefined, true);
+});
+
+Deno.test("runRoutine: a reporting run's end is not marked silent", async () => {
+  const events: ClientEvent[] = [];
+  const agent = makeAgent(
+    streamSequence([fauxAssistantMessage("The deploy failed")]),
+    [],
+    (event) => events.push(event),
+  );
+
+  await agent.runRoutine("check the deploy", { id: "r1", name: "check" });
+
+  const end = events.find((e) => e.type === "agent_end");
+  assert(end !== undefined);
+  assertEquals(end.type === "agent_end" ? end.silent : "missing", undefined);
+});
+
+Deno.test("a typed silent run is not marked silent", async () => {
+  // Only a routine's silence is removed from the conversation; a typed
+  // prompt keeps its row, so its end still says the run finished.
+  const events: ClientEvent[] = [];
+  const agent = makeAgent(
+    streamSequence([fauxAssistantMessage(NO_RESPONSE)]),
+    [],
+    (event) => events.push(event),
+  );
+
+  await agent.prompt("check the deploy");
+
+  const end = events.find((e) => e.type === "agent_end");
+  assert(end !== undefined);
+  assertEquals(end.type === "agent_end" ? end.silent : "missing", undefined);
+});
+
+Deno.test("runRoutine: a run that dies empty is retried before it counts as silent", async () => {
+  // The dead turn's end says nothing, but the run is not over: the restart
+  // is what decides whether there is anything to report.
+  const events: ClientEvent[] = [];
+  const agent = makeAgent(
+    streamSequence([
+      fauxSilentError(),
+      fauxAssistantMessage("The deploy failed"),
+    ]),
+    [],
+    (event) => events.push(event),
+  );
+
+  await agent.runRoutine("check the deploy", { id: "r1", name: "check" });
+
+  const ends = events.filter((e) => e.type === "agent_end");
+  assertEquals(ends.length, 2);
+  assertEquals(ends[0]?.type === "agent_end" ? ends[0].silent : false, true);
+  assertEquals(
+    ends[1]?.type === "agent_end" ? ends[1].silent : "missing",
+    undefined,
+  );
+  // user, failed turn, retry notification, recovered turn: the report stays.
+  assertEquals(agent.messages.length, 4);
+});
+
+Deno.test("runRoutine: a run retried into silence leaves no row and no notice", async () => {
+  const events: ClientEvent[] = [];
+  const agent = makeAgent(
+    streamSequence([fauxSilentError(), fauxAssistantMessage(NO_RESPONSE)]),
+    [],
+    (event) => events.push(event),
+  );
+
+  await agent.runRoutine("check the deploy", { id: "r1", name: "check" });
+
+  assertEquals(agent.messages.length, 0);
+  const ends = events.filter((e) => e.type === "agent_end");
+  assertEquals(ends.length, 2);
+  for (const end of ends) {
+    assertEquals(end.type === "agent_end" ? end.silent : false, true);
+  }
+});
+
 Deno.test("the reply belongs to the run that said it", async () => {
   // A second run that says nothing must not repeat the first one's answer:
   // that is the notification a user reads as "it said the same thing again".

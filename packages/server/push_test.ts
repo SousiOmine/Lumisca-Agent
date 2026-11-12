@@ -104,6 +104,36 @@ Deno.test("a finished run notifies every subscription", async () => {
   }
 });
 
+Deno.test("a silent routine's end is not notified", async () => {
+  // The run left nothing in the conversation, so the notification would ask
+  // the user to open an app that shows no change.
+  const { core, store, emit } = harness();
+  await store.add(await subscriber());
+  const sent: string[] = [];
+  const notifier = createPushNotifier({
+    core,
+    fetch: () => {
+      sent.push("sent");
+      return Promise.resolve(new Response(null, { status: 201 }));
+    },
+  });
+  try {
+    assertEquals(
+      isNotifiable({ type: "agent_end", sessionId: "s1", silent: true }),
+      false,
+    );
+    emit({ type: "agent_end", sessionId: "s1", silent: true });
+    // A quiet end that did deliver would have encrypted and fetched by now;
+    // a reporting one below proves the same harness does send.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assertEquals(sent, []);
+    emit({ type: "agent_end", sessionId: "s1" });
+    await waitUntil(() => sent.length === 1);
+  } finally {
+    notifier.dispose();
+  }
+});
+
 Deno.test("a question is urgent and replaces the completion toast", () => {
   // The same `tag` is what makes the OS replace rather than stack: an answer
   // prompt arriving after "finished" is the newer, more useful message.

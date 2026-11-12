@@ -116,6 +116,10 @@ export function translateRunEvent(
   /** What the run has said so far (see RunReply): carried by `agent_end` so
    * a notification can show an answer instead of just "finished". */
   reply?: string,
+  /** Whether this end belongs to a routine run that said nothing and is
+   * removed from the conversation (see RoutineRun): nothing to open the app
+   * for, so the end is not notified. */
+  silent?: boolean,
 ): TranslatedRunEvent {
   switch (event.type) {
     case "agent_start":
@@ -193,6 +197,7 @@ export function translateRunEvent(
             type: "agent_end",
             sessionId,
             ...(reply === undefined || reply.length === 0 ? {} : { reply }),
+            ...(silent === true ? { silent: true } : {}),
           },
         ],
       };

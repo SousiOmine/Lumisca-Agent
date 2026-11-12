@@ -461,8 +461,10 @@ export function useSessionEvents(
         if (event.type === "agent_end") {
           // A duplicate delivery (same run's end seen twice) must not
           // notify twice: the first end stamps agentEndedAt, and only a
-          // new agent_start clears it for the next run.
-          if (view?.agentEndedAt === undefined) {
+          // new agent_start clears it for the next run. A silent routine
+          // left nothing in the conversation, so its end is not announced
+          // either (see ClientEvent's `agent_end`).
+          if (view?.agentEndedAt === undefined && event.silent !== true) {
             // The run carries what it said, so the toast says it too (the
             // same body the installed app's notification has).
             void maybeNotifyAgentEnd(name, event.reply);

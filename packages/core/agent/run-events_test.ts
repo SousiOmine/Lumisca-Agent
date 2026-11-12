@@ -137,3 +137,29 @@ Deno.test("translateRunEvent: code mode's client cuts the card from the text", (
     ["message_delta"],
   );
 });
+
+Deno.test("translateRunEvent: a silent routine's end says so", () => {
+  // The end still ends the run a client is drawing, but it carries nothing
+  // to notify: the whole run was removed from the conversation.
+  const silent = translateRunEvent(
+    { type: "agent_end", message: fauxAssistantMessage("NO_RESPONSE") },
+    "s1",
+    undefined,
+    undefined,
+    true,
+  );
+  assertEquals(silent.events, [
+    { type: "agent_end", sessionId: "s1", silent: true },
+  ]);
+  // A run that said something is a normal end.
+  const spoken = translateRunEvent(
+    { type: "agent_end", message: fauxAssistantMessage("直しました") },
+    "s1",
+    undefined,
+    "直しました",
+    false,
+  );
+  assertEquals(spoken.events, [
+    { type: "agent_end", sessionId: "s1", reply: "直しました" },
+  ]);
+});

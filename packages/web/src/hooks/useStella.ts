@@ -361,10 +361,14 @@ export function useStella(
         if (event.type === "agent_end") {
           if (wasRunning) {
             wasRunning = false;
-            void maybeNotifyAgentEnd(
-              conversationRef.current?.agentName ?? "",
-              lastReply,
-            );
+            // A silent routine's run is removed from the conversation, so
+            // there is nothing to open the app for.
+            if (event.silent !== true) {
+              void maybeNotifyAgentEnd(
+                conversationRef.current?.agentName ?? "",
+                lastReply,
+              );
+            }
           }
           lastReply = "";
         }

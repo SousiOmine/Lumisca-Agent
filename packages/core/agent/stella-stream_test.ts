@@ -330,6 +330,11 @@ Deno.test("stellaEventsOf: the run's own events pass through", () => {
   assertEquals(stellaEventsOf({ type: "agent_end", sessionId: "s" }), [
     { type: "agent_end" },
   ]);
+  // A silent routine's end keeps its "nothing to notify" mark.
+  assertEquals(
+    stellaEventsOf({ type: "agent_end", sessionId: "s", silent: true }),
+    [{ type: "agent_end", silent: true }],
+  );
   // The agent's text is not the conversation's, so a delta has nothing to
   // add to it (see the projection's comment).
   assertEquals(

@@ -622,26 +622,33 @@ export class SessionAgent {
           ));
     if (options.announced === undefined) this.announceMessage(message);
     this.resetRetryState();
-    if (options.routine !== undefined) {
-      this.routineRuns.begin(options.routine.id);
-    }
-    let failure: string | null = null;
     // Where the routine's own prompt will sit: the view's length now, since
     // `prompt` appends it and everything the run produces follows it. A
-    // silent routine's run is removed from there (see below).
+    // silent routine's run is removed from there (see below), and its end
+    // is what that removal is decided from (see RoutineRun).
     const promptIndex =
       options.routine === undefined
         ? undefined
         : this.agent.state.messages.length;
+    if (options.routine !== undefined && promptIndex !== undefined) {
+      this.routineRuns.begin(options.routine.id, promptIndex);
+    }
+    let failure: string | null = null;
+    // The run stays "in flight" until its restart chain is done: a retried
+    // turn emits an `agent_end` of its own, and only a run still in flight
+    // can tell it to stay quiet (see RoutineRun).
     try {
-      await this.agent.prompt(message);
-    } catch (error) {
-      failure = errorMessage(error);
-      this.emit({
-        type: "session_error",
-        sessionId: this.sessionId,
-        message: failure,
-      });
+      try {
+        await this.agent.prompt(message);
+      } catch (error) {
+        failure = errorMessage(error);
+        this.emit({
+          type: "session_error",
+          sessionId: this.sessionId,
+          message: failure,
+        });
+      }
+      await this.resumeAfterErrorRun();
     } finally {
       this.routineRuns.end();
     }
@@ -652,7 +659,8 @@ export class SessionAgent {
     // the routine's prompt, and an assistant reply whose whole content is
     // "NO_RESPONSE". Silence is therefore spelled as an absence, not as a
     // hidden message. Nothing is removed when the run failed or wrote
-    // anything else.
+    // anything else. Read AFTER the restart chain: a run that died empty is
+    // retried before it can count as silent.
     if (
       options.routine !== undefined &&
       failure === null &&
@@ -661,7 +669,6 @@ export class SessionAgent {
     ) {
       this.routineRuns.drop(this.routineHost, promptIndex);
     }
-    await this.resumeAfterErrorRun();
     return { failure };
   }
 
@@ -1107,11 +1114,20 @@ export class SessionAgent {
     }
     if (event.type === "agent_end") this.interruptions.endRun();
     if (event.type === "message_end") this.reply.observe(event.message);
+    // A routine's silent end is read from the view BEFORE runPrompt removes
+    // the run (the removal happens after `prompt` resolves): the event says
+    // so, and the notifiers skip it. A silent routine is the one run that is
+    // entirely absent from the conversation, so a "finished" toast would be
+    // the only thing it ever told the user.
+    const quietRoutine =
+      event.type === "agent_end" &&
+      this.routineRuns.saidNothingSoFar(this.agent.state.messages);
     const translated = translateRunEvent(
       event,
       this.sessionId,
       this.cardsFromText ? this.textCards : undefined,
       event.type === "agent_end" ? this.reply.gist() : undefined,
+      quietRoutine,
     );
     for (const published of translated.events) this.emit(published);
     if (translated.modelError !== undefined) {

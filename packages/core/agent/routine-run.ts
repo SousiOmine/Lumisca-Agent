@@ -36,16 +36,31 @@ export interface RoutineDropHost {
  */
 export class RoutineRun {
   private activeId: string | null = null;
+  /** Where the run's own prompt sits in the view (see wasSilent). */
+  private promptIndex = -1;
 
   /** A run of this routine is starting (its stop button only interrupts its
-   * own run). */
-  begin(id: string): void {
+   * own run). `promptIndex` is the view's length before the prompt is
+   * appended, so the run's own rows can be recognised while it is still in
+   * flight. */
+  begin(id: string, promptIndex: number): void {
     this.activeId = id;
+    this.promptIndex = promptIndex;
   }
 
   /** The run finished, successfully or not. */
   end(): void {
     this.activeId = null;
+    this.promptIndex = -1;
+  }
+
+  /** Whether the run in flight has said nothing so far (see wasSilent). The
+   * run's end needs this BEFORE it is removed: a silent routine must not
+   * notify, and the notification is decided while the rows are still
+   * there. */
+  saidNothingSoFar(messages: readonly AgentMessage[]): boolean {
+    if (this.activeId === null || this.promptIndex < 0) return false;
+    return this.wasSilent(messages, this.promptIndex);
   }
 
   /** The routine whose run is in flight, or null. */
