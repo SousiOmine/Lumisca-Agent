@@ -67,10 +67,6 @@ pub(crate) struct ShareLender {
 }
 
 impl ShareLender {
-    fn view(&self) -> Vec<ShareGrantView> {
-        self.grants.clone()
-    }
-
     fn write_line(&mut self, value: serde_json::Value) -> Result<(), String> {
         let Some(stdin) = self.stdin.as_mut() else {
             return Err("フォルダ共有のプロセスに接続できていません".to_string());
@@ -271,12 +267,6 @@ pub(crate) fn revoke(app: &AppHandle, id: &str) -> Result<(), String> {
         lender.send_grants()?;
     }
     Ok(())
-}
-
-/// Every grant this shell holds, for the page to avoid re-lending a folder it
-/// already lent.
-pub(crate) fn list(app: &AppHandle) -> Vec<ShareGrantView> {
-    app.state::<AppState>().share.lock_recover().view()
 }
 
 /// Drop every grant: the window is about to show a different server. The

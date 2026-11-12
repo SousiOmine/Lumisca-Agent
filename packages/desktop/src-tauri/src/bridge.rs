@@ -302,10 +302,6 @@ pub(crate) fn handle_shell_action(
                 Err(e) => bridge_error(StatusCode::INTERNAL_SERVER_ERROR, &e),
             }
         }
-        "share/list" => bridge_json(
-            StatusCode::OK,
-            serde_json::json!({ "grants": share::list(app) }),
-        ),
         // --- local server diagnostics ------------------------------------
         //
         // The page cannot tell "server crashed" apart from "server hung"

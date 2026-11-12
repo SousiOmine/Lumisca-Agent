@@ -1,7 +1,6 @@
 import { assertEquals } from "@std/assert";
 import {
   folderName,
-  forgetFolder,
   loadRecentFolders,
   MAX_RECENT_FOLDERS,
   type RecentShareFolder,
@@ -65,21 +64,6 @@ Deno.test("share recents: bad storage data is an empty list, not a crash", () =>
 Deno.test("share recents: a missing name is derived from the path", () => {
   const storage = memoryStorage('[{"path":"/Users/me/proj"}]');
   assertEquals(loadRecentFolders(storage)[0]?.name, "proj");
-});
-
-Deno.test("share recents: forget drops one path and leaves the rest", () => {
-  const storage = memoryStorage();
-  rememberFolder(folder("/tmp/a"), storage);
-  rememberFolder(folder("/tmp/b"), storage);
-  const left = forgetFolder("/tmp/a", storage);
-  assertEquals(
-    left.map((entry) => entry.path),
-    ["/tmp/b"],
-  );
-  assertEquals(
-    loadRecentFolders(storage).map((entry) => entry.path),
-    ["/tmp/b"],
-  );
 });
 
 Deno.test("folderName keeps the last segment of either separator", () => {

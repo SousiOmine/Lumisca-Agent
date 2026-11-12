@@ -96,22 +96,3 @@ export function rememberFolder(
   }
   return next;
 }
-
-/** Drop one path from the list (the folder is gone, or was never wanted). */
-export function forgetFolder(
-  path: string,
-  storage:
-    | Pick<Storage, "getItem" | "setItem">
-    | undefined = globalThis.localStorage,
-): RecentShareFolder[] {
-  if (storage === undefined) return [];
-  const next = loadRecentFolders(storage).filter(
-    (entry) => entry.path !== path,
-  );
-  try {
-    storage.setItem(STORAGE_KEY, JSON.stringify(next));
-  } catch {
-    // Same as rememberFolder: the list is a convenience.
-  }
-  return next;
-}
