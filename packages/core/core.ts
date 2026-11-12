@@ -1297,6 +1297,11 @@ export class LumiscaCore {
     return this.services.stellaMachines.getStellaVm();
   }
 
+  /** The host port of one agent's screen, or null when it has none. */
+  stellaVncPort(agentId: string): Promise<number | null> {
+    return this.services.stellaMachines.stellaVncPort(agentId);
+  }
+
   /** Whether stella mode can run here, with the reason when it cannot. */
   getStellaAvailability(): Promise<StellaAvailability> {
     return this.services.stellaMachines.getStellaAvailability();

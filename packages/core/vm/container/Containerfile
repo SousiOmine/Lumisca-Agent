@@ -104,6 +104,12 @@ RUN printf 'agent ALL=(ALL) NOPASSWD: ALL\n' > /etc/sudoers.d/agent \
 COPY entry.sh /usr/local/bin/entry.sh
 RUN chmod 0755 /usr/local/bin/entry.sh
 
+# One desktop (X server, window manager, browser, VNC bridge) per agent, on
+# demand. Kept out of entry.sh because a slot starts and stops with the
+# conversation that uses it.
+COPY desktop.sh /usr/local/lib/lumisca/desktop.sh
+RUN chmod 0755 /usr/local/lib/lumisca/desktop.sh
+
 # The accessibility helper the semantic tools (`vm_find` / `vm_do` / `vm_wait`)
 # run inside the machine. Copied into the image rather than shipped as text on
 # every call: it is a program of a few hundred lines, and `podman exec` starts

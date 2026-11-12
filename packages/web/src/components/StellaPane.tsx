@@ -486,9 +486,15 @@ export function StellaPane({
         // it. The token rides as a query parameter because a browser cannot
         // set headers on a WebSocket handshake.
         const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-        const query =
-          token === undefined ? "" : `?token=${encodeURIComponent(token)}`;
-        const url = `${protocol}//${location.host}/api/stella/screen${query}`;
+        const query = new URLSearchParams();
+        if (token !== undefined) query.set("token", token);
+        // The pane is one conversation's desktop. Without the agent the
+        // relay has no desktop to show.
+        if (agentId !== null) query.set("agent", agentId);
+        const search = query.toString();
+        const url = `${protocol}//${location.host}/api/stella/screen${
+          search === "" ? "" : `?${search}`
+        }`;
         const rfb = new RFB(host, url);
         client = rfb;
         clientRef.current = rfb;
@@ -553,7 +559,7 @@ export function StellaPane({
         // Already gone (the machine stopped); nothing to do.
       }
     };
-  }, [running, vncPort, t]);
+  }, [running, vncPort, agentId, t]);
 
   // The view-only flag follows the hand-over: the agent owns the pointer
   // while it works, the user owns it while the run waits for them. Applied
