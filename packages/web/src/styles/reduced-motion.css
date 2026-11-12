@@ -36,8 +36,7 @@
   .live-dot,
   .cursor,
   .spin,
-  .stella-typing-dot,
-  .stella-agent-dot {
+  .stella-typing-dot {
     animation: none;
   }
 

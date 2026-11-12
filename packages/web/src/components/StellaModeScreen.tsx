@@ -93,7 +93,6 @@ export function StellaModeScreen({
         onChanged={stella.reloadAgents}
         onAgentChanged={onAgentChanged}
         onNewAgent={onNewAgent}
-        running={conversation?.running === true}
       />
       <StellaView
         agent={agent}

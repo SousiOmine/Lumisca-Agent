@@ -40,8 +40,7 @@ function render(
       at: AT,
     }),
   ],
-  running = false,
-  loading?: boolean,
+  loading = false,
 ): string {
   initLocale("ja");
   return renderToString(
@@ -52,8 +51,7 @@ function render(
       onChanged={() => {}}
       onAgentChanged={() => {}}
       onNewAgent={() => {}}
-      running={running}
-      {...(loading === undefined ? {} : { loading })}
+      loading={loading}
     />,
   );
 }
@@ -103,23 +101,14 @@ Deno.test("StellaSidebar: the time is the message's, not the last visit", () => 
   assertStringIncludes(time[0], new Date(AT).toISOString());
 });
 
-Deno.test("StellaSidebar: the working row keeps the message", () => {
-  // The regression this pins: a working row replaced the last message with
-  // "作業中…", so the one thing the reader was looking at disappeared for as
-  // long as the agent worked. The dot says that work is happening; the line
-  // keeps saying what was said.
-  const html = render(undefined, true);
-  assertStringIncludes(html, "3件の不具合を直しました。");
-  assertEquals(html.includes("作業中…"), false);
-  assertStringIncludes(html, "stella-agent-dot");
-});
-
-Deno.test("StellaSidebar: a working row that has said nothing yet stays one line", () => {
-  // Nothing was said, so the dot is the only thing to say about the work: an
-  // empty second line would be a blank row that claims a message.
-  const html = render([agent("a1")], true);
-  assertEquals(html.includes("stella-agent-meta"), false);
-  assertStringIncludes(html, "stella-agent-dot");
+Deno.test("StellaSidebar: no row is marked as working", () => {
+  // The list used to put a pulsing dot on the active row while its
+  // conversation ran. The conversation itself shows the work, and the list
+  // only ever marked the row that was already open, so the dot said nothing
+  // the reader did not already know.
+  const html = render();
+  assertEquals(html.includes("stella-agent-dot"), false);
+  assertEquals(html.includes("作業中"), false);
 });
 
 Deno.test("StellaSidebar: the face is what identifies a row", () => {
@@ -166,7 +155,7 @@ Deno.test("StellaSidebar: the empty list is not shown while it is being read", (
   // An empty list and a list still on its way look the same on screen, and
   // the empty state's advice ("create one") is wrong for half of them: the
   // wait is said instead until the read settles.
-  const waiting = render([], false, true);
+  const waiting = render([], true);
   assertStringIncludes(waiting, "読み込み中");
   assertEquals(
     waiting.includes("登録されているエージェントがありません"),
@@ -174,13 +163,13 @@ Deno.test("StellaSidebar: the empty list is not shown while it is being read", (
   );
 
   // Settled with nothing: the empty state (and its advice) is now the truth.
-  const empty = render([], false, false);
+  const empty = render([], false);
   assertStringIncludes(empty, "登録されているエージェントがありません");
   assertEquals(empty.includes("読み込み中"), false);
 
   // A list with rows is drawn as rows whether a read is in flight or not: a
   // refresh must never replace real content with the wait.
-  assertStringIncludes(render(undefined, false, true), "Aide");
+  assertStringIncludes(render(undefined, true), "Aide");
 });
 
 Deno.test("StellaSidebar: the create dialog asks for the job, and names it later", async () => {

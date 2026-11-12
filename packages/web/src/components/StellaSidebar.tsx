@@ -44,11 +44,6 @@ interface StellaSidebarProps {
    * at wide widths, the title bar at phone widths), so the dialog itself is
    * the App's, not this component's. */
   onNewAgent: () => void;
-  /** Whether the active agent's conversation is running, so its row can say
-   * so (a message app's "typing" in a list). Only the active one is known:
-   * the others have no open stream, and asking each would be a request per
-   * row. */
-  running: boolean;
 }
 
 /** Where a row's menu is drawn, in viewport coordinates from the LEFT and
@@ -138,7 +133,6 @@ export function StellaSidebar({
   onChanged,
   onAgentChanged,
   onNewAgent,
-  running,
 }: StellaSidebarProps) {
   const t = useT();
   const locale = useLocale();
@@ -420,25 +414,16 @@ export function StellaSidebar({
                 </span>
                 {/* What was said last. It stays while the agent works: a
                  * row that replaced the message with "working" took away
-                 * the one thing the reader was looking at, and the dot
-                 * beside the row already says that work is happening. A
-                 * fresh agent has said nothing, so its row is one line,
-                 * exactly like a message app's row for someone you have
-                 * not talked to yet. */}
+                 * the one thing the reader was looking at. A fresh agent
+                 * has said nothing, so its row is one line, exactly like a
+                 * message app's row for someone you have not talked to
+                 * yet. */}
                 {agent.preview !== null && (
                   <span className="stella-agent-meta">
                     {previewTextOf(agent.preview, t)}
                   </span>
                 )}
               </span>
-              {/* A dot on the agent that is working right now, so the list
-               * answers "is anything happening?" without opening each
-               * conversation. It repeats what the second line says
-               * because the line is text and the dot is what the eye
-               * catches while scanning. */}
-              {agent.id === activeId && running && (
-                <span className="stella-agent-dot" aria-hidden="true" />
-              )}
             </button>
           </div>
         ))}

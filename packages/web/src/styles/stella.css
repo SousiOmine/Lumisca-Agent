@@ -352,19 +352,6 @@
   font-weight: 600;
 }
 
-/* The active agent that is working now: a dot marks the row, and the second
- * line keeps showing what was said last — replacing it with "作業中…" took
- * away the thing the reader was looking at. */
-.stella-agent-dot {
-  flex: none;
-  width: 7px;
-  height: 7px;
-  margin-right: 4px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: pulse 1.2s ease-in-out infinite;
-}
-
 /* --- stella: an agent's routines ----------------------------------------- */
 
 .routine-panel {
