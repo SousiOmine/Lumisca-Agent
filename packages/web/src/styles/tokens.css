@@ -94,7 +94,7 @@
    * phone block clears it: there the sheet is the screen. */
   --chat-top-gap: 4px;
 
-  /* The square of the paperclip beside the composer's field. The field draws
+  /* The square of the plus beside the composer's field. The field draws
    * its first line in the middle of this square (composer.css), so one number
    * places both: a size written only in the composer sheet would let the
    * field's own padding drift away from it. */

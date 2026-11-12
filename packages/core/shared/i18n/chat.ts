@@ -85,11 +85,29 @@ export const chat = {
    * types, so the field would otherwise have no label at all to announce. */
   "chat.composer.label": { ja: "メッセージ入力", en: "Message" },
   "chat.composer.image.remove": { ja: "添付画像を削除", en: "Remove image" },
-  /** Attaching without a drag: the picker button, and the ways a pick can be
-   * refused before anything is sent. */
-  "chat.composer.attach.pick": {
+  /** The plus button's menu (the only way to attach without a drag), and the
+   * ways a pick can be refused before anything is sent. A row is named for
+   * what it will actually accept: a mode with no machine to put a file in
+   * takes pictures only. */
+  "chat.composer.attach.open": {
+    ja: "添付メニューを開く",
+    en: "Open the attach menu",
+  },
+  "chat.composer.attach.files": {
     ja: "ファイルを添付",
     en: "Attach files",
+  },
+  "chat.composer.attach.image": {
+    ja: "画像を添付",
+    en: "Attach images",
+  },
+  "chat.composer.insert.command": {
+    ja: "コマンド",
+    en: "Command",
+  },
+  "chat.composer.insert.file": {
+    ja: "ファイルを指定",
+    en: "Mention a file",
   },
   /** Shown above the field once the text is close to the cap (the composer
    * stops accepting input at 0, so the count never goes negative). */

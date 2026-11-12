@@ -68,6 +68,77 @@
   height: var(--input-attach-size);
 }
 
+/* The plus and the menu it opens. The slot is the menu's containing block:
+ * anchored to the field's row the menu would open under the control that
+ * summoned it. It carries no size of its own, so the square above still
+ * decides the row's height. */
+.input-attach-slot {
+  position: relative;
+  flex: none;
+  display: flex;
+}
+
+/* Open, the trigger answers the same way a hover does: the menu hangs right
+ * above it, and one of the two has to say which control it belongs to. */
+.input-attach[aria-expanded="true"] {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* The plus menu: wide enough for a two-word row, and no wider — it is a list
+ * of three verbs, not a panel. */
+.attach-popover {
+  position: absolute;
+  z-index: 50;
+  left: 0;
+  bottom: calc(100% + 8px);
+  min-width: 200px;
+  max-width: min(260px, calc(100vw - 24px));
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  animation: lum-rise-small var(--lum-dur-fast) var(--lum-ease-out) both;
+}
+
+.attach-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* A row takes the focus (unlike the caret popovers' rows, which must not),
+ * so the keyboard's place in the menu has to be visible. */
+.attach-item:hover,
+.attach-item:focus-visible {
+  background: var(--surface-3);
+}
+
+.attach-item-icon {
+  flex: none;
+  color: var(--text-faint);
+}
+
+.attach-item-label {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 /* The remaining-length line: quiet, and only present near the cap. */
 .input-length-note {
   margin: 0 2px 4px;
@@ -418,7 +489,7 @@
  *
  * The top padding is half the difference between the attach square and one
  * line of this field's type, which is what puts the first line in the middle
- * of the paperclip beside it. `1lh` resolves against this element's own
+ * of the plus beside it. `1lh` resolves against this element's own
  * font-size and line-height, so the tall field and a touch device follow
  * without a second number; both rules read `--input-attach-size`. The bottom
  * padding stays the small value it was — nothing sits beside the last line. */

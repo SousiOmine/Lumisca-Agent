@@ -7,7 +7,6 @@ import {
   IconChevronRight,
   IconFile,
   IconFolder,
-  IconPaperclip,
   IconPlayerStop,
   IconX,
 } from "@tabler/icons-preact";
@@ -29,6 +28,7 @@ import {
 
 export type { ContextUsageData };
 
+import { composerMenuItems, insertTrigger } from "../composerMenu.ts";
 import { useAttachments } from "../hooks/useAttachments.ts";
 import { useAutoGrow } from "../hooks/useAutoGrow.ts";
 import { useCaretPosition } from "../hooks/useCaretPosition.ts";
@@ -45,6 +45,10 @@ import {
   type SlashCommandItem,
   slashCompletion,
 } from "../slashCommands.ts";
+import {
+  type ComposerAttachAction,
+  ComposerAttachMenu,
+} from "./ComposerAttachMenu.tsx";
 import { ComposerModelBar } from "./ComposerModelBar.tsx";
 import { ComposerPopover } from "./ComposerPopover.tsx";
 
@@ -407,6 +411,50 @@ export function Composer({
     }
   };
 
+  /** Put a palette trigger at the caret and open the menu it starts. The
+   * plus menu runs the same detection as typing the character, so the two
+   * paths cannot drift apart. The detected token is what the popover is
+   * placed against, so the caret is moved before the detection runs: the
+   * frame callback is after the render that writes the field's value. */
+  const openPalette = (trigger: "/" | "@") => {
+    const field = textareaRef.current;
+    const next = insertTrigger(
+      value,
+      {
+        start: field?.selectionStart ?? value.length,
+        end: field?.selectionEnd ?? value.length,
+      },
+      trigger,
+    );
+    // The field refuses a value past the cap; inserting one it would drop
+    // leaves a trigger on screen that does not open anything.
+    if (next.value.length > MAX_PROMPT_TEXT_LENGTH) return;
+    onChange(next.value);
+    requestAnimationFrame(() => {
+      const target = textareaRef.current;
+      if (target === null) return;
+      target.focus();
+      target.setSelectionRange(next.caret, next.caret);
+      updateSuggestions(next.value, next.caret);
+    });
+  };
+
+  /** The plus menu's rows: what this composer can put into the message, named
+   * for the reader (see composerMenuItems for which rows exist and why). */
+  const attachActions: ComposerAttachAction[] = composerMenuItems({
+    canSendFiles: onFilesChange !== undefined,
+    canMention: mentionWorkspaceId !== undefined,
+    canSlash: slashEnabled,
+  }).map((item) => ({
+    id: item.id,
+    label: t(item.labelKey),
+    icon: item.icon,
+    run:
+      item.id === "attach"
+        ? () => pickerRef.current?.click()
+        : () => openPalette(item.id === "command" ? "/" : "@"),
+  }));
+
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     // An IME is composing: Enter confirms the conversion and Escape cancels
     // it. Both are the input method's keys until the composition ends, so
@@ -513,26 +561,29 @@ export function Composer({
         {/* A picker is the only way to attach on a phone: there is no drag
          * and nothing to paste. The control sits at the LEFT of the field,
          * where the writing starts — the row below belongs to what the
-         * message will be (model, context, send), and a paperclip there
-         * read as one more thing about sending. Hidden input, visible
-         * button: the native control is drawn by the OS and cannot take
-         * the app's styling. */}
+         * message will be (model, context, send), and a menu there read as
+         * one more thing about sending. Hidden input, visible button: the
+         * native control is drawn by the OS and cannot take the app's
+         * styling.
+         *
+         * The control is the plus, not the paperclip: it opens everything
+         * that can go into the message (a file, a command, a workspace
+         * path), and which of those exist is what this composer was handed
+         * (see composerMenuItems). */}
         <input
           ref={pickerRef}
           type="file"
           multiple
+          // A mode with no machine to put a file in takes pictures only; the
+          // dialog then offers nothing it would refuse.
+          accept={onFilesChange === undefined ? "image/*" : undefined}
           hidden
           onChange={handlePicked}
         />
-        <button
-          type="button"
-          className="icon-btn input-attach"
-          onClick={() => pickerRef.current?.click()}
-          title={t("chat.composer.attach.pick")}
-          aria-label={t("chat.composer.attach.pick")}
-        >
-          <IconPaperclip size={15} />
-        </button>
+        <ComposerAttachMenu
+          label={t("chat.composer.attach.open")}
+          actions={attachActions}
+        />
         <textarea
           ref={textareaRef}
           className={`input-box${large ? " large" : ""}`}

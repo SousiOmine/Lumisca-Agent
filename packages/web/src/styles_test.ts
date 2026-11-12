@@ -672,8 +672,8 @@ Deno.test("the composer draws one frame, and its buttons are one size", async ()
     "a one-glyph button must be square",
   );
 
-  // The paperclip and the first line of the message share one centre. They
-  // are two boxes side by side, so nothing lines them up on its own: the
+  // The attach control and the first line of the message share one centre.
+  // They are two boxes side by side, so nothing lines them up on its own: the
   // button was pinned with a fixed `margin-top`, which is level at one of
   // the field's three font sizes and a few pixels off at the others (14px
   // in the new-session view, 13px in a session, 16px on a touch device).
