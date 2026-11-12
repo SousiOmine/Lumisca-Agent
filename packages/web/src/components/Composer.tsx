@@ -131,6 +131,9 @@ interface ComposerProps {
    * useAttachments). */
   files?: PendingFile[];
   onFilesChange?: (files: PendingFile[]) => void;
+  /** Offer "share a folder" in the plus menu. Only the desktop shell can
+   * open a folder picker on this computer, so only it passes this. */
+  onShareFolder?: () => void;
   /** Context usage for the meter + popover above the footer (undefined
    * hides it: the session has no assistant usage yet). */
   contextUsage?: ContextUsageData;
@@ -174,6 +177,7 @@ export function Composer({
   onImagesChange,
   files = [],
   onFilesChange,
+  onShareFolder,
   contextUsage,
   contextWarnRatio,
   visible = true,
@@ -445,6 +449,7 @@ export function Composer({
     canSendFiles: onFilesChange !== undefined,
     canMention: mentionWorkspaceId !== undefined,
     canSlash: slashEnabled,
+    canShareFolder: onShareFolder !== undefined,
   }).map((item) => ({
     id: item.id,
     label: t(item.labelKey),
@@ -452,7 +457,9 @@ export function Composer({
     run:
       item.id === "attach"
         ? () => pickerRef.current?.click()
-        : () => openPalette(item.id === "command" ? "/" : "@"),
+        : item.id === "share"
+          ? () => onShareFolder?.()
+          : () => openPalette(item.id === "command" ? "/" : "@"),
   }));
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {

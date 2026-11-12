@@ -26,7 +26,8 @@ import {
   type PasteChord,
   pasteChordOf,
 } from "../stella-clipboard.ts";
-import type { StellaHandover } from "../types.ts";
+import type { FolderShare, StellaHandover } from "../types.ts";
+import { ShareList } from "./stella/ShareList.tsx";
 
 /**
  * The machine's screen, live.
@@ -111,6 +112,10 @@ function isEditableTarget(target: EventTarget | null): boolean {
 interface StellaPaneProps {
   running: boolean;
   vncPort: number | null;
+  /** The folders lent from this computer to this conversation. They are drawn
+   * above the screen: what the agent can reach is a fact about the run, and
+   * the way to take it back has to be where the loan is named. */
+  shares: readonly FolderShare[];
   /** The agent whose conversation this is: the clipboard crosses through that
    * conversation's API. Null while no conversation exists (the pane then has
    * nothing to exchange text with). */
@@ -159,6 +164,7 @@ function waitForSize(element: HTMLElement, timeoutMs: number): Promise<void> {
 export function StellaPane({
   running,
   vncPort,
+  shares,
   agentId,
   handover,
   onFinishHandover,
@@ -572,7 +578,7 @@ export function StellaPane({
       }${exiting ? " exiting" : ""}`}
     >
       <header className="stella-pane-header">
-        <span>{t("chat.stella.machine.screen")}</span>
+        <span>{t("chat.stella.machine.info")}</span>
         <button
           type="button"
           className="icon-btn"
@@ -691,6 +697,12 @@ export function StellaPane({
             </p>
           )}
         </form>
+      )}
+      <ShareList shares={shares} />
+      {shares.length > 0 && (
+        <h3 className="stella-pane-section stella-pane-screen-title">
+          {t("chat.stella.machine.screen")}
+        </h3>
       )}
       <div className="stella-pane-body">
         {!running && (

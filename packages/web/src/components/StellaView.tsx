@@ -1,5 +1,5 @@
 import { IconSend } from "@tabler/icons-preact";
-import { useState } from "preact/compat";
+import { useEffect, useRef, useState } from "preact/compat";
 import {
   sessionAttachmentBase,
   sessionVisualBase,
@@ -8,6 +8,7 @@ import {
 import { useReducedMotion } from "../hooks/useMediaQuery.ts";
 import { usePresence } from "../hooks/usePresence.ts";
 import { useT } from "../i18n.ts";
+import { inDesktopShell } from "../shell.ts";
 import type { StellaConversationState } from "../stella-state.ts";
 import type {
   PendingFile,
@@ -17,6 +18,7 @@ import type {
 } from "../types.ts";
 import { Composer } from "./Composer.tsx";
 import { StellaPane } from "./StellaPane.tsx";
+import { ShareFolderDialog } from "./stella/ShareFolderDialog.tsx";
 import { StellaTranscript } from "./stella/StellaTranscript.tsx";
 
 interface StellaViewProps {
@@ -139,6 +141,20 @@ export function StellaView({
   const attachBase = sessionAttachmentBase("", sessionId ?? "");
   const uploadBase = stellaUploadBase(agent?.id ?? "");
   const isRunning = conversation?.running === true;
+  const shares = conversation?.shares ?? [];
+  // Lending a folder is a shell action (the folder is on the user's computer
+  // and the picker is the shell's), so a browser tab does not offer it.
+  const canShareFolder = inDesktopShell();
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  // A loan is a fact the user must see: opening the panel is what shows the
+  // folder and the way to take it back. Only on the way in — closing the
+  // panel while a folder is lent is the reader's choice, and this must not
+  // reopen it under them.
+  const lentBefore = useRef(shares.length > 0);
+  useEffect(() => {
+    if (shares.length > 0 && !lentBefore.current) onScreenOpenChange(true);
+    lentBefore.current = shares.length > 0;
+  }, [shares.length, onScreenOpenChange]);
   // The screen is the user's while the agent waits for them: the pane turns
   // interactive and a bar above it says what to do and offers "done".
   const handover = conversation?.handover ?? null;
@@ -148,7 +164,9 @@ export function StellaView({
   // back afterwards leaves the panel as the user last wanted it.
   const handedOver = handover !== null;
   const machineRunning = status?.state === "running";
-  const showScreen = machineRunning && (screenOpen || handedOver);
+  // The panel is the conversation's information, not only its screen: a lent
+  // folder is worth opening it for while the machine is still starting.
+  const showScreen = screenOpen || handedOver;
   // The pane leaves the way it arrived: motion.ts plays its exit, so it has to
   // stay mounted for that. Without this the column vanished in one frame and
   // tore the conversation's width back out from under the eye.
@@ -273,6 +291,11 @@ export function StellaView({
             onImagesChange={onImagesChange}
             files={files}
             onFilesChange={onFilesChange}
+            onShareFolder={
+              canShareFolder && conversation !== null && sessionId !== null
+                ? () => setShareDialogOpen(true)
+                : undefined
+            }
           />
         </div>
       </div>
@@ -280,6 +303,7 @@ export function StellaView({
         <StellaPane
           running={machineRunning}
           vncPort={status?.vncPort ?? null}
+          shares={shares}
           agentId={agent?.id ?? null}
           handover={
             handover === null
@@ -298,6 +322,12 @@ export function StellaView({
           onClose={handedOver ? undefined : () => onScreenOpenChange(false)}
           exiting={pane.exiting}
           onExitDone={pane.done}
+        />
+      )}
+      {shareDialogOpen && sessionId !== null && (
+        <ShareFolderDialog
+          sessionId={sessionId}
+          onClose={() => setShareDialogOpen(false)}
         />
       )}
     </div>

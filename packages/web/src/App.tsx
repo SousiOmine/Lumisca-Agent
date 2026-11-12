@@ -633,7 +633,6 @@ export function App({ initialData }: AppProps): ReactElement {
           <div className="stella-titlebar-strip">
             <StellaTitleBarHeader
               agent={stellaAgent ?? null}
-              machineRunning={machineStatus?.state === "running"}
               onBack={
                 stellaSingleScreen && stellaAgentId !== null
                   ? goToStellaList
@@ -641,9 +640,7 @@ export function App({ initialData }: AppProps): ReactElement {
               }
               onEditAgent={() => setEditingStellaAgent(true)}
               onToggleScreen={
-                machineStatus?.state === "running" &&
-                !stellaHandedOver &&
-                stellaAgentId !== null
+                !stellaHandedOver && stellaAgentId !== null
                   ? () => setStellaScreenOpen((open) => !open)
                   : undefined
               }

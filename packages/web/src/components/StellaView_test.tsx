@@ -76,7 +76,7 @@ function render(
   );
 }
 
-Deno.test("StellaView: the pane opens only when the machine can show it", () => {
+Deno.test("StellaView: the pane is the conversation's information", () => {
   // Nothing of the pane is drawn before the reader asks for it: no column,
   // and with it no VNC connection (StellaPane connects on mount).
   assertEquals(render().includes("stella-pane"), false);
@@ -86,16 +86,41 @@ Deno.test("StellaView: the pane opens only when the machine can show it", () => 
   // Watching is not driving: the clipboard controls belong to the hand-over
   // (the server refuses a write outside it, and the buttons would be dead).
   assertEquals(opened.includes("stella-handover-clipboard"), false);
-  // A machine that is not running has no picture to show, whatever the
-  // reader asked for: the toggle is not drawn in that state (see
-  // StellaTitleBarHeader), and a pane here would be an empty rectangle.
-  assertEquals(
+  // The panel holds more than the picture (a lent folder, and how to take it
+  // back), so a machine that is not running is not a reason to withhold it:
+  // the body says the screen is not there yet, and the rest still reads.
+  assertStringIncludes(
     render({
       screenOpen: true,
       status: status({ state: "stopped", vncPort: null }),
-    }).includes("stella-pane"),
-    false,
+    }),
+    "stella-pane",
   );
+});
+
+Deno.test("StellaView: a lent folder is named in the panel, with its way back", () => {
+  // `screenOpen` is what the lending effect sets (StellaView opens the panel
+  // when a loan arrives); a static render does not run effects.
+  const html = render({
+    screenOpen: true,
+    conversation: {
+      shares: [
+        {
+          id: "g1",
+          name: "proj",
+          path: "/Users/me/proj",
+          host: { platform: "macos", name: "mac", shell: "zsh" },
+          write: false,
+          exec: true,
+          expiresAt: Date.now() + 30 * 60_000,
+        },
+      ],
+    },
+  });
+  assertStringIncludes(html, "stella-pane");
+  assertStringIncludes(html, "/lend/proj");
+  assertStringIncludes(html, "読み取りのみ・コマンドの実行を許す");
+  assertStringIncludes(html, "切断");
 });
 
 Deno.test("StellaView: a hand-over draws the pane whatever the caller chose", () => {

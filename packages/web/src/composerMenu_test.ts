@@ -17,7 +17,12 @@ Deno.test("composerMenuItems: a mode with a machine takes files, and offers noth
   // stella: a file is written into the machine, and there is no workspace to
   // mention and no command palette in that composer.
   assertEquals(
-    rows({ canSendFiles: true, canMention: false, canSlash: false }),
+    rows({
+      canSendFiles: true,
+      canMention: false,
+      canSlash: false,
+      canShareFolder: false,
+    }),
     [["attach", "chat.composer.attach.files"]],
   );
 });
@@ -26,7 +31,12 @@ Deno.test("composerMenuItems: code mode offers the picture, the commands and the
   // The order is the one the menu draws: what goes into the message first,
   // then the two palettes.
   assertEquals(
-    rows({ canSendFiles: false, canMention: true, canSlash: true }),
+    rows({
+      canSendFiles: false,
+      canMention: true,
+      canSlash: true,
+      canShareFolder: false,
+    }),
     [
       ["attach", "chat.composer.attach.image"],
       ["command", "chat.composer.insert.command"],
@@ -40,6 +50,7 @@ Deno.test("composerMenuItems: code mode offers the picture, the commands and the
       canSendFiles: false,
       canMention: true,
       canSlash: true,
+      canShareFolder: false,
     })[0]?.labelKey,
     "chat.composer.attach.image",
   );
@@ -49,10 +60,33 @@ Deno.test("composerMenuItems: a chat session has no mention to offer", () => {
   // No workspace attached: typing `@` opens nothing, so the row would be a
   // dead entry.
   assertEquals(
-    rows({ canSendFiles: false, canMention: false, canSlash: true }),
+    rows({
+      canSendFiles: false,
+      canMention: false,
+      canSlash: true,
+      canShareFolder: false,
+    }),
     [
       ["attach", "chat.composer.attach.image"],
       ["command", "chat.composer.insert.command"],
+    ],
+  );
+});
+
+Deno.test("composerMenuItems: the desktop app offers the folder, last", () => {
+  // The folder row changes what the conversation can reach rather than what
+  // goes into the next message, so it comes after the message rows. A
+  // browser never passes the option: there is no picker to open.
+  assertEquals(
+    rows({
+      canSendFiles: true,
+      canMention: false,
+      canSlash: false,
+      canShareFolder: true,
+    }),
+    [
+      ["attach", "chat.composer.attach.files"],
+      ["share", "chat.stella.share.open"],
     ],
   );
 });

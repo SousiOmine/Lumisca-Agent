@@ -19,7 +19,6 @@ const agent: StellaAgentSummary = {
 function render(
   overrides: {
     agent?: StellaAgentSummary | null;
-    machineRunning?: boolean;
     onBack?: () => void;
     onEditAgent?: () => void;
     onToggleScreen?: () => void;
@@ -30,7 +29,6 @@ function render(
   return renderToString(
     createElement(StellaTitleBarHeader, {
       agent: overrides.agent === undefined ? agent : overrides.agent,
-      machineRunning: overrides.machineRunning ?? true,
       onEditAgent: overrides.onEditAgent ?? (() => {}),
       ...(overrides.onBack === undefined ? {} : { onBack: overrides.onBack }),
       ...(overrides.onToggleScreen === undefined
@@ -75,15 +73,15 @@ Deno.test("StellaTitleBarHeader: with nothing picked the strip names nothing", (
   assertEquals(html.includes("stella-back"), false);
 });
 
-Deno.test("StellaTitleBarHeader: the screen toggle is drawn only while it can act", () => {
+Deno.test("StellaTitleBarHeader: the info toggle is drawn while a conversation is open", () => {
   const onToggle = () => {};
   const running = render({ onToggleScreen: onToggle });
   const tag = toggleTag(running);
-  assert(tag !== "", "the toggle is missing while the machine runs");
+  assert(tag !== "", "the toggle is missing while a conversation is open");
   // Closed reads as "not pressed" *and* as the crossed-out monitor; the
   // label says what the next click does.
   assertStringIncludes(tag, 'aria-pressed="false"');
-  assertStringIncludes(tag, 'title="画面を表示"');
+  assertStringIncludes(tag, 'title="情報を表示"');
   assert(!tag.includes(" on "), `closed must not carry .on: ${tag}`);
   assertStringIncludes(running, "tabler-icon-device-desktop-off");
 
@@ -91,19 +89,19 @@ Deno.test("StellaTitleBarHeader: the screen toggle is drawn only while it can ac
   const open = render({ onToggleScreen: onToggle, screenOpen: true });
   const openTag = toggleTag(open);
   assertStringIncludes(openTag, 'aria-pressed="true"');
-  assertStringIncludes(openTag, 'title="画面を隠す"');
+  assertStringIncludes(openTag, 'title="情報を隠す"');
   assertStringIncludes(open, 'tabler-icon-device-desktop"');
 });
 
-Deno.test("StellaTitleBarHeader: no toggle without a running machine", () => {
-  // Nothing can be shown, so a toggle would promise a pane that will not
-  // appear.
-  assertEquals(
-    toggleTag(render({ machineRunning: false, onToggleScreen: () => {} })),
-    "",
+Deno.test("StellaTitleBarHeader: the toggle exists while a conversation is open", () => {
+  // The panel now holds what the conversation can reach (a lent folder) as
+  // well as the screen, so a starting machine is no reason to withhold it.
+  assertStringIncludes(
+    toggleTag(render({ onToggleScreen: () => {} })),
+    "stella-screen-toggle",
   );
-  // A caller that offers no toggle at all (a hand-over owns the pane then)
-  // gets no button either, even on a running machine.
+  // A caller that offers no toggle at all (no conversation, or a hand-over
+  // owns the pane) gets no button.
   assertEquals(toggleTag(render()), "");
 });
 

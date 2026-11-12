@@ -246,6 +246,94 @@
   border-color: var(--text-dim);
 }
 
+/* --- stella: share-a-folder dialog --------------------------------------- */
+
+.stella-share-hint {
+  margin: 0 0 14px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.stella-share-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.stella-share-terms-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.stella-share-path {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 4px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.stella-share-choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.stella-share-note {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.stella-share-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.stella-share-recent .stella-share-list {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.stella-recent-folder {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.stella-recent-folder:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.stella-recent-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .stella-agent {
   display: flex;
   align-items: center;
@@ -917,6 +1005,75 @@
 .stella-loading {
   color: var(--text-dim);
   font-size: 13px;
+}
+
+/* --- stella: the information panel's lent folders ------------------------ */
+
+/* The panel holds two things: the folders this computer lent and the machine's
+ * screen. Both are facts about the conversation that its text cannot carry, so
+ * they share one column with a small heading each. */
+.stella-pane-section {
+  margin: 0;
+  padding: 9px 12px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.stella-shares {
+  border-bottom: 1px solid var(--border);
+}
+
+.stella-share-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 8px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stella-share-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.stella-share-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.stella-share-name {
+  font-size: 12px;
+}
+
+/* The path on this computer: the name above is how the agent addresses it,
+ * this is what the user lent. One line, cut at the end — a long path is still
+ * readable from its start, which is what tells folders apart. */
+.stella-share-origin {
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stella-share-terms {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.stella-pane-screen-title {
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
 }
 
 /* --- stella: the machine's screen ---------------------------------------- */

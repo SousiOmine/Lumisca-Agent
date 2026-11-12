@@ -11,10 +11,6 @@ export interface StellaTitleBarHeaderProps {
   /** The agent whose conversation is open, or null before one is picked (the
    * first screen, and the phone's list). */
   agent: StellaAgentSummary | null;
-  /** Whether the machine is up, so the screen toggle can act. The state
-   * itself is not drawn here: a reason can be a paragraph, and this strip is
-   * one line tall (StellaView has the room for it, and says it there). */
-  machineRunning: boolean;
   /** Return to the list. Present only at phone widths, where the list and the
    * conversation are two screens instead of two columns. */
   onBack?: () => void;
@@ -51,21 +47,20 @@ export interface StellaTitleBarHeaderProps {
  *
  * The controls are the conversation's, not the window's: back (phone only),
  * the agent's face (which opens the edit dialog), the name, the machine's
- * state while it is worth saying, and the screen toggle at the right edge
- * where the pane it shows appears.
+ * state while it is worth saying, and the information panel's toggle at the
+ * right edge, where the panel appears.
  */
 export function StellaTitleBarHeader({
   agent,
-  machineRunning,
   onBack,
   onEditAgent,
   onToggleScreen,
   screenOpen,
 }: StellaTitleBarHeaderProps) {
   const t = useT();
-  // A toggle that promises a pane that will not appear is worse than no
-  // toggle, so the caller's offer is not enough: the machine must be up.
-  const showToggle = onToggleScreen !== undefined && machineRunning;
+  // The caller decides: the panel is the conversation's information, and it
+  // has something to say with the machine still starting (a lent folder).
+  const showToggle = onToggleScreen !== undefined;
 
   return (
     <div className="stella-titlebar">

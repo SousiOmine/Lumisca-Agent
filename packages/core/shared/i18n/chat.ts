@@ -438,12 +438,12 @@ export const chat = {
    * the user opens and closes, so the label says which way the next click
    * goes. */
   "chat.stella.machine.showScreen": {
-    ja: "画面を表示",
-    en: "Show the screen",
+    ja: "情報を表示",
+    en: "Show info",
   },
   "chat.stella.machine.hideScreen": {
-    ja: "画面を隠す",
-    en: "Hide the screen",
+    ja: "情報を隠す",
+    en: "Hide info",
   },
   "chat.stella.machine.screenEmpty": {
     ja: "マシンが起動すると、ここに画面が表示されます。",
@@ -452,6 +452,73 @@ export const chat = {
   "chat.stella.machine.screenConnecting": {
     ja: "画面に接続しています…",
     en: "Connecting to the screen…",
+  },
+  /** The right-hand panel, which holds what is true about the conversation
+   * beyond its text: the folders lent from this computer and the machine's
+   * screen. */
+  "chat.stella.machine.info": { ja: "情報", en: "Info" },
+  "chat.stella.share.open": {
+    ja: "フォルダで共同作業",
+    en: "Share a folder",
+  },
+  "chat.stella.share.title": {
+    ja: "フォルダで共同作業",
+    en: "Share a folder",
+  },
+  "chat.stella.share.hint": {
+    ja: "この PC のフォルダを、この会話のエージェントが使えるようにします。",
+    en: "Let this conversation's agent use a folder on this computer.",
+  },
+  "chat.stella.share.pick": {
+    ja: "フォルダを選ぶ",
+    en: "Choose a folder",
+  },
+  "chat.stella.share.recent": {
+    ja: "最近貸したフォルダ",
+    en: "Recently shared",
+  },
+  "chat.stella.share.readOnly": {
+    ja: "読み取りのみ",
+    en: "Read only",
+  },
+  "chat.stella.share.readWrite": {
+    ja: "読み書き",
+    en: "Read and write",
+  },
+  "chat.stella.share.exec": {
+    ja: "コマンドの実行を許す",
+    en: "Allow commands",
+  },
+  /** The loan's clock is the lender's: keep the sentence in step with
+   * SHARE_IDLE_MS in packages/server/share-host.ts. */
+  "chat.stella.share.idle": {
+    ja: "最後に使ってから30分で切れます。",
+    en: "Ends 30 minutes after the last use.",
+  },
+  "chat.stella.share.lend": { ja: "貸す", en: "Share" },
+  "chat.stella.share.lending": {
+    ja: "貸しています…",
+    en: "Sharing…",
+  },
+  "chat.stella.share.pickFailed": {
+    ja: "フォルダを選べませんでした: {error}",
+    en: "Could not choose a folder: {error}",
+  },
+  "chat.stella.share.lendFailed": {
+    ja: "貸せませんでした: {error}",
+    en: "Could not share: {error}",
+  },
+  "chat.stella.share.panel": {
+    ja: "共有フォルダ",
+    en: "Shared folders",
+  },
+  "chat.stella.share.disconnect": {
+    ja: "切断",
+    en: "Disconnect",
+  },
+  "chat.stella.share.disconnectFailed": {
+    ja: "切断できませんでした: {error}",
+    en: "Could not disconnect: {error}",
   },
   "chat.stella.handover.reason": {
     ja: "エージェントから画面操作が引き継がれました",

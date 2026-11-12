@@ -15,13 +15,14 @@ import type { MessageKey } from "@lumisca/core/shared";
 import {
   type Icon,
   IconAt,
+  IconFolder,
   IconPaperclip,
   IconPhoto,
   IconSlash,
 } from "@tabler/icons-preact";
 
 /** The rows, in the order they are drawn. */
-export type ComposerMenuItemId = "attach" | "command" | "file";
+export type ComposerMenuItemId = "attach" | "command" | "file" | "share";
 
 export interface ComposerMenuItem {
   id: ComposerMenuItemId;
@@ -40,13 +41,17 @@ export interface ComposerMenuOptions {
   canMention: boolean;
   /** Typing `/` opens the command palette. */
   canSlash: boolean;
+  /** The composer sits in the desktop app, where a folder on this computer
+   * can be lent to the conversation. A browser has no folder picker to
+   * offer, so the row does not exist there. */
+  canShareFolder: boolean;
 }
 
 /** The rows of the plus menu for this composer. */
 export function composerMenuItems(
   options: ComposerMenuOptions,
 ): ComposerMenuItem[] {
-  const { canSendFiles, canMention, canSlash } = options;
+  const { canSendFiles, canMention, canSlash, canShareFolder } = options;
   const items: ComposerMenuItem[] = [
     canSendFiles
       ? {
@@ -74,6 +79,15 @@ export function composerMenuItems(
       id: "file",
       labelKey: "chat.composer.insert.file",
       icon: IconAt,
+    });
+  }
+  // Last, because it is not something put INTO the message: it changes what
+  // the conversation can reach. The three above are about this turn.
+  if (canShareFolder) {
+    items.push({
+      id: "share",
+      labelKey: "chat.stella.share.open",
+      icon: IconFolder,
     });
   }
   return items;
