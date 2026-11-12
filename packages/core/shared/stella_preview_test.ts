@@ -2,12 +2,15 @@ import { assertEquals } from "@std/assert";
 import type { StellaEntry } from "../domain/stella-conversation.ts";
 import {
   compareAgentRows,
+  mergeAgentRows,
+  newestPreview,
   PREVIEW_TEXT_CHARS,
   previewOf,
   previewText,
   type StellaAgentSummary,
   type StellaPreview,
   samePreview,
+  withAgentPreview,
   withAgentRow,
 } from "./mod.ts";
 
@@ -299,4 +302,88 @@ Deno.test("withAgentRow: an edit keeps the row's line and does not double it", (
   assertEquals(row1.name, "Renamed");
   // What the conversation said is not what the edit changed.
   assertEquals(row1.preview, { kind: "text", text: "a1", at: 100 });
+});
+
+Deno.test("newestPreview: the newest entry a row may speak for", () => {
+  const entries = [
+    entry({ text: "older", timestamp: 100 }),
+    // A routine's prompt is not a message: the row reads past it.
+    entry({ text: "", timestamp: 200, routine: "check" }),
+  ];
+  assertEquals(newestPreview(entries), {
+    kind: "text",
+    text: "older",
+    at: 100,
+  });
+  // Nothing said yet.
+  assertEquals(newestPreview([entry({ text: "", timestamp: 300 })]), null);
+  assertEquals(newestPreview([]), null);
+});
+
+Deno.test("withAgentPreview: the row moves when its conversation says something", () => {
+  const rows = [row("a", 300), row("b", 200), row("c", 100)];
+  const next = withAgentPreview(rows, "c", {
+    kind: "text",
+    text: "new",
+    at: 400,
+  });
+  assertEquals(
+    next.map((r) => r.id),
+    ["c", "a", "b"],
+  );
+  // The list the caller passed is not touched.
+  assertEquals(
+    rows.map((r) => r.id),
+    ["a", "b", "c"],
+  );
+});
+
+Deno.test("withAgentPreview: opening another conversation moves nothing", () => {
+  // The row already says what its conversation says, so re-applying it is
+  // the same list, not a re-ordered one. This is the bug the old shape had:
+  // the list was computed from the selection, so the row that was looked at
+  // last lost the message it had been showing and swapped places.
+  const rows = [row("a", 300), row("b", 200)];
+  const after = withAgentPreview(rows, "b", {
+    kind: "text",
+    text: "b",
+    at: 200,
+  });
+  assertEquals(after, rows);
+  // An agent the list does not hold is not invented from a conversation.
+  assertEquals(
+    withAgentPreview(rows, "ghost", { kind: "text", text: "x", at: 1 }),
+    rows,
+  );
+});
+
+Deno.test("mergeAgentRows: a read older than a message does not move the row back", () => {
+  // What the client learned from the open conversation...
+  const held = [row("fresh", 400), row("old", 100)];
+  // ...and a list read the server computed before that message landed.
+  const read = [row("old", 100), { ...row("fresh", 200), name: "renamed" }];
+  const merged = mergeAgentRows(held, read);
+  assertEquals(
+    merged.map((r) => r.id),
+    ["fresh", "old"],
+  );
+  // The row keeps what was said and takes what the answer changed about it.
+  assertEquals(merged[0]?.preview, {
+    kind: "text",
+    text: "fresh",
+    at: 400,
+  });
+  assertEquals(merged[0]?.name, "renamed");
+});
+
+Deno.test("mergeAgentRows: the newer answer wins and a gone row is gone", () => {
+  const merged = mergeAgentRows(
+    [row("a", 100), row("gone", 300)],
+    [row("a", 200)],
+  );
+  assertEquals(
+    merged.map((r) => r.id),
+    ["a"],
+  );
+  assertEquals(merged[0]?.preview, { kind: "text", text: "a", at: 200 });
 });

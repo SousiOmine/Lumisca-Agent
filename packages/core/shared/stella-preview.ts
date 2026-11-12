@@ -116,6 +116,84 @@ export function samePreview(
   }
 }
 
+/** The newest thing a loaded window says, or null when nothing in it is
+ * something a row could show.
+ *
+ * The caller is the client walking the entries the open conversation draws:
+ * a routine's prompt is not a message (see {@link previewOf}), so the answer
+ * is the newest entry the row may speak for. */
+export function newestPreview(
+  entries: readonly StellaEntry[],
+): StellaPreview | null {
+  for (let index = entries.length - 1; index >= 0; index--) {
+    const entry = entries[index];
+    if (entry === undefined) continue;
+    const preview = previewOf(entry);
+    if (preview !== null) return preview;
+  }
+  return null;
+}
+
+/** Put the newest message of one conversation into its row, then re-order.
+ *
+ * The open conversation is the one place a client learns about a message
+ * before the list is re-read: entries arrive as they land, the list on a
+ * timer. Writing the preview INTO the row — instead of deriving the list
+ * from "the conversation plus the selection" — is what keeps the order a
+ * fact about the conversations rather than about which one the reader is
+ * looking at. A row moves when something is said, not when another row is
+ * chosen.
+ *
+ * Returns the same array when the row already says this, so a caller can
+ * feed every entry without re-rendering the list. A row the list does not
+ * hold yet is not invented here: its name and picture are the list's to know
+ * (see {@link withAgentRow}). */
+export function withAgentPreview(
+  rows: readonly StellaAgentSummary[],
+  agentId: string,
+  preview: StellaPreview,
+): StellaAgentSummary[] {
+  const index = rows.findIndex((row) => row.id === agentId);
+  const current = rows[index];
+  if (current === undefined || samePreview(current.preview, preview)) {
+    return rows as StellaAgentSummary[];
+  }
+  const next = rows.slice();
+  next[index] = { ...current, preview };
+  return next.sort(compareAgentRows);
+}
+
+/** Fold a list read into the rows already held: per agent the newer preview
+ * wins, and a row the answer no longer has is gone.
+ *
+ * The answer is computed when the server handles the read, so one that was
+ * already in flight when a message landed can be younger than what the
+ * client knows. Taking it whole would put that row back where it was before
+ * the message — the list is ordered by the time it shows, so it would move
+ * down a moment after the conversation said the words. The client knows
+ * better and keeps what it has; the next read agrees with it.
+ *
+ * A rewind is the one case where a conversation really has less to say, and
+ * that is answered by the conversation itself (see
+ * {@link withAgentPreview}). */
+export function mergeAgentRows(
+  rows: readonly StellaAgentSummary[],
+  incoming: readonly StellaAgentSummary[],
+): StellaAgentSummary[] {
+  const held = new Map(rows.map((row) => [row.id, row] as const));
+  const next = incoming.map((row) => {
+    const previous = held.get(row.id);
+    if (
+      previous?.preview != null &&
+      (row.preview === null || previous.preview.at > row.preview.at)
+    ) {
+      return { ...row, preview: previous.preview };
+    }
+    return row;
+  });
+  return next.sort(compareAgentRows);
+}
+
 /** One message's text as a row shows it: the reader's line, not the
  * markdown.
  *

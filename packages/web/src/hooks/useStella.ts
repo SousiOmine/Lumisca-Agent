@@ -1,17 +1,10 @@
 import {
-  compareAgentRows,
-  previewOf,
-  type StellaPreview,
-  samePreview,
+  mergeAgentRows,
+  newestPreview,
+  withAgentPreview,
   withAgentRow,
 } from "@lumisca/core/shared";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "preact/compat";
+import { useCallback, useEffect, useRef, useState } from "preact/compat";
 import { api } from "../api.ts";
 import { connectStellaEvents, stellaApi } from "../api-stella.ts";
 import { describeError, useT } from "../i18n.ts";
@@ -144,6 +137,17 @@ export function useStella(
   const [agentsSettled, setAgentsSettled] = useState(false);
   const [conversation, setConversation] =
     useState<StellaConversationState | null>(null);
+  /** The agent `conversation` belongs to.
+   *
+   * Kept beside it rather than read from `activeAgentId`, because the two are
+   * not the same value for the frame in which the address has moved on: the
+   * state is dropped by an effect, so one render still holds the previous
+   * conversation under the new address. Anything that applies the
+   * conversation to something else — its row's preview — must check whose it
+   * is first, or it speaks for a conversation that has not been opened. */
+  const [conversationAgentId, setConversationAgentId] = useState<string | null>(
+    null,
+  );
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -186,7 +190,10 @@ export function useStella(
       try {
         const { agents: list } = await api.getStellaAgents();
         if (disposed) return;
-        setAgents(list.slice().sort(compareAgentRows));
+        // Folded into what the list holds rather than replacing it: a read
+        // that was in flight when a message landed would otherwise put that
+        // row back (see mergeAgentRows).
+        setAgents((current) => mergeAgentRows(current, list));
         setError(null);
       } catch (failure) {
         if (!disposed) setError(describeError(failure, t));
@@ -215,32 +222,28 @@ export function useStella(
   // beside it is the kind of disagreement this line exists to avoid. The
   // preview is built by the same function the server used, so the two can
   // only say the same thing.
-  const rows = useMemo<StellaAgentSummary[]>(() => {
-    if (!enabled || activeAgentId === null) return agents;
-    const entries = conversation?.entries ?? [];
-    // The newest entry the conversation DRAWS: a routine's prompt is at the
-    // end while the run arrives, and it is not a message, so the row keeps
-    // the last one that is (the same walk the server does in latestPreview).
-    let preview: StellaPreview | null = null;
-    for (let index = entries.length - 1; index >= 0; index--) {
-      const candidate = entries[index];
-      if (candidate === undefined) continue;
-      preview = previewOf(candidate);
-      if (preview !== null) break;
+  //
+  // Written into the row, not derived from the selection. A list computed as
+  // "the rows, with the selected conversation's newest message folded in"
+  // changes when the selection does: the message the previously selected row
+  // had been showing is taken back out, and two recent conversations swap
+  // places every time the reader looks at the other one. A row may move when
+  // something is SAID — that is the list's order — and not when a row is
+  // opened.
+  useEffect(() => {
+    if (!enabled || conversation === null || conversationAgentId === null) {
+      return;
     }
-    if (preview === null) return agents;
-    let changed = false;
-    const next = agents.map((agent) => {
-      if (agent.id !== activeAgentId || samePreview(agent.preview, preview)) {
-        return agent;
-      }
-      changed = true;
-      return { ...agent, preview };
-    });
-    // An unchanged list keeps its identity: the sidebar re-renders on every
-    // message, and reordering it for nothing would move rows under the eye.
-    return changed ? next.sort(compareAgentRows) : agents;
-  }, [enabled, activeAgentId, conversation?.entries, agents]);
+    // The frame in which the address has moved on but the effect that drops
+    // the state has not run yet still holds the previous conversation. Its
+    // messages are not this agent's last words.
+    if (conversationAgentId !== activeAgentId) return;
+    const preview = newestPreview(conversation.entries);
+    if (preview === null) return;
+    setAgents((current) =>
+      withAgentPreview(current, conversationAgentId, preview),
+    );
+  }, [enabled, activeAgentId, conversationAgentId, conversation]);
 
   // Open the active agent's conversation. The server starts the machine on
   // this call, so a first run waits here (minutes) — `loading` is what the
@@ -257,6 +260,7 @@ export function useStella(
   useEffect(() => {
     if (!enabled || activeAgentId === null) {
       setConversation(null);
+      setConversationAgentId(null);
       return;
     }
     setLoading(true);
@@ -267,7 +271,10 @@ export function useStella(
         const snapshot = await stellaApi.open(activeAgentId);
         if (disposed) return;
         // Seed from the snapshot: a page reload shows the conversation it
-        // left, and the snapshot's `running` keeps a live run live.
+        // left, and the snapshot's `running` keeps a live run live. The
+        // agent id is recorded in the same commit as the state, so a reader
+        // of `conversation` can always tell whose it is.
+        setConversationAgentId(activeAgentId);
         setConversation(stellaStateOf(snapshot));
         setSessionId(snapshot.sessionId);
       } catch (failure) {
@@ -419,6 +426,7 @@ export function useStella(
   // from appearing under another agent's name.
   useEffect(() => {
     setConversation(null);
+    setConversationAgentId(null);
     setSessionId(null);
   }, [activeAgentId]);
 
@@ -426,6 +434,7 @@ export function useStella(
   useEffect(() => {
     if (enabled) return;
     setConversation(null);
+    setConversationAgentId(null);
     setSessionId(null);
   }, [enabled]);
 
@@ -557,7 +566,7 @@ export function useStella(
   }, [activeAgentId, conversation?.older]);
 
   return {
-    agents: rows,
+    agents,
     // Only the very first read counts: a 30-second refresh replaces rows that
     // are already on screen, and swapping them for "Loading…" would take real
     // content away to say nothing new.
