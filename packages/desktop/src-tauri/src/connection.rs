@@ -201,6 +201,9 @@ fn remember(app: &AppHandle, conn: Option<SavedConnection>) -> Result<(), String
 
 /// Make `conn` the displayed server: state, then navigation.
 fn display_remote(app: &AppHandle, conn: &SavedConnection) -> Result<String, String> {
+    // A loan names one conversation on one server: showing another server
+    // ends every loan instead of carrying a folder the user never lent there.
+    crate::share::revoke_all(app);
     let page = page_url(&conn.url, &conn.token);
     *app.state::<AppState>().last_remote.lock_recover() = Some(conn.clone());
     navigate_main(app, &page)?;
@@ -244,6 +247,9 @@ pub(crate) fn connect_local(app: &AppHandle) -> Result<String, String> {
 /// display the next launch will not restore. Also used by the server-down
 /// banner's restart, which is explicitly about the local server.
 pub(crate) fn display_local(app: &AppHandle, url: &str) -> Result<String, String> {
+    // Same rule as display_remote: the loans belonged to the server the
+    // window was showing.
+    crate::share::revoke_all(app);
     remember(app, None)?;
     *app.state::<AppState>().last_remote.lock_recover() = None;
     navigate_main(app, url)?;

@@ -19,6 +19,7 @@ pub mod notify;
 pub mod server;
 pub mod server_log;
 pub mod settings;
+pub mod share;
 pub mod update;
 pub mod window;
 
@@ -107,6 +108,9 @@ pub(crate) struct AppState {
     /// The shell bridge's loopback listener. Its origin is injected into
     /// every page the main window loads, so the page can drive the shell.
     bridge: Mutex<Option<bridge_server::BridgeServer>>,
+    /// The folders this shell lends to the displayed conversation, and the
+    /// child process that serves them (see share.rs).
+    share: Mutex<share::ShareLender>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -156,6 +160,7 @@ pub fn run() {
                 startup_task: Mutex::new(None),
                 browser_lab: Mutex::new(lab),
                 bridge: Mutex::new(bridge),
+                share: Mutex::new(share::ShareLender::default()),
             });
             // The main window is defined in tauri.conf.json with
             // `create: false`, so it can be built here with the bridge's
@@ -248,6 +253,7 @@ pub fn run() {
 /// server log, which is the only trace a hard-killed server leaves behind.
 pub(crate) fn shutdown_services(app: &tauri::AppHandle, reason: &str) {
     server::stop_local_server(app, reason);
+    share::shutdown(app);
     browser_lab::shutdown(app);
     if let Some(state) = app.try_state::<AppState>() {
         // Dropping the server joins its listener thread.

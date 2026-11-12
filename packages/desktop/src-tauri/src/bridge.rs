@@ -20,7 +20,7 @@ use crate::settings::SavedConnection;
 use crate::update::{
     check_for_updates, download_update, install_update, set_auto_update, update_status_json,
 };
-use crate::{connection, notify, AppState, LockRecover};
+use crate::{connection, notify, share, AppState, LockRecover};
 
 /// One bridge action's answer: the HTTP status and the JSON body.
 type BridgeReply = (StatusCode, Vec<u8>);
@@ -268,6 +268,44 @@ pub(crate) fn handle_shell_action(
             ),
             Err(e) => bridge_error(StatusCode::BAD_GATEWAY, &e),
         },
+        // --- lending a folder from this computer -------------------------
+        //
+        // The page is served by the (possibly remote) server, so the folder
+        // picker, the consent and the loan itself are here in the shell. The
+        // server never asks for a folder: it only hears what the lending
+        // child announces (see share.rs).
+        "share/pick-folder" => match share::pick_folder(app) {
+            Ok(path) => bridge_json(StatusCode::OK, serde_json::json!({ "path": path })),
+            Err(e) => bridge_error(StatusCode::INTERNAL_SERVER_ERROR, &e),
+        },
+        "share/grant" => {
+            let Some(path) = get("path") else {
+                return bridge_error(StatusCode::BAD_REQUEST, "path required");
+            };
+            let session_id = get("sessionId").unwrap_or_default();
+            let write = get("write").as_deref() == Some("1");
+            let exec = get("exec").as_deref() == Some("1");
+            match share::grant(app, &session_id, &path, write, exec) {
+                Ok(grant) => bridge_json(
+                    StatusCode::OK,
+                    serde_json::json!({ "ok": true, "grant": grant }),
+                ),
+                Err(e) => bridge_error(StatusCode::BAD_REQUEST, &e),
+            }
+        }
+        "share/revoke" => {
+            let Some(id) = get("id") else {
+                return bridge_error(StatusCode::BAD_REQUEST, "id required");
+            };
+            match share::revoke(app, &id) {
+                Ok(()) => bridge_json(StatusCode::OK, serde_json::json!({ "ok": true })),
+                Err(e) => bridge_error(StatusCode::INTERNAL_SERVER_ERROR, &e),
+            }
+        }
+        "share/list" => bridge_json(
+            StatusCode::OK,
+            serde_json::json!({ "grants": share::list(app) }),
+        ),
         // --- local server diagnostics ------------------------------------
         //
         // The page cannot tell "server crashed" apart from "server hung"

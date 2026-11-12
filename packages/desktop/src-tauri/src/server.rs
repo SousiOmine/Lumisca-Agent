@@ -253,6 +253,47 @@ fn find_server_command(app: &AppHandle) -> Option<ServerCommand> {
     repo_entry.map(ServerCommand::Bun)
 }
 
+/// The repository root of a development server entry
+/// (`packages/server/mod.ts` → three parents). Canonicalized because a
+/// relative root breaks esbuild (it rejects relative working directories).
+fn repo_root_of(entry: &Path) -> PathBuf {
+    std::fs::canonicalize(entry)
+        .ok()
+        .and_then(|e| e.parent().map(|p| p.to_path_buf()))
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
+/// The lending child (`lumisca-server share`): the same launcher the local
+/// server runs, with the subcommand that makes it the process holding the
+/// user's folders. It gets no database, port or token: the launcher branches
+/// on `share` before reading any of that, and the child is told which server
+/// to dial on its stdin (see share.rs).
+pub(crate) fn share_process_command(app: &AppHandle) -> Result<Command, String> {
+    match find_server_command(app) {
+        Some(ServerCommand::Compiled(bin)) => {
+            let mut command = background_command(&bin);
+            command.arg("share");
+            Ok(command)
+        }
+        Some(ServerCommand::Bun(entry)) => {
+            let bun = find_bun().ok_or_else(|| {
+                "Bun runtime not found. Install Bun (https://bun.com) and add it to PATH."
+                    .to_string()
+            })?;
+            let mut command = background_command(&bun);
+            command
+                .args(["run"])
+                .arg(&entry)
+                .arg("share")
+                .env("LUMISCA_REPO_ROOT", repo_root_of(&entry));
+            Ok(command)
+        }
+        None => Err("サーバーの実行ファイルが見つかりません".to_string()),
+    }
+}
+
 /// Desktop data directory (server database, desktop settings).
 pub(crate) fn app_data_dir(app: &AppHandle) -> PathBuf {
     app.path()
@@ -340,15 +381,8 @@ fn start_server(app: &AppHandle, port: u16, token: &str) -> Result<Child, String
             })?;
             // The server resolves frontend assets relative to the
             // repository root; the spawned process runs from a different
-            // cwd, so pass it explicitly. The entry is relative in the
-            // development layout, so canonicalize it — a relative root
-            // breaks esbuild (it rejects relative working directories).
-            let repo_root = std::fs::canonicalize(&entry)
-                .ok()
-                .and_then(|e| e.parent().map(|p| p.to_path_buf()))
-                .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-                .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-                .unwrap_or_else(|| PathBuf::from("."));
+            // cwd, so pass it explicitly.
+            let repo_root = repo_root_of(&entry);
             let mut command = background_command(&bun);
             command
                 .args(["run"])
@@ -439,7 +473,7 @@ fn browser_lab_env(app: &AppHandle) -> Option<(String, String)> {
 /// the server child itself is reaped, so the grandchildren are dead
 /// before this returns — a spawned-and-forgotten taskkill races app exit
 /// and orphans the tree.
-fn kill_process_tree(child: &mut Child) {
+pub(crate) fn kill_process_tree(child: &mut Child) {
     #[cfg(windows)]
     {
         let pid = child.id();

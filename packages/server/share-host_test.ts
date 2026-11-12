@@ -233,7 +233,12 @@ Deno.test("a loan ends after 30 idle minutes, and an access restarts the clock",
   const root = folder();
   // The production deadline is half an hour; the rule is the same one at any
   // length, so the test shrinks it instead of waiting.
-  const lender = createShareHost({ retryMs: 10, idleMs: 600 });
+  const expired: string[][] = [];
+  const lender = createShareHost({
+    retryMs: 10,
+    idleMs: 600,
+    onExpired: (ids) => expired.push([...ids]),
+  });
   const sleep = (ms: number) =>
     new Promise((resolve) => setTimeout(resolve, ms));
   try {
@@ -265,6 +270,8 @@ Deno.test("a loan ends after 30 idle minutes, and an access restarts the clock",
       Error,
       "no longer lent",
     );
+    // The shell is told, so its next announcement does not lend it again.
+    assertEquals(expired, [["g1"]]);
   } finally {
     lender.close();
     disposeServer(server);

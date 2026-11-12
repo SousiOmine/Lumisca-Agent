@@ -79,6 +79,11 @@ export interface ShareHostOptions {
   maxRetryMs?: number;
   /** How long a loan survives without an access; tests shorten it. */
   idleMs?: number;
+  /** Called with the grants that ended by themselves. The shell keeps its
+   * own copy of the list to build the next announcement from; unless it
+   * hears this, its next change would lend a folder that has already ended
+   * (`runShareHost` turns this into the `expired` line on stdout). */
+  onExpired?: (ids: readonly string[]) => void;
   /** The clock every deadline is measured with; tests pin it. */
   now?: () => number;
 }
@@ -323,9 +328,13 @@ export function createShareHost(
     for (const grant of grants) {
       if (!kept.includes(grant)) lastUsed.delete(grant.id);
     }
+    const ended = grants
+      .filter((grant) => !kept.includes(grant))
+      .map((grant) => grant.id);
     grants = kept;
     mounts.clear();
     announce();
+    options.onExpired?.(ended);
     log(`loan expired after ${Math.round(idleMs / 60_000)} min of no use`);
   };
   // A quarter of the deadline (at most every 30 s): the delivery of an
@@ -381,6 +390,12 @@ export function createShareHost(
 export async function runShareHost(): Promise<number> {
   const lender = createShareHost({
     log: (line) => console.error(`[share] ${line}`),
+    // The shell holds the list it lent and writes it again on every change.
+    // Telling it which loans ended is what keeps a lapsed folder from coming
+    // back with the next one.
+    onExpired: (ids) => {
+      process.stdout.write(`${JSON.stringify({ type: "expired", ids })}\n`);
+    },
   });
   const decoder = new TextDecoder();
   let carry = "";
