@@ -33,6 +33,7 @@ import {
   VM_CONTRACT_CACHE_MS,
   VM_COPY_TIMEOUT_MS,
   VM_DBUS_ADDRESS,
+  VM_DESKTOP_SCRIPT,
   VM_DISPLAY,
   VM_GID,
   VM_HOME_VOLUME,
@@ -48,9 +49,14 @@ import {
   VM_STOP_TIMEOUT_MS,
   VM_UID,
   VM_USER,
-  VM_VNC_PORT,
+  VM_VNC_PORT_RANGE,
   VM_WORKDIR,
+  vmWebsockifyPortOf,
 } from "./contract.ts";
+
+/** Starting a desktop is a cold start of an X server and a browser, not a
+ * command: the first one builds a profile too. */
+const VM_DESKTOP_TIMEOUT_MS = 120_000;
 
 /** Where the machine is, as far as this application can tell. */
 export type VmState =
@@ -167,15 +173,18 @@ interface ContainerFacts {
   /** `podman`'s status word; `running` is the only one the machine can serve
    * calls in. */
   status: string;
-  /** The host port noVNC's websockify is published on, when one is. */
+  /** The host ports the machine publishes, by container port. One per desktop
+   * slot (see VM_VNC_PORT_RANGE). */
+  ports: Record<string, unknown>;
+  /** The first desktop's host port, when there is one. */
   vncPort: number | null;
 }
 
 /** The published host port of the machine's screen, out of the inspect
  * answer's port mapping (`{"6080/tcp":[{"HostIp":"127.0.0.1",
  * "HostPort":"35483"}]}`). */
-function vncPortOf(ports: Record<string, unknown>): number | null {
-  const bindings = ports[`${VM_VNC_PORT}/tcp`];
+function vncPortOf(ports: Record<string, unknown>, slot = 0): number | null {
+  const bindings = ports[`${vmWebsockifyPortOf(slot)}/tcp`];
   if (!Array.isArray(bindings)) return null;
   for (const binding of bindings) {
     if (typeof binding !== "object" || binding === null) continue;
@@ -198,9 +207,20 @@ export interface VmManager {
    * not an error. */
   stop(): Promise<void>;
 
-  /** The host port noVNC is published on; null when the machine is not
-   * running. Read fresh (the port is assigned at creation). */
-  vncPort(): Promise<number | null>;
+  /** The host port one desktop slot's screen is published on; null when the
+   * machine is not running. Read fresh (the host ports are assigned at
+   * creation). The first slot is the machine's original screen. */
+  vncPort(slot?: number): Promise<number | null>;
+
+  /** Start one desktop slot, idempotently: its X server, window manager, a
+   * browser with this agent's own profile, and the VNC bridge. The slot may
+   * already be up (a container that was restarted, or a conversation
+   * reopened); that is not an error. */
+  startDesktop(slot: number, agentId: string): Promise<void>;
+
+  /** Stop one slot's browser and bridge. Its X server stays: display :99 is
+   * part of the machine's contract. */
+  stopDesktop(slot: number): Promise<void>;
 }
 
 /** The podman command prefix every call shares. */
@@ -508,6 +528,7 @@ export function createVmManager(options: VmManagerOptions): VmManager {
       id,
       startedAt: startedAt ?? "",
       status,
+      ports: published,
       vncPort: vncPortOf(published),
     };
   }
@@ -701,9 +722,9 @@ export function createVmManager(options: VmManagerOptions): VmManager {
         // mounted from the host.
         "--userns",
         `keep-id:uid=${VM_UID},gid=${VM_GID}`,
-        // The screen bridge, on the host's loopback only.
+        // One screen bridge per desktop slot, on the host's loopback only.
         "--publish",
-        `127.0.0.1::${VM_VNC_PORT}`,
+        `127.0.0.1::${VM_VNC_PORT_RANGE}`,
         // The agent's home lives on a named volume, not in the container's
         // own writable layer: the container is rebuilt by a release and can
         // be removed by anything, and the files the agent wrote must not go
@@ -968,9 +989,46 @@ export function createVmManager(options: VmManagerOptions): VmManager {
       cached = null;
     },
 
-    vncPort: async () => {
+    vncPort: async (slot = 0) => {
       const current = await status();
-      return current.state === "running" ? current.vncPort : null;
+      if (current.state !== "running") return null;
+      if (slot === 0) return current.vncPort;
+      const facts = await readContainerFacts();
+      return facts === undefined ? null : vncPortOf(facts.ports, slot);
+    },
+
+    startDesktop: async (slot: number, agentId: string) => {
+      const result = await run(
+        podman([
+          "exec",
+          VM_CONTAINER_NAME,
+          VM_DESKTOP_SCRIPT,
+          "start",
+          String(slot),
+          agentId,
+        ]),
+        { timeoutMs: VM_DESKTOP_TIMEOUT_MS, maxOutput: VM_TEXT_OUTPUT_LIMIT },
+      );
+      if (result.exitCode !== 0) {
+        throw new Error(
+          `Could not start the agent's desktop: ${detail(result)}`,
+        );
+      }
+    },
+
+    stopDesktop: async (slot: number) => {
+      // A slot that is already down is not an error: stopping is idempotent,
+      // and the caller evicts a slot it may no longer remember.
+      await run(
+        podman([
+          "exec",
+          VM_CONTAINER_NAME,
+          VM_DESKTOP_SCRIPT,
+          "stop",
+          String(slot),
+        ]),
+        { timeoutMs: VM_STOP_TIMEOUT_MS, maxOutput: VM_TEXT_OUTPUT_LIMIT },
+      );
     },
   };
   return manager;

@@ -272,6 +272,15 @@ export class StellaMachineService {
     return await this.deps.machine.status();
   }
 
+  /** The host port of one agent's screen, or null when there is no such
+   * agent or no machine. Opening the screen pane before the agent has used
+   * it starts the desktop, so the reader sees the same empty desktop the
+   * agent is about to work in. */
+  async stellaVncPort(agentId: string): Promise<number | null> {
+    if (this.deps.agents.get(agentId) === undefined) return null;
+    return await this.deps.machine.vncPortFor(agentId);
+  }
+
   /**
    * Create one agent's working folder and its MEMORY.md now, when the machine
    * is up.
@@ -336,9 +345,9 @@ export class StellaMachineService {
    * other session (the factory asks per open). */
   stellaRuntimeFor(session: SessionInfo): StellaRuntime | undefined {
     if (session.stella !== true) return undefined;
-    const exec = this.deps.machine.exec();
-    const execBytes = this.deps.machine.execBytes();
-    if (exec === undefined || execBytes === undefined) return undefined;
+    const baseExec = this.deps.machine.exec();
+    const baseExecBytes = this.deps.machine.execBytes();
+    if (baseExec === undefined || baseExecBytes === undefined) return undefined;
     // The identity belongs to the AGENT row, not to the session, and a stella
     // session always has one (the conversation is created FOR an agent). A
     // session without one would have nowhere to keep the text, so it fails
@@ -350,6 +359,17 @@ export class StellaMachineService {
         "invalid",
       );
     }
+    // The agent's own desktop. Only the tools that work on the screen get
+    // this seam: they carry the desktop's DISPLAY and start it on first use,
+    // so a conversation that never looks at a screen never pays for a
+    // browser. Files, the shell and a background command use the machine's
+    // seam — they are not screen work, and starting an X server under `ls`
+    // would be a browser for nothing. A program is started with `vm_launch`,
+    // which is on this seam.
+    const exec = baseExec;
+    const screenExec = this.deps.machine.execFor(agentId) ?? baseExec;
+    const screenExecBytes =
+      this.deps.machine.execBytesFor(agentId) ?? baseExecBytes;
     // The agent's own skill catalog: its folder holds the skills it wrote,
     // and the machine-wide folder is merged in (see vm/skills.ts). Read
     // through a getter for the same reason the factory asks for one — the
@@ -376,13 +396,18 @@ export class StellaMachineService {
       skills,
       refreshSkills: () => this.deps.machine.refreshSkills(agentId),
       screenTools: [
-        ...createVmTools({ screen: createVmScreen({ exec, execBytes }) }),
-        createVmLaunchTool({ exec }),
+        ...createVmTools({
+          screen: createVmScreen({
+            exec: screenExec,
+            execBytes: screenExecBytes,
+          }),
+        }),
+        createVmLaunchTool({ exec: screenExec }),
         createVmAskUserTool({
           handover: this.handoverFor(session.id),
         }),
       ],
-      semanticTools: createVmSemanticTools({ exec }),
+      semanticTools: createVmSemanticTools({ exec: screenExec }),
       handoverHub: this.handoverFor(session.id),
       envTool: createVmEnvTool({
         requests: this.deps.envRequests.for(session.id),

@@ -59,6 +59,47 @@ export const VM_SCREEN_HEIGHT = 800;
 /** Where noVNC's websockify listens inside the container. */
 export const VM_VNC_PORT = 6080;
 
+/** How many desktops one machine runs at once.
+ *
+ * Each is a separate X server, window manager, browser and profile, so an
+ * agent's windows, pointer and logins are its own. Everything the machine
+ * offers — the screen tools, the semantic tools, bash, `vm_launch` — follows
+ * the conversation's `DISPLAY` (see container/desktop.sh and vm/machine.ts).
+ *
+ * Four is a chat's worth of agents without paying for more browsers than a
+ * person would open. A fifth conversation takes the slot used least recently;
+ * that desktop is stopped first, and started again when its agent next uses
+ * its screen (the profile keeps the logins). */
+export const VM_DESKTOP_SLOTS = 4;
+
+/** The X display of one desktop slot: `:99` for the first, which the
+ * container boots, then `:100`, `:101`, `:102`. */
+export function vmDisplayOf(slot: number): string {
+  return slot === 0 ? VM_DISPLAY : `:${99 + slot}`;
+}
+
+/** The websockify port a slot's desktop listens on inside the container. */
+export function vmWebsockifyPortOf(slot: number): number {
+  return VM_VNC_PORT + slot;
+}
+
+/** The container ports the machine publishes for its desktops, as one podman
+ * `--publish` range (the host port of each is assigned at creation). */
+export const VM_VNC_PORT_RANGE = `${VM_VNC_PORT}-${
+  VM_VNC_PORT + VM_DESKTOP_SLOTS - 1
+}`;
+
+/** The program that starts and stops one desktop inside the machine
+ * (container/desktop.sh). */
+export const VM_DESKTOP_SCRIPT = "/usr/local/lib/lumisca/desktop.sh";
+
+/** Where one agent's browser profile lives inside the machine. The directory
+ * is the agent's identity: a conversation reopened later has the logins it
+ * left, and two agents never share one. */
+export function vmProfileDir(agentId: string): string {
+  return `${VM_WORKDIR}/.config/chromium/${agentId}`;
+}
+
 /** The account the container's processes run as (the Containerfile creates
  * it; `--userns keep-id` maps it onto the host user so mounted-write cases
  * stay impossible to get wrong). */

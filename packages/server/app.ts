@@ -347,9 +347,11 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   app.get(
     "/api/stella/screen",
     stellaScreenRoute({
-      vncPort: async () => {
-        const vm = core.getStellaVm();
-        return vm === undefined ? null : await vm.vncPort();
+      // One desktop per agent: the pane names the conversation it belongs
+      // to, and the port follows that agent's slot.
+      vncPort: async (agentId) => {
+        if (agentId === null) return null;
+        return await core.stellaVncPort(agentId);
       },
     }),
   );

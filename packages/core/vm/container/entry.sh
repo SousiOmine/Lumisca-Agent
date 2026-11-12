@@ -1,6 +1,8 @@
 #!/bin/sh
-# The stella machine's first process: a virtual display, a window manager, a
-# browser and the VNC bridge the chat's screen pane connects to.
+# The stella machine's first process: the session bus, and the display and
+# window manager slot 0 runs on. Browsers, VNC bridges and the other desktop
+# slots are started per agent (container/desktop.sh), so two conversations do
+# not share a browser, a profile or a pointer.
 #
 # The values here (DISPLAY :99, 1280x800, VNC on 6080, the session bus path)
 # are also written in packages/core/vm/contract.ts, which verifies them against
@@ -50,37 +52,16 @@ export DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/lumisca-dbus/session.sock
 # activation on the first app that asks for it, so nothing here launches it.
 gsettings set org.gnome.desktop.interface toolkit-accessibility true
 
-# Chromium keeps its profile lock across container recreations (it names the
-# previous container's hostname and pid), which shows an "Unlock Profile"
-# dialog over the screen the agent is trying to read.
-rm -f /home/agent/.config/chromium/Singleton*
-
-# `--force-renderer-accessibility` is what makes Chromium publish the contents
-# of the PAGE (buttons, fields, table cells), not just its window chrome.
-# Without it the web area is an empty frame on the bus: the agent could find
-# Chromium's own toolbar but nothing the page shows.
-chromium \
-  --force-renderer-accessibility \
-  --no-first-run \
-  --no-default-browser-check \
-  --hide-crash-restore-bubble \
-  --window-size=1280,800 \
-  --window-position=0,0 \
-  about:blank &
-CHROMIUM_PID=$!
-
-# VNC listens on the container's loopback only: the server forwards it over an
-# authenticated WebSocket (server/stella-screen.ts). It is never exposed on the
-# host's network.
-x11vnc -display :99 -forever -shared -nopw -localhost -rfbport 5900 -quiet &
-X11VNC_PID=$!
-
-websockify 6080 127.0.0.1:5900 &
-WEBSOCKIFY_PID=$!
+# No browser and no VNC here: each agent's desktop is started on its own slot
+# by desktop.sh when a conversation first uses its screen (see vm/machine.ts).
+# Booting one browser for everybody was what made two agents share a tab, a
+# profile and a pointer.
 
 # SIGTERM is how `podman stop` ends this container. `wait` does not forward it
 # to children, and without this trap a stop would sleep out podman's 10 second
-# grace period and then SIGKILL, making every shutdown feel broken.
-trap 'kill $DBUS_PID $XVFB_PID $OPENBOX_PID $CHROMIUM_PID $X11VNC_PID $WEBSOCKIFY_PID 2>/dev/null; exit 0' TERM INT
+# grace period and then SIGKILL, making every shutdown feel broken. A desktop
+# started by desktop.sh is a child of its own `podman exec`, so it dies with
+# the container's process namespace rather than from this list.
+trap 'kill $DBUS_PID $XVFB_PID $OPENBOX_PID 2>/dev/null; exit 0' TERM INT
 
 wait
