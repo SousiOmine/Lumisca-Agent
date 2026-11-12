@@ -43,6 +43,9 @@ Deno.test("ShareFolderDialog: nothing is lent until a folder is chosen", () => {
   const html = withStorage(memoryStorage(null), render);
   assertStringIncludes(html, "フォルダで共同作業");
   assertStringIncludes(html, "フォルダを選ぶ");
+  // A phone shows the dialog full screen, so the backdrop is not a way out:
+  // the close button has to be in the sheet whatever state it is in.
+  assertStringIncludes(html, "閉じる");
   // The terms and the "share" button belong to a chosen folder: before one
   // exists there is nothing to agree to.
   assert(!html.includes("最後に使ってから30分"), html);

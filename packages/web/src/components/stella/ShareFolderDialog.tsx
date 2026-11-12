@@ -151,9 +151,6 @@ export function ShareFolderDialog({
               </label>
               <p className="stella-share-note">{t("chat.stella.share.idle")}</p>
               <div className="stella-share-actions">
-                <button type="button" className="btn" onClick={() => close()}>
-                  {t("common.cancel")}
-                </button>
                 <button
                   type="button"
                   className="btn primary"
@@ -200,6 +197,13 @@ export function ShareFolderDialog({
               {error}
             </p>
           )}
+          {/* Always here, not only in the decision: on a phone the dialog
+           * fills the screen, so the backdrop is not a way out. */}
+          <div className="modal-actions">
+            <button type="button" className="btn" onClick={() => close()}>
+              {t("common.close")}
+            </button>
+          </div>
         </>
       )}
     </Modal>

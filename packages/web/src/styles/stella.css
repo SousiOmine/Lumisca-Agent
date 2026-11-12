@@ -281,11 +281,15 @@
   overflow-wrap: anywhere;
 }
 
-.stella-share-choice {
-  display: flex;
+/* The dialog's labels are column stacks (modals.css: a field's name above
+ * its input). These three are one line each: the box and what it allows. The
+ * selector carries `.modal` to win over that rule. */
+.modal .stella-share-choice {
+  flex-direction: row;
   align-items: center;
   gap: 8px;
   font-size: 13px;
+  color: var(--text);
 }
 
 .stella-share-note {
@@ -1142,11 +1146,23 @@
 .stella-pane-header {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  gap: 2px;
   padding: 4px 4px 4px 12px;
   border-bottom: 1px solid var(--border);
   font-size: 11px;
   color: var(--text-dim);
+}
+
+/* The title names the panel; the controls follow it at the far edge. Before
+ * the panel had a name this was one label among the controls, and both packed
+ * right; a heading left and its controls right is what the two sections
+ * below it ask for. */
+.stella-pane-header > span {
+  margin-right: auto;
+}
+
+.stella-pane-header .icon-btn {
+  margin-left: 2px;
 }
 
 .stella-pane-body {
