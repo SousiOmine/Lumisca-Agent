@@ -101,11 +101,12 @@ export function agentCreateSkill(): SkillDef {
   return {
     name: "agent-create",
     description:
-      "Creating another agent (a counterpart with its own name, role and " +
-      "conversation): when a job needs a separate one, asking the user for " +
-      "the name and role in a card, and creating it with agent_create — a " +
-      "tool that is not preloaded, so find it with tool_search first. A long " +
-      "role can be a text file in the machine instead of inline text.",
+      "Use this skill whenever the user wants a separate counterpart to " +
+      "talk to — a new agent with its own name, role and conversation — or " +
+      "when a job clearly needs one. It covers asking the user for the name " +
+      "and role in a card, and creating the agent with agent_create (not " +
+      "preloaded: find it with tool_search first), including passing a long " +
+      "role as a file in the machine instead of inline text.",
     source: "builtin",
     read: (relativePath) => {
       if (relativePath !== undefined) {

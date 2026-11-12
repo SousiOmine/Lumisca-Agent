@@ -66,10 +66,10 @@ export function identitySkill(): SkillDef {
   return {
     name: "identity",
     description:
-      "Your own identity: the text you write about yourself (your role, what " +
-      "you are responsible for, the knowledge the work needs), separate from " +
-      "the role the user wrote. The identity tool is not preloaded — find it " +
-      "with tool_search.",
+      "Use this skill when you should record who you are for later runs — " +
+      "your role, what you are responsible for, the knowledge the work needs " +
+      "— separate from the role the user wrote at creation. The identity " +
+      "tool is not preloaded: find it with tool_search.",
     source: "builtin",
     read: (relativePath) => {
       if (relativePath !== undefined) {

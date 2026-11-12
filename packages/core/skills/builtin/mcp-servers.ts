@@ -108,10 +108,10 @@ export function mcpServersSkill(): SkillDef {
   return {
     name: "mcp-servers",
     description:
-      "Adding and removing MCP servers: the app-level list in Settings → MCP " +
-      "servers, which every workspace and session uses. Teaches mcp_add, " +
-      "mcp_remove and mcp_list, which are not preloaded — find them with " +
-      "tool_search first.",
+      "Use this skill whenever the user asks to add, remove or list MCP " +
+      "servers — the app-level list in Settings → MCP servers that every " +
+      "workspace and session uses. It teaches mcp_add, mcp_remove and " +
+      "mcp_list, which are not preloaded: find them with tool_search first.",
     source: "builtin",
     read: (relativePath) => {
       if (relativePath !== undefined) {

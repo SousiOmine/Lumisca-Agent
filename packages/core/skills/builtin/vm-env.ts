@@ -86,9 +86,10 @@ export function vmEnvSkill(): SkillDef {
   return {
     name: "vm-env",
     description:
-      "Ask the user for an environment variable's value (an API key, a " +
-      "token, a password) so a program can use it without you ever seeing " +
-      "it. The vm_env tool is not preloaded — find it with tool_search.",
+      "Use this skill whenever a program needs a secret — an API key, a " +
+      "token, a password — that the user should type and you should never " +
+      "see. It asks for the value with the vm_env tool, which is not " +
+      "preloaded: find it with tool_search.",
     source: "builtin",
     read: (relativePath) => {
       if (relativePath !== undefined) {

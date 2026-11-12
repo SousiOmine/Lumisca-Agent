@@ -120,10 +120,10 @@ export function webBrowserSkill(): SkillDef {
   return {
     name: "web-browser",
     description:
-      "Usage of the built-in web browser (WebView): opening, operating, " +
-      "screenshotting and debugging the UI of local web apps and dev " +
-      "servers. The browser_open etc. tools are not preloaded — find " +
-      "them with tool_search, then execute with tool_call.",
+      "Use this skill whenever the user wants a local web app or dev " +
+      "server opened, operated, screenshotted or debugged in the built-in " +
+      "browser (WebView). The browser_open etc. tools are not preloaded: " +
+      "find them with tool_search, then run one with tool_call.",
     source: "builtin",
     read: (relativePath) => {
       if (relativePath !== undefined) {

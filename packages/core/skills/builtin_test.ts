@@ -355,14 +355,17 @@ Deno.test("plugin skills shadow built-in skills of the same name", () => {
 Deno.test("formatAvailableSkills lists built-in skills like any other", () => {
   const text = formatAvailableSkills(browserBuiltins());
   assert(text.startsWith("- web-browser:"));
-  assert(text.includes("built-in web browser"));
+  // The line the catalog publishes is the trigger the model reads, so it
+  // starts with when to use the skill.
+  assert(text.includes("Use this skill whenever"));
 });
 
-Deno.test("the coding-agents skill teaches the discovery flow it needs", async () => {
-  // A stella conversation has the task tool, but nothing told its agent when
-  // a job is big enough to split — so the skill is advertised there. It must
-  // teach the tool_search step, because the tool is not in every session's
-  // preloaded set (a sub-agent's own set has no hub of its own).
+Deno.test("the coding-agents skill calls the preloaded task tool directly", async () => {
+  // The `subagents` flag that advertises this skill is the same fact as the
+  // tool hub, so `task` is in the agent's tool set wherever the guide is
+  // read. A `tool_search` step here made a literal reader conclude it could
+  // not delegate: tool_search only covers the session registry, and a
+  // preloaded tool is not in it.
   const skills = builtinSkills({
     browser: false,
     computer: false,
@@ -371,19 +374,54 @@ Deno.test("the coding-agents skill teaches the discovery flow it needs", async (
   });
   const coding = skills.find((skill) => skill.name === "coding-agents");
   assert(coding !== undefined, "the coding-agents skill must be advertised");
+  assert(coding.description.startsWith("Use this skill"), coding.description);
   assert(coding.description.includes("sub-agent"), coding.description);
+  // The description carries the trigger, so it has to name the cases where
+  // the user never says "sub-agent".
+  assert(coding.description.includes("even if"), coding.description);
 
   const read = coding.read;
   assert(read !== undefined, "the skill must be readable");
   const body = await read(undefined);
-  // The flow the request named: read the skill → find the tool → call it.
-  assert(body.includes("tool_search"), "teaches tool_search");
-  assert(body.includes("tool_call"), "teaches tool_call");
-  assert(body.includes(`"task"`), "names the task tool");
+  assert(body.includes("task"), "names the task tool");
+  assert(body.includes("task_output"), "teaches collecting the reports");
+  assert(body.includes("wait: true"), "teaches waiting instead of polling");
   // Several at once is a rule, not an accident: the skill has to say so, or
   // an agent splits a job and then runs the parts one after another.
   assert(body.includes("8"), "states how many may run at once");
-  assert(body.includes("task_output"), "teaches collecting the reports");
+  for (const type of ["general", "explore"]) {
+    assert(body.includes(`\`${type}\``), `names the ${type} type`);
+  }
+  assertEquals(
+    body.includes("tool_search"),
+    false,
+    "the task tool is preloaded wherever this guide is advertised",
+  );
+});
+
+Deno.test("every built-in description is a trigger, not a table of contents", () => {
+  // The catalog shows only `name: description` (level one of progressive
+  // disclosure), so the description is what makes the model load a skill at
+  // all. It starts with when to use the skill, not with what it contains.
+  const skills = builtinSkills({
+    browser: true,
+    computer: true,
+    stella: true,
+    subagents: true,
+    mcpAdmin: true,
+    skillAuthoring: {},
+  });
+  assertEquals(skills.length, 10, "the fixture advertises every built-in");
+  for (const skill of skills) {
+    assert(
+      skill.description.startsWith("Use this skill"),
+      `${skill.name}: ${skill.description}`,
+    );
+    assert(
+      skill.description.length <= 1024,
+      `${skill.name}: ${skill.description.length} characters`,
+    );
+  }
 });
 
 Deno.test("a session without a sub-agent hub is not pointed at one", () => {

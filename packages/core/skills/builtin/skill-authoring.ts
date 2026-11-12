@@ -31,10 +31,12 @@ export function skillAuthoringSkill(options: {
   return {
     name: SKILL_AUTHORING_NAME,
     description:
-      "Writing a skill: the SKILL.md format, the session's own skills " +
-      "folder and the shared folder every agent reads. Teaches creating, " +
-      "changing and deleting skills with the file tools (write, edit, " +
-      "list_dir, bash).",
+      "Use this skill whenever the user asks to add, change or remove a " +
+      "skill, says 'remember how to do this', or a procedure is worth " +
+      "keeping for later runs. It covers the SKILL.md format (including " +
+      "what the catalog shows the model), where a skill belongs, and " +
+      "creating, changing and deleting one with the file tools (write, " +
+      "edit, list_dir, bash).",
     source: "builtin",
     read: (relativePath) => {
       if (relativePath !== undefined) {
@@ -115,7 +117,7 @@ shared folder.
 \`\`\`markdown
 ---
 name: release-notes
-description: Write release notes from merged pull requests. Use when the user asks for a release summary.
+description: Use when the user asks for release notes or a summary of what shipped, even if they do not say "release notes". Writes them from merged pull requests, grouped by user-visible area.
 ---
 
 # Release notes
@@ -130,9 +132,29 @@ Rules discovery enforces:
 - \`name\`: lowercase letters, digits and single hyphens, 1–64 characters.
   It MUST equal the folder name — a mismatch means the skill is ignored.
 - \`description\`: one line, 1–1024 characters. It is the only thing the
-  catalog shows, so say **when** to use the skill, not what it contains.
+  catalog shows, so write it as the trigger — see "The description is the
+  trigger" below.
 - The body: the instructions themselves. Write them for an agent that has
   your tools, in the imperative, and keep them short enough to read.
+
+## The description is the trigger
+
+The model sees only \`name\` and \`description\`, and it decides from those
+whether to load the skill; until it does, the body is invisible. Write the
+description to that reader, not about the file:
+
+- Start with "Use when …" (or "Use this skill whenever …"). Name the
+  situations, not the contents.
+- Describe what the user is trying to achieve, not how the skill works.
+- Be pushy: list the contexts where it applies, including ones where the
+  user never names the domain ("even if they don't say 'release notes'").
+- Say what it is not for, briefly, when a neighbouring skill could be
+  mistaken for it.
+- Keep it to a few sentences and under 1,024 characters. Too broad and it
+  fires on everything; too narrow and it never fires.
+
+The body is then free to be only the how. Do not repeat the trigger list
+there: the description is the one place the model reads before deciding.
 
 ## Creating
 
@@ -170,7 +192,8 @@ one you did not write unless the user asks for that one by name.
 ## Checklist before you answer
 
 - The folder is named exactly like \`name\` in the frontmatter.
-- \`description\` says when to use it.
+- \`description\` starts with "Use when …", says when to use the skill
+  rather than what it contains, and stays under 1,024 characters.
 - You chose workspace or shared by scope.
 - You said where it went, and whether the user must reopen anything to see
   it.

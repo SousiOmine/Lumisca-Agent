@@ -73,7 +73,10 @@ export function createSkillCatalogProvider(
         published === undefined
           ? ""
           : " (this catalog replaces the earlier one)"
-      }. Load a skill with the skill tool before starting work that matches it.
+      }. Each line is \`name: description\`.
+The description says when that skill applies. Load a skill with the skill
+tool before starting work that matches one — a match can be a way of
+working, not only a subject.
 ${
   hidden > 0
     ? `Only the first ${listed} skills are listed; the remaining ` +

@@ -4,92 +4,90 @@ import type { SkillDef } from "../discover.ts";
  * The built-in "coding-agents" skill: how to hand a coding job to
  * sub-agents (the `task` tool).
  *
- * The tool is preloaded in a coding session, but a stella conversation had
- * nothing telling its agent when the work is big enough to split. This skill
- * is that rule: a job the user asked for, or one the agent judged to be a
- * program rather than an edit, is split across coding agents that run at the
- * same time.
+ * This is the only thing that tells an agent the work is big enough to
+ * split — the system prompt deliberately describes the machine, not a
+ * procedure, and a tool description can only state the contract of one
+ * call. The description is therefore the trigger (the catalog shows only
+ * `name: description`) and the body is the how.
  *
- * The tool is not in the preloaded set of every session (a sub-agent's own
- * set, and a session whose hub refused it) — that is why the flow starts
- * with tool_search rather than with the call: the skill can be read in a
- * session where the tool has to be found first, and the same words work in
- * both.
+ * The `task` family is preloaded exactly where this skill is advertised
+ * (the catalog's `subagents` flag is the same fact as the tool hub), so the
+ * body calls `task` directly. Teaching tool_search here made an agent that
+ * followed the guide literally conclude it could not delegate — the search
+ * only covers the session registry, and a preloaded tool is not in it.
  */
 
 /** The SKILL.md body. English, like the tool descriptions it quotes. */
 const SKILL_MD = `# Handing coding work to sub-agents
 
-A sub-agent is another coding agent with its own context. It works on one
-self-contained job, reports back, and never sees this conversation — so
-splitting work across several of them is how a large change gets done
-without burying this conversation in file reads.
+A sub-agent is another coding agent that starts with none of this
+conversation. It works on one job and reports back. Its transcript is not
+saved, so the report is the only trace of what it did — and the prompt is
+the only thing it knows.
 
-## When to use one
+## Split the job
 
-- The user asks for a coding job (implement this, fix that, port this over).
-- You judge that the work is a program rather than an edit: more than one
-  file, more than one concern, or something you would describe to a
-  colleague before starting.
-- Do NOT delegate a quick fix you can finish in a few tool calls, a
-  question, or work that needs the conversation's history. Do it yourself.
+Decide the parts before starting anything. A part is worth delegating
+when it:
 
-## Several at once
+- does not need another part's output;
+- touches files no other part touches (two agents writing one file
+  conflict, and the mess is yours to untangle);
+- can be described in two sentences. A part that needs paragraphs comes
+  back wrong.
 
-Sub-agents run in the background. Up to 8 may run at the same time in one
-session, so a job with independent parts is split into parts and all of them
-started before waiting for any:
+## Start every part in one turn
 
-1. Decide the parts. They must not need each other's output, and they must
-   not edit the same files — two agents writing one file is a conflict you
-   will have to untangle.
-2. Start every part with its own \`task\` call, one after another, in the
-   same turn. Do not wait for the first to finish before starting the
-   second: that is the serial version of the same work.
-3. Then collect: \`task_output\` with \`wait: true\` for each id, or read the
-   \`[Task <id> ...]\` notifications as they arrive.
-4. Integrate what they produced yourself, and check it as a whole.
+\`task\` is in your tool set. Call it once per part, all in the same turn:
+waiting for the first to finish before starting the second is the serial
+version of the same work. Up to 8 may run at once.
 
-Keep the parts small enough to describe in two sentences. A part that needs
-several paragraphs of instructions is a part that will come back wrong.
+    task(subagent_type: "general",
+         description: "Short name shown in the list",
+         prompt: "The self-contained job description")
 
-## Which kind
+## What the prompt must carry
 
-- \`general\` — a full coding agent: reads, writes, runs commands, and may
-  itself start sub-agents. This is the one to use for implementation.
-- \`explore\` — read-only research: finds things out and reports; it cannot
-  change anything. Use it when the work is "find out how X works" rather
-  than "change X".
+The sub-agent cannot ask you anything, so the prompt has to stand alone.
+Say what done looks like, not how to do it — it decides that.
 
-## The prompt
+    Goal: what done looks like
+    Files: the paths it needs, and the ones it must not touch
+    Constraints: what must not change, which tests must pass
+    Report: files touched, what was verified, what is left
 
-The sub-agent starts with no context. Every \`task\` call therefore carries:
+Do not paste this conversation into the prompt and do not write "see
+above": there is no above. A sub-agent handed the conversation instead of
+the job comes back with a summary of the conversation.
 
-- what to achieve (not how you would do it — it decides that),
-- the files and paths involved, with the facts it cannot discover quickly,
-- the constraints (what must not change, which tests must pass),
-- what to report back: the files it touched, what it verified, what it
-  could not do.
+## Which type
 
-Do not paste this conversation into it. Do not tell it to "see above" — there
-is no above.
-
-## The flow
-
-1. tool_search with the query "task sub-agent" (or "coding agent") to read
-   the arguments of \`task\`.
-2. tool_call with name "task", one call per part, all in this turn.
-3. tool_call with name "task_output" to collect each one.
-
-If tool_search does not list a sub-agent tool, this session cannot start
-one: do the work yourself rather than looking for another way in.
+- \`general\` reads, writes, runs commands, and may start its own
+  sub-agents. Use it to implement.
+- \`explore\` is read-only. Use it to find out how something works, and
+  for reviews where nothing may change.
 
 ## While they run
 
-You can keep working — read files, plan, write the part that is yours. Do not
-duplicate a part you delegated, and do not edit files you gave to an agent
-that is still running. When a report arrives, treat it as work to review, not
-as a result you can trust unread.
+Keep working: read files, plan, write the part that is yours. Do not
+duplicate a part you started, and do not edit a file you gave to an agent
+that is still running.
+
+## Collect
+
+- \`task_output\` with \`wait: true\` when you have nothing else to do;
+  otherwise keep working and read the \`[Task <id> ...]\` notification.
+- Treat the report as work to review, not as a result to trust: open the
+  diff before accepting it.
+
+## Gotchas
+
+- A task still running when this conversation closes is aborted and its
+  report is lost. Start long work early and collect it before you finish.
+- Reports arrive as notifications even while you are idle; do not poll in
+  a tight loop.
+- A fact only this conversation knows will never reach the sub-agent
+  unless you put it in the prompt.
 `;
 
 /** Build the built-in coding-agents skill definition. Content is embedded
@@ -98,10 +96,17 @@ export function codingAgentsSkill(): SkillDef {
   return {
     name: "coding-agents",
     description:
-      "Handing coding work to sub-agents: when a job is big enough to split, " +
-      "running several coding agents at the same time (up to 8), what their " +
-      "prompts must carry, and collecting their reports — the `task` tool, " +
-      "found with tool_search when it is not preloaded.",
+      "Use this skill whenever the user asks for a coding job bigger than a " +
+      "few edits — implementing a feature, fixing a bug across several " +
+      "files, porting or refactoring code, or working on several " +
+      "independent problems at once — or when you judge the work to be a " +
+      "program rather than an edit. It covers splitting the job across " +
+      "sub-agents that run at the same time (up to 8), what each " +
+      "sub-agent's prompt must carry, which type to use, and how to " +
+      "collect and check the reports. Use it even if the user does not say " +
+      "'sub-agent' or 'delegate'. Skip it for a quick fix of a few tool " +
+      "calls, a question, or a change that depends on this conversation's " +
+      "history.",
     source: "builtin",
     read: (relativePath) => {
       if (relativePath !== undefined) {

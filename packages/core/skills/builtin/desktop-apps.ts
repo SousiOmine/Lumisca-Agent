@@ -145,11 +145,13 @@ export function desktopAppsSkill(): SkillDef {
   return {
     name: "desktop-apps",
     description:
-      "Operating the machine's graphical applications by their widgets: " +
-      "finding a button or field by role and name (vm_find), acting on it " +
-      "(vm_do), and waiting for a page or dialog (vm_wait) — cheaper and more " +
-      "precise than reading coordinates off a screenshot. Also covers when " +
-      "the pixel path (vm_screenshot / vm_act) is the right one.",
+      "Use this skill whenever a graphical application on the machine must " +
+      "be operated by its widgets — pressing a button, filling a field, " +
+      "choosing a menu item, or waiting for a dialog. It finds a control by " +
+      "role and name (vm_find), acts on it (vm_do) and waits for the result " +
+      "(vm_wait), which is cheaper and more precise than reading coordinates " +
+      "off a screenshot; it also says when the pixel path " +
+      "(vm_screenshot / vm_act) is the right one.",
     source: "builtin",
     read: (relativePath) => {
       if (relativePath !== undefined) {

@@ -153,10 +153,10 @@ export function routinesSkill(): SkillDef {
   return {
     name: "routines",
     description:
-      "Requests this conversation runs on a schedule by itself: daily, " +
-      "weekly, every N minutes, once at a given date and time, or when " +
-      "something changes (a URL, a file, a command). The routine tools are " +
-      "not preloaded — find them with tool_search.",
+      "Use this skill whenever the user wants something to run on a " +
+      "schedule by itself — every morning, weekly, every N minutes, once at " +
+      "a given date and time, or when a URL, a file or a command changes. " +
+      "The routine tools are not preloaded: find them with tool_search.",
     source: "builtin",
     read: (relativePath) => {
       if (relativePath !== undefined) {

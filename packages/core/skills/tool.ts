@@ -54,8 +54,9 @@ export function createSkillTool(ctx: {
       "`[file truncated to the first N bytes]` note when it exceeds " +
       `${MAX_SKILL_FILE_BYTES} bytes. An unknown name ` +
       `fails with \`Unknown skill "<name>"\` followed by the skill names ` +
-      "that exist. The session skill catalog lists every available skill " +
-      "with its description.",
+      "that exist. The session skill catalog lists every available skill; " +
+      "a skill's description says when to load it, so load one before " +
+      "starting work that its description covers.",
     parameters: skillSchema,
     execute: async (_id, params): Promise<ToolResult> => {
       const skills = ctx.skills();

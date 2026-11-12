@@ -180,10 +180,11 @@ export function computerUseSkill(): SkillDef {
   return {
     name: "computer-use",
     description:
-      "Driving this machine's screen, mouse and keyboard: capturing the " +
-      "screen, clicking, dragging and typing in real GUI applications. The " +
+      "Use this skill whenever the user asks to work in a real GUI " +
+      "application on this machine — opening it, clicking, dragging, typing, " +
+      "or taking a screenshot to see what is on screen. The " +
       "computer_screenshot / computer_act / computer_list_windows tools are " +
-      "not preloaded — find them with tool_search, then execute with " +
+      "not preloaded: find them with tool_search, then run one with " +
       "tool_call. Windows and Linux (Wayland), and only when the feature is " +
       "enabled in settings.",
     source: "builtin",
