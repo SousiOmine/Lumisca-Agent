@@ -47,6 +47,15 @@ export interface FileBackend {
     maxBytes: number,
   ): Promise<{ bytes: Uint8Array; size: number }>;
 
+  /** Up to `length` bytes starting at `offset` (0-based), for moving a file
+   * between machines without decoding it as text. A shorter result means the
+   * file ended there; callers loop until they have what `stat` promised.
+   *
+   * Separate from `readHead` because the two answer different questions:
+   * `readHead` is a tool's first look at a file, `readBytes` is one window of
+   * a transfer, which must be able to start in the middle. */
+  readBytes(path: string, offset: number, length: number): Promise<Uint8Array>;
+
   /** Create or overwrite a file, creating missing parent directories.
    * `private` asks for owner-only permissions where the platform has them
    * (spilled tool output can hold secrets). */
@@ -54,6 +63,16 @@ export interface FileBackend {
     path: string,
     text: string,
     options?: { private?: boolean },
+  ): Promise<void>;
+
+  /** Write raw bytes, creating missing parent directories, and overwrite the
+   * file unless `append` says to add to its end. Transfers write one chunk at
+   * a time, so the whole file never has to sit in memory; `append` is how the
+   * second chunk knows it is not a new file. */
+  writeBytes(
+    path: string,
+    bytes: Uint8Array,
+    options?: { private?: boolean; append?: boolean },
   ): Promise<void>;
 
   /** Delete one file. A missing file is not an error (the caller is pruning

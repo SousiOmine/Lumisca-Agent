@@ -9,7 +9,7 @@
  * boundary and neither trusts the other's path arithmetic.
  */
 import { posix } from "node:path";
-import { base64ToBytes } from "../base64.ts";
+import { base64ToBytes, bytesToBase64 } from "../base64.ts";
 import type {
   BackendDirEntry,
   BackendStat,
@@ -117,6 +117,19 @@ export class RemoteFolderBackend implements FileBackend {
     return { bytes: base64ToBytes(value.base64), size: value.size };
   }
 
+  async readBytes(
+    path: string,
+    offset: number,
+    length: number,
+  ): Promise<Uint8Array> {
+    const value = await this.#call("readBytes", {
+      path: this.#segments(path),
+      offset,
+      length: Math.min(length, MAX_SHARE_READ_BYTES),
+    });
+    return base64ToBytes(value.base64);
+  }
+
   readRanges(
     path: string,
     ranges: readonly LineRange[],
@@ -125,6 +138,19 @@ export class RemoteFolderBackend implements FileBackend {
       path: this.#segments(path),
       ranges: [...ranges],
     });
+  }
+
+  writeBytes(
+    path: string,
+    bytes: Uint8Array,
+    options: { private?: boolean; append?: boolean } = {},
+  ): Promise<void> {
+    return this.#call("writeBytes", {
+      path: this.#segments(path),
+      base64: bytesToBase64(bytes),
+      private: options.private === true,
+      append: options.append === true,
+    }).then(() => {});
   }
 
   async writeText(

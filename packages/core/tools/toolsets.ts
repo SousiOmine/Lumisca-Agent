@@ -11,6 +11,7 @@ import { createBashTool } from "./bash.ts";
 import { createEvalTool } from "./eval.ts";
 import type { Tool } from "./schema.ts";
 import { createSendChatTool, type SendChatTarget } from "./send-chat.ts";
+import { createShareTransferTools } from "./share-transfer.ts";
 import type { TaskHub } from "./task-hub.ts";
 import { createTodoTool, type TodoHub } from "./todo.ts";
 import {
@@ -256,6 +257,9 @@ export function createStellaTools(options: {
     // The machine has `bash`, which brings grep, find and everything else
     // the shell already does well.
     fileTools(files),
+    // Bytes into and out of a folder the user lent: read/write reach /lend
+    // too, but only as text.
+    createShareTransferTools(files),
     createBashTool({
       files,
       runner,

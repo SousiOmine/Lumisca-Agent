@@ -83,6 +83,13 @@ export const TOOL_VM_ASK_USER = "vm_ask_user";
  * the agent the tool exists. */
 export const TOOL_VM_ENV = "vm_env";
 
+/** Move one file between the machine and a folder lent from the user's own
+ * computer, byte for byte (`share_upload` / `share_download`). Preloaded in
+ * stella: without them the model reads a picture as text and writes back
+ * something that is no longer the file. */
+export const TOOL_SHARE_UPLOAD = "share_upload";
+export const TOOL_SHARE_DOWNLOAD = "share_download";
+
 /** Send files to the user (images inline, everything else as a download).
  * Code mode only: there the reply's own text is what the user reads, so this
  * tool attaches what they should look at or keep. Preloaded wherever the

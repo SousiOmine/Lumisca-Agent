@@ -52,6 +52,10 @@ export interface ShareOpMap {
     req: { path: string[]; maxBytes: number };
     res: { base64: string; size: number };
   };
+  readBytes: {
+    req: { path: string[]; offset: number; length: number };
+    res: { base64: string };
+  };
   readRanges: {
     req: { path: string[]; ranges: LineRange[] };
     res: RangeReadResult;
@@ -59,6 +63,15 @@ export interface ShareOpMap {
   listDir: { req: { path: string[] }; res: BackendDirEntry[] };
   writeText: {
     req: { path: string[]; text: string; private: boolean };
+    res: null;
+  };
+  writeBytes: {
+    req: {
+      path: string[];
+      base64: string;
+      private: boolean;
+      append: boolean;
+    };
     res: null;
   };
   removeFile: { req: { path: string[] }; res: null };

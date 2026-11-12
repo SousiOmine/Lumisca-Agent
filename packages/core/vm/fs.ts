@@ -12,7 +12,7 @@
  * default, not a wall.
  */
 import { posix } from "node:path";
-import { base64ToBytes, textToBase64 } from "../base64.ts";
+import { base64ToBytes, bytesToBase64, textToBase64 } from "../base64.ts";
 import { firstLine, mergeRanges, stripTrailingCR } from "../lines.ts";
 import type {
   BackendDirEntry,
@@ -112,6 +112,62 @@ export class VmFileBackend implements FileBackend {
     }
     const bytes = base64ToBytes(result.stdout.trim());
     return { bytes, size: bytes.byteLength };
+  }
+
+  async readBytes(
+    path: string,
+    offset: number,
+    length: number,
+  ): Promise<Uint8Array> {
+    if (length === 0) return new Uint8Array(0);
+    // `tail -c +N` is 1-based, so byte 0 is `+1`. `head` stops the stream
+    // once the window is complete; `base64` keeps the payload binary-safe.
+    const result = await this.#exec(
+      [
+        "sh",
+        "-c",
+        'tail -c "+$2" -- "$1" | head -c "$3" | base64 --wrap=0',
+        "sh",
+        path,
+        String(offset + 1),
+        String(length),
+      ],
+      {
+        timeoutMs: FILE_TIMEOUT_MS,
+        maxOutput: Math.ceil(length / 3) * 4 + 16,
+        keep: "head",
+      },
+    );
+    if (result.exitCode !== 0) {
+      throw new Error(`Could not read ${path}: ${firstLine(result.stderr)}`);
+    }
+    return base64ToBytes(result.stdout.trim());
+  }
+
+  async writeBytes(
+    path: string,
+    bytes: Uint8Array,
+    options: { private?: boolean; append?: boolean } = {},
+  ): Promise<void> {
+    const append = options.append === true;
+    const result = await this.#exec(
+      [
+        "sh",
+        "-c",
+        `mkdir -p -- "$(dirname -- "$1")" && ${
+          options.private === true && !append ? "umask 077 && " : ""
+        }base64 --decode ${append ? ">>" : ">"} "$1"`,
+        "sh",
+        path,
+      ],
+      {
+        timeoutMs: FILE_TIMEOUT_MS,
+        stdin: new TextEncoder().encode(bytesToBase64(bytes)),
+      },
+    );
+    if (result.exitCode !== 0) {
+      throw new Error(`Could not write ${path}: ${firstLine(result.stderr)}`);
+    }
   }
 
   async readRanges(

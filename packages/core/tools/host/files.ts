@@ -57,6 +57,54 @@ export class HostFileBackend implements FileBackend {
     }
   }
 
+  async readBytes(
+    path: string,
+    offset: number,
+    length: number,
+  ): Promise<Uint8Array> {
+    const file = await runtime.open(path, { read: true });
+    try {
+      await file.seek(offset, 0);
+      const buffer = new Uint8Array(length);
+      let read = 0;
+      while (read < length) {
+        const n = await file.read(buffer.subarray(read));
+        if (n === null) break;
+        read += n;
+      }
+      return buffer.subarray(0, read);
+    } finally {
+      file.close();
+    }
+  }
+
+  async writeBytes(
+    path: string,
+    bytes: Uint8Array,
+    options: { private?: boolean; append?: boolean } = {},
+  ): Promise<void> {
+    await runtime.mkdir(parentOf(path), { recursive: true });
+    const append = options.append === true;
+    const file = await runtime.open(path, {
+      write: true,
+      create: true,
+      ...(append
+        ? { append: true }
+        : {
+            truncate: true,
+            ...(options.private === true ? { mode: 0o600 } : {}),
+          }),
+    });
+    try {
+      let written = 0;
+      while (written < bytes.length) {
+        written += await file.write(bytes.subarray(written));
+      }
+    } finally {
+      file.close();
+    }
+  }
+
   async writeText(
     path: string,
     text: string,

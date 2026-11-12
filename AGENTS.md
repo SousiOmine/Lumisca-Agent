@@ -194,7 +194,7 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 
 ### ツール
 
-- **集合**: ファイル、シェル、バックグラウンド実行（`async_bash` / `async_bash_status` / `async_bash_kill`。VM 内で `setsid` で動き、完了は通知としてモデルに届きます。パネルはありません）、画面、意味の層、`send_chat`、`history_search`、`skill`、`todo`、サブエージェントがプリロードされます。`todo` の計画は画面に出しません（依頼が複数あるときに、まだやっていないことを覚えておくためのもので、パネルのためではありません）。`ask` はありません。`identity` と `agent_create`、`routine_*`、`vm_env` は main レジストリ経由で `tool_search` から見つけさせます。ルーチンは組み込みスキル `routines` が教え（`packages/core/skills/builtin/routines.ts`）、環境変数は組み込みスキル `vm-env` が教えます（`packages/core/skills/builtin/vm-env.ts`）。`agent_create` の役割は `role` か `role_file`（マシン内のファイル）で渡し、UTF-8 でない・空・20,000 文字超は拒否します。
+- **集合**: ファイル、シェル、バックグラウンド実行（`async_bash` / `async_bash_status` / `async_bash_kill`。VM 内で `setsid` で動き、完了は通知としてモデルに届きます。パネルはありません）、画面、意味の層、`send_chat`、`history_search`、`skill`、`todo`、貸出フォルダとのファイル転送（`share_upload` / `share_download`。`read` と `write` は `/lend` にも届きますが文字としてしか運べないので、画像・書庫・PDF はこの 2 つでバイトのまま移します。1 ファイル 64 MiB・1 MiB ずつ）、サブエージェントがプリロードされます。`todo` の計画は画面に出しません（依頼が複数あるときに、まだやっていないことを覚えておくためのもので、パネルのためではありません）。`ask` はありません。`identity` と `agent_create`、`routine_*`、`vm_env` は main レジストリ経由で `tool_search` から見つけさせます。ルーチンは組み込みスキル `routines` が教え（`packages/core/skills/builtin/routines.ts`）、環境変数は組み込みスキル `vm-env` が教えます（`packages/core/skills/builtin/vm-env.ts`）。`agent_create` の役割は `role` か `role_file`（マシン内のファイル）で渡し、UTF-8 でない・空・20,000 文字超は拒否します。
 - **`eval` は渡さない**: サーバープロセス内で JavaScript を実行するため、VM の外へ出る経路になります。VM 内でコードを動かすときは `bash` から `node` を使います。サブエージェントにも渡しません（`SubagentRuntime.eval` が `false`）。
 - **サブエージェントのスキル**: `skill` ツールが読むカタログはセッションが渡します（`SubagentRuntime.skills`）。stella はマシン内のカタログ（`stella.skills()`）から、サブエージェントが持たないツールを教える組み込みを落としたもの、code mode はワークスペースのディスカバリです。開始時に `<available_skills>` 一覧も context メッセージとして 1 件渡します（`packages/core/tools/task-hub.ts` の `spawn`）。VM の画面ツールはサブエージェントに渡しません。
 - **レジストリの分離**: セッションは `main` と `subagent` の 2 つを持ちます（`packages/core/tools/registries.ts`）。MCP・browser-lab・computer・`pdf_read_pages` は両方に入り、`identity` / `agent_create` / `routine_*` は main だけです。
@@ -212,6 +212,7 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 - **サブエージェントには spawn 時に 1 回だけ**: `TaskHub.setShares` が保持し、`shareSeedMessages` でスキル一覧と並べて seed します。あちらは context を出し直さないので、走っているサブエージェントに後から貸しても届きません。
 - **ワイヤは相対セグメントのみ**: 絶対パスを送ると、受け取る側の `join` が別の場所を作ります。境界は両端が持ちます（サーバーの `relativeSegments`、貸し手の `Mount.absolute` と `Sandbox`）。
 - **読み取り専用は backend で拒否**: ツールごとに確かめません（`write` / `edit` / 添付のどれかが漏れます）。貸し手も自分の記録で拒否します。
+- **転送は `FileBackend.readBytes` / `writeBytes`**: 転送ツール（`components` ではなく `packages/core/tools/share-transfer.ts`）は新しい経路を作らず、セッションの 1 つの backend に窓を読ませて書かせます。貸出フォルダ側では `readBytes` / `writeBytes` が新しい op（オフセット付き・append 付き）になり、マシン側では `tail -c` と `base64` になります。`append` は 2 つ目以降のチャンクの「同じファイルの続き」の意味で、最初の書き込みは必ず切り詰めます（短いファイルが前の尾を残さないため）。
 - **貸し手は stdin が閉じたら終わる**: 貸出はアプリが開いている間だけです。`share` はランチャーのサブコマンドで、環境を読む前に分岐してください（DB もポートも要りません）。接続先とトークンは argv に載せず、stdin の hello 行で渡します。
 - **期限は最後のアクセスから30分**（`SHARE_IDLE_MS`）。時計は貸し手のプロセスにあり、op を受けるたびに `expiresAt` を延ばして再アナウンスします。アクセスを見るのは貸し手だけなので、サーバーやアプリ側に同じ規則を置かないこと。サーバーは `grantsFor` が `expiresAt` で外し、貸し手はタイマーで自分の一覧から外して知らせます（利用者が見る一覧は最後のアナウンス）。`LocalGrant` に期限は載せません。
 - **名前の重複はサーバーが解消**: 2 台が同じ `proj` を貸したら 2 台目が `proj-2` になります。再アナウンスで名前を変えないこと（会話が既に知っている住所が動きます）。

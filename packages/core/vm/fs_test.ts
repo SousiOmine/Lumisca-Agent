@@ -132,6 +132,33 @@ Deno.test("vm fs: an oversized read fails with the range hint", async () => {
   assert(message.includes("line range"), message);
 });
 
+Deno.test("vm fs: readBytes asks for one window by byte offset", async () => {
+  // "ell" in base64, the answer to "bytes 2..4 of hello.txt".
+  const { run, calls } = script([
+    { match: /^sh -c tail -c/, stdout: "ZWxs\n" },
+  ]);
+  const bytes = await backend(run).readBytes("/home/agent/hello.txt", 1, 3);
+  assertEquals(new TextDecoder().decode(bytes), "ell");
+  const [argv] = calls;
+  assert(argv !== undefined);
+  const command = argv.join(" ");
+  // `tail` counts from 1, so byte offset 1 is `+2`.
+  assert(command.includes('tail -c "+$2"'), command);
+  assertEquals(argv.slice(-2), ["2", "3"]);
+});
+
+Deno.test("vm fs: writeBytes appends when the transfer is not on its first chunk", async () => {
+  const { run, calls } = script([{ match: /^sh -c mkdir -p/, stdout: "" }]);
+  await backend(run).writeBytes(
+    "/home/agent/a.bin",
+    new Uint8Array([1, 2, 3]),
+    { append: true },
+  );
+  const [argv] = calls;
+  assert(argv !== undefined);
+  assert(argv.join(" ").includes('base64 --decode >> "$1"'), argv.join(" "));
+});
+
 Deno.test("vm fs: writeText sends the payload over stdin, never inline", async () => {
   const { run, calls } = script([{ match: /^sh -c mkdir -p/, stdout: "" }]);
   await backend(run).writeText("/home/agent/a.txt", "content");

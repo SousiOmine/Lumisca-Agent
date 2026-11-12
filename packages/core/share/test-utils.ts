@@ -132,6 +132,24 @@ export class FakeBackend implements FileBackend {
     });
   }
 
+  readBytes(path: string, offset: number, length: number): Promise<Uint8Array> {
+    this.calls.push({ op: "readBytes", path });
+    const bytes = new TextEncoder().encode(this.files.get(path) ?? "");
+    return Promise.resolve(bytes.slice(offset, offset + length));
+  }
+
+  writeBytes(
+    path: string,
+    bytes: Uint8Array,
+    options: { private?: boolean; append?: boolean } = {},
+  ): Promise<void> {
+    this.calls.push({ op: "writeBytes", path });
+    const text = new TextDecoder().decode(bytes);
+    const before = options.append === true ? (this.files.get(path) ?? "") : "";
+    this.files.set(path, before + text);
+    return Promise.resolve();
+  }
+
   writeText(path: string, text: string): Promise<void> {
     this.calls.push({ op: "writeText", path });
     this.files.set(path, text);
@@ -170,6 +188,8 @@ export function answerOf(call: ShareCall): unknown {
         base64: bytesToBase64(new TextEncoder().encode("lent")),
         size: 4,
       };
+    case "readBytes":
+      return { base64: bytesToBase64(new TextEncoder().encode("lent")) };
     case "readRanges":
       return {
         lines: ["one"],
@@ -181,6 +201,7 @@ export function answerOf(call: ShareCall): unknown {
     case "listDir":
       return [{ name: "src", isDirectory: true, isSymlink: false }];
     case "writeText":
+    case "writeBytes":
     case "removeFile":
       return null;
     case "exec":

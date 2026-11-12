@@ -21,6 +21,7 @@
  */
 import { basename, join } from "node:path";
 import {
+  base64ToBytes,
   bytesToBase64,
   type FolderGrant,
   getShell,
@@ -459,6 +460,16 @@ export async function runCall(
       );
       return { base64: bytesToBase64(head.bytes), size: head.size };
     }
+    case "readBytes": {
+      if (call.length > MAX_READ_BYTES) {
+        throw new Error(
+          `One read may carry at most ${Math.floor(MAX_READ_BYTES / 1024)}KB: ` +
+            "copy the file in smaller parts",
+        );
+      }
+      const bytes = await mount.files.readBytes(path, call.offset, call.length);
+      return { base64: bytesToBase64(bytes) };
+    }
     case "readRanges":
       return await mount.files.readRanges(path, call.ranges);
     case "listDir":
@@ -466,6 +477,13 @@ export async function runCall(
     case "writeText":
       mount.requireWrite();
       await mount.files.writeText(path, call.text, { private: call.private });
+      return null;
+    case "writeBytes":
+      mount.requireWrite();
+      await mount.files.writeBytes(path, base64ToBytes(call.base64), {
+        private: call.private,
+        append: call.append,
+      });
       return null;
     case "removeFile":
       mount.requireWrite();

@@ -118,6 +118,14 @@ export class MountedFiles implements FileBackend {
     return await this.#route(path).readHead(path, maxBytes);
   }
 
+  async readBytes(
+    path: string,
+    offset: number,
+    length: number,
+  ): Promise<Uint8Array> {
+    return await this.#route(path).readBytes(path, offset, length);
+  }
+
   async readRanges(
     path: string,
     ranges: readonly LineRange[],
@@ -131,6 +139,14 @@ export class MountedFiles implements FileBackend {
     options: { private?: boolean } = {},
   ): Promise<void> {
     await this.#route(path).writeText(path, text, options);
+  }
+
+  async writeBytes(
+    path: string,
+    bytes: Uint8Array,
+    options: { private?: boolean; append?: boolean } = {},
+  ): Promise<void> {
+    await this.#route(path).writeBytes(path, bytes, options);
   }
 
   async removeFile(path: string): Promise<void> {
