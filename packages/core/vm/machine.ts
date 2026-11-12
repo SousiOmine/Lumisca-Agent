@@ -13,7 +13,7 @@ import type {
   VmProgress,
 } from "./container.ts";
 import { createVmExec, createVmExecBytes } from "./container.ts";
-import { VM_SKILLS_DIR } from "./contract.ts";
+import { VM_DESKTOP_SLOTS, VM_SKILLS_DIR, vmDisplayOf } from "./contract.ts";
 import { discoverVmSkills } from "./skills.ts";
 
 /** Everything the stella machine holds between calls: the manager, the exec
@@ -34,6 +34,10 @@ export class StellaMachine {
   #skills = new Map<string, SkillDef[]>();
   /** The in-flight start, shared by callers that race on a cold machine. */
   #starting: Promise<void> | undefined;
+  /** Which desktop slot each agent owns, and the start in flight for it. */
+  #desktops = new Map<string, { slot: number; started: Promise<void> }>();
+  /** When each slot was last used, for choosing one to evict. */
+  #slotUse = new Map<number, number>();
 
   constructor(
     private readonly globalSkillDirs: string[] | undefined,
@@ -172,6 +176,104 @@ export class StellaMachine {
   async stop(): Promise<void> {
     await this.#vm?.stop();
     this.#verdict = undefined;
+  }
+
+  /**
+   * The slot an agent's desktop runs on, starting it if this is the agent's
+   * first use. Idempotent: concurrent callers share one start.
+   *
+   * A slot is the agent's for as long as its desktop runs. When all
+   * VM_DESKTOP_SLOTS are taken, the one nobody has touched for longest gives
+   * way: its browser and bridge stop, and its agent's next call starts a new
+   * desktop (the profile keeps the logins).
+   */
+  async desktopFor(agentId: string): Promise<number> {
+    const vm = this.require();
+    const known = this.#desktops.get(agentId);
+    if (known !== undefined) {
+      this.#slotUse.set(known.slot, Date.now());
+      await known.started;
+      return known.slot;
+    }
+    const slot = await this.#takeSlot(vm);
+    const started = vm.startDesktop(slot, agentId);
+    this.#desktops.set(agentId, { slot, started });
+    this.#slotUse.set(slot, Date.now());
+    try {
+      await started;
+    } catch (failure) {
+      // A failed start must not leave the slot looking taken.
+      this.#desktops.delete(agentId);
+      this.#slotUse.delete(slot);
+      throw failure;
+    }
+    return slot;
+  }
+
+  /** The host port of an agent's screen, starting its desktop when the
+   * reader gets there before the agent does. */
+  async vncPortFor(agentId: string): Promise<number | null> {
+    const vm = this.#vm;
+    if (vm === undefined) return null;
+    const slot = await this.desktopFor(agentId);
+    return await vm.vncPort(slot);
+  }
+
+  async #takeSlot(vm: VmManager): Promise<number> {
+    const taken = new Map<number, string>();
+    for (const [agent, desktop] of this.#desktops) {
+      taken.set(desktop.slot, agent);
+    }
+    for (let slot = 0; slot < VM_DESKTOP_SLOTS; slot++) {
+      if (!taken.has(slot)) return slot;
+    }
+    let oldestSlot = 0;
+    let oldestAt = Number.POSITIVE_INFINITY;
+    for (const slot of taken.keys()) {
+      const at = this.#slotUse.get(slot) ?? 0;
+      if (at < oldestAt) {
+        oldestAt = at;
+        oldestSlot = slot;
+      }
+    }
+    const evicted = taken.get(oldestSlot);
+    if (evicted !== undefined) this.#desktops.delete(evicted);
+    this.#slotUse.delete(oldestSlot);
+    await vm.stopDesktop(oldestSlot);
+    return oldestSlot;
+  }
+
+  /**
+   * One agent's exec seam: every call carries that desktop's `DISPLAY`, and
+   * starts the desktop first when the agent has not used its screen yet.
+   *
+   * This is the only place a session's display is decided. The screen tools,
+   * the semantic tools, `vm_launch`, bash and a background command all go
+   * through here, so they all land on the same desktop.
+   */
+  execFor(agentId: string): VmExec | undefined {
+    const base = this.exec();
+    if (base === undefined) return undefined;
+    return async (command, exec) => {
+      const slot = await this.desktopFor(agentId);
+      return base(command, {
+        ...exec,
+        env: { ...exec.env, DISPLAY: vmDisplayOf(slot) },
+      });
+    };
+  }
+
+  /** The byte variant of {@link execFor} (a screen capture). */
+  execBytesFor(agentId: string): VmExecBytes | undefined {
+    const base = this.execBytes();
+    if (base === undefined) return undefined;
+    return async (command, exec) => {
+      const slot = await this.desktopFor(agentId);
+      return base(command, {
+        ...exec,
+        env: { ...exec.env, DISPLAY: vmDisplayOf(slot) },
+      });
+    };
   }
 
   /** The exec seam of the attached machine, or undefined without one. */

@@ -19,9 +19,10 @@ import { upgradeWebSocket } from "hono/deno";
 const MAX_QUEUED_MESSAGES = 64;
 
 export interface StellaScreenOptions {
-  /** The machine's VNC port, or null when it is not running. Read at connect
-   * time: the container publishes on a port chosen when it was created. */
-  vncPort: () => Promise<number | null>;
+  /** The VNC port of one agent's desktop, or null when there is no such
+   * agent or no machine. Read at connect time: the host ports are chosen when
+   * the container is created, and a desktop starts on first use. */
+  vncPort: (agentId: string | null) => Promise<number | null>;
 }
 
 /** One relayed connection's state. */
@@ -38,11 +39,14 @@ interface ScreenSocketData {
 /** The stella screen's WebSocket handler, mounted at
  * `GET /api/stella/screen`. */
 export function stellaScreenRoute(options: StellaScreenOptions) {
-  return upgradeWebSocket(() => {
+  return upgradeWebSocket((c) => {
+    // Which agent's desktop this pane is looking at. Absent on an old page;
+    // it then gets no screen rather than somebody else's.
+    const agentId = c.req.query("agent") ?? null;
     let data: ScreenSocketData | undefined;
     return {
       async onOpen(_event, ws) {
-        const port = await options.vncPort();
+        const port = await options.vncPort(agentId);
         if (port === null) {
           ws.close(1013, "the machine is not running");
           return;
