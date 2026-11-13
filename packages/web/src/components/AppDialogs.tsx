@@ -1,6 +1,5 @@
 import type { ComponentProps, ReactElement } from "preact/compat";
 import { CloseTabsDialog } from "./CloseTabsDialog.tsx";
-import { ModeGateDialog } from "./ModeGate.tsx";
 import { RecentSessionsModal } from "./RecentSessionsModal.tsx";
 import { SettingsModal } from "./SettingsModal.tsx";
 import { AgentCreateDialog } from "./stella/AgentCreateDialog.tsx";
@@ -19,18 +18,16 @@ export interface AppDialogsProps {
   close: ComponentProps<typeof CloseTabsDialog> | null;
   agentCreate: ComponentProps<typeof AgentCreateDialog> | null;
   agentEdit: ComponentProps<typeof AgentEditDialog> | null;
-  modeGate: ComponentProps<typeof ModeGateDialog> | null;
 }
 
 /** The modal layer of the app: settings, the session list, the close
- * confirmation, the agent creator and editor, and the mode chooser. */
+ * confirmation, and the agent creator and editor. */
 export function AppDialogs({
   settings,
   recent,
   close,
   agentCreate,
   agentEdit,
-  modeGate,
 }: AppDialogsProps): ReactElement {
   return (
     <>
@@ -39,7 +36,6 @@ export function AppDialogs({
       {close !== null && <CloseTabsDialog {...close} />}
       {agentCreate !== null && <AgentCreateDialog {...agentCreate} />}
       {agentEdit !== null && <AgentEditDialog {...agentEdit} />}
-      {modeGate !== null && <ModeGateDialog {...modeGate} />}
     </>
   );
 }

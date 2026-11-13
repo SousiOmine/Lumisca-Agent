@@ -1,6 +1,6 @@
 /*
- * stella mode: the mode-selection screen and the single-conversation view
- * with its machine panel and screen pane.
+ * stella mode: the single-conversation view with its machine panel and
+ * screen pane.
  *
  * Kept apart from chat.css because these surfaces belong to one mode: the
  * chat view is code mode's, and mixing the two would make either one's
@@ -8,131 +8,6 @@
  * styles.css), so a shared class (`.chat-column`, `.chat-scroll`) keeps its
  * code-mode rules here only where this sheet overrides them.
  */
-
-/* --- mode selection ------------------------------------------------------ */
-
-.mode-select {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 32px 20px;
-  overflow-y: auto;
-}
-
-.mode-select-inner {
-  width: 100%;
-  max-width: 760px;
-}
-
-.mode-select-header {
-  text-align: center;
-  margin-bottom: 24px;
-}
-
-.mode-select-header h1 {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.mode-select-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 14px;
-}
-
-/* The chooser's cards rise in one after the other when the dialog opens —
- * 60ms apart, enough to read as a sequence and not as a queue. `backwards`
- * and not `both`: the card's own hover transition must win once it has
- * landed. */
-.mode-select-cards > .mode-card {
-  animation: lum-rise var(--lum-dur-slow) var(--lum-ease-out) backwards;
-}
-
-.mode-select-cards > .mode-card:nth-child(2) {
-  animation-delay: 60ms;
-}
-
-.mode-card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 20px;
-  text-align: left;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-panel);
-  color: var(--text);
-  cursor: pointer;
-  transition:
-    border-color var(--lum-dur-mid) var(--lum-ease-out),
-    transform var(--lum-dur-mid) var(--lum-ease-in-out);
-}
-
-/* Gated to a real pointer: on a touch screen `:hover` sticks after a tap, so
- * the card would stay lifted while its dialog opens. The border still marks
- * the current mode (`.current`), which is the state that matters. */
-@media (hover: hover) and (pointer: fine) {
-  .mode-card:hover:not(:disabled) {
-    border-color: var(--border-strong);
-    transform: translateY(-1px);
-  }
-}
-
-.mode-card.current {
-  border-color: var(--border-strong);
-  background: var(--surface);
-}
-
-.mode-card:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.mode-card-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius);
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-
-.mode-card-title {
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.mode-card-description {
-  color: var(--text-dim);
-  font-size: 12.5px;
-  line-height: 1.6;
-}
-
-.mode-card-action {
-  margin-top: auto;
-  color: var(--text);
-  font-size: 12.5px;
-  font-weight: 600;
-}
-
-.mode-card-unavailable {
-  margin-top: auto;
-  color: var(--text-dim);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.mode-select-error {
-  margin-top: 16px;
-  text-align: center;
-}
 
 /* --- stella: the shell (sidebar + conversation + screen) ----------------- */
 
@@ -1547,10 +1422,6 @@
 
   .stella-msg-main {
     max-width: 100%;
-  }
-
-  .mode-select {
-    padding: 20px 14px;
   }
 }
 

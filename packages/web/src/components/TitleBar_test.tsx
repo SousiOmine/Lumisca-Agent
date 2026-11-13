@@ -44,6 +44,7 @@ async function render(): Promise<string> {
         onQuit: () => {},
         onSwitchMode: () => {},
         onManageConnections: () => {},
+        mode: "code",
         children: createElement("div", { className: "tabbar" }),
       }),
     );

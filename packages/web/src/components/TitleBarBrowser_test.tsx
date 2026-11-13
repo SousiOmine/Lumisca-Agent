@@ -23,6 +23,7 @@ Deno.test("TitleBar: a plain browser gets the tab bar and no window chrome", () 
       onQuit: () => {},
       onSwitchMode: () => {},
       onManageConnections: () => {},
+      mode: "code",
       children: createElement("div", { className: "tabbar" }),
     }),
   );

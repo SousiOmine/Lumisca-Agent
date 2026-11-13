@@ -211,30 +211,14 @@ export const chat = {
   // --- attachments (files the agent sends to the user) --------------------
   "chat.attach.download": { ja: "ダウンロード", en: "Download" },
 
-  // --- mode selection and stella -------------------------------------------
+  // --- the modes' names ---------------------------------------------------
   // The reader meets the modes by their product names, not by the names this
   // code uses. stella stays the internal name of the main mode (URLs, files,
-  // types); the screen calls it Lumisca, and code mode Lumisca code.
-  "chat.modeSelect.title": {
-    ja: "モードを選択",
-    en: "Select a mode",
-  },
+  // types); the screen calls it Lumisca, and code mode Lumisca code. These
+  // two entries are the only place the names are written: the app menu's
+  // "switch to" entry and the settings nav both read them.
   "chat.modeSelect.code.title": { ja: "Lumisca code", en: "Lumisca code" },
-  "chat.modeSelect.code.description": {
-    ja: "マシンのファイルとシェルを使用して開発",
-    en: "Develop with this machine's files and shell",
-  },
   "chat.modeSelect.stella.title": { ja: "Lumisca", en: "Lumisca" },
-  "chat.modeSelect.stella.description": {
-    ja: "仮想マシンでエージェントと作業する",
-    en: "Work with an agent in a virtual machine",
-  },
-  "chat.modeSelect.stella.unavailable": {
-    ja: "この環境では利用できません: {reason}",
-    en: "Not available on this machine: {reason}",
-  },
-  "chat.modeSelect.choose": { ja: "このモードを選択", en: "Use this" },
-  "chat.modeSelect.current": { ja: "使用中", en: "In use" },
 
   "chat.stella.empty": {
     ja: "依頼を入力してください。エージェントは仮想マシンの中で作業します。",

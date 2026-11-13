@@ -1,3 +1,4 @@
+import type { AppMode } from "@lumisca/core/shared";
 import { IconChevronRight, IconPlus, IconX } from "@tabler/icons-preact";
 import { memo, useEffect, useRef, useState } from "preact/compat";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
@@ -36,8 +37,8 @@ interface TabBarProps {
   onOpenSettings: () => void;
   isDesktop: boolean;
   onQuit: () => void;
-  /** Open the mode-selection screen (stella is the other mode). */
-  onSwitchMode: () => void;
+  /** Switch to the other mode, in one press (see AppMenu). */
+  onSwitchMode: (mode: AppMode) => void;
 }
 
 /** State of the open right-click menu: target tab and cursor position. */
@@ -277,6 +278,7 @@ function TabBarView({
             onQuit={onQuit}
             onSwitchMode={onSwitchMode}
             isDesktop={false}
+            mode="code"
           />
         </div>
       )}

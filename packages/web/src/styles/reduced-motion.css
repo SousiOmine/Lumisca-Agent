@@ -63,7 +63,6 @@
   .new-session-card,
   .input-image,
   .stella-agent,
-  .mode-card,
   .stella-handover,
   /* The gated entrances (styles/motion.css): the gate changes which rows
    * animate, not what "reduced" means for them. The one exception is the
@@ -137,7 +136,6 @@
   .select-chevron,
   .model-group-chevron,
   .toggle-slider::before,
-  .mode-card,
   .stella-agent,
   .stella-titlebar-avatar,
   .stella-screen-toggle,
@@ -165,10 +163,6 @@
 
   .btn:active:not(:disabled),
   .icon-btn:active {
-    transform: none;
-  }
-
-  .mode-card:hover:not(:disabled) {
     transform: none;
   }
 }

@@ -1,3 +1,4 @@
+import type { AppMode } from "@lumisca/core/shared";
 import { IconCopy, IconMinus, IconSquare, IconX } from "@tabler/icons-preact";
 import {
   type MouseEvent,
@@ -33,13 +34,13 @@ interface TitleBarProps {
   onOpenRecent: () => void;
   onOpenSettings: () => void;
   onQuit: () => void;
-  /** Open the mode-selection screen (see AppMenu). */
-  onSwitchMode: () => void;
+  /** Switch to the other mode, in one press (see AppMenu). */
+  onSwitchMode: (mode: AppMode) => void;
   /** Open settings → 接続先サーバー (the picker's "manage" entry). */
   onManageConnections: () => void;
-  /** Whether the menu offers tab actions (code mode). stella mode has one
-   * conversation per agent and no tab strip (see AppMenu). */
-  tabs?: boolean;
+  /** The mode this window shows: the app menu's switch entry names the other
+   * one, and only code mode offers the tab actions (see AppMenu). */
+  mode: AppMode;
 }
 
 /** Window chrome for the desktop window: a single strip holding the tab
@@ -71,7 +72,7 @@ export function TitleBar({
   onQuit,
   onSwitchMode,
   onManageConnections,
-  tabs,
+  mode,
 }: TitleBarProps) {
   const t = useT();
   const [state, setState] = useState<ShellState | null>(null);
@@ -176,7 +177,7 @@ export function TitleBar({
           onQuit={onQuit}
           onSwitchMode={onSwitchMode}
           isDesktop
-          tabs={tabs}
+          mode={mode}
           buttonClass="titlebar-btn"
         />
         {!nativeControls && (

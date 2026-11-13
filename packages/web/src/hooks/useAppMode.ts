@@ -1,7 +1,6 @@
 import { type AppMode, isAppMode } from "@lumisca/core/shared";
 import { useCallback, useEffect, useRef, useState } from "preact/compat";
 import { api } from "../api.ts";
-import { errorText } from "../providers.ts";
 import type { StellaStatus } from "../types.ts";
 import { NEVER, useVisibleInterval } from "./useVisibleInterval.ts";
 
@@ -12,8 +11,8 @@ import { NEVER, useVisibleInterval } from "./useVisibleInterval.ts";
 const MODE_KEY = "lumisca.appMode";
 
 /** The mode a client that has never chosen starts in: the main one. The app
- * opens as Lumisca; the chooser is a dialog in the app menu, not a gate in
- * front of the first screen. */
+ * opens as Lumisca; the other mode is one press away in the app menu, not a
+ * gate in front of the first screen. */
 export const MAIN_MODE: AppMode = "stella";
 
 /**
@@ -37,8 +36,8 @@ export function startModeOf(stored: string | null): AppMode {
  * shell and an installed PWA open, so storing the choice is what makes "start
  * where I left off" work without putting a mode in the start URL (which the
  * manifest may not carry a capability in, and which a bare link should not
- * force anyway). A first launch has nothing stored: it starts in Lumisca
- * rather than at a chooser, because that mode is the app's main surface.
+ * force anyway). A first launch has nothing stored: it starts in Lumisca,
+ * because that mode is the app's main surface.
  */
 export function startMode(): AppMode {
   return startModeOf(localStorage.getItem(MODE_KEY));
@@ -66,23 +65,20 @@ export function rememberMode(mode: AppMode): void {
  * mode, because the machine starts itself when a conversation needs it and
  * the client has to learn when it is up.
  *
- * `choose` is what the chooser calls: it refuses stella where the server
- * cannot run it (a mode whose whole premise is a virtual machine has no
- * honest degraded form). Navigating is the caller's — the URL is where the
- * answer is written.
+ * `choose` is what the app menu's switch calls: it refuses stella where the
+ * server cannot run it (a mode whose whole premise is a virtual machine has
+ * no honest degraded form) and rejects with the reason. Navigating is the
+ * caller's — the URL is where the answer is written — and so is showing that
+ * reason: the menu has no dialog to keep it in.
  */
 export function useAppMode(mode: AppMode | null): {
   /** What this server can do for stella mode, and how its machine is doing.
    * null while the first read is in flight. */
   status: StellaStatus | null;
-  error: string | null;
   /** Validate `next`; rejects when the server refuses it. */
   choose: (next: AppMode) => Promise<void>;
-  /** Re-read the machine's status (the poll, and after a switch). */
-  reload: () => Promise<void>;
 } {
   const [status, setStatus] = useState<StellaStatus | null>(null);
-  const [error, setError] = useState<string | null>(null);
   // Guards against a stale response: the machine's status is polled and
   // changed by the user, and the slower answer must not overwrite the newer.
   const generation = useRef(0);
@@ -93,10 +89,10 @@ export function useAppMode(mode: AppMode | null): {
       const next = await api.getStellaStatus();
       if (generation.current !== mine) return;
       setStatus(next);
-      setError(null);
-    } catch (failure) {
-      if (generation.current !== mine) return;
-      setError(errorText(failure));
+    } catch {
+      // A status read that failed is not a sentence to show: the poll retries
+      // and the switch reads the server's verdict for itself. The machine's
+      // last known state stays, which is what the screen pane is drawn from.
     }
   }, []);
 
@@ -113,23 +109,17 @@ export function useAppMode(mode: AppMode | null): {
   useVisibleInterval(() => void reload(), mode === "stella" ? 3_000 : NEVER);
 
   const choose = useCallback(async (next: AppMode) => {
-    setError(null);
     if (next === "stella") {
       // The verdict is read now rather than reused: a machine that appeared
       // since the last poll (podman installed) must not be refused from a
       // stale answer, and a mode the server refuses is never rememberable.
-      try {
-        const current = await api.getStellaStatus();
-        setStatus(current);
-        if (!current.availability.available) {
-          throw new Error(current.availability.reason);
-        }
-      } catch (failure) {
-        setError(errorText(failure));
-        throw failure;
+      const current = await api.getStellaStatus();
+      setStatus(current);
+      if (!current.availability.available) {
+        throw new Error(current.availability.reason);
       }
     }
   }, []);
 
-  return { status, error, choose, reload };
+  return { status, choose };
 }

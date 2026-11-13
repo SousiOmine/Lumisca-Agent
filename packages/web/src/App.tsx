@@ -42,6 +42,7 @@ import { useUpdateStatus } from "./hooks/useUpdateStatus.ts";
 import { useWorkspaces } from "./hooks/useWorkspaces.ts";
 import { useT } from "./i18n.ts";
 import { isNotifyEnabled, setNotifyEnabled } from "./notify.ts";
+import { errorText } from "./providers.ts";
 import type { UrlState } from "./route.ts";
 import { inDesktopShell, quit, shellPlatform } from "./shell.ts";
 import { closeTargets, DRAFT_TAB } from "./tabs.ts";
@@ -82,8 +83,8 @@ export function App({ initialData }: AppProps): ReactElement {
   useBackspaceGuard();
   // The address the app is showing. Every screen below is read from it, and
   // every move writes it back: the URL is the one answer to "where am I", so
-  // a reload, a bookmark and the back button all agree. The mode chooser is
-  // the one address that has no screen of its own — see the resolution below.
+  // a reload, a bookmark and the back button all agree. A bare `/` is the one
+  // address that has no screen of its own — see the resolution below.
   const router = useRoute();
   const url = router.state;
   const { push: pushUrl, replace: replaceUrl } = router;
@@ -100,8 +101,8 @@ export function App({ initialData }: AppProps): ReactElement {
   // Which mode this page shows. The address names it, except at `/`: that is
   // the address the desktop shell and an installed PWA open, and it resolves
   // to the mode this client showed last, or to the main mode (Lumisca) when
-  // it has never chosen. The chooser is a dialog (AppDialogs), so no address
-  // shows it as a screen.
+  // it has never chosen. No address shows a chooser: the mode is switched
+  // from the app menu in one press.
   //
   // Memoized on the route kind: the store is a `localStorage` read, and the
   // App re-renders on every streamed event of a conversation.
@@ -132,15 +133,17 @@ export function App({ initialData }: AppProps): ReactElement {
   // What this server can do for stella mode, and how its machine is doing.
   const appMode = useAppMode(mode);
   const machineStatus = appMode.status;
-  /** A refusal the reader arrived at through an address, or through the
-   * default mode of a bare `/` (the chooser is not where the choice was
-   * made, so nothing came to show it). */
+  /** Why Lumisca did not open: the server refused it, either for an address
+   * that names it or for the app menu's switch, which has no chooser left to
+   * keep the reason in. */
   const [refusedStella, setRefusedStella] = useState<string | null>(null);
   // A mode whose whole premise is a virtual machine has no honest degraded
   // form: an address that names stella on a server that cannot run it lands
-  // on code mode's top, with the reason on screen.
+  // on code mode's top, with the reason on screen. A switch made from the
+  // menu never gets there — `choose` refuses before the address changes —
+  // so the reason it leaves on screen is cleared here once the machine can
+  // run.
   useEffect(() => {
-    if (mode !== "stella") return;
     if (machineStatus === null) return;
     if (machineStatus.availability.available) {
       // The machine came up (or another server answered): the sentence
@@ -148,6 +151,7 @@ export function App({ initialData }: AppProps): ReactElement {
       setRefusedStella(null);
       return;
     }
+    if (mode !== "stella") return;
     setRefusedStella(machineStatus.availability.reason);
     replaceUrl(codeUrl(null));
   }, [mode, machineStatus, replaceUrl]);
@@ -251,10 +255,6 @@ export function App({ initialData }: AppProps): ReactElement {
   const settingsOpen = settingsRoute !== null;
   const push = usePush(settingsOpen);
   const [showRecent, setShowRecent] = useState(false);
-  // The mode chooser dialog, opened from the app menu. A bare `/` starts in
-  // the stored (or main) mode instead of showing it, so this is the only way
-  // to the chooser.
-  const [showModeSelect, setShowModeSelect] = useState(false);
   const handleNotifyEnabledChange = (enabled: boolean) => {
     setNotifyEnabled(enabled);
     setNotifyEnabledState(enabled);
@@ -454,23 +454,32 @@ export function App({ initialData }: AppProps): ReactElement {
     }
     settingsWasOpen.current = settingsOpen;
   }, [settingsOpen]);
-  // The mode-selection screen, opened from the app menu ("switch mode") and
-  // closed from its own modal. Both are plain setters with a fixed argument,
-  // so they are stable for the memoized tab bar and the app menu alike: an
-  // inline arrow would be a new function on every event the App re-renders
-  // for, and TabBar's props would then never compare equal.
-  const openModeSelect = useCallback(() => setShowModeSelect(true), []);
-  const closeModeSelect = useCallback(() => setShowModeSelect(false), []);
-  /** Choose a mode: the server's verdict first (stella may be refused), then
-   * the address. It REPLACES: the screen it is chosen from is the chooser,
+  /** Switch modes in one press from the app menu: the server's verdict first
+   * (stella may be refused), then the address.
+   *
+   * It REPLACES rather than pushes: the menu is not a place to come back to,
    * and `/` resolves to the very mode just chosen, so a back would bounce
-   * through it instead of leaving. */
-  const chooseMode = useCallback(
+   * through the old address instead of leaving it.
+   *
+   * A refusal leaves the reader where they are and puts the reason on the
+   * screen they are on: the menu names the destination, so there is no
+   * chooser left open to hold that sentence.
+   *
+   * Depends on `choose` alone rather than the whole hook result, which is a
+   * fresh object each render: the identity of this callback has to hold or
+   * the memoized tab bar would re-render on every streamed event. */
+  const switchMode = useCallback(
     async (next: AppMode) => {
-      await appMode.choose(next);
-      replaceUrl(modeTop(next));
+      if (next === mode) return;
+      try {
+        await appMode.choose(next);
+        setRefusedStella(null);
+        replaceUrl(modeTop(next));
+      } catch (failure) {
+        setRefusedStella(errorText(failure));
+      }
     },
-    [appMode, replaceUrl],
+    [appMode.choose, mode, replaceUrl],
   );
   // Ctrl+T (the shortcut the app menu advertises): open the draft tab. Only
   // code mode has tabs; stella's conversation is the whole surface. The
@@ -564,9 +573,9 @@ export function App({ initialData }: AppProps): ReactElement {
         onOpenRecent={openRecent}
         onOpenSettings={openSettings}
         onQuit={quit}
-        onSwitchMode={openModeSelect}
+        onSwitchMode={switchMode}
         onManageConnections={openServers}
-        tabs={!stellaActive}
+        mode={mode}
       >
         {stellaActive ? (
           // stella mode has no tab strip: one conversation is the whole
@@ -617,9 +626,9 @@ export function App({ initialData }: AppProps): ReactElement {
                   onOpenRecent={openRecent}
                   onOpenSettings={openSettings}
                   onQuit={quit}
-                  onSwitchMode={openModeSelect}
+                  onSwitchMode={switchMode}
                   isDesktop={false}
-                  tabs={false}
+                  mode={mode}
                 />
               </div>
             )}
@@ -637,7 +646,7 @@ export function App({ initialData }: AppProps): ReactElement {
             onOpenSettings={openSettings}
             isDesktop={desktop}
             onQuit={quit}
-            onSwitchMode={openModeSelect}
+            onSwitchMode={switchMode}
           />
         )}
       </TitleBar>
@@ -815,20 +824,6 @@ export function App({ initialData }: AppProps): ReactElement {
                   setEditingStellaAgent(false);
                 },
                 onClose: () => setEditingStellaAgent(false),
-              }
-            : null
-        }
-        modeGate={
-          showModeSelect
-            ? {
-                status: machineStatus,
-                mode,
-                error: appMode.error,
-                choose: async (next) => {
-                  await chooseMode(next);
-                  setShowModeSelect(false);
-                },
-                onClose: closeModeSelect,
               }
             : null
         }

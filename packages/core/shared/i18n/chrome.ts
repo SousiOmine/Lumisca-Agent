@@ -101,9 +101,13 @@ export const chrome = {
     en: "Application menu",
   },
   "chrome.appMenu.newTab": { ja: "新しいタブ", en: "New tab" },
-  "chrome.appMenu.switchMode": {
-    ja: "モードを切り替える",
-    en: "Switch mode",
+  /** Names the mode the entry leads to, not the act of choosing: the menu
+   * switches in one press, so there is no later screen for the reader to
+   * learn which mode they are going to. {mode} is one of the mode names in
+   * chat.modeSelect.*.title. */
+  "chrome.appMenu.switchTo": {
+    ja: "{mode} に切り替え",
+    en: "Switch to {mode}",
   },
   "chrome.appMenu.history": {
     ja: "セッション履歴",

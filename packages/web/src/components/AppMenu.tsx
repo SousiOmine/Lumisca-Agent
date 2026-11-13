@@ -1,10 +1,12 @@
+import type { AppMode } from "@lumisca/core/shared";
 import {
-  IconArrowsLeftRight,
+  IconCode,
   IconHistory,
   IconMenu2,
   IconPlus,
   IconPower,
   IconSettings,
+  IconSparkles,
 } from "@tabler/icons-preact";
 import { useRef, useState } from "preact/compat";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
@@ -16,32 +18,36 @@ import { useT } from "../i18n.ts";
 export type AppMenuEntry =
   | { kind: "newTab" }
   | { kind: "history" }
-  | { kind: "switchMode" }
+  | { kind: "switchMode"; to: AppMode }
   | { kind: "settings" }
   | { kind: "quit" }
   | { kind: "separator" };
 
 /**
- * Which entries the menu holds.
+ * Which entries the menu holds, in the mode the reader is in.
  *
- * `tabs` is code mode's: stella mode has one conversation per agent and no
- * tab strip, so "new tab" and "session history" there would open code mode's
- * machinery inside a conversation view. The rest — switch mode, settings,
- * quit — belong to the app and stay in both.
+ * Code mode adds the tab actions. stella mode has one conversation per agent
+ * and no tab strip, so "new tab" and "session history" there would open code
+ * mode's machinery inside a conversation view. The rest — the switch, the
+ * settings, the quit — belong to the app and stay in both.
+ *
+ * The switch entry names the OTHER mode and does it in one press. It used to
+ * say "switch mode" and open a chooser, which made the reader read two cards
+ * to say what the menu could have said in one line.
  */
 export function menuEntries(options: {
-  tabs: boolean;
+  mode: AppMode;
   isDesktop: boolean;
 }): AppMenuEntry[] {
   return [
-    ...(options.tabs
+    ...(options.mode === "code"
       ? [
           { kind: "newTab" } as const,
           { kind: "history" } as const,
           { kind: "separator" } as const,
         ]
       : []),
-    { kind: "switchMode" },
+    { kind: "switchMode", to: options.mode === "code" ? "stella" : "code" },
     { kind: "settings" },
     ...(options.isDesktop
       ? [{ kind: "separator" } as const, { kind: "quit" } as const]
@@ -56,23 +62,24 @@ interface AppMenuProps {
   onOpenSettings: () => void;
   /** Quit the desktop app (shown only when running in the shell). */
   onQuit: () => void;
-  /** Open the mode-selection screen (code / stella). */
-  onSwitchMode: () => void;
+  /** Switch to `next`. The menu only ever names the other mode, so this is
+   * one press and no further screen. A refusal (stella where the server has
+   * no machine) is the caller's to show; the menu closes either way. */
+  onSwitchMode: (next: AppMode) => void;
   isDesktop: boolean;
-  /** Whether this client shows tabs (code mode). stella mode has one
-   * conversation per agent and no tab bar, so a "new tab" entry would open
-   * code mode's empty draft inside the conversation view — a control that
-   * cannot do what it says. Omitted → true (the menu is code mode's by
-   * default; stella passes `false`). */
-  tabs?: boolean;
+  /** The mode this client shows. Decides the switch entry's destination and
+   * the tab actions: stella mode has one conversation per agent and no tab
+   * bar, so a "new tab" entry would open code mode's empty draft inside the
+   * conversation view — a control that cannot do what it says. */
+  mode: AppMode;
   /** Extra class for the trigger button (it lives in the title bar on
    * desktop, in the tab bar in a plain browser). */
   buttonClass?: string;
 }
 
-/** Hamburger app menu (new tab / session history / settings / quit). Shown
- * in the desktop title bar next to the window controls, and at the right
- * end of the tab bar in a plain browser. */
+/** Hamburger app menu (new tab / session history / switch mode / settings /
+ * quit). Shown in the desktop title bar next to the window controls, and at
+ * the right end of the tab bar in a plain browser. */
 export function AppMenu({
   onNew,
   onOpenRecent,
@@ -80,7 +87,7 @@ export function AppMenu({
   onQuit,
   onSwitchMode,
   isDesktop,
-  tabs = true,
+  mode,
   buttonClass = "icon-btn",
 }: AppMenuProps) {
   const t = useT();
@@ -121,7 +128,7 @@ export function AppMenu({
             right: globalThis.innerWidth - pos.x,
           }}
         >
-          {menuEntries({ tabs, isDesktop }).map((entry) => {
+          {menuEntries({ mode, isDesktop }).map((entry) => {
             switch (entry.kind) {
               case "separator":
                 return <div className="app-menu-sep" role="separator" />;
@@ -156,7 +163,8 @@ export function AppMenu({
                     <span>{t("chrome.appMenu.history")}</span>
                   </button>
                 );
-              case "switchMode":
+              case "switchMode": {
+                const code = entry.to === "code";
                 return (
                   <button
                     type="button"
@@ -164,13 +172,22 @@ export function AppMenu({
                     role="menuitem"
                     onClick={() => {
                       setOpen(false);
-                      onSwitchMode();
+                      onSwitchMode(entry.to);
                     }}
                   >
-                    <IconArrowsLeftRight size={14} />
-                    <span>{t("chrome.appMenu.switchMode")}</span>
+                    {code ? <IconCode size={14} /> : <IconSparkles size={14} />}
+                    <span>
+                      {t("chrome.appMenu.switchTo", {
+                        mode: t(
+                          code
+                            ? "chat.modeSelect.code.title"
+                            : "chat.modeSelect.stella.title",
+                        ),
+                      })}
+                    </span>
                   </button>
                 );
+              }
               case "settings":
                 return (
                   <button

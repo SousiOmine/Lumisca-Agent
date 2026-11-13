@@ -27,6 +27,7 @@ function render(): string {
       onQuit: () => {},
       onSwitchMode: () => {},
       onManageConnections: () => {},
+      mode: "code",
       children: createElement("div", { className: "tabbar" }),
     }),
   );
