@@ -231,6 +231,7 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 - **名前の重複はサーバーが解消**: 2 台が同じ `proj` を貸したら 2 台目が `proj-2` になります。再アナウンスで名前を変えないこと（会話が既に知っている住所が動きます）。
 - **画面は「情報」パネル**: 右のパネルは画面だけでなく、貸したフォルダと切断を持つ（`components/stella/ShareList.tsx`）。貸出が 1 つ届くと開き、閉じるのは利用者の選択です（開くのは届いた時だけ。`StellaView` の effect）。タイトルのトグルは会話が開いていれば出ます（マシンの起動を待ちません）。＋メニューの「フォルダで共同作業」はデスクトップの窓だけに出ます（`inDesktopShell()`）。ダイアログは選択→条件→貸すの順で、選んだだけでは貸しません。最近のフォルダは localStorage の `lumisca.share.recentFolders` に条件ごと保存し、1 押しで同じ条件で貸し直します。
 - **シェル側は `packages/desktop/src-tauri/src/share.rs`**: フォルダの選択が同意で、一覧はシェルの `ShareLender`、ディスクと期限の時計は子プロセスです。子は最初の貸出まで起動せず、stdin に hello（接続先とトークン。argv には載せません）と grants（毎回すべて）を書きます。期限切れは子が stdout に `{"type":"expired","ids":[…]}` と書き、シェルがその行で自分の一覧から外します。これが無いと、次の貸出で切れたフォルダを再アナウンスしてしまいます。表示するサーバーを変えたら `revoke_all`。画面からは `/shell/share/pick-folder|grant|revoke` を呼びます。
+- **入力欄の枠も接続中を言う**: パネルは閉じられるので、会話を書いている間ずっと見える場所がもう 1 つ要ります。接続中の会話では `.input-composer.sharing` の枠が `--share` になり、`.share-notice` が「n個のフォルダーを共有中」と言います（`components/StellaView.tsx`、`styles/composer.css` の lent folders 節）。件数は `conversation.shares` の長さだけで、クライアントは期限の時計を持ちません（切れたものはサーバーが落として一覧を送り直します）。枠の規則は `:focus-within` より**後**に置いてください——特異度が同じなので、上にあると入力欄にフォーカスした瞬間にオレンジが消えます（`styles_test.ts` が固定）。`--share` は無彩色のランプで言えない状態にだけ使う色です（`packages/web/src/styles/README.md`）。
 - **確認**: `bun test packages/core/share packages/server/app_share_test.ts packages/server/share-host_test.ts`。手元では `bun run probe:share --url <url> --session <id> --folder <path>` で UI 抜きに一巡できます。
 
 ### 記憶（MEMORY.md）

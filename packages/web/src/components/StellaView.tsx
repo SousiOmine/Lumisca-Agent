@@ -1,4 +1,4 @@
-import { IconSend } from "@tabler/icons-preact";
+import { IconFolderShare, IconSend } from "@tabler/icons-preact";
 import { useEffect, useRef, useState } from "preact/compat";
 import {
   sessionAttachmentBase,
@@ -140,8 +140,11 @@ export function StellaView({
   const visualBase = sessionVisualBase("", sessionId ?? "");
   const attachBase = sessionAttachmentBase("", sessionId ?? "");
   const uploadBase = stellaUploadBase(agent?.id ?? "");
-  const isRunning = conversation?.running === true;
+  // Folders lent from the user's own computer. The server drops a grant when
+  // it expires and announces the whole list again, so the client counts what
+  // it was given and never keeps a clock of its own.
   const shares = conversation?.shares ?? [];
+  const isRunning = conversation?.running === true;
   // Lending a folder is a shell action (the folder is on the user's computer
   // and the picker is the shell's), so a browser tab does not offer it.
   const canShareFolder = inDesktopShell();
@@ -257,6 +260,24 @@ export function StellaView({
           />
         )}
         <div className="input-area">
+          {/* A loan is a fact about what this message can reach, not
+           * progress: it stays while it lasts, as a count above the field
+           * and as the field's own frame in the same colour (composer.css,
+           * the lent folders block). The paths are the folders the user
+           * picked, on hover, so the count can be checked without leaving
+           * the conversation. */}
+          {shares.length > 0 && (
+            <p
+              className="share-notice"
+              role="status"
+              title={shares.map((share) => share.path).join("\n")}
+            >
+              <IconFolderShare size={13} className="share-notice-icon" />
+              {shares.length === 1
+                ? t("chat.stella.share.activeOne")
+                : t("chat.stella.share.active", { count: shares.length })}
+            </p>
+          )}
           <Composer
             value={input}
             onChange={onInputChange}
@@ -296,6 +317,7 @@ export function StellaView({
                 ? () => setShareDialogOpen(true)
                 : undefined
             }
+            sharing={shares.length > 0}
           />
         </div>
       </div>

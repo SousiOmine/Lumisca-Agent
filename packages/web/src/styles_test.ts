@@ -714,6 +714,56 @@ Deno.test("the composer draws one frame, and its buttons are one size", async ()
   );
 });
 
+Deno.test("a lent folder's frame survives the field taking focus", async () => {
+  // While the user's own computer lends a folder, the capsule takes the
+  // state colour and the line above it counts the folders (composer.css,
+  // the lent folders block). Two things hold that together, and neither is
+  // visible to a type check:
+  //
+  // - `.input-composer.sharing` and `.input-composer:focus-within` have the
+  //   same specificity, so only the source order decides which colour wins.
+  //   Written beside `.dragging` (above the focus rule), the orange fell
+  //   back to --border-strong the moment the field took focus — exactly
+  //   when the user starts typing into a conversation that can reach their
+  //   disk.
+  // - the line above must keep the composer's width, or the column reads as
+  //   two unrelated controls instead of one.
+  const css = await Deno.readTextFile(
+    new URL("./styles/composer.css", import.meta.url),
+  );
+  const focusAt = css.indexOf(".input-composer:focus-within {");
+  const sharingAt = css.indexOf(".input-composer.sharing {");
+  assertEquals(focusAt !== -1, true, "the composer's focus rule must exist");
+  assertEquals(sharingAt !== -1, true, "the sharing rule must exist");
+  assertEquals(
+    sharingAt > focusAt,
+    true,
+    "the sharing rule must come after the focus rule (same specificity)",
+  );
+  const sharing = /\.input-composer\.sharing \{([^}]*)\}/.exec(css);
+  assertEquals(
+    /border-color:\s*var\(--share\)/.test(sharing![1]!),
+    true,
+    "the frame must take the share colour",
+  );
+  // Focus keeps its ring, and the ring keeps the colour: a loan does not end
+  // because the user clicked the field.
+  assertEquals(
+    /\.input-composer\.sharing:focus-within \{[^}]*var\(--share-soft\)/.test(
+      css,
+    ),
+    true,
+    "the focused sharing state needs its own ring",
+  );
+  const notice = /\.share-notice \{([^}]*)\}/.exec(css);
+  assertEquals(notice !== null, true, ".share-notice must be styled");
+  assertEquals(
+    /max-width:\s*880px/.test(notice![1]!),
+    true,
+    ".share-notice must keep the composer's width",
+  );
+});
+
 Deno.test("the composer field grows to twelve lines and then scrolls", async () => {
   // The field follows the message (hooks/useAutoGrow.ts writes its height
   // from `scrollHeight`) up to a ceiling the sheet owns. Two things break the

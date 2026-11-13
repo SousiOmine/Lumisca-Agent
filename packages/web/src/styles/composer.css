@@ -481,6 +481,51 @@
   box-shadow: 0 0 0 4px var(--accent-soft);
 }
 
+/* ---- lent folders (share) ------------------------------------------------ */
+
+/* A conversation can reach a folder on the user's own computer (core/share).
+ * That is a fact about the message being written, not progress, so it stays
+ * for as long as the loan lasts: the capsule takes the state colour, and the
+ * line above it counts the folders.
+ *
+ * These rules sit here, below the focus rule, and not beside `.dragging`:
+ * `.input-composer.sharing` and `.input-composer:focus-within` have the same
+ * specificity, so the later rule wins. Above it, the frame would fall back to
+ * --border-strong the moment the field took focus — losing the warning
+ * exactly when the user is about to type into it (styles_test.ts fixes the
+ * order). */
+.input-composer.sharing {
+  border-color: var(--share);
+  box-shadow: 0 0 0 3px var(--share-soft);
+}
+
+/* Focus keeps its ring in the same colour: the user is in the field, and the
+ * loan is still true. */
+.input-composer.sharing:focus-within {
+  border-color: var(--share);
+  box-shadow: 0 0 0 4px var(--share-soft);
+}
+
+/* The count sits in the composer's column (same width, same centring), so the
+ * two read as one control. It is a status line rather than a card: no fill,
+ * no frame, and no motion of its own — the capsule's border already answers
+ * the change, and a line that also faded in would say it twice. */
+.share-notice {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  max-width: 880px;
+  margin: 0 auto 6px;
+  padding: 0 4px;
+  color: var(--share);
+  font-size: 11.5px;
+}
+
+.share-notice-icon {
+  flex: none;
+}
+
 /* No frame of its own, focused or not: the composer's rounded capsule IS the
  * frame, and a second border inside it drew a box within a box as soon as
  * the field took focus (the keyboard ring the rest of the app needs would

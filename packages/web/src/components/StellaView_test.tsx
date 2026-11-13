@@ -6,7 +6,11 @@ import {
   emptyStellaState,
   type StellaConversationState,
 } from "../stella-state.ts";
-import type { StellaAgentSummary, StellaStatus } from "../types.ts";
+import type {
+  FolderShare,
+  StellaAgentSummary,
+  StellaStatus,
+} from "../types.ts";
 import { StellaView } from "./StellaView.tsx";
 
 /** One agent, so the header (and the screen toggle it holds) is drawn. The
@@ -222,4 +226,53 @@ Deno.test("StellaView: opening a conversation shows the wait, not an empty pane"
   // Once nothing is in flight the same spot carries the empty state's hint.
   const idle = render({ conversation: null, loading: false });
   assertStringIncludes(idle, "依頼を入力してください");
+});
+
+/** A folder lent from the user's own computer (core/domain/share.ts). The
+ * paths are display strings: nothing on the client turns them into a path. */
+const lent: FolderShare = {
+  id: "g1",
+  name: "proj",
+  path: "/Users/me/proj",
+  host: { platform: "macos", name: "Mac", shell: "zsh" },
+  write: true,
+  expiresAt: 0,
+};
+
+Deno.test("StellaView: a lent folder colours the composer and counts itself", () => {
+  // A loan is a fact about what the next message can reach, and it leaves no
+  // other trace on screen: the tools reach /lend/<name> without saying so.
+  // Without the line and the frame, a user has no way to see from the
+  // conversation that the agent is working on a folder of their computer.
+  const html = render({ conversation: { shares: [lent] } });
+  assertStringIncludes(html, "share-notice");
+  assertStringIncludes(html, "1個のフォルダーを共有中");
+  // The frame answers the same fact (composer.css, the lent folders block).
+  assertStringIncludes(html, "input-composer sharing");
+  // The folder's own path is on the line as its tooltip, so the count can be
+  // checked against what the user picked.
+  assertStringIncludes(html, "/Users/me/proj");
+});
+
+Deno.test("StellaView: the line counts the loans it was given", () => {
+  // The whole list travels on every change (see stella-state), so the count
+  // is the length of what arrived — no client-side tally to drift.
+  const html = render({
+    conversation: {
+      shares: [
+        lent,
+        { ...lent, id: "g2", name: "docs", path: "/Users/me/docs" },
+      ],
+    },
+  });
+  assertStringIncludes(html, "2個のフォルダーを共有中");
+  assertStringIncludes(html, "/Users/me/docs");
+});
+
+Deno.test("StellaView: no lent folder leaves the composer alone", () => {
+  // The usual conversation: no loans, so nothing about them is drawn and the
+  // capsule keeps its neutral frame.
+  const html = render();
+  assertEquals(html.includes("share-notice"), false);
+  assertEquals(html.includes("input-composer sharing"), false);
 });

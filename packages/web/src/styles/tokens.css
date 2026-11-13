@@ -239,6 +239,13 @@ html[data-theme="dark"] {
   --ok: #5fd3a2;
   --error: #ff9a90;
   --error-soft: rgba(255, 154, 144, 0.12);
+  /* A folder lent from the user's own computer (see composer.css, the lent
+   * folders block): the one hue the neutral ramp cannot replace, because
+   * what it says is "the agent can reach a disk outside this machine".
+   * 8.8:1 on --surface, so the 11.5px line above the composer reads as
+   * text. */
+  --share: #f0a35e;
+  --share-soft: rgba(240, 163, 94, 0.14);
   --shadow: rgba(0, 0, 0, 0.55);
   /* A pane lying on the canvas (the chat, a dialog): two layers, the first
    * a crisp contact shadow, the second a wide diffuse one, so the edge reads
@@ -289,6 +296,11 @@ html[data-theme="light"] {
   --ok: #107c10;
   --error: #c42b1c;
   --error-soft: rgba(196, 43, 28, 0.08);
+  /* Same fact as the dark theme's (tokens.css, the dark block). 5.0:1 on
+   * --surface and 4.6:1 on the canvas: the line is 11.5px, so it has to
+   * clear the 4.5 floor on both. */
+  --share: #b45309;
+  --share-soft: rgba(180, 83, 9, 0.1);
   --shadow: rgba(20, 20, 40, 0.16);
   --shadow-panel:
     0 1px 2px rgba(23, 23, 42, 0.04), 0 24px 56px -30px rgba(23, 23, 42, 0.22);

@@ -517,6 +517,17 @@ export const chat = {
     ja: "切断できませんでした: {error}",
     en: "Could not disconnect: {error}",
   },
+  /** How many folders the conversation can reach right now, in the line
+   * above the composer. Two keys because English needs the singular and
+   * Japanese does not. */
+  "chat.stella.share.active": {
+    ja: "{count}個のフォルダーを共有中",
+    en: "Sharing {count} folders",
+  },
+  "chat.stella.share.activeOne": {
+    ja: "1個のフォルダーを共有中",
+    en: "Sharing 1 folder",
+  },
   "chat.stella.handover.reason": {
     ja: "エージェントから画面操作が引き継がれました",
     en: "The agent is handing the screen to you",

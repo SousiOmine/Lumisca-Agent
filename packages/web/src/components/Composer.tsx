@@ -140,6 +140,11 @@ interface ComposerProps {
   /** Where the meter's bar turns amber: the compaction point when the
    * caller knows it (see shared/context-usage.ts compactionUsageRatio). */
   contextWarnRatio?: number;
+  /** Folders lent from the user's own computer are within reach of this
+   * message (stella). The capsule says so by taking the state colour; the
+   * line above it that counts them belongs to the caller, which is the one
+   * that knows about the loans. */
+  sharing?: boolean;
   /** Whether this composer is on screen. A tab pane another tab is showing
    * keeps its composer mounted (see SessionPane) with no box, so the field
    * must not measure itself there; it does so again when the pane is shown. */
@@ -180,6 +185,7 @@ export function Composer({
   onShareFolder,
   contextUsage,
   contextWarnRatio,
+  sharing = false,
   visible = true,
 }: ComposerProps) {
   const [showModelPicker, setShowModelPicker] = useState(false);
@@ -490,7 +496,9 @@ export function Composer({
 
   return (
     <div
-      className={`input-composer${dragging ? " dragging" : ""}`}
+      className={`input-composer${dragging ? " dragging" : ""}${
+        sharing ? " sharing" : ""
+      }`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
