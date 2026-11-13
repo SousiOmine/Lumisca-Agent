@@ -44,7 +44,7 @@ LLM との接続には Vercel AI SDK（`ai` および `@ai-sdk/*`）を使用し
 - **独自スキームにしない**: WKWebView（macOS）は http(s) のページから独自スキームを fetch させません。CSP の `connect-src` に `http://127.0.0.1:*` が必要です（`packages/server/render.ts`）。
 - **HTTPS のページは IPC に退避する**: WebKit は https のページから loopback への fetch を遮断します。`shellCall` が切り替えるのは**通信段階の失敗**だけで、HTTP エラーで再実行するとアクションが二重に走ります。リモートページに許すコマンドは `capabilities/remote-shell.json` の `allow-shell-action` だけです。
 - **macOS のウィンドウ操作は OS のもの**: `tauri.macos.conf.json` は `decorations: true` + `titleBarStyle: "overlay"` で、信号機はネイティブのものを使います。透明なタイトルバーはページの上に 28pt 重なり、その中のページ要素はクリックを受け取れません。帯は `.app.macos` の上余白の下から始め、上余白に `.macos-titlebar-drag` を置きます（左 78px は空ける）。ドラッグとダブルクリックはブリッジへ送ります。Windows / Linux はフレームレスのままページが描きます。
-- **帯を描くかはブリッジの応答で決めない**: どちらの作法かは初期化スクリプトの `__LUMISCA_PLATFORM__` が答え、帯の有無は `inDesktopShell()` が決めます（`packages/web/src/shell.ts`）。`state` の読み出し失敗で帯を落とすと、`decorations: false` の窓は閉じることも動かすこともできなくなります。モード選択画面（`App.tsx` の `mode === null`）も同じ帯を持ちます。モードは `localStorage` でオリジンごとなので、リモート接続の初回は必ずこの画面から始まるためです。
+- **帯を描くかはブリッジの応答で決めない**: どちらの作法かは初期化スクリプトの `__LUMISCA_PLATFORM__` が答え、帯の有無は `inDesktopShell()` が決めます（`packages/web/src/shell.ts`）。`state` の読み出し失敗で帯を落とすと、`decorations: false` の窓は閉じることも動かすこともできなくなります。
 - **帯の中身は `.titlebar-controls` に場所を譲る**: 帯は横 1 行の flex で、右端の `.titlebar-controls`（接続先・メニュー・3 ボタン）は `flex: none` です。帯へ入る中身（タブバー、stella の `.stella-titlebar-strip`）は `flex: 1` と `min-width: 0` を持ち、幅を独占してはいけません。`width: 100%` を書くと controls が右端の外へ押し出され、`decorations: false` の窓は**閉じるボタンだけを失って、ドラッグは効くまま**になります（stella モードで実際に起きた。`packages/web/src/styles_test.ts` が固定）。`width: 100%` が要るのは、素のブラウザで帯が無く `.app` の縦積みの子になる場合だけです。
 - **ファイルのドロップはページが受ける**: main ウィンドウは `tauri.conf.json` で `dragDropEnabled: false` です。既定の `true` では Tauri のネイティブ D&D が WebView の HTML5 D&D を置き換え、コンポーザへのドロップが DOM に届きません（画像も含めて）。Tauri の `DragDropEvent` は使っていません。有効にした分の穴は `packages/web/src/drop-guard.ts` が塞ぎます——コンポーザ以外へファイルを落としても、ウィンドウがそのファイルへ遷移して戻れなくなります。スプラッシュ（`frontend/splash.js`）も同じガードを持ちます。`repo_hygiene_test.ts` が `false` を固定しています。
 
@@ -140,7 +140,7 @@ npm outdated                                                   # packages/deskto
 
 | 画面 | URL |
 | --- | --- |
-| モード選択（未選択） | `/` |
+| 起動時のアドレス | `/`（保存したモード。無ければ Lumisca） |
 | code mode のトップ（新規セッション） | `/code` |
 | このサーバーのセッション | `/code/s/<sessionId>` |
 | ピアのセッション | `/code/p/<peerId>/s/<sessionId>` |
@@ -150,7 +150,7 @@ npm outdated                                                   # packages/deskto
 
 - **`route.ts` は純粋関数だけ**。`parseUrl` と `urlOf` が往復し、DOM に触れません。`hooks/useRoute.ts` だけが `history` を触ります。
 - **設定はモードの下**。カテゴリの一覧はどちらのモードでも同じですが、設定はそこを開いたモードの画面の一部で、閉じればその画面へ戻ります。モードを持たない `/settings` は、戻る先を答えられません。閉じると開いた画面へ戻ります（`history.back()`。履歴が無ければ `replace`）。
-- **`/` は解決先**。デスクトップシェルとインストールした PWA が開く URL なので、`localStorage` の `lumisca.appMode` に解決し、`replace` で `/code` か `/stella` に置き換えます。未選択ならモード選択画面のままです。
+- **`/` は解決先**。デスクトップシェルとインストールした PWA が開く URL なので、`localStorage` の `lumisca.appMode` に解決し、`replace` で `/code` か `/stella` に置き換えます。未選択ならメインモードの `/stella` です。
 - **URL はモードを決める**。`/stella` を開けば保存値が code でも stella になります。stella を使えないサーバーでは理由を出して `/code` に倒し、そのstella は保存しません。
 - **戻るで画面が戻る**。タブ切り替え、セッションを開く、設定の開閉、設定カテゴリの変更がそれぞれ履歴になります。ただし `POST /close` は × で閉じたときだけです（戻るは画面を移るだけで、実行は止めません）。
 - **設定を閉じるのは、開いてから積んだ分をまとめて戻す 1 回**です。カテゴリの変更も履歴なので、直前に 1 歩戻るだけでは前のカテゴリページに着き、`Modal` の退出が終わった不可視のシート（`opacity: 0` でも `position: fixed; inset: 0`）が画面を覆ったままになります。深さは各エントリの `history.state` が持ちます（`packages/web/src/history-entry.ts`）。`replace` で別の画面に差し替えるときは、その深さを 0 に戻してください。

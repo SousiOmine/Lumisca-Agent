@@ -37,12 +37,6 @@
   padding-top: var(--titlebar-inset);
 }
 
-/* The mode-selection screen has no title bar strip; its menu is fixed to
- * the window corner, so it needs the same inset explicitly. */
-.app.macos .app-menu-standalone {
-  top: calc(10px + var(--titlebar-inset));
-}
-
 /* The drag handle inside the native bar's height. The page is inset below
  * the bar, so this strip has no content of its own (the traffic lights are
  * native and sit in the left 78px, which this must not cover). Without it,
@@ -66,15 +60,6 @@
   min-width: 0;
   height: 100%;
   background: transparent;
-}
-
-/* The strip's empty left side on a screen with nothing to tab through (the
- * mode selection): it is the drag handle, so it takes the room the tab bar
- * would have. Scoped to the strip — in a plain browser the bar is not drawn,
- * and the same element would otherwise grow inside the app's column. */
-.titlebar .titlebar-blank {
-  flex: 1;
-  min-width: 0;
 }
 
 /* The controls never shrink: the window is undecorated, so these buttons are

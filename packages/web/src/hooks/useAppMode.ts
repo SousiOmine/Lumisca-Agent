@@ -11,20 +11,37 @@ import { NEVER, useVisibleInterval } from "./useVisibleInterval.ts";
  * own, and switching in one never reaches the other. */
 const MODE_KEY = "lumisca.appMode";
 
+/** The mode a client that has never chosen starts in: the main one. The app
+ * opens as Lumisca; the chooser is a dialog in the app menu, not a gate in
+ * front of the first screen. */
+export const MAIN_MODE: AppMode = "stella";
+
 /**
- * The mode a bare `/` resolves to: the one this client showed last, or null
- * when it has never chosen.
+ * The mode a bare `/` resolves to, given what this client stored (null when
+ * it has never chosen).
+ *
+ * Pure so the rule can be read and tested without a browser: a stored value
+ * this version does not know (an older spelling, a hand-edited entry) is the
+ * same as no choice, and answers the main mode rather than an error screen.
+ */
+export function startModeOf(stored: string | null): AppMode {
+  return isAppMode(stored) ? stored : MAIN_MODE;
+}
+
+/**
+ * The mode a bare `/` resolves to: the one this client showed last, or the
+ * main mode when it has never chosen.
  *
  * The stored value is not what the app SHOWS — the URL is (route.ts) — but
  * what the address every launch starts from means. `/` is what the desktop
  * shell and an installed PWA open, so storing the choice is what makes "start
  * where I left off" work without putting a mode in the start URL (which the
  * manifest may not carry a capability in, and which a bare link should not
- * force anyway).
+ * force anyway). A first launch has nothing stored: it starts in Lumisca
+ * rather than at a chooser, because that mode is the app's main surface.
  */
-export function storedMode(): AppMode | null {
-  const raw = localStorage.getItem(MODE_KEY);
-  return isAppMode(raw) ? raw : null;
+export function startMode(): AppMode {
+  return startModeOf(localStorage.getItem(MODE_KEY));
 }
 
 /** Remember the mode this client is showing, for the next bare `/`. */

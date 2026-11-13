@@ -11,7 +11,6 @@ import {
 import { AppDialogs } from "./components/AppDialogs.tsx";
 import { AppMenu } from "./components/AppMenu.tsx";
 import { MacosTitleBarDrag } from "./components/MacosTitleBarDrag.tsx";
-import { ModeGate } from "./components/ModeGate.tsx";
 import { ServerDownBanner } from "./components/ServerDownBanner.tsx";
 import { DraftPane, SessionPane } from "./components/SessionPane.tsx";
 import type { SettingsCategory } from "./components/SettingsModal.tsx";
@@ -21,7 +20,7 @@ import { TabBar, type TabSummary } from "./components/TabBar.tsx";
 import { TitleBar } from "./components/TitleBar.tsx";
 import { UpdateBanner } from "./components/UpdateBanner.tsx";
 import { useAppHeight } from "./hooks/useAppHeight.ts";
-import { rememberMode, storedMode, useAppMode } from "./hooks/useAppMode.ts";
+import { rememberMode, startMode, useAppMode } from "./hooks/useAppMode.ts";
 import { useBackspaceGuard } from "./hooks/useBackspaceGuard.ts";
 import { useBuildWatch } from "./hooks/useBuildWatch.ts";
 import { EMPTY_DRAFT, useDrafts } from "./hooks/useDrafts.ts";
@@ -100,19 +99,20 @@ export function App({ initialData }: AppProps): ReactElement {
 
   // Which mode this page shows. The address names it, except at `/`: that is
   // the address the desktop shell and an installed PWA open, and it resolves
-  // to the mode this client showed last. `null` means the chooser — no mode
-  // has ever been chosen here, so there is nothing to resolve to.
+  // to the mode this client showed last, or to the main mode (Lumisca) when
+  // it has never chosen. The chooser is a dialog (AppDialogs), so no address
+  // shows it as a screen.
   //
   // Memoized on the route kind: the store is a `localStorage` read, and the
   // App re-renders on every streamed event of a conversation.
-  const resolved = useMemo(storedMode, [url.route.kind]);
-  const mode: AppMode | null =
+  const resolved = useMemo(startMode, [url.route.kind]);
+  const mode: AppMode =
     url.route.kind === "modeSelect" ? resolved : url.route.kind;
   // The resolution is a REPLACE: `/` is not a place to come back to, and a
   // back from a mode's top must leave the app rather than bounce off the
-  // chooser it never meant to show.
+  // address it never meant to show.
   useEffect(() => {
-    if (url.route.kind !== "modeSelect" || mode === null) return;
+    if (url.route.kind !== "modeSelect") return;
     replaceUrl(modeTop(mode));
   }, [url.route.kind, mode, replaceUrl]);
   // Showing a mode is what this client remembers for the next bare `/` —
@@ -132,8 +132,9 @@ export function App({ initialData }: AppProps): ReactElement {
   // What this server can do for stella mode, and how its machine is doing.
   const appMode = useAppMode(mode);
   const machineStatus = appMode.status;
-  /** A refusal the reader arrived at through an address (the chooser is not
-   * where the choice was made, so nothing came to show it). */
+  /** A refusal the reader arrived at through an address, or through the
+   * default mode of a bare `/` (the chooser is not where the choice was
+   * made, so nothing came to show it). */
   const [refusedStella, setRefusedStella] = useState<string | null>(null);
   // A mode whose whole premise is a virtual machine has no honest degraded
   // form: an address that names stella on a server that cannot run it lands
@@ -156,7 +157,6 @@ export function App({ initialData }: AppProps): ReactElement {
   // otherwise be the answer every launch, and the reader would meet the same
   // refusal instead of starting where they can work.
   useEffect(() => {
-    if (mode === null) return;
     if (mode === "stella" && machineStatus === null) return;
     if (mode === "stella" && !machineStatus?.availability.available) return;
     rememberMode(mode);
@@ -251,8 +251,9 @@ export function App({ initialData }: AppProps): ReactElement {
   const settingsOpen = settingsRoute !== null;
   const push = usePush(settingsOpen);
   const [showRecent, setShowRecent] = useState(false);
-  // The mode-selection screen, reopened from the app menu (the first-run
-  // screen is driven by the stored mode instead; this is the "switch" path).
+  // The mode chooser dialog, opened from the app menu. A bare `/` starts in
+  // the stored (or main) mode instead of showing it, so this is the only way
+  // to the chooser.
   const [showModeSelect, setShowModeSelect] = useState(false);
   const handleNotifyEnabledChange = (enabled: boolean) => {
     setNotifyEnabled(enabled);
@@ -552,63 +553,6 @@ export function App({ initialData }: AppProps): ReactElement {
   const stellaHandedOver =
     stella.conversation?.handover !== null &&
     stella.conversation?.handover !== undefined;
-  // The mode-selection screen, and nothing else, until this client picks a
-  // mode. The choice is per client (hooks/useAppMode.ts), so a second window
-  // on the same server is never dragged into it.
-  if (mode === null) {
-    return (
-      <div className={appClass}>
-        {macos && <MacosTitleBarDrag />}
-        {/* The selection screen is the first thing a new origin shows, and
-         * a remote server is a new origin (the mode is stored per client,
-         * per origin). The window is undecorated there, so this screen has
-         * to carry the same chrome as the app: without it a connected
-         * window had no way to be moved, maximized or closed. */}
-        <TitleBar
-          onNew={() => goToTab(null)}
-          onOpenRecent={openRecent}
-          onOpenSettings={openSettings}
-          onQuit={quit}
-          onSwitchMode={openModeSelect}
-          onManageConnections={openServers}
-          tabs={false}
-        >
-          <div className="titlebar-blank" />
-        </TitleBar>
-        {/* A plain browser has no title bar, so the menu stays where the
-         * tab bar would put it: this screen is the only way into settings
-         * and the mode switch before a mode exists. */}
-        {!desktop && (
-          <AppMenu
-            onNew={() => goToTab(null)}
-            onOpenRecent={openRecent}
-            onOpenSettings={openSettings}
-            onQuit={quit}
-            onSwitchMode={openModeSelect}
-            isDesktop={false}
-            buttonClass="app-menu-standalone"
-          />
-        )}
-        <div className="app-body">
-          {machineStatus === null ? (
-            <div className="mode-select-loading">
-              {appMode.error === null
-                ? t("common.loading")
-                : t("common.serverUnreachable", { error: appMode.error })}
-            </div>
-          ) : (
-            <ModeGate
-              status={machineStatus}
-              mode={mode}
-              error={appMode.error}
-              choose={chooseMode}
-            />
-          )}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className={appClass}>
       {macos && <MacosTitleBarDrag />}

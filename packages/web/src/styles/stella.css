@@ -44,11 +44,10 @@
   gap: 14px;
 }
 
-/* The first screen of the app, seen once. This is the one place a little
- * delight is affordable (a rare, first-time moment), so the cards rise in
- * one after the other — 60ms apart, enough to read as a sequence and not as
- * a queue. `backwards` and not `both`: the card's own hover transition must
- * win once it has landed. */
+/* The chooser's cards rise in one after the other when the dialog opens —
+ * 60ms apart, enough to read as a sequence and not as a queue. `backwards`
+ * and not `both`: the card's own hover transition must win once it has
+ * landed. */
 .mode-select-cards > .mode-card {
   animation: lum-rise var(--lum-dur-slow) var(--lum-ease-out) backwards;
 }
@@ -133,23 +132,6 @@
 .mode-select-error {
   margin-top: 16px;
   text-align: center;
-}
-
-.mode-select-loading {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-dim);
-  font-size: 13px;
-}
-
-/* The app menu on the selection screen has no title bar to sit in. */
-.app-menu-standalone {
-  position: fixed;
-  top: 10px;
-  right: 10px;
-  z-index: 10;
 }
 
 /* --- stella: the shell (sidebar + conversation + screen) ----------------- */

@@ -6,32 +6,23 @@ import type { ModeSelectViewProps } from "./ModeSelectView.tsx";
 import { ModeSelectView } from "./ModeSelectView.tsx";
 
 /**
- * One place that shows the mode chooser, in the two shapes it is needed.
+ * The mode chooser, in the one place it is shown: the "switch mode" dialog
+ * from the app menu.
  *
- * The same view appears as the app's first screen (no mode stored yet) and
- * inside the "switch mode" dialog from the app menu. App.tsx rendered it at
- * both sites with the same five props, and the busy/refusal rules lived beside
- * those render calls: a change to how a refusal is shown had to be made twice,
- * and one of the two could drift (the dialog keeps itself open on a refusal,
- * because closing it would hide why nothing happened).
+ * It used to be the app's first screen too, for a client that had never
+ * chosen. A bare `/` now starts in the main mode (Lumisca, see
+ * hooks/useAppMode.ts), so choosing is a deliberate act from the menu rather
+ * than a gate in front of the app; the dialog is what remains.
  *
- * `Gate` is the screen, `Dialog` is the modal. Both own the busy state, so the
- * cards cannot be double-clicked into two different modes while the server
- * verdict is in flight.
+ * The host owns the busy state, so the cards cannot be double-clicked into
+ * two different modes while the server verdict is in flight, and the dialog
+ * keeps itself open on a refusal (closing it would hide why nothing
+ * happened).
  */
 export interface ModeGateProps
   extends Omit<ModeSelectViewProps, "busy" | "onChoose"> {
   /** Choose the mode. Resolves when the choice is stored (or refused). */
   choose: (mode: AppMode) => Promise<void>;
-}
-
-/** The first screen: the chooser, full page. */
-export function ModeGate(view: ModeGateProps) {
-  return (
-    <ModeSelectHost {...view}>
-      {(shared) => <ModeSelectView {...shared} />}
-    </ModeSelectHost>
-  );
 }
 
 /** The "switch mode" dialog. A refusal keeps it open showing its reason. */
@@ -50,7 +41,7 @@ export function ModeGateDialog(view: ModeGateProps & { onClose: () => void }) {
 }
 
 /**
- * The busy state and the choose handler, shared by both shapes.
+ * The busy state and the choose handler, kept out of the view.
  *
  * `onChosen` runs only on success: a refusal (stella on a server without a
  * usable machine) leaves the chooser where it is, showing the reason.

@@ -7,8 +7,8 @@ export interface ModeSelectViewProps {
   /** What this server can do; null while the first read is in flight (both
    * cards stay disabled: neither mode can be honest about itself yet). */
   status: StellaStatus | null;
-  /** The mode this client already shows, or null before it picked one. */
-  mode: AppMode | null;
+  /** The mode this client shows now (marked "in use"). */
+  mode: AppMode;
   /** Why the last attempt to switch failed (e.g. stella refused). */
   error: string | null;
   /** True while the choice is being stored. */
@@ -17,14 +17,15 @@ export interface ModeSelectViewProps {
 }
 
 /**
- * The first screen of the app: which mode to work in.
+ * The app menu's mode chooser: which mode to work in.
  *
- * Shown while no mode is stored, and reachable later from the app menu.
- * stella is offered only where it can actually run — the card is disabled and
- * says why (podman missing, the machine cannot start), because a mode whose
- * whole premise is a virtual machine has no honest degraded form. There is
- * deliberately no "continue anyway": picking code mode is the alternative, and
- * it is right there.
+ * Reached from "switch mode"; a bare `/` starts in the main mode (Lumisca)
+ * instead of asking first, so this view is only ever a dialog now. stella is
+ * offered only where it can actually run — the card is disabled and says why
+ * (podman missing, the machine cannot start), because a mode whose whole
+ * premise is a virtual machine has no honest degraded form. There is
+ * deliberately no "continue anyway": picking Lumisca code is the alternative,
+ * and it is right there.
  */
 export function ModeSelectView({
   status,
