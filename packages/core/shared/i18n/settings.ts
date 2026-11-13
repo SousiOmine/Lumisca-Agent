@@ -659,7 +659,7 @@ export const settings = {
     en: "Fetched {count} tools",
   },
   "settings.mcp.testNoTools": {
-    ja: "接続に成功しました。公開されているツールはありません",
+    ja: "接続に成功しました。公開されているツールはありません。",
     en: "Connected. The server exposes no tools",
   },
   "settings.mcp.testFailed": {

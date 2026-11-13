@@ -41,8 +41,8 @@ function render(): string {
 
 Deno.test("ShareFolderDialog: nothing is lent until a folder is chosen", () => {
   const html = withStorage(memoryStorage(null), render);
-  assertStringIncludes(html, "フォルダで共同作業");
-  assertStringIncludes(html, "フォルダを選ぶ");
+  assertStringIncludes(html, "フォルダーで共同作業");
+  assertStringIncludes(html, "フォルダーを選ぶ");
   // A phone shows the dialog full screen, so the backdrop is not a way out:
   // the close button has to be in the sheet whatever state it is in.
   assertStringIncludes(html, "閉じる");
@@ -51,7 +51,7 @@ Deno.test("ShareFolderDialog: nothing is lent until a folder is chosen", () => {
   assert(!html.includes("最後に使ってから30分"), html);
   assert(!html.includes(">接続<"), html);
   // Nothing was lent before either.
-  assert(!html.includes("最近接続したフォルダ"), html);
+  assert(!html.includes("最近接続したフォルダー"), html);
 });
 
 Deno.test("ShareFolderDialog: a recent folder is one press, with its last terms", () => {
@@ -60,7 +60,7 @@ Deno.test("ShareFolderDialog: a recent folder is one press, with its last terms"
     { path: "/Users/me/notes", name: "notes", write: false },
   ]);
   const html = withStorage(memoryStorage(stored), render);
-  assertStringIncludes(html, "最近接続したフォルダ");
+  assertStringIncludes(html, "最近接続したフォルダー");
   assertStringIncludes(html, "proj");
   assertStringIncludes(html, "notes");
   // The terms are the ones saved with the folder, not the dialog's defaults.

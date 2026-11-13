@@ -55,10 +55,10 @@ Deno.test("AgentEditDialog: the role is not editable here", () => {
 Deno.test("AgentEditDialog: an agent without a picture offers no reset", () => {
   // A control that removes something which is not there is one more thing to
   // read (and it would be a no-op the user has to interpret).
-  assertEquals(render().includes("デフォルトに戻す"), false);
+  assertEquals(render().includes("既定に戻す"), false);
   assertStringIncludes(
     render({ ...agent, icon: "9f3c2a1b4d5e.png" }),
-    "デフォルトに戻す",
+    "既定に戻す",
   );
 });
 

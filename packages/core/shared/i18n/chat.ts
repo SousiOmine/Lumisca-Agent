@@ -67,7 +67,7 @@ export const chat = {
 
   // --- chat view -----------------------------------------------------------
   "chat.empty.workspace": {
-    ja: "作業内容（タスク）を入力してください。ワークスペース内のファイル操作やコマンド実行をAIが自律的に進めます。",
+    ja: "作業内容を入力してください。ワークスペース内のファイル操作やコマンド実行を AI が自律的に進めます。",
     en: "Enter a task. The AI will autonomously operate files and run commands in your workspace.",
   },
   "chat.empty.chat": {
@@ -77,8 +77,8 @@ export const chat = {
 
   // --- composer ------------------------------------------------------------
   "chat.composer.placeholder": {
-    ja: "メッセージを入力...",
-    en: "Type a message...",
+    ja: "メッセージを入力…",
+    en: "Type a message…",
   },
   "chat.composer.submit": { ja: "送信", en: "Send" },
   /** The composer's own name: the placeholder disappears once the reader
@@ -127,7 +127,7 @@ export const chat = {
    * it in (code mode): the tools work on the user's own folders, so there is
    * nowhere for the bytes to go. */
   "chat.composer.attach.imageOnly": {
-    ja: "「{name}」は添付できません。このモードで添付できるのは画像だけです",
+    ja: "「{name}」は添付できません。このモードで添付できるのは画像だけです。",
     en: '"{name}" cannot be attached: only pictures can be attached in this mode',
   },
   "chat.composer.mention.noMatch": {
@@ -163,7 +163,7 @@ export const chat = {
   "chat.newSession.title": { ja: "新しいセッション", en: "New session" },
   "chat.newSession.workspace": { ja: "ワークスペース", en: "Workspace" },
   "chat.newSession.defaultModelError": {
-    ja: "デフォルトのモデルを取得できませんでした:",
+    ja: "既定のモデルを取得できませんでした:",
     en: "Could not fetch the default model:",
   },
   "chat.newSession.defaultModelSaveFailed": {
@@ -175,8 +175,8 @@ export const chat = {
     en: "No provider is configured, so no model can be selected. Register an API key in the settings.",
   },
   "chat.newSession.placeholder": {
-    ja: "メッセージを入力...",
-    en: "Type a message...",
+    ja: "メッセージを入力…",
+    en: "Type a message…",
   },
   "chat.newSession.submitCreating": { ja: "作成中…", en: "Creating…" },
   "chat.newSession.submitStart": { ja: "開始", en: "Start" },
@@ -357,8 +357,8 @@ export const chat = {
     en: "Choose a picture",
   },
   "chat.stella.agents.iconReset": {
-    ja: "デフォルトに戻す",
-    en: "Back to the initial",
+    ja: "既定に戻す",
+    en: "Reset to default",
   },
   /** The model the agent's conversation runs on. It is the AGENT's choice
    * (not one made per message), and leaving it unset follows the app's
@@ -402,8 +402,8 @@ export const chat = {
     en: "Could not open the conversation: {error}",
   },
   "chat.stella.placeholder": {
-    ja: "メッセージを入力...",
-    en: "Type a message...",
+    ja: "メッセージを入力…",
+    en: "Type a message…",
   },
   /** A file a prompt brought into the machine that the machine no longer
    * has (the agent moved or deleted it): the conversation says so rather
@@ -458,23 +458,23 @@ export const chat = {
    * screen. */
   "chat.stella.machine.info": { ja: "情報", en: "Info" },
   "chat.stella.share.open": {
-    ja: "フォルダで共同作業",
+    ja: "フォルダーで共同作業",
     en: "Share a folder",
   },
   "chat.stella.share.title": {
-    ja: "フォルダで共同作業",
+    ja: "フォルダーで共同作業",
     en: "Share a folder",
   },
   "chat.stella.share.hint": {
-    ja: "この PC のフォルダを、この会話のエージェントが使えるようにします。",
+    ja: "この PC のフォルダーを、この会話のエージェントが使えるようにします。",
     en: "Let this conversation's agent use a folder on this computer.",
   },
   "chat.stella.share.pick": {
-    ja: "フォルダを選ぶ",
+    ja: "フォルダーを選ぶ",
     en: "Choose a folder",
   },
   "chat.stella.share.recent": {
-    ja: "最近接続したフォルダ",
+    ja: "最近接続したフォルダー",
     en: "Recently shared",
   },
   "chat.stella.share.readOnly": {
@@ -498,7 +498,7 @@ export const chat = {
     en: "Sharing…",
   },
   "chat.stella.share.pickFailed": {
-    ja: "フォルダを選べませんでした: {error}",
+    ja: "フォルダーを選べませんでした: {error}",
     en: "Could not choose a folder: {error}",
   },
   "chat.stella.share.lendFailed": {
@@ -506,7 +506,7 @@ export const chat = {
     en: "Could not share: {error}",
   },
   "chat.stella.share.panel": {
-    ja: "共有フォルダ",
+    ja: "共有フォルダー",
     en: "Shared folders",
   },
   "chat.stella.share.disconnect": {
