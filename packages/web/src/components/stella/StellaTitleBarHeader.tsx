@@ -1,7 +1,6 @@
 import {
   IconArrowLeft,
-  IconDeviceDesktop,
-  IconDeviceDesktopOff,
+  IconLayoutSidebarRight,
 } from "@tabler/icons-preact";
 import { useT } from "../../i18n.ts";
 import type { StellaAgentSummary } from "../../types.ts";
@@ -114,11 +113,7 @@ export function StellaTitleBarHeader({
               : "chat.stella.machine.showScreen",
           )}
         >
-          {screenOpen ? (
-            <IconDeviceDesktop size={15} />
-          ) : (
-            <IconDeviceDesktopOff size={15} />
-          )}
+          <IconLayoutSidebarRight size={17} />
         </button>
       )}
     </div>
