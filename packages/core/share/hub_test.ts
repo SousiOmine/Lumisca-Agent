@@ -207,9 +207,11 @@ Deno.test("an unchanged announcement adds no report", () => {
   const changes: string[][] = [];
   hub.onSharesChange((sessions) => changes.push([...sessions]));
   const sink = sinkOf();
-  const grants = [grantOf()];
-  hub.register(sink, { clientId: "app-1", host, grants });
-  hub.register(sink, { clientId: "app-1", host, grants: [grantOf()] });
+  // One grant object, announced twice: the expiries must match, or the
+  // clock alone would look like a change.
+  const grant = grantOf();
+  hub.register(sink, { clientId: "app-1", host, grants: [grant] });
+  hub.register(sink, { clientId: "app-1", host, grants: [{ ...grant }] });
   assertEquals(changes, [["s1"]]);
 });
 
