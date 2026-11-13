@@ -1,4 +1,5 @@
 import { CoreError } from "../errors.ts";
+import type { PendingShareRequest, ShareRequestHub } from "../share/request.ts";
 import type { AskAnswer } from "../shared/mod.ts";
 import type { AskHub, PendingQuestion } from "../tools/ask.ts";
 import type { EnvRequestHub, PendingEnvRequest } from "../vm/env-request.ts";
@@ -6,19 +7,21 @@ import type { HandoverHub, PendingHandover } from "../vm/handover.ts";
 
 /**
  * The ways a run stops and waits for a person: the `ask` tool's questions,
- * the screen hand-over, and the environment variable the user has to fill in.
+ * the screen hand-over, the environment variable the user has to fill in, and
+ * the folder they are asked to lend.
  *
  * All of them live as long as the session's agent and are rejected or
  * cancelled when the run ends (a question nobody can answer any more, a
  * hand-over nobody can take, a dialog with no run behind it). Grouping them
  * here keeps that teardown rule in one place: the event handler calls
- * {@link endRun} once instead of remembering three hubs.
+ * {@link endRun} once instead of remembering four hubs.
  */
 export class InterruptionHub {
   constructor(
     private readonly ask: AskHub,
     private readonly handover: HandoverHub | null,
     private readonly envRequest: EnvRequestHub | null = null,
+    private readonly shareRequest: ShareRequestHub | null = null,
   ) {}
 
   /** The user answered a question (the answer resolves the blocked tool). */
@@ -42,6 +45,11 @@ export class InterruptionHub {
     return this.envRequest?.pendingEnvRequest() ?? null;
   }
 
+  /** The folder the run is waiting on (the resync snapshot), or null. */
+  pendingShareRequest(): PendingShareRequest | null {
+    return this.shareRequest?.pendingShareRequest() ?? null;
+  }
+
   /** The user finished at the screen: let the blocked run continue. */
   finishHandover(note: string, toolCallId?: string): void {
     if (this.handover === null) {
@@ -59,5 +67,6 @@ export class InterruptionHub {
     this.ask.rejectAll();
     this.handover?.cancelAll();
     this.envRequest?.cancelAll();
+    this.shareRequest?.cancelAll();
   }
 }

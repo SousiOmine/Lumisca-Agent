@@ -72,6 +72,7 @@ export type {
   StellaEvent,
   StellaHandover,
   StellaQuestion,
+  StellaShareRequest,
 } from "./domain/stella-conversation.ts";
 export type { Workspace } from "./domain/workspace.ts";
 export { CoreError, errorMessage } from "./errors.ts";

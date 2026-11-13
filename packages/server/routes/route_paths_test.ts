@@ -88,6 +88,11 @@ function fakeCore(seen: string[]): StellaApi {
     getPendingQuestions: () => [],
     getPendingHandover: () => null,
     getPendingEnvRequest: () => null,
+    getPendingShareRequest: () => null,
+    finishShareLend: () => {},
+    declineShareRequest: () => {},
+    finishShareDisconnect: () => {},
+    failShareDisconnect: () => {},
     getShares: () => [],
     finishHandover: () => {
       seen.push("handover");

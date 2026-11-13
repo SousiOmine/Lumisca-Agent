@@ -14,6 +14,7 @@ import type { MessageRepo } from "../session/messages.ts";
 import type { RequestShapeRepo } from "../session/request-shapes.ts";
 import type { SessionVisualStore } from "../session/visuals.ts";
 import type { ShareHub } from "../share/hub.ts";
+import type { ShareRequestRegistry } from "../share/request.ts";
 import type { Locale, ThinkingLevel } from "../shared/mod.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import type { BackgroundProcessManager } from "../tools/background.ts";
@@ -149,6 +150,10 @@ export interface AgentRuntime {
    * read on every call, so a loan made while a session runs is reachable
    * without rebuilding its agent. */
   shares?: () => ShareHub | undefined;
+  /** The per-session hubs of the folder requests (`share_request` /
+   * `share_disconnect`). Omitted → a stella session gets neither tool (a pool
+   * built by hand without a share channel). */
+  shareRequests?: ShareRequestRegistry;
   /** The persona of a stella session: the role its agent works from, which
    * is what makes one conversation different from another (see
    * stella/agents.ts). The agent's NAME is not part of it: it is a label the

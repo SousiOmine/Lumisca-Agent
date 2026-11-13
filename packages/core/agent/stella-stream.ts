@@ -41,6 +41,7 @@ import type {
   StellaEvent,
   StellaHandover,
   StellaQuestion,
+  StellaShareRequest,
 } from "../domain/stella-conversation.ts";
 import { chatMessageOfDetails } from "../shared/chat-message.ts";
 import { TOOL_SEND_CHAT } from "../shared/tool-names.ts";
@@ -235,6 +236,28 @@ function handoverOf(handover: StellaHandover | null): StellaHandover | null {
       };
 }
 
+/** The conversation's view of a folder request (same reason as
+ * questionsOf): the fields the card and the shell call need, and nothing
+ * else. */
+function shareRequestOf(
+  event: Extract<ClientEvent, { type: "share_request" }>,
+): StellaShareRequest {
+  return event.kind === "lend"
+    ? {
+        kind: "lend",
+        toolCallId: event.toolCallId,
+        reason: event.reason,
+        expiresAt: event.expiresAt,
+      }
+    : {
+        kind: "disconnect",
+        toolCallId: event.toolCallId,
+        id: event.id,
+        name: event.name,
+        expiresAt: event.expiresAt,
+      };
+}
+
 /** The conversation's view of an environment-variable request (same reason
  * as questionsOf). There is no value to copy: none ever arrives as an
  * event. */
@@ -327,6 +350,10 @@ export function stellaEventsOf(event: ClientEvent): StellaEvent[] {
       ];
     case "env_request_end":
       return [{ type: "env_request", request: null }];
+    case "share_request":
+      return [{ type: "share_request", request: shareRequestOf(event) }];
+    case "share_request_end":
+      return [{ type: "share_request", request: null }];
     case "shares":
       return [{ type: "shares", shares: event.shares }];
     case "card_delta":

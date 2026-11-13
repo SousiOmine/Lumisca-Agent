@@ -1426,11 +1426,14 @@
   color: var(--text-dim);
 }
 
-/* The `vm_env` card: a secret goes from this field into the machine. It is
- * drawn in the conversation, not over it (see EnvRequestCard), so it takes
- * the surface a UI card takes and the width a single field needs — a reply
- * may be 640px wide, a form with one input in it does not want to be. */
-.env-request-card {
+/* The two request cards: `vm_env` (a secret goes from its field into the
+ * machine) and `share_request` (a button opens the folder dialog). Both are
+ * drawn in the conversation, not over it (see EnvRequestCard and
+ * ShareRequestCard), so they take the surface a UI card takes and the width
+ * one question needs — a reply may be 640px wide, a card does not want to
+ * be. */
+.env-request-card,
+.share-request-card {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1446,14 +1449,16 @@
   animation: lum-rise-small var(--lum-dur-mid) var(--lum-ease-out) both;
 }
 
-.env-request-title {
+.env-request-title,
+.share-request-title {
   margin: 0;
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
 }
 
-.env-request-text {
+.env-request-text,
+.share-request-text {
   margin: 0;
   font-size: 13.5px;
   line-height: 1.6;
@@ -1469,13 +1474,15 @@
 /* The plain button's own surface IS this card's (both --surface-2), which
  * on the sheet it replaces was not the case: there it sat on --surface and
  * read as a button. Here the border is what shows it. */
-.env-request-card .btn:not(.primary) {
+.env-request-card .btn:not(.primary),
+.share-request-card .btn:not(.primary) {
   background: transparent;
   border-color: var(--border);
 }
 
 /* The refusal travels with the save: one row, the sheet's own alignment. */
-.env-request-actions {
+.env-request-actions,
+.share-request-actions {
   display: flex;
   justify-content: flex-end;
   flex-wrap: wrap;
@@ -1490,13 +1497,15 @@
   color: var(--text-dim);
 }
 
-.env-request-hint {
+.env-request-hint,
+.share-request-hint {
   margin: 0;
   font-size: 12px;
   color: var(--text-dim);
 }
 
-.env-request-deadline {
+.env-request-deadline,
+.share-request-deadline {
   margin: 0;
   font-size: 11px;
   color: var(--text-faint);

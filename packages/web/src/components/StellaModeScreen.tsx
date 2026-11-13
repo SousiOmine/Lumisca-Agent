@@ -123,6 +123,8 @@ export function StellaModeScreen({
           stella.provideEnv(value, toolCallId)
         }
         onDeclineEnv={(toolCallId) => stella.declineEnv(toolCallId)}
+        onLendShare={(toolCallId) => stella.lendShare(toolCallId)}
+        onDeclineShare={(toolCallId) => stella.declineShare(toolCallId)}
         onOpenSettings={onOpenSettings}
       />
     </div>

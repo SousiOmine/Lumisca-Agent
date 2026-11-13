@@ -84,11 +84,22 @@ export const TOOL_VM_ASK_USER = "vm_ask_user";
 export const TOOL_VM_ENV = "vm_env";
 
 /** Move one file between the machine and a folder lent from the user's own
- * computer, byte for byte (`share_upload` / `share_download`). Preloaded in
- * stella: without them the model reads a picture as text and writes back
- * something that is no longer the file. */
+ * computer, byte for byte (`share_upload` / `share_download`). Discovered
+ * through tool_search: a conversation that lends nothing has no use for
+ * them, and without them the model would read a picture as text and write
+ * back something that is no longer the file. */
 export const TOOL_SHARE_UPLOAD = "share_upload";
 export const TOOL_SHARE_DOWNLOAD = "share_download";
+
+/** Ask the user to lend a folder from their computer (`share_request`) and
+ * withdraw one again (`share_disconnect`). Both are discovered rather than
+ * preloaded — a conversation that lends nothing pays nothing for their
+ * definitions — and both belong to the conversation's main agent, which is
+ * the only one that may put a question to the user or end a loan the run is
+ * working in. The built-in `folder-share` skill is what tells the agent they
+ * exist. */
+export const TOOL_SHARE_REQUEST = "share_request";
+export const TOOL_SHARE_DISCONNECT = "share_disconnect";
 
 /** Send files to the user (images inline, everything else as a download).
  * Code mode only: there the reply's own text is what the user reads, so this

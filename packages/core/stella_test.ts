@@ -1060,6 +1060,104 @@ Deno.test("stella conversation: the transfer tools are found with tool_search", 
   }
 });
 
+Deno.test("stella conversation: the folder tools are found with tool_search", async () => {
+  // Neither `share_request` nor `share_disconnect` has a use until the user
+  // lends something, so they cost nothing in the context: they live in the
+  // session registry, and the built-in folder-share skill is what tells the
+  // agent they exist.
+  const { faux, core, session } = await stellaConversation("Lender");
+  try {
+    const preloaded = core.getAgent(session.id)!.toolNames;
+    for (const name of ["share_request", "share_disconnect"]) {
+      assertEquals(preloaded.includes(name), false, `${name} is preloaded`);
+    }
+
+    faux.setResponses([
+      fauxAssistantMessage(
+        [fauxToolCall("tool_search", { query: "lend folder" })],
+        {
+          stopReason: "toolUse",
+        },
+      ),
+      fauxAssistantMessage("Found them."),
+    ]);
+    await promptSession(
+      core,
+      session.id,
+      "Which tools ask the user for a folder?",
+    );
+
+    const result = core
+      .getAgent(session.id)!
+      .messages.find((message) => message.role === "toolResult");
+    assert(result !== undefined, "the search produced no result");
+    const text = JSON.stringify(result);
+    assert(text.includes("share_request"), text);
+    assert(text.includes("share_disconnect"), text);
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella conversation: share_request blocks the run until a folder is lent", async () => {
+  // The wait is real (see share/request.ts): the tool call does not return
+  // until the user answers, so the core's snapshot carries the pending
+  // request and the answer comes back through the core's own method — the
+  // route the server's share endpoints use.
+  const { faux, core, session } = await stellaConversation("Asker");
+  try {
+    faux.setResponses([
+      // Discovered first, as the skill teaches: the tool is not in the
+      // run's tool set until tool_search hands it over.
+      fauxAssistantMessage(
+        [fauxToolCall("tool_search", { query: "lend folder" })],
+        { stopReason: "toolUse" },
+      ),
+      fauxAssistantMessage(
+        [
+          fauxToolCall("tool_call", {
+            name: "share_request",
+            args: { reason: "read the exports" },
+          }),
+        ],
+        { stopReason: "toolUse" },
+      ),
+      fauxAssistantMessage("Thanks."),
+    ]);
+    const running = promptSession(
+      core,
+      session.id,
+      "Read the CSV exports in my Downloads folder",
+    );
+    // The card's state, as a reconnecting client would read it.
+    let pending = core.getPendingShareRequest(session.id);
+    for (let index = 0; index < 100 && pending === null; index += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      pending = core.getPendingShareRequest(session.id);
+    }
+    assert(pending !== null, "the request never reached the snapshot");
+    assertEquals(pending.kind, "lend");
+    if (pending.kind === "lend") {
+      assertEquals(pending.reason, "read the exports");
+    }
+
+    core.finishShareLend(session.id, pending.toolCallId);
+    await running;
+    // The card is gone once the run moves on.
+    assertEquals(core.getPendingShareRequest(session.id), null);
+    // The tool result names no folder (nothing was lent in this test), so a
+    // model cannot read a path out of an answer that lent nothing.
+    const results = core
+      .getAgent(session.id)!
+      .messages.filter((message) => message.role === "toolResult");
+    const text = JSON.stringify(results.at(-1));
+    assert(text.includes("shared a folder"), text);
+    assertEquals(text.includes("/lend/exports"), false, text);
+  } finally {
+    await core.close();
+  }
+});
+
 Deno.test("stella conversation: todo keeps a plan the conversation does not draw", async () => {
   const { faux, core, session } = await stellaConversation("Planner");
   try {

@@ -1,4 +1,5 @@
 import {
+  errorMessage,
   mergeAgentRows,
   newestPreview,
   withAgentPreview,
@@ -12,7 +13,9 @@ import {
   maybeNotifyAgentEnd,
   maybeNotifyEnv,
   maybeNotifyHandover,
+  maybeNotifyShare,
 } from "../notify.ts";
+import { inDesktopShell, shellCall } from "../shell.ts";
 import {
   applyStellaEvent,
   prependOlderEntries,
@@ -99,6 +102,11 @@ export type StellaHook = {
   provideEnv: (value: string, toolCallId: string) => Promise<void>;
   /** Refuse to enter a value: the run continues without it. */
   declineEnv: (toolCallId: string) => Promise<void>;
+  /** The user lent a folder from the card `share_request` put in the
+   * conversation: the blocked run continues. */
+  lendShare: (toolCallId: string) => Promise<void>;
+  /** The user refused to lend a folder: the run continues without one. */
+  declineShare: (toolCallId: string) => Promise<void>;
   /** Read the entries before the loaded window (the reader reached the top
    * of the conversation). Returns whether a read started. */
   loadOlder: () => boolean;
@@ -308,6 +316,9 @@ export function useStella(
     let notifiedHandover: string | null = null;
     /** The `vm_env` dialog already announced, for the same reason. */
     let notifiedEnv: string | null = null;
+    /** The `share_request` card already announced (only a lend request is:
+     * a disconnect asks the user nothing). */
+    let notifiedShare: string | null = null;
 
     const resync = async () => {
       try {
@@ -363,6 +374,18 @@ export function useStella(
           void maybeNotifyEnv(
             conversationRef.current?.agentName ?? "",
             event.request.name,
+          );
+        }
+        if (
+          event.type === "share_request" &&
+          event.request !== null &&
+          event.request.kind === "lend" &&
+          event.request.toolCallId !== notifiedShare
+        ) {
+          notifiedShare = event.request.toolCallId;
+          void maybeNotifyShare(
+            conversationRef.current?.agentName ?? "",
+            event.request.reason,
           );
         }
         if (event.type === "agent_end") {
@@ -437,6 +460,58 @@ export function useStella(
     setConversationAgentId(null);
     setSessionId(null);
   }, [enabled]);
+
+  /** The disconnect already carried out by this window. A `share_disconnect`
+   * request is read again by every resync (the snapshot carries it while the
+   * run waits), and the shell call must happen once per request. */
+  const answeredDisconnect = useRef<string | null>(null);
+
+  // A `share_disconnect` is the desktop shell's to carry out: it owns the
+  // loan, and the server only hears the shorter list afterwards. The page is
+  // the one channel between the two, so it acts on the request here — no
+  // question is put to the user, because ending a loan takes nothing away
+  // from them. A window that is not inside the shell (a browser tab on the
+  // same server) says so instead, so the blocked tool learns why rather than
+  // waiting for its deadline.
+  useEffect(() => {
+    const request = conversation?.shareRequest ?? null;
+    if (request === null || request.kind !== "disconnect") return;
+    if (activeAgentId === null) return;
+    if (answeredDisconnect.current === request.toolCallId) return;
+    answeredDisconnect.current = request.toolCallId;
+    const agentId = activeAgentId;
+    const { toolCallId, id } = request;
+    void (async () => {
+      if (!inDesktopShell()) {
+        await stellaApi.finishShareDisconnect(
+          agentId,
+          toolCallId,
+          false,
+          "The folder is on the user's computer, and this page is not open in " +
+            "the desktop app there, so the loan cannot be ended from here",
+        );
+        return;
+      }
+      try {
+        await shellCall("share/revoke", { id });
+        await stellaApi.finishShareDisconnect(agentId, toolCallId, true);
+      } catch (failure) {
+        await stellaApi.finishShareDisconnect(
+          agentId,
+          toolCallId,
+          false,
+          errorMessage(failure),
+        );
+      }
+    })().catch(() => {
+      // The answer did not settle anything: the answer never reached the
+      // server (the socket dropped, the server restarted), or another window
+      // showing the same conversation answered first and this one was told
+      // there is nothing waiting. The tool's own deadline reports the first
+      // case to the agent; the second needs no report at all. Nothing is
+      // shown here either way: no card was ever drawn for this request.
+    });
+  }, [conversation?.shareRequest, activeAgentId]);
 
   /** The conversation's agent id, or throw: a client action without an open
    * conversation is a bug (the composer is disabled in that state). */
@@ -527,6 +602,20 @@ export function useStella(
     [requireAgent],
   );
 
+  const lendShare = useCallback(
+    async (toolCallId: string) => {
+      await stellaApi.lendShare(requireAgent(), toolCallId);
+    },
+    [requireAgent],
+  );
+
+  const declineShare = useCallback(
+    async (toolCallId: string) => {
+      await stellaApi.declineShare(requireAgent(), toolCallId);
+    },
+    [requireAgent],
+  );
+
   /** Read the entries before the loaded window (the reader reached the top
    * of the conversation). Returns whether a read started. */
   const loadOlder = useCallback((): boolean => {
@@ -583,6 +672,8 @@ export function useStella(
     finishHandover,
     provideEnv,
     declineEnv,
+    lendShare,
+    declineShare,
     error,
     loading,
     reloadAgents,

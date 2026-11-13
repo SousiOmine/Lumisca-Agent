@@ -34,7 +34,9 @@ import {
   TOOL_ROUTINE_LIST,
   TOOL_ROUTINE_RUN,
   TOOL_ROUTINE_UPDATE,
+  TOOL_SHARE_DISCONNECT,
   TOOL_SHARE_DOWNLOAD,
+  TOOL_SHARE_REQUEST,
   TOOL_SHARE_UPLOAD,
   TOOL_VM_ENV,
 } from "../shared/mod.ts";
@@ -48,6 +50,7 @@ import {
 } from "../tools/mod.ts";
 import { SessionToolRegistries } from "../tools/registries.ts";
 import type { Tool } from "../tools/schema.ts";
+import { createShareRequestTools } from "../tools/share-request.ts";
 import { createShareTransferTools } from "../tools/share-transfer.ts";
 import { TaskHub } from "../tools/task-hub.ts";
 import { TodoHub } from "../tools/todo.ts";
@@ -92,6 +95,13 @@ const VM_ENV_TOOL_NAMES = [TOOL_VM_ENV];
  * preloaded: a conversation that lends nothing has no use for them, and the
  * lent-folder announcement is what tells the agent they exist. */
 const SHARE_TRANSFER_TOOL_NAMES = [TOOL_SHARE_UPLOAD, TOOL_SHARE_DOWNLOAD];
+
+/** Names of the tools that ask about a lent folder (`share_request` /
+ * `share_disconnect`). Discovered for the same reason as the transfer pair,
+ * main-only because a sub-agent must not put a card in front of the user or
+ * end a loan its parent is still working in, and stella-only because folder
+ * lending is stella's (code mode has workspace folders of its own). */
+const SHARE_REQUEST_TOOL_NAMES = [TOOL_SHARE_REQUEST, TOOL_SHARE_DISCONNECT];
 
 /** The rule that condenses a stella conversation while it sits idle (see
  * SessionAgentOptions.idleCompaction).
@@ -198,7 +208,7 @@ export class AgentFactory {
     );
     const registries = resources.registries!;
     const where = this.resolveWhere(session, workspace);
-    this.seedDiscoverableTools(where, registries);
+    this.seedDiscoverableTools(where, registries, session.id);
     const hubs = this.buildHubs(session, where, resources, mcp);
     const tools = this.buildToolSet(session, workspace, where, hubs);
     const systemPrompt = this.ensureSystemPrompt(session, workspace);
@@ -250,6 +260,9 @@ export class AgentFactory {
         ? {
             handoverHub: where.stella.handoverHub,
             envRequestHub: where.stella.envRequestHub,
+            ...(this.deps.shareRequests !== undefined
+              ? { shareRequestHub: this.deps.shareRequests.for(session.id) }
+              : {}),
           }
         : {}),
       taskHub: hubs.tasks,
@@ -441,7 +454,7 @@ export class AgentFactory {
     const registries = resources.registries;
     if (registries === undefined) return;
     const where = this.resolveWhere(session, workspace);
-    this.seedDiscoverableTools(where, registries);
+    this.seedDiscoverableTools(where, registries, session.id);
     resources.agent?.ensureSearchTools();
   }
 
@@ -459,6 +472,7 @@ export class AgentFactory {
   private seedDiscoverableTools(
     where: SessionWhere,
     registries: SessionToolRegistries,
+    sessionId: string,
   ): void {
     if (where.browserAvailable) {
       registries.addShared(createBrowserToolsFrom(() => this.deps.browser?.()));
@@ -504,6 +518,19 @@ export class AgentFactory {
     registries.main.removeTools(ROUTINE_TOOL_NAMES);
     registries.main.removeTools(STELLA_AGENT_TOOL_NAMES);
     registries.main.removeTools(VM_ENV_TOOL_NAMES);
+    // Asking the user for a folder, and ending a loan: stella's, main-only
+    // and discoverable (the built-in `folder-share` skill is what tells the
+    // agent they exist). The grants are read per call, so a loan made while
+    // the run is elsewhere is there for the next answer.
+    registries.main.removeTools(SHARE_REQUEST_TOOL_NAMES);
+    if (where.stella !== undefined && this.deps.shareRequests !== undefined) {
+      registries.addMainOnly(
+        createShareRequestTools({
+          grants: () => this.deps.shares?.()?.grantsFor(sessionId) ?? [],
+          requests: this.deps.shareRequests.for(sessionId),
+        }),
+      );
+    }
     if (where.stella !== undefined) {
       registries.addMainOnly(where.stella.routineTools);
       registries.addMainOnly([

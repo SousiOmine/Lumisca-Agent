@@ -51,6 +51,7 @@ export type {
   StellaEvent,
   StellaHandover,
   StellaQuestion,
+  StellaShareRequest,
   SubagentStatus,
   SubagentType,
   TaskInfo,

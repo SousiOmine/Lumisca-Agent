@@ -104,6 +104,39 @@ export const stellaApi = {
       body: JSON.stringify({ toolCallId }),
     }),
 
+  /** The user lent a folder (`share_request`): the blocked run continues.
+   * The folder itself is not posted — the server's own list of loans is what
+   * the tool reads. */
+  lendShare: (agentId: string, toolCallId: string) =>
+    request<{ ok: true }>(conversationPath(agentId, "/share/lend"), {
+      method: "POST",
+      body: JSON.stringify({ toolCallId }),
+    }),
+
+  /** The user refused to lend a folder: the run continues without one. */
+  declineShare: (agentId: string, toolCallId: string) =>
+    request<{ ok: true }>(conversationPath(agentId, "/share/decline"), {
+      method: "POST",
+      body: JSON.stringify({ toolCallId }),
+    }),
+
+  /** The desktop app withdrew a loan (`share_disconnect`), or could not and
+   * said why. The reason is handed to the blocked tool as it was given. */
+  finishShareDisconnect: (
+    agentId: string,
+    toolCallId: string,
+    ok: boolean,
+    error?: string,
+  ) =>
+    request<{ ok: true }>(conversationPath(agentId, "/share/disconnect"), {
+      method: "POST",
+      body: JSON.stringify({
+        toolCallId,
+        ok,
+        ...(error === undefined ? {} : { error }),
+      }),
+    }),
+
   /** The text on the machine's clipboard (empty when nothing was copied
    * there). The screen pane reads it while the user drives the screen; the
    * VNC connection cannot carry the text (see core/vm/clipboard.ts). */

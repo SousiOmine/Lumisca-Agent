@@ -82,6 +82,11 @@ interface StellaViewProps {
   onProvideEnv: (value: string, toolCallId: string) => Promise<void>;
   /** The user refused to enter a value. */
   onDeclineEnv: (toolCallId: string) => Promise<void>;
+  /** The user lent a folder the agent asked for (`share_request`): the
+   * dialog's loan answers the blocked run. */
+  onLendShare: (toolCallId: string) => Promise<void>;
+  /** The user refused to lend one. */
+  onDeclineShare: (toolCallId: string) => Promise<void>;
   onOpenSettings: () => void;
 }
 
@@ -131,6 +136,8 @@ export function StellaView({
   onFinishHandover,
   onProvideEnv,
   onDeclineEnv,
+  onLendShare,
+  onDeclineShare,
   onOpenSettings,
 }: StellaViewProps) {
   const t = useT();
@@ -144,6 +151,12 @@ export function StellaView({
   // it expires and announces the whole list again, so the client counts what
   // it was given and never keeps a clock of its own.
   const shares = conversation?.shares ?? [];
+  // The card the run is blocked on, when it is a request for a folder (a
+  // disconnect draws no card: the page carries it out on its own).
+  const lendRequest =
+    conversation?.shareRequest?.kind === "lend"
+      ? conversation.shareRequest
+      : null;
   const isRunning = conversation?.running === true;
   // Lending a folder is a shell action (the folder is on the user's computer
   // and the picker is the shell's), so a browser tab does not offer it.
@@ -254,6 +267,8 @@ export function StellaView({
             onSend={(text) => onPrompt(text, [], [])}
             onProvideEnv={onProvideEnv}
             onDeclineEnv={onDeclineEnv}
+            onPickShare={() => setShareDialogOpen(true)}
+            onDeclineShare={onDeclineShare}
             onLoadOlder={onLoadOlder}
             loadingOlder={loadingOlder}
             pinToken={pinToken}
@@ -350,6 +365,20 @@ export function StellaView({
         <ShareFolderDialog
           sessionId={sessionId}
           onClose={() => setShareDialogOpen(false)}
+          // A loan made from the menu answers a waiting `share_request` too:
+          // the card and the menu ask the same question, so whichever way the
+          // folder was chosen, the run continues from it.
+          {...(lendRequest !== null
+            ? {
+                onLent: () => {
+                  // The loan is the answer; the card goes when the server
+                  // says so. An answer that does not reach the server is
+                  // reported by the tool's own deadline — there is nothing
+                  // to draw here for a request that is already on screen.
+                  void onLendShare(lendRequest.toolCallId).catch(() => {});
+                },
+              }
+            : {})}
         />
       )}
     </div>

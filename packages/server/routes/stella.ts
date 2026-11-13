@@ -11,6 +11,7 @@ import type {
   StellaEnvRequest,
   StellaHandover,
   StellaQuestion,
+  StellaShareRequest,
   WindowQuery,
 } from "@lumisca/core";
 import { base64ToBytes, stellaEventsOf } from "@lumisca/core";
@@ -115,6 +116,21 @@ export interface StellaApi {
   /** The environment variable the run is waiting for the user to fill in,
    * or null (`vm_env`). */
   getPendingEnvRequest(sessionId: string): StellaEnvRequest | null;
+  /** The folder request the run is waiting on, or null (`share_request` /
+   * `share_disconnect`). */
+  getPendingShareRequest(sessionId: string): StellaShareRequest | null;
+  /** The user lent a folder: let the blocked run continue. */
+  finishShareLend(sessionId: string, toolCallId?: string): void;
+  /** The user refused to lend one. */
+  declineShareRequest(sessionId: string, toolCallId?: string): void;
+  /** The desktop app withdrew the loan it was asked to. */
+  finishShareDisconnect(sessionId: string, toolCallId: string): void;
+  /** The desktop app could not withdraw it, and said why. */
+  failShareDisconnect(
+    sessionId: string,
+    toolCallId: string,
+    error: string,
+  ): void;
   /** The folders lent to this conversation from the user's own computer
    * (see core/share). Empty when none — the usual case. */
   getShares(sessionId: string): FolderShare[];
@@ -638,6 +654,73 @@ export function stellaRoutes(core: StellaApi): Hono {
     return c.json({ ok: true });
   });
 
+  /** The user lent a folder (`share_request`): let the blocked run continue.
+   *
+   * The tool call is named by the body so a card that outlived its run cannot
+   * answer a different request; the folder itself is never named here — the
+   * server's list of loans is what the tool reads, so a client cannot tell
+   * the model that a folder exists when it does not. */
+  app.post("/stella/conversations/:agentId/share/lend", async (c) => {
+    const body = await parseBody<{ toolCallId?: unknown }>(c);
+    const toolCallId = body?.toolCallId;
+    if (toolCallId !== undefined && typeof toolCallId !== "string") {
+      throw new AppError("toolCallId must be a string", 400);
+    }
+    const session = requireConversation(c.req.param("agentId"));
+    core.finishShareLend(
+      session.id,
+      typeof toolCallId === "string" ? toolCallId : undefined,
+    );
+    return c.json({ ok: true });
+  });
+
+  /** The user refused to lend a folder. Not an error: the run continues
+   * without one. */
+  app.post("/stella/conversations/:agentId/share/decline", async (c) => {
+    const body = await parseBody<{ toolCallId?: unknown }>(c);
+    const toolCallId = body?.toolCallId;
+    if (toolCallId !== undefined && typeof toolCallId !== "string") {
+      throw new AppError("toolCallId must be a string", 400);
+    }
+    const session = requireConversation(c.req.param("agentId"));
+    core.declineShareRequest(
+      session.id,
+      typeof toolCallId === "string" ? toolCallId : undefined,
+    );
+    return c.json({ ok: true });
+  });
+
+  /** The desktop app answered `share_disconnect`: it withdrew the loan
+   * (`ok: true`), or it could not and said why. The reason is handed to the
+   * blocked tool as it was given — the shell's own words are what the model
+   * can act on. */
+  app.post("/stella/conversations/:agentId/share/disconnect", async (c) => {
+    const body = await parseBody<{
+      toolCallId?: unknown;
+      ok?: unknown;
+      error?: unknown;
+    }>(c);
+    const toolCallId = body?.toolCallId;
+    if (typeof toolCallId !== "string" || toolCallId === "") {
+      throw new AppError("toolCallId (string) is required", 400);
+    }
+    const ok = body?.ok;
+    if (typeof ok !== "boolean") {
+      throw new AppError("ok (boolean) is required", 400);
+    }
+    const session = requireConversation(c.req.param("agentId"));
+    if (ok) {
+      core.finishShareDisconnect(session.id, toolCallId);
+      return c.json({ ok: true });
+    }
+    const error = body?.error;
+    if (typeof error !== "string" || error.trim() === "") {
+      throw new AppError("error (string) is required when ok is false", 400);
+    }
+    core.failShareDisconnect(session.id, toolCallId, error);
+    return c.json({ ok: true });
+  });
+
   /** The machine's clipboard, for the chat's screen pane.
    *
    * The pane cannot use the VNC connection for it: x11vnc speaks the standard
@@ -771,6 +854,7 @@ export function stellaRoutes(core: StellaApi): Hono {
       questions: core.getPendingQuestions(session.id),
       handover: core.getPendingHandover(session.id),
       envRequest: core.getPendingEnvRequest(session.id),
+      shareRequest: core.getPendingShareRequest(session.id),
       shares: core.getShares(session.id),
       ...(lastErrorOf(session.id) !== undefined
         ? { error: lastErrorOf(session.id) }

@@ -32,6 +32,11 @@ const MAX_QUESTION_CHARS = 80;
  * beginning of it, which is what says whether opening the app is urgent. */
 const MAX_HANDOVER_CHARS = 120;
 
+/** Longest reason taken from `share_request`. Same rule as the hand-over's:
+ * the agent writes a sentence for the card, and a toast carries enough of it
+ * to say whether the user should open the app now. */
+const MAX_SHARE_REASON_CHARS = 120;
+
 /** Longest reply a notification carries. One line of a toast: enough to
  * judge whether opening the app is worth it, short enough to read without
  * expanding it. The same cap the desktop notification applies (see
@@ -47,16 +52,22 @@ export interface PushNotification {
 
 /** The core events a notification is sent for. Everything else (text deltas,
  * tool traffic, `session_created`) is the UI's alone. */
-export type NotifiableEvent = Extract<
-  ClientEvent,
-  {
-    type:
-      | "agent_end"
-      | "question"
-      | "session_error"
-      | "handover"
-      | "env_request";
-  }
+export type NotifiableEvent = Exclude<
+  Extract<
+    ClientEvent,
+    {
+      type:
+        | "agent_end"
+        | "question"
+        | "session_error"
+        | "handover"
+        | "env_request"
+        | "share_request";
+    }
+  >,
+  // A disconnect puts nothing in front of the user: the page forwards it to
+  // the shell and posts the answer, so there is nothing to open the app for.
+  { type: "share_request"; kind: "disconnect" }
 >;
 
 /** Whether the event is one the installed app is notified about. A
@@ -74,7 +85,8 @@ export function isNotifiable(event: ClientEvent): event is NotifiableEvent {
     event.type === "question" ||
     event.type === "session_error" ||
     event.type === "handover" ||
-    event.type === "env_request"
+    event.type === "env_request" ||
+    (event.type === "share_request" && event.kind === "lend")
   );
 }
 
@@ -156,6 +168,25 @@ export function buildPushNotification(
         },
         // The run is blocked at the screen until the user acts (or the
         // deadline passes), so the device is woken.
+        urgency: "high",
+      };
+    }
+    case "share_request": {
+      const gist = Array.from(event.reason.trim())
+        .slice(0, MAX_SHARE_REASON_CHARS)
+        .join("");
+      return {
+        message: {
+          title: name,
+          body: tr("notify.push.share", {
+            detail: gist === "" ? "" : tr("notify.shareDetail", { gist }),
+          }),
+          // The same tag as the completion: the request replaces the
+          // "finished" toast of the same session instead of stacking on it.
+          tag: `session:${event.sessionId}`,
+        },
+        // The run is blocked on the card until the user lends a folder or
+        // declines, so the device is woken.
         urgency: "high",
       };
     }

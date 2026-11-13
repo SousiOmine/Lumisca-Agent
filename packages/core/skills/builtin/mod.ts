@@ -3,6 +3,7 @@ import { agentCreateSkill } from "./agent-create.ts";
 import { codingAgentsSkill } from "./coding-agents.ts";
 import { computerUseSkill } from "./computer-use.ts";
 import { desktopAppsSkill } from "./desktop-apps.ts";
+import { folderShareSkill } from "./folder-share.ts";
 import { identitySkill } from "./identity.ts";
 import { mcpServersSkill } from "./mcp-servers.ts";
 import { routinesSkill } from "./routines.ts";
@@ -84,6 +85,10 @@ export function builtinSkills(context: BuiltinContext): SkillDef[] {
     // machine) and sub-agents (no dialog they could show) are not pointed at
     // it.
     ...(context.stella === true ? [vmEnvSkill()] : []),
+    // The same for the two tools that ask about a lent folder: they are
+    // stella's and discoverable, so this guide is what tells the agent they
+    // exist at all.
+    ...(context.stella === true ? [folderShareSkill()] : []),
     ...(context.mcpAdmin === true ? [mcpServersSkill()] : []),
     // Skills are written with the file tools, so the guide follows them: no
     // file tools (a chat session) → nothing to teach about writing files.

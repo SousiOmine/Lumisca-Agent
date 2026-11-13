@@ -12,6 +12,7 @@ import { CardView } from "../chat/CardView.tsx";
 import { RunningIndicator } from "../chat/RunningIndicator.tsx";
 import { AgentAvatar } from "./AgentAvatar.tsx";
 import { EnvRequestCard } from "./EnvRequestCard.tsx";
+import { ShareRequestCard } from "./ShareRequestCard.tsx";
 import { type MessageAuthor, StellaMessage } from "./StellaMessage.tsx";
 
 /**
@@ -37,6 +38,8 @@ export function StellaTranscript({
   onSend,
   onProvideEnv,
   onDeclineEnv,
+  onPickShare,
+  onDeclineShare,
   onLoadOlder,
   loadingOlder,
   pinToken,
@@ -62,6 +65,11 @@ export function StellaTranscript({
   onProvideEnv: (value: string, toolCallId: string) => Promise<void>;
   /** The user refused to give the value. */
   onDeclineEnv: (toolCallId: string) => Promise<void>;
+  /** Open the folder dialog (the card's button). It is the view's one sheet,
+   * not a child of the transcript. */
+  onPickShare: () => void;
+  /** The user refused to lend one. */
+  onDeclineShare: (toolCallId: string) => Promise<void>;
   /** Read the entries before the loaded window (the reader reached the
    * top). Returns whether a read started. */
   onLoadOlder: () => boolean;
@@ -198,22 +206,49 @@ export function StellaTranscript({
             </div>
           </div>
         )}
-        {/* The dots say "the agent is composing". While the run waits for
-         * the user it is not composing but blocked, and the card above says
-         * so — two opposite signals in one column would read as a stuck
-         * run. */}
-        {conversation.running && conversation.envRequest === null && (
-          <RunningIndicator
-            avatar={
+        {/* The agent wants a folder from this computer. Like the env card it
+         * takes the agent's face and column: the agent is the one asking. */}
+        {conversation.shareRequest?.kind === "lend" && (
+          <div className="stella-msg">
+            <div className="stella-msg-avatar" aria-hidden="true">
               <AgentAvatar
                 agentId={author.id}
                 name={author.name}
                 icon={author.icon}
                 size={26}
               />
-            }
-          />
+            </div>
+            <div className="stella-msg-main">
+              <ShareRequestCard
+                key={conversation.shareRequest.toolCallId}
+                request={conversation.shareRequest}
+                onPick={onPickShare}
+                onDecline={onDeclineShare}
+              />
+              <span className="visually-hidden" role="status">
+                {t("chat.stella.share.request.announce")}
+              </span>
+            </div>
+          </div>
         )}
+        {/* The dots say "the agent is composing". While the run waits for
+         * the user it is not composing but blocked, and the card above says
+         * so — two opposite signals in one column would read as a stuck
+         * run. */}
+        {conversation.running &&
+          conversation.envRequest === null &&
+          conversation.shareRequest?.kind !== "lend" && (
+            <RunningIndicator
+              avatar={
+                <AgentAvatar
+                  agentId={author.id}
+                  name={author.name}
+                  icon={author.icon}
+                  size={26}
+                />
+              }
+            />
+          )}
         {conversation.error !== undefined && (
           <p className="error-text" role="alert">
             {conversation.error}

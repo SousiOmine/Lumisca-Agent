@@ -46,6 +46,7 @@ Deno.test("stellaStateOf: a snapshot becomes the conversation", () => {
     questions: [],
     handover: null,
     envRequest: null,
+    shareRequest: null,
     shares: [],
     error: "last failure",
     agentName: "Aide",
@@ -65,6 +66,7 @@ Deno.test("stellaStateOf: a snapshot becomes the conversation", () => {
     questions: [],
     handover: null,
     envRequest: null,
+    shareRequest: null,
     shares: [],
     error: "last failure",
     agentName: "Aide",
@@ -96,6 +98,62 @@ Deno.test("stella: an env request is state a reconnect can still answer", () => 
   // The same request twice changes nothing (a duplicate event must not
   // re-render, and above all must not reset the field the user is typing in).
   assertEquals(applyStellaEvent(next, { type: "env_request", request }), null);
+});
+
+Deno.test("stella: a folder request is state a reconnect can still answer", () => {
+  const request = {
+    kind: "lend" as const,
+    toolCallId: "t1",
+    reason: "read the exports",
+    expiresAt: 5,
+  };
+  const withRequest = applyStellaEvent(state({ running: true }), {
+    type: "share_request",
+    request,
+  });
+  assertEquals(withRequest?.shareRequest, request);
+  // A resync that reads the same request again is not a new state: the card
+  // must not be re-staged (and the scroll must not move).
+  assertEquals(
+    applyStellaEvent(withRequest!, { type: "share_request", request }),
+    null,
+  );
+  // The answer clears it, so the card goes when the run moves on.
+  assertEquals(
+    applyStellaEvent(withRequest!, { type: "share_request", request: null })
+      ?.shareRequest,
+    null,
+  );
+});
+
+Deno.test("stella: a disconnect rides in the same field and is not a card", () => {
+  // One field for both: a run can only be waiting on one folder question at a
+  // time, and the difference is the kind the view reads.
+  const next = applyStellaEvent(state({ running: true }), {
+    type: "share_request",
+    request: {
+      kind: "disconnect",
+      toolCallId: "t9",
+      id: "g1",
+      name: "proj",
+      expiresAt: 5,
+    },
+  });
+  assertEquals(next?.shareRequest?.kind, "disconnect");
+  // A different tool call id is a different request, even with the same kind.
+  assertEquals(
+    applyStellaEvent(next!, {
+      type: "share_request",
+      request: {
+        kind: "disconnect",
+        toolCallId: "t10",
+        id: "g1",
+        name: "proj",
+        expiresAt: 5,
+      },
+    })?.shareRequest?.toolCallId,
+    "t10",
+  );
 });
 
 Deno.test("stellaStateOf: a model without thinking levels shows no rail", () => {

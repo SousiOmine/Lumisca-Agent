@@ -12,6 +12,7 @@ import type {
   StellaEvent,
   StellaHandover,
   StellaQuestion,
+  StellaShareRequest,
   ThinkingLevel,
 } from "./types.ts";
 
@@ -54,6 +55,10 @@ export interface StellaConversationState {
   /** The environment variable the run waits for the user to fill in, or
    * null. Carries the name only — a value never reaches the client. */
   envRequest: StellaEnvRequest | null;
+  /** The folder the run waits on: a request to lend one, or the withdrawal
+   * of one, or null. A `disconnect` is not a question for the user — the
+   * page forwards it to the shell — so only a `lend` draws a card. */
+  shareRequest: StellaShareRequest | null;
   /** The folders the user lent this conversation from their own computer.
    * A security fact, not progress: the view shows it for as long as it
    * lasts, and the whole list travels on every change. */
@@ -108,6 +113,7 @@ export function stellaStateOf(
     questions: snapshot.questions,
     handover: snapshot.handover,
     envRequest: snapshot.envRequest,
+    shareRequest: snapshot.shareRequest,
     shares: snapshot.shares,
     ...(snapshot.error !== undefined ? { error: snapshot.error } : {}),
     agentName: snapshot.agentName,
@@ -302,6 +308,13 @@ export function applyStellaEvent(
             ...state,
             envRequest: event.request,
           };
+    case "share_request":
+      return sameShareRequest(event.request, state.shareRequest)
+        ? null
+        : {
+            ...state,
+            shareRequest: event.request,
+          };
     case "shares":
       return sameShares(event.shares, state.shares)
         ? null
@@ -339,6 +352,21 @@ function sameEnvRequest(
   );
 }
 
+function sameShareRequest(
+  a: StellaShareRequest | null,
+  b: StellaShareRequest | null,
+): boolean {
+  if (a === b) return true;
+  if (a === null || b === null) return false;
+  if (a.toolCallId !== b.toolCallId || a.expiresAt !== b.expiresAt) {
+    return false;
+  }
+  if (a.kind === "lend") {
+    return b.kind === "lend" && a.reason === b.reason;
+  }
+  return b.kind === "disconnect" && a.id === b.id && a.name === b.name;
+}
+
 /** Whether two loan lists say the same thing. Every field is compared: a
  * folder re-lent with narrower terms (writing taken away, the shell closed) is
  * a different fact even though the folder is the same one. */
@@ -374,6 +402,7 @@ export function emptyStellaState(agentName: string): StellaConversationState {
     questions: [],
     handover: null,
     envRequest: null,
+    shareRequest: null,
     shares: [],
     agentName,
     model: null,

@@ -75,6 +75,8 @@ function render(
       onFinishHandover: () => Promise.resolve(),
       onProvideEnv: () => Promise.resolve(),
       onDeclineEnv: () => Promise.resolve(),
+      onLendShare: () => Promise.resolve(),
+      onDeclineShare: () => Promise.resolve(),
       onOpenSettings: () => {},
     }),
   );
@@ -189,6 +191,52 @@ Deno.test("StellaView: the env request is a card in the conversation", () => {
     }),
     "env-request-existing",
   );
+});
+
+Deno.test("StellaView: the folder request is a card too, and a browser says it cannot pick", () => {
+  // The same edge as the env card: the agent asks, the run waits, and the
+  // reader answers in the conversation. This test runs as a plain browser (no
+  // bridge origin), so the card has to say that a folder cannot be chosen
+  // here instead of offering a button that cannot work — the desktop variant
+  // is ShareRequestCard_test.tsx.
+  const html = render({
+    conversation: {
+      running: true,
+      shareRequest: {
+        kind: "lend",
+        toolCallId: "t1",
+        reason: "read the CSV exports in my Downloads folder",
+        expiresAt: Date.now() + 15 * 60_000,
+      },
+    },
+  });
+  assertStringIncludes(html, "フォルダーの共有");
+  assertStringIncludes(html, "read the CSV exports in my Downloads folder");
+  assertStringIncludes(html, "この画面からはフォルダーを選べません");
+  assertStringIncludes(html, "共有しない");
+  // The run is blocked on the card, so the typing dots are not drawn: two
+  // opposite signals in one column would read as a stuck run.
+  assertEquals(html.includes("stella-running"), false, html);
+});
+
+Deno.test("StellaView: a folder disconnect is the page's errand, not a card", () => {
+  // Nothing is put in front of the user: the page forwards the request to the
+  // desktop shell, so the conversation shows the run still working (the dots)
+  // and no question.
+  const html = render({
+    conversation: {
+      running: true,
+      shareRequest: {
+        kind: "disconnect",
+        toolCallId: "t9",
+        id: "g1",
+        name: "proj",
+        expiresAt: Date.now() + 30_000,
+      },
+    },
+  });
+  assertEquals(html.includes("フォルダーの共有"), false, html);
+  assertStringIncludes(html, "stella-running");
 });
 
 Deno.test("StellaView: a failed send leaves the conversation on screen", () => {

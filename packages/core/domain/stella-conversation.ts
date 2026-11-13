@@ -99,6 +99,33 @@ export interface StellaEnvRequest {
   expiresAt: number;
 }
 
+/** What the run waits on while it asks about a lent folder: the request for
+ * one (`share_request`), or the withdrawal of one (`share_disconnect`).
+ *
+ * Both are one field in the conversation because both can block the same run
+ * and a client can only be asked one thing at a time. A `disconnect` is not
+ * a question for the user: the page forwards it to the desktop shell, which
+ * owns the loan, and the user is only told if it fails. */
+export type StellaShareRequest =
+  | {
+      kind: "lend";
+      toolCallId: string;
+      /** Why the agent needs a folder, in its own words. */
+      reason: string;
+      /** When the wait ends on its own (epoch ms). */
+      expiresAt: number;
+    }
+  | {
+      kind: "disconnect";
+      toolCallId: string;
+      /** The grant's id: what the page passes to the shell's
+       * `share/revoke`. */
+      id: string;
+      /** The folder's name in the namespace (`/lend/<name>`). */
+      name: string;
+      expiresAt: number;
+    };
+
 /** Everything a client needs to draw a conversation from nothing: the
  * messages, whether a run is going right now, and what is blocking it.
  * Read in one handler so the pieces describe the same instant. */
@@ -120,6 +147,9 @@ export interface StellaConversationSnapshot {
    * (`vm_env`), or null. Carries the name and whether it already has a
    * value — never a value. */
   envRequest: StellaEnvRequest | null;
+  /** The folder the run is waiting on (`share_request` /
+   * `share_disconnect`), or null. */
+  shareRequest: StellaShareRequest | null;
   /** The folders the user lent this conversation from their own computer
    * (see core/share). Empty when none — the usual case. */
   shares: FolderShare[];
@@ -189,6 +219,8 @@ export type StellaEvent =
   | { type: "handover"; handover: StellaHandover | null }
   /** The environment-variable request began or ended (`null`). */
   | { type: "env_request"; request: StellaEnvRequest | null }
+  /** The folder request began or ended (`null`). */
+  | { type: "share_request"; request: StellaShareRequest | null }
   /** The folders lent to this conversation from the user's own computer
    * changed. The whole list travels, so the client replaces it. */
   | { type: "shares"; shares: FolderShare[] }

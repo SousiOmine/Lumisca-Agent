@@ -232,6 +232,13 @@ export const common = {
     ja: "「{name}」が環境変数 {variable} の入力を待っています",
     en: '"{name}" is waiting for a value of {variable}',
   },
+  /** A run blocked on the `share_request` card: the agent wants a folder
+   * from this computer, and only the user can lend one. */
+  "notify.share": {
+    ja: "「{name}」がフォルダーの共有を求めています{detail}",
+    en: '"{name}" asks you to share a folder{detail}',
+  },
+  "notify.shareDetail": { ja: "：{gist}", en: ": {gist}" },
   // --- PWA notifications (server/push.ts) -----------------------------------
   // The installed app's notifications put the name in the TITLE, where a
   // phone shows it in bold, and the message in the BODY. So the wording here
@@ -252,6 +259,10 @@ export const common = {
   "notify.push.env": {
     ja: "{variable} の入力を待っています",
     en: "Is waiting for a value of {variable}",
+  },
+  "notify.push.share": {
+    ja: "フォルダーの共有を求めています{detail}",
+    en: "Asks you to share a folder{detail}",
   },
   "notify.push.error": {
     ja: "エラーが発生しました",

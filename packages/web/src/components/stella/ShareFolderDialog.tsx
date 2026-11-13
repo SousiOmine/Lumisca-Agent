@@ -12,11 +12,25 @@ import { shellCall } from "../../shell.ts";
 import { Modal } from "../Modal.tsx";
 import { ShareTerms } from "./ShareList.tsx";
 
+/** One loan as the shell answered it (`share/grant`): the grant the lending
+ * child serves it under, and the terms. */
+export interface ShareGrantView {
+  id: string;
+  sessionId: string;
+  /** The folder on this computer, absolute. */
+  path: string;
+  write: boolean;
+}
+
 export interface ShareFolderDialogProps {
   /** The conversation's server-side session id: the loan is made to it, and
    * the shell passes it to the lending child unchanged. */
   sessionId: string;
   onClose: () => void;
+  /** Called after a loan was made, before the dialog leaves. The card that
+   * asked for a folder answers the blocked tool with this; the composer's
+   * menu, which asks for nothing, passes none. */
+  onLent?: (grant: ShareGrantView) => void;
 }
 
 /**
@@ -36,6 +50,7 @@ export interface ShareFolderDialogProps {
 export function ShareFolderDialog({
   sessionId,
   onClose,
+  onLent,
 }: ShareFolderDialogProps) {
   const t = useT();
   const [recent] = useState<RecentShareFolder[]>(() => loadRecentFolders());
@@ -80,12 +95,16 @@ export function ShareFolderDialog({
     setBusy(true);
     setError(null);
     try {
-      await shellCall("share/grant", {
-        sessionId,
-        path: folder.path,
-        write: folder.write ? "1" : "0",
-      });
+      const answer = await shellCall<{ ok: boolean; grant: ShareGrantView }>(
+        "share/grant",
+        {
+          sessionId,
+          path: folder.path,
+          write: folder.write ? "1" : "0",
+        },
+      );
       rememberFolder(folder);
+      onLent?.(answer.grant);
       close();
     } catch (failure) {
       setError(

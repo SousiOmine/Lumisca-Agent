@@ -30,6 +30,7 @@ import type { McpAttachment } from "../mcp/attachment.ts";
 import type { McpServerStatus } from "../mcp/manager.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import { messageIdentityOf } from "../session/transcript-window.ts";
+import type { PendingShareRequest, ShareRequestHub } from "../share/request.ts";
 import type { AskAnswer, PromptFileRef, ThinkingLevel } from "../shared/mod.ts";
 import {
   DEFAULT_LOCALE,
@@ -133,6 +134,11 @@ export interface SessionAgentOptions {
    * the user types a secret into the dialog. Torn down with the run, like
    * the hand-over. */
   envRequestHub?: EnvRequestHub;
+  /** Request hub backing `share_request` / `share_disconnect` (one per
+   * session): blocks the run while the user is asked to lend a folder, and
+   * for seconds while their computer withdraws one. Torn down with the run,
+   * like the other waits. */
+  shareRequestHub?: ShareRequestHub;
   /** Task hub backing the task / task_output / send_message tools. The
    * agent registers itself as the delivery target for sub-agent completion
    * notifications and messages (see setParentDelivery). */
@@ -311,6 +317,7 @@ export class SessionAgent {
       options.askHub,
       options.handoverHub ?? null,
       options.envRequestHub ?? null,
+      options.shareRequestHub ?? null,
     );
 
     // A vision-capable main model passes images through as-is; only a
@@ -1002,6 +1009,14 @@ export class SessionAgent {
    * way to learn that it may answer it. */
   getPendingEnvRequest(): PendingEnvRequest | null {
     return this.interruptions.pendingEnvRequest();
+  }
+
+  /** The folder this session is still waiting on, for the resync snapshot:
+   * `share_request` events are never replayed, so a client that (re)connects
+   * while the run is blocked on the card has no other way to learn that it
+   * may answer it. */
+  getPendingShareRequest(): PendingShareRequest | null {
+    return this.interruptions.pendingShareRequest();
   }
 
   /** The questions this session is still waiting on (the ask tool), for the

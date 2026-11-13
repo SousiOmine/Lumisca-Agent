@@ -180,6 +180,42 @@ export type ClientEvent =
       toolCallId: string;
       outcome: "set" | "declined" | "timed_out";
     }
+  /** The agent asked the user to lend a folder from their computer
+   * (`share_request`) and the run is blocked until they do, refuse, or the
+   * deadline passes. Clients show a card whose button opens the folder
+   * dialog; the answer posts back to the conversation's share endpoints.
+   *
+   * `reason` is the agent's own sentence, and the only part of the card a
+   * reader cannot guess. */
+  | {
+      type: "share_request";
+      sessionId: string;
+      toolCallId: string;
+      kind: "lend";
+      reason: string;
+      expiresAt: number;
+    }
+  /** The agent asked the desktop app to withdraw one lent folder
+   * (`share_disconnect`). No card: the page forwards this to the shell,
+   * which owns the loan, and posts what happened. `id` is the grant the
+   * shell's `share/revoke` takes; `name` is the folder's `/lend` name. */
+  | {
+      type: "share_request";
+      sessionId: string;
+      toolCallId: string;
+      kind: "disconnect";
+      id: string;
+      name: string;
+      expiresAt: number;
+    }
+  /** The folder request ended: a folder was lent, the user declined, the app
+   * withdrew the loan, the shell refused, or the deadline passed. */
+  | {
+      type: "share_request_end";
+      sessionId: string;
+      toolCallId: string;
+      outcome: "lent" | "declined" | "disconnected" | "failed" | "timed_out";
+    }
   /** A sub-agent task started (the task tool). Clients add it to the tasks
    * panel; its live response arrives as `task_delta` events. */
   | {

@@ -528,6 +528,41 @@ export const chat = {
     ja: "1個のフォルダーを共有中",
     en: "Sharing 1 folder",
   },
+  /** The card `share_request` puts in the conversation. Its title names what
+   * is being asked for; the sentence under it is the agent's own reason, so
+   * there is no key for that. */
+  "chat.stella.share.request.title": {
+    ja: "フォルダーの共有",
+    en: "Folder sharing",
+  },
+  "chat.stella.share.request.hint": {
+    ja: "この PC のフォルダーを選ぶと、この会話のエージェントが使えるようになります。",
+    en: "Choose a folder on this computer and this conversation's agent can use it.",
+  },
+  /** Refusing to lend a folder. A card has no close button, so this is the
+   * only way to say "no" — and the run continues without one. */
+  "chat.stella.share.request.decline": {
+    ja: "共有しない",
+    en: "Not now",
+  },
+  /** When the wait ends (the same shape as the environment-variable card's
+   * line: the time alone, no explanation). */
+  "chat.stella.share.request.deadline": {
+    ja: "{time} まで",
+    en: "Until {time}",
+  },
+  /** A browser tab has no OS folder picker: the card says so instead of
+   * offering a button that cannot work. */
+  "chat.stella.share.request.browserOnly": {
+    ja: "この画面からはフォルダーを選べません。デスクトップアプリで開いてください。",
+    en: "A folder cannot be chosen from this page. Open the desktop app.",
+  },
+  /** What a screen reader hears when the card appears (the card cannot
+   * announce itself the way a dialog does). */
+  "chat.stella.share.request.announce": {
+    ja: "エージェントがフォルダーの共有を求めています。",
+    en: "The agent asks you to share a folder.",
+  },
   "chat.stella.handover.reason": {
     ja: "エージェントから画面操作が引き継がれました",
     en: "The agent is handing the screen to you",

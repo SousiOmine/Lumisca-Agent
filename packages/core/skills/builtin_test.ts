@@ -56,7 +56,14 @@ Deno.test("builtinSkills advertises the stella-only skills for a stella session"
   });
   assertEquals(
     skills.map((s) => s.name),
-    ["desktop-apps", "agent-create", "identity", "routines", "vm-env"],
+    [
+      "desktop-apps",
+      "agent-create",
+      "identity",
+      "routines",
+      "vm-env",
+      "folder-share",
+    ],
   );
 
   // Each guide teaches the tool_search → tool_call path, because neither
@@ -142,6 +149,34 @@ Deno.test("builtinSkills advertises vm-env only in a stella session", async () =
   });
   assertEquals(
     subagent.some((s) => s.name === "vm-env"),
+    false,
+  );
+});
+
+Deno.test("builtinSkills advertises folder-share only in a stella session", async () => {
+  // Both folder tools are discoverable, so this guide is the only thing that
+  // tells the agent they exist. It has to name them, name the search that
+  // finds them, and carry the two rules the tool descriptions cannot: the
+  // folder is on ANOTHER computer, and the loan ends on its own.
+  const skill = builtinSkills({
+    browser: false,
+    computer: false,
+    stella: true,
+    subagents: false,
+  }).find((s) => s.name === "folder-share");
+  assert(skill !== undefined, "stella sessions can ask for a folder");
+  const guide = await loadSkillContent(skill!);
+  assert(guide.includes("tool_search"));
+  assert(guide.includes("share_request"));
+  assert(guide.includes("share_disconnect"));
+  // An absolute path is the one thing a model gets wrong about a loan.
+  assert(guide.includes("/lend/"));
+  assert(guide.includes("30 minutes"));
+  // Only a stella session has the /lend namespace.
+  assertEquals(
+    builtinSkills({ browser: false, computer: false, subagents: false }).some(
+      (s) => s.name === "folder-share",
+    ),
     false,
   );
 });
@@ -411,7 +446,7 @@ Deno.test("every built-in description is a trigger, not a table of contents", ()
     mcpAdmin: true,
     skillAuthoring: {},
   });
-  assertEquals(skills.length, 10, "the fixture advertises every built-in");
+  assertEquals(skills.length, 11, "the fixture advertises every built-in");
   for (const skill of skills) {
     assert(
       skill.description.startsWith("Use this skill"),

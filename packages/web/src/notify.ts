@@ -35,6 +35,9 @@ const MAX_QUESTION_CHARS = 80;
  * 500 characters for the model; the first sentence is what says whether the
  * user has to come now. */
 const MAX_HANDOVER_CHARS = 120;
+/** Longest reason taken from a `share_request` card. The same cap as the
+ * hand-over's: one line of a toast says whether opening the app is worth it. */
+const MAX_SHARE_REASON_CHARS = 120;
 /** How much of the finished run's reply the notification carries. One line of
  * a toast: enough to judge whether opening the app is worth it, short enough
  * to read without expanding it. */
@@ -163,6 +166,28 @@ export function buildEnvNotification(
   };
 }
 
+/** Display text for the `share_request` card: the run is blocked until the
+ * user lends a folder or refuses, and the reason is what says whether they
+ * should come back to the window now. Pure (unit-tested). */
+export function buildShareNotification(
+  sessionName: string,
+  reason: string,
+  tr: Translator = t,
+): { title: string; body: string } {
+  const gist = truncate(
+    reason.replace(/\s+/g, " ").trim(),
+    MAX_SHARE_REASON_CHARS,
+  );
+  const detail = gist === "" ? "" : tr("notify.shareDetail", { gist });
+  return {
+    title: "Lumisca",
+    body: tr("notify.share", {
+      name: sessionLabel(sessionName, tr),
+      detail,
+    }),
+  };
+}
+
 /** Decide from already-known state whether the app is hidden from the
  * user (notify-worthy). Pure (unit-tested):
  * - a hidden document is always hidden (minimized WebView, background
@@ -272,5 +297,17 @@ export function maybeNotifyEnv(
 ): Promise<void> {
   return maybeNotify(sessionName, true, (name) =>
     buildEnvNotification(name, variable),
+  );
+}
+
+/** Notify that the run is waiting for the user to lend a folder
+ * (`share_request`). Urgent for the same reason as the two above: the run is
+ * blocked until a person answers the card. */
+export function maybeNotifyShare(
+  sessionName: SessionName,
+  reason: string,
+): Promise<void> {
+  return maybeNotify(sessionName, true, (name) =>
+    buildShareNotification(name, reason),
   );
 }
