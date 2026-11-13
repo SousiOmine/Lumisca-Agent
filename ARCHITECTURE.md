@@ -4,7 +4,7 @@
 
 ## 0. 動作モード（code mode / stella mode）
 
-アプリケーションは 2 つの動作モードを持ちます。どちらを使うかは初回起動時に選び、そのクライアントの `localStorage`（`lumisca.appMode`）に保存されます。アプリメニューの「モードを切り替える」から選び直せます。
+アプリケーションは 2 つの動作モードを持ちます。画面では stella mode を **Lumisca**、code mode を **Lumisca code** と呼びます。`stella` は内部の名前で、URL・ファイル名・型はそのままです。どちらを使うかは初回起動時に選び、そのクライアントの `localStorage`（`lumisca.appMode`）に保存されます。アプリメニューの「モードを切り替える」から選び直せます。
 
 | | code mode | stella mode |
 |---|---|---|

@@ -212,19 +212,22 @@ export const chat = {
   "chat.attach.download": { ja: "ダウンロード", en: "Download" },
 
   // --- mode selection and stella -------------------------------------------
+  // The reader meets the modes by their product names, not by the names this
+  // code uses. stella stays the internal name of the main mode (URLs, files,
+  // types); the screen calls it Lumisca, and code mode Lumisca code.
   "chat.modeSelect.title": {
     ja: "モードを選択",
     en: "Select a mode",
   },
-  "chat.modeSelect.code.title": { ja: "code mode", en: "code mode" },
+  "chat.modeSelect.code.title": { ja: "Lumisca code", en: "Lumisca code" },
   "chat.modeSelect.code.description": {
     ja: "マシンのファイルとシェルを使用して開発",
     en: "Develop with this machine's files and shell",
   },
-  "chat.modeSelect.stella.title": { ja: "stella mode", en: "stella mode" },
+  "chat.modeSelect.stella.title": { ja: "Lumisca", en: "Lumisca" },
   "chat.modeSelect.stella.description": {
-    ja: "シームレスな開発体験",
-    en: "A seamless development experience",
+    ja: "仮想マシンでエージェントと作業する",
+    en: "Work with an agent in a virtual machine",
   },
   "chat.modeSelect.stella.unavailable": {
     ja: "この環境では利用できません: {reason}",
@@ -265,12 +268,12 @@ export const chat = {
     ja: "エージェント一覧に戻る",
     en: "Back to the agents",
   },
-  /** An address named stella mode on a server whose machine cannot run. The
-   * mode is refused rather than shown degraded (see App.tsx): the sentence
-   * explains why the reader landed on code mode instead. */
+  /** An address named Lumisca on a server whose machine cannot run. The mode
+   * is refused rather than shown degraded (see App.tsx): the sentence
+   * explains why the reader landed on Lumisca code instead. */
   "chat.stella.refused": {
-    ja: "stella モードはこのサーバーで使えません: {reason}",
-    en: "stella mode cannot run on this server: {reason}",
+    ja: "Lumisca モードはこのサーバーで使えません: {reason}",
+    en: "Lumisca mode cannot run on this server: {reason}",
   },
   "chat.stella.agents.new": { ja: "新しいエージェント", en: "New agent" },
   "chat.stella.agents.name": { ja: "名前", en: "Name" },
