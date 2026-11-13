@@ -355,7 +355,6 @@ function sameShares(
       share.id === other.id &&
       share.name === other.name &&
       share.write === other.write &&
-      share.exec === other.exec &&
       share.expiresAt === other.expiresAt &&
       share.host.platform === other.host.platform &&
       share.host.shell === other.host.shell

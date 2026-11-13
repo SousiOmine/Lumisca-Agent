@@ -34,7 +34,6 @@ export function grantOf(overrides: Partial<FolderGrant> = {}): FolderGrant {
     path: "/Users/me/proj",
     host: { platform: "macos", name: "mac", shell: "zsh" },
     write: true,
-    exec: false,
     expiresAt: Date.now() + 60 * 60_000,
     ...overrides,
   };

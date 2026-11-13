@@ -138,7 +138,6 @@ export function parseGrant(value: unknown): FolderGrant | undefined {
     typeof v.name !== "string" ||
     !isShareName(v.name) ||
     typeof v.write !== "boolean" ||
-    typeof v.exec !== "boolean" ||
     typeof v.expiresAt !== "number" ||
     !Number.isFinite(v.expiresAt) ||
     (h.platform !== "macos" &&
@@ -155,7 +154,6 @@ export function parseGrant(value: unknown): FolderGrant | undefined {
     name: v.name,
     path: v.path,
     write: v.write,
-    exec: v.exec,
     expiresAt: v.expiresAt,
     host: { platform: h.platform, name: h.name, shell: h.shell },
   };

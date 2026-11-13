@@ -1025,6 +1025,41 @@ Deno.test("stella conversation: the background-command tools are preloaded", asy
   }
 });
 
+Deno.test("stella conversation: the transfer tools are found with tool_search", async () => {
+  // `share_upload` / `share_download` have no use until a folder is lent, so
+  // they cost nothing in the context: they live in the session registry, and
+  // the lent-folder announcement is what tells the agent they exist.
+  const { faux, core, session } = await stellaConversation("Courier");
+  try {
+    const preloaded = core.getAgent(session.id)!.toolNames;
+    for (const name of ["share_upload", "share_download"]) {
+      assertEquals(preloaded.includes(name), false, `${name} is preloaded`);
+    }
+
+    faux.setResponses([
+      fauxAssistantMessage([fauxToolCall("tool_search", { query: "share" })], {
+        stopReason: "toolUse",
+      }),
+      fauxAssistantMessage("Found them."),
+    ]);
+    await promptSession(
+      core,
+      session.id,
+      "Which tools move files to a folder the user lent?",
+    );
+
+    const result = core
+      .getAgent(session.id)!
+      .messages.find((message) => message.role === "toolResult");
+    assert(result !== undefined, "the search produced no result");
+    const text = JSON.stringify(result);
+    assert(text.includes("share_upload"), text);
+    assert(text.includes("share_download"), text);
+  } finally {
+    await core.close();
+  }
+});
+
 Deno.test("stella conversation: todo keeps a plan the conversation does not draw", async () => {
   const { faux, core, session } = await stellaConversation("Planner");
   try {

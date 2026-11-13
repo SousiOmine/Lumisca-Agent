@@ -29,10 +29,9 @@ Deno.test("a loan is announced with how to address it and what it allows", () =>
     grantOf({
       name: "proj",
       write: true,
-      exec: true,
       host: { platform: "macos", name: "mac", shell: "zsh" },
     }),
-    grantOf({ id: "g2", name: "data", write: false, exec: false }),
+    grantOf({ id: "g2", name: "data", write: false }),
   ]);
   const [update] = provider.provider.next();
   assert(update !== undefined);
@@ -41,11 +40,16 @@ Deno.test("a loan is announced with how to address it and what it allows", () =>
   assert(update.body.includes(`- ${shareRootOf("proj")} — read-write`));
   assert(update.body.includes("commands run there (zsh)"));
   assert(update.body.includes(`- ${shareRootOf("data")} — read-only`));
-  assert(update.body.includes("no commands"));
+  // Commands are always allowed, whichever way the folder was lent.
+  assert(update.body.includes("commands run there"));
   assert(update.body.includes("lent from"));
   // The rules the model has to follow, stated once.
   assert(update.body.includes("absolute path"));
-  assert(update.body.includes("A command runs on that computer only"));
+  assert(update.body.includes("A command whose working directory is inside"));
+  // The transfer tools are discovered rather than preloaded, so the
+  // announcement is the only place that says they exist.
+  assert(update.body.includes("share_upload and share_download"));
+  assert(update.body.includes("tool_search"));
   assert(update.body.includes("can withdraw"));
   // The wording is the session's, not stella's: code mode has no machine.
   assert(!update.body.includes("machine"), update.body);

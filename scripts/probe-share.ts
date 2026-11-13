@@ -12,12 +12,12 @@
  * session. Open the conversation first, then run this in another terminal:
  *
  *   bun run probe:share --url http://127.0.0.1:8000 --session <id> \
- *     --folder ~/Documents/proj [--token <token>] [--write] [--exec] \
+ *     --folder ~/Documents/proj [--token <token>] [--write] \
  *     [--minutes 30]
  *
- * Without `--write` the loan is read-only; without `--exec` commands cannot
- * run there. Prompt the agent ("read README.md in the folder I lent you") and
- * watch the calls arrive. Ctrl-C ends the loan.
+ * Without `--write` the loan is read-only. Commands always run there.
+ * Prompt the agent ("read README.md in the folder I lent you") and watch the
+ * calls arrive. Ctrl-C ends the loan.
  */
 import { realpathSync } from "node:fs";
 import { createShareHost } from "../packages/server/share-host.ts";
@@ -28,14 +28,13 @@ interface Args {
   folder: string;
   token: string;
   write: boolean;
-  exec: boolean;
   minutes: number;
 }
 
 const USAGE = [
-  "使い方: bun run probe:share --url <url> --session <id> --folder <path> [--token <token>] [--write] [--exec] [--minutes 30]",
+  "使い方: bun run probe:share --url <url> --session <id> --folder <path> [--token <token>] [--write] [--minutes 30]",
   "  --write    エージェントに書き込みを許します（既定は読み取りのみ）",
-  "  --exec     そのフォルダでコマンドを実行させます（既定は不許可）",
+  "  --minutes  最後にアクセスしてから切れるまでの分数（既定は 30）",
 ].join("\n");
 
 function parseArgs(argv: readonly string[]): Args {
@@ -66,7 +65,6 @@ function parseArgs(argv: readonly string[]): Args {
     folder: realpathSync.native(folder),
     token: values.get("token") ?? "",
     write: flags.has("write"),
-    exec: flags.has("exec"),
     minutes: Number.isFinite(minutes) && minutes > 0 ? minutes : 30,
   };
 }
@@ -77,12 +75,11 @@ const grant = {
   sessionId: args.session,
   path: args.folder,
   write: args.write,
-  exec: args.exec,
-  expiresAt: Date.now() + args.minutes * 60_000,
 };
 
 const lender = createShareHost({
   log: (line) => console.log(`[share] ${line}`),
+  idleMs: args.minutes * 60_000,
 });
 lender.command(
   JSON.stringify({ type: "hello", url: args.url, token: args.token }),
@@ -92,10 +89,11 @@ lender.command(JSON.stringify({ type: "grants", grants: [grant] }));
 console.log(`貸出中: ${args.folder}`);
 console.log(
   `  宛先: ${args.url}  session=${args.session}  ` +
-    `${args.write ? "読み書き" : "読み取りのみ"} / ` +
-    `${args.exec ? "コマンド可" : "コマンド不可"}`,
+    `${args.write ? "読み書き" : "読み取りのみ"}`,
 );
-console.log(`  ${args.minutes} 分で失効します（Ctrl-C で取り消し）`);
+console.log(
+  `  最後にアクセスしてから ${args.minutes} 分で失効します（Ctrl-C で取り消し）`,
+);
 
 const stop = () => {
   lender.close();

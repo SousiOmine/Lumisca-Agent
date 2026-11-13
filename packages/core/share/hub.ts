@@ -335,7 +335,6 @@ export class ShareHub implements ShareTransport {
       if (old === undefined) continue;
       if (
         old.write !== grant.write ||
-        old.exec !== grant.exec ||
         old.name !== grant.name ||
         old.expiresAt !== grant.expiresAt
       ) {

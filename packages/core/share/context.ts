@@ -25,23 +25,23 @@ import { grantAccess, shareRootOf } from "./grant.ts";
 
 const TITLE = "Lent folders";
 
-/** What the model reads for one loan: the path it addresses, what it may do
- * there, and which computer it is. */
+/** What the model reads for one loan: the path it addresses, what it may
+ * write, and which computer and shell it is. */
 function describe(grant: FolderGrant): string {
   const root = shareRootOf(grant.name);
   const access = grantAccess(grant);
   const where = grant.host.name === "" ? grant.host.platform : grant.host.name;
-  const commands = grant.exec
-    ? `commands run there (${grant.host.shell})`
-    : "no commands";
-  return `- ${root} — ${access}, ${commands} — lent from ${where}`;
+  return (
+    `- ${root} — ${access}, commands run there (${grant.host.shell}) — ` +
+    `lent from ${where}`
+  );
 }
 
 function signatureOf(grants: readonly FolderGrant[]): string {
   return grants
     .map(
       (grant) =>
-        `${grant.id}|${grant.name}|${grant.sessionId}|${grant.write}|${grant.exec}|${grant.host.shell}`,
+        `${grant.id}|${grant.name}|${grant.sessionId}|${grant.write}|${grant.host.shell}`,
     )
     .join("\n");
 }
@@ -99,11 +99,14 @@ export function createShareProvider(options: {
             "",
             "They are not one of the folders this session works in. Address " +
               `them by absolute path (${roots.join(", ")} and below): a ` +
-              "relative path never reaches them. A command runs on that " +
-              "computer only when its working directory is inside a folder " +
-              "lent with commands; the shell you normally use is elsewhere. " +
-              "The user can withdraw a folder at any time, and then it is " +
-              "gone.",
+              "relative path never reaches them. A command whose working " +
+              "directory is inside one of these folders runs on that " +
+              "computer, in its shell; the shell you normally use is " +
+              "elsewhere. To move a file between this computer and a lent " +
+              "folder without decoding it — a picture, an archive, a PDF — " +
+              "use the share_upload and share_download tools: find them with " +
+              "tool_search. The user can withdraw a folder at any time, and " +
+              "then it is gone.",
           ].join("\n"),
           signature,
         ),

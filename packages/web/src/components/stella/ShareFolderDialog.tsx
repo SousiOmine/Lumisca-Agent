@@ -40,11 +40,10 @@ export function ShareFolderDialog({
   const t = useT();
   const [recent] = useState<RecentShareFolder[]>(() => loadRecentFolders());
   const [selected, setSelected] = useState<RecentShareFolder | null>(null);
-  // Terms start as the ones the user answered for this feature: read only,
-  // commands allowed. A folder lent again starts from its own last terms
-  // instead (see pick and lend).
+  // Terms start read only. A folder lent again starts from its own last
+  // terms instead (see choose and lend). Commands are always allowed, so
+  // there is nothing else to ask.
   const [write, setWrite] = useState(false);
-  const [exec, setExec] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,10 +61,8 @@ export function ShareFolderDialog({
           path: answer.path,
           name: folderName(answer.path),
           write: known?.write ?? false,
-          exec: known?.exec ?? true,
         });
         setWrite(known?.write ?? false);
-        setExec(known?.exec ?? true);
       }
     } catch (failure) {
       setError(
@@ -87,7 +84,6 @@ export function ShareFolderDialog({
         sessionId,
         path: folder.path,
         write: folder.write ? "1" : "0",
-        exec: folder.exec ? "1" : "0",
       });
       rememberFolder(folder);
       close();
@@ -141,14 +137,6 @@ export function ShareFolderDialog({
                 />
                 {t("chat.stella.share.readWrite")}
               </label>
-              <label className="stella-share-choice">
-                <input
-                  type="checkbox"
-                  checked={exec}
-                  onChange={(event) => setExec(event.currentTarget.checked)}
-                />
-                {t("chat.stella.share.exec")}
-              </label>
               <p className="stella-share-note">{t("chat.stella.share.idle")}</p>
               <div className="stella-share-actions">
                 <button
@@ -156,7 +144,7 @@ export function ShareFolderDialog({
                   className="btn primary"
                   disabled={busy}
                   onClick={() =>
-                    void lend({ ...selected, write, exec }, () => close())
+                    void lend({ ...selected, write }, () => close())
                   }
                 >
                   {busy
@@ -184,7 +172,7 @@ export function ShareFolderDialog({
                     >
                       <IconFolder size={15} />
                       <span className="stella-recent-name">{entry.name}</span>
-                      <ShareTerms write={entry.write} exec={entry.exec} />
+                      <ShareTerms write={entry.write} />
                     </button>
                   </li>
                 ))}

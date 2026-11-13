@@ -284,8 +284,7 @@ pub(crate) fn handle_shell_action(
             };
             let session_id = get("sessionId").unwrap_or_default();
             let write = get("write").as_deref() == Some("1");
-            let exec = get("exec").as_deref() == Some("1");
-            match share::grant(app, &session_id, &path, write, exec) {
+            match share::grant(app, &session_id, &path, write) {
                 Ok(grant) => bridge_json(
                     StatusCode::OK,
                     serde_json::json!({ "ok": true, "grant": grant }),

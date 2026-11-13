@@ -25,7 +25,6 @@ function grant(sessionId: string = SESSION) {
     path: "/Users/me/proj",
     host: { platform: "macos", name: "mac", shell: "zsh" },
     write: true,
-    exec: false,
     expiresAt: Date.now() + 60_000,
   };
 }

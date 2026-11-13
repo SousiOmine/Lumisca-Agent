@@ -27,7 +27,6 @@ function grant(path: string, overrides: Partial<LocalGrant> = {}): LocalGrant {
     sessionId: SESSION,
     path,
     write: true,
-    exec: true,
     ...overrides,
   };
 }
@@ -122,7 +121,7 @@ Deno.test("a read-only loan refuses to write, in the process that holds the disk
     lender.command(
       JSON.stringify({
         type: "grants",
-        grants: [grant(root, { write: false, exec: false })],
+        grants: [grant(root, { write: false })],
       }),
     );
     await until(
@@ -140,17 +139,16 @@ Deno.test("a read-only loan refuses to write, in the process that holds the disk
       "read-only",
     );
     assertEquals(await Deno.readTextFile(join(root, "a.txt")), "x\n");
-    await assertRejects(
-      () =>
-        core.shares.call("g1", "exec", {
-          path: [],
-          command: "echo no",
-          timeoutSec: 5,
-          maxOutputChars: 100,
-        }),
-      Error,
-      "without command access",
-    );
+    // Commands are always allowed: read-only governs the file tools, not the
+    // shell (see domain/share.ts).
+    const exec = await core.shares.call("g1", "exec", {
+      path: [],
+      command: "echo ok",
+      timeoutSec: 5,
+      maxOutputChars: 100,
+    });
+    assertEquals(exec.exitCode, 0);
+    assert(exec.stdout.includes("ok"), exec.stdout);
   } finally {
     lender.close();
     disposeServer(server);
@@ -309,7 +307,7 @@ Deno.test("an agent's read reaches the folder through the whole chain", async ()
     lender.command(
       JSON.stringify({
         type: "grants",
-        grants: [grant(lent, { id: "g1", sessionId: session.id, exec: false })],
+        grants: [grant(lent, { id: "g1", sessionId: session.id })],
       }),
     );
     await until(
@@ -337,7 +335,7 @@ Deno.test("an agent's read reaches the folder through the whole chain", async ()
     if (published.role === "context") {
       assert(published.body.includes(`/lend/${name}`), published.body);
       assert(published.body.includes("read-write"), published.body);
-      assert(published.body.includes("no commands"), published.body);
+      assert(published.body.includes("commands run there"), published.body);
     }
     // …and the read itself went to the user's computer: the tool result is
     // the file's own text, not a refusal.

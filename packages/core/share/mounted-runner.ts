@@ -5,13 +5,12 @@
  * a command reaches a {@link CommandRunner} the directory is a path the
  * namespace claims to have. This class is what answers "which machine owns
  * that directory": the session's own (this machine, or the stella VM), or a
- * computer that lent a folder WITH command access.
+ * computer that lent a folder. Commands always run there — a lent folder is
+ * somewhere the agent may look around, and the write permission only governs
+ * the file tools.
  *
- * The two refusals matter as much as the routing: a folder lent without
- * command access must fail loudly rather than quietly running the command
- * where the session normally works (a `rm` meant for the user's machine
- * running inside the VM is a wrong action that reports success), and a cwd
- * outside the namespace is a bug in the caller, not a place to guess.
+ * The refusal matters as much as the routing: a cwd outside the namespace is
+ * a bug in the caller, not a place to guess.
  */
 import { CoreError } from "../errors.ts";
 import type {
@@ -42,14 +41,6 @@ export class MountedRunner implements CommandRunner {
     const grant = grantOwning(this.#grants(), options.cwd);
     if (grant === undefined) return this.#primary.run(command, options);
     const root = shareRootOf(grant.name);
-    if (!grant.exec) {
-      throw new CoreError(
-        `${root} was lent without command access: the file tools can read ` +
-          "and change it, but commands cannot run there. Ask the user to " +
-          "lend it with commands if that is what the task needs.",
-        "forbidden",
-      );
-    }
     const segments = relativeSegments(root, options.cwd);
     if (segments === undefined) {
       // The file namespace resolved a path the grant does not own: a wiring

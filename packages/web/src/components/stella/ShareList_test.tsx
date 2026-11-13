@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertStringIncludes } from "@std/assert";
+import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
 import { initLocale } from "../../i18n.ts";
@@ -12,7 +12,6 @@ function share(overrides: Partial<FolderShare> = {}): FolderShare {
     path: "/Users/me/proj",
     host: { platform: "macos", name: "mac", shell: "zsh" },
     write: false,
-    exec: true,
     expiresAt: Date.now() + 30 * 60_000,
     ...overrides,
   };
@@ -33,12 +32,11 @@ Deno.test("ShareList: a loan names its address, its folder and its way back", ()
   // The address is what the agent uses; the path is what the user lent.
   assertStringIncludes(html, "/lend/proj");
   assertStringIncludes(html, "/Users/me/proj");
-  assertStringIncludes(html, "読み取りのみ・コマンドの実行を許す");
+  assertStringIncludes(html, "読み取りのみ");
   assertStringIncludes(html, "切断");
 });
 
-Deno.test("ShareList: read-write says so, and a loan without commands does not", () => {
-  const html = render([share({ write: true, exec: false })]);
+Deno.test("ShareList: read-write says so", () => {
+  const html = render([share({ write: true })]);
   assertStringIncludes(html, "読み書き");
-  assert(!html.includes("コマンドの実行を許す"), html);
 });

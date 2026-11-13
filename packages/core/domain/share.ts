@@ -37,11 +37,11 @@ export interface FolderShare {
   path: string;
   host: ShareHostInfo;
   /** Whether the agent may write there. False is enforced by the backend
-   * (`writeText` / `removeFile`), not by the tools. */
+   * (`writeText` / `removeFile`), not by the tools. Commands are always
+   * allowed: a lent folder is somewhere the agent can look around, and a
+   * shell that could only read would not be able to run the `git status` or
+   * `grep` the user lent it for. */
   write: boolean;
-  /** Whether commands may run there. False makes `bash` refuse a cwd inside
-   * the folder instead of running the command somewhere else. */
-  exec: boolean;
   /** Epoch ms after which the lender drops the grant on its own. */
   expiresAt: number;
 }

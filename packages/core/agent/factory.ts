@@ -34,6 +34,8 @@ import {
   TOOL_ROUTINE_LIST,
   TOOL_ROUTINE_RUN,
   TOOL_ROUTINE_UPDATE,
+  TOOL_SHARE_DOWNLOAD,
+  TOOL_SHARE_UPLOAD,
   TOOL_VM_ENV,
 } from "../shared/mod.ts";
 import { createSkillCatalogProvider } from "../skills/catalog.ts";
@@ -46,6 +48,7 @@ import {
 } from "../tools/mod.ts";
 import { SessionToolRegistries } from "../tools/registries.ts";
 import type { Tool } from "../tools/schema.ts";
+import { createShareTransferTools } from "../tools/share-transfer.ts";
 import { TaskHub } from "../tools/task-hub.ts";
 import { TodoHub } from "../tools/todo.ts";
 import {
@@ -84,6 +87,11 @@ const STELLA_AGENT_TOOL_NAMES = [TOOL_IDENTITY, TOOL_AGENT_CREATE];
  * dialog in front of the user. Removed from every session that is not a
  * stella conversation, added to that session's main registry when it is. */
 const VM_ENV_TOOL_NAMES = [TOOL_VM_ENV];
+
+/** Names of the two transfer tools. They are discovered rather than
+ * preloaded: a conversation that lends nothing has no use for them, and the
+ * lent-folder announcement is what tells the agent they exist. */
+const SHARE_TRANSFER_TOOL_NAMES = [TOOL_SHARE_UPLOAD, TOOL_SHARE_DOWNLOAD];
 
 /** The rule that condenses a stella conversation while it sits idle (see
  * SessionAgentOptions.idleCompaction).
@@ -470,6 +478,15 @@ export class AgentFactory {
     registries.removeShared(PDF_TOOL_NAMES);
     if (!where.chatOnly) {
       registries.addShared(createPdfTools({ files: where.backends.files }));
+    }
+    // Bytes between this session's own files and a folder lent from the
+    // user's computer. `read` and `write` reach /lend too, but only as text,
+    // so this pair is how a picture or an archive crosses. Discovered from
+    // the loan's own announcement (share/context.ts) rather than preloaded:
+    // a conversation that lends nothing pays nothing for them.
+    registries.removeShared(SHARE_TRANSFER_TOOL_NAMES);
+    if (!where.chatOnly) {
+      registries.addShared(createShareTransferTools(where.backends.files));
     }
     // The app-level MCP server config is shared by every workspace and
     // outlives this conversation, so it belongs to the session's main agent

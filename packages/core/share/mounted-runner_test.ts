@@ -1,4 +1,4 @@
-import { assertEquals, assertRejects } from "@std/assert";
+import { assertEquals } from "@std/assert";
 import type { RunOptions, ShellRunResult } from "../tools/command-backend.ts";
 import { shareRootOf } from "./grant.ts";
 import { MountedRunner } from "./mounted-runner.ts";
@@ -31,7 +31,7 @@ Deno.test("a command outside a lent folder runs where the session works", async 
   primary.calls.length = 0;
   const transport = new RecordingTransport(answerOf);
   const runner = new MountedRunner(primary, transport, () => [
-    grantOf({ name: "proj", exec: true }),
+    grantOf({ name: "proj" }),
   ]);
   const answer = await runner.run("ls", options("/home/agent"));
   assertEquals(answer.stdout, "primary\n");
@@ -43,7 +43,7 @@ Deno.test("a command in a lent folder runs on the computer that lent it", async 
   primary.calls.length = 0;
   const transport = new RecordingTransport(answerOf);
   const runner = new MountedRunner(primary, transport, () => [
-    grantOf({ name: "proj", exec: true }),
+    grantOf({ name: "proj" }),
   ]);
   const answer = await runner.run("pwd", {
     ...options(`${shareRootOf("proj")}/src`),
@@ -62,18 +62,16 @@ Deno.test("a command in a lent folder runs on the computer that lent it", async 
   });
 });
 
-Deno.test("a folder lent without commands refuses instead of running elsewhere", async () => {
+Deno.test("a read-only folder still runs a command there", async () => {
+  // The write permission governs the file tools. A shell that could only
+  // read would not run the `git status` or `grep` the folder was lent for.
   primary.calls.length = 0;
   const transport = new RecordingTransport(answerOf);
   const runner = new MountedRunner(primary, transport, () => [
-    grantOf({ name: "proj", exec: false }),
+    grantOf({ name: "proj", write: false }),
   ]);
-  await assertRejects(
-    () => runner.run("rm -rf .", options(shareRootOf("proj"))),
-    Error,
-    "without command access",
-  );
-  // Neither machine ran it: the refusal is the whole outcome.
+  const answer = await runner.run("ls", options(shareRootOf("proj")));
+  assertEquals(answer.stdout, "ok\n");
   assertEquals(primary.calls.length, 0);
-  assertEquals(transport.calls.length, 0);
+  assertEquals(transport.calls[0]?.grantId, "g1");
 });

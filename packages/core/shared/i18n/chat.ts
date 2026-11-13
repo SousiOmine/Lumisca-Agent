@@ -485,10 +485,6 @@ export const chat = {
     ja: "読み書き",
     en: "Read and write",
   },
-  "chat.stella.share.exec": {
-    ja: "コマンドの実行を許す",
-    en: "Allow commands",
-  },
   /** The loan's clock is the lender's: keep the sentence in step with
    * SHARE_IDLE_MS in packages/server/share-host.ts. */
   "chat.stella.share.idle": {

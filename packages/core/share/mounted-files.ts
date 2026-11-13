@@ -198,7 +198,6 @@ export class MountedFiles implements FileBackend {
     const signature = [
       grant.name,
       grant.write ? "w" : "r",
-      grant.exec ? "x" : "-",
       grant.expiresAt,
       grant.sessionId,
     ].join("|");

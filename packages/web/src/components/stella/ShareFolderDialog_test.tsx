@@ -56,15 +56,15 @@ Deno.test("ShareFolderDialog: nothing is lent until a folder is chosen", () => {
 
 Deno.test("ShareFolderDialog: a recent folder is one press, with its last terms", () => {
   const stored = JSON.stringify([
-    { path: "/Users/me/proj", name: "proj", write: true, exec: true },
-    { path: "/Users/me/notes", name: "notes", write: false, exec: false },
+    { path: "/Users/me/proj", name: "proj", write: true },
+    { path: "/Users/me/notes", name: "notes", write: false },
   ]);
   const html = withStorage(memoryStorage(stored), render);
   assertStringIncludes(html, "最近貸したフォルダ");
   assertStringIncludes(html, "proj");
   assertStringIncludes(html, "notes");
   // The terms are the ones saved with the folder, not the dialog's defaults.
-  assertStringIncludes(html, "読み書き・コマンドの実行を許す");
+  assertStringIncludes(html, "読み書き");
   // The path is there for a reader who has two folders of the same name.
   assertStringIncludes(html, 'title="/Users/me/notes"');
 });

@@ -25,7 +25,6 @@ function folder(path: string, overrides: Partial<RecentShareFolder> = {}) {
     path,
     name: folderName(path),
     write: false,
-    exec: true,
     ...overrides,
   };
 }

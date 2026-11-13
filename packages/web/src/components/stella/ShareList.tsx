@@ -4,14 +4,15 @@ import { useT } from "../../i18n.ts";
 import { shellCall } from "../../shell.ts";
 import type { FolderShare } from "../../types.ts";
 
-/** What a loan allows, in words the reader set in the dialog. */
-export function ShareTerms({ write, exec }: { write: boolean; exec: boolean }) {
+/** What a loan allows, in words the reader set in the dialog. Commands are
+ * always allowed, so only the write permission is a choice. */
+export function ShareTerms({ write }: { write: boolean }) {
   const t = useT();
-  const terms = [
-    t(write ? "chat.stella.share.readWrite" : "chat.stella.share.readOnly"),
-  ];
-  if (exec) terms.push(t("chat.stella.share.exec"));
-  return <span className="stella-share-terms">{terms.join("・")}</span>;
+  return (
+    <span className="stella-share-terms">
+      {t(write ? "chat.stella.share.readWrite" : "chat.stella.share.readOnly")}
+    </span>
+  );
 }
 
 /**
@@ -62,7 +63,7 @@ export function ShareList({ shares }: { shares: readonly FolderShare[] }) {
               <span className="stella-share-origin" title={share.path}>
                 {share.path}
               </span>
-              <ShareTerms write={share.write} exec={share.exec} />
+              <ShareTerms write={share.write} />
             </div>
             <button
               type="button"

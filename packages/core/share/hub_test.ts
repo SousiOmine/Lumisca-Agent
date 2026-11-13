@@ -120,7 +120,7 @@ Deno.test("an exec waits its own timeout, not the file timeout", async () => {
   hub.register(sink, {
     clientId: "app-1",
     host,
-    grants: [grantOf({ exec: true })],
+    grants: [grantOf()],
   });
 
   const pending = hub.call("g1", "exec", {

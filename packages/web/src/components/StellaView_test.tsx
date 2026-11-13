@@ -111,7 +111,6 @@ Deno.test("StellaView: a lent folder is named in the panel, with its way back", 
           path: "/Users/me/proj",
           host: { platform: "macos", name: "mac", shell: "zsh" },
           write: false,
-          exec: true,
           expiresAt: Date.now() + 30 * 60_000,
         },
       ],
@@ -119,7 +118,7 @@ Deno.test("StellaView: a lent folder is named in the panel, with its way back", 
   });
   assertStringIncludes(html, "stella-pane");
   assertStringIncludes(html, "/lend/proj");
-  assertStringIncludes(html, "読み取りのみ・コマンドの実行を許す");
+  assertStringIncludes(html, "読み取りのみ");
   assertStringIncludes(html, "切断");
 });
 

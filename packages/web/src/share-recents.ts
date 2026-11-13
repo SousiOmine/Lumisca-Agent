@@ -19,7 +19,6 @@ export interface RecentShareFolder {
   /** What to call it in the list: the last segment of the path. */
   name: string;
   write: boolean;
-  exec: boolean;
 }
 
 const STORAGE_KEY = "lumisca.share.recentFolders";
@@ -69,7 +68,6 @@ export function loadRecentFolders(
           ? record.name
           : folderName(path),
       write: record.write === true,
-      exec: record.exec === true,
     });
   }
   return folders.slice(0, MAX_RECENT_FOLDERS);

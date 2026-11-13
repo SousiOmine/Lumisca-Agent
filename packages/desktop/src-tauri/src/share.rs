@@ -35,7 +35,6 @@ pub(crate) struct ShareGrantView {
     /// The folder on this computer, absolute.
     pub(crate) path: String,
     pub(crate) write: bool,
-    pub(crate) exec: bool,
 }
 
 /// The line the child receives for one grant. The field names are the
@@ -47,7 +46,6 @@ struct GrantLine<'a> {
     session_id: &'a str,
     path: &'a str,
     write: bool,
-    exec: bool,
 }
 
 struct Endpoint {
@@ -86,7 +84,6 @@ impl ShareLender {
                 session_id: &grant.session_id,
                 path: &grant.path,
                 write: grant.write,
-                exec: grant.exec,
             })
             .collect();
         self.write_line(serde_json::json!({ "type": "grants", "grants": grants }))
@@ -188,7 +185,6 @@ pub(crate) fn grant(
     session_id: &str,
     path: &str,
     write: bool,
-    exec: bool,
 ) -> Result<ShareGrantView, String> {
     if session_id.is_empty() {
         return Err("借りる会話が指定されていません".to_string());
@@ -218,7 +214,6 @@ pub(crate) fn grant(
         // A second grant would give the conversation `/lend/proj-2` for the
         // same folder, which is a name the user never asked for.
         existing.write = write;
-        existing.exec = exec;
         existing.clone()
     } else {
         let view = ShareGrantView {
@@ -226,7 +221,6 @@ pub(crate) fn grant(
             session_id: session_id.to_string(),
             path: folder,
             write,
-            exec,
         };
         lender.grants.push(view.clone());
         added = true;
@@ -244,10 +238,9 @@ pub(crate) fn grant(
     server_log::note(
         app,
         format!(
-            "フォルダを貸しました: {} (書き込み: {}, コマンド: {})",
+            "フォルダを貸しました: {} (書き込み: {})",
             view.path,
-            if write { "可" } else { "不可" },
-            if exec { "可" } else { "不可" }
+            if write { "可" } else { "不可" }
         ),
     );
     Ok(view)

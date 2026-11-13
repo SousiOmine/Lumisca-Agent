@@ -63,7 +63,6 @@ export interface LocalGrant {
   /** The folder on this machine, absolute. */
   path: string;
   write: boolean;
-  exec: boolean;
 }
 
 /** What the shell writes on this process's stdin, one JSON object per line. */
@@ -505,12 +504,6 @@ export async function runCall(
       await mount.files.removeFile(path);
       return null;
     case "exec": {
-      if (!mount.grant.exec) {
-        throw new Error(
-          `${mount.grant.path} was lent without command access: the file ` +
-            "tools can read and change it, but commands cannot run there",
-        );
-      }
       return await mount.runner.run(call.command, {
         cwd: path,
         timeoutSec: call.timeoutSec,
@@ -548,7 +541,6 @@ function describeGrant(
     path: grant.path,
     host,
     write: grant.write,
-    exec: grant.exec,
     expiresAt,
   };
 }
@@ -592,8 +584,7 @@ function parseLocalGrant(value: unknown): LocalGrant | undefined {
     record.sessionId === "" ||
     typeof record.path !== "string" ||
     record.path === "" ||
-    typeof record.write !== "boolean" ||
-    typeof record.exec !== "boolean"
+    typeof record.write !== "boolean"
   ) {
     return undefined;
   }
@@ -602,7 +593,6 @@ function parseLocalGrant(value: unknown): LocalGrant | undefined {
     sessionId: record.sessionId,
     path: record.path,
     write: record.write,
-    exec: record.exec,
   };
 }
 
