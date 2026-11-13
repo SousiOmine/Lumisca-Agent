@@ -34,6 +34,7 @@
   "scripts": {
     "build:server": "bun run scripts/build-server.ts",
     "check": "tsc --noEmit -p tsconfig.json",
+    "check:ja": "bun run scripts/check-ui-japanese.ts",
     "check:versions": "bun run scripts/check-versions.ts",
     "demo": "bun run scripts/demo-server.ts",
     "dev": "bun run scripts/dev.ts",

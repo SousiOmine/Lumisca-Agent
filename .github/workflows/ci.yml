@@ -59,6 +59,11 @@ jobs:
       - name: Type check
         run: bun run check
 
+      # The catalogue's Japanese is data, not code: a wording rule broken
+      # here would compile and still read wrong on a screen.
+      - name: UI Japanese
+        run: bun run check:ja
+
       # The version lives in five manifests (the desktop package.json and
       # its package-lock.json, tauri.conf.json, Cargo.toml, and
       # packages/server/version.ts — the
