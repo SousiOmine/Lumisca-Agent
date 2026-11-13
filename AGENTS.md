@@ -213,7 +213,7 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 - **ワイヤは相対セグメントのみ**: 絶対パスを送ると、受け取る側の `join` が別の場所を作ります。境界は両端が持ちます（サーバーの `relativeSegments`、貸し手の `Mount.absolute` と `Sandbox`）。
 - **読み取り専用は backend で拒否**: ツールごとに確かめません（`write` / `edit` / 添付のどれかが漏れます）。貸し手も自分の記録で拒否します。
 - **コマンドは常に許す**: 貸出に `exec` の可否はありません（`FolderShare` から外しました）。読み取りのみでもそのフォルダでコマンドは動きます。`write` が見るのはファイルツールだけで、シェルは止めません。コマンドは貸し手のマシンで、貸し手のシェルで動きます。
-- **転送ツールは発見式**: `share_upload` / `share_download` は `createStellaTools` に置かず、`seedDiscoverableTools` が両方のレジストリに入れます（`addShared`）。プリロードしないのは、貸出の無い会話には使い道が無いためです。貸出の告知（`share/context.ts`）が「画像・書庫・PDF はこの 2 つでバイトのまま移せる、`tool_search` で探す」と教えます。
+- **転送ツールは発見式**: `share_upload` / `share_download` は `createStellaTools` に置かず、`seedDiscoverableTools` が両方のレジストリに入れます（`addShared`）。プリロードしないのは、貸出の無い会話には使い道が無いためです。貸出の告知（`share/context.ts`）が「ファイルはこの 2 つでそのまま移せる、`tool_search` で探す」と教えます。
 - **転送は `FileBackend.readBytes` / `writeBytes`**: 転送ツール（`components` ではなく `packages/core/tools/share-transfer.ts`）は新しい経路を作らず、セッションの 1 つの backend に窓を読ませて書かせます。貸出フォルダ側では `readBytes` / `writeBytes` が新しい op（オフセット付き・append 付き）になり、マシン側では `tail -c` と `base64` になります。`append` は 2 つ目以降のチャンクの「同じファイルの続き」の意味で、最初の書き込みは必ず切り詰めます（短いファイルが前の尾を残さないため）。
 - **貸し手は stdin が閉じたら終わる**: 貸出はアプリが開いている間だけです。`share` はランチャーのサブコマンドで、環境を読む前に分岐してください（DB もポートも要りません）。接続先とトークンは argv に載せず、stdin の hello 行で渡します。
 - **期限は最後のアクセスから30分**（`SHARE_IDLE_MS`）。時計は貸し手のプロセスにあり、op を受けるたびに `expiresAt` を延ばして再アナウンスします。アクセスを見るのは貸し手だけなので、サーバーやアプリ側に同じ規則を置かないこと。サーバーは `grantsFor` が `expiresAt` で外し、貸し手はタイマーで自分の一覧から外して知らせます（利用者が見る一覧は最後のアナウンス）。`LocalGrant` に期限は載せません。

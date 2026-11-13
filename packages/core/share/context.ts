@@ -102,11 +102,10 @@ export function createShareProvider(options: {
               "relative path never reaches them. A command whose working " +
               "directory is inside one of these folders runs on that " +
               "computer, in its shell; the shell you normally use is " +
-              "elsewhere. To move a file between this computer and a lent " +
-              "folder without decoding it — a picture, an archive, a PDF — " +
-              "use the share_upload and share_download tools: find them with " +
-              "tool_search. The user can withdraw a folder at any time, and " +
-              "then it is gone.",
+              "elsewhere. To copy a file between this computer and a lent " +
+              "folder unchanged, use the share_upload and share_download " +
+              "tools: find them with tool_search. The user can withdraw a " +
+              "folder at any time, and then it is gone.",
           ].join("\n"),
           signature,
         ),
