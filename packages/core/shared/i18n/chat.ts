@@ -485,8 +485,9 @@ export const chat = {
     ja: "読み書き",
     en: "Read and write",
   },
-  /** The loan's clock is the lender's: keep the sentence in step with
-   * SHARE_IDLE_MS in packages/server/share-host.ts. */
+  /** The connection's clock is the host's: keep the sentence in step with
+   * SHARE_IDLE_MS in packages/server/share-host.ts. The sentence says what
+   * ends (the connection), not that something "cuts off". */
   "chat.stella.share.idle": {
     ja: "最後に使ってから30分で切断されます。",
     en: "Ends 30 minutes after the last use.",
