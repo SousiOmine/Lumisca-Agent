@@ -1,4 +1,4 @@
-import type { Locale } from "../shared/i18n/mod.ts";
+import { type Locale, type MessageKey, translate } from "../shared/i18n/mod.ts";
 import type { WebSearchErrorCode } from "./errors.ts";
 
 /** One failure code, phrased for each reader it has. */
@@ -6,8 +6,8 @@ interface FailureWording {
   /** What the model is told: what happened and what it can do next.
    * `provider` is the display name ("Exa"). */
   model(provider: string, message: string): string;
-  /** What the settings screen shows, per app language. */
-  ui: Record<Locale, (message: string) => string>;
+  /** Catalogue key of the sentence the settings screen shows. */
+  ui: MessageKey;
 }
 
 /**
@@ -15,8 +15,9 @@ interface FailureWording {
  *
  * The model is told in English (the tool results and the prompts are
  * English); the settings screen is told in the app language, because a
- * rejected key is something the user has to fix. Both live in one table so
- * adding a kind cannot update only one of them: the record is keyed by
+ * rejected key is something the user has to fix. The UI sentence lives in
+ * the catalogue with every other user-facing string, so `check:ja` sees it
+ * and both languages cannot drift apart. The record is keyed by
  * `WebSearchErrorCode`, so a missing entry fails the type check.
  */
 export const WEB_SEARCH_FAILURE_TEXT: Record<
@@ -27,52 +28,34 @@ export const WEB_SEARCH_FAILURE_TEXT: Record<
     model: (provider, message) =>
       `The ${provider} API key was rejected. Ask the user to check it in ` +
       `Settings. (${message})`,
-    ui: {
-      ja: (message) => `API キーが受け付けられませんでした（${message}）`,
-      en: (message) => `The API key was rejected (${message})`,
-    },
+    ui: "common.websearch.auth",
   },
   rate_limit: {
     model: (provider, message) =>
       `The ${provider} search provider is rate limited. Try again later. ` +
       `(${message})`,
-    ui: {
-      ja: (message) => `レート制限に達しました（${message}）`,
-      en: (message) => `Rate limited (${message})`,
-    },
+    ui: "common.websearch.rateLimit",
   },
   quota: {
     model: (provider, message) =>
       `The ${provider} search provider has no remaining quota. (${message})`,
-    ui: {
-      ja: (message) => `利用枠が不足しています（${message}）`,
-      en: (message) => `No remaining quota (${message})`,
-    },
+    ui: "common.websearch.quota",
   },
   invalid: {
     model: (provider, message) =>
       `The ${provider} search provider rejected the request: ${message}`,
-    ui: {
-      ja: (message) => `リクエストが受け付けられませんでした（${message}）`,
-      en: (message) => `The request was rejected (${message})`,
-    },
+    ui: "common.websearch.invalid",
   },
   unsupported: {
     model: (provider, message) =>
       `The ${provider} search provider cannot handle this request: ` +
       `${message}`,
-    ui: {
-      ja: (message) => `このプロバイダでは扱えません（${message}）`,
-      en: (message) => `This provider cannot handle the request (${message})`,
-    },
+    ui: "common.websearch.unsupported",
   },
   unavailable: {
     model: (provider, message) =>
       `Could not reach the ${provider} search provider: ${message}`,
-    ui: {
-      ja: (message) => `接続できませんでした（${message}）`,
-      en: (message) => `Could not connect (${message})`,
-    },
+    ui: "common.websearch.unavailable",
   },
 };
 
@@ -82,5 +65,5 @@ export function failureText(
   code: WebSearchErrorCode,
   message: string,
 ): string {
-  return WEB_SEARCH_FAILURE_TEXT[code].ui[locale](message);
+  return translate(locale, WEB_SEARCH_FAILURE_TEXT[code].ui, { message });
 }

@@ -72,6 +72,33 @@ export const common = {
   },
   /** Appended to the line above when the server explained itself. */
   "common.error.detail": { ja: "詳細: {detail}", en: "Details: {detail}" },
+
+  /** Web search failures the settings screen shows. `{message}` is the
+   * provider's own explanation, so it may be in any language. */
+  "common.websearch.auth": {
+    ja: "API キーが受け付けられませんでした: {message}",
+    en: "The API key was rejected: {message}",
+  },
+  "common.websearch.rateLimit": {
+    ja: "レート制限に達しました: {message}",
+    en: "Rate limited: {message}",
+  },
+  "common.websearch.quota": {
+    ja: "利用枠が不足しています: {message}",
+    en: "No remaining quota: {message}",
+  },
+  "common.websearch.invalid": {
+    ja: "リクエストが受け付けられませんでした: {message}",
+    en: "The request was rejected: {message}",
+  },
+  "common.websearch.unsupported": {
+    ja: "このプロバイダーでは扱えません: {message}",
+    en: "This provider cannot handle the request: {message}",
+  },
+  "common.websearch.unavailable": {
+    ja: "接続できませんでした: {message}",
+    en: "Could not connect: {message}",
+  },
   /** A crash while drawing the page (the client's error boundary). Without
    * it an exception unmounts the whole tree and leaves a blank window. */
   "common.crash.title": {
