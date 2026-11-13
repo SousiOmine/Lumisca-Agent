@@ -1,7 +1,4 @@
-import {
-  IconArrowLeft,
-  IconLayoutSidebarRight,
-} from "@tabler/icons-preact";
+import { IconArrowLeft, IconLayoutSidebarRight } from "@tabler/icons-preact";
 import { useT } from "../../i18n.ts";
 import type { StellaAgentSummary } from "../../types.ts";
 import { AgentAvatar } from "./AgentAvatar.tsx";
