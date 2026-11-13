@@ -1,4 +1,8 @@
-import { IconArrowLeft, IconLayoutSidebarRight } from "@tabler/icons-preact";
+import {
+  IconArrowLeft,
+  IconLayoutSidebarRightCollapse,
+  IconLayoutSidebarRightExpand,
+} from "@tabler/icons-preact";
 import { useT } from "../../i18n.ts";
 import type { StellaAgentSummary } from "../../types.ts";
 import { AgentAvatar } from "./AgentAvatar.tsx";
@@ -110,7 +114,17 @@ export function StellaTitleBarHeader({
               : "chat.stella.machine.showScreen",
           )}
         >
-          <IconLayoutSidebarRight size={17} />
+          {/* The picture follows the panel's state: an open pane carries the
+           * arrow that pushes it shut, and a closed one the arrow that pulls
+           * it out. One picture for both states left the 1px border as the
+           * only difference, which is not readable at a glance. Both are the
+           * same window with a right sidebar, so the pair still names what
+           * the button shows. */}
+          {screenOpen ? (
+            <IconLayoutSidebarRightCollapse size={17} />
+          ) : (
+            <IconLayoutSidebarRightExpand size={17} />
+          )}
         </button>
       )}
     </div>

@@ -78,20 +78,22 @@ Deno.test("StellaTitleBarHeader: the info toggle is drawn while a conversation i
   const running = render({ onToggleScreen: onToggle });
   const tag = toggleTag(running);
   assert(tag !== "", "the toggle is missing while a conversation is open");
-  // Closed reads as "not pressed"; the label says what the next click does.
+  // Closed reads as "not pressed" and as the arrow that pulls the panel out;
+  // the label says what the next click does.
   assertStringIncludes(tag, 'aria-pressed="false"');
   assertStringIncludes(tag, 'title="情報を表示"');
   assert(!tag.includes(" on "), `closed must not carry .on: ${tag}`);
+  assertStringIncludes(running, 'tabler-icon-layout-sidebar-right-expand"');
 
-  // Open: pressed, and the label names the other way. The picture is the
-  // same both ways: it names the panel (a window with a right sidebar), and
-  // the pressed state is what says whether the panel is showing. A monitor
-  // read as the machine's screen rather than as the panel holding it.
+  // Open: pressed, the arrow that pushes the panel shut, and the label names
+  // the other way. The pair differs by the arrow rather than by the window:
+  // both name the panel, and the direction tells which way the next click
+  // moves it.
   const open = render({ onToggleScreen: onToggle, screenOpen: true });
   const openTag = toggleTag(open);
   assertStringIncludes(openTag, 'aria-pressed="true"');
   assertStringIncludes(openTag, 'title="情報を隠す"');
-  assertStringIncludes(open, 'tabler-icon-layout-sidebar-right"');
+  assertStringIncludes(open, 'tabler-icon-layout-sidebar-right-collapse"');
 });
 
 Deno.test("StellaTitleBarHeader: the toggle exists while a conversation is open", () => {
