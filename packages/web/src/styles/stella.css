@@ -1024,8 +1024,14 @@
   color: var(--text-dim);
 }
 
+/* The screen keeps the machine's own ratio, so the pane has no dead black
+ * band above and below the picture; the loans take the rest of the column and
+ * scroll there when there are several. */
 .stella-shares {
-  border-bottom: 1px solid var(--border);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
 }
 
 .stella-share-list {
@@ -1139,8 +1145,12 @@
   background: var(--surface);
 }
 
+/* Full screen is for the picture: it takes every pixel the pane has rather
+ * than keeping the ratio inside a black frame. */
 .stella-pane.fullscreen .stella-pane-body {
+  flex: 1 1 auto;
   min-height: 0;
+  aspect-ratio: auto;
 }
 
 .stella-pane-header {
@@ -1166,7 +1176,9 @@
 }
 
 .stella-pane-body {
-  flex: 1;
+  flex: none;
+  width: 100%;
+  aspect-ratio: 1280 / 800;
   min-height: 0;
   position: relative;
   background: #000;
@@ -1308,6 +1320,13 @@
     width: 100%;
     min-width: 0;
     max-height: 40vh;
+  }
+
+  /* The pane is a strip here, shorter than the picture's own ratio would make
+   * it; the screen takes the strip and the loans scroll under it. */
+  .stella-pane-body {
+    flex: 1 1 auto;
+    aspect-ratio: auto;
   }
 }
 
@@ -1576,7 +1595,15 @@
     height: 40px;
   }
 
+  /* The pane is the whole screen again, so the picture goes back to its own
+   * ratio at the top and the loans take the room under it; they are what
+   * reaches the bottom edge of a phone. */
   .stella-pane-body {
+    flex: none;
+    aspect-ratio: 1280 / 800;
+  }
+
+  .stella-shares {
     padding-bottom: env(safe-area-inset-bottom);
   }
 }

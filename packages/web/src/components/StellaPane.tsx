@@ -698,12 +698,9 @@ export function StellaPane({
           )}
         </form>
       )}
-      <ShareList shares={shares} />
-      {shares.length > 0 && (
-        <h3 className="stella-pane-section stella-pane-screen-title">
-          {t("chat.stella.machine.screen")}
-        </h3>
-      )}
+      <h3 className="stella-pane-section stella-pane-screen-title">
+        {t("chat.stella.machine.screen")}
+      </h3>
       <div className="stella-pane-body">
         {!running && (
           <p className="stella-pane-note">
@@ -724,6 +721,7 @@ export function StellaPane({
             connection lives (the client holds the node). */}
         <div ref={hostRef} className="stella-pane-screen" />
       </div>
+      <ShareList shares={shares} />
     </aside>
   );
 }

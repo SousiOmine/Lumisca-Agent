@@ -19,9 +19,9 @@ export function ShareTerms({ write }: { write: boolean }) {
  * The folders this conversation may reach on this computer, with the way to
  * take one back.
  *
- * It is the first thing in the information panel because it is a security
- * fact, not progress: the user lent a folder on their own disk, and the only
- * place that says so while it lasts is here. Disconnecting goes through the
+ * It sits under the machine's screen in the information panel, and it is a
+ * security fact rather than progress: the user lent a folder on their own
+ * disk, and the only place that says so while it lasts is here. Disconnecting goes through the
  * shell (the folder is on this computer; the server only hears the shorter
  * list), and the list then changes by itself through the conversation's
  * `shares` event — this component keeps no copy.
