@@ -8,34 +8,25 @@ import { outputLanguageSentence } from "../tools/language.ts";
  * before the prompt so the text cannot name a different one. */
 export const MAX_TITLE_CHARS = 30;
 
-/** One worked example per language. A small model copies the shape it saw
- * last, so the sample IS the format — and it is written in the title's own
- * language, because an English sample beside "Write the answer in Japanese"
- * pulls the model back to English. A new locale must add its entry here
- * (`Record<Locale, …>` fails to compile without one). */
-const TITLE_EXAMPLE: Record<Locale, { message: string; title: string }> = {
-  en: {
-    message: "the login button is broken on mobile, can you fix?",
-    title: "Fix mobile login button",
-  },
-  ja: {
-    message: "スマホでログインボタンが押せないので直して",
-    title: "スマホのログイン不具合を修正",
-  },
-};
-
-/** System prompt of the title model: positive rules only, and only the ones
- * cleanTitle does not already guarantee. It strips quotes, a closing
- * sentence mark and anything past MAX_TITLE_CHARS, so a "no quotes, no
- * trailing period" clause here would spend a small model's constraint
- * budget on rules the code keeps anyway. */
-export function titleSystemPrompt(language: Locale): string {
-  const example = TITLE_EXAMPLE[language];
-  return (
-    `Write a title of at most ${MAX_TITLE_CHARS} characters for the ` +
-    `task in <message>.\nAnswer with the title alone.\n\n` +
-    `<message>${example.message}</message>\n${example.title}`
-  );
+/** The instruction of the title request, sent as the opening lines of the
+ * same user turn as the message it titles (see generateTitle).
+ *
+ * No worked example, deliberately. A sample in the prompt is what a small
+ * model returns: measured with the fast model, the sample came back as the
+ * title, or the model answered the task the sample describes and the reply
+ * was cut to MAX_TITLE_CHARS — leaving a session named after the opening of
+ * its first message instead of its topic.
+ *
+ * The cap is stated here even though cleanTitle enforces it (models ignore
+ * the number), and the output language is the one rule the code cannot
+ * derive. */
+export function titleInstruction(language: Locale): string {
+  return [
+    `Write a title of at most ${MAX_TITLE_CHARS} characters for the task ` +
+      "in <message>.",
+    "Answer with the title alone.",
+    outputLanguageSentence(language),
+  ].join("\n");
 }
 
 /** Strip quotes, collapse whitespace, drop a closing sentence mark, and cap
@@ -51,7 +42,7 @@ export function cleanTitle(raw: string): string {
   }
   title = title.replace(/\s+/g, " ").trim();
   // A title is a label, not a sentence: the terminator is dropped here
-  // rather than asked for in the prompt (see titleSystemPrompt).
+  // rather than asked for in the prompt (see titleInstruction).
   title = title.replace(/[.。．]$/, "").trim();
   return title.slice(0, MAX_TITLE_CHARS).trim();
 }
@@ -68,24 +59,27 @@ export class TitleGenerator {
   ) {}
 
   /** Ask the fast model for a title. Throws on stream errors or empty
-   * output. The session's language is appended to the prompt: the tab must
+   * output. The session's language is part of the instruction: the tab must
    * read in the language the session answers in, whichever language the
    * first message happened to be written in. */
   async generateTitle(
     firstMessage: string,
     language: Locale = DEFAULT_LOCALE,
   ): Promise<string> {
+    // The instruction and the message share one turn. Split across a system
+    // prompt and a user turn they are two inputs, and the model can take
+    // either for the task.
+    const request =
+      `${titleInstruction(language)}\n\n` +
+      `<message>${firstMessage}</message>`;
     const text = await streamText(
       this.streamFn,
       this.model,
       {
-        systemPrompt: `${titleSystemPrompt(language)} ${outputLanguageSentence(
-          language,
-        )}`,
         messages: [
           {
             role: "user",
-            content: [{ type: "text", text: firstMessage }],
+            content: [{ type: "text", text: request }],
             timestamp: Date.now(),
           },
         ],

@@ -342,10 +342,10 @@ Deno.test("startPrompt (web path): first prompt auto-generates the session title
 
   assertEquals(captured.length, 2);
   assertEquals(captured[0]!.model, "fast");
-  assertEquals(
-    captured[0]!.messages[0]!.content[0]!.text,
-    "Please fix the login bug",
-  );
+  const titleRequest = captured[0]!.messages[0]!.content[0]!.text;
+  assert(titleRequest.includes("Please fix the login bug"));
+  assert(titleRequest.includes("<message>"));
+  assertEquals(captured[0]!.systemPrompt, undefined);
   assertEquals(captured[1]!.model, "main");
   assertEquals(core.getSession(session.id)!.name, "Fix login bug");
 

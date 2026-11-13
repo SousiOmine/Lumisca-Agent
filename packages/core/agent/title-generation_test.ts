@@ -11,7 +11,7 @@ import {
   cleanTitle,
   MAX_TITLE_CHARS,
   TitleGenerator,
-  titleSystemPrompt,
+  titleInstruction,
 } from "./title-generation.ts";
 
 /** A stream function that yields one text_delta (or an error event). */
@@ -58,32 +58,26 @@ Deno.test("cleanTitle drops a closing sentence mark", () => {
   assertEquals(cleanTitle("Fix the login bug．"), "Fix the login bug");
 });
 
-Deno.test("the prompt names the cap that cleanTitle enforces", () => {
+Deno.test("the instruction names the cap and the answer language", () => {
   for (const language of ["ja", "en"] as const) {
-    assert(
-      titleSystemPrompt(language).includes(
-        `at most ${MAX_TITLE_CHARS} characters`,
-      ),
-    );
+    const instruction = titleInstruction(language);
+    assert(instruction.includes(`at most ${MAX_TITLE_CHARS} characters`));
+    assert(instruction.includes("Answer with the title alone."));
+    assert(instruction.includes("<message>"), "it names where the input goes");
   }
+  assert(titleInstruction("ja").includes("Japanese"));
+  assert(titleInstruction("en").includes("English"));
 });
 
-Deno.test("the prompt shows an example in the title's own language", () => {
-  const ja = titleSystemPrompt("ja");
-  assert(ja.includes("スマホのログイン不具合を修正"));
-  assert(ja.includes("<message>"), "the example must show its input");
-  const en = titleSystemPrompt("en");
-  assert(en.includes("Fix mobile login button"));
-  assertEquals(en.includes("スマホ"), false, "an English sample, in English");
-});
-
-Deno.test("the examples are already the final shape", () => {
-  // A sample the model copies must survive the cleaner unchanged and obey
-  // the cap it teaches; otherwise it demonstrates a title we would rewrite.
+Deno.test("the instruction carries no worked example", () => {
+  // Regression: a sample in the prompt was copied as the title (the session
+  // was named after the sample's topic), or the model answered the task the
+  // sample describes and the reply was cut to the cap. The message must be
+  // the only text the model can read as a task.
   for (const language of ["ja", "en"] as const) {
-    const example = titleSystemPrompt(language).split("\n").at(-1)!;
-    assert(example.length <= MAX_TITLE_CHARS, example);
-    assertEquals(cleanTitle(example), example);
+    const instruction = titleInstruction(language);
+    assertEquals(instruction.includes("スマホ"), false);
+    assertEquals(instruction.includes("login button"), false);
   }
 });
 
@@ -97,21 +91,25 @@ Deno.test("generateTitle returns the cleaned model output", async () => {
   const title = await generator.generateTitle("Please fix the login bug");
 
   assertEquals(title, "Fix login bug");
-  // The call carried the first message and the title system prompt.
+  // One turn carries the instruction and the message, and no system prompt.
   assertEquals(calls.length, 1);
   const content = calls[0]!.messages[0]!.content as Array<{ text: string }>;
-  assertEquals(content[0]!.text, "Please fix the login bug");
-  assertEquals(calls[0]!.systemPrompt?.includes("title"), true);
+  assertEquals(
+    content[0]!.text,
+    `${titleInstruction("ja")}\n\n<message>Please fix the login bug</message>`,
+  );
+  assertEquals(calls[0]!.systemPrompt, undefined);
 });
 
 Deno.test("generateTitle sends no output cap and follows the session language", async () => {
   let seen: StreamOptions | undefined;
-  let prompt = "";
+  let request = "";
   const generator = new TitleGenerator(
     fakeModel("fast"),
-    fakeStreamFn("Fix login bug", {}, (request, streamOptions) => {
+    fakeStreamFn("Fix login bug", {}, (r, streamOptions) => {
       seen = streamOptions;
-      prompt = request.systemPrompt ?? "";
+      const content = r.messages[0]!.content as Array<{ text: string }>;
+      request = content[0]!.text;
     }),
   );
 
@@ -121,9 +119,9 @@ Deno.test("generateTitle sends no output cap and follows the session language", 
   // a reasoning model's thinking tokens, so the answer was empty and the
   // session kept its provisional name. The transport's cap is the bound.
   assertEquals(seen?.maxOutputTokens, undefined);
-  // The example follows the session, not the message.
-  assert(prompt.includes("スマホのログイン不具合を修正"));
-  assert(prompt.includes("Japanese"));
+  // The language follows the session, not the message.
+  assert(request.includes("Japanese"));
+  assertEquals(request.includes("English"), false);
 });
 
 Deno.test("generateTitle throws on stream errors", async () => {

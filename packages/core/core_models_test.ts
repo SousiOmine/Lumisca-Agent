@@ -418,14 +418,14 @@ Deno.test("fast model: first prompt auto-generates the session title", async () 
 
   await promptSession(core, session.id, "Please fix the login bug");
 
-  // The title call used the fast model and the first message text.
+  // The title call used the fast model, and carried the first message inside
+  // the instruction: one user turn, no system prompt.
   assertEquals(captured.length, 2);
   assertEquals(captured[0]!.model, "fast");
-  assertEquals(
-    captured[0]!.messages[0]!.content[0]!.text,
-    "Please fix the login bug",
-  );
-  assertEquals(captured[0]!.systemPrompt?.includes("title"), true);
+  const titleRequest = captured[0]!.messages[0]!.content[0]!.text;
+  assertEquals(titleRequest.includes("Please fix the login bug"), true);
+  assertEquals(titleRequest.includes("<message>"), true);
+  assertEquals(captured[0]!.systemPrompt, undefined);
   // The main run went to the session model.
   assertEquals(captured[1]!.model, "main");
   // The provisional name was replaced by the generated title.
