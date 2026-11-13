@@ -156,7 +156,12 @@ interface DraftPaneProps {
  * reopening it used to re-read the default model, the skill catalog and the
  * recent session list (which probes every registered peer) on every visit.
  * The App mounts it lazily — a launch that opens a session directly still
- * makes none of those requests. */
+ * makes none of those requests.
+ *
+ * Keeping it mounted also keeps its state: what belongs to one request has
+ * to settle when that request ends, because the screen coming back with the
+ * next "+" is this same component and would inherit whatever was left behind
+ * (the start flag, see ../draftStart.ts). */
 export const DraftPane = memo(function DraftPane({
   active,
   draft,

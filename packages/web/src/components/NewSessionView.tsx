@@ -2,6 +2,7 @@ import { IconArrowUp } from "@tabler/icons-preact";
 import { useEffect, useMemo, useRef, useState } from "preact/compat";
 import { api } from "../api.ts";
 import { rememberDefaultModel } from "../defaultModel.ts";
+import { startDraft } from "../draftStart.ts";
 import { useAsyncEffect } from "../hooks/useAsync.ts";
 import { useRecentSessions } from "../hooks/useRecentSessions.ts";
 import { useSavedPrompts } from "../hooks/useSavedPrompts.ts";
@@ -315,14 +316,11 @@ export function NewSessionView({
       trimmed = resolved.text;
       mode = resolved.mode;
     }
-    setBusy(true);
-    setError(undefined);
-    try {
-      await onStart(selectedWorkspace, model, trimmed, images, mode);
-    } catch (e) {
-      setError(describeError(e, t));
-      setBusy(false);
-    }
+    await startDraft(
+      () => onStart(selectedWorkspace, model, trimmed, images, mode),
+      { busy: setBusy, error: setError },
+      (failure) => describeError(failure, t),
+    );
   };
 
   /** A `run` command was picked at the start of the input (the composer
