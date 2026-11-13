@@ -3,8 +3,8 @@
  *
  * The desktop shell, an installed PWA and a plain bookmark all open `/`, and
  * that address has to answer a mode on its own: a first launch starts in the
- * main mode (Lumisca) rather than at a chooser, and a client that has chosen
- * before starts where it left off.
+ * main mode (Lumisca) rather than at any choice screen, and a client that has
+ * chosen before starts where it left off.
  */
 import { assertEquals } from "@std/assert";
 import { MAIN_MODE, startModeOf } from "./useAppMode.ts";

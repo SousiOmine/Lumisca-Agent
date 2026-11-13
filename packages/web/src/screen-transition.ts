@@ -84,7 +84,7 @@ function settingsMove(previous: UrlState, next: UrlState): ScreenMove | null {
 function sameRoute(a: UrlState["route"], b: UrlState["route"]): boolean {
   if (a.kind !== b.kind) return false;
   switch (a.kind) {
-    case "modeSelect":
+    case "start":
       return true;
     case "code":
       return a.tabKey === (b as typeof a).tabKey;

@@ -108,21 +108,21 @@ Deno.test("route: a settings address without a category opens the dialog", () =>
   roundTrip(withSettings({ kind: "stella", agentId: "a-1" }, null));
 });
 
-Deno.test("route: / is the mode chooser", () => {
-  assertEquals(parseUrl("/"), at({ kind: "modeSelect" }));
-  assertEquals(urlOf(at({ kind: "modeSelect" })), "/");
+Deno.test("route: / is the start address", () => {
+  assertEquals(parseUrl("/"), at({ kind: "start" }));
+  assertEquals(urlOf(at({ kind: "start" })), "/");
 });
 
-Deno.test("route: an unknown path is the mode chooser", () => {
+Deno.test("route: an unknown path is the start address", () => {
   // A removed route or a typo resolves to the first screen rather than to an
   // error the app would have to invent a page for.
-  assertEquals(parseUrl("/nope"), at({ kind: "modeSelect" }));
-  assertEquals(parseUrl("/%zz"), at({ kind: "modeSelect" }));
+  assertEquals(parseUrl("/nope"), at({ kind: "start" }));
+  assertEquals(parseUrl("/%zz"), at({ kind: "start" }));
 });
 
 Deno.test("route: a malformed path inside a mode is that mode's top", () => {
   // The reader was already in the mode, and a missing id does not unmake
-  // that: `/code/s` is the new-session screen, not the chooser.
+  // that: `/code/s` is the new-session screen, not the start address.
   for (const path of ["/code/s", "/code/p/peer-1", "/code/p/s-1", "/code/x"]) {
     assertEquals(parseUrl(path), at({ kind: "code", tabKey: null }), path);
   }
@@ -145,9 +145,10 @@ Deno.test("route: a category the dialog does not have leaves the dialog open", (
   );
 });
 
-Deno.test("route: settings on the chooser are not settings", () => {
-  // There is no mode, so no category set to name: the chooser is the screen.
-  assertEquals(parseUrl("/settings/general"), at({ kind: "modeSelect" }));
+Deno.test("route: settings on the start address are not settings", () => {
+  // There is no mode, so no category set to name: the start address is the
+  // screen.
+  assertEquals(parseUrl("/settings/general"), at({ kind: "start" }));
 });
 
 Deno.test("route: trailing slashes and doubled slashes are the same path", () => {

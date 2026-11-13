@@ -107,13 +107,12 @@ export function App({ initialData }: AppProps): ReactElement {
   // Memoized on the route kind: the store is a `localStorage` read, and the
   // App re-renders on every streamed event of a conversation.
   const resolved = useMemo(startMode, [url.route.kind]);
-  const mode: AppMode =
-    url.route.kind === "modeSelect" ? resolved : url.route.kind;
+  const mode: AppMode = url.route.kind === "start" ? resolved : url.route.kind;
   // The resolution is a REPLACE: `/` is not a place to come back to, and a
   // back from a mode's top must leave the app rather than bounce off the
   // address it never meant to show.
   useEffect(() => {
-    if (url.route.kind !== "modeSelect") return;
+    if (url.route.kind !== "start") return;
     replaceUrl(modeTop(mode));
   }, [url.route.kind, mode, replaceUrl]);
   // Showing a mode is what this client remembers for the next bare `/` —

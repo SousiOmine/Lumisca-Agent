@@ -121,11 +121,11 @@ Deno.test("screen transition: code mode's moves stay instant", () => {
   assertEquals(move(session("s1"), session("s2")), null);
 });
 
-Deno.test("screen transition: the mode chooser is not in either hierarchy", () => {
-  const chooser = at({ kind: "modeSelect" });
-  assertEquals(move(chooser, at({ kind: "stella", agentId: null })), null);
-  assertEquals(move(at({ kind: "stella", agentId: null }), chooser), null);
-  // Settings do not exist on the chooser (route.ts), so a category cannot be
-  // reached from it either.
-  assertEquals(move(chooser, at({ kind: "code", tabKey: null })), null);
+Deno.test("screen transition: the start address is not in either hierarchy", () => {
+  const start = at({ kind: "start" });
+  assertEquals(move(start, at({ kind: "stella", agentId: null })), null);
+  assertEquals(move(at({ kind: "stella", agentId: null }), start), null);
+  // Settings do not exist on the start address (route.ts), so a category
+  // cannot be reached from it either.
+  assertEquals(move(start, at({ kind: "code", tabKey: null })), null);
 });

@@ -10,7 +10,7 @@ import { splitTabKey, tabKey } from "./tabs.ts";
  * Every screen the app can show has an address, so a reload, a bookmark, a
  * shared link and the browser's back button all reach the same place:
  *
- *   /                          the mode chooser, or this client's mode's top
+ *   /                          the start address (this client's mode's top)
  *   /code                      code mode's new-session screen
  *   /code/s/<sessionId>        one session of this server
  *   /code/p/<peerId>/s/<id>    one session of a federated peer
@@ -35,9 +35,12 @@ import { splitTabKey, tabKey } from "./tabs.ts";
  * the only place that touches the browser's history.
  */
 
-/** The screen a URL names. `null` inside a mode is that mode's top. */
+/** The screen a URL names. `null` inside a mode is that mode's top.
+ *
+ * `start` is `/` itself and every path this app does not name: the App
+ * resolves it to this client's mode's top (see hooks/useAppMode.ts). */
 export type AppRoute =
-  | { kind: "modeSelect" }
+  | { kind: "start" }
   | { kind: "code"; tabKey: string | null }
   | { kind: "stella"; agentId: string | null };
 
@@ -59,7 +62,7 @@ export type SettingsRoute = { category: SettingsCategory | null };
 /** One address: the screen, and the settings dialog when it is open. */
 export interface UrlState {
   route: AppRoute;
-  /** The open dialog, or null. Never set on the mode chooser: there is no
+  /** The open dialog, or null. Never set on the start address: there is no
    * mode yet, so there is no category set to name. */
   settings: SettingsRoute | null;
 }
@@ -76,7 +79,7 @@ export function urlOf(state: UrlState): string {
 
 function routePath(route: AppRoute): string {
   switch (route.kind) {
-    case "modeSelect":
+    case "start":
       return "/";
     case "code": {
       if (route.tabKey === null) return "/code";
@@ -96,15 +99,15 @@ function routePath(route: AppRoute): string {
 /**
  * What a path means.
  *
- * A path this app does not name answers the mode chooser, which the App
+ * A path this app does not name is read as the start address, which the App
  * resolves to this client's mode's top: a typo, a stale bookmark of a route
  * this version no longer has, or a category that was removed lands on a
  * screen the reader can use. The app has no "not found" page to send them to,
  * and a rendered error would be one they cannot leave.
  *
  * Under `/code` and `/stella`, a malformed session or agent path is that
- * mode's top rather than the chooser: the reader was already in the mode, and
- * a missing id does not unmake that.
+ * mode's top rather than the start address: the reader was already in the
+ * mode, and a missing id does not unmake that.
  */
 export function parseUrl(pathname: string): UrlState {
   const segments = pathname
@@ -113,7 +116,7 @@ export function parseUrl(pathname: string): UrlState {
     .map(decodeSegment);
 
   const [first, second, third, fourth, fifth] = segments;
-  let route: AppRoute = { kind: "modeSelect" };
+  let route: AppRoute = { kind: "start" };
   let consumed = 0;
 
   if (first === "code") {
@@ -140,9 +143,9 @@ export function parseUrl(pathname: string): UrlState {
 
 /** The settings part of a path, given what the route did not consume. */
 function settingsOf(route: AppRoute, trailing: string[]): SettingsRoute | null {
-  // The chooser has no categories to name: an address that put settings
-  // there is read as the chooser it starts with.
-  if (route.kind === "modeSelect") return null;
+  // The start address names no mode, so settings have no screen to sit on:
+  // an address that put them there is the start address.
+  if (route.kind === "start") return null;
   if (trailing[0] !== "settings") return null;
   if (trailing.length === 1) return { category: null };
   if (trailing.length > 2) return null;
