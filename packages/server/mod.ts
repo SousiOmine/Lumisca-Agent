@@ -85,7 +85,7 @@ const LAUNCHER_USAGE = [
   "使い方:",
   "  lumisca-server                      サーバーを起動します",
   "  lumisca-server service <サブコマンド>  systemd ユーザーユニットを管理します",
-  "  lumisca-server share                この PC のフォルダをサーバーへ貸します（デスクトップアプリが起動します）",
+  "  lumisca-server share                この PC のフォルダをサーバーに接続します（デスクトップアプリが起動します）",
   "",
   "詳細: lumisca-server service --help",
 ].join("\n");

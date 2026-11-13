@@ -49,9 +49,9 @@ Deno.test("ShareFolderDialog: nothing is lent until a folder is chosen", () => {
   // The terms and the "share" button belong to a chosen folder: before one
   // exists there is nothing to agree to.
   assert(!html.includes("最後に使ってから30分"), html);
-  assert(!html.includes(">貸す<"), html);
+  assert(!html.includes(">接続<"), html);
   // Nothing was lent before either.
-  assert(!html.includes("最近貸したフォルダ"), html);
+  assert(!html.includes("最近接続したフォルダ"), html);
 });
 
 Deno.test("ShareFolderDialog: a recent folder is one press, with its last terms", () => {
@@ -60,7 +60,7 @@ Deno.test("ShareFolderDialog: a recent folder is one press, with its last terms"
     { path: "/Users/me/notes", name: "notes", write: false },
   ]);
   const html = withStorage(memoryStorage(stored), render);
-  assertStringIncludes(html, "最近貸したフォルダ");
+  assertStringIncludes(html, "最近接続したフォルダ");
   assertStringIncludes(html, "proj");
   assertStringIncludes(html, "notes");
   // The terms are the ones saved with the folder, not the dialog's defaults.

@@ -474,7 +474,7 @@ export const chat = {
     en: "Choose a folder",
   },
   "chat.stella.share.recent": {
-    ja: "最近貸したフォルダ",
+    ja: "最近接続したフォルダ",
     en: "Recently shared",
   },
   "chat.stella.share.readOnly": {
@@ -488,12 +488,12 @@ export const chat = {
   /** The loan's clock is the lender's: keep the sentence in step with
    * SHARE_IDLE_MS in packages/server/share-host.ts. */
   "chat.stella.share.idle": {
-    ja: "最後に使ってから30分で切れます。",
+    ja: "最後に使ってから30分で切断されます。",
     en: "Ends 30 minutes after the last use.",
   },
-  "chat.stella.share.lend": { ja: "貸す", en: "Share" },
+  "chat.stella.share.lend": { ja: "接続", en: "Share" },
   "chat.stella.share.lending": {
-    ja: "貸しています…",
+    ja: "接続しています…",
     en: "Sharing…",
   },
   "chat.stella.share.pickFailed": {
@@ -501,7 +501,7 @@ export const chat = {
     en: "Could not choose a folder: {error}",
   },
   "chat.stella.share.lendFailed": {
-    ja: "貸せませんでした: {error}",
+    ja: "接続できませんでした: {error}",
     en: "Could not share: {error}",
   },
   "chat.stella.share.panel": {
