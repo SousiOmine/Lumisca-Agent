@@ -9,6 +9,7 @@ import type {
   AgentMessage,
   AgentTool,
   StreamFn,
+  ThinkingContent,
   ToolResultMessage,
 } from "./types.ts";
 
@@ -387,4 +388,86 @@ Deno.test("a steer during a tool loop is processed at the next turn boundary, no
     steerIndex < reactionIndex,
     "the steered message must be processed before the loop moves on",
   );
+});
+
+/** A stream shaped like the real transport: one thinking delta, then a
+ * finished message. `withThinkingBlock` says whether that message already
+ * describes the reasoning, which is what the transport does (see
+ * ai/stream.ts buildAssistantMessage). */
+function thinkingStreamFn(withThinkingBlock: boolean): StreamFn {
+  return () => {
+    const stream = createAssistantMessageEventStream();
+    const done = fauxAssistantMessage(
+      withThinkingBlock
+        ? [
+            { type: "thinking", thinking: "weigh the options" },
+            { type: "text", text: "answer" },
+          ]
+        : "answer",
+    );
+    stream.push({ type: "start", partial: done });
+    stream.push({ type: "thinking_delta", delta: "weigh the options" });
+    stream.push({ type: "done", message: done });
+    stream.end(done);
+    return stream;
+  };
+}
+
+/** The thinking blocks of the run's last assistant message. */
+function thinkingBlocks(messages: AgentMessage[]): ThinkingContent[] {
+  const answer = messages.filter((m) => m.role === "assistant").at(-1);
+  assert(answer !== undefined && answer.role === "assistant");
+  return answer.content.filter(
+    (block): block is ThinkingContent => block.type === "thinking",
+  );
+}
+
+Deno.test("a thinking delta does not add a second block to the transport's message", async () => {
+  const agent = makeAgent(thinkingStreamFn(true));
+  await agent.prompt("think about it");
+
+  // Storing the block twice made every later request carry the same
+  // reasoning twice: a model that requires its reasoning back (an
+  // interleaved `reasoning_content`) is sent both copies.
+  assertEquals(thinkingBlocks(agent.messages), [
+    { type: "thinking", thinking: "weigh the options" },
+  ]);
+});
+
+Deno.test("a thinking delta still fills a message that arrived without one", async () => {
+  const agent = makeAgent(thinkingStreamFn(false));
+  await agent.prompt("think about it");
+
+  // The real transport always describes its thinking (buildAssistantMessage),
+  // so the fallback covers the turns whose message carries none: a turn that
+  // ended in an error (its message is empty) and test doubles.
+  assertEquals(thinkingBlocks(agent.messages), [
+    { type: "thinking", thinking: "weigh the options" },
+  ]);
+  assertEquals(assistantText(agent.messages.at(-1)), "answer");
+});
+
+Deno.test("a thinking delta survives a turn that ended in an error", async () => {
+  // The real path of the fill-in: a stream that reported thinking and then
+  // failed has no finished message to describe it (the error message's
+  // content is empty), so the accumulated reasoning is all the transcript
+  // has. A test double that omits the block is the other shape.
+  const streamFn: StreamFn = () => {
+    const stream = createAssistantMessageEventStream();
+    stream.push({ type: "start", partial: fauxAssistantMessage("") });
+    stream.push({ type: "thinking_delta", delta: "weigh the options" });
+    stream.push({ type: "error", errorMessage: "the connection dropped" });
+    stream.end();
+    return stream;
+  };
+  const agent = makeAgent(streamFn);
+
+  await agent.prompt("think about it");
+
+  assertEquals(thinkingBlocks(agent.messages), [
+    { type: "thinking", thinking: "weigh the options" },
+  ]);
+  const answer = agent.messages.at(-1);
+  assert(answer?.role === "assistant");
+  assertEquals(answer.stopReason, "error");
 });

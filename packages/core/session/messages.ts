@@ -1,4 +1,4 @@
-import type { AgentMessage } from "../ai/types.ts";
+import type { AgentMessage, AssistantMessage } from "../ai/types.ts";
 import type { LumiscaDb } from "../db/mod.ts";
 import type { ContextUsageMessageLike } from "../shared/context-usage.ts";
 import { reduceMessage } from "./prune.ts";
@@ -205,8 +205,14 @@ function timestampOf(message: AgentMessage): number {
 
 /** Decode a stored `content` cell. Rows written before versioning (raw
  * AgentMessage JSON) decode as-is; versioned rows run a per-version
- * normalizer. */
+ * normalizer. The decoded message is then repaired (see
+ * {@link dropDuplicateThinking}) so every reader — the model's view, a
+ * client's page, a compaction's input — sees the same content. */
 function decodeStoredMessage(content: string): AgentMessage {
+  return dropDuplicateThinking(decodeEnvelope(content));
+}
+
+function decodeEnvelope(content: string): AgentMessage {
   const parsed: unknown = JSON.parse(content);
   if (typeof parsed === "object" && parsed !== null && "v" in parsed) {
     const envelope = parsed as StoredEnvelope;
@@ -231,6 +237,43 @@ function decodeStoredMessage(content: string): AgentMessage {
  * Every other role is unchanged. */
 function upgradeFromV1(message: AgentMessage): AgentMessage {
   return message.role === "mode" ? { ...message, images: [] } : message;
+}
+
+/**
+ * Fold a thinking block that repeats the one before it.
+ *
+ * Turns stored before the agent stopped prepending a copy of the transport's
+ * own block hold the same reasoning twice. Repairing on read is what reaches
+ * those rows: nothing rewrites them, and a model that requires its reasoning
+ * replayed (an interleaved `reasoning_content`) is sent both copies on every
+ * later request for as long as the conversation lives. The rule is
+ * content-based rather than tied to an envelope version, so it covers rows
+ * written before the fix and after it (where it finds nothing to fold).
+ *
+ * Only adjacent, byte-identical blocks are folded. One turn can hold several
+ * distinct thinking blocks, and those are the turn's own shape. Pruned rows
+ * keep one empty block for the same reason (see session/prune.ts), so a
+ * pruned pair folds to one rather than to none.
+ */
+function dropDuplicateThinking(message: AgentMessage): AgentMessage {
+  if (message.role !== "assistant") return message;
+  const content = message.content;
+  let kept: AssistantMessage["content"] | undefined;
+  for (let i = 0; i < content.length; i++) {
+    const block = content[i]!;
+    const previous =
+      kept === undefined ? content[i - 1] : kept[kept.length - 1];
+    if (
+      block.type === "thinking" &&
+      previous?.type === "thinking" &&
+      previous.thinking === block.thinking
+    ) {
+      kept ??= content.slice(0, i);
+      continue;
+    }
+    kept?.push(block);
+  }
+  return kept === undefined ? message : { ...message, content: kept };
 }
 
 export function createMessageRepo(db: LumiscaDb): MessageRepo {

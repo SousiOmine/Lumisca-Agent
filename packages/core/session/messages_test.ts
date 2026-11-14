@@ -1,5 +1,10 @@
-import type { AgentMessage, ImageContent, ModeMessage } from "@lumisca/core";
-import { assertEquals } from "@std/assert";
+import type {
+  AgentMessage,
+  AssistantMessage,
+  ImageContent,
+  ModeMessage,
+} from "@lumisca/core";
+import { assert, assertEquals } from "@std/assert";
 import { LumiscaDb } from "../db/mod.ts";
 import { createMessageRepo } from "./messages.ts";
 
@@ -779,6 +784,135 @@ Deno.test("messages: newestConversationRows also reads pre-stamped rows", () => 
       rows.map((row) => row.message),
       [legacyReply, legacySend],
     );
+  } finally {
+    db.close();
+  }
+});
+
+/** An assistant turn with the given content blocks. */
+function assistantWith(
+  content: AssistantMessage["content"],
+  timestamp = 100,
+): AssistantMessage {
+  return {
+    role: "assistant",
+    content,
+    api: "openai-completions",
+    provider: "faux",
+    model: "faux-1",
+    usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    stopReason: "stop",
+    timestamp,
+  };
+}
+
+/** Insert a row the way a build before the fix wrote it: a versioned
+ * envelope around a message the repo would now write differently. */
+function insertStored(
+  db: LumiscaDb,
+  sessionId: string,
+  id: string,
+  message: AgentMessage,
+  version = 2,
+): void {
+  db.db
+    .prepare(
+      "INSERT INTO messages (id, session_id, role, content, timestamp) " +
+        "VALUES (?, ?, ?, ?, ?)",
+    )
+    .run(
+      id,
+      sessionId,
+      message.role,
+      JSON.stringify({ v: version, message }),
+      (message as { timestamp?: number }).timestamp ?? 0,
+    );
+}
+
+function storedContent(db: LumiscaDb, id: string): AssistantMessage["content"] {
+  const repo = createMessageRepo(db);
+  const stored = repo.list("s1").find((row) => row.id === id);
+  assert(stored !== undefined, `row ${id} missing`);
+  assert(stored.message.role === "assistant");
+  return stored.message.content;
+}
+
+Deno.test("messages: a stored duplicate thinking block decodes as one", () => {
+  // Every turn written before the agent stopped prepending a copy of the
+  // transport's own thinking block holds the same reasoning twice. Nothing
+  // rewrites those rows, so the repair has to happen on read.
+  const db = LumiscaDb.openInMemory();
+  try {
+    createSession(db, "s1");
+    insertStored(
+      db,
+      "s1",
+      "dup-1",
+      assistantWith([
+        { type: "thinking", thinking: "weigh the options" },
+        { type: "thinking", thinking: "weigh the options" },
+        { type: "text", text: "answer" },
+      ]),
+    );
+
+    assertEquals(storedContent(db, "dup-1"), [
+      { type: "thinking", thinking: "weigh the options" },
+      { type: "text", text: "answer" },
+    ]);
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("messages: distinct thinking blocks in one turn are kept", () => {
+  // A turn can think in several blocks; only a repeat of the one before it
+  // is the duplicate the repair removes.
+  const db = LumiscaDb.openInMemory();
+  try {
+    createSession(db, "s1");
+    insertStored(
+      db,
+      "s1",
+      "two-1",
+      assistantWith([
+        { type: "thinking", thinking: "plan" },
+        { type: "thinking", thinking: "check" },
+        { type: "text", text: "answer" },
+      ]),
+    );
+
+    assertEquals(storedContent(db, "two-1"), [
+      { type: "thinking", thinking: "plan" },
+      { type: "thinking", thinking: "check" },
+      { type: "text", text: "answer" },
+    ]);
+  } finally {
+    db.close();
+  }
+});
+
+Deno.test("messages: a pruned pair of empty thinking blocks decodes as one", () => {
+  // session/prune.ts empties a thinking block instead of removing it (a
+  // replaying model rejects a history that omits reasoning), so a duplicated
+  // pair is pruned to two empty blocks. One still satisfies that shape.
+  const db = LumiscaDb.openInMemory();
+  try {
+    createSession(db, "s1");
+    insertStored(
+      db,
+      "s1",
+      "pruned-1",
+      assistantWith([
+        { type: "thinking", thinking: "" },
+        { type: "thinking", thinking: "" },
+        { type: "text", text: "answer" },
+      ]),
+    );
+
+    assertEquals(storedContent(db, "pruned-1"), [
+      { type: "thinking", thinking: "" },
+      { type: "text", text: "answer" },
+    ]);
   } finally {
     db.close();
   }

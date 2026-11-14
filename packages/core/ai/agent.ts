@@ -696,7 +696,17 @@ export class Agent {
     if (final !== undefined && text.length > 0 && final.content.length === 0) {
       final = { ...final, content: [{ type: "text", text }] };
     }
-    if (final !== undefined && thinking.length > 0) {
+    // The transport's finished message already carries the turn's thinking
+    // (ai/stream.ts buildAssistantMessage), so this only fills it in for a
+    // stream that emitted the deltas without describing the message. Adding
+    // it unconditionally stored every reasoning block twice — and a model
+    // that requires its reasoning replayed (interleaved `reasoning_content`)
+    // then sent both copies back on every later request.
+    if (
+      final !== undefined &&
+      thinking.length > 0 &&
+      !final.content.some((block) => block.type === "thinking")
+    ) {
       final = {
         ...final,
         content: [{ type: "thinking", thinking }, ...final.content],
