@@ -583,9 +583,9 @@ export function StellaPane({
       className={`stella-pane${interactive ? " handover" : ""}${
         fullscreen ? " fullscreen" : ""
       }${exiting ? " exiting" : ""}`}
+      aria-label={t("chat.stella.machine.info")}
     >
       <header className="stella-pane-header">
-        <span>{t("chat.stella.machine.info")}</span>
         <button
           type="button"
           className="icon-btn"

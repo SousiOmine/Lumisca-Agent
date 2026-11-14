@@ -440,9 +440,9 @@ export const chat = {
     ja: "画面に接続しています…",
     en: "Connecting to the screen…",
   },
-  /** The right-hand panel, which holds what is true about the conversation
-   * beyond its text: the folders lent from this computer and the machine's
-   * screen. */
+  /** The right-hand panel's name for assistive technology. The panel carries
+   * no visible title: its two sections (the screen and the lent folders) name
+   * themselves. */
   "chat.stella.machine.info": { ja: "情報", en: "Info" },
   "chat.stella.share.open": {
     ja: "フォルダーで共同作業",

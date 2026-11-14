@@ -104,6 +104,15 @@ Deno.test("StellaView: the pane is the conversation's information", () => {
   );
 });
 
+Deno.test("StellaView: the panel is named without a title row", () => {
+  // The two sections inside the panel (the screen and the lent folders) name
+  // themselves, so a heading over them said it twice and took a row for it.
+  // The region keeps its name for assistive technology.
+  const html = render({ screenOpen: true });
+  assertStringIncludes(html, 'aria-label="情報"');
+  assertEquals(html.includes(">情報<"), false);
+});
+
 Deno.test("StellaView: a lent folder is named in the panel, with its way back", () => {
   // `screenOpen` is what the lending effect sets (StellaView opens the panel
   // when a loan arrives); a static render does not run effects.
