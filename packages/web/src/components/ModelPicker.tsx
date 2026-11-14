@@ -1,5 +1,5 @@
 import { formatModelMeta, type Translator } from "@lumisca/core/shared";
-import { IconBrain, IconCheck, IconSettings } from "@tabler/icons-preact";
+import { IconCheck, IconSettings } from "@tabler/icons-preact";
 import { useMemo, useState } from "preact/compat";
 import { useT } from "../i18n.ts";
 import {
@@ -180,13 +180,6 @@ export function ModelPicker({
                 </span>
                 <span className="mp-model-meta">
                   {formatModelMeta(row.model.contextWindow)}
-                  {row.model.reasoning && (
-                    <IconBrain
-                      size={12}
-                      title={t("chrome.modelPicker.reasoning")}
-                      aria-label={t("chrome.modelPicker.reasoning")}
-                    />
-                  )}
                 </span>
                 {isCurrent(row) && <IconCheck size={14} className="mp-check" />}
               </button>

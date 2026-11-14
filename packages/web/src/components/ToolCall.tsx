@@ -46,7 +46,6 @@ import {
   TOOL_WRITE,
 } from "@lumisca/core/shared";
 import {
-  IconBrain,
   IconCamera,
   IconCheck,
   IconChevronRight,
@@ -70,6 +69,7 @@ import {
   IconSearch,
   IconSend,
   IconSparkles,
+  IconSubtask,
   IconTerminal2,
   IconUser,
   IconUsers,
@@ -206,7 +206,7 @@ const PRESENTATION: Readonly<Record<string, ToolPresentation>> = {
   [TOOL_HISTORY_SEARCH]: { icon: IconHistory, summary: query },
   [TOOL_IDENTITY]: { icon: IconUser, summary: (a) => arg(a, "action") },
   [TOOL_TASK]: {
-    icon: IconBrain,
+    icon: IconSubtask,
     summary: (a) => truncate(arg(a, "description") || arg(a, "prompt"), 50),
   },
   [TOOL_TASK_OUTPUT]: {

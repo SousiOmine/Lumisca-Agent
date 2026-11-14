@@ -1,10 +1,10 @@
 import {
-  IconBrain,
   IconCheck,
   IconChevronRight,
   IconRefresh,
   IconRepeat,
   IconSend,
+  IconSubtask,
   IconTerminal2,
 } from "@tabler/icons-preact";
 import type { ComponentChildren } from "preact";
@@ -17,7 +17,7 @@ export function notificationKindIcon(kind: NotificationKind) {
     case "background":
       return <IconTerminal2 size={13} />;
     case "task":
-      return <IconBrain size={13} />;
+      return <IconSubtask size={13} />;
     case "message":
       return <IconSend size={13} />;
     case "retry":

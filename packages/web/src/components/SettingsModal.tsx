@@ -1,6 +1,6 @@
 import {
   IconBookmark,
-  IconBrain,
+  IconCpu,
   IconPalette,
   IconPlugConnected,
   IconPointer,
@@ -274,7 +274,7 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     id: "models",
     scope: "common",
     labelKey: "settings.nav.models",
-    icon: <IconBrain size={18} />,
+    icon: <IconCpu size={18} />,
     render: ({ openCategory }) => (
       <>
         <ModelPreferencePanel

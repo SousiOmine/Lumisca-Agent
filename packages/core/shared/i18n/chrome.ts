@@ -236,10 +236,6 @@ export const chrome = {
     ja: "モデルを検索…",
     en: "Search models…",
   },
-  "chrome.modelPicker.reasoning": {
-    ja: "推論モデル",
-    en: "Reasoning model",
-  },
   "chrome.modelPicker.noImageModels": {
     ja: "画像認識に対応したモデルがありません",
     en: "No models support image input",

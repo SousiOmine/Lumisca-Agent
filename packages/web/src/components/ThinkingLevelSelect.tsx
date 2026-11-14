@@ -1,5 +1,4 @@
 import { THINKING_LEVEL_ORDER } from "@lumisca/core/shared";
-import { IconBrain } from "@tabler/icons-preact";
 import { useMemo } from "preact/compat";
 import { thinkingLevelLabel } from "../format.ts";
 import type { SelectSide } from "../hooks/useSelectPlacement.ts";
@@ -58,7 +57,6 @@ export function ThinkingLevelSelect({
         disabled={disabled}
         preferredSide={preferredSide}
         onOpen={onOpen}
-        icon={<IconBrain size={12} />}
       />
     </div>
   );
