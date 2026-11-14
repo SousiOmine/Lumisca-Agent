@@ -88,6 +88,8 @@ export type UiField = {
   type: UiFieldType;
   required: boolean;
   placeholder: string | null;
+  /** A line under the input saying what to write there, or null. */
+  description: string | null;
   /** Options are carried only when `type` is select. */
   options: readonly UiOption[];
 };

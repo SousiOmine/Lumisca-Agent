@@ -1017,6 +1017,27 @@
   margin: 0;
 }
 
+.ui-card-invalid summary {
+  margin-top: 6px;
+  cursor: pointer;
+}
+
+/* The source of a card that would not draw. It is the agent's own words, so
+ * it wraps rather than scrolling sideways out of the message. */
+.ui-card-source {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .ui-card-title {
   margin: 0;
   font-size: 13px;
@@ -1239,6 +1260,12 @@
   gap: 8px;
   font-size: 13px;
   color: var(--text);
+}
+
+.ui-card-field-desc {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-dim);
 }
 
 .ui-card-required {

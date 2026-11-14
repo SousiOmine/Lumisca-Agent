@@ -3,17 +3,19 @@
  * it draws.
  *
  * A card is written by the model into its own reply, inside a fenced code
- * block tagged `card` — the same way markdown.ts draws a `svg` fence as a
- * picture rather than as code. The card is therefore part of the message, not
- * the result of a tool call: words can come before and after it, and the
- * reader sees them in the order the agent wrote them.
+ * block — tagged `card`, or simply holding a `<Card>` — the same way
+ * markdown.ts draws a `svg` fence as a picture rather than as code. The card
+ * is therefore part of the message, not the result of a tool call: words can
+ * come before and after it, and the reader sees them in the order the agent
+ * wrote them.
  *
  * The text is never HTML: the card's markup is read by ./build.ts, which
  * refuses anything it does not know.
  */
+import { cardEnd } from "./reader.ts";
 import type { UiSegment } from "./types.ts";
 
-/** The fence's info string that means "this block is a card". */
+/** The fence's info string that names a card. */
 const CARD_FENCE = "card";
 
 /** A fence's opening line: up to three spaces, three or more backticks or
@@ -45,12 +47,36 @@ function closesFence(
 }
 
 /**
+ * Whether a fenced block's body is card markup: its first line that is not
+ * blank opens with `<Card`.
+ *
+ * The info string is a hint, not the answer. A model that fences a card as
+ * `html`, `jsx` or with no info string at all meant the card, and drawing
+ * the block as code would show the reader the markup instead of the picture.
+ * Only a fence whose BODY is a card is read as one, so a sample that merely
+ * mentions `<Card>` stays a sample.
+ */
+function opensWithCard(body: readonly string[]): boolean {
+  for (const line of body) {
+    const text = line.trim();
+    if (text.length === 0) continue;
+    return /^<Card[\s>]/.test(text);
+  }
+  return false;
+}
+
+/**
  * Split one message's text into its segments, in reading order.
  *
- * A `card` fence becomes a card segment and leaves the prose; every other
- * fence (a code sample, an `svg` picture) stays in the prose as written. The
- * fence runs to the end of the text when it is not closed — the model is
- * still writing it — and the caller decides how to draw a partial card.
+ * A fence holding a card becomes a card segment and leaves the prose; every
+ * other fence (a code sample, an `svg` picture) stays in the prose as
+ * written. The fence runs to the end of the text when it is not closed — the
+ * model is still writing it — and the caller decides how to draw a partial
+ * card.
+ *
+ * The card ends at its closing `</Card>`: a model often keeps talking inside
+ * the fence after it, and those words are the reply's prose, drawn after the
+ * card rather than swallowed by it.
  *
  * Text between and around the cards is trimmed at its edges: a card is a
  * block of the reply, so the blank line that separated it from the prose is
@@ -63,6 +89,16 @@ export function splitChatText(text: string): UiSegment[] {
     const joined = prose.join("\n").trim();
     if (joined.length > 0) segments.push({ type: "text", text: joined });
     prose = [];
+  };
+  const pushCard = (markup: string) => {
+    const end = cardEnd(markup);
+    if (end < 0) {
+      segments.push({ type: "card", markup });
+      return;
+    }
+    segments.push({ type: "card", markup: markup.slice(0, end) });
+    const rest = markup.slice(end).trim();
+    if (rest.length > 0) segments.push({ type: "text", text: rest });
   };
 
   const lines = text.split("\n");
@@ -80,13 +116,11 @@ export function splitChatText(text: string): UiSegment[] {
       close += 1;
     }
     const closed = close < lines.length;
+    const body = lines.slice(index + 1, close);
 
-    if (open.info === CARD_FENCE) {
+    if (open.info === CARD_FENCE || opensWithCard(body)) {
       flushProse();
-      segments.push({
-        type: "card",
-        markup: lines.slice(index + 1, close).join("\n"),
-      });
+      pushCard(body.join("\n"));
     } else {
       // A fence of any other language is text the reader should see whole,
       // delimiters included: it is what `marked` turns into a code block or

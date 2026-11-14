@@ -14,15 +14,15 @@
  * (ui-markup_test.ts fails when a tag is missing here).
  */
 export const CARD_HELP: string = [
-  "A card is written into your reply, not sent by a tool call: put it in a fenced code block whose info string is `card`, on its own lines, and the app draws the card where the block sits. The rest of the reply is ordinary markdown, so words may come before and after the card.",
+  "A card is written into your reply, not sent by a tool call: put it in a fenced code block whose info string is `card`, on its own lines, and the app draws the card where the block sits. The rest of the reply is ordinary markdown, so words may come before and after the card. Nothing but the card goes in the block: close the fence right after </Card>.",
   'The block holds one <Card title="..."> with Text, List, Table, Flow, Metric, Choice, Form, Stack, Columns, Grid, Repeat and If blocks inside it.',
   '<Text>paragraph</Text>; <List ordered><Item>one</Item></List>; <Table><Row><Cell>head</Cell><Cell>head</Cell></Row></Table> (the first row is the header); <Metric label="Open" value="12" unit="件" hint="+3 today" />.',
   '<Flow><Node id="a" shape="box|round|diamond|pill">Start</Node><Edge from="a" to="b" label="yes" dashed /></Flow>.',
-  '<Choice multiple layout="list|row"><Option description="why">Label</Option></Choice>; <Form submit="Send"><Field label="Name" type="text|number|select|checkbox" required placeholder="..."><Option>a choice for select</Option></Field></Form>.',
+  '<Choice multiple layout="list|row"><Option description="why">Label</Option></Choice>; <Form submit="Send"><Field label="Name" type="text|number|select|checkbox" required placeholder="...">a line of help under the field</Field></Form> (a select field holds <Option>a choice</Option> instead).',
   '<Stack gap="s|m|l">...</Stack> puts blocks one above another; <Columns gap="..."> side by side (they go one above another on a narrow screen); <Grid columns="1-4"> in a grid.',
   'A card may start with <Data>{"items":[{"name":"prod","load":81}]}</Data>: one JSON object whose fields are read as $data.items. <Repeat over="items"> draws its blocks once per item, where $item.name and $index are that item; <If test="$item.load" eq="81"> (or ne="0") draws only when the field matches what you name (it sits inside a repeat only, and repeats never nest).',
-  "Read values with $data.field, $item.field and $index; write $$ for a dollar sign. Every reference must name a field that <Data> (or every item) really has, so a typo is refused instead of drawn as a blank.",
-  "At most one Choice or Form per card. Write boolean attributes without a value, and attribute values in double quotes.",
+  "Read values with $data.field, $item.field and $index; any other $ is plain text ($5, $HOME), and $$ writes one $ before those three words. Every reference must name a field that <Data> (or every item) really has, so a typo is refused instead of drawn as a blank.",
+  'At most one Choice or Form per card. Write boolean attributes bare (`multiple`) or as `multiple="true"` / `"false"`, and other attribute values in double quotes.',
   "Escape <, > and & in text as &lt;, &gt; and &amp;; inside <Data> write plain JSON, but no </Data>.",
   "Clicking an option sends its label as the user's next message; the user can click only after your turn ends, so end the turn after showing a question.",
 ].join(" ");

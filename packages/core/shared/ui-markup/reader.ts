@@ -352,6 +352,58 @@ function isAttributeChar(value: string | undefined): boolean {
   return value !== undefined && /[A-Za-z0-9-]/.test(value);
 }
 
+/** One tag met while walking a card. `end` is the index just past its ">". */
+type Tag = {
+  /** The name written after "<"; "" when a name was not what came next. */
+  name: string;
+  closing: boolean;
+  selfClosing: boolean;
+  end: number;
+};
+
+/**
+ * Walk the tags of a card, one at a time, without checking the grammar.
+ *
+ * `<Data>` is taken whole: its body is JSON, where a string may hold "<" or
+ * "&", and reading it as tags would find tags the model never wrote. A tag
+ * that is still being written ends the walk — nothing after it can be read
+ * yet.
+ */
+function* walkTags(source: string): Generator<Tag> {
+  let index = 0;
+
+  while (index < source.length) {
+    const open = source.indexOf("<", index);
+    if (open < 0) return;
+    const close = source.indexOf(">", open);
+    if (close < 0) return; // the tag is still being written
+
+    const body = source.slice(open + 1, close);
+    index = close + 1;
+
+    if (body.startsWith("/")) {
+      yield {
+        name: body.slice(1).trim(),
+        closing: true,
+        selfClosing: false,
+        end: index,
+      };
+      continue;
+    }
+
+    const selfClosing = body.endsWith("/");
+    const name = body.replace(/\/$/, "").trim().split(/\s/)[0] ?? "";
+
+    if (name === "Data" && !selfClosing) {
+      const end = source.indexOf("</Data>", index);
+      if (end < 0) return; // the data is still arriving; nothing after it
+      index = end + "</Data>".length;
+      continue;
+    }
+    yield { name, closing: false, selfClosing, end: index };
+  }
+}
+
 /**
  * The longest prefix of a card that ends at a complete block, with `</Card>`
  * closed onto it — or null while there is none.
@@ -368,43 +420,53 @@ function isAttributeChar(value: string | undefined): boolean {
 export function cardPrefix(source: string): string | null {
   const stack: string[] = [];
   let closedAt = -1;
-  let index = 0;
 
-  while (index < source.length) {
-    const open = source.indexOf("<", index);
-    if (open < 0) break;
-    const close = source.indexOf(">", open);
-    if (close < 0) break; // the tag is still being written
-
-    const body = source.slice(open + 1, close);
-    if (body.startsWith("/")) {
-      const name = body.slice(1).trim();
-      if (stack.pop() !== name) return null;
-      index = close + 1;
-      if (stack.length === 1) closedAt = index;
+  for (const tag of walkTags(source)) {
+    if (tag.closing) {
+      if (stack.pop() !== tag.name) return null;
+      if (stack.length === 1) closedAt = tag.end;
       continue;
     }
-
-    const selfClosing = body.endsWith("/");
-    const name = body.replace(/\/$/, "").trim().split(/\s/)[0] ?? "";
-    if (!/^[A-Za-z][A-Za-z0-9]*$/.test(name)) return null;
-    index = close + 1;
-
-    if (name === "Data" && !selfClosing) {
-      const end = source.indexOf("</Data>", index);
-      if (end < 0) break; // the data is still arriving; nothing after it
-      index = end + "</Data>".length;
-      if (stack.length === 1) closedAt = index;
+    if (!/^[A-Za-z][A-Za-z0-9]*$/.test(tag.name)) return null;
+    if (tag.selfClosing) {
+      if (stack.length === 1) closedAt = tag.end;
       continue;
     }
-    if (selfClosing) {
-      if (stack.length === 1) closedAt = index;
-      continue;
-    }
-
-    if (stack.length === 0 && name !== "Card") return null;
-    stack.push(name);
+    if (stack.length === 0 && tag.name !== "Card") return null;
+    stack.push(tag.name);
   }
 
   return closedAt < 0 ? null : `${source.slice(0, closedAt)}</Card>`;
+}
+
+/**
+ * Where the card written in `source` ends: the index just past the tag that
+ * closes its root, or -1 while that tag has not been written.
+ *
+ * A reply often keeps talking inside the fence after `</Card>` — the model
+ * writes the closing tag and then goes on — so the text left in the block is
+ * the reply's words, not part of the card. The card is over at that tag
+ * (./segments.ts hands the rest back as prose rather than losing it).
+ *
+ * The walk starts at whatever comes first: the end found is the end of the
+ * first element the source holds, and the caller decides what that means
+ * (./segments.ts asks only about a block that opens with `<Card`).
+ */
+export function cardEnd(source: string): number {
+  let depth = 0;
+
+  for (const tag of walkTags(source)) {
+    if (tag.closing) {
+      depth -= 1;
+      if (depth === 0) return tag.end;
+      continue;
+    }
+    if (tag.selfClosing) {
+      if (depth === 0) return tag.end;
+      continue;
+    }
+    depth += 1;
+  }
+
+  return -1;
 }

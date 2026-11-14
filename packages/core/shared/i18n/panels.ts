@@ -156,6 +156,7 @@ export const panels = {
     ja: "このカードを表示できませんでした",
     en: "This card could not be displayed",
   },
+  "panels.ui.markup": { ja: "マークアップ", en: "Markup" },
   "panels.ui.submit": { ja: "送信", en: "Send" },
   "panels.ui.multiple": { ja: "複数選択可", en: "Select any number" },
   "panels.ui.flow": { ja: "フローチャート", en: "Flowchart" },

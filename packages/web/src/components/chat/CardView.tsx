@@ -5,15 +5,17 @@ import {
   type UiResolvedView,
 } from "@lumisca/core/shared";
 import { useMemo } from "preact/compat";
-import { UiCard } from "./UiCard.tsx";
+import { InvalidCard, UiCard } from "./UiCard.tsx";
 
 /**
  * A card, drawn from the markup a tool result carried.
  *
- * Parsing happens here (the server already refused anything this build cannot
- * read), and so does expanding the binds: the component below only ever sees
- * literal blocks, so a reader who reopens the conversation weeks later gets
- * the card the agent sent with the data it carried.
+ * Parsing happens here, and so does expanding the binds: the component below
+ * only ever sees literal blocks, so a reader who reopens the conversation
+ * weeks later gets the card the agent sent with the data it carried.
+ *
+ * A card that does not read is drawn as the reader's note plus its source —
+ * never as half a card, and never as nothing.
  */
 export function CardView({
   markup,
@@ -35,6 +37,8 @@ export function CardView({
       : parseUiMarkup(markup);
     return parsed.ok ? resolveUiView(parsed.view) : null;
   }, [markup, streaming]);
-  if (streaming && view === null) return null;
+  if (view === null) {
+    return streaming ? null : <InvalidCard markup={markup} />;
+  }
   return <UiCard view={view} onSend={onSend} />;
 }

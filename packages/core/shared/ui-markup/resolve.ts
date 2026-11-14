@@ -1,4 +1,4 @@
-import { valueAt } from "./build.ts";
+import { referenceSpans, valueAt } from "./build.ts";
 import type {
   UiBlock,
   UiCondition,
@@ -147,6 +147,7 @@ function resolveContent(
           type: field.type,
           required: field.required,
           placeholder: optional(field.placeholder),
+          description: optional(field.description),
           options: field.options.map((option) => ({
             label: text(option.label),
             description: optional(option.description),
@@ -168,42 +169,24 @@ function substitute(value: string, data: UiData, context: Context): string {
   if (!value.includes("$")) return value;
 
   let out = "";
-  let index = 0;
-  while (index < value.length) {
-    const dollar = value.indexOf("$", index);
-    if (dollar < 0) {
-      out += value.slice(index);
-      break;
-    }
-    out += value.slice(index, dollar);
+  let cursor = 0;
+  for (const span of referenceSpans(value)) {
+    out += value.slice(cursor, span.start);
 
-    if (value[dollar + 1] === "$") {
+    if (span.kind === "$") {
       out += "$";
-      index = dollar + 2;
-      continue;
-    }
-
-    const match = /^\$(item|index|data)((?:\.[A-Za-z0-9_-]+)*)/.exec(
-      value.slice(dollar),
-    );
-    if (match === null) {
-      throw new Error(`the reference at ${dollar} was not checked`);
-    }
-
-    const kind = match[1] ?? "";
-    const path = (match[2] ?? "").replace(/^\./, "");
-    if (kind === "index") {
+    } else if (span.kind === "index") {
       if (context === null) throw new Error("$index outside a <Repeat>");
       out += String(context.index);
-    } else if (kind === "item") {
+    } else if (span.kind === "item") {
       if (context === null) throw new Error("$item outside a <Repeat>");
-      out += String(valueAt(context.item, path).value);
+      out += String(valueAt(context.item, span.path).value);
     } else {
-      out += String(valueAt(data, path).value);
+      out += String(valueAt(data, span.path).value);
     }
 
-    index = dollar + match[0].length;
+    cursor = span.end;
   }
 
-  return out;
+  return out + value.slice(cursor);
 }

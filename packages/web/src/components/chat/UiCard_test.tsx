@@ -7,7 +7,7 @@ import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
 import { initLocale } from "../../i18n.ts";
-import { UiCard } from "./UiCard.tsx";
+import { InvalidCard, UiCard } from "./UiCard.tsx";
 
 /**
  * Drawing a card.
@@ -24,7 +24,7 @@ function viewOf(markup: string): UiResolvedView {
   return resolveUiView(parsed.view);
 }
 
-function draw(view: UiResolvedView | null): string {
+function draw(view: UiResolvedView): string {
   initLocale("ja");
   return renderToString(createElement(UiCard, { view, onSend: () => {} }));
 }
@@ -88,10 +88,28 @@ Deno.test("UiCard draws a choice as a row of buttons when asked", () => {
   assertStringIncludes(html, "中止");
 });
 
-Deno.test("UiCard shows a note instead of half a card", () => {
-  const html = draw(null);
+Deno.test("InvalidCard keeps a card's markup behind the note", () => {
+  initLocale("ja");
+  const markup = '<Card><Metric label="本番" value="81" /></Card>trailing';
+  const html = renderToString(createElement(InvalidCard, { markup }));
 
   assertStringIncludes(html, "ui-card-invalid");
+  assertStringIncludes(html, "このカードを表示できませんでした");
+  assertStringIncludes(html, "マークアップ");
+  // The source is the agent's words: whatever it wrote stays readable.
+  assertStringIncludes(html, "&lt;Card>");
   assertEquals(html.includes("ui-card-metric"), false);
   assert(html.length > 0);
+});
+
+Deno.test("UiCard draws the line a field carries under its input", () => {
+  const html = draw(
+    viewOf(`<Card><Form submit="送る">
+      <Field label="日時" required>毎週の曜日と時間帯を書いてください</Field>
+    </Form></Card>`),
+  );
+
+  assertStringIncludes(html, "ui-card-field-desc");
+  assertStringIncludes(html, "毎週の曜日と時間帯を書いてください");
+  assertEquals(html.includes("$item"), false, html);
 });

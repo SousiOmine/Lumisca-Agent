@@ -619,6 +619,7 @@ function readField(node: RawElement, scope: Scope): UiField {
     UI_MARKUP_LIMITS.placeholderChars,
     scope,
   );
+  const description = fieldDescription(node, scope);
 
   if (type === "select") {
     const options = readOptions(node, scope);
@@ -632,11 +633,39 @@ function readField(node: RawElement, scope: Scope): UiField {
           `${UI_MARKUP_LIMITS.selectOptions}`,
       );
     }
-    return { label, type, required, placeholder, options };
+    return { label, type, required, placeholder, description, options };
   }
 
-  noContent(node);
-  return { label, type, required, placeholder, options: [] };
+  noElements(node);
+  return { label, type, required, placeholder, description, options: [] };
+}
+
+/**
+ * The `<Field>`'s own text: a line drawn under the input that says what to
+ * write there ("毎週の曜日と時間帯を書いてください").
+ *
+ * The model writes it where a person writing HTML would write a label's help
+ * text — between the tags — so that is where the grammar reads it. It is not
+ * the placeholder: a placeholder is an example value that disappears as soon
+ * as the reader types.
+ */
+function fieldDescription(node: RawElement, scope: Scope): string | null {
+  let raw = "";
+  for (const child of node.children) {
+    if (child.kind === "text") raw += child.text;
+  }
+
+  const text = normalizeText(raw);
+  if (text.length === 0) return null;
+  if (text.length > UI_MARKUP_LIMITS.fieldDescriptionChars) {
+    fail(
+      node.at,
+      `the text of <Field> is ${text.length} characters; the limit is ` +
+        `${UI_MARKUP_LIMITS.fieldDescriptionChars}`,
+    );
+  }
+  checkReferences(text, node.at, scope);
+  return text;
 }
 
 function fieldType(node: RawElement): UiFieldType {
@@ -657,7 +686,19 @@ function fieldType(node: RawElement): UiFieldType {
 }
 
 function readOptions(node: RawElement, scope: Scope): UiOption[] {
-  return elementChildren(node, ["Option"]).map((option) => {
+  const options: RawElement[] = [];
+  for (const child of node.children) {
+    // The field's own text is its description (see fieldDescription).
+    if (child.kind === "text") continue;
+    if (child.name !== "Option") {
+      fail(
+        child.at,
+        `<${child.name}> is not allowed inside <Field> (allowed: Option)`,
+      );
+    }
+    options.push(child);
+  }
+  return options.map((option) => {
     checkAttributes(option, ["description"]);
     return {
       label: contentText(
@@ -772,6 +813,65 @@ function checkPath(path: string, at: number): void {
   }
 }
 
+/** One `$` of a content string, as the string itself reads it. */
+export type UiSpan = {
+  /** `"$"` for the `$$` escape; the keyword otherwise. */
+  kind: "$" | "item" | "index" | "data";
+  /** The path after the keyword, without its leading dot ("" for `$item`). */
+  path: string;
+  /** Index of the `$` in the string. */
+  start: number;
+  /** Index just past the span. */
+  end: number;
+};
+
+/**
+ * The spans of a content string that are references, or an escaped `$`.
+ *
+ * A `$` is a reference only when it spells `$item`, `$index` or `$data` and
+ * that name ends there. Every other `$` is text — a price ("$5"), a shell
+ * variable ("$XDG_CONFIG_HOME"), a template literal — and asking the model to
+ * write `$$` for those made a sentence that mentions one unable to draw.
+ *
+ * The reader (`checkReferences`) and the screen (`resolve.ts`) both walk a
+ * string with this one function: what was checked is exactly what is
+ * replaced.
+ */
+export function* referenceSpans(value: string): Generator<UiSpan> {
+  let index = 0;
+  while (index < value.length) {
+    const dollar = value.indexOf("$", index);
+    if (dollar < 0) return;
+    const rest = value.slice(dollar);
+
+    if (rest.startsWith("$$")) {
+      yield { kind: "$", path: "", start: dollar, end: dollar + 2 };
+      index = dollar + 2;
+      continue;
+    }
+
+    const match = /^\$(item|index|data)((?:\.[A-Za-z0-9_-]+)*)/.exec(rest);
+    if (match === null) {
+      index = dollar + 1;
+      continue;
+    }
+    const end = dollar + match[0].length;
+    if (/[A-Za-z0-9_-]/.test(value[end] ?? "")) {
+      // `$items` or `$database` spells a word, not the keyword.
+      index = end;
+      continue;
+    }
+
+    yield {
+      kind: match[1] as "item" | "index" | "data",
+      path: (match[2] ?? "").replace(/^\./, ""),
+      start: dollar,
+      end,
+    };
+    index = end;
+  }
+}
+
 /**
  * Check the references a content string carries.
  *
@@ -782,55 +882,36 @@ function checkPath(path: string, at: number): void {
  * reader cannot explain.
  */
 function checkReferences(value: string, at: number, scope: Scope): void {
-  let index = 0;
-  while (index < value.length) {
-    const dollar = value.indexOf("$", index);
-    if (dollar < 0) return;
+  for (const span of referenceSpans(value)) {
+    if (span.kind === "$") continue;
 
-    const rest = value.slice(dollar);
-    if (rest.startsWith("$$")) {
-      index = dollar + 2;
-      continue;
-    }
-
-    const match = /^\$(item|index|data)((?:\.[A-Za-z0-9_-]+)*)/.exec(rest);
-    const after = rest[match?.[0].length ?? 0] ?? "";
-    if (match === null || /[A-Za-z0-9_-]/.test(after)) {
-      fail(
-        at,
-        `"${rest.slice(0, 24)}" is not a reference ` +
-          '(use $item, $item.field, $data.field or $index; write $$ for "$")',
-      );
-    }
-
-    const kind = match[1] ?? "";
-    const path = (match[2] ?? "").replace(/^\./, "");
-
-    if (kind === "index") {
+    if (span.kind === "index") {
       if (scope.items === null) {
         fail(at, "$index can only be used inside a <Repeat>");
       }
-    } else if (kind === "item") {
+      continue;
+    }
+
+    if (span.kind === "item") {
       if (scope.items === null) {
         fail(at, "$item can only be used inside a <Repeat>");
       }
       // An empty path is the item itself; assertFieldOnItems checks it is a
       // value the screen can print, on every item.
-      assertFieldOnItems(path, at, scope);
-    } else {
-      if (path.length === 0) {
-        fail(at, "$data needs a field, e.g. $data.total");
-      }
-      const value = valueAt(scope.data, path);
-      if (!value.found) {
-        fail(at, `$data.${path} names no field of <Data>`);
-      }
-      if (!isScalar(value.value)) {
-        fail(at, `$data.${path} must be text, a number or true/false`);
-      }
+      assertFieldOnItems(span.path, at, scope);
+      continue;
     }
 
-    index = dollar + (match?.[0].length ?? 1);
+    if (span.path.length === 0) {
+      fail(at, "$data needs a field, e.g. $data.total");
+    }
+    const found = valueAt(scope.data, span.path);
+    if (!found.found) {
+      fail(at, `$data.${span.path} names no field of <Data>`);
+    }
+    if (!isScalar(found.value)) {
+      fail(at, `$data.${span.path} must be text, a number or true/false`);
+    }
   }
 }
 
@@ -951,14 +1032,22 @@ function requiredContentAttribute(
   return value;
 }
 
-/** A value-less boolean attribute. */
+/** A boolean attribute: bare, or given a value of `"true"` / `"false"`.
+ *
+ * A model trained on HTML writes `multiple` and `multiple="true"` both, and
+ * a wrong guess used to be a card that would not draw. Both spellings say the
+ * same one thing; any other value is still refused, because guessing what
+ * `multiple="yes"` meant is not this reader's job. */
 function flagAttribute(node: RawElement, name: string): boolean {
   const attribute = node.attrs.find((entry) => entry.name === name);
   if (attribute === undefined) return false;
-  if (attribute.value !== null) {
-    fail(attribute.at, `attribute "${name}" of <${node.name}> takes no value`);
-  }
-  return true;
+  if (attribute.value === null || attribute.value === "true") return true;
+  if (attribute.value === "false") return false;
+  fail(
+    attribute.at,
+    `attribute "${name}" of <${node.name}> is either written bare or given ` +
+      '"true" or "false"',
+  );
 }
 
 /** Take out only the text inside the tag. A mixed-in element is refused at its
@@ -1038,6 +1127,16 @@ function noContent(node: RawElement): void {
     if (child.text.trim().length > 0) {
       fail(child.at, `<${node.name}> has no content`);
     }
+  }
+}
+
+/** A tag whose text is allowed but whose elements are not. */
+function noElements(node: RawElement): void {
+  for (const child of node.children) {
+    if (child.kind !== "element") continue;
+    const hint =
+      child.name === "Option" ? ' (<Option> needs type="select")' : "";
+    fail(child.at, `<${node.name}> cannot hold <${child.name}>${hint}`);
   }
 }
 

@@ -89,6 +89,8 @@ export const UI_MARKUP_LIMITS = {
   fieldLabelChars: 200,
   /** Length of a field placeholder. */
   placeholderChars: 200,
+  /** Length of the line under a field. */
+  fieldDescriptionChars: 300,
   /** Length of the submit button label. */
   submitChars: 40,
   /** Number of options in a select. */

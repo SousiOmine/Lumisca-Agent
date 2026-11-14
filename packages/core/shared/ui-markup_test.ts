@@ -115,6 +115,7 @@ Deno.test("parseUiMarkup reads a form's fields", () => {
       <Field label="数" type="number" />
       <Field label="プラン" type="select"><Option>無料</Option><Option>Pro</Option></Field>
       <Field label="同意" type="checkbox" required />
+      <Field label="日時">毎週の曜日と時間帯を書いてください</Field>
     </Form></Card>`);
 
   assertEquals(view.blocks, [
@@ -127,6 +128,7 @@ Deno.test("parseUiMarkup reads a form's fields", () => {
           type: "text",
           required: true,
           placeholder: "例: Tera",
+          description: null,
           options: [],
         },
         {
@@ -134,6 +136,7 @@ Deno.test("parseUiMarkup reads a form's fields", () => {
           type: "number",
           required: false,
           placeholder: null,
+          description: null,
           options: [],
         },
         {
@@ -141,6 +144,7 @@ Deno.test("parseUiMarkup reads a form's fields", () => {
           type: "select",
           required: false,
           placeholder: null,
+          description: null,
           options: [
             { label: "無料", description: null },
             { label: "Pro", description: null },
@@ -151,6 +155,15 @@ Deno.test("parseUiMarkup reads a form's fields", () => {
           type: "checkbox",
           required: true,
           placeholder: null,
+          description: null,
+          options: [],
+        },
+        {
+          label: "日時",
+          type: "text",
+          required: false,
+          placeholder: null,
+          description: "毎週の曜日と時間帯を書いてください",
           options: [],
         },
       ],
@@ -206,10 +219,19 @@ Deno.test("parseUiMarkup refuses text written directly inside a tag", () => {
   );
 });
 
-Deno.test("parseUiMarkup refuses a value on a boolean attribute", () => {
+Deno.test("parseUiMarkup reads a boolean attribute bare or as true/false", () => {
+  assertEquals(
+    viewOf('<Card><List ordered="true"><Item>a</Item></List></Card>').blocks[0],
+    { type: "list", ordered: true, items: ["a"] },
+  );
+  assertEquals(
+    viewOf('<Card><List ordered="false"><Item>a</Item></List></Card>')
+      .blocks[0],
+    { type: "list", ordered: false, items: ["a"] },
+  );
   assertStringIncludes(
     problemOf('<Card><List ordered="yes"><Item>a</Item></List></Card>'),
-    "takes no value",
+    'written bare or given "true" or "false"',
   );
 });
 
@@ -562,6 +584,51 @@ Deno.test("splitChatText: a tilde fence is a card fence too", () => {
   ]);
 });
 
+Deno.test("splitChatText: words after </Card> in the fence are prose again", () => {
+  // The model writes the closing tag and then keeps talking inside the
+  // fence. The card is over at the tag, and its words are the reply's.
+  assertEquals(
+    splitChatText("```card\n<Card><Text>a</Text></Card>\n\n後です。\n```"),
+    [
+      { type: "card", markup: "<Card><Text>a</Text></Card>" },
+      { type: "text", text: "後です。" },
+    ],
+  );
+  // A </Card> written inside <Data> is JSON, not the end of the card.
+  assertEquals(
+    splitChatText(
+      '```card\n<Card><Data>{"note":"a </Card> b"}</Data>' +
+        "<Text>a</Text></Card>\n続き。\n```",
+    ),
+    [
+      {
+        type: "card",
+        markup:
+          '<Card><Data>{"note":"a </Card> b"}</Data><Text>a</Text></Card>',
+      },
+      { type: "text", text: "続き。" },
+    ],
+  );
+});
+
+Deno.test("splitChatText: a fence holding a card is a card, whatever its label", () => {
+  // The info string is a hint. A model that fences its card as html, jsx or
+  // with no label meant the card, and drawing the block as code would show
+  // the markup instead of the picture.
+  for (const info of ["", "html", "jsx"]) {
+    assertEquals(
+      splitChatText(`\`\`\`${info}\n<Card><Text>a</Text></Card>\n\`\`\``),
+      [{ type: "card", markup: "<Card><Text>a</Text></Card>" }],
+    );
+  }
+  // A sample that merely mentions the markup stays a sample.
+  assertEquals(
+    splitChatText("```html\n<div>a</div>\n<Card>\n```")[0]?.type,
+    "text",
+  );
+  assertEquals(splitChatText("```txt\n  <Cards>\n```")[0]?.type, "text");
+});
+
 Deno.test("segmentsText: the prose is what a preview reads", () => {
   assertEquals(
     segmentsText([
@@ -631,9 +698,21 @@ Deno.test("parseUiMarkup checks a reference against the data", () => {
     problemOf("<Card><Text>$index</Text></Card>"),
     "$index can only be used inside a <Repeat>",
   );
-  assertStringIncludes(
-    problemOf("<Card><Text>$env</Text></Card>"),
-    "is not a reference",
+});
+
+Deno.test("parseUiMarkup reads a $ that names no reference as text", () => {
+  // A shell variable, a price and a template literal are sentences, not
+  // references, and refusing them used to take the whole card with it.
+  const view = viewOf(
+    "<Card><Text>$XDG_CONFIG_HOME と $5 を ${name} に書く</Text></Card>",
+  );
+  assertEquals(view.blocks, [
+    { type: "text", text: "$XDG_CONFIG_HOME と $5 を ${name} に書く" },
+  ]);
+  // `$$` still stands for one `$`, so a reference can be written literally.
+  assertEquals(
+    resolveUiView(viewOf("<Card><Text>$$data.x</Text></Card>")).blocks,
+    [{ type: "text", text: "$data.x" }],
   );
 });
 

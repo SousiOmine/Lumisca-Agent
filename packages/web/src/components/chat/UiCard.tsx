@@ -33,24 +33,37 @@ export function UiCard({
   view,
   onSend,
 }: {
-  view: UiResolvedView | null;
+  view: UiResolvedView;
   /** Send the card's answer as the user's next message. */
   onSend: (text: string) => void;
 }) {
-  const t = useT();
-  if (view === null) {
-    return (
-      <section className="ui-card ui-card-invalid">
-        <p>{t("panels.ui.invalid")}</p>
-      </section>
-    );
-  }
   return (
     <section className="ui-card">
       {view.title !== null && <h3 className="ui-card-title">{view.title}</h3>}
       {view.blocks.map((block, index) => (
         <BlockView key={index} block={block} onSend={onSend} />
       ))}
+    </section>
+  );
+}
+
+/**
+ * A card the reader refused: the note, and the markup behind a disclosure.
+ *
+ * What the model wrote into the fence is the agent's own words, and a card
+ * that could not be drawn must not swallow them. Opening the disclosure shows
+ * the source as written, so the reader can still read the content and can
+ * tell the agent what it got wrong.
+ */
+export function InvalidCard({ markup }: { markup: string }) {
+  const t = useT();
+  return (
+    <section className="ui-card ui-card-invalid">
+      <p>{t("panels.ui.invalid")}</p>
+      <details>
+        <summary>{t("panels.ui.markup")}</summary>
+        <pre className="ui-card-source">{markup.trim()}</pre>
+      </details>
     </section>
   );
 }
@@ -348,6 +361,9 @@ function FieldView({
         <label htmlFor={id}>
           {field.label}
           {field.required && <span className="ui-card-required">*</span>}
+          {field.description !== null && (
+            <span className="ui-card-field-desc">{field.description}</span>
+          )}
         </label>
       </div>
     );
@@ -358,6 +374,10 @@ function FieldView({
       {field.required && <span className="ui-card-required">*</span>}
     </label>
   );
+  const description =
+    field.description === null ? null : (
+      <span className="ui-card-field-desc">{field.description}</span>
+    );
   if (field.type === "select") {
     return (
       <div className="ui-card-field">
@@ -375,6 +395,7 @@ function FieldView({
             </option>
           ))}
         </select>
+        {description}
       </div>
     );
   }
@@ -395,6 +416,7 @@ function FieldView({
           value={text}
           onChange={onChangeText}
         />
+        {description}
       </div>
     );
   }
@@ -409,6 +431,7 @@ function FieldView({
         value={text}
         onChange={onChangeText}
       />
+      {description}
     </div>
   );
 }
