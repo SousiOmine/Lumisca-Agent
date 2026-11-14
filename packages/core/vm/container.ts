@@ -34,6 +34,7 @@ import {
   VM_COPY_TIMEOUT_MS,
   VM_DBUS_ADDRESS,
   VM_DESKTOP_SCRIPT,
+  VM_DESKTOP_SLOTS,
   VM_DISPLAY,
   VM_GID,
   VM_HOME_VOLUME,
@@ -41,6 +42,7 @@ import {
   VM_IMAGE_NAME,
   VM_MANAGED_LABEL,
   VM_PROBE_IMAGE,
+  VM_PROFILE_ROOT,
   VM_REMOVE_TIMEOUT_MS,
   VM_RUN_TIMEOUT_MS,
   VM_SCREEN_HEIGHT,
@@ -49,8 +51,12 @@ import {
   VM_STOP_TIMEOUT_MS,
   VM_UID,
   VM_USER,
+  VM_VNC_PORT,
   VM_VNC_PORT_RANGE,
+  VM_VNC_RFB_PORT,
   VM_WORKDIR,
+  vmBusSocketOf,
+  vmDisplayOf,
   vmWebsockifyPortOf,
 } from "./contract.ts";
 
@@ -138,6 +144,13 @@ const CONTAINER_FACTS_FORMAT = `{{.Id}}\t{{.State.Status}}\t{{.State.StartedAt}}
  *
  * `sudo -n` is a false answer rather than a hang when the rule is missing:
  * it never prompts.
+ *
+ * The last probe asks the machine's desktop helper (`$2`) for the values only
+ * it can see — the slot count, where its displays start, the ports, the
+ * profile root and how a desktop's session bus is named — and the reader
+ * compares that one line with what contract.ts says. A helper whose numbering
+ * drifted would put the pane on a port nothing listens on, or the semantic
+ * tools on another agent's bus.
  */
 const CONTRACT_PROBE_SCRIPT = `
 printf 'env=%s|%s|%s\\n' "$DISPLAY" "$(id -u)" "$(pwd)"
@@ -161,6 +174,11 @@ if error=$(python3 "$1" '{"command":"find","app":"definitely-not-running"}' 2>&1
   printf 'helper=%s\\n' "$error"
 else
   printf 'helper_error=%s\\n' "$error"
+fi
+if desktops=$(sh "$2" contract 2>&1); then
+  printf 'desktop=%s\\n' "$desktops"
+else
+  printf 'desktop_error=%s\\n' "$desktops"
 fi
 `;
 
@@ -572,11 +590,19 @@ export function createVmManager(options: VmManagerOptions): VmManager {
    * One `podman exec`, not four: the values are printed by a single shell,
    * which also answers whether the screen is up, whether sudo works without a
    * password, whether the accessibility bus is where the helpers expect it,
-   * and whether the helper itself runs. Each of those used to be its own
-   * spawn (or its own tool call, which is later and worse). */
+   * whether the helper itself runs, and whether the desktop helper's
+   * numbering matches this file. Each of those used to be its own spawn (or
+   * its own tool call, which is later and worse). */
   async function verifyContract(): Promise<string | null> {
     const result = await run(
-      podmanExec(["sh", "-c", CONTRACT_PROBE_SCRIPT, "sh", VM_A11Y_HELPER]),
+      podmanExec([
+        "sh",
+        "-c",
+        CONTRACT_PROBE_SCRIPT,
+        "sh",
+        VM_A11Y_HELPER,
+        VM_DESKTOP_SCRIPT,
+      ]),
       { timeoutMs: 60_000, maxOutput: 8192 },
     );
     // Each line is `name=value`; a probe that could not run leaves its line
@@ -625,12 +651,13 @@ export function createVmManager(options: VmManagerOptions): VmManager {
         `password: ${firstLine(fields.get("sudo_error") ?? "")}`
       );
     }
-    // The semantic tools (vm_find / vm_do / vm_wait) read the machine's
-    // widgets through one accessibility bus, reached by a fixed address, and
-    // only see an application that was started with accessibility on. Each of
-    // the three fails in a way that looks like something else — a find that
-    // answers "no such application", an app whose web area is empty — so the
-    // machine is refused at start-up instead of at the first tool call.
+    // The semantic tools (vm_find / vm_do / vm_wait) read a desktop's widgets
+    // through the session bus of that desktop (desktop.sh starts one each, at
+    // a fixed address the server can name), and only see an application that
+    // was started with accessibility on. Each failure looks like something
+    // else — a find that answers "no such application", an app whose web area
+    // is empty — so the machine is refused at start-up instead of at the
+    // first tool call.
     const bus = fields.get("dbus");
     if (bus !== VM_DBUS_ADDRESS) {
       return (
@@ -656,6 +683,28 @@ export function createVmManager(options: VmManagerOptions): VmManager {
       return (
         `the machine's accessibility helper did not run: ` +
         `${firstLine(fields.get("helper_error") ?? "")}`
+      );
+    }
+    // The desktop helper answers for the per-agent desktops. Its line is
+    // compared verbatim: every value on it is one the server also writes
+    // down, and a difference would show up later as a pane that cannot
+    // connect or a tool that reads the wrong screen.
+    const desktops = fields.get("desktop");
+    if (desktops === undefined) {
+      return (
+        `the machine's desktop helper did not answer: ` +
+        `${firstLine(fields.get("desktop_error") ?? "")}`
+      );
+    }
+    const expectedDesktops =
+      `slots=${VM_DESKTOP_SLOTS} display=${vmDisplayOf(0)} ` +
+      `screen=${VM_SCREEN_WIDTH}x${VM_SCREEN_HEIGHT} vnc=${VM_VNC_RFB_PORT} ` +
+      `websockify=${VM_VNC_PORT} profile=${VM_PROFILE_ROOT} ` +
+      `bus=${vmBusSocketOf(0)}`;
+    if (desktops !== expectedDesktops) {
+      return (
+        `the machine's desktops are "${desktops}", expected ` +
+        `"${expectedDesktops}"`
       );
     }
     return null;

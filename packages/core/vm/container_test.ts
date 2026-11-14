@@ -12,14 +12,19 @@ import {
   VM_A11Y_HELPER,
   VM_CONTAINER_NAME,
   VM_DBUS_ADDRESS,
+  VM_DESKTOP_SLOTS,
   VM_DISPLAY,
   VM_HOME_VOLUME,
   VM_IMAGE_DIGEST_LABEL,
+  VM_PROFILE_ROOT,
   VM_SCREEN_HEIGHT,
   VM_SCREEN_WIDTH,
   VM_UID,
   VM_VNC_PORT,
+  VM_VNC_RFB_PORT,
   VM_WORKDIR,
+  vmBusSocketOf,
+  vmDisplayOf,
 } from "./contract.ts";
 
 /**
@@ -102,19 +107,27 @@ async function currentDigest(dir: string): Promise<string> {
  * works, and whether the semantic tools' bus, accessibility setting and helper
  * are in place. A probe that cannot run leaves its own line out, so tests
  * change one line to state one drift. */
+const DESKTOP_CONTRACT =
+  `slots=${VM_DESKTOP_SLOTS} display=${vmDisplayOf(0)} ` +
+  `screen=${VM_SCREEN_WIDTH}x${VM_SCREEN_HEIGHT} vnc=${VM_VNC_RFB_PORT} ` +
+  `websockify=${VM_VNC_PORT} profile=${VM_PROFILE_ROOT} ` +
+  `bus=${vmBusSocketOf(0)}`;
+
 const CONTRACT_OK =
   `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
   `geometry=${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n` +
   `sudo=ok\n` +
   `dbus=${VM_DBUS_ADDRESS}\n` +
   `toolkit=true\n` +
-  `helper={"error":"no running application matches 'definitely-not-running'"}\n`;
+  `helper={"error":"no running application matches 'definitely-not-running'"}\n` +
+  `desktop=${DESKTOP_CONTRACT}\n`;
 
-/** The three lines the accessibility probes print when everything is in
+/** The lines the accessibility and desktop probes print when everything is in
  * place. A test that states one drift keeps them and changes that one line. */
 const A11Y_LINES =
   `dbus=${VM_DBUS_ADDRESS}\ntoolkit=true\n` +
-  `helper={"error":"no running application matches 'x'"}\n`;
+  `helper={"error":"no running application matches 'x'"}\n` +
+  `desktop=${DESKTOP_CONTRACT}\n`;
 
 /** The answer of one `podman container inspect`: the instance, its state and
  * the screen's published port, as the manager's template asks for them. */
@@ -287,6 +300,34 @@ Deno.test("status: a drifted contract is reported as stopped with the reason", a
     assert(
       status.reason.includes("1024x768"),
       `reason must name the mismatch: ${status.reason}`,
+    );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("status: desktops numbered otherwise than the server expects are refused", async () => {
+  const dir = await containerDir();
+  const digest = await currentDigest(dir);
+  // The helper and the server both write the numbering down; a machine built
+  // from a helper that disagrees would put the pane on a port nothing
+  // listens on, so it is refused at start-up.
+  const { run } = makeRunner({
+    answers: [
+      {
+        match: /printf .*DISPLAY/,
+        result: ok(CONTRACT_OK.replace("display=:100", "display=:99")),
+      },
+      ...runningMachine(digest).answers,
+    ],
+  });
+  try {
+    const manager = createVmManager({ containerDir: dir, run });
+    const status = await manager.status();
+    assertEquals(status.state, "stopped");
+    assert(
+      status.reason.includes("display=:99"),
+      `reason must name the drift: ${status.reason}`,
     );
   } finally {
     await Deno.remove(dir, { recursive: true });

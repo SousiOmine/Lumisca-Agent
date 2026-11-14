@@ -122,16 +122,21 @@ RUN chmod 0755 /usr/local/lib/lumisca/desktop.sh
 COPY a11y.py /usr/local/lib/lumisca/a11y.py
 RUN chmod 0644 /usr/local/lib/lumisca/a11y.py
 
-# xdotool, scrot and Chromium read DISPLAY from the environment; entry.sh's
-# export does not reach `podman exec`.
+# The machine's own screen. xdotool, scrot and Chromium read DISPLAY from the
+# environment and entry.sh's export does not reach `podman exec`, so this is
+# what a command that names no desktop gets. The agents' desktops are
+# `:100`-`:103`: the server sets DISPLAY per call (see vm/contract.ts and
+# container/desktop.sh).
 ENV DISPLAY=:99
 
-# The session bus the semantic tools talk to. entry.sh starts it at exactly
-# this path and switches accessibility on; the accessibility bus itself is
-# found through it (org.a11y.Bus), so nothing else needs to be named. A
-# `podman exec` from the server inherits none of entry.sh's exports, so the
-# address is repeated here (and in vm/contract.ts, which is verified against
-# the running container).
+# The machine's own session bus, the one its own screen (:99) uses. entry.sh
+# starts it at exactly this path and switches accessibility on; the
+# accessibility bus itself is found through it (org.a11y.Bus), so nothing else
+# needs to be named. A `podman exec` from the server inherits none of
+# entry.sh's exports, so the address is repeated here (and in vm/contract.ts,
+# which is verified against the running container). Each agent's desktop has
+# its own bus (`session-<slot>.sock`, started by container/desktop.sh), and the
+# server names that one for the tools that work on the screen.
 ENV DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/lumisca-dbus/session.sock
 
 USER agent

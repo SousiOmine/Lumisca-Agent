@@ -1058,6 +1058,8 @@ Deno.test("stella API: the conversation's stream carries only the conversation",
         Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
       stop: () => Promise.resolve(),
       vncPort: () => Promise.resolve(null),
+      startDesktop: () => Promise.resolve(),
+      stopDesktop: () => Promise.resolve(),
     });
     const agentRes = await json(base, "/api/stella/agents", {
       method: "POST",
@@ -1157,6 +1159,8 @@ Deno.test("stella API: a row carries what its conversation last said", async () 
         Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
       stop: () => Promise.resolve(),
       vncPort: () => Promise.resolve(1),
+      startDesktop: () => Promise.resolve(),
+      stopDesktop: () => Promise.resolve(),
     });
 
     // A conversation that has not been opened says nothing: the row is one
@@ -1213,6 +1217,8 @@ Deno.test("stella API: agents are listed, renamed and deleted with their convers
         Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
       stop: () => Promise.resolve(),
       vncPort: () => Promise.resolve(1),
+      startDesktop: () => Promise.resolve(),
+      stopDesktop: () => Promise.resolve(),
     });
 
     // The first read creates the starter agent (a fresh stella mode must
@@ -1280,6 +1286,8 @@ Deno.test("stella API: an agent's name and icon are saved together and served", 
         Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
       stop: () => Promise.resolve(),
       vncPort: () => Promise.resolve(1),
+      startDesktop: () => Promise.resolve(),
+      stopDesktop: () => Promise.resolve(),
     });
 
     const created = await json(base, "/api/stella/agents", {
@@ -1403,6 +1411,8 @@ Deno.test("stella API: a refused name or picture changes nothing", async () => {
         Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
       stop: () => Promise.resolve(),
       vncPort: () => Promise.resolve(1),
+      startDesktop: () => Promise.resolve(),
+      stopDesktop: () => Promise.resolve(),
     });
     const created = await json(base, "/api/stella/agents", {
       method: "POST",
@@ -1482,6 +1492,8 @@ Deno.test("stella API: an icon patch is refused with the reason it failed", asyn
         Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
       stop: () => Promise.resolve(),
       vncPort: () => Promise.resolve(1),
+      startDesktop: () => Promise.resolve(),
+      stopDesktop: () => Promise.resolve(),
     });
     const created = await json(base, "/api/stella/agents", {
       method: "POST",
@@ -1563,6 +1575,8 @@ Deno.test("stella API: an icon URL answers only for a name that agent has", asyn
         Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
       stop: () => Promise.resolve(),
       vncPort: () => Promise.resolve(1),
+      startDesktop: () => Promise.resolve(),
+      stopDesktop: () => Promise.resolve(),
     });
     const first = (await (
       await json(base, "/api/stella/agents", {

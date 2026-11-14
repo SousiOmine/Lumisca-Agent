@@ -89,6 +89,9 @@ a shell, a browser and a screen, and nothing outside it. Your folder is
 ${workdir}, where file tools resolve paths and bash starts. You are
 \`${VM_USER}\` with passwordless \`sudo\`. Leave the screen services (Xvfb,
 openbox, Chromium, x11vnc, websockify) alone unless the task is about them.
+A GUI program is started with \`vm_launch\`: that is what opens it on your
+desktop. One started from \`bash\` opens on the machine's own screen, which no
+conversation shows.
 
 Your folder holds MEMORY.md, where you keep notes for later runs: write
 there, with the ordinary file tools, what you should remember next time —

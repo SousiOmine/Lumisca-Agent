@@ -110,8 +110,10 @@ function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 interface StellaPaneProps {
+  /** The machine is running. Which desktop the picture comes from is the
+   * server's business: the relay resolves the conversation's agent to its own
+   * screen. */
   running: boolean;
-  vncPort: number | null;
   /** The folders lent from this computer to this conversation. They are drawn
    * above the screen: what the agent can reach is a fact about the run, and
    * the way to take it back has to be where the loan is named. */
@@ -163,7 +165,6 @@ function waitForSize(element: HTMLElement, timeoutMs: number): Promise<void> {
 
 export function StellaPane({
   running,
-  vncPort,
   shares,
   agentId,
   handover,
@@ -471,7 +472,7 @@ export function StellaPane({
   useEffect(() => {
     const host = hostRef.current;
     if (host === null) return;
-    if (!running || vncPort === null) {
+    if (!running) {
       setState("idle");
       return;
     }
@@ -565,7 +566,7 @@ export function StellaPane({
         // Already gone (the machine stopped); nothing to do.
       }
     };
-  }, [running, vncPort, agentId, t]);
+  }, [running, agentId, t]);
 
   // The view-only flag follows the hand-over: the agent owns the pointer
   // while it works, the user owns it while the run waits for them. Applied

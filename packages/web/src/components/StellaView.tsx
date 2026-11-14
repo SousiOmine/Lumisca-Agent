@@ -339,7 +339,6 @@ export function StellaView({
       {pane.mounted && (
         <StellaPane
           running={machineRunning}
-          vncPort={status?.vncPort ?? null}
           shares={shares}
           agentId={agent?.id ?? null}
           handover={

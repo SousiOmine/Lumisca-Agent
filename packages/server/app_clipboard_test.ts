@@ -61,6 +61,8 @@ Deno.test("stella clipboard: the machine's text crosses the server, in UTF-8", a
         Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
       stop: () => Promise.resolve(),
       vncPort: () => Promise.resolve(null),
+      startDesktop: () => Promise.resolve(),
+      stopDesktop: () => Promise.resolve(),
     });
     const created = await json(base, "/api/stella/agents", {
       method: "POST",

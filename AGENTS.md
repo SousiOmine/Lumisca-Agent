@@ -203,11 +203,24 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
 
 - **必要環境**: Linux と rootless podman だけです。`podman --version` が通っても起動できるとは限らないので、素のイメージを 1 回起動して確かめ（`VM_PROBE_IMAGE`）、失敗すれば `podman_unusable` として提示を断ります。
 - **イメージ**: `packages/core/vm/container/Containerfile` から初回起動時にビルドします。配布物では `scripts/build-server.ts` が `stella-container/` をバイナリの隣へ同梱し、`packages/server/paths.ts` が場所を解決します。定義のダイジェストを `lumisca.container-digest` ラベルに焼き、ずれていればイメージを作り直します（`/home/agent` は `podman cp` で退避して戻します）。
-- **契約値**: 画面サイズ（1280x800）、DISPLAY、uid/gid、作業ディレクトリ、パスワード無し `sudo` は `packages/core/vm/contract.ts` と Containerfile / entry.sh の両方にあります。起動時に実コンテナと突き合わせ（`sudo -n true` を含む）、ずれていれば起動を失敗させます。
+- **契約値**: 画面サイズ（1280x800）、マシン自身の DISPLAY、uid/gid、作業ディレクトリ、パスワード無し `sudo` は `packages/core/vm/contract.ts` と Containerfile / entry.sh の両方にあります。起動時に実コンテナと突き合わせ（`sudo -n true` を含む）、ずれていれば起動を失敗させます。デスクトップの値（スロット数、表示番号、ポート、プロファイルの置き場、バスの名前）は `container/desktop.sh contract` が 1 行で答え、同じ `podman exec` の中で `contract.ts` の値と突き合わせます。
 - **落ちたマシンは podman が戻す**: `podman create` に `--restart=unless-stopped` を渡します。マシンは会話を開くときにしか起動されないので、自前で死んだコンテナは止まったままになり、全ツールが `container state improper` を返していました。`podman stop` は手動停止として扱われるため、アプリの終了（`LumiscaCore.close()`）で止めたマシンは戻りません。送信とルーチン実行は起動を確かめてから走ります（`ensureStellaReady`）。
 - **本番のマシンに触るテストは明示したときだけ**: `packages/core/stella_live_test.ts` は利用者の `lumisca-stella` をそのまま使います。`LUMISCA_STELLA_LIVE=1` が無ければ状態も読まずに skip し、`core.close()` の前に `setStellaVm(undefined)` で切り離します——`close()` は持っているマシンを止めるためです。`scripts/probe-stella.ts` も同じ理由で切り離してから閉じます。`bun run test` に含まれるので、ここを緩めるとテストを回しただけで利用中のマシンが落ちます。
 - **権限**: `agent` は `sudo` を使えます。コンテナの外へは出られず（ホストをマウントせず、uid 0 は `--userns keep-id` で写像）、既定を root にしないのは Chromium のサンドボックスを使うためです。
 - **同梱ファイルは 1 段まで**: `stella-container/Containerfile` は可、`stella-container/helper/a11y.py` は不可です。アーカイブを読むのは動いているサーバーのバイナリで、深さの規則はビルド時に焼き込まれます。深くすると、その版より前にインストールされたサーバーが更新を適用できません。`archive.ts` の `MAX_PACKAGE_DEPTH` を上げるのは、旧版の更新を諦めるときだけにしてください。
+
+### デスクトップ（エージェントごと）
+
+会話（エージェント）ごとに 1 つのデスクトップを持ちます。X サーバ、ウィンドウマネージャ、セッションバス、専用プロファイルのブラウザ、VNC の橋で 1 組です（`container/desktop.sh`、`vm/machine.ts`）。
+
+- **4 枠、表示は `:100` から**: `VM_DESKTOP_SLOTS` = 4 で、X は `:100`〜`:103`（`vmDisplayOf`）、RFB は 5900 番台、websockify は 6080 番台です。容器は 6080-6083 を範囲で公開します（`VM_VNC_PORT_RANGE`）。`:99` はマシン自身の画面で、契約検査の対象と、デスクトップを持たないコマンドの `DISPLAY` です——`bash` から GUI を起こすとそこに出て、どの会話にも映りません。5 人目は最後に使った枠を明け渡します。
+- **起こすのは画面を使ったとき**: 画面のツール、意味の層、`vm_launch`、クリップボードだけが `StellaMachine.execFor` の継ぎ目（そのスロットの `DISPLAY` と `DBUS_SESSION_BUS_ADDRESS`）を使い、最初の 1 回で `desktop.sh start` を呼びます。ファイル・シェル・バックグラウンド実行は素の継ぎ目です（`ls` のたびにブラウザを起こさないため）。この分離は事故を減らすためのもので、境界ではありません（コンテナ内のプロセスは `DISPLAY` を名指しすればどの画面にも繋がります）。
+- **枠は 1 エージェントのもの**: `machine.ts` は枠を `await` の前に同期的に予約します（同時に使い始めた 2 人が同じ枠を取りません）。コンテナ側も `desktop.sh` が持ち主を `$STATE_DIR/<slot>/agent` に書き、違うエージェントの `start` はブラウザと橋を落としてから始めます。サーバーが記憶を失っても（再起動）、他人のブラウザには入りません。
+- **再起動で枠の記憶を捨てる**: `podman stop` は中のプロセスを全部落とすので、`ensureReady`（コンテナを起こしたとき）、`stop()`、`set()` が `#desktops` を捨てます。コンテナ側では `entry.sh` の先頭の `desktop.sh reset` が前回の pid ファイルと X のロックを消します（どちらも `/tmp` に残り、pid は再利用され、ロックは Xvfb の起動を止めるためです）。`alive` は `kill -0` ではなく `/proc/<pid>/cmdline` で確かめます（ゾンビと再利用に成功してしまうため）。
+- **プロファイルとログイン**: `$HOME/.config/chromium/<agent id>` がエージェントの同一性です（`VM_PROFILE_ROOT`）。枠を明け渡して起こし直してもログインは続きます。この変更より前の共有プロファイル（`~/.config/chromium` 直下）は移行しません。
+- **バスも枠ごと**: `desktop.sh` が `session-<slot>.sock` を立て、`execFor` がそのアドレスを積みます。AT-SPI のレジストリはセッションバス単位で、さらに at-spi 自身のバスは `DISPLAY` から名付けられる（`~/.cache/at-spi/bus_100`）ので、**デスクトップのバスはその `DISPLAY` で起こします**——共有すると `vm_find` が他のエージェントの窓を読めてしまいます。ref のスナップショットも `a11y.py` が表示ごとのディレクトリに分けます。
+- **起動は待ち合わせてから返す**: `desktop.sh start` は X の応答と websockify の待ち受けを確かめ、上がらなければ非 0 で終わります。ペインはポートを得た瞬間に繋ぐためです。
+- **ペインは会話のエージェントの画面**: `GET /api/stella/screen` は `?agent=<id>` を取り、そのエージェントの枠のホストポートへ中継します。ペインが繋ぐかどうかは「マシンが動いているか」だけで決めます（ポートはサーバーが解決します）。中継はデスクトップの起動に失敗したら 1011 で閉じます——ハンドラの Promise は待たれないので、投げるとペインが「接続中」で止まります。
 
 ### 会話
 
@@ -269,10 +282,10 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
   - ref（`@s12345:e7`）はスナップショットに属し、`vm_do` は role と name が変わっていれば拒否します。経路は `a11y.py` の `walk` が tuple で組み立て、読み戻しも role と name で引き直します。
   - ウィンドウの題名は frame の name なので、保存後の確認は `vm_wait` で待つのが確実です。xterm のようにバスへ出ないアプリは `vm_find` に出ません。
 - **アクセシビリティはイメージ側の設定**: `entry.sh` がアプリの起動前に `gsettings set org.gnome.desktop.interface toolkit-accessibility true` を実行します。GTK アプリはこの値を起動時に 1 度だけ読み、後から変えてもバスに出ません。Chromium には `--force-renderer-accessibility` を付けます。
-  - 契約値は `contract.ts` の `VM_DBUS_ADDRESS` / `VM_A11Y_GSETTINGS_KEY` / `VM_A11Y_HELPER` で、`verifyImageContract` が 1 回の `podman exec` で検査し、欠ければ起動を落とします。`containerFilesDigest` はサブディレクトリも含めます。
+  - 契約値は `contract.ts` の `VM_DBUS_ADDRESS`（マシン自身のバス）/ `VM_A11Y_GSETTINGS_KEY` / `VM_A11Y_HELPER` で、`verifyImageContract` が 1 回の `podman exec` で検査し、欠ければ起動を落とします。デスクトップは `vmBusAddressOf(slot)` の自分のバスを使います。`containerFilesDigest` はサブディレクトリも含めます。
   - スクロールは X11 のホイールボタン（4 上・5 下・6 左・7 右）で、正の値で 5 を送ります（`VM_SCROLL_NOTCH` = 100、上限 20）。
 - **受け渡し**: 人が必要な手順は `vm_ask_user` で待ちます（`packages/core/vm/handover.ts`）。待機中は画面ペインが操作可能になり、エージェントは止まっています。待ちには 15 分の期限があり（`HANDOVER_TIMEOUT_MS`）、過ぎると `handover_end` でペインを閉じてから「利用者が来なかった」をツールの結果として返します（実行は止めません。待ち続けるとルーチンが順番待ちで止まります）。期限は `handover` イベントとスナップショットの `expiresAt` に載せ、開始は通知の対象です。待ちを解く経路を増やすときは、`cancelAll` とイベントの後始末、タイマーの片付けも確認してください。
-- **クリップボードは VNC を通さない**: 受け渡し中は、この PC と画面のあいだで文字が往復します。x11vnc の cut text は ISO 8859-1 で Extended Clipboard にも対応していないため、日本語は `?` になります。文字は `GET/POST /api/stella/conversations/:agentId/clipboard` でサーバーを通り、VM の中では `xclip` が CLIPBOARD 選択を読み書きします（`packages/core/vm/clipboard.ts`）。noVNC に残るのは、選択が変わったことを知らせる `clipboard` イベント（本文はラテン 1 の代役なので使わない）と、`Ctrl+V`（`Cmd+V` / `Ctrl+Shift+V`）を画面へ送る `sendKey` だけです。
+- **クリップボードは VNC を通さない**: 受け渡し中は、この PC と画面のあいだで文字が往復します。x11vnc の cut text は ISO 8859-1 で Extended Clipboard にも対応していないため、日本語は `?` になります。文字は `GET/POST /api/stella/conversations/:agentId/clipboard` でサーバーを通り、VM の中では `xclip` が CLIPBOARD 選択を読み書きします（`packages/core/vm/clipboard.ts`）。`xclip` はその会話のエージェントの画面（`execFor`）で動きます——選択はディスプレイのもので、マシンの `:99` に書いてもどの会話にも出ません。noVNC に残るのは、選択が変わったことを知らせる `clipboard` イベント（本文はラテン 1 の代役なので使わない）と、`Ctrl+V`（`Cmd+V` / `Ctrl+Shift+V`）を画面へ送る `sendKey` だけです。
   - **書き込みだけが受け渡しを要求する**: `POST` は `getPendingHandover` を確かめ、実行中の画面のクリップボードを変えません。読み取りは変えないので確かめません（待機の終わりと競合しても害がないためです）。
   - **文字は stdin で渡す**: 引数にすると VM 内のプロセス一覧から読めます（パスワードが入りえます）。書いた直後に読み戻して一致を確かめてください——`xclip -i` は fork して選択の所有者として残るので、そこで失敗すれば画面へ貼る前に分かります。
   - **イメージに `xclip` が要る**: `container/Containerfile` が持っています。足した／変えたときは `containerFilesDigest` が変わるので、次の起動でイメージが自動で再ビルドされます（`/home/agent` は退避・復元）。

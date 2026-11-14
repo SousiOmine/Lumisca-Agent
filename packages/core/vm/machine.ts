@@ -13,7 +13,12 @@ import type {
   VmProgress,
 } from "./container.ts";
 import { createVmExec, createVmExecBytes } from "./container.ts";
-import { VM_DESKTOP_SLOTS, VM_SKILLS_DIR, vmDisplayOf } from "./contract.ts";
+import {
+  VM_DESKTOP_SLOTS,
+  VM_SKILLS_DIR,
+  vmBusAddressOf,
+  vmDisplayOf,
+} from "./contract.ts";
 import { discoverVmSkills } from "./skills.ts";
 
 /** Everything the stella machine holds between calls: the manager, the exec
@@ -54,6 +59,10 @@ export class StellaMachine {
     this.#verdict = undefined;
     this.#seams = undefined;
     this.#skills.clear();
+    // The slots belonged to the machine that just went away: a different
+    // container has no desktop running.
+    this.#desktops.clear();
+    this.#slotUse.clear();
   }
 
   get(): VmManager | undefined {
@@ -116,6 +125,10 @@ export class StellaMachine {
       this.#verdict = undefined;
       try {
         await vm.start();
+        // The machine was down: every desktop that was running died with it,
+        // and the slot each agent held no longer names a display.
+        this.#desktops.clear();
+        this.#slotUse.clear();
         void onProgress;
       } finally {
         this.#starting = undefined;
@@ -176,6 +189,9 @@ export class StellaMachine {
   async stop(): Promise<void> {
     await this.#vm?.stop();
     this.#verdict = undefined;
+    // The container and everything in it is gone, desktops included.
+    this.#desktops.clear();
+    this.#slotUse.clear();
   }
 
   /**
@@ -195,8 +211,14 @@ export class StellaMachine {
       await known.started;
       return known.slot;
     }
-    const slot = await this.#takeSlot(vm);
-    const started = vm.startDesktop(slot, agentId);
+    // The slot is reserved synchronously, before anything is awaited: two
+    // conversations that start at the same moment would otherwise both read
+    // the same free slot and one of them would end up in the other's browser.
+    const { slot, evicted } = this.#reserve();
+    const started = (async () => {
+      if (evicted) await vm.stopDesktop(slot);
+      await vm.startDesktop(slot, agentId);
+    })();
     this.#desktops.set(agentId, { slot, started });
     this.#slotUse.set(slot, Date.now());
     try {
@@ -219,13 +241,17 @@ export class StellaMachine {
     return await vm.vncPort(slot);
   }
 
-  async #takeSlot(vm: VmManager): Promise<number> {
+  /** A free slot, or the one used least recently, whose agent gives it up
+   * (`evicted`). Synchronous on purpose (see `desktopFor`): the caller can
+   * only start the desktop after this returns, and by then the slot must no
+   * longer look free. */
+  #reserve(): { slot: number; evicted: boolean } {
     const taken = new Map<number, string>();
     for (const [agent, desktop] of this.#desktops) {
       taken.set(desktop.slot, agent);
     }
     for (let slot = 0; slot < VM_DESKTOP_SLOTS; slot++) {
-      if (!taken.has(slot)) return slot;
+      if (!taken.has(slot)) return { slot, evicted: false };
     }
     let oldestSlot = 0;
     let oldestAt = Number.POSITIVE_INFINITY;
@@ -239,17 +265,21 @@ export class StellaMachine {
     const evicted = taken.get(oldestSlot);
     if (evicted !== undefined) this.#desktops.delete(evicted);
     this.#slotUse.delete(oldestSlot);
-    await vm.stopDesktop(oldestSlot);
-    return oldestSlot;
+    return { slot: oldestSlot, evicted: true };
   }
 
   /**
-   * One agent's exec seam: every call carries that desktop's `DISPLAY`, and
-   * starts the desktop first when the agent has not used its screen yet.
+   * One agent's exec seam: every call carries that desktop's `DISPLAY` and
+   * session bus, and starts the desktop first when the agent has not used its
+   * screen yet.
    *
-   * This is the only place a session's display is decided. The screen tools,
-   * the semantic tools, `vm_launch`, bash and a background command all go
-   * through here, so they all land on the same desktop.
+   * The screen tools, the semantic tools, `vm_launch` and the clipboard take
+   * this seam, so they all land on the same desktop and on its own
+   * accessibility tree. Files, the shell and a background command keep the
+   * machine's seam: starting a browser under `ls` would be a desktop for
+   * nothing. A GUI program is therefore started with `vm_launch`; one started
+   * from `bash` opens on the machine's own display, which no conversation
+   * shows.
    */
   execFor(agentId: string): VmExec | undefined {
     const base = this.exec();
@@ -258,7 +288,11 @@ export class StellaMachine {
       const slot = await this.desktopFor(agentId);
       return base(command, {
         ...exec,
-        env: { ...exec.env, DISPLAY: vmDisplayOf(slot) },
+        env: {
+          ...exec.env,
+          DISPLAY: vmDisplayOf(slot),
+          DBUS_SESSION_BUS_ADDRESS: vmBusAddressOf(slot),
+        },
       });
     };
   }
@@ -271,7 +305,11 @@ export class StellaMachine {
       const slot = await this.desktopFor(agentId);
       return base(command, {
         ...exec,
-        env: { ...exec.env, DISPLAY: vmDisplayOf(slot) },
+        env: {
+          ...exec.env,
+          DISPLAY: vmDisplayOf(slot),
+          DBUS_SESSION_BUS_ADDRESS: vmBusAddressOf(slot),
+        },
       });
     };
   }

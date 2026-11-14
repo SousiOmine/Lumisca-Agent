@@ -304,14 +304,15 @@ export class StellaMachineService {
     return this.deps.handovers.for(sessionId);
   }
 
-  /** The machine's clipboard of one conversation (see vm/clipboard.ts).
+  /** The clipboard of one conversation's screen (see vm/clipboard.ts).
    *
    * Built per call rather than kept on the runtime: it holds nothing between
    * calls, and the chat's screen pane asks for it only while the user is at
-   * the screen. A selection inside the machine is the machine's own state, so
-   * this needs the machine to be reachable — a conversation whose machine was
-   * replaced between opens must not be answered from an old seam (the seam is
-   * rebuilt with the machine, see StellaMachine).
+   * the screen. It goes through the AGENT's seam, not the machine's: an X
+   * selection belongs to a display, and the machine's own (`:99`) is on no
+   * conversation's screen. A conversation whose machine was replaced between
+   * opens must not be answered from an old seam (the seam is rebuilt with the
+   * machine, see StellaMachine).
    */
   private clipboardOf(session: SessionInfo): VmClipboard {
     if (session.stella !== true) {
@@ -320,7 +321,14 @@ export class StellaMachineService {
         "not_found",
       );
     }
-    const exec = this.deps.machine.exec();
+    const agentId = session.agentId;
+    if (agentId === undefined) {
+      throw new CoreError(
+        "The stella session has no agent: its screen has no clipboard",
+        "invalid",
+      );
+    }
+    const exec = this.deps.machine.execFor(agentId);
     if (exec === undefined) {
       throw new CoreError(
         "stella mode is not available: the virtual machine is not set up for this installation",
@@ -367,9 +375,18 @@ export class StellaMachineService {
     // would be a browser for nothing. A program is started with `vm_launch`,
     // which is on this seam.
     const exec = baseExec;
-    const screenExec = this.deps.machine.execFor(agentId) ?? baseExec;
-    const screenExecBytes =
-      this.deps.machine.execBytesFor(agentId) ?? baseExecBytes;
+    // Both build on the seam read above (`exec()` returned it a line ago), so
+    // neither can be missing. If the machine were gone in between, opening
+    // the session on the machine's own display would be exactly the mixing
+    // this seam exists to prevent, so it fails here instead.
+    const screenExec = this.deps.machine.execFor(agentId);
+    const screenExecBytes = this.deps.machine.execBytesFor(agentId);
+    if (screenExec === undefined || screenExecBytes === undefined) {
+      throw new CoreError(
+        "The machine went away while the conversation was opening",
+        "unavailable",
+      );
+    }
     // The agent's own skill catalog: its folder holds the skills it wrote,
     // and the machine-wide folder is merged in (see vm/skills.ts). Read
     // through a getter for the same reason the factory asks for one — the

@@ -290,6 +290,8 @@ Deno.test("stella API: the conversation carries the conversation, never the mode
         Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
       stop: () => Promise.resolve(),
       vncPort: () => Promise.resolve(null),
+      startDesktop: () => Promise.resolve(),
+      stopDesktop: () => Promise.resolve(),
     });
     const created = await json(base, "/api/stella/conversations", {
       method: "POST",

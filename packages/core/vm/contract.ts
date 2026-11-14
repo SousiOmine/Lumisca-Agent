@@ -47,7 +47,14 @@ export const VM_ENV_DIR = `${VM_WORKDIR}/.lumisca-env`;
 export const VM_ENV_JSON = `${VM_ENV_DIR}/env.json`;
 export const VM_ENV_SH = `${VM_ENV_DIR}/env.sh`;
 
-/** The virtual X display the container runs Xvfb on. */
+/** The virtual X display the container boots on its own (`entry.sh`).
+ *
+ * No agent works here: the desktops are `vmDisplayOf(slot)`, one display
+ * above. This one is the machine's screen — the contract proves it is up and
+ * sized as expected — and it is what `DISPLAY` names for a process that is
+ * not on a desktop, such as a command the agent runs through `bash`. A
+ * program started there by hand is on no conversation's screen rather than on
+ * somebody else's. */
 export const VM_DISPLAY = ":99";
 
 /** The screen size Xvfb is created with. Fixed, because the agent reads
@@ -56,15 +63,22 @@ export const VM_DISPLAY = ":99";
 export const VM_SCREEN_WIDTH = 1280;
 export const VM_SCREEN_HEIGHT = 800;
 
-/** Where noVNC's websockify listens inside the container. */
+/** Where noVNC's websockify listens inside the container, for the first
+ * desktop; the others follow it (see `vmWebsockifyPortOf`). */
 export const VM_VNC_PORT = 6080;
+
+/** Where x11vnc listens inside the container, for the first desktop; the
+ * others follow it. The host reaches it only through websockify. */
+export const VM_VNC_RFB_PORT = 5900;
 
 /** How many desktops one machine runs at once.
  *
- * Each is a separate X server, window manager, browser and profile, so an
- * agent's windows, pointer and logins are its own. Everything the machine
- * offers — the screen tools, the semantic tools, bash, `vm_launch` — follows
- * the conversation's `DISPLAY` (see container/desktop.sh and vm/machine.ts).
+ * Each is a separate X server, window manager, session bus, browser and
+ * profile, so an agent's windows, pointer, logins and accessibility tree are
+ * its own. Everything the machine offers — the screen tools, the semantic
+ * tools, `vm_launch`, the clipboard — follows the conversation's `DISPLAY`
+ * and bus (see container/desktop.sh and vm/machine.ts). The shell is not
+ * desktop work and keeps the machine's own display (see VM_DISPLAY).
  *
  * Four is a chat's worth of agents without paying for more browsers than a
  * person would open. A fifth conversation takes the slot used least recently;
@@ -72,10 +86,11 @@ export const VM_VNC_PORT = 6080;
  * its screen (the profile keeps the logins). */
 export const VM_DESKTOP_SLOTS = 4;
 
-/** The X display of one desktop slot: `:99` for the first, which the
- * container boots, then `:100`, `:101`, `:102`. */
+/** The X display of one desktop slot: `:100` for the first, then `:101`,
+ * `:102`, `:103`. One above the machine's own display, so nothing that starts
+ * on `DISPLAY` without naming a desktop lands on an agent's screen. */
 export function vmDisplayOf(slot: number): string {
-  return slot === 0 ? VM_DISPLAY : `:${99 + slot}`;
+  return `:${100 + slot}`;
 }
 
 /** The websockify port a slot's desktop listens on inside the container. */
@@ -93,12 +108,12 @@ export const VM_VNC_PORT_RANGE = `${VM_VNC_PORT}-${
  * (container/desktop.sh). */
 export const VM_DESKTOP_SCRIPT = "/usr/local/lib/lumisca/desktop.sh";
 
-/** Where one agent's browser profile lives inside the machine. The directory
- * is the agent's identity: a conversation reopened later has the logins it
- * left, and two agents never share one. */
-export function vmProfileDir(agentId: string): string {
-  return `${VM_WORKDIR}/.config/chromium/${agentId}`;
-}
+/** Where the per-agent browser profiles live inside the machine, one
+ * directory per agent (`<this>/<agent id>`). The directory is the agent's
+ * identity: a conversation reopened later has the logins it left, and two
+ * agents never share one. Under the home, which is a volume, so a rebuilt
+ * machine keeps them. */
+export const VM_PROFILE_ROOT = `${VM_WORKDIR}/.config/chromium`;
 
 /** The account the container's processes run as (the Containerfile creates
  * it; `--userns keep-id` maps it onto the host user so mounted-write cases
@@ -181,7 +196,10 @@ export function vmAgentSkillsDir(agentId: string): string {
   return `${vmAgentDir(agentId)}/.agents/skills`;
 }
 
-/** The session bus `entry.sh` starts, at a fixed path.
+/** The session bus `entry.sh` starts, at a fixed path: the machine's own bus,
+ * the one the image's `DBUS_SESSION_BUS_ADDRESS` names and a command run
+ * without a desktop reaches. The desktops have one each (see
+ * `vmBusSocketOf`).
  *
  * Fixed because the server enters the machine with `podman exec`, which
  * inherits nothing from the container's first process: an autolaunched bus
@@ -189,8 +207,24 @@ export function vmAgentSkillsDir(agentId: string): string {
  * found. The Containerfile exports the same address so a shell the agent runs
  * by hand reaches the same bus; the contract check proves it against the
  * running container. */
-export const VM_DBUS_SOCKET = "/tmp/lumisca-dbus/session.sock";
+export const VM_DBUS_DIR = "/tmp/lumisca-dbus";
+export const VM_DBUS_SOCKET = `${VM_DBUS_DIR}/session.sock`;
 export const VM_DBUS_ADDRESS = `unix:path=${VM_DBUS_SOCKET}`;
+
+/** The socket of one desktop's session bus.
+ *
+ * Every desktop starts its own. An AT-SPI registry lives on the session bus,
+ * so a shared one would let one agent's semantic tools (`vm_find` and the
+ * rest) read and press another agent's windows — the failure the separate
+ * displays exist to prevent. */
+export function vmBusSocketOf(slot: number): string {
+  return `${VM_DBUS_DIR}/session-${slot}.sock`;
+}
+
+/** That bus's address, in the form an environment variable carries it. */
+export function vmBusAddressOf(slot: number): string {
+  return `unix:path=${vmBusSocketOf(slot)}`;
+}
 
 /** The gsettings key that makes a GTK application load its ATK bridge. *
  * `entry.sh` sets it before anything else starts, because an app reads it once

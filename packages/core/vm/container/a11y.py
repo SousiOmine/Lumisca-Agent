@@ -46,7 +46,11 @@ MAX_LIMIT = 60
 
 # Where snapshots are kept. Under /tmp because they are scratch: a machine
 # restart drops them, and a ref from before the restart correctly fails.
-SNAPSHOT_DIR = "/tmp/lumisca-a11y/snapshots"
+# One directory per display: a ref names a path in the tree it was read from,
+# and two agents' desktops are two trees. DISPLAY is indexed rather than read
+# with a default, because without a display there is no tree to read at all.
+DISPLAY = os.environ["DISPLAY"]
+SNAPSHOT_DIR = os.path.join("/tmp/lumisca-a11y/snapshots", DISPLAY.lstrip(":"))
 MAX_SNAPSHOTS = 8
 
 # Roles an agent can act on, whether or not the toolkit advertises an action.

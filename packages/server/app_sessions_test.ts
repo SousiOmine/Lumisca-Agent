@@ -845,6 +845,8 @@ Deno.test("stella API: the conversation is opened by agent and never listed as a
         Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
       stop: () => Promise.resolve(),
       vncPort: () => Promise.resolve(null),
+      startDesktop: () => Promise.resolve(),
+      stopDesktop: () => Promise.resolve(),
     });
     // An agent must exist first: stella's conversation belongs to one.
     const created = await json(base, "/api/stella/agents", {

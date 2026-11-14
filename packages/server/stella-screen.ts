@@ -46,7 +46,18 @@ export function stellaScreenRoute(options: StellaScreenOptions) {
     let data: ScreenSocketData | undefined;
     return {
       async onOpen(_event, ws) {
-        const port = await options.vncPort(agentId);
+        // The adapter does not await this handler (see `socket.onopen` in
+        // hono/deno), so a rejection would leave the page's socket open with
+        // no desktop behind it: the pane would sit on "connecting" forever.
+        // Starting a desktop can fail (the machine went away, its helper
+        // refused), and that is what this closes on.
+        let port: number | null;
+        try {
+          port = await options.vncPort(agentId);
+        } catch {
+          ws.close(1011, "the desktop could not be started");
+          return;
+        }
         if (port === null) {
           ws.close(1013, "the machine is not running");
           return;

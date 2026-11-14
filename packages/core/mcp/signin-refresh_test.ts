@@ -76,6 +76,8 @@ Deno.test("E2E: a stella conversation reaches an MCP server after signing in", a
     start: () => Promise.resolve(),
     stop: () => Promise.resolve(),
     vncPort: () => Promise.resolve(49153),
+    startDesktop: () => Promise.resolve(),
+    stopDesktop: () => Promise.resolve(),
   } as never);
   try {
     const agent = await core.createStellaAgent({ name: "Aide", role: "help" });

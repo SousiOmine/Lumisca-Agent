@@ -61,6 +61,8 @@ function fakeVm(status: VmStatus): VmManager {
     start: () => Promise.resolve({ ...status, state: "running" as const }),
     stop: () => Promise.resolve(),
     vncPort: () => Promise.resolve(status.vncPort),
+    startDesktop: () => Promise.resolve(),
+    stopDesktop: () => Promise.resolve(),
   };
 }
 
@@ -2148,6 +2150,8 @@ Deno.test("stella routines: a run brings a stopped machine back", async () => {
     },
     stop: () => Promise.resolve(),
     vncPort: () => Promise.resolve(state.vncPort),
+    startDesktop: () => Promise.resolve(),
+    stopDesktop: () => Promise.resolve(),
   });
   try {
     const agent = await core.createStellaAgent({
