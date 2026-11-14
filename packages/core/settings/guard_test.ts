@@ -3,11 +3,15 @@ import { CoreError } from "../errors.ts";
 import { MCP_OAUTH_KEY_PREFIX } from "../mcp/oauth.ts";
 import { APP_MCP_SETTINGS_KEY, CONNECTIONS_KEY } from "../shared/mod.ts";
 import {
+  COMPACTION_ENABLED_KEY,
+  COMPACTION_KEEP_RECENT_PERCENT_KEY,
+  COMPACTION_RESERVE_PERCENT_KEY,
   DEFAULT_MODEL_KEY,
   FAST_MODEL_KEY,
   IMAGE_MODEL_KEY,
   PUSH_SUBSCRIPTIONS_KEY,
   PUSH_VAPID_KEY,
+  STELLA_KEEP_FULL_LOG_KEY,
 } from "../shared/settings-keys.ts";
 import { CREDENTIAL_KEY_PREFIX } from "./credentials.ts";
 import {
@@ -58,6 +62,19 @@ Deno.test("the model rows of the settings dialog are writable", () => {
   for (const key of [DEFAULT_MODEL_KEY, FAST_MODEL_KEY, IMAGE_MODEL_KEY]) {
     // Throws (and so fails this test) when the key is missing from the
     // allow-list.
+    assertMutableKey(key);
+  }
+});
+
+Deno.test("the compaction rows of the settings dialog are writable", () => {
+  // Same surface, same failure mode: a row added to the panel without its
+  // declaration here only fails in the browser, as "Unknown setting".
+  for (const key of [
+    COMPACTION_ENABLED_KEY,
+    COMPACTION_RESERVE_PERCENT_KEY,
+    COMPACTION_KEEP_RECENT_PERCENT_KEY,
+    STELLA_KEEP_FULL_LOG_KEY,
+  ]) {
     assertMutableKey(key);
   }
 });

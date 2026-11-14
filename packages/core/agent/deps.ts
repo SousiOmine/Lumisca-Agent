@@ -54,6 +54,12 @@ export interface ModelResolver {
    * shared/settings-keys.ts). The agents read it on every compaction check,
    * so a settings change applies without rebuilding them. */
   getCompactionPolicy(): CompactionPolicyInput;
+  /** Whether a stella conversation keeps its whole transcript (see
+   * STELLA_KEEP_FULL_LOG_KEY and session/prune.ts). A getter rather than a
+   * value captured at open: the agents consult it on every prune, so the
+   * settings toggle reaches a running conversation without rebuilding its
+   * agent. */
+  getStellaKeepFullLog(): boolean;
   /** Record that a prune freed bytes in the store, so the next start rewrites
    * the database file (see db/vacuum.ts). Omitted → the figure is dropped
    * (tests, an in-memory core). */

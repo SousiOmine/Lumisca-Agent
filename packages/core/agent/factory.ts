@@ -290,9 +290,11 @@ export class AgentFactory {
         ? {
             idleCompaction: STELLA_IDLE_COMPACTION,
             // A stella conversation is the only one whose transcript outlives
-            // every window it crosses: what its checkpoints summarized is work
-            // nothing reads again (see session/prune.ts).
-            pruneCondensed: true,
+            // every window it crosses, so it is the only one that may drop
+            // what a checkpoint covered (see session/prune.ts). Read at every
+            // prune rather than here: the user's answer can change while the
+            // conversation is open.
+            shouldPruneCondensed: () => !this.deps.getStellaKeepFullLog(),
             ...(this.deps.recordFreedBytes === undefined
               ? {}
               : { onFreedBytes: this.deps.recordFreedBytes }),

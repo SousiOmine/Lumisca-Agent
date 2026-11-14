@@ -6,10 +6,11 @@
  * (see SessionAgentOptions.idleCompaction). What it needs to keep is the
  * conversation's current state — what the user wants, what was decided, what
  * is still open — not a transcript: the conversation itself can be searched
- * with history_search, by word or by date, and the tool traffic stays on the
- * machine. So the summary is built from the same projection the conversation
- * and the search use (stellaEntryOf), rewritten in full each time, and capped
- * small.
+ * with history_search, by word or by date, and the tool traffic is stored
+ * separately in the transcript (which the user may reduce; see
+ * session/prune.ts). So the summary is built from the same projection the
+ * conversation and the search use (stellaEntryOf), rewritten in full each
+ * time, and capped small.
  *
  * One thing the conversation does not show still matters to the record: that
  * work happened. A span of tool calls that leaves no trace in the record

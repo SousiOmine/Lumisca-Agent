@@ -549,6 +549,14 @@ export const settings = {
     ja: "圧縮後も残す直近の割合。既定 20%。",
     en: "Recent share kept after a compaction. Default 20%.",
   },
+  "settings.compaction.keepFullLog": {
+    ja: "圧縮した区間も残す",
+    en: "Keep condensed spans",
+  },
+  "settings.compaction.keepFullLogDesc": {
+    ja: "Lumisca の会話で、コンテキスト圧縮が覆った区間も削らずに保存します。ツールの実行記録や画像も残るため、データベースは大きくなります。Lumisca code のセッションはこの設定にかかわらず常に残ります。",
+    en: "Lumisca conversations keep the spans a compaction covered, tools and images included, so the database grows. Lumisca code sessions are always kept, whatever this setting says.",
+  },
   "settings.compaction.saveFailed": {
     ja: "圧縮の設定を保存できませんでした: {error}",
     en: "Failed to save the compaction settings: {error}",

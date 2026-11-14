@@ -107,6 +107,26 @@ export const COMPACTION_RESERVE_PERCENT_KEY = "compaction_reserve_percent";
 export const COMPACTION_KEEP_RECENT_PERCENT_KEY =
   "compaction_keep_recent_percent";
 
+/** Settings-table key for keeping a stella conversation's record whole.
+ * "0" = only what the conversation shows is kept (a compaction's covered
+ * spans are reduced to markers); unset, "1" or anything else = every row is
+ * kept as it was written, which is what code mode has always done.
+ *
+ * On by default because the two sides are not symmetric: pruning buys disk
+ * space the user can reclaim by other means, while the rows it drops — tool
+ * arguments, outputs, screenshots — are unrecoverable, and the record they
+ * make up is the one thing a long-lived conversation cannot re-derive. */
+export const STELLA_KEEP_FULL_LOG_KEY = "stella_keep_full_log";
+
+/** Whether stella conversations keep their whole transcript (the key
+ * above). Follows the "0"-is-off convention of the other flags; anything
+ * else, including unset, keeps the record. */
+export function stellaKeepsFullLog(
+  read: (key: string) => string | undefined,
+): boolean {
+  return read(STELLA_KEEP_FULL_LOG_KEY) !== "0";
+}
+
 /** The compactor's default reservation: 8% of the window (pi's 16k against
  * a 200k window, which is where the old fixed default came from). */
 export const COMPACTION_DEFAULT_RESERVE_PERCENT = 8;

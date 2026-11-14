@@ -121,6 +121,7 @@ import {
   parseModelPreference,
   resolveLocale,
   type SavedPrompt,
+  stellaKeepsFullLog,
 } from "./shared/mod.ts";
 import type {
   PushSubscriptionKeys,
@@ -447,6 +448,7 @@ export class LumiscaCore {
           this.models.getThinkingLevel(provider, modelId),
         getLanguage: () => this.getLanguage(),
         getCompactionPolicy: () => this.getCompactionPolicy(),
+        getStellaKeepFullLog: () => this.getStellaKeepFullLog(),
         recordFreedBytes: (bytes) => {
           this.freedBytes += bytes;
         },
@@ -1015,6 +1017,13 @@ export class LumiscaCore {
    * rebuild; omitted fields keep the compactor's defaults (pi's). */
   getCompactionPolicy(): CompactionPolicyInput {
     return parseCompactionPolicyInput((key) => this.settings.get(key));
+  }
+
+  /** Whether stella conversations keep their whole transcript (see
+   * STELLA_KEEP_FULL_LOG_KEY). Read by the session agents on every prune,
+   * so the settings toggle reaches a running conversation. */
+  getStellaKeepFullLog(): boolean {
+    return stellaKeepsFullLog((key) => this.settings.get(key));
   }
 
   // --- command safety (fast-model judgement of bash/eval) -------------------

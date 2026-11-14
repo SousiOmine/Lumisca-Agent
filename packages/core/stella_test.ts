@@ -1,6 +1,8 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { NO_RESPONSE } from "./agent/silent-reply.ts";
 import {
+  type FauxOptions,
+  type FauxProvider,
   fauxAssistantMessage,
   fauxProvider,
   fauxText,
@@ -12,8 +14,12 @@ import type { StellaEntry } from "./domain/stella-conversation.ts";
 import { CoreError } from "./errors.ts";
 import { SessionAttachmentStore } from "./session/attachments.ts";
 import { createHistorySearchTool } from "./session/history.ts";
+import { PRUNED_MARKER } from "./session/prune.ts";
 import type { WindowPage } from "./session/transcript-window.ts";
-import { DEFAULT_MODEL_KEY } from "./shared/settings-keys.ts";
+import {
+  DEFAULT_MODEL_KEY,
+  STELLA_KEEP_FULL_LOG_KEY,
+} from "./shared/settings-keys.ts";
 import { DEFAULT_AGENT_NAME } from "./stella/agents.ts";
 import { STELLA_ONBOARDING_PROMPT } from "./stella/onboarding.ts";
 import { MINI_PNG, promptSession, withTempDir } from "./test-utils.ts";
@@ -942,9 +948,10 @@ Deno.test("stella tool set: the conversation's tools are preloaded", () => {
 
 /** A core with a running machine, one agent and its conversation open.
  * The faux provider is the core's own: a second one would script a model
- * nothing is listening to. */
-async function stellaConversation(name: string) {
-  const faux = fauxProvider();
+ * nothing is listening to. `options` reaches the provider, which is how a
+ * test gives the model a context window (compaction needs one). */
+async function stellaConversation(name: string, options: FauxOptions = {}) {
+  const faux = fauxProvider(options);
   const core = LumiscaCore.forTesting(
     [faux.provider],
     () => ({}),
@@ -1944,15 +1951,50 @@ Deno.test("stella conversation: only stella sessions condense an idle history", 
   }
 });
 
-Deno.test("stella conversation: only stella sessions drop what a checkpoint covered", async () => {
-  // The transcript of a conversation that lives for years holds the work as
-  // well as the talk. stella's clients never receive the work rows and its
-  // history_search searches the conversation's entries, so the rows behind a
-  // checkpoint are reduced to markers. Code mode's work log IS a surface, so
-  // its rows are left as they are.
+Deno.test("stella conversation: a compaction keeps the work rows by default", async () => {
+  // The record of a conversation that lives for years is what the model was
+  // sent and what it produced, not only what the conversation draws. Code
+  // mode has always kept that; a stella conversation reduces it to markers
+  // only when the user asks for the space back (STELLA_KEEP_FULL_LOG_KEY).
+  const { faux, core, session } = await stellaConversation("Keeper", {
+    models: [{ id: "faux", contextWindow: 4_000 }],
+  });
+  try {
+    await recordTwoTurns(faux, core, session.id);
+    // The checkpoint covers the work rows: this is where pruning would
+    // replace them (see session/prune.ts).
+    faux.setResponses([fauxAssistantMessage("## Now\n- kept the record")]);
+    assert(
+      (await core.compactSession(session.id)) !== undefined,
+      "the history was not condensed",
+    );
+    assert(toolResultRows(core, session.id) > 0, "no tool row to keep");
+    assertEquals(prunedRows(core, session.id), 0);
+
+    // Turned off, the next open reduces what the checkpoint already covers.
+    // The setting is read on every prune, so no rebuild is needed.
+    core.setSetting(STELLA_KEEP_FULL_LOG_KEY, "0");
+    await core.closeSession(session.id);
+    core.openSession(session.id);
+    assert(prunedRows(core, session.id) > 0, "the rows were not reduced");
+  } finally {
+    await core.close();
+  }
+});
+
+Deno.test("stella conversation: a code-mode session never drops its rows", async () => {
+  // The setting names stella's conversations. Code mode's work log IS a
+  // surface, so its rows are what the reader studies after the fact (see
+  // agent/factory.ts) — with the setting off, they still stay.
   const { core, session } = await stellaConversation("Prune");
   try {
+    // The default keeps the record.
+    assertStellaPrunes(core, session.id, false);
+    // The predicate is a getter, so turning the setting off reaches the open
+    // conversation without reopening it.
+    core.setSetting(STELLA_KEEP_FULL_LOG_KEY, "0");
     assertStellaPrunes(core, session.id, true);
+
     await withTempDir("lumisca-prune-", async (root) => {
       const workspace = await core.createWorkspace("ws", [root]);
       const plain = await core.createSession({ workspaceId: workspace.id });
@@ -1963,21 +2005,55 @@ Deno.test("stella conversation: only stella sessions drop what a checkpoint cove
   }
 });
 
-/** Assert whether the agent of `sessionId` reduces condensed rows, by
- * checking the option it was built with through a compaction. */
+/** Assert whether the agent of `sessionId` reduces condensed rows. The
+ * predicate is what the compaction hook consults; exercising it through a
+ * run would test the compaction rather than the wiring. */
 function assertStellaPrunes(
   core: LumiscaCore,
   sessionId: string,
   expected: boolean,
 ): void {
-  const agent = core.getAgent(sessionId)!;
-  // The option is what the compaction hook consults; reading it through the
-  // public surface would need a run, and a run here would test the
-  // compaction rather than the wiring.
-  assertEquals(
-    (agent as unknown as { pruneCondensed: boolean }).pruneCondensed,
-    expected,
-  );
+  const agent = core.getAgent(sessionId)! as unknown as {
+    shouldPruneCondensed: () => boolean;
+  };
+  assertEquals(agent.shouldPruneCondensed(), expected);
+}
+
+/** Two turns long enough for a compaction to find a span worth summarizing,
+ * the first of them with a tool call: what a reduction would eat. */
+async function recordTwoTurns(
+  faux: FauxProvider,
+  core: LumiscaCore,
+  sessionId: string,
+): Promise<void> {
+  faux.setResponses([
+    fauxAssistantMessage(
+      [fauxToolCall("history_search", { query: "keeper" }, "call-1")],
+      { stopReason: "toolUse" },
+    ),
+    fauxAssistantMessage("Noted."),
+  ]);
+  await promptSession(core, sessionId, "a".repeat(3_000));
+  faux.setResponses([fauxAssistantMessage("Understood.")]);
+  await promptSession(core, sessionId, "b".repeat(3_000));
+}
+
+/** How many of the session's stored payloads hold a prune marker. */
+function prunedRows(core: LumiscaCore, sessionId: string): number {
+  const rows = core.db.db
+    .prepare("SELECT content FROM messages WHERE session_id = ?")
+    .all(sessionId) as { content: string }[];
+  return rows.filter((row) => row.content.includes(PRUNED_MARKER)).length;
+}
+
+/** How many tool-result rows the session has. */
+function toolResultRows(core: LumiscaCore, sessionId: string): number {
+  const row = core.db.db
+    .prepare(
+      "SELECT COUNT(*) AS n FROM messages WHERE session_id = ? AND role = 'toolResult'",
+    )
+    .get(sessionId) as { n: number };
+  return Number(row.n);
 }
 
 Deno.test("stella agents: a row says what its conversation last said", async () => {

@@ -8,7 +8,8 @@ import type {
 import { TOOL_SEND_CHAT } from "../shared/tool-names.ts";
 
 /**
- * Dropping what a condensed conversation no longer needs.
+ * Dropping what a condensed conversation no longer needs — when the user
+ * decides the space matters more than the record.
  *
  * stella's premise is one conversation with one agent for years. Its
  * transcript therefore holds the work as well as the talk: tool calls, their
@@ -19,10 +20,14 @@ import { TOOL_SEND_CHAT } from "../shared/tool-names.ts";
  * `history_search` searches the conversation's entries, which are the user's
  * words and the agent's words (see session/history.ts).
  *
- * So the rule is one rule: **keep what the conversation shows, drop the
- * rest.** A row is not deleted — `insertAt` and `deleteFrom` rely on rowid
- * order being transcript order, and a hole would move every position after
- * it — it is replaced by a stub that says what it was.
+ * Cheap to drop, but not free: these rows are the only record of what the
+ * model was sent and what it produced, and a row that loses its payload
+ * cannot get it back. So the reduction is OFF by default
+ * (STELLA_KEEP_FULL_LOG_KEY); with it on, the rule is one rule: **keep what
+ * the conversation shows, drop the rest.** A row is not deleted — `insertAt`
+ * and `deleteFrom` rely on rowid order being transcript order, and a hole
+ * would move every position after it — it is replaced by a stub that says
+ * what it was.
  *
  * What survives, and why:
  *

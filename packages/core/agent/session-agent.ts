@@ -182,17 +182,20 @@ export interface SessionAgentOptions {
    * that live for weeks, so they are the ones that set it. */
   idleCompaction?: IdleCompaction;
   /** Whether rows behind a compaction checkpoint lose their payload once the
-   * checkpoint covers them (see session/prune.ts).
+   * checkpoint covers them (see session/prune.ts). A predicate rather than a
+   * value: the answer is a setting (STELLA_KEEP_FULL_LOG_KEY) the user can
+   * change while the conversation is open, and a value captured at build
+   * time would leave a running conversation on the old answer until it was
+   * reopened.
    *
-   * On for a stella conversation, whose transcript is the record of a
-   * conversation that lives for years: tool calls, their output and the
-   * context publications steering it are never shown to the user and never
-   * searched, so keeping them costs the store and buys nothing. Off for
-   * code mode, whose work log IS a surface: its tool rows are what the
-   * reader studies after the fact.
+   * Asked only for a stella conversation, whose transcript is the record of
+   * a conversation that lives for years. When it says yes, only what the
+   * conversation shows is kept; when no, the work rows stay as written — the
+   * record of what the model was sent and what it produced. Code mode's work
+   * log IS a surface, so its rows are never reduced.
    *
-   * Omitted → off. */
-  pruneCondensed?: boolean;
+   * Omitted → never reduces. */
+  shouldPruneCondensed?: () => boolean;
   /** Called with the number of bytes a prune freed in the store. The pool
    * accumulates them and records that the database file is worth rewriting
    * at the next start (see db/vacuum.ts). Omitted → the figure is dropped. */
@@ -296,8 +299,8 @@ export class SessionAgent {
   }
 
   /** Whether rows behind a checkpoint lose their payload (see
-   * SessionAgentOptions.pruneCondensed and session/prune.ts). */
-  private readonly pruneCondensed: boolean;
+   * SessionAgentOptions.shouldPruneCondensed and session/prune.ts). */
+  private readonly shouldPruneCondensed: () => boolean;
   /** What a prune freed in the store (see SessionAgentOptions.onFreedBytes). */
   private readonly onFreedBytes: ((bytes: number) => void) | undefined;
 
@@ -416,7 +419,7 @@ export class SessionAgent {
       },
     );
     this.contextProviders = options.contextProviders ?? [];
-    this.pruneCondensed = options.pruneCondensed === true;
+    this.shouldPruneCondensed = options.shouldPruneCondensed ?? (() => false);
     this.onFreedBytes = options.onFreedBytes;
     // Reopening a conversation is the repair point for a process that died
     // between a checkpoint's insertion and its prune: the store is asked to
@@ -441,7 +444,7 @@ export class SessionAgent {
    * the rewrite happens at the next start, before any request (see
    * db/vacuum.ts). */
   private pruneCondensedRows(): void {
-    if (!this.pruneCondensed || this.closed) return;
+    if (this.closed || !this.shouldPruneCondensed()) return;
     try {
       const result = this.transcript.pruneCondensed();
       if (result.freedBytes > 0) this.onFreedBytes?.(result.freedBytes);

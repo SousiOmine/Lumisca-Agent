@@ -5,6 +5,7 @@ import {
   COMPACTION_KEEP_RECENT_PERCENT_KEY,
   COMPACTION_RESERVE_PERCENT_KEY,
   parsePercentSetting,
+  STELLA_KEEP_FULL_LOG_KEY,
 } from "@lumisca/core/shared";
 import { useEffect, useRef, useState } from "preact/compat";
 import { useDebouncedWrite, useSavedNotice } from "../../hooks/useSave.ts";
@@ -45,6 +46,7 @@ export function CompactionSettings() {
   const settings = useSettings();
   const loaded = settings.loaded;
   const [enabled, setEnabled] = useState(true);
+  const [keepFullLog, setKeepFullLog] = useState(true);
   const [reserve, setReserve] = useState("");
   const [keepRecent, setKeepRecent] = useState("");
   const { saved, flash: flashSaved } = useSavedNotice();
@@ -59,6 +61,7 @@ export function CompactionSettings() {
     seeded.current = true;
     const values = settings.values;
     setEnabled(values[COMPACTION_ENABLED_KEY] !== "0");
+    setKeepFullLog(values[STELLA_KEEP_FULL_LOG_KEY] !== "0");
     setReserve(values[COMPACTION_RESERVE_PERCENT_KEY] ?? "");
     setKeepRecent(values[COMPACTION_KEEP_RECENT_PERCENT_KEY] ?? "");
   }, [loaded, settings.values]);
@@ -95,6 +98,17 @@ export function CompactionSettings() {
     setEnabled(next); // optimistic, like the other toggles
     void save(COMPACTION_ENABLED_KEY, next ? "1" : "0", () =>
       setEnabled(previous),
+    );
+  };
+
+  /** Keep or drop what a compaction covers. The setting is read by the
+   * sessions on every prune, so it takes effect without a rebuild — on the
+   * next condense or the next open, not necessarily now. */
+  const toggleKeepFullLog = (next: boolean) => {
+    const previous = keepFullLog;
+    setKeepFullLog(next);
+    void save(STELLA_KEEP_FULL_LOG_KEY, next ? "1" : "0", () =>
+      setKeepFullLog(previous),
     );
   };
 
@@ -195,6 +209,18 @@ export function CompactionSettings() {
         t("settings.compaction.keepRecentPercent"),
         t("settings.compaction.keepRecentPercentDesc"),
       )}
+
+      <SettingRow
+        label={t("settings.compaction.keepFullLog")}
+        description={t("settings.compaction.keepFullLogDesc")}
+      >
+        <Toggle
+          checked={keepFullLog}
+          disabled={saving || !loaded}
+          onChange={toggleKeepFullLog}
+          label={t("settings.compaction.keepFullLog")}
+        />
+      </SettingRow>
 
       {saved && !saving && (
         <span className="settings-saved" role="status">
