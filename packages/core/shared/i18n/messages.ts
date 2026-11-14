@@ -7,7 +7,8 @@
  * 1. Pick the area file that owns the surface (`common` = shared/generic
  *    text and the text the CORE generates, `chrome` = title bar, tabs, menus,
  *    pickers and banners, `settings` = the settings dialog, `chat` = the chat
- *    view and composer, `panels` = the side panels and session lists).
+ *    view and composer, `panels` = the side panels and session lists, `setup`
+ *    = the first-run wizard).
  * 2. Key it `<area>.<surface>.<element>` (e.g. `settings.general.autoUpdate`)
  *    and give it BOTH languages in the same edit.
  * 3. Use `{name}` placeholders for values; keep the placeholder names
@@ -23,6 +24,7 @@ import { chrome } from "./chrome.ts";
 import { common } from "./common.ts";
 import { panels } from "./panels.ts";
 import { settings } from "./settings.ts";
+import { setup } from "./setup.ts";
 
 /** Every message of the app, keyed by `MessageKey`. */
 export const messages = {
@@ -30,6 +32,7 @@ export const messages = {
   ...chrome,
   ...settings,
   ...chat,
+  ...setup,
   ...panels,
 };
 

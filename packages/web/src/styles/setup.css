@@ -1,0 +1,125 @@
+/* setup.css — the first-run setup (`/setup`): the step card, its progress line
+ * and its footer. Cascade position 13/16: after settings.css, whose rows and
+ * notes the steps reuse (see ../styles.css).
+ * See ./README.md before adding new files. */
+
+/* The screen is the canvas with one floating card on it, like a dialog that
+ * has the window to itself. The card keeps its shape (title, progress and
+ * footer) while the step's body scrolls: a long provider list must not push
+ * the way out of the step below the fold. */
+.setup {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 48px 24px 24px;
+}
+
+.setup-inner {
+  width: 100%;
+  max-width: 560px;
+  /* One height for every step. The card used to size itself to the step, so
+   * moving on made the whole screen jump: 600px is the tallest step (the
+   * provider list) at the widths the card can take, and a step taller than
+   * that — a wrapped note on a narrow window — scrolls its body instead. A
+   * shorter window caps the card at the room there is. */
+  height: min(600px, 100%);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 24px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
+}
+
+.setup-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.setup-head h1 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* The count is read as a number, not as prose: tabular figures keep it from
+ * jumping between "1 / 4" and "4 / 4". */
+.setup-progress {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The body takes the room the fixed card leaves: a short step keeps its
+ * footer at the bottom of the card, and a long one scrolls here. */
+.setup-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* The step's own name: the screen's h1 is the wizard, this is what the reader
+ * is deciding right now. */
+.setup-step-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+/* The two moves stay reachable because they are outside the scroller: a
+ * step taller than the window scrolls its body, not the way out of it. */
+.setup-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 0 2px;
+}
+
+/* Back sits at the left edge, away from the forward move: the two are not a
+ * pair (one goes a step back, the other leaves the step), and the footer reads
+ * better with the primary button alone on the right. */
+.setup-back {
+  margin-right: auto;
+}
+
+.setup-error {
+  margin: 0;
+}
+
+/* The way into the full provider catalogue, kept on its own line under the
+ * short list instead of beside it: it is the secondary move on that step. */
+.setup-provider-more {
+  display: flex;
+}
+
+/* What the wizard decided, as the right-hand value of a row (`SettingRow`). */
+.setup-summary {
+  color: var(--text-dim);
+}
+
+/* A phone has no room for a floating card: the screen is the card. */
+@media (max-width: 600px) {
+  .setup {
+    padding: 16px 0 0;
+  }
+
+  .setup-inner {
+    height: 100%;
+    padding: 18px 16px 16px;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+}

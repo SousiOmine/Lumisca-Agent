@@ -17,10 +17,11 @@ import {
 } from "./i18n/mod.ts";
 import { panels } from "./i18n/panels.ts";
 import { settings } from "./i18n/settings.ts";
+import { setup } from "./i18n/setup.ts";
 
 /** Each area file's own table, for the duplicate-key check (the catalogue
  * spread merges them, which is exactly what hides a collision). */
-const AREA_TABLES = { common, chrome, settings, chat, panels };
+const AREA_TABLES = { common, chrome, settings, chat, panels, setup };
 
 // --- locale resolution ------------------------------------------------------
 
@@ -130,7 +131,14 @@ Deno.test("translate interpolates {name} placeholders", () => {
 
 /** The catalogue's area files, by the name each exports (see messages.ts,
  * which spreads them into one table). */
-const AREAS = ["common", "chrome", "settings", "chat", "panels"] as const;
+const AREAS = [
+  "common",
+  "chrome",
+  "settings",
+  "chat",
+  "panels",
+  "setup",
+] as const;
 
 Deno.test("catalogue: no key is defined in two area files", () => {
   // `messages` is a spread of the area tables, so a key present in two of

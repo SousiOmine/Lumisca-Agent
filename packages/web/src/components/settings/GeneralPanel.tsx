@@ -38,8 +38,10 @@ interface GeneralPanelProps {
 }
 
 /** Selector labels in each language's own name where it differs: a reader
- * looking for their language finds it without knowing the current one. */
-const LANGUAGE_OPTION_KEYS: Record<Locale, MessageKey> = {
+ * looking for their language finds it without knowing the current one. Also
+ * read by the first-run setup, which asks the same question (see
+ * components/setup/WelcomeStep.tsx). */
+export const LANGUAGE_OPTION_KEYS: Record<Locale, MessageKey> = {
   ja: "settings.language.option.ja",
   en: "settings.language.option.en",
 };

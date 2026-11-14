@@ -22,9 +22,10 @@
 | 10 | `model-picker.css` | モデルの切り替え（1列のピッカー）、思考強度の選択、コンテキスト表示 |
 | 11 | `modals.css` | モーダルウィンドウ、エラーバナー |
 | 12 | `settings.css` | 設定画面と各設定パネル |
-| 13 | `banners.css` | アップデート通知、サーバー停止通知バナー |
-| 14 | `folder-browser.css` | ワークスペースのフォルダー選択 UI（2ペイン表示） |
-| 15 | `reduced-motion.css` | `prefers-reduced-motion` の縮小規定（フェードは残す） |
+| 13 | `setup.css` | 初期セットアップ（`/setup`）の手順カードと進捗 |
+| 14 | `banners.css` | アップデート通知、サーバー停止通知バナー |
+| 15 | `folder-browser.css` | ワークスペースのフォルダー選択 UI（2ペイン表示） |
+| 16 | `reduced-motion.css` | `prefers-reduced-motion` の縮小規定（フェードは残す） |
 
 ## デザイン言語
 

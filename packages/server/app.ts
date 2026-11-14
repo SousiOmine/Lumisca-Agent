@@ -23,6 +23,7 @@ import { providerRoutes } from "./routes/providers.ts";
 import { routineRoutes } from "./routes/routines.ts";
 import { sessionRoutes } from "./routes/sessions.ts";
 import { settingRoutes } from "./routes/settings.ts";
+import { setupRoutes } from "./routes/setup.ts";
 import { shareHostRoutes } from "./routes/share.ts";
 import { skillRoutes } from "./routes/skills.ts";
 import { stellaRoutes } from "./routes/stella.ts";
@@ -250,6 +251,9 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   app.route("/api", attachmentRoutes(core));
   app.route("/api", providerRoutes(core));
   app.route("/api", settingRoutes(core));
+  // The first-run setup's state: a file beside the settings file, so this
+  // server answers for one installation (and every client of it).
+  app.route("/api", setupRoutes(core));
   app.route(
     "/api",
     connectionRoutes(core, () => fed.restart()),

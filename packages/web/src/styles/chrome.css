@@ -53,6 +53,16 @@
   -webkit-user-select: none;
 }
 
+/* A strip with no tab bar (the first-run setup, which has nothing to list
+ * yet): the space left of the window controls, and the drag handle. Scoped to
+ * the strip because a plain browser renders no strip at all (TitleBar returns
+ * its children alone), and `flex: 1` there would make this empty div claim
+ * half the window. */
+.titlebar > .titlebar-blank {
+  flex: 1;
+  min-width: 0;
+}
+
 /* The tab bar inside the title bar drops its own chrome (background and
  * bottom border) and fills the space left of the window controls. */
 .titlebar .tabbar {

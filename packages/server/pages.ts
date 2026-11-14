@@ -63,6 +63,10 @@ export function registerPages(
     // server serves now, and the difference is how an installed PWA (no
     // address bar, no reload) learns that its bundle has been replaced.
     buildId: await assets.buildId(),
+    // Read now rather than kept from startup: deleting the marker file asks
+    // every client for the first-run setup at its next page load (see
+    // core/settings/setup.ts).
+    setup: core.getSetup(),
   });
 
   /** Render the app shell for one request (also the SPA fallback). */

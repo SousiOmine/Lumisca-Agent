@@ -156,6 +156,17 @@ export function formatModelMeta(contextWindow?: number): string {
 
 // ---- bootstrap ------------------------------------------------------------
 
+/** The first-run setup of this installation (see settings/setup.ts).
+ *
+ * The state is a file beside the settings file, so the answer is the same for
+ * every client of this server and survives a reinstall of the app around it:
+ * deleting the marker asks every client for the setup again at its next page
+ * load. There is deliberately no "reset" API — the file is the one way to ask
+ * for it. */
+export interface SetupState {
+  completed: boolean;
+}
+
 /** Initial data served by the server's bootstrap script
  * (`/assets/initial-data.js`). Lives here (not in the web package) so the
  * server never imports from `@lumisca/web`: the dependency stays
@@ -182,6 +193,10 @@ export interface InitialData {
    * server that predates the field — then there is nothing to compare, and
    * the page simply never offers it. */
   buildId?: string;
+  /** Whether this installation's first-run setup is done. Absent from a
+   * server that predates the field, and from a page served without initial
+   * data: then the wizard is not owed (there is no answer to show it for). */
+  setup?: SetupState;
 }
 
 // ---- async ----------------------------------------------------------------

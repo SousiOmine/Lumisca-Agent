@@ -134,6 +134,18 @@ npm outdated                                                   # packages/deskto
 - **新規セッション画面のモデルは既定モデルに書く**: ピッカーの選択は `packages/web/src/defaultModel.ts` の `rememberDefaultModel` で `model_default` に保存します。あの画面の面はタブを閉じるまで保持しますが、リロードで消えるので、コンポーネントの state だけに持たせると選んだモデルが次の表示で既定に戻ります。失敗は画面に出す（黙って落とすと、次に開いたときに既定へ戻った理由が分かりません）。設定画面の「既定のモデル」の行と同じ値なので、片方だけ変えると 2 つの画面が食い違います。`settingsStore` が未読のうちに書くと「表全体を読んだ」ことになり設定パネルが他の値を未設定と表示するので、`rememberDefaultModel` は先に読みます。
 - **自分自身とは連携しない**: `connections` の各項目へ `/ws` を張って中継しますが、自分自身なら中継しません。判定は `/api/health` の `instanceId` です（tailnet 名や LAN アドレス経由の自分は URL では見分けられません）。中継済みのフレームを再中継しないのも同じ理由で、破るとエコーで CPU とメモリを食い尽くします（`packages/server/federation.ts`）。
 
+### 初期セットアップ（`/setup`）
+
+新規インストールの最初の画面です。**設定ファイルと同じ場所のマーカーファイルが唯一の判定**で、`/` を開いたときに未完了なら `/setup` へ `replace` します。
+
+- **マーカーは `$XDG_CONFIG_HOME/lumisca-agent/setup-complete`**（未設定なら `~/.config/lumisca-agent/setup-complete`）。中身は空で、存在だけを読みます。判定は `LumiscaCore.getSetup()`、作成は `LumiscaCore.completeSetup()`（`POST /api/setup/complete`）で、どちらも呼ぶたびにファイルを読みます（`packages/core/settings/setup.ts`）。
+- **削除してページを開き直す（またはアプリを再起動する）と、ウィザードがもう一度出ます**。起動時の値に固定しないのはこのためです。やり直しの API はありません——ファイルが状態そのものです。
+- **ページへの受け渡しは `InitialData.setup`**（`packages/server/pages.ts`）。`hooks/useSetup.ts` がそれを state にし、完了の記録はその答えを採用します。フィールドの無いページ（古いサーバー、初期データ無し）はウィザードを出しません。
+- **置き換えるのは `/` だけ**。`/code` や `/stella` を直接開けばウィザードを通りません（ブックマークや共有リンクを塞がないためです）。`/setup` に居て完了済みなら `/` へ戻します。
+- **既存インストールの移行はしない**: マーカーの無い環境は、すでに使っていても一度だけウィザードが出ます。「設定済み」を `settings.jsonc` の中身から推測しないでください——最初のページ表示が `language` を書くので、設定ファイルの存在は判定になりません。
+- **段は 4 つ**（ようこそ / プロバイダー / 既定のモデル / 完了）。並びは `components/setup/steps.ts`、面は 1 つです。段は住所ではありません（各段の選択はその場で設定に書くので、読み込み直しても失うものがありません）。プロバイダーの接続は設定画面の部品（`AddProviderFlow` / `ProviderDetail` / `AddUserProviderForm`）をそのまま使い、既定のモデルは `rememberDefaultModel` で `model_default` に書きます。
+- **文面は `packages/core/shared/i18n/setup.ts`**。「Lumiscaにようこそ！」の `！` だけは `check:ja` の例外（`scripts/check-ui-japanese.ts` の `ALLOWED_EXCLAMATION`）です。ルール自体は緩めないでください。
+
 ### 画面の URL
 
 画面はすべて URL を持ちます（`packages/web/src/route.ts`）。URL が「いまどの画面か」の唯一の答えです。
@@ -141,6 +153,7 @@ npm outdated                                                   # packages/deskto
 | 画面 | URL |
 | --- | --- |
 | 起動時のアドレス | `/`（保存したモード。無ければ Lumisca） |
+| 初期セットアップ | `/setup`（未完了のときだけ） |
 | code mode のトップ（新規セッション） | `/code` |
 | このサーバーのセッション | `/code/s/<sessionId>` |
 | ピアのセッション | `/code/p/<peerId>/s/<sessionId>` |

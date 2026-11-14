@@ -86,6 +86,8 @@ function sameRoute(a: UrlState["route"], b: UrlState["route"]): boolean {
   switch (a.kind) {
     case "start":
       return true;
+    case "setup":
+      return true;
     case "code":
       return a.tabKey === (b as typeof a).tabKey;
     case "stella":

@@ -113,6 +113,26 @@ Deno.test("route: / is the start address", () => {
   assertEquals(urlOf(at({ kind: "start" })), "/");
 });
 
+Deno.test("route: the first-run setup is a place of its own", () => {
+  // The wizard has an address because the address is what says which screen
+  // is showing: `/` sends a reader there while the installation's setup is
+  // unfinished, and a reload has to keep them there.
+  assertEquals(urlOf(at({ kind: "setup" })), "/setup");
+  roundTrip(at({ kind: "setup" }));
+  // Its settings dialog hangs under it like any other screen's: the title
+  // bar's menu opens settings during the wizard, and closing returns there.
+  roundTrip(withSettings({ kind: "setup" }, null));
+  roundTrip(withSettings({ kind: "setup" }, "providers"));
+});
+
+Deno.test("route: a path under /setup stays the setup", () => {
+  // A step is not an address of its own (the wizard writes each choice as it
+  // is made, so there is nothing to return to): an invented sub-path is the
+  // wizard, not a screen this app has.
+  assertEquals(parseUrl("/setup/welcome"), at({ kind: "setup" }));
+  assertEquals(parseUrl("/setup/unknown/general"), at({ kind: "setup" }));
+});
+
 Deno.test("route: an unknown path is the start address", () => {
   // A removed route or a typo resolves to the first screen rather than to an
   // error the app would have to invent a page for.

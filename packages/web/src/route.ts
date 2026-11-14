@@ -11,6 +11,7 @@ import { splitTabKey, tabKey } from "./tabs.ts";
  * shared link and the browser's back button all reach the same place:
  *
  *   /                          the start address (this client's mode's top)
+ *   /setup                     the first-run setup, until it is finished
  *   /code                      code mode's new-session screen
  *   /code/s/<sessionId>        one session of this server
  *   /code/p/<peerId>/s/<id>    one session of a federated peer
@@ -38,9 +39,15 @@ import { splitTabKey, tabKey } from "./tabs.ts";
 /** The screen a URL names. `null` inside a mode is that mode's top.
  *
  * `start` is `/` itself and every path this app does not name: the App
- * resolves it to this client's mode's top (see hooks/useAppMode.ts). */
+ * resolves it to this client's mode's top (see hooks/useAppMode.ts).
+ *
+ * `setup` is the first-run wizard. It is a place of its own rather than a
+ * flag on the start address: the address has to say what is on screen, and
+ * the wizard is where `/` sends the reader while the installation's setup is
+ * unfinished (see App.tsx). */
 export type AppRoute =
   | { kind: "start" }
+  | { kind: "setup" }
   | { kind: "code"; tabKey: string | null }
   | { kind: "stella"; agentId: string | null };
 
@@ -81,6 +88,8 @@ function routePath(route: AppRoute): string {
   switch (route.kind) {
     case "start":
       return "/";
+    case "setup":
+      return "/setup";
     case "code": {
       if (route.tabKey === null) return "/code";
       const { peerId, sessionId } = splitTabKey(route.tabKey);
@@ -136,6 +145,9 @@ export function parseUrl(pathname: string): UrlState {
       route = { kind: "stella", agentId: third };
       consumed = 3;
     }
+  } else if (first === "setup") {
+    route = { kind: "setup" };
+    consumed = 1;
   }
 
   return { route, settings: settingsOf(route, segments.slice(consumed)) };
@@ -144,7 +156,9 @@ export function parseUrl(pathname: string): UrlState {
 /** The settings part of a path, given what the route did not consume. */
 function settingsOf(route: AppRoute, trailing: string[]): SettingsRoute | null {
   // The start address names no mode, so settings have no screen to sit on:
-  // an address that put them there is the start address.
+  // an address that put them there is the start address. The setup screen
+  // does hold them: the title bar's menu opens settings during the wizard,
+  // and closing the dialog returns to the wizard.
   if (route.kind === "start") return null;
   if (trailing[0] !== "settings") return null;
   if (trailing.length === 1) return { category: null };

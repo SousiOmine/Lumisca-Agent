@@ -13,8 +13,10 @@ interface AppearancePanelProps {
 }
 
 /** The option labels are catalogue keys: the panel reads in the app
- * language, and the values stay the stored setting's vocabulary. */
-const THEME_OPTIONS: { value: ThemeSetting; label: MessageKey }[] = [
+ * language, and the values stay the stored setting's vocabulary. Also read by
+ * the first-run setup, which asks the same question (see
+ * components/setup/WelcomeStep.tsx). */
+export const THEME_OPTIONS: { value: ThemeSetting; label: MessageKey }[] = [
   { value: "light", label: "settings.appearance.theme.light" },
   { value: "dark", label: "settings.appearance.theme.dark" },
   { value: "system", label: "settings.appearance.theme.system" },

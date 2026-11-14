@@ -13,16 +13,23 @@ const SETTINGS_FILE = "settings.jsonc";
  * belongs to the user, and the file tools never reach it. */
 export const SKILLS_DIR_NAME = "skills";
 
-/** Location of the settings file: $XDG_CONFIG_HOME/lumisca-agent/settings.jsonc
- * when XDG_CONFIG_HOME is set, otherwise ~/.config/lumisca-agent/settings.jsonc
- * (on Windows: %USERPROFILE%\.config\lumisca-agent\settings.jsonc).
+/** Directory holding this installation's files, the settings file and the
+ * first-run setup marker among them (`settings/setup.ts`):
+ * <config home>/lumisca-agent.
  *
  * The environment is a parameter, not a direct `runtime.env` read: the process
  * environment is shared by every test file the runner executes in parallel,
  * so a test that needs a different one passes it instead of mutating the
  * real thing. */
+export function resolveSettingsDir(env: EnvReader = processEnv): string {
+  return join(configHome(env), SETTINGS_DIR_NAME);
+}
+
+/** Location of the settings file: $XDG_CONFIG_HOME/lumisca-agent/settings.jsonc
+ * when XDG_CONFIG_HOME is set, otherwise ~/.config/lumisca-agent/settings.jsonc
+ * (on Windows: %USERPROFILE%\.config\lumisca-agent\settings.jsonc). */
 export function resolveSettingsPath(env: EnvReader = processEnv): string {
-  return join(configHome(env), SETTINGS_DIR_NAME, SETTINGS_FILE);
+  return join(resolveSettingsDir(env), SETTINGS_FILE);
 }
 
 /** The Lumisca skills folder (see {@link SKILLS_DIR_NAME}), or undefined

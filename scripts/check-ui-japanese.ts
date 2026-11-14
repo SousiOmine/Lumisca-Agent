@@ -25,6 +25,7 @@ import { common } from "../packages/core/shared/i18n/common.ts";
 import { messages } from "../packages/core/shared/i18n/messages.ts";
 import { panels } from "../packages/core/shared/i18n/panels.ts";
 import { settings } from "../packages/core/shared/i18n/settings.ts";
+import { setup } from "../packages/core/shared/i18n/setup.ts";
 
 /** One catalogue entry; only the Japanese is checked. */
 export interface UiText {
@@ -228,7 +229,19 @@ const AREA_TABLES: Record<string, Record<string, UiText>> = {
   settings,
   chat,
   panels,
+  setup,
 };
+
+/** The one entry written with an exclamation mark: the first-run wizard's
+ * greeting. The rule itself stands — shouting is not how this app talks, and
+ * a greeting is the one place the mark is punctuation rather than emphasis,
+ * so a second one is a decision someone has to make here. */
+const ALLOWED_EXCLAMATION = new Set(["setup.welcome.title"]);
+
+/** Whether this entry is deliberately outside `rule` (see the set above). */
+function allowed(key: string, rule: Rule): boolean {
+  return rule.id === "format/exclamation" && ALLOWED_EXCLAMATION.has(key);
+}
 
 function sourceFile(key: string): string {
   for (const [name, table] of Object.entries(AREA_TABLES)) {
@@ -246,6 +259,7 @@ export function checkUiJapanese(
     const text = catalogue[key]?.ja;
     if (text === undefined) continue;
     for (const rule of RULES) {
+      if (allowed(key, rule)) continue;
       const result = rule.check(text);
       if (result === null) continue;
       findings.push({

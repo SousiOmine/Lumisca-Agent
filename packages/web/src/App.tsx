@@ -15,6 +15,7 @@ import { ServerDownBanner } from "./components/ServerDownBanner.tsx";
 import { DraftPane, SessionPane } from "./components/SessionPane.tsx";
 import type { SettingsCategory } from "./components/SettingsModal.tsx";
 import { StellaModeScreen } from "./components/StellaModeScreen.tsx";
+import { SetupScreen } from "./components/setup/SetupScreen.tsx";
 import { StellaTitleBarHeader } from "./components/stella/StellaTitleBarHeader.tsx";
 import { TabBar, type TabSummary } from "./components/TabBar.tsx";
 import { TitleBar } from "./components/TitleBar.tsx";
@@ -34,6 +35,7 @@ import {
   useSessionActions,
 } from "./hooks/useSessionActions.ts";
 import { useSessionEvents } from "./hooks/useSessionEvents.ts";
+import { useSetup } from "./hooks/useSetup.ts";
 import { useStella } from "./hooks/useStella.ts";
 import { useTabClose } from "./hooks/useTabClose.ts";
 import { useTabs } from "./hooks/useTabs.ts";
@@ -97,6 +99,11 @@ export function App({ initialData }: AppProps): ReactElement {
   // (client.tsx); this hook owns the settings-dialog state and the persist
   // (a failed save rolls the UI back).
   const { language, setLanguage, error: languageError } = useLanguage();
+  // The installation's first-run setup. The page is seeded with the answer
+  // (InitialData.setup, read by the server from the marker file beside the
+  // settings file), so `/` can be sent to the wizard before anything else is
+  // drawn; `complete` is the one action that ends it.
+  const setup = useSetup(initialData?.setup);
 
   // Which mode this page shows. The address names it, except at `/`: that is
   // the address the desktop shell and an installed PWA open, and it resolves
@@ -107,16 +114,33 @@ export function App({ initialData }: AppProps): ReactElement {
   // Memoized on the route kind: the store is a `localStorage` read, and the
   // App re-renders on every streamed event of a conversation.
   const resolved = useMemo(startMode, [url.route.kind]);
-  const mode: AppMode = url.route.kind === "start" ? resolved : url.route.kind;
+  // The setup screen shows no mode; it resolves `/` the same way the start
+  // address does, so the hooks below keep one shape (and the wizard's own
+  // "start" lands on the mode the reader would have opened).
+  const mode: AppMode =
+    url.route.kind === "start" || url.route.kind === "setup"
+      ? resolved
+      : url.route.kind;
   // The resolution is a REPLACE: `/` is not a place to come back to, and a
   // back from a mode's top must leave the app rather than bounce off the
-  // address it never meant to show.
+  // address it never meant to show. While the setup is unfinished, `/` is
+  // the wizard instead (the only address that is redirected there: a
+  // bookmark of a session or a mode still opens, see AGENTS.md).
   useEffect(() => {
     if (url.route.kind !== "start") return;
+    replaceUrl(
+      setup.pending
+        ? { route: { kind: "setup" }, settings: null }
+        : modeTop(mode),
+    );
+  }, [url.route.kind, mode, replaceUrl, setup.pending]);
+  // A finished setup has nowhere to stay: `/setup` (a bookmark, the address a
+  // reload kept) belongs to `/`, which resolves the mode the reader would
+  // have started in.
+  useEffect(() => {
+    if (url.route.kind !== "setup" || setup.pending) return;
     replaceUrl(modeTop(mode));
-  }, [url.route.kind, mode, replaceUrl]);
-  // Showing a mode is what this client remembers for the next bare `/` —
-  // whether it was chosen here or arrived at through an address.
+  }, [url.route.kind, mode, replaceUrl, setup.pending]);
 
   // macOS overlays the native title bar on the page, so the page's chrome
   // has to start below it (see `.app.macos` in styles/chrome.css). The
@@ -441,6 +465,28 @@ export function App({ initialData }: AppProps): ReactElement {
   const backToSettingsList = useCallback(() => {
     router.dismiss({ ...urlRef.current, settings: { category: null } });
   }, [router]);
+  /** The settings dialog's props, or null while it is closed. Built once: the
+   * dialog covers whichever screen it was opened from, so the setup screen
+   * (whose title bar menu opens it) passes the same object as the app does. */
+  const settingsDialog =
+    settingsOpen && settingsRoute !== null
+      ? {
+          theme,
+          themeError,
+          onThemeChange: setTheme,
+          language,
+          languageError,
+          onLanguageChange: setLanguage,
+          update,
+          notifyEnabled,
+          onNotifyEnabledChange: handleNotifyEnabledChange,
+          push,
+          category: settingsRoute.category,
+          onOpenCategory: openSettingsAt,
+          onBackToList: backToSettingsList,
+          onClose: closeSettings,
+        }
+      : null;
   // Bumped when the settings dialog closes: the draft re-reads the default
   // model there, since registering (or removing) a provider changes what a
   // new session would run on. A dialog without a provider change only costs
@@ -561,6 +607,60 @@ export function App({ initialData }: AppProps): ReactElement {
   const stellaHandedOver =
     stella.conversation?.handover !== null &&
     stella.conversation?.handover !== undefined;
+  /** The setup screen's dialogs: the settings dialog only. Its title bar menu
+   * opens that one, and nothing else has anything to name while the
+   * installation has no conversation yet (a session list, a close prompt and
+   * the agent editors are the app's, not the wizard's). */
+  const setupDialogs = {
+    settings: settingsDialog,
+    recent: null,
+    close: null,
+    agentCreate: null,
+    agentEdit: null,
+  };
+  // The first-run setup, as a screen of its own (`/setup`): while it shows,
+  // there is nothing behind it to draw — the visitor arriving here has no
+  // conversations yet — and a layer over a session would claim that session
+  // is somewhere to be. The address says which screen this is, so a reload
+  // keeps it (until the setup is finished, when the effect above sends the
+  // reader on).
+  if (url.route.kind === "setup") {
+    return (
+      <div className={appClass}>
+        {macos && <MacosTitleBarDrag />}
+        {/* The same chrome as the app: the window is undecorated, so this
+         * screen has to be movable, closable and switchable too. The strip
+         * has no tab bar to hold. */}
+        <TitleBar
+          onNew={() => goToTab(null)}
+          onOpenRecent={openRecent}
+          onOpenSettings={openSettings}
+          onQuit={quit}
+          onSwitchMode={switchMode}
+          onManageConnections={openServers}
+          mode={mode}
+        >
+          <div className="titlebar-blank" />
+        </TitleBar>
+        <div className="app-body">
+          {setup.pending && (
+            <SetupScreen
+              theme={theme}
+              themeError={themeError}
+              onThemeChange={setTheme}
+              language={language}
+              languageError={languageError}
+              onLanguageChange={setLanguage}
+              busy={setup.busy}
+              error={setup.error}
+              onComplete={setup.complete}
+            />
+          )}
+          <AppDialogs {...setupDialogs} />
+        </div>
+      </div>
+    );
+  }
   return (
     <div className={appClass}>
       {macos && <MacosTitleBarDrag />}
@@ -755,26 +855,7 @@ export function App({ initialData }: AppProps): ReactElement {
         )}
       </div>
       <AppDialogs
-        settings={
-          settingsOpen && settingsRoute !== null
-            ? {
-                theme,
-                themeError,
-                onThemeChange: setTheme,
-                language,
-                languageError,
-                onLanguageChange: setLanguage,
-                update,
-                notifyEnabled,
-                onNotifyEnabledChange: handleNotifyEnabledChange,
-                push,
-                category: settingsRoute.category,
-                onOpenCategory: openSettingsAt,
-                onBackToList: backToSettingsList,
-                onClose: closeSettings,
-              }
-            : null
-        }
+        settings={settingsDialog}
         recent={
           showRecent
             ? {

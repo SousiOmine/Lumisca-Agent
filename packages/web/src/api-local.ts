@@ -2,6 +2,7 @@ import type {
   CommandApproval,
   SavedPrompt,
   SessionSnapshot,
+  SetupState,
 } from "@lumisca/core/shared";
 import {
   promptBody,
@@ -502,6 +503,11 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ value }),
     }),
+  /** Record that the first-run setup is done (the server writes its marker
+   * file beside the settings file). The answer is the state after the call;
+   * the page is seeded with the same value through InitialData. */
+  completeSetup: () =>
+    request<SetupState>("/api/setup/complete", { method: "POST" }),
 
   /** The approvals record of the command safety check (bash/eval judged by
    * the fast model). The enable toggle is a plain setting

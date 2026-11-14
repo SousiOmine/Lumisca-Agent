@@ -89,6 +89,7 @@ import {
   createInMemorySettingsRepo,
   type SettingsRepo,
 } from "./settings/repo.ts";
+import { markSetupComplete, readSetupState } from "./settings/setup.ts";
 import { ShareHub } from "./share/hub.ts";
 import {
   type PendingShareRequest,
@@ -102,6 +103,7 @@ import type {
   PromptFileRef,
   ProviderAuthType,
   Routine,
+  SetupState,
   StellaAgentSummary,
   TaskInfo,
   ThinkingLevel,
@@ -234,6 +236,10 @@ export class LumiscaCore {
   private readonly agentIcons: AgentIconStore;
   /** The database file, when this core has one (see requestVacuumIfWorthwhile). */
   private readonly dbPath: string | undefined;
+  /** The directory the settings file lives in, when this core has a settings
+   * file at all. The first-run setup marker is read and written there (see
+   * settings/setup.ts); an in-memory core has no such directory. */
+  private readonly settingsDir: string | undefined;
   /** MCP OAuth grants (see mcp/oauth.ts), shared with the session pool. */
   private readonly mcpOAuth: McpOAuthStore;
   private readonly commandSafety: CommandSafety;
@@ -340,6 +346,7 @@ export class LumiscaCore {
     );
     this.db = db;
     this.settings = settings;
+    this.settingsDir = settings.dir();
     this.credentials = createDbCredentialStore(this.settings);
     this.computer = new ComputerUseService({
       getSetting: (key) => this.settings.get(key),
@@ -971,6 +978,23 @@ export class LumiscaCore {
   deleteSetting(key: string): void {
     assertNotProtected(key);
     this.settings.delete(key);
+  }
+
+  // --- first-run setup ------------------------------------------------------
+
+  /** Whether this installation's first-run setup is done (see
+   * settings/setup.ts: a marker file beside the settings file).
+   *
+   * Read on every call instead of once at startup on purpose: the marker is
+   * how a reader asks for the wizard again, and an answer cached for the life
+   * of the process would make them restart the server to see it. */
+  getSetup(): SetupState {
+    return readSetupState(this.settingsDir);
+  }
+
+  /** Record that the first-run setup finished, by writing its marker. */
+  completeSetup(): SetupState {
+    return markSetupComplete(this.settingsDir);
   }
 
   /** The app language: the stored setting when one was chosen, else the
