@@ -1,11 +1,7 @@
-import {
-  IconArrowBackUp,
-  IconCheck,
-  IconClipboard,
-} from "@tabler/icons-preact";
-import { useCopy } from "../../hooks/useSave.ts";
+import { IconArrowBackUp } from "@tabler/icons-preact";
 import { useT } from "../../i18n.ts";
 import { ContentImages } from "../ContentImages.tsx";
+import { MessageCopyButton } from "./MessageCopyButton.tsx";
 import type { UserMessageImage } from "./types.ts";
 
 /** A user message with its action row: rewind (restore to the composer)
@@ -36,12 +32,6 @@ export function CopyableUserMessage({
   ) => void;
 }) {
   const t = useT();
-  const { copied, copy } = useCopy(text);
-
-  const handleCopy = async () => {
-    if (!text) return;
-    await copy();
-  };
 
   return (
     <div className="msg-user-wrap">
@@ -60,26 +50,7 @@ export function CopyableUserMessage({
         >
           <IconArrowBackUp size={16} stroke={1.5} />
         </button>
-        {text && (
-          <button
-            type="button"
-            className="msg-action-btn"
-            aria-label={t("chat.message.copy")}
-            onClick={handleCopy}
-          >
-            {copied ? (
-              <IconCheck size={16} stroke={2} />
-            ) : (
-              <IconClipboard size={16} stroke={1.5} />
-            )}
-          </button>
-        )}
-        {/* Mounted empty and filled on success: a live region has to be in
-            the tree before its text changes to be announced, and the
-            checkmark that replaces the icon says nothing. */}
-        <span className="visually-hidden" role="status">
-          {copied ? t("chat.message.copied") : null}
-        </span>
+        {text && <MessageCopyButton text={text} />}
         {modeLabel && <div className="msg-mode-badge">{modeLabel}</div>}
       </div>
     </div>

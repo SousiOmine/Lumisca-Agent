@@ -1,16 +1,12 @@
-import {
-  IconArrowBackUp,
-  IconCheck,
-  IconClipboard,
-} from "@tabler/icons-preact";
+import { IconArrowBackUp } from "@tabler/icons-preact";
 import type { ComponentChildren } from "preact";
 import { formatClockTime } from "../../format.ts";
-import { useCopy } from "../../hooks/useSave.ts";
 import { useLocale, useT } from "../../i18n.ts";
 import type { StellaEntry } from "../../types.ts";
 import { AttachmentCard } from "../chat/AttachmentCard.tsx";
 import { CardView } from "../chat/CardView.tsx";
 import { MarkdownBlock } from "../chat/MarkdownBlock.tsx";
+import { MessageCopyButton } from "../chat/MessageCopyButton.tsx";
 import { AgentAvatar } from "./AgentAvatar.tsx";
 import { PromptFiles } from "./PromptFiles.tsx";
 
@@ -130,7 +126,6 @@ function UserBubble({
   time: ComponentChildren;
   uploadBase: string;
 }) {
-  const { copied, copy } = useCopy(entry.text);
   const t = useT();
   return (
     <div className="msg-user-wrap">
@@ -154,25 +149,7 @@ function UserBubble({
         >
           <IconArrowBackUp size={16} stroke={1.5} />
         </button>
-        {entry.text && (
-          <button
-            type="button"
-            className="msg-action-btn"
-            aria-label={t("chat.message.copy")}
-            onClick={() => void copy()}
-          >
-            {copied ? (
-              <IconCheck size={16} stroke={2} />
-            ) : (
-              <IconClipboard size={16} stroke={1.5} />
-            )}
-          </button>
-        )}
-        {/* Mounted empty and filled on success: a live region has to be in
-            the tree before its text changes to be announced. */}
-        <span className="visually-hidden" role="status">
-          {copied ? t("chat.message.copied") : null}
-        </span>
+        {entry.text && <MessageCopyButton text={entry.text} />}
         {time}
       </div>
     </div>
@@ -200,8 +177,6 @@ function AgentBubble({
   onSend: (text: string) => void;
   time: ComponentChildren;
 }) {
-  const { copied, copy } = useCopy(entry.text);
-  const t = useT();
   return (
     <div
       className={`stella-msg${showAvatar ? "" : " continued"}`}
@@ -251,24 +226,12 @@ function AgentBubble({
          * on the left, so the clock comes first and the button closes the
          * row. Copying the agent's words is what a reader does with an
          * answer (a command, a path, a paragraph) and it was the one
-         * message they could not take away. */}
+         * message they could not take away. This control is the one drawn
+         * at rest: the answer is what the reader came for, and a button
+         * waiting for a hover had no wrapper here to wait on. */}
         <div className="msg-meta start">
           {time}
-          {entry.text && (
-            <button
-              type="button"
-              className="msg-action-btn"
-              onClick={() => void copy()}
-              title={t("chat.message.copy")}
-              aria-label={t("chat.message.copy")}
-            >
-              {copied ? (
-                <IconCheck size={16} stroke={2} />
-              ) : (
-                <IconClipboard size={16} stroke={1.5} />
-              )}
-            </button>
-          )}
+          {entry.text && <MessageCopyButton text={entry.text} rest />}
         </div>
       </div>
     </div>

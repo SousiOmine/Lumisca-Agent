@@ -191,6 +191,22 @@
   color: var(--text);
 }
 
+/* A control that is drawn without waiting for the pointer. The agent's
+ * answer is what a reader takes away, and its copy control sat at
+ * `opacity: 0` above with no rule to reveal it: stella's answer is no
+ * `.msg-user-wrap`, so the reveal never matched and the button was drawn
+ * nowhere (it still answered the pointer, which is why it was reported as
+ * invisible rather than as missing). Quiet at rest, the row's own colour
+ * under the pointer. */
+.msg-action-btn.rest {
+  opacity: 1;
+  color: var(--text-faint);
+}
+
+.msg-action-btn.rest:hover {
+  color: var(--text);
+}
+
 .msg-body {
   min-width: 0;
   font-size: 14px;

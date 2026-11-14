@@ -1205,6 +1205,31 @@ Deno.test("the code-mode sheet is the window's paper, with one edge of canvas", 
   assertEquals(sheet.get("box-shadow"), "none");
 });
 
+Deno.test("the answer's copy control is drawn without a hover", async () => {
+  // Regression: the control existed — stella's answer carries one under its
+  // clock — but nothing drew it. `.msg-action-btn` is held at `opacity: 0`
+  // and revealed by `.msg-user-wrap` (the reader's own message), and an
+  // answer owns no such wrapper, so it answered the pointer and its tooltip
+  // while showing nothing. The fix is the visible variant, which the agent's
+  // answer uses in both modes (chat.css, MessageCopyButton.tsx).
+  const chat = await Deno.readTextFile(
+    new URL("./styles/chat.css", import.meta.url),
+  );
+  const rules = cssRules(chat);
+  assertEquals(
+    declarations(rules, ".msg-action-btn").get("opacity"),
+    "0",
+    "the reader's own actions are still revealed on hover",
+  );
+  const rest = declarations(rules, ".msg-action-btn.rest");
+  assertEquals(rest.get("opacity"), "1");
+  assertEquals(rest.get("color"), "var(--text-faint)");
+  assertEquals(
+    declarations(rules, ".msg-action-btn.rest:hover").get("color"),
+    "var(--text)",
+  );
+});
+
 Deno.test("a pane behind another tab is not laid out", async () => {
   // Every open tab keeps its pane mounted so a switch does not rebuild its
   // transcript (components/SessionPane); what hides one is `hidden` on the

@@ -208,10 +208,12 @@ Deno.test("StellaTranscript: a conversation reads as messages, not rows", () => 
   // …and the agent's answer can be copied too, after its clock.
   const agentMeta = html.slice(html.indexOf('class="msg-meta start"'));
   const agentOrder = [
-    ...agentMeta.matchAll(/class="(msg-action-btn|msg-time)"/g),
+    ...agentMeta.matchAll(/class="(msg-(?:action-btn|time)[^"]*)"/g),
   ].map((match) => match[1]);
   assertEquals(agentOrder[0], "msg-time", agentOrder.join(","));
-  assert(agentOrder.includes("msg-action-btn"), agentOrder.join(","));
+  // Drawn at rest: this bubble is no `.msg-user-wrap`, so a control waiting
+  // for the hover was drawn nowhere at all (see styles_test.ts).
+  assert(agentOrder.includes("msg-action-btn rest"), agentOrder.join(","));
 });
 
 Deno.test("StellaTranscript: a run of the agent's messages shares one avatar", () => {
