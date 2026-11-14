@@ -80,11 +80,22 @@ export const VM_VNC_RFB_PORT = 5900;
  * and bus (see container/desktop.sh and vm/machine.ts). The shell is not
  * desktop work and keeps the machine's own display (see VM_DISPLAY).
  *
- * Four is a chat's worth of agents without paying for more browsers than a
- * person would open. A fifth conversation takes the slot used least recently;
- * that desktop is stopped first, and started again when its agent next uses
- * its screen (the profile keeps the logins). */
-export const VM_DESKTOP_SLOTS = 4;
+ * Six, from the memory one desktop costs: an idle Chromium (about 220 MB
+ * proportional set size with its renderers) plus an Xvfb and an openbox (about
+ * 35 MB) per slot. Six running desktops are about 1.5 GB inside the machine;
+ * four measured 1.0 GB. A conversation that needs a seventh slot waits for
+ * one to be free rather than evicting somebody who is still working (see
+ * `StellaMachine.desktopFor` and VM_DESKTOP_WAIT_MS). */
+export const VM_DESKTOP_SLOTS = 6;
+
+/** How long a conversation waits for a desktop when every slot belongs to a
+ * conversation that is still working.
+ *
+ * A slot frees when another run ends, which is seconds to minutes away; a tool
+ * call that sits longer than this is worse than one that says "every desktop
+ * is in use" and lets the agent try again, and the screen pane's WebSocket
+ * handshake is held for the same time. */
+export const VM_DESKTOP_WAIT_MS = 30_000;
 
 /** The X display of one desktop slot: `:100` for the first, then `:101`,
  * `:102`, `:103`. One above the machine's own display, so nothing that starts

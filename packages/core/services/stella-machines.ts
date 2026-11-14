@@ -109,7 +109,17 @@ export class StellaMachineService {
         role: string;
       }): Promise<import("../stella/agents.ts").StellaAgent>;
     },
-  ) {}
+  ) {
+    // The machine cannot see the conversations, and must not take a desktop
+    // away from one that is working: a prompt, a routine, or a hand-over the
+    // user is answering all keep their run going. It asks this before it
+    // evicts a slot.
+    this.deps.machine.setBusyCheck((agentId) => {
+      const session = this.deps.sessions.getByAgent(agentId);
+      if (session === undefined) return false;
+      return this.deps.pool.get(session.id)?.isStreaming === true;
+    });
+  }
 
   // --- the stella machine --------------------------------------------------
 

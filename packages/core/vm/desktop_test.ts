@@ -1,4 +1,4 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertRejects } from "@std/assert";
 import type { VmCommandBytesRunner, VmCommandRunner } from "./command.ts";
 import type { VmManager, VmStatus } from "./container.ts";
 import {
@@ -90,19 +90,34 @@ function recorder(): {
   };
 }
 
-function machine(): {
+function machine(
+  options: {
+    /** Which agents' conversations are working (default: none). */
+    busy?: (agentId: string) => boolean;
+    desktopWaitMs?: number;
+  } = {},
+): {
   stella: StellaMachine;
   manager: ReturnType<typeof fakeManager>;
   calls: { command: readonly string[] }[];
 } {
   const manager = fakeManager();
   const run = recorder();
-  const stella = new StellaMachine(undefined, {
-    run: run.run,
-    runBytes: run.runBytes,
-  });
+  const stella = new StellaMachine(
+    undefined,
+    { run: run.run, runBytes: run.runBytes },
+    options.desktopWaitMs === undefined
+      ? {}
+      : { desktopWaitMs: options.desktopWaitMs },
+  );
+  stella.setBusyCheck(options.busy ?? (() => false));
   stella.set(manager.manager);
   return { stella, manager, calls: run.calls };
+}
+
+/** Every slot's agent, named in the order they are started. */
+function agents(): string[] {
+  return Array.from({ length: VM_DESKTOP_SLOTS }, (_, i) => `agent-${i}`);
 }
 
 Deno.test("desktop slots have their own display, ports and session bus", () => {
@@ -111,11 +126,17 @@ Deno.test("desktop slots have their own display, ports and session bus", () => {
   assertEquals(VM_DISPLAY, ":99");
   assertEquals(vmDisplayOf(0), ":100");
   assertEquals(vmDisplayOf(1), ":101");
-  assertEquals(vmDisplayOf(VM_DESKTOP_SLOTS - 1), ":103");
+  assertEquals(vmDisplayOf(VM_DESKTOP_SLOTS - 1), `:${99 + VM_DESKTOP_SLOTS}`);
   // Every slot's websockify is published, so the relay can find any of them.
   assertEquals(vmWebsockifyPortOf(0), VM_VNC_PORT);
-  assertEquals(vmWebsockifyPortOf(3), VM_VNC_PORT + 3);
-  assertEquals(VM_VNC_PORT_RANGE, `${VM_VNC_PORT}-${VM_VNC_PORT + 3}`);
+  assertEquals(
+    vmWebsockifyPortOf(VM_DESKTOP_SLOTS - 1),
+    VM_VNC_PORT + VM_DESKTOP_SLOTS - 1,
+  );
+  assertEquals(
+    VM_VNC_PORT_RANGE,
+    `${VM_VNC_PORT}-${VM_VNC_PORT + VM_DESKTOP_SLOTS - 1}`,
+  );
   // Each desktop has its own accessibility tree, reached through its own bus.
   assertEquals(vmBusSocketOf(0), "/tmp/lumisca-dbus/session-0.sock");
   assertEquals(vmBusSocketOf(1) === vmBusSocketOf(0), false);
@@ -176,16 +197,64 @@ Deno.test("exec: two agents that start at once get different slots", async () =>
   );
 });
 
-Deno.test("exec: a fifth agent takes the slot nobody has used for longest", async () => {
+Deno.test("exec: the next agent takes the idle desktop used least recently", async () => {
   const { stella, manager } = machine();
-  for (const agent of ["a", "b", "c", "d"]) {
+  for (const agent of agents()) {
     await stella.execFor(agent)!(["true"], { timeoutMs: 1000 });
   }
-  // Touch b so a is the least recently used.
-  await stella.execFor("b")!(["true"], { timeoutMs: 1000 });
-  await stella.execFor("e")!(["true"], { timeoutMs: 1000 });
+  // Touch the second one so the first is the least recently used.
+  await stella.execFor("agent-1")!(["true"], { timeoutMs: 1000 });
+  await stella.execFor("extra")!(["true"], { timeoutMs: 1000 });
   assertEquals(manager.stopped, [0]);
-  assertEquals(manager.started.at(-1), { slot: 0, agentId: "e" });
+  assertEquals(manager.started.at(-1), { slot: 0, agentId: "extra" });
+});
+
+Deno.test("exec: a working conversation's desktop is never taken", async () => {
+  // Taking a desktop from a run in progress kills its browser under it. The
+  // next agent must take another idle desktop instead, even though this one
+  // is the least recently used.
+  const busy = new Set<string>();
+  const { stella, manager } = machine({ busy: (id) => busy.has(id) });
+  for (const agent of agents()) {
+    await stella.desktopFor(agent);
+  }
+  busy.add("agent-0");
+  const slot = await stella.desktopFor("extra");
+  assertEquals(slot, 1);
+  assertEquals(manager.stopped, [1]);
+});
+
+Deno.test("exec: a request waits for a slot instead of interrupting a run", async () => {
+  const busy = new Set<string>();
+  const { stella, manager } = machine({
+    busy: (id) => busy.has(id),
+    desktopWaitMs: 5_000,
+  });
+  for (const agent of agents()) {
+    await stella.desktopFor(agent);
+    busy.add(agent);
+  }
+  // Nobody can give way yet. The request waits, and the run that ends first
+  // frees its desktop for it.
+  const waiting = stella.desktopFor("extra");
+  setTimeout(() => busy.delete("agent-3"), 100);
+  assertEquals(await waiting, 3);
+  assertEquals(manager.stopped, [3]);
+});
+
+Deno.test("exec: when every conversation is working, the request fails with a reason", async () => {
+  // The machine cannot tell a run that ended from one that never started: it
+  // may only ask. Guessing would take a desktop from a run, so the request is
+  // refused instead, with a sentence the agent can act on.
+  const { stella } = machine({ busy: () => true, desktopWaitMs: 30 });
+  for (const agent of agents()) {
+    await stella.desktopFor(agent);
+  }
+  await assertRejects(
+    () => stella.desktopFor("extra"),
+    Error,
+    "desktops are in use",
+  );
 });
 
 Deno.test("a stopped machine's agents start their desktops again", async () => {

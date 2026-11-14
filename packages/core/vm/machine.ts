@@ -1,3 +1,4 @@
+import { CoreError } from "../errors.ts";
 import type { StellaStatus } from "../shared/wire.ts";
 import { builtinSkills } from "../skills/builtin/mod.ts";
 import type { SkillDef } from "../skills/discover.ts";
@@ -15,11 +16,22 @@ import type {
 import { createVmExec, createVmExecBytes } from "./container.ts";
 import {
   VM_DESKTOP_SLOTS,
+  VM_DESKTOP_WAIT_MS,
   VM_SKILLS_DIR,
   vmBusAddressOf,
   vmDisplayOf,
 } from "./contract.ts";
 import { discoverVmSkills } from "./skills.ts";
+
+/** The pause between attempts at a slot nobody will give up yet. The wait is
+ * rare (every desktop must belong to a conversation that is still working)
+ * and each attempt is a handful of session lookups, so a quarter second is
+ * cheap and short enough that a freed slot is not visibly idle. */
+const DESKTOP_POLL_MS = 250;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 /** Everything the stella machine holds between calls: the manager, the exec
  * seams built over it, the cached availability verdict and the skill catalog.
@@ -43,13 +55,30 @@ export class StellaMachine {
   #desktops = new Map<string, { slot: number; started: Promise<void> }>();
   /** When each slot was last used, for choosing one to evict. */
   #slotUse = new Map<number, number>();
+  /** Whether an agent's conversation is working right now, supplied by the
+   * service that owns the sessions (the machine cannot see them). A slot
+   * whose conversation is working is never taken from it. */
+  #busy: ((agentId: string) => boolean) | undefined;
+  /** How long `desktopFor` waits for a slot (VM_DESKTOP_WAIT_MS). */
+  #desktopWaitMs: number;
 
   constructor(
     private readonly globalSkillDirs: string[] | undefined,
     private readonly run?:
       | { run: VmCommandRunner; runBytes: VmCommandBytesRunner }
       | undefined,
-  ) {}
+    /** Test seam: shorten the wait so a test can reach its end. */
+    options: { desktopWaitMs?: number } = {},
+  ) {
+    this.#desktopWaitMs = options.desktopWaitMs ?? VM_DESKTOP_WAIT_MS;
+  }
+
+  /** Supply the answer to "is this agent's conversation working?", which the
+   * machine needs before it takes a desktop away from its agent. Called once
+   * by the service that owns the sessions. */
+  setBusyCheck(check: (agentId: string) => boolean): void {
+    this.#busy = check;
+  }
 
   /** Attach (or detach, with undefined) the machine. */
   set(vm: VmManager | undefined): void {
@@ -199,9 +228,12 @@ export class StellaMachine {
    * first use. Idempotent: concurrent callers share one start.
    *
    * A slot is the agent's for as long as its desktop runs. When all
-   * VM_DESKTOP_SLOTS are taken, the one nobody has touched for longest gives
-   * way: its browser and bridge stop, and its agent's next call starts a new
-   * desktop (the profile keeps the logins).
+   * VM_DESKTOP_SLOTS are taken, a desktop whose conversation is NOT working
+   * gives way (the one nobody has touched for longest): its browser and
+   * bridge stop, and its agent's next call starts a new desktop (the profile
+   * keeps the logins). A conversation that is still working keeps its screen;
+   * the caller waits for a slot to become free instead, up to
+   * VM_DESKTOP_WAIT_MS.
    */
   async desktopFor(agentId: string): Promise<number> {
     const vm = this.require();
@@ -211,10 +243,24 @@ export class StellaMachine {
       await known.started;
       return known.slot;
     }
-    // The slot is reserved synchronously, before anything is awaited: two
-    // conversations that start at the same moment would otherwise both read
-    // the same free slot and one of them would end up in the other's browser.
-    const { slot, evicted } = this.#reserve();
+    // The claim and the entry that records it are one synchronous stretch,
+    // before anything is awaited: two conversations that start at the same
+    // moment would otherwise both read the same free slot and one of them
+    // would end up in the other's browser.
+    const deadline = Date.now() + this.#desktopWaitMs;
+    let claim = this.#claimSlot();
+    while (claim === null) {
+      if (Date.now() >= deadline) {
+        throw new CoreError(
+          `All ${VM_DESKTOP_SLOTS} desktops are in use by conversations that ` +
+            "are still working. Try again when one of them has finished.",
+          "conflict",
+        );
+      }
+      await sleep(DESKTOP_POLL_MS);
+      claim = this.#claimSlot();
+    }
+    const { slot, evicted } = claim;
     const started = (async () => {
       if (evicted) await vm.stopDesktop(slot);
       await vm.startDesktop(slot, agentId);
@@ -241,11 +287,12 @@ export class StellaMachine {
     return await vm.vncPort(slot);
   }
 
-  /** A free slot, or the one used least recently, whose agent gives it up
-   * (`evicted`). Synchronous on purpose (see `desktopFor`): the caller can
-   * only start the desktop after this returns, and by then the slot must no
-   * longer look free. */
-  #reserve(): { slot: number; evicted: boolean } {
+  /** A free slot, or the one held by an idle conversation (the least recently
+   * used one), claimed for the caller. Synchronous on purpose (see
+   * `desktopFor`): by the time it returns, no other caller may see the slot
+   * as free. Null when every slot belongs to a conversation that is still
+   * working. */
+  #claimSlot(): { slot: number; evicted: boolean } | null {
     const taken = new Map<number, string>();
     for (const [agent, desktop] of this.#desktops) {
       taken.set(desktop.slot, agent);
@@ -253,19 +300,35 @@ export class StellaMachine {
     for (let slot = 0; slot < VM_DESKTOP_SLOTS; slot++) {
       if (!taken.has(slot)) return { slot, evicted: false };
     }
-    let oldestSlot = 0;
-    let oldestAt = Number.POSITIVE_INFINITY;
-    for (const slot of taken.keys()) {
-      const at = this.#slotUse.get(slot) ?? 0;
-      if (at < oldestAt) {
-        oldestAt = at;
-        oldestSlot = slot;
+    let candidate: { slot: number; agent: string } | undefined;
+    for (const [slot, agent] of taken) {
+      if (this.#isBusy(agent)) continue;
+      if (
+        candidate === undefined ||
+        (this.#slotUse.get(slot) ?? 0) <
+          (this.#slotUse.get(candidate.slot) ?? 0)
+      ) {
+        candidate = { slot, agent };
       }
     }
-    const evicted = taken.get(oldestSlot);
-    if (evicted !== undefined) this.#desktops.delete(evicted);
-    this.#slotUse.delete(oldestSlot);
-    return { slot: oldestSlot, evicted: true };
+    if (candidate === undefined) return null;
+    this.#desktops.delete(candidate.agent);
+    this.#slotUse.delete(candidate.slot);
+    return { slot: candidate.slot, evicted: true };
+  }
+
+  /** Whether an agent's conversation is working. The check is required: a
+   * machine that guessed "nobody is working" would take a screen from under
+   * a run. */
+  #isBusy(agentId: string): boolean {
+    const check = this.#busy;
+    if (check === undefined) {
+      throw new Error(
+        "The stella machine cannot tell whether a conversation is working: " +
+          "setBusyCheck was not called",
+      );
+    }
+    return check(agentId);
   }
 
   /**

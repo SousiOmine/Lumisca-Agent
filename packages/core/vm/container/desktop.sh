@@ -31,7 +31,7 @@ BUS_DIR=/tmp/lumisca-dbus
 PROFILE_ROOT="$HOME/.config/chromium"
 VNC_BASE=5900
 WEBSOCKIFY_BASE=6080
-SLOTS=4
+SLOTS=6
 SCREEN=1280x800
 
 usage='usage: desktop.sh start <slot> <agent id> | stop <slot> | reset | contract'
