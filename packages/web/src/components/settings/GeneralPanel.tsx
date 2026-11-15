@@ -305,10 +305,44 @@ export function GeneralPanel({
     }
   }
 
+  // The line under the version: what the last check found, and the one file
+  // action it offers.
+  const stateLine = status.downloading ? (
+    <>
+      <div
+        className="update-progress"
+        role="progressbar"
+        aria-valuenow={percent ?? 0}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
+        <div
+          className="update-progress-fill"
+          style={{ width: `${percent ?? 0}%` }}
+        />
+      </div>
+      <span className="update-status-text">
+        {t("settings.general.downloading")} {formatBytes(status.downloaded)}
+        {status.total ? ` / ${formatBytes(status.total)}` : ""}
+      </span>
+      {percent !== null && <span className="update-percent">{percent}%</span>}
+    </>
+  ) : (
+    <>
+      <span className="update-status-text">{statusText}</span>
+      {/* Installing has nothing to press, and the check for another release
+          is above, beside the version. */}
+      <div className="update-actions">{action}</div>
+    </>
+  );
+
   return (
     <div className="settings-pane">
       {preferences}
 
+      {/* The version, the check for another one, and what that check found:
+          one object at the right edge, so an available update is read with
+          the number it replaces instead of a row further down the page. */}
       <div className="update-item">
         <div className="update-info">
           <span className="update-label">
@@ -318,24 +352,40 @@ export function GeneralPanel({
           </span>
           <span className="update-desc">Lumisca</span>
         </div>
-        <div className="update-version">
-          <span className="mono">v{status.currentVersion}</span>
-          {/* Beside the version, in every state: a package staged by an
-              earlier release must not be a dead end (a failed install keeps
-              its package, and only a check learns that a newer release
-              replaced it). */}
-          {supported && (
-            <button
-              type="button"
-              className="btn small"
-              disabled={checkDisabled}
-              onClick={onCheck}
-            >
-              {t("settings.general.checkForUpdate")}
-            </button>
-          )}
+        <div className="update-app">
+          <div className="update-version">
+            <span className="mono">v{status.currentVersion}</span>
+            {/* Beside the version, in every state: a package staged by an
+                earlier release must not be a dead end (a failed install keeps
+                its package, and only a check learns that a newer release
+                replaced it). */}
+            {supported && (
+              <button
+                type="button"
+                className="btn small"
+                disabled={checkDisabled}
+                onClick={onCheck}
+              >
+                {t("settings.general.checkForUpdate")}
+              </button>
+            )}
+          </div>
+          {supported && <div className="update-state">{stateLine}</div>}
         </div>
       </div>
+
+      {status.ready && !installing && (
+        <p className="settings-note">
+          {server
+            ? t("settings.general.installNoteServer")
+            : t("settings.general.installNote")}
+        </p>
+      )}
+      {restartPending && status.restartMode === "none" && (
+        <p className="settings-note">
+          {t("settings.general.autoRestartDisabled")}
+        </p>
+      )}
 
       {addressItem}
 
@@ -361,54 +411,6 @@ export function GeneralPanel({
                 label={t("settings.general.autoRestart")}
               />
             </SettingRow>
-          )}
-
-          <div className="update-status-row">
-            {status.downloading ? (
-              <>
-                <div
-                  className="update-progress"
-                  role="progressbar"
-                  aria-valuenow={percent ?? 0}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                >
-                  <div
-                    className="update-progress-fill"
-                    style={{ width: `${percent ?? 0}%` }}
-                  />
-                </div>
-                <span className="update-status-text">
-                  {t("settings.general.downloading")}{" "}
-                  {formatBytes(status.downloaded)}
-                  {status.total ? ` / ${formatBytes(status.total)}` : ""}
-                </span>
-                {percent !== null && (
-                  <span className="update-percent">{percent}%</span>
-                )}
-              </>
-            ) : (
-              <>
-                <span className="update-status-text">{statusText}</span>
-                {/* One action at a time: the file work in flight (installing)
-                    has nothing to press, and the check for others lives in
-                    the version row. */}
-                <div className="update-actions">{action}</div>
-              </>
-            )}
-          </div>
-
-          {status.ready && !installing && (
-            <p className="settings-note">
-              {server
-                ? t("settings.general.installNoteServer")
-                : t("settings.general.installNote")}
-            </p>
-          )}
-          {restartPending && status.restartMode === "none" && (
-            <p className="settings-note">
-              {t("settings.general.autoRestartDisabled")}
-            </p>
           )}
         </>
       )}

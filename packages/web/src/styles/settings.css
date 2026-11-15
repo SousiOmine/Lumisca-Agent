@@ -970,6 +970,31 @@ button.provider-row-body:hover .provider-row-chevron {
   flex: none;
 }
 
+/* The app-info row stacks: the version and the check for another one, then
+ * what that check found. Both lines end at the right edge, so the number, the
+ * state and the action are read as one column under the app's name. */
+.update-app {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.update-state {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.update-state .update-status-text {
+  flex: 0 1 auto;
+  text-align: right;
+}
+
 .update-status-row {
   display: flex;
   align-items: center;

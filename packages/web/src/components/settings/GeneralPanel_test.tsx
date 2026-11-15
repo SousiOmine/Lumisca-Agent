@@ -130,6 +130,18 @@ Deno.test("the check for updates sits beside the version it is about", () => {
   const check = html.indexOf(">アップデートを確認<");
   const statusText = html.indexOf("最新バージョンです。");
   assertEquals(version >= 0 && check > version && statusText > check, true);
+  // The answer is read under that number too, above the settings that only
+  // decide how the update is applied.
+  assertEquals(statusText < html.indexOf("自動アップデート"), true);
+});
+
+Deno.test("an available update is shown under the current version", () => {
+  const html = panel(status({ ready: false, latestVersion: "0.12.0" }));
+  const statusText = html.indexOf("v0.12.0 が利用可能です。");
+  assertEquals(statusText > html.indexOf("v0.10.18"), true);
+  assertEquals(statusText < html.indexOf("自動アップデート"), true);
+  // Its action travels with it, so the button is never apart from the line.
+  assertEquals(html.indexOf(">ダウンロード<") > statusText, true);
 });
 
 Deno.test("the notification row follows the language", () => {
