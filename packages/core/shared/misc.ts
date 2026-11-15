@@ -132,7 +132,7 @@ export function formatLocalDay(at: Date, localeTag: string): string {
   })})`;
 }
 /** Display name for a newly created session ("Session <date>" /
- * "セッション <date>"), shown until the title generator replaces it. The
+ * "セッション<date>"), shown until the title generator replaces it. The
  * language is the session's own (the setting at creation). */
 export function formatSessionName(
   locale: Locale = DEFAULT_LOCALE,

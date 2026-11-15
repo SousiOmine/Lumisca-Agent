@@ -13,7 +13,7 @@ export const setup = {
   "setup.title": { ja: "初期セットアップ", en: "Initial setup" },
   /** Where the reader is, in the header. */
   "setup.progress": {
-    ja: "ステップ {current} / {total}",
+    ja: "ステップ{current} / {total}",
     en: "Step {current} of {total}",
   },
   "setup.next": { ja: "次へ", en: "Next" },

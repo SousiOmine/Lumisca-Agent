@@ -117,8 +117,8 @@ Deno.test("before the first answer the panel says it is asking", () => {
 Deno.test("the PWA notification row is drawn only where the channel exists", () => {
   // "This browser cannot use PWA notifications" is a switch the reader cannot
   // use and an explanation they did not ask for; the row is left out instead.
-  assertEquals(panel(status()).includes("PWA 通知"), false);
-  assertStringIncludes(panel(status(), "server", null, "on"), "PWA 通知");
+  assertEquals(panel(status()).includes("PWA通知"), false);
+  assertStringIncludes(panel(status(), "server", null, "on"), "PWA通知");
 });
 
 Deno.test("the check for updates sits beside the version it is about", () => {
@@ -137,7 +137,7 @@ Deno.test("the check for updates sits beside the version it is about", () => {
 
 Deno.test("an available update is shown under the current version", () => {
   const html = panel(status({ ready: false, latestVersion: "0.12.0" }));
-  const statusText = html.indexOf("v0.12.0 が利用可能です。");
+  const statusText = html.indexOf("v0.12.0が利用可能です。");
   assertEquals(statusText > html.indexOf("v0.10.18"), true);
   assertEquals(statusText < html.indexOf("自動アップデート"), true);
   // Its action travels with it, so the button is never apart from the line.

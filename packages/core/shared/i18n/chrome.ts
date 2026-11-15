@@ -82,7 +82,7 @@ export const chrome = {
     en: '"{name}" is running. Closing it stops the run, along with its background commands and sub-agents.',
   },
   "chrome.tabClose.bodyMany": {
-    ja: "対象のタブのうち {count} 件が実行中です。閉じるとそれらの実行は中止され、バックグラウンドコマンドとサブエージェントも停止します。",
+    ja: "対象のタブのうち{count}件が実行中です。閉じるとそれらの実行は中止され、バックグラウンドコマンドとサブエージェントも停止します。",
     en: "The close includes {count} running tabs. Closing stops their runs, their background commands and their sub-agents.",
   },
   "chrome.tabClose.keepRunningNote": {
@@ -106,7 +106,7 @@ export const chrome = {
    * learn which mode they are going to. {mode} is one of the mode names in
    * chat.modeSelect.*.title. */
   "chrome.appMenu.switchTo": {
-    ja: "{mode} に切り替え",
+    ja: "{mode}に切り替え",
     en: "Switch to {mode}",
   },
   "chrome.appMenu.history": {
@@ -117,11 +117,11 @@ export const chrome = {
 
   // --- update banner -------------------------------------------------------
   "chrome.update.downloaded": {
-    ja: "Lumisca v{version} をダウンロードしました。",
+    ja: "Lumisca v{version}をダウンロードしました。",
     en: "Lumisca v{version} has been downloaded.",
   },
   "chrome.update.ready": {
-    ja: "新しいバージョン v{version} にアップデートできます。",
+    ja: "新しいバージョンv{version}にアップデートできます。",
     en: "An update to v{version} is available.",
   },
   "chrome.update.restartNote": {
@@ -142,7 +142,7 @@ export const chrome = {
   },
   "chrome.update.restartNow": { ja: "今すぐ再起動", en: "Restart now" },
   "chrome.update.installing": {
-    ja: "v{version} をインストールしています…",
+    ja: "v{version}をインストールしています…",
     en: "Installing v{version}…",
   },
   "chrome.update.installingButton": {
@@ -273,7 +273,7 @@ export const chrome = {
     en: "Plain chat without a workspace",
   },
   "chrome.workspacePicker.folderCount": {
-    ja: "{count} 件のフォルダー",
+    ja: "{count}件のフォルダー",
     en: "{count} folders",
   },
   "chrome.workspacePicker.editNamed": {

@@ -60,27 +60,27 @@ export const panels = {
     en: "Runs requests in this agent's conversation on the schedule shown. Ask the agent in the conversation to create or change one.",
   },
   "panels.routine.empty": {
-    ja: "登録されたルーチンはありません。「毎朝 8 時にデプロイを確認して」のようにエージェントに依頼すると作成できます。",
+    ja: "登録されたルーチンはありません。「毎朝8時にデプロイを確認して」のようにエージェントに依頼すると作成できます。",
     en: 'None yet. Ask the agent for one ("check the deploy every morning at 8").',
   },
   "panels.routine.schedule.daily": {
-    ja: "毎日 {time}",
+    ja: "毎日{time}",
     en: "Every day at {time}",
   },
   "panels.routine.schedule.weekly": {
-    ja: "毎週 {days} {time}",
+    ja: "毎週{days} {time}",
     en: "Every week on {days} at {time}",
   },
   "panels.routine.schedule.every": {
-    ja: "{minutes} 分ごと",
+    ja: "{minutes}分ごと",
     en: "Every {minutes} minutes",
   },
   "panels.routine.schedule.once": {
-    ja: "{at} に 1 回",
+    ja: "{at}に1回",
     en: "Once at {at}",
   },
   "panels.routine.schedule.watch": {
-    ja: "{minutes} 分ごとに確認し、{what} が変わったら実行",
+    ja: "{minutes}分ごとに確認し、{what}が変わったら実行",
     en: "Check every {minutes} minutes, run when {what} changes",
   },
   "panels.routine.watch.http": {
@@ -96,7 +96,7 @@ export const panels = {
     en: "{command} ({condition})",
   },
   "panels.routine.watch.mcp": {
-    ja: "{server} の {tool}（{condition}）",
+    ja: "{server}の{tool}（{condition}）",
     en: "{server}: {tool} ({condition})",
   },
   "panels.routine.watch.newItem": {
@@ -108,15 +108,15 @@ export const panels = {
     en: "a value change",
   },
   "panels.routine.watch.status": {
-    ja: "状態コード {status}",
+    ja: "状態コード{status}",
     en: "status {status}",
   },
   "panels.routine.watch.bodyChanged": { ja: "本文", en: "the body" },
   "panels.routine.watch.modified": { ja: "更新時刻", en: "the timestamp" },
   "panels.routine.watch.content": { ja: "内容", en: "the content" },
-  "panels.routine.watch.exit": { ja: "終了コード {code}", en: "exit {code}" },
+  "panels.routine.watch.exit": { ja: "終了コード{code}", en: "exit {code}" },
   "panels.routine.watch.contains": {
-    ja: "{text} を含むこと",
+    ja: "{text}を含むこと",
     en: "it contains {text}",
   },
   "panels.routine.weekday.1": { ja: "月", en: "Mon" },
@@ -133,17 +133,17 @@ export const panels = {
   "panels.routine.status.skipped": { ja: "見送り", en: "skipped" },
   "panels.routine.disabled": { ja: "停止中", en: "Disabled" },
   "panels.routine.queued": { ja: "待機中", en: "Waiting" },
-  "panels.routine.next": { ja: "次回 {when}", en: "next {when}" },
+  "panels.routine.next": { ja: "次回{when}", en: "next {when}" },
   "panels.routine.last": {
-    ja: "前回 {when} {status}",
+    ja: "前回{when} {status}",
     en: "last {when} {status}",
   },
   "panels.routine.checked": {
-    ja: "確認 {when}",
+    ja: "確認{when}",
     en: "checked {when}",
   },
   "panels.routine.checkFailed": {
-    ja: "確認 {when} に失敗",
+    ja: "確認{when}に失敗",
     en: "check failed at {when}",
   },
   "panels.routine.run": { ja: "今すぐ実行", en: "Run now" },
@@ -197,11 +197,11 @@ export const panels = {
   // the app's, not the model's: a row the user reads should follow the app
   // language like every other label.
   "panels.tool.askQuestions": {
-    ja: "{count} 件の質問",
+    ja: "{count}件の質問",
     en: "{count} questions",
   },
-  "panels.tool.askOneQuestion": { ja: "1 件の質問", en: "1 question" },
+  "panels.tool.askOneQuestion": { ja: "1件の質問", en: "1 question" },
   "panels.tool.taskWaitSuffix": { ja: "（待機）", en: " (wait)" },
-  "panels.tool.sendTo": { ja: "{to} へ: {summary}", en: "to {to}: {summary}" },
+  "panels.tool.sendTo": { ja: "{to}へ: {summary}", en: "to {to}: {summary}" },
   "panels.tool.backgroundList": { ja: "一覧", en: "list" },
 } satisfies Record<string, LocalizedText>;

@@ -324,7 +324,7 @@ Deno.test("startPrompt (web path): first prompt auto-generates the session title
     modelProvider: providerId,
     modelId: "main",
   });
-  assertEquals(session.name.startsWith("セッション "), true); // provisional
+  assertEquals(session.name.startsWith("セッション"), true); // provisional
 
   const captured: CapturedCall[] = [];
   faux.setResponses(

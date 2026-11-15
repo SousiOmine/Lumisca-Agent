@@ -147,7 +147,7 @@ Deno.test("the direct fetch stops at the size limit while reading", async () => 
 
 Deno.test("failureText speaks each reader's language", () => {
   const message = "Tavily returned HTTP 401";
-  assert(failureText("ja", "auth", message).includes("API キー"));
+  assert(failureText("ja", "auth", message).includes("APIキー"));
   assert(failureText("en", "auth", message).includes("API key"));
 });
 

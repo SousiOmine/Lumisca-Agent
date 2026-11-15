@@ -111,7 +111,7 @@ Deno.test("translate returns the message of the language", () => {
 Deno.test("translate interpolates {name} placeholders", () => {
   assertEquals(
     translate("ja", "common.sessionName", { date: "12:00" }),
-    "セッション 12:00",
+    "セッション12:00",
   );
   assertEquals(
     translate("en", "common.sessionName", { date: "12:00" }),

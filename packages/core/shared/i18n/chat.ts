@@ -22,7 +22,7 @@ export const chat = {
     en: "Changes against the base branch",
   },
   "chat.mode.review.option.baseDiff.description": {
-    ja: "現在のブランチと main などのベースブランチとの差分をレビュー",
+    ja: "現在のブランチとmainなどのベースブランチとの差分をレビュー",
     en: "Review the diff against the base branch (main, …)",
   },
   "chat.mode.review.option.baseDiff.shortText": {
@@ -67,7 +67,7 @@ export const chat = {
 
   // --- chat view -----------------------------------------------------------
   "chat.empty.workspace": {
-    ja: "作業内容を入力してください。ワークスペース内のファイル操作やコマンド実行を AI が自律的に進めます。",
+    ja: "作業内容を入力してください。ワークスペース内のファイル操作やコマンド実行をAIが自律的に進めます。",
     en: "Enter a task. The AI will autonomously operate files and run commands in your workspace.",
   },
   "chat.empty.chat": {
@@ -112,7 +112,7 @@ export const chat = {
   /** Shown above the field once the text is close to the cap (the composer
    * stops accepting input at 0, so the count never goes negative). */
   "chat.composer.lengthLeft": {
-    ja: "あと {count} 文字入力できます",
+    ja: "あと{count}文字入力できます",
     en: "{count} characters left",
   },
   "chat.composer.attach.tooLarge": {
@@ -203,7 +203,7 @@ export const chat = {
     en: "Diagrams may not contain scripts",
   },
   "chat.visual.error.size": {
-    ja: "図が大きすぎます。上限は {limit} です。",
+    ja: "図が大きすぎます。上限は{limit}です。",
     en: "Diagram is too large. The limit is {limit}.",
   },
   "chat.visual.error.source": { ja: "ソースを表示", en: "Show source" },
@@ -256,7 +256,7 @@ export const chat = {
    * is refused rather than shown degraded (see App.tsx): the sentence
    * explains why the reader landed on Lumisca code instead. */
   "chat.stella.refused": {
-    ja: "Lumisca モードはこのサーバーで使えません: {reason}",
+    ja: "Lumiscaモードはこのサーバーで使えません: {reason}",
     en: "Lumisca mode cannot run on this server: {reason}",
   },
   "chat.stella.agents.new": { ja: "新しいエージェント", en: "New agent" },
@@ -396,7 +396,7 @@ export const chat = {
    * described, because "3 files" is a caption rather than something the user
    * wrote. */
   "chat.stella.agents.preview.files": {
-    ja: "ファイル {count} 件",
+    ja: "ファイル{count}件",
     en: "{count} files",
   },
   "chat.stella.agents.preview.card": { ja: "カード", en: "Card" },
@@ -444,7 +444,7 @@ export const chat = {
     en: "Share a folder",
   },
   "chat.stella.share.hint": {
-    ja: "この PC のフォルダーを、この会話のエージェントが使えるようにします。",
+    ja: "このPCのフォルダーを、この会話のエージェントが使えるようにします。",
     en: "Let this conversation's agent use a folder on this computer.",
   },
   "chat.stella.share.pick": {
@@ -514,7 +514,7 @@ export const chat = {
     en: "Folder sharing",
   },
   "chat.stella.share.request.hint": {
-    ja: "この PC のフォルダーを選ぶと、この会話のエージェントが使えるようになります。",
+    ja: "このPCのフォルダーを選ぶと、この会話のエージェントが使えるようになります。",
     en: "Choose a folder on this computer and this conversation's agent can use it.",
   },
   /** Refusing to lend a folder. A card has no close button, so this is the
@@ -526,7 +526,7 @@ export const chat = {
   /** When the wait ends (the same shape as the environment-variable card's
    * line: the time alone, no explanation). */
   "chat.stella.share.request.deadline": {
-    ja: "{time} まで",
+    ja: "{time}まで",
     en: "Until {time}",
   },
   /** A browser tab has no OS folder picker: the card says so instead of
@@ -554,7 +554,7 @@ export const chat = {
   /** When the wait ends by itself: saying when keeps a late return from
    * looking like a lost run. */
   "chat.stella.handover.deadline": {
-    ja: "この待機は {time} までです",
+    ja: "この待機は{time}までです",
     en: "This wait ends at {time}.",
   },
   /** The card `vm_env` puts in the conversation: the user types a secret
@@ -567,7 +567,7 @@ export const chat = {
     en: "Environment variable",
   },
   "chat.stella.env.request": {
-    ja: "{name} の値を入力してください。",
+    ja: "{name}の値を入力してください。",
     en: "Enter the value of {name}.",
   },
   "chat.stella.env.existing": {
@@ -600,7 +600,7 @@ export const chat = {
    * a parenthetical explanation made the line the longest one on a card that
    * has to stay small. */
   "chat.stella.env.deadline": {
-    ja: "{time} まで",
+    ja: "{time}まで",
     en: "Until {time}",
   },
   /** The clipboard the user and the machine share while the user drives the
@@ -610,11 +610,11 @@ export const chat = {
   "chat.stella.handover.clipboard.copy": { ja: "コピー", en: "Copy" },
   "chat.stella.handover.clipboard.paste": { ja: "ペースト", en: "Paste" },
   "chat.stella.handover.clipboard.copyHint": {
-    ja: "画面のコピーをこの PC へ",
+    ja: "画面のコピーをこのPCへ",
     en: "Copy the screen's text to this PC",
   },
   "chat.stella.handover.clipboard.pasteHint": {
-    ja: "この PC のコピーを画面へ",
+    ja: "このPCのコピーを画面へ",
     en: "Paste this PC's copy into the screen",
   },
   "chat.stella.handover.clipboard.copied": {
@@ -626,7 +626,7 @@ export const chat = {
     en: "Nothing has been copied on the screen yet",
   },
   "chat.stella.handover.clipboard.copyFailed": {
-    ja: "この PC にコピーできませんでした",
+    ja: "このPCにコピーできませんでした",
     en: "Could not copy it to this PC",
   },
   "chat.stella.handover.clipboard.copyError": {
@@ -634,11 +634,11 @@ export const chat = {
     en: "Could not read the screen's copy: {reason}",
   },
   "chat.stella.handover.clipboard.pasteEmpty": {
-    ja: "この PC のコピーは空でした",
+    ja: "このPCのコピーは空でした",
     en: "This PC's clipboard was empty",
   },
   "chat.stella.handover.clipboard.pasteReadFailed": {
-    ja: "この PC のコピーを読めませんでした",
+    ja: "このPCのコピーを読めませんでした",
     en: "Could not read this PC's clipboard",
   },
   "chat.stella.handover.clipboard.pasteFailed": {

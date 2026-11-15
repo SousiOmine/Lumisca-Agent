@@ -69,27 +69,27 @@ export const settings = {
     en: "Checking for updates…",
   },
   "settings.general.appliedRestartDesktop": {
-    ja: "v{version} を適用しました。再起動すると有効になります。",
+    ja: "v{version}を適用しました。再起動すると有効になります。",
     en: "v{version} applied. It will take effect after a restart.",
   },
   "settings.general.appliedRestartSystemd": {
-    ja: "v{version} を適用しました。サービスの再起動後に有効になります。",
+    ja: "v{version}を適用しました。サービスの再起動後に有効になります。",
     en: "v{version} applied. It will take effect after the service restarts.",
   },
   "settings.general.appliedNextStart": {
-    ja: "v{version} を適用しました。次回の起動で有効になります。",
+    ja: "v{version}を適用しました。次回の起動で有効になります。",
     en: "v{version} applied. It will take effect on the next start.",
   },
   "settings.general.readyToInstall": {
-    ja: "v{version} のアップデートの準備ができました。",
+    ja: "v{version}のアップデートの準備ができました。",
     en: "Update to v{version} is ready to install.",
   },
   "settings.general.readyToInstallServer": {
-    ja: "v{version} のアップデートをインストールできます。",
+    ja: "v{version}のアップデートをインストールできます。",
     en: "Update to v{version} is ready to install on the server.",
   },
   "settings.general.versionAvailable": {
-    ja: "v{version} が利用可能です。",
+    ja: "v{version}が利用可能です。",
     en: "v{version} is available.",
   },
   "settings.general.latestVersion": {
@@ -143,11 +143,11 @@ export const settings = {
   /** Web Push: agent events delivered to an installed PWA through the
    * browser's push service, so they arrive with the app closed. */
   "settings.general.pushNotifications": {
-    ja: "PWA 通知",
+    ja: "PWA通知",
     en: "PWA notifications",
   },
   "settings.general.pushNotificationsDesc": {
-    ja: "インストールした PWA に、実行完了・質問・エラーを OS の通知で届けます。アプリを閉じていても届きます。iPhone / iPad ではホーム画面に追加した PWA でだけ使えます。",
+    ja: "インストールしたPWAに、実行完了・質問・エラーをOSの通知で届けます。アプリを閉じていても届きます。iPhone / iPadではホーム画面に追加したPWAでだけ使えます。",
     en: "Deliver completion, question and error alerts to the installed PWA through your OS, even with the app closed. On iPhone / iPad this works only in a PWA added to the home screen.",
   },
   "settings.general.pushDenied": {
@@ -251,7 +251,7 @@ export const settings = {
    * search section's own description: the two sections are one list of
    * services, so each says what it is for and nothing else. */
   "settings.provider.aiDescription": {
-    ja: "エージェントが応答の生成に使用する AI プロバイダーです。",
+    ja: "エージェントが応答の生成に使用するAIプロバイダーです。",
     en: "The AI providers the agent uses to generate replies.",
   },
   "settings.provider.configured": { ja: "設定済み", en: "Configured" },
@@ -264,7 +264,7 @@ export const settings = {
   // --- provider detail ------------------------------------------------------
   "settings.provider.loginStatus": { ja: "ログイン済み", en: "Logged in" },
   "settings.provider.oauthDescription": {
-    ja: "OAuth ログイン（サブスクリプション契約）",
+    ja: "OAuthログイン（サブスクリプション契約）",
     en: "OAuth login (subscription)",
   },
   "settings.provider.logout": { ja: "ログアウト", en: "Logout" },
@@ -368,7 +368,7 @@ export const settings = {
     en: "Provider not in the list",
   },
   "settings.provider.addCustomOpenAI": {
-    ja: "カスタム OpenAI 互換プロバイダーを追加",
+    ja: "カスタムOpenAI互換プロバイダーを追加",
     en: "Add custom OpenAI-compatible provider",
   },
   "settings.provider.send": { ja: "送信", en: "Send" },
@@ -388,7 +388,7 @@ export const settings = {
     en: "Display name",
   },
   "settings.userProvider.displayNamePlaceholder": {
-    ja: "例: 自宅 vLLM",
+    ja: "例: 自宅vLLM",
     en: "e.g. Home vLLM",
   },
   "settings.userProvider.idLabel": { ja: "プロバイダーID", en: "Provider ID" },
@@ -407,11 +407,11 @@ export const settings = {
   "settings.userProvider.baseUrlLabel": { ja: "Base URL", en: "Base URL" },
   "settings.userProvider.apiLabel": { ja: "API", en: "API" },
   "settings.userProvider.baseUrlHint": {
-    ja: "OpenAI 互換エンドポイントの基底 URL。通常は /v1 までです。",
+    ja: "OpenAI互換エンドポイントの基底URL。通常は /v1までです。",
     en: "Base URL for the OpenAI-compatible endpoint. Usually up to /v1.",
   },
   "settings.userProvider.apiDefaultHint": {
-    ja: "モデルが未指定の場合の既定 API",
+    ja: "モデルが未指定の場合の既定API",
     en: "Default API when no model specifies one",
   },
   "settings.userProvider.apiKeyLabel": { ja: "APIキー", en: "API key" },
@@ -553,7 +553,7 @@ export const settings = {
     en: "Failed to save the compaction settings: {error}",
   },
   "settings.compaction.invalidNumber": {
-    ja: "0 から 100 までの整数を入力してください。",
+    ja: "0から100までの整数を入力してください。",
     en: "Enter a whole number between 0 and 100.",
   },
 
@@ -636,9 +636,9 @@ export const settings = {
     en: "Relative path from workspace root",
   },
   "settings.mcp.urlLabel": { ja: "URL", en: "URL" },
-  "settings.mcp.urlEmpty": { ja: "URL を入力してください", en: "Enter a URL" },
+  "settings.mcp.urlEmpty": { ja: "URLを入力してください", en: "Enter a URL" },
   "settings.mcp.envLabel": {
-    ja: "環境変数（key=value、1行に1つ、{var} 展開可）",
+    ja: "環境変数（key=value、1行に1つ、{var}展開可）",
     en: "Environment variables (key=value, one per line, {var} expansion supported)",
   },
   "settings.mcp.httpHeadersLabel": {
@@ -654,7 +654,7 @@ export const settings = {
     en: "Test the server to unlock adding",
   },
   "settings.mcp.testOk": {
-    ja: "ツールを {count} 件取得しました",
+    ja: "ツールを{count}件取得しました",
     en: "Fetched {count} tools",
   },
   "settings.mcp.testNoTools": {
@@ -674,7 +674,7 @@ export const settings = {
   // --- mcp OAuth sign-in ----------------------------------------------------
   /** Shown in place of a failure when the server asked for a sign-in. */
   "settings.mcp.authRequired": {
-    ja: "このサーバーには OAuth 認証が必要です",
+    ja: "このサーバーにはOAuth認証が必要です",
     en: "This server requires an OAuth sign-in",
   },
   "settings.mcp.authStart": {
@@ -700,7 +700,7 @@ export const settings = {
   /** For WebViews that cannot open a window (the desktop app): the user
    * copies the sign-in URL and opens it in their own browser. */
   "settings.mcp.authCopyUrl": {
-    ja: "認証 URL をコピー",
+    ja: "認証URLをコピー",
     en: "Copy the sign-in URL",
   },
   "settings.mcp.authCopied": {
@@ -755,11 +755,11 @@ export const settings = {
    * TLS-terminating front end such as `tailscale serve`); anything else is
    * refused before a request leaves the app. */
   "settings.connection.badUrl": {
-    ja: "URL は http:// または https:// で始まる必要があります",
+    ja: "URLはhttp:// またはhttps:// で始まる必要があります",
     en: "The URL must start with http:// or https://",
   },
   "settings.connection.urlHint": {
-    ja: "接続先サーバーの URL を入力してください。http:// か https:// で始まるもの。",
+    ja: "接続先サーバーのURLを入力してください。http:// かhttps:// で始まるもの。",
     en: "Enter the server URL, starting with http:// or https://.",
   },
   "settings.connection.unnamed": { ja: "（無名）", en: "(unnamed)" },
@@ -820,7 +820,7 @@ export const settings = {
    * own: the nav key `settings.nav.providers` names the category). */
   "settings.webSearch.title": { ja: "Web検索", en: "Web search" },
   "settings.webSearch.description": {
-    ja: "エージェントが Web 検索やページの閲覧に使用する検索プロバイダーを設定します。",
+    ja: "エージェントがWeb検索やページの閲覧に使用する検索プロバイダーを設定します。",
     en: "Configure the search provider used by the agent for web searches and fetching pages.",
   },
   "settings.webSearch.empty": {
@@ -830,11 +830,11 @@ export const settings = {
   "settings.webSearch.makeDefault": { ja: "既定にする", en: "Make default" },
   "settings.webSearch.defaultBadge": { ja: "既定", en: "Default" },
   "settings.webSearch.noDefault": {
-    ja: "既定のプロバイダーが未設定です。エージェントは Web 検索ツールを使用できません。",
+    ja: "既定のプロバイダーが未設定です。エージェントはWeb検索ツールを使用できません。",
     en: "No default provider: the agent has no web tools.",
   },
   "settings.webSearch.useFetchApi": {
-    ja: "ページ取得: プロバイダーの API",
+    ja: "ページ取得: プロバイダーのAPI",
     en: "Page fetch: provider API",
   },
   "settings.webSearch.useFetchDirect": {
@@ -869,13 +869,13 @@ export const settings = {
   "settings.webSearch.form.provider": { ja: "プロバイダー", en: "Provider" },
   "settings.webSearch.form.apiKey": { ja: "APIキー", en: "API key" },
   "settings.webSearch.form.apiKeyKeep": {
-    ja: "空欄のまま保存すると、登録済みの API キーを維持します。",
+    ja: "空欄のまま保存すると、登録済みのAPIキーを維持します。",
     en: "Leave it empty to keep the stored key.",
   },
   "settings.webSearch.form.check": { ja: "接続を確認", en: "Check" },
   "settings.webSearch.form.checking": { ja: "確認中…", en: "Checking…" },
   "settings.webSearch.form.checked": {
-    ja: "検索に成功しました。{count} 件見つかりました。追加できます。",
+    ja: "検索に成功しました。{count}件見つかりました。追加できます。",
     en: "Search worked. {count} result(s) found. You can add it now.",
   },
   "settings.webSearch.form.failed": {
@@ -910,8 +910,8 @@ export const settings = {
     ja: "変更に失敗しました: {error}",
     en: "Failed to change: {error}",
   },
-  "settings.mcp.toolCount": { ja: "{count} 個のツール", en: "{count} tools" },
-  "settings.provider.oauth": { ja: "OAuth 連携", en: "OAuth" },
+  "settings.mcp.toolCount": { ja: "{count}個のツール", en: "{count} tools" },
+  "settings.provider.oauth": { ja: "OAuth連携", en: "OAuth" },
   /** Section heading of the AI providers inside the プロバイダー category
    * (the web-search providers are listed under it on the same screen). */
   "settings.provider.aiTitle": {

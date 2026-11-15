@@ -70,7 +70,7 @@ Deno.test("StellaSidebar: a message with no words is described", () => {
   // catalogue, so it reads in the app's language.
   assertStringIncludes(
     render([agent("a1", { kind: "files", count: 3, at: AT })]),
-    "ファイル 3 件",
+    "ファイル3件",
   );
   assertStringIncludes(
     render([agent("a1", { kind: "card", at: AT })]),

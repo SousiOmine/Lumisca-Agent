@@ -76,7 +76,7 @@ export const common = {
   /** Web search failures the settings screen shows. `{message}` is the
    * provider's own explanation, so it may be in any language. */
   "common.websearch.auth": {
-    ja: "API キーが受け付けられませんでした: {message}",
+    ja: "APIキーが受け付けられませんでした: {message}",
     en: "The API key was rejected: {message}",
   },
   "common.websearch.rateLimit": {
@@ -130,7 +130,7 @@ export const common = {
     en: "This server requires a token. The page is not shown because the browser has no token stored, or the stored one does not match.",
   },
   "common.tokenRequired.how": {
-    ja: "次の形式の URL を一度だけ開いてください。2 回目以降はトークン無しの URL で開けます。",
+    ja: "次の形式のURLを一度だけ開いてください。2回目以降はトークン無しのURLで開けます。",
     en: "Open a URL of the form below once. After that, the URL without the token works.",
   },
   "common.tokenRequired.example": {
@@ -138,7 +138,7 @@ export const common = {
     en: "http://<host>:<port>/?token=<token>",
   },
   "common.tokenRequired.note": {
-    ja: "トークンの値はサーバーの設定を確認してください。ブラウザで Cookie が無効になっている場合にもこの画面が表示されます。",
+    ja: "トークンの値はサーバーの設定を確認してください。ブラウザでCookieが無効になっている場合にもこの画面が表示されます。",
     en: "Check your server configuration for the token value. This screen also appears when the browser rejects cookies.",
   },
   /** The way back in when the app runs without an address bar: an installed
@@ -165,9 +165,9 @@ export const common = {
   /** The page the browser lands on after the authorization server redirects
    * it back (see server/routes/mcp.ts). Served without the app, so it
    * renders in the language the server resolved for that request. */
-  "common.mcpAuth.title": { ja: "MCP の認証", en: "MCP sign-in" },
+  "common.mcpAuth.title": { ja: "MCPの認証", en: "MCP sign-in" },
   "common.mcpAuth.done": {
-    ja: "認証が完了しました。このタブを閉じて Lumisca に戻ってください。",
+    ja: "認証が完了しました。このタブを閉じてLumiscaに戻ってください。",
     en: "Signed in. Close this tab and return to Lumisca.",
   },
   "common.mcpAuth.failed": {
@@ -175,19 +175,19 @@ export const common = {
     en: "Sign-in failed: {error}",
   },
   "common.mcpAuth.missing": {
-    ja: "この認証リクエストは見つかりませんでした。期限切れか、すでに完了しています。Lumisca に戻り、もう一度お試しください。",
+    ja: "この認証リクエストは見つかりませんでした。期限切れか、すでに完了しています。Lumiscaに戻り、もう一度お試しください。",
     en: "This sign-in request was not found. It expired or already finished. Return to Lumisca and try again.",
   },
 
   // --- core-generated transcript text --------------------------------------
   /** Provisional name of a session, before the title generator names it
    * (see shared/misc.ts formatSessionName). */
-  "common.sessionName": { ja: "セッション {date}", en: "Session {date}" },
+  "common.sessionName": { ja: "セッション{date}", en: "Session {date}" },
   /** Head line of a compaction checkpoint (see ai/context-compaction.ts).
    * It is stored with the message, so a checkpoint keeps the language it was
    * generated in. */
   "checkpoint.title": {
-    ja: "履歴 {count} 件を約 {tokens} トークンに要約しました。",
+    ja: "履歴{count}件を約{tokens}トークンに要約しました。",
     en: "Summarized {count} messages into about {tokens} tokens.",
   },
   /** Why a run ended without doing anything: the model answered with
@@ -195,7 +195,7 @@ export const common = {
    * out (see ai/retry-policy.ts). Without this the turn just stopped,
    * which reads as the agent ignoring the prompt. */
   "session.vacantResponse": {
-    ja: "モデルの応答が空でした。本文もツール呼び出しもありません。{count} 回まで自動で再試行しましたが回復しませんでした。もう一度送信してください。",
+    ja: "モデルの応答が空でした。本文もツール呼び出しもありません。{count}回まで自動で再試行しましたが回復しませんでした。もう一度送信してください。",
     en:
       "The model answered with neither text nor a tool call. Retried " +
       "automatically {count} times without recovering. Send the message " +
@@ -203,7 +203,7 @@ export const common = {
   },
   /** Why a run ended on a rate-limit/error budget that had been retried. */
   "session.retryExhausted": {
-    ja: "自動再試行の上限 {count} 回に達したため停止しました: {message}",
+    ja: "自動再試行の上限{count}回に達したため停止しました: {message}",
     en: "Stopped after {count} automatic retries: {message}",
   },
 
@@ -229,7 +229,7 @@ export const common = {
   /** A run blocked on the `vm_env` dialog: like a hand-over, only the user
    * can release it, so it is notified with the same urgency. */
   "notify.env": {
-    ja: "「{name}」が環境変数 {variable} の入力を待っています",
+    ja: "「{name}」が環境変数{variable}の入力を待っています",
     en: '"{name}" is waiting for a value of {variable}',
   },
   /** A run blocked on the `share_request` card: the agent wants a folder
@@ -257,7 +257,7 @@ export const common = {
   /** The `vm_env` dialog: the body names the variable, the title is the
    * agent (as for every push). */
   "notify.push.env": {
-    ja: "{variable} の入力を待っています",
+    ja: "{variable}の入力を待っています",
     en: "Is waiting for a value of {variable}",
   },
   "notify.push.share": {

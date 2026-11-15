@@ -33,7 +33,7 @@ Deno.test("CloseTabsDialog warns about the single tab it would stop", () => {
 
 Deno.test("CloseTabsDialog lists every running tab of a bulk close", () => {
   const html = render(["A の調査", "B の実装"]);
-  assertStringIncludes(html, "対象のタブのうち 2 件が実行中です");
+  assertStringIncludes(html, "対象のタブのうち2件が実行中です");
   // The names are rows, not sentence fragments: a title may be long or
   // repeated, and listing them keeps the warning readable.
   assertStringIncludes(html, '<ul class="confirm-list">');

@@ -172,6 +172,19 @@ const RULES: readonly Rule[] = [
   },
   patternRule("format/double-space", "one space between words", /[ 　]{2,}/),
   {
+    id: "format/space-between-scripts",
+    note:
+      "no space between Latin or a number and Japanese: write " +
+      '"AIが", "PWA通知", "1件"',
+    check(text) {
+      // A placeholder counts as the word it stands for (`{count} 件`).
+      const fixed = text
+        .replace(/([A-Za-z0-9{}]) +(?=[\u3040-\u30ff\u4e00-\u9fff])/g, "$1")
+        .replace(/([\u3040-\u30ff\u4e00-\u9fff]) +(?=[A-Za-z0-9{}])/g, "$1");
+      return fixed === text ? null : { fixed };
+    },
+  },
+  {
     id: "format/edge-space",
     note: "no space at either edge; a colon may wait for its value",
     check(text) {

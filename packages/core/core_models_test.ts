@@ -405,7 +405,7 @@ Deno.test("fast model: first prompt auto-generates the session title", async () 
     modelProvider: providerId,
     modelId: "main",
   });
-  assertEquals(session.name.startsWith("セッション "), true); // provisional
+  assertEquals(session.name.startsWith("セッション"), true); // provisional
 
   const captured: CapturedCall[] = [];
   faux.setResponses(
@@ -450,7 +450,7 @@ Deno.test("no fast model: session keeps its provisional name", async () => {
   await promptSession(core, session.id, "hello");
 
   assertEquals(core.getSession(session.id)!.name, session.name);
-  assertEquals(session.name.startsWith("セッション "), true);
+  assertEquals(session.name.startsWith("セッション"), true);
 
   core.close();
 });

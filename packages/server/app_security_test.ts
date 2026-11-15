@@ -343,7 +343,7 @@ Deno.test("the MCP OAuth callback is reachable without the token", async () => {
     );
     assertEquals(callback.status, 404);
     const page = await callback.text();
-    assert(page.includes("MCP の認証") || page.includes("MCP sign-in"));
+    assert(page.includes("MCPの認証") || page.includes("MCP sign-in"));
 
     // Every other MCP path stays behind the token.
     const guarded = await app.fetch(

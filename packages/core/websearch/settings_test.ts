@@ -188,7 +188,7 @@ Deno.test("a key check reports success and failure without saving", async () => 
   assertEquals(failed.ok, false);
   assertEquals(failed.results, 0);
   // The reason is shown to the user, in the app language.
-  assert(failed.detail?.includes("API キー"));
+  assert(failed.detail?.includes("APIキー"));
 });
 
 Deno.test("a check without a key fails before reaching the network", async () => {

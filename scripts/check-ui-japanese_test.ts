@@ -74,3 +74,28 @@ Deno.test("check-ui-japanese: the space after a colon may stay", () => {
   assertEquals(rulesFor(" 前の空白"), ["format/edge-space"]);
   assertEquals(rulesFor("後ろの空白 "), ["format/edge-space"]);
 });
+
+Deno.test("check-ui-japanese: no space between scripts or a number", () => {
+  // The catalogue writes a Latin word, a number and a placeholder on the
+  // Japanese around it with no space: the reader's eye crosses the boundary
+  // either way, and a space there breaks the word in two.
+  assertEquals(rulesFor("PWA 通知"), ["format/space-between-scripts"]);
+  assertEquals(rulesFor("この PC の"), ["format/space-between-scripts"]);
+  assertEquals(rulesFor("1 件の質問"), ["format/space-between-scripts"]);
+  assertEquals(rulesFor("履歴 {count} 件"), ["format/space-between-scripts"]);
+  assertEquals(rulesFor("PWA通知"), []);
+  assertEquals(rulesFor("このPCの"), []);
+  assertEquals(rulesFor("1件の質問"), []);
+  assertEquals(rulesFor("履歴{count}件"), []);
+  // A space between two Latin words, or around a slash, is not that boundary.
+  assertEquals(rulesFor("iPhone / iPad"), []);
+  assertEquals(rulesFor("Lumisca code"), []);
+});
+
+Deno.test("check-ui-japanese: the space fix is mechanical", () => {
+  const [finding] = checkUiJapanese({
+    "chat.test.one": { ja: "履歴 {count} 件を要約しました。" },
+  });
+  assert(finding !== undefined);
+  assertEquals(finding.fixed, "履歴{count}件を要約しました。");
+});
