@@ -351,8 +351,8 @@ export const chat = {
     en: "Use the default",
   },
   "chat.stella.agents.modelHint": {
-    ja: "このエージェントの会話が使うモデルです。未設定なら既定のモデルを使います。",
-    en: "The model this agent's conversation runs on. Unset means the app's default model.",
+    ja: "このエージェントで使用するモデルを設定します。",
+    en: "Sets the model this agent uses.",
   },
   "chat.stella.agents.deleteTitle": {
     ja: "「{name}」を削除しますか？",

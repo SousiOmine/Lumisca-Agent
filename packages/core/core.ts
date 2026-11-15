@@ -2185,7 +2185,7 @@ export class LumiscaCore {
    * has no model of its own.
    *
    * "Unset means the app's default model" is what the agent dialog promises
-   * (see chat.stella.agents.modelHint), but the conversation row stores the
+   * (see chat.stella.agents.modelDefault), but the conversation row stores the
    * pair it resolved when it was created and a run reads that row. Changing
    * the default afterwards therefore left the row on the old model while the
    * agent still said "default" — the row was right about what runs and wrong
