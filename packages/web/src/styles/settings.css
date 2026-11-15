@@ -659,9 +659,15 @@
   margin-top: 18px;
 }
 
+/* The head of a section: its heading, and the section's own action at the
+ * right edge. A section with no heading (one whose page title already names
+ * it) still puts its action there — "追加" belongs over the list it adds to,
+ * at the same right edge as the rows' own buttons, not beside the page title
+ * on the left where it reads as another heading. */
 .settings-section-head {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 10px;
   min-height: 30px;
 }

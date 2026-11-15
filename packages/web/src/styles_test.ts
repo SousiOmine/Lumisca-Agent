@@ -1459,3 +1459,19 @@ Deno.test("a disclosure's body is always mounted", async () => {
   }
   assertEquals(missing, [], "disclosures that do not use the shared shape");
 });
+
+Deno.test("a section's action keeps the right edge, heading or not", async () => {
+  // 保存済みプロンプト and MCPサーバー have no section heading (the page title
+  // names them), and their 追加 button then sat at the left edge, one line
+  // under that title: read as another heading rather than as the action over
+  // the list it adds to, and off the right edge where each row's own buttons
+  // are. A section that does have a heading pushes its action there through
+  // the heading's own growth, which is why both halves are checked.
+  const settings = await Deno.readTextFile(
+    new URL("./styles/settings.css", import.meta.url),
+  );
+  const head = declarations(cssRules(settings), ".settings-section-head");
+  assertEquals(head.get("justify-content"), "flex-end");
+  const heading = declarations(cssRules(settings), ".settings-section-head h3");
+  assertEquals(heading.get("flex"), "1");
+});
