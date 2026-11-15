@@ -1475,3 +1475,51 @@ Deno.test("a section's action keeps the right edge, heading or not", async () =>
   const heading = declarations(cssRules(settings), ".settings-section-head h3");
   assertEquals(heading.get("flex"), "1");
 });
+
+Deno.test("a routine's state stays on its name's line", async () => {
+  // A stopped routine's badge wrapped under a long name and was read as part
+  // of the line below: the row looked like one that still runs. The title row
+  // never wraps; the name gives way (measured per row, so a name that fits
+  // keeps its last letters) and fades into the row instead of being cut
+  // square beside the badge.
+  const stella = await Deno.readTextFile(
+    new URL("./styles/stella.css", import.meta.url),
+  );
+  const rules = cssRules(stella);
+  assertEquals(
+    declarations(rules, ".routine-title").get("flex-wrap"),
+    "nowrap",
+    "the badges must not wrap away from the name",
+  );
+  const name = declarations(rules, ".routine-name");
+  assertEquals(name.get("min-width"), "0", "the name must be able to shrink");
+  assertEquals(name.get("white-space"), "nowrap");
+  assertEquals(
+    declarations(rules, ".routine-name.cut").get("mask-image"),
+    "linear-gradient(to right, #000 calc(100% - 20px), transparent)",
+  );
+  assertEquals(
+    declarations(rules, ".routine-badge").get("flex"),
+    "none",
+    "a badge must not shrink with the name",
+  );
+});
+
+Deno.test("a routine's request folds to three lines", async () => {
+  // Routines are written by the agent and can be pages long; shown whole, one
+  // filled the panel and the next was below the fold. The fold lives in the
+  // stylesheet, and the disclosure that opens it in the component
+  // (RoutinePrompt).
+  const stella = await Deno.readTextFile(
+    new URL("./styles/stella.css", import.meta.url),
+  );
+  const rules = cssRules(stella);
+  const prompt = declarations(rules, ".routine-prompt");
+  assertEquals(prompt.get("-webkit-line-clamp"), "3");
+  assertEquals(prompt.get("overflow"), "hidden");
+  assertEquals(
+    declarations(rules, ".routine-prompt.open").get("-webkit-line-clamp"),
+    "none",
+    "an opened request must show all of its lines",
+  );
+});

@@ -18,6 +18,7 @@ import {
   useRef,
   useState,
 } from "preact/compat";
+import { useExpandableRow } from "../../hooks/useExpandableRow.ts";
 import { NEVER, useVisibleInterval } from "../../hooks/useVisibleInterval.ts";
 import { useLocale, useT } from "../../i18n.ts";
 import type { RoutineView } from "../../types.ts";
@@ -180,6 +181,73 @@ function statusKey(status: RoutineStatus | null): MessageKey | null {
   }
 }
 
+/** A routine's name, faded out on the right when the row cannot show all of
+ * it.
+ *
+ * The badges beside the name say something the reader cannot get anywhere
+ * else — a stopped routine looks like a running one otherwise — so they must
+ * stay on the name's line; the name is what gives way. A fade, not an
+ * ellipsis: it reads as "the row is short of room" rather than as the end of
+ * a name, and the badge that follows it is not crowded by a row of dots. */
+function RoutineName({ name }: { name: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [cut, setCut] = useState(false);
+
+  useEffect(() => {
+    const element = ref.current;
+    if (element === null) return;
+    // The row is measured rather than guessed from the length: the same name
+    // fits at a wide window and does not beside three badges.
+    const measure = () => setCut(element.scrollWidth > element.clientWidth + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [name]);
+
+  return (
+    <span ref={ref} className={`routine-name${cut ? " cut" : ""}`} title={name}>
+      {name}
+    </span>
+  );
+}
+
+/** The request a routine runs: three lines at rest, all of it once clicked.
+ *
+ * A routine is written by the agent from what the user said, so it can be
+ * pages long; shown whole, one routine filled the panel and the next one was
+ * below the fold. Only a text that actually runs past three lines is a
+ * button — a short one must not claim to open something.
+ */
+function RoutinePrompt({ children }: { children: string }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  const [folded, setFolded] = useState(false);
+  const { open, triggerProps } = useExpandableRow(folded);
+
+  useEffect(() => {
+    const element = ref.current;
+    if (element === null) return;
+    // Clamped, `scrollHeight` is still the whole text: it reports the content
+    // box, not the three lines it is clipped to.
+    const measure = () =>
+      setFolded(element.scrollHeight > element.clientHeight + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [children]);
+
+  return (
+    <p
+      ref={ref}
+      className={`routine-prompt${open ? " open" : ""}`}
+      {...(folded ? triggerProps : {})}
+    >
+      {children}
+    </p>
+  );
+}
+
 export interface RoutinePanelProps {
   /** The routines of the agent this list is about. */
   routines: RoutineView[];
@@ -290,7 +358,7 @@ export function RoutinePanel({
             >
               <div className="routine-main">
                 <div className="routine-title">
-                  <span className="routine-name">{routine.name}</span>
+                  <RoutineName name={routine.name} />
                   {routine.running && (
                     <span className="routine-badge running">
                       {t("panels.routine.status.running")}
@@ -355,7 +423,7 @@ export function RoutinePanel({
                     </>
                   )}
                 </div>
-                <p className="routine-prompt">{routine.prompt}</p>
+                <RoutinePrompt>{routine.prompt}</RoutinePrompt>
                 {routine.watchError !== undefined && (
                   <p className="routine-detail error-text">
                     {routine.watchError}

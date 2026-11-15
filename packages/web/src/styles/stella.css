@@ -357,23 +357,39 @@
   gap: 3px;
 }
 
+/* The name and its badges are one line, always: a badge that wrapped under
+ * the name read as belonging to the line below it, and "停止中" — the one
+ * fact that says the routine no longer runs — ended up out of sight under a
+ * long name. The name gives way instead (see .routine-name). */
 .routine-title {
   display: flex;
   gap: 6px;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .routine-name {
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* Squeezed by its badges: the end of the name fades into the row rather than
+ * being cut square (the badge that follows must not look clipped). Measured
+ * per row, so a name that fits keeps its last letters. */
+.routine-name.cut {
+  mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
 }
 
 .routine-badge {
+  flex: none;
   padding: 0 6px;
   font-size: 10px;
   line-height: 16px;
+  white-space: nowrap;
   border-radius: var(--radius-pill);
   background: var(--surface-3);
   color: var(--text-dim);
@@ -392,12 +408,35 @@
   color: var(--text-dim);
 }
 
+/* Three lines at rest: a routine's request is written by the agent and can be
+ * pages long, and shown whole, one routine filled the panel. A longer text
+ * becomes a button (RoutinePrompt) that opens it; a shorter one is a plain
+ * paragraph. */
 .routine-prompt {
   margin: 2px 0 0;
   font-size: 12px;
   color: var(--text-dim);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.routine-prompt.open {
+  display: block;
+  -webkit-line-clamp: none;
+}
+
+/* Folded: the last line fades, so the cut says there is more rather than
+ * looking like the end of the text. */
+.routine-prompt[role="button"] {
+  cursor: pointer;
+}
+
+.routine-prompt[role="button"]:not(.open) {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 16px), transparent);
 }
 
 .routine-detail {
