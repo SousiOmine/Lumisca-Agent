@@ -72,8 +72,12 @@ Deno.test("the install button turns into the work it started", () => {
   // the status; the panel must say so instead of looking frozen.
   const html = panel(status({ installing: true }));
   assertStringIncludes(html, "インストール中…");
-  assertStringIncludes(html, "disabled");
   assertEquals(html.includes(">インストール<"), false);
+  // Nothing to press while the files are being replaced, and the check is
+  // out too (one update request at a time).
+  assertEquals(html.includes("btn push"), false);
+  assertStringIncludes(html, "disabled");
+  assertStringIncludes(html, "アップデートを確認</button>");
   // The note says what installing will do next; that is behind, not now.
   assertEquals(html.includes("次回の起動で新しいバージョンが有効"), false);
 });
@@ -115,4 +119,34 @@ Deno.test("the PWA notification row is drawn only where the channel exists", () 
   // use and an explanation they did not ask for; the row is left out instead.
   assertEquals(panel(status()).includes("PWA 通知"), false);
   assertStringIncludes(panel(status(), "server", null, "on"), "PWA 通知");
+});
+
+Deno.test("the check for updates sits beside the version it is about", () => {
+  // The status row says what the last check found; the question "is there
+  // anything new?" belongs to the number it answers about, so the button is
+  // in the version row and not among the actions at the bottom.
+  const html = panel(status({ available: false, ready: false }));
+  const version = html.indexOf("v0.10.18");
+  const check = html.indexOf(">アップデートを確認<");
+  const statusText = html.indexOf("最新バージョンです。");
+  assertEquals(version >= 0 && check > version && statusText > check, true);
+});
+
+Deno.test("the notification row follows the language", () => {
+  // Notifications are an app preference like the language, not part of the
+  // update controls they used to be listed under.
+  const html = panel(status(), "shell");
+  const language = html.indexOf(">言語<");
+  const notify = html.indexOf("バックグラウンド通知");
+  const appInfo = html.indexOf("アプリ情報");
+  assertEquals(language >= 0 && notify > language && appInfo > notify, true);
+});
+
+Deno.test("the notification row is drawn without an updater too", () => {
+  // The toggle is not about updating, so a server with no updater (or a
+  // shell bridge that did not answer) must not hide it.
+  assertStringIncludes(
+    panel(null, "shell", "no-updater"),
+    "バックグラウンド通知",
+  );
 });

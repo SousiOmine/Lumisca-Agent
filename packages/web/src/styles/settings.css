@@ -960,6 +960,16 @@ button.provider-row-body:hover .provider-row-chevron {
   color: var(--text-faint);
 }
 
+/* The version and the check that asks about it: one object at the right edge
+ * of the row, so the button reads as belonging to the number and the two wrap
+ * together on a phone. */
+.update-version {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
 .update-status-row {
   display: flex;
   align-items: center;

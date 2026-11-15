@@ -1,4 +1,5 @@
 import { LOCALES, type MessageKey } from "@lumisca/core/shared";
+import type { ReactNode } from "preact/compat";
 import type { PushControls } from "../../hooks/usePush.ts";
 import type {
   UpdateFailureKind,
@@ -168,14 +169,27 @@ export function GeneralPanel({
 }: GeneralPanelProps) {
   const t = useT();
 
-  // The language and the notification toggle are app preferences of their
-  // own: they are shown whether or not an updater answered.
-  const languageItem = (
-    <LanguageItem
-      language={language}
-      error={languageError}
-      onLanguageChange={onLanguageChange}
-    />
+  // The app preferences: the language and the notification channels. None of
+  // them is about updating, so they stay above the update controls and are
+  // shown whether or not an updater answered.
+  const preferences = (
+    <>
+      <LanguageItem
+        language={language}
+        error={languageError}
+        onLanguageChange={onLanguageChange}
+      />
+      {source === "shell" && (
+        <SettingRow label={t("settings.general.bgNotification")}>
+          <Toggle
+            checked={notifyEnabled}
+            onChange={onNotifyEnabledChange}
+            label={t("settings.general.bgNotification")}
+          />
+        </SettingRow>
+      )}
+      <PushNotificationsItem push={push} />
+    </>
   );
 
   // Which server this page is talking to. An installed app cannot show its
@@ -216,7 +230,7 @@ export function GeneralPanel({
   if (status === null) {
     return (
       <div className="settings-pane">
-        {languageItem}
+        {preferences}
         {addressItem}
         <p className="settings-note">{unavailableNote}</p>
       </div>
@@ -232,6 +246,9 @@ export function GeneralPanel({
   // Replacing the files takes seconds and moves nothing else in the status:
   // without this the panel looks frozen after the install click.
   const installing = status.installing === true;
+  // A check is asked for by the version row; the updater answers one request
+  // at a time, so the button is out while one is already in flight.
+  const checkDisabled = status.checking || status.downloading || installing;
   const statusText = status.checking
     ? t("settings.general.checkingUpdate")
     : installing
@@ -262,9 +279,35 @@ export function GeneralPanel({
               })
             : t("settings.general.latestVersion");
 
+  // The one file action the status offers. A staged package that is being
+  // installed is already moving, and the check for another release is beside
+  // the version instead.
+  let action: ReactNode = null;
+  if (!installing) {
+    if (restartPending) {
+      action = canRestart ? (
+        <button type="button" className="btn push" onClick={onRestart}>
+          {t("settings.general.restart")}
+        </button>
+      ) : null;
+    } else if (status.ready) {
+      action = (
+        <button type="button" className="btn push" onClick={onInstall}>
+          {t("settings.general.install")}
+        </button>
+      );
+    } else if (status.available) {
+      action = (
+        <button type="button" className="btn push" onClick={onDownload}>
+          {t("settings.general.download")}
+        </button>
+      );
+    }
+  }
+
   return (
     <div className="settings-pane">
-      {languageItem}
+      {preferences}
 
       <div className="update-item">
         <div className="update-info">
@@ -275,7 +318,23 @@ export function GeneralPanel({
           </span>
           <span className="update-desc">Lumisca</span>
         </div>
-        <span className="mono">v{status.currentVersion}</span>
+        <div className="update-version">
+          <span className="mono">v{status.currentVersion}</span>
+          {/* Beside the version, in every state: a package staged by an
+              earlier release must not be a dead end (a failed install keeps
+              its package, and only a check learns that a newer release
+              replaced it). */}
+          {supported && (
+            <button
+              type="button"
+              className="btn small"
+              disabled={checkDisabled}
+              onClick={onCheck}
+            >
+              {t("settings.general.checkForUpdate")}
+            </button>
+          )}
+        </div>
       </div>
 
       {addressItem}
@@ -331,66 +390,10 @@ export function GeneralPanel({
             ) : (
               <>
                 <span className="update-status-text">{statusText}</span>
-                <div className="update-actions">
-                  {status.checking ? (
-                    <button type="button" className="btn small" disabled>
-                      {t("settings.general.checkForUpdate")}
-                    </button>
-                  ) : installing ? (
-                    <button type="button" className="btn push" disabled>
-                      {t("settings.general.installing")}
-                    </button>
-                  ) : restartPending ? (
-                    canRestart ? (
-                      <button
-                        type="button"
-                        className="btn push"
-                        onClick={onRestart}
-                      >
-                        {t("settings.general.restart")}
-                      </button>
-                    ) : null
-                  ) : status.ready ? (
-                    <>
-                      <button
-                        type="button"
-                        className="btn push"
-                        onClick={onInstall}
-                      >
-                        {t("settings.general.install")}
-                      </button>
-                      {/* The staged package is the *previous* release
-                              when a newer one is out (a failed install keeps
-                              its package staged), so checking must stay
-                              reachable — otherwise the screen offers a
-                              package that cannot be installed and no way to
-                              learn that a new release exists. */}
-                      <button
-                        type="button"
-                        className="btn small"
-                        onClick={onCheck}
-                      >
-                        {t("settings.general.checkForUpdate")}
-                      </button>
-                    </>
-                  ) : status.available ? (
-                    <button
-                      type="button"
-                      className="btn push"
-                      onClick={onDownload}
-                    >
-                      {t("settings.general.download")}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="btn small"
-                      onClick={onCheck}
-                    >
-                      {t("settings.general.checkForUpdate")}
-                    </button>
-                  )}
-                </div>
+                {/* One action at a time: the file work in flight (installing)
+                    has nothing to press, and the check for others lives in
+                    the version row. */}
+                <div className="update-actions">{action}</div>
               </>
             )}
           </div>
@@ -432,18 +435,6 @@ export function GeneralPanel({
           {unavailableNote}
         </div>
       )}
-
-      {source === "shell" && (
-        <SettingRow label={t("settings.general.bgNotification")}>
-          <Toggle
-            checked={notifyEnabled}
-            onChange={onNotifyEnabledChange}
-            label={t("settings.general.bgNotification")}
-          />
-        </SettingRow>
-      )}
-
-      <PushNotificationsItem push={push} />
     </div>
   );
 }
