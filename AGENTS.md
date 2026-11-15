@@ -1,88 +1,150 @@
-Lumisca-Agent は、LLM を用いてアプリケーション開発を支援するコーディングエージェントです。Web サーバーおよびデスクトップアプリとして動作し、Bun、Tauri、Preact で構築されています。
+Lumisca-Agent は LLM を用いてアプリケーション開発を支援するコーディングエージェントです。
+Web サーバーおよびデスクトップアプリとして動作し、Bun、Tauri、Preact で構築されています。
 
-LLM との接続には Vercel AI SDK（`ai` および `@ai-sdk/*`）を使用します。モデルのメタデータは models.dev（`@opencode-ai/models`）を基準とし、アプリケーション側でプロバイダーの生成と API キーの注入を行います。
+LLM との接続には Vercel AI SDK（`ai` および `@ai-sdk/*`）を使用します。
+モデルのメタデータは models.dev（`@opencode-ai/models`）を基準とし、アプリケーション側でプロバイダーの生成と API キーの注入を行います。
 
-**この文書は作業者向けの手引きです。** 何をどう触るか、どこで間違えやすいかだけを書きます。なぜその設計なのかは `ARCHITECTURE.md` にあり、ここには書きません。
+この文書は作業者向けの手引きです。
+何をどう触るか、どこで間違えやすいかだけを書きます。
+なぜその設計なのかは `ARCHITECTURE.md` にあり、ここには書きません。
 
 ## 作業前の確認
 
-編集の前に `git fetch` と `git status` で、手元が最新かを確かめます。push の前にも `git fetch` して `git log --oneline HEAD..origin/master` を見てください。
+編集の前に `git fetch` と `git status` で、手元が最新かを確かめます。
+push の前にも `git fetch` して `git log --oneline HEAD..origin/master` を見てください。
 
-上流は同じ日に何度も進みます。古い HEAD のまま編集すると、直っている問題を作り直したり、push が拒否されたりします。取り込むときは rebase し、取り込んだ後に検証をやり直してください。
+上流は同じ日に何度も進みます。
+古い HEAD のまま編集すると、直っている問題を作り直したり、push が拒否されたりします。
+取り込むときは rebase し、取り込んだ後に検証をやり直してください。
 
 ## 0. コードコメント
 
-コメントは、コードを読んでも分からないことだけを書きます。読めば分かることを書いたコメントは、コードを直しても直されないまま残り、やがて嘘になります。足す前に、名前を直せないかを考えてください。要らないコメントは、別の文に書き直すのではなく消します。
+コメントはコードを読んでも分からないことだけを書きます。
+読めば分かることを書いたコメントは、コードを直しても直されないまま残り、やがて嘘になります。
+足す前に、名前を直せないかを考えてください。
+要らないコメントは別の文に書き直すのではなく消します。
 
 | 書く | 書かない |
 | --- | --- |
 | なぜそうしたか、なぜ他の書き方を選ばなかったか | コードを日本語に翻訳しただけのもの |
-| コードから読めない制約・業務ルール・数値の根拠 | 変数名やメソッド名で表現できるもの |
+| コードから読めない制約、業務ルール、数値の根拠 | 変数名やメソッド名で表現できるもの |
 | 一見不要に見える処理がなぜ必要か | 修正履歴（`git log` で分かる） |
 | 直感に反する挙動、ハマりどころ | 自動生成されたままのコメント |
 | 期限と課題管理先が決まっている TODO | 放置された TODO、削除予定のないコメントアウト |
 
-たとえば `STELLA_COMPACTION_STYLE.maxTokens` の「モデルが実際に出せる量より多い出力を要求してはいけないので、記録の上限と予算の小さい方を採る」は書きます。関係が破れたときに何が起きるかは、コードから読めないためです。逆に `/** The RPC path. */`（`RPC_PATH`）や `// Filter by search query`（`filtered`）は書きません。
+たとえば `STELLA_COMPACTION_STYLE.maxTokens` の「モデルが実際に出せる量より多い出力を要求してはいけないので、記録の上限と予算の小さい方を採る」は書きます。
+関係が破れたときに何が起きるかは、コードから読めないためです。
+逆に `/** The RPC path. */`（`RPC_PATH`）や `// Filter by search query`（`filtered`）は書きません。
 
-- **言語は英語**: `.ts` / `.tsx` / `.rs` / `.css` のコメントは英語で書きます。日本語を書いてよいのは、画面やログの文言を引用するとき（`"作業完了"`）だけです。
-- **過去の話は理由のときだけ**: 「以前はこうだった」は、いまのコードがその形である理由を説明するときだけ書きます。いつ何を直したかは `git log` に任せてください。テストの「この回帰を固定する」は書きます。
-- **doc コメントには契約を書く**: `/** Options of a Sandbox. */` のような名前の言い換えは書きません。単位、範囲、省略時の意味、呼び出し側が守る前提を書きます。
-- **足場は片付ける**: `// TODO: implement` のような書きかけの目印は、実装が終わったら消します。
-- **TODO は追跡先とセット**: `// TODO(issue #123): …` の形だけを残します。
-- **コメントアウトしたコードは残さない**: 戻すときは revert します。
-- **数値には根拠を書く**: タイムアウト、上限、しきい値は、その値でなければならない理由を書きます。
+- `.ts` / `.tsx` / `.rs` / `.css` のコメントは英語で書きます。
+  日本語を書いてよいのは画面やログの文言を引用するとき（`"作業完了"`）だけです。
+- 「以前はこうだった」という過去の話は、いまのコードがその形である理由を説明するときだけ書きます。
+  いつ何を直したかは `git log` に任せてください。
+  テストの「この回帰を固定する」は書きます。
+- doc コメントには契約を書きます。
+  `/** Options of a Sandbox. */` のような名前の言い換えは書きません。
+  単位、範囲、省略時の意味、呼び出し側が守る前提を書きます。
+- 足場は片付けます。
+  `// TODO: implement` のような書きかけの目印は、実装が終わったら消します。
+- TODO は追跡先とセットにします。
+  `// TODO(issue #123): …` の形だけを残します。
+- コメントアウトしたコードは残しません。
+  戻すときは revert します。
+- タイムアウト、上限、しきい値の数値には、その値でなければならない根拠を書きます。
 
 ## 1. ビルドの注意点
 
-- **`packages/desktop` はワークスペースに含めない**: ルートの `package.json` に `workspaces` を置いていないので、`bun install` はデスクトップを巻き込みません（`src-tauri/target` がサーバーバイナリの入力に入ると巨大になります）。デスクトップはルートから `bun run dev:desktop` で動かします。このディレクトリから import するサーバー側のモジュールは、ルートの `tsconfig.json` の `@lumisca/*` が効かないため bare specifier を持てません。環境の取り出しは `packages/server/startup-env.ts` のように依存の無いモジュールへ分け、`startup.ts` から再輸出します。
-- **サーバーのビルド経路**: `scripts/build-server.ts` に集約しています。確認は `bun run smoke:server` です。
+- `packages/desktop` はワークスペースに含めません。
+  ルートの `package.json` に `workspaces` を置いていないので、`bun install` はデスクトップを巻き込みません（`src-tauri/target` がサーバーバイナリの入力に入ると巨大になります）。
+  デスクトップはルートから `bun run dev:desktop` で動かします。
+  このディレクトリから import するサーバー側のモジュールは、ルートの `tsconfig.json` の `@lumisca/*` が効かないため bare specifier を持てません。
+  環境の取り出しは `packages/server/startup-env.ts` のように依存の無いモジュールへ分け、`startup.ts` から再輸出します。
+- サーバーのビルド経路: `scripts/build-server.ts` に集約しています。
+  確認は `bun run smoke:server` です。
 
 ### デスクトップのシェルブリッジ
 
-シェル操作は loopback の HTTP へ送り（`packages/desktop/src-tauri/src/bridge_server.rs`）、届かない場合だけ Tauri IPC に退避します。経緯と理由は `ARCHITECTURE.md` の「シェルブリッジは loopback の HTTP、HTTPS のページは Tauri IPC へ退避する」にあります。
+シェル操作は loopback の HTTP へ送り（`packages/desktop/src-tauri/src/bridge_server.rs`）、届かない場合だけ Tauri IPC に退避します。
+経緯と理由は `ARCHITECTURE.md` の「シェルブリッジは loopback の HTTP、HTTPS のページは Tauri IPC へ退避する」にあります。
 
-- **独自スキームにしない**: WKWebView（macOS）は http(s) のページから独自スキームを fetch させません。CSP の `connect-src` に `http://127.0.0.1:*` が必要です（`packages/server/render.ts`）。
-- **HTTPS のページは IPC に退避する**: WebKit は https のページから loopback への fetch を遮断します。`shellCall` が切り替えるのは**通信段階の失敗**だけで、HTTP エラーで再実行するとアクションが二重に走ります。リモートページに許すコマンドは `capabilities/remote-shell.json` の `allow-shell-action` だけです。
-- **macOS のウィンドウ操作は OS のもの**: `tauri.macos.conf.json` は `decorations: true` + `titleBarStyle: "overlay"` で、信号機はネイティブのものを使います。透明なタイトルバーはページの上に 28pt 重なり、その中のページ要素はクリックを受け取れません。帯は `.app.macos` の上余白の下から始め、上余白に `.macos-titlebar-drag` を置きます（左 78px は空ける）。ドラッグとダブルクリックはブリッジへ送ります。Windows / Linux はフレームレスのままページが描きます。
-- **帯を描くかはブリッジの応答で決めない**: どちらの作法かは初期化スクリプトの `__LUMISCA_PLATFORM__` が答え、帯の有無は `inDesktopShell()` が決めます（`packages/web/src/shell.ts`）。`state` の読み出し失敗で帯を落とすと、`decorations: false` の窓は閉じることも動かすこともできなくなります。
-- **帯の中身は `.titlebar-controls` に場所を譲る**: 帯は横 1 行の flex で、右端の `.titlebar-controls`（接続先・メニュー・3 ボタン）は `flex: none` です。帯へ入る中身（タブバー、stella の `.stella-titlebar-strip`）は `flex: 1` と `min-width: 0` を持ち、幅を独占してはいけません。`width: 100%` を書くと controls が右端の外へ押し出され、`decorations: false` の窓は**閉じるボタンだけを失って、ドラッグは効くまま**になります（stella モードで実際に起きた。`packages/web/src/styles_test.ts` が固定）。`width: 100%` が要るのは、素のブラウザで帯が無く `.app` の縦積みの子になる場合だけです。
-- **ファイルのドロップはページが受ける**: main ウィンドウは `tauri.conf.json` で `dragDropEnabled: false` です。既定の `true` では Tauri のネイティブ D&D が WebView の HTML5 D&D を置き換え、コンポーザへのドロップが DOM に届きません（画像も含めて）。Tauri の `DragDropEvent` は使っていません。有効にした分の穴は `packages/web/src/drop-guard.ts` が塞ぎます——コンポーザ以外へファイルを落としても、ウィンドウがそのファイルへ遷移して戻れなくなります。スプラッシュ（`frontend/splash.js`）も同じガードを持ちます。`repo_hygiene_test.ts` が `false` を固定しています。
+- 独自スキームにはしません。
+  WKWebView（macOS）は http(s) のページから独自スキームを fetch させません。
+  CSP の `connect-src` に `http://127.0.0.1:*` が必要です（`packages/server/render.ts`）。
+- HTTPS のページは IPC に退避します。
+  WebKit は https のページから loopback への fetch を遮断します。
+  `shellCall` が切り替えるのは**通信段階の失敗**だけで、HTTP エラーで再実行するとアクションが二重に走ります。
+  リモートページに許すコマンドは `capabilities/remote-shell.json` の `allow-shell-action` だけです。
+- macOS のウィンドウ操作は OS のものです。
+  `tauri.macos.conf.json` は `decorations: true` + `titleBarStyle: "overlay"` で、信号機はネイティブのものを使います。
+  透明なタイトルバーはページの上に 28pt 重なり、その中のページ要素はクリックを受け取れません。
+  帯は `.app.macos` の上余白の下から始め、上余白に `.macos-titlebar-drag` を置きます（左 78px は空ける）。
+  ドラッグとダブルクリックはブリッジへ送ります。
+  Windows / Linux はフレームレスのままページが描きます。
+- 帯を描くかどうかはブリッジの応答で決めません。
+  どちらの作法かは初期化スクリプトの `__LUMISCA_PLATFORM__` が答え、帯の有無は `inDesktopShell()` が決めます（`packages/web/src/shell.ts`）。
+  `state` の読み出し失敗で帯を落とすと、`decorations: false` の窓は閉じることも動かすこともできなくなります。
+- 帯の中身は `.titlebar-controls` に場所を譲ります。
+  帯は横 1 行の flex で、右端の `.titlebar-controls`（接続先、メニュー、3 ボタン）は `flex: none` です。
+  帯へ入る中身（タブバー、stella の `.stella-titlebar-strip`）は `flex: 1` と `min-width: 0` を持ち、幅を独占してはいけません。
+  `width: 100%` を書くと controls が右端の外へ押し出され、`decorations: false` の窓は**閉じるボタンだけを失って、ドラッグは効くまま**になります（stella モードで実際に起きた。`packages/web/src/styles_test.ts` が固定）。
+  `width: 100%` が要るのは、素のブラウザで帯が無く `.app` の縦積みの子になる場合だけです。
+- ファイルのドロップはページが受けます。
+  main ウィンドウは `tauri.conf.json` で `dragDropEnabled: false` です。
+  既定の `true` では Tauri のネイティブ D&D が WebView の HTML5 D&D を置き換え、コンポーザへのドロップが DOM に届きません（画像も含めて）。
+  Tauri の `DragDropEvent` は使っていません。
+  有効にした分の穴は `packages/web/src/drop-guard.ts` が塞ぎます。
+  コンポーザ以外へファイルを落としても、ウィンドウがそのファイルへ遷移して戻れなくなります。
+  スプラッシュ（`frontend/splash.js`）も同じガードを持ちます。
+  `repo_hygiene_test.ts` が `false` を固定しています。
 
 ## 2. 自動アップデート
 
 デスクトップは Tauri updater でアプリ全体を更新し、サーバー単体は `packages/server/update/` がバイナリと静的ファイルを更新します。
 
-- **署名鍵**: 共通の鍵を使います。変更時は `packages/server/update/verify.ts` と `tauri.conf.json` の両方を更新してください。
-- **メタデータ**: 配布定義とバージョン比較は `packages/server/update/release.ts` に集約しています。
-- **インストール先の名前**: 配布アーカイブの最上位は `lumisca-server-<platform>` で、バージョンを含めません。自己更新は同じディレクトリでファイルを差し替えるため、名前に版があると実際の版と食い違います（`packages/core/repo_hygiene_test.ts` が固定）。
-- **デスクトップの更新マニフェスト**: `latest.json` の URL は直リンク（`releases/download/<tag>/<name>`）へ書き換えます。`api.github.com` の URL はレート制限に当たり、403 で更新のダウンロードが失敗します。書き換えは `scripts/rewrite-updater-json.ts` と `.github/workflows/rewrite-updater-json.yml` です。
-- **動作条件**: サーバーの自己更新は、パッケージ済みバイナリかつ `LUMISCA_DESKTOP` 未設定のときだけ動きます。
-- **再起動制御**: `LUMISCA_UPDATE_RESTART`（`self` / `supervisor` / `none`）で決まります。
-- **適用中は `installing` を返す**: ファイルの置き換えは数秒かかり、その間ほかの状態は動きません。画面はこれで「インストール中…」を出してボタンを止めます。解除は `#fail` と成功時の `#patch` で行い、`apply()` の `finally` では行いません——戻り値は `finally` より先に作られるため、「インストール中のまま」の応答が返ります。
-- **事前検証**: アーカイブの整合性は `scripts/check-server-archive.ts` で確かめます。
+- 署名鍵: 共通の鍵を使います。
+  変更時は `packages/server/update/verify.ts` と `tauri.conf.json` の両方を更新してください。
+- メタデータ: 配布定義とバージョン比較は `packages/server/update/release.ts` に集約しています。
+- インストール先の名前: 配布アーカイブの最上位は `lumisca-server-<platform>` で、バージョンを含めません。
+  自己更新は同じディレクトリでファイルを差し替えるため、名前に版があると実際の版と食い違います（`packages/core/repo_hygiene_test.ts` が固定）。
+- デスクトップの更新マニフェスト: `latest.json` の URL は直リンク（`releases/download/<tag>/<name>`）へ書き換えます。
+  `api.github.com` の URL はレート制限に当たり、403 で更新のダウンロードが失敗します。
+  書き換えは `scripts/rewrite-updater-json.ts` と `.github/workflows/rewrite-updater-json.yml` です。
+- 動作条件: サーバーの自己更新はパッケージ済みバイナリかつ `LUMISCA_DESKTOP` 未設定のときだけ動きます。
+- 再起動制御: `LUMISCA_UPDATE_RESTART`（`self` / `supervisor` / `none`）で決まります。
+- 適用中は `installing` を返します。
+  ファイルの置き換えは数秒かかり、その間ほかの状態は動きません。
+  画面はこれで「インストール中…」を出してボタンを止めます。
+  解除は `#fail` と成功時の `#patch` で行い、`apply()` の `finally` では行いません。
+  戻り値は `finally` より先に作られるため、「インストール中のまま」の応答が返ります。
+- 事前検証: アーカイブの整合性は `scripts/check-server-archive.ts` で確かめます。
 
 ## 3. Linux 常駐（systemd ユーザーユニット）
 
-パッケージ済みサーバーは systemd のユーザーユニットとして常駐できます（`packages/server/systemd/`）。任意のコマンドを実行できるため、root ではなく一般ユーザーで動かします。
+パッケージ済みサーバーは systemd のユーザーユニットとして常駐できます（`packages/server/systemd/`）。
+任意のコマンドを実行できるため、root ではなく一般ユーザーで動かします。
 
 - `./lumisca-server service config`: 設定内容を確認
 - `./lumisca-server service install`: 登録と起動
 - `./lumisca-server service status`: 稼働状況と接続情報
 - `./lumisca-server service uninstall`: 停止と登録解除
 
-設定は `<config home>/systemd/user/lumisca.service` と `service.env` です。外部から接続するときは `--host` と `--allowed-hosts` を指定します。OS 起動時から動かすには `loginctl enable-linger <user>` が必要で、ログは `journalctl --user -u lumisca -f` で見ます。
+設定は `<config home>/systemd/user/lumisca.service` と `service.env` です。
+外部から接続するときは `--host` と `--allowed-hosts` を指定します。
+OS 起動時から動かすには `loginctl enable-linger <user>` が必要で、ログは `journalctl --user -u lumisca -f` で見ます。
 
 ## 4. 障害調査
 
 サーバーが止まったら、アプリケーションデータ領域の `server.log` を見ます。
 
-- **Windows**: `%APPDATA%\com.lumisca.agent\server.log`
-- **macOS**: `~/Library/Application Support/com.lumisca.agent/server.log`
-- **Linux**: `$XDG_DATA_HOME/com.lumisca.agent/server.log`
+- Windows: `%APPDATA%\com.lumisca.agent\server.log`
+- macOS: `~/Library/Application Support/com.lumisca.agent/server.log`
+- Linux: `$XDG_DATA_HOME/com.lumisca.agent/server.log`
 
-末尾から、クラッシュ（エラー出力）、強制終了（`[shell] Stopping`）、ハング（ヘルスチェックの無応答）を判別できます。systemd は `journalctl --user -u lumisca -n 100` です。
+末尾から、クラッシュ（エラー出力）、強制終了（`[shell] Stopping`）、ハング（ヘルスチェックの無応答）を判別できます。
+systemd は `journalctl --user -u lumisca -n 100` です。
 
-作業中のエージェント自身を止めないため、`bun` や `lumisca-server` をプロセス名で一括終了しないでください。個別のプロセス ID を指定します。
+作業中のエージェント自身を止めないため、`bun` や `lumisca-server` をプロセス名で一括終了しないでください。
+個別のプロセス ID を指定します。
 
 ## 5. 依存関係の更新
 
@@ -95,66 +157,135 @@ cargo update --manifest-path packages/browser-rpc/Cargo.toml
 npm outdated                                                   # packages/desktop 内で実行
 ```
 
-新しく公開された版は、24 時間たってから入れます（`bun update --latest` に待ち時間はないので、ここで守ります）。`packages/desktop` はワークスペース外なので個別に確認します。
+新しく公開された版は 24 時間たってから入れます（`bun update --latest` に待ち時間はないので、ここで守ります）。
+`packages/desktop` はワークスペース外なので個別に確認します。
 
 ## 6. UI の多言語対応
 
-表示文言は `packages/core/shared/i18n/` のカタログに日英の対で置きます。コンポーネントでは `const t = useT();`（`packages/web/src/i18n.ts`）で `t("キー名")` を呼び、キーは `<area>.<surface>.<element>` 形式です。システムプロンプトとツール定義の英語文面は翻訳対象外で、回答言語はセッションの指示で制御します。
+表示文言は `packages/core/shared/i18n/` のカタログに日英の対で置きます。
+コンポーネントでは `const t = useT();`（`packages/web/src/i18n.ts`）で `t("キー名")` を呼び、キーは `<area>.<surface>.<element>` 形式です。
+システムプロンプトとツール定義の英語文面は翻訳対象外で、回答言語はセッションの指示で制御します。
 
-画面では、stella mode を「Lumisca」、code mode を「Lumisca code」と呼びます。`stella` は内部の名前で、URL・ファイル名・型・コードの識別子はそのままにします。
+画面では、stella mode を「Lumisca」、code mode を「Lumisca code」と呼びます。
+`stella` は内部の名前で、URL、ファイル名、型、コードの識別子はそのままにします。
 
 ### 文言の検査
 
-`bun run check:ja` がカタログの日本語を検査します。機械的に直せる指摘は `fix:` に直した文字列を出します。`bun run check:ja --list chat.stella.share` のように接頭辞を渡すと、その画面の文言をキー順に日英で並べます。どの語がボタンでどれが説明文かは機械で判定できないので、役割による使い分けはこの一覧を画面と突き合わせて読みます。
+`bun run check:ja` がカタログの日本語を検査します。
+機械的に直せる指摘は `fix:` に直した文字列を出します。
+`bun run check:ja --list chat.stella.share` のように接頭辞を渡すと、その画面の文言をキー順に日英で並べます。
+どの語がボタンでどれが説明文かは機械で判定できないので、役割による使い分けはこの一覧を画面と突き合わせて読みます。
 
-次の形は、これまでの文言の手入れ（括弧を外す、用語をそろえる、文言を詰める）で繰り返し選ばれてきたものです。
+次の形はこれまでの文言の手入れ（括弧を外す、用語をそろえる、文言を詰める）で繰り返し選ばれてきたものです。
 
-- ボタンと項目名は名詞か動詞の終止形で、句点を付けません。「保存する」ではなく「保存」です。
-- 説明文はです・ますで書き、文末に句点を付けます。括弧で補足せず、別の文にします。括弧が残ってよいのは「新しいAPIキー（上書き）」のような短いラベルだけです。
-- 同じ語を画面ごとに言い換えません。カタログ全体でフォルダー、サーバー、ユーザー、プロバイダー、ブラウザ、既定にそろえます（`デフォルト` とは書きません）。
-- 「貸す」「切れます」のように、何が起きるか読めない動詞を使いません。フォルダーは「接続」し、接続は「切断」されます。
-- **英字と日本語の間、数字と助数詞の間は詰めます**。半角スペースを入れません（`AIが`、`APIキー`、`Web検索`、`Lumiscaモード`、`1件`、`8時`、`30分`、`2回`）。
-- **短く書きます**。同じことを短く言えるなら短くし（「環境変数の入力」→「環境変数」）、翻訳調の言い換え（`〜することができます`、`〜を行う`、`に関して`、`の際`）を使いません。
-- **内部の名前を画面に出しません**。環境変数（`LUMISCA_UPDATE_RESTART` など）、`systemd`、`Reasoning`、`stella` は書きません。モード名は Lumisca / Lumisca code です。
-- **失敗は隠しません**。原因と、次にできることを書きます。
+- ボタンと項目名は名詞か動詞の終止形で、句点を付けません。
+  「保存する」ではなく「保存」です。
+- 説明文はです・ますで書き、文末に句点を付けます。
+  括弧で補足せず、別の文にします。
+  括弧が残ってよいのは「新しいAPIキー（上書き）」のような短いラベルだけです。
+- 同じ語を画面ごとに言い換えません。
+  カタログ全体でフォルダー、サーバー、ユーザー、プロバイダー、ブラウザ、既定にそろえます（`デフォルト` とは書きません）。
+- 「貸す」「切れます」のように、何が起きるか読めない動詞を使いません。
+  フォルダーは「接続」し、接続は「切断」されます。
+- 英字と日本語の間、数字と助数詞の間は詰めます。
+  半角スペースを入れません（`AIが`、`APIキー`、`Web検索`、`Lumiscaモード`、`1件`、`8時`、`30分`、`2回`）。
+- 短く書きます。
+  同じことを短く言えるなら短くし（「環境変数の入力」→「環境変数」）、翻訳調の言い換え（`〜することができます`、`〜を行う`、`に関して`、`の際`）を使いません。
+- 内部の名前を画面に出しません。
+  環境変数（`LUMISCA_UPDATE_RESTART` など）、`systemd`、`Reasoning`、`stella` は書きません。
+  モード名は Lumisca / Lumisca code です。
+- 失敗は隠しません。
+  原因と、次にできることを書きます。
 
 文言を変えたら `bun run check:ja` と `bun test packages/core/shared/i18n_test.ts` を実行してください。
 
 ### 設定のカテゴリ
 
-カテゴリはどちらのモードでも同じ並びで出ます（`packages/web/src/components/settings/categories.ts`）。モードで隠す項目はなく、モードはその値が効くセッションを決めるだけです。ナビは効く範囲で 3 群に区切り、見出しでどちらに効くのかを示します。
+カテゴリはどちらのモードでも同じ並びで出ます（`packages/web/src/components/settings/categories.ts`）。
+モードで隠す項目はなく、モードはその値が効くセッションを決めるだけです。
+ナビは効く範囲で 2 群に区切り、見出しでどちらに効くのかを示します。
 
-- **共通**: 一般 / 外観 / プロバイダー / モデル設定 / MCPサーバー / カスタマイズ / 接続先サーバー / セキュリティ
-- **Lumisca code**: 画面操作 / 保存済みプロンプト
+- 共通: 一般 / 外観 / プロバイダー / モデル設定 / MCPサーバー / カスタマイズ / 接続先サーバー / セキュリティ
+- Lumisca code: 画面操作 / 保存済みプロンプト
 
-設定画面が持つのは、このインストール全体の設定だけです。1 つのエージェントに属するものは置きません。ルーチンはそのエージェントとの会話で走るので、一覧の行のメニュー（右クリック・長押し・メニューキー）から開く「ルーチン」ダイアログにあります。名前・アイコン・モデルも同じメニューの編集ダイアログです。会話を開いていないエージェントの設定も、その行から変えられます。
+設定画面が持つのは、このインストール全体の設定だけです。
+1 つのエージェントに属するものは置きません。
+ルーチンはそのエージェントとの会話で走るので、一覧の行のメニュー（右クリック、長押し、メニューキー）から開く「ルーチン」ダイアログにあります。
+名前、アイコン、モデルも同じメニューの編集ダイアログです。
+会話を開いていないエージェントの設定も、その行から変えられます。
 
-モード専用の意味を持つものは、足りないものを画面で言います。`/prompt` は code mode のコンポーザにしかなく、computer use はこのマシンの画面を動かします。パネルはどちらのモードでも開け、対象が無ければその旨を出します。
+モード専用の意味を持つものは、足りないものを画面で言います。
+`/prompt` は code mode のコンポーザにしかなく、computer use はこのマシンの画面を動かします。
+パネルはどちらのモードでも開け、対象が無ければその旨を出します。
 
-- **カテゴリは 1 枚のページ**（`settings/SettingsPage.tsx`）。見出し（名前）と本文を分け、本文だけをスクロールさせます。中から開く画面は 1 段低い `settings/SettingsSubHeader.tsx` を持ち、`modal-header` を重ねません。900px 以下では一覧とページを 1 枚ずつ出します（`.settings-body[data-view]`）。
-- **プロバイダーは 1 画面に 2 種類**を同じ部品（`settings/SettingsSection.tsx` と `settings/ProviderRow.tsx`）で並べます。AI プロバイダーと Web 検索を分けると、検索側を見落とします。ページ名がそのまま節名になる画面では節の見出しを省きます。
-- **選択肢は `components/Select.tsx`**。ネイティブの `<select>` は OS の見た目で描かれ、説明行も現在値のチェックも持てません。一覧を開く側は毎回測ります（`hooks/useSelectPlacement.ts`）。呼び出し側の `preferredSide` は希望で、収まらなければ反対側へ開き、どちらにも収まらなければ切り取らずに高さを切ってスクロールさせます（`.modal` は `overflow-y: auto` なので、ダイアログの中ではダイアログの縁が一覧を切ります）。
-- **設定の行は面を塗らない**。`SettingRow` や `.setting-card` / `.provider-row` は下線で区切った行です。
-- **能力のトグルは実行中のセッションにも効く**（computer use など）。設定への保存は実行中のセッションがあっても必ず行います（`SessionPool.applyCapabilityChange`）。待機中のセッションは再構築し、実行中のセッションはエージェントを差し替えず（差し替えると run の行が二重になる）ツールレジストリと能力フラグだけをその場で更新します。ツールはプリロードされずレジストリにだけ入るので、これで追従できます。能力の値は開いた時点で捕捉せず getter で渡してください（`SessionWhere.computerAvailable`、`ToolFactoryOptions.computerAvailable`）。値で持つとスキル一覧が次の open まで古いままになります。
-- **接続先はタイトルバーのドロップダウンだけ**（`components/ConnectionPicker.tsx`）。新規セッション画面にはサーバー選択を置きません。表示名はシェルが `settings.json` の `lastRemote` に記録して `state` で返します。設定画面の一覧は編集用で、行は畳んだ状態が既定、名前が空のまま URL を入れたらホスト名を補完します（`packages/web/src/connections.ts`）。
-- **新規セッション画面のモデルは既定モデルに書く**: ピッカーの選択は `packages/web/src/defaultModel.ts` の `rememberDefaultModel` で `model_default` に保存します。あの画面の面はタブを閉じるまで保持しますが、リロードで消えるので、コンポーネントの state だけに持たせると選んだモデルが次の表示で既定に戻ります。失敗は画面に出す（黙って落とすと、次に開いたときに既定へ戻った理由が分かりません）。設定画面の「既定のモデル」の行と同じ値なので、片方だけ変えると 2 つの画面が食い違います。`settingsStore` が未読のうちに書くと「表全体を読んだ」ことになり設定パネルが他の値を未設定と表示するので、`rememberDefaultModel` は先に読みます。
-- **自分自身とは連携しない**: `connections` の各項目へ `/ws` を張って中継しますが、自分自身なら中継しません。判定は `/api/health` の `instanceId` です（tailnet 名や LAN アドレス経由の自分は URL では見分けられません）。中継済みのフレームを再中継しないのも同じ理由で、破るとエコーで CPU とメモリを食い尽くします（`packages/server/federation.ts`）。
+- カテゴリは 1 枚のページです（`settings/SettingsPage.tsx`）。
+  見出し（名前）と本文を分け、本文だけをスクロールさせます。
+  中から開く画面は 1 段低い `settings/SettingsSubHeader.tsx` を持ち、`modal-header` を重ねません。
+  900px 以下では一覧とページを 1 枚ずつ出します（`.settings-body[data-view]`）。
+- プロバイダーは 1 画面に 2 種類を同じ部品（`settings/SettingsSection.tsx` と `settings/ProviderRow.tsx`）で並べます。
+  AI プロバイダーと Web 検索を分けると、検索側を見落とします。
+  ページ名がそのまま節名になる画面では節の見出しを省きます。
+- 選択肢は `components/Select.tsx` です。
+  ネイティブの `<select>` は OS の見た目で描かれ、説明行も現在値のチェックも持てません。
+  一覧を開く側は毎回測ります（`hooks/useSelectPlacement.ts`）。
+  呼び出し側の `preferredSide` は希望で、収まらなければ反対側へ開き、どちらにも収まらなければ切り取らずに高さを切ってスクロールさせます（`.modal` は `overflow-y: auto` なので、ダイアログの中ではダイアログの縁が一覧を切ります）。
+- 設定の行は面を塗りません。
+  `SettingRow` や `.setting-card` / `.provider-row` は下線で区切った行です。
+- 能力のトグルは実行中のセッションにも効きます（computer use など）。
+  設定への保存は実行中のセッションがあっても必ず行います（`SessionPool.applyCapabilityChange`）。
+  待機中のセッションは再構築し、実行中のセッションはエージェントを差し替えず（差し替えると run の行が二重になる）ツールレジストリと能力フラグだけをその場で更新します。
+  ツールはプリロードされずレジストリにだけ入るので、これで追従できます。
+  能力の値は開いた時点で捕捉せず getter で渡してください（`SessionWhere.computerAvailable`、`ToolFactoryOptions.computerAvailable`）。
+  値で持つとスキル一覧が次の open まで古いままになります。
+- 接続先はタイトルバーのドロップダウンだけです（`components/ConnectionPicker.tsx`）。
+  新規セッション画面にはサーバー選択を置きません。
+  表示名はシェルが `settings.json` の `lastRemote` に記録して `state` で返します。
+  設定画面の一覧は編集用で、行は畳んだ状態が既定、名前が空のまま URL を入れたらホスト名を補完します（`packages/web/src/connections.ts`）。
+- 新規セッション画面のモデルは既定モデルに書きます。
+  ピッカーの選択は `packages/web/src/defaultModel.ts` の `rememberDefaultModel` で `model_default` に保存します。
+  あの画面の面はタブを閉じるまで保持しますが、リロードで消えるので、コンポーネントの state だけに持たせると選んだモデルが次の表示で既定に戻ります。
+  失敗は画面に出します（黙って落とすと、次に開いたときに既定へ戻った理由が分かりません）。
+  設定画面の「既定のモデル」の行と同じ値なので、片方だけ変えると 2 つの画面が食い違います。
+  `settingsStore` が未読のうちに書くと「表全体を読んだ」ことになり設定パネルが他の値を未設定と表示するので、`rememberDefaultModel` は先に読みます。
+- 自分自身とは連携しません。
+  `connections` の各項目へ `/ws` を張って中継しますが、自分自身なら中継しません。
+  判定は `/api/health` の `instanceId` です（tailnet 名や LAN アドレス経由の自分は URL では見分けられません）。
+  中継済みのフレームを再中継しないのも同じ理由で、破るとエコーで CPU とメモリを食い尽くします（`packages/server/federation.ts`）。
 
 ### 初期セットアップ（`/setup`）
 
-新規インストールの最初の画面です。**設定ファイルと同じ場所のマーカーファイルが唯一の判定**で、`/` を開いたときに未完了なら `/setup` へ `replace` します。
+新規インストールの最初の画面です。
+**設定ファイルと同じ場所のマーカーファイルが唯一の判定**で、`/` を開いたときに未完了なら `/setup` へ `replace` します。
 
-- **マーカーは `$XDG_CONFIG_HOME/lumisca-agent/setup-complete`**（未設定なら `~/.config/lumisca-agent/setup-complete`）。中身は空で、存在だけを読みます。判定は `LumiscaCore.getSetup()`、作成は `LumiscaCore.completeSetup()`（`POST /api/setup/complete`）で、どちらも呼ぶたびにファイルを読みます（`packages/core/settings/setup.ts`）。
-- **削除してページを開き直す（またはアプリを再起動する）と、ウィザードがもう一度出ます**。起動時の値に固定しないのはこのためです。やり直しの API はありません——ファイルが状態そのものです。
-- **ページへの受け渡しは `InitialData.setup`**（`packages/server/pages.ts`）。`hooks/useSetup.ts` がそれを state にし、完了の記録はその答えを採用します。フィールドの無いページ（古いサーバー、初期データ無し）はウィザードを出しません。
-- **置き換えるのは `/` だけ**。`/code` や `/stella` を直接開けばウィザードを通りません（ブックマークや共有リンクを塞がないためです）。`/setup` に居て完了済みなら `/` へ戻します。
-- **既存インストールの移行はしない**: マーカーの無い環境は、すでに使っていても一度だけウィザードが出ます。「設定済み」を `settings.jsonc` の中身から推測しないでください——最初のページ表示が `language` を書くので、設定ファイルの存在は判定になりません。
-- **段は 4 つ**（ようこそ / プロバイダー / 既定のモデル / 完了）。並びは `components/setup/steps.ts`、面は 1 つです。段は住所ではありません（各段の選択はその場で設定に書くので、読み込み直しても失うものがありません）。プロバイダーの接続は設定画面の部品（`AddProviderFlow` / `ProviderDetail` / `AddUserProviderForm`）をそのまま使い、既定のモデルは `rememberDefaultModel` で `model_default` に書きます。
-- **文面は `packages/core/shared/i18n/setup.ts`**。「Lumiscaにようこそ！」の `！` だけは `check:ja` の例外（`scripts/check-ui-japanese.ts` の `ALLOWED_EXCLAMATION`）です。ルール自体は緩めないでください。
+- マーカーは `$XDG_CONFIG_HOME/lumisca-agent/setup-complete` です（未設定なら `~/.config/lumisca-agent/setup-complete`）。
+  中身は空で、存在だけを読みます。
+  判定は `LumiscaCore.getSetup()`、作成は `LumiscaCore.completeSetup()`（`POST /api/setup/complete`）で、どちらも呼ぶたびにファイルを読みます（`packages/core/settings/setup.ts`）。
+- 削除してページを開き直す（またはアプリを再起動する）と、ウィザードがもう一度出ます。
+  起動時の値に固定しないのはこのためです。
+  やり直しの API はありません。
+  ファイルが状態そのものです。
+- ページへの受け渡しは `InitialData.setup` です（`packages/server/pages.ts`）。
+  `hooks/useSetup.ts` がそれを state にし、完了の記録はその答えを採用します。
+  フィールドの無いページ（古いサーバー、初期データ無し）はウィザードを出しません。
+- 置き換えるのは `/` だけです。
+  `/code` や `/stella` を直接開けばウィザードを通りません（ブックマークや共有リンクを塞がないためです）。
+  `/setup` に居て完了済みなら `/` へ戻します。
+- 既存インストールの移行はしません。
+  マーカーの無い環境は、すでに使っていても一度だけウィザードが出ます。
+  「設定済み」を `settings.jsonc` の中身から推測しないでください。
+  最初のページ表示が `language` を書くので、設定ファイルの存在は判定になりません。
+- 段は 4 つです（ようこそ / プロバイダー / 既定のモデル / 完了）。
+  並びは `components/setup/steps.ts`、面は 1 つです。
+  段は住所ではありません（各段の選択はその場で設定に書くので、読み込み直しても失うものがありません）。
+  プロバイダーの接続は設定画面の部品（`AddProviderFlow` / `ProviderDetail` / `AddUserProviderForm`）をそのまま使い、既定のモデルは `rememberDefaultModel` で `model_default` に書きます。
+- 文面は `packages/core/shared/i18n/setup.ts` です。
+  「Lumiscaにようこそ！」の `！` だけは `check:ja` の例外（`scripts/check-ui-japanese.ts` の `ALLOWED_EXCLAMATION`）です。
+  ルール自体は緩めないでください。
 
 ### 画面の URL
 
-画面はすべて URL を持ちます（`packages/web/src/route.ts`）。URL が「いまどの画面か」の唯一の答えです。
+画面はすべて URL を持ちます（`packages/web/src/route.ts`）。
+URL が「いまどの画面か」の唯一の答えです。
 
 | 画面 | URL |
 | --- | --- |
@@ -167,183 +298,529 @@ npm outdated                                                   # packages/deskto
 | stella の会話 | `/stella/a/<agentId>` |
 | 設定 | `<画面>/settings` / `<画面>/settings/<category>` |
 
-- **`route.ts` は純粋関数だけ**。`parseUrl` と `urlOf` が往復し、DOM に触れません。`hooks/useRoute.ts` だけが `history` を触ります。
-- **設定はモードの下**。カテゴリの一覧はどちらのモードでも同じですが、設定はそこを開いたモードの画面の一部で、閉じればその画面へ戻ります。モードを持たない `/settings` は、戻る先を答えられません。閉じると開いた画面へ戻ります（`history.back()`。履歴が無ければ `replace`）。
-- **`/` は解決先**。デスクトップシェルとインストールした PWA が開く URL なので、`localStorage` の `lumisca.appMode` に解決し、`replace` で `/code` か `/stella` に置き換えます。未選択ならメインモードの `/stella` です。
-- **URL はモードを決める**。`/stella` を開けば保存値が code でも stella になります。stella を使えないサーバーでは理由を出して `/code` に倒し、そのstella は保存しません。
-- **戻るで画面が戻る**。タブ切り替え、セッションを開く、設定の開閉、設定カテゴリの変更がそれぞれ履歴になります。ただし `POST /close` は × で閉じたときだけです（戻るは画面を移るだけで、実行は止めません）。
-- **設定を閉じるのは、開いてから積んだ分をまとめて戻す 1 回**です。カテゴリの変更も履歴なので、直前に 1 歩戻るだけでは前のカテゴリページに着き、`Modal` の退出が終わった不可視のシート（`opacity: 0` でも `position: fixed; inset: 0`）が画面を覆ったままになります。深さは各エントリの `history.state` が持ちます（`packages/web/src/history-entry.ts`）。`replace` で別の画面に差し替えるときは、その深さを 0 に戻してください。
-- **存在しない画面はモードのトップへ**。消えたセッション・消えたエージェント・知らないカテゴリは、エラー画面ではなく使える画面に倒します（このアプリに 404 ページはありません）。
-- **`/code` の状態は URL のタブだけ**。以前の「開いていたタブをすべて `localStorage` から復元」は廃止しました（URL が同じ問いに答えるため）。タブバーはこのページが開いたセッションの一覧です。
-- **ドラフトはセッションの集合で管理**。`/code` の下書きは、セッションへ移っても消えません（`useDrafts` は `useTabs` の `open` をキーにします）。
-- **タブの面は閉じるまで保持する**（`components/SessionPane.tsx`）。開いているタブは 1 枚ずつマウントしたままで、住所が名指さない面は `hidden` で隠すだけです。切り替えのたびに作り直すと、窓（最大 200 行）のターン組み・マークダウン解析・DOM 生成・レイアウトが毎回走り、低スペック機では数百 ms 画面が止まります。隠れた面には `active` で、追従スクロールと過去の読み出し（`useTranscriptScroll`）、入力欄の自動伸縮（`useAutoGrow`）、直近一覧の 30 秒ポーリング（`useRecentSessions`）を止めます——`display: none` の要素は測ると 0 になるためです。戻ったときの位置は、履歴を読んでいたならその行、最新を追っていたなら最下部です。`.chat[hidden] { display: none }` は必須です（`.chat` の `display: flex` が UA の `[hidden]` に勝つため。`styles_test.ts` と `components/SessionPane_test.tsx` が固定）。新規セッション画面も一度表示したら保持し、起動してセッションを開いただけのときはマウントしません。
-- **面の state は要求の終わりに戻す**: 面を保つということは、その面の state も保つということです。要求ごとの状態は、要求が決着したら成功でも失敗でも戻してください。戻し忘れると、次に「+」で開いた新規セッション画面の送信ボタンが押せないままになります（送信フラグは `packages/web/src/draftStart.ts` が決着時に戻します）。
-- **エージェントを選んでいない間は会話パネルを描かない**。`/stella` は一覧だけの画面です。一覧はウィンドウの中央に立ち、`StellaModeScreen` の `data-screen`（**選択だけで決まり、幅では変わりません**）を読んだ `.stella-shell[data-screen="list"] .stella { display: none }` が会話シートを出しません。空の会話パネル（「依頼を入力してください」と無効な送信ボタン）は、同じことを 3 度言うだけでした。エージェントを選ぶと一覧が左端へすべり、会話シートが右から入ります（`stella.css` の `left` の遷移と `lum-enter-right`）。中央寄せは相対配置の `left` で、`transform` ではありません——一覧の中の行のメニューとエージェントのダイアログ（`position: fixed`）が包含ブロックに閉じ込められます。900px 以下では同じ属性が「一覧か会話か」の 1 枚ずつを決め、中央寄せは外れます。
-- **画面遷移は階層のある移動だけ**: 遷移するのは stella の一覧 ⇄ 会話と、設定の一覧 ⇄ カテゴリページです。判定は `packages/web/src/screen-transition.ts` の `screenMove` がアドレスの組から決め、`hooks/useRoute.ts` の push / replace / `popstate` が `playScreenTransition` を通します。タブの切り替え、新規セッション画面とセッション、ダイアログの開閉は遷移しません（並列の面であり、階層ではないためです）。向きは `<html data-vt="push|back">` として JS が書き、形は `styles/motion.css` が決めます（1 枚ずつの画面になる 900px 以下は横スライド、それ以上はフェード）。
-  - **2 列の stella は遷移しない**: 広い画面では一覧と会話が同時に並び、選ぶと一覧そのものが左へ動くため、ページ全体のスナップショットを取ると一覧が 2 枚（中央のものと左のもの）写って二重にフェードします。`screenMove` は `ScreenLayout.singleScreen`（= `useCompactViewport()`）が偽なら stella の移動を遷移にしません。設定の一覧 ⇄ カテゴリは、ページが隣に残るので幅に関係なくクロスフェードです。
-  - **内側の要素に `view-transition-name` を書かない**: 名前を持つ要素は別スナップショットになり、同時に包含ブロックになります。`position: fixed` のダイアログと仮想マシンの画面ペインが、自分自身ではなくその要素を基準に置かれて壊れます（`styles_test.ts` が固定）。
-  - **`flushSync` が要る**: Preact は描画をマイクロタスクに積むので、遷移のコールバックの中で `flushSync` をしないと、2 枚目のスナップショットが前の画面のままになります。
-  - **戻るは履歴を戻す**: 一覧へ戻る操作（stella の戻る、設定ページの戻る）は `push` ではなく `router.dismiss` です。向きはアドレスの組から決まるので、ボタンとブラウザの戻るが同じ動きになります。設定の `showPage` は廃止し、表示は `category` から導出します（住所が唯一の答え）。
-  - **未対応ブラウザでは動かないだけ**: Safari 18 / Firefox 133 より前にはアニメーションが付きません。画面の移り方は同じです。
-- **開閉する面は `.collapse` を使う**: 進捗の行（`components/Panel.tsx`）、ツール呼び出し（`components/ToolCall.tsx`）、通知行（`components/SystemRow.tsx`）、ターンの作業ログ（`components/chat/ConversationTurn.tsx`）は、本体を**常にマウント**し、`className="collapse" data-open={open}` の内側に `collapse-inner` を挟みます（規則は `styles/motion.css`）。
-  - **`{open && …}` を書かない**: アンマウントした要素は閉じる動きを持てません。開閉は `data-open` 1 か所で表します。
-  - **高さは `grid-template-rows: 0fr ⇄ 1fr`**: 測った `height` を書くと、ストリーミングで伸びる中身に対して次のフレームには古くなります。`1fr` はブラウザが中身から答え続けます。`width` / `height` は今までどおり動かしません。
-  - **`overflow: hidden` は `collapse-inner` に**: 本体の `max-height` / `overflow-y`（進捗の行はその中でスクロールします）を保つためです。`collapse > .collapse-inner > *` がフェードを持つので、内側の面に `opacity` のアニメを足さないでください。
-  - **運動を減らす設定では止める**: `reduced-motion.css` が `.collapse` の `transition` を `none` にします。高さは動きそのものです。
-- **実行中のツール行は `tool_start` から描く**: AI SDK は 1 ステップのツールをストリームの中で実行するので、toolCall ブロックを持つ assistant メッセージ（`message_end`）はツールが終わった後に届きます。メッセージだけを描くと、行は仕事が済んでから現れます。`SessionView.liveTools` が `tool_start` で行を足し、その呼び出しを含むメッセージの `message_end` で消します（`components/Transcript.tsx` がストリーミング本文の直下に描きます）。消し忘れると行が二重に出ます。faux プロバイダだけは順序が逆（メッセージが先、`executeTools` が後）なので、読み込み済みの履歴に同じ id があるときは足しません。
+- `route.ts` は純粋関数だけです。
+  `parseUrl` と `urlOf` が往復し、DOM に触れません。
+  `hooks/useRoute.ts` だけが `history` を触ります。
+- 設定はモードの下にあります。
+  カテゴリの一覧はどちらのモードでも同じですが、設定はそこを開いたモードの画面の一部で、閉じればその画面へ戻ります。
+  モードを持たない `/settings` は、戻る先を答えられません。
+  閉じると開いた画面へ戻ります（`history.back()`。履歴が無ければ `replace`）。
+- `/` は解決先です。
+  デスクトップシェルとインストールした PWA が開く URL なので、`localStorage` の `lumisca.appMode` に解決し、`replace` で `/code` か `/stella` に置き換えます。
+  未選択ならメインモードの `/stella` です。
+- URL はモードを決めます。
+  `/stella` を開けば保存値が code でも stella になります。
+  stella を使えないサーバーでは理由を出して `/code` に倒し、その stella は保存しません。
+- 戻るで画面が戻ります。
+  タブ切り替え、セッションを開く、設定の開閉、設定カテゴリの変更がそれぞれ履歴になります。
+  ただし `POST /close` は × で閉じたときだけです（戻るは画面を移るだけで、実行は止めません）。
+- 設定を閉じるのは、開いてから積んだ分をまとめて戻す 1 回です。
+  カテゴリの変更も履歴なので、直前に 1 歩戻るだけでは前のカテゴリページに着き、`Modal` の退出が終わった不可視のシート（`opacity: 0` でも `position: fixed; inset: 0`）が画面を覆ったままになります。
+  深さは各エントリの `history.state` が持ちます（`packages/web/src/history-entry.ts`）。
+  `replace` で別の画面に差し替えるときは、その深さを 0 に戻してください。
+- 消えたセッション、消えたエージェント、知らないカテゴリは、モードのトップへ倒します。
+  このアプリに 404 ページはないので、エラー画面ではなく使える画面に着きます。
+- `/code` の状態は URL のタブだけです。
+  以前の「開いていたタブをすべて `localStorage` から復元」は廃止しました（URL が同じ問いに答えるため）。
+  タブバーはこのページが開いたセッションの一覧です。
+- ドラフトはセッションの集合で管理します。
+  `/code` の下書きは、セッションへ移っても消えません（`useDrafts` は `useTabs` の `open` をキーにします）。
+- タブの面は閉じるまで保持します（`components/SessionPane.tsx`）。
+  開いているタブは 1 枚ずつマウントしたままで、住所が名指さない面は `hidden` で隠すだけです。
+  切り替えのたびに作り直すと、窓（最大 200 行）のターン組み、マークダウン解析、DOM 生成、レイアウトが毎回走り、低スペック機では数百 ms 画面が止まります。
+  隠れた面には `active` で、追従スクロールと過去の読み出し（`useTranscriptScroll`）、入力欄の自動伸縮（`useAutoGrow`）、直近一覧の 30 秒ポーリング（`useRecentSessions`）を止めます。
+  `display: none` の要素は測ると 0 になるためです。
+  戻ったときの位置は、履歴を読んでいたならその行、最新を追っていたなら最下部です。
+  `.chat[hidden] { display: none }` は必須です（`.chat` の `display: flex` が UA の `[hidden]` に勝つため。`styles_test.ts` と `components/SessionPane_test.tsx` が固定）。
+  新規セッション画面も一度表示したら保持し、起動してセッションを開いただけのときはマウントしません。
+- 面の state は要求の終わりに戻します。
+  面を保つということは、その面の state も保つということです。
+  要求ごとの状態は、要求が決着したら成功でも失敗でも戻してください。
+  戻し忘れると、次に「+」で開いた新規セッション画面の送信ボタンが押せないままになります（送信フラグは `packages/web/src/draftStart.ts` が決着時に戻します）。
+- エージェントを選んでいない間は会話パネルを描きません。
+  `/stella` は一覧だけの画面です。
+  一覧はウィンドウの中央に立ち、`StellaModeScreen` の `data-screen`（**選択だけで決まり、幅では変わりません**）を読んだ `.stella-shell[data-screen="list"] .stella { display: none }` が会話シートを出しません。
+  空の会話パネル（「依頼を入力してください」と無効な送信ボタン）は、同じことを 3 度言うだけでした。
+  エージェントを選ぶと一覧が左端へすべり、会話シートが右から入ります（`stella.css` の `left` の遷移と `lum-enter-right`）。
+  中央寄せは相対配置の `left` で、`transform` ではありません。
+  一覧の中の行のメニューとエージェントのダイアログ（`position: fixed`）が包含ブロックに閉じ込められます。
+  900px 以下では同じ属性が「一覧か会話か」の 1 枚ずつを決め、中央寄せは外れます。
+- 画面遷移は階層のある移動だけです。
+  遷移するのは stella の一覧 ⇄ 会話と、設定の一覧 ⇄ カテゴリページです。
+  判定は `packages/web/src/screen-transition.ts` の `screenMove` がアドレスの組から決め、`hooks/useRoute.ts` の push / replace / `popstate` が `playScreenTransition` を通します。
+  タブの切り替え、新規セッション画面とセッション、ダイアログの開閉は遷移しません（並列の面であり、階層ではないためです）。
+  向きは `<html data-vt="push|back">` として JS が書き、形は `styles/motion.css` が決めます（1 枚ずつの画面になる 900px 以下は横スライド、それ以上はフェード）。
+  - 2 列の stella は遷移しません。
+    広い画面では一覧と会話が同時に並び、選ぶと一覧そのものが左へ動くため、ページ全体のスナップショットを取ると一覧が 2 枚（中央のものと左のもの）写って二重にフェードします。
+    `screenMove` は `ScreenLayout.singleScreen`（= `useCompactViewport()`）が偽なら stella の移動を遷移にしません。
+    設定の一覧 ⇄ カテゴリは、ページが隣に残るので幅に関係なくクロスフェードです。
+  - 内側の要素に `view-transition-name` を書きません。
+    名前を持つ要素は別スナップショットになり、同時に包含ブロックになります。
+    `position: fixed` のダイアログと仮想マシンの画面ペインが、自分自身ではなくその要素を基準に置かれて壊れます（`styles_test.ts` が固定）。
+  - `flushSync` が要ります。
+    Preact は描画をマイクロタスクに積むので、遷移のコールバックの中で `flushSync` をしないと、2 枚目のスナップショットが前の画面のままになります。
+  - 戻るは履歴を戻します。
+    一覧へ戻る操作（stella の戻る、設定ページの戻る）は `push` ではなく `router.dismiss` です。
+    向きはアドレスの組から決まるので、ボタンとブラウザの戻るが同じ動きになります。
+    設定の `showPage` は廃止し、表示は `category` から導出します（住所が唯一の答え）。
+  - 未対応ブラウザでは動かないだけです。
+    Safari 18 / Firefox 133 より前にはアニメーションが付きません。
+    画面の移り方は同じです。
+- 開閉する面は `.collapse` を使います。
+  進捗の行（`components/Panel.tsx`）、ツール呼び出し（`components/ToolCall.tsx`）、通知行（`components/SystemRow.tsx`）、ターンの作業ログ（`components/chat/ConversationTurn.tsx`）は、本体を常にマウントし、`className="collapse" data-open={open}` の内側に `collapse-inner` を挟みます（規則は `styles/motion.css`）。
+  - `{open && …}` を書きません。
+    アンマウントした要素は閉じる動きを持てません。
+    開閉は `data-open` 1 か所で表します。
+  - 高さは `grid-template-rows: 0fr ⇄ 1fr` です。
+    測った `height` を書くと、ストリーミングで伸びる中身に対して次のフレームには古くなります。
+    `1fr` はブラウザが中身から答え続けます。
+    `width` / `height` は今までどおり動かしません。
+  - `overflow: hidden` は `collapse-inner` に置きます。
+    本体の `max-height` / `overflow-y`（進捗の行はその中でスクロールします）を保つためです。
+    `collapse > .collapse-inner > *` がフェードを持つので、内側の面に `opacity` のアニメを足さないでください。
+  - 運動を減らす設定では止めます。
+    `reduced-motion.css` が `.collapse` の `transition` を `none` にします。
+    高さは動きそのものです。
+- 実行中のツール行は `tool_start` から描きます。
+  AI SDK は 1 ステップのツールをストリームの中で実行するので、toolCall ブロックを持つ assistant メッセージ（`message_end`）はツールが終わった後に届きます。
+  メッセージだけを描くと、行は仕事が済んでから現れます。
+  `SessionView.liveTools` が `tool_start` で行を足し、その呼び出しを含むメッセージの `message_end` で消します（`components/Transcript.tsx` がストリーミング本文の直下に描きます）。
+  消し忘れると行が二重に出ます。
+  faux プロバイダだけは順序が逆（メッセージが先、`executeTools` が後）なので、読み込み済みの履歴に同じ id があるときは足しません。
 
 ### リモート接続での応答
 
-- **差分はセッション単位でまとめる**: `/ws` と stella の会話ストリームは `message_delta` / `delta` を 16 ms 分まとめて 1 フレームにします（`packages/core/shared/ws-batch.ts`）。キーがセッション id なのは、1 本のソケットが複数タブのイベントを運ぶからです。ツール開始・確定・終了は遅延させず、送る前に保留分を flush します。
-- **rev はイベント数のまま**: フレームには最後の `rev` と、含めたイベント数 `events` を載せます。`revisionGap` は `events` を見ます。ここを「1 フレーム = 1 イベント」に戻すと、結合のたびにスナップショットを取り直します。
-- **クライアントも rAF でまとめる**: `useSessionEvents` / `useStella` は保留中の delta をアニメーションフレーム単位で反映し、他のイベントの適用前に必ず flush します。
-- **圧縮と再検証**: 全応答を gzip し、`/assets/*` は `ETag` で再検証、ページと初期データは `no-store` です。CSS はページの `<style>` にインラインします（`packages/server/render.ts`）。規則は `packages/server/app-file-headers.ts` にあります。
-- **プロキシ**: タイムアウトは `packages/server/federation.ts` の `proxyTimeoutFor` がパスから決めます（通常 30 秒、open／messages／compact／rewind は 120 秒、`/fed/peers` は 3 秒）。`content-disposition`、`cache-control`、`etag`、`vary`、`content-security-policy`、`x-content-type-options` は透過し、`content-encoding` は通しません。
-- **同一サーバーの判定はスキームを見ない**: CORS と WebSocket の Origin 検証は、Origin のホストとポートが `Host` と一致するかで決めます（`packages/server/security.ts` の `sameServerAuthority`。MCP の `redirect_uri` も同じ関数）。TLS 終端は https を受けて http で転送するため、スキームまで比べると `/ws` が 403 になり、本文が流れないまま 10 秒おきのスナップショットだけになります。
+- 差分はセッション単位でまとめます。
+  `/ws` と stella の会話ストリームは `message_delta` / `delta` を 16 ms 分まとめて 1 フレームにします（`packages/core/shared/ws-batch.ts`）。
+  キーがセッション id なのは、1 本のソケットが複数タブのイベントを運ぶからです。
+  ツール開始、確定、終了は遅延させず、送る前に保留分を flush します。
+- rev はイベント数のままです。
+  フレームには最後の `rev` と、含めたイベント数 `events` を載せます。
+  `revisionGap` は `events` を見ます。
+  ここを「1 フレーム = 1 イベント」に戻すと、結合のたびにスナップショットを取り直します。
+- クライアントも rAF でまとめます。
+  `useSessionEvents` / `useStella` は保留中の delta をアニメーションフレーム単位で反映し、他のイベントの適用前に必ず flush します。
+- 圧縮と再検証: 全応答を gzip し、`/assets/*` は `ETag` で再検証、ページと初期データは `no-store` です。
+  CSS はページの `<style>` にインラインします（`packages/server/render.ts`）。
+  規則は `packages/server/app-file-headers.ts` にあります。
+- プロキシ: タイムアウトは `packages/server/federation.ts` の `proxyTimeoutFor` がパスから決めます（通常 30 秒、open／messages／compact／rewind は 120 秒、`/fed/peers` は 3 秒）。
+  `content-disposition`、`cache-control`、`etag`、`vary`、`content-security-policy`、`x-content-type-options` は透過し、`content-encoding` は通しません。
+- 同一サーバーの判定はスキームを見ません。
+  CORS と WebSocket の Origin 検証は、Origin のホストとポートが `Host` と一致するかで決めます（`packages/server/security.ts` の `sameServerAuthority`。MCP の `redirect_uri` も同じ関数）。
+  TLS 終端は https を受けて http で転送するため、スキームまで比べると `/ws` が 403 になり、本文が流れないまま 10 秒おきのスナップショットだけになります。
 
 ## 7. stella mode（仮想マシン）
 
-podman コンテナを仮想マシンとして与え、その中だけでエージェントを動かすモードです。実装は `packages/core/vm/` にあり、会話は相手（agent）ごとに 1 本だけです。表示するモードはクライアントごとに選び（`packages/web/src/hooks/useAppMode.ts`）、サーバーは能力と状態だけを返します（`GET /api/stella/status`）。
+podman コンテナを仮想マシンとして与え、その中だけでエージェントを動かすモードです。
+実装は `packages/core/vm/` にあり、会話は相手（agent）ごとに 1 本だけです。
+表示するモードはクライアントごとに選び（`packages/web/src/hooks/useAppMode.ts`）、サーバーは能力と状態だけを返します（`GET /api/stella/status`）。
 
 ### マシン
 
-- **必要環境**: Linux と rootless podman だけです。`podman --version` が通っても起動できるとは限らないので、素のイメージを 1 回起動して確かめ（`VM_PROBE_IMAGE`）、失敗すれば `podman_unusable` として提示を断ります。
-- **イメージ**: `packages/core/vm/container/Containerfile` から初回起動時にビルドします。配布物では `scripts/build-server.ts` が `stella-container/` をバイナリの隣へ同梱し、`packages/server/paths.ts` が場所を解決します。定義のダイジェストを `lumisca.container-digest` ラベルに焼き、ずれていればイメージを作り直します（`/home/agent` は `podman cp` で退避して戻します）。
-- **契約値**: 画面サイズ（1280x800）、マシン自身の DISPLAY、uid/gid、作業ディレクトリ、パスワード無し `sudo` は `packages/core/vm/contract.ts` と Containerfile / entry.sh の両方にあります。起動時に実コンテナと突き合わせ（`sudo -n true` を含む）、ずれていれば起動を失敗させます。デスクトップの値（スロット数、表示番号、ポート、プロファイルの置き場、バスの名前）は `container/desktop.sh contract` が 1 行で答え、同じ `podman exec` の中で `contract.ts` の値と突き合わせます。
-- **落ちたマシンは podman が戻す**: `podman create` に `--restart=unless-stopped` を渡します。マシンは会話を開くときにしか起動されないので、自前で死んだコンテナは止まったままになり、全ツールが `container state improper` を返していました。`podman stop` は手動停止として扱われるため、アプリの終了（`LumiscaCore.close()`）で止めたマシンは戻りません。送信とルーチン実行は起動を確かめてから走ります（`ensureStellaReady`）。
-- **本番のマシンに触るテストは明示したときだけ**: `packages/core/stella_live_test.ts` は利用者の `lumisca-stella` をそのまま使います。`LUMISCA_STELLA_LIVE=1` が無ければ状態も読まずに skip し、`core.close()` の前に `setStellaVm(undefined)` で切り離します——`close()` は持っているマシンを止めるためです。`scripts/probe-stella.ts` も同じ理由で切り離してから閉じます。`bun run test` に含まれるので、ここを緩めるとテストを回しただけで利用中のマシンが落ちます。
-- **権限**: `agent` は `sudo` を使えます。コンテナの外へは出られず（ホストをマウントせず、uid 0 は `--userns keep-id` で写像）、既定を root にしないのは Chromium のサンドボックスを使うためです。
-- **同梱ファイルは 1 段まで**: `stella-container/Containerfile` は可、`stella-container/helper/a11y.py` は不可です。アーカイブを読むのは動いているサーバーのバイナリで、深さの規則はビルド時に焼き込まれます。深くすると、その版より前にインストールされたサーバーが更新を適用できません。`archive.ts` の `MAX_PACKAGE_DEPTH` を上げるのは、旧版の更新を諦めるときだけにしてください。
+- 必要環境: Linux と rootless podman だけです。
+  `podman --version` が通っても起動できるとは限らないので、素のイメージを 1 回起動して確かめ（`VM_PROBE_IMAGE`）、失敗すれば `podman_unusable` として提示を断ります。
+- イメージ: `packages/core/vm/container/Containerfile` から初回起動時にビルドします。
+  配布物では `scripts/build-server.ts` が `stella-container/` をバイナリの隣へ同梱し、`packages/server/paths.ts` が場所を解決します。
+  定義のダイジェストを `lumisca.container-digest` ラベルに焼き、ずれていればイメージを作り直します（`/home/agent` は `podman cp` で退避して戻します）。
+- 契約値: 画面サイズ（1280x800）、マシン自身の DISPLAY、uid/gid、作業ディレクトリ、パスワード無し `sudo` は `packages/core/vm/contract.ts` と Containerfile / entry.sh の両方にあります。
+  起動時に実コンテナと突き合わせ（`sudo -n true` を含む）、ずれていれば起動を失敗させます。
+  デスクトップの値（スロット数、表示番号、ポート、プロファイルの置き場、バスの名前）は `container/desktop.sh contract` が 1 行で答え、同じ `podman exec` の中で `contract.ts` の値と突き合わせます。
+- 落ちたマシンは podman が戻します。
+  `podman create` に `--restart=unless-stopped` を渡します。
+  マシンは会話を開くときにしか起動されないので、自前で死んだコンテナは止まったままになり、全ツールが `container state improper` を返していました。
+  `podman stop` は手動停止として扱われるため、アプリの終了（`LumiscaCore.close()`）で止めたマシンは戻りません。
+  送信とルーチン実行は起動を確かめてから走ります（`ensureStellaReady`）。
+- 本番のマシンに触るテストは、明示したときだけです。
+  `packages/core/stella_live_test.ts` は利用者の `lumisca-stella` をそのまま使います。
+  `LUMISCA_STELLA_LIVE=1` が無ければ状態も読まずに skip し、`core.close()` の前に `setStellaVm(undefined)` で切り離します。
+  `close()` は持っているマシンを止めるためです。
+  `scripts/probe-stella.ts` も同じ理由で切り離してから閉じます。
+  `bun run test` に含まれるので、ここを緩めるとテストを回しただけで利用中のマシンが落ちます。
+- 権限: `agent` は `sudo` を使えます。
+  コンテナの外へは出られず（ホストをマウントせず、uid 0 は `--userns keep-id` で写像）、既定を root にしないのは Chromium のサンドボックスを使うためです。
+- 同梱ファイルは 1 段までです。
+  `stella-container/Containerfile` は可、`stella-container/helper/a11y.py` は不可です。
+  アーカイブを読むのは動いているサーバーのバイナリで、深さの規則はビルド時に焼き込まれます。
+  深くすると、その版より前にインストールされたサーバーが更新を適用できません。
+  `archive.ts` の `MAX_PACKAGE_DEPTH` を上げるのは、旧版の更新を諦めるときだけにしてください。
 
 ### デスクトップ（エージェントごと）
 
-会話（エージェント）ごとに 1 つのデスクトップを持ちます。X サーバ、ウィンドウマネージャ、セッションバス、専用プロファイルのブラウザ、VNC の橋で 1 組です（`container/desktop.sh`、`vm/machine.ts`）。
+会話（エージェント）ごとに 1 つのデスクトップを持ちます。
+X サーバ、ウィンドウマネージャ、セッションバス、専用プロファイルのブラウザ、VNC の橋で 1 組です（`container/desktop.sh`、`vm/machine.ts`）。
 
-- **6 枠、表示は `:100` から**: `VM_DESKTOP_SLOTS` = 6 で、X は `:100`〜`:105`（`vmDisplayOf`）、RFB は 5900 番台、websockify は 6080 番台です。容器は 6080-6085 を範囲で公開します（`VM_VNC_PORT_RANGE`）。`:99` はマシン自身の画面で、契約検査の対象と、デスクトップを持たないコマンドの `DISPLAY` です——`bash` から GUI を起こすとそこに出て、どの会話にも映りません。枠の数はメモリで決めています（Chromium 1 つ約 220 MB + Xvfb と openbox で約 35 MB。6 枠すべて起動して約 1.5 GB、4 枠で 1.0 GB を実測）。
-- **空きが無ければ、実行中でない会話の枠を明け渡す**: 最後に使った枠から順に、`isStreaming` でない会話のデスクトップを止めて譲ります。すべての会話が実行中なら**奪わずに待ちます**（`VM_DESKTOP_WAIT_MS` = 30 秒、250 ms ごとに空きを確かめる）。待ち切れなければツールは「すべてのデスクトップが使用中」と返し、エージェントは後でやり直せます。判定は `StellaMachine.setBusyCheck` に渡す getter（`sessions.getByAgent` → `pool.get(...).isStreaming`）で、実行中の run の画面を落とすとその run の途中で画面が消えるためです。
-- **起こすのは画面を使ったとき**: 画面のツール、意味の層、`vm_launch`、クリップボードだけが `StellaMachine.execFor` の継ぎ目（そのスロットの `DISPLAY` と `DBUS_SESSION_BUS_ADDRESS`）を使い、最初の 1 回で `desktop.sh start` を呼びます。ファイル・シェル・バックグラウンド実行は素の継ぎ目です（`ls` のたびにブラウザを起こさないため）。この分離は事故を減らすためのもので、境界ではありません（コンテナ内のプロセスは `DISPLAY` を名指しすればどの画面にも繋がります）。
-- **枠は 1 エージェントのもの**: `machine.ts` は枠を `await` の前に同期的に予約します（同時に使い始めた 2 人が同じ枠を取りません）。コンテナ側も `desktop.sh` が持ち主を `$STATE_DIR/<slot>/agent` に書き、違うエージェントの `start` はブラウザと橋を落としてから始めます。サーバーが記憶を失っても（再起動）、他人のブラウザには入りません。
-- **再起動で枠の記憶を捨てる**: `podman stop` は中のプロセスを全部落とすので、`ensureReady`（コンテナを起こしたとき）、`stop()`、`set()` が `#desktops` を捨てます。コンテナ側では `entry.sh` の先頭の `desktop.sh reset` が前回の pid ファイルと X のロックを消します（どちらも `/tmp` に残り、pid は再利用され、ロックは Xvfb の起動を止めるためです）。`alive` は `kill -0` ではなく `/proc/<pid>/cmdline` で確かめます（ゾンビと再利用に成功してしまうため）。
-- **プロファイルとログイン**: `$HOME/.config/chromium/<agent id>` がエージェントの同一性です（`VM_PROFILE_ROOT`）。枠を明け渡して起こし直してもログインは続きます。この変更より前の共有プロファイル（`~/.config/chromium` 直下）は移行しません。
-- **バスも枠ごと**: `desktop.sh` が `session-<slot>.sock` を立て、`execFor` がそのアドレスを積みます。AT-SPI のレジストリはセッションバス単位で、さらに at-spi 自身のバスは `DISPLAY` から名付けられる（`~/.cache/at-spi/bus_100`）ので、**デスクトップのバスはその `DISPLAY` で起こします**——共有すると `vm_find` が他のエージェントの窓を読めてしまいます。ref のスナップショットも `a11y.py` が表示ごとのディレクトリに分けます。
-- **起動は待ち合わせてから返す**: `desktop.sh start` は X の応答と websockify の待ち受けを確かめ、上がらなければ非 0 で終わります。ペインはポートを得た瞬間に繋ぐためです。
-- **ペインは会話のエージェントの画面**: `GET /api/stella/screen` は `?agent=<id>` を取り、そのエージェントの枠のホストポートへ中継します。ペインが繋ぐかどうかは「マシンが動いているか」だけで決めます（ポートはサーバーが解決します）。中継はデスクトップの起動に失敗したら 1011 で閉じます——ハンドラの Promise は待たれないので、投げるとペインが「接続中」で止まります。
+- 枠は 6 つで、表示は `:100` からです。
+  `VM_DESKTOP_SLOTS` = 6 で、X は `:100`〜`:105`（`vmDisplayOf`）、RFB は 5900 番台、websockify は 6080 番台です。
+  容器は 6080-6085 を範囲で公開します（`VM_VNC_PORT_RANGE`）。
+  `:99` はマシン自身の画面で、契約検査の対象と、デスクトップを持たないコマンドの `DISPLAY` です。
+  `bash` から GUI を起こすとそこに出て、どの会話にも映りません。
+  枠の数はメモリで決めています（Chromium 1 つ約 220 MB + Xvfb と openbox で約 35 MB。6 枠すべて起動して約 1.5 GB、4 枠で 1.0 GB を実測）。
+- 空きが無ければ、実行中でない会話の枠を明け渡します。
+  最後に使った枠から順に、`isStreaming` でない会話のデスクトップを止めて譲ります。
+  すべての会話が実行中なら**奪わずに待ちます**（`VM_DESKTOP_WAIT_MS` = 30 秒、250 ms ごとに空きを確かめる）。
+  待ち切れなければツールは「すべてのデスクトップが使用中」と返し、エージェントは後でやり直せます。
+  判定は `StellaMachine.setBusyCheck` に渡す getter（`sessions.getByAgent` → `pool.get(...).isStreaming`）で、実行中の run の画面を落とすとその run の途中で画面が消えるためです。
+- 起こすのは、画面を使ったときです。
+  画面のツール、意味の層、`vm_launch`、クリップボードだけが `StellaMachine.execFor` の継ぎ目（そのスロットの `DISPLAY` と `DBUS_SESSION_BUS_ADDRESS`）を使い、最初の 1 回で `desktop.sh start` を呼びます。
+  ファイル、シェル、バックグラウンド実行は素の継ぎ目です（`ls` のたびにブラウザを起こさないため）。
+  この分離は事故を減らすためのもので、境界ではありません（コンテナ内のプロセスは `DISPLAY` を名指しすればどの画面にも繋がります）。
+- 枠は 1 エージェントのものです。
+  `machine.ts` は枠を `await` の前に同期的に予約します（同時に使い始めた 2 人が同じ枠を取りません）。
+  コンテナ側も `desktop.sh` が持ち主を `$STATE_DIR/<slot>/agent` に書き、違うエージェントの `start` はブラウザと橋を落としてから始めます。
+  サーバーが記憶を失っても（再起動）、他人のブラウザには入りません。
+- 再起動すると枠の記憶を捨てます。
+  `podman stop` は中のプロセスを全部落とすので、`ensureReady`（コンテナを起こしたとき）、`stop()`、`set()` が `#desktops` を捨てます。
+  コンテナ側では `entry.sh` の先頭の `desktop.sh reset` が前回の pid ファイルと X のロックを消します（どちらも `/tmp` に残り、pid は再利用され、ロックは Xvfb の起動を止めるためです）。
+  `alive` は `kill -0` ではなく `/proc/<pid>/cmdline` で確かめます（ゾンビと再利用に成功してしまうためです）。
+- プロファイルとログイン: `$HOME/.config/chromium/<agent id>` がエージェントの同一性です（`VM_PROFILE_ROOT`）。
+  枠を明け渡して起こし直してもログインは続きます。
+  この変更より前の共有プロファイル（`~/.config/chromium` 直下）は移行しません。
+- バスも枠ごとです。
+  `desktop.sh` が `session-<slot>.sock` を立て、`execFor` がそのアドレスを積みます。
+  AT-SPI のレジストリはセッションバス単位で、さらに at-spi 自身のバスは `DISPLAY` から名付けられる（`~/.cache/at-spi/bus_100`）ので、**デスクトップのバスはその `DISPLAY` で起こします**。
+  共有すると `vm_find` が他のエージェントの窓を読めてしまいます。
+  ref のスナップショットも `a11y.py` が表示ごとのディレクトリに分けます。
+- 起動は待ち合わせてから返します。
+  `desktop.sh start` は X の応答と websockify の待ち受けを確かめ、上がらなければ非 0 で終わります。
+  ペインはポートを得た瞬間に繋ぐためです。
+- ペインは会話のエージェントの画面です。
+  `GET /api/stella/screen` は `?agent=<id>` を取り、そのエージェントの枠のホストポートへ中継します。
+  ペインが繋ぐかどうかは「マシンが動いているか」だけで決めます（ポートはサーバーが解決します）。
+  中継はデスクトップの起動に失敗したら 1011 で閉じます。
+  ハンドラの Promise は待たれないので、投げるとペインが「接続中」で止まります。
 
 ### 会話
 
-- **相手は常に 1 人以上**: `GET /api/stella/agents` の初回読み出しでスターターを作ります（`LumiscaCore.ensureStellaAgent`）。全員を削除しても次の読み出しで戻ります。応答は `{ agents }` だけで、どの会話を開くかは返しません——それは URL（`/stella/a/<id>`）が答えます。
-- **初回の設定はアプリが始める**: 新しいエージェントの会話は、開いたときに `stella_agents.onboarded_at` を CAS で取った 1 回だけセットアップのターンを始めます（`packages/core/stella/onboarding.ts`、`LumiscaCore.startStellaOnboarding`）。何を聞くかはモデルが `role` から決め、アプリは枠（1 メッセージ 1 問・カード・上限 5 問・スキップ肢・`identity` に書く・完了カード）だけを渡します。指示は可視テキストが空のプロンプト（`modelContent`）なので会話には出ません。既存の行は移行で `created_at` が入り、新しい行だけが NULL です。やり直しの入口はありません（行メニューの「設定をやり直す」は廃止しました）。
-- **一覧の行は最新の発言**: 2 行目は会話と同じ射影（`shared/stella-preview.ts` の `previewOf`）、並びも最新メッセージの時刻です。開いていない会話にはストリームが無いので、一覧は 30 秒ごとに読み直します（`useVisibleInterval`）。
-- **話す手段は本文と `send_chat`**: 本文はそのまま返信になり、`send_chat` がファイルと途中経過を添えます（`packages/core/tools/send-chat.ts`）。カードは本文に ` ```card ` のフェンスで書きます（ツール呼び出しは不要）。フェンスは目印で、本文が `<Card>` で始まれば info string が違ってもカードです（`shared/ui-markup/segments.ts`）。黙るターンは `NO_RESPONSE` だけを書きます（`packages/core/agent/silent-reply.ts`）。`text` と `paths` は 1 回で 1 つのメッセージになり、少なくとも 1 つ必要です。
-- **カードだけは書きながら出る**: モデルが本文にカードを書いている間、`card_delta` が届き、画面は `parseUiMarkupPartial` で閉じたブロックまで描きます。切り出しは `packages/core/agent/run-events.ts` の `TextCards`（stella は本文を流さないため。code mode は画面が本文から切り出します）、まとめは stella のイベントストリームの `delta` チャネルです。本文はターンの終わりに一度に届きます。
-- **モデルはエージェントごと**: 選択はエージェントの編集ダイアログで行い、`PATCH /api/stella/agents/:id` の `model`（`null` は既定、省略は変更なし）で保存します。未設定ならアプリの既定モデル（設定 → モデル設定）を使います。選択はそのエージェントの会話の `sessions` 行にも同じ呼び出しで書き込まれます。会話が実行中でも拒否せず、保存したうえでその実行が終わってから適用します（`SessionService.setSessionModel`。code mode の `POST /api/sessions/:id/model` も同じです）——実行中のモデルを差し替えると run の行が二重になり、待たせるのは実行と関係のない要求を断ることになるためです。会話のモデルだけを切り替えるルートはありません——2 つの入口があると、どちらが正しいかが決まらなくなります。切り替えてもシステムプロンプトは変わりません。モデル名は context メッセージとして公開します（`packages/core/agent/model-context.ts`）。
-- **identity**: `role` とは別に、`identity` ツールで自分の役割と知識を書けます（`stella_agents.identity`、`packages/core/stella/identity.ts`）。操作は `read` / `write` / `edit` で、`write` は全文、`edit` は一意に一致する部分の置換です。context メッセージとして届き、反映は次のターンからです。
+- 相手は常に 1 人以上です。
+  `GET /api/stella/agents` の初回読み出しでスターターを作ります（`LumiscaCore.ensureStellaAgent`）。
+  全員を削除しても次の読み出しで戻ります。
+  応答は `{ agents }` だけで、どの会話を開くかは返しません。
+  それは URL（`/stella/a/<id>`）が答えます。
+- 初回の設定はアプリが始めます。
+  新しいエージェントの会話は、開いたときに `stella_agents.onboarded_at` を CAS で取った 1 回だけセットアップのターンを始めます（`packages/core/stella/onboarding.ts`、`LumiscaCore.startStellaOnboarding`）。
+  何を聞くかはモデルが `role` から決め、アプリは枠（1 メッセージ 1 問、カード、上限 5 問、スキップ肢、`identity` に書く、完了カード）だけを渡します。
+  指示は可視テキストが空のプロンプト（`modelContent`）なので会話には出ません。
+  既存の行は移行で `created_at` が入り、新しい行だけが NULL です。
+  やり直しの入口はありません（行メニューの「設定をやり直す」は廃止しました）。
+- 一覧の行は最新の発言です。
+  2 行目は会話と同じ射影（`shared/stella-preview.ts` の `previewOf`）、並びも最新メッセージの時刻です。
+  開いていない会話にはストリームが無いので、一覧は 30 秒ごとに読み直します（`useVisibleInterval`）。
+- 話す手段は本文と `send_chat` です。
+  本文はそのまま返信になり、`send_chat` がファイルと途中経過を添えます（`packages/core/tools/send-chat.ts`）。
+  カードは本文に ` ```card ` のフェンスで書きます（ツール呼び出しは不要）。
+  フェンスは目印で、本文が `<Card>` で始まれば info string が違ってもカードです（`shared/ui-markup/segments.ts`）。
+  黙るターンは `NO_RESPONSE` だけを書きます（`packages/core/agent/silent-reply.ts`）。
+  `text` と `paths` は 1 回で 1 つのメッセージになり、少なくとも 1 つ必要です。
+- カードだけは書きながら出ます。
+  モデルが本文にカードを書いている間、`card_delta` が届き、画面は `parseUiMarkupPartial` で閉じたブロックまで描きます。
+  切り出しは `packages/core/agent/run-events.ts` の `TextCards`（stella は本文を流さないため。code mode は画面が本文から切り出します）、まとめは stella のイベントストリームの `delta` チャネルです。
+  本文はターンの終わりに一度に届きます。
+- モデルはエージェントごとです。
+  選択はエージェントの編集ダイアログで行い、`PATCH /api/stella/agents/:id` の `model`（`null` は既定、省略は変更なし）で保存します。
+  未設定ならアプリの既定モデル（設定 → モデル設定）を使います。
+  選択はそのエージェントの会話の `sessions` 行にも同じ呼び出しで書き込まれます。
+  会話が実行中でも拒否せず、保存したうえでその実行が終わってから適用します（`SessionService.setSessionModel`。code mode の `POST /api/sessions/:id/model` も同じです）。
+  実行中のモデルを差し替えると run の行が二重になり、待たせるのは実行と関係のない要求を断ることになるためです。
+  会話のモデルだけを切り替えるルートはありません。
+  2 つの入口があると、どちらが正しいかが決まらなくなります。
+  切り替えてもシステムプロンプトは変わりません。
+  モデル名は context メッセージとして公開します（`packages/core/agent/model-context.ts`）。
+- identity: `role` とは別に、`identity` ツールで自分の役割と知識を書けます（`stella_agents.identity`、`packages/core/stella/identity.ts`）。
+  操作は `read` / `write` / `edit` で、`write` は全文、`edit` は一意に一致する部分の置換です。
+  context メッセージとして届き、反映は次のターンからです。
 
 ### ツール
 
-- **集合**: ファイル、シェル、バックグラウンド実行（`async_bash` / `async_bash_status` / `async_bash_kill`。VM 内で `setsid` で動き、完了は通知としてモデルに届きます。パネルはありません）、画面、意味の層、`send_chat`、`history_search`、`skill`、`todo`、サブエージェントがプリロードされます。`todo` の計画は画面に出しません（依頼が複数あるときに、まだやっていないことを覚えておくためのもので、パネルのためではありません）。`ask` はありません。`identity` と `agent_create`、`routine_*`、`vm_env` は main レジストリ経由で `tool_search` から見つけさせます。`share_upload` / `share_download` も同じく `tool_search` から見つけさせます（貸出の告知が名前を教えます）。ルーチンは組み込みスキル `routines` が教え（`packages/core/skills/builtin/routines.ts`）、環境変数は組み込みスキル `vm-env` が教えます（`packages/core/skills/builtin/vm-env.ts`）。`agent_create` の役割は `role` か `role_file`（マシン内のファイル）で渡し、UTF-8 でない・空・20,000 文字超は拒否します。
-- **`eval` は渡さない**: サーバープロセス内で JavaScript を実行するため、VM の外へ出る経路になります。VM 内でコードを動かすときは `bash` から `node` を使います。サブエージェントにも渡しません（`SubagentRuntime.eval` が `false`）。
-- **サブエージェントのスキル**: `skill` ツールが読むカタログはセッションが渡します（`SubagentRuntime.skills`）。stella はマシン内のカタログ（`stella.skills()`）から、サブエージェントが持たないツールを教える組み込みを落としたもの、code mode はワークスペースのディスカバリです。開始時に `<available_skills>` 一覧も context メッセージとして 1 件渡します（`packages/core/tools/task-hub.ts` の `spawn`）。VM の画面ツールはサブエージェントに渡しません。
-- **レジストリの分離**: セッションは `main` と `subagent` の 2 つを持ちます（`packages/core/tools/registries.ts`）。MCP・browser-lab・computer・`pdf_read_pages` は両方に入り、`identity` / `agent_create` / `routine_*` は main だけです。
-- **パスの境界**: 相対パスと `bash` の基点は `/home/agent/agents/<agent id>`、境界は `/home/agent` です（`packages/core/vm/fs.ts` の `resolveVmPath`）。変えるときは `packages/core/tools/system-prompt.ts` も合わせてください。
-- **ファイルの送受信**: ユーザーへは `send_chat` の `paths`（code mode は `chat_attach`）で送ります。上限は `attachFiles()` の 1 箇所で、1 件 4 MiB・1 回 10 件・合計 16 MiB、累計に上限はありません。ユーザーからの添付はマシンの中に書き（`packages/core/vm/uploads.ts`）、メッセージは参照と表示名・サイズだけを持ちます。表示はマシンから読み、消えていれば 404 です。
+- 集合: ファイル、シェル、バックグラウンド実行（`async_bash` / `async_bash_status` / `async_bash_kill`。VM 内で `setsid` で動き、完了は通知としてモデルに届きます。パネルはありません）、画面、意味の層、`send_chat`、`history_search`、`skill`、`todo`、サブエージェントがプリロードされます。
+  `todo` の計画は画面に出しません（依頼が複数あるときに、まだやっていないことを覚えておくためのもので、パネルのためではありません）。
+  `ask` はありません。
+  `identity` と `agent_create`、`routine_*`、`vm_env` は main レジストリ経由で `tool_search` から見つけさせます。
+  `share_upload` / `share_download` も同じく `tool_search` から見つけさせます（貸出の告知が名前を教えます）。
+  ルーチンは組み込みスキル `routines` が教え（`packages/core/skills/builtin/routines.ts`）、環境変数は組み込みスキル `vm-env` が教えます（`packages/core/skills/builtin/vm-env.ts`）。
+  `agent_create` の役割は `role` か `role_file`（マシン内のファイル）で渡し、UTF-8 でない、空、20,000 文字超は拒否します。
+- `eval` は渡しません。
+  サーバープロセス内で JavaScript を実行するため、VM の外へ出る経路になります。
+  VM 内でコードを動かすときは `bash` から `node` を使います。
+  サブエージェントにも渡しません（`SubagentRuntime.eval` が `false`）。
+- サブエージェントのスキル: `skill` ツールが読むカタログはセッションが渡します（`SubagentRuntime.skills`）。
+  stella はマシン内のカタログ（`stella.skills()`）から、サブエージェントが持たないツールを教える組み込みを落としたもの、code mode はワークスペースのディスカバリです。
+  開始時に `<available_skills>` 一覧も context メッセージとして 1 件渡します（`packages/core/tools/task-hub.ts` の `spawn`）。
+  VM の画面ツールはサブエージェントに渡しません。
+- レジストリの分離: セッションは `main` と `subagent` の 2 つを持ちます（`packages/core/tools/registries.ts`）。
+  MCP、browser-lab、computer、`pdf_read_pages` は両方に入り、`identity` / `agent_create` / `routine_*` は main だけです。
+- パスの境界: 相対パスと `bash` の基点は `/home/agent/agents/<agent id>`、境界は `/home/agent` です（`packages/core/vm/fs.ts` の `resolveVmPath`）。
+  変えるときは `packages/core/tools/system-prompt.ts` も合わせてください。
+- ファイルの送受信: ユーザーへは `send_chat` の `paths`（code mode は `chat_attach`）で送ります。
+  上限は `attachFiles()` の 1 箇所で、1 件 4 MiB、1 回 10 件、合計 16 MiB、累計に上限はありません。
+  ユーザーからの添付はマシンの中に書き（`packages/core/vm/uploads.ts`）、メッセージは参照と表示名、サイズだけを持ちます。
+  表示はマシンから読み、消えていれば 404 です。
 
 ### ローカルフォルダの貸出（lend）
 
-デスクトップアプリを開いている PC のフォルダを、サーバーの会話へ期限つきで貸せます。実装は `packages/core/share/`（名前空間の合成・ハブ・context）と `packages/server/share-host.ts`（貸し手のプロセス）にあります。
+デスクトップアプリを開いている PC のフォルダを、サーバーの会話へ期限つきで貸せます。
+実装は `packages/core/share/`（名前空間の合成、ハブ、context）と `packages/server/share-host.ts`（貸し手のプロセス）にあります。
 
-- **合成は `mountedBackends` の 1 か所**: `AgentFactory.resolveWhere` がここを通します。ツール側に「貸出フォルダか」を書かないでください（`read` から `send_chat` まで同じ backend を通ります）。
-- **`roots[0]` は必ずセッション自身の根**（`MountedFiles`）。切り詰め出力の退避先（`OutputSpiller`）がそこを見ており、貸出フォルダへ書くと、貸し手が消えたあとに読めなくなります。
-- **`/lend` そのものへの読み書きは拒否**。素の backend に流すと、サーバー側に `/lend` というファイルを作ります。
-- **システムプロンプトには書かない**: 貸出の存在も中身も context メッセージ（`createShareProvider`）だけが告知します。プロンプトを変えると全会話のキャッシュ先頭が 1 回失われます。
-- **サブエージェントには spawn 時に 1 回だけ**: `TaskHub.setShares` が保持し、`shareSeedMessages` でスキル一覧と並べて seed します。あちらは context を出し直さないので、走っているサブエージェントに後から貸しても届きません。
-- **ワイヤは相対セグメントのみ**: 絶対パスを送ると、受け取る側の `join` が別の場所を作ります。境界は両端が持ちます（サーバーの `relativeSegments`、貸し手の `Mount.absolute` と `Sandbox`）。
-- **読み取り専用は backend で拒否**: ツールごとに確かめません（`write` / `edit` / 添付のどれかが漏れます）。貸し手も自分の記録で拒否します。
-- **コマンドは常に許す**: 貸出に `exec` の可否はありません（`FolderShare` から外しました）。読み取りのみでもそのフォルダでコマンドは動きます。`write` が見るのはファイルツールだけで、シェルは止めません。コマンドは貸し手のマシンで、貸し手のシェルで動きます。
-- **転送ツールは発見式**: `share_upload` / `share_download` は `createStellaTools` に置かず、`seedDiscoverableTools` が両方のレジストリに入れます（`addShared`）。プリロードしないのは、貸出の無い会話には使い道が無いためです。貸出の告知（`share/context.ts`）が「ファイルはこの 2 つでそのまま移せる、`tool_search` で探す」と教えます。
-- **転送は `FileBackend.readBytes` / `writeBytes`**: 転送ツール（`components` ではなく `packages/core/tools/share-transfer.ts`）は新しい経路を作らず、セッションの 1 つの backend に窓を読ませて書かせます。貸出フォルダ側では `readBytes` / `writeBytes` が新しい op（オフセット付き・append 付き）になり、マシン側では `tail -c` と `base64` になります。`append` は 2 つ目以降のチャンクの「同じファイルの続き」の意味で、最初の書き込みは必ず切り詰めます（短いファイルが前の尾を残さないため）。
-- **貸し手は stdin が閉じたら終わる**: 貸出はアプリが開いている間だけです。`share` はランチャーのサブコマンドで、環境を読む前に分岐してください（DB もポートも要りません）。接続先とトークンは argv に載せず、stdin の hello 行で渡します。
-- **期限は最後のアクセスから30分**（`SHARE_IDLE_MS`）。時計は貸し手のプロセスにあり、op を受けるたびに `expiresAt` を延ばして再アナウンスします。アクセスを見るのは貸し手だけなので、サーバーやアプリ側に同じ規則を置かないこと。サーバーは `grantsFor` が `expiresAt` で外し、貸し手はタイマーで自分の一覧から外して知らせます（利用者が見る一覧は最後のアナウンス）。`LocalGrant` に期限は載せません。
-- **名前の重複はサーバーが解消**: 2 台が同じ `proj` を貸したら 2 台目が `proj-2` になります。再アナウンスで名前を変えないこと（会話が既に知っている住所が動きます）。
-- **画面は「情報」パネル**: 右のパネルは画面だけでなく、貸したフォルダと切断を持つ（`components/stella/ShareList.tsx`）。貸出が 1 つ届くと開き、閉じるのは利用者の選択です（開くのは届いた時だけ。`StellaView` の effect）。タイトルのトグルは会話が開いていれば出ます（マシンの起動を待ちません）。＋メニューの「フォルダで共同作業」はデスクトップの窓だけに出ます（`inDesktopShell()`）。ダイアログは選択→条件→貸すの順で、選んだだけでは貸しません。最近のフォルダは localStorage の `lumisca.share.recentFolders` に条件ごと保存し、1 押しで同じ条件で貸し直します。
-- **シェル側は `packages/desktop/src-tauri/src/share.rs`**: フォルダの選択が同意で、一覧はシェルの `ShareLender`、ディスクと期限の時計は子プロセスです。子は最初の貸出まで起動せず、stdin に hello（接続先とトークン。argv には載せません）と grants（毎回すべて）を書きます。期限切れは子が stdout に `{"type":"expired","ids":[…]}` と書き、シェルがその行で自分の一覧から外します。これが無いと、次の貸出で切れたフォルダを再アナウンスしてしまいます。表示するサーバーを変えたら `revoke_all`。画面からは `/shell/share/pick-folder|grant|revoke` を呼びます。
-- **入力欄の枠も接続中を言う**: パネルは閉じられるので、会話を書いている間ずっと見える場所がもう 1 つ要ります。接続中の会話では `.input-composer.sharing` の枠が `--share` になり、`.share-notice` が「n個のフォルダーを共有中」と言います（`components/StellaView.tsx`、`styles/composer.css` の lent folders 節）。件数は `conversation.shares` の長さだけで、クライアントは期限の時計を持ちません（切れたものはサーバーが落として一覧を送り直します）。枠の規則は `:focus-within` より**後**に置いてください——特異度が同じなので、上にあると入力欄にフォーカスした瞬間にオレンジが消えます（`styles_test.ts` が固定）。`--share` は無彩色のランプで言えない状態にだけ使う色です（`packages/web/src/styles/README.md`）。
-- **依頼と切断はツール 2 つ（`share_request` / `share_disconnect`）**: どちらも初期ロードせず `tool_search` で見つかり、main のみ、stella のみ（`agent/factory.ts` の `SHARE_REQUEST_TOOL_NAMES`）。組み込みスキル `folder-share` が存在を教えます。`share_request` は `shareRequest` の待ちで run を止め、`components/stella/ShareRequestCard.tsx` のカードのボタンが既存の `ShareFolderDialog` を開きます（答えは `POST …/share/lend|decline`）。`share_disconnect` はカードを出さず、ページ（`hooks/useStella.ts`）が `share/revoke` を呼んで `POST …/share/disconnect` で結果を返します。どちらも告知（`ShareHub`）でも片付くので、＋メニューから貸した場合や、シェルが答えないまま grant が消えた場合も run は進みます。結果は `grantsFor` から作り、届いていない貸出のパスを名乗らないこと。
-- **確認**: `bun test packages/core/share packages/server/app_share_test.ts packages/server/share-host_test.ts`。手元では `bun run probe:share --url <url> --session <id> --folder <path>` で UI 抜きに一巡できます。
+- 合成は `mountedBackends` の 1 か所です。
+  `AgentFactory.resolveWhere` がここを通します。
+  ツール側に「貸出フォルダか」を書かないでください（`read` から `send_chat` まで同じ backend を通ります）。
+- `roots[0]` は必ずセッション自身の根です（`MountedFiles`）。
+  切り詰め出力の退避先（`OutputSpiller`）がそこを見ており、貸出フォルダへ書くと、貸し手が消えたあとに読めなくなります。
+- `/lend` そのものへの読み書きは拒否します。
+  素の backend に流すと、サーバー側に `/lend` というファイルを作ります。
+- システムプロンプトには書きません。
+  貸出の存在も中身も context メッセージ（`createShareProvider`）だけが告知します。
+  プロンプトを変えると全会話のキャッシュ先頭が 1 回失われます。
+- サブエージェントには、spawn 時に 1 回だけ伝えます。
+  `TaskHub.setShares` が保持し、`shareSeedMessages` でスキル一覧と並べて seed します。
+  あちらは context を出し直さないので、走っているサブエージェントに後から貸しても届きません。
+- ワイヤは相対セグメントだけです。
+  絶対パスを送ると、受け取る側の `join` が別の場所を作ります。
+  境界は両端が持ちます（サーバーの `relativeSegments`、貸し手の `Mount.absolute` と `Sandbox`）。
+- 読み取り専用は backend で拒否します。
+  ツールごとに確かめません（`write` / `edit` / 添付のどれかが漏れます）。
+  貸し手も自分の記録で拒否します。
+- コマンドは常に許します。
+  貸出に `exec` の可否はありません（`FolderShare` から外しました）。
+  読み取りのみでもそのフォルダでコマンドは動きます。
+  `write` が見るのはファイルツールだけで、シェルは止めません。
+  コマンドは貸し手のマシンで、貸し手のシェルで動きます。
+- 転送ツールは発見式です。
+  `share_upload` / `share_download` は `createStellaTools` に置かず、`seedDiscoverableTools` が両方のレジストリに入れます（`addShared`）。
+  プリロードしないのは、貸出の無い会話には使い道が無いためです。
+  貸出の告知（`share/context.ts`）が「ファイルはこの 2 つでそのまま移せる、`tool_search` で探す」と教えます。
+- 転送は `FileBackend.readBytes` / `writeBytes` で行います。
+  転送ツール（`components` ではなく `packages/core/tools/share-transfer.ts`）は新しい経路を作らず、セッションの 1 つの backend に窓を読ませて書かせます。
+  貸出フォルダ側では `readBytes` / `writeBytes` が新しい op（オフセット付き、append 付き）になり、マシン側では `tail -c` と `base64` になります。
+  `append` は 2 つ目以降のチャンクの「同じファイルの続き」の意味で、最初の書き込みは必ず切り詰めます（短いファイルが前の尾を残さないため）。
+- 貸し手は stdin が閉じたら終わります。
+  貸出はアプリが開いている間だけです。
+  `share` はランチャーのサブコマンドで、環境を読む前に分岐してください（DB もポートも要りません）。
+  接続先とトークンは argv に載せず、stdin の hello 行で渡します。
+- 期限は最後のアクセスから30分です（`SHARE_IDLE_MS`）。
+  時計は貸し手のプロセスにあり、op を受けるたびに `expiresAt` を延ばして再アナウンスします。
+  アクセスを見るのは貸し手だけなので、サーバーやアプリ側に同じ規則を置かないこと。
+  サーバーは `grantsFor` が `expiresAt` で外し、貸し手はタイマーで自分の一覧から外して知らせます（利用者が見る一覧は最後のアナウンス）。
+  `LocalGrant` に期限は載せません。
+- 名前の重複はサーバーが解消します。
+  2 台が同じ `proj` を貸したら 2 台目が `proj-2` になります。
+  再アナウンスで名前を変えないこと（会話が既に知っている住所が動きます）。
+- 画面は「情報」パネルです。
+  右のパネルは画面だけでなく、貸したフォルダと切断を持ちます（`components/stella/ShareList.tsx`）。
+  貸出が 1 つ届くと開き、閉じるのは利用者の選択です（開くのは届いた時だけ。`StellaView` の effect）。
+  タイトルのトグルは会話が開いていれば出ます（マシンの起動を待ちません）。
+  ＋メニューの「フォルダで共同作業」はデスクトップの窓だけに出ます（`inDesktopShell()`）。
+  ダイアログは選択→条件→貸すの順で、選んだだけでは貸しません。
+  最近のフォルダは localStorage の `lumisca.share.recentFolders` に条件ごと保存し、1 押しで同じ条件で貸し直します。
+- シェル側は `packages/desktop/src-tauri/src/share.rs` です。
+  フォルダの選択が同意で、一覧はシェルの `ShareLender`、ディスクと期限の時計は子プロセスです。
+  子は最初の貸出まで起動せず、stdin に hello（接続先とトークン。argv には載せません）と grants（毎回すべて）を書きます。
+  期限切れは子が stdout に `{"type":"expired","ids":[…]}` と書き、シェルがその行で自分の一覧から外します。
+  これが無いと、次の貸出で切れたフォルダを再アナウンスしてしまいます。
+  表示するサーバーを変えたら `revoke_all`。
+  画面からは `/shell/share/pick-folder|grant|revoke` を呼びます。
+- 入力欄の枠も接続中を言います。
+  パネルは閉じられるので、会話を書いている間ずっと見える場所がもう 1 つ要ります。
+  接続中の会話では `.input-composer.sharing` の枠が `--share` になり、`.share-notice` が「n個のフォルダーを共有中」と言います（`components/StellaView.tsx`、`styles/composer.css` の lent folders 節）。
+  件数は `conversation.shares` の長さだけで、クライアントは期限の時計を持ちません（切れたものはサーバーが落として一覧を送り直します）。
+  枠の規則は `:focus-within` より**後**に置いてください。
+  特異度が同じなので、上にあると入力欄にフォーカスした瞬間にオレンジが消えます（`styles_test.ts` が固定）。
+  `--share` は無彩色のランプで言えない状態にだけ使う色です（`packages/web/src/styles/README.md`）。
+- 依頼と切断はツール 2 つ（`share_request` / `share_disconnect`）です。
+  どちらも初期ロードせず `tool_search` で見つかり、main のみ、stella のみ（`agent/factory.ts` の `SHARE_REQUEST_TOOL_NAMES`）。
+  組み込みスキル `folder-share` が存在を教えます。
+  `share_request` は `shareRequest` の待ちで run を止め、`components/stella/ShareRequestCard.tsx` のカードのボタンが既存の `ShareFolderDialog` を開きます（答えは `POST …/share/lend|decline`）。
+  `share_disconnect` はカードを出さず、ページ（`hooks/useStella.ts`）が `share/revoke` を呼んで `POST …/share/disconnect` で結果を返します。
+  どちらも告知（`ShareHub`）でも片付くので、＋メニューから貸した場合や、シェルが答えないまま grant が消えた場合も run は進みます。
+  結果は `grantsFor` から作り、届いていない貸出のパスを名乗らないこと。
+- 確認: `bun test packages/core/share packages/server/app_share_test.ts packages/server/share-host_test.ts`。
+  手元では `bun run probe:share --url <url> --session <id> --folder <path>` で UI 抜きに一巡できます。
 
 ### 記憶（MEMORY.md）
 
-エージェントは自分の作業フォルダに `MEMORY.md` を持ち、`read` / `write` / `edit` で読み書きします。専用のツールはありません（`identity` とは別物です。あちらは DB の行で、毎ターン context メッセージとして届きます）。
+エージェントは自分の作業フォルダに `MEMORY.md` を持ち、`read` / `write` / `edit` で読み書きします。
+専用のツールはありません（`identity` とは別物です。あちらは DB の行で、毎ターン context メッセージとして届きます）。
 
-- **用意するのは 2 か所**: 作成時（`LumiscaCore.createStellaAgent` → `StellaMachineService.prepareAgentFolder`）と、会話を開くとき（`getOrCreateStellaSession`）です。作成時にマシンが止まっていれば何もしません——エージェントの作成がコンテナの起動を要求してはいけないためです。
-- **`[ -e ]` ガードを外さない**: 開くたびに走るので、無条件に `: >` すると記憶が毎回消えます。コマンドは `packages/core/vm/agent-memory.ts` の 1 箇所だけで、`stella_live_test.ts` が「開き直しても消えない」を固定しています。
-- **文面とファイル名は別々に持つ**: 文面は `packages/core/tools/system-prompt.ts`、名前は `AGENT_MEMORY_FILE` です。`vm/agent-memory_test.ts` が両者の一致を検査します。
-- **作成は非同期**: フォルダを触るため `createStellaAgent` / `ensureStellaAgent` は `Promise` を返します。`agent_create` ツールも同じ経路を通るので、ツールから作ったエージェントにもファイルができます。
+- 用意するのは 2 か所です。
+  作成時（`LumiscaCore.createStellaAgent` → `StellaMachineService.prepareAgentFolder`）と、会話を開くとき（`getOrCreateStellaSession`）です。
+  作成時にマシンが止まっていれば何もしません。
+  エージェントの作成がコンテナの起動を要求してはいけないためです。
+- `[ -e ]` ガードを外さないでください。
+  開くたびに走るので、無条件に `: >` すると記憶が毎回消えます。
+  コマンドは `packages/core/vm/agent-memory.ts` の 1 箇所だけで、`stella_live_test.ts` が「開き直しても消えない」を固定しています。
+- 文面とファイル名は別々に持ちます。
+  文面は `packages/core/tools/system-prompt.ts`、名前は `AGENT_MEMORY_FILE` です。
+  `vm/agent-memory_test.ts` が両者の一致を検査します。
+- 作成は非同期です。
+  フォルダを触るため `createStellaAgent` / `ensureStellaAgent` は `Promise` を返します。
+  `agent_create` ツールも同じ経路を通るので、ツールから作ったエージェントにもファイルができます。
 
 ### 画面
 
-- **パネルは既定で閉じる**: 開閉はヘッダーのトグルで、送信で勝手に開き直しません。`vm_ask_user` の受け渡し中だけは必ず開きます。
-- **computer use は code mode だけ**: `agent/factory.ts` が stella セッションへ渡しません（VM には `vm_screenshot` / `vm_act` と `vm_find` / `vm_do` / `vm_wait` があります）。設定でも「画面操作」は code mode 専用です。
-- **GUI は意味で操作する**: ボタンを押す用途には `vm_find` / `vm_do` / `vm_wait` を使います。画素のツールは、座標を読んで渡すしかない対象（キャンバス、ドラッグ、ゲーム）のためです。結果は `delivered_verified` か `delivered_unverified` で返り、後者は繰り返すと二重に押すことになります。
+- パネルは既定で閉じます。
+  開閉はヘッダーのトグルで、送信で勝手に開き直しません。
+  `vm_ask_user` の受け渡し中だけは必ず開きます。
+- computer use は code mode だけです。
+  `agent/factory.ts` が stella セッションへ渡しません（VM には `vm_screenshot` / `vm_act` と `vm_find` / `vm_do` / `vm_wait` があります）。
+  設定でも「画面操作」は code mode 専用です。
+- GUI は意味で操作します。
+  ボタンを押す用途には `vm_find` / `vm_do` / `vm_wait` を使います。
+  画素のツールは、座標を読んで渡すしかない対象（キャンバス、ドラッグ、ゲーム）のためです。
+  結果は `delivered_verified` か `delivered_unverified` で返り、後者は繰り返すと二重に押すことになります。
   - 実装は VM の中の 1 本の Python（`packages/core/vm/container/a11y.py`）で、サーバー側（`vm/semantic.ts`）は JSON を渡して結果を文にするだけです。
-  - ref（`@s12345:e7`）はスナップショットに属し、`vm_do` は role と name が変わっていれば拒否します。経路は `a11y.py` の `walk` が tuple で組み立て、読み戻しも role と name で引き直します。
-  - ウィンドウの題名は frame の name なので、保存後の確認は `vm_wait` で待つのが確実です。xterm のようにバスへ出ないアプリは `vm_find` に出ません。
-- **アクセシビリティはイメージ側の設定**: `entry.sh` がアプリの起動前に `gsettings set org.gnome.desktop.interface toolkit-accessibility true` を実行します。GTK アプリはこの値を起動時に 1 度だけ読み、後から変えてもバスに出ません。Chromium には `--force-renderer-accessibility` を付けます。
-  - 契約値は `contract.ts` の `VM_DBUS_ADDRESS`（マシン自身のバス）/ `VM_A11Y_GSETTINGS_KEY` / `VM_A11Y_HELPER` で、`verifyImageContract` が 1 回の `podman exec` で検査し、欠ければ起動を落とします。デスクトップは `vmBusAddressOf(slot)` の自分のバスを使います。`containerFilesDigest` はサブディレクトリも含めます。
-  - スクロールは X11 のホイールボタン（4 上・5 下・6 左・7 右）で、正の値で 5 を送ります（`VM_SCROLL_NOTCH` = 100、上限 20）。
-- **受け渡し**: 人が必要な手順は `vm_ask_user` で待ちます（`packages/core/vm/handover.ts`）。待機中は画面ペインが操作可能になり、エージェントは止まっています。待ちには 15 分の期限があり（`HANDOVER_TIMEOUT_MS`）、過ぎると `handover_end` でペインを閉じてから「利用者が来なかった」をツールの結果として返します（実行は止めません。待ち続けるとルーチンが順番待ちで止まります）。期限は `handover` イベントとスナップショットの `expiresAt` に載せ、開始は通知の対象です。待ちを解く経路を増やすときは、`cancelAll` とイベントの後始末、タイマーの片付けも確認してください。
-- **クリップボードは VNC を通さない**: 受け渡し中は、この PC と画面のあいだで文字が往復します。x11vnc の cut text は ISO 8859-1 で Extended Clipboard にも対応していないため、日本語は `?` になります。文字は `GET/POST /api/stella/conversations/:agentId/clipboard` でサーバーを通り、VM の中では `xclip` が CLIPBOARD 選択を読み書きします（`packages/core/vm/clipboard.ts`）。`xclip` はその会話のエージェントの画面（`execFor`）で動きます——選択はディスプレイのもので、マシンの `:99` に書いてもどの会話にも出ません。noVNC に残るのは、選択が変わったことを知らせる `clipboard` イベント（本文はラテン 1 の代役なので使わない）と、`Ctrl+V`（`Cmd+V` / `Ctrl+Shift+V`）を画面へ送る `sendKey` だけです。
-  - **書き込みだけが受け渡しを要求する**: `POST` は `getPendingHandover` を確かめ、実行中の画面のクリップボードを変えません。読み取りは変えないので確かめません（待機の終わりと競合しても害がないためです）。
-  - **文字は stdin で渡す**: 引数にすると VM 内のプロセス一覧から読めます（パスワードが入りえます）。書いた直後に読み戻して一致を確かめてください——`xclip -i` は fork して選択の所有者として残るので、そこで失敗すれば画面へ貼る前に分かります。
-  - **イメージに `xclip` が要る**: `container/Containerfile` が持っています。足した／変えたときは `containerFilesDigest` が変わるので、次の起動でイメージが自動で再ビルドされます（`/home/agent` は退避・復元）。
-  - **画面に出すのは「コピー」「ペースト」の 2 語だけ**: 受け渡しの帯の小さなボタンで、自動の経路と同じことをする（コピー＝画面 → この PC、ペースト＝この PC → 画面）。成功は見れば分かるので文を足さず、失敗のときだけボタンの隣に 1 文を出す。入力欄やパネルは置きません。
+  - ref（`@s12345:e7`）はスナップショットに属し、`vm_do` は role と name が変わっていれば拒否します。
+    経路は `a11y.py` の `walk` が tuple で組み立て、読み戻しも role と name で引き直します。
+  - ウィンドウの題名は frame の name なので、保存後の確認は `vm_wait` で待つのが確実です。
+    xterm のようにバスへ出ないアプリは `vm_find` に出ません。
+- アクセシビリティはイメージ側の設定です。
+  `entry.sh` がアプリの起動前に `gsettings set org.gnome.desktop.interface toolkit-accessibility true` を実行します。
+  GTK アプリはこの値を起動時に 1 度だけ読み、後から変えてもバスに出ません。
+  Chromium には `--force-renderer-accessibility` を付けます。
+  - 契約値は `contract.ts` の `VM_DBUS_ADDRESS`（マシン自身のバス）/ `VM_A11Y_GSETTINGS_KEY` / `VM_A11Y_HELPER` で、`verifyImageContract` が 1 回の `podman exec` で検査し、欠ければ起動を落とします。
+    デスクトップは `vmBusAddressOf(slot)` の自分のバスを使います。
+    `containerFilesDigest` はサブディレクトリも含めます。
+  - スクロールは X11 のホイールボタン（4 上、5 下、6 左、7 右）で、正の値で 5 を送ります（`VM_SCROLL_NOTCH` = 100、上限 20）。
+- 受け渡し: 人が必要な手順は `vm_ask_user` で待ちます（`packages/core/vm/handover.ts`）。
+  待機中は画面ペインが操作可能になり、エージェントは止まっています。
+  待ちには 15 分の期限があり（`HANDOVER_TIMEOUT_MS`）、過ぎると `handover_end` でペインを閉じてから「利用者が来なかった」をツールの結果として返します（実行は止めません。待ち続けるとルーチンが順番待ちで止まります）。
+  期限は `handover` イベントとスナップショットの `expiresAt` に載せ、開始は通知の対象です。
+  待ちを解く経路を増やすときは、`cancelAll` とイベントの後始末、タイマーの片付けも確認してください。
+- クリップボードは VNC を通しません。
+  受け渡し中は、この PC と画面のあいだで文字が往復します。
+  x11vnc の cut text は ISO 8859-1 で Extended Clipboard にも対応していないため、日本語は `?` になります。
+  文字は `GET/POST /api/stella/conversations/:agentId/clipboard` でサーバーを通り、VM の中では `xclip` が CLIPBOARD 選択を読み書きします（`packages/core/vm/clipboard.ts`）。
+  `xclip` はその会話のエージェントの画面（`execFor`）で動きます。
+  選択はディスプレイのもので、マシンの `:99` に書いてもどの会話にも出ません。
+  noVNC に残るのは、選択が変わったことを知らせる `clipboard` イベント（本文はラテン 1 の代役なので使わない）と、`Ctrl+V`（`Cmd+V` / `Ctrl+Shift+V`）を画面へ送る `sendKey` だけです。
+  - 書き込みだけが受け渡しを要求します。
+    `POST` は `getPendingHandover` を確かめ、実行中の画面のクリップボードを変えません。
+    読み取りは変えないので確かめません（待機の終わりと競合しても害がないためです）。
+  - 文字は stdin で渡します。
+    引数にすると VM 内のプロセス一覧から読めます（パスワードが入りえます）。
+    書いた直後に読み戻して一致を確かめてください。
+    `xclip -i` は fork して選択の所有者として残るので、そこで失敗すれば画面へ貼る前に分かります。
+  - イメージに `xclip` が要ります。
+    `container/Containerfile` が持っています。
+    足した／変えたときは `containerFilesDigest` が変わるので、次の起動でイメージが自動で再ビルドされます（`/home/agent` は退避、復元）。
+  - 画面に出すのは「コピー」「ペースト」の 2 語だけです。
+    受け渡しの帯の小さなボタンで、自動の経路と同じことをします（コピー＝画面 → この PC、ペースト＝この PC → 画面）。
+    成功は見れば分かるので文は足しません。
+    失敗のときだけボタンの隣に 1 文を出します。
+    入力欄やパネルは置きません。
 
 ### 環境変数（`vm_env`）
 
-API キーやトークンは、ツールの引数にも戻り値にも会話にも入れません。エージェントは名前だけを言い、ユーザーがダイアログに入力し、値はマシンのファイルへ直接書かれます。
+API キーやトークンは、ツールの引数にも戻り値にも会話にも入れません。
+エージェントは名前だけを言い、ユーザーがダイアログに入力し、値はマシンのファイルへ直接書かれます。
 
-- **保存は 2 ファイル**: `/home/agent/.lumisca-env/env.json`（真実、キー単位で書き換える）と `env.sh`（生成物、`export NAME='…'`）。どちらも 0600 で、`/home/agent` はボリュームなのでマシンを作り直しても残ります。`env.json` を読まずに `env.sh` へ追記すると、同じ名前が 2 行になります。
-- **適用は `vm/shell.ts` の 2 か所**: `VmCommandRunner.run` と `VmBackgroundSpawner.spawn` が `bash -lc` の先頭で source します（`VM_ENV_SOURCE`）。片方だけ直すと、バックグラウンドのコマンドだけ値を見なくなります。`vm/shell_test.ts` が両方を固定しています。
-- **値は argv に載せない**: 書き込みは `podman exec` の stdin（引数にするとホストの `ps` に出ます）。`env-store_test.ts` が「コマンド文字列に値が出ない」を固定しています。
-- **待ちは `EnvRequestHub`**: `vm/env-request.ts`（セッションごとに 1 つ、同時に 1 件）。`env_request` イベントと `POST /api/stella/conversations/:agentId/env` で答え、拒否は `…/env/decline` です。期限は 15 分（`ENV_REQUEST_TIMEOUT_MS`）で、過ぎたら `env_request_end` を出してから「値は無い」を返します。待ちを解く経路を増やすときは `cancelAll` とタイマーの片付けも見てください（`InterruptionHub.endRun` が実行の終了で呼びます）。
-- **値の書き込みより先に待ちを解かない**: `StellaMachineService.provideEnv` は store に書いてから `finish` します。逆にすると、書けなかったときにエージェントが「設定済み」と思い込みます。
-- **スナップショットに載せる**: 再読み込みや再接続でダイアログを戻すため、会話のスナップショットは `envRequest`（名前・既存か・期限）を持ちます。値のフィールドはありません（サーバーも持ち歩きません）。
-- **隠せる範囲**: マシンの中ではエージェントが同じアカウントで `sudo` も使えるので、`echo $NAME` を実行すれば読めます。守っているのは「ツールの引数・結果・会話・DB を通らない」ところまでです。`vm_launch` で起動した GUI アプリには継承されません。
-- **通知**: `env_request` は実行が止まる待ちなので、`handover` と同じく Web Push とデスクトップ通知の対象です（`packages/server/push.ts` の `isNotifiable`）。
+- 保存は 2 ファイルです。
+  `/home/agent/.lumisca-env/env.json`（真実、キー単位で書き換える）と `env.sh`（生成物、`export NAME='…'`）です。
+  どちらも 0600 で、`/home/agent` はボリュームなのでマシンを作り直しても残ります。
+  `env.json` を読まずに `env.sh` へ追記すると、同じ名前が 2 行になります。
+- 適用は `vm/shell.ts` の 2 か所です。
+  `VmCommandRunner.run` と `VmBackgroundSpawner.spawn` が `bash -lc` の先頭で source します（`VM_ENV_SOURCE`）。
+  片方だけ直すと、バックグラウンドのコマンドだけ値を見なくなります。
+  `vm/shell_test.ts` が両方を固定しています。
+- 値は argv に載せません。
+  書き込みは `podman exec` の stdin です（引数にするとホストの `ps` に出ます）。
+  `env-store_test.ts` が「コマンド文字列に値が出ない」を固定しています。
+- 待ちは `vm/env-request.ts` の `EnvRequestHub` です（セッションごとに 1 つ、同時に 1 件）。
+  `env_request` イベントと `POST /api/stella/conversations/:agentId/env` で答え、拒否は `…/env/decline` です。
+  期限は 15 分（`ENV_REQUEST_TIMEOUT_MS`）で、過ぎたら `env_request_end` を出してから「値は無い」を返します。
+  待ちを解く経路を増やすときは `cancelAll` とタイマーの片付けも見てください（`InterruptionHub.endRun` が実行の終了で呼びます）。
+- 値の書き込みより先に待ちを解きません。
+  `StellaMachineService.provideEnv` は store に書いてから `finish` します。
+  逆にすると、書けなかったときにエージェントが「設定済み」と思い込みます。
+- スナップショットに載せます。
+  再読み込みや再接続でダイアログを戻すため、会話のスナップショットは `envRequest`（名前、既存か、期限）を持ちます。
+  値のフィールドはありません（サーバーも持ち歩きません）。
+- 隠せる範囲: マシンの中ではエージェントが同じアカウントで `sudo` も使えるので、`echo $NAME` を実行すれば読めます。
+  守っているのは「ツールの引数、結果、会話、DB を通らない」ところまでです。
+  `vm_launch` で起動した GUI アプリには継承されません。
+- 通知: `env_request` は実行が止まる待ちなので、`handover` と同じく Web Push とデスクトップ通知の対象です（`packages/server/push.ts` の `isNotifiable`）。
 
 ### 履歴と自動実行
 
-- **ルーチン**: `daily` / `weekly` / `every` / `once` / `watch` の 5 種類だけで、cron は扱いません。`once` は `YYYY-MM-DD HH:MM` のローカル日時を 1 つ持ち、次が無いので「進める」代わりに実行前に枠を空けて無効にし、走り終えたら行を削除します（走らなかった待機・見送りは理由付きで残ります。時刻が過ぎたまま起動した場合は遅れて実行）。次回時刻は保存値ではなく `packages/core/shared/routine.ts` の `nextRunAt` で計算し、実行前に進めます。
-- **確認と実行は別**: `watch` の確認は推論を呼ばない別の事実で、`watch_checked_at` / `watch_error` に書きます（`last_run_at` / `last_status` は実行だけ）。マシンが動いていない確認は 15 分後に送り直し、ルーチンは止めません。観測値は監視対象の変更と有効化のやり直しで捨てます（`repo.ts` の `update`）。
-- **MCP の監視だけはサーバー側**: `mcp` ソースの確認はマシンではなくサーバーの接続（`McpService` のチェック用マネージャ）で走り、マシンが止まっていても続きます。読み取りツールだけを許し（`readOnlyHint`、無ければ名前の動詞）、作成時と毎回の確認の両方で拒否します。比較は ID の集合差で、新しい ID が現れたときだけ発火し、run には新着件数が隠しで渡ります。
-- **待機は 1 本・1 時間**: 会話が空くまで待つのは設計どおりですが、積み上げません（`scheduler.ts` の `queued`）。上限を超えたら実行せずに `skipped` として理由を残します。`RoutineView.queued` は画面の「待機中」です。
-- **ルーチンのプロンプトは描かない**: 実行は利用者のプロンプトとして届きますが、本文はルーチンの指示（作成時にエージェントが書いた定型の依頼）なので、会話には出しません（stella は `stella-state.ts` の `transcriptEntries`、code mode は `MessageRow` が落とします）。`StellaEntry.routine` の名前は識別・カーソルのために射影・圧縮の記録まで通し続けてください。ただし会話に出さないものを一覧の 2 行目にだけ出してはいけません（`previewOf` はルーチンのプロンプトに `null` を返し、一覧は 1 つ前の発言まで遡ります）。
-- **放置された会話の圧縮**: 最後のメッセージから 10 分たったとき、モデルの視界が 50k トークン以上なら畳みます（`SessionAgentOptions.idleCompaction`、定数は `packages/core/agent/factory.ts` の `STELLA_IDLE_COMPACTION`）。視界はすべて畳み、尻尾は残しません（idle 中に答えているリクエストは無いためです）。要約中に会話が動いたら挿入せずに捨てます（`ContextCompactor.compactNow` の `canCommit`）。畳んだ区間の行は消しません。ペイロードは既定では残し、設定「圧縮した区間も残す」を切ったときだけ `packages/core/session/prune.ts` が削ります（`STELLA_KEEP_FULL_LOG_KEY`、既定オン）。
-- **履歴は遅延読み込み**: メモリに載せるのはモデルの視界（最新チェックポイント以降）だけです（`MessageRepo.listModelView`）。画面の遡りは `packages/core/session/transcript-pager.ts` がストアから引きます。**ページが数える行（`CONVERSATION_ROWS_SQL`）は、射影（`stellaEntryOf`）がエントリにする行と同じ集合でなければなりません**。片方だけ変えると、画面に出ていた発言が再読み込みで消えます。
-- **空いた領域は次の起動で返す**: `close()` がマーカーを書き（`packages/core/db/vacuum.ts` の `vacuumMarkerPath`）、次の起動時にファイルを作り直します（`vacuumOnStartup`、`packages/server/mod.ts`）。`bun:sqlite` の `VACUUM INTO` で新しいファイルへ書き出し、rename で置き換えます。
-- **DB は `closeDatabase()` で閉じる**: `bun:sqlite` は `close()` だけではプリペアドステートメントを解放せず、Windows ではファイルが開いたままになって rename も削除もできません（起動時の vacuum とテストの後片付けが落ちます）。`packages/core/db/close.ts` の `close(true)` が唯一の閉じ方です。
-- **`history_search`**: 検索するのは会話の射影（画面に出るもの）だけで、結果はローカル日時付き、`from` / `to` で期間を切れます。ツール名・引数・結果は出ません。
+- ルーチン: `daily` / `weekly` / `every` / `once` / `watch` の 5 種類だけで、cron は扱いません。
+  `once` は `YYYY-MM-DD HH:MM` のローカル日時を 1 つ持ち、次が無いので「進める」代わりに実行前に枠を空けて無効にし、走り終えたら行を削除します（走らなかった待機と見送りは理由付きで残ります。時刻が過ぎたまま起動した場合は遅れて実行）。
+  次回時刻は保存値ではなく `packages/core/shared/routine.ts` の `nextRunAt` で計算し、実行前に進めます。
+- 確認と実行は別です。
+  `watch` の確認は推論を呼ばない別の事実で、`watch_checked_at` / `watch_error` に書きます（`last_run_at` / `last_status` は実行だけ）。
+  マシンが動いていない確認は 15 分後に送り直し、ルーチンは止めません。
+  観測値は監視対象の変更と有効化のやり直しで捨てます（`repo.ts` の `update`）。
+- MCP の監視だけはサーバー側です。
+  `mcp` ソースの確認はマシンではなくサーバーの接続（`McpService` のチェック用マネージャ）で走り、マシンが止まっていても続きます。
+  読み取りツールだけを許し（`readOnlyHint`、無ければ名前の動詞）、作成時と毎回の確認の両方で拒否します。
+  比較は ID の集合差で、新しい ID が現れたときだけ発火し、run には新着件数が隠しで渡ります。
+- 待機は 1 本で 1 時間です。
+  会話が空くまで待つのは設計どおりですが、積み上げません（`scheduler.ts` の `queued`）。
+  上限を超えたら実行せずに `skipped` として理由を残します。
+  `RoutineView.queued` は画面の「待機中」です。
+- ルーチンのプロンプトは描きません。
+  実行は利用者のプロンプトとして届きますが、本文はルーチンの指示（作成時にエージェントが書いた定型の依頼）なので、会話には出しません（stella は `stella-state.ts` の `transcriptEntries`、code mode は `MessageRow` が落とします）。
+  `StellaEntry.routine` の名前は識別とカーソルのために射影と圧縮の記録まで通し続けてください。
+  ただし会話に出さないものを一覧の 2 行目にだけ出してはいけません（`previewOf` はルーチンのプロンプトに `null` を返し、一覧は 1 つ前の発言まで遡ります）。
+- 放置された会話は圧縮します。
+  最後のメッセージから 10 分たったとき、モデルの視界が 50k トークン以上なら畳みます（`SessionAgentOptions.idleCompaction`、定数は `packages/core/agent/factory.ts` の `STELLA_IDLE_COMPACTION`）。
+  視界はすべて畳み、尻尾は残しません（idle 中に答えているリクエストは無いためです）。
+  要約中に会話が動いたら挿入せずに捨てます（`ContextCompactor.compactNow` の `canCommit`）。
+  畳んだ区間の行は消しません。
+  ペイロードは既定では残し、設定「圧縮した区間も残す」を切ったときだけ `packages/core/session/prune.ts` が削ります（`STELLA_KEEP_FULL_LOG_KEY`、既定オン）。
+- 履歴は遅延読み込みです。
+  メモリに載せるのはモデルの視界（最新チェックポイント以降）だけです（`MessageRepo.listModelView`）。
+  画面の遡りは `packages/core/session/transcript-pager.ts` がストアから引きます。
+  **ページが数える行（`CONVERSATION_ROWS_SQL`）は、射影（`stellaEntryOf`）がエントリにする行と同じ集合でなければなりません**。
+  片方だけ変えると、画面に出ていた発言が再読み込みで消えます。
+- 空いた領域は次の起動で返します。
+  `close()` がマーカーを書き（`packages/core/db/vacuum.ts` の `vacuumMarkerPath`）、次の起動時にファイルを作り直します（`vacuumOnStartup`、`packages/server/mod.ts`）。
+  `bun:sqlite` の `VACUUM INTO` で新しいファイルへ書き出し、rename で置き換えます。
+- DB は `closeDatabase()` で閉じます。
+  `bun:sqlite` は `close()` だけではプリペアドステートメントを解放せず、Windows ではファイルが開いたままになって rename も削除もできません（起動時の vacuum とテストの後片付けが落ちます）。
+  `packages/core/db/close.ts` の `close(true)` が唯一の閉じ方です。
+- `history_search`: 検索するのは会話の射影（画面に出るもの）だけで、結果はローカル日時付き、`from` / `to` で期間を切れます。
+  ツール名、引数、結果は出ません。
 
-### 名前・アイコン・モデル
+### 名前、アイコン、モデル
 
-- **1 つのダイアログで変える**（`packages/web/src/components/stella/AgentEditDialog.tsx`）。`PATCH /api/stella/agents/:id` に `{ name?, icon?, model?, thinkingLevel? }` を送り、`icon` 省略は変更なし、`null` は頭文字、`{data, mimeType}` は差し替え、`model` 省略は変更なし、`null` は既定のモデルです。`thinkingLevel` は `{provider, modelId, level}` で、レベルはモデルの設定なので対象のモデルを名乗ります（エージェントから既定モデルを引き直すと、画面が見ていたモデルと食い違いえます）。レベルは選んだ時点では書かず、保存で名前・画像・モデルと一緒に確定します（キャンセルでは残りません）。名前を先に検証し（空名・長すぎる名前は 400、重複名は 409）、モデルはカタログにあるかを、レベルはそのモデルが提供するかを確かめてから書き込みます。弾かれたときに画像も名前も書かれません。
-- **並びは動かさない**: 改名も差し替えも `updated_at` を触りません。「最後に話した順」のままです。
-- **会話の名前はエージェント名**: stella の会話では最初のメッセージからのタイトル生成を行いません（`SessionAgentOptions.titleGeneration`、`factory.ts`）。会話のセッション名は作成時のエージェント名のままで、通知もエージェントの行から名前を読みます。古い会話は開くときに名前をエージェント名へ戻します（`getOrCreateStellaSession`）。
-- **`role` は編集できない**: 作成時のシステムプロンプトに入っており、後から変えても既存の会話に届きません。名前もプロンプトには入りません（`packages/core/tools/system-prompt.ts`）。プロンプト自体はセッションを開くたびに導出し直され、保存値と違えば書き換わるので（`packages/core/agent/factory.ts` の `ensureSystemPrompt`）、新しい版でプロンプトを変えれば既存の会話にも届きます。
-- **アイコン**: 保存先は DB 隣の `.lumisca-agent-icons/<agent id>/`（`packages/core/stella/icons.ts`）。未設定なら名前の頭文字を `agent id` から導いた色の上に描きます（`packages/core/shared/agent-avatar.ts`）。PNG / JPEG / GIF / WebP / BMP の 512 KiB までで、SVG は置けません。
+- 1 つのダイアログで変えます（`packages/web/src/components/stella/AgentEditDialog.tsx`）。
+  `PATCH /api/stella/agents/:id` に `{ name?, icon?, model?, thinkingLevel? }` を送り、`icon` 省略は変更なし、`null` は頭文字、`{data, mimeType}` は差し替え、`model` 省略は変更なし、`null` は既定のモデルです。
+  `thinkingLevel` は `{provider, modelId, level}` で、レベルはモデルの設定なので対象のモデルを名乗ります（エージェントから既定モデルを引き直すと、画面が見ていたモデルと食い違いえます）。
+  レベルは選んだ時点では書かず、保存で名前、画像、モデルと一緒に確定します（キャンセルでは残りません）。
+  名前を先に検証し（空名と長すぎる名前は 400、重複名は 409）、モデルはカタログにあるかを、レベルはそのモデルが提供するかを確かめてから書き込みます。
+  弾かれたときに画像も名前も書かれません。
+- 並びは動かしません。
+  改名も差し替えも `updated_at` を触りません。
+  「最後に話した順」のままです。
+- 会話の名前はエージェント名です。
+  stella の会話では最初のメッセージからのタイトル生成を行いません（`SessionAgentOptions.titleGeneration`、`factory.ts`）。
+  会話のセッション名は作成時のエージェント名のままで、通知もエージェントの行から名前を読みます。
+  古い会話は開くときに名前をエージェント名へ戻します（`getOrCreateStellaSession`）。
+- `role` は編集できません。
+  作成時のシステムプロンプトに入っており、後から変えても既存の会話に届きません。
+  名前もプロンプトには入りません（`packages/core/tools/system-prompt.ts`）。
+  プロンプト自体はセッションを開くたびに導出し直され、保存値と違えば書き換わるので（`packages/core/agent/factory.ts` の `ensureSystemPrompt`）、新しい版でプロンプトを変えれば既存の会話にも届きます。
+- アイコン: 保存先は DB 隣の `.lumisca-agent-icons/<agent id>/` です（`packages/core/stella/icons.ts`）。
+  未設定なら名前の頭文字を `agent id` から導いた色の上に描きます（`packages/core/shared/agent-avatar.ts`）。
+  PNG / JPEG / GIF / WebP / BMP の 512 KiB までで、SVG は置けません。
 
 ## 8. MCP サーバーの管理（会話から）
 
-エージェントは `mcp_add` / `mcp_remove` / `mcp_list` で、設定画面と同じアプリ全体の設定を変更できます（`packages/core/mcp/manage-tools.ts`）。ワークスペースの `.mcp.json` とプラグインのサーバーは対象外です。
+エージェントは `mcp_add` / `mcp_remove` / `mcp_list` で、設定画面と同じアプリ全体の設定を変更できます（`packages/core/mcp/manage-tools.ts`）。
+ワークスペースの `.mcp.json` とプラグインのサーバーは対象外です。
 
-- **探索経路**: 3 つはプリロードせず main レジストリに置き、`tool_search` → `tool_call` で呼びます。sub-agent には渡しません。組み込みスキル `mcp-servers`（`packages/core/skills/builtin/mcp-servers.ts`）が経路を教えます。
-- **接続テスト**: `mcp_add` は接続してツール一覧を取るまで 1 行も保存しません（30 秒）。401 はサインイン要求として保存し、設定画面でのサインインを促します。初回の取得が 30 秒を超える場合は `verify: false` で省けます。
-- **保存先の書き換え**: `McpService.addAppServer` / `removeAppServer` は該当エントリだけを差し替えます。丸ごと書き戻すと、他のサーバーの `${VAR}` が展開後の値で確定します。
-- **適用**: 保存は `setAppMcpConfig` を通るので、開いているセッションは idle なら再構築、実行中なら差し替えで追従します（`SessionPool.applyMcpConfigChange`）。
+- 探索経路: 3 つはプリロードせず main レジストリに置き、`tool_search` → `tool_call` で呼びます。
+  sub-agent には渡しません。
+  組み込みスキル `mcp-servers`（`packages/core/skills/builtin/mcp-servers.ts`）が経路を教えます。
+- 接続テスト: `mcp_add` は接続してツール一覧を取るまで 1 行も保存しません（30 秒）。
+  401 はサインイン要求として保存し、設定画面でのサインインを促します。
+  初回の取得が 30 秒を超える場合は `verify: false` で省けます。
+- 保存先の書き換え: `McpService.addAppServer` / `removeAppServer` は該当エントリだけを差し替えます。
+  丸ごと書き戻すと、他のサーバーの `${VAR}` が展開後の値で確定します。
+- 適用: 保存は `setAppMcpConfig` を通るので、開いているセッションは idle なら再構築、実行中なら差し替えで追従します（`SessionPool.applyMcpConfigChange`）。
 
 ## 9. 開発用スクリプト
 
-手元の確認は `bun run` から実行します。どれも手動操作用で、CI からは実行しません。
+手元の確認は `bun run` から実行します。
+どれも手動操作用で、CI からは実行しません。
 
 - `bun run demo`: faux プロバイダで動くデモサーバー
 - `bun run seed:history <sessionId> [nPairs]`: 指定セッションに長い履歴を流し込む
@@ -356,62 +833,143 @@ API キーやトークンは、ツールの引数にも戻り値にも会話に�
 
 ## 10. 画像の保存
 
-エージェントが読み込んだ画像と、プロンプトに添付された画像は、トランスクリプト（DB）に画像ブロックとして残ります。保存前に `packages/core/media/stored-image.ts` の `prepareStoredImage` を通してください（長辺 1568px・1 MiB に収め、まだ重ければ JPEG 化）。
+エージェントが読み込んだ画像と、プロンプトに添付された画像は、トランスクリプト（DB）に画像ブロックとして残ります。
+保存前に `packages/core/media/stored-image.ts` の `prepareStoredImage` を通してください（長辺 1568px、1 MiB に収め、まだ重ければ JPEG 化）。
 
-- **画像を返すツールは、画像ブロックを作る前にこの関数を通す**。注記には縮小後の寸法と容量を書きます（`read` の `[image: …]`、`pdf_read_pages` の頁の行、`browser_screenshot` の 1 行目）。名乗る数値と実際の画像が食い違うと、モデルは別のものを見ていることになります。
-- **座標を持つ 2 つのスクリーンショット**（`computer_screenshot` / `vm_screenshot`）も同じ規則で縮め、結果の文に画面の寸法と倍率を必ず書きます（`computer_screenshot` は `screen = round(image / scale)`、`vm_screenshot` は「画像の位置 × 倍率」）。倍率が無いと、モデルが読んだ位置とクリック先がずれます。
-- **プロンプト添付**は `packages/server/routes/session-requests.ts` の `preparePromptImages` を通します。code mode はメッセージへ、stella はマシンへ書くためです。
-- **原ファイルとユーザーへ送るファイルは触りません**。`chat_attach` / `send_chat` / `visual` は、アセット置き場（4 MiB 上限）にそのままのバイト列を書きます。
+- 画像を返すツールは、画像ブロックを作る前にこの関数を通します。
+  注記には縮小後の寸法と容量を書きます（`read` の `[image: …]`、`pdf_read_pages` の頁の行、`browser_screenshot` の 1 行目）。
+  名乗る数値と実際の画像が食い違うと、モデルは別のものを見ていることになります。
+- 座標を持つ 2 つのスクリーンショット（`computer_screenshot` / `vm_screenshot`）も同じ規則で縮め、結果の文に画面の寸法と倍率を必ず書きます（`computer_screenshot` は `screen = round(image / scale)`、`vm_screenshot` は「画像の位置 × 倍率」）。
+  倍率が無いと、モデルが読んだ位置とクリック先がずれます。
+- プロンプト添付は `packages/server/routes/session-requests.ts` の `preparePromptImages` を通します。
+  code mode はメッセージへ、stella はマシンへ書くためです。
+- 原ファイルとユーザーへ送るファイルは触りません。
+  `chat_attach` / `send_chat` / `visual` は、アセット置き場（4 MiB 上限）にそのままのバイト列を書きます。
 
-## 11. スキルの作成・書き換え
+## 11. スキルの作成と書き換え
 
-スキルは会話から作れます。作成用のツールはなく、フォルダと `SKILL.md` なので `read` / `write` / `edit` / `list_dir` で書き（削除だけ `bash` の `rm`）、書き方は組み込みスキル `skill-authoring` が教えます。
+スキルは会話から作れます。
+作成用のツールはなく、フォルダと `SKILL.md` なので `read` / `write` / `edit` / `list_dir` で書き（削除だけ `bash` の `rm`）、書き方は組み込みスキル `skill-authoring` が教えます。
 
-- **置き場所は 4 つ**: ワークスペースの `.agents/skills`、Lumisca 用フォルダ（`<config home>/lumisca-agent/skills`）、`~/.agents/skills`（読み取りのみ）、組み込みです。stella ではエージェント自身の `.agents/skills` とマシン共通の `/home/agent/.agents/skills` で、ホストの Lumisca 用フォルダは読みません。
-- **Lumisca 用フォルダは追加ルート**: `Sandbox` の `extraRoots` に入り、絶対パスでだけ届きます。フォルダ名による相対パス解決には参加しないので、リポジトリに `skills/` があっても曖昧になりません。退避先の `roots[0]` はワークスペースのままです。
-- **`skill` ツールは一覧を毎回引き直す**: カタログ provider と同じディスカバリを呼ぶので、書いたスキルを同じ run で読めます。固定配列に戻すと「一覧には出るが `Unknown skill`」になります。
-- **サブエージェントも同じカタログを読む**: サブエージェントの `skill` ツールはセッションが渡すカタログ（`SubagentRuntime.skills`）を使います。stella ではエージェント自身とマシン共通のスキルがそのまま読め、開始時の一覧にも出ます。main 専用ツール（`identity` / `agent_create` / `routine_*` / MCP 管理）と画面操作を教える組み込みは落とします（`tool-pieces.ts` の `subagentSkills`）。ディレクトリを渡すのは factory の runtime resolver までで、task-hub はもう探索しません。
-- **ガイドの広告条件**: ファイルツールを持つセッションだけです（`BuiltinContext.skillAuthoring`）。stella では共通フォルダのパスをマシン側のものにして渡します。
-- **テストの隔離**: `LumiscaCore.forTesting` は `appSkillDirs: []` を渡します。配線するときは `globalSkillDirs` と同じく core → pool → toolsets（と factory の runtime resolver）へ通してください。
+- 置き場所は 4 つです。
+  ワークスペースの `.agents/skills`、Lumisca 用フォルダ（`<config home>/lumisca-agent/skills`）、`~/.agents/skills`（読み取りのみ）、組み込みです。
+  stella ではエージェント自身の `.agents/skills` とマシン共通の `/home/agent/.agents/skills` で、ホストの Lumisca 用フォルダは読みません。
+- Lumisca 用フォルダは追加ルートです。
+  `Sandbox` の `extraRoots` に入り、絶対パスでだけ届きます。
+  フォルダ名による相対パス解決には参加しないので、リポジトリに `skills/` があっても曖昧になりません。
+  退避先の `roots[0]` はワークスペースのままです。
+- `skill` ツールは一覧を毎回引き直します。
+  カタログ provider と同じディスカバリを呼ぶので、書いたスキルを同じ run で読めます。
+  固定配列に戻すと「一覧には出るが `Unknown skill`」になります。
+- サブエージェントも同じカタログを読みます。
+  サブエージェントの `skill` ツールはセッションが渡すカタログ（`SubagentRuntime.skills`）を使います。
+  stella ではエージェント自身とマシン共通のスキルがそのまま読め、開始時の一覧にも出ます。
+  main 専用ツール（`identity` / `agent_create` / `routine_*` / MCP 管理）と画面操作を教える組み込みは落とします（`tool-pieces.ts` の `subagentSkills`）。
+  ディレクトリを渡すのは factory の runtime resolver までで、task-hub はもう探索しません。
+- ガイドの広告条件: ファイルツールを持つセッションだけです（`BuiltinContext.skillAuthoring`）。
+  stella では共通フォルダのパスをマシン側のものにして渡します。
+- テストの隔離: `LumiscaCore.forTesting` は `appSkillDirs: []` を渡します。
+  配線するときは `globalSkillDirs` と同じく core → pool → toolsets（と factory の runtime resolver）へ通してください。
 
 ## 12. PWA（インストール）
 
-https（`tailscale serve` など）で開いた端末から、ページを PWA としてインストールできます。理由は `ARCHITECTURE.md` の「PWA としてのインストール」にあります。
+https（`tailscale serve` など）で開いた端末から、ページを PWA としてインストールできます。
+理由は `ARCHITECTURE.md` の「PWA としてのインストール」にあります。
 
-- **manifest はリクエストごとに生成**します（`packages/server/manifest.ts`）。`theme_color` はそのページの第一描画のテーマ色で、`@lumisca/core/shared` の `THEME_COLORS` と `tokens.css` の `--bg` が一致することを `styles_test.ts` が検査します。`start_url` に token を入れないでください。
-- **token ガードの対象外は `/manifest.webmanifest`・`/pwa/*`・`/sw.js`**（`security.ts` の `unguardedPath`）。ブラウザのインストール処理が Cookie 無しで取りに来るためです。秘密は載せないでください。
-- **アイコンは `packages/web/public/pwa/` の PNG を `assets.json` に base64 で埋め込みます**（`PWA_ICON_FILES`）。宣言する `sizes` は実ファイルと一致させてください（`app_assets_test.ts` が照合）。`icon-maskable-512.png` は円形マスクで切られないよう、内容を 70% に縮めています。
-- **Service Worker は https のページでのみ登録**します（`packages/web/src/pwa.ts`）。デスクトップの `http://127.0.0.1` は secure context なので、スキームの判定がそのまま除外になります。キャッシュは `/assets/*.js`（`initial-data.js` を除く）、`/pwa/*`、`/favicon.png`、manifest だけで、network-first です。ページ・`/api`・`/ws` には触りません。
-- **`public/sw.js` のキャッシュ方針を変えたら `CACHE_NAME` を上げてください**。`/sw.js` は `max-age=0, must-revalidate` で配ります。
-- **クライアントの版ずれは `buildId` で検出**します。`Assets.buildId()`（`app.js` の ETag）を `GET /api/build` と `initial-data.js` の両方に載せ、`hooks/useBuildWatch.ts` が可視の間 60 秒ごと＋復帰時に比べ、違えば `UpdateBanner` が再読み込みを促します。インストールした PWA にはアドレスバーも再読み込みもなく、開いたときのバンドルを保ち続けるためです（サーバー単体アップデートより前のクライアントは、ブラウザで開いても更新の操作を出せませんでした）。片方だけに載せると検出できないので、`app_assets_test.ts` が両者の一致を検査します。自動で読み直さないのは実行中のセッションを切らないためで、このページから再起動したときだけ自動になります。**`/api/health` には載せません**。生存確認は連合の疎通確認やデスクトップの起動確認が 3 秒予算で叩くもので、`buildId` の初回算出は esbuild を走らせて数百ミリ秒から数秒かかるためです（これを健康確認に載せていたため、負荷の高い CI ランナーで生きているピアが落ちていると判定されました）。
-- **更新状態を取得できなかった理由は分類して出します**（`hooks/useUpdateStatus.ts` の `classifyUpdateFailure`）。404 は「このサーバーには更新機能がない」、401/403 は認証切れ、通信失敗は到達不可で、それぞれ別の文面です。一つの「この環境では利用できません」に潰すと、更新できるサーバーでもデスクトップアプリへ誘導してしまいます。
-- **standalone の余白**: viewport は `viewport-fit=cover`、余白は `env(safe-area-inset-*)` で戻します（`layout.css` の `.app`、全画面 `.modal`、`.mp-popover`）。`packages/server/render.ts` と `packages/web/index.html` の viewport は揃えたままにしてください。
-- **確認**: `app_assets_test.ts` と `app_security_test.ts` が通ること。実機は Chrome の DevTools → Application → Manifest で、警告が出ないことを見ます。
+- manifest はリクエストごとに生成します（`packages/server/manifest.ts`）。
+  `theme_color` はそのページの第一描画のテーマ色で、`@lumisca/core/shared` の `THEME_COLORS` と `tokens.css` の `--bg` が一致することを `styles_test.ts` が検査します。
+  `start_url` に token を入れないでください。
+- token ガードの対象外は `/manifest.webmanifest`、`/pwa/*`、`/sw.js` です（`security.ts` の `unguardedPath`）。
+  ブラウザのインストール処理が Cookie 無しで取りに来るためです。
+  秘密は載せないでください。
+- アイコンは `packages/web/public/pwa/` の PNG を `assets.json` に base64 で埋め込みます（`PWA_ICON_FILES`）。
+  宣言する `sizes` は実ファイルと一致させてください（`app_assets_test.ts` が照合）。
+  `icon-maskable-512.png` は円形マスクで切られないよう、内容を 70% に縮めています。
+- Service Worker は https のページでのみ登録します（`packages/web/src/pwa.ts`）。
+  デスクトップの `http://127.0.0.1` は secure context なので、スキームの判定がそのまま除外になります。
+  キャッシュは `/assets/*.js`（`initial-data.js` を除く）、`/pwa/*`、`/favicon.png`、manifest だけで、network-first です。
+  ページ、`/api`、`/ws` には触りません。
+- `public/sw.js` のキャッシュ方針を変えたら `CACHE_NAME` を上げてください。
+  `/sw.js` は `max-age=0, must-revalidate` で配ります。
+- クライアントの版ずれは `buildId` で検出します。
+  `Assets.buildId()`（`app.js` の ETag）を `GET /api/build` と `initial-data.js` の両方に載せ、`hooks/useBuildWatch.ts` が可視の間 60 秒ごとと復帰時に比べ、違えば `UpdateBanner` が再読み込みを促します。
+  インストールした PWA にはアドレスバーも再読み込みもなく、開いたときのバンドルを保ち続けるためです（サーバー単体アップデートより前のクライアントは、ブラウザで開いても更新の操作を出せませんでした）。
+  片方だけに載せると検出できないので、`app_assets_test.ts` が両者の一致を検査します。
+  自動で読み直さないのは実行中のセッションを切らないためで、このページから再起動したときだけ自動になります。
+  **`/api/health` には載せません**。
+  生存確認は連合の疎通確認やデスクトップの起動確認が 3 秒予算で叩くもので、`buildId` の初回算出は esbuild を走らせて数百ミリ秒から数秒かかるためです（これを健康確認に載せていたため、負荷の高い CI ランナーで生きているピアが落ちていると判定されました）。
+- 更新状態を取得できなかった理由は分類して出します（`hooks/useUpdateStatus.ts` の `classifyUpdateFailure`）。
+  404 は「このサーバーには更新機能がない」、401/403 は認証切れ、通信失敗は到達不可で、それぞれ別の文面です。
+  一つの「この環境では利用できません」に潰すと、更新できるサーバーでもデスクトップアプリへ誘導してしまいます。
+- standalone の余白: viewport は `viewport-fit=cover`、余白は `env(safe-area-inset-*)` で戻します（`layout.css` の `.app`、全画面 `.modal`、`.mp-popover`）。
+  `packages/server/render.ts` と `packages/web/index.html` の viewport は揃えたままにしてください。
+- 確認: `app_assets_test.ts` と `app_security_test.ts` が通ること。
+  実機は Chrome の DevTools → Application → Manifest で、警告が出ないことを見ます。
 
 ### 通知（Web Push）
 
-インストールした PWA に、実行完了・質問・画面の受け渡し・エラーを OS 通知で届けます（`packages/server/push.ts`、`packages/core/notify/`）。
+インストールした PWA に、実行完了、質問、画面の受け渡し、エラーを OS 通知で届けます（`packages/server/push.ts`、`packages/core/notify/`）。
 
-- **タイトルは名前、本文は中身**: 通知の title はエージェント名（code mode はセッション名）、body は何が起きたかです（`push.ts` の `notificationName` と `buildPushNotification`）。実行完了の body は**その run が言ったことの冒頭**（120 文字に畳んで切る）で、言うことが無かった run（`NO_RESPONSE`、カードやファイルだけ）だけ「処理が完了しました」に落とします。返信は `agent_end` が運びます（`packages/core/agent/run-reply.ts`。会話に出るものと同じ規則 `stellaEntryOf` で拾うので、ツール前のナレーションは入りません）。DB から読み直さないのは、何も言わなかった run が前の run の返信を繰り返すためです。デスクトップ通知（`packages/web/src/notify.ts`）は名前を本文に置く従来の文面のままで、返信の冒頭だけが両方に入ります。
-- **stella はエージェント名で通知する**: 会話のセッション名ではなく `stella_agents.name` を読みます。会話の名前はエージェントのもので、stella では最初のメッセージからのタイトル生成を行いません（`SessionAgentOptions.titleGeneration`。古い会話は開くときに名前を戻します）。ヘッダーと通知が同じ名前を出すためです。
-- **run の無い `agent_end` を出さない**: セッションを閉じると `agent.abort()` が走りますが、`agent_end` は走っていた run があるときだけ出します（`ai/agent.ts` の `abort`）。閉じただけで「完了しました」を届けないためです。閉じたセッションはどのイベントも出しません（`SessionAgent.emit`）。ここを外すと、×でタブを閉じるたびに通知が届きます。
-- **可視判定は Service Worker が持つ**（`public/sw.js` の `push`）。`clients.matchAll({ type: "window", includeUncontrolled: true })` に `visibilityState === "visible"` の窓があれば何も出しません。サーバー側に presence を持たせると、複数端末のフォーカスを当てる必要が出て必ずずれます。
-- **暗号は WebCrypto だけで書く**（`packages/core/notify/web-push.ts`）。VAPID の ES256、RFC 8291 の AES128GCM、HKDF の 2 段です。依存は増やさないでください。本文は必ず `0x02` 区切りで終わらせます（無いとブラウザがレコードを終端できず、黙って捨てます）。往復は `packages/core/notify/web-push_test.ts` がブラウザ側の手順で復号して確かめます。
-- **鍵と購読は settings.jsonc**（`push_vapid` / `push_subscriptions`）。DB マイグレーションはありません。両方とも `settings/guard.ts` の `protectedKeyReason` で汎用設定 API から遮断しています。
-- **鍵は初回の `GET /api/notify/key` で作る**。通知を使わない利用者に秘密鍵を書かないためです。保存済みの鍵対が公開側と食い違ったら**作り直さず失敗**させてください（作り直すと既存の購読が全部無効になり、ブラウザは通知を黙って捨てます）。
-- **404 / 410 の購読は削除**、それ以外の失敗（429、通信断）は残します（`push.ts` の `forgetPushSubscriptions`）。
-- **このサーバーのイベントだけ**送ります。中継しているピアのイベントは対象外で、購読はこのオリジンの端末のものです。
-- **`pushsubscriptionchange` は当てにしない**。Chromium も発火しないことがあり、Safari は実装していません。ページを開いたときに購読を 1 回 POST し直す経路（`packages/web/src/hooks/usePush.ts`）を消さないでください。
-- **`public/sw.js` は素の script** なので、ページの `push.ts` を import できません。base64url の復号だけが 2 か所にあります。
-- **設定行は `pushSupported()` のときだけ**出します（`https` かつデスクトップシェル外かつ Push API あり）。デスクトップの `http://127.0.0.1` と `bun run dev` は対象外で、そこは従来どおり Tauri の通知が担当します。iOS はホーム画面の PWA でだけ動きます。
+- タイトルは名前、本文は中身です。
+  通知の title はエージェント名（code mode はセッション名）、body は何が起きたかです（`push.ts` の `notificationName` と `buildPushNotification`）。
+  実行完了の body はその run が言ったことの冒頭（120 文字に畳んで切る）で、言うことが無かった run（`NO_RESPONSE`、カードやファイルだけ）だけ「処理が完了しました」に落とします。
+  返信は `agent_end` が運びます（`packages/core/agent/run-reply.ts`。会話に出るものと同じ規則 `stellaEntryOf` で拾うので、ツール前のナレーションは入りません）。
+  DB から読み直さないのは、何も言わなかった run が前の run の返信を繰り返すためです。
+  デスクトップ通知（`packages/web/src/notify.ts`）は名前を本文に置く従来の文面のままで、返信の冒頭だけが両方に入ります。
+- stella はエージェント名で通知します。
+  会話のセッション名ではなく `stella_agents.name` を読みます。
+  会話の名前はエージェントのもので、stella では最初のメッセージからのタイトル生成を行いません（`SessionAgentOptions.titleGeneration`。古い会話は開くときに名前を戻します）。
+  ヘッダーと通知が同じ名前を出すためです。
+- run の無い `agent_end` は出しません。
+  セッションを閉じると `agent.abort()` が走りますが、`agent_end` は走っていた run があるときだけ出します（`ai/agent.ts` の `abort`）。
+  閉じただけで「完了しました」を届けないためです。
+  閉じたセッションはどのイベントも出しません（`SessionAgent.emit`）。
+  ここを外すと、×でタブを閉じるたびに通知が届きます。
+- 可視判定は Service Worker が持ちます（`public/sw.js` の `push`）。
+  `clients.matchAll({ type: "window", includeUncontrolled: true })` に `visibilityState === "visible"` の窓があれば何も出しません。
+  サーバー側に presence を持たせると、複数端末のフォーカスを当てる必要が出て必ずずれます。
+- 暗号は WebCrypto だけで書きます（`packages/core/notify/web-push.ts`）。
+  VAPID の ES256、RFC 8291 の AES128GCM、HKDF の 2 段です。
+  依存は増やさないでください。
+  本文は必ず `0x02` 区切りで終わらせます（無いとブラウザがレコードを終端できず、気づかないうちに捨てます）。
+  往復は `packages/core/notify/web-push_test.ts` がブラウザ側の手順で復号して確かめます。
+- 鍵と購読は settings.jsonc にあります（`push_vapid` / `push_subscriptions`）。
+  DB マイグレーションはありません。
+  両方とも `settings/guard.ts` の `protectedKeyReason` で汎用設定 API から遮断しています。
+- 鍵は初回の `GET /api/notify/key` で作ります。
+  通知を使わない利用者に秘密鍵を書かないためです。
+  保存済みの鍵対が公開側と食い違ったら**作り直さず失敗**させてください（作り直すと既存の購読が全部無効になり、ブラウザは通知を気づかないうちに捨てます）。
+- 404 / 410 の購読は削除し、それ以外の失敗（429、通信断）は残します（`push.ts` の `forgetPushSubscriptions`）。
+- 送るのはこのサーバーのイベントだけです。
+  中継しているピアのイベントは対象外で、購読はこのオリジンの端末のものです。
+- `pushsubscriptionchange` は当てにしません。
+  Chromium も発火しないことがあり、Safari は実装していません。
+  ページを開いたときに購読を 1 回 POST し直す経路（`packages/web/src/hooks/usePush.ts`）を消さないでください。
+- `public/sw.js` は素の script なので、ページの `push.ts` を import できません。
+  base64url の復号だけが 2 か所にあります。
+- 設定行は `pushSupported()` のときだけ出します（`https` かつデスクトップシェル外かつ Push API あり）。
+  デスクトップの `http://127.0.0.1` と `bun run dev` は対象外で、そこは従来どおり Tauri の通知が担当します。
+  iOS はホーム画面の PWA でだけ動きます。
 
 ## 13. プロバイダーの OAuth ログイン（ChatGPT）
 
-設定 → プロバイダー → ChatGPT から、ChatGPT のサブスクリプションで OpenAI のモデル（Codex 系）を使えます。実装は `packages/core/models/chatgpt/` です。
+設定 → プロバイダー → ChatGPT から、ChatGPT のサブスクリプションで OpenAI のモデル（Codex 系）を使えます。
+実装は `packages/core/models/chatgpt/` です。
 
-- **方式はクライアントが決める**: `POST /api/providers/:id/login` の body に `{"method":"browser"|"device_code"}` が必須です。サーバーに既定はありません。ブラウザ方式は Origin と Host が loopback のときだけ受け付けます（コールバックはサーバー機の `127.0.0.1:1455/1457` にしか来ないためです）。
-- **モデル一覧はログイン時に取る**: `GET /backend-api/codex/models` を認証付きで取得し、`chatgpt_models` に保存します。取得に失敗するとログインごと失敗し、credential は保存されません。静的な一覧への fallback はありません。
-- **期限切れの更新**: `resolveCredential` が期限の 60 秒前に更新し、同時要求は 1 回の更新を共有します。更新トークンはローテーションされるため、2 回交換すると片方が無効になります。
-- **要求の形**: Codex バックエンドは `instructions` 必須・`store:false` です。`ai/stream.ts` の `chatgptProviderOptions` がシステムプロンプトを `instructions` に移し、`input` から外します。ここを外すと全リクエストが 400 になります。
-- **設定のキー**: `AuthInteraction.method`（クライアントの選択）、`OAuthAuth.methods`（プロバイダーが受理する方式）、`ProviderInfo.loginMethods`（UI が読む一覧）です。`methods` を増やすときは 3 つとも合わせてください。
-- **確認**: `bun test packages/core/models/chatgpt packages/server/login_openai_codex_test.ts packages/server/routes/providers_test.ts`。実機の確認には ChatGPT アカウントが必要で、デバイスコード方式は ChatGPT のセキュリティ設定で有効化しておきます。
+- 方式はクライアントが決めます。
+  `POST /api/providers/:id/login` の body に `{"method":"browser"|"device_code"}` が必須です。
+  サーバーに既定はありません。
+  ブラウザ方式は Origin と Host が loopback のときだけ受け付けます（コールバックはサーバー機の `127.0.0.1:1455/1457` にしか来ないためです）。
+- モデル一覧はログイン時に取ります。
+  `GET /backend-api/codex/models` を認証付きで取得し、`chatgpt_models` に保存します。
+  取得に失敗するとログインごと失敗し、credential は保存されません。
+  静的な一覧への fallback はありません。
+- 期限切れの更新: `resolveCredential` が期限の 60 秒前に更新し、同時要求は 1 回の更新を共有します。
+  更新トークンはローテーションされるため、2 回交換すると片方が無効になります。
+- 要求の形: Codex バックエンドは `instructions` 必須、`store:false` です。
+  `ai/stream.ts` の `chatgptProviderOptions` がシステムプロンプトを `instructions` に移し、`input` から外します。
+  ここを外すと全リクエストが 400 になります。
+- 設定のキー: `AuthInteraction.method`（クライアントの選択）、`OAuthAuth.methods`（プロバイダーが受理する方式）、`ProviderInfo.loginMethods`（UI が読む一覧）です。
+  `methods` を増やすときは 3 つとも合わせてください。
+- 確認: `bun test packages/core/models/chatgpt packages/server/login_openai_codex_test.ts packages/server/routes/providers_test.ts`。
+  実機の確認には ChatGPT アカウントが必要で、デバイスコード方式は ChatGPT のセキュリティ設定で有効化しておきます。
