@@ -725,10 +725,6 @@
   padding-top: 16px;
 }
 
-.settings-disclosure + .settings-section {
-  margin-top: 18px;
-}
-
 /* One provider: its name, its state, and the way into its detail. The body
  * is the clickable part, so the row's actions stay their own targets. */
 .provider-row {

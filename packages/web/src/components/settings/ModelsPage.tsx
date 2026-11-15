@@ -7,11 +7,11 @@ import { SettingsDisclosure } from "./SettingsDisclosure.tsx";
 /**
  * Settings → モデル: the model to use, and everything that tunes it.
  *
- * Two things here are what a reader comes for — the model new conversations
- * start with, and the list of models a session may switch to. The rest (a
- * model for sub-tasks, one for images, the compaction tuning) is a fine
- * point, so it sits behind one "詳細" for the page: shown all at once, the
- * two that matter read as two among nine.
+ * The two rows a reader comes for come first — the model new conversations
+ * start with, then the list of models a session may switch to. Everything
+ * else (a model for sub-tasks, one for images, the compaction tuning) is a
+ * fine point, so it sits behind one "詳細" at the foot of the page: shown all
+ * at once, the two that matter read as two among nine.
  */
 export function ModelsPage({
   onOpenProviders,
@@ -22,6 +22,7 @@ export function ModelsPage({
   return (
     <>
       <ModelPreferencePanel onOpenProviders={onOpenProviders} />
+      <ModelList />
       <SettingsDisclosure label={t("settings.model.details")}>
         <ModelPreferencePanel
           onOpenProviders={onOpenProviders}
@@ -29,7 +30,6 @@ export function ModelsPage({
         />
         <CompactionSettings />
       </SettingsDisclosure>
-      <ModelList />
     </>
   );
 }
