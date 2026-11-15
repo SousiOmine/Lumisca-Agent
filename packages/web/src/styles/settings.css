@@ -679,6 +679,56 @@
   flex-direction: column;
 }
 
+/* A settings page's "詳細": one row that opens the rest of the page (see
+ * SettingsDisclosure). Drawn as a row of the same column — label on the
+ * left, hairline over and under — so it reads as the last item of what is
+ * shown rather than as a button placed among the settings. */
+.settings-disclosure {
+  margin-top: 18px;
+}
+
+.settings-disclosure-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 11px 2px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: none;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: color var(--lum-dur-fast) var(--lum-ease-out);
+}
+
+.settings-disclosure-toggle:hover {
+  color: var(--text);
+}
+
+.settings-disclosure-toggle svg {
+  flex: none;
+  transition: transform var(--lum-dur-mid) var(--lum-ease-in-out);
+}
+
+.settings-disclosure-toggle[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+
+/* The opened body keeps the sections it holds apart the way the page does
+ * (`.settings-section + .settings-section`); the gap under the toggle is on
+ * this wrapper because the body itself has no height while closed. */
+.settings-disclosure-body {
+  padding-top: 16px;
+}
+
+.settings-disclosure + .settings-section {
+  margin-top: 18px;
+}
+
 /* One provider: its name, its state, and the way into its detail. The body
  * is the clickable part, so the row's actions stay their own targets. */
 .provider-row {

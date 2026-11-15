@@ -101,12 +101,6 @@ export const COMPACTION_ENABLED_KEY = "compaction_enabled";
  * a small one compact almost immediately. */
 export const COMPACTION_RESERVE_PERCENT_KEY = "compaction_reserve_percent";
 
-/** Settings-table key for the SHARE of the window kept verbatim after a
- * compaction, as a percentage. The cut lands on a unit boundary, so the
- * retained tail is this share rounded up. */
-export const COMPACTION_KEEP_RECENT_PERCENT_KEY =
-  "compaction_keep_recent_percent";
-
 /** Settings-table key for keeping a stella conversation's record whole.
  * "0" = only what the conversation shows is kept (a compaction's covered
  * spans are reduced to markers); unset, "1" or anything else = every row is
@@ -141,12 +135,14 @@ export const COMPACTION_DEFAULT_RESERVE_PERCENT = 8;
 export const COMPACTION_DEFAULT_KEEP_RECENT_PERCENT = 20;
 
 /** Compaction tuning read from the settings table; omitted fields keep the
- * compactor's defaults (see ai/context-compaction.ts). */
+ * compactor's defaults (see ai/context-compaction.ts). The retained share is
+ * not among them: it is the compactor's default, with no setting behind it. */
 export interface CompactionPolicyInput {
   enabled?: boolean;
   /** Percent of the window (0-100). */
   reservePercent?: number;
-  /** Percent of the window (0-100). */
+  /** Percent of the window (0-100). Callers outside the settings table (the
+   * tests) still tune it. */
   keepRecentPercent?: number;
 }
 
@@ -175,12 +171,6 @@ export function parseCompactionPolicyInput(
     read(COMPACTION_RESERVE_PERCENT_KEY),
   );
   if (reservePercent !== undefined) input.reservePercent = reservePercent;
-  const keepRecentPercent = parsePercentSetting(
-    read(COMPACTION_KEEP_RECENT_PERCENT_KEY),
-  );
-  if (keepRecentPercent !== undefined) {
-    input.keepRecentPercent = keepRecentPercent;
-  }
   return input;
 }
 

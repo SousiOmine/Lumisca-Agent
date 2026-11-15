@@ -522,6 +522,9 @@ export const settings = {
     ja: "メインモデルが画像認識に未対応の場合に、代替として画像の解析・読み取りを担当するモデル。",
     en: "The model that analyzes and reads images when the main model cannot.",
   },
+  /** The disclosure on the models page that holds everything besides the
+   * default model: the auxiliary model rows and the compaction tuning. */
+  "settings.model.details": { ja: "詳細", en: "Details" },
   // --- context compaction ---------------------------------------------------
   /** Heading of the compaction group in the settings dialog's model
    * section. */
@@ -534,28 +537,16 @@ export const settings = {
     en: "Automatic compaction",
   },
   "settings.compaction.reservePercent": {
-    ja: "予約（ウィンドウ比 %）",
-    en: "Reserved (% of window)",
-  },
-  "settings.compaction.reservePercentDesc": {
-    ja: "上限に対して残す余裕。応答の出力上限はこの範囲に収まります。既定 8%。",
-    en: "Free space kept below the limit. The reply's output cap stays within it. Default 8%.",
-  },
-  "settings.compaction.keepRecentPercent": {
-    ja: "保持（ウィンドウ比 %）",
-    en: "Kept (% of window)",
-  },
-  "settings.compaction.keepRecentPercentDesc": {
-    ja: "圧縮後も残す直近の割合。既定 20%。",
-    en: "Recent share kept after a compaction. Default 20%.",
+    ja: "出力時の予約コンテキスト長（ウィンドウ比 %）",
+    en: "Context reserved for output (% of window)",
   },
   "settings.compaction.keepFullLog": {
-    ja: "圧縮した区間も残す",
-    en: "Keep condensed spans",
+    ja: "圧縮されたログを保持する",
+    en: "Keep the compacted log",
   },
   "settings.compaction.keepFullLogDesc": {
-    ja: "Lumisca の会話で、コンテキスト圧縮が覆った区間も削らずに保存します。ツールの実行記録や画像も残るため、データベースは大きくなります。Lumisca code のセッションはこの設定にかかわらず常に残ります。",
-    en: "Lumisca conversations keep the spans a compaction covered, tools and images included, so the database grows. Lumisca code sessions are always kept, whatever this setting says.",
+    ja: "コンテキストが圧縮されたあとも、モデルへの入出力をデータベースに保持します。追加のストレージ容量を必要とします。",
+    en: "Keeps the model's input and output in the database after the context is compacted. It needs extra storage.",
   },
   "settings.compaction.saveFailed": {
     ja: "圧縮の設定を保存できませんでした: {error}",

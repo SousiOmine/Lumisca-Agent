@@ -21,7 +21,6 @@ import type {
 } from "./mod.ts";
 import { LumiscaCore, LumiscaDb, VISUALS_DIR_NAME } from "./mod.ts";
 import { LANGUAGE_KEY, TOOL_SEARCH, TOOL_SKILL } from "./shared/mod.ts";
-import { COMPACTION_KEEP_RECENT_PERCENT_KEY } from "./shared/settings-keys.ts";
 
 import {
   MINI_PNG,
@@ -1260,10 +1259,8 @@ Deno.test("compactSession condenses on demand and reports the count", async () =
   await fillHistory(core, faux, session.id, 3);
   const before = conversationMessages(core.getAgent(session.id)!);
   // The manual call summarizes whatever the retention budget leaves out:
-  // with the default 10% kept (3K against a 30K window) the retained tail
-  // would cover the whole history, so the session is tuned to keep only
-  // the newest 10% — the same setting a user can change in the dialog.
-  core.setSetting(COMPACTION_KEEP_RECENT_PERCENT_KEY, "10");
+  // the default fifth of a 30K window (6K) is less than this history, so
+  // there is something to condense.
   // On demand: condense without waiting for the pressure threshold.
   faux.setResponses([
     fauxAssistantMessage([fauxText("## Summary\n- condensed")]),

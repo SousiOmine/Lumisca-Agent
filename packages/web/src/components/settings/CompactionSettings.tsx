@@ -1,8 +1,6 @@
 import {
-  COMPACTION_DEFAULT_KEEP_RECENT_PERCENT,
   COMPACTION_DEFAULT_RESERVE_PERCENT,
   COMPACTION_ENABLED_KEY,
-  COMPACTION_KEEP_RECENT_PERCENT_KEY,
   COMPACTION_RESERVE_PERCENT_KEY,
   parsePercentSetting,
   STELLA_KEEP_FULL_LOG_KEY,
@@ -26,16 +24,17 @@ interface TypedCommit {
 /**
  * Settings → モデル: the context compaction tuning. It follows pi's settings
  * (badlogic/pi-mono): the conversation is condensed once it would come
- * within `reserved tokens` of the model's window, and the newest `kept
- * tokens` stay verbatim (the history itself is never deleted — see
- * core/agent/context-compaction.ts).
+ * within the reserved share of the model's window; how much of the history
+ * stays verbatim after that is the compactor's own default
+ * (`COMPACTION_DEFAULT_KEEP_RECENT_PERCENT`), not a preference. The history
+ * itself is never deleted — see core/agent/context-compaction.ts.
  *
  * The values are plain settings read by the session agents on every
  * compaction check, so a change applies to running sessions without a
  * rebuild. An empty field means "use the default", which is what the
  * placeholder shows.
  *
- * The token fields persist while the user types (debounced), not only on
+ * The number fields persist while the user types (debounced), not only on
  * blur: a dialog closed with the field still focused must not drop the
  * typed value.
  */
@@ -48,7 +47,6 @@ export function CompactionSettings() {
   const [enabled, setEnabled] = useState(true);
   const [keepFullLog, setKeepFullLog] = useState(true);
   const [reserve, setReserve] = useState("");
-  const [keepRecent, setKeepRecent] = useState("");
   const { saved, flash: flashSaved } = useSavedNotice();
   const [error, setError] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
@@ -63,7 +61,6 @@ export function CompactionSettings() {
     setEnabled(values[COMPACTION_ENABLED_KEY] !== "0");
     setKeepFullLog(values[STELLA_KEEP_FULL_LOG_KEY] !== "0");
     setReserve(values[COMPACTION_RESERVE_PERCENT_KEY] ?? "");
-    setKeepRecent(values[COMPACTION_KEEP_RECENT_PERCENT_KEY] ?? "");
   }, [loaded, settings.values]);
 
   /** One pending piece of typing: which setting, the text, and how to put
@@ -145,17 +142,16 @@ export function CompactionSettings() {
     typedCommit.schedule({ key, raw, current, apply });
   };
 
-  /** One percentage row (label, description, numeric field). */
-  const tokenRow = (
+  /** One percentage row (label, optional description, numeric field). */
+  const percentRow = (
     key: string,
     value: string,
     current: string,
     fallback: number,
     apply: (value: string) => void,
     label: string,
-    description: string,
   ) => (
-    <SettingRow label={label} description={description}>
+    <SettingRow label={label}>
       <input
         type="text"
         inputMode="numeric"
@@ -191,23 +187,13 @@ export function CompactionSettings() {
         />
       </SettingRow>
 
-      {tokenRow(
+      {percentRow(
         COMPACTION_RESERVE_PERCENT_KEY,
         reserve,
         reserve,
         COMPACTION_DEFAULT_RESERVE_PERCENT,
         setReserve,
         t("settings.compaction.reservePercent"),
-        t("settings.compaction.reservePercentDesc"),
-      )}
-      {tokenRow(
-        COMPACTION_KEEP_RECENT_PERCENT_KEY,
-        keepRecent,
-        keepRecent,
-        COMPACTION_DEFAULT_KEEP_RECENT_PERCENT,
-        setKeepRecent,
-        t("settings.compaction.keepRecentPercent"),
-        t("settings.compaction.keepRecentPercentDesc"),
       )}
 
       <SettingRow

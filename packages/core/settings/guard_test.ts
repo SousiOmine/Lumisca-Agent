@@ -4,7 +4,6 @@ import { MCP_OAUTH_KEY_PREFIX } from "../mcp/oauth.ts";
 import { APP_MCP_SETTINGS_KEY, CONNECTIONS_KEY } from "../shared/mod.ts";
 import {
   COMPACTION_ENABLED_KEY,
-  COMPACTION_KEEP_RECENT_PERCENT_KEY,
   COMPACTION_RESERVE_PERCENT_KEY,
   DEFAULT_MODEL_KEY,
   FAST_MODEL_KEY,
@@ -72,7 +71,6 @@ Deno.test("the compaction rows of the settings dialog are writable", () => {
   for (const key of [
     COMPACTION_ENABLED_KEY,
     COMPACTION_RESERVE_PERCENT_KEY,
-    COMPACTION_KEEP_RECENT_PERCENT_KEY,
     STELLA_KEEP_FULL_LOG_KEY,
   ]) {
     assertMutableKey(key);

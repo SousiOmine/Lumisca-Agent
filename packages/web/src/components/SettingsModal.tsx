@@ -24,7 +24,6 @@ import { AddProviderFlow } from "./settings/AddProviderFlow.tsx";
 import { AddUserProviderForm } from "./settings/AddUserProviderForm.tsx";
 import { AppearancePanel } from "./settings/AppearancePanel.tsx";
 import { CommandSafetyPanel } from "./settings/CommandSafetyPanel.tsx";
-import { CompactionSettings } from "./settings/CompactionSettings.tsx";
 import { ComputerUsePanel } from "./settings/ComputerUsePanel.tsx";
 import { ConnectionList } from "./settings/ConnectionList.tsx";
 import {
@@ -35,8 +34,7 @@ import {
 } from "./settings/categories.ts";
 import { GeneralPanel } from "./settings/GeneralPanel.tsx";
 import { McpList } from "./settings/McpList.tsx";
-import { ModelList } from "./settings/ModelList.tsx";
-import { ModelPreferencePanel } from "./settings/ModelPreferencePanel.tsx";
+import { ModelsPage } from "./settings/ModelsPage.tsx";
 import { PersonalizePanel } from "./settings/PersonalizePanel.tsx";
 import { ProviderDetail } from "./settings/ProviderDetail.tsx";
 import { ProviderList } from "./settings/ProviderList.tsx";
@@ -276,13 +274,7 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     labelKey: "settings.nav.models",
     icon: <IconCpu size={18} />,
     render: ({ openCategory }) => (
-      <>
-        <ModelPreferencePanel
-          onOpenProviders={() => openCategory("providers")}
-        />
-        <CompactionSettings />
-        <ModelList />
-      </>
+      <ModelsPage onOpenProviders={() => openCategory("providers")} />
     ),
   },
   {

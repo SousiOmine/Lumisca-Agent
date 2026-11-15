@@ -29,6 +29,14 @@ interface ModelPrefRow {
   thinking?: boolean;
 }
 
+/** Which of the panel's rows this instance draws. The models page shows the
+ * default model on its own and keeps the rest behind its "詳細" disclosure
+ * (see ModelsPage), and the panel cannot split itself: what it puts in the
+ * disclosure also has to hold the compaction section. Each instance owns the
+ * row state of the rows it draws; the stored values come from the one
+ * settings store. */
+export type ModelPrefScope = "default" | "others";
+
 /** Settings → モデル: the stored model preferences. Configured here in the
  * settings dialog, separate from the per-session model chosen in the
  * chatbox picker. The default model starts new conversations; the fast
@@ -36,8 +44,10 @@ interface ModelPrefRow {
  * Each row's thinking level is the stored per-model reasoning level. */
 export function ModelPreferencePanel({
   onOpenProviders,
+  scope = "default",
 }: {
   onOpenProviders: () => void;
+  scope?: ModelPrefScope;
 }) {
   const t = useT();
   const [values, setValues] = useState<
@@ -64,8 +74,8 @@ export function ModelPreferencePanel({
   const { modelsByProvider, reload: reloadModels } = useProviderModels();
 
   // Localized ROWS, built inside the component so t() is available.
-  const localizedRows = useMemo<ModelPrefRow[]>(
-    () => [
+  const localizedRows = useMemo<ModelPrefRow[]>(() => {
+    const rows: ModelPrefRow[] = [
       {
         key: DEFAULT_MODEL_KEY,
         label: t("settings.model.defaultModel"),
@@ -85,9 +95,11 @@ export function ModelPreferencePanel({
         imageOnly: true,
         thinking: true,
       },
-    ],
-    [t],
-  );
+    ];
+    return scope === "default"
+      ? rows.filter((row) => row.key === DEFAULT_MODEL_KEY)
+      : rows.filter((row) => row.key !== DEFAULT_MODEL_KEY);
+  }, [t, scope]);
 
   /** Load the stored preferences once, from the shared settings store. */
   const settingsState = useSettings();
@@ -274,7 +286,7 @@ export function ModelPreferencePanel({
         }}
       />
 
-      {loadError && (
+      {loadError && scope === "default" && (
         <div className="error-text">
           {t("settings.model.loadFailed", { error: loadError })}
         </div>
