@@ -334,30 +334,6 @@ Deno.test("stella onboarding: starts once and stays out of the conversation", as
   }
 });
 
-Deno.test("stella onboarding: redo runs the setup turn again", async () => {
-  const { faux, core, agent, session } = await stellaConversation("Aide");
-  try {
-    faux.setResponses([fauxAssistantMessage(NO_RESPONSE)]);
-    assert(core.startStellaOnboarding(agent.id));
-    await core.getAgent(session.id)!.waitForIdle();
-
-    faux.setResponses([fauxAssistantMessage(NO_RESPONSE)]);
-    assertEquals(core.restartStellaOnboarding(agent.id), true);
-    await core.getAgent(session.id)!.waitForIdle();
-
-    const turns = core
-      .getAgent(session.id)!
-      .messages.filter(
-        (message) =>
-          message.role === "user" &&
-          message.modelContent === STELLA_ONBOARDING_PROMPT,
-      );
-    assertEquals(turns.length, 2);
-  } finally {
-    await core.close();
-  }
-});
-
 Deno.test("stella onboarding: no conversation open means no setup turn", async () => {
   // The turn is delivered into an OPEN session: a conversation that was never
   // opened has no agent to receive it, so nothing is claimed and the first

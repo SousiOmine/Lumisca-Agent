@@ -1430,18 +1430,6 @@ export class LumiscaCore {
     return true;
   }
 
-  /** Run an agent's setup turn again (the sidebar's "設定をやり直す"). The
-   * claim is cleared only when the turn can actually start, so a click
-   * during a run changes nothing and the next open is not surprised. */
-  restartStellaOnboarding(agentId: string): boolean {
-    const session = this.sessions.getByAgent(agentId);
-    if (session === undefined) return false;
-    const open = this.services.sessions.getAgent(session.id);
-    if (open === undefined || open.isStreaming) return false;
-    this.services.stellaAgents.clearOnboarded(agentId);
-    return this.startStellaOnboarding(agentId);
-  }
-
   ensureStellaReady(
     onProgress?: (progress: VmProgress) => void,
   ): Promise<void> {

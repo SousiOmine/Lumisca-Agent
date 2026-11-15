@@ -2,7 +2,6 @@ import type { Translator } from "@lumisca/core/shared";
 import {
   IconPencil,
   IconPlus,
-  IconRefresh,
   IconRepeat,
   IconTrash,
 } from "@tabler/icons-preact";
@@ -117,8 +116,8 @@ function previewTextOf(preview: StellaPreview, t: Translator): string {
  * without this dialog ever opening.
  *
  * A row's menu holds what can be done TO an agent — edit its name, picture and
- * model, see its routines, ask it to set itself up again, delete it — apart
- * from what the row itself does, which is open the conversation. Routines are
+ * model, see its routines, delete it — apart from what the row itself does,
+ * which is open the conversation. Routines are
  * here rather than in the settings dialog because they belong to one agent,
  * and this is where the reader names that agent without opening anything.
  * Deleting is not on the row: an always-visible × on every row reads as
@@ -227,24 +226,6 @@ export function StellaSidebar({
     try {
       await api.deleteStellaAgent(agent.id);
       onChanged();
-    } catch (failure) {
-      setError(errorText(failure));
-    }
-  };
-
-  /** Ask the agent to set itself up again, then show the conversation the
-   * questions arrive in. A run already in flight refuses the restart (the
-   * core will not steer setup text into that work), which is said rather
-   * than swallowed: the click did something, and it did nothing visible. */
-  const redoSetup = async (agent: StellaAgentSummary) => {
-    setError(null);
-    try {
-      const { started } = await api.restartStellaOnboarding(agent.id);
-      if (!started) {
-        setError(t("chat.stella.agents.onboardingBusy"));
-        return;
-      }
-      onSelect(agent.id);
     } catch (failure) {
       setError(errorText(failure));
     }
@@ -466,19 +447,6 @@ export function StellaSidebar({
           >
             <IconRepeat size={14} />
             <span>{t("chat.stella.agents.routines")}</span>
-          </button>
-          <button
-            type="button"
-            className="app-menu-item"
-            role="menuitem"
-            onClick={() => {
-              const agent = menu.agent;
-              setMenu(null);
-              void redoSetup(agent);
-            }}
-          >
-            <IconRefresh size={14} />
-            <span>{t("chat.stella.agents.onboarding")}</span>
           </button>
           <button
             type="button"

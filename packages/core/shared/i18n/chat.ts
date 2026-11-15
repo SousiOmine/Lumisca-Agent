@@ -321,15 +321,6 @@ export const chat = {
     ja: "「{name}」のルーチン",
     en: 'Routines of "{name}"',
   },
-  /** The row menu's redo: the agent asks how it should work, again. */
-  "chat.stella.agents.onboarding": {
-    ja: "設定をやり直す",
-    en: "Set up again",
-  },
-  "chat.stella.agents.onboardingBusy": {
-    ja: "いま作業中です。終わってからやり直してください。",
-    en: "It is working right now. Try again when it finishes.",
-  },
   "chat.stella.agents.editTitle": {
     ja: "「{name}」を編集",
     en: 'Edit "{name}"',

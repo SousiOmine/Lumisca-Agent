@@ -132,8 +132,8 @@ export interface AgentRepo {
    * clients opening the same conversation at once cannot both start it.
    * An unknown id is false (there is no row to set up). */
   markOnboarded(id: string): boolean;
-  /** Forget that the setup turn ran, so the next open starts it again (the
-   * sidebar's "設定をやり直す"). */
+  /** Forget that the setup turn ran, so the next open starts it again. Used
+   * to give the claim back when the turn could not be started. */
   clearOnboarded(id: string): void;
 }
 
