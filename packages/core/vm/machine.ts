@@ -29,6 +29,16 @@ import { discoverVmSkills } from "./skills.ts";
  * cheap and short enough that a freed slot is not visibly idle. */
 const DESKTOP_POLL_MS = 250;
 
+/** How long a failed skill catalog read waits before it is asked again.
+ *
+ * A read is started from inside a run when the catalog is cold (see
+ * `ensureSkills`), so a machine that is not answering would otherwise be
+ * asked once per run and once per `skill` call. A container restart is what
+ * makes a read fail, and it takes seconds: this is long enough that a broken
+ * machine is not hammered and short enough that the turn after a restart
+ * finds the skills. */
+const SKILL_READ_RETRY_MS = 30_000;
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -49,6 +59,12 @@ export class StellaMachine {
    * before each open. A catalog is per agent because an agent's own skills
    * live in its folder: only the machine-wide folder is shared. */
   #skills = new Map<string, SkillDef[]>();
+  /** The catalog reads in flight, one per agent: `skills()` is called by
+   * every run and by the skill tool, and a cold cache must start one read
+   * rather than one per call. */
+  #skillReads = new Map<string, Promise<void>>();
+  /** When each agent's last read failed (see SKILL_READ_RETRY_MS). */
+  #skillRetries = new Map<string, number>();
   /** The in-flight start, shared by callers that race on a cold machine. */
   #starting: Promise<void> | undefined;
   /** Which desktop slot each agent owns, and the start in flight for it. */
@@ -88,6 +104,8 @@ export class StellaMachine {
     this.#verdict = undefined;
     this.#seams = undefined;
     this.#skills.clear();
+    this.#skillReads.clear();
+    this.#skillRetries.clear();
     // The slots belonged to the machine that just went away: a different
     // container has no desktop running.
     this.#desktops.clear();
@@ -425,12 +443,56 @@ export class StellaMachine {
    * Awaited before a stella session opens. */
   async refreshSkills(agentId: string): Promise<void> {
     this.#skills.set(agentId, await this.#readSkills(agentId));
+    this.#skillRetries.delete(agentId);
+  }
+
+  /**
+   * Read one agent's catalog when this server has not read it yet.
+   *
+   * Separate from {@link refreshSkills}, which reads unconditionally: a
+   * conversation that opens wants skills the agent wrote since the last read,
+   * while a run that is already under way only needs an empty cache to stop
+   * being empty. That distinction is what lets a run wait for this without
+   * paying for a `podman exec` on every turn.
+   *
+   * The failure case is deliberately soft. A read that throws leaves the
+   * catalog as it was and stops being retried for SKILL_READ_RETRY_MS: a
+   * conversation whose machine is restarting should run without skills, not
+   * fail to run.
+   */
+  async ensureSkills(agentId: string): Promise<void> {
+    if ((this.#skills.get(agentId)?.length ?? 0) > 0) return;
+    // Without a machine there is nothing to read: storing the empty result
+    // would only make every later call start the same fruitless read.
+    if (this.#vm === undefined) return;
+    const pending = this.#skillReads.get(agentId);
+    if (pending !== undefined) {
+      await pending;
+      return;
+    }
+    const retryAt = this.#skillRetries.get(agentId);
+    if (retryAt !== undefined && Date.now() < retryAt) return;
+    const read = this.refreshSkills(agentId)
+      .catch(() => {
+        this.#skillRetries.set(agentId, Date.now() + SKILL_READ_RETRY_MS);
+      })
+      .finally(() => {
+        this.#skillReads.delete(agentId);
+      });
+    this.#skillReads.set(agentId, read);
+    await read;
   }
 
   /** One agent's catalog as last read (the factory builds tools
-   * synchronously). Empty until the agent's first refresh. */
+   * synchronously). Empty until the agent's first read, and a cold cache
+   * starts one: a run that found nothing here would tell its agent that no
+   * skills exist, and nothing would read them again until the conversation
+   * was reopened (a routine run after a server restart did exactly that). */
   skills(agentId: string): SkillDef[] {
-    return this.#skills.get(agentId) ?? [];
+    const known = this.#skills.get(agentId);
+    if (known !== undefined && known.length > 0) return known;
+    void this.ensureSkills(agentId);
+    return known ?? [];
   }
 
   #readSkills(agentId: string): Promise<SkillDef[]> {

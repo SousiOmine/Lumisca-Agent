@@ -554,6 +554,14 @@ export class StellaMachineService {
     );
   }
 
+  /** Read one stella agent's skill catalog when this server has not read it
+   * yet. A run that starts without opening the conversation (a routine)
+   * asks this before its agent is built; opening a conversation instead
+   * primes the catalog with `primeStellaSkills`. */
+  ensureStellaSkills(agentId: string): Promise<void> {
+    return this.deps.machine.ensureSkills(agentId);
+  }
+
   /**
    * Make one agent's skill catalog current enough to open its conversation.
    *

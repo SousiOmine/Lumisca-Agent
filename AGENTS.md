@@ -551,6 +551,9 @@ X サーバ、ウィンドウマネージャ、セッションバス、専用プ
   stella はマシン内のカタログ（`stella.skills()`）から、サブエージェントが持たないツールを教える組み込みを落としたもの、code mode はワークスペースのディスカバリです。
   開始時に `<available_skills>` 一覧も context メッセージとして 1 件渡します（`packages/core/tools/task-hub.ts` の `spawn`）。
   VM の画面ツールはサブエージェントに渡しません。
+- スキル一覧のキャッシュはプロセスが持ちます。
+  会話を開くときに読み（`primeStellaSkills`）、空なら run の開始時にも読み直します（`StellaMachine.ensureSkills`）。
+  ルーチンは `getOrCreateStellaSession` を通らずに `openSession` で開くので、ここを外すとサーバー再起動後の会話がスキル無しのまま走ります。
 - レジストリの分離: セッションは `main` と `subagent` の 2 つを持ちます（`packages/core/tools/registries.ts`）。
   MCP、browser-lab、computer、`pdf_read_pages` は両方に入り、`identity` / `agent_create` / `routine_*` は main だけです。
 - パスの境界: 相対パスと `bash` の基点は `/home/agent/agents/<agent id>`、境界は `/home/agent` です（`packages/core/vm/fs.ts` の `resolveVmPath`）。

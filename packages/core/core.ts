@@ -807,7 +807,18 @@ export class LumiscaCore {
         // machine that died since (a crash, a stop from outside) answered
         // every tool with podman's "container state improper" until the user
         // happened to open the conversation again.
-        if (session.stella === true) await this.ensureStellaReady();
+        if (session.stella === true) {
+          await this.ensureStellaReady();
+          // Opening a conversation is what primes its skill catalog, and a
+          // routine opens one with the synchronous `openSession`: without
+          // this read the run builds its agent from an empty cache and the
+          // conversation is told it has no skills. Nothing read them again
+          // while the conversation stayed open, so after a server restart
+          // the routine-only conversations kept running without a catalog.
+          if (session.agentId !== undefined) {
+            await this.ensureStellaSkills(session.agentId);
+          }
+        }
         await this.openSession(session.id);
         const agent = this.pool.require(session.id);
         this.sessions.touch(session.id);
@@ -1448,6 +1459,12 @@ export class LumiscaCore {
    * machine's shared one). */
   refreshStellaSkills(agentId: string): Promise<void> {
     return this.services.stellaMachines.refreshStellaSkills(agentId);
+  }
+
+  /** Read one stella agent's skill catalog when this server has not read it
+   * yet (see StellaMachine.ensureSkills). */
+  ensureStellaSkills(agentId: string): Promise<void> {
+    return this.services.stellaMachines.ensureStellaSkills(agentId);
   }
 
   /** The runtime a stella session's tools run on (see StellaMachineService). */

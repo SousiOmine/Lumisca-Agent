@@ -2226,3 +2226,58 @@ Deno.test("stella routines: a run brings a stopped machine back", async () => {
     await core.close();
   }
 });
+
+Deno.test("stella routines: a run after a restart still has its skill catalog", async () => {
+  // The catalog is read when a conversation opens, and the cache lives in
+  // the server process: a restarted server has none. A routine opens its
+  // conversation with the synchronous `openSession`, which primes nothing,
+  // so the first run after a restart told its agent "no skills are
+  // available" — and nothing read them again while the conversation stayed
+  // open, so a routine-only conversation stayed without skills for days.
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting(
+    [faux.provider],
+    () => ({}),
+    recordingRunner(),
+  );
+  core.models.models.setProvider(faux.provider);
+  await core.setProviderApiKey(faux.provider.id, "faux-key");
+  core.setStellaVm(fakeVm(RUNNING));
+  try {
+    const agent = await core.createStellaAgent({
+      name: "Watcher",
+      role: "Watches something.",
+    });
+    const session = await core.getOrCreateStellaSession(agent.id);
+    faux.setResponses([fauxAssistantMessage("checked")]);
+    const routine = core.getRoutineRepo().create({
+      agentId: agent.id,
+      name: "Check",
+      prompt: "check it",
+      schedule: { kind: "every", minutes: 30 },
+    });
+    // One run while the process still holds the catalog it read on open:
+    // this is the listing the conversation has been given.
+    await core.runRoutineNow(routine.id);
+
+    // What a restart looks like from here: the machine is attached again and
+    // the cached catalogs are gone, while the conversation stays as it was.
+    core.setStellaVm(fakeVm(RUNNING));
+    faux.setResponses([fauxAssistantMessage("checked again")]);
+    await core.runRoutineNow(routine.id);
+
+    const catalogs = core
+      .readTranscript(session.id, {})!
+      .items.filter(
+        (message) =>
+          message.role === "context" && message.provider === "skills",
+      );
+    assert(catalogs.length > 0, "the run published no skill catalog");
+    for (const catalog of catalogs) {
+      assertEquals(catalog.title.startsWith("Skills (none"), false);
+      assert(catalog.body.includes("<available_skills>"), catalog.body);
+    }
+  } finally {
+    await core.close();
+  }
+});
