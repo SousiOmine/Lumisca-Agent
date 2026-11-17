@@ -41,6 +41,9 @@ import {
   VM_IMAGE_DIGEST_LABEL,
   VM_IMAGE_NAME,
   VM_MANAGED_LABEL,
+  VM_MEMORY_LIMIT_BYTES,
+  VM_MEMORY_SWAP_BYTES,
+  VM_PIDS_LIMIT,
   VM_PROBE_IMAGE,
   VM_PROFILE_ROOT,
   VM_REMOVE_TIMEOUT_MS,
@@ -131,7 +134,7 @@ export interface VmManagerOptions {
  * start (or a recreation) is verified again and a running one is not asked
  * again on every poll.
  */
-const CONTAINER_FACTS_FORMAT = `{{.Id}}\t{{.State.Status}}\t{{.State.StartedAt}}\t{{json .NetworkSettings.Ports}}`;
+const CONTAINER_FACTS_FORMAT = `{{.Id}}\t{{.State.Status}}\t{{.State.StartedAt}}\t{{json .NetworkSettings.Ports}}\t{{.HostConfig.Memory}}\t{{.HostConfig.MemorySwap}}\t{{.HostConfig.PidsLimit}}`;
 
 /**
  * The contract probes, in one shell.
@@ -196,6 +199,14 @@ interface ContainerFacts {
   ports: Record<string, unknown>;
   /** The first desktop's host port, when there is one. */
   vncPort: number | null;
+  /** The ceilings the container was created with, as podman printed them: two
+   * byte counts and a process count. Strings because the answer is compared
+   * with what this file asks for and printed back when it differs — a
+   * container created without them reports `0`, and a version of podman that
+   * answers something else must be reported rather than turned into NaN. */
+  memory: string;
+  memorySwap: string;
+  pidsLimit: string;
 }
 
 /** The published host port of the machine's screen, out of the inspect
@@ -208,6 +219,37 @@ function vncPortOf(ports: Record<string, unknown>, slot = 0): number | null {
     if (typeof binding !== "object" || binding === null) continue;
     const port = Number((binding as { HostPort?: unknown }).HostPort);
     if (Number.isInteger(port) && port > 0) return port;
+  }
+  return null;
+}
+
+/** The sentence a machine whose cgroup has no ceilings contributes, or null
+ * when it has the ones this file asks for.
+ *
+ * A container created without the ceilings is not the machine this
+ * installation describes: it would run the same tools with nothing bounding a
+ * runaway process, which is the failure they exist to prevent. Reporting it
+ * as drift is enough — `start()` replaces such a container, and the agent's
+ * home is on its volume, so nothing of the agent's work is lost by that.
+ */
+function limitsMismatch(facts: ContainerFacts): string | null {
+  if (facts.memory !== String(VM_MEMORY_LIMIT_BYTES)) {
+    return (
+      `the machine's memory ceiling is ${facts.memory} bytes, expected ` +
+      `${VM_MEMORY_LIMIT_BYTES}`
+    );
+  }
+  if (facts.memorySwap !== String(VM_MEMORY_SWAP_BYTES)) {
+    return (
+      `the machine's swap ceiling is ${facts.memorySwap} bytes, expected ` +
+      `${VM_MEMORY_SWAP_BYTES}`
+    );
+  }
+  if (facts.pidsLimit !== String(VM_PIDS_LIMIT)) {
+    return (
+      `the machine's process ceiling is ${facts.pidsLimit}, expected ` +
+      `${VM_PIDS_LIMIT}`
+    );
   }
   return null;
 }
@@ -483,6 +525,13 @@ export function createVmManager(options: VmManagerOptions): VmManager {
       return { state: "stopped", vncPort: null, reason: "" };
     }
     const port = facts.vncPort;
+    // Judged before the contract check, which costs a `podman exec`: this
+    // answer came with the inspect above, and a machine without its ceilings
+    // is replaced rather than asked to prove anything about itself.
+    const limits = limitsMismatch(facts);
+    if (limits !== null) {
+      return { state: "stopped", vncPort: port, reason: limits };
+    }
     // Running is not enough: the machine is usable when its own values match
     // the contract (see contractOf — verified once per instance).
     const contract = await contractOf(facts);
@@ -533,7 +582,8 @@ export function createVmManager(options: VmManagerOptions): VmManager {
     );
     if (result.exitCode !== 0) return undefined;
     const line = result.stdout.trim().split("\n")[0] ?? "";
-    const [id, status, startedAt, ports] = line.split("\t");
+    const [id, status, startedAt, ports, memory, memorySwap, pidsLimit] =
+      line.split("\t");
     if (id === undefined || status === undefined) return undefined;
     let published: Record<string, unknown> = {};
     try {
@@ -548,6 +598,9 @@ export function createVmManager(options: VmManagerOptions): VmManager {
       status,
       ports: published,
       vncPort: vncPortOf(published),
+      memory: memory ?? "",
+      memorySwap: memorySwap ?? "",
+      pidsLimit: pidsLimit ?? "",
     };
   }
 
@@ -765,6 +818,17 @@ export function createVmManager(options: VmManagerOptions): VmManager {
         // shutdown keeps it down.
         "--restart",
         "unless-stopped",
+        // Ceilings on what the machine may consume. They put the failure
+        // inside the machine: a runaway browser or build is OOM-killed or
+        // refused a process there, where the agent sees the error, instead of
+        // taking memory or process slots the host's own programs need. The
+        // values and why they are those numbers are in contract.ts.
+        "--memory",
+        String(VM_MEMORY_LIMIT_BYTES),
+        "--memory-swap",
+        String(VM_MEMORY_SWAP_BYTES),
+        "--pids-limit",
+        String(VM_PIDS_LIMIT),
         // The container's uid 1000 is mapped onto this host user, so files
         // the agent writes inside are this user's own — and files it must not
         // touch (the host's) are not reachable at all, because nothing is

@@ -430,6 +430,11 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
   マシンは会話を開くときにしか起動されないので、自前で死んだコンテナは止まったままになり、全ツールが `container state improper` を返していました。
   `podman stop` は手動停止として扱われるため、アプリの終了（`LumiscaCore.close()`）で止めたマシンは戻りません。
   送信とルーチン実行は起動を確かめてから走ります（`ensureStellaReady`）。
+- 資源の上限はコンテナの cgroup です。
+  `podman create` に `--memory`、`--memory-swap`（同じ値。つまりスワップ無し）、`--pids-limit` を渡し、値は `contract.ts` の `VM_MEMORY_LIMIT_BYTES` / `VM_MEMORY_SWAP_BYTES` / `VM_PIDS_LIMIT` にあります。
+  この 3 つは `podman container inspect` の `HostConfig` で照合し（`limitsMismatch`）、足りないコンテナは `stopped` と理由を返して `start()` に作り直させます。
+  ホームはボリュームにあるので、作り直しでエージェントのファイルは失われません。
+  上限は「暴走をホストではなくマシンの中で終わらせる」ためのものです。値を上げるとホストの OOM killer が無関係なプロセスを選ぶ側に戻ります。
 - 本番のマシンに触るテストは、明示したときだけです。
   `packages/core/stella_live_test.ts` は利用者の `lumisca-stella` をそのまま使います。
   `LUMISCA_STELLA_LIVE=1` が無ければ状態も読まずに skip し、`core.close()` の前に `setStellaVm(undefined)` で切り離します。

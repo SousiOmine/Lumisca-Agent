@@ -16,6 +16,9 @@ import {
   VM_DISPLAY,
   VM_HOME_VOLUME,
   VM_IMAGE_DIGEST_LABEL,
+  VM_MEMORY_LIMIT_BYTES,
+  VM_MEMORY_SWAP_BYTES,
+  VM_PIDS_LIMIT,
   VM_PROFILE_ROOT,
   VM_SCREEN_HEIGHT,
   VM_SCREEN_WIDTH,
@@ -137,6 +140,12 @@ function containerFacts(
     status?: string;
     startedAt?: string;
     port?: number | null;
+    /** The ceilings as podman prints them, in bytes and processes. The
+     * default is a machine this version created; `"0"` is what a container
+     * created without them reports. */
+    memory?: string;
+    memorySwap?: string;
+    pidsLimit?: string;
   } = {},
 ): string {
   const ports =
@@ -152,7 +161,10 @@ function containerFacts(
         };
   return (
     `${options.id ?? "c0ffee"}\t${options.status ?? "running"}\t` +
-    `${options.startedAt ?? "2026-01-01T00:00:00Z"}\t${JSON.stringify(ports)}\n`
+    `${options.startedAt ?? "2026-01-01T00:00:00Z"}\t${JSON.stringify(ports)}` +
+    `\t${options.memory ?? String(VM_MEMORY_LIMIT_BYTES)}` +
+    `\t${options.memorySwap ?? String(VM_MEMORY_SWAP_BYTES)}` +
+    `\t${options.pidsLimit ?? String(VM_PIDS_LIMIT)}\n`
   );
 }
 
@@ -791,6 +803,68 @@ Deno.test("start: a broken container is recreated on the same home volume", asyn
   }
 });
 
+Deno.test("start: a machine created without its ceilings is replaced", async () => {
+  const dir = await containerDir();
+  const digest = await currentDigest(dir);
+  const { run, calls } = makeRunner({
+    answers: [
+      { match: /^podman --version/, result: ok("4.9.3\n") },
+      { match: /^podman image exists/, result: ok() },
+      { match: /^podman image inspect/, result: ok(`${digest}\n`) },
+      // A running machine without the ceilings: podman reports no memory and
+      // no swap, which is what "no ceiling" looks like in an inspect answer.
+      // This one is replaced, so it answers once.
+      {
+        match: /^podman container inspect --format/,
+        result: ok(containerFacts({ memory: "0", memorySwap: "0" })),
+        once: true,
+      },
+      {
+        match: /^podman container inspect --format \{\{range \.Mounts\}\}/,
+        result: ok(`${VM_WORKDIR}=volume\n`),
+      },
+      { match: /^podman container inspect/, result: ok(containerFacts()) },
+      { match: /printf .*DISPLAY/, result: ok(CONTRACT_OK) },
+      { match: /^podman stop/, result: ok() },
+      { match: /^podman rm/, result: ok() },
+      { match: /^podman create /, result: ok("abc123\n") },
+      { match: /^podman start/, result: ok() },
+      {
+        match: /xdotool getdisplaygeometry/,
+        result: ok(`${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n`),
+      },
+    ],
+  });
+  try {
+    const manager = createVmManager({ containerDir: dir, run });
+    const status = await manager.start();
+    assertEquals(status.state, "running");
+    const joined = calls.map((c) => c.join(" "));
+    // The drift is noticed before the contract is proven: a machine that may
+    // use all of the host's memory is not a machine to vouch for.
+    const created = joined.findIndex((c) => c.startsWith("podman create "));
+    const verified = joined.findIndex((c) => /printf .*DISPLAY/.test(c));
+    assert(
+      verified > created,
+      `the unbounded container must not be verified: ${joined.join("\n")}`,
+    );
+    assert(
+      joined.some((c) => c.startsWith("podman rm")),
+      `the unbounded container must be removed: ${joined.join("\n")}`,
+    );
+    const create = joined.find((c) => c.startsWith("podman create "));
+    assert(create !== undefined, "the machine must be created again");
+    assert(
+      create!.includes(`--memory ${VM_MEMORY_LIMIT_BYTES}`) &&
+        create!.includes(`--memory-swap ${VM_MEMORY_SWAP_BYTES}`) &&
+        create!.includes(`--pids-limit ${VM_PIDS_LIMIT}`),
+      `the replacement must carry the ceilings: ${create}`,
+    );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
 Deno.test("start: a stale image is rebuilt from the container files", async () => {
   const dir = await containerDir();
   const { run, calls } = makeRunner({
@@ -1160,6 +1234,15 @@ Deno.test("the home volume is mounted on every container the machine makes", asy
     assert(
       create!.includes("--restart unless-stopped"),
       `the machine must restart after a crash: ${create}`,
+    );
+    // The cgroup ceilings travel with the container. They are the boundary a
+    // runaway browser or build hits inside the machine instead of in the
+    // host's memory (see contract.ts for the values).
+    assert(
+      create!.includes(`--memory ${VM_MEMORY_LIMIT_BYTES}`) &&
+        create!.includes(`--memory-swap ${VM_MEMORY_SWAP_BYTES}`) &&
+        create!.includes(`--pids-limit ${VM_PIDS_LIMIT}`),
+      `the machine must run inside its ceilings: ${create}`,
     );
   } finally {
     await Deno.remove(dir, { recursive: true });

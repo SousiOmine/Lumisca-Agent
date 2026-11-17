@@ -142,6 +142,35 @@ export const VM_USER = "agent";
 export const VM_CONTAINER_NAME = "lumisca-stella";
 export const VM_IMAGE_NAME = "lumisca-stella";
 
+/** The memory the machine may use, in bytes.
+ *
+ * The ceiling is what keeps a runaway browser or a build from taking the
+ * host down with it: past it the OOM killer ends a process INSIDE the
+ * machine, where the agent sees the failure and can retry, instead of
+ * choosing a victim among the host's own programs. 4 GiB is what the machine
+ * already costs (six desktops are about 1.5 GB, see VM_DESKTOP_SLOTS) plus
+ * room for one build inside it, which is the heaviest thing a conversation
+ * does there; it leaves the host about the other half of 8 GB, the smallest
+ * machine this runs on. */
+export const VM_MEMORY_LIMIT_BYTES = 4 * 1024 ** 3;
+
+/** Swap the machine may use: the same as its memory limit, which means none.
+ *
+ * Swap is the host's disk and the host's page pressure, so a machine that
+ * wants more than its ceiling fails inside itself rather than pushing the
+ * host into thrashing. Podman's own default, when only `--memory` is given,
+ * would let it swap a second ceiling's worth on top of the first. */
+export const VM_MEMORY_SWAP_BYTES = VM_MEMORY_LIMIT_BYTES;
+
+/** Processes and threads the machine may run.
+ *
+ * A fork bomb costs process slots, not memory, so a memory ceiling alone does
+ * not stop one. The value is podman's own default, written down here so the
+ * ceiling is this file's promise rather than one version's accident: the
+ * container has run under it since the machine existed, six browsers with
+ * their threads included. */
+export const VM_PIDS_LIMIT = 2048;
+
 /** The image the run probe starts.
  *
  * Not the machine's own image: the probe answers "can this host run a
