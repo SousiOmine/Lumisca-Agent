@@ -147,7 +147,11 @@ export function createInstructionsProvider(
     if (personal !== undefined) {
       files.push({ path: personal.path, content: cap(personal.content) });
     }
-    return files;
+    // An empty file is not an instruction. Publishing its heading alone
+    // announces instructions and then shows nothing, which is the normal
+    // state of the personal file while nothing is configured. Treating it as
+    // absent also makes clearing the file read as removed.
+    return files.filter((file) => file.content.trim() !== "");
   };
 
   return {

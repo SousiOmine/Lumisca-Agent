@@ -6,11 +6,12 @@ import type { SettingsRepo } from "./settings/repo.ts";
 
 const log = createLogger("personalization");
 
-/** Machine-level AGENTS.md (next to the settings file): read at session
- * creation and appended to generated system prompts. Extracted from
- * LumiscaCore so the file I/O, the missing-file contract, and the
- * permission bits live in one testable unit; the core keeps only a
- * delegating facade. */
+/** Machine-level AGENTS.md (next to the settings file): published with a
+ * session's instructions whenever it changes (memory/instructions.ts) rather
+ * than written into the generated system prompt, so an edit reaches a
+ * session that is already open. Extracted from LumiscaCore so the file I/O,
+ * the missing-file contract, and the permission bits live in one testable
+ * unit; the core keeps only a delegating facade. */
 export class PersonalizationService {
   constructor(private readonly settings: SettingsRepo) {}
 

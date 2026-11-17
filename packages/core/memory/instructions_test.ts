@@ -175,6 +175,39 @@ Deno.test("a session without instructions publishes nothing", async () => {
   }
 });
 
+Deno.test("an empty instruction file is not published", async () => {
+  const dir = await makeRealTempDir("lumisca-personal-");
+  const personalPath = join(dir, "AGENTS.md");
+  // The shape Settings → カスタマイズ has while nothing is configured: a path
+  // with no content behind it.
+  let content = "";
+  const { root, provider } = await fixture(() => ({
+    path: personalPath,
+    content,
+  }));
+  try {
+    assertEquals(provider.next(), []);
+    await Deno.writeTextFile(join(root, "AGENTS.md"), "  \n");
+    assertEquals(provider.next(), []);
+
+    content = "Answer in Japanese.\n";
+    const added = provider.next();
+    assertEquals(added.length, 1);
+    assertStringIncludes(added[0]!.body, "Answer in Japanese.");
+
+    // Clearing the box withdraws the instructions instead of leaving the
+    // model to read a heading with nothing under it.
+    content = "";
+    const removed = provider.next();
+    assertEquals(removed.length, 1);
+    assertStringIncludes(removed[0]!.body, "Instructions removed:");
+    assertEquals(provider.next(), []);
+  } finally {
+    await removeDirRetry(root);
+    await removeDirRetry(dir);
+  }
+});
+
 Deno.test("personal instructions ride along with the workspace ones", async () => {
   const dir = await makeRealTempDir("lumisca-personal-");
   const personalPath = join(dir, "AGENTS.md");
