@@ -34,10 +34,11 @@ import {
 } from "../packages/core/shared/mod.ts";
 import { createVmManager } from "../packages/core/vm/container.ts";
 import { startServer } from "../packages/server/app.ts";
+import { DEFAULT_PORT } from "../packages/server/default-port.ts";
 import { repoRoot } from "./lib.ts";
 
 function parsePort(raw: string | undefined): number {
-  if (raw === undefined) return 8000;
+  if (raw === undefined) return DEFAULT_PORT;
   const port = Number(raw);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error(`port must be an integer in 1..65535 (got "${raw}")`);

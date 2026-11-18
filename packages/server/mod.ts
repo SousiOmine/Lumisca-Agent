@@ -22,13 +22,13 @@ import {
   runtime,
 } from "../core/runtime/runtime.ts";
 import { disposeServer, startServer } from "./app.ts";
+import { DEFAULT_PORT } from "./default-port.ts";
 import { stellaContainerDir } from "./paths.ts";
 import { validateHostConfig } from "./security.ts";
 import { createShutdown } from "./shutdown.ts";
 import {
   consumeServerStartupEnvironment,
   DEFAULT_HOST,
-  DEFAULT_PORT,
   DESKTOP_ENV_KEY,
   defaultAssetsFile,
   describeListenError,

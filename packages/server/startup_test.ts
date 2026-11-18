@@ -1,7 +1,7 @@
 import { assert, assertEquals, assertThrows } from "@std/assert";
+import { DEFAULT_PORT } from "./default-port.ts";
 import {
   consumeServerStartupEnvironment,
-  DEFAULT_PORT,
   DESKTOP_ENV_KEY,
   defaultAssetsFile,
   describeListenError,

@@ -1,4 +1,5 @@
 import { CoreError } from "../errors.ts";
+import { sleep } from "../shared/misc.ts";
 import type { StellaStatus } from "../shared/wire.ts";
 import { builtinSkills } from "../skills/builtin/mod.ts";
 import type { SkillDef } from "../skills/discover.ts";
@@ -33,10 +34,6 @@ const DESKTOP_POLL_MS = 250;
  * machine is not hammered and short enough that the turn after a restart
  * finds the skills. */
 const SKILL_READ_RETRY_MS = 30_000;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 /** Everything the stella machine holds between calls: the manager, the exec
  * seams built over it, the cached availability verdict and the skill catalog.

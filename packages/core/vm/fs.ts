@@ -305,15 +305,6 @@ export class VmFileBackend implements FileBackend {
     }
     return entries;
   }
-
-  async mkdirp(path: string): Promise<void> {
-    const result = await this.#exec(["mkdir", "-p", "--", path], {
-      timeoutMs: FILE_TIMEOUT_MS,
-    });
-    if (result.exitCode !== 0) {
-      throw new Error(`Could not create ${path}: ${firstLine(result.stderr)}`);
-    }
-  }
 }
 
 /** Resolve a model-supplied path inside the machine: `~` is expanded as a

@@ -9,7 +9,10 @@ import { shellHeadTags } from "../core/shared/shell-head.ts";
 import { THEME_COLORS } from "../core/shared/theme-colors.ts";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
-const apiTarget = "http://127.0.0.1:8000";
+
+import { DEFAULT_PORT } from "../server/default-port.ts";
+
+const apiTarget = `http://127.0.0.1:${DEFAULT_PORT}`;
 
 export default defineConfig({
   plugins: [

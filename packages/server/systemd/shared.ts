@@ -17,7 +17,8 @@ import {
   type NetworkInterfaceInfo,
   runtime,
 } from "../../core/runtime/runtime.ts";
-import { DEFAULT_HOST, DEFAULT_PORT, DESKTOP_ENV_KEY } from "../startup.ts";
+import { DEFAULT_PORT } from "../default-port.ts";
+import { DEFAULT_HOST, DESKTOP_ENV_KEY } from "../startup.ts";
 import { resolveValues, type ServicePaths } from "./compose.ts";
 import type { ServiceDeps } from "./deps.ts";
 import {

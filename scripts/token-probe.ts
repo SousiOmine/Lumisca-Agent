@@ -13,8 +13,9 @@
  */
 import { fauxProvider, LumiscaCore } from "../packages/core/mod.ts";
 import { createApp } from "../packages/server/app.ts";
+import { DEFAULT_PORT } from "../packages/server/default-port.ts";
 
-const HOST = "127.0.0.1:8000";
+const HOST = `127.0.0.1:${DEFAULT_PORT}`;
 const URL = `http://${HOST}/api/health`;
 
 const faux = fauxProvider();

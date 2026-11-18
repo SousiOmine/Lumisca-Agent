@@ -25,8 +25,7 @@ export {
  * documented way to make it (packages/server/systemd/). */
 export const DEFAULT_HOST = "127.0.0.1";
 
-/** Default port. Shared by the launcher and the service command's `--port`. */
-export const DEFAULT_PORT = 8000;
+import { DEFAULT_PORT } from "./default-port.ts";
 
 /** True when the value is a usable TCP port (1〜65535). The range lives
  * here once: the launcher's LUMISCA_PORT, the service command's flags and

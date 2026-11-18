@@ -8,7 +8,9 @@
  * template renders. A unit another version wrote is therefore reported
  * instead of a healthy installation.
  */
-import { DEFAULT_HOST, DEFAULT_PORT } from "../startup.ts";
+
+import { DEFAULT_PORT } from "../default-port.ts";
+import { DEFAULT_HOST } from "../startup.ts";
 import { renderUnit } from "./compose.ts";
 import type { ServiceDeps } from "./deps.ts";
 import { servicePaths, UNIT_NAME } from "./plan.ts";
