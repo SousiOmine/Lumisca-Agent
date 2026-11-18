@@ -3,6 +3,7 @@ import { errorMessage } from "../errors.ts";
 import { transpileToJs } from "../tools/js-sandbox.ts";
 import type { VmChannelOpener, VmExec } from "../vm/container.ts";
 import { shellQuote } from "../vm/quote.ts";
+import type { CodeStoreChanges } from "./store.ts";
 import {
   type CodeRunContext,
   type CodeRunOutcome,
@@ -54,7 +55,16 @@ export function createVmCodeRuntime(options: {
       context.signal?.throwIfAborted();
       const js = await transpileToJs(code);
       const path = `${SCRIPT_DIR}/${randomUUID()}.cjs`;
-      const file = `${VM_PROGRAM_PRELUDE}\n${runnerOf(js)}`;
+      const snapshot = JSON.stringify(context.store.snapshot());
+      const literal = JSON.stringify(snapshot)
+        .replace(/\u2028/g, "\\u2028")
+        .replace(/\u2029/g, "\\u2029");
+      const file =
+        `${VM_PROGRAM_PRELUDE}\n` +
+        `const __STORE__ = new Map(Object.entries(JSON.parse(${literal})));\n` +
+        "for (const __value of __STORE__.values()) " +
+        '__storeBytes += Buffer.byteLength(JSON.stringify(__value), "utf8");\n' +
+        `${runnerOf(js)}`;
       await writeFile(options, path, file);
       try {
         return await runProgram(options, path, context);
@@ -169,6 +179,7 @@ async function runProgram(
         }
         case "done":
           value = message.value;
+          if (message.store !== undefined) context.store.apply(message.store);
           done = true;
           break;
         case "error":
@@ -219,6 +230,7 @@ interface WireCall {
 interface WireDone {
   type: "done";
   value: unknown;
+  store?: CodeStoreChanges;
 }
 
 interface WireError {
@@ -249,8 +261,20 @@ function parseWire(line: string): WireMessage | undefined {
             args: message.args,
           }
         : undefined;
-    case "done":
-      return { type: "done", value: message.value };
+    case "done": {
+      const store = message.store;
+      if (store !== undefined && !isStoreChanges(store)) {
+        return {
+          type: "error",
+          message: "The program sent a malformed store update.",
+        };
+      }
+      return {
+        type: "done",
+        value: message.value,
+        ...(store !== undefined ? { store } : {}),
+      };
+    }
     case "error":
       return {
         type: "error",
@@ -262,6 +286,21 @@ function parseWire(line: string): WireMessage | undefined {
     default:
       return undefined;
   }
+}
+
+/** True when a done message carries the store diff the server can apply. */
+function isStoreChanges(value: unknown): value is CodeStoreChanges {
+  if (typeof value !== "object" || value === null) return false;
+  const changes = value as Record<string, unknown>;
+  if (
+    typeof changes.set !== "object" ||
+    changes.set === null ||
+    Array.isArray(changes.set)
+  ) {
+    return false;
+  }
+  if (!Array.isArray(changes.delete)) return false;
+  return changes.delete.every((key) => typeof key === "string");
 }
 
 /**
@@ -316,6 +355,53 @@ console.log = console.info = console.warn = console.error = console.debug = func
 function jsonValue(value) {
   if (value === undefined) return null;
   try { JSON.stringify(value); return value; } catch (error) { return String(value); }
+}
+const __storeChanged = new Set();
+let __storeBytes = 0;
+// Same bounds as the server-side store (store.ts).
+function storeKey(key) {
+  if (typeof key !== "string" || key.length === 0) throw new Error("The store key must be a non-empty string.");
+  if (key.length > 256) throw new Error("The store key is longer than 256 characters.");
+  return key;
+}
+function store(key, value) {
+  const name = storeKey(key);
+  if (value === undefined) {
+    const old = __store.get(name);
+    if (old !== undefined) {
+      __storeBytes -= Buffer.byteLength(JSON.stringify(old), "utf8");
+      __store.delete(name);
+    }
+    __storeChanged.add(name);
+    return;
+  }
+  let text;
+  try { text = JSON.stringify(value); } catch (error) {
+    throw new Error("The store can hold only JSON values: " + String((error && error.message) || error));
+  }
+  if (text === undefined) throw new Error("The store can hold only JSON values: functions and symbols are not JSON.");
+  const bytes = Buffer.byteLength(text, "utf8");
+  if (bytes > 256 * 1024) throw new Error("The store value is larger than 262144 bytes.");
+  const old = __store.get(name);
+  const oldBytes = old === undefined ? 0 : Buffer.byteLength(JSON.stringify(old), "utf8");
+  if (__storeBytes - oldBytes + bytes > 1024 * 1024) throw new Error("The store would be larger than 1048576 bytes.");
+  __store.set(name, JSON.parse(text));
+  __storeBytes += bytes - oldBytes;
+  __storeChanged.add(name);
+}
+function load(key) {
+  const name = storeKey(key);
+  const value = __store.get(name);
+  return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+}
+function storeChanges() {
+  const set = Object.create(null);
+  const remove = [];
+  for (const key of __storeChanged) {
+    if (__store.has(key)) set[key] = __store.get(key);
+    else remove.push(key);
+  }
+  return { set: set, delete: remove };
 }`;
 
 /** The program itself, wrapped so its `return` becomes the reported value
@@ -324,7 +410,7 @@ function runnerOf(js: string): string {
   return `(async function () {
   try {
     const value = await (${programOf(js)});
-    send({ type: "done", value: jsonValue(value) });
+    send({ type: "done", value: jsonValue(value), store: storeChanges() });
   } catch (error) {
     send({ type: "error", message: String((error && error.message) || error) });
   }

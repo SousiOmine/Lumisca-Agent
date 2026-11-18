@@ -57,6 +57,7 @@ import {
 } from "../tools/mod.ts";
 import { SessionToolRegistries } from "../tools/registries.ts";
 import type { Tool } from "../tools/schema.ts";
+import { renderToolSdk } from "../tools/sdk.ts";
 import { createToolSearchTool } from "../tools/search-tool.ts";
 import { createShareRequestTools } from "../tools/share-request.ts";
 import { createShareTransferTools } from "../tools/share-transfer.ts";
@@ -70,7 +71,7 @@ import {
 } from "../tools/toolsets.ts";
 import type { StellaRuntime } from "../vm/runtime.ts";
 import type { SearchProvider } from "../websearch/types.ts";
-import { createCodeExecutionProvider } from "./code-execution-context.ts";
+import { codeExecutionPrompt } from "./code-execution-prompt.ts";
 import { createDateProvider } from "./date-context.ts";
 import type { SessionPoolDeps, SessionResources } from "./deps.ts";
 import { createLanguageProvider } from "./language-context.ts";
@@ -224,12 +225,14 @@ export class AgentFactory {
     const where = this.resolveWhere(session, workspace);
     this.seedDiscoverableTools(where, registries, session.id);
     const hubs = this.buildHubs(session, where, resources, mcp);
-    const tools = this.applyCodeExecution(
+    const code = this.applyCodeExecution(
       this.buildToolSet(session, workspace, where, hubs),
       where,
       registries,
+      session.id,
     );
-    const systemPrompt = this.ensureSystemPrompt(session, workspace);
+    const tools = code.tools;
+    const systemPrompt = this.ensureSystemPrompt(session, workspace, code.sdk);
     const contextProviders = this.buildContextProviders(
       session,
       workspace,
@@ -789,10 +792,9 @@ export class AgentFactory {
    *
    * The set built by buildToolSet is not discarded — it becomes the catalog
    * a program calls tools from, together with the session's discoverable
-   * registry. That is the point of the mode: every tool definition leaves
-   * the request, and one program does the work that used to cost a round
-   * trip per call. `tool_search` travels INSIDE the catalog rather than on
-   * the agent, because the program is where a name is looked up.
+   * registry. The preloaded tools are also rendered as a compact TypeScript
+   * SDK in the system prompt; the discoverable registry is not, so a tool
+   * added after the agent opened is found through tool_search.
    *
    * Both `execute` and `tool_call` are left out of the catalog: a program
    * running a program is a way to multiply the limits one of them enforces,
@@ -802,8 +804,9 @@ export class AgentFactory {
     tools: Tool[],
     where: SessionWhere,
     registries: SessionToolRegistries,
-  ): Tool[] {
-    if (!where.codeExecution) return tools;
+    sessionId: string,
+  ): { tools: Tool[]; sdk?: string } {
+    if (!where.codeExecution) return { tools };
     // The search tool is built first and reads the catalog through a
     // closure: the catalog has to contain tool_search, and tool_search has
     // to search the catalog. Only the call order matters, never the
@@ -825,14 +828,19 @@ export class AgentFactory {
             cwd: where.stella.cwd,
           })
         : createHostCodeRuntime();
-    return [
-      createExecuteTool({
-        catalog,
-        runtime: codeRuntime,
-        cwd: where.stella?.cwd ?? process.cwd(),
-        safety: this.deps.commandSafety,
-      }),
-    ];
+    return {
+      tools: [
+        createExecuteTool({
+          catalog,
+          runtime: codeRuntime,
+          cwd: where.stella?.cwd ?? process.cwd(),
+          safety: this.deps.commandSafety,
+          store: this.deps.codeStore,
+          sessionId,
+        }),
+      ],
+      sdk: renderToolSdk([...tools, search]),
+    };
   }
 
   /**
@@ -854,8 +862,9 @@ export class AgentFactory {
   private ensureSystemPrompt(
     session: SessionInfo,
     workspace: Workspace,
+    codeSdk?: string,
   ): string {
-    const generated = this.deps.buildGeneratedPrompt(
+    const base = this.deps.buildGeneratedPrompt(
       workspace,
       // A stella session's prompt is the machine's plus the role this agent
       // works from; the persona comes from the agent registry, through the
@@ -868,6 +877,10 @@ export class AgentFactory {
           })
         : undefined,
     );
+    const generated =
+      codeSdk === undefined
+        ? base
+        : base + "\n\n" + codeExecutionPrompt(codeSdk);
     if (generated !== session.systemPrompt) {
       this.deps.updateSystemPrompt(session.id, generated);
     }
@@ -956,10 +969,6 @@ export class AgentFactory {
       createMcpToolsProvider({
         searchable: () => !registries.main.isEmpty,
       }),
-      // The contract of `execute`, published only while the mode is on: the
-      // tool itself cannot say how a program reaches the tools it is not
-      // given.
-      ...(where.codeExecution ? [createCodeExecutionProvider()] : []),
       // The language the session answers in. Published rather than put in
       // the prompt for the same reason as the date and the model: it is a
       // setting, so it can change while the session lives, and the prompt is

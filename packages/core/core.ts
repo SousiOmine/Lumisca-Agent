@@ -16,6 +16,10 @@ import { withProviderRetryDefaults } from "./ai/llm-retry.ts";
 import type { AgentMessage, ImageContent } from "./ai/message.ts";
 import { type CoreServices, createCoreServices } from "./bootstrap.ts";
 import type { BrowserBackend } from "./browser/types.ts";
+import {
+  type CodeStoreRepo,
+  createCodeStoreRepo,
+} from "./code-execution/store.ts";
 import type { ComputerHost, ComputerHostResult } from "./computer/types.ts";
 import { LumiscaDb } from "./db/mod.ts";
 import { MIN_VACUUM_BYTES, vacuumMarkerPath } from "./db/vacuum.ts";
@@ -220,6 +224,8 @@ export class LumiscaCore {
   private readonly routineScheduler: RoutineScheduler;
   private readonly messages: MessageRepo;
   private readonly requestShapes: RequestShapeRepo;
+  /** The scripting tool call's store, shared by every session's programs. */
+  private readonly codeStore: CodeStoreRepo;
   private readonly pool: SessionPool;
   /** The extracted areas of this facade (see services/). */
   private readonly modelService: ModelService;
@@ -307,6 +313,7 @@ export class LumiscaCore {
       routineCatchUpDelayMs?: number;
       messages?: MessageRepo;
       requestShapes?: RequestShapeRepo;
+      codeStore?: CodeStoreRepo;
       commandSafety?: CommandSafety;
       pool?: SessionPool;
       mcp?: McpService;
@@ -384,6 +391,7 @@ export class LumiscaCore {
     });
     this.messages = overrides.messages ?? createMessageRepo(db);
     this.requestShapes = overrides.requestShapes ?? createRequestShapeRepo(db);
+    this.codeStore = overrides.codeStore ?? createCodeStoreRepo(db);
     const streamFn = withProviderRetryDefaults(
       this.models.models.streamFn((providerId) =>
         this.models.getProviderWithRetired(providerId),
@@ -473,6 +481,7 @@ export class LumiscaCore {
         streamFn,
         messageRepo: this.messages,
         requestShapeRepo: this.requestShapes,
+        codeStore: this.codeStore,
         commandSafety: this.commandSafety,
         visuals: this.visuals,
         attachments: this.attachments,

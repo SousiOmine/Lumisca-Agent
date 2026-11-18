@@ -26,7 +26,11 @@ export function createHostCodeRuntime(): CodeRuntime {
     async run(code: string, context: CodeRunContext): Promise<CodeRunOutcome> {
       context.signal?.throwIfAborted();
       const sandbox = new JsSandbox({
-        globals: { tools: toolsOf(context.call) },
+        globals: {
+          tools: toolsOf(context.call),
+          store: (key: string, value: unknown) => context.store.set(key, value),
+          load: (key: string) => context.store.get(key),
+        },
       });
       try {
         const js = await transpileToJs(code);

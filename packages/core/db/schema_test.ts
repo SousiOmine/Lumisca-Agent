@@ -21,6 +21,20 @@ test("migrate brings an empty database to the newest user_version", () => {
   }
 });
 
+test("migrate creates the scripting tool call's store", () => {
+  const db = LumiscaDb.openInMemory();
+  try {
+    const table = db.db
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'code_store'",
+      )
+      .get() as { name: string } | null;
+    assertEquals(table?.name, "code_store");
+  } finally {
+    db.close();
+  }
+});
+
 test("migrate adds the session workspace index", () => {
   const db = LumiscaDb.openInMemory();
   try {

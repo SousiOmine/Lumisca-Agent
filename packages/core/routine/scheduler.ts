@@ -213,9 +213,13 @@ export function createRoutineScheduler(
 
   let tickTimer: ReturnType<typeof setInterval> | null = null;
   let firstTimer: ReturnType<typeof setTimeout> | null = null;
+  /** A timer callback already queued when close() ran must not read the
+   * database the core is about to close. */
+  let closed = false;
 
   /** One pass: start every due routine. Runs do not block the tick. */
   function tick(): void {
+    if (closed) return;
     const at = now();
     const due = repo.due(at);
     for (const routine of due) {
@@ -499,6 +503,7 @@ export function createRoutineScheduler(
     },
 
     close(): void {
+      closed = true;
       if (firstTimer !== null) {
         clearTimeout(firstTimer);
         firstTimer = null;

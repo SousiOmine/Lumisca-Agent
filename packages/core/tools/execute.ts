@@ -1,3 +1,4 @@
+import type { CodeStoreRepo } from "../code-execution/store.ts";
 import type {
   CodeRunOutcome,
   CodeRuntime,
@@ -65,14 +66,19 @@ const DESCRIPTION =
   "Run one JavaScript/TypeScript program that uses this session's tools. " +
   "`tools.<name>(args)` runs a tool and resolves to its text result; a tool " +
   "that fails throws, so a `try` around it is how a program survives one " +
-  "failure. `tools.tool_search({ query })` finds tools and returns their " +
-  "descriptions and argument schemas; call it with no query to list every " +
-  "tool by name. No other tool is attached to this conversation: files, " +
-  "shell, web, MCP and the rest are all reached from here.\n\n" +
+  "failure. The tools declared in the system prompt are available without a " +
+  "search; `tools.tool_search({ query })` finds the rest and returns their " +
+  "descriptions and argument schemas. No other tool is attached to this " +
+  "conversation: files, shell, web, MCP and the rest are all reached from " +
+  "here.\n\n" +
   "The program's return value and its console output are the result. " +
   "Everything else stays in the script, which is the point: a job that " +
   "takes twenty calls costs one turn's context. Return what the answer " +
   "needs, not the raw tool output.\n\n" +
+  "Small JSON values survive between calls: `store(key, value)` writes one, " +
+  "`load(key)` reads one, and `store(key, undefined)` deletes it. Writes are " +
+  "kept only when the program succeeds. Each value is at most 256 KiB and the " +
+  "whole store at most 1 MiB.\n\n" +
   `Limits: ${MAX_CALLS} tool calls per program; \`timeout\` in milliseconds ` +
   `(default ${DEFAULT_TIMEOUT_MS}, max ${MAX_TIMEOUT_MS}). Up to ` +
   `${MAX_FORWARDED_IMAGES} images a tool returns reach the conversation; a ` +
@@ -89,6 +95,10 @@ export interface ExecuteToolOptions {
   /** The fast-model check on the program before it runs. The tools a
    * program calls are checked by their own rules as usual. */
   safety?: CommandSafety;
+  /** The session's store: small JSON values a program keeps between calls. */
+  store: CodeStoreRepo;
+  /** The session whose store the program uses. */
+  sessionId: string;
 }
 
 /**
@@ -125,6 +135,7 @@ export function createExecuteTool(
 
       const timeoutMs = Math.max(1000, params.timeout ?? DEFAULT_TIMEOUT_MS);
       const deadline = Date.now() + timeoutMs;
+      const store = options.store.begin(options.sessionId);
       const calls: CallRecord[] = [];
       const images: CodeToolImage[] = [];
       let textChars = 0;
@@ -180,13 +191,22 @@ export function createExecuteTool(
         outcome = await options.runtime.run(params.code, {
           call,
           timeoutMs,
+          store,
           ...(signal !== undefined ? { signal } : {}),
         });
       } catch (error) {
         failure = error;
       }
 
-      const text = composeResult(outcome, failure, calls);
+      let storeFailure: unknown;
+      if (failure === undefined) {
+        try {
+          store.commit();
+        } catch (error) {
+          storeFailure = error;
+        }
+      }
+      const text = composeResult(outcome, failure, calls, storeFailure);
       const content: ToolContentBlock[] = [{ type: "text", text }];
       for (const image of images) {
         content.push({
@@ -205,6 +225,7 @@ export function createExecuteTool(
             ok: entry.ok,
           })),
           ...(failure === undefined ? {} : { error: true }),
+          ...(storeFailure === undefined ? {} : { storeError: true }),
         },
       };
     },
@@ -236,6 +257,7 @@ function composeResult(
   outcome: CodeRunOutcome | undefined,
   failure: unknown,
   calls: readonly CallRecord[],
+  storeFailure?: unknown,
 ): string {
   const parts: string[] = [];
   if (outcome !== undefined) {
@@ -243,6 +265,12 @@ function composeResult(
     if (script.length > 0) parts.push(script);
   }
   if (failure !== undefined) parts.push(`[error]\n${errorMessage(failure)}`);
+  if (storeFailure !== undefined) {
+    parts.push(
+      "[error]\nThe program finished, but its store writes were not saved: " +
+        errorMessage(storeFailure),
+    );
+  }
   if (calls.length > 0) parts.push(`[calls]\n${callSummary(calls)}`);
   const joined = parts.length === 0 ? "(no output)" : parts.join("\n\n");
   const { text, truncated } = truncate(joined);

@@ -1,6 +1,11 @@
 import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { createHostCodeRuntime } from "../code-execution/host.ts";
+import type {
+  CodeStoreChanges,
+  CodeStoreRepo,
+  CodeStoreSession,
+} from "../code-execution/store.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
 import { toolText } from "../test-utils.ts";
 import { ToolCatalog } from "./catalog.ts";
@@ -56,15 +61,65 @@ function makeCatalog(
   return catalog;
 }
 
+/** An in-memory stand-in for the SQLite store: enough to observe what one
+ * program commits and what the next one reads. The bounds and the SQL live
+ * in code-execution/store_test.ts. */
+function fakeStoreRepo(): CodeStoreRepo {
+  const values = new Map<string, unknown>();
+  return {
+    begin(): CodeStoreSession {
+      const working = new Map(values);
+      const changed = new Set<string>();
+      const clone = <T>(value: T): T => {
+        const text = JSON.stringify(value);
+        if (text === undefined) throw new Error("not JSON");
+        return JSON.parse(text) as T;
+      };
+      return {
+        get(key: string): unknown {
+          return working.has(key) ? clone(working.get(key)) : undefined;
+        },
+        set(key: string, value: unknown): void {
+          if (value === undefined) working.delete(key);
+          else working.set(key, clone(value));
+          changed.add(key);
+        },
+        delete(key: string): void {
+          working.delete(key);
+          changed.add(key);
+        },
+        snapshot(): Record<string, unknown> {
+          return Object.fromEntries(
+            [...working].map(([key, value]) => [key, clone(value)]),
+          );
+        },
+        changes(): CodeStoreChanges {
+          return { set: {}, delete: [] };
+        },
+        apply(_changes: CodeStoreChanges): void {},
+        commit(): void {
+          for (const key of changed) {
+            if (working.has(key)) values.set(key, working.get(key));
+            else values.delete(key);
+          }
+        },
+      };
+    },
+  };
+}
+
 function makeExecute(options: {
   tools?: readonly Tool[];
   registryTools?: readonly Tool[];
   safety?: CommandSafety;
+  store?: CodeStoreRepo;
 }) {
   return createExecuteTool({
     catalog: makeCatalog(options.tools ?? [], options.registryTools ?? []),
     runtime: createHostCodeRuntime(),
     cwd: "/tmp",
+    store: options.store ?? fakeStoreRepo(),
+    sessionId: "s1",
     ...(options.safety !== undefined ? { safety: options.safety } : {}),
   });
 }
@@ -217,4 +272,58 @@ test("execute: a program may keep state across its own calls only", async () => 
   await tool.execute("call-1", { code: "var kept = 41;" }, undefined);
   const result = await tool.execute("call-2", { code: "kept + 1" }, undefined);
   assert(toolText(result).includes("[error]"), toolText(result));
+});
+test("execute: the store keeps a value for the next call", async () => {
+  const store = fakeStoreRepo();
+  const tool = makeExecute({ store });
+  const first = await tool.execute(
+    "call-1",
+    { code: 'store("k", { a: 1 }); return load("k");' },
+    undefined,
+  );
+  assert(toolText(first).includes("{ a: 1 }"), toolText(first));
+  const second = await tool.execute(
+    "call-2",
+    { code: 'return load("k");' },
+    undefined,
+  );
+  assert(toolText(second).includes("{ a: 1 }"), toolText(second));
+});
+
+test("execute: a failed program does not commit its store", async () => {
+  const store = fakeStoreRepo();
+  const tool = makeExecute({ store });
+  await tool.execute(
+    "call-1",
+    { code: 'store("k", 1); throw new Error("boom");' },
+    undefined,
+  );
+  const result = await tool.execute(
+    "call-2",
+    { code: 'return String(load("k"));' },
+    undefined,
+  );
+  assert(toolText(result).includes("undefined"), toolText(result));
+});
+
+test("execute: undefined deletes and null is a value", async () => {
+  const store = fakeStoreRepo();
+  const tool = makeExecute({ store });
+  await tool.execute(
+    "call-1",
+    { code: 'store("k", null); store("gone", 1); store("gone", undefined);' },
+    undefined,
+  );
+  const result = await tool.execute(
+    "call-2",
+    {
+      code:
+        'return { nullKept: load("k") === null, ' +
+        'gone: load("gone") === undefined };',
+    },
+    undefined,
+  );
+  const text = toolText(result);
+  assert(text.includes("nullKept: true"), text);
+  assert(text.includes("gone: true"), text);
 });

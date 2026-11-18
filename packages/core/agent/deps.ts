@@ -2,6 +2,7 @@ import type { Api, Model } from "../ai/catalog.ts";
 import type { StreamFn } from "../ai/transport.ts";
 
 import type { BrowserBackend } from "../browser/types.ts";
+import type { CodeStoreRepo } from "../code-execution/store.ts";
 import type { ComputerHost } from "../computer/types.ts";
 import type { ClientEvent } from "../domain/event.ts";
 import type { SessionInfo } from "../domain/session.ts";
@@ -76,6 +77,10 @@ export interface SessionPersistence {
    * events that cost the provider's prompt cache (see
    * session/request-shapes.ts). */
   requestShapeRepo: RequestShapeRepo;
+  /** The scripting tool call's store: small JSON values a program keeps
+   * between calls and across session resumes. Always present in a core; a
+   * pool built by hand must pass one when it turns the mode on. */
+  codeStore: CodeStoreRepo;
   /** Persist a new session title and notify clients. */
   renameSession(id: string, name: string): void;
   /** Full generated system prompt for a workspace, re-derived every time a

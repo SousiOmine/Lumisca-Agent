@@ -1,8 +1,7 @@
 import { test } from "bun:test";
 import * as fsp from "node:fs/promises";
-import { fauxAssistantMessage, fauxText, fauxToolCall } from "@lumisca/core";
+import { fauxAssistantMessage, fauxToolCall } from "@lumisca/core";
 import { assert, assertEquals } from "@std/assert";
-import { CODE_EXECUTION_PROVIDER } from "./agent/code-execution-context.ts";
 import type { AgentMessage, LumiscaCore } from "./mod.ts";
 import {
   TOOL_BASH,
@@ -113,7 +112,7 @@ test("scripting tool call: a program runs the session's real tools", async () =>
   }
 });
 
-test("scripting tool call: the note about it is published once", async () => {
+test("scripting tool call: the system prompt declares the initial tools", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   try {
@@ -123,18 +122,31 @@ test("scripting tool call: the note about it is published once", async () => {
       modelProvider: providerId,
       modelId,
     });
-    faux.setResponses([fauxAssistantMessage([fauxText("Nothing to do.")])]);
-    await promptSession(core, session.id, "hello");
-    const notes = core
-      .getAgent(session.id)!
-      .messages.filter(
-        (message) =>
-          message.role === "context" &&
-          message.provider === CODE_EXECUTION_PROVIDER,
-      );
-    assertEquals(notes.length, 1, "the note is published exactly once");
     const prompt = core.getAgent(session.id)!.agent.state.systemPrompt;
-    assertEquals(prompt.includes("Scripting tool call is on"), false);
+    assert(prompt.includes("## Scripting tool call"), prompt);
+    assert(prompt.includes("declare const tools"), prompt);
+    assert(prompt.includes("read(args:"), prompt);
+    assert(prompt.includes("tool_search(args:"), prompt);
+    assert(prompt.includes("declare function store"), prompt);
+    assert(prompt.includes("declare function load"), prompt);
+    // A registry tool is dynamic: it is found through tool_search, not
+    // declared in the prompt.
+    assert(!prompt.includes("pdf_read_pages"), prompt);
+
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxToolCall(TOOL_EXECUTE, {
+          code:
+            'const found = await tools.tool_search({ query: "pdf" });\n' +
+            "return found;",
+        }),
+      ]),
+      fauxAssistantMessage("Found it."),
+    ]);
+    await promptSession(core, session.id, "find the pdf tool");
+    const results = toolResultTexts(core, session.id);
+    assertEquals(results.length, 1, results.join("\n---\n"));
+    assert(results[0]!.includes("pdf_read_pages"), results[0]);
   } finally {
     await core.close();
     await removeDirRetry(root);
@@ -168,6 +180,45 @@ test("scripting tool call: the toggle rebuilds an open session", async () => {
     assert(after.includes(TOOL_BASH), after.join(","));
     assertEquals(after.includes(TOOL_EXECUTE), false);
     assertEquals(core.isCodeExecutionEnabled(), false);
+  } finally {
+    await core.close();
+    await removeDirRetry(root);
+  }
+});
+test("scripting tool call: the store survives closing and reopening the session", async () => {
+  const { core, faux, providerId, modelId } = setup();
+  const { ws, root } = await makeWorkspace(core);
+  try {
+    core.setCodeExecutionEnabled(true);
+    const session = await core.createSession({
+      workspaceId: ws.id,
+      modelProvider: providerId,
+      modelId,
+    });
+
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxToolCall(TOOL_EXECUTE, {
+          code: 'store("cursor", { page: 2 }); return "saved";',
+        }),
+      ]),
+      fauxAssistantMessage("Saved."),
+    ]);
+    await promptSession(core, session.id, "save the cursor");
+
+    await core.closeSession(session.id);
+    core.openSession(session.id);
+
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxToolCall(TOOL_EXECUTE, { code: 'return load("cursor");' }),
+      ]),
+      fauxAssistantMessage("Loaded."),
+    ]);
+    await promptSession(core, session.id, "load the cursor");
+    const results = toolResultTexts(core, session.id);
+    const last = results[results.length - 1]!;
+    assert(last.includes("{ page: 2 }"), last);
   } finally {
     await core.close();
     await removeDirRetry(root);

@@ -396,6 +396,22 @@ export const MIGRATIONS: ReadonlyArray<(db: Database) => void> = [
   // A disabled agent is not a hidden one: its conversation stays readable
   // from the store, but nothing about it is built (see stella/agents.ts).
   (db) => addColumnIfMissing(db, "stella_agents", "disabled_at", "INTEGER"),
+  // The scripting tool call's store: small JSON values a program keeps across
+  // execute calls and session resumes. A table rather than a column on
+  // sessions because a program addresses values by key and replaces or
+  // deletes one at a time; a JSON blob would rewrite the whole store for
+  // every write. The primary key is (session_id, key), so a session's rows
+  // are contiguous and no extra index is needed.
+  (db) =>
+    db.exec(
+      "CREATE TABLE IF NOT EXISTS code_store (" +
+        "session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE, " +
+        "key TEXT NOT NULL, " +
+        "value TEXT NOT NULL, " +
+        "updated_at INTEGER NOT NULL, " +
+        "PRIMARY KEY (session_id, key)" +
+        ")",
+    ),
 ];
 
 /** The `user_version` a fully migrated database carries: one per migration

@@ -1,3 +1,5 @@
+import type { CodeStoreSession } from "./store.ts";
+
 /**
  * The contract between the `execute` tool and the place a program runs.
  *
@@ -40,6 +42,9 @@ export interface CodeRunContext {
   /** Wall-clock budget of the whole program, tool waits included. The
    * runtime enforces it; the tool enforces it again around the calls. */
   timeoutMs: number;
+  /** The session's store transaction: the program reads and writes small JSON
+   * values through it. */
+  store: CodeStoreSession;
   /** The run's abort signal: a stopped turn stops the program. */
   signal?: AbortSignal;
 }

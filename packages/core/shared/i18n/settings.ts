@@ -1014,8 +1014,8 @@ export const settings = {
     en: "Scripting tool call",
   },
   "settings.experimental.codeExecution.description": {
-    ja: "モデルに渡すツールを1つにまとめ、ファイルやシェル、MCPのツールを短いスクリプトから呼ばせます。ツールの定義がリクエストから消えるぶん、やり取りが減ります。",
-    en: "Gives the model one tool and lets a short script call files, the shell and MCP tools. The tool definitions leave the request, so fewer round trips are needed.",
+    ja: "モデルに渡すツールを1つにまとめ、ファイルやシェル、MCPのツールを短いスクリプトから呼ばせます。初期ツールの型はプロンプトに載せ、残りは検索で見つけます。",
+    en: "Gives the model one tool and lets a short script call files, the shell and MCP tools. Initial tools are declared in the prompt; the rest are found by search.",
   },
   "settings.experimental.codeExecution.tooltip": {
     ja: "Scripting tool call: モデルがJavaScriptを書き、その中からツールを呼びます。既定は無効です。",

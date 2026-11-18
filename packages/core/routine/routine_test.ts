@@ -1258,6 +1258,14 @@ test("routine tools: an mcp watch without a lookup cannot be saved", async () =>
 test("routine scheduler: a disabled agent's routine is skipped, not run", async () => {
   const { repo: routines, close } = repo();
   const fake = runner({ agentEnabled: false });
+  const now = Date.now();
+  const scheduler = createRoutineScheduler({
+    repo: routines,
+    runner: fake,
+    now: () => now,
+    tickMs: 10_000,
+    catchUpDelayMs: 5,
+  });
   try {
     const created = routines.create({
       agentId: AGENT,
@@ -1266,15 +1274,6 @@ test("routine scheduler: a disabled agent's routine is skipped, not run", async 
       schedule: { kind: "every", minutes: 30 },
     });
     routines.update(created.id, { nextRunAt: Date.now() - 1_000 });
-
-    const now = Date.now();
-    const scheduler = createRoutineScheduler({
-      repo: routines,
-      runner: fake,
-      now: () => now,
-      tickMs: 10_000,
-      catchUpDelayMs: 5,
-    });
     scheduler.start();
     await new Promise((resolve) => setTimeout(resolve, 40));
 
@@ -1288,6 +1287,7 @@ test("routine scheduler: a disabled agent's routine is skipped, not run", async 
     // The row's own reason is not touched: the routine was not at fault.
     assertEquals(advanced.lastStatus, null);
   } finally {
+    scheduler.close();
     close();
   }
 });
