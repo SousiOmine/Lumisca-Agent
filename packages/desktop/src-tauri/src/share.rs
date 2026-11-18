@@ -23,7 +23,7 @@ use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Stdio};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::DialogExt;
 
-use crate::{server, server_log, AppState, LockRecover};
+use crate::{server, server_log, settings, AppState, LockRecover};
 
 /// One folder this shell has lent, as both this module and the page see it.
 #[derive(Clone, serde::Serialize)]
@@ -173,7 +173,30 @@ pub(crate) fn pick_folder(app: &AppHandle) -> Result<Option<String>, String> {
     let path = picked
         .into_path()
         .map_err(|error| format!("選んだフォルダを読み取れません: {error}"))?;
-    Ok(Some(simplify(path)))
+    let folder = simplify(path);
+    remember_approved(app, &folder)?;
+    Ok(Some(folder))
+}
+
+/// Record a folder the picker returned. This is the consent `grant` checks:
+/// the page cannot approve a path, only the picker can.
+fn remember_approved(app: &AppHandle, folder: &str) -> Result<(), String> {
+    settings::update(app, |settings| {
+        if !settings
+            .approved_share_folders
+            .iter()
+            .any(|path| path == folder)
+        {
+            settings.approved_share_folders.push(folder.to_string());
+        }
+    })
+}
+
+/// Whether `folder` may be lent: the picker returned it at some point, or it
+/// is already lent (changing the terms of an existing loan).
+fn may_lend(approved: &[String], granted: &[ShareGrantView], folder: &str) -> bool {
+    approved.iter().any(|path| path == folder)
+        || granted.iter().any(|grant| grant.path == folder)
 }
 
 /// Lend `path` to `session_id`, replacing the terms if this conversation
@@ -204,6 +227,13 @@ pub(crate) fn grant(
 
     let state = app.state::<AppState>();
     let mut lender = state.share.lock_recover();
+    let approved = settings::load(app).approved_share_folders;
+    if !may_lend(&approved, &lender.grants, &folder) {
+        return Err(
+            "このフォルダーは選択されていません。フォルダーを選択してから共有してください。"
+                .to_string(),
+        );
+    }
     let mut added = false;
     let view = if let Some(existing) = lender
         .grants
@@ -360,4 +390,33 @@ fn simplify(path: PathBuf) -> String {
         }
     }
     text
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn grant(path: &str) -> ShareGrantView {
+        ShareGrantView {
+            id: "g".to_string(),
+            session_id: "s".to_string(),
+            path: path.to_string(),
+            write: false,
+        }
+    }
+
+    #[test]
+    fn a_folder_is_lendable_only_after_the_picker_or_as_an_existing_loan() {
+        let approved = vec!["/home/user/proj".to_string()];
+        let lent = vec![grant("/home/user/notes")];
+
+        // The picker returned it: the user consented to lending this one.
+        assert!(may_lend(&approved, &lent, "/home/user/proj"));
+        // Already lent: this call only changes the terms.
+        assert!(may_lend(&approved, &lent, "/home/user/notes"));
+        // A path the page named on its own is refused before the lending
+        // child hears of it.
+        assert!(!may_lend(&approved, &lent, "/home/user"));
+        assert!(!may_lend(&[], &[], "/home/user/.ssh"));
+    }
 }

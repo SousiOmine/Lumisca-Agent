@@ -44,6 +44,12 @@ pub(crate) struct DesktopSettings {
     /// choice stored beside it.
     #[serde(default)]
     pub(crate) last_remote: Option<SavedConnection>,
+    /// Folders this shell's picker returned, as paths the user consented to
+    /// lend. `share/grant` accepts only these (or a folder already lent):
+    /// the page can name any path, and a remote page must not be able to
+    /// hand `/home/<user>` to a conversation the user never chose.
+    #[serde(default)]
+    pub(crate) approved_share_folders: Vec<String>,
 }
 
 impl Default for DesktopSettings {
@@ -51,6 +57,7 @@ impl Default for DesktopSettings {
         Self {
             auto_update: true,
             last_remote: None,
+            approved_share_folders: Vec::new(),
         }
     }
 }
@@ -141,6 +148,7 @@ mod tests {
                 token: "abc".into(),
                 name: Some("自宅".into()),
             }),
+            approved_share_folders: vec!["/home/user/proj".into()],
         };
         save_to(&file.0, &settings).unwrap();
         assert_eq!(load_from(&file.0), settings);
@@ -156,6 +164,7 @@ mod tests {
             DesktopSettings {
                 auto_update: false,
                 last_remote: None,
+                approved_share_folders: Vec::new(),
             }
         );
     }
