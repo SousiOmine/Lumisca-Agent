@@ -138,12 +138,13 @@ test("skills API lists the workspace catalog and the chat subset", async () => {
       .find((s) => s.name === "skill-authoring");
     assert(skillGuide !== undefined, "the skill guide must be listed");
 
-    // ...and the guide for delegating to sub-agents: a workspace session
-    // has the task tools it teaches.
-    const codingGuide = core
-      .listSkills(ws.id)
-      .find((s) => s.name === "coding-agents");
-    assert(codingGuide !== undefined, "the coding guide must be listed");
+    // The coding-agents guide belongs to a stella conversation; a workspace
+    // session starts sub-agents too, but its catalog does not load it.
+    assertEquals(
+      core.listSkills(ws.id).some((s) => s.name === "coding-agents"),
+      false,
+      "the coding guide must not be listed in code mode",
+    );
 
     const forWorkspace = await json(base, `/api/skills?workspaceId=${ws.id}`);
     assertEquals(forWorkspace.status, 200);
@@ -152,7 +153,6 @@ test("skills API lists the workspace catalog and the chat subset", async () => {
       appGuide,
       mcpGuide,
       skillGuide,
-      codingGuide,
     ]);
 
     // Without a workspaceId the endpoint answers for a chat session: no
@@ -704,7 +704,7 @@ test("computer use toggle goes through the capability path", async () => {
   }
 });
 
-test("code execution toggle goes through the tool-set path", async () => {
+test("the scripting tool call toggle goes through the tool-set path", async () => {
   const { core, server, base } = await setup();
   try {
     // A plain settings write would store the flag and leave every open

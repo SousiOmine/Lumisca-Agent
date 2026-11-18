@@ -241,8 +241,9 @@ export class SessionPool {
     }
   }
 
-  /** Apply a change to the TOOLS the model is given (code execution on or
-   * off). The mutation runs unconditionally, then every open session
+  /** Apply a change to the TOOLS the model is given (the scripting tool
+   * call on or off). The mutation runs unconditionally, then every open
+   * session
    * follows: an idle one is rebuilt at once, and a streaming one keeps its
    * agent — its tool set is part of the request it already sent — and is
    * rebuilt when the run ends, through `defer`. */

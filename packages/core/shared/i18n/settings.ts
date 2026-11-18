@@ -918,19 +918,19 @@ export const settings = {
     ja: "試験中の機能です。予告なく変わるか、無くなる場合があります。",
     en: "Features under test. They may change or disappear without notice.",
   },
-  /** The switch that turns code execution on: the model gets one tool and
-   * calls every other tool from inside a short program. */
+  /** The switch that turns the scripting tool call feature on: the model gets
+   * one tool and calls every other tool from inside a short script. */
   "settings.experimental.codeExecution.title": {
-    ja: "コード実行",
-    en: "Code execution",
+    ja: "Scripting tool call",
+    en: "Scripting tool call",
   },
   "settings.experimental.codeExecution.description": {
-    ja: "モデルに渡すツールを1つにまとめ、ファイルやシェル、MCPのツールを短いプログラムから呼ばせます。ツールの定義がリクエストから消えるぶん、やり取りが減ります。",
-    en: "Gives the model one tool and lets a short program call files, the shell and MCP tools. The tool definitions leave the request, so fewer round trips are needed.",
+    ja: "モデルに渡すツールを1つにまとめ、ファイルやシェル、MCPのツールを短いスクリプトから呼ばせます。ツールの定義がリクエストから消えるぶん、やり取りが減ります。",
+    en: "Gives the model one tool and lets a short script call files, the shell and MCP tools. The tool definitions leave the request, so fewer round trips are needed.",
   },
   "settings.experimental.codeExecution.tooltip": {
-    ja: "コード実行: モデルがJavaScriptを書き、その中からツールを呼びます。既定は無効です。",
-    en: "Code execution: the model writes JavaScript and calls tools from it. Disabled by default.",
+    ja: "Scripting tool call: モデルがJavaScriptを書き、その中からツールを呼びます。既定は無効です。",
+    en: "Scripting tool call: the model writes JavaScript and calls tools from it. Disabled by default.",
   },
   "settings.experimental.codeExecution.operationFailed": {
     ja: "変更に失敗しました: {error}",

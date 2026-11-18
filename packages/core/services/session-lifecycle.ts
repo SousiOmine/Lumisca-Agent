@@ -218,8 +218,8 @@ export class SessionLifecycle {
    * Rebuild a session's agent as soon as its run ends.
    *
    * Used by a change that cannot be applied to a live agent without
-   * replacing it: the tool set the model was given (code execution on or
-   * off). The replacement would duplicate the rows of the run in flight, so
+   * replacing it: the tool set the model was given (the scripting tool call
+   * on or off). The replacement would duplicate the rows of the run in flight, so
    * it waits for the end of that run (see releasePendingRebuild). */
   deferRebuild(id: string): void {
     this.pendingRebuilds.add(id);

@@ -337,8 +337,9 @@ export class LumiscaCore {
       stellaRun?: {
         run: VmCommandRunner;
         runBytes: VmCommandBytesRunner;
-        /** Interactive exec (code execution's channel). Omitted → the real
-         * one; a test that runs code in a stella session supplies it. */
+        /** Interactive exec (the scripting tool call's channel). Omitted →
+         * the real one; a test that runs code in a stella session supplies
+         * it. */
         openChannel?: VmChannelRunner;
       };
     } = {},
@@ -945,13 +946,14 @@ export class LumiscaCore {
     return this.computer.setEnabled(enabled);
   }
 
-  /** Whether the user turned code execution on (the experimental toggle). */
+  /** Whether the user turned the scripting tool call on (the experimental
+   * toggle). */
   isCodeExecutionEnabled(): boolean {
     return codeExecutionEnabled((key) => this.settings.get(key));
   }
 
-  /** Turn code execution on or off. The flag decides the whole tool set of
-   * an agent, so every open session follows: an idle one is rebuilt at
+  /** Turn the scripting tool call on or off. The flag decides the whole tool
+   * set of an agent, so every open session follows: an idle one is rebuilt at
    * once, and a running one is rebuilt when its run ends (its request
    * already carried the old tool set). */
   setCodeExecutionEnabled(enabled: boolean): void {

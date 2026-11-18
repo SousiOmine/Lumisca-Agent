@@ -105,22 +105,22 @@ export function sessionSkills(
  *
  * `browserAvailable` / `computerAvailable` are the session's gates: a
  * sub-agent reaches the browser-lab and computer-use tools through the
- * session's tool registry, so their guides still apply. `subagents` gates
- * the coding-agents guide the same way the tool hub does.
+ * session's tool registry, so their guides still apply. The coding-agents
+ * guide is left out: it belongs to a stella conversation's main catalog,
+ * and a sub-agent has no task hub of its own.
  */
 export function subagentSkills(
   catalog: readonly SkillDef[],
   options: {
     browserAvailable?: boolean;
     computerAvailable?: boolean;
-    subagents: boolean;
   },
 ): SkillDef[] {
   const allowed = new Set(
     builtinSkills({
       browser: options.browserAvailable === true,
       computer: options.computerAvailable === true,
-      subagents: options.subagents,
+      subagents: false,
     })
       .map((skill) => skill.name)
       // A sub-agent's text is a report to another model, not a screen, so

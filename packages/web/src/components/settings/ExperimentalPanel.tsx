@@ -13,7 +13,7 @@ import { SettingsSection } from "./SettingsSection.tsx";
  * the rest of the dialog, and the note at its top says what that means for
  * a feature on it: it may change or disappear.
  *
- * Code execution replaces the tools the model is given, so the server
+ * The scripting tool call replaces the tools the model is given, so the server
  * rebuilds the open sessions when the switch moves: a session that is
  * waiting follows at once, and one in the middle of a run follows when that
  * run ends. The run already sent its tool set, and replacing the agent under

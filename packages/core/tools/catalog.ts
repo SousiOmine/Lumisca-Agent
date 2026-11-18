@@ -16,7 +16,7 @@ import type { Tool, ToolResult } from "./schema.ts";
  * (read, bash, todo, ...) and the registry of tools that stay out of the
  * LLM context (MCP servers, the browser lab, computer use). Function
  * calling needs that split — a preloaded tool must be in the request to be
- * callable at all. Code execution does not: a script reaches a tool by
+ * callable at all. The scripting tool call does not: a script reaches a tool by
  * name, so the two sets are one catalog to the model, and moving a tool
  * between them changes nothing about how it is called.
  *

@@ -898,11 +898,11 @@ URLはシェルを介さず、プログラムの引数として1つだけ渡し�
   実装はライフサイクル（`session-lifecycle.ts`）、状態（`session-state.ts`）、履歴（`session-transcript.ts`）、ファイル（`session-assets.ts`）、スキル（`session-skills.ts`）、実行（`session-runs.ts`）に分かれます。
   ファサードに状態を戻すと、初期化順の循環が型キャストで隠れます。
 
-- コード実行（`execute`）: 設定 → 実験的機能のトグルが `1` のとき、モデルへ渡すツールは `execute` 1 つだけになります。
+- Scripting tool call（`execute`）: 設定 → 実験的機能のトグルが `1` のとき、モデルへ渡すツールは `execute` 1 つだけになります。
   ツールは 2 か所に分かれて住んでいます。
   リクエストに載せるプリロード済みの組と、LLM の文脈に載せないレジストリです。
   関数呼び出しではこの分離が要ります。
-  モデルが名前でツールを呼ぶコード実行では要らないので、`tools/catalog.ts` の `ToolCatalog` が両方を 1 つの目録として見せます。
+  モデルが名前でツールを呼ぶScripting tool callでは要らないので、`tools/catalog.ts` の `ToolCatalog` が両方を 1 つの目録として見せます。
   目録は両側を provider で読むため、MCP の検出が後から届いても、能力の再投入でレジストリが埋まっても、同じ目録に映ります。
   `tool_search` はエージェントではなく目録の中に入ります。名前を引くのはプログラムの中だからです。
   `execute` と `tool_call` は目録から外します。プログラムがプログラムを走らせると、1 つの実行に掛けた上限が何重にもなります。

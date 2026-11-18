@@ -46,9 +46,10 @@ export interface BuiltinContext {
    * session has no agents to manage). */
   stella?: boolean;
   /** Whether the session can start coding sub-agents (it has a tool hub).
-   * The coding-agents skill is included only when true: it teaches the
-   * `task` tool, and a session that cannot start one must not be pointed at
-   * it. */
+   * The coding-agents skill is included only for a stella conversation that
+   * can start one: its sub-agents work inside the machine, and the main
+   * agent's catalog is where the guide belongs. Code mode starts sub-agents
+   * too, but its catalog does not load this guide. */
   subagents: boolean;
   /** Whether this session's main agent may change the app-level MCP server
    * config (`mcp_add` / `mcp_remove` / `mcp_list`). The mcp-servers skill is
@@ -106,6 +107,8 @@ export function builtinSkills(context: BuiltinContext): SkillDef[] {
           }),
         ]
       : []),
-    ...(context.subagents ? [codingAgentsSkill()] : []),
+    ...(context.stella === true && context.subagents
+      ? [codingAgentsSkill()]
+      : []),
   ];
 }

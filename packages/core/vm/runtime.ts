@@ -25,11 +25,12 @@ export interface StellaRuntime {
   cwd: string;
   files: FileBackend;
   runner: CommandRunner;
-  /** One-shot exec on the machine's seam (code execution writes its program
-   * file through it). */
+  /** One-shot exec on the machine's seam (the scripting tool call writes its
+   * program file through it). */
   exec: VmExec;
-  /** Opens an interactive exec: how code execution keeps a program's tool
-   * calls connected to the server (see code-execution/vm.ts). */
+  /** Opens an interactive exec: how the scripting tool call keeps a
+   * program's tool calls connected to the server (see
+   * code-execution/vm.ts). */
   channel: VmChannelOpener;
   backgroundSpawner: BackgroundSpawner;
   /** The session's skill catalog: the machine's `.agents/skills` plus the

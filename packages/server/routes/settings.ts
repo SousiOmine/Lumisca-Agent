@@ -25,8 +25,9 @@ export interface SettingsApi {
    * (an idle one is rebuilt; a running one keeps its run and has its
    * discoverable tools reseeded in place). */
   setComputerUseEnabled(enabled: boolean): Promise<void>;
-  /** Enable or disable code execution. Not a plain setting write either: it
-   * replaces the tool set every session is built with, so the core rebuilds
+  /** Enable or disable the scripting tool call. Not a plain setting write
+   * either: it replaces the tool set every session is built with, so the core
+   * rebuilds
    * the open sessions (a running one when its run ends). */
   setCodeExecutionEnabled(enabled: boolean): void;
   getPersonalization(): { path: string; content: string };

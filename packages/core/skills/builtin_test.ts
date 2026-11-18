@@ -146,9 +146,7 @@ test("builtinSkills advertises vm-env only in a stella session", async () => {
   assert(guide.includes("15 minutes"));
   // A sub-agent has no dialog to show: its catalog drops this skill like it
   // drops the other main-only guides.
-  const subagent = subagentSkills([skill!], {
-    subagents: true,
-  });
+  const subagent = subagentSkills([skill!], {});
   assertEquals(
     subagent.some((s) => s.name === "vm-env"),
     false,
@@ -400,6 +398,20 @@ test("formatAvailableSkills lists built-in skills like any other", () => {
   // The line the catalog publishes is the trigger the model reads, so it
   // starts with when to use the skill.
   assert(text.includes("Use this skill whenever"));
+});
+
+test("code mode does not load the coding-agents guide", () => {
+  // The guide is a stella conversation's. Code mode starts sub-agents too,
+  // but its catalog stays without this one.
+  const skills = builtinSkills({
+    browser: false,
+    computer: false,
+    subagents: true,
+  });
+  assertEquals(
+    skills.some((skill) => skill.name === "coding-agents"),
+    false,
+  );
 });
 
 test("the coding-agents skill calls the preloaded task tool directly", async () => {

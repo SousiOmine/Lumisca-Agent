@@ -25,7 +25,7 @@ const SCRIPT_IO_TIMEOUT_MS = 30_000;
 const CHANNEL_GRACE_MS = 10_000;
 
 /**
- * Code execution inside a stella machine.
+ * The scripting tool call inside a stella machine.
  *
  * The program runs under the machine's own `node`, so it has exactly what
  * `bash` in the same conversation has — the machine, and nothing outside it.

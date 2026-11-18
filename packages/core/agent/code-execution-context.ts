@@ -1,14 +1,15 @@
 import type { ContextProvider } from "../ai/context-providers.ts";
 
 /**
- * The note that tells the model how code execution works.
+ * The note that tells the model how the scripting tool call works.
  *
  * It travels as a context message rather than as part of the system prompt
  * for the same reason as the tool_search note (see mcp/context.ts): the
  * language a turn answers in, the model and the folder shares all reach a
  * live session this way, and the prompt is a snapshot that never changes.
- * Here the note also coincides with a rebuild — turning code execution on
- * replaces the whole tool set, which costs the provider's cached prefix
+ * Here the note also coincides with a rebuild — turning the scripting tool
+ * call on replaces the whole tool set, which costs the provider's cached
+ * prefix
  * once — but publishing it instead of writing it into the prompt keeps the
  * two mechanisms from being different for no reason.
  *
@@ -21,7 +22,7 @@ import type { ContextProvider } from "../ai/context-providers.ts";
 export const CODE_EXECUTION_PROVIDER = "code-execution";
 
 export const CODE_EXECUTION_NOTE =
-  "Code execution is on: this conversation has ONE tool, `execute`. Every " +
+  "Scripting tool call is on: this conversation has ONE tool, `execute`. Every " +
   "other tool — files, shell, web, MCP servers, the session's own tools — " +
   "is called from inside the program with `await tools.<name>(args)`, which " +
   "resolves to that tool's text result and throws when the tool fails. " +
@@ -52,7 +53,7 @@ export function createCodeExecutionProvider(): ContextProvider {
       announced = true;
       return [
         {
-          title: "Code execution",
+          title: "Scripting tool call",
           body: CODE_EXECUTION_NOTE,
           state: { execution: true } satisfies CodeExecutionState,
         },

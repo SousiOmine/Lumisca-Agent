@@ -16,8 +16,9 @@ import { assertSchemaBounds } from "./validate.ts";
  * same set, and a rebuild (model change etc.) keeps the tools searchable.
  *
  * The ranking, listing and dispatch live as functions over `Tool[]` rather
- * than as methods only: code execution searches a set that is the agent's
- * preloaded tools PLUS this registry (see tools/catalog.ts), and both sides
+ * than as methods only: the scripting tool call searches a set that is the
+ * agent's preloaded tools PLUS this registry (see tools/catalog.ts), and both
+ * sides
  * must describe and run a tool the same way or the model would get two
  * answers for one name.
  */
@@ -45,7 +46,7 @@ export interface ToolSearchEntry {
 }
 
 /** What the search and listing tools need from whatever holds the tools: a
- * registry, or the catalog code execution searches. */
+ * registry, or the catalog the scripting tool call searches. */
 export interface ToolSearchSource {
   search(query: string, limit: number): ToolSearchEntry[];
   browse(): string;

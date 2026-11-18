@@ -136,7 +136,7 @@ export interface AgentRuntime {
    * no browser tools. A getter so a backend attached after the pool was
    * built still reaches new agents. */
   browser?: () => BrowserBackend | undefined;
-  /** Whether the user turned code execution on (see
+  /** Whether the user turned the scripting tool call on (see
    * CODE_EXECUTION_ENABLED_KEY). Read once per open: it decides the whole
    * tool set of the agent, so the pool rebuilds the open sessions when the
    * toggle changes (see SessionPool.applyToolSetChange). */

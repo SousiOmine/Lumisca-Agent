@@ -10,11 +10,13 @@ import type { SkillDef } from "../discover.ts";
  * call. The description is therefore the trigger (the catalog shows only
  * `name: description`) and the body is the how.
  *
- * The `task` family is preloaded exactly where this skill is advertised
- * (the catalog's `subagents` flag is the same fact as the tool hub), so the
- * body calls `task` directly. Teaching tool_search here made an agent that
- * followed the guide literally conclude it could not delegate — the search
- * only covers the session registry, and a preloaded tool is not in it.
+ * In a stella conversation the `task` family is preloaded wherever this
+ * skill is advertised (the catalog's `subagents` flag is the same fact as
+ * the tool hub), so the body calls `task` directly. Teaching tool_search
+ * here made an agent that followed the guide literally conclude it could not
+ * delegate — the search only covers the session registry, and a preloaded
+ * tool is not in it. Code mode has the same tool hub but does not load this
+ * guide; the `task` description carries the contract there.
  */
 
 /** The SKILL.md body. English, like the tool descriptions it quotes. */

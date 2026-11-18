@@ -1278,8 +1278,8 @@ function channelArgv(
 }
 
 /** Open an interactive exec, with the container's name and workdir already
- * applied. Code execution's seam: the only caller that needs the exchange
- * to stay live (see vm/channel.ts). */
+ * applied. The scripting tool call's seam: the only caller that needs the
+ * exchange to stay live (see vm/channel.ts). */
 export function createVmChannel(options: {
   open: VmChannelRunner;
   containerName?: string;

@@ -8,7 +8,7 @@ import {
 } from "./types.ts";
 
 /**
- * Code execution on the host: the program runs in the server-process
+ * The scripting tool call on the host: the program runs in the server-process
  * sandbox (tools/js-sandbox.ts), the same one `eval` uses, with a `tools`
  * namespace added.
  *

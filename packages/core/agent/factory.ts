@@ -630,9 +630,6 @@ export class AgentFactory {
                 subagentSkills(stella.skills(), {
                   browserAvailable: where.browserAvailable,
                   computerAvailable: where.computerAvailable(),
-                  // A sub-agent has no hub of its own: the guide that teaches
-                  // the task tool has no reader here.
-                  subagents: false,
                 })
             : () =>
                 sessionSkills(workspace.folders, {
@@ -788,8 +785,8 @@ export class AgentFactory {
   }
 
   /**
-   * The tool set the model is given when code execution is on: `execute`,
-   * and nothing else.
+   * The tool set the model is given when the scripting tool call is on:
+   * `execute`, and nothing else.
    *
    * The set built by buildToolSet is not discarded — it becomes the catalog
    * a program calls tools from, together with the session's discoverable

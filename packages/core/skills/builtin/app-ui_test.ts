@@ -34,5 +34,5 @@ test("app-ui: the guide's example is a valid spec", async () => {
 });
 
 test("app-ui: a sub-agent is not pointed at the guide", () => {
-  assertEquals(subagentSkills([appUiSkill()], { subagents: true }), []);
+  assertEquals(subagentSkills([appUiSkill()], {}), []);
 });

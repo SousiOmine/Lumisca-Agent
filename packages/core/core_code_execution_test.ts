@@ -28,7 +28,7 @@ function toolResultTexts(core: LumiscaCore, sessionId: string): string[] {
     .map((message) => toolText(message));
 }
 
-test("code execution is off by default", async () => {
+test("scripting tool call is off by default", async () => {
   const { core, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   try {
@@ -49,7 +49,7 @@ test("code execution is off by default", async () => {
   }
 });
 
-test("code execution: the model is given execute and nothing else", async () => {
+test("scripting tool call: the model is given execute and nothing else", async () => {
   const { core, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   try {
@@ -72,11 +72,11 @@ test("code execution: the model is given execute and nothing else", async () => 
   }
 });
 
-test("code execution: a program runs the session's real tools", async () => {
+test("scripting tool call: a program runs the session's real tools", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   try {
-    await Deno.writeTextFile(`${root}/hello.txt`, "code execution works");
+    await Deno.writeTextFile(`${root}/hello.txt`, "scripting tool call works");
     core.setCodeExecutionEnabled(true);
     const session = await core.createSession({
       workspaceId: ws.id,
@@ -104,7 +104,7 @@ test("code execution: a program runs the session's real tools", async () => {
     const text = results[0]!;
     assert(text.includes("[calls]"), text);
     assert(text.includes("read"), text);
-    assert(text.includes("code execution works"), text);
+    assert(text.includes("scripting tool call works"), text);
     assert(text.includes("found: true"), text);
   } finally {
     await core.close();
@@ -112,7 +112,7 @@ test("code execution: a program runs the session's real tools", async () => {
   }
 });
 
-test("code execution: the note about it is published once", async () => {
+test("scripting tool call: the note about it is published once", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   try {
@@ -133,14 +133,14 @@ test("code execution: the note about it is published once", async () => {
       );
     assertEquals(notes.length, 1, "the note is published exactly once");
     const prompt = core.getAgent(session.id)!.agent.state.systemPrompt;
-    assertEquals(prompt.includes("Code execution is on"), false);
+    assertEquals(prompt.includes("Scripting tool call is on"), false);
   } finally {
     await core.close();
     await removeDirRetry(root);
   }
 });
 
-test("code execution: the toggle rebuilds an open session", async () => {
+test("scripting tool call: the toggle rebuilds an open session", async () => {
   const { core, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   try {

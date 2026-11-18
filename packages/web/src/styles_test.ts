@@ -676,8 +676,8 @@ test("the composer draws one frame, and its buttons are one size", async () => {
   // The attach control and the first line of the message share one centre.
   // They are two boxes side by side, so nothing lines them up on its own: the
   // button was pinned with a fixed `margin-top`, which is level at one of
-  // the field's three font sizes and a few pixels off at the others (14px
-  // in the new-session view, 13px in a session, 16px on a touch device).
+  // the field's two font sizes and a few pixels off at the other (14px, or
+  // 16px on a touch device).
   // The field now pads its top by the difference between the button's
   // square and its own line, and both numbers come from the same token.
   const attach = /\.input-attach \{([^}]*)\}/.exec(css);
@@ -765,11 +765,40 @@ test("a lent folder's frame survives the field taking focus", async () => {
   );
 });
 
+test("the message field keeps one type size between the two views", async () => {
+  // The new-session screen and a session both show the message field. Its
+  // type used to differ by a step between them, so selecting a session (or
+  // coming back to the new-session tab) resized the text the reader was
+  // writing. The height still tells the two apart; the type does not.
+  const css = await Deno.readTextFile(
+    new URL("./styles/composer.css", import.meta.url),
+  );
+  const rules = cssRules(css);
+  const shared = rules.find((rule) =>
+    rule.selector.includes(".input-box:focus-visible"),
+  );
+  assertEquals(shared !== undefined, true, "the shared field rule is missing");
+  assertEquals(
+    /font-size:\s*var\(--type-14\)/.test(shared!.body),
+    true,
+    "the message field must take the shared type size",
+  );
+  // `.large` may change the height and the line-height; a second font size
+  // is what made the text jump.
+  const large = rules.find((rule) => rule.selector === ".input-box.large");
+  assertEquals(large !== undefined, true, ".input-box.large must exist");
+  assertEquals(
+    /(^|[;{\s])font-size:/.test(large!.body),
+    false,
+    ".input-box.large must not set its own font size",
+  );
+});
+
 test("the composer field grows to twelve lines and then scrolls", async () => {
   // The field follows the message (hooks/useAutoGrow.ts writes its height
   // from `scrollHeight`) up to a ceiling the sheet owns. Two things break the
   // growth without breaking anything a type check sees: a fixed `height`
-  // (the field never moves), and a ceiling in pixels (the three sizes the
+  // (the field never moves), and a ceiling in pixels (the two sizes the
   // field takes would each need their own number, and the new-session one
   // would keep a different idea of "too tall").
   const css = await Deno.readTextFile(
@@ -790,8 +819,8 @@ test("the composer field grows to twelve lines and then scrolls", async () => {
     false,
     "a fixed height stops the field from following its text",
   );
-  // Twelve whole lines of the field's own type (`1lh` follows all three
-  // font sizes), plus the padding inside the border-box.
+  // Twelve whole lines of the field's own type (`1lh` follows both font
+  // sizes), plus the padding inside the border-box.
   assertEquals(
     /max-height:\s*min\(\s*calc\(\s*12lh\s*\+/.test(body),
     true,

@@ -239,7 +239,7 @@ npm outdated                                                   # packages/deskto
   呼び出し側の `preferredSide` は希望で、収まらなければ反対側へ開き、どちらにも収まらなければ切り取らずに高さを切ってスクロールさせます（`.modal` は `overflow-y: auto` なので、ダイアログの中ではダイアログの縁が一覧を切ります）。
 - 設定の行は面を塗りません。
   `SettingRow` や `.setting-card` / `.provider-row` は下線で区切った行です。
-- ツールの構成を変えるトグルは `SessionPool.applyToolSetChange` を通します（コード実行）。
+- ツールの構成を変えるトグルは `SessionPool.applyToolSetChange` を通します（Scripting tool call）。
   待機中のセッションはその場で再構築し、実行中のセッションは run が終わってから再構築します（`SessionLifecycle.deferRebuild`）。
   ツールの定義は送信済みのリクエストに入っているため、実行中に差し替えると run の行が二重になります。
   能力のフラグだけを変える computer use とは、そこが違います。
@@ -994,10 +994,10 @@ https（`tailscale serve` など）で開いた端末から、ページを PWA �
 - 確認: `bun test packages/core/models/chatgpt packages/server/login_openai_codex_test.ts packages/server/routes/providers_test.ts`。
   実機の確認には ChatGPT アカウントが必要で、デバイスコード方式は ChatGPT のセキュリティ設定で有効化しておきます。
 
-## 14. コード実行（`execute`）
+## 14. Scripting tool call（`execute`）
 
 設定 → 実験的機能のトグル（`code_execution_enabled`）を入れると、モデルに渡すツールは `execute` 1 つになります。
-設計の理由は `ARCHITECTURE.md` の「コード実行（`execute`）」にあります。
+設計の理由は `ARCHITECTURE.md` の「Scripting tool call（`execute`）」にあります。
 
 - モデルが見るツールは `execute` だけです。
   `tool_search` も `tool_call` もエージェントには付けません。

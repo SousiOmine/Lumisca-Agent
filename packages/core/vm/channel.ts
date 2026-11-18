@@ -6,8 +6,9 @@ import { type ChildProcess, runtime } from "../runtime/runtime.ts";
  * decided, one line at a time.
  *
  * Every other use of the machine is one request to completion (see
- * command.ts). Code execution is the exception it cannot express: a program
- * runs tool calls whose results it needs before it decides the next one, so
+ * command.ts). The scripting tool call is the exception it cannot express:
+ * a program runs tool calls whose results it needs before it decides the
+ * next one, so
  * the exchange has to stay live for the length of the program.
  *
  * The channel talks to the container's standard streams, never to a port:

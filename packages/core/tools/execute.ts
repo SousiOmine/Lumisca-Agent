@@ -92,7 +92,7 @@ export interface ExecuteToolOptions {
 }
 
 /**
- * The one tool code execution attaches to the model.
+ * The one tool the scripting tool call attaches to the model.
  *
  * Everything the model can do to the session happens through a nested call,
  * so this tool owns the bookkeeping that must hold wherever the program

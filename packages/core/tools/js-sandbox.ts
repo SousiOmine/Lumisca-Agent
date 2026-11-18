@@ -121,8 +121,8 @@ function hasAwait(code: string): boolean {
 
 export interface JsSandboxOptions {
   /** Host values every snippet sees in addition to the standard web
-   * globals (code execution puts its `tools` namespace here). Re-applied
-   * by {@link JsSandbox.reset}. */
+   * globals (the scripting tool call puts its `tools` namespace here).
+   * Re-applied by {@link JsSandbox.reset}. */
   globals?: Record<string, unknown>;
 }
 

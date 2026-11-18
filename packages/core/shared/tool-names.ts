@@ -14,8 +14,9 @@ export const TOOL_ASYNC_BASH_KILL = "async_bash_kill";
 export const TOOL_SKILL = "skill";
 export const TOOL_EVAL = "eval";
 /** Run a JavaScript/TypeScript program that calls this session's tools
- * (`execute`). The only tool code execution attaches to the model: every
- * other tool, tool_search included, is reached from inside the script. */
+ * (`execute`). The only tool the scripting tool call attaches to the model:
+ * every other tool, tool_search included, is reached from inside the
+ * script. */
 export const TOOL_EXECUTE = "execute";
 export const TOOL_ASK = "ask";
 export const TOOL_TODO = "todo";

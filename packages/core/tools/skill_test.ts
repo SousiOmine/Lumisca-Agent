@@ -244,7 +244,7 @@ test("coding tools reach the shared skills folder and the catalog lists it", asy
   }
 });
 
-test("the coding set loads the guide its own catalog advertises", async () => {
+test("code mode does not load the coding-agents guide", async () => {
   const root = await makeRealTempDir("lumisca-skill-gate-");
   try {
     const workspace = {
@@ -254,9 +254,9 @@ test("the coding set loads the guide its own catalog advertises", async () => {
       createdAt: 0,
       chat: false,
     };
-    // The catalog provider gates coding-agents on the tool hub (`subagents:
-    // !chat`). The skill tool must be built from the same gate: with the hub
-    // present, a name the catalog lists has to load.
+    // The guide is a stella conversation's. A workspace session has the task
+    // hub, but the catalog and the skill tool must agree that this name is
+    // not one of its skills.
     const hub = { parentTools: () => [] } as unknown as TaskHub;
     const tools = createCodingTools(workspace, {
       task: hub,
@@ -264,12 +264,11 @@ test("the coding set loads the guide its own catalog advertises", async () => {
     });
     const skill = tools.find((tool) => tool.name === "skill");
     assert(skill !== undefined, "the coding set has the skill tool");
-    const loaded = await skill!.execute(
-      "1",
-      { name: "coding-agents" },
-      undefined,
+    await assertRejects(
+      () => skill!.execute("1", { name: "coding-agents" }, undefined),
+      Error,
+      'Unknown skill "coding-agents"',
     );
-    assert(toolText(loaded).length > 0);
   } finally {
     await removeDirRetry(root);
   }

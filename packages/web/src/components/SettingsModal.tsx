@@ -330,9 +330,9 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     scope: "common",
     labelKey: "settings.nav.experimental",
     icon: <IconFlask size={18} />,
-    // Code execution reaches both modes' sessions, so the page is shared
-    // rather than one mode's. It sits last: nothing a reader relies on is
-    // below it.
+    // The scripting tool call reaches both modes' sessions, so the page is
+    // shared rather than one mode's. It sits last: nothing a reader relies on
+    // is below it.
     render: () => <ExperimentalPanel />,
   },
 ];

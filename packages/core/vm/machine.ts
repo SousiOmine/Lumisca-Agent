@@ -436,7 +436,7 @@ export class StellaMachine {
     return this.#seamCache()?.execBytes;
   }
 
-  /** The interactive seam of the attached machine (code execution), or
+  /** The interactive seam of the attached machine (the scripting tool call), or
    * undefined without one. */
   channel(): VmChannelOpener | undefined {
     return this.#seamCache()?.channel;

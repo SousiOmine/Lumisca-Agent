@@ -6,7 +6,7 @@ import {
   createCodeExecutionProvider,
 } from "./code-execution-context.ts";
 
-test("code execution context: publishes the note once", () => {
+test("scripting tool call context: publishes the note once", () => {
   const provider = createCodeExecutionProvider();
   assertEquals(provider.name, CODE_EXECUTION_PROVIDER);
   const published = provider.next();
@@ -16,7 +16,7 @@ test("code execution context: publishes the note once", () => {
   assertEquals(provider.next(), []);
 });
 
-test("code execution context: rebase re-anchors to the publication", () => {
+test("scripting tool call context: rebase re-anchors to the publication", () => {
   const provider = createCodeExecutionProvider();
   // A conversation reopened while the mode stayed on already carries the
   // note: a second copy would say the same thing twice.
