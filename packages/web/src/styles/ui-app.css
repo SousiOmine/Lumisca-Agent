@@ -1,0 +1,667 @@
+/* --- app cards (the `ui` fence's JSON) ----------------------------------- */
+
+/* An app card is a reply's interactive surface: a dashboard, a form, a
+ * list with controls. It is still a block of the message, so it keeps the
+ * message's width and colours; only its body scrolls when the app is taller
+ * than a conversation should be. */
+.app-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0;
+  padding: 14px 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  min-width: 0;
+}
+
+.app-card-title {
+  margin: 0;
+  font-size: var(--type-14);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.app-card-description {
+  margin: 0;
+  font-size: var(--type-12);
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+/* The app's own scroll: a 400-element card must not push the composer off
+ * the screen. `overscroll-behavior` keeps the wheel from continuing into
+ * the transcript when the app reaches its end. */
+.app-card-body {
+  min-width: 0;
+  max-height: min(70dvh, 640px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.app-card-building {
+  color: var(--text-dim);
+  font-size: var(--type-12);
+}
+
+.app-card-building-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.app-card-invalid {
+  color: var(--text-dim);
+  font-size: var(--type-12);
+}
+
+.app-card-invalid p {
+  margin: 0;
+}
+
+.app-card-problem {
+  margin-top: 6px;
+  color: var(--error);
+  font-family: var(--mono);
+  font-size: var(--type-11);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.app-card-invalid summary {
+  margin-top: 6px;
+  cursor: pointer;
+}
+
+.app-card-source {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: var(--type-11);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* --- layout --------------------------------------------------------------- */
+
+.app-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.app-stack,
+.app-row {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.app-stack {
+  flex-direction: column;
+}
+
+.app-row {
+  flex-direction: row;
+  flex-wrap: nowrap;
+}
+
+.app-row[data-wrap="true"] {
+  flex-wrap: wrap;
+}
+
+.app-stack[data-align="start"],
+.app-row[data-align="start"] {
+  align-items: flex-start;
+}
+
+.app-stack[data-align="center"],
+.app-row[data-align="center"] {
+  align-items: center;
+}
+
+.app-stack[data-align="end"],
+.app-row[data-align="end"] {
+  align-items: flex-end;
+}
+
+.app-stack[data-align="stretch"],
+.app-row[data-align="stretch"] {
+  align-items: stretch;
+}
+
+.app-stack[data-gap="s"],
+.app-row[data-gap="s"],
+.app-grid[data-gap="s"] {
+  gap: 6px;
+}
+
+.app-stack[data-gap="l"],
+.app-row[data-gap="l"],
+.app-grid[data-gap="l"] {
+  gap: 16px;
+}
+
+.app-grid {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app-grid[data-columns="2"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.app-grid[data-columns="3"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.app-grid[data-columns="4"] {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.app-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.app-panel-title {
+  margin: 0;
+  font-size: var(--type-13);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.app-panel-description {
+  margin: 0;
+  font-size: var(--type-12);
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+.app-card .app-divider {
+  width: 100%;
+  margin: 2px 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+/* --- text ----------------------------------------------------------------- */
+
+.app-heading {
+  color: var(--text);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.app-heading[data-level="1"] {
+  font-size: var(--type-17);
+}
+
+.app-heading[data-level="2"] {
+  font-size: var(--type-15);
+}
+
+.app-heading[data-level="3"] {
+  font-size: var(--type-14);
+}
+
+.app-heading[data-level="4"] {
+  font-size: var(--type-13);
+}
+
+.app-text {
+  margin: 0;
+  font-size: var(--type-13);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.app-text[data-tone="muted"] {
+  color: var(--text-dim);
+}
+
+.app-text[data-tone="danger"] {
+  color: var(--error);
+}
+
+.app-text[data-tone="success"] {
+  color: var(--ok);
+}
+
+.app-badge {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--text-dim);
+  font-size: var(--type-11);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.app-badge[data-tone="info"] {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.app-badge[data-tone="success"] {
+  background: color-mix(in srgb, var(--ok) 16%, transparent);
+  color: var(--ok);
+}
+
+.app-badge[data-tone="warning"] {
+  background: var(--share-soft);
+  color: var(--share);
+}
+
+.app-badge[data-tone="danger"] {
+  background: var(--error-soft);
+  color: var(--error);
+}
+
+/* --- controls ------------------------------------------------------------- */
+
+.app-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+  min-height: 30px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--ui);
+  font-size: var(--type-12);
+  cursor: pointer;
+  transition:
+    background var(--lum-dur-fast) var(--lum-ease-out),
+    border-color var(--lum-dur-fast) var(--lum-ease-out);
+}
+
+.app-button:hover:not(:disabled) {
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+}
+
+.app-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.app-button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+
+.app-button.primary:hover:not(:disabled) {
+  background: var(--accent-dim);
+  border-color: var(--accent-dim);
+}
+
+.app-button.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-dim);
+}
+
+.app-button.ghost:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--text);
+}
+
+.app-button.danger {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.app-button.danger:hover:not(:disabled) {
+  background: var(--error-soft);
+}
+
+.app-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.app-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.app-field-label {
+  font-size: var(--type-11);
+  color: var(--text-dim);
+}
+
+.app-input {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 12px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--ui);
+  font-size: var(--type-13);
+}
+
+.app-input:focus-visible {
+  outline: none;
+  border-color: var(--border-strong);
+}
+
+.app-input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.app-textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.app-select {
+  appearance: none;
+  cursor: pointer;
+}
+
+.app-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: var(--type-13);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.app-check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.app-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--type-13);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.app-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.app-switch-track {
+  display: inline-flex;
+  align-items: center;
+  width: 34px;
+  height: 20px;
+  padding: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  transition: background var(--lum-dur-fast) var(--lum-ease-out);
+}
+
+.app-switch-knob {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--toggle-knob);
+  transition: transform var(--lum-dur-fast) var(--lum-ease-out);
+}
+
+.app-switch input:checked + .app-switch-track {
+  background: var(--accent);
+}
+
+.app-switch input:checked + .app-switch-track .app-switch-knob {
+  transform: translateX(14px);
+}
+
+.app-switch input:focus-visible + .app-switch-track {
+  outline: 2px solid var(--border-strong);
+  outline-offset: 2px;
+}
+
+.app-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.app-progress-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--type-11);
+  color: var(--text-dim);
+}
+
+.app-progress-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.app-progress-track {
+  width: 100%;
+  height: 6px;
+  overflow: hidden;
+  background: var(--surface-3);
+  border-radius: var(--radius-pill);
+}
+
+.app-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width var(--lum-dur-mid) var(--lum-ease-out);
+}
+
+/* --- data ----------------------------------------------------------------- */
+
+.app-card .app-list {
+  margin: 0;
+  padding-left: 20px;
+  font-size: var(--type-13);
+  line-height: 1.6;
+}
+
+.app-card .app-list.ordered {
+  list-style: decimal;
+}
+
+.app-card .app-list:not(.ordered) {
+  list-style: disc;
+}
+
+.app-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.app-card .app-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: var(--type-12);
+}
+
+.app-card .app-table th {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.app-card .app-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: top;
+}
+
+.app-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.app-metric-label {
+  font-size: var(--type-11);
+  color: var(--text-dim);
+}
+
+.app-metric-value {
+  font-size: var(--type-18);
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.app-metric-unit {
+  margin-left: 2px;
+  font-size: var(--type-12);
+  font-weight: 400;
+  color: var(--text-dim);
+}
+
+.app-metric-hint {
+  font-size: var(--type-11);
+  color: var(--text-dim);
+}
+
+/* --- tabs ----------------------------------------------------------------- */
+
+.app-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.app-tabbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+.app-tab {
+  padding: 6px 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--ui);
+  font-size: var(--type-12);
+  cursor: pointer;
+}
+
+.app-tab:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.app-tab.active {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}
+
+.app-tab:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.app-tabpanel {
+  min-width: 0;
+}
+
+/* --- flow, notes ---------------------------------------------------------- */
+
+.app-flow {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.app-unknown {
+  padding: 6px 8px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--error);
+  font-family: var(--mono);
+  font-size: var(--type-11);
+}
+
+.app-limit {
+  color: var(--text-dim);
+  font-size: var(--type-12);
+  text-align: center;
+}
+
+/* A phone gets one column: a three-column dashboard at 390px is a column of
+ * clipped cells, not a dashboard. Rows wrap for the same reason. */
+@media (max-width: 600px) {
+  .app-grid[data-columns="2"],
+  .app-grid[data-columns="3"],
+  .app-grid[data-columns="4"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-row {
+    flex-wrap: wrap;
+  }
+
+  .app-card-body {
+    max-height: 60dvh;
+  }
+
+  .app-button {
+    align-self: stretch;
+  }
+}
+
+/* Motion is decoration here; the state change is the point. */
+@media (prefers-reduced-motion: reduce) {
+  .app-button,
+  .app-progress-fill,
+  .app-switch-track,
+  .app-switch-knob {
+    transition: none;
+  }
+}

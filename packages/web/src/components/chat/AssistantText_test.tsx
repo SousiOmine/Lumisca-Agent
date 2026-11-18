@@ -17,9 +17,9 @@ function render(text: string): string {
   );
 }
 
-/** A card as the agent writes it into its reply (shared/ui-markup). */
+/** A card as the agent writes it into its reply. */
 const CARD =
-  '```card\n<Card title="確認">\n<Text>進めますか</Text>\n</Card>\n```';
+  '```ui\n{"version":1,"state":{},"root":"screen","elements":{"screen":{"type":"Screen","children":["t"]},"t":{"type":"Text","props":{"text":"進めますか。"}}}}\n```';
 
 test("AssistantText: the answer keeps a copy control", () => {
   // Drawn without a hover (see chat.css, .msg-action-btn.rest). A reader who
@@ -32,9 +32,9 @@ test("AssistantText: the answer keeps a copy control", () => {
 });
 
 test("AssistantText: a reply that is only a card has nothing to copy", () => {
-  // A card's markup is how the conversation is written, not something the
+  // A card's JSON is how the conversation is written, not something the
   // agent said, so there is no prose to take away (see segmentsText).
   const html = render(CARD);
-  assertStringIncludes(html, "ui-card");
+  assertStringIncludes(html, "app-card");
   assertEquals(html.includes("msg-action-btn"), false);
 });

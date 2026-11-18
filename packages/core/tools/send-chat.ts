@@ -18,9 +18,9 @@
  * that wanted to hand over a picture with one sentence made two calls and
  * hoped the client drew them side by side.
  *
- * A card is NOT here: the agent writes it into its reply (see
- * shared/ui-markup), so a message that shows a table or asks a question needs
- * no call at all.
+ * A UI card is NOT a separate argument: the agent writes it into the
+ * message text (see shared/chat-ui), so a message that shows a table or
+ * asks a question needs no second field.
  *
  * What the model reads back is a receipt, not the message: see the `execute`
  * comment.
@@ -92,7 +92,7 @@ const DESCRIPTION = [
   "Send the user a note BEFORE starting work that will take more than a moment — reading many files, a build, tests, a search, or anything you expect to run for a while — saying what you are about to do and what you are looking for.",
   "Until you do, the conversation shows only a timer and tool names: the user cannot see your plan, cannot tell progress from a hang, and cannot correct your direction before you have spent the time.",
   "Send another when the picture changes (what you found, that the approach is wrong, that the work is longer than you said). Your reply at the end is still the answer.",
-  "One call is one message: the words (text) and files (paths), in any combination; at least one of the two is required. A card is not sent by this tool — write it into your reply instead.",
+  "One call is one message: the words (text) and files (paths), in any combination; at least one of the two is required. A UI card is not a separate argument — write it into the text.",
   "A run with nothing to report replies with exactly NO_RESPONSE (see the system prompt).",
 ].join(" ");
 

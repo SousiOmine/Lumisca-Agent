@@ -296,8 +296,8 @@ export class AgentFactory {
       // names the session.
       titleGeneration: where.stella === undefined,
       // A stella conversation's clients never receive the reply's text, so
-      // the card written into it is extracted on the way out (see TextCards).
-      cardsFromText: where.stella !== undefined,
+      // the card written into it is extracted on the way out (see TextUi).
+      uiFromText: where.stella !== undefined,
       language: this.deps.getLanguage(),
       compactionPolicy: () => this.deps.getCompactionPolicy(),
       // A stella conversation remembers the conversation (the record the

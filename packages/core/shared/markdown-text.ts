@@ -14,7 +14,7 @@
  * fancier is left as written, which is the honest failure: a strange string
  * in a toast is better than a sentence silently cut in half.
  */
-import { segmentsText, splitChatText } from "./ui-markup/segments.ts";
+import { segmentsText, splitChatText } from "./chat-ui/segments.ts";
 
 /** A fence's opening line (up to three spaces, then the marker and its info
  * string). The same shape `marked` and the card splitter read, so the three

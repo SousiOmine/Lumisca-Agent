@@ -9,7 +9,7 @@ import {
   type StellaConversationState,
   transcriptEntries,
 } from "../../stella-state.ts";
-import { CardView } from "../chat/CardView.tsx";
+import { AppCard } from "../chat/AppCard.tsx";
 import { RunningIndicator } from "../chat/RunningIndicator.tsx";
 import { AgentAvatar } from "./AgentAvatar.tsx";
 import { EnvRequestCard } from "./EnvRequestCard.tsx";
@@ -168,12 +168,8 @@ export function StellaTranscript({
             </Fragment>
           );
         })}
-        {conversation.liveCard !== null && (
-          <CardView
-            markup={conversation.liveCard.markup}
-            streaming
-            onSend={onSend}
-          />
+        {conversation.liveUi !== null && (
+          <AppCard json={conversation.liveUi.json} streaming onSend={onSend} />
         )}
         {/* The question the run is blocked on, at the live edge where the
          * answer belongs. It takes the agent's face and column like a

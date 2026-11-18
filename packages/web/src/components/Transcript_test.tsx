@@ -70,12 +70,12 @@ test("Transcript: a card being written is drawn, not printed", () => {
   // shown as text, and the card draws from its first block.
   const html = render({
     streamingText:
-      '確認します。\n\n```card\n<Card title="確認"><Text>進めますか。</Text>',
+      '確認します。\n\n```ui\n{"version":1,"state":{},"root":"screen","elements":{"screen":{"type":"Screen","children":["t"]},"t":{"type":"Text","props":{"text":"進めますか。"}}}}',
   });
 
-  assertStringIncludes(html, "ui-card");
+  assertStringIncludes(html, "app-card");
   assertStringIncludes(html, "確認します。");
-  assert(!html.includes("```card"));
+  assert(!html.includes("```ui"));
 });
 
 test("Transcript: the caret still marks text that is arriving", () => {

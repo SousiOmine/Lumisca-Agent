@@ -91,7 +91,7 @@ export function previewOf(entry: StellaEntry): StellaPreview | null {
     };
   }
   // A card without words. The row names it; the conversation shows it.
-  if (entry.segments.some((segment) => segment.type === "card")) {
+  if (entry.segments.some((segment) => segment.type === "app")) {
     return { kind: "card", at: entry.timestamp };
   }
   return null;

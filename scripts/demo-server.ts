@@ -54,6 +54,64 @@ const folder = basename(repoRoot);
 /** The demo's directory listing (the shell differs per OS). */
 const LIST_COMMAND = runtime.build.os === "windows" ? "dir" : "ls -la";
 
+/** The app card the demo's `send_chat` answer writes into its text. */
+const DEMO_UI = JSON.stringify({
+  version: 1,
+  title: "リリース確認",
+  state: { done: false },
+  root: "screen",
+  elements: {
+    screen: {
+      type: "Screen",
+      children: ["text", "table", "flow", "actions", "done", "status"],
+    },
+    text: { type: "Text", props: { text: "この内容で進めますか。" } },
+    table: {
+      type: "Table",
+      props: {
+        columns: ["項目", "値"],
+        rows: [["版", "0.9.4"]],
+      },
+    },
+    flow: {
+      type: "Flow",
+      props: {
+        nodes: [
+          { id: "a", label: "開始", shape: "round" },
+          { id: "b", label: "確認", shape: "box" },
+        ],
+        edges: [{ from: "a", to: "b", label: "はい" }],
+      },
+    },
+    actions: {
+      type: "Row",
+      props: { gap: "s" },
+      children: ["go", "stop"],
+    },
+    go: {
+      type: "Button",
+      props: { label: "進める", variant: "primary" },
+      on: { press: { action: "sendMessage", text: "進める" } },
+    },
+    stop: {
+      type: "Button",
+      props: { label: "止める" },
+      on: { press: { action: "sendMessage", text: "止める" } },
+    },
+    done: {
+      type: "Checkbox",
+      props: {
+        label: "完了",
+        checked: { $bindState: "/done" },
+      },
+    },
+    status: {
+      type: "Text",
+      props: { text: { $template: "状態: ${/done}" } },
+    },
+  },
+});
+
 /** Answer one LLM call from the transcript so far: a tool result ends the
  * run with a summary, a prompt mentioning a tool name calls it, and
  * anything else returns markdown for the UI. */
@@ -105,10 +163,9 @@ function respond(context: StreamRequest): AssistantMessage {
   }
   if (text.includes(TOOL_SEND_CHAT)) {
     return fauxAssistantMessage([
-      fauxText("カードで確認します。"),
+      fauxText("UIで確認します。"),
       fauxToolCall(TOOL_SEND_CHAT, {
-        text: "この内容で進めますか。",
-        card: '<Card title="リリース確認">\n  <Text>この内容で進めますか。</Text>\n  <Table>\n    <Row><Cell>項目</Cell><Cell>値</Cell></Row>\n    <Row><Cell>版</Cell><Cell>0.9.4</Cell></Row>\n  </Table>\n  <Flow>\n    <Node id="a" shape="round">開始</Node>\n    <Node id="b">確認</Node>\n    <Edge from="a" to="b" label="はい" />\n  </Flow>\n  <Choice>\n    <Option description="そのまま公開します">進める</Option>\n    <Option>止める</Option>\n  </Choice>\n</Card>',
+        text: `この内容で進めますか。\n\n\`\`\`ui\n${DEMO_UI}\n\`\`\``,
       }),
     ]);
   }

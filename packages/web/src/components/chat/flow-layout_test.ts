@@ -1,5 +1,5 @@
 import { test } from "bun:test";
-import type { UiFlowBlock } from "@lumisca/core/shared";
+import type { FlowBlock } from "@lumisca/core/shared";
 import { assertEquals, assertGreater, assertLess } from "@std/assert";
 import type { FlowLayout, FlowNodeBox } from "./flow-layout.ts";
 import { layoutFlow } from "./flow-layout.ts";
@@ -11,16 +11,16 @@ import { layoutFlow } from "./flow-layout.ts";
  */
 
 function block(
-  nodes: UiFlowBlock["nodes"],
-  edges: UiFlowBlock["edges"],
-): UiFlowBlock {
+  nodes: FlowBlock["nodes"],
+  edges: FlowBlock["edges"],
+): FlowBlock {
   return { type: "flow", nodes, edges };
 }
 
 function node(
   id: string,
   label = id,
-  shape: UiFlowBlock["nodes"][number]["shape"] = "box",
+  shape: FlowBlock["nodes"][number]["shape"] = "box",
 ) {
   return { id, label, shape };
 }

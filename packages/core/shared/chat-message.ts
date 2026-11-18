@@ -6,7 +6,7 @@
  * (the final text of its turn; see agent/stella-stream.ts), so this is the
  * shape the projection reads for what a call sent, and the shape a client
  * draws. A card is not here: it is part of the reply's own text (see
- * ui-markup/segments.ts).
+ * chat-ui/segments.ts).
  *
  * The values live in the tool result's `details`, never in its `content`:
  * `content` is what the MODEL reads on its next turn, and repeating the

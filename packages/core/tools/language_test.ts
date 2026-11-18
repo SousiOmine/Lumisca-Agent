@@ -3,7 +3,7 @@ import { assert, assertEquals } from "@std/assert";
 import type { Workspace } from "../domain/workspace.ts";
 import { DEFAULT_LOCALE } from "../shared/mod.ts";
 import { TOOL_READ, TOOL_TODO } from "../shared/tool-names.ts";
-import { CARD_HELP } from "../shared/ui-markup/help.ts";
+import { UI_HELP } from "../shared/ui-app/help.ts";
 import { outputLanguageRule, outputLanguageSentence } from "./language.ts";
 import { subagentSystemPrompt } from "./subagent-format.ts";
 import { buildChatSystemPrompt, buildSystemPrompt } from "./system-prompt.ts";
@@ -65,7 +65,7 @@ test("buildSystemPrompt: nothing that varies with the session is in it", () => {
   // detached or a server was added. The card paragraph is scanned out: it is
   // a constant of the reply, not of the session, and it says "read" as an
   // ordinary verb.
-  const withoutCards = prompt.replace(CARD_HELP, "");
+  const withoutCards = prompt.replace(UI_HELP, "");
   for (const name of TOOLS) {
     assertEquals(
       withoutCards.includes(name),

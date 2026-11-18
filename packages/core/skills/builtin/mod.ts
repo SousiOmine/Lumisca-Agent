@@ -1,5 +1,6 @@
 import type { SkillDef } from "../discover.ts";
 import { agentCreateSkill } from "./agent-create.ts";
+import { appUiSkill } from "./app-ui.ts";
 import { codingAgentsSkill } from "./coding-agents.ts";
 import { computerUseSkill } from "./computer-use.ts";
 import { desktopAppsSkill } from "./desktop-apps.ts";
@@ -69,6 +70,9 @@ export interface BuiltinContext {
 /** The app-embedded skill set for a session context. */
 export function builtinSkills(context: BuiltinContext): SkillDef[] {
   return [
+    // Every reply can carry an app card, so every mode gets the guide. It is
+    // a skill rather than part of the prompt because the catalog is large.
+    appUiSkill(),
     ...(context.browser ? [webBrowserSkill()] : []),
     ...(context.computer ? [computerUseSkill()] : []),
     // The machine's GUI, always available in a stella session: the semantic

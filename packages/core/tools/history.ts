@@ -248,7 +248,7 @@ export function stellaEntryText(entry: StellaEntry): string {
   if (entry.attachments.length > 0) {
     return `(sent ${entry.attachments.length} file(s), no text)`;
   }
-  if (entry.segments.some((segment) => segment.type === "card")) {
+  if (entry.segments.some((segment) => segment.type === "app")) {
     return "(card, no text)";
   }
   return "(no text)";

@@ -68,8 +68,9 @@ test("StellaTranscript: the words come out in order", () => {
   assertEquals(first !== -1 && second > first && third > second, true, html);
 });
 
-test("StellaTranscript: a card renders with its markup", () => {
-  const markup = '<Card title="確認"><Text>進めますか。</Text></Card>';
+test("StellaTranscript: a card renders with its JSON", () => {
+  const json =
+    '{"version":1,"state":{},"root":"screen","elements":{"screen":{"type":"Screen","children":["t"]},"t":{"type":"Text","props":{"text":"進めますか。"}}}}';
   const html = render({
     entries: [
       {
@@ -78,8 +79,8 @@ test("StellaTranscript: a card renders with its markup", () => {
         segments: [
           { type: "text", text: "確認します。" },
           {
-            type: "card",
-            markup,
+            type: "app",
+            json,
           },
         ],
         attachments: [],
@@ -89,7 +90,7 @@ test("StellaTranscript: a card renders with its markup", () => {
     ],
   });
 
-  assertStringIncludes(html, "ui-card");
+  assertStringIncludes(html, "app-card");
   assertStringIncludes(html, "確認");
   assertStringIncludes(html, "進めますか。");
 });

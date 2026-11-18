@@ -121,7 +121,11 @@ export function subagentSkills(
       browser: options.browserAvailable === true,
       computer: options.computerAvailable === true,
       subagents: options.subagents,
-    }).map((skill) => skill.name),
+    })
+      .map((skill) => skill.name)
+      // A sub-agent's text is a report to another model, not a screen, so
+      // the app-card grammar is not part of its work.
+      .filter((name) => name !== "app-ui"),
   );
   return catalog.filter(
     (skill) => skill.source !== "builtin" || allowed.has(skill.name),

@@ -1,12 +1,12 @@
-import type { UiFlowBlock, UiFlowShape } from "@lumisca/core/shared";
+import type { FlowBlock, FlowShape } from "@lumisca/core/shared";
 import { useId, useMemo } from "preact/hooks";
 import { useT } from "../../i18n.ts";
 import { FLOW_LINE_HEIGHT, layoutFlow } from "./flow-layout.ts";
 
 /**
- * A flow chart drawn from the card markup's nodes and edges.
+ * A flow chart drawn from a `Flow` component's nodes and edges.
  *
- * The layout is computed here, not by the model: the markup names nodes and
+ * The layout is computed here, not by the model: the spec names nodes and
  * edges, and their positions come from `layoutFlow` (a pure function, so the
  * same card always draws the same picture). Sizes are in CSS pixels and the
  * container scrolls horizontally rather than shrinking — a shrunken chart is
@@ -15,13 +15,13 @@ import { FLOW_LINE_HEIGHT, layoutFlow } from "./flow-layout.ts";
 
 /** The `<marker>` id must be unique per chart: two charts on one page would
  * otherwise share an arrowhead, and the second would lose its own. */
-export function Flowchart({ block }: { block: UiFlowBlock }) {
+export function Flowchart({ block }: { block: FlowBlock }) {
   const t = useT();
   const markerId = `flow-arrow-${useId()}`;
   const layout = useMemo(() => layoutFlow(block), [block]);
 
   return (
-    <div className="ui-flow">
+    <div className="app-flow">
       <svg
         width={layout.width}
         height={layout.height}
@@ -97,7 +97,7 @@ function shapeOf(node: {
   y: number;
   width: number;
   height: number;
-  shape: UiFlowShape;
+  shape: FlowShape;
 }) {
   const common = {
     fill: "var(--surface-2)",

@@ -10,6 +10,7 @@
 @import "./styles/layout.css";
 @import "./styles/chrome.css";
 @import "./styles/chat.css";
+@import "./styles/ui-app.css";
 @import "./styles/stella.css";
 @import "./styles/side-panels.css";
 @import "./styles/composer.css";

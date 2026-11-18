@@ -15,9 +15,8 @@ import type {
 import { CheckpointRow } from "../CheckpointRow.tsx";
 import { NotificationRow } from "../NotificationRow.tsx";
 import { ToolCall } from "../ToolCall.tsx";
-import { CardView } from "./CardView.tsx";
 import { CopyableUserMessage } from "./CopyableUserMessage.tsx";
-import { MarkdownBlock } from "./MarkdownBlock.tsx";
+import { SegmentView } from "./SegmentView.tsx";
 import type { UserMessageImage } from "./types.ts";
 
 /** One message of a turn: user messages get the action row, notifications
@@ -103,7 +102,7 @@ export function MessageRow({
   const toolCalls = assistant.content.filter(
     (b): b is ToolCallBlock => b.type === "toolCall",
   );
-  // A card is a block of the text (see shared/ui-markup/segments.ts), so it
+  // A card is a block of the text (see shared/chat-ui/segments.ts), so it
   // is drawn where the agent wrote it — including in the log of a turn that
   // went on working after showing it.
   const segments = splitChatText(text);
@@ -111,17 +110,14 @@ export function MessageRow({
   return (
     <div className="msg">
       <div className="msg-body markdown">
-        {segments.map((segment, index) =>
-          segment.type === "card" ? (
-            <CardView key={index} markup={segment.markup} onSend={onCardSend} />
-          ) : (
-            <MarkdownBlock
-              key={index}
-              text={segment.text}
-              visualBase={visualBase}
-            />
-          ),
-        )}
+        {segments.map((segment, index) => (
+          <SegmentView
+            key={index}
+            segment={segment}
+            onSend={onCardSend}
+            visualBase={visualBase}
+          />
+        ))}
         {toolCalls.map((tc) => (
           <ToolCall
             key={tc.id}

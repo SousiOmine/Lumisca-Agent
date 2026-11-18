@@ -35,7 +35,7 @@ import {
 /** The text a batched event appends: the reply's words, or a card being
  * written. */
 function deltaText(event: ClientEvent): string {
-  return event.type === "message_delta" || event.type === "card_delta"
+  return event.type === "message_delta" || event.type === "ui_delta"
     ? event.delta
     : "";
 }
@@ -76,7 +76,7 @@ export interface EventStreamOptions {
   delta?: {
     /** Which delta events this stream batches. Omitted → `message_delta`
      * only (the reply being typed). A stella conversation batches
-     * `card_delta` instead: it has no streaming text, but a card is drawn
+     * `ui_delta` instead: it has no streaming text, but a card is drawn
      * while the model writes it. */
     accepts?: (event: ClientEvent) => boolean;
     /** The batch channel: which transcript (or call) the text belongs to. */

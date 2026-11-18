@@ -105,7 +105,7 @@ export async function attachFiles(
  * either, so "attach a file" and "say something" are one act.
  *
  * Cards are not part of this tool: the agent writes one into its reply
- * (shared/ui-markup), so a card needs no call of its own.
+ * (shared/chat-ui), so a card needs no call of its own.
  *
  * The result carries the files in `details`, which is what the client draws
  * and what a reload re-draws (the transcript keeps the call).

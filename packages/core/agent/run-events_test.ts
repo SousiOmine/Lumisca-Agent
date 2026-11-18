@@ -3,18 +3,18 @@ import { assertEquals } from "@std/assert";
 import { fauxAssistantMessage } from "../ai/faux.ts";
 import type { AgentMessage } from "../ai/message.ts";
 
-import { TextCards, translateRunEvent } from "./run-events.ts";
+import { TextUi, translateRunEvent } from "./run-events.ts";
 
 /**
- * Reading the card being written into a reply's text.
+ * Reading the app card being written into a reply's text.
  *
  * A stella conversation never receives the reply's text (it arrives whole),
  * so this is where the card is taken out of it, fragment by fragment, to be
  * drawn while the model writes it. What a client gets is appended, so each
  * piece must be only what became readable since the last one.
  */
-test("TextCards: a card is read as its fence arrives", () => {
-  const cards = new TextCards();
+test("TextUi: a card is read as its fence arrives", () => {
+  const cards = new TextUi();
   const pieces: string[] = [];
   const push = (delta: string) => {
     const piece = cards.push(delta);
@@ -25,56 +25,48 @@ test("TextCards: a card is read as its fence arrives", () => {
   push("確認します。\n\n");
   assertEquals(pieces, []);
 
-  // The fence opens; the card is drawn from its first character.
-  push("```ca");
+  // The info string can arrive in two deltas.
+  push("```u");
   assertEquals(pieces, []);
-  push('rd\n<Card title="確認">');
-  assertEquals(pieces, ['<Card title="確認">']);
+  push('i\n{"version":1');
+  assertEquals(pieces, ['{"version":1']);
 
-  push("\n<Text>進めますか。</Text>");
-  assertEquals(
-    pieces.join(""),
-    '<Card title="確認">\n<Text>進めますか。</Text>',
-  );
+  push(',"state":{}}');
+  assertEquals(pieces.join(""), '{"version":1,"state":{}}');
 
-  // The closing fence ends the card; the prose after it is not a card. What
-  // the client already has is enough to draw: the partial parse stops at the
-  // last block that closed, and the finished message replaces the live card
-  // with the whole markup.
-  push("\n</Card>\n```\n\n進めますか。");
-  assertEquals(
-    pieces.join(""),
-    '<Card title="確認">\n<Text>進めますか。</Text>',
-  );
+  // The closing fence ends the card; the prose after it is not a card. The
+  // finished message replaces the live card with the whole spec.
+  push("\n```\n\n進めますか。");
+  assertEquals(pieces.join(""), '{"version":1,"state":{}}');
 });
 
-test("TextCards: a second card starts over", () => {
-  const cards = new TextCards();
-  const first = cards.push("```card\n<Card><Text>a</Text></Card>");
-  assertEquals(first?.delta, "<Card><Text>a</Text></Card>");
+test("TextUi: a second card starts over", () => {
+  const cards = new TextUi();
+  const first = cards.push('```ui\n{"a":1}');
+  assertEquals(first?.delta, '{"a":1}');
   const closed = cards.push("\n```\n");
   assertEquals(closed, null);
 
-  const second = cards.push("```card\n<Card><Text>b");
+  const second = cards.push('```ui\n{"b":2');
   // A new id, so a client replaces what it drew instead of appending.
   assertEquals(second?.id === first?.id, false);
-  assertEquals(second?.delta, "<Card><Text>b");
+  assertEquals(second?.delta, '{"b":2');
 });
 
-test("TextCards: a message's buffer does not leak into the next", () => {
-  const cards = new TextCards();
-  cards.push("```card\n<Card><Text>a");
+test("TextUi: a message's buffer does not leak into the next", () => {
+  const cards = new TextUi();
+  cards.push('```ui\n{"a":1');
   assertEquals(cards.end(), true);
   // The finished message carries the whole card; the next one starts empty.
   assertEquals(cards.push("plain prose"), null);
-  assertEquals(cards.push("\n```card\n<Card/>"), {
+  assertEquals(cards.push('\n```ui\n{"b":2}'), {
     id: "text-2",
-    delta: "<Card/>",
+    delta: '{"b":2}',
   });
 });
 
-test("TextCards: a message that drew nothing says so", () => {
-  const cards = new TextCards();
+test("TextUi: a message that drew nothing says so", () => {
+  const cards = new TextUi();
   cards.push("ただの文です。");
   assertEquals(cards.end(), false);
 });
@@ -82,13 +74,13 @@ test("TextCards: a message that drew nothing says so", () => {
 test("translateRunEvent: a card in the text reaches a stella client", () => {
   // The conversation's clients never see the text, so the card is cut out of
   // it on the way out — with the text delta that carried it.
-  const cards = new TextCards();
+  const cards = new TextUi();
   const update = translateRunEvent(
     {
       type: "message_update",
       assistantMessageEvent: {
         type: "text_delta",
-        delta: "```card\n<Card><Text>a",
+        delta: '```ui\n{"version":1',
       },
     },
     "s1",
@@ -96,13 +88,13 @@ test("translateRunEvent: a card in the text reaches a stella client", () => {
   );
   assertEquals(
     update.events.map((event) => event.type),
-    ["message_delta", "card_delta"],
+    ["message_delta", "ui_delta"],
   );
   assertEquals(update.events[1], {
-    type: "card_delta",
+    type: "ui_delta",
     sessionId: "s1",
     toolCallId: "text-1",
-    delta: "<Card><Text>a",
+    delta: '{"version":1',
   });
 
   // The message ended drawing a card: if it turns out to be narration, the
@@ -110,14 +102,14 @@ test("translateRunEvent: a card in the text reaches a stella client", () => {
   const end = translateRunEvent(
     {
       type: "message_end",
-      message: fauxAssistantMessage("```card\n<Card><Text>a") as AgentMessage,
+      message: fauxAssistantMessage('```ui\n{"version":1') as AgentMessage,
     },
     "s1",
     cards,
   );
   assertEquals(
     end.events.map((event) => event.type),
-    ["message_end", "card_end"],
+    ["message_end", "ui_end"],
   );
 });
 
@@ -128,7 +120,7 @@ test("translateRunEvent: code mode's client cuts the card from the text", () => 
       type: "message_update",
       assistantMessageEvent: {
         type: "text_delta",
-        delta: "```card\n<Card><Text>a",
+        delta: '```ui\n{"version":1',
       },
     },
     "s1",
@@ -138,30 +130,4 @@ test("translateRunEvent: code mode's client cuts the card from the text", () => 
     update.events.map((event) => event.type),
     ["message_delta"],
   );
-});
-
-test("translateRunEvent: a silent routine's end says so", () => {
-  // The end still ends the run a client is drawing, but it carries nothing
-  // to notify: the whole run was removed from the conversation.
-  const silent = translateRunEvent(
-    { type: "agent_end", message: fauxAssistantMessage("NO_RESPONSE") },
-    "s1",
-    undefined,
-    undefined,
-    true,
-  );
-  assertEquals(silent.events, [
-    { type: "agent_end", sessionId: "s1", silent: true },
-  ]);
-  // A run that said something is a normal end.
-  const spoken = translateRunEvent(
-    { type: "agent_end", message: fauxAssistantMessage("直しました") },
-    "s1",
-    undefined,
-    "直しました",
-    false,
-  );
-  assertEquals(spoken.events, [
-    { type: "agent_end", sessionId: "s1", reply: "直しました" },
-  ]);
 });

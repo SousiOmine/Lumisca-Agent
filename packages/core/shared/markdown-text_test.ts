@@ -80,17 +80,11 @@ test("notificationText leaves a card out", () => {
   // A card is presentation: a toast that showed its markup would be showing
   // the agent's source. The words around it still reach the reader.
   assertEquals(
-    notificationText(
-      '確認してください。\n\n```card\n<Card title="A"><Text>中身</Text></Card>\n```',
-      120,
-    ),
+    notificationText('確認してください。\n\n```ui\n{"version":1}\n```', 120),
     "確認してください。",
   );
   // A reply that was only a card has no words to carry.
-  assertEquals(
-    notificationText("```card\n<Card><Text>中身</Text></Card>\n```", 120),
-    "",
-  );
+  assertEquals(notificationText('```ui\n{"version":1}\n```', 120), "");
 });
 
 test("notificationText cuts at the cap", () => {

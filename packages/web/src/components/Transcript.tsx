@@ -6,10 +6,9 @@ import { useArrivals, withoutHandoff } from "../hooks/useArrivals.ts";
 import { useTranscriptScroll } from "../hooks/useTranscriptScroll.ts";
 import { useT } from "../i18n.ts";
 import type { AgentMessage, SessionView, ToolResultMessage } from "../types.ts";
-import { CardView } from "./chat/CardView.tsx";
 import { buildTurns, ConversationTurn } from "./chat/ConversationTurn.tsx";
 import { ErrorBanner } from "./chat/ErrorBanner.tsx";
-import { MarkdownBlock } from "./chat/MarkdownBlock.tsx";
+import { SegmentView } from "./chat/SegmentView.tsx";
 import type { ConversationTurnData, UserMessageImage } from "./chat/types.ts";
 import { ToolCall } from "./ToolCall.tsx";
 
@@ -190,22 +189,15 @@ export function Transcript({
         {(segments.length > 0 || liveTools.length > 0) && (
           <div className="msg">
             <div className="msg-body markdown">
-              {segments.map((segment, index) =>
-                segment.type === "card" ? (
-                  <CardView
-                    key={index}
-                    markup={segment.markup}
-                    streaming
-                    onSend={onCardSend}
-                  />
-                ) : (
-                  <MarkdownBlock
-                    key={index}
-                    text={segment.text}
-                    visualBase={visualBase}
-                  />
-                ),
-              )}
+              {segments.map((segment, index) => (
+                <SegmentView
+                  key={index}
+                  segment={segment}
+                  streaming
+                  onSend={onCardSend}
+                  visualBase={visualBase}
+                />
+              ))}
               {/* The step's text is finished once a tool of that step
                * runs: a caret would claim it is still being written. And
                * a caret under a card would claim the card is prose. */}

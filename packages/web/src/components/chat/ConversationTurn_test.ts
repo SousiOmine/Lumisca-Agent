@@ -730,15 +730,15 @@ test("ConversationTurn: a fragment renders its rows without a header", () => {
 });
 
 test("ConversationTurn: a card written in the reply is drawn where it was written", () => {
-  // A card is a block of the message's own text (shared/ui-markup), so the
+  // A card is a block of the message's own text (shared/chat-ui), so the
   // words before and after it keep their order around it.
-  const markup = '<Card title="確認"><Text>カードの中</Text></Card>';
+  const json =
+    '{"version":1,"state":{},"root":"screen","elements":{"screen":{"type":"Screen","children":["t"]},"t":{"type":"Text","props":{"text":"カードの中"}}}}';
   const messages: AgentMessage[] = [
     user(1),
-    fauxAssistantMessage(
-      `前の文。\n\n\`\`\`card\n${markup}\n\`\`\`\n\n後の文。`,
-      { timestamp: 2 },
-    ) as AgentMessage,
+    fauxAssistantMessage(`前の文。\n\n\`\`\`ui\n${json}\n\`\`\`\n\n後の文。`, {
+      timestamp: 2,
+    }) as AgentMessage,
   ];
 
   const turns = buildTurns(messages);
@@ -756,8 +756,8 @@ test("ConversationTurn: a card written in the reply is drawn where it was writte
     }),
   );
 
-  assertStringIncludes(html, "ui-card");
+  assertStringIncludes(html, "app-card");
   assertStringIncludes(html, "カードの中");
-  assert(html.indexOf("前の文。") < html.indexOf("ui-card"), html);
-  assert(html.indexOf("ui-card") < html.indexOf("後の文。"), html);
+  assert(html.indexOf("前の文。") < html.indexOf("app-card"), html);
+  assert(html.indexOf("app-card") < html.indexOf("後の文。"), html);
 });

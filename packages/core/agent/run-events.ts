@@ -3,20 +3,21 @@ import type { AgentEvent } from "../ai/agent-types.ts";
 import type { AgentMessage } from "../ai/message.ts";
 
 import type { ClientEvent } from "../domain/event.ts";
-import { splitChatText } from "../shared/ui-markup/segments.ts";
+import { splitChatText } from "../shared/chat-ui/segments.ts";
 
 /**
- * The card being written into the reply, read out of the text as it streams.
+ * The app card being written into the reply, read out of the text as it
+ * streams.
  *
- * A card is a fenced block in the model's own text (ui-markup/segments.ts).
+ * A card is a `ui` fence in the model's own text (chat-ui/segments.ts).
  * Code mode's client receives that text and cuts the card out where it draws;
  * a stella conversation never receives the text (its reply arrives whole), so
  * the card has to be taken out here, to be drawn while it is written.
  *
  * `push` answers only with the part that became readable since the previous
- * fragment: a client appends what a `card_delta` gives it.
+ * fragment: a client appends what a `ui_delta` gives it.
  */
-export class TextCards {
+export class TextUi {
   /** The message's text so far (one message; `reset` starts the next). */
   private text = "";
   /** The id of the card being written; "" when the text ends outside one. */
@@ -29,7 +30,7 @@ export class TextCards {
   private drawn = false;
   private seq = 0;
 
-  /** Feed one text delta; the card text that became readable, or null. */
+  /** Feed one text delta; the card JSON that became readable, or null. */
   push(delta: string): { id: string; delta: string } | null {
     const beforeLine = this.text.slice(this.text.lastIndexOf("\n") + 1);
     this.text += delta;
@@ -48,22 +49,22 @@ export class TextCards {
     }
     const segments = splitChatText(this.text);
     const last = segments.at(-1);
-    if (last?.type !== "card") {
+    if (last?.type !== "app") {
       // The fence closed (or was not a card's): nothing is being written.
       this.open = false;
       this.id = "";
       this.emitted = "";
       return null;
     }
-    if (!this.open || !last.markup.startsWith(this.emitted)) {
+    if (!this.open || !last.json.startsWith(this.emitted)) {
       // A new card: a fresh id makes the client start over instead of
       // appending to the one it has.
       this.id = `text-${++this.seq}`;
       this.emitted = "";
       this.open = true;
     }
-    const piece = last.markup.slice(this.emitted.length);
-    this.emitted = last.markup;
+    const piece = last.json.slice(this.emitted.length);
+    this.emitted = last.json;
     this.drawn = true;
     return piece.length === 0 ? null : { id: this.id, delta: piece };
   }
@@ -115,7 +116,7 @@ export function translateRunEvent(
   /** The reader of the card being written into the reply, or undefined when
    * the client receives the text itself and cuts the card out where it draws
    * (code mode). */
-  textCards: TextCards | undefined,
+  textUi: TextUi | undefined,
   /** What the run has said so far (see RunReply): carried by `agent_end` so
    * a notification can show an answer instead of just "finished". */
   reply?: string,
@@ -128,7 +129,7 @@ export function translateRunEvent(
     case "agent_start":
       return { events: [{ type: "agent_start", sessionId }] };
     case "message_start":
-      if (event.message.role === "assistant") textCards?.reset();
+      if (event.message.role === "assistant") textUi?.reset();
       return {
         events: [{ type: "message_start", sessionId, message: event.message }],
       };
@@ -142,10 +143,10 @@ export function translateRunEvent(
           delta: update.delta,
         },
       ];
-      const piece = textCards?.push(update.delta) ?? null;
+      const piece = textUi?.push(update.delta) ?? null;
       if (piece !== null) {
         events.push({
-          type: "card_delta",
+          type: "ui_delta",
           sessionId,
           toolCallId: piece.id,
           delta: piece.delta,
@@ -163,8 +164,8 @@ export function translateRunEvent(
       ];
       // A message that was narration ends here without becoming one (see
       // agent/stella-stream.ts): the card it drew has nowhere to land.
-      if (event.message.role === "assistant" && textCards?.end() === true) {
-        events.push({ type: "card_end", sessionId });
+      if (event.message.role === "assistant" && textUi?.end() === true) {
+        events.push({ type: "ui_end", sessionId });
       }
       return { events, persist: true, modelError: event.message };
     }

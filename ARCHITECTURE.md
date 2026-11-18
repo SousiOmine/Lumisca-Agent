@@ -379,7 +379,7 @@ API キーやトークンは、エージェントが作業に必要としなが�
 
 stella の会話でエージェントの発言になるのは 2 つです。
 ターンの最終的な本文（そのまま返信になります）と、`send_chat` で送ったもの（本文とファイル）です。
-カードはどちらの本文にも書けます。
+UIはどちらの本文にも書けます。
 黙りたいターンは本文に `NO_RESPONSE` だけを書きます。
 
 - 返信が既定です。
@@ -389,40 +389,41 @@ stella の会話でエージェントの発言になるのは 2 つです。
 - ツールを呼ぶ前の本文は返信ではありません。
   `stopReason: "toolUse"` で終わったターンは、次の手順へ向かうナレーションなので表示しません。
   道具を使った回の答えは、結果を受けた次のターンの本文です（`agent/stella-stream.ts` の `stellaEntryOf`）。
-- カードは返信の本文に書きます。
-  テキスト、一覧、表、フローチャート、数値、選択肢、フォームを、`Stack` / `Columns` / `Grid` で組んだもので、HTML に似た独自タグを ` ```card ` のフェンスに入れて書きます。
+- UIは返信の本文に書きます。
+  大きなインタラクティブUIは、info stringが`ui`のフェンスにJSONの仕様を入れて書きます。
   ツール呼び出しは要りません。
-  `shared/ui-markup/segments.ts` の `splitChatText` が本文を散文とカードに分けるので、カードの前後には文章が来ます。
-- フェンスは目印で、条件ではありません。
-  本文が `<Card>` で始まるブロックは、info string が `html` でも `jsx` でも無指定でもカードとして描きます（`html` として書かれたブロックをコードとして見せると、読者に見えるのはカードではなくマークアップだからです）。
-  コードの見本は本文が `<Card>` で始まらないので、そのまま見本です。
-  カードは `</Card>` で終わり、そのあとにフェンスの中へ書き足された文は散文としてカードの後に描きます（捨てると、書いた言葉が消えます）。
-  `<Data>` の中の `</Card>` は JSON なので終わりではありません（`packages/core/shared/ui-markup/reader.ts` の `cardEnd`）。
-- 文法はプロンプトに載せます。
-  カードはツールが作るものではないので、文法を書けるツールの説明がありません。
-  `shared/ui-markup/help.ts` の `CARD_HELP` を、人が読む返信を持つプロンプト（code mode、chat、stella）のシステムプロンプトに載せます（`tools/system-prompt.ts`）。
-  サブエージェントには載せません。
+  `shared/chat-ui/segments.ts`の`splitChatText`が本文を散文とUIに分けるので、UIの前後には文章が来ます。
+- 仕様は平坦な要素マップです。
+  `version`、`state`、`root`、`elements`を持ち、要素は`type`、`props`、`children`、`visible`、`on`を持ちます。
+  `type`は`shared/ui-app/catalog.ts`の部品名だけです。
+  `shared/ui-app/build.ts`の`parseAppSpec`が、未知の部品、未知のprops、存在しない参照、循環、複数親、到達不能、上限違反を拒否します。
+- 状態はカードのインスタンスが持ちます。
+  `shared/ui-app/state.ts`の`createUiAppState`が初期状態を複製し、`$state`、`$item`、`$index`、`$template`、`$cond`、`$bindState`、`$bindItem`で読みます。
+  操作は`setState`、`resetState`、`sendMessage`の3つです。
+  `sendMessage`だけがユーザーの次の発言としてモデルへ届きます。
+  状態はメッセージにもサーバーにも保存しないので、再読み込みで初期値に戻ります。
+- 操作はクライアントで完結します。
+  入力、タブ、チェック、追加、削除は`setState`でその場で変わり、ターンを終えません。
+  会話が読み取り専用のときは、入力とボタンを無効にします。
+- 文法はスキルで教えます。
+  全カタログは大きいので、`shared/ui-app/help.ts`の`appHelp`を組み込みスキル`app-ui`の本文にします。
+  システムプロンプトには`UI_HELP`の1文だけを載せ、`app-ui`スキルを読ませます（`tools/system-prompt.ts`）。
+  サブエージェントにはスキルを出しません。
   その本文は画面ではなく、別のモデルへの報告だからです。
-  この 3 つは `tools/mod_test.ts` が固定しています。
-- カードはデータを持てます。
-  `<Data>` の JSON を `<Repeat>` が回り、テキストと属性の中で `$data.field` / `$item.field` / `$index` を読みます。
-  `<If>` は repeat の中だけで、項目の 1 フィールドを 1 つの値と比べられます。
-  参照先が実在するか、展開後の要素数が上限に収まるかはパーサが検査するので、画面は `shared/ui-markup/resolve.ts` の `resolveUiView` で置換するだけで、空の行を描くことはありません。
-  参照なのは `$item` / `$index` / `$data` の 3 語だけです。
-  値段の `$5` や環境変数の `$HOME` は文字で、`$$` がその 3 語の前の `$` を 1 つ書く手段です。
-  読み取りと置換は `packages/core/shared/ui-markup/build.ts` の `referenceSpans` を共有するので、検査したものがそのまま置き換わります。
-- 崩れたカードは原文を見せます。
-  読めなかったカードは「このカードを表示できませんでした」と、畳んだ `マークアップ`（書かれたまま）を出します（`packages/web/src/components/chat/UiCard.tsx` の `InvalidCard`）。
-  フェンスの中身はエージェントの言葉なので、描けないことを理由に消しません。
-- 書きかけのカードは書かれたところまで描きます。
-  code mode は本文がそのまま届くので、画面が `splitChatText` で書きかけのカードを切り出して `parseUiMarkupPartial` で閉じたブロックまで描きます。
-  stella は本文を流さない（返信はターンの終わりに一度に届く）ので、`agent/run-events.ts` の `TextCards` が本文の断片からカードを切り出し、`card_delta` として 1 断片ずつ配ります。
-  イベントストリームはその断片だけを 16 ms まとめて 1 フレームにし（`ws-stream.ts` の `delta` チャネル）、確定したメッセージが全体に置き換わります。
-  ナレーションで終わったメッセージのカードは `card_end` で消えます。
-- クライアント状態は持たせません。
-  操作は「次の発言を送る」だけで、タブや絞り込みのような書き換えはしません（カードがターンを終えるという単位と噛み合わないためです）。
-- カードはメッセージの本文そのものなので、サーバーに状態を持たず、再読み込みでも同じカードが出ます。
-  選択肢やフォームの回答はユーザーの次の発言として届きます（`packages/web/src/components/chat/UiCard.tsx`）。
+- 崩れたUIは原文を見せます。
+  読めなかったUIは「このUIを表示できませんでした」と、解析の理由、畳んだJSONを出します（`packages/web/src/components/chat/AppCard.tsx`の`InvalidAppCard`）。
+- 書きかけのUIは読めるところまで描きます。
+  code modeは本文がそのまま届くので、画面が`splitChatText`で書きかけのフェンスを切り出し、`parseAppSpecPartial`で閉じたJSONまで描きます。
+  stellaは本文を流さないので、`agent/run-events.ts`の`TextUi`が本文の断片から切り出し、`ui_delta`として1断片ずつ配ります。
+  イベントストリームはその断片だけを16 msまとめて1フレームにし、確定したメッセージが全体に置き換わります。
+  ナレーションで終わったメッセージのUIは`ui_end`で消えます。
+- 状態はカードごとです。
+  同じメッセージを2つのクライアントで開いても、状態はそれぞれのページにあります。
+  モデルは状態を読めないので、必要な値は`sendMessage`の文面に`$template`で入れます。
+- 安全境界はカタログです。
+  HTML、CSS、URL、スクリプト、イベントハンドラのコードは仕様にありません。
+  文字列はテキストとして描き、`innerHTML`を使いません。
+  状態のパスは`__proto__`、`constructor`、`prototype`を拒否します。
 
 ### ルーチン（スケジュール実行）
 

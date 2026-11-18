@@ -58,6 +58,7 @@ test("builtinSkills advertises the stella-only skills for a stella session", asy
   assertEquals(
     skills.map((s) => s.name),
     [
+      "app-ui",
       "desktop-apps",
       "agent-create",
       "identity",
@@ -69,9 +70,9 @@ test("builtinSkills advertises the stella-only skills for a stella session", asy
 
   // Each guide teaches the tool_search → tool_call path, because neither
   // tool is preloaded (they live in the session's main registry).
-  const agentCreate = skills[1]!;
+  const agentCreate = skills[2]!;
   assert(agentCreate.description.includes("tool_search"));
-  const identity = skills[2]!;
+  const identity = skills[3]!;
   assert(identity.description.includes("tool_search"));
 
   const agentGuide = await loadSkillContent(agentCreate);
@@ -95,7 +96,7 @@ test("builtinSkills advertises the stella-only skills for a stella session", asy
   // The routine guide is what makes the discoverable routine tools findable
   // at all: it must name the search path and every schedule shape the tools
   // accept, because the agent has to build the argument itself.
-  const routines = skills[3]!;
+  const routines = skills[4]!;
   assert(routines.description.includes("tool_search"));
   const routinesGuide = await loadSkillContent(routines);
   assert(routinesGuide.includes("routine_create"));
@@ -219,9 +220,9 @@ test("builtinSkills advertises web-browser when the browser is available", () =>
   const skills = browserBuiltins();
   assertEquals(
     skills.map((s) => s.name),
-    ["web-browser"],
+    ["app-ui", "web-browser"],
   );
-  const skill = skills[0]!;
+  const skill = skills[1]!;
   assertEquals(skill.source, "builtin");
   assert(skill.description.includes("tool_search"));
   // Embedded skills have no filesystem location.
@@ -232,8 +233,10 @@ test("builtinSkills advertises web-browser when the browser is available", () =>
 
 test("builtinSkills hides web-browser without a browser backend", () => {
   assertEquals(
-    builtinSkills({ browser: false, computer: false, subagents: false }),
-    [],
+    builtinSkills({ browser: false, computer: false, subagents: false }).map(
+      (s) => s.name,
+    ),
+    ["app-ui"],
   );
 });
 
@@ -241,9 +244,9 @@ test("builtinSkills advertises computer-use only when the machine can be driven"
   const skills = computerBuiltins();
   assertEquals(
     skills.map((s) => s.name),
-    ["computer-use"],
+    ["app-ui", "computer-use"],
   );
-  const skill = skills[0]!;
+  const skill = skills[1]!;
   assertEquals(skill.source, "builtin");
   assert(skill.description.includes("tool_search"));
   assert(skill.description.includes("Windows and Linux (Wayland)"));
@@ -252,8 +255,10 @@ test("builtinSkills advertises computer-use only when the machine can be driven"
 
   // A session that must not drive the machine never sees the skill.
   assertEquals(
-    builtinSkills({ browser: false, computer: false, subagents: false }),
-    [],
+    builtinSkills({ browser: false, computer: false, subagents: false }).map(
+      (s) => s.name,
+    ),
+    ["app-ui"],
   );
   assertEquals(
     browserBuiltins().some((s) => s.name === "computer-use"),
@@ -266,12 +271,12 @@ test("both built-in skills are advertised when both capabilities are present", (
     builtinSkills({ browser: true, computer: true, subagents: false }).map(
       (s) => s.name,
     ),
-    ["web-browser", "computer-use"],
+    ["app-ui", "web-browser", "computer-use"],
   );
 });
 
 test("loadSkillContent reads the embedded computer-use guide", async () => {
-  const [skill] = computerBuiltins();
+  const skill = computerBuiltins().find((s) => s.name === "computer-use");
   assert(skill !== undefined);
   const content = await loadSkillContent(skill);
   // The guide's key teaching must be present.
@@ -282,7 +287,7 @@ test("loadSkillContent reads the embedded computer-use guide", async () => {
 });
 
 test("the computer-use guide has no follow-up files", async () => {
-  const [skill] = computerBuiltins();
+  const skill = computerBuiltins().find((s) => s.name === "computer-use");
   assert(skill !== undefined);
   await assertRejects(
     () => loadSkillContent(skill, "reference.md"),
@@ -294,7 +299,7 @@ test("the computer-use guide has no follow-up files", async () => {
 // --- loading ----------------------------------------------------------------
 
 test("loadSkillContent reads the embedded SKILL.md without a filesystem", async () => {
-  const [skill] = browserBuiltins();
+  const skill = browserBuiltins().find((s) => s.name === "web-browser");
   assert(skill !== undefined);
   const content = await loadSkillContent(skill);
   // The guide's key teaching must be present.
@@ -304,7 +309,7 @@ test("loadSkillContent reads the embedded SKILL.md without a filesystem", async 
 });
 
 test("built-in skills have no follow-up files", async () => {
-  const [skill] = browserBuiltins();
+  const skill = browserBuiltins().find((s) => s.name === "web-browser");
   assert(skill !== undefined);
   await assertRejects(
     () => loadSkillContent(skill, "reference.md"),
@@ -390,7 +395,8 @@ test("plugin skills shadow built-in skills of the same name", () => {
 
 test("formatAvailableSkills lists built-in skills like any other", () => {
   const text = formatAvailableSkills(browserBuiltins());
-  assert(text.startsWith("- web-browser:"));
+  assert(text.includes("- app-ui:"));
+  assert(text.includes("- web-browser:"));
   // The line the catalog publishes is the trigger the model reads, so it
   // starts with when to use the skill.
   assert(text.includes("Use this skill whenever"));
@@ -447,7 +453,7 @@ test("every built-in description is a trigger, not a table of contents", () => {
     mcpAdmin: true,
     skillAuthoring: {},
   });
-  assertEquals(skills.length, 11, "the fixture advertises every built-in");
+  assertEquals(skills.length, 12, "the fixture advertises every built-in");
   for (const skill of skills) {
     assert(
       skill.description.startsWith("Use this skill"),

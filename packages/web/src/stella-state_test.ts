@@ -24,7 +24,7 @@ function entry(
     segments:
       card === null
         ? segments
-        : [...segments, { type: "card" as const, markup: card }],
+        : [...segments, { type: "app" as const, json: card }],
     attachments: [],
     files: [],
     timestamp,
@@ -64,7 +64,7 @@ test("stellaStateOf: a snapshot becomes the conversation", () => {
     // back through the history before it.
     older: "cursor-1",
     running: true,
-    liveCard: null,
+    liveUi: null,
     questions: [],
     handover: null,
     envRequest: null,
@@ -510,67 +510,67 @@ test("prependOlderEntries: an entry newer than the edge is never added", () => {
 test("stella: a card being written grows, and the entry replaces it", () => {
   let current = state({ running: true });
   current = applyStellaEvent(current, {
-    type: "card_delta",
+    type: "ui_delta",
     toolCallId: "call-1",
-    delta: "<Card><Text>",
+    delta: '{"version":1',
   })!;
   current = applyStellaEvent(current, {
-    type: "card_delta",
+    type: "ui_delta",
     toolCallId: "call-1",
-    delta: "進めますか。</Text></Card>",
+    delta: ',"state":{}}',
   })!;
 
-  assertEquals(current.liveCard, {
+  assertEquals(current.liveUi, {
     toolCallId: "call-1",
-    markup: "<Card><Text>進めますか。</Text></Card>",
+    json: '{"version":1,"state":{}}',
   });
 
   // The finished message carries the whole card; what was drawn from the
   // fragments must not stay beside it.
   current = applyStellaEvent(current, {
     type: "entry",
-    entry: entry("assistant", "", 5, "<Card><Text>進めますか。</Text></Card>"),
+    entry: entry("assistant", "", 5, '{"version":1}'),
   })!;
-  assertEquals(current.liveCard, null);
+  assertEquals(current.liveUi, null);
   assertEquals(current.entries.length, 1);
 });
 
 test("stella: a narration card is dropped when its message ends", () => {
   // A message that stopped to call a tool is not a reply (see the server's
-  // projection): the card it drew has nowhere to land, and `card_end` clears
+  // projection): the card it drew has nowhere to land, and `ui_end` clears
   // it. Waiting for the next entry would leave it up for the whole tool run.
   let current = applyStellaEvent(state(), {
-    type: "card_delta",
+    type: "ui_delta",
     toolCallId: "text-1",
-    delta: "<Card><Text>途中</Text></Card>",
+    delta: '{"version":1}',
   })!;
-  assert(current.liveCard !== null);
+  assert(current.liveUi !== null);
 
-  current = applyStellaEvent(current, { type: "card_end" })!;
-  assertEquals(current.liveCard, null);
+  current = applyStellaEvent(current, { type: "ui_end" })!;
+  assertEquals(current.liveUi, null);
   // Nothing was drawn, so the same event again changes nothing.
-  assertEquals(applyStellaEvent(current, { type: "card_end" }), null);
+  assertEquals(applyStellaEvent(current, { type: "ui_end" }), null);
 });
 
 test("stella: a card of another call starts over, and the run clears it", () => {
   let current = state({ running: true });
   current = applyStellaEvent(current, {
-    type: "card_delta",
+    type: "ui_delta",
     toolCallId: "call-1",
-    delta: "<Card><Text>a</Text></Card>",
+    delta: '{"version":1}',
   })!;
   current = applyStellaEvent(current, {
-    type: "card_delta",
+    type: "ui_delta",
     toolCallId: "call-2",
-    delta: "<Card><Text>b",
+    delta: '{"version":1',
   })!;
-  assertEquals(current.liveCard, {
+  assertEquals(current.liveUi, {
     toolCallId: "call-2",
-    markup: "<Card><Text>b",
+    json: '{"version":1',
   });
 
   current = applyStellaEvent(current, { type: "agent_end" })!;
-  assertEquals(current.liveCard, null);
+  assertEquals(current.liveUi, null);
   assertEquals(current.running, false);
 });
 
@@ -589,7 +589,7 @@ test("stella: a snapshot is the finished conversation, so it draws no live card"
     rev: 3,
   };
 
-  assertEquals(stellaStateOf(snapshot).liveCard, null);
+  assertEquals(stellaStateOf(snapshot).liveUi, null);
 });
 
 test("entryKey: a routine's prompt and the same words typed differ", () => {

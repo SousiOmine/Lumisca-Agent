@@ -34,7 +34,8 @@
  * - `./push.ts` — Web Push subscriptions and the base64url codec,
  * - `./markdown-text.ts` — a reply's markdown as the plain text of a
  *   notification,
- * - `./ui-markup/` — the card markup an agent writes into a reply,
+ * - `./chat-ui/` — the prose and app cards a reply is split into,
+ * - `./ui-app/` — the JSON spec, catalog, parser and state of an app card,
  * - `./i18n/mod.ts` — Locale, the message catalogue, locale resolution.
  */
 
@@ -42,6 +43,7 @@ export * from "./agent-avatar.ts";
 export * from "./app-mode.ts";
 export * from "./attachments.ts";
 export * from "./chat-message.ts";
+export * from "./chat-ui/index.ts";
 export * from "./content.ts";
 export * from "./context-usage.ts";
 export * from "./diff-stat.ts";
@@ -63,7 +65,7 @@ export * from "./stella-preview.ts";
 export * from "./theme-colors.ts";
 export * from "./token-estimate.ts";
 export * from "./tool-names.ts";
-export * from "./ui-markup/index.ts";
+export * from "./ui-app/index.ts";
 export * from "./visual.ts";
 export * from "./watch-path.ts";
 export * from "./web-search.ts";

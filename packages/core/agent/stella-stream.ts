@@ -45,9 +45,9 @@ import type {
   StellaShareRequest,
 } from "../domain/stella-conversation.ts";
 import { chatMessageOfDetails } from "../shared/chat-message.ts";
+import { segmentsText, splitChatText } from "../shared/chat-ui/segments.ts";
+import type { UiSegment } from "../shared/chat-ui/types.ts";
 import { TOOL_SEND_CHAT } from "../shared/tool-names.ts";
-import { segmentsText, splitChatText } from "../shared/ui-markup/segments.ts";
-import type { UiSegment } from "../shared/ui-markup/types.ts";
 import { assistantTextVerdict } from "./silent-reply.ts";
 
 /** A message that carries content blocks: the three conversational roles. */
@@ -144,7 +144,7 @@ export function stellaEntryOf(message: AgentMessage): StellaEntry | null {
       const verdict = assistantTextVerdict(textOf(message));
       if (verdict.kind !== "message") return null;
       // The reply is read, not echoed: a card is a block written into it
-      // (see shared/ui-markup/segments.ts), so the words and the cards are
+      // (see shared/chat-ui/segments.ts), so the words and the cards are
       // separated here once, and every reader below gets the same picture.
       const segments = splitChatText(verdict.text);
       if (segments.length === 0) return null;
@@ -220,8 +220,8 @@ export function stellaEntryCursorOf(entry: StellaEntry): string {
     // card can be long, and its beginning is what tells two apart) and the
     // start of the text name which is which.
     entry.segments
-      .filter((segment) => segment.type === "card")
-      .map((segment) => segment.markup.slice(0, 64))
+      .filter((segment) => segment.type === "app")
+      .map((segment) => segment.json.slice(0, 64))
       .join(""),
     entry.text.slice(0, 64),
     // A routine's prompt and the same words typed by the user are different
@@ -372,20 +372,20 @@ export function stellaEventsOf(event: ClientEvent): StellaEvent[] {
       return [{ type: "share_request", request: null }];
     case "shares":
       return [{ type: "shares", shares: event.shares }];
-    case "card_delta":
-      // A card being written into the reply. The conversation has no streaming
-      // TEXT (a reply arrives whole), but a card is drawn while the model
-      // writes it: it is presentation, not words, so there is no
+    case "ui_delta":
+      // An app card being written into the reply. The conversation has no
+      // streaming TEXT (a reply arrives whole), but a card is drawn while the
+      // model writes it: it is presentation, not words, so there is no
       // half-sentence to guard against.
       return [
         {
-          type: "card_delta",
+          type: "ui_delta",
           toolCallId: event.toolCallId,
           delta: event.delta,
         },
       ];
-    case "card_end":
-      return [{ type: "card_end" }];
+    case "ui_end":
+      return [{ type: "ui_end" }];
     case "session_error":
       return [{ type: "error", message: event.message }];
     default:

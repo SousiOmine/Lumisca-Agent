@@ -818,10 +818,10 @@ export function stellaRoutes(core: StellaApi): Hono {
         // reply's text, keyed by the card they belong to.
         delta: {
           accepts: (event) =>
-            event.type === "card_delta" && event.sessionId === id,
-          key: (event) => (event.type === "card_delta" ? event.toolCallId : ""),
+            event.type === "ui_delta" && event.sessionId === id,
+          key: (event) => (event.type === "ui_delta" ? event.toolCallId : ""),
           frame: ({ key, delta, rev, events }) => ({
-            type: "card_delta",
+            type: "ui_delta",
             toolCallId: key,
             delta,
             rev,

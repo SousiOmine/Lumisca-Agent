@@ -1268,7 +1268,7 @@ test("stella conversation: the agent's reply is what the store serves", async ()
 test("stella conversation: what send_chat sends is the conversation", async () => {
   const { faux, core, session } = await stellaConversation("Aide");
   try {
-    const markup = '<Card title="確認"><Text>進めますか。</Text></Card>';
+    const json = '{"version":1}';
     faux.setResponses([
       fauxAssistantMessage(
         [
@@ -1278,8 +1278,8 @@ test("stella conversation: what send_chat sends is the conversation", async () =
             "send_chat",
             {
               // The card is written into the message's own text (see
-              // shared/ui-markup/segments.ts): words, a block, more words.
-              text: `3件の不具合を直しました。\n\n\`\`\`card\n${markup}\n\`\`\``,
+              // shared/chat-ui/segments.ts): words, a block, more words.
+              text: `3件の不具合を直しました。\n\n\`\`\`ui\n${json}\n\`\`\``,
             },
             "call-1",
           ),
@@ -1301,7 +1301,7 @@ test("stella conversation: what send_chat sends is the conversation", async () =
     assertEquals(sent.text, "3件の不具合を直しました。");
     assertEquals(sent.segments, [
       { type: "text", text: "3件の不具合を直しました。" },
-      { type: "card", markup },
+      { type: "app", json },
     ]);
     assertEquals(sent.attachments, []);
 

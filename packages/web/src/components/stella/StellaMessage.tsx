@@ -4,9 +4,8 @@ import { formatClockTime } from "../../format.ts";
 import { useLocale, useT } from "../../i18n.ts";
 import type { StellaEntry } from "../../types.ts";
 import { AttachmentCard } from "../chat/AttachmentCard.tsx";
-import { CardView } from "../chat/CardView.tsx";
-import { MarkdownBlock } from "../chat/MarkdownBlock.tsx";
 import { MessageCopyButton } from "../chat/MessageCopyButton.tsx";
+import { SegmentView } from "../chat/SegmentView.tsx";
 import { AgentAvatar } from "./AgentAvatar.tsx";
 import { PromptFiles } from "./PromptFiles.tsx";
 
@@ -210,18 +209,15 @@ function AgentBubble({
         <div className="stella-msg-body msg-body markdown">
           {/* The message in the order it was written: its words and the
            * cards the agent put between them (see
-           * shared/ui-markup/segments.ts). */}
-          {entry.segments.map((segment, index) =>
-            segment.type === "card" ? (
-              <CardView key={index} markup={segment.markup} onSend={onSend} />
-            ) : (
-              <MarkdownBlock
-                key={index}
-                text={segment.text}
-                visualBase={visualBase}
-              />
-            ),
-          )}
+           * shared/chat-ui/segments.ts). */}
+          {entry.segments.map((segment, index) => (
+            <SegmentView
+              key={index}
+              segment={segment}
+              onSend={onSend}
+              visualBase={visualBase}
+            />
+          ))}
           <AttachmentCard attachments={entry.attachments} base={attachBase} />
         </div>
         {/* The time, then the copy control — the same shape as the reader's

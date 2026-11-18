@@ -13,7 +13,7 @@ import {
   TOOL_TODO,
   TOOL_WRITE,
 } from "../shared/tool-names.ts";
-import { CARD_HELP } from "../shared/ui-markup/help.ts";
+import { UI_HELP } from "../shared/ui-app/help.ts";
 import {
   buildChatSystemPrompt,
   buildStellaSystemPrompt,
@@ -133,7 +133,7 @@ test("coding prompt never mentions a tool", () => {
   // The card paragraph is scanned out: it is a constant of the reply, not of
   // the tool set, so it cannot go stale with a backend, and it says "read"
   // as an ordinary verb ("fields are read as ...").
-  const prompt = buildSystemPrompt(workspace).replace(CARD_HELP, "");
+  const prompt = buildSystemPrompt(workspace).replace(UI_HELP, "");
   for (const name of CODING_TOOLS) {
     assertEquals(
       prompt.includes(name),
@@ -153,7 +153,7 @@ test("every prompt whose reply a person reads teaches the card grammar", () => {
     buildChatSystemPrompt(),
     buildStellaSystemPrompt(),
   ]) {
-    assert(prompt.includes(CARD_HELP), prompt.slice(0, 200));
+    assert(prompt.includes(UI_HELP), prompt.slice(0, 200));
     // The fence is what makes a block a card; a prompt that named the tags
     // but not the fence would still produce plain markdown.
     assert(prompt.includes("fenced code block"), prompt.slice(0, 200));

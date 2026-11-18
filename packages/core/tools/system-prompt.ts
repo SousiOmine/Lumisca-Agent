@@ -1,5 +1,5 @@
 import type { Workspace } from "../domain/workspace.ts";
-import { CARD_HELP } from "../shared/ui-markup/help.ts";
+import { UI_HELP } from "../shared/ui-app/help.ts";
 
 /** The machine's home, the folder its agents work in, and the account the
  * tools run as.
@@ -32,7 +32,7 @@ export function buildSystemPrompt(workspace: Workspace): string {
 The workspace contains these folders (file access is restricted to them):
 ${folders}
 
-${CARD_HELP}
+${UI_HELP}
 `;
 }
 
@@ -112,7 +112,7 @@ call carried it.
 A run with nothing to report replies with exactly NO_RESPONSE.
 send_chat carries what a reply cannot: a file, or a progress note.
 
-${CARD_HELP}
+${UI_HELP}
 `;
 }
 
@@ -127,6 +127,6 @@ export function buildChatSystemPrompt(): string {
 sub-agent tools: you cannot read, write or run anything. Images can be
 attached to prompts.
 
-${CARD_HELP}
+${UI_HELP}
 `;
 }

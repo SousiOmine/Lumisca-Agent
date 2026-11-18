@@ -524,13 +524,13 @@ X サーバ、ウィンドウマネージャ、セッションバス、専用プ
   開いていない会話にはストリームが無いので、一覧は 30 秒ごとに読み直します（`useVisibleInterval`）。
 - 話す手段は本文と `send_chat` です。
   本文はそのまま返信になり、`send_chat` がファイルと途中経過を添えます（`packages/core/tools/send-chat.ts`）。
-  カードは本文に ` ```card ` のフェンスで書きます（ツール呼び出しは不要）。
-  フェンスは目印で、本文が `<Card>` で始まれば info string が違ってもカードです（`shared/ui-markup/segments.ts`）。
+  UIは本文に ` ```ui ` のフェンスでJSONを書きます（ツール呼び出しは不要）。
+  仕様とカタログは `shared/ui-app/`、文法は組み込みスキル `app-ui` が教えます（`shared/chat-ui/segments.ts` が本文を分けます）。
   黙るターンは `NO_RESPONSE` だけを書きます（`packages/core/agent/silent-reply.ts`）。
   `text` と `paths` は 1 回で 1 つのメッセージになり、少なくとも 1 つ必要です。
-- カードだけは書きながら出ます。
-  モデルが本文にカードを書いている間、`card_delta` が届き、画面は `parseUiMarkupPartial` で閉じたブロックまで描きます。
-  切り出しは `packages/core/agent/run-events.ts` の `TextCards`（stella は本文を流さないため。code mode は画面が本文から切り出します）、まとめは stella のイベントストリームの `delta` チャネルです。
+- UIだけは書きながら出ます。
+  モデルが本文にUIを書いている間、`ui_delta` が届き、画面は `parseAppSpecPartial` で読めるところまで描きます。
+  切り出しは `packages/core/agent/run-events.ts` の `TextUi`（stella は本文を流さないため。code mode は画面が本文から切り出します）、まとめは stella のイベントストリームの `delta` チャネルです。
   本文はターンの終わりに一度に届きます。
 - モデルはエージェントごとです。
   選択はエージェントの編集ダイアログで行い、`PATCH /api/stella/agents/:id` の `model`（`null` は既定、省略は変更なし）で保存します。

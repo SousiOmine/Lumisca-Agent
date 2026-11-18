@@ -127,6 +127,8 @@ test("skills API lists the workspace catalog and the chat subset", async () => {
       join(skillDir, "SKILL.md"),
       "---\nname: demo\ndescription: Demo skill.\n---\n\nDo the demo thing.\n",
     );
+    const appGuide = core.listSkills().find((s) => s.name === "app-ui");
+    assert(appGuide !== undefined, "the app UI guide must be listed");
     const mcpGuide = core.listSkills().find((s) => s.name === "mcp-servers");
     assert(mcpGuide !== undefined, "the MCP guide must be listed");
     // A workspace session has file tools, so its palette also offers the
@@ -147,6 +149,7 @@ test("skills API lists the workspace catalog and the chat subset", async () => {
     assertEquals(forWorkspace.status, 200);
     assertEquals((await forWorkspace.json()).skills, [
       { name: "demo", description: "Demo skill." },
+      appGuide,
       mcpGuide,
       skillGuide,
       codingGuide,
@@ -157,7 +160,7 @@ test("skills API lists the workspace catalog and the chat subset", async () => {
     // POST /sessions).
     const chat = await json(base, "/api/skills");
     assertEquals(chat.status, 200);
-    assertEquals((await chat.json()).skills, [mcpGuide]);
+    assertEquals((await chat.json()).skills, [appGuide, mcpGuide]);
 
     // An unknown workspace is a 404, never a fallback to the chat list.
     const unknown = await json(base, "/api/skills?workspaceId=nope");

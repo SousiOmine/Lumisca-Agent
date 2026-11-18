@@ -75,7 +75,7 @@ test("RunReply: a message that only carried a card or files is no reply", () => 
   // The conversation shows an empty bubble's worth of words: there is
   // nothing a one-line notification can say.
   const reply = new RunReply();
-  reply.observe(sent("```card\n<Card><Text>x</Text></Card>\n```"));
+  reply.observe(sent('```ui\n{"version":1}\n```'));
   assertEquals(reply.gist(), undefined);
 });
 

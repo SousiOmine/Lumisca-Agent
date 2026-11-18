@@ -61,7 +61,7 @@ import { RetryManager } from "./retry-manager.ts";
 import { Rewinder } from "./rewinder.ts";
 import { ROUTINE_SILENCE_GUIDANCE } from "./routine-guidance.ts";
 import { type RoutineDropHost, RoutineRun } from "./routine-run.ts";
-import { TextCards, translateRunEvent } from "./run-events.ts";
+import { TextUi, translateRunEvent } from "./run-events.ts";
 import { RunReply } from "./run-reply.ts";
 import { TitleGenerator } from "./title-generation.ts";
 import { TitleScheduler } from "./title-scheduler.ts";
@@ -113,11 +113,11 @@ export interface SessionAgentOptions {
    * request per agent to do it. */
   titleGeneration?: boolean;
   /** Read the card being written into a reply out of the text as it
-   * streams, and publish it as `card_delta`. A stella conversation's clients
+   * streams, and publish it as `ui_delta`. A stella conversation's clients
    * never receive that text (its reply arrives whole), so the card has to be
    * extracted here; code mode's client has the text and cuts the card out
    * where it draws. Omitted → false. */
-  cardsFromText?: boolean;
+  uiFromText?: boolean;
   /** Background-command manager backing the async_bash tools. Its
    * completion events are injected into the agent loop as notifications
    * (see notifyBackgroundCommand). */
@@ -221,9 +221,9 @@ export class SessionAgent {
    * transcript messages they cover (see transcript.ts). */
   private readonly transcript: TranscriptStore;
   /** The card being written into a reply, for a stream whose client never
-   * receives the text (see SessionAgentOptions.cardsFromText). */
-  private readonly textCards = new TextCards();
-  private readonly cardsFromText: boolean;
+   * receives the text (see SessionAgentOptions.uiFromText). */
+  private readonly textUi = new TextUi();
+  private readonly uiFromText: boolean;
   /** What this run last said to the user, for the `agent_end` notification
    * (see RunReply). */
   private readonly reply = new RunReply();
@@ -316,7 +316,7 @@ export class SessionAgent {
       options.baseIndex ?? 0,
     );
     this.toolRegistry = options.toolRegistry ?? null;
-    this.cardsFromText = options.cardsFromText === true;
+    this.uiFromText = options.uiFromText === true;
     this.onEvent = options.onEvent;
     this.renameSession = options.renameSession;
     this.interruptions = new InterruptionHub(
@@ -1111,7 +1111,7 @@ export class SessionAgent {
     const translated = translateRunEvent(
       event,
       this.sessionId,
-      this.cardsFromText ? this.textCards : undefined,
+      this.uiFromText ? this.textUi : undefined,
       event.type === "agent_end" ? this.reply.gist() : undefined,
       quietRoutine,
     );

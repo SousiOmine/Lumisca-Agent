@@ -44,12 +44,12 @@ export interface StellaConversationState {
    * conversation's beginning. */
   older: string | null;
   running: boolean;
-  /** The card being written into the reply right now, as far as it has
+  /** The app card being written into the reply right now, as far as it has
    * arrived, or null. The run has no streaming TEXT (a reply arrives whole),
    * but a card is presentation: drawing it while it is written reads as
-   * progress. The finished entry carries the whole card and clears this;
-   * `card_end` clears it when the message turns out to be narration. */
-  liveCard: { toolCallId: string; markup: string } | null;
+   * progress. The finished entry carries the whole spec and clears this;
+   * `ui_end` clears it when the message turns out to be narration. */
+  liveUi: { toolCallId: string; json: string } | null;
   questions: StellaQuestion[];
   handover: StellaHandover | null;
   /** The environment variable the run waits for the user to fill in, or
@@ -112,7 +112,7 @@ export function stellaStateOf(
     // A snapshot is the finished conversation; a card being written belongs
     // to the run that is still going, and a reconnect picks the rest up from
     // the events that follow.
-    liveCard: null,
+    liveUi: null,
     questions: snapshot.questions,
     handover: snapshot.handover,
     envRequest: snapshot.envRequest,
@@ -207,8 +207,8 @@ export function entryKey(entry: StellaEntry): string {
   // Two prompts of one millisecond that say the same words differ when one
   // of them came from a routine: the name is part of the identity.
   const cards = entry.segments
-    .filter((segment) => segment.type === "card")
-    .map((segment) => segment.markup)
+    .filter((segment) => segment.type === "app")
+    .map((segment) => segment.json)
     .join(",");
   return `${entry.role}:${entry.timestamp}:${attachments}:${files}:${cards}:${
     entry.routine ?? ""
@@ -261,35 +261,33 @@ export function applyStellaEvent(
 ): StellaConversationState | null {
   switch (event.type) {
     case "agent_start":
-      return state.running &&
-        state.error === undefined &&
-        state.liveCard === null
+      return state.running && state.error === undefined && state.liveUi === null
         ? null
-        : { ...state, running: true, error: undefined, liveCard: null };
+        : { ...state, running: true, error: undefined, liveUi: null };
     case "agent_end":
-      return !state.running && state.liveCard === null
+      return !state.running && state.liveUi === null
         ? null
-        : { ...state, running: false, liveCard: null };
-    case "card_delta": {
-      const markup =
-        state.liveCard?.toolCallId === event.toolCallId
-          ? state.liveCard.markup + event.delta
+        : { ...state, running: false, liveUi: null };
+    case "ui_delta": {
+      const json =
+        state.liveUi?.toolCallId === event.toolCallId
+          ? state.liveUi.json + event.delta
           : event.delta;
       return {
         ...state,
-        liveCard: { toolCallId: event.toolCallId, markup },
+        liveUi: { toolCallId: event.toolCallId, json },
       };
     }
-    case "card_end":
-      return state.liveCard === null ? null : { ...state, liveCard: null };
+    case "ui_end":
+      return state.liveUi === null ? null : { ...state, liveUi: null };
     case "entry": {
       const entries = upsertEntry(state.entries, event.entry);
       // A message arrives whole, so an unchanged list means nothing to
       // re-render — unless a card was being drawn, which the finished entry
       // now replaces.
-      return entries === state.entries && state.liveCard === null
+      return entries === state.entries && state.liveUi === null
         ? null
-        : { ...state, entries, liveCard: null };
+        : { ...state, entries, liveUi: null };
     }
     case "questions":
       return sameAsks(event.questions, state.questions)
@@ -324,7 +322,7 @@ export function applyStellaEvent(
         ? null
         : { ...state, shares: event.shares };
     case "error":
-      return { ...state, error: event.message, liveCard: null };
+      return { ...state, error: event.message, liveUi: null };
   }
 }
 
@@ -403,7 +401,7 @@ export function emptyStellaState(agentName: string): StellaConversationState {
     older: null,
     running: false,
     disabled: false,
-    liveCard: null,
+    liveUi: null,
     questions: [],
     handover: null,
     envRequest: null,

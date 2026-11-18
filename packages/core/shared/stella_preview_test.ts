@@ -136,7 +136,7 @@ test("previewOf: a message with no words is described", () => {
   assertEquals(
     previewOf(
       entry({
-        segments: [{ type: "card", markup: "<Card />" }],
+        segments: [{ type: "app", json: "{}" }],
       }),
     ),
     {
@@ -157,7 +157,7 @@ test("previewOf: words win over a card and files", () => {
         text: "確認してください。",
         segments: [
           { type: "text", text: "確認してください。" },
-          { type: "card", markup: "<Card />" },
+          { type: "app", json: "{}" },
         ],
         files: [
           {

@@ -1,8 +1,8 @@
 import type {
-  UiFlowBlock,
-  UiFlowEdge,
-  UiFlowNode,
-  UiFlowShape,
+  FlowBlock,
+  FlowEdge,
+  FlowNode,
+  FlowShape,
 } from "@lumisca/core/shared";
 
 /**
@@ -58,7 +58,7 @@ export type FlowNodeBox = {
   label: string;
   /** Lines after wrapping. */
   lines: readonly string[];
-  shape: UiFlowShape;
+  shape: FlowShape;
   x: number;
   y: number;
   width: number;
@@ -86,7 +86,7 @@ export type FlowLayout = {
 };
 
 /** Place the nodes and edges of a diagram on screen. */
-export function layoutFlow(block: UiFlowBlock): FlowLayout {
+export function layoutFlow(block: FlowBlock): FlowLayout {
   const back = backEdges(block);
   const rank = ranks(block, back);
   const layers = orderLayers(block, rank, back);
@@ -167,7 +167,7 @@ function layerWidth(count: number): number {
 }
 
 /** Decide a node's size and its wrapped label. */
-function measure(node: UiFlowNode): { lines: string[]; height: number } {
+function measure(node: FlowNode): { lines: string[]; height: number } {
   // A diamond leaves less room for text, so it wraps earlier.
   const textWidth =
     node.shape === "diamond"
@@ -224,8 +224,8 @@ function widthOf(char: string): number {
  * walk as a back edge. Removing those leaves a DAG that always flows from
  * top to bottom.
  */
-function backEdges(block: UiFlowBlock): ReadonlySet<UiFlowEdge> {
-  const back = new Set<UiFlowEdge>();
+function backEdges(block: FlowBlock): ReadonlySet<FlowEdge> {
+  const back = new Set<FlowEdge>();
   const state = new Map<string, 0 | 1 | 2>();
 
   const visit = (id: string): void => {
@@ -258,8 +258,8 @@ function backEdges(block: UiFlowBlock): ReadonlySet<UiFlowEdge> {
  * distance from an entry (longest path).
  */
 function ranks(
-  block: UiFlowBlock,
-  back: ReadonlySet<UiFlowEdge>,
+  block: FlowBlock,
+  back: ReadonlySet<FlowEdge>,
 ): Map<string, number> {
   const forward = block.edges.filter((edge) => !back.has(edge));
   const rank = new Map(block.nodes.map((node) => [node.id, 0]));
@@ -299,9 +299,9 @@ function ranks(
  * such a neighbor stay at the end, in their original order.
  */
 function orderLayers(
-  block: UiFlowBlock,
+  block: FlowBlock,
   rank: ReadonlyMap<string, number>,
-  back: ReadonlySet<UiFlowEdge>,
+  back: ReadonlySet<FlowEdge>,
 ): string[][] {
   const layers: string[][] = [];
   for (const node of block.nodes) {
@@ -379,7 +379,7 @@ function orderLayers(
 /** An edge that flows downward. It joins the middle of the lower side to
  * the middle of the upper side with a vertical curve. */
 function forwardEdgeLine(
-  edge: UiFlowEdge,
+  edge: FlowEdge,
   from: FlowNodeBox,
   to: FlowNodeBox,
 ): FlowEdgeLine {
@@ -403,7 +403,7 @@ function forwardEdgeLine(
 /** A back edge. It loops around the right side, and each one is pushed a
  * little further out so the lines do not overlap. */
 function backEdgeLine(
-  edge: UiFlowEdge,
+  edge: FlowEdge,
   from: FlowNodeBox,
   to: FlowNodeBox,
   index: number,

@@ -131,11 +131,11 @@ test("stellaEntryOf: what send_chat sent is the conversation's message", () => {
 
   // A card written into the text is a block of the message: the words around
   // it and the card keep the order the agent wrote them in.
-  const card = '<Card title="確認"><Text>進めますか。</Text></Card>';
+  const json = '{"version":1}';
   assertEquals(
     stellaEntryOf(
       sent({
-        text: `確認します。\n\n\`\`\`card\n${card}\n\`\`\`\n\n進めますか。`,
+        text: `確認します。\n\n\`\`\`ui\n${json}\n\`\`\`\n\n進めますか。`,
         attachments: [],
       }),
     ),
@@ -144,7 +144,7 @@ test("stellaEntryOf: what send_chat sent is the conversation's message", () => {
       text: "確認します。\n\n進めますか。",
       segments: [
         { type: "text", text: "確認します。" },
-        { type: "card", markup: card },
+        { type: "app", json },
         { type: "text", text: "進めますか。" },
       ],
       attachments: [],
@@ -158,7 +158,7 @@ test("stellaEntryOf: what send_chat sent is the conversation's message", () => {
     stellaEntryOf(
       sent(
         {
-          text: `\`\`\`card\n${card}\n\`\`\``,
+          text: `\`\`\`ui\n${json}\n\`\`\``,
           attachments: [],
         },
         11,
@@ -167,7 +167,7 @@ test("stellaEntryOf: what send_chat sent is the conversation's message", () => {
     {
       role: "assistant",
       text: "",
-      segments: [{ type: "card", markup: card }],
+      segments: [{ type: "app", json }],
       attachments: [],
       files: [],
       timestamp: 11,
@@ -266,25 +266,6 @@ test("stellaEntryOf: the tools send_chat replaced show nothing", () => {
   for (const message of old) {
     assertEquals(stellaEntryOf(message), null, message.role);
   }
-});
-
-test("stellaEntryOf: an old chat_ui call shows its words, not its card", () => {
-  // The assistant message that made the old call wrote a sentence first. That
-  // sentence is a message under the current rule (the agent's text is the
-  // conversation's), while the card it attached is not: a card only arrives
-  // through send_chat now.
-  const old = fauxAssistantMessage(
-    [
-      { type: "text", text: "確認します。" },
-      fauxToolCall("chat_ui", {
-        markup: '<Card title="確認"><Text>進めますか。</Text></Card>',
-      }),
-    ],
-    { timestamp: 21 },
-  ) as AgentMessage;
-  const entry = stellaEntryOf(old);
-  assertEquals(entry?.text, "確認します。");
-  assertEquals(entry?.segments, [{ type: "text", text: "確認します。" }]);
 });
 
 test("stellaEntryOf: the model's own rows are never conversation entries", () => {

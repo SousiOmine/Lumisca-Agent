@@ -33,24 +33,21 @@ history and its own way of working.
 
 ## Ask before creating
 
-Ask for two things with send_chat, in one call whose card is one <Form>:
+Ask for two things with one app card in the reply text: the name and the
+role. Load the app-ui skill for the JSON spec. The card is part of the
+reply text, not a send_chat argument.
 
-<Card title="...">
-<Text>...</Text>
-<Form submit="...">
-<Field label="Name" type="text" required placeholder="Researcher" />
-<Field label="Role" type="text" required placeholder="Reads papers and summarizes them" />
-</Form>
-</Card>
-
-- Write the card, its text, the labels and the submit label in the reply
-  language, and put the card in send_chat's card argument.
+- Put the question in a Text block, then two Inputs bound to state, then a
+  Button whose sendMessage text carries the two values as label: value
+  lines.
+- Write the card, its text, the labels and the button label in the reply
+  language.
 - Name: the label in the sidebar, up to 60 characters.
 - Role: what the agent is responsible for and how it works, in one or two
   sentences — it becomes the new agent's system prompt, so it is the whole
   of its instructions from the first turn. If the role is long and already
   exists as a file, it can be passed as a file instead (see below).
-- The form is the question. Do not repeat the same questions in your text.
+- The card is the question. Do not repeat the same questions in your text.
 
 The answer arrives as a message with "label: value" lines. Use those values
 as written; do not paraphrase, shorten or translate them.

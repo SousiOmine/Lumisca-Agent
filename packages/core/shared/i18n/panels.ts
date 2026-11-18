@@ -157,17 +157,17 @@ export const panels = {
     en: "This agent is disabled, so its routines do not run.",
   },
 
-  // --- UI cards (the send_chat tool's card argument) -------------------------
-  "panels.ui.invalid": {
-    ja: "このカードを表示できませんでした",
-    en: "This card could not be displayed",
+  // --- UI cards (the `ui` fence's JSON) --------------------------------------
+  "panels.ui.invalidApp": {
+    ja: "このUIを表示できませんでした",
+    en: "This UI could not be displayed",
   },
-  "panels.ui.markup": { ja: "マークアップ", en: "Markup" },
-  "panels.ui.submit": { ja: "送信", en: "Send" },
-  "panels.ui.multiple": { ja: "複数選択可", en: "Select any number" },
+  "panels.ui.spec": { ja: "仕様", en: "JSON" },
+  "panels.ui.buildingApp": {
+    ja: "UIを組み立てています…",
+    en: "Building UI…",
+  },
   "panels.ui.flow": { ja: "フローチャート", en: "Flowchart" },
-  "panels.ui.yes": { ja: "はい", en: "Yes" },
-  "panels.ui.no": { ja: "いいえ", en: "No" },
 
   "panels.question.header": { ja: "質問", en: "Question" },
   "panels.question.placeholder": {

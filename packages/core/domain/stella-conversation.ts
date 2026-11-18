@@ -18,9 +18,9 @@
  */
 
 import type { AttachmentRef, PromptFileRef } from "../shared/attachments.ts";
+import type { UiSegment } from "../shared/chat-ui/types.ts";
 import type { AskTurn } from "../shared/interaction.ts";
 import type { ThinkingLevel } from "../shared/providers.ts";
-import type { UiSegment } from "../shared/ui-markup/types.ts";
 import type { FolderShare } from "./share.ts";
 
 /** One thing the user or the agent said, as the conversation shows it.
@@ -41,7 +41,7 @@ export interface StellaEntry {
    * the conversation search read. */
   text: string;
   /** What the message draws, in the order it was written: its prose and the
-   * cards the agent put between the words (see shared/ui-markup/segments.ts).
+   * cards the agent put between the words (see shared/chat-ui/segments.ts).
    * A card is a block of the reply itself, so a message may hold several and
    * the text before and after each of them. The user's own message has one
    * text segment: their words are never read as markup. */
@@ -214,13 +214,13 @@ export type StellaEvent =
   | { type: "agent_end"; silent?: boolean }
   /** One finished message (a prompt, or what the agent sent). */
   | { type: "entry"; entry: StellaEntry }
-  /** A fragment of a card being written into a `send_chat` call: the markup
-   * appended since the previous fragment of that call. */
-  | { type: "card_delta"; toolCallId: string; delta: string }
+  /** A fragment of an app card being written into a reply: the JSON appended
+   * since the previous fragment of that card. */
+  | { type: "ui_delta"; toolCallId: string; delta: string }
   /** The message that was being written ended without becoming one (a turn
    * that stopped to call a tool is narration, not a reply): whatever card was
    * being drawn goes. */
-  | { type: "card_end" }
+  | { type: "ui_end" }
   /** The pending questions changed (asked, answered, or dropped). */
   | { type: "questions"; questions: StellaQuestion[] }
   /** The screen hand-over began or ended (`null`). */
