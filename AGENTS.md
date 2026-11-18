@@ -80,6 +80,9 @@ push の前にも `git fetch` して `git log --oneline HEAD..origin/master` を
   帯は `.app.macos` の上余白の下から始め、上余白に `.macos-titlebar-drag` を置きます（左 78px は空ける）。
   ドラッグとダブルクリックはブリッジへ送ります。
   Windows / Linux はフレームレスのままページが描きます。
+- Windows / Linux の帯のダブルクリックは 2 回目の押下で決めます。
+  1 回目の押下が始める移動ループがマウスを捕捉し、解放から数える `dblclick` はページに届きません。
+  2 回目の押下は届き、OS が数えた `detail` を持っています（`packages/web/src/titlebar-press.ts`。起動直後のスプラッシュ `frontend/splash.js` も同じ規則です）。
 - 帯を描くかどうかはブリッジの応答で決めません。
   どちらの作法かは初期化スクリプトの `__LUMISCA_PLATFORM__` が答え、帯の有無は `inDesktopShell()` が決めます（`packages/web/src/shell.ts`）。
   `state` の読み出し失敗で帯を落とすと、`decorations: false` の窓は閉じることも動かすこともできなくなります。

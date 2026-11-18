@@ -74,14 +74,20 @@ applyPlatform(globalThis.__LUMISCA_PLATFORM__);
 // Drag the window from anywhere on the title bar except the buttons;
 // double-click toggles maximize. On macOS the system title bar already
 // does both.
+//
+// The double click is decided on the second press, not on `dblclick`: the
+// first press starts the OS's window-move loop, whose mouse capture swallows
+// the release a `dblclick` would be counted from. See
+// packages/web/src/titlebar-press.ts for the same rule.
 titlebar.addEventListener("mousedown", (e) => {
   if (nativeChrome || e.button !== 0 || e.target.closest("button")) return;
   e.preventDefault();
+  if (e.detail === 2) {
+    windowAction("toggle-maximize");
+    return;
+  }
+  if (e.detail !== 1) return;
   windowAction("start-drag");
-});
-titlebar.addEventListener("dblclick", (e) => {
-  if (nativeChrome || e.target.closest("button")) return;
-  windowAction("toggle-maximize");
 });
 
 function setMaximized(maximized) {

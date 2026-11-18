@@ -695,6 +695,12 @@ URLはシェルを介さず、プログラムの引数として1つだけ渡し�
   ネイティブバーの高さにも `.macos-titlebar-drag` を置きます（信号機の左 78px は空けます）。
   Windows / Linux は `decorations: false` のフレームレスで、ページが右端にボタンを描きます。
 
+  Windows / Linux の帯のダブルクリックは、2 回目の押下（`detail === 2`）で最大化と復元を決めます（`packages/web/src/titlebar-press.ts`。スプラッシュの `frontend/splash.js` も同じ規則です）。
+  1 回目の押下は OS のウィンドウ移動ループを始め、そのループがマウスを捕捉するため、解放から数える `dblclick` はページに届きません。
+  2 回目の押下は解放の後に届き、OS が `WM_LBUTTONDBLCLK` として数えた `detail` を持っています。
+  Tauri 自身のドラッグ領域のスクリプトも同じ場所で決めています。
+  macOS は解放で決め、押下の間にポインタが動いていれば拡大しません。
+
   どちらかをページへ渡すのは、ブリッジの origin と同じ初期化スクリプトです（`__LUMISCA_PLATFORM__`、`bridge_server.rs` の `main_window_initialization_script`）。
   `state` には載せません。
   OS はウィンドウの事実であり、ページはそれとは別のマシンに配信され得るため、ページの環境からは答えられない一方で、ブリッジの応答は待てないからです。

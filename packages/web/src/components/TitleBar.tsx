@@ -11,6 +11,7 @@ import {
   shellState,
   windowApi,
 } from "../shell.ts";
+import { captionPress } from "../titlebar-press.ts";
 import { AppMenu } from "./AppMenu.tsx";
 import { ConnectionPicker } from "./ConnectionPicker.tsx";
 
@@ -56,7 +57,9 @@ interface TitleBarProps {
  *   click zooms it.
  * - Windows and Linux are undecorated (`decorations: false`), so the page
  *   draws square minimize / maximize / close buttons at the right edge and
- *   moves the window through the bridge (`window/start-drag`).
+ *   moves the window through the bridge (`window/start-drag`). A double
+ *   click on the strip maximizes or restores the window, decided on the
+ *   second press rather than on `dblclick` — see `captionPress`.
  *
  * The page is served from http://127.0.0.1 (or a remote server), so it has
  * no Tauri IPC and the native `data-tauri-drag-region` path cannot work. */
@@ -116,50 +119,52 @@ export function TitleBar({
 
   const onMouseDown = (e: MouseEvent<HTMLDivElement>) => {
     if (e.button !== 0 || isInteractive(e)) return;
+    e.preventDefault();
     // macOS: the strip is below the native title bar, but it is still the
     // window's toolbar. A drag here goes through the bridge like Windows
     // and Linux; a double click is the system's zoom gesture, so remember
     // its position instead of starting a second drag on the second press.
-    if (nativeControls && e.detail === 2) {
-      doubleClickAt.current = { x: e.clientX, y: e.clientY };
+    if (nativeControls) {
+      if (e.detail === 2) {
+        doubleClickAt.current = { x: e.clientX, y: e.clientY };
+        return;
+      }
+      windowApi.startDrag().catch(() => {});
       return;
     }
-    e.preventDefault();
-    windowApi.startDrag().catch(() => {});
+    switch (captionPress(e.detail)) {
+      case "drag":
+        windowApi.startDrag().catch(() => {});
+        break;
+      case "toggle-maximize":
+        windowApi.toggleMaximize().catch(() => {});
+        break;
+      case "none":
+        break;
+    }
   };
 
   const onMouseUp = (e: MouseEvent<HTMLDivElement>) => {
-    if (nativeControls && e.button === 0 && e.detail === 2) {
-      const start = doubleClickAt.current;
+    if (!nativeControls) return;
+    if (e.button !== 0 || e.detail !== 2) {
       doubleClickAt.current = null;
-      // The system cancels the zoom when the pointer moved between the two
-      // presses; do the same so a sloppy double click does not resize.
-      if (
-        start !== null &&
-        !isInteractive(e) &&
-        Math.abs(e.clientX - start.x) + Math.abs(e.clientY - start.y) <= 4
-      ) {
-        windowApi.toggleMaximize().catch(() => {});
-      }
       return;
     }
+    const start = doubleClickAt.current;
     doubleClickAt.current = null;
-  };
-
-  const onDblClick = (e: MouseEvent<HTMLDivElement>) => {
-    // macOS zooms on mouseup (the first press starts a drag); the other
-    // platforms do not have the native title bar to consume the drag.
-    if (nativeControls || isInteractive(e)) return;
-    windowApi.toggleMaximize().catch(() => {});
+    // The system cancels the zoom when the pointer moved between the two
+    // presses; do the same so a sloppy double click does not resize.
+    if (
+      start !== null &&
+      !isInteractive(e) &&
+      Math.abs(e.clientX - start.x) + Math.abs(e.clientY - start.y) <= 4
+    ) {
+      windowApi.toggleMaximize().catch(() => {});
+    }
   };
 
   return (
-    <div
-      className="titlebar"
-      onMouseDown={onMouseDown}
-      onMouseUp={onMouseUp}
-      onDblClick={onDblClick}
-    >
+    <div className="titlebar" onMouseDown={onMouseDown} onMouseUp={onMouseUp}>
       {children}
       <div className="titlebar-controls">
         {/* Which server this window shows. The window's own state, so it
