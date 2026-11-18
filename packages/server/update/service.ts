@@ -251,7 +251,6 @@ export class UpdateService {
     const applied = readAppliedUpdate(this.#environment.installDir);
     const staged = readStagedUpdate(this.#environment.installDir);
     if (
-      staged !== null &&
       staged !== undefined &&
       isNewerVersion(staged.version, this.#currentVersion)
     ) {

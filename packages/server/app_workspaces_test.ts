@@ -135,12 +135,20 @@ Deno.test("skills API lists the workspace catalog and the chat subset", async ()
       .find((s) => s.name === "skill-authoring");
     assert(skillGuide !== undefined, "the skill guide must be listed");
 
+    // ...and the guide for delegating to sub-agents: a workspace session
+    // has the task tools it teaches.
+    const codingGuide = core
+      .listSkills(ws.id)
+      .find((s) => s.name === "coding-agents");
+    assert(codingGuide !== undefined, "the coding guide must be listed");
+
     const forWorkspace = await json(base, `/api/skills?workspaceId=${ws.id}`);
     assertEquals(forWorkspace.status, 200);
     assertEquals((await forWorkspace.json()).skills, [
       { name: "demo", description: "Demo skill." },
       mcpGuide,
       skillGuide,
+      codingGuide,
     ]);
 
     // Without a workspaceId the endpoint answers for a chat session: no

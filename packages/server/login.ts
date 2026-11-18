@@ -238,4 +238,12 @@ export class LoginSessions {
     }
     return undefined;
   }
+
+  /** Stop every flow still holding timers or awaiting a prompt. Called from
+   * the app's disposer: a login poll left behind keeps the process alive and
+   * can still write a credential after the server said it stopped. */
+  dispose(): void {
+    for (const session of this.sessions.values()) session.dispose();
+    this.sessions.clear();
+  }
 }

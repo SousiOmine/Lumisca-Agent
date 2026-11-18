@@ -162,9 +162,11 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
     return c.text("Not found", 404);
   });
 
+  const routeDisposers: Array<() => void> = [];
   appDisposers.set(app, () => {
     fed.close();
     push.dispose();
+    for (const dispose of routeDisposers) dispose();
   });
 
   // `now` proves the event loop itself is alive (not just the listener
@@ -249,7 +251,10 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   // `send_chat`'s attachments in stella). Their own path shape, like the
   // visuals above.
   app.route("/api", attachmentRoutes(core));
-  app.route("/api", providerRoutes(core));
+  app.route(
+    "/api",
+    providerRoutes(core, (dispose) => routeDisposers.push(dispose)),
+  );
   app.route("/api", settingRoutes(core));
   // The first-run setup's state: a file beside the settings file, so this
   // server answers for one installation (and every client of it).

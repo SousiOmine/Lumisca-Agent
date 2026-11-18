@@ -53,7 +53,7 @@ Deno.test("ShareRequestCard: the agent's reason is what the card leads with", ()
   assertStringIncludes(html, "フォルダーを選ぶ");
   assertStringIncludes(html, "共有しない");
   // A window that can pick a folder is told so, and the button works.
-  assertStringIncludes(html, "この PC のフォルダーを選ぶと");
+  assertStringIncludes(html, "このPCのフォルダーを選ぶと");
   assert(!html.includes("この画面からは"), html);
   assertStringIncludes(pickButton(html), "フォルダーを選ぶ");
   assert(!pickButton(html).includes("disabled"), pickButton(html));

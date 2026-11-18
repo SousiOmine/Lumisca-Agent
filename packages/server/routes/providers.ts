@@ -91,7 +91,10 @@ function pageIsLocal(c: Context): boolean {
   }
 }
 
-export function providerRoutes(core: ProviderApi): Hono {
+export function providerRoutes(
+  core: ProviderApi,
+  onDispose?: (dispose: () => void) => void,
+): Hono {
   const app = new Hono();
 
   const authCache = ttlCache<
@@ -217,6 +220,7 @@ export function providerRoutes(core: ProviderApi): Hono {
   // methods are not interchangeable (only a page on this machine can finish
   // the browser flow).
   const loginSessions = new LoginSessions();
+  onDispose?.(() => loginSessions.dispose());
 
   app.post("/providers/:id/login", async (c) => {
     const id = c.req.param("id");
