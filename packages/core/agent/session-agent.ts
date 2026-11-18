@@ -7,7 +7,6 @@ import {
   contextStart,
 } from "../ai/context-compaction.ts";
 import type { ContextProvider } from "../ai/context-providers.ts";
-import { contextMessage } from "../ai/context-providers.ts";
 import { toLlmMessages } from "../ai/llm-view.ts";
 import type {
   AgentMessage,
@@ -20,7 +19,6 @@ import type {
 import type { NotificationPayload } from "../ai/notification.ts";
 import { notificationMessage } from "../ai/notification.ts";
 import type { StreamFn } from "../ai/transport.ts";
-
 import type { ClientEvent } from "../domain/event.ts";
 import type { ModePrompt } from "../domain/mode-message.ts";
 import { buildModeMessage } from "../domain/mode-message.ts";
@@ -55,6 +53,7 @@ import {
   CompactionController,
   type IdleCompaction,
 } from "./compaction-controller.ts";
+import { ContextPublisher } from "./context-publisher.ts";
 import { ImageAnalyzer } from "./image-analysis.ts";
 import { InterruptionHub } from "./interruption-hub.ts";
 import { McpAttachmentHost } from "./mcp-host.ts";
@@ -270,10 +269,9 @@ export class SessionAgent {
    * built for this session). */
   private readonly backgroundManager: BackgroundProcessManager | null;
   private readonly backgroundUnsubscribe: (() => void) | null;
-  /** Dynamic context providers (skill catalog, workspace instructions):
-   * their pending updates are published as transcript messages before each
-   * run (see publishContexts). */
-  private readonly contextProviders: readonly ContextProvider[];
+  /** Dynamic context providers (skill catalog, workspace instructions) and
+   * the messages they publish (see context-publisher.ts). */
+  private readonly contexts: ContextPublisher;
   /** Set by close(): completion notifications of killed background
    * commands must not reach the discarded agent. */
   private closed = false;
@@ -284,7 +282,7 @@ export class SessionAgent {
     baseIndex: () => this.transcript.baseIndex,
     forgetFrom: (messages, from) => this.transcript.forgetFrom(messages, from),
     truncateFrom: (position) => this.transcript.truncateFrom(position),
-    rebaseContexts: (messages) => this.rebaseContexts(messages),
+    rebaseContexts: (messages) => this.contexts.rebase(messages),
     emitTruncated: (removed) =>
       this.emit({
         type: "messages_truncated",
@@ -378,7 +376,7 @@ export class SessionAgent {
       retry: this.retry,
       isStreaming: () => this.isStreaming,
       abort: () => this.abort(),
-      rebaseContexts: (messages) => this.rebaseContexts(messages),
+      rebaseContexts: (messages) => this.contexts.rebase(messages),
       emit: (event) =>
         this.emit({
           type: event.type,
@@ -403,7 +401,7 @@ export class SessionAgent {
         isStreaming: () => this.isStreaming,
         isClosed: () => this.closed,
         insertHistory: (index, message) => this.insertHistory(index, message),
-        publishContexts: () => this.publishContexts(),
+        publishContexts: () => this.contexts.publish(),
         onCompacted: (index, message) =>
           this.announceCheckpoint(index, message),
       },
@@ -418,7 +416,12 @@ export class SessionAgent {
         idle: options.idleCompaction ?? null,
       },
     );
-    this.contextProviders = options.contextProviders ?? [];
+    this.contexts = new ContextPublisher(options.contextProviders ?? [], {
+      append: (message) => this.agent.appendMessage(message),
+      announce: (message) => this.announceMessage(message),
+      nextTimestamp: () => this.agent.nextTimestamp(),
+      isClosed: () => this.closed,
+    });
     this.shouldPruneCondensed = options.shouldPruneCondensed ?? (() => false);
     this.onFreedBytes = options.onFreedBytes;
     // Reopening a conversation is the repair point for a process that died
@@ -426,7 +429,7 @@ export class SessionAgent {
     // reduce what is behind the checkpoint, and a row already reduced is
     // left alone.
     this.pruneCondensedRows();
-    this.rebaseContexts(this.agent.state.messages);
+    this.contexts.rebase(this.agent.state.messages);
     this.agent.subscribe((event) => this.handleEvent(event));
     // A conversation reopened after a long silence is condensed right away
     // (the gap started before this process opened it); otherwise the timer
@@ -454,47 +457,6 @@ export class SessionAgent {
           error,
         )}`,
       );
-    }
-  }
-
-  /** Re-anchor every context provider to the part of the transcript the
-   * model actually sees (from the newest compaction checkpoint on): the
-   * restored history already carries the last publication of each provider,
-   * so a reopened session must neither republish an unchanged value nor
-   * lose track of what the model has already seen. A publication that a
-   * compaction left outside the model's view is forgotten here, so the
-   * provider publishes its current value again before the next request.
-   * Called on construction, after a compaction and after a rewind truncated
-   * the history. */
-  private rebaseContexts(messages: readonly AgentMessage[]): void {
-    if (this.contextProviders.length === 0) return;
-    const last = new Map<string, unknown>();
-    for (let i = contextStart(messages); i < messages.length; i++) {
-      const message = messages[i]!;
-      if (message.role === "context") last.set(message.provider, message.state);
-    }
-    for (const provider of this.contextProviders) {
-      provider.rebase(last.get(provider.name));
-    }
-  }
-
-  /** Publish the pending dynamic-context updates (skill catalog, workspace
-   * instructions) as transcript messages. Runs before a run starts, so the
-   * model sees the current value in the run's first request; the messages
-   * are announced to clients like any other injected message, and they are
-   * appended to the transcript without starting a run of their own. */
-  private publishContexts(): void {
-    if (this.closed) return;
-    for (const provider of this.contextProviders) {
-      for (const update of provider.next()) {
-        const message = contextMessage(
-          provider.name,
-          update,
-          this.agent.nextTimestamp(),
-        );
-        this.agent.appendMessage(message);
-        this.announceMessage(message);
-      }
     }
   }
 
@@ -611,7 +573,7 @@ export class SessionAgent {
     // The contexts are published FIRST: they are the run's preamble, so they
     // must precede the prompt in the transcript (and, with the timestamp,
     // in time — see Agent.nextTimestamp).
-    this.publishContexts();
+    this.contexts.publish();
     const message =
       options.announced ??
       (options.mode !== undefined
@@ -764,7 +726,7 @@ export class SessionAgent {
     // delivery below, and the condition is the one deliverPrompt re-checks.
     const steered = this.joinsActiveRun();
     // Same order as runPrompt: the preamble, then the prompt it introduces.
-    this.publishContexts();
+    this.contexts.publish();
     const message = mode
       ? buildModeMessage(
           mode,
@@ -1300,6 +1262,6 @@ export class SessionAgent {
     // publications the older messages carried: re-anchor so a provider
     // whose snapshot is no longer visible publishes it again before the
     // next request (the caller publishes what the re-anchoring queued).
-    this.rebaseContexts(this.agent.state.messages);
+    this.contexts.rebase(this.agent.state.messages);
   }
 }
