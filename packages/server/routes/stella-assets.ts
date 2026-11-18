@@ -13,7 +13,7 @@ import type { StellaAgent } from "@lumisca/core";
 import { Hono } from "hono";
 import { renderPreview } from "../../core/media/preview.ts";
 import { runtime } from "../../core/runtime/runtime.ts";
-import { assetHeaders } from "./asset-headers.ts";
+import { assetResponse } from "./asset-response.ts";
 import { AppError, notFound } from "./util.ts";
 
 /** The slice of the core the file routes need (interface segregation). */
@@ -56,8 +56,9 @@ export function stellaAssetRoutes(core: StellaAssetApi): Hono {
       throw notFound("Icon", name);
     }
     const bytes = await runtime.readFile(icon.path);
-    return new Response(bytes, {
-      headers: assetHeaders({ mimeType: icon.mimeType }),
+    return assetResponse(c, {
+      bytes: bytes.buffer as ArrayBuffer,
+      mimeType: icon.mimeType,
     });
   });
 
@@ -94,8 +95,9 @@ export function stellaAssetRoutes(core: StellaAssetApi): Hono {
       ? ((await renderPreview(new Uint8Array(file.bytes), file.mimeType)) ??
         new Uint8Array(file.bytes))
       : new Uint8Array(file.bytes);
-    return new Response(bytes.buffer as ArrayBuffer, {
-      headers: assetHeaders({ mimeType: file.mimeType }),
+    return assetResponse(c, {
+      bytes: bytes.buffer as ArrayBuffer,
+      mimeType: file.mimeType,
     });
   });
 

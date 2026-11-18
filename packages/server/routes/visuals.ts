@@ -5,7 +5,7 @@ import {
   previewPathOf,
 } from "../../core/media/preview-cache.ts";
 import { runtime } from "../../core/runtime/runtime.ts";
-import { assetHeaders } from "./asset-headers.ts";
+import { assetResponse } from "./asset-response.ts";
 import { notFound } from "./util.ts";
 
 /** The slice of the core these routes need (interface segregation). */
@@ -45,7 +45,6 @@ export function visualRoutes(core: VisualApi): Hono {
     if (visual === undefined) {
       throw notFound("Visual", name);
     }
-    const headers = assetHeaders({ mimeType: visual.mimeType });
     // A picture is drawn small: the conversation gets a downscaled copy, and
     // `preview=0` asks for the original (what a click opens, and what the
     // model reads). The preview is stored beside its source under a name
@@ -60,12 +59,18 @@ export function visualRoutes(core: VisualApi): Hono {
         )
       : undefined;
     if (preview !== undefined) {
-      return c.newResponse(preview.buffer as ArrayBuffer, 200, headers);
+      return assetResponse(c, {
+        bytes: preview.buffer as ArrayBuffer,
+        mimeType: visual.mimeType,
+      });
     }
     const bytes = await runtime.readFile(visual.path);
     // The asset is bounded by the store's limit (4 MiB), so buffering it
     // needs no stream handling; the buffer is an ArrayBuffer of its own.
-    return c.newResponse(bytes.buffer as ArrayBuffer, 200, headers);
+    return assetResponse(c, {
+      bytes: bytes.buffer as ArrayBuffer,
+      mimeType: visual.mimeType,
+    });
   });
 
   return app;

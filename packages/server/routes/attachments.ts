@@ -5,7 +5,7 @@ import {
   previewPathOf,
 } from "../../core/media/preview-cache.ts";
 import { runtime } from "../../core/runtime/runtime.ts";
-import { assetHeaders } from "./asset-headers.ts";
+import { assetResponse } from "./asset-response.ts";
 import { notFound } from "./util.ts";
 
 /** The slice of the core these routes need (interface segregation). */
@@ -49,10 +49,6 @@ export function attachmentRoutes(core: AttachmentApi): Hono {
     }
     // The download carries the name the user knows, not the store's random
     // one (see asset-headers.ts for the rest of the rules).
-    const headers = assetHeaders({
-      mimeType: attachment.mimeType,
-      downloadName: attachment.downloadName,
-    });
     // A picture is drawn small, so the conversation gets a downscaled copy
     // (`preview=0` asks for the original, which is what a click opens). The
     // preview is stored beside its source under a name derived from it (see
@@ -66,10 +62,18 @@ export function attachmentRoutes(core: AttachmentApi): Hono {
         )
       : undefined;
     if (preview !== undefined) {
-      return new Response(preview.buffer as ArrayBuffer, { headers });
+      return assetResponse(c, {
+        bytes: preview.buffer as ArrayBuffer,
+        mimeType: attachment.mimeType,
+        downloadName: attachment.downloadName,
+      });
     }
     const bytes = await runtime.readFile(attachment.path);
-    return new Response(bytes, { headers });
+    return assetResponse(c, {
+      bytes: bytes.buffer as ArrayBuffer,
+      mimeType: attachment.mimeType,
+      downloadName: attachment.downloadName,
+    });
   });
 
   return app;
