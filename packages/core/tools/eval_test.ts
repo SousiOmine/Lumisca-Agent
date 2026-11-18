@@ -123,7 +123,7 @@ test("eval exposes Deno and fetch deliberately, but not node globals", async () 
   );
   assertEquals(
     toolText(result),
-    "[result]\n'object,function,undefined,undefined'",
+    "[result]\nobject,function,undefined,undefined",
   );
 });
 
@@ -163,9 +163,9 @@ test("eval provides the web globals real snippets need", async () => {
   // 18 web globals present, the three node internals absent.
   assertEquals(
     toolText(result),
-    "[result]\n'" +
+    "[result]\n" +
       "function+".repeat(17) +
-      "function+undefined+undefined+undefined'",
+      "function+undefined+undefined+undefined",
   );
 });
 
@@ -178,7 +178,7 @@ test("eval can decode, hash and abort with the web globals", async () => {
     },
     undefined,
   );
-  assertEquals(toolText(decoded), "[result]\n'hello|aGk='");
+  assertEquals(toolText(decoded), "[result]\nhello|aGk=");
 
   // AbortController + fetch: the abort must reach the host fetch, which is
   // why exposing it matters (a fetch without a signal cannot time out).
@@ -201,7 +201,7 @@ test("eval state is isolated per tool instance", async () => {
   const b = makeEval();
   await a.execute("1", { code: "var shared = 1" }, undefined);
   const result = await b.execute("1", { code: "typeof shared" }, undefined);
-  assertEquals(toolText(result), "[result]\n'undefined'");
+  assertEquals(toolText(result), "[result]\nundefined");
 });
 
 test("eval reports no output for statements without a value", async () => {
@@ -247,7 +247,7 @@ test("eval supports top-level await and awaits promise completions", async () =>
       { code: `Deno.readTextFile(${JSON.stringify(file)})` },
       undefined,
     );
-    assertEquals(toolText(promised), "[result]\n'hello'");
+    assertEquals(toolText(promised), "[result]\nhello");
   } finally {
     await removeDirRetry(root);
   }

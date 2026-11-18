@@ -36,14 +36,68 @@ const RESULT_MAX_STRING = 8192;
 let sucrase: typeof import("sucrase") | undefined;
 
 /** Strip TypeScript type annotations so vm can run the snippet. Plain
- * JavaScript passes through unchanged; syntax errors throw. Imports are
- * left untouched (disableESTransforms) and fail in vm with a clear error. */
+ * JavaScript passes through unchanged; a syntax error throws with the line it
+ * is on, because the parser's own message carries only a position. Imports
+ * are left untouched (disableESTransforms) and fail in vm with a clear
+ * error. */
 export async function transpileToJs(code: string): Promise<string> {
   const { transform } = (sucrase ??= await import("sucrase"));
-  return transform(code, {
-    transforms: ["typescript"],
-    disableESTransforms: true,
-  }).code;
+  try {
+    return transform(code, {
+      transforms: ["typescript"],
+      disableESTransforms: true,
+    }).code;
+  } catch (error) {
+    throw new Error(syntaxErrorText(code, error));
+  }
+}
+
+/** How much of a source line a syntax error shows on each side of the caret.
+ * A program that embeds a shell command has lines of thousands of characters,
+ * and the caret has to stay on screen. */
+const ERROR_LINE_WINDOW = 100;
+
+/** sucrase reports `Unexpected token, expected "," (6:51)`: a position and
+ * nothing else. The mistake is usually one unescaped character in a template
+ * literal, so the line and the caret are what let the model find it without
+ * guessing at the cause. */
+function syntaxErrorText(code: string, error: unknown): string {
+  const message = errorMessage(error);
+  const match = /^(.*) \((\d+):(\d+)\)$/s.exec(message);
+  if (match === null) return message;
+  const [, reason, lineText, columnText] = match;
+  const line = Number(lineText);
+  const column = Number(columnText);
+  const source = code.split("\n")[line - 1];
+  if (source === undefined) return message;
+  const { text, caret } = windowAround(source, column);
+  const number = String(line);
+  return [
+    `Syntax error at line ${line}, column ${column}: ${reason}`,
+    "",
+    `${number} | ${text}`,
+    `${" ".repeat(number.length)} | ${" ".repeat(caret)}^`,
+    "",
+    "Common cause: a backtick or `${` inside a template literal. Write " +
+      "them as \\` and \\${, and close every quoted string on its own line.",
+  ].join("\n");
+}
+
+/** The part of `source` around `column`, one space per tab so the caret lines
+ * up, with an ellipsis marking a cut on either side. */
+function windowAround(
+  source: string,
+  column: number,
+): { text: string; caret: number } {
+  const at = Math.min(Math.max(column - 1, 0), source.length);
+  const start = Math.max(0, at - ERROR_LINE_WINDOW);
+  const end = Math.min(source.length, at + ERROR_LINE_WINDOW);
+  const head = start > 0 ? "…" : "";
+  const tail = end < source.length ? "…" : "";
+  return {
+    text: head + source.slice(start, end).replace(/\t/g, " ") + tail,
+    caret: head.length + (at - start),
+  };
 }
 
 /** True when `value` is a promise-like completion that the host must await
@@ -248,19 +302,25 @@ function formatConsoleArg(arg: unknown): string {
   return typeof arg === "string" ? arg : inspect(arg);
 }
 
-/** The text a script's outcome is reported as: its console output, then
- * its completion value. */
+/** The text a script's outcome is reported as: its console output, then its
+ * completion value. A string value is reported as itself: the model reads it
+ * as text, and `inspect` would only add quotes and escaped newlines to every
+ * line of what a tool returned. Everything else is inspected. */
 export function composeScriptResult(output: string, value: unknown): string {
   const parts: string[] = [];
   if (output.length > 0) parts.push(`[output]\n${output}`);
-  if (value !== undefined) {
-    parts.push(
-      `[result]\n${inspect(value, {
-        depth: RESULT_DEPTH,
-        maxArrayLength: RESULT_MAX_ARRAY,
-        maxStringLength: RESULT_MAX_STRING,
-      })}`,
-    );
-  }
+  if (value !== undefined) parts.push(`[result]\n${resultText(value)}`);
   return parts.join("\n\n");
+}
+
+/** `inspect` bounds a huge array or string that a program built without
+ * meaning to. A string returned whole is bounded by the caller's own
+ * truncation of the composed result. */
+function resultText(value: unknown): string {
+  if (typeof value === "string") return value;
+  return inspect(value, {
+    depth: RESULT_DEPTH,
+    maxArrayLength: RESULT_MAX_ARRAY,
+    maxStringLength: RESULT_MAX_STRING,
+  });
 }

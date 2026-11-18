@@ -81,10 +81,25 @@ test("execute: a program returns its value and its calls' results", async () => 
     undefined,
   );
   const text = toolText(result);
-  // inspect() quotes a returned string, so the case change is what proves
-  // the value went through the program.
-  assert(text.includes("[result]\n'FILE BODY'"), text);
+  // A returned string is reported as itself, so the case change is what
+  // proves the value went through the program.
+  assert(text.includes("[result]\nFILE BODY"), text);
   assert(text.includes("[calls]\nread ×1"), text);
+});
+
+test("execute: a syntax error shows the line and the caret", async () => {
+  const tool = makeExecute({});
+  const result = await tool.execute(
+    "call-1",
+    { code: "const a = 1;\nconst text = `a ` b`;" },
+    undefined,
+  );
+  const text = toolText(result);
+  assert(text.startsWith("[error]"), text);
+  assert(text.includes("Syntax error at line 2"), text);
+  assert(text.includes("2 | const text = `a ` b`;"), text);
+  assert(text.includes("^"), text);
+  assert(text.includes("template literal"), text);
 });
 
 test("execute: console output is kept and the value inspected", async () => {
