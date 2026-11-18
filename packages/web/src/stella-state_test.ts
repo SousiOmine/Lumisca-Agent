@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertNotEquals } from "@std/assert";
 import {
   applyStellaEvent,
@@ -38,7 +39,7 @@ function state(
 
 const thinkingLevel: ThinkingLevel = "high";
 
-Deno.test("stellaStateOf: a snapshot becomes the conversation", () => {
+test("stellaStateOf: a snapshot becomes the conversation", () => {
   const snapshot = {
     entries: [entry("user", "こんにちは", 1)],
     older: "cursor-1",
@@ -77,7 +78,7 @@ Deno.test("stellaStateOf: a snapshot becomes the conversation", () => {
   });
 });
 
-Deno.test("stellaStateOf: a disabled conversation is read-only", () => {
+test("stellaStateOf: a disabled conversation is read-only", () => {
   // The flag is the client's whole answer to "may I send here": a snapshot
   // that carried the entries but not this would draw a composer the server
   // refuses.
@@ -102,7 +103,7 @@ Deno.test("stellaStateOf: a disabled conversation is read-only", () => {
   assertEquals(next.model, null);
 });
 
-Deno.test("stella: an env request is state a reconnect can still answer", () => {
+test("stella: an env request is state a reconnect can still answer", () => {
   // `env_request` events are not replayed, so the snapshot is the only thing
   // that can reopen the dialog for a client that was away when it opened.
   const request = {
@@ -127,7 +128,7 @@ Deno.test("stella: an env request is state a reconnect can still answer", () => 
   assertEquals(applyStellaEvent(next, { type: "env_request", request }), null);
 });
 
-Deno.test("stella: a folder request is state a reconnect can still answer", () => {
+test("stella: a folder request is state a reconnect can still answer", () => {
   const request = {
     kind: "lend" as const,
     toolCallId: "t1",
@@ -153,7 +154,7 @@ Deno.test("stella: a folder request is state a reconnect can still answer", () =
   );
 });
 
-Deno.test("stella: a disconnect rides in the same field and is not a card", () => {
+test("stella: a disconnect rides in the same field and is not a card", () => {
   // One field for both: a run can only be waiting on one folder question at a
   // time, and the difference is the kind the view reads.
   const next = applyStellaEvent(state({ running: true }), {
@@ -183,7 +184,7 @@ Deno.test("stella: a disconnect rides in the same field and is not a card", () =
   );
 });
 
-Deno.test("stellaStateOf: a model without thinking levels shows no rail", () => {
+test("stellaStateOf: a model without thinking levels shows no rail", () => {
   // The rail is drawn only when the model has a choice to offer; a snapshot
   // from a server that predates the field must not invent one.
   const snapshot = {
@@ -202,7 +203,7 @@ Deno.test("stellaStateOf: a model without thinking levels shows no rail", () => 
   assertEquals(stellaStateOf(snapshot).thinking, { level: "off", levels: [] });
 });
 
-Deno.test("applyStellaEvent: an entry is appended", () => {
+test("applyStellaEvent: an entry is appended", () => {
   const next = applyStellaEvent(state(), {
     type: "entry",
     entry: entry("assistant", "こんにちは", 2),
@@ -210,7 +211,7 @@ Deno.test("applyStellaEvent: an entry is appended", () => {
   assertEquals(next.entries, [entry("assistant", "こんにちは", 2)]);
 });
 
-Deno.test("applyStellaEvent: the same message twice is one entry", () => {
+test("applyStellaEvent: the same message twice is one entry", () => {
   // The server announces an injected message twice (a synthetic start/end
   // pair) and a client that reconnects reads the same window again: the same
   // message must never appear twice, and a second copy changes nothing.
@@ -219,7 +220,7 @@ Deno.test("applyStellaEvent: the same message twice is one entry", () => {
   assertEquals(applyStellaEvent(once, { type: "entry", entry: message }), null);
 });
 
-Deno.test("applyStellaEvent: the same message twice replaces in place", () => {
+test("applyStellaEvent: the same message twice replaces in place", () => {
   // The server sends a synthetic start/end pair for an injected message and
   // the placeholder plus the final copy for a reply; a re-read snapshot can
   // overlap the live events. An entry must never appear twice, and it must
@@ -244,13 +245,13 @@ Deno.test("applyStellaEvent: the same message twice replaces in place", () => {
   assertEquals(entryKey(current.entries[0]!), "user:1:::::A");
 });
 
-Deno.test("applyStellaEvent: the run ends", () => {
+test("applyStellaEvent: the run ends", () => {
   let current = state({ running: true });
   current = applyStellaEvent(current, { type: "agent_end" })!;
   assertEquals(current.running, false);
 });
 
-Deno.test("applyStellaEvent: the run state and its error", () => {
+test("applyStellaEvent: the run state and its error", () => {
   let current = state();
   current = applyStellaEvent(current, { type: "agent_start" })!;
   assertEquals(current.running, true);
@@ -264,7 +265,7 @@ Deno.test("applyStellaEvent: the run state and its error", () => {
   assertEquals(current.error, undefined);
 });
 
-Deno.test("applyStellaEvent: questions and the hand-over replace wholesale", () => {
+test("applyStellaEvent: questions and the hand-over replace wholesale", () => {
   const questions = [
     {
       toolCallId: "t1",
@@ -301,7 +302,7 @@ Deno.test("applyStellaEvent: questions and the hand-over replace wholesale", () 
   assertEquals(current.handover, null);
 });
 
-Deno.test("applyStellaEvent: no-ops keep the previous object", () => {
+test("applyStellaEvent: no-ops keep the previous object", () => {
   // The hook writes only when the reducer returns a new object, so a
   // memoized view is not re-rendered by a repeated frame.
   const idle = state();
@@ -314,7 +315,7 @@ Deno.test("applyStellaEvent: no-ops keep the previous object", () => {
   assertEquals(applyStellaEvent(once, duplicate), null);
 });
 
-Deno.test("stellaStateOf: a re-read snapshot merges into paged history", () => {
+test("stellaStateOf: a re-read snapshot merges into paged history", () => {
   // The client paged back and holds history the newest window does not: the
   // snapshot must add what the socket missed, not replace what the reader
   // loaded.
@@ -354,7 +355,7 @@ Deno.test("stellaStateOf: a re-read snapshot merges into paged history", () => {
   assertEquals(merged.older, "cursor-old");
 });
 
-Deno.test("stellaStateOf: an empty window keeps the conversation it holds", () => {
+test("stellaStateOf: an empty window keeps the conversation it holds", () => {
   // A snapshot can hold no entries and still not be the beginning of the
   // conversation: a run whose visible entries are all older than the window.
   // Replacing the state with it would empty a screen that was showing the
@@ -383,7 +384,7 @@ Deno.test("stellaStateOf: an empty window keeps the conversation it holds", () =
   assertEquals(merged.running, true);
 });
 
-Deno.test("stellaStateOf: a window that shares nothing replaces the state", () => {
+test("stellaStateOf: a window that shares nothing replaces the state", () => {
   const current = state({
     entries: [entry("user", "古い", 1)],
     older: "stale-cursor",
@@ -413,7 +414,7 @@ Deno.test("stellaStateOf: a window that shares nothing replaces the state", () =
   assertEquals(merged.older, "fresh-cursor");
 });
 
-Deno.test("prependOlderEntries: a page goes in front; an empty one ends the walk", () => {
+test("prependOlderEntries: a page goes in front; an empty one ends the walk", () => {
   const current = state({
     entries: [entry("user", "後", 3)],
     older: "cursor-b",
@@ -436,7 +437,7 @@ Deno.test("prependOlderEntries: a page goes in front; an empty one ends the walk
   assertEquals(repeated.older, null);
 });
 
-Deno.test("applyStellaEvent: two sends in one millisecond stay two entries", () => {
+test("applyStellaEvent: two sends in one millisecond stay two entries", () => {
   // Regression: the dedup key was role + timestamp (+ the first attachment's
   // name). The clock is a millisecond, so a burst of sends — or a server that
   // stamps a batch with one tick — produced one key for two DIFFERENT
@@ -455,7 +456,7 @@ Deno.test("applyStellaEvent: two sends in one millisecond stay two entries", () 
   );
 });
 
-Deno.test("applyStellaEvent: the same message announced twice is one entry", () => {
+test("applyStellaEvent: the same message announced twice is one entry", () => {
   // The other half of the same rule: the synthetic start/end pair (and the
   // snapshot that repeats an event) must still collapse.
   const message = entry("user", "同じ", 1000);
@@ -468,7 +469,7 @@ Deno.test("applyStellaEvent: the same message announced twice is one entry", () 
   assertEquals(current.entries.length, 1);
 });
 
-Deno.test("prependOlderEntries: a page never inserts live entries above", () => {
+test("prependOlderEntries: a page never inserts live entries above", () => {
   // Regression: the page is asked for by cursor, but the conversation keeps
   // growing while the answer is in flight. Prepending everything the client
   // lacked put a reply that had just arrived at the TOP of the conversation;
@@ -492,7 +493,7 @@ Deno.test("prependOlderEntries: a page never inserts live entries above", () => 
   );
 });
 
-Deno.test("prependOlderEntries: an entry newer than the edge is never added", () => {
+test("prependOlderEntries: an entry newer than the edge is never added", () => {
   // Even without an overlap to stop at, an entry newer than what the client
   // holds belongs to the live stream.
   const current = prependOlderEntries(
@@ -506,7 +507,7 @@ Deno.test("prependOlderEntries: an entry newer than the edge is never added", ()
   );
 });
 
-Deno.test("stella: a card being written grows, and the entry replaces it", () => {
+test("stella: a card being written grows, and the entry replaces it", () => {
   let current = state({ running: true });
   current = applyStellaEvent(current, {
     type: "card_delta",
@@ -534,7 +535,7 @@ Deno.test("stella: a card being written grows, and the entry replaces it", () =>
   assertEquals(current.entries.length, 1);
 });
 
-Deno.test("stella: a narration card is dropped when its message ends", () => {
+test("stella: a narration card is dropped when its message ends", () => {
   // A message that stopped to call a tool is not a reply (see the server's
   // projection): the card it drew has nowhere to land, and `card_end` clears
   // it. Waiting for the next entry would leave it up for the whole tool run.
@@ -551,7 +552,7 @@ Deno.test("stella: a narration card is dropped when its message ends", () => {
   assertEquals(applyStellaEvent(current, { type: "card_end" }), null);
 });
 
-Deno.test("stella: a card of another call starts over, and the run clears it", () => {
+test("stella: a card of another call starts over, and the run clears it", () => {
   let current = state({ running: true });
   current = applyStellaEvent(current, {
     type: "card_delta",
@@ -573,7 +574,7 @@ Deno.test("stella: a card of another call starts over, and the run clears it", (
   assertEquals(current.running, false);
 });
 
-Deno.test("stella: a snapshot is the finished conversation, so it draws no live card", () => {
+test("stella: a snapshot is the finished conversation, so it draws no live card", () => {
   const snapshot = {
     entries: [entry("user", "こんにちは", 1)],
     older: null,
@@ -591,7 +592,7 @@ Deno.test("stella: a snapshot is the finished conversation, so it draws no live 
   assertEquals(stellaStateOf(snapshot).liveCard, null);
 });
 
-Deno.test("entryKey: a routine's prompt and the same words typed differ", () => {
+test("entryKey: a routine's prompt and the same words typed differ", () => {
   // Two entries of one millisecond must not collapse: the routine's name is
   // part of which message this is.
   const typed = {
@@ -605,7 +606,7 @@ Deno.test("entryKey: a routine's prompt and the same words typed differ", () => 
   assert(entryKey(typed) !== entryKey({ ...typed, routine: "毎朝の確認" }));
 });
 
-Deno.test("transcriptEntries: a routine's prompt is not drawn", () => {
+test("transcriptEntries: a routine's prompt is not drawn", () => {
   // The words are the routine's instruction plus guidance written for the
   // model, so the transcript shows only what the run answered. The entry is
   // kept in the state (identity, the agent list's second line), which is why

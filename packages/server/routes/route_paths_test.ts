@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import type { SessionInfo, StellaAgent } from "@lumisca/core";
 /**
  * The shared session builder's mounted paths.
@@ -102,7 +103,7 @@ function fakeCore(seen: string[]): StellaApi {
   });
 }
 
-Deno.test("the shared builder owns rewind, not a second handler", async () => {
+test("the shared builder owns rewind, not a second handler", async () => {
   const seen: string[] = [];
   const app = stellaRoutes(fakeCore(seen));
   const response = await app.request(
@@ -148,7 +149,7 @@ async function registrationsIn(
   return out;
 }
 
-Deno.test("no route module registers the same method and path twice", async () => {
+test("no route module registers the same method and path twice", async () => {
   const files = [
     "attachments.ts",
     "connections.ts",

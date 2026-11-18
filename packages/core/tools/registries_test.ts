@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { createToolCallTool } from "./call-tool.ts";
 import { SessionToolRegistries } from "./registries.ts";
@@ -25,7 +26,7 @@ function fakeTool(name: string): Tool {
   };
 }
 
-Deno.test("shared tools reach both registries; main-only tools reach one", () => {
+test("shared tools reach both registries; main-only tools reach one", () => {
   const registries = new SessionToolRegistries();
   registries.addShared([fakeTool("mcp__a__x")]);
   registries.addMainOnly([fakeTool("identity"), fakeTool("agent_create")]);
@@ -40,7 +41,7 @@ Deno.test("shared tools reach both registries; main-only tools reach one", () =>
   assert(registries.subagent.get("agent_create") === undefined);
 });
 
-Deno.test("removing a shared tool removes it from both", () => {
+test("removing a shared tool removes it from both", () => {
   const registries = new SessionToolRegistries();
   registries.addShared([fakeTool("browser_open"), fakeTool("mcp__a__x")]);
   registries.removeShared(["browser_open"]);
@@ -52,7 +53,7 @@ Deno.test("removing a shared tool removes it from both", () => {
   assert(registries.subagent.get("mcp__a__x") !== undefined);
 });
 
-Deno.test("the sub-agent's tool_search cannot find a main-only tool", async () => {
+test("the sub-agent's tool_search cannot find a main-only tool", async () => {
   const registries = new SessionToolRegistries();
   registries.addShared([fakeTool("mcp__a__x")]);
   registries.addMainOnly([fakeTool("identity"), fakeTool("agent_create")]);

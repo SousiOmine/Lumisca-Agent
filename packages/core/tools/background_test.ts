@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { basename } from "node:path";
 import {
   fauxAssistantMessage,
@@ -127,7 +128,7 @@ async function removeTreeRetry(root: string): Promise<void> {
 
 // --- manager ---------------------------------------------------------------
 
-Deno.test("start returns immediately and notifies on completion", async () => {
+test("start returns immediately and notifies on completion", async () => {
   const manager = new BackgroundProcessManager();
   const exitPromise = waitForExit(manager);
   // Do not await: start() has a synchronous contract and must return while a
@@ -145,7 +146,7 @@ Deno.test("start returns immediately and notifies on completion", async () => {
   assertEquals(manager.get(commandId)!.state, "finished");
 });
 
-Deno.test("lifecycle events announce start, output deltas and end", async () => {
+test("lifecycle events announce start, output deltas and end", async () => {
   const events: ClientEvent[] = [];
   const manager = new BackgroundProcessManager({
     sessionId: "s1",
@@ -195,7 +196,7 @@ Deno.test("lifecycle events announce start, output deltas and end", async () => 
   );
 });
 
-Deno.test("kill announces a killed end event", async () => {
+test("kill announces a killed end event", async () => {
   const events: ClientEvent[] = [];
   const manager = new BackgroundProcessManager({
     sessionId: "s1",
@@ -219,7 +220,7 @@ Deno.test("kill announces a killed end event", async () => {
   );
 });
 
-Deno.test("status reports state, exit code and output tail", async () => {
+test("status reports state, exit code and output tail", async () => {
   const manager = new BackgroundProcessManager();
   const exitPromise = waitForExit(manager);
   const { commandId } = await manager.start({
@@ -237,7 +238,7 @@ Deno.test("status reports state, exit code and output tail", async () => {
   assert(tailWhileRunning !== undefined);
 });
 
-Deno.test("per-command env vars are passed and override the manager-level env", async () => {
+test("per-command env vars are passed and override the manager-level env", async () => {
   const manager = new BackgroundProcessManager({
     env: { LUMISCA_TEST_ENV: "manager-level" },
   });
@@ -258,7 +259,7 @@ Deno.test("per-command env vars are passed and override the manager-level env", 
   assert(!done.tail.includes("manager-level"), `tail: ${done.tail}`);
 });
 
-Deno.test("async_bash start tool forwards env vars", async () => {
+test("async_bash start tool forwards env vars", async () => {
   const manager = new BackgroundProcessManager();
   const exitPromise = waitForExit(manager);
   const root = Deno.makeTempDirSync({ prefix: "lumisca-async-env-" });
@@ -292,7 +293,7 @@ Deno.test("async_bash start tool forwards env vars", async () => {
   }
 });
 
-Deno.test("kill stops the process tree and is idempotent", async () => {
+test("kill stops the process tree and is idempotent", async () => {
   const manager = new BackgroundProcessManager();
   const exitPromise = waitForExit(manager);
   const { commandId } = await manager.start({
@@ -310,7 +311,7 @@ Deno.test("kill stops the process tree and is idempotent", async () => {
   assertEquals((await manager.kill(commandId)).alreadyExited, true);
 });
 
-Deno.test("timeout kills the command and notifies with reason timeout", async () => {
+test("timeout kills the command and notifies with reason timeout", async () => {
   const manager = new BackgroundProcessManager();
   const exitPromise = waitForExit(manager);
   const { commandId } = await manager.start({
@@ -329,10 +330,9 @@ Deno.test("timeout kills the command and notifies with reason timeout", async ()
 // running (and holding their pipes — a killed dev server stayed alive and
 // took its pipes with it). POSIX-only: the Windows kill walks the tree via
 // taskkill /T, and the command syntax below is /bin/sh's.
-Deno.test({
-  name: "kill stops the command's own process, not only its shell",
-  ignore: Deno.build.os === "windows",
-  fn: async () => {
+test.skipIf(Deno.build.os === "windows")(
+  "kill stops the command's own process, not only its shell",
+  async () => {
     const root = Deno.makeTempDirSync({ prefix: "lumisca-kill-tree-" });
     const marker = "marker";
     const manager = new BackgroundProcessManager();
@@ -372,9 +372,9 @@ Deno.test({
       await removeDirRetry(root);
     }
   },
-});
+);
 
-Deno.test("killAll stops every running command", async () => {
+test("killAll stops every running command", async () => {
   const manager = new BackgroundProcessManager();
   const exitPromises: Promise<BackgroundCommandDone>[] = [];
   for (let i = 0; i < 3; i++) {
@@ -416,7 +416,7 @@ function idleSpawner(): BackgroundSpawner & { spawned: number } {
   return spawner;
 }
 
-Deno.test("the per-session concurrency limit is enforced", async () => {
+test("the per-session concurrency limit is enforced", async () => {
   const spawner = idleSpawner();
   const manager = new BackgroundProcessManager({ spawner });
   for (let i = 0; i < MAX_BACKGROUND_COMMANDS; i++) {
@@ -435,7 +435,7 @@ Deno.test("the per-session concurrency limit is enforced", async () => {
   assertEquals(manager.list().length, MAX_BACKGROUND_COMMANDS);
 });
 
-Deno.test("finished commands free their slot for new starts", async () => {
+test("finished commands free their slot for new starts", async () => {
   const manager = new BackgroundProcessManager();
   try {
     // Fill every slot with short commands and let them all finish: the
@@ -457,7 +457,7 @@ Deno.test("finished commands free their slot for new starts", async () => {
   }
 });
 
-Deno.test("output tail is capped and keeps the last bytes", async () => {
+test("output tail is capped and keeps the last bytes", async () => {
   const manager = new BackgroundProcessManager();
   const exitPromise = waitForExit(manager);
   const spam =
@@ -493,7 +493,7 @@ function makeTools() {
   };
 }
 
-Deno.test("async_bash tool resolves cwd, reports status and kill", async () => {
+test("async_bash tool resolves cwd, reports status and kill", async () => {
   const { root, manager, startTool, statusTool, killTool } = makeTools();
   try {
     const exitPromise = waitForExit(manager);
@@ -523,7 +523,7 @@ Deno.test("async_bash tool resolves cwd, reports status and kill", async () => {
   }
 });
 
-Deno.test("async_bash tools reject unknown ids", async () => {
+test("async_bash tools reject unknown ids", async () => {
   const { root, statusTool, killTool } = makeTools();
   try {
     let statusMessage = "";
@@ -546,7 +546,7 @@ Deno.test("async_bash tools reject unknown ids", async () => {
   }
 });
 
-Deno.test("async_bash tool rejects an unknown cwd", async () => {
+test("async_bash tool rejects an unknown cwd", async () => {
   const { root, startTool } = makeTools();
   try {
     let message = "";
@@ -567,7 +567,7 @@ Deno.test("async_bash tool rejects an unknown cwd", async () => {
 
 // --- notification format ----------------------------------------------------
 
-Deno.test("formatBackgroundNotification covers every reason", () => {
+test("formatBackgroundNotification covers every reason", () => {
   const exited = formatBackgroundNotification({
     commandId: "3",
     exitCode: 0,
@@ -623,7 +623,7 @@ Deno.test("formatBackgroundNotification covers every reason", () => {
   });
 });
 
-Deno.test("trimIncompleteUtf8 drops incomplete trailing sequences", () => {
+test("trimIncompleteUtf8 drops incomplete trailing sequences", () => {
   const full = new TextEncoder().encode("a\u3042"); // "a" + あ (3 bytes)
   assertEquals(trimIncompleteUtf8(full).length, full.length);
   // "a" + the first two bytes of あ: the incomplete sequence must go.
@@ -680,7 +680,7 @@ async function waitForMessage(
   }
 }
 
-Deno.test("background completion is injected into the agent loop", async () => {
+test("background completion is injected into the agent loop", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
   const root = await Deno.makeTempDir({ prefix: "lumisca-async-e2e-" });
@@ -719,7 +719,7 @@ Deno.test("background completion is injected into the agent loop", async () => {
   }
 });
 
-Deno.test("background commands survive a session rebuild", async () => {
+test("background commands survive a session rebuild", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
   const root = await Deno.makeTempDir({ prefix: "lumisca-async-rebuild-" });

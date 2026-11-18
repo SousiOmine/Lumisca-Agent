@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { LumiscaCore } from "@lumisca/core";
 import { removeDirRetry } from "@lumisca/core/test-utils";
@@ -12,7 +13,7 @@ async function initialDataOf(base: string): Promise<string> {
   return await res.text();
 }
 
-Deno.test("setup API: a new installation owes the setup until it is finished", async () => {
+test("setup API: a new installation owes the setup until it is finished", async () => {
   const dir = await Deno.makeTempDir({ prefix: "lumisca-setup-" });
   const core = LumiscaCore.open(
     join(dir, "lumisca.db"),
@@ -58,7 +59,7 @@ Deno.test("setup API: a new installation owes the setup until it is finished", a
   }
 });
 
-Deno.test("setup API: deleting the marker asks for the setup again, with no restart", async () => {
+test("setup API: deleting the marker asks for the setup again, with no restart", async () => {
   const dir = await Deno.makeTempDir({ prefix: "lumisca-setup-" });
   const core = LumiscaCore.open(
     join(dir, "lumisca.db"),
@@ -93,7 +94,7 @@ Deno.test("setup API: deleting the marker asks for the setup again, with no rest
   }
 });
 
-Deno.test("setup API: an in-memory installation owes no setup", async () => {
+test("setup API: an in-memory installation owes no setup", async () => {
   // The test harness (and a scratch core) has no settings file, so there is
   // nowhere for the marker to live: the wizard is never owed, which is why
   // the other app tests never meet it.

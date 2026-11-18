@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { assertEquals } from "@std/assert";
@@ -13,7 +14,7 @@ function workspace(): string {
   );
 }
 
-Deno.test("command runner: a capped stream keeps its tail, not its head", async () => {
+test("command runner: a capped stream keeps its tail, not its head", async () => {
   const root = workspace();
   try {
     // ~60 KiB, where this held ~600 KB: the assertion is about which end
@@ -39,7 +40,7 @@ Deno.test("command runner: a capped stream keeps its tail, not its head", async 
   }
 });
 
-Deno.test("command runner: a stream under the cap is returned whole", async () => {
+test("command runner: a stream under the cap is returned whole", async () => {
   const root = workspace();
   try {
     await Deno.writeTextFile(join(root, "small.txt"), "small output\n");

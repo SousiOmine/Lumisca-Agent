@@ -12,6 +12,7 @@
  * check forbids is a tools module importing a VALUE out of the ai runtime, or
  * naming `Agent` as a constructor.
  */
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 
 const TOOLS_DIR = new URL("./", import.meta.url);
@@ -42,7 +43,7 @@ async function toolsSources(): Promise<Map<string, string>> {
   return out;
 }
 
-Deno.test("no tools module imports a value from the ai runtime", async () => {
+test("no tools module imports a value from the ai runtime", async () => {
   const sources = await toolsSources();
   assert(sources.size > 20, `only ${sources.size} tools modules were read`);
   const offenders: Offender[] = [];
@@ -67,7 +68,7 @@ Deno.test("no tools module imports a value from the ai runtime", async () => {
   );
 });
 
-Deno.test("no tools module constructs an Agent", async () => {
+test("no tools module constructs an Agent", async () => {
   const sources = await toolsSources();
   const offenders: Offender[] = [];
   for (const [file, text] of sources) {

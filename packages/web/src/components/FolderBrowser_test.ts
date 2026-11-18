@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import type { FsEntry } from "../types.ts";
 import { isHiddenEntry, visibleEntries } from "./FolderBrowser.tsx";
@@ -12,7 +13,7 @@ function file(name: string): FsEntry {
   return { name, path: `/home/me/${name}`, kind: "file" };
 }
 
-Deno.test("isHiddenEntry: the dot-prefix rule of the file managers", () => {
+test("isHiddenEntry: the dot-prefix rule of the file managers", () => {
   assertEquals(isHiddenEntry(dir(".config")), true);
   assertEquals(isHiddenEntry(file(".zshrc")), true);
   // A dot inside a name is not a hidden entry.
@@ -20,7 +21,7 @@ Deno.test("isHiddenEntry: the dot-prefix rule of the file managers", () => {
   assertEquals(isHiddenEntry(file("notes.md")), false);
 });
 
-Deno.test("visibleEntries: hidden entries stay out until they are asked for", () => {
+test("visibleEntries: hidden entries stay out until they are asked for", () => {
   // The server's order: folders by name, then files. The dot-names sort
   // first, which is exactly why they are held back.
   const entries = [
@@ -40,7 +41,7 @@ Deno.test("visibleEntries: hidden entries stay out until they are asked for", ()
   assertEquals(visibleEntries(entries, true), entries);
 });
 
-Deno.test("visibleEntries: a folder of nothing but hidden entries is empty", () => {
+test("visibleEntries: a folder of nothing but hidden entries is empty", () => {
   assertEquals(visibleEntries([dir(".ssh"), file(".gitconfig")], false), []);
   assertEquals(visibleEntries([], false), []);
   assertEquals(visibleEntries([], true), []);

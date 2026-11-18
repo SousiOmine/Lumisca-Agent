@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { createInMemorySettingsRepo } from "../settings/repo.ts";
 import { type PushSubscriptionRecord, toBase64Url } from "../shared/push.ts";
@@ -33,7 +34,7 @@ async function subscription(): Promise<{
   };
 }
 
-Deno.test("a push body decrypts to the message the browser shows", async () => {
+test("a push body decrypts to the message the browser shows", async () => {
   // The format is only right if a browser can read it, and the browser's side
   // is exactly this: ECDH against the sender's ephemeral key, the two HKDF
   // steps, then AES-GCM. Round-tripping through the same code would prove
@@ -53,7 +54,7 @@ Deno.test("a push body decrypts to the message the browser shows", async () => {
   });
 });
 
-Deno.test("the encrypted header carries the salt, record size and key", async () => {
+test("the encrypted header carries the salt, record size and key", async () => {
   const { record } = await subscription();
   const body = await encryptPushPayload(record.keys, {
     title: "T",
@@ -68,7 +69,7 @@ Deno.test("the encrypted header carries the salt, record size and key", async ()
   assert(body.length > 21 + 65);
 });
 
-Deno.test("two messages to one subscription differ (fresh salt and key)", async () => {
+test("two messages to one subscription differ (fresh salt and key)", async () => {
   const { record } = await subscription();
   const message = { title: "T", body: "B", tag: "t" };
   const first = await encryptPushPayload(record.keys, message);
@@ -76,7 +77,7 @@ Deno.test("two messages to one subscription differ (fresh salt and key)", async 
   assert(first.every((byte, index) => byte === second[index]) === false);
 });
 
-Deno.test("a subscription that is not a P-256 point is refused", async () => {
+test("a subscription that is not a P-256 point is refused", async () => {
   await assertRejects(() =>
     encryptPushPayload(
       { p256dh: toBase64Url(new Uint8Array(10)), auth: "AAAA" },
@@ -85,7 +86,7 @@ Deno.test("a subscription that is not a P-256 point is refused", async () => {
   );
 });
 
-Deno.test("the VAPID header is an ES256 token scoped to the endpoint", async () => {
+test("the VAPID header is an ES256 token scoped to the endpoint", async () => {
   const keys = await loadVapidKeys(createInMemorySettingsRepo());
   const header = await buildVapidAuth("https://push.example/abc/def", keys);
   const match = /^vapid t=([^,]+), k=(.+)$/.exec(header);
@@ -132,7 +133,7 @@ Deno.test("the VAPID header is an ES256 token scoped to the endpoint", async () 
   assertEquals(verified, true);
 });
 
-Deno.test("sendPush posts an encrypted body and reports what happened", async () => {
+test("sendPush posts an encrypted body and reports what happened", async () => {
   const { record, privateKey } = await subscription();
   const keys = await loadVapidKeys(createInMemorySettingsRepo());
   let seen: { url: string; init: RequestInit } | undefined;
@@ -165,7 +166,7 @@ Deno.test("sendPush posts an encrypted body and reports what happened", async ()
   assertEquals(decoded.body, "done");
 });
 
-Deno.test("a gone subscription is reported as gone, not as an error", async () => {
+test("a gone subscription is reported as gone, not as an error", async () => {
   const { record } = await subscription();
   const keys = await loadVapidKeys(createInMemorySettingsRepo());
   for (const status of [404, 410]) {
@@ -179,7 +180,7 @@ Deno.test("a gone subscription is reported as gone, not as an error", async () =
   }
 });
 
-Deno.test("a transient refusal keeps the subscription", async () => {
+test("a transient refusal keeps the subscription", async () => {
   const { record } = await subscription();
   const keys = await loadVapidKeys(createInMemorySettingsRepo());
   const result = await sendPush(

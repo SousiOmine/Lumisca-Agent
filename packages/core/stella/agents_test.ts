@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
@@ -31,7 +32,7 @@ function setup() {
   return { db, repo };
 }
 
-Deno.test("agents: create, list and read back", () => {
+test("agents: create, list and read back", () => {
   const { db, repo } = setup();
   try {
     const agent = repo.create({ name: "Aide", role: "Keep notes." });
@@ -47,7 +48,7 @@ Deno.test("agents: create, list and read back", () => {
   }
 });
 
-Deno.test("agents: a touch inside the creation millisecond still wins", () => {
+test("agents: a touch inside the creation millisecond still wins", () => {
   const { db, repo } = setup();
   try {
     // The clock is what makes this flaky in practice: two inserts and the
@@ -73,7 +74,7 @@ Deno.test("agents: a touch inside the creation millisecond still wins", () => {
   }
 });
 
-Deno.test("agents: the most recently used one is the default", () => {
+test("agents: the most recently used one is the default", () => {
   const { db, repo } = setup();
   try {
     assertEquals(repo.latest(), undefined);
@@ -90,7 +91,7 @@ Deno.test("agents: the most recently used one is the default", () => {
   }
 });
 
-Deno.test("agents: a blank name becomes the default, a blank role stays blank", () => {
+test("agents: a blank name becomes the default, a blank role stays blank", () => {
   // Creating an agent must not be blocked on two free-text answers: the
   // sidebar row needs a name, so an empty one gets the default label, and an
   // empty role simply means "no persona" (the app's own instructions).
@@ -110,7 +111,7 @@ Deno.test("agents: a blank name becomes the default, a blank role stays blank", 
   }
 });
 
-Deno.test("agents: only an over-long name or role is refused", () => {
+test("agents: only an over-long name or role is refused", () => {
   const { db, repo } = setup();
   try {
     assertThrows(
@@ -124,7 +125,7 @@ Deno.test("agents: only an over-long name or role is refused", () => {
   }
 });
 
-Deno.test("agents: an over-long name or role is refused, never truncated", () => {
+test("agents: an over-long name or role is refused, never truncated", () => {
   const { db, repo } = setup();
   try {
     assertThrows(
@@ -144,7 +145,7 @@ Deno.test("agents: an over-long name or role is refused, never truncated", () =>
   }
 });
 
-Deno.test("agents: a long role is accepted — the limit is a brief, not a label", () => {
+test("agents: a long role is accepted — the limit is a brief, not a label", () => {
   const { db, repo } = setup();
   try {
     // A role is the agent's system prompt. 20,000 characters is a full brief
@@ -161,14 +162,14 @@ Deno.test("agents: a long role is accepted — the limit is a brief, not a label
   }
 });
 
-Deno.test("agents: normalizeAgentInput trims both fields", () => {
+test("agents: normalizeAgentInput trims both fields", () => {
   assertEquals(normalizeAgentInput({ name: " A ", role: " B " }), {
     name: "A",
     role: "B",
   });
 });
 
-Deno.test("agents: rename and delete", () => {
+test("agents: rename and delete", () => {
   const { db, repo } = setup();
   try {
     const agent = repo.create({ name: "Old", role: "r" });
@@ -187,7 +188,7 @@ Deno.test("agents: rename and delete", () => {
   }
 });
 
-Deno.test("agents: switching an agent off is a column of its own", () => {
+test("agents: switching an agent off is a column of its own", () => {
   const { db, repo } = setup();
   try {
     const agent = repo.create({ name: "Aide", role: "r" });
@@ -210,7 +211,7 @@ Deno.test("agents: switching an agent off is a column of its own", () => {
   }
 });
 
-Deno.test("agents: the identity is the agent's own text, kept apart from the role", () => {
+test("agents: the identity is the agent's own text, kept apart from the role", () => {
   const { db, repo } = setup();
   try {
     const agent = repo.create({ name: "Aide", role: "Keep notes." });
@@ -231,7 +232,7 @@ Deno.test("agents: the identity is the agent's own text, kept apart from the rol
   }
 });
 
-Deno.test("agents: an over-long identity is refused, never truncated", () => {
+test("agents: an over-long identity is refused, never truncated", () => {
   const { db, repo } = setup();
   try {
     const agent = repo.create({ name: "Aide", role: "r" });
@@ -248,7 +249,7 @@ Deno.test("agents: an over-long identity is refused, never truncated", () => {
   }
 });
 
-Deno.test("agents: an identity write for a missing agent fails", () => {
+test("agents: an identity write for a missing agent fails", () => {
   const { db, repo } = setup();
   try {
     const error = assertThrows(
@@ -261,7 +262,7 @@ Deno.test("agents: an identity write for a missing agent fails", () => {
   }
 });
 
-Deno.test("agents: the icon starts empty and records a store-generated name", () => {
+test("agents: the icon starts empty and records a store-generated name", () => {
   const { db, repo } = setup();
   try {
     const agent = repo.create({ name: "Aide", role: "r" });
@@ -280,7 +281,7 @@ Deno.test("agents: the icon starts empty and records a store-generated name", ()
   }
 });
 
-Deno.test("agents: a display change does not reorder the sidebar", () => {
+test("agents: a display change does not reorder the sidebar", () => {
   const { db, repo } = setup();
   try {
     const first = repo.create({ name: "First", role: "r" });
@@ -301,7 +302,7 @@ Deno.test("agents: a display change does not reorder the sidebar", () => {
   }
 });
 
-Deno.test("agents: name and icon travel in one write", () => {
+test("agents: name and icon travel in one write", () => {
   const { db, repo } = setup();
   try {
     const agent = repo.create({ name: "Old", role: "r" });
@@ -319,7 +320,7 @@ Deno.test("agents: name and icon travel in one write", () => {
   }
 });
 
-Deno.test("agents: the model starts unset and is set, kept and cleared", () => {
+test("agents: the model starts unset and is set, kept and cleared", () => {
   const { db, repo } = setup();
   try {
     const agent = repo.create({ name: "Aide", role: "r" });
@@ -343,7 +344,7 @@ Deno.test("agents: the model starts unset and is set, kept and cleared", () => {
   }
 });
 
-Deno.test("agents: a half-written model is refused", () => {
+test("agents: a half-written model is refused", () => {
   // A pair with one empty half describes a request, not a model: storing it
   // would leave the conversation unable to open.
   const { db, repo } = setup();
@@ -361,7 +362,7 @@ Deno.test("agents: a half-written model is refused", () => {
   }
 });
 
-Deno.test("agents: a renamed agent is trimmed and length-checked", () => {
+test("agents: a renamed agent is trimmed and length-checked", () => {
   const { db, repo } = setup();
   try {
     const agent = repo.create({ name: "Old", role: "r" });
@@ -382,7 +383,7 @@ Deno.test("agents: a renamed agent is trimmed and length-checked", () => {
   }
 });
 
-Deno.test("agents: a patch for a missing agent fails instead of being lost", () => {
+test("agents: a patch for a missing agent fails instead of being lost", () => {
   const { db, repo } = setup();
   try {
     const error = assertThrows(
@@ -454,7 +455,7 @@ async function agentToolFixture(
   };
 }
 
-Deno.test("agent_create: creates through the core's own entry point", async () => {
+test("agent_create: creates through the core's own entry point", async () => {
   const test = await agentToolFixture();
   try {
     const result = await test.tool.execute(
@@ -479,7 +480,7 @@ Deno.test("agent_create: creates through the core's own entry point", async () =
   }
 });
 
-Deno.test("agent_create: the role is read from a file in the machine", async () => {
+test("agent_create: the role is read from a file in the machine", async () => {
   const brief = "# Researcher\n\nRead papers and summarize them.\n";
   const test = await agentToolFixture({ files: { "brief.md": brief } });
   try {
@@ -501,7 +502,7 @@ Deno.test("agent_create: the role is read from a file in the machine", async () 
   }
 });
 
-Deno.test("agent_create: role and role_file are alternatives, not a pair", async () => {
+test("agent_create: role and role_file are alternatives, not a pair", async () => {
   const test = await agentToolFixture({
     files: { "role.md": "From the file." },
   });
@@ -549,7 +550,7 @@ Deno.test("agent_create: role and role_file are alternatives, not a pair", async
   }
 });
 
-Deno.test("agent_create: a role file that cannot be used is refused", async () => {
+test("agent_create: a role file that cannot be used is refused", async () => {
   const test = await agentToolFixture({
     files: {
       // Whitespace is not a role: the file was meant to hold instructions.
@@ -620,7 +621,7 @@ Deno.test("agent_create: a role file that cannot be used is refused", async () =
   }
 });
 
-Deno.test("agent_create: a role file is held to the same character limit", async () => {
+test("agent_create: a role file is held to the same character limit", async () => {
   const test = await agentToolFixture({
     files: { "long.md": "x".repeat(MAX_AGENT_ROLE_CHARS + 1) },
     // The core's own validation: the tool keeps no second copy of the limit,
@@ -646,7 +647,7 @@ Deno.test("agent_create: a role file is held to the same character limit", async
   }
 });
 
-Deno.test("agent_create: a taken name surfaces the core's conflict", async () => {
+test("agent_create: a taken name surfaces the core's conflict", async () => {
   const test = await agentToolFixture({
     create: () => {
       throw new CoreError(

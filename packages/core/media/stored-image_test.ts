@@ -7,6 +7,7 @@
  * transparent one never does.
  */
 
+import { test } from "bun:test";
 import { loadImage } from "@napi-rs/canvas";
 import { assert, assertEquals } from "@std/assert";
 import { MINI_PNG, noisyPng } from "../test-utils.ts";
@@ -23,7 +24,7 @@ async function sizeOf(
   return { width: image.width, height: image.height };
 }
 
-Deno.test("stored image: one inside the budget is returned as it is", async () => {
+test("stored image: one inside the budget is returned as it is", async () => {
   const stored = await prepareStoredImage(MINI_PNG, "image/png");
   assert(!stored.changed);
   assertEquals(stored.bytes, MINI_PNG);
@@ -32,21 +33,21 @@ Deno.test("stored image: one inside the budget is returned as it is", async () =
   assertEquals(stored.size, undefined);
 });
 
-Deno.test("stored image: a type this module cannot decode is untouched", async () => {
+test("stored image: a type this module cannot decode is untouched", async () => {
   const svg = new TextEncoder().encode("<svg></svg>");
   const stored = await prepareStoredImage(svg, "image/svg+xml");
   assert(!stored.changed);
   assertEquals(stored.bytes, svg);
 });
 
-Deno.test("stored image: bytes no decoder reads are kept, not refused", async () => {
+test("stored image: bytes no decoder reads are kept, not refused", async () => {
   const garbage = new Uint8Array(STORED_IMAGE_BYTES + 1).fill(0xff);
   const stored = await prepareStoredImage(garbage, "image/png");
   assert(!stored.changed);
   assertEquals(stored.bytes.byteLength, garbage.byteLength);
 });
 
-Deno.test("stored image: a big picture loses its excess pixels", async () => {
+test("stored image: a big picture loses its excess pixels", async () => {
   const source = await noisyPng(2000, 1400);
   assert(
     source.byteLength > STORED_IMAGE_BYTES,
@@ -69,7 +70,7 @@ Deno.test("stored image: a big picture loses its excess pixels", async () => {
   assertEquals(await sizeOf(stored.bytes), stored.size);
 });
 
-Deno.test("stored image: an opaque picture over budget becomes a JPEG", async () => {
+test("stored image: an opaque picture over budget becomes a JPEG", async () => {
   const source = await noisyPng(800, 600);
   assert(
     source.byteLength > STORED_IMAGE_BYTES,
@@ -86,7 +87,7 @@ Deno.test("stored image: an opaque picture over budget becomes a JPEG", async ()
   assertEquals(stored.bytes[1], 0xd8);
 });
 
-Deno.test("stored image: a transparent picture never becomes a JPEG", async () => {
+test("stored image: a transparent picture never becomes a JPEG", async () => {
   const source = await noisyPng(1200, 900, 128);
   assert(
     source.byteLength > STORED_IMAGE_BYTES,

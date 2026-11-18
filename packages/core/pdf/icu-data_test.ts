@@ -1,8 +1,9 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { assert, assertEquals } from "@std/assert";
 import { findCanvasIcuDataFile } from "./icu-data.ts";
 
-Deno.test("findCanvasIcuDataFile takes LUMISCA_ICU_DATA from the injected env", async () => {
+test("findCanvasIcuDataFile takes LUMISCA_ICU_DATA from the injected env", async () => {
   const dir = await Deno.makeTempDir({ prefix: "lumisca-icu-" });
   try {
     const file = join(dir, "icudtl.dat");

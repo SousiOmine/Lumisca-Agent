@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import type { AgentMessage } from "../ai/message.ts";
 
@@ -41,7 +42,7 @@ function assistantMessage(text: string, timestamp: number): AgentMessage {
   } as AgentMessage;
 }
 
-Deno.test("latestPreview: a routine's prompt is not what the row says", () => {
+test("latestPreview: a routine's prompt is not what the row says", () => {
   // Regression: the row named the routine ("ルーチン「…」") although the
   // conversation hides the prompt, so the list showed a message that was
   // not in the conversation. The row now steps back to the newest entry the
@@ -66,7 +67,7 @@ Deno.test("latestPreview: a routine's prompt is not what the row says", () => {
   }
 });
 
-Deno.test("latestPreview: the run's reply becomes the row again", () => {
+test("latestPreview: the run's reply becomes the row again", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
@@ -87,7 +88,7 @@ Deno.test("latestPreview: the run's reply becomes the row again", () => {
   }
 });
 
-Deno.test("latestPreview: a routine-only conversation says nothing", () => {
+test("latestPreview: a routine-only conversation says nothing", () => {
   // The prompt is the only thing in the conversation, and it is invisible:
   // an honest row has no second line rather than quoting the instruction.
   const db = LumiscaDb.openInMemory();

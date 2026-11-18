@@ -7,6 +7,7 @@
  * hierarchy the app does not have. The check runs over the real addresses the
  * App builds, so a new screen has to say whether it belongs to one.
  */
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import type { UrlState } from "./route.ts";
 import { type ScreenLayout, screenMove } from "./screen-transition.ts";
@@ -35,20 +36,20 @@ const talk = (id: string) => at({ kind: "stella", agentId: id });
 const draft = at({ kind: "code", tabKey: null });
 const session = (id: string) => at({ kind: "code", tabKey: id });
 
-Deno.test("screen transition: stella's list and a conversation", () => {
+test("screen transition: stella's list and a conversation", () => {
   assertEquals(move(list, talk("a1")), "push");
   assertEquals(move(talk("a1"), list), "back");
   // Re-selecting the same one is not a move (the address did not change).
   assertEquals(move(talk("a1"), talk("a1")), null);
 });
 
-Deno.test("screen transition: two conversations are lateral", () => {
+test("screen transition: two conversations are lateral", () => {
   // Both are reached from the list, so neither is the screen the reader came
   // from: there is no direction to draw.
   assertEquals(move(talk("a1"), talk("a2")), null);
 });
 
-Deno.test("screen transition: two columns are not two screens", () => {
+test("screen transition: two columns are not two screens", () => {
   // A wide window shows both surfaces at once, and the layout moves them
   // itself when the address names an agent: the list travels to the left
   // margin and the conversation arrives from the right (stella.css). A
@@ -66,7 +67,7 @@ Deno.test("screen transition: two columns are not two screens", () => {
   assertEquals(move(page, root, columns), "back");
 });
 
-Deno.test("screen transition: settings' list and a category", () => {
+test("screen transition: settings' list and a category", () => {
   const root = (kind: UrlState["route"]["kind"]) =>
     kind === "stella"
       ? at({ kind: "stella", agentId: null }, { category: null })
@@ -90,7 +91,7 @@ Deno.test("screen transition: settings' list and a category", () => {
   );
 });
 
-Deno.test("screen transition: opening and closing the dialog is not a move", () => {
+test("screen transition: opening and closing the dialog is not a move", () => {
   // The dialog has its own entrance and exit (Modal.tsx). Its first page
   // arrives with the sheet, not after it.
   const closed = at({ kind: "code", tabKey: null });
@@ -112,7 +113,7 @@ Deno.test("screen transition: opening and closing the dialog is not a move", () 
   );
 });
 
-Deno.test("screen transition: code mode's moves stay instant", () => {
+test("screen transition: code mode's moves stay instant", () => {
   // A tab switch is lateral (the tab bar is a list of peers), and a session
   // is not deeper than the draft screen: the draft is a place the reader is
   // finished with, and closing a session returns to it.
@@ -121,7 +122,7 @@ Deno.test("screen transition: code mode's moves stay instant", () => {
   assertEquals(move(session("s1"), session("s2")), null);
 });
 
-Deno.test("screen transition: the start address is not in either hierarchy", () => {
+test("screen transition: the start address is not in either hierarchy", () => {
   const start = at({ kind: "start" });
   assertEquals(move(start, at({ kind: "stella", agentId: null })), null);
   assertEquals(move(at({ kind: "stella", agentId: null }), start), null);

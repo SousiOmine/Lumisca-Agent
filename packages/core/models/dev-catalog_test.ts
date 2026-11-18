@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import type { ProviderMap } from "@opencode-ai/models";
 import snapshot from "@opencode-ai/models/snapshot";
 import { assert, assertEquals } from "@std/assert";
@@ -54,7 +55,7 @@ function listedModels(
   return built[0]!.getModels().map((m) => m.id);
 }
 
-Deno.test("catalog lists only models that support tool calling", () => {
+test("catalog lists only models that support tool calling", () => {
   assertEquals(
     listedModels([
       { id: "agent", tool_call: true },
@@ -75,7 +76,7 @@ Deno.test("catalog lists only models that support tool calling", () => {
   );
 });
 
-Deno.test("catalog carries the documented input cap onto the model", () => {
+test("catalog carries the documented input cap onto the model", () => {
   const built = buildCatalogProviders(
     catalogWith([
       {
@@ -95,7 +96,7 @@ Deno.test("catalog carries the documented input cap onto the model", () => {
   assertEquals(byId.get("window-only")?.maxInputTokens, undefined);
 });
 
-Deno.test("catalog still drops models that cannot answer in text", () => {
+test("catalog still drops models that cannot answer in text", () => {
   assertEquals(
     listedModels([
       { id: "agent", tool_call: true },
@@ -114,7 +115,7 @@ Deno.test("catalog still drops models that cannot answer in text", () => {
   );
 });
 
-Deno.test("catalog preserves reasoning_content replay requirements", () => {
+test("catalog preserves reasoning_content replay requirements", () => {
   const providers = buildCatalogProviders(
     catalogWith([
       {
@@ -132,7 +133,7 @@ Deno.test("catalog preserves reasoning_content replay requirements", () => {
   });
 });
 
-Deno.test("every listed snapshot model declares tool calling", () => {
+test("every listed snapshot model declares tool calling", () => {
   for (const id of DEV_PROVIDER_IDS) {
     const source = snapshot.providers[id];
     const provider = builtinProvider(id);
@@ -153,7 +154,7 @@ Deno.test("every listed snapshot model declares tool calling", () => {
   }
 });
 
-Deno.test("snapshot hides embeddings, transcription and image models", () => {
+test("snapshot hides embeddings, transcription and image models", () => {
   const ids = (providerId: string) =>
     builtinProvider(providerId)!
       .getModels()

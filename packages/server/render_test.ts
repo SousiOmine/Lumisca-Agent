@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { THEME_COLORS } from "@lumisca/core/shared";
 import { assertEquals } from "@std/assert";
 import {
@@ -16,7 +17,7 @@ function connectSrc(csp: string): string[] {
   return directive === undefined ? [] : directive.split(" ").slice(1);
 }
 
-Deno.test("pageCsp allows the page's own host over ws and wss", () => {
+test("pageCsp allows the page's own host over ws and wss", () => {
   // The client opens the event stream with the scheme of the page it runs
   // on (api-routing.ts), so a page served over TLS by a front end reaches
   // wss:// — a policy that only named ws:// would be violated on every
@@ -31,13 +32,13 @@ Deno.test("pageCsp allows the page's own host over ws and wss", () => {
   assertEquals(sources.includes("http://127.0.0.1:*"), true);
 });
 
-Deno.test("pageCsp names the page's own host with its port", () => {
+test("pageCsp names the page's own host with its port", () => {
   const sources = connectSrc(pageCsp("homeserver:8000"));
   assertEquals(sources.includes("ws://homeserver:8000"), true);
   assertEquals(sources.includes("wss://homeserver:8000"), true);
 });
 
-Deno.test("pageCsp names loopback only when the Host header is missing", () => {
+test("pageCsp names loopback only when the Host header is missing", () => {
   const sources = connectSrc(pageCsp(undefined));
   assertEquals(sources.includes("ws://127.0.0.1:*"), true);
   // A page served over TLS always carries a Host header, so the fallback
@@ -48,7 +49,7 @@ Deno.test("pageCsp names loopback only when the Host header is missing", () => {
   );
 });
 
-Deno.test("pageCsp keeps inline scripts and foreign frames out", () => {
+test("pageCsp keeps inline scripts and foreign frames out", () => {
   const csp = pageCsp("homeserver:8000");
   assertEquals(csp.includes("script-src 'self'"), true);
   assertEquals(csp.includes("object-src 'none'"), true);
@@ -56,7 +57,7 @@ Deno.test("pageCsp keeps inline scripts and foreign frames out", () => {
   assertEquals(csp.includes("style-src 'self' 'unsafe-inline'"), true);
 });
 
-Deno.test("pageCsp names the PWA surface", () => {
+test("pageCsp names the PWA surface", () => {
   // The document links the manifest and registers the service worker; both
   // are same-origin, and both are named so a later tightening of
   // `default-src` cannot make the app uninstallable in silence.
@@ -65,7 +66,7 @@ Deno.test("pageCsp names the PWA surface", () => {
   assertEquals(csp.includes("worker-src 'self'"), true);
 });
 
-Deno.test("the shell links the manifest and paints its own theme colour", () => {
+test("the shell links the manifest and paints its own theme colour", () => {
   for (const theme of ["dark", "light"] as const) {
     const html = renderHtmlDocument("body { color: red; }", theme, {
       language: "ja",
@@ -93,7 +94,7 @@ Deno.test("the shell links the manifest and paints its own theme colour", () => 
   }
 });
 
-Deno.test("the shell asks for the safe area", () => {
+test("the shell asks for the safe area", () => {
   // `viewport-fit=cover` is what makes `env(safe-area-inset-*)` non-zero in
   // layout.css: without it an installed app is letterboxed away from the
   // notch, and the insets the stylesheet reads are all zero.
@@ -101,7 +102,7 @@ Deno.test("the shell asks for the safe area", () => {
   assertEquals(html.includes("viewport-fit=cover"), true);
 });
 
-Deno.test("the token page can take the token without an address bar", () => {
+test("the token page can take the token without an address bar", () => {
   // An installed PWA has no URL field: the form is the only way to present
   // the token when the browser lost its cookie.
   for (const language of ["ja", "en"] as const) {

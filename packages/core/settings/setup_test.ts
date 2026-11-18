@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { assertEquals } from "@std/assert";
 import { LumiscaCore } from "../core.ts";
@@ -22,7 +23,7 @@ function markerExists(path: string): boolean {
   }
 }
 
-Deno.test("the setup marker lives beside the settings file", () => {
+test("the setup marker lives beside the settings file", () => {
   const dir = resolveSettingsDir(() => ({
     XDG_CONFIG_HOME: join("C:", "xdg"),
   }));
@@ -39,7 +40,7 @@ Deno.test("the setup marker lives beside the settings file", () => {
   );
 });
 
-Deno.test("a missing marker means the setup is not done", async () => {
+test("a missing marker means the setup is not done", async () => {
   const dir = await Deno.makeTempDir({ prefix: "lumisca-setup-" });
   try {
     // The directory itself may not exist yet: the wizard can be finished
@@ -55,7 +56,7 @@ Deno.test("a missing marker means the setup is not done", async () => {
   }
 });
 
-Deno.test("deleting the marker asks for the setup again", async () => {
+test("deleting the marker asks for the setup again", async () => {
   const dir = await Deno.makeTempDir({ prefix: "lumisca-setup-" });
   const marker = setupMarkerPath(dir);
   try {
@@ -73,7 +74,7 @@ Deno.test("deleting the marker asks for the setup again", async () => {
   }
 });
 
-Deno.test("a core without a settings file owes no setup", async () => {
+test("a core without a settings file owes no setup", async () => {
   // An in-memory core is a test's or a scratch instance's: there is nowhere
   // for the marker to live, so there is no installation to guide.
   const core = LumiscaCore.openInMemory();
@@ -85,7 +86,7 @@ Deno.test("a core without a settings file owes no setup", async () => {
   }
 });
 
-Deno.test("core: the marker is read per call, not fixed at startup", async () => {
+test("core: the marker is read per call, not fixed at startup", async () => {
   const dir = await Deno.makeTempDir({ prefix: "lumisca-setup-" });
   const core = LumiscaCore.open(
     join(dir, "lumisca.db"),

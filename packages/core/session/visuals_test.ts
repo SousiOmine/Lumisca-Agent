@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { MAX_VISUAL_SVG_BYTES } from "../shared/mod.ts";
@@ -16,7 +17,7 @@ async function withStore(
   }
 }
 
-Deno.test("put names the asset and resolve finds it", async () => {
+test("put names the asset and resolve finds it", async () => {
   await withStore(async (store) => {
     const name = await store.put("s1", MINI_PNG, ".png");
     // The name is what a `visual:` reference carries: a short hex base and
@@ -31,7 +32,7 @@ Deno.test("put names the asset and resolve finds it", async () => {
   });
 });
 
-Deno.test("put normalizes the extension rather than trusting it", async () => {
+test("put normalizes the extension rather than trusting it", async () => {
   await withStore(async (store) => {
     const name = await store.put("s1", MINI_PNG, ".PNG");
     assertEquals(name.endsWith(".png"), true);
@@ -39,7 +40,7 @@ Deno.test("put normalizes the extension rather than trusting it", async () => {
   });
 });
 
-Deno.test("every publish gets a name of its own", async () => {
+test("every publish gets a name of its own", async () => {
   await withStore(async (store) => {
     const first = await store.put("s1", MINI_PNG, ".png");
     const second = await store.put("s1", MINI_PNG, ".png");
@@ -51,7 +52,7 @@ Deno.test("every publish gets a name of its own", async () => {
   });
 });
 
-Deno.test("put refuses an unsupported extension", async () => {
+test("put refuses an unsupported extension", async () => {
   await withStore(async (store) => {
     await assertRejects(
       () => store.put("s1", MINI_PNG, ".pdf"),
@@ -61,7 +62,7 @@ Deno.test("put refuses an unsupported extension", async () => {
   });
 });
 
-Deno.test("put refuses bytes over the limit of their extension", async () => {
+test("put refuses bytes over the limit of their extension", async () => {
   await withStore(async (store) => {
     // An SVG's limit is the small one, so the oversized case stays cheap to
     // build here.
@@ -75,7 +76,7 @@ Deno.test("put refuses bytes over the limit of their extension", async () => {
   });
 });
 
-Deno.test("resolve refuses anything that is not an asset name", async () => {
+test("resolve refuses anything that is not an asset name", async () => {
   await withStore(async (store, root) => {
     const name = await store.put("s1", MINI_PNG, ".png");
     // A file the store did not name is not reachable through it, even when
@@ -98,14 +99,14 @@ Deno.test("resolve refuses anything that is not an asset name", async () => {
   });
 });
 
-Deno.test("resolve does not cross sessions", async () => {
+test("resolve does not cross sessions", async () => {
   await withStore(async (store) => {
     const name = await store.put("s1", MINI_PNG, ".png");
     assertEquals(await store.resolve("s2", name), undefined);
   });
 });
 
-Deno.test("resolve reports a missing asset as undefined", async () => {
+test("resolve reports a missing asset as undefined", async () => {
   await withStore(async (store) => {
     assertEquals(
       await store.resolve("never-used", "9f3c2a1b4d5e.png"),
@@ -114,7 +115,7 @@ Deno.test("resolve reports a missing asset as undefined", async () => {
   });
 });
 
-Deno.test("nothing is created until a session publishes", async () => {
+test("nothing is created until a session publishes", async () => {
   await withStore(async (store, root) => {
     // Reading never creates anything: an in-memory core (a temp root per
     // instance) leaves no directory behind unless a session shows an image.
@@ -130,7 +131,7 @@ Deno.test("nothing is created until a session publishes", async () => {
   });
 });
 
-Deno.test("deleteSession drops one session's assets only", async () => {
+test("deleteSession drops one session's assets only", async () => {
   await withStore(async (store) => {
     const kept = await store.put("s2", MINI_PNG, ".png");
     const dropped = await store.put("s1", MINI_PNG, ".png");

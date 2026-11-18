@@ -1,8 +1,9 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { today } from "../environment.ts";
 import { createDateProvider, DATE_PROVIDER } from "./date-context.ts";
 
-Deno.test("date context: publishes the current date once, then only on a new day", () => {
+test("date context: publishes the current date once, then only on a new day", () => {
   let now = new Date("2026-10-08T12:00:00Z");
   const provider = createDateProvider({ now: () => now });
   assertEquals(provider.name, DATE_PROVIDER);
@@ -33,7 +34,7 @@ Deno.test("date context: publishes the current date once, then only on a new day
   );
 });
 
-Deno.test("date context: rebase re-anchors to the last publication", () => {
+test("date context: rebase re-anchors to the last publication", () => {
   const now = new Date("2026-10-08T12:00:00Z");
   const provider = createDateProvider({ now: () => now });
   const published = provider.next()[0]!;
@@ -52,7 +53,7 @@ Deno.test("date context: rebase re-anchors to the last publication", () => {
   assertEquals(provider.next().length, 1);
 });
 
-Deno.test("date context: state is a date string, never the payload text", () => {
+test("date context: state is a date string, never the payload text", () => {
   const provider = createDateProvider({
     now: () => new Date("2026-10-08T12:00:00Z"),
   });

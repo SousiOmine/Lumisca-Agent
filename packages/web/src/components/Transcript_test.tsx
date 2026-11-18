@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { fauxToolCall } from "@lumisca/core";
 import { assert, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
@@ -32,7 +33,7 @@ function render(
   );
 }
 
-Deno.test("Transcript: a call that is executing is drawn before its message", () => {
+test("Transcript: a call that is executing is drawn before its message", () => {
   // The assistant message carrying the call arrives only when the step ends
   // (the SDK runs the step's tools inside the stream), so the row has to
   // come from the live calls: without it the work appears after it is done.
@@ -52,7 +53,7 @@ Deno.test("Transcript: a call that is executing is drawn before its message", ()
   assert(html.indexOf("running the command") < html.indexOf("tool-line"));
 });
 
-Deno.test("Transcript: a live row that already returned is not spinning", () => {
+test("Transcript: a live row that already returned is not spinning", () => {
   // Between tool_end and the message there is a row with no running entry:
   // it keeps its place (removing it would blink) and stops the spinner.
   const html = render({
@@ -64,7 +65,7 @@ Deno.test("Transcript: a live row that already returned is not spinning", () => 
   assert(!html.includes("spin"));
 });
 
-Deno.test("Transcript: a card being written is drawn, not printed", () => {
+test("Transcript: a card being written is drawn, not printed", () => {
   // The tail is read the same way a finished message is: the fence is never
   // shown as text, and the card draws from its first block.
   const html = render({
@@ -77,7 +78,7 @@ Deno.test("Transcript: a card being written is drawn, not printed", () => {
   assert(!html.includes("```card"));
 });
 
-Deno.test("Transcript: the caret still marks text that is arriving", () => {
+test("Transcript: the caret still marks text that is arriving", () => {
   const html = render({ streamingText: "half a sent" });
 
   assertStringIncludes(html, 'class="cursor"');

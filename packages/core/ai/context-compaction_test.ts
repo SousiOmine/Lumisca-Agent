@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { createAssistantMessageEventStream } from "../ai/event-stream.ts";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "../ai/faux.ts";
@@ -164,7 +165,7 @@ function requestText(request: RecordedRequest): string {
   return message.content[0]!.text;
 }
 
-Deno.test("resolveCompactionBudgets: the threshold sits one reservation below the window", () => {
+test("resolveCompactionBudgets: the threshold sits one reservation below the window", () => {
   const budgets = resolveCompactionBudgets(wideModel())!;
   assertEquals(budgets.contextWindow, 200_000);
   // The default 8% of a 200K window is the 16K pi used.
@@ -174,7 +175,7 @@ Deno.test("resolveCompactionBudgets: the threshold sits one reservation below th
   assertEquals(budgets.summaryMaxTokens, Math.floor(16_000 * 0.8));
 });
 
-Deno.test("resolveCompactionBudgets: a share behaves the same at every window size", () => {
+test("resolveCompactionBudgets: a share behaves the same at every window size", () => {
   // The point of the shares: a 32K model and a 1M model compact the same
   // distance from their limits, and keep the same share of history. A fixed
   // token reservation made the large window compact at 98% and the small one
@@ -195,7 +196,7 @@ Deno.test("resolveCompactionBudgets: a share behaves the same at every window si
   }
 });
 
-Deno.test("resolveCompactionBudgets: the threshold hangs off the documented input cap", () => {
+test("resolveCompactionBudgets: the threshold hangs off the documented input cap", () => {
   // models.dev publishes an input cap below the window for some models (the
   // window counts the completion); the prompt budget is the smaller number.
   const budgets = resolveCompactionBudgets({
@@ -214,7 +215,7 @@ Deno.test("resolveCompactionBudgets: the threshold hangs off the documented inpu
   assertEquals(narrow.contextWindow, 200_000);
 });
 
-Deno.test("resolveCompactionBudgets: no window, no room, or disabled disables compaction", () => {
+test("resolveCompactionBudgets: no window, no room, or disabled disables compaction", () => {
   const bare: Model<Api> = {
     id: "x",
     name: "x",
@@ -249,7 +250,7 @@ Deno.test("resolveCompactionBudgets: no window, no room, or disabled disables co
   );
 });
 
-Deno.test("reservedCompletionTokens: the cap stops at the reservation", () => {
+test("reservedCompletionTokens: the cap stops at the reservation", () => {
   // A 1M window documents a 384,000-token completion. The pressure check
   // lets the prompt reach 920,000 (one 8% reservation below the window), so
   // only the reservation is left for the answer: asking for the model's cap
@@ -270,7 +271,7 @@ Deno.test("reservedCompletionTokens: the cap stops at the reservation", () => {
   assertEquals(reservedCompletionTokens(bare as Model<Api>, {}), undefined);
 });
 
-Deno.test("resolveCompactionBudgets: a zero reservation falls back to the model's cap", () => {
+test("resolveCompactionBudgets: a zero reservation falls back to the model's cap", () => {
   const budgets = resolveCompactionBudgets(modelWith(200_000, 8_000), {
     enabled: true,
     reservePercent: 0,
@@ -280,7 +281,7 @@ Deno.test("resolveCompactionBudgets: a zero reservation falls back to the model'
   assertEquals(budgets.summaryMaxTokens, 8_000);
 });
 
-Deno.test("resolveCompactionBudgets: a reservation of 100% leaves no room", () => {
+test("resolveCompactionBudgets: a reservation of 100% leaves no room", () => {
   // Nothing would be left to send: compaction is off rather than useless.
   const policy = resolveCompactionPolicy({ reservePercent: 100 });
   assertEquals(
@@ -289,7 +290,7 @@ Deno.test("resolveCompactionBudgets: a reservation of 100% leaves no room", () =
   );
 });
 
-Deno.test("resolveCompactionPolicy falls back to pi's defaults", () => {
+test("resolveCompactionPolicy falls back to pi's defaults", () => {
   const policy = resolveCompactionPolicy();
   assertEquals(policy, DEFAULT_COMPACTION_POLICY);
   // Invalid and unset values keep the defaults; explicit ones win. A share
@@ -310,7 +311,7 @@ Deno.test("resolveCompactionPolicy falls back to pi's defaults", () => {
   );
 });
 
-Deno.test("transcriptUnits keeps an assistant turn with its tool results", () => {
+test("transcriptUnits keeps an assistant turn with its tool results", () => {
   const messages: AgentMessage[] = [
     user("do it"),
     ...toolPair("t1", "first"),
@@ -336,7 +337,7 @@ Deno.test("transcriptUnits keeps an assistant turn with its tool results", () =>
   );
 });
 
-Deno.test("contextStart is the newest checkpoint (0 when there is none)", () => {
+test("contextStart is the newest checkpoint (0 when there is none)", () => {
   const messages: AgentMessage[] = [
     user("a"),
     assistant("b"),
@@ -347,7 +348,7 @@ Deno.test("contextStart is the newest checkpoint (0 when there is none)", () => 
   assertEquals(contextStart([user("a")]), 0);
 });
 
-Deno.test("checkpointSummaryText unwraps the framed summary", () => {
+test("checkpointSummaryText unwraps the framed summary", () => {
   const message = {
     role: "checkpoint",
     title: "t",
@@ -357,7 +358,7 @@ Deno.test("checkpointSummaryText unwraps the framed summary", () => {
   assertEquals(checkpointSummaryText(message), "## Goal\n- x");
 });
 
-Deno.test("selectCompactionSpan retains the newest unit and cuts on a unit boundary", () => {
+test("selectCompactionSpan retains the newest unit and cuts on a unit boundary", () => {
   // Units: user(0), pair(1,2), pair(3,4), pair(5,6).
   const messages = conversation(3, 4_000);
   const budgets = {
@@ -374,7 +375,7 @@ Deno.test("selectCompactionSpan retains the newest unit and cuts on a unit bound
   assertEquals(span.headTokens > 0, true);
 });
 
-Deno.test("selectCompactionSpan: a single unit, or one with nothing to summarize, is refused", () => {
+test("selectCompactionSpan: a single unit, or one with nothing to summarize, is refused", () => {
   const budgets = {
     contextWindow: 10_000,
     reserveTokens: 10_000 - 80,
@@ -392,7 +393,7 @@ Deno.test("selectCompactionSpan: a single unit, or one with nothing to summarize
   assertEquals(selectCompactionSpan(checkpointOnly, 0, budgets), null);
 });
 
-Deno.test("selectCompactionSpan: force reduces as far as one span allows", () => {
+test("selectCompactionSpan: force reduces as far as one span allows", () => {
   const messages: AgentMessage[] = [
     user("a".repeat(4_000)),
     user("b".repeat(4_000)),
@@ -412,7 +413,7 @@ Deno.test("selectCompactionSpan: force reduces as far as one span allows", () =>
   assertEquals([span.start, span.cutIndex, span.count], [0, 2, 2]);
 });
 
-Deno.test("compactIfNeeded does nothing below the pressure threshold", async () => {
+test("compactIfNeeded does nothing below the pressure threshold", async () => {
   const messages: AgentMessage[] = [user("short"), assistant("ok")];
   const { compactor, requests, inserts } = compactorFor(messages);
   assertEquals(await compactor.compactIfNeeded(messages), null);
@@ -420,7 +421,7 @@ Deno.test("compactIfNeeded does nothing below the pressure threshold", async () 
   assertEquals(inserts.length, 0);
 });
 
-Deno.test("compactIfNeeded inserts a checkpoint at the cut and keeps every message", async () => {
+test("compactIfNeeded inserts a checkpoint at the cut and keeps every message", async () => {
   const messages = conversation(3, 16_000);
   const before = [...messages];
   const { compactor, requests, inserts } = compactorFor(messages, {
@@ -444,7 +445,7 @@ Deno.test("compactIfNeeded inserts a checkpoint at the cut and keeps every messa
   assertEquals(requests.length, 1);
 });
 
-Deno.test("the summarization request is a dedicated, tool-free call", async () => {
+test("the summarization request is a dedicated, tool-free call", async () => {
   const messages = conversation(2, 4_000);
   const { compactor, requests } = compactorFor(messages, {
     model: modelWith(10_000, 2_000),
@@ -467,7 +468,7 @@ Deno.test("the summarization request is a dedicated, tool-free call", async () =
   assertEquals(text.includes("<previous-summary>"), false);
 });
 
-Deno.test("a second compaction merges the previous summary", async () => {
+test("a second compaction merges the previous summary", async () => {
   const messages = conversation(2, 4_000);
   const { compactor, requests } = compactorFor(messages, {
     model: modelWith(10_000, 2_000),
@@ -489,7 +490,7 @@ Deno.test("a second compaction merges the previous summary", async () => {
   assertEquals(text.includes(CHECKPOINT_PREAMBLE), false);
 });
 
-Deno.test("custom instructions steer the summary", async () => {
+test("custom instructions steer the summary", async () => {
   const messages = conversation(2, 4_000);
   const { compactor, requests } = compactorFor(messages, {
     model: modelWith(10_000, 2_000),
@@ -503,7 +504,7 @@ Deno.test("custom instructions steer the summary", async () => {
   assertEquals(text.includes("Additional focus: keep the file paths"), true);
 });
 
-Deno.test("compactIfNeeded leaves the transcript untouched when summarization fails", async () => {
+test("compactIfNeeded leaves the transcript untouched when summarization fails", async () => {
   const messages = conversation(3, 4_000);
   const before = [...messages];
   const failingStreamFn: StreamFn = () => {
@@ -528,7 +529,7 @@ Deno.test("compactIfNeeded leaves the transcript untouched when summarization fa
   assertEquals(messages, before);
 });
 
-Deno.test("compactIfNeeded refuses a summary that does not shrink its source", async () => {
+test("compactIfNeeded refuses a summary that does not shrink its source", async () => {
   const messages = conversation(2, 4_000);
   const before = [...messages];
   const { compactor, inserts } = compactorFor(messages, {
@@ -541,7 +542,7 @@ Deno.test("compactIfNeeded refuses a summary that does not shrink its source", a
   assertEquals(messages, before);
 });
 
-Deno.test("compactNow condenses below the threshold on demand", async () => {
+test("compactNow condenses below the threshold on demand", async () => {
   const messages = conversation(2, 4_000);
   // The retention budget must be smaller than the conversation, otherwise
   // there is nothing left to summarize (the default 20k keeps it all).
@@ -557,7 +558,7 @@ Deno.test("compactNow condenses below the threshold on demand", async () => {
   assertEquals(messages.at(-1)!.role, "toolResult");
 });
 
-Deno.test("selectCompactionSpan: a zero retention condenses the whole view", () => {
+test("selectCompactionSpan: a zero retention condenses the whole view", () => {
   const messages = conversation(3, 4_000);
   const budgets = {
     contextWindow: 10_000,
@@ -579,7 +580,7 @@ Deno.test("selectCompactionSpan: a zero retention condenses the whole view", () 
   assertEquals([one.start, one.cutIndex, one.count], [0, 1, 1]);
 });
 
-Deno.test("compactNow with zero retention appends the checkpoint after the view", async () => {
+test("compactNow with zero retention appends the checkpoint after the view", async () => {
   const messages = conversation(2, 4_000);
   const { compactor, inserts } = compactorFor(messages, {
     policy: { reservePercent: 20, keepRecentPercent: 1 },
@@ -595,7 +596,7 @@ Deno.test("compactNow with zero retention appends the checkpoint after the view"
   assertEquals(contextStart(messages), messages.length - 1);
 });
 
-Deno.test("compactNow does nothing when no safe span exists", async () => {
+test("compactNow does nothing when no safe span exists", async () => {
   const messages: AgentMessage[] = [user("only")];
   const { compactor, requests, inserts } = compactorFor(messages);
   assertEquals(await compactor.compactNow(messages), null);
@@ -603,7 +604,7 @@ Deno.test("compactNow does nothing when no safe span exists", async () => {
   assertEquals(inserts.length, 0);
 });
 
-Deno.test("compactNow refuses a span too small to reduce a request", async () => {
+test("compactNow refuses a span too small to reduce a request", async () => {
   // Two tiny units: summarizing them would cost a call and free nothing.
   const messages: AgentMessage[] = [user("a"), assistant("b")];
   const { compactor, requests, inserts } = compactorFor(messages);
@@ -612,7 +613,7 @@ Deno.test("compactNow refuses a span too small to reduce a request", async () =>
   assertEquals(inserts.length, 0);
 });
 
-Deno.test("measure anchors on provider usage and estimates only the delta", () => {
+test("measure anchors on provider usage and estimates only the delta", () => {
   const messages: AgentMessage[] = [user("start"), assistant("ok")];
   const { compactor } = compactorFor(messages);
   const full = compactor.measure(messages);
@@ -628,7 +629,7 @@ Deno.test("measure anchors on provider usage and estimates only the delta", () =
   assertEquals(anchored < 160_000, true);
 });
 
-Deno.test("measure only counts the model's view, not the kept-but-hidden history", async () => {
+test("measure only counts the model's view, not the kept-but-hidden history", async () => {
   const messages = conversation(2, 4_000);
   const { compactor } = compactorFor(messages, {
     model: modelWith(10_000, 2_000),
@@ -643,7 +644,7 @@ Deno.test("measure only counts the model's view, not the kept-but-hidden history
   assertEquals(after < before, true);
 });
 
-Deno.test("an insertion invalidates the measurement anchor", async () => {
+test("an insertion invalidates the measurement anchor", async () => {
   const messages = conversation(3, 4_000);
   const { compactor } = compactorFor(messages, {
     model: modelWith(10_000, 2_000),
@@ -658,7 +659,7 @@ Deno.test("an insertion invalidates the measurement anchor", async () => {
   assertEquals(measured < 10_000, true);
 });
 
-Deno.test("compaction re-entrancy is refused while a summarization runs", async () => {
+test("compaction re-entrancy is refused while a summarization runs", async () => {
   const messages = conversation(3, 4_000);
   const { compactor } = compactorFor(messages, {
     model: modelWith(10_000, 2_000),
@@ -671,7 +672,7 @@ Deno.test("compaction re-entrancy is refused while a summarization runs", async 
   await first;
 });
 
-Deno.test("compactNow abandons the checkpoint when the caller saw the transcript move", async () => {
+test("compactNow abandons the checkpoint when the caller saw the transcript move", async () => {
   // The summary takes a whole LLM call; a prompt that lands during it moves
   // the transcript past the span that was selected. Committing then would
   // splice a checkpoint that does not describe what follows it.
@@ -689,7 +690,7 @@ Deno.test("compactNow abandons the checkpoint when the caller saw the transcript
   assertEquals(messages.length, 7);
 });
 
-Deno.test("compactNow commits when the caller's check passes", async () => {
+test("compactNow commits when the caller's check passes", async () => {
   const messages = conversation(3, 4_000);
   const { compactor, inserts } = compactorFor(messages, {
     model: modelWith(10_000, 2_000),

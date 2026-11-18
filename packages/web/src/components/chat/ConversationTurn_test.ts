@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { fauxAssistantMessage, fauxToolCall } from "@lumisca/core";
 import { summarizeContextUsage } from "@lumisca/core/shared";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
@@ -92,7 +93,7 @@ function assistant(timestamp: number, text = "hi"): AgentMessage {
   return fauxAssistantMessage(text, { timestamp }) as AgentMessage;
 }
 
-Deno.test("buildTurns: user prompts and notifications start a turn", () => {
+test("buildTurns: user prompts and notifications start a turn", () => {
   // A notification that started its own run (no `steered` stamp) is the
   // prompt of that run, so it begins a turn of its own.
   const turns = buildTurns([
@@ -106,7 +107,7 @@ Deno.test("buildTurns: user prompts and notifications start a turn", () => {
   assertEquals(turns[1]!.responses.length, 1);
 });
 
-Deno.test("buildTurns: a steered notification joins the run's turn", () => {
+test("buildTurns: a steered notification joins the run's turn", () => {
   // A notification injected into the run that is already active is a system
   // event of the ongoing work, like a tool result: it must not split the
   // turn, or the still-running turn's work log would collapse mid-run.
@@ -125,7 +126,7 @@ Deno.test("buildTurns: a steered notification joins the run's turn", () => {
   assertEquals((turns[0]!.responses[1] as NotificationMessage).steered, true);
 });
 
-Deno.test("buildTurns: a steered notification with no open turn starts one", () => {
+test("buildTurns: a steered notification with no open turn starts one", () => {
   // A leading steered notification has no turn to join: it must still be
   // rendered, so it falls back to starting a turn of its own.
   const turns = buildTurns([notification("task", 1, true), assistant(2)]);
@@ -137,7 +138,7 @@ Deno.test("buildTurns: a steered notification with no open turn starts one", () 
   );
 });
 
-Deno.test("buildTurns: a steered notification after a checkpoint starts one", () => {
+test("buildTurns: a steered notification after a checkpoint starts one", () => {
   // A checkpoint turn is standalone (its responses are never rendered), so
   // a steered notification cannot join it: it starts a turn of its own
   // rather than vanishing from the history.
@@ -163,7 +164,7 @@ Deno.test("buildTurns: a steered notification after a checkpoint starts one", ()
   );
 });
 
-Deno.test("buildTurns: a prompt steered mid-run joins the run's turn", () => {
+test("buildTurns: a prompt steered mid-run joins the run's turn", () => {
   // The user sent a follow-up while the agent was working: the server
   // steers it into the same run (see promptWhileRunning), so it must not
   // split the turn — the same rule a steered notification follows, and for
@@ -183,7 +184,7 @@ Deno.test("buildTurns: a prompt steered mid-run joins the run's turn", () => {
   );
 });
 
-Deno.test("buildTurns: a steered mode prompt joins the run's turn", () => {
+test("buildTurns: a steered mode prompt joins the run's turn", () => {
   // Mode messages (slash-command prompts like /plan) travel the same
   // delivery path and carry the same stamp.
   const turns = buildTurns([
@@ -199,7 +200,7 @@ Deno.test("buildTurns: a steered mode prompt joins the run's turn", () => {
   );
 });
 
-Deno.test("buildTurns: a steered prompt with no open turn starts one", () => {
+test("buildTurns: a steered prompt with no open turn starts one", () => {
   // A leading steered prompt has no turn to join: it must still be
   // rendered, so it falls back to starting a turn of its own.
   const turns = buildTurns([user(1, true), assistant(2)]);
@@ -212,7 +213,7 @@ Deno.test("buildTurns: a steered prompt with no open turn starts one", () => {
   );
 });
 
-Deno.test("buildTurns: a steered prompt after a checkpoint starts one", () => {
+test("buildTurns: a steered prompt after a checkpoint starts one", () => {
   // A checkpoint turn is standalone (its responses are never rendered), so
   // a steered prompt cannot join it: it starts a turn of its own rather
   // than vanishing from the history.
@@ -238,7 +239,7 @@ Deno.test("buildTurns: a steered prompt after a checkpoint starts one", () => {
   );
 });
 
-Deno.test("buildTurns: mode messages (slash-command prompts) start a turn", () => {
+test("buildTurns: mode messages (slash-command prompts) start a turn", () => {
   // A session started by `/plan 依頼文` has the mode message as its only
   // prompt: it must render as a turn (short text + badge + responses),
   // never vanish from the history.
@@ -255,7 +256,7 @@ Deno.test("buildTurns: mode messages (slash-command prompts) start a turn", () =
   assertEquals(mixed[1]!.responses.length, 1);
 });
 
-Deno.test("buildTurns: retry notifications do not split the turn", () => {
+test("buildTurns: retry notifications do not split the turn", () => {
   const turns = buildTurns([
     user(1),
     assistant(2),
@@ -274,13 +275,13 @@ Deno.test("buildTurns: retry notifications do not split the turn", () => {
   );
 });
 
-Deno.test("buildTurns: retry notifications are skipped entirely", () => {
+test("buildTurns: retry notifications are skipped entirely", () => {
   const turns = buildTurns([user(1), assistant(2), notification("retry", 3)]);
   assertEquals(turns.length, 1);
   assertEquals(turns[0]!.responses.length, 1);
 });
 
-Deno.test("buildTurns: context snapshots are not part of any turn", () => {
+test("buildTurns: context snapshots are not part of any turn", () => {
   const context = (timestamp: number): AgentMessage => ({
     role: "context",
     provider: "skills",
@@ -309,7 +310,7 @@ Deno.test("buildTurns: context snapshots are not part of any turn", () => {
   );
 });
 
-Deno.test("buildTurns: a compaction checkpoint is a turn of its own", () => {
+test("buildTurns: a compaction checkpoint is a turn of its own", () => {
   const checkpoint = (timestamp: number): AgentMessage => ({
     role: "checkpoint",
     title: "履歴 2 件を要約しました（約 12K トークン）",
@@ -343,7 +344,7 @@ Deno.test("buildTurns: a compaction checkpoint is a turn of its own", () => {
   assertEquals(leading[1]!.user!.role, "user");
 });
 
-Deno.test("ConversationTurn: a steered notification renders in the work log", () => {
+test("ConversationTurn: a steered notification renders in the work log", () => {
   // The turn the notification was steered into: the prompt, the work the
   // agent did (a tool call), the notification, then the reaction.
   const responses: AgentMessage[] = [
@@ -391,7 +392,7 @@ Deno.test("ConversationTurn: a steered notification renders in the work log", ()
   assertStringIncludes(html, "notification-line-summary");
 });
 
-Deno.test("ConversationTurn: a context snapshot reaches neither the log nor a disclosure", () => {
+test("ConversationTurn: a context snapshot reaches neither the log nor a disclosure", () => {
   // A context snapshot is the model's reading, so it is not drawn. It must
   // also not be passed to the turn: a row left in `responses` would count
   // toward the work log and give the activity header a disclosure that opens
@@ -430,7 +431,7 @@ Deno.test("ConversationTurn: a context snapshot reaches neither the log nor a di
   assertStringIncludes(html, "done");
 });
 
-Deno.test("ConversationTurn: a context snapshot stays out of a running turn", () => {
+test("ConversationTurn: a context snapshot stays out of a running turn", () => {
   // The same drop, on the screen the report was about: the contexts are
   // published right before a run, while the turn is still running and its
   // work log is open. They must not appear there either — the log shows what
@@ -471,7 +472,7 @@ Deno.test("ConversationTurn: a context snapshot stays out of a running turn", ()
   assertStringIncludes(html, "作業中");
 });
 
-Deno.test("a notification steered mid-run keeps the running turn last", () => {
+test("a notification steered mid-run keeps the running turn last", () => {
   // The reported collapse along the whole client path (events → view →
   // turns): while a run is active, the completion notification is delivered
   // into that run, so it must not start a turn. The running turn stays the
@@ -514,7 +515,7 @@ Deno.test("a notification steered mid-run keeps the running turn last", () => {
   );
 });
 
-Deno.test("a prompt steered mid-run keeps the running turn last", () => {
+test("a prompt steered mid-run keeps the running turn last", () => {
   // The same client path as the notification case (events → view → turns),
   // now for the prompt the user typed while the agent was working: the
   // server steers it into the run, so the turn stays the last one and
@@ -556,7 +557,7 @@ Deno.test("a prompt steered mid-run keeps the running turn last", () => {
   );
 });
 
-Deno.test("a view restored mid-run keeps its turn running", () => {
+test("a view restored mid-run keeps its turn running", () => {
   // The reported bug: the WebUI is (re)loaded — or the socket drops and
   // resyncs — while the agent is working. `agent_start` is never replayed,
   // so the transcript snapshot's `running` flag is the only thing that
@@ -611,7 +612,7 @@ Deno.test("a view restored mid-run keeps its turn running", () => {
   assertWorkLog(stale, false);
 });
 
-Deno.test("ConversationTurn: a mode prompt renders the images attached to it", () => {
+test("ConversationTurn: a mode prompt renders the images attached to it", () => {
   // A picture pasted into the composer before sending `/plan 依頼文` is
   // part of that prompt: the mode bubble shows it like a user message's,
   // so the transcript reflects what the model received.
@@ -641,7 +642,7 @@ Deno.test("ConversationTurn: a mode prompt renders the images attached to it", (
   assertStringIncludes(html, "プランモード");
 });
 
-Deno.test("buildTurns: a window that begins inside a turn draws its tail", () => {
+test("buildTurns: a window that begins inside a turn draws its tail", () => {
   // The server looks back only so far for the prompt a page starts in, so a
   // run that outgrew that lookback hands over rows whose prompt is on an
   // earlier page. Those rows are a fragment: drawn as the turn's tail, never
@@ -678,7 +679,7 @@ Deno.test("buildTurns: a window that begins inside a turn draws its tail", () =>
   );
 });
 
-Deno.test("buildTurns: leading context does not open a fragment", () => {
+test("buildTurns: leading context does not open a fragment", () => {
   // The dynamic contexts are published right before a run: in a window that
   // begins with them, they belong to no turn at all. The prompt below still
   // opens the window's only turn, and the dropped rows leave no fragment
@@ -699,7 +700,7 @@ Deno.test("buildTurns: leading context does not open a fragment", () => {
   );
 });
 
-Deno.test("ConversationTurn: a fragment renders its rows without a header", () => {
+test("ConversationTurn: a fragment renders its rows without a header", () => {
   // A fragment has no prompt to head it and no start to time: it is the
   // middle of a run, so its rows are drawn open. An activity header here
   // would date the whole turn from the first row the window happens to hold.
@@ -728,7 +729,7 @@ Deno.test("ConversationTurn: a fragment renders its rows without a header", () =
   assertStringIncludes(html, "tool-timeline");
 });
 
-Deno.test("ConversationTurn: a card written in the reply is drawn where it was written", () => {
+test("ConversationTurn: a card written in the reply is drawn where it was written", () => {
   // A card is a block of the message's own text (shared/ui-markup), so the
   // words before and after it keep their order around it.
   const markup = '<Card title="確認"><Text>カードの中</Text></Card>';

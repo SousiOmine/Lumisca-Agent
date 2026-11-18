@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import type {
   SessionInfo,
   StellaAgent,
@@ -117,7 +118,7 @@ async function post(
   });
 }
 
-Deno.test("folder request: a loan answers the waiting card", async () => {
+test("folder request: a loan answers the waiting card", async () => {
   const seen: string[] = [];
   const response = await post(seen, "/stella/conversations/a1/share/lend", {
     toolCallId: "t1",
@@ -128,7 +129,7 @@ Deno.test("folder request: a loan answers the waiting card", async () => {
   assertEquals(seen, ["lend:s1:t1"]);
 });
 
-Deno.test("folder request: a refusal answers it too", async () => {
+test("folder request: a refusal answers it too", async () => {
   const seen: string[] = [];
   const response = await post(seen, "/stella/conversations/a1/share/decline", {
     toolCallId: "t1",
@@ -137,7 +138,7 @@ Deno.test("folder request: a refusal answers it too", async () => {
   assertEquals(seen, ["decline:s1:t1"]);
 });
 
-Deno.test("folder request: a tool call id that is not a string is refused", async () => {
+test("folder request: a tool call id that is not a string is refused", async () => {
   const seen: string[] = [];
   const response = await post(seen, "/stella/conversations/a1/share/lend", {
     toolCallId: 7,
@@ -146,7 +147,7 @@ Deno.test("folder request: a tool call id that is not a string is refused", asyn
   assertEquals(seen, []);
 });
 
-Deno.test("folder disconnect: the app's success settles the wait", async () => {
+test("folder disconnect: the app's success settles the wait", async () => {
   const seen: string[] = [];
   const response = await post(
     seen,
@@ -164,7 +165,7 @@ Deno.test("folder disconnect: the app's success settles the wait", async () => {
   assertEquals(seen, ["disconnect:s1:t9"]);
 });
 
-Deno.test("folder disconnect: the app's reason reaches the tool as given", async () => {
+test("folder disconnect: the app's reason reaches the tool as given", async () => {
   const seen: string[] = [];
   const response = await post(
     seen,
@@ -182,7 +183,7 @@ Deno.test("folder disconnect: the app's reason reaches the tool as given", async
   assertEquals(seen, ["failed:s1:t9:the shell refused"]);
 });
 
-Deno.test("folder disconnect: a failure without a reason is refused", async () => {
+test("folder disconnect: a failure without a reason is refused", async () => {
   // The reason is what the model reads instead of "it did not work": an empty
   // one would be an answer with nothing in it.
   const seen: string[] = [];
@@ -202,7 +203,7 @@ Deno.test("folder disconnect: a failure without a reason is refused", async () =
   assertEquals(seen, []);
 });
 
-Deno.test("folder request: the snapshot carries the pending card", async () => {
+test("folder request: the snapshot carries the pending card", async () => {
   // `share_request` events are never replayed, so a client that reconnects
   // while the run is blocked learns about the card from the snapshot alone.
   const seen: string[] = [];

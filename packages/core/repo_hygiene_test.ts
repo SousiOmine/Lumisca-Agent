@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { messages } from "./shared/i18n/messages.ts";
 
@@ -116,7 +117,7 @@ async function sourceTexts(): Promise<Map<string, string>> {
   return texts;
 }
 
-Deno.test("sources carry no mojibake from a legacy code page", async () => {
+test("sources carry no mojibake from a legacy code page", async () => {
   const texts = await sourceTexts();
   // A walk that silently visited nothing would pass vacuously.
   assert(texts.size > 300, `the source walk found only ${texts.size} files`);
@@ -138,7 +139,7 @@ Deno.test("sources carry no mojibake from a legacy code page", async () => {
  * archive's file name (scripts/build-server-manifest.ts refuses a mismatch),
  * the release manifest and the binary itself (`--version`).
  */
-Deno.test("a packaged install directory carries no version", async () => {
+test("a packaged install directory carries no version", async () => {
   const workflow = await Deno.readTextFile(
     new URL(".github/workflows/release.yml", ROOT),
   );
@@ -180,7 +181,7 @@ Deno.test("a packaged install directory carries no version", async () => {
  * arrangement is drop-guard.ts (the drops it does not handle must not
  * navigate the window away from the app).
  */
-Deno.test("the desktop window lets the page handle file drops", async () => {
+test("the desktop window lets the page handle file drops", async () => {
   const config = JSON.parse(
     await Deno.readTextFile(
       new URL("packages/desktop/src-tauri/tauri.conf.json", ROOT),
@@ -195,7 +196,7 @@ Deno.test("the desktop window lets the page handle file drops", async () => {
   assertEquals(main.dragDropEnabled, false);
 });
 
-Deno.test("every i18n catalogue key is referenced by some source", async () => {
+test("every i18n catalogue key is referenced by some source", async () => {
   // The catalogue test (shared/i18n_test.ts) proves the entries are
   // complete and translated; nothing proves they are still used, so a key
   // whose last caller was deleted outlives it silently. Keys are only ever
@@ -237,7 +238,7 @@ function resolvePath(dir: string, specifier: string): string {
   return /\.tsx?$/.test(resolved) ? resolved : `${resolved}.ts`;
 }
 
-Deno.test("every export of the core barrel is imported by a consumer", async () => {
+test("every export of the core barrel is imported by a consumer", async () => {
   // The barrel is the package's public surface, and a name nothing imports
   // is a false claim about the API: it makes the dependency direction
   // unreadable (which of these does the server actually use?) and turns an
@@ -318,7 +319,7 @@ Deno.test("every export of the core barrel is imported by a consumer", async () 
   );
 });
 
-Deno.test("the design documents only name files that exist", async () => {
+test("the design documents only name files that exist", async () => {
   // A document that names a file the repository moved away is worse than no
   // reference: the reader trusts it and looks in the wrong place (both docs
   // pointed at `agent/context-compaction.ts` after it moved to `ai/`). Each
@@ -404,7 +405,7 @@ function fileExistsAt(root: string, ref: string): boolean {
   }
 }
 
-Deno.test("the core's own modules form a DAG", async () => {
+test("the core's own modules form a DAG", async () => {
   // A cycle between modules is a cycle between their responsibilities: two
   // areas that each need the other are one area, or a seam is missing. The
   // graph is read from the import statements, so a new edge is checked the

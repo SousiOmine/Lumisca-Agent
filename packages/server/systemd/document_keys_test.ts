@@ -17,6 +17,7 @@
  * invariant — a document does not have to expose every key (the desktop
  * bridge's two are not settable through a unit).
  */
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { SERVER_STARTUP_ENV_KEYS } from "../startup.ts";
 import { DOCUMENT_KEYS } from "./document.ts";
@@ -25,7 +26,7 @@ import { DOCUMENT_KEYS } from "./document.ts";
  * settings directory, which `resolveSettingsPath` reads directly. */
 const NOT_STARTUP_KEYS = new Set(["XDG_CONFIG_HOME"]);
 
-Deno.test("every service-document key is one the server reads", () => {
+test("every service-document key is one the server reads", () => {
   const startup = new Set<string>(SERVER_STARTUP_ENV_KEYS);
   const unknown = DOCUMENT_KEYS.filter(
     (key) => !startup.has(key) && !NOT_STARTUP_KEYS.has(key),
@@ -39,7 +40,7 @@ Deno.test("every service-document key is one the server reads", () => {
   );
 });
 
-Deno.test("the document exposes the keys a unit needs to configure a server", () => {
+test("the document exposes the keys a unit needs to configure a server", () => {
   // A unit that cannot say where its database, port or token is cannot be
   // installed. These are the minimum; the list may grow, never shrink.
   const document = new Set<string>(DOCUMENT_KEYS);

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import {
   LumiscaCore as Core,
@@ -73,7 +74,7 @@ async function withApp(
   }
 }
 
-Deno.test("the asset route serves a published image", async () => {
+test("the asset route serves a published image", async () => {
   await withApp(async ({ get, sessionId }) => {
     const res = await get(`/api/sessions/${sessionId}/visual/${PNG_NAME}`);
     assertEquals(res.status, 200);
@@ -90,7 +91,7 @@ Deno.test("the asset route serves a published image", async () => {
   });
 });
 
-Deno.test("an SVG asset carries a policy of its own", async () => {
+test("an SVG asset carries a policy of its own", async () => {
   await withApp(async ({ get, sessionId }) => {
     const res = await get(`/api/sessions/${sessionId}/visual/${SVG_NAME}`);
     assertEquals(res.status, 200);
@@ -104,7 +105,7 @@ Deno.test("an SVG asset carries a policy of its own", async () => {
   });
 });
 
-Deno.test("the asset route serves only the session's own assets", async () => {
+test("the asset route serves only the session's own assets", async () => {
   await withApp(async ({ get, sessionId, storeDir }) => {
     // A file the store never named — even one sitting in the session's own
     // directory — is not reachable.
@@ -135,7 +136,7 @@ Deno.test("the asset route serves only the session's own assets", async () => {
   });
 });
 
-Deno.test("a cookie is enough: an <img> can send nothing else", async () => {
+test("a cookie is enough: an <img> can send nothing else", async () => {
   await withApp(async ({ core, sessionId }) => {
     const token = "s3cret-token";
     const app = createApp(core, { repoRoot: Deno.cwd(), token });
@@ -163,7 +164,7 @@ Deno.test("a cookie is enough: an <img> can send nothing else", async () => {
   });
 });
 
-Deno.test("a big visual is served downscaled, and whole on request", async () => {
+test("a big visual is served downscaled, and whole on request", async () => {
   await withApp(async ({ get, sessionId, storeDir }) => {
     // A 2000px picture: bigger than the preview edge, so it has both forms.
     const big = await makeRealTempDir("lumisca-visuals-big-");

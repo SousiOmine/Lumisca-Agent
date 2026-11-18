@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertRejects } from "@std/assert";
 import type { VmCommandResult } from "./command.ts";
 import type { VmExec, VmExecOptions } from "./container.ts";
@@ -33,7 +34,7 @@ function exec(
 
 // --- the foreground runner -------------------------------------------------
 
-Deno.test("vm shell: the runner wraps the command in one login shell", async () => {
+test("vm shell: the runner wraps the command in one login shell", async () => {
   const { run, calls } = exec(() => ({ stdout: "output\n" }));
   const runner = new VmCommandRunner(run);
   const result = await runner.run("echo hi", {
@@ -52,7 +53,7 @@ Deno.test("vm shell: the runner wraps the command in one login shell", async () 
   assertEquals(argv?.[2], `[ -f ${VM_ENV_SH} ] && . ${VM_ENV_SH}; echo hi`);
 });
 
-Deno.test("vm shell: per-call env vars travel through env, quoted", async () => {
+test("vm shell: per-call env vars travel through env, quoted", async () => {
   const { run, calls } = exec(() => ({}));
   const runner = new VmCommandRunner(run);
   await runner.run("printenv", {
@@ -67,7 +68,7 @@ Deno.test("vm shell: per-call env vars travel through env, quoted", async () => 
   assertEquals(script, `${VM_ENV_SOURCE}env GREETING='it'\\''s fine' printenv`);
 });
 
-Deno.test("vm shell: a background command sources the saved variables", async () => {
+test("vm shell: a background command sources the saved variables", async () => {
   const { run, calls } = exec((joined) => {
     if (joined.includes("setsid")) return { stdout: "4242" };
     if (joined.includes("kill -0")) return { stdout: "gone\n" };
@@ -88,7 +89,7 @@ Deno.test("vm shell: a background command sources the saved variables", async ()
   await process.kill();
 });
 
-Deno.test("vm shell: a timeout is reported, not thrown", async () => {
+test("vm shell: a timeout is reported, not thrown", async () => {
   const { run } = exec(() => ({ exitCode: 124, timedOut: true }));
   const runner = new VmCommandRunner(run);
   const result = await runner.run("sleep 100", {
@@ -104,7 +105,7 @@ Deno.test("vm shell: a timeout is reported, not thrown", async () => {
 
 // --- the background spawner ------------------------------------------------
 
-Deno.test("vm shell: a background command is started detached with a log", async () => {
+test("vm shell: a background command is started detached with a log", async () => {
   const { run, calls } = exec((joined) => {
     if (joined.includes("setsid")) return { stdout: "4242" };
     if (joined.includes("kill -0")) return { stdout: "gone\n" };
@@ -126,7 +127,7 @@ Deno.test("vm shell: a background command is started detached with a log", async
   await process.kill();
 });
 
-Deno.test("vm shell: kill targets the process group", async () => {
+test("vm shell: kill targets the process group", async () => {
   const { run, calls } = exec((joined) => {
     if (joined.includes("setsid")) return { stdout: "777" };
     return {};
@@ -147,7 +148,7 @@ Deno.test("vm shell: kill targets the process group", async () => {
   assertEquals(calls.length, before);
 });
 
-Deno.test("vm shell: a failed start reports the machine's message", async () => {
+test("vm shell: a failed start reports the machine's message", async () => {
   const { run } = exec(() => ({
     exitCode: 1,
     stderr: "no such directory",
@@ -160,7 +161,7 @@ Deno.test("vm shell: a failed start reports the machine's message", async () => 
   );
 });
 
-Deno.test("vm shell: a start without a pid is refused", async () => {
+test("vm shell: a start without a pid is refused", async () => {
   const { run } = exec(() => ({ stdout: "not-a-pid" }));
   const spawner = new VmBackgroundSpawner(run);
   await assertRejects(
@@ -170,10 +171,9 @@ Deno.test("vm shell: a start without a pid is refused", async () => {
   );
 });
 
-Deno.test({
-  name: "vm shell: shellQuote round-trips through a real shell",
-  ignore: Deno.build.os === "windows",
-  fn: async () => {
+test.skipIf(Deno.build.os === "windows")(
+  "vm shell: shellQuote round-trips through a real shell",
+  async () => {
     // The quoting is the one piece that must be exactly right: a value with
     // a quote in it must reach the command unchanged. Only a POSIX shell can
     // answer this: the VM image has no `sh` at C:\bin, and the quoting the
@@ -185,4 +185,4 @@ Deno.test({
     }).output();
     assertEquals(new TextDecoder().decode(result.stdout), value);
   },
-});
+);

@@ -6,6 +6,7 @@
  * screens of a phone both read it (stella.css), and the wrong answer draws the
  * wrong surface without any error anywhere.
  */
+import { test } from "bun:test";
 import { assertStringIncludes } from "@std/assert";
 import { renderToString } from "preact-render-to-string";
 import type { StellaHook } from "../hooks/useStella.ts";
@@ -75,7 +76,7 @@ function render(stella: StellaHook): string {
   );
 }
 
-Deno.test("StellaModeScreen: nobody picked is the list", () => {
+test("StellaModeScreen: nobody picked is the list", () => {
   // The answer is the selection's, not the window's: asked of the viewport, a
   // wide window would say "list" while a conversation is open — and the
   // stylesheet hides the conversation for that value, so the agent the reader
@@ -86,7 +87,7 @@ Deno.test("StellaModeScreen: nobody picked is the list", () => {
   );
 });
 
-Deno.test("StellaModeScreen: a picked agent is the conversation", () => {
+test("StellaModeScreen: a picked agent is the conversation", () => {
   assertStringIncludes(
     render(
       hook({

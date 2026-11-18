@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import type { SessionInfo } from "../domain/session.ts";
 import type { Workspace } from "../domain/workspace.ts";
@@ -33,7 +34,7 @@ function serverBody(url: string): string {
   return JSON.stringify({ mcpServers: { probe: { url } } });
 }
 
-Deno.test("OAuth: the sign-in grants what the next connection uses", async () => {
+test("OAuth: the sign-in grants what the next connection uses", async () => {
   const auth = startFakeAuthServer();
   const mcp = startFakeMcpServer({
     token: "access-token-1",
@@ -107,7 +108,7 @@ Deno.test("OAuth: the sign-in grants what the next connection uses", async () =>
   }
 });
 
-Deno.test("OAuth: finishing a sign-in reconnects the sessions using it", async () => {
+test("OAuth: finishing a sign-in reconnects the sessions using it", async () => {
   // The sign-in changes no config, so nothing else would ever tell a session
   // that already got its 401 to connect again. completeAuth must reach every
   // session whose merged config names the server — including one that is
@@ -164,7 +165,7 @@ Deno.test("OAuth: finishing a sign-in reconnects the sessions using it", async (
   }
 });
 
-Deno.test("OAuth: a callback with an unknown state is refused", async () => {
+test("OAuth: a callback with an unknown state is refused", async () => {
   const auth = startFakeAuthServer();
   const mcp = startFakeMcpServer({
     token: "access-token-1",
@@ -186,7 +187,7 @@ Deno.test("OAuth: a callback with an unknown state is refused", async () => {
   }
 });
 
-Deno.test("OAuth: a cancelled sign-in exchanges nothing", async () => {
+test("OAuth: a cancelled sign-in exchanges nothing", async () => {
   const auth = startFakeAuthServer();
   const mcp = startFakeMcpServer({
     token: "access-token-1",
@@ -215,7 +216,7 @@ Deno.test("OAuth: a cancelled sign-in exchanges nothing", async () => {
   }
 });
 
-Deno.test("OAuth: the authorization server's refusal is reported", async () => {
+test("OAuth: the authorization server's refusal is reported", async () => {
   const auth = startFakeAuthServer();
   const mcp = startFakeMcpServer({
     token: "access-token-1",
@@ -240,7 +241,7 @@ Deno.test("OAuth: the authorization server's refusal is reported", async () => {
   }
 });
 
-Deno.test("OAuth: a session's connections use the stored grant", async () => {
+test("OAuth: a session's connections use the stored grant", async () => {
   const auth = startFakeAuthServer();
   const mcp = startFakeMcpServer({
     token: "access-token-1",
@@ -274,7 +275,7 @@ Deno.test("OAuth: a session's connections use the stored grant", async () => {
   }
 });
 
-Deno.test("OAuth: a session's server without a grant reports needsAuth", async () => {
+test("OAuth: a session's server without a grant reports needsAuth", async () => {
   const mcp = startFakeMcpServer({ token: "access-token-1" });
   const config = parseMcpConfig(serverBody(mcp.url), ".mcp.json");
   try {
@@ -296,7 +297,7 @@ Deno.test("OAuth: a session's server without a grant reports needsAuth", async (
   }
 });
 
-Deno.test("OAuth: the store keeps one record per server", () => {
+test("OAuth: the store keeps one record per server", () => {
   const store = new McpOAuthStore(createInMemorySettingsRepo());
   store.update("https://a.example/mcp", () => ({
     tokens: { access_token: "a-token" },

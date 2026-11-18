@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { createTranslator } from "@lumisca/core/shared";
 import { assert, assertEquals } from "@std/assert";
 import {
@@ -26,21 +27,21 @@ function question(overrides: Partial<AskQuestion> = {}): AskQuestion {
   };
 }
 
-Deno.test("buildAgentEndNotification mentions the session", () => {
+test("buildAgentEndNotification mentions the session", () => {
   const { title, body } = buildAgentEndNotification("My session", ja);
   assertEquals(title, "Lumisca");
   assert(body.includes("My session"), `body carries the name: ${body}`);
   assert(body.startsWith("「My session」"), `body frames the name: ${body}`);
 });
 
-Deno.test("buildAgentEndNotification follows the language", () => {
+test("buildAgentEndNotification follows the language", () => {
   const jaBody = buildAgentEndNotification("My session", ja).body;
   const enBody = buildAgentEndNotification("My session", en).body;
   assertEquals(jaBody, "「My session」の処理が完了しました");
   assertEquals(enBody, '"My session" has finished');
 });
 
-Deno.test("buildAgentEndNotification truncates long names", () => {
+test("buildAgentEndNotification truncates long names", () => {
   const { body } = buildAgentEndNotification("あ".repeat(100), ja);
   // The name is capped at 60 characters, so the body is the wording plus
   // at most that many characters.
@@ -49,7 +50,7 @@ Deno.test("buildAgentEndNotification truncates long names", () => {
   assert(!body.includes("あ".repeat(61)), "name is cut at 60 chars");
 });
 
-Deno.test("buildAgentEndNotification carries the start of the reply", () => {
+test("buildAgentEndNotification carries the start of the reply", () => {
   // "Finished" alone does not say whether opening the app is worth it — the
   // reason a routine's result needs a body (#41).
   const { body } = buildAgentEndNotification(
@@ -75,7 +76,7 @@ Deno.test("buildAgentEndNotification carries the start of the reply", () => {
   assertEquals(Array.from(long.split("\n")[1] ?? "").length, 120);
 });
 
-Deno.test("buildQuestionNotification prefers the header", () => {
+test("buildQuestionNotification prefers the header", () => {
   const { body } = buildQuestionNotification(
     "S",
     [question({ header: "確認", question: "本文" })],
@@ -96,7 +97,7 @@ Deno.test("buildQuestionNotification prefers the header", () => {
   );
 });
 
-Deno.test("buildQuestionNotification falls back to the question text", () => {
+test("buildQuestionNotification falls back to the question text", () => {
   const { body } = buildQuestionNotification(
     "S",
     [question({ header: undefined })],
@@ -105,14 +106,14 @@ Deno.test("buildQuestionNotification falls back to the question text", () => {
   assert(body.includes("どれにしますか?"), `body carries the text: ${body}`);
 });
 
-Deno.test("buildQuestionNotification handles no questions", () => {
+test("buildQuestionNotification handles no questions", () => {
   const { body } = buildQuestionNotification("S", [], ja);
   assert(body.includes("質問"), `body still asks for input: ${body}`);
   // Without a gist no separator is left behind.
   assertEquals(body.endsWith("あります"), true);
 });
 
-Deno.test("buildHandoverNotification names the session and the reason", () => {
+test("buildHandoverNotification names the session and the reason", () => {
   const { title, body } = buildHandoverNotification(
     "Aide",
     "The login form needs a password only you know",
@@ -124,7 +125,7 @@ Deno.test("buildHandoverNotification names the session and the reason", () => {
   assert(body.includes("password only you know"), body);
 });
 
-Deno.test("buildEnvNotification says which variable and which conversation", () => {
+test("buildEnvNotification says which variable and which conversation", () => {
   const { title, body } = buildEnvNotification("Aide", "OPENAI_API_KEY", ja);
   assertEquals(title, "Lumisca");
   assert(body.includes("「Aide」"), body);
@@ -137,7 +138,7 @@ Deno.test("buildEnvNotification says which variable and which conversation", () 
   );
 });
 
-Deno.test("buildHandoverNotification follows the language", () => {
+test("buildHandoverNotification follows the language", () => {
   assertEquals(
     buildHandoverNotification("Aide", "a password", en).body,
     '"Aide" is waiting for you at the screen: a password',
@@ -148,7 +149,7 @@ Deno.test("buildHandoverNotification follows the language", () => {
   );
 });
 
-Deno.test("buildHandoverNotification folds whitespace and caps the reason", () => {
+test("buildHandoverNotification folds whitespace and caps the reason", () => {
   // The reason is a sentence the model wrote for a banner, not a paragraph
   // a toast can hold.
   const { body } = buildHandoverNotification("Aide", "  needs\n\na  ", ja);
@@ -157,7 +158,7 @@ Deno.test("buildHandoverNotification folds whitespace and caps the reason", () =
   assert(!long.includes("あ".repeat(121)), "reason is cut at 120 chars");
 });
 
-Deno.test("shouldNotifyFromState matrix", () => {
+test("shouldNotifyFromState matrix", () => {
   const focused = {
     focused: true,
     minimized: false,
@@ -206,7 +207,7 @@ class MemoryStorage {
   }
 }
 
-Deno.test("notify enabled defaults to on and round-trips", () => {
+test("notify enabled defaults to on and round-trips", () => {
   const descriptor = Object.getOwnPropertyDescriptor(
     globalThis,
     "localStorage",

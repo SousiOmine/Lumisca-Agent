@@ -1,10 +1,11 @@
+import { test } from "bun:test";
 import { dirname, join } from "node:path";
 import { assertEquals } from "@std/assert";
 import { bytesToBase64 } from "./base64.ts";
 import { atomicWriteTextFileSync, readIfExists } from "./fs.ts";
 import { makeRealTempDir, removeDirRetry } from "./test-utils.ts";
 
-Deno.test("atomicWriteTextFileSync writes the file and creates the parent", async () => {
+test("atomicWriteTextFileSync writes the file and creates the parent", async () => {
   const root = await makeRealTempDir("lumisca-atomic-");
   try {
     const target = join(root, "nested", "deep", "settings.jsonc");
@@ -21,7 +22,7 @@ Deno.test("atomicWriteTextFileSync writes the file and creates the parent", asyn
   }
 });
 
-Deno.test("atomicWriteTextFileSync replaces an existing file in place", async () => {
+test("atomicWriteTextFileSync replaces an existing file in place", async () => {
   const root = await makeRealTempDir("lumisca-atomic-");
   try {
     const target = join(root, "settings.jsonc");
@@ -33,7 +34,7 @@ Deno.test("atomicWriteTextFileSync replaces an existing file in place", async ()
   }
 });
 
-Deno.test("readIfExists returns undefined for a missing path", async () => {
+test("readIfExists returns undefined for a missing path", async () => {
   const root = await makeRealTempDir("lumisca-fs-");
   try {
     assertEquals(readIfExists(join(root, "absent.txt")), undefined);
@@ -45,7 +46,7 @@ Deno.test("readIfExists returns undefined for a missing path", async () => {
   }
 });
 
-Deno.test("bytesToBase64 encodes across the chunk boundary", () => {
+test("bytesToBase64 encodes across the chunk boundary", () => {
   assertEquals(bytesToBase64(new Uint8Array([0x68, 0x69])), "aGk=");
   assertEquals(bytesToBase64(new Uint8Array(0)), "");
   // 0x8000 is the chunk size: a longer buffer proves the chunked loop is

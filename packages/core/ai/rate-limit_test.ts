@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import {
   isRetryableRateLimitError,
@@ -10,7 +11,7 @@ import {
   sleepAbortable,
 } from "./rate-limit.ts";
 
-Deno.test("isRetryableRateLimitError classifies 429 wording as retryable", () => {
+test("isRetryableRateLimitError classifies 429 wording as retryable", () => {
   assertEquals(
     isRetryableRateLimitError(
       new Error("OpenAI API error (429): rate_limit_exceeded"),
@@ -29,7 +30,7 @@ Deno.test("isRetryableRateLimitError classifies 429 wording as retryable", () =>
   assertEquals(isRetryableRateLimitError("not an error object"), false);
 });
 
-Deno.test("rateLimitRetryDelayMs grows exponentially and is capped", () => {
+test("rateLimitRetryDelayMs grows exponentially and is capped", () => {
   // Deterministic: override Math.random so jitter is zero.
   const realRandom = Math.random;
   try {
@@ -47,7 +48,7 @@ Deno.test("rateLimitRetryDelayMs grows exponentially and is capped", () => {
   }
 });
 
-Deno.test("rateLimitRetryDelayMs applies up to -25% jitter", () => {
+test("rateLimitRetryDelayMs applies up to -25% jitter", () => {
   // Random = 1 → factor (1 - 0.25) = 0.75.
   const realRandom = Math.random;
   try {
@@ -61,7 +62,7 @@ Deno.test("rateLimitRetryDelayMs applies up to -25% jitter", () => {
   }
 });
 
-Deno.test("sleepAbortable rejects when the signal fires", async () => {
+test("sleepAbortable rejects when the signal fires", async () => {
   const controller = new AbortController();
   const p = sleepAbortable(1000, controller.signal);
   controller.abort();
@@ -76,7 +77,7 @@ function instantSleep(): Promise<void> {
   return Promise.resolve();
 }
 
-Deno.test("retryOnRateLimitError retries rate limits then succeeds", async () => {
+test("retryOnRateLimitError retries rate limits then succeeds", async () => {
   let calls = 0;
   const result = await retryOnRateLimitError(
     () => {
@@ -93,7 +94,7 @@ Deno.test("retryOnRateLimitError retries rate limits then succeeds", async () =>
   assertEquals(calls, 3);
 });
 
-Deno.test("retryOnRateLimitError stops at non-rate errors", async () => {
+test("retryOnRateLimitError stops at non-rate errors", async () => {
   let calls = 0;
   const err = await retryOnRateLimitError(
     () => {
@@ -110,7 +111,7 @@ Deno.test("retryOnRateLimitError stops at non-rate errors", async () => {
   assertEquals(calls, 1);
 });
 
-Deno.test("retryOnRateLimitError gives up after the budget", async () => {
+test("retryOnRateLimitError gives up after the budget", async () => {
   let calls = 0;
   const err = await retryOnRateLimitError(
     () => {
@@ -128,7 +129,7 @@ Deno.test("retryOnRateLimitError gives up after the budget", async () => {
   assertEquals(calls, 3);
 });
 
-Deno.test("retryOnRateLimitError respects the default budget", async () => {
+test("retryOnRateLimitError respects the default budget", async () => {
   let calls = 0;
   await retryOnRateLimitError(
     () => {
@@ -144,7 +145,7 @@ Deno.test("retryOnRateLimitError respects the default budget", async () => {
   assertEquals(calls, MAX_RATE_LIMIT_RETRIES + 1);
 });
 
-Deno.test("retryOnRateLimitError aborts during backoff with RetryAbortError", async () => {
+test("retryOnRateLimitError aborts during backoff with RetryAbortError", async () => {
   const controller = new AbortController();
   const err = await retryOnRateLimitError(
     () => {

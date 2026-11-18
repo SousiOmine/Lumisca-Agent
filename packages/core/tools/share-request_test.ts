@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { CoreError } from "../errors.ts";
 import type { FolderGrant } from "../share/grant.ts";
@@ -53,7 +54,7 @@ function disconnectTool(grants: FolderGrant[]) {
   };
 }
 
-Deno.test("share_request: a lent folder comes back by its /lend path", async () => {
+test("share_request: a lent folder comes back by its /lend path", async () => {
   const grants: FolderGrant[] = [];
   const { requests, tool } = requestTool(grants);
   const answered = tool.execute("call-1", { reason: "read the CSV exports" });
@@ -67,7 +68,7 @@ Deno.test("share_request: a lent folder comes back by its /lend path", async () 
   assert(body.includes("absolute path"), body);
 });
 
-Deno.test("share_request: a refusal says to continue without asking again", async () => {
+test("share_request: a refusal says to continue without asking again", async () => {
   const grants: FolderGrant[] = [];
   const { requests, tool } = requestTool(grants);
   const answered = tool.execute("call-1", { reason: "read the CSV exports" });
@@ -77,7 +78,7 @@ Deno.test("share_request: a refusal says to continue without asking again", asyn
   assert(body.includes("do not ask again"), body);
 });
 
-Deno.test("share_request: the reason is what the card shows, so it must be there", async () => {
+test("share_request: the reason is what the card shows, so it must be there", async () => {
   const { tool } = requestTool([]);
   await assertRejects(
     () => tool.execute("call-1", { reason: "   " }),
@@ -94,7 +95,7 @@ Deno.test("share_request: the reason is what the card shows, so it must be there
   );
 });
 
-Deno.test("share_request: a second card while one stands is refused", async () => {
+test("share_request: a second card while one stands is refused", async () => {
   const grants: FolderGrant[] = [];
   const { requests, tool } = requestTool(grants);
   const first = tool.execute("call-1", { reason: "read the exports" });
@@ -107,7 +108,7 @@ Deno.test("share_request: a second card while one stands is refused", async () =
   await first;
 });
 
-Deno.test("share_disconnect: the loan ends, and the folder is gone afterwards", async () => {
+test("share_disconnect: the loan ends, and the folder is gone afterwards", async () => {
   const grants: FolderGrant[] = [grantOf("proj")];
   const { requests, tool } = disconnectTool(grants);
   const answered = tool.execute("call-1", { name: "proj" });
@@ -119,7 +120,7 @@ Deno.test("share_disconnect: the loan ends, and the folder is gone afterwards", 
   assert(body.includes("no longer reachable"), body);
 });
 
-Deno.test("share_disconnect: an unknown name answers with what is lent", async () => {
+test("share_disconnect: an unknown name answers with what is lent", async () => {
   const grants: FolderGrant[] = [grantOf("proj"), grantOf("exports", true)];
   const { tool } = disconnectTool(grants);
   const body = text(await tool.execute("call-1", { name: "notes" }));
@@ -128,7 +129,7 @@ Deno.test("share_disconnect: an unknown name answers with what is lent", async (
   assert(body.includes("/lend/exports"), body);
 });
 
-Deno.test("share_disconnect: the path is refused, and the name is named", async () => {
+test("share_disconnect: the path is refused, and the name is named", async () => {
   // The lent-folder notice shows absolute paths, so the model reaches for one;
   // converting it silently would teach it the wrong argument, so the answer
   // says what the tool takes.
@@ -141,7 +142,7 @@ Deno.test("share_disconnect: the path is refused, and the name is named", async 
   );
 });
 
-Deno.test("share_disconnect: the app's failure is quoted, and the folder stays lent", async () => {
+test("share_disconnect: the app's failure is quoted, and the folder stays lent", async () => {
   const grants: FolderGrant[] = [grantOf("proj")];
   const { requests, tool } = disconnectTool(grants);
   const answered = tool.execute("call-1", { name: "proj" });
@@ -151,7 +152,7 @@ Deno.test("share_disconnect: the app's failure is quoted, and the folder stays l
   assert(body.includes("still lent"), body);
 });
 
-Deno.test("share_disconnect: silence from the desktop app leaves the folder lent", async () => {
+test("share_disconnect: silence from the desktop app leaves the folder lent", async () => {
   // The deadline, not a torn-down run: the tool resolves and says what is
   // still true, so the model does not report a loan it did not end.
   const grants: FolderGrant[] = [grantOf("proj")];
@@ -166,7 +167,7 @@ Deno.test("share_disconnect: silence from the desktop app leaves the folder lent
   assertEquals(grants.length, 1);
 });
 
-Deno.test("share_request: a loan that has not arrived is said, not guessed", async () => {
+test("share_request: a loan that has not arrived is said, not guessed", async () => {
   const grants: FolderGrant[] = [];
   const { requests, tool } = requestTool(grants);
   const answered = tool.execute("call-1", { reason: "read the exports" });
@@ -177,7 +178,7 @@ Deno.test("share_request: a loan that has not arrived is said, not guessed", asy
   assertEquals(body.includes("/lend/exports"), false, body);
 });
 
-Deno.test("share_request: an ending run rejects rather than answering", async () => {
+test("share_request: an ending run rejects rather than answering", async () => {
   const { requests, tool } = requestTool([]);
   const answered = tool.execute("call-1", { reason: "read the exports" });
   requests.cancelAll();

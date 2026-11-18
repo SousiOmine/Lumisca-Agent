@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { contentText } from "../shared/mod.ts";
 import { fakeModel } from "../test-utils.ts";
@@ -84,7 +85,7 @@ function announcedRoles(events: AgentEvent[]): string[] {
     .map((event) => (event as { message: AgentMessage }).message.role);
 }
 
-Deno.test("a turn's tool results are announced after their assistant message", async () => {
+test("a turn's tool results are announced after their assistant message", async () => {
   const events: AgentEvent[] = [];
   const toolCall = fauxToolCall("edit", { path: "a.ts" }, "t1");
   const toolTurn = fauxAssistantMessage([toolCall], { stopReason: "toolUse" });
@@ -142,7 +143,7 @@ Deno.test("a turn's tool results are announced after their assistant message", a
   ]);
 });
 
-Deno.test("an abort does not leak into later runs (the signal is per run)", async () => {
+test("an abort does not leak into later runs (the signal is per run)", async () => {
   const { streamFn, calls } = abortAwareStreamFn(["held", "second answer"]);
   const agent = makeAgent(streamFn);
 
@@ -163,7 +164,7 @@ Deno.test("an abort does not leak into later runs (the signal is per run)", asyn
   assertEquals(assistantText(agent.messages.at(-1)), "second answer");
 });
 
-Deno.test("a prompt while a run is aborting starts its own run, not a lost queue entry", async () => {
+test("a prompt while a run is aborting starts its own run, not a lost queue entry", async () => {
   const { streamFn, calls } = abortAwareStreamFn(["held", "second answer"]);
   const agent = makeAgent(streamFn);
 
@@ -246,7 +247,7 @@ function toolThenAnswerStreamFn(toolName: string): {
   return { streamFn, calls: () => calls };
 }
 
-Deno.test("a stop settles the run even when a tool never returns", async () => {
+test("a stop settles the run even when a tool never returns", async () => {
   // The tool runs in the SDK's tool loop; this double bypasses the SDK and
   // the agent's own executeTools is the one that holds — both are the same
   // exchange from the run's point of view.
@@ -278,7 +279,7 @@ Deno.test("a stop settles the run even when a tool never returns", async () => {
   assertEquals(assistantText(agent.messages.at(-1)), "second run answered");
 });
 
-Deno.test("an abandoned turn's tool call is answered with a stop, not left dangling", async () => {
+test("an abandoned turn's tool call is answered with a stop, not left dangling", async () => {
   // A slow (but finite) tool: the stop lands while it runs, and the tool
   // returns afterwards. Its own result belongs to the abandoned run and must
   // not appear — but the call it is answering is already in the transcript,
@@ -314,7 +315,7 @@ Deno.test("an abandoned turn's tool call is answered with a stop, not left dangl
   );
 });
 
-Deno.test("a steer during a tool loop is processed at the next turn boundary, not at the end", async () => {
+test("a steer during a tool loop is processed at the next turn boundary, not at the end", async () => {
   // Turn 1 asks for the tool; the tool result keeps the loop going. While
   // the tool runs, a message is steered in. It must be drained as the next
   // turn (before the loop ends), so the second LLM call already sees it.
@@ -421,7 +422,7 @@ function thinkingBlocks(messages: AgentMessage[]): ThinkingContent[] {
   );
 }
 
-Deno.test("a thinking delta does not add a second block to the transport's message", async () => {
+test("a thinking delta does not add a second block to the transport's message", async () => {
   const agent = makeAgent(thinkingStreamFn(true));
   await agent.prompt("think about it");
 
@@ -433,7 +434,7 @@ Deno.test("a thinking delta does not add a second block to the transport's messa
   ]);
 });
 
-Deno.test("a thinking delta still fills a message that arrived without one", async () => {
+test("a thinking delta still fills a message that arrived without one", async () => {
   const agent = makeAgent(thinkingStreamFn(false));
   await agent.prompt("think about it");
 
@@ -446,7 +447,7 @@ Deno.test("a thinking delta still fills a message that arrived without one", asy
   assertEquals(assistantText(agent.messages.at(-1)), "answer");
 });
 
-Deno.test("a thinking delta survives a turn that ended in an error", async () => {
+test("a thinking delta survives a turn that ended in an error", async () => {
   // The real path of the fill-in: a stream that reported thinking and then
   // failed has no finished message to describe it (the error message's
   // content is empty), so the accumulated reasoning is all the transcript

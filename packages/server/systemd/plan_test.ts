@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { SETTINGS_DIR_NAME } from "@lumisca/core";
 import { assert, assertEquals, assertThrows } from "@std/assert";
@@ -23,7 +24,7 @@ function host(patch: Partial<ServiceHost> = {}): ServiceHost {
   };
 }
 
-Deno.test("installed files live where systemd and the settings file expect them", () => {
+test("installed files live where systemd and the settings file expect them", () => {
   // Paths are joined the way the platform joins them (the suite runs on
   // Windows, macOS, and Linux), so the expectation is built, not spelled.
   assertEquals(servicePaths(host()), {
@@ -43,7 +44,7 @@ Deno.test("installed files live where systemd and the settings file expect them"
   );
 });
 
-Deno.test("the four verbs parse with their own options", () => {
+test("the four verbs parse with their own options", () => {
   assertEquals(parseServiceArgs(["install"]), {
     verb: "install",
     flags: {},
@@ -75,7 +76,7 @@ Deno.test("the four verbs parse with their own options", () => {
   assertEquals(parseServiceArgs(["install", "-h"]).verb, "help");
 });
 
-Deno.test("host lists normalize and accumulate across repeats", () => {
+test("host lists normalize and accumulate across repeats", () => {
   assertEquals(
     parseServiceArgs([
       "install",
@@ -90,7 +91,7 @@ Deno.test("host lists normalize and accumulate across repeats", () => {
   );
 });
 
-Deno.test("options from another mode are usage errors, never ignored", () => {
+test("options from another mode are usage errors, never ignored", () => {
   // A silently ignored --port would install a server somewhere the operator
   // did not ask for.
   assertThrows(
@@ -135,7 +136,7 @@ Deno.test("options from another mode are usage errors, never ignored", () => {
   );
 });
 
-Deno.test("option values are validated where they enter", () => {
+test("option values are validated where they enter", () => {
   assertThrows(
     () => parseServiceArgs(["install", "--port", "0"]),
     ServiceUsageError,
@@ -183,7 +184,7 @@ Deno.test("option values are validated where they enter", () => {
   );
 });
 
-Deno.test("a token given on the command line is what the layer carries", () => {
+test("a token given on the command line is what the layer carries", () => {
   const parsed = parseServiceArgs(["install", "--token", "abc123"]);
   assert(
     !("xdgConfigHome" in parsed.flags),

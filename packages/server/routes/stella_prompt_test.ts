@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import type { PromptFileRef } from "@lumisca/core";
 /**
  * The conversation's prompt takes the same attachments code mode's prompt
@@ -107,7 +108,7 @@ function setup(): { app: ReturnType<typeof stellaRoutes>; received: Received } {
   app.onError((error, c) => jsonError(c, error));
   return { app, received };
 }
-Deno.test("stella prompt: a picture is written into the machine, not the message", async () => {
+test("stella prompt: a picture is written into the machine, not the message", async () => {
   const { app, received } = setup();
   const response = await app.request("/stella/conversations/a1/prompt", {
     method: "POST",
@@ -126,7 +127,7 @@ Deno.test("stella prompt: a picture is written into the machine, not the message
   assertEquals(received.saved[0]!.ref, "uploads/1-ab/00-image-1.png");
 });
 
-Deno.test("stella prompt: the machine is made ready before the run", async () => {
+test("stella prompt: the machine is made ready before the run", async () => {
   // The machine is stopped or crashes while the conversation is open, and
   // nothing else on this path would start it again (see ARCHITECTURE.md):
   // every tool would answer podman's "container state improper". The uploads
@@ -145,7 +146,7 @@ Deno.test("stella prompt: the machine is made ready before the run", async () =>
   assertEquals(received.order, ["ready", "upload", "prompt"]);
 });
 
-Deno.test("stella prompt: an image with no text is a prompt", async () => {
+test("stella prompt: an image with no text is a prompt", async () => {
   const { app, received } = setup();
   const response = await app.request("/stella/conversations/a1/prompt", {
     method: "POST",
@@ -160,7 +161,7 @@ Deno.test("stella prompt: an image with no text is a prompt", async () => {
   assertEquals(received.uploads.length, 1);
 });
 
-Deno.test("stella prompt: an unsupported picture type is refused by name", async () => {
+test("stella prompt: an unsupported picture type is refused by name", async () => {
   const { app } = setup();
   // A prompt's pictures are drawn back by their extension, so the type has to
   // be one the conversation can show. Refusing here says which one it was
@@ -176,7 +177,7 @@ Deno.test("stella prompt: an unsupported picture type is refused by name", async
   assertEquals(response.status, 400);
 });
 
-Deno.test("stella prompt: text alone needs no upload", async () => {
+test("stella prompt: text alone needs no upload", async () => {
   const { app, received } = setup();
   const response = await app.request("/stella/conversations/a1/prompt", {
     method: "POST",
@@ -189,7 +190,7 @@ Deno.test("stella prompt: text alone needs no upload", async () => {
   assertEquals(received.uploads, []);
 });
 
-Deno.test("stella prompt: the file notice is for the model, not the screen", async () => {
+test("stella prompt: the file notice is for the model, not the screen", async () => {
   // The route hands the core the user's own words: the notice naming the
   // files is added to the message's modelContent (see session-agent's
   // buildUserMessage), so the conversation draws the sentence the user wrote

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import { DEFAULT_PORT } from "./default-port.ts";
 import {
@@ -19,7 +20,7 @@ import {
   updateSupport,
 } from "./startup.ts";
 
-Deno.test("server startup environment is consumed instead of inherited by tools", () => {
+test("server startup environment is consumed instead of inherited by tools", () => {
   const values = new Map<string, string>([
     ["LUMISCA_DB", "C:/data/parent.db"],
     ["LUMISCA_HOME", "C:/data"],
@@ -70,7 +71,7 @@ Deno.test("server startup environment is consumed instead of inherited by tools"
   assertEquals(values, new Map([["LUMISCA_MODEL", "test-model"]]));
 });
 
-Deno.test("desktop mode and update switches are read strictly", () => {
+test("desktop mode and update switches are read strictly", () => {
   assertEquals(isDesktopManaged("1"), true);
   assertEquals(isDesktopManaged("true"), true);
   assertEquals(isDesktopManaged("0"), false);
@@ -97,7 +98,7 @@ Deno.test("desktop mode and update switches are read strictly", () => {
   assertEquals(parseUpdateRestartMode("false"), "self");
 });
 
-Deno.test("the update decision names the reason for every unsupported launch", () => {
+test("the update decision names the reason for every unsupported launch", () => {
   // Only a packaged server outside the desktop shell may replace its own
   // files. The composition root registers no update endpoints in the other
   // cases, so this decision is what decides whether /api/update/* exists at
@@ -127,19 +128,19 @@ Deno.test("the update decision names the reason for every unsupported launch", (
   );
 });
 
-Deno.test("parseServerPort falls back when unset or blank", () => {
+test("parseServerPort falls back when unset or blank", () => {
   assertEquals(parseServerPort(undefined, 8000), 8000);
   assertEquals(parseServerPort("", 8000), 8000);
   assertEquals(parseServerPort("   ", 8000), 8000);
 });
 
-Deno.test("parseServerPort accepts valid ports", () => {
+test("parseServerPort accepts valid ports", () => {
   assertEquals(parseServerPort("8100", 8000), 8100);
   assertEquals(parseServerPort("1", 8000), 1);
   assertEquals(parseServerPort("65535", 8000), 65535);
 });
 
-Deno.test("parseServerPort rejects garbage and out-of-range values", () => {
+test("parseServerPort rejects garbage and out-of-range values", () => {
   // The service command validates `--port` with the same parser as
   // LUMISCA_PORT, so the accepted range is one definition, not two.
   assertEquals(parsePortValue("8100"), 8100);
@@ -158,7 +159,7 @@ Deno.test("parseServerPort rejects garbage and out-of-range values", () => {
   }
 });
 
-Deno.test("isAddressInUseError matches Deno's AddrInUse", () => {
+test("isAddressInUseError matches Deno's AddrInUse", () => {
   assertEquals(isAddressInUseError(new Deno.errors.AddrInUse("taken")), true);
   const shaped = new Error("taken");
   shaped.name = "AddrInUse";
@@ -168,7 +169,7 @@ Deno.test("isAddressInUseError matches Deno's AddrInUse", () => {
   assertEquals(isAddressInUseError(undefined), false);
 });
 
-Deno.test("defaultAssetsFile picks up the manifest staged next to the binary", () => {
+test("defaultAssetsFile picks up the manifest staged next to the binary", () => {
   const execPath =
     Deno.build.os === "windows"
       ? "C:\\opt\\lumisca\\lumisca-server.exe"
@@ -187,7 +188,7 @@ Deno.test("defaultAssetsFile picks up the manifest staged next to the binary", (
   assertEquals(seen, [beside], "only the sibling manifest is probed");
 });
 
-Deno.test("defaultAssetsFile leaves development servers on the repository sources", () => {
+test("defaultAssetsFile leaves development servers on the repository sources", () => {
   // `bun run` has no assets.json beside the runtime binary.
   assertEquals(
     defaultAssetsFile("/usr/local/bin/bun", () => false),
@@ -197,7 +198,7 @@ Deno.test("defaultAssetsFile leaves development servers on the repository source
   assertEquals(defaultAssetsFile("/usr/local/bin/bun"), undefined);
 });
 
-Deno.test("describeListenError guides away from an occupied port", () => {
+test("describeListenError guides away from an occupied port", () => {
   const message = describeListenError(
     "127.0.0.1",
     8000,
@@ -208,7 +209,7 @@ Deno.test("describeListenError guides away from an occupied port", () => {
   assert(message.includes("LUMISCA_PORT"), "offers another port");
 });
 
-Deno.test("describeListenError reports other listen failures plainly", () => {
+test("describeListenError reports other listen failures plainly", () => {
   const message = describeListenError(
     "127.0.0.1",
     8000,
@@ -218,7 +219,7 @@ Deno.test("describeListenError reports other listen failures plainly", () => {
   assert(message.includes("permission denied"), "keeps the raw detail");
 });
 
-Deno.test("isValidPort accepts exactly the TCP range", () => {
+test("isValidPort accepts exactly the TCP range", () => {
   for (const port of [1, 80, 8000, 65535]) {
     assertEquals(isValidPort(port), true, String(port));
   }
@@ -234,7 +235,7 @@ Deno.test("isValidPort accepts exactly the TCP range", () => {
   }
 });
 
-Deno.test("the desktop shell mirrors this module's port contract", () => {
+test("the desktop shell mirrors this module's port contract", () => {
   // packages/desktop is Rust and cannot import this module, so server.rs
   // repeats the default port, the port key and the desktop marker the shell
   // passes to the child. Nothing else compares the copies, and a changed
@@ -275,7 +276,7 @@ Deno.test("the desktop shell mirrors this module's port contract", () => {
   );
 });
 
-Deno.test("unset server startup variables are still removed", () => {
+test("unset server startup variables are still removed", () => {
   const deleted: string[] = [];
   const captured = consumeServerStartupEnvironment({
     get: () => undefined,
@@ -289,7 +290,7 @@ Deno.test("unset server startup variables are still removed", () => {
   assertEquals(deleted, Object.keys(captured));
 });
 
-Deno.test("spawned commands inherit the cleaned process environment", async () => {
+test("spawned commands inherit the cleaned process environment", async () => {
   const keys = [...SERVER_STARTUP_ENV_KEYS, "LUMISCA_MODEL"];
   const saved = new Map(keys.map((key) => [key, Deno.env.get(key)]));
 
@@ -327,7 +328,7 @@ Deno.test("spawned commands inherit the cleaned process environment", async () =
   }
 });
 
-Deno.test("resolveDbPath prefers the explicit file, then the home, then cwd", () => {
+test("resolveDbPath prefers the explicit file, then the home, then cwd", () => {
   // The launcher's three documented shapes.
   assertEquals(
     resolveDbPath({ LUMISCA_DB: "/tmp/x.db" } as never, "/work"),
@@ -340,7 +341,7 @@ Deno.test("resolveDbPath prefers the explicit file, then the home, then cwd", ()
   assertEquals(resolveDbPath({} as never, "/work"), "/work/lumisca.db");
 });
 
-Deno.test("resolveAllowedHosts lowercases and drops blank entries", () => {
+test("resolveAllowedHosts lowercases and drops blank entries", () => {
   assertEquals(
     resolveAllowedHosts({
       LUMISCA_ALLOWED_HOSTS: " A.example ,, B.example ",

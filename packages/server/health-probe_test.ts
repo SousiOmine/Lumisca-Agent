@@ -8,6 +8,7 @@
  * that is not a health body" are all the same answer — undefined — because
  * every caller treats them the same way, and none has a use for a throw.
  */
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { isSelf, probeHealth, TOKEN_HEADER } from "./health-probe.ts";
 
@@ -51,7 +52,7 @@ function serve(served: Served): {
 
 const HEALTH = { ok: true, now: 1, instanceId: "abc" };
 
-Deno.test("a live server answers with its health body", async () => {
+test("a live server answers with its health body", async () => {
   const served = serve({ body: HEALTH });
   try {
     const body = await probeHealth({ url: served.url, timeoutMs: 2_000 });
@@ -61,7 +62,7 @@ Deno.test("a live server answers with its health body", async () => {
   }
 });
 
-Deno.test("the credential travels in the agreed header", async () => {
+test("the credential travels in the agreed header", async () => {
   const served = serve({ body: HEALTH });
   try {
     await probeHealth({
@@ -75,7 +76,7 @@ Deno.test("the credential travels in the agreed header", async () => {
   }
 });
 
-Deno.test("a trailing slash in the URL does not double the path", async () => {
+test("a trailing slash in the URL does not double the path", async () => {
   const served = serve({ body: HEALTH });
   try {
     // `${url}//api/health` would be a different route on a strict server.
@@ -89,7 +90,7 @@ Deno.test("a trailing slash in the URL does not double the path", async () => {
   }
 });
 
-Deno.test("a failure status is no answer", async () => {
+test("a failure status is no answer", async () => {
   const served = serve({ status: 401, body: { error: "no" } });
   try {
     assertEquals(
@@ -101,7 +102,7 @@ Deno.test("a failure status is no answer", async () => {
   }
 });
 
-Deno.test("a body that is not a health shape is no answer", async () => {
+test("a body that is not a health shape is no answer", async () => {
   const served = serve({ body: { hello: "world" } });
   try {
     // A captive portal or a different service answering /api/health must not
@@ -115,7 +116,7 @@ Deno.test("a body that is not a health shape is no answer", async () => {
   }
 });
 
-Deno.test("an unreachable server is no answer, not a throw", async () => {
+test("an unreachable server is no answer, not a throw", async () => {
   // Port 1 on loopback: nothing listens there.
   assertEquals(
     await probeHealth({ url: "http://127.0.0.1:1", timeoutMs: 500 }),
@@ -123,7 +124,7 @@ Deno.test("an unreachable server is no answer, not a throw", async () => {
   );
 });
 
-Deno.test("isSelf compares the process id, not the address", async () => {
+test("isSelf compares the process id, not the address", async () => {
   const served = serve({ body: HEALTH });
   try {
     // The same server reached at two addresses answers with the same id, so
@@ -138,7 +139,7 @@ Deno.test("isSelf compares the process id, not the address", async () => {
   }
 });
 
-Deno.test("an empty selfId never matches", async () => {
+test("an empty selfId never matches", async () => {
   // A core with no configured identity must not claim every peer as itself.
   const served = serve({ body: HEALTH });
   try {

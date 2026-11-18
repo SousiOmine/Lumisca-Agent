@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import type { Workspace } from "../domain/workspace.ts";
@@ -23,7 +24,7 @@ import { createMcpTools, sanitizeServerName } from "./tools.ts";
 
 // --- config -----------------------------------------------------------------
 
-Deno.test("parseMcpConfig normalizes stdio, http and disabled servers", () => {
+test("parseMcpConfig normalizes stdio, http and disabled servers", () => {
   const config = parseMcpConfig(
     JSON.stringify({
       mcpServers: {
@@ -59,7 +60,7 @@ Deno.test("parseMcpConfig normalizes stdio, http and disabled servers", () => {
   assertEquals(remote.enabled, false);
 });
 
-Deno.test("parseMcpConfig rejects invalid configurations", () => {
+test("parseMcpConfig rejects invalid configurations", () => {
   const cases: Array<[string, string]> = [
     ["not json", "is not valid JSON"],
     ['{"other": 1}', 'missing the "mcpServers" key'],
@@ -92,7 +93,7 @@ Deno.test("parseMcpConfig rejects invalid configurations", () => {
   }
 });
 
-Deno.test("loadMcpConfig reads the workspace file and expands env", async () => {
+test("loadMcpConfig reads the workspace file and expands env", async () => {
   const root = await makeRealTempDir("lumisca-mcp-");
   try {
     // Missing file → empty config.
@@ -118,7 +119,7 @@ Deno.test("loadMcpConfig reads the workspace file and expands env", async () => 
   }
 });
 
-Deno.test("serializeMcpConfig round-trips a config", () => {
+test("serializeMcpConfig round-trips a config", () => {
   const config = parseMcpConfig(
     JSON.stringify({
       mcpServers: {
@@ -165,7 +166,7 @@ function makeManager(cwd: string, extra: Record<string, unknown> = {}) {
   return new McpManager(config, cwd);
 }
 
-Deno.test("manager discovers MCP tools and calls them", async () => {
+test("manager discovers MCP tools and calls them", async () => {
   const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-" });
   const manager = makeManager(cwd);
   try {
@@ -190,7 +191,7 @@ Deno.test("manager discovers MCP tools and calls them", async () => {
   }
 });
 
-Deno.test("manager maps isError results to thrown errors", async () => {
+test("manager maps isError results to thrown errors", async () => {
   const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-" });
   const manager = makeManager(cwd);
   try {
@@ -203,7 +204,7 @@ Deno.test("manager maps isError results to thrown errors", async () => {
   }
 });
 
-Deno.test("manager turns image content into a placeholder note", async () => {
+test("manager turns image content into a placeholder note", async () => {
   const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-" });
   const manager = makeManager(cwd);
   try {
@@ -220,7 +221,7 @@ Deno.test("manager turns image content into a placeholder note", async () => {
   }
 });
 
-Deno.test("manager respawns a crashed server on the next call", async () => {
+test("manager respawns a crashed server on the next call", async () => {
   const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-" });
   const manager = makeManager(cwd);
   try {
@@ -250,7 +251,7 @@ Deno.test("manager respawns a crashed server on the next call", async () => {
   }
 });
 
-Deno.test("aborting a call rejects and does not kill the server", async () => {
+test("aborting a call rejects and does not kill the server", async () => {
   const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-" });
   const manager = makeManager(cwd);
   try {
@@ -281,7 +282,7 @@ Deno.test("aborting a call rejects and does not kill the server", async () => {
   }
 });
 
-Deno.test("a call that never answers fails at its time limit and is not retried", async () => {
+test("a call that never answers fails at its time limit and is not retried", async () => {
   const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-" });
   const manager = makeManager(cwd);
   try {
@@ -321,7 +322,7 @@ Deno.test("a call that never answers fails at its time limit and is not retried"
   }
 });
 
-Deno.test("an aborted call stays an abort, not a timeout", async () => {
+test("an aborted call stays an abort, not a timeout", async () => {
   const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-" });
   const manager = makeManager(cwd);
   try {
@@ -348,7 +349,7 @@ Deno.test("an aborted call stays an abort, not a timeout", async () => {
   }
 });
 
-Deno.test("manager.close kills server processes", async () => {
+test("manager.close kills server processes", async () => {
   const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-" });
   const manager = makeManager(cwd);
   await createMcpTools(manager);
@@ -366,7 +367,7 @@ Deno.test("manager.close kills server processes", async () => {
   await removeDirRetry(cwd);
 });
 
-Deno.test("failed server startup is reported per server", async () => {
+test("failed server startup is reported per server", async () => {
   const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-" });
   const config = parseMcpConfig(
     JSON.stringify({
@@ -395,7 +396,7 @@ Deno.test("failed server startup is reported per server", async () => {
   }
 });
 
-Deno.test("sanitizeServerName produces provider-safe names", () => {
+test("sanitizeServerName produces provider-safe names", () => {
   assertEquals(sanitizeServerName("my server"), "my_server");
   assertEquals(sanitizeServerName("github.com"), "github_com");
   assertEquals(sanitizeServerName("ok-1"), "ok-1");
@@ -404,7 +405,7 @@ Deno.test("sanitizeServerName produces provider-safe names", () => {
 
 // --- http client ------------------------------------------------------------
 
-Deno.test("http servers work over streamable HTTP with session ids", async () => {
+test("http servers work over streamable HTTP with session ids", async () => {
   // A minimal streamable-HTTP MCP server: issues a session id on
   // initialize, expects it back afterwards, answers tools/call over SSE.
   let sessionId: string | null = null;
@@ -503,7 +504,7 @@ Deno.test("http servers work over streamable HTTP with session ids", async () =>
 
 // --- plugin integration (McpService.loadMergedConfig) -----------------------
 
-Deno.test("loadMergedConfig merges app, workspace and plugin MCP servers", async () => {
+test("loadMergedConfig merges app, workspace and plugin MCP servers", async () => {
   const root = await makeRealTempDir("lumisca-mcp-plugins-");
   const pluginDir = join(root, ".agents", "plugins", "demo");
   await Deno.mkdir(pluginDir, { recursive: true });
@@ -612,7 +613,7 @@ function makeTestService(): McpService {
   });
 }
 
-Deno.test("probeMcpServer lists the server's tools", async () => {
+test("probeMcpServer lists the server's tools", async () => {
   const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-probe-" });
   try {
     const tools = await probeMcpServer(
@@ -633,7 +634,7 @@ Deno.test("probeMcpServer lists the server's tools", async () => {
   }
 });
 
-Deno.test("probeMcpServer fails for a server that cannot start", async () => {
+test("probeMcpServer fails for a server that cannot start", async () => {
   await assertRejects(() =>
     probeMcpServer(
       probeTarget("lumisca-definitely-missing-command", []),
@@ -643,7 +644,7 @@ Deno.test("probeMcpServer fails for a server that cannot start", async () => {
   );
 });
 
-Deno.test("a timed-out probe leaves no server process behind", async () => {
+test("a timed-out probe leaves no server process behind", async () => {
   const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-hang-" });
   const marker = join(cwd, "exited");
   try {
@@ -667,7 +668,7 @@ Deno.test("a timed-out probe leaves no server process behind", async () => {
   }
 });
 
-Deno.test("testServer reports a server with its tools", async () => {
+test("testServer reports a server with its tools", async () => {
   const service = makeTestService();
   const result = await service.testServer(
     JSON.stringify({
@@ -685,7 +686,7 @@ Deno.test("testServer reports a server with its tools", async () => {
   );
 });
 
-Deno.test("testServer tests a disabled server too", async () => {
+test("testServer tests a disabled server too", async () => {
   const service = makeTestService();
   const result = await service.testServer(
     JSON.stringify({
@@ -703,7 +704,7 @@ Deno.test("testServer tests a disabled server too", async () => {
   assertEquals(result.ok, true);
 });
 
-Deno.test("testServer reports an unreachable server as a result", async () => {
+test("testServer reports an unreachable server as a result", async () => {
   const service = makeTestService();
   const result = await service.testServer(
     JSON.stringify({
@@ -716,7 +717,7 @@ Deno.test("testServer reports an unreachable server as a result", async () => {
   assert((result.error?.length ?? 0) > 0);
 });
 
-Deno.test("testServer rejects invalid text and multi-server bodies", async () => {
+test("testServer rejects invalid text and multi-server bodies", async () => {
   const service = makeTestService();
   // A malformed body is a caller error, not a test result.
   await assertRejects(() => service.testServer("not json"), CoreError);
@@ -735,7 +736,7 @@ Deno.test("testServer rejects invalid text and multi-server bodies", async () =>
 
 // --- HTTP transport (headers and the 401 answer) ----------------------------
 
-Deno.test("an HTTP server receives the configured headers", async () => {
+test("an HTTP server receives the configured headers", async () => {
   const server = startFakeMcpServer();
   try {
     const tools = await probeMcpServer(
@@ -765,7 +766,7 @@ Deno.test("an HTTP server receives the configured headers", async () => {
   }
 });
 
-Deno.test("testServer reports a 401 as needing a sign-in", async () => {
+test("testServer reports a 401 as needing a sign-in", async () => {
   const server = startFakeMcpServer({ token: "secret" });
   try {
     const service = makeTestService();
@@ -821,7 +822,7 @@ function stdioServer(name: string, command = "npx"): McpServerConfig {
   };
 }
 
-Deno.test("addAppServer appends without expanding the other servers' env", () => {
+test("addAppServer appends without expanding the other servers' env", () => {
   const { service, settings } = makeAppEditService();
   Deno.env.set("LUMISCA_ADD_TEST_TOKEN", "secret-value");
   try {
@@ -854,7 +855,7 @@ Deno.test("addAppServer appends without expanding the other servers' env", () =>
   }
 });
 
-Deno.test("addAppServer refuses a taken name and writes nothing", () => {
+test("addAppServer refuses a taken name and writes nothing", () => {
   const { service, settings } = makeAppEditService();
   settings.set(
     APP_MCP_SETTINGS_KEY,
@@ -869,14 +870,14 @@ Deno.test("addAppServer refuses a taken name and writes nothing", () => {
   assertEquals(settings.get(APP_MCP_SETTINGS_KEY), before);
 });
 
-Deno.test("addAppServer applies the change to every open session", () => {
+test("addAppServer applies the change to every open session", () => {
   let applied = 0;
   const { service } = makeAppEditService(() => applied++);
   service.addAppServer(stdioServer("added"));
   assertEquals(applied, 1);
 });
 
-Deno.test("addAppServer refuses to edit a stored config it cannot parse", () => {
+test("addAppServer refuses to edit a stored config it cannot parse", () => {
   const { service, settings } = makeAppEditService();
   settings.set(APP_MCP_SETTINGS_KEY, "not json");
   const error = assertThrows(
@@ -887,7 +888,7 @@ Deno.test("addAppServer refuses to edit a stored config it cannot parse", () => 
   assertEquals(settings.get(APP_MCP_SETTINGS_KEY), "not json");
 });
 
-Deno.test("removeAppServer drops one server and keeps the rest", () => {
+test("removeAppServer drops one server and keeps the rest", () => {
   const { service, settings } = makeAppEditService();
   settings.set(
     APP_MCP_SETTINGS_KEY,
@@ -908,7 +909,7 @@ Deno.test("removeAppServer drops one server and keeps the rest", () => {
   assert(stored.includes('"a"'), stored);
 });
 
-Deno.test("removeAppServer refuses a name that is not configured", () => {
+test("removeAppServer refuses a name that is not configured", () => {
   const { service, settings } = makeAppEditService();
   settings.set(
     APP_MCP_SETTINGS_KEY,

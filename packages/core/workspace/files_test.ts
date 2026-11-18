@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { basename, join } from "node:path";
 import { assertEquals } from "@std/assert";
 import {
@@ -12,7 +13,7 @@ function workspace(root: string): Workspace {
   return { id: "w1", name: "ws", folders: [root], createdAt: 0, chat: false };
 }
 
-Deno.test("listWorkspaceFiles returns folder-relative posix paths", async () => {
+test("listWorkspaceFiles returns folder-relative posix paths", async () => {
   const root = await Deno.makeTempDir({ prefix: "lumisca-files-" });
   try {
     await Deno.mkdir(join(root, "src", "util"), { recursive: true });
@@ -43,7 +44,7 @@ Deno.test("listWorkspaceFiles returns folder-relative posix paths", async () => 
   }
 });
 
-Deno.test("listWorkspaceFiles skips hidden entries, excluded dirs and symlinks", async () => {
+test("listWorkspaceFiles skips hidden entries, excluded dirs and symlinks", async () => {
   const root = await Deno.makeTempDir({ prefix: "lumisca-files-" });
   try {
     await Deno.mkdir(join(root, "node_modules", "pkg"), { recursive: true });
@@ -97,7 +98,7 @@ Deno.test("listWorkspaceFiles skips hidden entries, excluded dirs and symlinks",
   }
 });
 
-Deno.test("listWorkspaceFiles emits files before subdirectories of a level", async () => {
+test("listWorkspaceFiles emits files before subdirectories of a level", async () => {
   const root = await Deno.makeTempDir({ prefix: "lumisca-files-" });
   try {
     // `z.txt` sorts after the `a` directory alphabetically, but the walk
@@ -123,7 +124,7 @@ Deno.test("listWorkspaceFiles emits files before subdirectories of a level", asy
   }
 });
 
-Deno.test("listWorkspaceFiles stops at the max entry cap", async () => {
+test("listWorkspaceFiles stops at the max entry cap", async () => {
   const root = await Deno.makeTempDir({ prefix: "lumisca-files-" });
   try {
     for (let i = 0; i < 10; i++) {
@@ -136,7 +137,7 @@ Deno.test("listWorkspaceFiles stops at the max entry cap", async () => {
   }
 });
 
-Deno.test("listWorkspaceFiles covers every folder of a multi-folder workspace", async () => {
+test("listWorkspaceFiles covers every folder of a multi-folder workspace", async () => {
   const a = await Deno.makeTempDir({ prefix: "lumisca-a-" });
   const b = await Deno.makeTempDir({ prefix: "lumisca-b-" });
   try {
@@ -173,14 +174,14 @@ const sample: WorkspaceFileEntry[] = [
   { path: "README.md", name: "README.md", isDir: false },
 ];
 
-Deno.test("suggestWorkspaceFiles returns everything with an empty query", () => {
+test("suggestWorkspaceFiles returns everything with an empty query", () => {
   assertEquals(
     suggestWorkspaceFiles(sample, "").map((e) => e.path),
     sample.map((e) => e.path),
   );
 });
 
-Deno.test("suggestWorkspaceFiles ranks basename prefix above contains", () => {
+test("suggestWorkspaceFiles ranks basename prefix above contains", () => {
   const sample: WorkspaceFileEntry[] = [
     { path: "z/api-helpers/helper.ts", name: "helper.ts", isDir: false },
     { path: "a/api-client.ts", name: "api-client.ts", isDir: false },
@@ -195,7 +196,7 @@ Deno.test("suggestWorkspaceFiles ranks basename prefix above contains", () => {
   ]);
 });
 
-Deno.test("suggestWorkspaceFiles matches case-insensitively", () => {
+test("suggestWorkspaceFiles matches case-insensitively", () => {
   const result = suggestWorkspaceFiles(sample, "MOD");
   assertEquals(
     result.some((e) => e.name === "mod.ts"),
@@ -203,7 +204,7 @@ Deno.test("suggestWorkspaceFiles matches case-insensitively", () => {
   );
 });
 
-Deno.test("suggestWorkspaceFiles honors the limit", () => {
+test("suggestWorkspaceFiles honors the limit", () => {
   assertEquals(suggestWorkspaceFiles(sample, "e", 2).length, 2);
   assertEquals(suggestWorkspaceFiles(sample, "zzz-no-match").length, 0);
 });

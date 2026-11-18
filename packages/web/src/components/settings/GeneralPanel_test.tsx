@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -67,7 +68,7 @@ function panel(
   );
 }
 
-Deno.test("the install button turns into the work it started", () => {
+test("the install button turns into the work it started", () => {
   // Pressing install replaces files for seconds with nothing else moving in
   // the status; the panel must say so instead of looking frozen.
   const html = panel(status({ installing: true }));
@@ -82,13 +83,13 @@ Deno.test("the install button turns into the work it started", () => {
   assertEquals(html.includes("次回の起動で新しいバージョンが有効"), false);
 });
 
-Deno.test("a downloaded package shows the install and its note", () => {
+test("a downloaded package shows the install and its note", () => {
   const html = panel(status());
   assertStringIncludes(html, ">インストール<");
   assertStringIncludes(html, "次回の起動で新しいバージョンが有効");
 });
 
-Deno.test("an applied update shows the restart", () => {
+test("an applied update shows the restart", () => {
   const html = panel(
     status({ ready: false, restartPending: true, appliedVersion: "0.11.0" }),
   );
@@ -96,7 +97,7 @@ Deno.test("an applied update shows the restart", () => {
   assertEquals(html.includes("インストール中…"), false);
 });
 
-Deno.test("no updater says which reason it is", () => {
+test("no updater says which reason it is", () => {
   // One sentence ("auto-update is not available in this environment") used
   // to answer a 404, a 401 and an unreachable server alike, and sent the
   // reader to the desktop app for a server that simply had no updater.
@@ -108,20 +109,20 @@ Deno.test("no updater says which reason it is", () => {
   assertStringIncludes(panel(null, null, "unreachable"), "接続できない");
 });
 
-Deno.test("before the first answer the panel says it is asking", () => {
+test("before the first answer the panel says it is asking", () => {
   // The poll starts on mount; claiming "no updater" in that first moment is
   // what made an installed app look unsupported on every visit.
   assertStringIncludes(panel(null, null, null), "アップデートを確認中");
 });
 
-Deno.test("the PWA notification row is drawn only where the channel exists", () => {
+test("the PWA notification row is drawn only where the channel exists", () => {
   // "This browser cannot use PWA notifications" is a switch the reader cannot
   // use and an explanation they did not ask for; the row is left out instead.
   assertEquals(panel(status()).includes("PWA通知"), false);
   assertStringIncludes(panel(status(), "server", null, "on"), "PWA通知");
 });
 
-Deno.test("the check for updates sits beside the version it is about", () => {
+test("the check for updates sits beside the version it is about", () => {
   // The status row says what the last check found; the question "is there
   // anything new?" belongs to the number it answers about, so the button is
   // in the version row and not among the actions at the bottom.
@@ -135,7 +136,7 @@ Deno.test("the check for updates sits beside the version it is about", () => {
   assertEquals(statusText < html.indexOf("自動アップデート"), true);
 });
 
-Deno.test("an available update is shown under the current version", () => {
+test("an available update is shown under the current version", () => {
   const html = panel(status({ ready: false, latestVersion: "0.12.0" }));
   const statusText = html.indexOf("v0.12.0が利用可能です。");
   assertEquals(statusText > html.indexOf("v0.10.18"), true);
@@ -144,7 +145,7 @@ Deno.test("an available update is shown under the current version", () => {
   assertEquals(html.indexOf(">ダウンロード<") > statusText, true);
 });
 
-Deno.test("the notification row follows the language", () => {
+test("the notification row follows the language", () => {
   // Notifications are an app preference like the language, not part of the
   // update controls they used to be listed under.
   const html = panel(status(), "shell");
@@ -154,7 +155,7 @@ Deno.test("the notification row follows the language", () => {
   assertEquals(language >= 0 && notify > language && appInfo > notify, true);
 });
 
-Deno.test("the notification row is drawn without an updater too", () => {
+test("the notification row is drawn without an updater too", () => {
   // The toggle is not about updating, so a server with no updater (or a
   // shell bridge that did not answer) must not hide it.
   assertStringIncludes(

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { diffLineCounts, formatDiffStat, splitDiffLines } from "./diff-stat.ts";
 
@@ -6,7 +7,7 @@ import { diffLineCounts, formatDiffStat, splitDiffLines } from "./diff-stat.ts";
  * that the edge bands stay distinct. Both are checked here, one test per
  * function, with the cases that a rewrite actually breaks spelled out. */
 
-Deno.test("splitDiffLines drops the trailing break and normalizes CRLF", () => {
+test("splitDiffLines drops the trailing break and normalizes CRLF", () => {
   // The line splitter feeds the counter, so a stray empty last line or a
   // leftover CR would show up as a phantom +1 on every edit of a CRLF file.
   assertEquals(splitDiffLines(""), []);
@@ -16,7 +17,7 @@ Deno.test("splitDiffLines drops the trailing break and normalizes CRLF", () => {
   assertEquals(splitDiffLines("a\r\nb\r\n"), ["a", "b"]);
 });
 
-Deno.test("diffLineCounts charges only the lines that changed", () => {
+test("diffLineCounts charges only the lines that changed", () => {
   // Untouched prefix and suffix lines are not counted: one changed line in
   // a 3-line block is +1 -1, not +3 -3.
   assertEquals(diffLineCounts("one\ntwo\nthree", "one\nTWO\nthree"), {
@@ -42,7 +43,7 @@ Deno.test("diffLineCounts charges only the lines that changed", () => {
   });
 });
 
-Deno.test("formatDiffStat renders +A -R, omitting zero sides", () => {
+test("formatDiffStat renders +A -R, omitting zero sides", () => {
   assertEquals(formatDiffStat(10, 5), "+10 -5");
   assertEquals(formatDiffStat(3, 0), "+3");
   assertEquals(formatDiffStat(0, 2), "-2");

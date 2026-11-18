@@ -7,6 +7,7 @@
  * the reader learns why nothing happened instead of watching a list that says
  * "skipped" by itself.
  */
+import { test } from "bun:test";
 import type { Routine, StellaAgent } from "@lumisca/core";
 import { assertEquals } from "@std/assert";
 import { type RoutineApi, routineRoutes } from "./routines.ts";
@@ -70,7 +71,7 @@ function run(disabledAt: number | null, runs: string[]) {
   return app.request("/routines/r1/run", { method: "POST" });
 }
 
-Deno.test("routines: a disabled agent's run is refused and not queued", async () => {
+test("routines: a disabled agent's run is refused and not queued", async () => {
   const runs: string[] = [];
   const response = await run(1_700_000_000_000, runs);
   assertEquals(response.status, 409);
@@ -78,7 +79,7 @@ Deno.test("routines: a disabled agent's run is refused and not queued", async ()
   assertEquals(runs, []);
 });
 
-Deno.test("routines: an enabled agent's run is started", async () => {
+test("routines: an enabled agent's run is started", async () => {
   const runs: string[] = [];
   const response = await run(null, runs);
   assertEquals(response.status, 200);

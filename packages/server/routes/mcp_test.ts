@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import type {
   McpAuthSnapshot,
   McpInfo,
@@ -112,7 +113,7 @@ function makeApp(fake: FakeMcpApi) {
   return app;
 }
 
-Deno.test("/mcp stores the raw config text and reports it back", async () => {
+test("/mcp stores the raw config text and reports it back", async () => {
   const fake = new FakeMcpApi();
   const app = makeApp(fake);
   const text = '{"mcpServers":{"app":{"command":"npx"}}}\n';
@@ -131,7 +132,7 @@ Deno.test("/mcp stores the raw config text and reports it back", async () => {
   assertEquals(((await get.json()) as McpInfo).exists, true);
 });
 
-Deno.test("/mcp and /mcp/test reject an empty body", async () => {
+test("/mcp and /mcp/test reject an empty body", async () => {
   const app = makeApp(new FakeMcpApi());
 
   const put = await app.request("/mcp", { method: "PUT", body: "   " });
@@ -142,7 +143,7 @@ Deno.test("/mcp and /mcp/test reject an empty body", async () => {
   assertEquals(await post.json(), { error: "JSON body is required" });
 });
 
-Deno.test("/mcp/test probes the single server of the raw body", async () => {
+test("/mcp/test probes the single server of the raw body", async () => {
   const fake = new FakeMcpApi();
   const app = makeApp(fake);
   const text =
@@ -155,7 +156,7 @@ Deno.test("/mcp/test probes the single server of the raw body", async () => {
   assertEquals(await res.json(), { ok: true, tools: [{ name: "echo" }] });
 });
 
-Deno.test("/mcp/test answers a failed probe as a 200 result", async () => {
+test("/mcp/test answers a failed probe as a 200 result", async () => {
   const fake = new FakeMcpApi();
   fake.testResult = { ok: false, tools: [], error: "spawn nope ENOENT" };
   const app = makeApp(fake);
@@ -170,7 +171,7 @@ Deno.test("/mcp/test answers a failed probe as a 200 result", async () => {
   assertEquals(await res.json(), fake.testResult);
 });
 
-Deno.test("workspace .mcp.json routes keep their text per workspace", async () => {
+test("workspace .mcp.json routes keep their text per workspace", async () => {
   const app = makeApp(new FakeMcpApi());
   await app.request("/workspaces/w1/mcp", {
     method: "PUT",
@@ -197,7 +198,7 @@ Deno.test("workspace .mcp.json routes keep their text per workspace", async () =
 const SIGN_IN_BODY =
   '{"mcpServers":{"probe":{"url":"https://example.com/mcp"}}}';
 
-Deno.test("/mcp/auth registers the origin the browser is on", async () => {
+test("/mcp/auth registers the origin the browser is on", async () => {
   const fake = new FakeMcpApi();
   const app = makeApp(fake);
 
@@ -225,7 +226,7 @@ Deno.test("/mcp/auth registers the origin the browser is on", async () => {
   );
 });
 
-Deno.test("/mcp/auth falls back to the request's own host", async () => {
+test("/mcp/auth falls back to the request's own host", async () => {
   const fake = new FakeMcpApi();
   const app = makeApp(fake);
 
@@ -253,13 +254,13 @@ Deno.test("/mcp/auth falls back to the request's own host", async () => {
   );
 });
 
-Deno.test("/mcp/auth rejects an empty body", async () => {
+test("/mcp/auth rejects an empty body", async () => {
   const app = makeApp(new FakeMcpApi());
   const res = await app.request("/mcp/auth", { method: "POST", body: "  " });
   assertEquals(res.status, 400);
 });
 
-Deno.test("/mcp/auth/:id answers the poll, the cancel and 404s when gone", async () => {
+test("/mcp/auth/:id answers the poll, the cancel and 404s when gone", async () => {
   const fake = new FakeMcpApi();
   const app = makeApp(fake);
   await app.request("/mcp/auth", { method: "POST", body: SIGN_IN_BODY });
@@ -280,7 +281,7 @@ Deno.test("/mcp/auth/:id answers the poll, the cancel and 404s when gone", async
   );
 });
 
-Deno.test("/mcp/oauth/callback finishes the sign-in and answers a page", async () => {
+test("/mcp/oauth/callback finishes the sign-in and answers a page", async () => {
   const fake = new FakeMcpApi();
   const app = makeApp(fake);
   await app.request("/mcp/auth", { method: "POST", body: SIGN_IN_BODY });

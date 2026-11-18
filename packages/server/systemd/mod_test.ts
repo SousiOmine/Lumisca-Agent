@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { SETTINGS_DIR_NAME } from "@lumisca/core";
 import { unusedPort } from "@lumisca/core/test-utils";
@@ -175,7 +176,7 @@ async function readIfPresent(path: string): Promise<string | undefined> {
   }
 }
 
-Deno.test("install writes the definition and starts the service", async () => {
+test("install writes the definition and starts the service", async () => {
   const test = await harness();
   try {
     const code = await runServiceCommand(
@@ -231,7 +232,7 @@ Deno.test("install writes the definition and starts the service", async () => {
   }
 });
 
-Deno.test("reinstalling keeps the installed values and credential", async () => {
+test("reinstalling keeps the installed values and credential", async () => {
   const test = await harness();
   try {
     assertEquals(
@@ -252,7 +253,7 @@ Deno.test("reinstalling keeps the installed values and credential", async () => 
   }
 });
 
-Deno.test("explicit flags override the installed layer", async () => {
+test("explicit flags override the installed layer", async () => {
   const test = await harness();
   try {
     assertEquals(
@@ -279,7 +280,7 @@ Deno.test("explicit flags override the installed layer", async () => {
   }
 });
 
-Deno.test("install refuses a port another process holds", async () => {
+test("install refuses a port another process holds", async () => {
   const test = await harness();
   const port = unusedPort();
   const listener = Deno.listen({ hostname: "127.0.0.1", port });
@@ -298,7 +299,7 @@ Deno.test("install refuses a port another process holds", async () => {
   }
 });
 
-Deno.test("an active unit owns its port, so a reinstall does not test it", async () => {
+test("an active unit owns its port, so a reinstall does not test it", async () => {
   const test = await harness();
   const port = unusedPort();
   const listener = Deno.listen({ hostname: "127.0.0.1", port });
@@ -316,7 +317,7 @@ Deno.test("an active unit owns its port, so a reinstall does not test it", async
   }
 });
 
-Deno.test("install fails fast where a user unit cannot work", async () => {
+test("install fails fast where a user unit cannot work", async () => {
   for (const [options, expected] of [
     [{ os: "windows" }, "Linux のみ対応"],
     [{ standalone: false }, "パッケージ済みサーバー"],
@@ -335,7 +336,7 @@ Deno.test("install fails fast where a user unit cannot work", async () => {
   }
 });
 
-Deno.test("a systemd failure is reported with the reason it gave", async () => {
+test("a systemd failure is reported with the reason it gave", async () => {
   const test = await harness();
   test.systemd.failOn = `systemctl restart ${UNIT_NAME}`;
   try {
@@ -352,7 +353,7 @@ Deno.test("a systemd failure is reported with the reason it gave", async () => {
   }
 });
 
-Deno.test("a server that never answers is a failure, not a silent success", async () => {
+test("a server that never answers is a failure, not a silent success", async () => {
   const test = await harness({ probe: false });
   try {
     const code = await runServiceCommand(
@@ -370,7 +371,7 @@ Deno.test("a server that never answers is a failure, not a silent success", asyn
   }
 });
 
-Deno.test("a unit that cannot start at boot is a failure, with the one command left", async () => {
+test("a unit that cannot start at boot is a failure, with the one command left", async () => {
   const test = await harness();
   test.systemd.grantLinger = false;
   try {
@@ -388,7 +389,7 @@ Deno.test("a unit that cannot start at boot is a failure, with the one command l
   }
 });
 
-Deno.test("install names every address a wildcard bind answers on", async () => {
+test("install names every address a wildcard bind answers on", async () => {
   const test = await harness({
     interfaces: [
       {
@@ -443,7 +444,7 @@ Deno.test("install names every address a wildcard bind answers on", async () => 
   }
 });
 
-Deno.test("config shows what install would write, and changes nothing", async () => {
+test("config shows what install would write, and changes nothing", async () => {
   const test = await harness();
   try {
     // `config` needs no systemd and no installed unit: it is the preview the
@@ -466,7 +467,7 @@ Deno.test("config shows what install would write, and changes nothing", async ()
   }
 });
 
-Deno.test("config layers the installed document, --defaults does not", async () => {
+test("config layers the installed document, --defaults does not", async () => {
   const test = await harness();
   try {
     assertEquals(
@@ -490,7 +491,7 @@ Deno.test("config layers the installed document, --defaults does not", async () 
   }
 });
 
-Deno.test("config still requires a packaged server", async () => {
+test("config still requires a packaged server", async () => {
   const test = await harness({ standalone: false });
   try {
     assertEquals(await runServiceCommand(["config"], test.deps), 2);
@@ -500,7 +501,7 @@ Deno.test("config still requires a packaged server", async () => {
   }
 });
 
-Deno.test("status reports the installation, its drift, and where it is", async () => {
+test("status reports the installation, its drift, and where it is", async () => {
   const test = await harness();
   try {
     // Nothing installed yet.
@@ -533,7 +534,7 @@ Deno.test("status reports the installation, its drift, and where it is", async (
   }
 });
 
-Deno.test("status reports an inactive or non-lingering installation as unhealthy", async () => {
+test("status reports an inactive or non-lingering installation as unhealthy", async () => {
   const test = await harness();
   try {
     assertEquals(
@@ -561,7 +562,7 @@ Deno.test("status reports an inactive or non-lingering installation as unhealthy
   }
 });
 
-Deno.test("uninstall stops the unit and keeps the operator's state", async () => {
+test("uninstall stops the unit and keeps the operator's state", async () => {
   const test = await harness();
   try {
     assertEquals(await runServiceCommand(["uninstall"], test.deps), 1);
@@ -590,7 +591,7 @@ Deno.test("uninstall stops the unit and keeps the operator's state", async () =>
   }
 });
 
-Deno.test("the command line is answered on the command line, not the service deps", async () => {
+test("the command line is answered on the command line, not the service deps", async () => {
   const test = await harness();
   const logged: string[] = [];
   const errored: string[] = [];
@@ -619,7 +620,7 @@ Deno.test("the command line is answered on the command line, not the service dep
   }
 });
 
-Deno.test("a machine this command cannot resolve is reported, never a silent exit", async () => {
+test("a machine this command cannot resolve is reported, never a silent exit", async () => {
   // Reproduces a packaged-server bug the smoke test caught: resolving HOME and
   // the user happens inside the error mapping, so a missing HOME exits 2 with
   // a message. Building it outside let the rejection reach the server's

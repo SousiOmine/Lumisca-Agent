@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 
 /**
@@ -15,7 +16,7 @@ import { assertEquals } from "@std/assert";
  * first.
  */
 
-Deno.test("bun:sqlite works on Bun", () => {
+test("bun:sqlite works on Bun", () => {
   const db = new Database(":memory:");
   db.exec(`
     CREATE TABLE workspaces (

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { LumiscaDb } from "../db/mod.ts";
 import { formatLocalDateTime } from "../shared/misc.ts";
@@ -91,7 +92,7 @@ function runner(
   };
 }
 
-Deno.test("routine repo: a routine reads back with its next run", () => {
+test("routine repo: a routine reads back with its next run", () => {
   const { repo: routines, close } = repo();
   try {
     const created = routines.create({
@@ -111,7 +112,7 @@ Deno.test("routine repo: a routine reads back with its next run", () => {
   }
 });
 
-Deno.test("routine repo: names are unique per agent, not globally", () => {
+test("routine repo: names are unique per agent, not globally", () => {
   const { repo: routines, close } = repo();
   try {
     routines.create({
@@ -134,7 +135,7 @@ Deno.test("routine repo: names are unique per agent, not globally", () => {
   }
 });
 
-Deno.test("routine repo: disabling clears the next run, enabling sets one", () => {
+test("routine repo: disabling clears the next run, enabling sets one", () => {
   const { repo: routines, close } = repo();
   try {
     const created = routines.create({
@@ -160,7 +161,7 @@ Deno.test("routine repo: disabling clears the next run, enabling sets one", () =
   }
 });
 
-Deno.test("routine repo: due returns only enabled rows that are due", () => {
+test("routine repo: due returns only enabled rows that are due", () => {
   const { repo: routines, close } = repo();
   try {
     const early = routines.create({
@@ -192,7 +193,7 @@ Deno.test("routine repo: due returns only enabled rows that are due", () => {
   }
 });
 
-Deno.test("routine scheduler: a due routine runs and advances first", async () => {
+test("routine scheduler: a due routine runs and advances first", async () => {
   const { repo: routines, close } = repo();
   const fake = runner();
   try {
@@ -238,7 +239,7 @@ Deno.test("routine scheduler: a due routine runs and advances first", async () =
   }
 });
 
-Deno.test("routine scheduler: a one-off runs once and removes itself", async () => {
+test("routine scheduler: a one-off runs once and removes itself", async () => {
   const { repo: routines, close } = repo();
   const fake = runner();
   try {
@@ -276,7 +277,7 @@ Deno.test("routine scheduler: a one-off runs once and removes itself", async () 
   }
 });
 
-Deno.test("routine scheduler: a one-off that came due while off runs late", async () => {
+test("routine scheduler: a one-off that came due while off runs late", async () => {
   const { repo: routines, close } = repo();
   const fake = runner();
   try {
@@ -311,7 +312,7 @@ Deno.test("routine scheduler: a one-off that came due while off runs late", asyn
   }
 });
 
-Deno.test("routine scheduler: a disabled one-off does not run", async () => {
+test("routine scheduler: a disabled one-off does not run", async () => {
   const { repo: routines, close } = repo();
   const fake = runner();
   try {
@@ -341,7 +342,7 @@ Deno.test("routine scheduler: a disabled one-off does not run", async () => {
   }
 });
 
-Deno.test("routine scheduler: a one-off stopped while waiting keeps its row", async () => {
+test("routine scheduler: a one-off stopped while waiting keeps its row", async () => {
   const { repo: routines, close } = repo();
   const fake = runner({ busy: true });
   try {
@@ -379,7 +380,7 @@ Deno.test("routine scheduler: a one-off stopped while waiting keeps its row", as
   }
 });
 
-Deno.test("routine scheduler: run now uses up a one-off", async () => {
+test("routine scheduler: run now uses up a one-off", async () => {
   const { repo: routines, close } = repo();
   const fake = runner();
   try {
@@ -408,7 +409,7 @@ Deno.test("routine scheduler: run now uses up a one-off", async () => {
   }
 });
 
-Deno.test("routine scheduler: a busy conversation is waited for, not skipped", async () => {
+test("routine scheduler: a busy conversation is waited for, not skipped", async () => {
   const { repo: routines, close } = repo();
   const fake = runner({ busy: true });
   try {
@@ -445,7 +446,7 @@ Deno.test("routine scheduler: a busy conversation is waited for, not skipped", a
   }
 });
 
-Deno.test("routine scheduler: a failed run records the reason", async () => {
+test("routine scheduler: a failed run records the reason", async () => {
   const { repo: routines, close } = repo();
   const fake = runner({ failure: "the model said no" });
   try {
@@ -471,7 +472,7 @@ Deno.test("routine scheduler: a failed run records the reason", async () => {
   }
 });
 
-Deno.test("routine scheduler: runNow does not move the schedule", async () => {
+test("routine scheduler: runNow does not move the schedule", async () => {
   const { repo: routines, close } = repo();
   const fake = runner();
   try {
@@ -494,7 +495,7 @@ Deno.test("routine scheduler: runNow does not move the schedule", async () => {
   }
 });
 
-Deno.test("routine scheduler: stopping a run records it as stopped", async () => {
+test("routine scheduler: stopping a run records it as stopped", async () => {
   const { repo: routines, close } = repo();
   const fake = runner();
   try {
@@ -517,7 +518,7 @@ Deno.test("routine scheduler: stopping a run records it as stopped", async () =>
   }
 });
 
-Deno.test("routine tools: create, list, update, delete and run", async () => {
+test("routine tools: create, list, update, delete and run", async () => {
   const { repo: routines, close } = repo();
   const fake = runner();
   try {
@@ -569,7 +570,7 @@ Deno.test("routine tools: create, list, update, delete and run", async () => {
   }
 });
 
-Deno.test("routine tools: a one-off in the past is refused", async () => {
+test("routine tools: a one-off in the past is refused", async () => {
   const { repo: routines, close } = repo();
   try {
     const scheduler = createRoutineScheduler({
@@ -613,7 +614,7 @@ Deno.test("routine tools: a one-off in the past is refused", async () => {
   }
 });
 
-Deno.test("routine tools: another agent's routine is refused", async () => {
+test("routine tools: another agent's routine is refused", async () => {
   const { repo: routines, close } = repo();
   try {
     const scheduler = createRoutineScheduler({
@@ -654,7 +655,7 @@ Deno.test("routine tools: another agent's routine is refused", async () => {
   }
 });
 
-Deno.test("routine tools: the per-agent limit is enforced", async () => {
+test("routine tools: the per-agent limit is enforced", async () => {
   const { repo: routines, close } = repo();
   try {
     const scheduler = createRoutineScheduler({
@@ -720,7 +721,7 @@ function promptRunner(
   };
 }
 
-Deno.test("scheduler: a watch schedule checks instead of running", async () => {
+test("scheduler: a watch schedule checks instead of running", async () => {
   // The whole economy of the trigger: a due watch runs its CHECK, and a
   // check that saw nothing starts no run (and so no model call).
   const { repo: routines, close } = repo();
@@ -760,7 +761,7 @@ Deno.test("scheduler: a watch schedule checks instead of running", async () => {
   }
 });
 
-Deno.test("scheduler: a watch that saw a change starts the run", async () => {
+test("scheduler: a watch that saw a change starts the run", async () => {
   const { repo: routines, close } = repo();
   try {
     const created = routines.create({
@@ -798,7 +799,7 @@ Deno.test("scheduler: a watch that saw a change starts the run", async () => {
   }
 });
 
-Deno.test("scheduler: a check that could not answer does not fire the run", async () => {
+test("scheduler: a check that could not answer does not fire the run", async () => {
   // A machine that is down or a URL that timed out observed nothing: firing
   // the routine for it turns every transient failure into a run.
   const { repo: routines, close } = repo();
@@ -837,7 +838,7 @@ Deno.test("scheduler: a check that could not answer does not fire the run", asyn
   }
 });
 
-Deno.test("routine repo: changing what a watch watches drops the baseline", () => {
+test("routine repo: changing what a watch watches drops the baseline", () => {
   // The stored observation belongs to the watched thing. Carried across a
   // retarget it would compare a new file against an old one, and the first
   // look at the new file would fire the routine (see check.ts).
@@ -889,7 +890,7 @@ Deno.test("routine repo: changing what a watch watches drops the baseline", () =
   }
 });
 
-Deno.test("routine repo: switching a routine back on drops the baseline", () => {
+test("routine repo: switching a routine back on drops the baseline", () => {
   // While it was off nobody looked: the watched thing may have moved, and
   // comparing against the old value would fire a run for a change the user
   // never asked to be told about.
@@ -921,7 +922,7 @@ Deno.test("routine repo: switching a routine back on drops the baseline", () => 
   }
 });
 
-Deno.test("scheduler: a check that cannot run backs off without recording a run", async () => {
+test("scheduler: a check that cannot run backs off without recording a run", async () => {
   // The regression from #33: a stopped machine was asked every interval and
   // every failure was written as if the routine had run and failed, so the
   // list said "last failed a moment ago" about a routine that never ran.
@@ -970,7 +971,7 @@ Deno.test("scheduler: a check that cannot run backs off without recording a run"
   }
 });
 
-Deno.test("scheduler: a busy conversation keeps ONE waiting run, not six", async () => {
+test("scheduler: a busy conversation keeps ONE waiting run, not six", async () => {
   // The regression from #38: every occurrence queued its own wait, so when
   // the conversation freed, six runs of the same request started at once.
   const { repo: routines, close } = repo();
@@ -1029,7 +1030,7 @@ Deno.test("scheduler: a busy conversation keeps ONE waiting run, not six", async
   }
 });
 
-Deno.test("scheduler: a wait that lasts too long gives up without recording a run", async () => {
+test("scheduler: a wait that lasts too long gives up without recording a run", async () => {
   const { repo: routines, close } = repo();
   try {
     const created = routines.create({
@@ -1079,7 +1080,7 @@ Deno.test("scheduler: a wait that lasts too long gives up without recording a ru
   }
 });
 
-Deno.test("scheduler: stopping a waiting run records it without a run time", async () => {
+test("scheduler: stopping a waiting run records it without a run time", async () => {
   const { repo: routines, close } = repo();
   try {
     const created = routines.create({
@@ -1123,7 +1124,7 @@ Deno.test("scheduler: stopping a waiting run records it without a run time", asy
   }
 });
 
-Deno.test("scheduler: stopping one run does not swallow the next", async () => {
+test("scheduler: stopping one run does not swallow the next", async () => {
   // The stop marks were kept in one set for both cases, so stopping a run
   // that had already started left a cancellation behind that skipped the
   // routine's NEXT run (recorded as "stopped before it started").
@@ -1160,7 +1161,7 @@ Deno.test("scheduler: stopping one run does not swallow the next", async () => {
   }
 });
 
-Deno.test("routine tools: an mcp watch is saved only for a reading tool", async () => {
+test("routine tools: an mcp watch is saved only for a reading tool", async () => {
   const { repo: routines, close } = repo();
   try {
     const scheduler = createRoutineScheduler({
@@ -1215,7 +1216,7 @@ Deno.test("routine tools: an mcp watch is saved only for a reading tool", async 
   }
 });
 
-Deno.test("routine tools: an mcp watch without a lookup cannot be saved", async () => {
+test("routine tools: an mcp watch without a lookup cannot be saved", async () => {
   // A conversation that cannot ask whether the tool reads must not save a
   // watch on one: the answer is part of what makes the routine valid.
   const { repo: routines, close } = repo();
@@ -1254,7 +1255,7 @@ Deno.test("routine tools: an mcp watch without a lookup cannot be saved", async 
   }
 });
 
-Deno.test("routine scheduler: a disabled agent's routine is skipped, not run", async () => {
+test("routine scheduler: a disabled agent's routine is skipped, not run", async () => {
   const { repo: routines, close } = repo();
   const fake = runner({ agentEnabled: false });
   try {
@@ -1291,7 +1292,7 @@ Deno.test("routine scheduler: a disabled agent's routine is skipped, not run", a
   }
 });
 
-Deno.test("routine scheduler: a run already queued when the agent is switched off is skipped", async () => {
+test("routine scheduler: a run already queued when the agent is switched off is skipped", async () => {
   const { repo: routines } = repo();
   let enabled = true;
   // A runner that was told to run, then found the agent switched off: the

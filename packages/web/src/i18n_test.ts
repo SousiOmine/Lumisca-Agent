@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { createTranslator } from "@lumisca/core/shared";
 import { assertEquals } from "@std/assert";
 import { ApiError } from "./api-client.ts";
@@ -13,7 +14,7 @@ import { describeError } from "./i18n.ts";
 const ja = createTranslator("ja");
 const en = createTranslator("en");
 
-Deno.test("describeError: each failure kind is said in the app's language", () => {
+test("describeError: each failure kind is said in the app's language", () => {
   assertEquals(
     describeError(new ApiError("Failed to fetch", "network"), ja),
     "サーバーに接続できません。自動で再試行します。",
@@ -32,7 +33,7 @@ Deno.test("describeError: each failure kind is said in the app's language", () =
   );
 });
 
-Deno.test("describeError: the server's own text follows as the detail", () => {
+test("describeError: the server's own text follows as the detail", () => {
   // The sentence says retrying will not help; the detail says what to fix.
   const error = new ApiError("provider not configured", "http-4xx", {
     status: 400,
@@ -50,7 +51,7 @@ Deno.test("describeError: the server's own text follows as the detail", () => {
   );
 });
 
-Deno.test("describeError: a failure that is not a request keeps its message", () => {
+test("describeError: a failure that is not a request keeps its message", () => {
   // Everything else (a bug, a client-side validation error, the machine
   // refusing a stella action) has no classification, and its message is
   // already the explanation the code that threw it wrote.

@@ -1,9 +1,10 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { removeDirRetry } from "@lumisca/core/test-utils";
 import { assertEquals } from "@std/assert";
 import { json, setup } from "./test-utils.ts";
 
-Deno.test("app-level MCP config API applies to every workspace", async () => {
+test("app-level MCP config API applies to every workspace", async () => {
   const { core, server, base, faux } = await setup();
   const providerId = faux.provider.id;
   const modelId = faux.getModel().id;

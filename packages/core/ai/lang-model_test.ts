@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertThrows } from "@std/assert";
 import { opencodeGoProvider } from "../models/dev-catalog.ts";
 import type { Api, Model } from "./catalog.ts";
@@ -16,7 +17,7 @@ const openaiModel: Model<Api> = {
   provider: "openai",
 };
 
-Deno.test("sessionHeadersFor sends the conversation id as x-opencode-session for OpenCode Go", () => {
+test("sessionHeadersFor sends the conversation id as x-opencode-session for OpenCode Go", () => {
   // The model comes from the real models.dev catalog so the test also
   // pins the transport's provider-id constant against catalog renames.
   const model = opencodeGoProvider().getModels()[0]!;
@@ -25,7 +26,7 @@ Deno.test("sessionHeadersFor sends the conversation id as x-opencode-session for
   });
 });
 
-Deno.test("sessionHeadersFor is a no-op for providers without session affinity", () => {
+test("sessionHeadersFor is a no-op for providers without session affinity", () => {
   assertEquals(
     sessionHeadersFor(openaiModel, { sessionId: "conv-1" }),
     undefined,
@@ -33,7 +34,7 @@ Deno.test("sessionHeadersFor is a no-op for providers without session affinity",
   assertEquals(sessionHeadersFor(openaiModel), undefined);
 });
 
-Deno.test("sessionHeadersFor fails fast when an OpenCode Go request has no conversation id", () => {
+test("sessionHeadersFor fails fast when an OpenCode Go request has no conversation id", () => {
   const model = opencodeGoProvider().getModels()[0]!;
   assertThrows(() => sessionHeadersFor(model), Error, "x-opencode-session");
   assertThrows(
@@ -43,7 +44,7 @@ Deno.test("sessionHeadersFor fails fast when an OpenCode Go request has no conve
   );
 });
 
-Deno.test("openai-responses resolves to the official Responses model even for third-party gateways", () => {
+test("openai-responses resolves to the official Responses model even for third-party gateways", () => {
   const go = opencodeGoProvider();
   const muse = go
     .getModels()
@@ -70,7 +71,7 @@ Deno.test("openai-responses resolves to the official Responses model even for th
   );
 });
 
-Deno.test("OpenCode Go chat/anthropic models resolve to their declared transports", () => {
+test("OpenCode Go chat/anthropic models resolve to their declared transports", () => {
   const go = opencodeGoProvider();
   const byId = new Map(go.getModels().map((m) => [m.id, m]));
   const key = { apiKey: "test-key", source: "test" };
@@ -96,7 +97,7 @@ Deno.test("OpenCode Go chat/anthropic models resolve to their declared transport
   assertEquals(anthropicLm.modelId, "minimax-m3");
 });
 
-Deno.test("reasoningForceOption forces unknown Responses-API models into reasoning mode", () => {
+test("reasoningForceOption forces unknown Responses-API models into reasoning mode", () => {
   const go = opencodeGoProvider();
   const muse = go
     .getModels()
@@ -123,7 +124,7 @@ Deno.test("reasoningForceOption forces unknown Responses-API models into reasoni
   assertEquals(reasoningForceOption(plain, "high"), undefined);
 });
 
-Deno.test("muse-spark actually sends reasoning.effort on the wire", async () => {
+test("muse-spark actually sends reasoning.effort on the wire", async () => {
   // End-to-end through the real @ai-sdk/openai Responses model: the SDK
   // classifies unknown model ids as non-reasoning and drops the hint, so
   // the transport must attach forceReasoning (see reasoningForceOption).
@@ -152,7 +153,7 @@ Deno.test("muse-spark actually sends reasoning.effort on the wire", async () => 
   });
 });
 
-Deno.test("toolResultTakesImages follows the transport that carries the result", () => {
+test("toolResultTakesImages follows the transport that carries the result", () => {
   const gateway = (api: Api, provider: string, baseUrl?: string): Model<Api> =>
     ({ id: "m", name: "m", api, provider, baseUrl }) as Model<Api>;
 

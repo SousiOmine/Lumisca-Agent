@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -22,12 +23,12 @@ function render(shares: readonly FolderShare[]): string {
   return renderToString(createElement(ShareList, { shares }));
 }
 
-Deno.test("ShareList: an empty list draws nothing", () => {
+test("ShareList: an empty list draws nothing", () => {
   // The panel's other section (the screen) must not carry an empty heading.
   assertEquals(render([]), "");
 });
 
-Deno.test("ShareList: a loan names its address, its folder and its way back", () => {
+test("ShareList: a loan names its address, its folder and its way back", () => {
   const html = render([share()]);
   // The address is what the agent uses; the path is what the user lent.
   assertStringIncludes(html, "/lend/proj");
@@ -36,7 +37,7 @@ Deno.test("ShareList: a loan names its address, its folder and its way back", ()
   assertStringIncludes(html, "切断");
 });
 
-Deno.test("ShareList: read-write says so", () => {
+test("ShareList: read-write says so", () => {
   const html = render([share({ write: true })]);
   assertStringIncludes(html, "読み書き");
 });

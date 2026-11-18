@@ -1,5 +1,5 @@
 [test]
-preload = ["./tools/bun/deno-shim.ts"]
+preload = ["./packages/core/runtime/runtime.ts"]
 
 [run]
-preload = ["./tools/bun/deno-shim.ts"]
+preload = ["./packages/core/runtime/runtime.ts"]

@@ -5,6 +5,7 @@
  * than nothing. These pin the other half — that a run which DOES ask for
  * silence actually gets it, and that a stray token never eats a real answer.
  */
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import {
   assistantTextVerdict,
@@ -13,21 +14,21 @@ import {
   stripStrayNoResponse,
 } from "./silent-reply.ts";
 
-Deno.test("the sentinel alone is silence", () => {
+test("the sentinel alone is silence", () => {
   assertEquals(isExactNoResponse(NO_RESPONSE), true);
   assertEquals(isExactNoResponse(`  ${NO_RESPONSE}  `), true);
   assertEquals(isExactNoResponse(""), false);
   assertEquals(isExactNoResponse("done"), false);
 });
 
-Deno.test("the sentinel repeated per turn is still silence", () => {
+test("the sentinel repeated per turn is still silence", () => {
   // A model re-emits it after each tool batch; the segments of one turn are
   // joined with no separator, so this is one run, not prose.
   assertEquals(isExactNoResponse(`${NO_RESPONSE}${NO_RESPONSE}`), true);
   assertEquals(isExactNoResponse(`${NO_RESPONSE}\n${NO_RESPONSE}\n`), true);
 });
 
-Deno.test("a sentinel with prose is an answer, not silence", () => {
+test("a sentinel with prose is an answer, not silence", () => {
   // Fail closed: dropping the text around a token would lose what the agent
   // actually said, which is the failure this whole design exists to prevent.
   assertEquals(isExactNoResponse(`${NO_RESPONSE} done`), false);
@@ -38,7 +39,7 @@ Deno.test("a sentinel with prose is an answer, not silence", () => {
   );
 });
 
-Deno.test("a token inside a word is a word", () => {
+test("a token inside a word is a word", () => {
   // `NO_RESPONSE_POLICY` is an identifier the agent wrote, not a sentinel.
   assertEquals(
     stripStrayNoResponse("NO_RESPONSE_POLICY is the name"),
@@ -46,7 +47,7 @@ Deno.test("a token inside a word is a word", () => {
   );
 });
 
-Deno.test("stray sentinels at the edges are removed; the rest stays", () => {
+test("stray sentinels at the edges are removed; the rest stays", () => {
   assertEquals(
     stripStrayNoResponse(`${NO_RESPONSE}\nthe answer`),
     "the answer",
@@ -59,7 +60,7 @@ Deno.test("stray sentinels at the edges are removed; the rest stays", () => {
   assertEquals(stripStrayNoResponse(NO_RESPONSE), NO_RESPONSE);
 });
 
-Deno.test("the verdict a conversation draws from one message", () => {
+test("the verdict a conversation draws from one message", () => {
   assertEquals(assistantTextVerdict(NO_RESPONSE), { kind: "silent" });
   assertEquals(assistantTextVerdict("  "), { kind: "empty" });
   assertEquals(assistantTextVerdict("the answer"), {

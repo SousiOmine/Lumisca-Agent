@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertRejects } from "@std/assert";
 import type { VmCommandResult } from "./command.ts";
 import type { VmExec, VmExecOptions } from "./container.ts";
@@ -56,7 +57,7 @@ function fakeMachine(initial: { json?: string } = {}): {
   return { exec, files, commands, writes };
 }
 
-Deno.test("env store: set keeps the other entries and replaces the named one", async () => {
+test("env store: set keeps the other entries and replaces the named one", async () => {
   const machine = fakeMachine();
   const store = new VmEnvStore(machine.exec);
   await store.set("FIRST", "one");
@@ -69,7 +70,7 @@ Deno.test("env store: set keeps the other entries and replaces the named one", a
   assertEquals(machine.files.get(VM_ENV_SH), envScript(json));
 });
 
-Deno.test("env store: the command sources entries the shell can read", () => {
+test("env store: the command sources entries the shell can read", () => {
   // Anything can be a value: quotes, `$`, backslashes, newlines. One line
   // per entry, single-quoted, so the shell takes it verbatim.
   assertEquals(
@@ -80,7 +81,7 @@ Deno.test("env store: the command sources entries the shell can read", () => {
   assertEquals(envScript({}), "\n");
 });
 
-Deno.test("env store: a broken file reads as empty instead of failing", async () => {
+test("env store: a broken file reads as empty instead of failing", async () => {
   const machine = fakeMachine({ json: "{ not json" });
   const store = new VmEnvStore(machine.exec);
   assertEquals(await store.names(), []);
@@ -92,7 +93,7 @@ Deno.test("env store: a broken file reads as empty instead of failing", async ()
   );
 });
 
-Deno.test("env store: the value never appears in a command's arguments", async () => {
+test("env store: the value never appears in a command's arguments", async () => {
   const machine = fakeMachine();
   const store = new VmEnvStore(machine.exec);
   await store.set("TOKEN", "super-secret-value");
@@ -103,7 +104,7 @@ Deno.test("env store: the value never appears in a command's arguments", async (
   }
 });
 
-Deno.test("env store: a failed write rejects instead of reporting success", async () => {
+test("env store: a failed write rejects instead of reporting success", async () => {
   const exec: VmExec = () =>
     Promise.resolve<VmCommandResult>({
       exitCode: 1,
@@ -120,14 +121,14 @@ Deno.test("env store: a failed write rejects instead of reporting success", asyn
   );
 });
 
-Deno.test("env store: has() tells the dialog whether it replaces a value", async () => {
+test("env store: has() tells the dialog whether it replaces a value", async () => {
   const machine = fakeMachine({ json: JSON.stringify({ SET: "v" }) });
   const store = new VmEnvStore(machine.exec);
   assertEquals(await store.has("SET"), true);
   assertEquals(await store.has("UNSET"), false);
 });
 
-Deno.test("env store: JSON entries that are not values are dropped", () => {
+test("env store: JSON entries that are not values are dropped", () => {
   assertEquals(
     parseEnvJson(
       JSON.stringify({
@@ -144,7 +145,7 @@ Deno.test("env store: JSON entries that are not values are dropped", () => {
   assertEquals(parseEnvJson(""), {});
 });
 
-Deno.test("env store: names must be shell identifiers", () => {
+test("env store: names must be shell identifiers", () => {
   assertEquals(requireEnvName("  OPENAI_API_KEY  "), "OPENAI_API_KEY");
   assertEquals(requireEnvName("_private"), "_private");
   for (const bad of ["", "   ", "1KEY", "MY-KEY", "MY KEY", "a.b"]) {
@@ -153,7 +154,7 @@ Deno.test("env store: names must be shell identifiers", () => {
   assertThrowsInvalid(() => requireEnvName("K".repeat(65)));
 });
 
-Deno.test("env store: values are trimmed and bounded", () => {
+test("env store: values are trimmed and bounded", () => {
   assertEquals(requireEnvValue("  sk-abc\n"), "sk-abc");
   assertThrowsInvalid(() => requireEnvValue(""));
   assertThrowsInvalid(() => requireEnvValue("   "));
@@ -174,7 +175,7 @@ function assertThrowsInvalid(fn: () => unknown): void {
   assertEquals(message.length > 0, true);
 }
 
-Deno.test("env store: the files live outside any agent's folder", () => {
+test("env store: the files live outside any agent's folder", () => {
   // Machine-wide, as the tool says: two agents share one machine, so one
   // entry serves both. Next to the background log directory, away from the
   // files an agent keeps for one conversation.

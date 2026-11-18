@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import type {
   AssistantMessageEventStream,
   ImageContent,
@@ -49,7 +50,7 @@ function fakeStreamFn(
   };
 }
 
-Deno.test("analyzeContent replaces image blocks with analysis text", async () => {
+test("analyzeContent replaces image blocks with analysis text", async () => {
   const calls: StreamRequest[] = [];
   const analyzer = new ImageAnalyzer(
     fakeModel("vision"),
@@ -75,7 +76,7 @@ Deno.test("analyzeContent replaces image blocks with analysis text", async () =>
   assertEquals(calls[0]!.systemPrompt?.includes("image analysis"), true);
 });
 
-Deno.test("analyzeContent caches per image (no re-analysis across turns)", async () => {
+test("analyzeContent caches per image (no re-analysis across turns)", async () => {
   let callCount = 0;
   const analyzer = new ImageAnalyzer(
     fakeModel("vision"),
@@ -89,7 +90,7 @@ Deno.test("analyzeContent caches per image (no re-analysis across turns)", async
   assertEquals(callCount, 1);
 });
 
-Deno.test("analyzeContent falls back to the original content on failure", async () => {
+test("analyzeContent falls back to the original content on failure", async () => {
   const analyzer = new ImageAnalyzer(
     fakeModel("vision"),
     fakeStreamFn("", { fail: true }),
@@ -101,7 +102,7 @@ Deno.test("analyzeContent falls back to the original content on failure", async 
   assertEquals(out, content);
 });
 
-Deno.test("analyzeContent without images never calls the model", async () => {
+test("analyzeContent without images never calls the model", async () => {
   let callCount = 0;
   const analyzer = new ImageAnalyzer(
     fakeModel("vision"),

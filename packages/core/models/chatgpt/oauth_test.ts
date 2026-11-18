@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import type { AuthInteraction, AuthNotice } from "../../ai/catalog.ts";
 
@@ -31,7 +32,7 @@ function jwt(claims: Record<string, unknown>): string {
   return `${b64({ alg: "none" })}.${b64(claims)}.signature`;
 }
 
-Deno.test("chatGptAccountId reads the nested and top-level claims", () => {
+test("chatGptAccountId reads the nested and top-level claims", () => {
   assertEquals(
     chatGptAccountId(
       jwt({
@@ -48,7 +49,7 @@ Deno.test("chatGptAccountId reads the nested and top-level claims", () => {
   assertEquals(chatGptAccountId(jwt({ exp: 1 })), undefined);
 });
 
-Deno.test("expiresAtFor prefers expires_in and falls back to exp", () => {
+test("expiresAtFor prefers expires_in and falls back to exp", () => {
   assertEquals(
     expiresAtFor({ accessToken: "x", expiresIn: 60 }, 1_000),
     61_000,
@@ -61,7 +62,7 @@ Deno.test("expiresAtFor prefers expires_in and falls back to exp", () => {
   );
 });
 
-Deno.test("the authorize URL carries the Codex client's parameters", () => {
+test("the authorize URL carries the Codex client's parameters", () => {
   const url = new URL(
     buildAuthorizeUrl({
       state: "state-1",
@@ -91,7 +92,7 @@ Deno.test("the authorize URL carries the Codex client's parameters", () => {
   assertEquals(url.searchParams.get("originator"), CHATGPT_ORIGINATOR);
 });
 
-Deno.test("device login polls through pending and exchanges the code", async () => {
+test("device login polls through pending and exchanges the code", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   let polls = 0;
   const fetchImpl: FetchLike = (input, init) => {
@@ -169,7 +170,7 @@ Deno.test("device login polls through pending and exchanges the code", async () 
   );
 });
 
-Deno.test("device login explains a disabled device flow", async () => {
+test("device login explains a disabled device flow", async () => {
   const fetchImpl: FetchLike = () =>
     Promise.resolve(new Response("not found", { status: 404 }));
   const interaction: AuthInteraction = {
@@ -185,7 +186,7 @@ Deno.test("device login explains a disabled device flow", async () => {
   assert(error.message.includes("not enabled"));
 });
 
-Deno.test("refresh sends the refresh grant", async () => {
+test("refresh sends the refresh grant", async () => {
   let form: URLSearchParams | undefined;
   const fetchImpl: FetchLike = (_input, init) => {
     form = init?.body as URLSearchParams;

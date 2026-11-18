@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import type { AgentMessage } from "../ai/message.ts";
 
@@ -64,7 +65,7 @@ function toolTurn(repo: MessageRepo, at: number): void {
   } as AgentMessage);
 }
 
-Deno.test("transcript pager: the newest page ends at the transcript's end", () => {
+test("transcript pager: the newest page ends at the transcript's end", () => {
   const { db, repo } = setup(5);
   try {
     const page = readTranscriptPage(repo, "s1", { limit: 2 }, RULES);
@@ -76,7 +77,7 @@ Deno.test("transcript pager: the newest page ends at the transcript's end", () =
   }
 });
 
-Deno.test("transcript pager: the next page ends where the last one began", () => {
+test("transcript pager: the next page ends where the last one began", () => {
   const { db, repo } = setup(5);
   try {
     const newest = readTranscriptPage(repo, "s1", { limit: 2 }, RULES);
@@ -101,7 +102,7 @@ Deno.test("transcript pager: the next page ends where the last one began", () =>
   }
 });
 
-Deno.test("transcript pager: a runaway turn is bounded, not read whole", () => {
+test("transcript pager: a runaway turn is bounded, not read whole", () => {
   const { db, repo } = setup(1);
   try {
     // One prompt followed by a runaway tool loop: the turn is far longer than
@@ -135,7 +136,7 @@ Deno.test("transcript pager: a runaway turn is bounded, not read whole", () => {
   }
 });
 
-Deno.test("transcript pager: a turn inside the lookback still begins the page", () => {
+test("transcript pager: a turn inside the lookback still begins the page", () => {
   const { db, repo } = setup(1);
   try {
     // One prompt, then a long-but-affordable run (inside the lookback): the
@@ -163,7 +164,7 @@ Deno.test("transcript pager: a turn inside the lookback still begins the page", 
   }
 });
 
-Deno.test("transcript pager: a page pulls its start back to a turn", () => {
+test("transcript pager: a page pulls its start back to a turn", () => {
   const { db, repo } = setup(1);
   try {
     // One prompt followed by a tool call and three results: those rows
@@ -190,7 +191,7 @@ Deno.test("transcript pager: a page pulls its start back to a turn", () => {
   }
 });
 
-Deno.test("transcript pager: a cursor that names nothing is a conflict", () => {
+test("transcript pager: a cursor that names nothing is a conflict", () => {
   const { db, repo } = setup(3);
   try {
     assertThrows(
@@ -208,7 +209,7 @@ Deno.test("transcript pager: a cursor that names nothing is a conflict", () => {
   }
 });
 
-Deno.test("transcript pager: an invalid page size is refused, not clamped", () => {
+test("transcript pager: an invalid page size is refused, not clamped", () => {
   const { db, repo } = setup(3);
   try {
     assertThrows(
@@ -224,7 +225,7 @@ Deno.test("transcript pager: an invalid page size is refused, not clamped", () =
   }
 });
 
-Deno.test("transcript pager: the page size is bounded", () => {
+test("transcript pager: the page size is bounded", () => {
   const { db, repo } = setup(300);
   try {
     const page = readTranscriptPage(repo, "s1", { limit: 10_000 }, RULES);
@@ -234,7 +235,7 @@ Deno.test("transcript pager: the page size is bounded", () => {
   }
 });
 
-Deno.test("transcript pager: a dropped row still marks the page's turn", () => {
+test("transcript pager: a dropped row still marks the page's turn", () => {
   const { db, repo } = setup(1);
   try {
     // A stella-shaped surface: the projection drops tool traffic, and every
@@ -278,7 +279,7 @@ Deno.test("transcript pager: a dropped row still marks the page's turn", () => {
   }
 });
 
-Deno.test("transcript pager: a page starts at a checkpoint, not inside it", () => {
+test("transcript pager: a page starts at a checkpoint, not inside it", () => {
   const { db, repo } = setup(2);
   try {
     // A compaction checkpoint is a row of its own in the transcript, so a
@@ -320,7 +321,7 @@ Deno.test("transcript pager: a page starts at a checkpoint, not inside it", () =
   }
 });
 
-Deno.test("transcript pager: the cursor survives a checkpoint inserted before it", () => {
+test("transcript pager: the cursor survives a checkpoint inserted before it", () => {
   const { db, repo } = setup(4);
   try {
     const newest = readTranscriptPage(repo, "s1", { limit: 2 }, RULES);
@@ -349,7 +350,7 @@ Deno.test("transcript pager: the cursor survives a checkpoint inserted before it
   }
 });
 
-Deno.test("transcript pager: an empty transcript has no pages", () => {
+test("transcript pager: an empty transcript has no pages", () => {
   const { db, repo } = setup(0);
   try {
     const page = readTranscriptPage(repo, "s1", { limit: 5 }, RULES);

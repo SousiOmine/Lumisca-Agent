@@ -1,7 +1,8 @@
+import { test } from "bun:test";
 import { assertEquals, assertMatch } from "@std/assert";
 import { checkBrowserUrl, requireAllowedUrl } from "./policy.ts";
 
-Deno.test("policy allows loopback http/https URLs", () => {
+test("policy allows loopback http/https URLs", () => {
   assertEquals(checkBrowserUrl("http://127.0.0.1:5173/"), undefined);
   assertEquals(checkBrowserUrl("http://localhost:8000/"), undefined);
   assertEquals(checkBrowserUrl("http://localhost:3000/?token=x"), undefined);
@@ -10,7 +11,7 @@ Deno.test("policy allows loopback http/https URLs", () => {
   assertEquals(checkBrowserUrl("http://127.0.0.1/"), undefined); // default port
 });
 
-Deno.test("policy rejects everything that is not a loopback http(s) URL", () => {
+test("policy rejects everything that is not a loopback http(s) URL", () => {
   const rejects = [
     "http://example.com/",
     "https://www.google.com/",
@@ -39,7 +40,7 @@ Deno.test("policy rejects everything that is not a loopback http(s) URL", () => 
   }
 });
 
-Deno.test("requireAllowedUrl returns the normalized components", () => {
+test("requireAllowedUrl returns the normalized components", () => {
   const allowed = requireAllowedUrl("http://LOCALHOST:5173/app?q=1#top");
   assertEquals(allowed.scheme, "http");
   assertEquals(allowed.host, "localhost");
@@ -52,7 +53,7 @@ Deno.test("requireAllowedUrl returns the normalized components", () => {
   assertEquals(requireAllowedUrl("https://localhost/").port, 443);
 });
 
-Deno.test("requireAllowedUrl throws with the policy message", () => {
+test("requireAllowedUrl throws with the policy message", () => {
   let message = "";
   try {
     requireAllowedUrl("https://example.com/");

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -36,7 +37,7 @@ function tab(overrides: Partial<TabSummary> & { id: string }): TabSummary {
   };
 }
 
-Deno.test("TabBar renders each tab's label, tooltip and active state", () => {
+test("TabBar renders each tab's label, tooltip and active state", () => {
   const html = render([
     tab({
       id: "s1",
@@ -65,7 +66,7 @@ Deno.test("TabBar renders each tab's label, tooltip and active state", () => {
   assertStringIncludes(html, 'class="tabler-icon');
 });
 
-Deno.test("TabBar marks a running tab and names the tool it runs", () => {
+test("TabBar marks a running tab and names the tool it runs", () => {
   const html = render([
     tab({ id: "s1", name: "実行中", running: true, runningTool: "bash" }),
     // Running without a tool in flight: the dot shows, the badge does not.

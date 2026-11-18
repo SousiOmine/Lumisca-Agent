@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertNotEquals } from "@std/assert";
 import { messages } from "../shared/mod.ts";
 import { AGENT_MODES, findAgentMode } from "./mod.ts";
@@ -9,7 +10,7 @@ import { buildReviewPrompt, reviewMode } from "./review.ts";
  * translation of the instructions is a regression. */
 const JAPANESE = /[\u3040-\u30ff\u4e00-\u9fff]/;
 
-Deno.test("AGENT_MODES: ids are unique and every mode has menu text and options", () => {
+test("AGENT_MODES: ids are unique and every mode has menu text and options", () => {
   const ids = new Set<string>();
   for (const mode of AGENT_MODES) {
     assertEquals(ids.has(mode.id), false, `duplicate mode id: ${mode.id}`);
@@ -49,13 +50,13 @@ Deno.test("AGENT_MODES: ids are unique and every mode has menu text and options"
   }
 });
 
-Deno.test("findAgentMode finds registered modes and misses unknown ids", () => {
+test("findAgentMode finds registered modes and misses unknown ids", () => {
   assertEquals(findAgentMode("review"), reviewMode);
   assertEquals(findAgentMode("plan"), planMode);
   assertEquals(findAgentMode("nope"), undefined);
 });
 
-Deno.test("review mode: options cover both targets and build distinct prompts", () => {
+test("review mode: options cover both targets and build distinct prompts", () => {
   assertEquals(
     reviewMode.options.map((o) => o.id),
     ["base-diff", "uncommitted"],
@@ -69,7 +70,7 @@ Deno.test("review mode: options cover both targets and build distinct prompts", 
   );
 });
 
-Deno.test("review prompt: reviewer role and report-only rule", () => {
+test("review prompt: reviewer role and report-only rule", () => {
   const prompt = buildReviewPrompt("uncommitted");
   assertEquals(prompt.includes("code reviewer"), true);
   assertEquals(prompt.includes("another engineer"), true);
@@ -77,7 +78,7 @@ Deno.test("review prompt: reviewer role and report-only rule", () => {
   assertEquals(JAPANESE.test(prompt), false);
 });
 
-Deno.test("review prompt: review rules are present", () => {
+test("review prompt: review rules are present", () => {
   const prompt = buildReviewPrompt("uncommitted");
   assertEquals(prompt.includes("correctness, performance, security"), true);
   assertEquals(prompt.includes("concrete and fixable"), true);
@@ -87,7 +88,7 @@ Deno.test("review prompt: review rules are present", () => {
   assertEquals(prompt.includes("Suggested direction"), true);
 });
 
-Deno.test("review prompt: target-specific git steps", () => {
+test("review prompt: target-specific git steps", () => {
   const uncommitted = buildReviewPrompt("uncommitted");
   assertEquals(uncommitted.includes("uncommitted changes"), true);
   assertEquals(uncommitted.includes("git status"), true);
@@ -101,13 +102,13 @@ Deno.test("review prompt: target-specific git steps", () => {
   assertEquals(base.includes("git diff HEAD"), false);
 });
 
-Deno.test("plan mode: takes the request text and has no options", () => {
+test("plan mode: takes the request text and has no options", () => {
   assertEquals(planMode.options.length, 0);
   assertEquals(planMode.buildPromptForText !== undefined, true);
   assertEquals(planMode.modeLabel, "chat.mode.plan.modeLabel");
 });
 
-Deno.test("plan prompt: embeds the request and the internal rules", () => {
+test("plan prompt: embeds the request and the internal rules", () => {
   const prompt = planMode.buildPromptForText!("add a browsing history");
   assertEquals(prompt.includes("add a browsing history"), true);
   assertEquals(prompt.includes("implementation planner"), true);
@@ -125,7 +126,7 @@ Deno.test("plan prompt: embeds the request and the internal rules", () => {
   assertEquals(JAPANESE.test(prompt), false);
 });
 
-Deno.test("plan mode: empty fallback prompt asks for the request instead of planning blindly", () => {
+test("plan mode: empty fallback prompt asks for the request instead of planning blindly", () => {
   const prompt = buildPlanPrompt("");
   assertEquals(prompt.length > 0, true);
   assertEquals(prompt.includes("No request was given"), true);

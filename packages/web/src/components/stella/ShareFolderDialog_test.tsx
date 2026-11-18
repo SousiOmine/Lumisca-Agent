@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -39,7 +40,7 @@ function render(): string {
   );
 }
 
-Deno.test("ShareFolderDialog: nothing is lent until a folder is chosen", () => {
+test("ShareFolderDialog: nothing is lent until a folder is chosen", () => {
   const html = withStorage(memoryStorage(null), render);
   assertStringIncludes(html, "フォルダーで共同作業");
   assertStringIncludes(html, "フォルダーを選ぶ");
@@ -54,7 +55,7 @@ Deno.test("ShareFolderDialog: nothing is lent until a folder is chosen", () => {
   assert(!html.includes("最近接続したフォルダー"), html);
 });
 
-Deno.test("ShareFolderDialog: a recent folder is one press, with its last terms", () => {
+test("ShareFolderDialog: a recent folder is one press, with its last terms", () => {
   const stored = JSON.stringify([
     { path: "/Users/me/proj", name: "proj", write: true },
     { path: "/Users/me/notes", name: "notes", write: false },

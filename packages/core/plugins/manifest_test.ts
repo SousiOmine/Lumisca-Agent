@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { PLUGIN_SCHEMA_URL, parsePluginManifest } from "./manifest.ts";
 
@@ -16,7 +17,7 @@ const FULL = {
 
 // --- valid manifests ----------------------------------------------------------
 
-Deno.test("parsePluginManifest accepts the minimal manifest", () => {
+test("parsePluginManifest accepts the minimal manifest", () => {
   const result = parsePluginManifest(
     JSON.stringify({ $schema: PLUGIN_SCHEMA_URL, name: "minimal-plugin" }),
     "plugin.json",
@@ -25,7 +26,7 @@ Deno.test("parsePluginManifest accepts the minimal manifest", () => {
   assertEquals(result.manifest, { name: "minimal-plugin" });
 });
 
-Deno.test("parsePluginManifest accepts the full manifest", () => {
+test("parsePluginManifest accepts the full manifest", () => {
   const result = parsePluginManifest(JSON.stringify(FULL), "plugin.json");
   assertEquals(result.fatal, undefined);
   assertEquals(result.warnings, []);
@@ -35,7 +36,7 @@ Deno.test("parsePluginManifest accepts the full manifest", () => {
   assertEquals(result.manifest, expected);
 });
 
-Deno.test("parsePluginManifest accepts every valid name", () => {
+test("parsePluginManifest accepts every valid name", () => {
   for (const name of ["my-plugin", "acme.tools", "lint3r", "a"]) {
     const result = parsePluginManifest(
       JSON.stringify({ $schema: PLUGIN_SCHEMA_URL, name }),
@@ -47,22 +48,22 @@ Deno.test("parsePluginManifest accepts every valid name", () => {
 
 // --- fatal violations ---------------------------------------------------------
 
-Deno.test("parsePluginManifest rejects invalid JSON", () => {
+test("parsePluginManifest rejects invalid JSON", () => {
   const result = parsePluginManifest("{ not json", "plugin.json");
   assertFatal(result.fatal, "not valid JSON");
 });
 
-Deno.test("parsePluginManifest rejects a non-object document", () => {
+test("parsePluginManifest rejects a non-object document", () => {
   const result = parsePluginManifest('["array"]', "plugin.json");
   assertFatal(result.fatal, "JSON object");
 });
 
-Deno.test("parsePluginManifest rejects a missing $schema", () => {
+test("parsePluginManifest rejects a missing $schema", () => {
   const result = parsePluginManifest('{"name": "x"}', "plugin.json");
   assertFatal(result.fatal, "$schema");
 });
 
-Deno.test("parsePluginManifest rejects an unsupported $schema", () => {
+test("parsePluginManifest rejects an unsupported $schema", () => {
   const result = parsePluginManifest(
     JSON.stringify({
       $schema: "https://agent-plugins.org/schemas/0.9.0/plugin.schema.json",
@@ -73,7 +74,7 @@ Deno.test("parsePluginManifest rejects an unsupported $schema", () => {
   assertFatal(result.fatal, "unsupported $schema");
 });
 
-Deno.test("parsePluginManifest rejects invalid names", () => {
+test("parsePluginManifest rejects invalid names", () => {
   for (const name of [
     "",
     "My-Plugin",
@@ -91,7 +92,7 @@ Deno.test("parsePluginManifest rejects invalid names", () => {
   }
 });
 
-Deno.test("parsePluginManifest rejects wrong-typed known fields", () => {
+test("parsePluginManifest rejects wrong-typed known fields", () => {
   for (const [key, value] of [
     ["version", 1],
     ["description", []],
@@ -108,7 +109,7 @@ Deno.test("parsePluginManifest rejects wrong-typed known fields", () => {
   }
 });
 
-Deno.test("parsePluginManifest rejects a malformed author", () => {
+test("parsePluginManifest rejects a malformed author", () => {
   for (const author of ["string", [], { name: 42 }, { extra: "x" }]) {
     const result = parsePluginManifest(
       JSON.stringify({ $schema: PLUGIN_SCHEMA_URL, name: "x", author }),
@@ -120,7 +121,7 @@ Deno.test("parsePluginManifest rejects a malformed author", () => {
 
 // --- non-fatal violations (report and ignore) --------------------------------
 
-Deno.test("parsePluginManifest reports and ignores unknown top-level fields", () => {
+test("parsePluginManifest reports and ignores unknown top-level fields", () => {
   const result = parsePluginManifest(
     JSON.stringify({ $schema: PLUGIN_SCHEMA_URL, name: "x", bogus: 1 }),
     "plugin.json",
@@ -134,7 +135,7 @@ Deno.test("parsePluginManifest reports and ignores unknown top-level fields", ()
   );
 });
 
-Deno.test("parsePluginManifest reports and ignores a non-object extensions", () => {
+test("parsePluginManifest reports and ignores a non-object extensions", () => {
   for (const extensions of [42, "nope", []]) {
     const result = parsePluginManifest(
       JSON.stringify({ $schema: PLUGIN_SCHEMA_URL, name: "x", extensions }),

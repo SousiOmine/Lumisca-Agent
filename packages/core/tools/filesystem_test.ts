@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { basename, join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import {
@@ -40,7 +41,7 @@ async function fixture(): Promise<{ root: string; folder: string }> {
   return { root, folder: basename(root) };
 }
 
-Deno.test("read passes raster images to the model as image blocks", async () => {
+test("read passes raster images to the model as image blocks", async () => {
   const { root, folder } = await fixture();
   try {
     const result = await makeRead(root).execute("id", {
@@ -61,7 +62,7 @@ Deno.test("read passes raster images to the model as image blocks", async () => 
   }
 });
 
-Deno.test("read stores a bounded copy of a large image", async () => {
+test("read stores a bounded copy of a large image", async () => {
   const root = await makeRealTempDir("lumisca-read-big-");
   const folder = basename(root);
   try {
@@ -91,7 +92,7 @@ Deno.test("read stores a bounded copy of a large image", async () => {
   }
 });
 
-Deno.test("read maps common image extensions to mime types", async () => {
+test("read maps common image extensions to mime types", async () => {
   const { root, folder } = await fixture();
   try {
     for (const [ext, mime] of [
@@ -116,7 +117,7 @@ Deno.test("read maps common image extensions to mime types", async () => {
   }
 });
 
-Deno.test("read keeps text, SVG and line-ranged reads on the text path", async () => {
+test("read keeps text, SVG and line-ranged reads on the text path", async () => {
   const { root, folder } = await fixture();
   try {
     const read = makeRead(root);
@@ -138,7 +139,7 @@ Deno.test("read keeps text, SVG and line-ranged reads on the text path", async (
   }
 });
 
-Deno.test("read extracts line ranges from the path", async () => {
+test("read extracts line ranges from the path", async () => {
   const { root, folder } = await fixture();
   try {
     const result = await makeRead(root).execute("id", {
@@ -155,7 +156,7 @@ Deno.test("read extracts line ranges from the path", async () => {
   }
 });
 
-Deno.test("read supports single lines, N+M and comma-separated ranges", async () => {
+test("read supports single lines, N+M and comma-separated ranges", async () => {
   const { root, folder } = await fixture();
   try {
     const read = makeRead(root);
@@ -185,7 +186,7 @@ Deno.test("read supports single lines, N+M and comma-separated ranges", async ()
   }
 });
 
-Deno.test("read rejects invalid line ranges", async () => {
+test("read rejects invalid line ranges", async () => {
   const { root, folder } = await fixture();
   try {
     const read = makeRead(root);
@@ -206,7 +207,7 @@ Deno.test("read rejects invalid line ranges", async () => {
   }
 });
 
-Deno.test("read notes when a range extends past the end of the file", async () => {
+test("read notes when a range extends past the end of the file", async () => {
   const { root, folder } = await fixture();
   try {
     const result = await makeRead(root).execute("id", {
@@ -220,7 +221,7 @@ Deno.test("read notes when a range extends past the end of the file", async () =
   }
 });
 
-Deno.test("read suggests a line range when a large file is cut off", async () => {
+test("read suggests a line range when a large file is cut off", async () => {
   const root = await makeRealTempDir("lumisca-read-");
   const folder = basename(root);
   try {
@@ -236,7 +237,7 @@ Deno.test("read suggests a line range when a large file is cut off", async () =>
   }
 });
 
-Deno.test("read line ranges stay memory-bounded on huge single-line files", async () => {
+test("read line ranges stay memory-bounded on huge single-line files", async () => {
   const root = await makeRealTempDir("lumisca-read-");
   const folder = basename(root);
   try {
@@ -258,7 +259,7 @@ Deno.test("read line ranges stay memory-bounded on huge single-line files", asyn
   }
 });
 
-Deno.test("read reports the lines a huge ranged read had to drop", async () => {
+test("read reports the lines a huge ranged read had to drop", async () => {
   const root = await makeRealTempDir("lumisca-read-");
   const folder = basename(root);
   try {
@@ -314,7 +315,7 @@ async function fsFixture(): Promise<{ root: string; folder: string }> {
   return { root, folder: basename(root) };
 }
 
-Deno.test("edit matches CRLF files with an LF old_string and keeps CRLF", async () => {
+test("edit matches CRLF files with an LF old_string and keeps CRLF", async () => {
   const { root, folder } = await fsFixture();
   const file = join(root, "sample.txt");
   try {
@@ -332,7 +333,7 @@ Deno.test("edit matches CRLF files with an LF old_string and keeps CRLF", async 
   }
 });
 
-Deno.test("edit matches CRLF files with a CRLF old_string", async () => {
+test("edit matches CRLF files with a CRLF old_string", async () => {
   const { root, folder } = await fsFixture();
   const file = join(root, "sample.txt");
   try {
@@ -349,7 +350,7 @@ Deno.test("edit matches CRLF files with a CRLF old_string", async () => {
   }
 });
 
-Deno.test("edit matches LF files with a CRLF old_string", async () => {
+test("edit matches LF files with a CRLF old_string", async () => {
   const { root, folder } = await fsFixture();
   const file = join(root, "sample.txt");
   try {
@@ -369,7 +370,7 @@ Deno.test("edit matches LF files with a CRLF old_string", async () => {
   }
 });
 
-Deno.test("edit converts an LF new_string to CRLF in a CRLF file", async () => {
+test("edit converts an LF new_string to CRLF in a CRLF file", async () => {
   const { root, folder } = await fsFixture();
   const file = join(root, "sample.txt");
   try {
@@ -390,7 +391,7 @@ Deno.test("edit converts an LF new_string to CRLF in a CRLF file", async () => {
   }
 });
 
-Deno.test("edit throws when old_string is missing", async () => {
+test("edit throws when old_string is missing", async () => {
   const { root, folder } = await fsFixture();
   const file = join(root, "sample.txt");
   try {
@@ -410,7 +411,7 @@ Deno.test("edit throws when old_string is missing", async () => {
   }
 });
 
-Deno.test("edit fails on an ambiguous old_string and leaves the file", async () => {
+test("edit fails on an ambiguous old_string and leaves the file", async () => {
   const { root, folder } = await fsFixture();
   const file = join(root, "sample.txt");
   try {
@@ -446,7 +447,7 @@ Deno.test("edit fails on an ambiguous old_string and leaves the file", async () 
   }
 });
 
-Deno.test("edit fails on an ambiguous old_string in a CRLF file", async () => {
+test("edit fails on an ambiguous old_string in a CRLF file", async () => {
   const { root, folder } = await fsFixture();
   const file = join(root, "sample.txt");
   try {
@@ -475,7 +476,7 @@ Deno.test("edit fails on an ambiguous old_string in a CRLF file", async () => {
   }
 });
 
-Deno.test("write keeps an existing CRLF file's line endings", async () => {
+test("write keeps an existing CRLF file's line endings", async () => {
   const { root, folder } = await fsFixture();
   const file = join(root, "sample.txt");
   try {
@@ -491,7 +492,7 @@ Deno.test("write keeps an existing CRLF file's line endings", async () => {
   }
 });
 
-Deno.test("write creates new files with line endings as sent", async () => {
+test("write creates new files with line endings as sent", async () => {
   const { root, folder } = await fsFixture();
   const file = join(root, "new.txt");
   try {
@@ -505,7 +506,7 @@ Deno.test("write creates new files with line endings as sent", async () => {
   }
 });
 
-Deno.test("read strips CR so CRLF files display as clean LF lines", async () => {
+test("read strips CR so CRLF files display as clean LF lines", async () => {
   const { root, folder } = await fsFixture();
   const file = join(root, "crlf.txt");
   try {
@@ -525,7 +526,7 @@ Deno.test("read strips CR so CRLF files display as clean LF lines", async () => 
   }
 });
 
-Deno.test("parallel edits to the same file are serialized (no lost update)", async () => {
+test("parallel edits to the same file are serialized (no lost update)", async () => {
   const { root, folder } = await fsFixture();
   const file = join(root, "sample.txt");
   try {
@@ -582,7 +583,7 @@ Deno.test("parallel edits to the same file are serialized (no lost update)", asy
   }
 });
 
-Deno.test("parallel writes to the same file are serialized", async () => {
+test("parallel writes to the same file are serialized", async () => {
   const { root, folder } = await fsFixture();
   const file = join(root, "sample.txt");
   try {
@@ -610,7 +611,7 @@ Deno.test("parallel writes to the same file are serialized", async () => {
   }
 });
 
-Deno.test("edit reports added/removed line counts in details", async () => {
+test("edit reports added/removed line counts in details", async () => {
   const { root, folder } = await fsFixture();
   const file = join(root, "sample.txt");
   try {
@@ -635,7 +636,7 @@ Deno.test("edit reports added/removed line counts in details", async () => {
   }
 });
 
-Deno.test("write reports added/removed line counts in details", async () => {
+test("write reports added/removed line counts in details", async () => {
   const { root, folder } = await fsFixture();
   try {
     const { write } = makeFs(root);

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import {
   DEFAULT_MODEL_KEY,
   serializeModelPreference,
@@ -59,7 +60,7 @@ const preference = (provider: string, modelId: string) =>
 
 // First on purpose: the shared store starts unread, which is the state the
 // new-session screen is in when it is the first screen a page shows.
-Deno.test("rememberDefaultModel reads the settings before its first write", async () => {
+test("rememberDefaultModel reads the settings before its first write", async () => {
   const sent = await withFetch(
     (request) => (request.method === "GET" ? table({ theme: "dark" })() : ok()),
     () => rememberDefaultModel("anthropic", "claude-sonnet-4-5"),
@@ -78,7 +79,7 @@ Deno.test("rememberDefaultModel reads the settings before its first write", asyn
   );
 });
 
-Deno.test("rememberDefaultModel writes the pick to the default model key", async () => {
+test("rememberDefaultModel writes the pick to the default model key", async () => {
   settingsStore.reset();
   const sent = await withFetch(ok, () =>
     rememberDefaultModel("anthropic", "claude-sonnet-4-5"),
@@ -94,7 +95,7 @@ Deno.test("rememberDefaultModel writes the pick to the default model key", async
   ]);
 });
 
-Deno.test("rememberDefaultModel writes nothing when it already is the default", async () => {
+test("rememberDefaultModel writes nothing when it already is the default", async () => {
   settingsStore.reset();
   await withFetch(ok, () => rememberDefaultModel("openai", "gpt-5"));
   const sent = await withFetch(ok, () =>
@@ -103,7 +104,7 @@ Deno.test("rememberDefaultModel writes nothing when it already is the default", 
   assertEquals(sent, [], "a second pick of the same model is not a request");
 });
 
-Deno.test("rememberDefaultModel reports a failed write instead of keeping it", async () => {
+test("rememberDefaultModel reports a failed write instead of keeping it", async () => {
   settingsStore.reset();
   await assertRejects(() =>
     withFetch(

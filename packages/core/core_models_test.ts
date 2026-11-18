@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 
 import {
@@ -99,7 +100,7 @@ function setupImageAnalysis() {
 
 /** Capture every LLM call: model id + messages, in call order. */
 
-Deno.test("session without model picks the last used model", async () => {
+test("session without model picks the last used model", async () => {
   const { core, faux: _faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
   // Default-model resolution only considers providers configured inside
@@ -122,7 +123,7 @@ Deno.test("session without model picks the last used model", async () => {
   core.close();
 });
 
-Deno.test("getDefaultModel returns the last used model or a fallback", async () => {
+test("getDefaultModel returns the last used model or a fallback", async () => {
   const { core, faux: _faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
   await core.setProviderApiKey(providerId, "faux-key");
@@ -150,7 +151,7 @@ Deno.test("getDefaultModel returns the last used model or a fallback", async () 
   core.close();
 });
 
-Deno.test("session without model falls back to a configured provider", async () => {
+test("session without model falls back to a configured provider", async () => {
   const { core, faux } = setup();
   const { ws } = await makeWorkspace(core);
   await core.setProviderApiKey(faux.provider.id, "faux-key");
@@ -173,7 +174,7 @@ Deno.test("session without model falls back to a configured provider", async () 
   core.close();
 });
 
-Deno.test("no configured provider: no default model and no session", async () => {
+test("no configured provider: no default model and no session", async () => {
   const { core } = setup();
   const { ws } = await makeWorkspace(core);
 
@@ -203,7 +204,7 @@ Deno.test("no configured provider: no default model and no session", async () =>
   core.close();
 });
 
-Deno.test("hasConfiguredAuth ignores ambient env keys of built-in providers", async () => {
+test("hasConfiguredAuth ignores ambient env keys of built-in providers", async () => {
   // The ambient environment is the test's own object, not the process's:
   // an env key must resolve for requests while the provider still counts
   // as unconfigured inside Lumisca.
@@ -230,7 +231,7 @@ Deno.test("hasConfiguredAuth ignores ambient env keys of built-in providers", as
   }
 });
 
-Deno.test("thinking level reaches the provider stream options", async () => {
+test("thinking level reaches the provider stream options", async () => {
   const faux = fauxProvider({ models: [{ id: "thinky", reasoning: true }] });
   const core = LumiscaCore.forTesting([faux.provider]);
   const { ws } = await makeWorkspace(core);
@@ -266,7 +267,7 @@ Deno.test("thinking level reaches the provider stream options", async () => {
   core.close();
 });
 
-Deno.test("text-only model: user images are analyzed and passed as text", async () => {
+test("text-only model: user images are analyzed and passed as text", async () => {
   const { core, faux, providerId } = setupImageAnalysis();
   const { ws } = await makeWorkspace(core);
 
@@ -333,7 +334,7 @@ Deno.test("text-only model: user images are analyzed and passed as text", async 
   core.close();
 });
 
-Deno.test("text-only model: read tool images are analyzed and passed as text", async () => {
+test("text-only model: read tool images are analyzed and passed as text", async () => {
   const { core, faux, providerId } = setupImageAnalysis();
   const { ws, root } = await makeWorkspace(core);
   await Deno.writeFile(join(root, "pic.png"), MINI_PNG);
@@ -393,7 +394,7 @@ Deno.test("text-only model: read tool images are analyzed and passed as text", a
 /** A main model plus a fast model on one provider; the fast model is
  * selected through the model_fast setting (see ModelPreferencePanel). */
 
-Deno.test("fast model: first prompt auto-generates the session title", async () => {
+test("fast model: first prompt auto-generates the session title", async () => {
   const { core, faux, providerId } = setupFastTitle();
   const { ws } = await makeWorkspace(core);
 
@@ -434,7 +435,7 @@ Deno.test("fast model: first prompt auto-generates the session title", async () 
   core.close();
 });
 
-Deno.test("no fast model: session keeps its provisional name", async () => {
+test("no fast model: session keeps its provisional name", async () => {
   const { core, faux, providerId } = setup();
   const { ws } = await makeWorkspace(core);
 
@@ -455,7 +456,7 @@ Deno.test("no fast model: session keeps its provisional name", async () => {
   core.close();
 });
 
-Deno.test("getDefaultModel prefers the user's default over the last used model", async () => {
+test("getDefaultModel prefers the user's default over the last used model", async () => {
   const { core, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
   await core.setProviderApiKey(providerId, "faux-key");
@@ -488,7 +489,7 @@ Deno.test("getDefaultModel prefers the user's default over the last used model",
   assertEquals((await core.getDefaultModel())?.modelId, modelId);
 });
 
-Deno.test("getDefaultModel skips a default this installation cannot reach", async () => {
+test("getDefaultModel skips a default this installation cannot reach", async () => {
   // A default naming a provider that was removed (or an id that retired)
   // must not make every new session fail: the resolver falls through to
   // what it would have answered without the setting.

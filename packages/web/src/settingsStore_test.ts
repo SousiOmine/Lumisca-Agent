@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { settingsStore } from "./settingsStore.ts";
 
@@ -25,7 +26,7 @@ const ok = (body: Record<string, string>) => () =>
     headers: { "content-type": "application/json" },
   });
 
-Deno.test("settings store: two subscribers opening together share one read", async () => {
+test("settings store: two subscribers opening together share one read", async () => {
   settingsStore.reset();
   let reads = 0;
   await withFetch(
@@ -48,7 +49,7 @@ Deno.test("settings store: two subscribers opening together share one read", asy
   assertEquals(settingsStore.value("theme"), "dark");
 });
 
-Deno.test("settings store: the newer read wins", async () => {
+test("settings store: the newer read wins", async () => {
   settingsStore.reset();
   let call = 0;
   await withFetch(
@@ -70,7 +71,7 @@ Deno.test("settings store: the newer read wins", async () => {
   assertEquals(settingsStore.value("theme"), "new");
 });
 
-Deno.test("settings store: a failed read keeps the values and reports it", async () => {
+test("settings store: a failed read keeps the values and reports it", async () => {
   settingsStore.reset();
   await withFetch(ok({ theme: "dark" }), () => settingsStore.reload());
   await withFetch(
@@ -82,7 +83,7 @@ Deno.test("settings store: a failed read keeps the values and reports it", async
   assertEquals(settingsStore.value("theme"), "dark", "the values survive");
 });
 
-Deno.test("settings store: a write is reflected and rolled back on failure", async () => {
+test("settings store: a write is reflected and rolled back on failure", async () => {
   settingsStore.reset();
   await withFetch(ok({ theme: "dark" }), () => settingsStore.reload());
 

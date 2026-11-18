@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -30,7 +31,7 @@ function render(state: Partial<StellaConversationState>): string {
   );
 }
 
-Deno.test("StellaTranscript: the words come out in order", () => {
+test("StellaTranscript: the words come out in order", () => {
   const html = render({
     entries: [
       {
@@ -67,7 +68,7 @@ Deno.test("StellaTranscript: the words come out in order", () => {
   assertEquals(first !== -1 && second > first && third > second, true, html);
 });
 
-Deno.test("StellaTranscript: a card renders with its markup", () => {
+test("StellaTranscript: a card renders with its markup", () => {
   const markup = '<Card title="確認"><Text>進めますか。</Text></Card>';
   const html = render({
     entries: [
@@ -93,7 +94,7 @@ Deno.test("StellaTranscript: a card renders with its markup", () => {
   assertStringIncludes(html, "進めますか。");
 });
 
-Deno.test("StellaTranscript: a message never streams", () => {
+test("StellaTranscript: a message never streams", () => {
   // The agent's own text is its working notes and never arrives here, so a
   // run shows the typing dots alone until it SENDS something. There is no
   // cursor and no half-written bubble to draw.
@@ -102,7 +103,7 @@ Deno.test("StellaTranscript: a message never streams", () => {
   assertEquals(html.includes("cursor"), false, html);
 });
 
-Deno.test("StellaTranscript: a run with nothing to show yet is typing dots", () => {
+test("StellaTranscript: a run with nothing to show yet is typing dots", () => {
   const html = render({ running: true });
   // The wait is drawn where the reply will go: the agent's face in the
   // avatar column, then three dots. The word itself stays for a screen
@@ -113,7 +114,7 @@ Deno.test("StellaTranscript: a run with nothing to show yet is typing dots", () 
   assertStringIncludes(html, "visually-hidden");
 });
 
-Deno.test("StellaTranscript: a blocked run asks in a card, not in dots", () => {
+test("StellaTranscript: a blocked run asks in a card, not in dots", () => {
   const html = render({
     running: true,
     envRequest: {
@@ -133,13 +134,13 @@ Deno.test("StellaTranscript: a blocked run asks in a card, not in dots", () => {
   assertEquals(html.includes("stella-typing"), false);
 });
 
-Deno.test("StellaTranscript: the last failure is shown, not swallowed", () => {
+test("StellaTranscript: the last failure is shown, not swallowed", () => {
   const html = render({ error: "provider not configured" });
   assertStringIncludes(html, "provider not configured");
   assertStringIncludes(html, 'role="alert"');
 });
 
-Deno.test("StellaTranscript: nothing of the model's machinery can appear", () => {
+test("StellaTranscript: nothing of the model's machinery can appear", () => {
   // The projection is the server's job (see stella-stream_test); this is the
   // structural check: the component has no way to draw a tool row, a work
   // log or a context row even if one were passed.
@@ -165,7 +166,7 @@ Deno.test("StellaTranscript: nothing of the model's machinery can appear", () =>
   }
 });
 
-Deno.test("StellaTranscript: a conversation reads as messages, not rows", () => {
+test("StellaTranscript: a conversation reads as messages, not rows", () => {
   const html = render({
     entries: [
       {
@@ -216,7 +217,7 @@ Deno.test("StellaTranscript: a conversation reads as messages, not rows", () => 
   assert(agentOrder.includes("msg-action-btn rest"), agentOrder.join(","));
 });
 
-Deno.test("StellaTranscript: a run of the agent's messages shares one avatar", () => {
+test("StellaTranscript: a run of the agent's messages shares one avatar", () => {
   const now = Date.now();
   const html = render({
     entries: [
@@ -255,7 +256,7 @@ Deno.test("StellaTranscript: a run of the agent's messages shares one avatar", (
   assertEquals((html.match(/class="agent-avatar/g) ?? []).length, 1);
 });
 
-Deno.test("StellaTranscript: a new day opens a separator", () => {
+test("StellaTranscript: a new day opens a separator", () => {
   const today = new Date(2026, 8, 15, 12, 0).getTime();
   const yesterday = new Date(2026, 8, 14, 12, 0).getTime();
   const html = render({
@@ -284,7 +285,7 @@ Deno.test("StellaTranscript: a new day opens a separator", () => {
   assertStringIncludes(html, "今日");
 });
 
-Deno.test("StellaTranscript: the agent's time starts at its words' edge", () => {
+test("StellaTranscript: the agent's time starts at its words' edge", () => {
   // The agent's message box is as wide as its content, so a right-aligned
   // time moved with every message's length. The `start` modifier pins it to
   // the left edge, where the words begin; the user's own time stays at the
@@ -313,7 +314,7 @@ Deno.test("StellaTranscript: the agent's time starts at its words' edge", () => 
   assertStringIncludes(html, 'class="msg-meta"');
 });
 
-Deno.test("StellaTranscript: a prompt's pictures are drawn in the bubble", () => {
+test("StellaTranscript: a prompt's pictures are drawn in the bubble", () => {
   const html = render({
     entries: [
       {
@@ -340,7 +341,7 @@ Deno.test("StellaTranscript: a prompt's pictures are drawn in the bubble", () =>
   assertStringIncludes(html, "/upload?ref=uploads%2F1-ab%2F01-image-1.png");
 });
 
-Deno.test("StellaTranscript: a conversation with nothing said yet says so", () => {
+test("StellaTranscript: a conversation with nothing said yet says so", () => {
   // A fresh agent's pane used to be blank, which reads as a view that failed
   // to load rather than as "nothing has been said yet".
   const html = render({});
@@ -352,7 +353,7 @@ Deno.test("StellaTranscript: a conversation with nothing said yet says so", () =
   assertEquals(running.includes("まだメッセージがありません"), false);
 });
 
-Deno.test("StellaTranscript: an answer's code scrolls inside the message", () => {
+test("StellaTranscript: an answer's code scrolls inside the message", () => {
   // The body must carry the shared `.msg-body` as well as stella's own class:
   // chat.css holds the message body's language there — including
   // `.msg-body pre { overflow-x: auto }`, which is what keeps a long line

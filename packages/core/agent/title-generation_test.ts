@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import type {
   AssistantMessageEventStream,
   StreamFn,
@@ -43,7 +44,7 @@ function fakeStreamFn(
   };
 }
 
-Deno.test("cleanTitle strips quotes, collapses whitespace, caps at 30 chars", () => {
+test("cleanTitle strips quotes, collapses whitespace, caps at 30 chars", () => {
   assertEquals(cleanTitle('"Fix login bug"'), "Fix login bug");
   assertEquals(cleanTitle("'  Fix login bug  '"), "Fix login bug");
   assertEquals(cleanTitle("Fix\n  login\n bug."), "Fix login bug");
@@ -51,7 +52,7 @@ Deno.test("cleanTitle strips quotes, collapses whitespace, caps at 30 chars", ()
   assertEquals(cleanTitle("   "), "");
 });
 
-Deno.test("cleanTitle drops a closing sentence mark", () => {
+test("cleanTitle drops a closing sentence mark", () => {
   // A title is a label, not a sentence. The prompt stopped asking for this,
   // so the code has to guarantee it instead.
   assertEquals(cleanTitle("Fix the login bug."), "Fix the login bug");
@@ -59,7 +60,7 @@ Deno.test("cleanTitle drops a closing sentence mark", () => {
   assertEquals(cleanTitle("Fix the login bug．"), "Fix the login bug");
 });
 
-Deno.test("the instruction names the cap and the answer language", () => {
+test("the instruction names the cap and the answer language", () => {
   for (const language of ["ja", "en"] as const) {
     const instruction = titleInstruction(language);
     assert(instruction.includes(`at most ${MAX_TITLE_CHARS} characters`));
@@ -70,7 +71,7 @@ Deno.test("the instruction names the cap and the answer language", () => {
   assert(titleInstruction("en").includes("English"));
 });
 
-Deno.test("the instruction carries no worked example", () => {
+test("the instruction carries no worked example", () => {
   // Regression: a sample in the prompt was copied as the title (the session
   // was named after the sample's topic), or the model answered the task the
   // sample describes and the reply was cut to the cap. The message must be
@@ -82,7 +83,7 @@ Deno.test("the instruction carries no worked example", () => {
   }
 });
 
-Deno.test("generateTitle returns the cleaned model output", async () => {
+test("generateTitle returns the cleaned model output", async () => {
   const calls: StreamRequest[] = [];
   const generator = new TitleGenerator(
     fakeModel("fast"),
@@ -102,7 +103,7 @@ Deno.test("generateTitle returns the cleaned model output", async () => {
   assertEquals(calls[0]!.systemPrompt, undefined);
 });
 
-Deno.test("generateTitle sends no output cap and follows the session language", async () => {
+test("generateTitle sends no output cap and follows the session language", async () => {
   let seen: StreamOptions | undefined;
   let request = "";
   const generator = new TitleGenerator(
@@ -125,7 +126,7 @@ Deno.test("generateTitle sends no output cap and follows the session language", 
   assertEquals(request.includes("English"), false);
 });
 
-Deno.test("generateTitle throws on stream errors", async () => {
+test("generateTitle throws on stream errors", async () => {
   const generator = new TitleGenerator(
     fakeModel("fast"),
     fakeStreamFn("", { fail: true }),
@@ -133,7 +134,7 @@ Deno.test("generateTitle throws on stream errors", async () => {
   await assertRejects(() => generator.generateTitle("hi"), Error, "boom");
 });
 
-Deno.test("generateTitle throws when the model returns no text", async () => {
+test("generateTitle throws when the model returns no text", async () => {
   const generator = new TitleGenerator(fakeModel("fast"), fakeStreamFn("   "));
   await assertRejects(() => generator.generateTitle("hi"), Error, "no text");
 });

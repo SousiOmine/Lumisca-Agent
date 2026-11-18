@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { inflateSync } from "node:zlib";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { crc32 } from "../bytes.ts";
@@ -71,7 +72,7 @@ function parseChunks(png: Uint8Array): Chunk[] {
 
 // --- PNG structure ----------------------------------------------------------
 
-Deno.test("encodePng writes a well-formed truecolor PNG", () => {
+test("encodePng writes a well-formed truecolor PNG", () => {
   // 2×2: red, green / blue, white.
   const rgb = new Uint8Array([255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255]);
   const png = encodePng(rgb, 2, 2);
@@ -113,36 +114,37 @@ Deno.test("encodePng writes a well-formed truecolor PNG", () => {
   assertEquals([...filtered.subarray(8, 14)], [...rgb.subarray(6, 12)]);
 });
 
-Deno.test("encodePng output decodes back to the same pixels", {
-  ignore: canvasModule === undefined,
-}, async () => {
-  const canvas = canvasModule!;
-  const rgb = new Uint8Array(3 * 4 * 3);
-  for (let i = 0; i < 12; i++) {
-    rgb[i * 3] = (i * 20) % 256;
-    rgb[i * 3 + 1] = (i * 40) % 256;
-    rgb[i * 3 + 2] = (i * 60) % 256;
-  }
-  const png = encodePng(rgb, 4, 3);
+test.skipIf(canvasModule === undefined)(
+  "encodePng output decodes back to the same pixels",
+  async () => {
+    const canvas = canvasModule!;
+    const rgb = new Uint8Array(3 * 4 * 3);
+    for (let i = 0; i < 12; i++) {
+      rgb[i * 3] = (i * 20) % 256;
+      rgb[i * 3 + 1] = (i * 40) % 256;
+      rgb[i * 3 + 2] = (i * 60) % 256;
+    }
+    const png = encodePng(rgb, 4, 3);
 
-  const image = await canvas.loadImage(png);
-  const target = canvas.createCanvas(4, 3);
-  const ctx = target.getContext("2d");
-  ctx.drawImage(image, 0, 0);
-  const decoded = ctx.getImageData(0, 0, 4, 3).data;
-  for (let i = 0; i < 12; i++) {
-    assertEquals(
-      [decoded[i * 4], decoded[i * 4 + 1], decoded[i * 4 + 2]],
-      [rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2]],
-      `pixel ${i}`,
-    );
-    assertEquals(decoded[i * 4 + 3], 255, `pixel ${i} alpha`);
-  }
-});
+    const image = await canvas.loadImage(png);
+    const target = canvas.createCanvas(4, 3);
+    const ctx = target.getContext("2d");
+    ctx.drawImage(image, 0, 0);
+    const decoded = ctx.getImageData(0, 0, 4, 3).data;
+    for (let i = 0; i < 12; i++) {
+      assertEquals(
+        [decoded[i * 4], decoded[i * 4 + 1], decoded[i * 4 + 2]],
+        [rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2]],
+        `pixel ${i}`,
+      );
+      assertEquals(decoded[i * 4 + 3], 255, `pixel ${i} alpha`);
+    }
+  },
+);
 
 // --- channel conversion -----------------------------------------------------
 
-Deno.test("bgraToRgb swaps channels and drops alpha", () => {
+test("bgraToRgb swaps channels and drops alpha", () => {
   const pixels = new Uint8Array([
     0x10,
     0x20,
@@ -159,7 +161,7 @@ Deno.test("bgraToRgb swaps channels and drops alpha", () => {
   );
 });
 
-Deno.test("bgraToRgb refuses a buffer that does not match its size", () => {
+test("bgraToRgb refuses a buffer that does not match its size", () => {
   assertThrows(
     () => bgraToRgb(new Uint8Array(3), 1, 1),
     Error,
@@ -167,7 +169,7 @@ Deno.test("bgraToRgb refuses a buffer that does not match its size", () => {
   );
 });
 
-Deno.test("encodePng refuses a buffer that does not match its size", async () => {
+test("encodePng refuses a buffer that does not match its size", async () => {
   await assertRejects(
     () => Promise.resolve().then(() => encodePng(new Uint8Array(3), 2, 2)),
     Error,
@@ -177,7 +179,7 @@ Deno.test("encodePng refuses a buffer that does not match its size", async () =>
 
 // --- scaling ----------------------------------------------------------------
 
-Deno.test("resizeRgb averages the source blocks", () => {
+test("resizeRgb averages the source blocks", () => {
   // 4×4 pixel checkerboard of two greys: a 2×2 box filter must average each
   // block (two 0s and two 200s) into 100 — picking a nearest pixel would
   // return 0 or 200 instead.
@@ -197,14 +199,14 @@ Deno.test("resizeRgb averages the source blocks", () => {
   );
 });
 
-Deno.test("resizeRgb returns the source when the size is unchanged", () => {
+test("resizeRgb returns the source when the size is unchanged", () => {
   const src = new Uint8Array(9);
   assertEquals(resizeRgb(src, 1, 3, 1, 3), src);
 });
 
 // --- encodeCapture ----------------------------------------------------------
 
-Deno.test("encodeCapture keeps a small region at 1:1", () => {
+test("encodeCapture keeps a small region at 1:1", () => {
   const raw = rawFromRgb(new Array(4 * 2 * 3).fill(120), 4, 2, {
     x: -100,
     y: 50,
@@ -217,7 +219,7 @@ Deno.test("encodeCapture keeps a small region at 1:1", () => {
   assertEquals(parseChunks(encoded.png)[0]!.data.length, 13);
 });
 
-Deno.test("encodeCapture fits the longest side and reports the exact ratio", () => {
+test("encodeCapture fits the longest side and reports the exact ratio", () => {
   // A 2560×1440 display at the default budget: exactly half size, so the
   // agent's image coordinates are exactly double the screen offset.
   const raw = rawFromRgb(new Array(8 * 4 * 3).fill(30), 8, 4);
@@ -231,7 +233,7 @@ Deno.test("encodeCapture fits the longest side and reports the exact ratio", () 
   );
 });
 
-Deno.test("encodeCapture never upscales below the budget", () => {
+test("encodeCapture never upscales below the budget", () => {
   const raw = rawFromRgb(new Array(3 * 2 * 3).fill(200), 3, 2);
   const encoded = encodeCapture(raw, 1280);
   assertEquals([encoded.width, encoded.height], [3, 2]);

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { createHeartbeatWatchdog } from "./heartbeat.ts";
 
@@ -34,7 +35,7 @@ function watchdog(options: { timeoutMs?: number; isHidden?: () => boolean }) {
   };
 }
 
-Deno.test("heartbeat: silence past the deadline reports the socket dead once", () => {
+test("heartbeat: silence past the deadline reports the socket dead once", () => {
   const { instance, dead, advance } = watchdog({ timeoutMs: 30 });
   advance(29);
   instance.check();
@@ -49,7 +50,7 @@ Deno.test("heartbeat: silence past the deadline reports the socket dead once", (
   instance.stop();
 });
 
-Deno.test("heartbeat: a beating socket is never reported dead", () => {
+test("heartbeat: a beating socket is never reported dead", () => {
   const { instance, dead, advance } = watchdog({ timeoutMs: 30 });
   // Any frame counts, not just heartbeats: a busy stream is alive too.
   for (let i = 0; i < 10; i++) {
@@ -65,7 +66,7 @@ Deno.test("heartbeat: a beating socket is never reported dead", () => {
   instance.stop();
 });
 
-Deno.test("heartbeat: a hidden page does not judge, and judges on return", () => {
+test("heartbeat: a hidden page does not judge, and judges on return", () => {
   let hidden = true;
   const { instance, dead, advance } = watchdog({
     timeoutMs: 30,
@@ -82,7 +83,7 @@ Deno.test("heartbeat: a hidden page does not judge, and judges on return", () =>
   instance.stop();
 });
 
-Deno.test("heartbeat: stop ends the watch", () => {
+test("heartbeat: stop ends the watch", () => {
   const { instance, dead, advance } = watchdog({ timeoutMs: 30 });
   instance.stop();
   advance(1_000);

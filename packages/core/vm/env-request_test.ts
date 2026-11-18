@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertRejects } from "@std/assert";
 import type { ClientEvent } from "../domain/event.ts";
 import { EnvRequestHub } from "./env-request.ts";
@@ -20,7 +21,7 @@ function hub(timeoutMs?: number): {
   };
 }
 
-Deno.test("env request: asking announces the variable and resolves when stored", async () => {
+test("env request: asking announces the variable and resolves when stored", async () => {
   const { hub: h, events } = hub();
   const before = Date.now();
   const waited = h.ask("call-1", "OPENAI_API_KEY", false);
@@ -48,7 +49,7 @@ Deno.test("env request: asking announces the variable and resolves when stored",
   assertEquals(h.pendingEnvRequest(), null);
 });
 
-Deno.test("env request: an existing name is announced as an overwrite", async () => {
+test("env request: an existing name is announced as an overwrite", async () => {
   const { hub: h, events } = hub();
   const waited = h.ask("call-1", "GITHUB_TOKEN", true);
   assertEquals(
@@ -59,7 +60,7 @@ Deno.test("env request: an existing name is announced as an overwrite", async ()
   assertEquals(await waited, { kind: "declined" });
 });
 
-Deno.test("env request: the deadline hands the run back without a value", async () => {
+test("env request: the deadline hands the run back without a value", async () => {
   const { hub: h, events } = hub(20);
   const waited = h.ask("call-1", "KEY", false);
   assertEquals(await waited, { kind: "timed_out" });
@@ -83,7 +84,7 @@ Deno.test("env request: the deadline hands the run back without a value", async 
   assertEquals(message.includes("No environment variable"), true);
 });
 
-Deno.test("env request: a settled wait leaves no timer behind", async () => {
+test("env request: a settled wait leaves no timer behind", async () => {
   // The deadline timer keeps running in the background; a leaked one would
   // fire later and close a request the user is still answering.
   const { hub: h, events } = hub(20);
@@ -94,7 +95,7 @@ Deno.test("env request: a settled wait leaves no timer behind", async () => {
   assertEquals(events.filter((e) => e.type === "env_request_end").length, 1);
 });
 
-Deno.test("env request: only one at a time", async () => {
+test("env request: only one at a time", async () => {
   const { hub: h } = hub();
   const first = h.ask("call-1", "ONE", false);
   await assertRejects(
@@ -106,7 +107,7 @@ Deno.test("env request: only one at a time", async () => {
   await first;
 });
 
-Deno.test("env request: finishing when nothing waits is refused", () => {
+test("env request: finishing when nothing waits is refused", () => {
   const { hub: h } = hub();
   let message = "";
   try {
@@ -117,7 +118,7 @@ Deno.test("env request: finishing when nothing waits is refused", () => {
   assertEquals(message.includes("No environment variable"), true);
 });
 
-Deno.test("env request: a mismatched tool call does not resolve the wait", async () => {
+test("env request: a mismatched tool call does not resolve the wait", async () => {
   const { hub: h } = hub();
   const waited = h.ask("call-1", "KEY", false);
   let message = "";
@@ -132,7 +133,7 @@ Deno.test("env request: a mismatched tool call does not resolve the wait", async
   await waited;
 });
 
-Deno.test("env request: cancelling rejects the wait and closes the dialog", async () => {
+test("env request: cancelling rejects the wait and closes the dialog", async () => {
   const { hub: h, events } = hub();
   const waited = h.ask("call-1", "KEY", false);
   h.cancelAll();
@@ -143,7 +144,7 @@ Deno.test("env request: cancelling rejects the wait and closes the dialog", asyn
   h.cancelAll();
 });
 
-Deno.test("env request: an already aborted signal never registers", async () => {
+test("env request: an already aborted signal never registers", async () => {
   const { hub: h, events } = hub();
   const controller = new AbortController();
   controller.abort();
@@ -155,7 +156,7 @@ Deno.test("env request: an already aborted signal never registers", async () => 
   assertEquals(events.length, 0);
 });
 
-Deno.test("env request: aborting the run settles the wait", async () => {
+test("env request: aborting the run settles the wait", async () => {
   const { hub: h } = hub();
   const controller = new AbortController();
   const waited = h.ask("call-1", "KEY", false, controller.signal);

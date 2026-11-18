@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import type {
   AgentMessage,
@@ -40,7 +41,7 @@ function toolResult(over: Partial<ToolResultMessage> = {}): ToolResultMessage {
   };
 }
 
-Deno.test("prune: the conversation's own messages are kept whole", () => {
+test("prune: the conversation's own messages are kept whole", () => {
   const user: AgentMessage = {
     role: "user",
     content: [{ type: "text", text: "hello" }],
@@ -71,7 +72,7 @@ Deno.test("prune: the conversation's own messages are kept whole", () => {
   assertEquals(reduceMessage(mode).changed, false);
 });
 
-Deno.test("prune: a tool call is dropped and marked, its text survives", () => {
+test("prune: a tool call is dropped and marked, its text survives", () => {
   const message = assistant([
     { type: "text", text: "Writing the file now." },
     {
@@ -108,7 +109,7 @@ Deno.test("prune: a tool call is dropped and marked, its text survives", () => {
   assertEquals(JSON.stringify(reduced).includes("big.txt"), false);
 });
 
-Deno.test("prune: thinking is emptied, not removed", () => {
+test("prune: thinking is emptied, not removed", () => {
   // A model that requires reasoning_content replayed refuses a history
   // without it; an empty block satisfies the shape at no token cost.
   const message = assistant([
@@ -123,7 +124,7 @@ Deno.test("prune: thinking is emptied, not removed", () => {
   assertEquals(thinking, { type: "thinking", thinking: "" });
 });
 
-Deno.test("prune: a tool result becomes a marker, its details dropped", () => {
+test("prune: a tool result becomes a marker, its details dropped", () => {
   const message = toolResult({
     content: [
       { type: "text", text: "lots of log" },
@@ -143,7 +144,7 @@ Deno.test("prune: a tool result becomes a marker, its details dropped", () => {
   assertEquals(result.isError, false);
 });
 
-Deno.test("prune: what the agent sent is part of the conversation", () => {
+test("prune: what the agent sent is part of the conversation", () => {
   const message = toolResult({
     toolName: "send_chat",
     content: [{ type: "text", text: "Sent the message to the user." }],
@@ -166,7 +167,7 @@ Deno.test("prune: what the agent sent is part of the conversation", () => {
   assertEquals(reduceMessage(message).message, message);
 });
 
-Deno.test("prune: context publications and notifications become markers", () => {
+test("prune: context publications and notifications become markers", () => {
   const context: ContextMessage = {
     role: "context",
     provider: "skills",
@@ -194,7 +195,7 @@ Deno.test("prune: context publications and notifications become markers", () => 
   assertEquals(reducedNotification.title, "[Background command #2 finished]");
 });
 
-Deno.test("prune: reducing twice changes nothing the second time", () => {
+test("prune: reducing twice changes nothing the second time", () => {
   const messages: AgentMessage[] = [
     assistant([
       { type: "thinking", thinking: "hmm" },

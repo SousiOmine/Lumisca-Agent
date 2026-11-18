@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@lumisca/core";
 import { assertEquals } from "@std/assert";
 import type { AgentMessage } from "../ai/message.ts";
@@ -23,7 +24,7 @@ function withText(text: string): AgentMessage {
   return fauxAssistantMessage([fauxText(text)]);
 }
 
-Deno.test("classify: progress resets both retry budgets", () => {
+test("classify: progress resets both retry budgets", () => {
   const retries = new RetryManager(instantSleep);
   // Burn one vacant and one rate-limit retry, then make progress.
   retries.classify(fauxAssistantMessage(""), false);
@@ -34,7 +35,7 @@ Deno.test("classify: progress resets both retry budgets", () => {
   assertEquals(decision.action, "followUp");
 });
 
-Deno.test("classify: a vacant normal stop retries in-run up to the cap", () => {
+test("classify: a vacant normal stop retries in-run up to the cap", () => {
   const retries = new RetryManager(instantSleep);
   for (let attempt = 1; attempt <= MAX_EMPTY_RESPONSE_RETRIES; attempt++) {
     const decision = retries.classify(fauxAssistantMessage(""), false);
@@ -50,7 +51,7 @@ Deno.test("classify: a vacant normal stop retries in-run up to the cap", () => {
   });
 });
 
-Deno.test("classify: a tool call counts as progress", () => {
+test("classify: a tool call counts as progress", () => {
   const retries = new RetryManager(instantSleep);
   retries.classify(fauxAssistantMessage(""), false);
   assertEquals(retries.classify(withToolCall(), false), { action: "none" });
@@ -60,7 +61,7 @@ Deno.test("classify: a tool call counts as progress", () => {
   );
 });
 
-Deno.test("classify: a rate-limited turn parks a restart with its own budget", () => {
+test("classify: a rate-limited turn parks a restart with its own budget", () => {
   const retries = new RetryManager(instantSleep);
   for (let attempt = 1; attempt <= MAX_RATE_LIMIT_RETRIES; attempt++) {
     const decision = retries.classify(
@@ -80,7 +81,7 @@ Deno.test("classify: a rate-limited turn parks a restart with its own budget", (
   });
 });
 
-Deno.test("classify: rate-limit and vacant budgets are independent", () => {
+test("classify: rate-limit and vacant budgets are independent", () => {
   const retries = new RetryManager(instantSleep);
   // Spend the whole vacant budget first...
   for (let i = 0; i < MAX_EMPTY_RESPONSE_RETRIES; i++) {
@@ -93,7 +94,7 @@ Deno.test("classify: rate-limit and vacant budgets are independent", () => {
   );
 });
 
-Deno.test("classify: a permanent error surfaces instead of retrying", () => {
+test("classify: a permanent error surfaces instead of retrying", () => {
   const retries = new RetryManager(instantSleep);
   assertEquals(
     retries.classify(errored("Provider is not configured: openai"), false),
@@ -102,13 +103,13 @@ Deno.test("classify: a permanent error surfaces instead of retrying", () => {
   assertEquals(retries.hasPendingRestart, false);
 });
 
-Deno.test("classify: an aborted stop is never retried", () => {
+test("classify: an aborted stop is never retried", () => {
   const retries = new RetryManager(instantSleep);
   const aborted = fauxAssistantMessage("", { stopReason: "aborted" });
   assertEquals(retries.classify(aborted, false), { action: "none" });
 });
 
-Deno.test("classify: a closed session retries nothing", () => {
+test("classify: a closed session retries nothing", () => {
   const retries = new RetryManager(instantSleep);
   assertEquals(retries.classify(fauxAssistantMessage(""), true), {
     action: "none",
@@ -118,7 +119,7 @@ Deno.test("classify: a closed session retries nothing", () => {
   });
 });
 
-Deno.test("classify: a user message is never a retry trigger", () => {
+test("classify: a user message is never a retry trigger", () => {
   const retries = new RetryManager(instantSleep);
   const user: AgentMessage = { role: "user", content: [], timestamp: 0 };
   assertEquals(retries.classify(user, false), { action: "none" });
@@ -143,7 +144,7 @@ function recordingAgent(): {
   };
 }
 
-Deno.test("resumeOnce re-prompts with the parked notification", async () => {
+test("resumeOnce re-prompts with the parked notification", async () => {
   const retries = new RetryManager(instantSleep);
   const decision = retries.classify(errored("429 rate_limit_exceeded"), false);
   assertEquals(decision.action, "park");
@@ -155,7 +156,7 @@ Deno.test("resumeOnce re-prompts with the parked notification", async () => {
   assertEquals(retries.hasPendingRestart, false);
 });
 
-Deno.test("resumeOnce backs off before a rate-limit restart", async () => {
+test("resumeOnce backs off before a rate-limit restart", async () => {
   const delays: number[] = [];
   const retries = new RetryManager((ms) => {
     delays.push(ms);
@@ -167,7 +168,7 @@ Deno.test("resumeOnce backs off before a rate-limit restart", async () => {
   assertEquals(delays[0]! > 0, true);
 });
 
-Deno.test("resumeOnce stands down when the backoff is aborted", async () => {
+test("resumeOnce stands down when the backoff is aborted", async () => {
   const retries = new RetryManager(() => Promise.reject(new Error("aborted")));
   retries.classify(errored("429 rate_limit_exceeded"), false);
   const agent = recordingAgent();
@@ -177,7 +178,7 @@ Deno.test("resumeOnce stands down when the backoff is aborted", async () => {
   assertEquals(agent.prompts.length, 0);
 });
 
-Deno.test("abort: a later rate-limit backoff is still interruptible", async () => {
+test("abort: a later rate-limit backoff is still interruptible", async () => {
   // AbortSignal is one-way, so reusing the controller abort() fired would
   // leave every later backoff pre-aborted: the sleep would reject at once
   // and the retry would be dropped silently for the rest of the session.
@@ -197,7 +198,7 @@ Deno.test("abort: a later rate-limit backoff is still interruptible", async () =
   assertEquals(agent.prompts.length, 1);
 });
 
-Deno.test("resumeOnce stands down when an abort lands between restarts", async () => {
+test("resumeOnce stands down when an abort lands between restarts", async () => {
   const retries = new RetryManager(() => {
     // The stop arrives while the backoff is running: the current restart
     // still completes, the next one must not fire.
@@ -216,7 +217,7 @@ Deno.test("resumeOnce stands down when an abort lands between restarts", async (
   assertEquals(retries.hasPendingRestart, true);
 });
 
-Deno.test("resumeOnce stands down when the agent rejects the prompt", async () => {
+test("resumeOnce stands down when the agent rejects the prompt", async () => {
   const retries = new RetryManager(instantSleep);
   retries.classify(errored("429 rate_limit_exceeded"), false);
   const agent = {
@@ -225,14 +226,14 @@ Deno.test("resumeOnce stands down when the agent rejects the prompt", async () =
   assertEquals(await retries.resumeOnce(agent, false), false);
 });
 
-Deno.test("resumeOnce is a no-op without a parked restart", async () => {
+test("resumeOnce is a no-op without a parked restart", async () => {
   const retries = new RetryManager(instantSleep);
   const agent = recordingAgent();
   assertEquals(await retries.resumeOnce(agent, false), true);
   assertEquals(agent.prompts.length, 0);
 });
 
-Deno.test("classify: a cut-off response parks a continuation", () => {
+test("classify: a cut-off response parks a continuation", () => {
   const retries = new RetryManager(instantSleep);
   // The turn produced text and was then cut by a transport failure.
   const interrupted = fauxAssistantMessage([fauxText("partial answer")], {
@@ -252,7 +253,7 @@ Deno.test("classify: a cut-off response parks a continuation", () => {
   );
 });
 
-Deno.test("classify: a permanent error with output is not retried", () => {
+test("classify: a permanent error with output is not retried", () => {
   const retries = new RetryManager(instantSleep);
   const rejected = fauxAssistantMessage([fauxText("partial answer")], {
     stopReason: "error",
@@ -262,12 +263,12 @@ Deno.test("classify: a permanent error with output is not retried", () => {
   assertEquals(retries.hasPendingRestart, false);
 });
 
-Deno.test("classify: a normal answer is progress, not an interruption", () => {
+test("classify: a normal answer is progress, not an interruption", () => {
   const retries = new RetryManager(instantSleep);
   assertEquals(retries.classify(withText("done"), false), { action: "none" });
 });
 
-Deno.test("classify: the interruption budget is bounded", () => {
+test("classify: the interruption budget is bounded", () => {
   const retries = new RetryManager(instantSleep);
   const interrupted = () =>
     fauxAssistantMessage([fauxText("partial")], {
@@ -281,7 +282,7 @@ Deno.test("classify: the interruption budget is bounded", () => {
   assertEquals(retries.classify(interrupted(), false), { action: "none" });
 });
 
-Deno.test("classify: a closed session never parks an interruption", () => {
+test("classify: a closed session never parks an interruption", () => {
   const retries = new RetryManager(instantSleep);
   const interrupted = fauxAssistantMessage([fauxText("partial")], {
     stopReason: "error",
@@ -290,7 +291,7 @@ Deno.test("classify: a closed session never parks an interruption", () => {
   assertEquals(retries.classify(interrupted, true), { action: "none" });
 });
 
-Deno.test("reset clears a parked interruption", () => {
+test("reset clears a parked interruption", () => {
   const retries = new RetryManager(instantSleep);
   retries.classify(
     fauxAssistantMessage([fauxText("partial")], {
@@ -304,7 +305,7 @@ Deno.test("reset clears a parked interruption", () => {
   assertEquals(retries.hasPendingRestart, false);
 });
 
-Deno.test("reset clears the budgets and the parked restarts", () => {
+test("reset clears the budgets and the parked restarts", () => {
   const retries = new RetryManager(instantSleep);
   retries.classify(fauxAssistantMessage(""), false);
   retries.classify(errored("429 rate_limit_exceeded"), false);
@@ -320,7 +321,7 @@ Deno.test("reset clears the budgets and the parked restarts", () => {
   );
 });
 
-Deno.test("isContextOverflowError: provider window rejections are classified", () => {
+test("isContextOverflowError: provider window rejections are classified", () => {
   // The reported failure (OpenCode Go / Console Go wording).
   assertEquals(
     isContextOverflowError(
@@ -356,7 +357,7 @@ Deno.test("isContextOverflowError: provider window rejections are classified", (
   );
 });
 
-Deno.test("isContextOverflowError: other failures are not overflows", () => {
+test("isContextOverflowError: other failures are not overflows", () => {
   // A transport cut is retried by the transient path, not by compaction.
   assertEquals(
     isContextOverflowError(
@@ -384,7 +385,7 @@ Deno.test("isContextOverflowError: other failures are not overflows", () => {
   );
 });
 
-Deno.test("classify: a context overflow parks a restart that condenses first", () => {
+test("classify: a context overflow parks a restart that condenses first", () => {
   const retries = new RetryManager(instantSleep);
   const decision = retries.classify(
     fauxAssistantMessage("", {
@@ -402,7 +403,7 @@ Deno.test("classify: a context overflow parks a restart that condenses first", (
   assertEquals(decision.notification.title.includes("Context window"), true);
 });
 
-Deno.test("classify: a second overflow surfaces instead of retrying", () => {
+test("classify: a second overflow surfaces instead of retrying", () => {
   const retries = new RetryManager(instantSleep);
   const overflow = () =>
     fauxAssistantMessage("", {
@@ -415,7 +416,7 @@ Deno.test("classify: a second overflow surfaces instead of retrying", () => {
   assertEquals(retries.hasPendingOverflow, true);
 });
 
-Deno.test("abort and reset clear a parked overflow", () => {
+test("abort and reset clear a parked overflow", () => {
   const retries = new RetryManager(instantSleep);
   retries.classify(
     fauxAssistantMessage("", {
@@ -440,7 +441,7 @@ Deno.test("abort and reset clear a parked overflow", () => {
   );
 });
 
-Deno.test("classify: an answer cut at the output cap parks a continuation", () => {
+test("classify: an answer cut at the output cap parks a continuation", () => {
   const retries = new RetryManager(instantSleep);
   const cut = fauxAssistantMessage("the beginning of a long answer", {
     stopReason: "length",

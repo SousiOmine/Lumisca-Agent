@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { disposeServer } from "./app.ts";
 import { setup } from "./test-utils.ts";
@@ -38,7 +39,7 @@ async function connect(port: number): Promise<WebSocket> {
   return socket;
 }
 
-Deno.test("a lending app's folders reach the session it lent them to", async () => {
+test("a lending app's folders reach the session it lent them to", async () => {
   const { core, server } = setup();
   const socket = await connect(server.addr.port);
   try {
@@ -115,7 +116,7 @@ Deno.test("a lending app's folders reach the session it lent them to", async () 
   }
 });
 
-Deno.test("a frame the server cannot read is ignored, not fatal", async () => {
+test("a frame the server cannot read is ignored, not fatal", async () => {
   const { core, server } = setup();
   const socket = await connect(server.addr.port);
   try {
@@ -144,7 +145,7 @@ Deno.test("a frame the server cannot read is ignored, not fatal", async () => {
   }
 });
 
-Deno.test("closing the socket ends every loan it carried", async () => {
+test("closing the socket ends every loan it carried", async () => {
   const { core, server } = setup();
   const socket = await connect(server.addr.port);
   try {

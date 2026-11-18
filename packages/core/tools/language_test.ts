@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import type { Workspace } from "../domain/workspace.ts";
 import { DEFAULT_LOCALE } from "../shared/mod.ts";
@@ -20,7 +21,7 @@ const workspace: Workspace = {
  * named. */
 const TOOLS = [TOOL_READ, TOOL_TODO];
 
-Deno.test("outputLanguageRule: names the language, in English, for both", () => {
+test("outputLanguageRule: names the language, in English, for both", () => {
   const ja = outputLanguageRule("ja");
   assertEquals(ja.includes("Japanese"), true);
   const en = outputLanguageRule("en");
@@ -39,7 +40,7 @@ Deno.test("outputLanguageRule: names the language, in English, for both", () => 
   assertEquals(ja.includes("do not switch"), true);
 });
 
-Deno.test("the system prompt carries no guidelines at all", () => {
+test("the system prompt carries no guidelines at all", () => {
   // Both kinds are gone: the per-tool guidance duplicated what each tool's
   // description already says, and the output-language rule is published as a
   // context message now (agent/language-context.ts), because it is a setting
@@ -53,7 +54,7 @@ Deno.test("the system prompt carries no guidelines at all", () => {
   assertEquals(prompt.includes("Write every reply in"), false);
 });
 
-Deno.test("buildSystemPrompt: nothing that varies with the session is in it", () => {
+test("buildSystemPrompt: nothing that varies with the session is in it", () => {
   // The prompt is re-derived on every open and compared against the stored
   // value (see AgentFactory.ensureSystemPrompt), so it may only carry what
   // describes where the session works. The language is a setting and the
@@ -74,13 +75,13 @@ Deno.test("buildSystemPrompt: nothing that varies with the session is in it", ()
   }
 });
 
-Deno.test("buildChatSystemPrompt: no rule and no tool name in the prompt either", () => {
+test("buildChatSystemPrompt: no rule and no tool name in the prompt either", () => {
   const prompt = buildChatSystemPrompt();
   assertEquals(prompt.includes("Write every reply in"), false);
   assertEquals(prompt.includes("available_skills"), false);
 });
 
-Deno.test("subagentSystemPrompt: reports come back in the session language", () => {
+test("subagentSystemPrompt: reports come back in the session language", () => {
   const explore = subagentSystemPrompt("agent_2", "agent_1", "explore", "ja");
   assertEquals(explore.includes("Write every reply in Japanese"), true);
   const general = subagentSystemPrompt("agent_3", "agent_1", "general", "en");
@@ -93,7 +94,7 @@ Deno.test("subagentSystemPrompt: reports come back in the session language", () 
   assertEquals(fallback.includes(outputLanguageRule(DEFAULT_LOCALE)), true);
 });
 
-Deno.test("outputLanguageSentence: one sentence for the title prompt", () => {
+test("outputLanguageSentence: one sentence for the title prompt", () => {
   assertEquals(outputLanguageSentence("ja"), "Write the answer in Japanese.");
   assertEquals(outputLanguageSentence("en"), "Write the answer in English.");
 });

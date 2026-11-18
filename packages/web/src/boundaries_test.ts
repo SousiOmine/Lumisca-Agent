@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { BROWSER_CORE_ENTRIES } from "@lumisca/core/browser-entries";
 import { assert, assertEquals } from "@std/assert";
 
@@ -59,7 +60,7 @@ function specifierOf(statement: string): string | undefined {
   return statement.match(/from\s+"([^"]+)"/)?.[1];
 }
 
-Deno.test("the web bundle imports only the core's pure modules", async () => {
+test("the web bundle imports only the core's pure modules", async () => {
   const violations: string[] = [];
   let inspected = 0;
 

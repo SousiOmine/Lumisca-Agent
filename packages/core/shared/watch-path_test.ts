@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import {
   MAX_WATCH_IDS,
@@ -16,7 +17,7 @@ const INBOX = {
   },
 };
 
-Deno.test("watch path: a mapped field yields one value per item", () => {
+test("watch path: a mapped field yields one value per item", () => {
   assertEquals(resolveWatchPath(INBOX, "data.messages[].id"), ["m1", 42]);
   assertEquals(resolveWatchPath(INBOX, "data.messages[].subject"), [
     "first",
@@ -27,7 +28,7 @@ Deno.test("watch path: a mapped field yields one value per item", () => {
   assertEquals(resolveWatchPath(INBOX, "data.messages[].id"), ["m1", 42]);
 });
 
-Deno.test("watch path: a path that names nothing is undefined", () => {
+test("watch path: a path that names nothing is undefined", () => {
   assertEquals(resolveWatchPath(INBOX, "data.missing"), undefined);
   assertEquals(resolveWatchPath(INBOX, "data.count.deeper"), undefined);
   // `[]` over a value that is not an array is not an empty list: the watch
@@ -37,7 +38,7 @@ Deno.test("watch path: a path that names nothing is undefined", () => {
   assertEquals(resolveWatchPath([], "data"), undefined);
 });
 
-Deno.test("watch path: ids are strings and numbers, in order", () => {
+test("watch path: ids are strings and numbers, in order", () => {
   assertEquals(watchIdsFrom(INBOX, "data.messages[].id"), ["m1", "42"]);
   assertEquals(watchIdsFrom({ ids: [] }, "ids"), []);
   // An object in the list means the path stopped one level too high: that is
@@ -49,7 +50,7 @@ Deno.test("watch path: ids are strings and numbers, in order", () => {
   assertEquals(watchIdsFrom(INBOX, "data.count"), undefined);
 });
 
-Deno.test("watch path: the stored window is bounded", () => {
+test("watch path: the stored window is bounded", () => {
   const many = {
     items: Array.from({ length: MAX_WATCH_IDS + 50 }, (_, index) => ({
       id: `i${index}`,
@@ -61,7 +62,7 @@ Deno.test("watch path: the stored window is bounded", () => {
   assertEquals(ids?.at(-1), `i${MAX_WATCH_IDS - 1}`);
 });
 
-Deno.test("watch path: only the accepted shape is a path", () => {
+test("watch path: only the accepted shape is a path", () => {
   assertEquals(watchPathProblem("data.messages[].id"), null);
   assertEquals(watchPathProblem("ids"), null);
   assertEquals(

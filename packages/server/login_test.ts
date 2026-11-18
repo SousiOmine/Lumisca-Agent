@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import type { AuthInteraction, ProviderLoginSnapshot } from "@lumisca/core";
 import { assert, assertEquals } from "@std/assert";
 import { friendlyLoginError, LoginSession } from "./login.ts";
@@ -31,7 +32,7 @@ function create(
   return { session, wait };
 }
 
-Deno.test("LoginSession carries the chosen method to the flow", async () => {
+test("LoginSession carries the chosen method to the flow", async () => {
   let seen: "browser" | "device_code" | undefined;
   const { session, wait } = create((interaction) => {
     seen = interaction.method;
@@ -59,7 +60,7 @@ Deno.test("LoginSession carries the chosen method to the flow", async () => {
   }
 });
 
-Deno.test("LoginSession forwards even a device-code-looking select prompt", async () => {
+test("LoginSession forwards even a device-code-looking select prompt", async () => {
   const { session, wait } = create(async (interaction) => {
     const picked = await interaction.prompt({
       type: "select",
@@ -97,7 +98,7 @@ Deno.test("LoginSession forwards even a device-code-looking select prompt", asyn
   }
 });
 
-Deno.test("LoginSession cancel aborts a pending prompt as cancelled", async () => {
+test("LoginSession cancel aborts a pending prompt as cancelled", async () => {
   const completed: string[] = [];
   const { session, wait } = create(async (interaction) => {
     await interaction.prompt({ type: "manual_code", message: "paste code" });
@@ -120,7 +121,7 @@ Deno.test("LoginSession cancel aborts a pending prompt as cancelled", async () =
   }
 });
 
-Deno.test("LoginSession surfaces a failing flow as error", async () => {
+test("LoginSession surfaces a failing flow as error", async () => {
   const { session, wait } = create(() => {
     throw new Error("token exchange failed");
   });
@@ -134,7 +135,7 @@ Deno.test("LoginSession surfaces a failing flow as error", async () => {
   }
 });
 
-Deno.test("consumeDone reports completion exactly once", async () => {
+test("consumeDone reports completion exactly once", async () => {
   const { session, wait } = create(async () => {});
   try {
     await wait("done");
@@ -145,7 +146,7 @@ Deno.test("consumeDone reports completion exactly once", async () => {
   }
 });
 
-Deno.test("friendlyLoginError rewrites OpenAI-side throttling, keeps others", () => {
+test("friendlyLoginError rewrites OpenAI-side throttling, keeps others", () => {
   const friendly =
     "認証元の利用制限（レートリミット）またはアクセス検証により、ログインできませんでした。" +
     "時間をおいて再度お試しください。";

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -51,7 +52,7 @@ function render(
   );
 }
 
-Deno.test("RecentSessionsList: a failed refresh keeps the rows", () => {
+test("RecentSessionsList: a failed refresh keeps the rows", () => {
   const html = render({
     items: [row("s1", { name: "ログイン画面の修正" })],
     error: "サーバーに接続できません",
@@ -66,7 +67,7 @@ Deno.test("RecentSessionsList: a failed refresh keeps the rows", () => {
   assertStringIncludes(html, "recent-item");
 });
 
-Deno.test("RecentSessionsList: a failure with no rows is not the empty state", () => {
+test("RecentSessionsList: a failure with no rows is not the empty state", () => {
   const html = render({ error: "サーバーに接続できません" });
   assertStringIncludes(html, "recent-error");
   assertEquals(
@@ -76,18 +77,18 @@ Deno.test("RecentSessionsList: a failure with no rows is not the empty state", (
   );
 });
 
-Deno.test("RecentSessionsList: the empty state waits for the first read", () => {
+test("RecentSessionsList: the empty state waits for the first read", () => {
   // Before the first answer lands, "履歴はありません" would be a guess.
   assertStringIncludes(render({ loading: true }), "読み込み中…");
   assertStringIncludes(render({ loading: false }), "履歴はありません");
 });
 
-Deno.test("RecentSessionsList: no error line once a read succeeded", () => {
+test("RecentSessionsList: no error line once a read succeeded", () => {
   const html = render({ items: [row("s1")] });
   assertEquals(html.includes("recent-error"), false);
 });
 
-Deno.test("RecentSessionsList: rows of open tabs are omitted, the cap applies", () => {
+test("RecentSessionsList: rows of open tabs are omitted, the cap applies", () => {
   const html = render({
     items: [
       row("s1", { name: "one" }),
@@ -102,7 +103,7 @@ Deno.test("RecentSessionsList: rows of open tabs are omitted, the cap applies", 
   assertEquals(html.includes("three"), false, "the cap is the visible rows");
 });
 
-Deno.test("RecentSessionsList: a peer's session names the peer", () => {
+test("RecentSessionsList: a peer's session names the peer", () => {
   const html = render({
     items: [row("s1", { name: "remote", peerId: "p1", peerName: "buildbox" })],
   });

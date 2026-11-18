@@ -6,6 +6,7 @@
  * could stop being true: an entry a desktop hides being offered anyway, and
  * an entry whose command line cannot be run from a shell.
  */
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import {
   applicationFromDesktopFile,
@@ -23,7 +24,7 @@ Type=Application
 Categories=Network;WebBrowser;
 `;
 
-Deno.test("a desktop entry becomes a launchable program", () => {
+test("a desktop entry becomes a launchable program", () => {
   const app = applicationFromDesktopFile("chromium.desktop", CHROMIUM);
   assertEquals(app?.id, "chromium");
   assertEquals(app?.name, "Chromium");
@@ -33,7 +34,7 @@ Deno.test("a desktop entry becomes a launchable program", () => {
   assertEquals(app?.exec, "chromium");
 });
 
-Deno.test("an entry a desktop hides is not offered", () => {
+test("an entry a desktop hides is not offered", () => {
   // Offering it would put a program in the list that a person at this
   // machine cannot see either.
   const hidden = CHROMIUM.replace("Type=Application", "NoDisplay=true");
@@ -45,13 +46,13 @@ Deno.test("an entry a desktop hides is not offered", () => {
   );
 });
 
-Deno.test("an entry that is not an application is not offered", () => {
+test("an entry that is not an application is not offered", () => {
   // A Link entry is a shortcut for a file manager this machine has not got.
   const link = CHROMIUM.replace("Type=Application", "Type=Link");
   assertEquals(applicationFromDesktopFile("x.desktop", link), undefined);
 });
 
-Deno.test("an entry without a name or a command is not offered", () => {
+test("an entry without a name or a command is not offered", () => {
   const noName = CHROMIUM.replace("Name=Chromium\n", "");
   assertEquals(applicationFromDesktopFile("x.desktop", noName), undefined);
   const noExec = CHROMIUM.replace("Exec=chromium %U\n", "");
@@ -61,7 +62,7 @@ Deno.test("an entry without a name or a command is not offered", () => {
   assertEquals(applicationFromDesktopFile("x.desktop", onlyCodes), undefined);
 });
 
-Deno.test("the icon field code takes its flag with it", () => {
+test("the icon field code takes its flag with it", () => {
   // `%i` expands to `--icon <name>`; removing the code alone would leave
   // `--icon` with no argument, and the program would refuse to start.
   const app = applicationFromDesktopFile(
@@ -71,7 +72,7 @@ Deno.test("the icon field code takes its flag with it", () => {
   assertEquals(app?.exec, "chromium");
 });
 
-Deno.test("a file that is not a desktop entry is skipped", () => {
+test("a file that is not a desktop entry is skipped", () => {
   assertEquals(applicationFromDesktopFile("readme.txt", CHROMIUM), undefined);
   assertEquals(applicationFromDesktopFile("x.desktop", ""), undefined);
   assertEquals(
@@ -80,7 +81,7 @@ Deno.test("a file that is not a desktop entry is skipped", () => {
   );
 });
 
-Deno.test("the list reads the way a menu does, and says what it found", () => {
+test("the list reads the way a menu does, and says what it found", () => {
   const apps = [
     { id: "z", name: "zoom", exec: "zoom" },
     { id: "a", name: "Audacity", exec: "audacity" },

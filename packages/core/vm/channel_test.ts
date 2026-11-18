@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { openVmChannel } from "./channel.ts";
 
@@ -8,10 +9,9 @@ import { openVmChannel } from "./channel.ts";
  * process. */
 const posix = process.platform !== "win32";
 
-Deno.test({
-  name: "channel: lines round-trip through a live process",
-  ignore: !posix,
-  async fn() {
+test.skipIf(!posix)(
+  "channel: lines round-trip through a live process",
+  async () => {
     const channel = await openVmChannel(["sh", "-c", "cat"], {
       timeoutMs: 5_000,
     });
@@ -23,12 +23,11 @@ Deno.test({
     assertEquals(await channel.read(), "last");
     channel.kill();
   },
-});
+);
 
-Deno.test({
-  name: "channel: the end of stdout is reported as no line",
-  ignore: !posix,
-  async fn() {
+test.skipIf(!posix)(
+  "channel: the end of stdout is reported as no line",
+  async () => {
     const channel = await openVmChannel(["sh", "-c", "printf 'only\\n'"], {
       timeoutMs: 5_000,
     });
@@ -39,12 +38,11 @@ Deno.test({
       true,
     );
   },
-});
+);
 
-Deno.test({
-  name: "channel: stderr is kept for the failure it explains",
-  ignore: !posix,
-  async fn() {
+test.skipIf(!posix)(
+  "channel: stderr is kept for the failure it explains",
+  async () => {
     const channel = await openVmChannel(
       ["sh", "-c", "printf 'boom\\n' >&2; exit 3"],
       { timeoutMs: 5_000 },
@@ -52,18 +50,14 @@ Deno.test({
     assertEquals(await channel.read(), undefined);
     assertEquals(channel.stderr().includes("boom"), true);
   },
-});
+);
 
-Deno.test({
-  name: "channel: the timeout stops the process",
-  ignore: !posix,
-  async fn() {
-    const started = Date.now();
-    const channel = await openVmChannel(["sh", "-c", "sleep 30"], {
-      timeoutMs: 200,
-    });
-    assertEquals(await channel.read(), undefined);
-    assertEquals(Date.now() - started < 10_000, true);
-    channel.kill();
-  },
+test.skipIf(!posix)("channel: the timeout stops the process", async () => {
+  const started = Date.now();
+  const channel = await openVmChannel(["sh", "-c", "sleep 30"], {
+    timeoutMs: 200,
+  });
+  assertEquals(await channel.read(), undefined);
+  assertEquals(Date.now() - started < 10_000, true);
+  channel.kill();
 });

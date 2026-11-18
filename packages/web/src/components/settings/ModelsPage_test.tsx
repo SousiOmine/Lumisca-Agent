@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -14,13 +15,13 @@ function at(page: string, needle: string): number {
   return page.indexOf(needle);
 }
 
-Deno.test("the models page shows the two things it is for", () => {
+test("the models page shows the two things it is for", () => {
   const page = html();
   assertStringIncludes(page, "既定のモデル");
   assertStringIncludes(page, "利用するモデル");
 });
 
-Deno.test("everything else waits behind one 詳細, closed", () => {
+test("everything else waits behind one 詳細, closed", () => {
   // Shown together, the rows that matter read as two among nine. The two
   // come first and the disclosure is last, so what a reader came for is in
   // the first screen and the tuning is below it.

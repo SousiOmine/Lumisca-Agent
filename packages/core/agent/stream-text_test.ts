@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import type { StreamFn } from "@lumisca/core";
 import {
   type AssistantMessageEventStream,
@@ -35,7 +36,7 @@ function fakeStreamFn(outcomes: Array<{ fail?: string }>): StreamFn {
   };
 }
 
-Deno.test("streamText accumulates text deltas", async () => {
+test("streamText accumulates text deltas", async () => {
   const text = await streamText(
     fakeStreamFn([{}]),
     fakeModel(),
@@ -45,7 +46,7 @@ Deno.test("streamText accumulates text deltas", async () => {
   assertEquals(text, "hi");
 });
 
-Deno.test("streamText reads the done message when no delta arrived", async () => {
+test("streamText reads the done message when no delta arrived", async () => {
   // A cached / non-streaming provider path streams no deltas: the done
   // message carries the turn's text, and the transport documents that as the
   // fallback (see runStream). Accumulating the deltas alone returned "" here,
@@ -65,7 +66,7 @@ Deno.test("streamText reads the done message when no delta arrived", async () =>
   assertEquals(text, "hello");
 });
 
-Deno.test("streamText retries a 429 then succeeds", async () => {
+test("streamText retries a 429 then succeeds", async () => {
   let calls = 0;
   const fn = fakeStreamFn([
     { fail: "OpenAI API error (429): rate_limit_exceeded" },
@@ -88,7 +89,7 @@ Deno.test("streamText retries a 429 then succeeds", async () => {
   assertEquals(calls, 3);
 });
 
-Deno.test("streamText does not retry non-rate errors", async () => {
+test("streamText does not retry non-rate errors", async () => {
   let calls = 0;
   const fn = fakeStreamFn([{ fail: "boom" }]);
   const streamFn = (...args: Parameters<StreamFn>) => {
@@ -106,7 +107,7 @@ Deno.test("streamText does not retry non-rate errors", async () => {
   assertEquals(calls, 1);
 });
 
-Deno.test("streamText aborts when the signal is already set", async () => {
+test("streamText aborts when the signal is already set", async () => {
   let calls = 0;
   const fn = fakeStreamFn([
     { fail: "OpenAI API error (429): rate_limit_exceeded" },
@@ -132,7 +133,7 @@ Deno.test("streamText aborts when the signal is already set", async () => {
   assertEquals(calls, 1);
 });
 
-Deno.test("streamText backoff delays grow exponentially", async () => {
+test("streamText backoff delays grow exponentially", async () => {
   const realRandom = Math.random;
   const delays: number[] = [];
   try {

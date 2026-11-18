@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@lumisca/core";
@@ -39,7 +40,7 @@ async function until(check: () => boolean, what: string): Promise<void> {
   }
 }
 
-Deno.test("the lending process serves a folder over the socket", async () => {
+test("the lending process serves a folder over the socket", async () => {
   const { core, server, base } = setup();
   const root = folder();
   const lender = createShareHost({ retryMs: 10 });
@@ -111,7 +112,7 @@ Deno.test("the lending process serves a folder over the socket", async () => {
   }
 });
 
-Deno.test("a read-only loan refuses to write, in the process that holds the disk", async () => {
+test("a read-only loan refuses to write, in the process that holds the disk", async () => {
   const { core, server, base } = setup();
   const root = folder();
   const lender = createShareHost({ retryMs: 10 });
@@ -158,7 +159,7 @@ Deno.test("a read-only loan refuses to write, in the process that holds the disk
   }
 });
 
-Deno.test("a call cannot climb out of the lent folder", async () => {
+test("a call cannot climb out of the lent folder", async () => {
   const root = folder();
   const outside = `${root}-outside`;
   await Deno.mkdir(outside, { recursive: true });
@@ -180,7 +181,7 @@ Deno.test("a call cannot climb out of the lent folder", async () => {
   }
 });
 
-Deno.test("a whole-file read larger than one frame is refused with a next step", async () => {
+test("a whole-file read larger than one frame is refused with a next step", async () => {
   const root = folder();
   try {
     await Deno.writeTextFile(join(root, "big.txt"), "0123456789");
@@ -195,7 +196,7 @@ Deno.test("a whole-file read larger than one frame is refused with a next step",
   }
 });
 
-Deno.test("a withdrawn loan stops answering", async () => {
+test("a withdrawn loan stops answering", async () => {
   const { core, server, base } = setup();
   const root = folder();
   const lender = createShareHost({ retryMs: 10 });
@@ -226,7 +227,7 @@ Deno.test("a withdrawn loan stops answering", async () => {
   }
 });
 
-Deno.test("a loan ends after 30 idle minutes, and an access restarts the clock", async () => {
+test("a loan ends after 30 idle minutes, and an access restarts the clock", async () => {
   const { core, server, base } = setup();
   const root = folder();
   // The production deadline is half an hour; the rule is the same one at any
@@ -279,7 +280,7 @@ Deno.test("a loan ends after 30 idle minutes, and an access restarts the clock",
   }
 });
 
-Deno.test("a line the process cannot read is ignored", () => {
+test("a line the process cannot read is ignored", () => {
   const lender = createShareHost({ retryMs: 10 });
   try {
     lender.command("not json");
@@ -290,7 +291,7 @@ Deno.test("a line the process cannot read is ignored", () => {
   }
 });
 
-Deno.test("an agent's read reaches the folder through the whole chain", async () => {
+test("an agent's read reaches the folder through the whole chain", async () => {
   const { core, server, base, faux } = setup();
   const workspace = folder();
   const lent = folder();

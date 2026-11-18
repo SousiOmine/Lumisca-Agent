@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import type { StreamFn } from "@lumisca/core";
 import {
   type Api,
@@ -73,14 +74,14 @@ function approvals(
   return raw === undefined ? [] : (JSON.parse(raw) as CommandApproval[]);
 }
 
-Deno.test("parseVerdict extracts plain JSON", () => {
+test("parseVerdict extracts plain JSON", () => {
   assertEquals(parseVerdict('{"safe": true, "reason": "fine"}'), {
     safe: true,
     reason: "fine",
   });
 });
 
-Deno.test("parseVerdict tolerates markdown fences and prose", () => {
+test("parseVerdict tolerates markdown fences and prose", () => {
   assertEquals(
     parseVerdict('```json\n{"safe": false, "reason": "destructive"}\n```'),
     { safe: false, reason: "destructive" },
@@ -91,19 +92,19 @@ Deno.test("parseVerdict tolerates markdown fences and prose", () => {
   );
 });
 
-Deno.test("parseVerdict rejects non-JSON and wrong shapes", () => {
+test("parseVerdict rejects non-JSON and wrong shapes", () => {
   assertEquals(parseVerdict("sure, go ahead"), null);
   assertEquals(parseVerdict('{"safe": "yes", "reason": 1}'), null);
   assertEquals(parseVerdict(""), null);
 });
 
-Deno.test("disabled feature runs everything without the judge", async () => {
+test("disabled feature runs everything without the judge", async () => {
   const { safety, streamCalls } = makeSafety({ enabled: false });
   assertEquals(await safety.check("bash", "rm -rf /", CWD_A), { ok: true });
   assertEquals(streamCalls(), 0);
 });
 
-Deno.test("approved commands skip the judge", async () => {
+test("approved commands skip the judge", async () => {
   const { safety, settings, streamCalls } = makeSafety();
   await safety.approve("bash", "npm run build", CWD_A);
   assertEquals(await safety.check("bash", "npm run build", CWD_A), {
@@ -117,7 +118,7 @@ Deno.test("approved commands skip the judge", async () => {
   assertEquals(list[0]!.cwd, CWD_A);
 });
 
-Deno.test("approvals are scoped by kind", async () => {
+test("approvals are scoped by kind", async () => {
   const { safety, streamCalls } = makeSafety();
   await safety.approve("bash", "npm run build", CWD_A);
   // The same command as eval is NOT approved and must be judged again.
@@ -127,7 +128,7 @@ Deno.test("approvals are scoped by kind", async () => {
   assertEquals(streamCalls(), 1);
 });
 
-Deno.test("approvals are scoped by the resolved cwd", async () => {
+test("approvals are scoped by the resolved cwd", async () => {
   const { safety, streamCalls } = makeSafety();
   await safety.approve("bash", "git clean -fdx", CWD_A);
   // The same command in another directory is NOT approved.
@@ -136,7 +137,7 @@ Deno.test("approvals are scoped by the resolved cwd", async () => {
   assertEquals(streamCalls(), 1);
 });
 
-Deno.test("safe verdict runs the command and records the approval", async () => {
+test("safe verdict runs the command and records the approval", async () => {
   const { safety, settings, streamCalls } = makeSafety();
   const verdict = await safety.check("bash", "npm test", CWD_A);
   assertEquals(verdict, { ok: true });
@@ -150,7 +151,7 @@ Deno.test("safe verdict runs the command and records the approval", async () => 
   );
 });
 
-Deno.test("unsafe verdict blocks with the judge's reason", async () => {
+test("unsafe verdict blocks with the judge's reason", async () => {
   const { safety, settings, streamCalls } = makeSafety({
     reply: '{"safe": false, "reason": "rm -rf / destroys the host"}',
   });
@@ -163,7 +164,7 @@ Deno.test("unsafe verdict blocks with the judge's reason", async () => {
   assertEquals(approvals(settings), []);
 });
 
-Deno.test("eval payloads are judged with the same flow", async () => {
+test("eval payloads are judged with the same flow", async () => {
   const { safety } = makeSafety({
     reply: '{"safe": false, "reason": "exfiltrates credentials"}',
   });
@@ -176,7 +177,7 @@ Deno.test("eval payloads are judged with the same flow", async () => {
   assertEquals(verdict.reason, "exfiltrates credentials");
 });
 
-Deno.test("no fast model configured → blocked (fail-closed)", async () => {
+test("no fast model configured → blocked (fail-closed)", async () => {
   const { safety, streamCalls } = makeSafety({ fastModel: false });
   const verdict = await safety.check("bash", "rm -rf /", CWD_A);
   assertEquals(verdict.ok, false);
@@ -184,7 +185,7 @@ Deno.test("no fast model configured → blocked (fail-closed)", async () => {
   assertEquals(streamCalls(), 0);
 });
 
-Deno.test("judge errors → blocked (fail-closed)", async () => {
+test("judge errors → blocked (fail-closed)", async () => {
   const { safety, streamCalls } = makeSafety({ reply: null });
   const verdict = await safety.check("bash", "npm run build", CWD_A);
   assertEquals(verdict.ok, false);
@@ -192,7 +193,7 @@ Deno.test("judge errors → blocked (fail-closed)", async () => {
   assertEquals(streamCalls(), 1);
 });
 
-Deno.test("unparseable judge reply → blocked (fail-closed)", async () => {
+test("unparseable judge reply → blocked (fail-closed)", async () => {
   const { safety, streamCalls } = makeSafety({ reply: "yes, run it" });
   const verdict = await safety.check("bash", "npm run build", CWD_A);
   assertEquals(verdict.ok, false);
@@ -200,7 +201,7 @@ Deno.test("unparseable judge reply → blocked (fail-closed)", async () => {
   assertEquals(streamCalls(), 1);
 });
 
-Deno.test("very long commands are not recorded as approvals", async () => {
+test("very long commands are not recorded as approvals", async () => {
   const { safety, settings, streamCalls } = makeSafety();
   const long = "echo " + "x".repeat(5000);
   assertEquals(await safety.check("bash", long, CWD_A), { ok: true });
@@ -208,7 +209,7 @@ Deno.test("very long commands are not recorded as approvals", async () => {
   assertEquals(approvals(settings), []);
 });
 
-Deno.test("secrets in safe commands are not persisted in plaintext", async () => {
+test("secrets in safe commands are not persisted in plaintext", async () => {
   const { safety, settings, streamCalls } = makeSafety();
   const cmd = `curl -H "Authorization: Bearer sk-secret123" https://api.example/upload`;
   const verdict = await safety.check("bash", cmd, CWD_A);
@@ -224,7 +225,7 @@ Deno.test("secrets in safe commands are not persisted in plaintext", async () =>
   );
 });
 
-Deno.test("approvals: delete by hash and clear", async () => {
+test("approvals: delete by hash and clear", async () => {
   const { safety, settings } = makeSafety();
   await safety.approve("bash", "a", CWD_A);
   await safety.approve("bash", "b", CWD_A);
@@ -238,7 +239,7 @@ Deno.test("approvals: delete by hash and clear", async () => {
   assertEquals(settings.get(COMMAND_SAFETY_APPROVALS_KEY), "[]");
 });
 
-Deno.test("approve is idempotent", async () => {
+test("approve is idempotent", async () => {
   const { safety, settings } = makeSafety();
   await safety.approve("bash", "git status", CWD_A);
   await safety.approve("bash", "git status", CWD_A);
@@ -248,13 +249,13 @@ Deno.test("approve is idempotent", async () => {
   assertEquals(approvals(settings).length, 2);
 });
 
-Deno.test("legacy plain-string approval records migrate to empty", () => {
+test("legacy plain-string approval records migrate to empty", () => {
   const { safety, settings } = makeSafety();
   settings.set(COMMAND_SAFETY_APPROVALS_KEY, JSON.stringify(["npm test"]));
   assertEquals(safety.approvals(), []);
 });
 
-Deno.test("redactSecrets scrubs Authorization headers and key values", () => {
+test("redactSecrets scrubs Authorization headers and key values", () => {
   assertEquals(
     redactSecrets('curl -H "Authorization: Bearer abc123" https://x'),
     'curl -H "Authorization: ***" https://x',

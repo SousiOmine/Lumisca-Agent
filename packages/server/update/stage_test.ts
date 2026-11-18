@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { withTempDir } from "@lumisca/core/test-utils";
 import { assertEquals, assertRejects } from "@std/assert";
 import type { ReleaseManifest } from "./release.ts";
@@ -77,7 +78,7 @@ function stagingEntries(installDir: string): string[] {
   }
 }
 
-Deno.test("stageUpdate records the verified package and its metadata", async () => {
+test("stageUpdate records the verified package and its metadata", async () => {
   await withTempDir("lumisca-stage-", async (installDir) => {
     const { manifest, archive, publicKey } = await packageFixture();
     const received: number[] = [];
@@ -120,7 +121,7 @@ Deno.test("stageUpdate records the verified package and its metadata", async () 
   });
 });
 
-Deno.test("stageUpdate leaves nothing behind when a package is rejected", async () => {
+test("stageUpdate leaves nothing behind when a package is rejected", async () => {
   await withTempDir("lumisca-stage-", async (installDir) => {
     const { manifest, archive, publicKey } = await packageFixture();
     const other = await createSigningKeys();
@@ -201,7 +202,7 @@ Deno.test("stageUpdate leaves nothing behind when a package is rejected", async 
   });
 });
 
-Deno.test("stageUpdate refuses a target that is not distributed", async () => {
+test("stageUpdate refuses a target that is not distributed", async () => {
   await withTempDir("lumisca-stage-", async (installDir) => {
     const { manifest } = await packageFixture();
     await assertRejects(
@@ -217,7 +218,7 @@ Deno.test("stageUpdate refuses a target that is not distributed", async () => {
   });
 });
 
-Deno.test("applied markers round-trip and ignore malformed files", async () => {
+test("applied markers round-trip and ignore malformed files", async () => {
   await withTempDir("lumisca-stage-", async (installDir) => {
     assertEquals(readAppliedUpdate(installDir), undefined);
     await writeAppliedUpdate(installDir, "0.7.8");

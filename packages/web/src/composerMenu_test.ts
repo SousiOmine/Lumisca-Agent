@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { composerMenuItems, insertTrigger } from "./composerMenu.ts";
 
@@ -13,7 +14,7 @@ import { composerMenuItems, insertTrigger } from "./composerMenu.ts";
 const rows = (options: Parameters<typeof composerMenuItems>[0]) =>
   composerMenuItems(options).map((item) => [item.id, item.labelKey]);
 
-Deno.test("composerMenuItems: a mode with a machine takes files, and offers nothing else", () => {
+test("composerMenuItems: a mode with a machine takes files, and offers nothing else", () => {
   // stella: a file is written into the machine, and there is no workspace to
   // mention and no command palette in that composer.
   assertEquals(
@@ -27,7 +28,7 @@ Deno.test("composerMenuItems: a mode with a machine takes files, and offers noth
   );
 });
 
-Deno.test("composerMenuItems: code mode offers the picture, the commands and the mention", () => {
+test("composerMenuItems: code mode offers the picture, the commands and the mention", () => {
   // The order is the one the menu draws: what goes into the message first,
   // then the two palettes.
   assertEquals(
@@ -56,7 +57,7 @@ Deno.test("composerMenuItems: code mode offers the picture, the commands and the
   );
 });
 
-Deno.test("composerMenuItems: a chat session has no mention to offer", () => {
+test("composerMenuItems: a chat session has no mention to offer", () => {
   // No workspace attached: typing `@` opens nothing, so the row would be a
   // dead entry.
   assertEquals(
@@ -73,7 +74,7 @@ Deno.test("composerMenuItems: a chat session has no mention to offer", () => {
   );
 });
 
-Deno.test("composerMenuItems: the desktop app offers the folder, last", () => {
+test("composerMenuItems: the desktop app offers the folder, last", () => {
   // The folder row changes what the conversation can reach rather than what
   // goes into the next message, so it comes after the message rows. A
   // browser never passes the option: there is no picker to open.
@@ -91,7 +92,7 @@ Deno.test("composerMenuItems: the desktop app offers the folder, last", () => {
   );
 });
 
-Deno.test("insertTrigger: the caret lands right after the trigger", () => {
+test("insertTrigger: the caret lands right after the trigger", () => {
   assertEquals(insertTrigger("", { start: 0, end: 0 }, "/"), {
     value: "/",
     caret: 1,
@@ -106,7 +107,7 @@ Deno.test("insertTrigger: the caret lands right after the trigger", () => {
   });
 });
 
-Deno.test("insertTrigger: a trigger in the middle of a word gets a space first", () => {
+test("insertTrigger: a trigger in the middle of a word gets a space first", () => {
   // Both palettes open only on a word start (whitespace before `/`, a
   // non-word character before `@`), so a trigger inserted without one would
   // sit there doing nothing.
@@ -129,7 +130,7 @@ Deno.test("insertTrigger: a trigger in the middle of a word gets a space first",
   });
 });
 
-Deno.test("insertTrigger: the highlighted text is replaced", () => {
+test("insertTrigger: the highlighted text is replaced", () => {
   // A word start is a word start, even when the trigger replaces what was
   // highlighted: the space that made the selection a word stays.
   assertEquals(insertTrigger("abcdef", { start: 2, end: 4 }, "/"), {
@@ -147,7 +148,7 @@ Deno.test("insertTrigger: the highlighted text is replaced", () => {
   });
 });
 
-Deno.test("insertTrigger: a selection outside the text is clamped", () => {
+test("insertTrigger: a selection outside the text is clamped", () => {
   // A caret captured while the field was empty (the menu is reachable before
   // the first keystroke) must not slice past the text.
   assertEquals(insertTrigger("ab", { start: 9, end: 12 }, "/"), {

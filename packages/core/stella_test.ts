@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { NO_RESPONSE } from "./agent/silent-reply.ts";
 import {
@@ -107,7 +108,7 @@ function recordingRunner() {
   };
 }
 
-Deno.test("stella availability: no machine attached reports its own reason", async () => {
+test("stella availability: no machine attached reports its own reason", async () => {
   const core = LumiscaCore.forTesting([fauxProvider().provider]);
   try {
     const availability = await core.getStellaAvailability();
@@ -121,7 +122,7 @@ Deno.test("stella availability: no machine attached reports its own reason", asy
   }
 });
 
-Deno.test("stella availability: a stopped machine is still usable", async () => {
+test("stella availability: a stopped machine is still usable", async () => {
   // This is the point of starting on demand: podman missing is fatal, a
   // stopped container is not (the first message starts it).
   const core = await stellaCore({
@@ -136,7 +137,7 @@ Deno.test("stella availability: a stopped machine is still usable", async () => 
   }
 });
 
-Deno.test("stella availability: podman missing is not", async () => {
+test("stella availability: podman missing is not", async () => {
   const core = await stellaCore(NO_PODMAN);
   try {
     const availability = await core.getStellaAvailability();
@@ -149,7 +150,7 @@ Deno.test("stella availability: podman missing is not", async () => {
   }
 });
 
-Deno.test("stella agents: the starter agent exists once and is the default", async () => {
+test("stella agents: the starter agent exists once and is the default", async () => {
   const core = await stellaCore(RUNNING);
   try {
     assertEquals(core.listStellaAgents(), []);
@@ -169,7 +170,7 @@ Deno.test("stella agents: the starter agent exists once and is the default", asy
   }
 });
 
-Deno.test("stella agents: a user's own agent is never replaced by the starter", async () => {
+test("stella agents: a user's own agent is never replaced by the starter", async () => {
   const core = await stellaCore(RUNNING);
   try {
     const mine = await core.createStellaAgent({
@@ -183,7 +184,7 @@ Deno.test("stella agents: a user's own agent is never replaced by the starter", 
   }
 });
 
-Deno.test("stella agents: creating one prepares its folder and memory file", async () => {
+test("stella agents: creating one prepares its folder and memory file", async () => {
   // The file the system prompt names is made as the agent is CREATED, not at
   // its first message: an agent that has never spoken still has one.
   const faux = fauxProvider();
@@ -212,7 +213,7 @@ Deno.test("stella agents: creating one prepares its folder and memory file", asy
   }
 });
 
-Deno.test("stella agents: a stopped machine prepares the folder at the first open", async () => {
+test("stella agents: a stopped machine prepares the folder at the first open", async () => {
   // Creating an agent does not start the machine — that is the first
   // conversation's job — so nothing is attempted here and the open path makes
   // the folder (and MEMORY.md) later.
@@ -230,7 +231,7 @@ Deno.test("stella agents: a stopped machine prepares the folder at the first ope
   }
 });
 
-Deno.test("stella conversation: created once and kept out of the session lists", async () => {
+test("stella conversation: created once and kept out of the session lists", async () => {
   const core = await stellaCore(RUNNING);
   try {
     await core.createStellaAgent({ name: "Aide", role: "Help with the work." });
@@ -248,7 +249,7 @@ Deno.test("stella conversation: created once and kept out of the session lists",
   }
 });
 
-Deno.test("stella conversation: each agent has its own", async () => {
+test("stella conversation: each agent has its own", async () => {
   const core = await stellaCore(RUNNING);
   try {
     const first = await core.createStellaAgent({ name: "First", role: "r" });
@@ -269,7 +270,7 @@ Deno.test("stella conversation: each agent has its own", async () => {
   }
 });
 
-Deno.test("stella conversation: its name is the agent's, after a rename too", async () => {
+test("stella conversation: its name is the agent's, after a rename too", async () => {
   const core = await stellaCore(RUNNING);
   try {
     const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
@@ -290,7 +291,7 @@ Deno.test("stella conversation: its name is the agent's, after a rename too", as
   }
 });
 
-Deno.test("stella onboarding: starts once and stays out of the conversation", async () => {
+test("stella onboarding: starts once and stays out of the conversation", async () => {
   const { faux, core, agent, session } = await stellaConversation("Aide");
   try {
     // A new agent has not been set up: opening it is what starts the turn.
@@ -335,7 +336,7 @@ Deno.test("stella onboarding: starts once and stays out of the conversation", as
   }
 });
 
-Deno.test("stella onboarding: no conversation open means no setup turn", async () => {
+test("stella onboarding: no conversation open means no setup turn", async () => {
   // The turn is delivered into an OPEN session: a conversation that was never
   // opened has no agent to receive it, so nothing is claimed and the first
   // open still starts it.
@@ -363,7 +364,7 @@ async function twoModelStellaCore(): Promise<LumiscaCore> {
   return core;
 }
 
-Deno.test("stella conversation: opens on the agent's own model", async () => {
+test("stella conversation: opens on the agent's own model", async () => {
   // The choice is made in the agent's edit dialog, before the conversation
   // exists: a user picking a model must not have to open one first.
   const core = await twoModelStellaCore();
@@ -380,7 +381,7 @@ Deno.test("stella conversation: opens on the agent's own model", async () => {
   }
 });
 
-Deno.test("stella conversation: an unset model follows the app's default", async () => {
+test("stella conversation: an unset model follows the app's default", async () => {
   const core = await twoModelStellaCore();
   try {
     const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
@@ -423,7 +424,7 @@ Deno.test("stella conversation: an unset model follows the app's default", async
   }
 });
 
-Deno.test("stella conversation: the dialog's model choice moves the conversation", async () => {
+test("stella conversation: the dialog's model choice moves the conversation", async () => {
   // The regression this pins: the model used to be settable only from the
   // settings dialog, which needed an open conversation. The choice lives on
   // the agent now, and the conversation row follows it — the row is what the
@@ -453,7 +454,7 @@ Deno.test("stella conversation: the dialog's model choice moves the conversation
   }
 });
 
-Deno.test("stella conversation: a model the catalog does not have is refused", async () => {
+test("stella conversation: a model the catalog does not have is refused", async () => {
   const core = await twoModelStellaCore();
   try {
     const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
@@ -472,7 +473,7 @@ Deno.test("stella conversation: a model the catalog does not have is refused", a
   }
 });
 
-Deno.test("stella agent: the thinking level is stored with the same save", async () => {
+test("stella agent: the thinking level is stored with the same save", async () => {
   // The dialog saves the name, the model and the strength in one request, and
   // Cancel must leave all of them alone — which is why the level is not
   // written when it is picked.
@@ -493,7 +494,7 @@ Deno.test("stella agent: the thinking level is stored with the same save", async
   }
 });
 
-Deno.test("stella agent: a level the model does not offer is refused", async () => {
+test("stella agent: a level the model does not offer is refused", async () => {
   const core = await twoModelStellaCore();
   try {
     const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
@@ -516,7 +517,7 @@ Deno.test("stella agent: a level the model does not offer is refused", async () 
   }
 });
 
-Deno.test("stella conversation: deleting an agent takes its conversation", async () => {
+test("stella conversation: deleting an agent takes its conversation", async () => {
   const core = await stellaCore(RUNNING);
   try {
     const agent = await core.createStellaAgent({ name: "Gone", role: "r" });
@@ -529,7 +530,7 @@ Deno.test("stella conversation: deleting an agent takes its conversation", async
   }
 });
 
-Deno.test("stella agents: an icon is stored, replaced and cleared as one file", async () => {
+test("stella agents: an icon is stored, replaced and cleared as one file", async () => {
   const core = await stellaCore(RUNNING);
   try {
     const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
@@ -573,7 +574,7 @@ Deno.test("stella agents: an icon is stored, replaced and cleared as one file", 
   }
 });
 
-Deno.test("stella agents: deleting an agent drops its icon files", async () => {
+test("stella agents: deleting an agent drops its icon files", async () => {
   const core = await stellaCore(RUNNING);
   try {
     const agent = await core.createStellaAgent({ name: "Gone", role: "r" });
@@ -591,7 +592,7 @@ Deno.test("stella agents: deleting an agent drops its icon files", async () => {
   }
 });
 
-Deno.test("stella agents: a patch for a missing agent is refused", async () => {
+test("stella agents: a patch for a missing agent is refused", async () => {
   const core = await stellaCore(RUNNING);
   try {
     // The user deleted the agent while the picture was being saved.
@@ -618,7 +619,7 @@ Deno.test("stella agents: a patch for a missing agent is refused", async () => {
   }
 });
 
-Deno.test("stella agents: an icon that is not an image is refused by the core", async () => {
+test("stella agents: an icon that is not an image is refused by the core", async () => {
   const core = await stellaCore(RUNNING);
   try {
     const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
@@ -640,7 +641,7 @@ Deno.test("stella agents: an icon that is not an image is refused by the core", 
   }
 });
 
-Deno.test("stella agents: a rename is checked like a creation", async () => {
+test("stella agents: a rename is checked like a creation", async () => {
   const core = await stellaCore(RUNNING);
   try {
     const first = await core.createStellaAgent({ name: "First", role: "r" });
@@ -676,7 +677,7 @@ Deno.test("stella agents: a rename is checked like a creation", async () => {
   }
 });
 
-Deno.test("stella agents: a name and a picture land together", async () => {
+test("stella agents: a name and a picture land together", async () => {
   const core = await stellaCore(RUNNING);
   try {
     const agent = await core.createStellaAgent({ name: "Old", role: "r" });
@@ -706,7 +707,7 @@ Deno.test("stella agents: a name and a picture land together", async () => {
   }
 });
 
-Deno.test("stella conversation: its system prompt is the machine's, not the name", async () => {
+test("stella conversation: its system prompt is the machine's, not the name", async () => {
   const core = await stellaCore(RUNNING);
   try {
     const agent = await core.createStellaAgent({
@@ -755,7 +756,7 @@ Deno.test("stella conversation: its system prompt is the machine's, not the name
   }
 });
 
-Deno.test("stella conversation: an agent without a role still gets the opening line", async () => {
+test("stella conversation: an agent without a role still gets the opening line", async () => {
   const core = await stellaCore(RUNNING);
   try {
     // The create form's role is optional, so this is a normal agent: it gets
@@ -774,7 +775,7 @@ Deno.test("stella conversation: an agent without a role still gets the opening l
   }
 });
 
-Deno.test("stella tool set: eval is absent, the screen tools present", () => {
+test("stella tool set: eval is absent, the screen tools present", () => {
   const faux = fauxProvider();
   const screen: VmScreen = {
     screenshot: () => Promise.resolve(new Uint8Array()),
@@ -854,7 +855,7 @@ Deno.test("stella tool set: eval is absent, the screen tools present", () => {
   void faux;
 });
 
-Deno.test("stella tool set: the conversation's tools are preloaded", () => {
+test("stella tool set: the conversation's tools are preloaded", () => {
   // Built the way the factory builds it (tools/toolsets.ts), not copied by
   // hand — the hand-written list this replaced had already drifted once.
   const screen: VmScreen = {
@@ -958,7 +959,7 @@ function lastHistoryResult(core: LumiscaCore, sessionId: string): string {
     .join("");
 }
 
-Deno.test("stella conversation: history_search is preloaded and reads its own rows", async () => {
+test("stella conversation: history_search is preloaded and reads its own rows", async () => {
   const { faux, core, session } = await stellaConversation("Solo");
   try {
     // Preloaded for a real stella session — not only for a hand-built tool
@@ -987,7 +988,7 @@ Deno.test("stella conversation: history_search is preloaded and reads its own ro
   }
 });
 
-Deno.test("stella conversation: the background-command tools are preloaded", async () => {
+test("stella conversation: the background-command tools are preloaded", async () => {
   // Regression (issue #30): the factory built the background manager only
   // for non-chat workspaces, and stella's row lives in the chat one; the
   // tool set also lost the hub when the registries were split. Together they
@@ -1011,7 +1012,7 @@ Deno.test("stella conversation: the background-command tools are preloaded", asy
   }
 });
 
-Deno.test("stella conversation: the transfer tools are found with tool_search", async () => {
+test("stella conversation: the transfer tools are found with tool_search", async () => {
   // `share_upload` / `share_download` have no use until a folder is lent, so
   // they cost nothing in the context: they live in the session registry, and
   // the lent-folder announcement is what tells the agent they exist.
@@ -1046,7 +1047,7 @@ Deno.test("stella conversation: the transfer tools are found with tool_search", 
   }
 });
 
-Deno.test("stella conversation: the folder tools are found with tool_search", async () => {
+test("stella conversation: the folder tools are found with tool_search", async () => {
   // Neither `share_request` nor `share_disconnect` has a use until the user
   // lends something, so they cost nothing in the context: they live in the
   // session registry, and the built-in folder-share skill is what tells the
@@ -1085,7 +1086,7 @@ Deno.test("stella conversation: the folder tools are found with tool_search", as
   }
 });
 
-Deno.test("stella conversation: share_request blocks the run until a folder is lent", async () => {
+test("stella conversation: share_request blocks the run until a folder is lent", async () => {
   // The wait is real (see share/request.ts): the tool call does not return
   // until the user answers, so the core's snapshot carries the pending
   // request and the answer comes back through the core's own method — the
@@ -1144,7 +1145,7 @@ Deno.test("stella conversation: share_request blocks the run until a folder is l
   }
 });
 
-Deno.test("stella conversation: todo keeps a plan the conversation does not draw", async () => {
+test("stella conversation: todo keeps a plan the conversation does not draw", async () => {
   const { faux, core, session } = await stellaConversation("Planner");
   try {
     // The tool is preloaded (the factory hands the session's hub to the
@@ -1199,7 +1200,7 @@ Deno.test("stella conversation: todo keeps a plan the conversation does not draw
   }
 });
 
-Deno.test("stella conversation: a run that says nothing leaves nothing on screen", async () => {
+test("stella conversation: a run that says nothing leaves nothing on screen", async () => {
   // Silence is the deliberate act. The default is that a turn's text is the
   // reply (see the next test), so a run that has nothing to add writes the
   // sentinel instead of relying on a forgotten `send_chat` to hide it.
@@ -1229,7 +1230,7 @@ Deno.test("stella conversation: a run that says nothing leaves nothing on screen
   }
 });
 
-Deno.test("stella conversation: the agent's reply is what the store serves", async () => {
+test("stella conversation: the agent's reply is what the store serves", async () => {
   // The regression this pins: the live stream projected the assistant's text
   // (see stella-stream.ts), but the store's conversation scope still selected
   // only prompts and `send_chat` results. A reply was on screen until the next
@@ -1264,7 +1265,7 @@ Deno.test("stella conversation: the agent's reply is what the store serves", asy
   }
 });
 
-Deno.test("stella conversation: what send_chat sends is the conversation", async () => {
+test("stella conversation: what send_chat sends is the conversation", async () => {
   const { faux, core, session } = await stellaConversation("Aide");
   try {
     const markup = '<Card title="確認"><Text>進めますか。</Text></Card>';
@@ -1325,7 +1326,7 @@ Deno.test("stella conversation: what send_chat sends is the conversation", async
   }
 });
 
-Deno.test("stella conversation: a tool-heavy run still shows the conversation", async () => {
+test("stella conversation: a tool-heavy run still shows the conversation", async () => {
   // The screen draws entries, not rows. A page that counted raw rows filled
   // up on the tool traffic of one run and projected to zero entries, and the
   // newest window then answered "empty, with nothing before it" — during a
@@ -1371,7 +1372,7 @@ Deno.test("stella conversation: a tool-heavy run still shows the conversation", 
   }
 });
 
-Deno.test("stella conversation: a long conversation pages back by entries", async () => {
+test("stella conversation: a long conversation pages back by entries", async () => {
   // The way back has to be measured in the same units as the page: a cursor
   // resolved against every row would land somewhere other than the entry it
   // names, and the reader would be handed a window that repeats or skips.
@@ -1429,7 +1430,7 @@ Deno.test("stella conversation: a long conversation pages back by entries", asyn
   }
 });
 
-Deno.test("stella conversation: history_search reads the message after a prune", async () => {
+test("stella conversation: history_search reads the message after a prune", async () => {
   // A checkpoint replaces the span that held the call (whose arguments carry
   // the words), so the send_chat ROW is what keeps the message readable —
   // that is why prune keeps it.
@@ -1468,7 +1469,7 @@ Deno.test("stella conversation: history_search reads the message after a prune",
   }
 });
 
-Deno.test("stella conversation: history_search never reads another agent's rows", async () => {
+test("stella conversation: history_search never reads another agent's rows", async () => {
   const { faux, core, session: sessionA } = await stellaConversation("First");
   try {
     const second = await core.createStellaAgent({ name: "Second", role: "r" });
@@ -1506,7 +1507,7 @@ function identityMessages(core: LumiscaCore, sessionId: string) {
   );
 }
 
-Deno.test("stella conversation: the identity a write produces reaches the next run", async () => {
+test("stella conversation: the identity a write produces reaches the next run", async () => {
   const { faux, core, agent, session } = await stellaConversation("Scribe");
   try {
     // Nothing is published before the agent writes one: a first turn must
@@ -1568,7 +1569,7 @@ Deno.test("stella conversation: the identity a write produces reaches the next r
   }
 });
 
-Deno.test("stella conversation: each agent's identity is its own", async () => {
+test("stella conversation: each agent's identity is its own", async () => {
   const { faux, core, session: sessionA } = await stellaConversation("One");
   try {
     const second = await core.createStellaAgent({ name: "Two", role: "r" });
@@ -1640,7 +1641,7 @@ function vmSkillsRunner(skills: Array<{ name: string; description: string }>) {
   };
 }
 
-Deno.test("stella conversation: a skill in the machine reaches the published catalog", async () => {
+test("stella conversation: a skill in the machine reaches the published catalog", async () => {
   const faux = fauxProvider();
   // The machine's own skills: they exist nowhere on this host, so a catalog
   // built from workspace folders could not list them. This is the gap the
@@ -1694,7 +1695,7 @@ Deno.test("stella conversation: a skill in the machine reaches the published cat
   }
 });
 
-Deno.test("stella conversation: a sub-agent loads a skill from the machine", async () => {
+test("stella conversation: a sub-agent loads a skill from the machine", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting(
     [faux.provider],
@@ -1776,7 +1777,7 @@ Deno.test("stella conversation: a sub-agent loads a skill from the machine", asy
   }
 });
 
-Deno.test("stella conversation: two agents do not share their own skills", async () => {
+test("stella conversation: two agents do not share their own skills", async () => {
   const faux = fauxProvider();
   // The machine answers per directory: each agent's own folder and the
   // machine-wide folder hold different lists, which is what makes a
@@ -1876,7 +1877,7 @@ function listingOf(
     .join("");
 }
 
-Deno.test("stella agents: an unnamed agent gets a free default name", async () => {
+test("stella agents: an unnamed agent gets a free default name", async () => {
   const core = await stellaCore(RUNNING);
   try {
     // The user did not fill the form in. Creating must still work, and the
@@ -1904,7 +1905,7 @@ Deno.test("stella agents: an unnamed agent gets a free default name", async () =
   }
 });
 
-Deno.test("stella conversation: only stella sessions condense an idle history", async () => {
+test("stella conversation: only stella sessions condense an idle history", async () => {
   // stella's conversation is the one that lives for weeks: it is reopened
   // after hours or days of silence, so the period is set there and nowhere
   // else (a working session the user closed is reopened on purpose, and the
@@ -1928,7 +1929,7 @@ Deno.test("stella conversation: only stella sessions condense an idle history", 
   }
 });
 
-Deno.test("stella conversation: a compaction keeps the work rows by default", async () => {
+test("stella conversation: a compaction keeps the work rows by default", async () => {
   // The record of a conversation that lives for years is what the model was
   // sent and what it produced, not only what the conversation draws. Code
   // mode has always kept that; a stella conversation reduces it to markers
@@ -1959,7 +1960,7 @@ Deno.test("stella conversation: a compaction keeps the work rows by default", as
   }
 });
 
-Deno.test("stella conversation: a code-mode session never drops its rows", async () => {
+test("stella conversation: a code-mode session never drops its rows", async () => {
   // The setting names stella's conversations. Code mode's work log IS a
   // surface, so its rows are what the reader studies after the fact (see
   // agent/factory.ts) — with the setting off, they still stay.
@@ -2033,7 +2034,7 @@ function toolResultRows(core: LumiscaCore, sessionId: string): number {
   return Number(row.n);
 }
 
-Deno.test("stella agents: a row says what its conversation last said", async () => {
+test("stella agents: a row says what its conversation last said", async () => {
   const { faux, core, agent, session } = await stellaConversation("Aide");
   try {
     faux.setResponses([
@@ -2080,7 +2081,7 @@ Deno.test("stella agents: a row says what its conversation last said", async () 
   }
 });
 
-Deno.test("stella agents: the preview is the newest entry, not the newest row", async () => {
+test("stella agents: the preview is the newest entry, not the newest row", async () => {
   // The newest rows are tool traffic and a silent turn — none of which the
   // conversation shows; the entry before them is what the sidebar must say.
   const { faux, core, agent, session } = await stellaConversation("Aide");
@@ -2109,7 +2110,7 @@ Deno.test("stella agents: the preview is the newest entry, not the newest row", 
   }
 });
 
-Deno.test("stella prompt: a conversation from an older release is re-derived", async () => {
+test("stella prompt: a conversation from an older release is re-derived", async () => {
   // A stella conversation lives for years, so its prompt cannot be a
   // creation-time snapshot: a release that changes buildStellaSystemPrompt
   // (or the agent's role, which is snapshot there) must reach the
@@ -2132,7 +2133,7 @@ Deno.test("stella prompt: a conversation from an older release is re-derived", a
   }
 });
 
-Deno.test("stella prompt: the reply is the message, silence is asked for", async () => {
+test("stella prompt: the reply is the message, silence is asked for", async () => {
   // The rule the model has to follow. It is the opposite of the rule this
   // prompt used to carry: the agent's own text IS what the user reads, and a
   // run that wants to say nothing writes the sentinel. A forgotten decision
@@ -2145,7 +2146,7 @@ Deno.test("stella prompt: the reply is the message, silence is asked for", async
   assert(prompt.includes("send_chat carries what a reply cannot"), prompt);
 });
 
-Deno.test("stella prompt: text beside a tool call is not delivered", async () => {
+test("stella prompt: text beside a tool call is not delivered", async () => {
   // A regression fixed here: the prompt said only that "your reply is the
   // message", so an agent that wrote "I sent the screenshot" next to a bash
   // call believed it had said so, and reported it as delivered hours later
@@ -2161,7 +2162,7 @@ Deno.test("stella prompt: text beside a tool call is not delivered", async () =>
   assert(prompt.includes("never tell the user a file was sent"), prompt);
 });
 
-Deno.test("stella prompt: MEMORY.md is where the agent keeps what it must remember", async () => {
+test("stella prompt: MEMORY.md is where the agent keeps what it must remember", async () => {
   // Three rules in one paragraph, and all three are the user's: write down
   // what should outlive the run (without being asked), read what an earlier
   // run may have written, and keep the file short enough to search. The
@@ -2178,7 +2179,7 @@ Deno.test("stella prompt: MEMORY.md is where the agent keeps what it must rememb
   assert(prompt.includes("delete what is no longer true"), prompt);
 });
 
-Deno.test("stella routines: a run brings a stopped machine back", async () => {
+test("stella routines: a run brings a stopped machine back", async () => {
   // A routine runs in a conversation that is already open, so no open path
   // asks whether the machine is up. When it died since (a crash, a stop from
   // outside), every tool of the run answered podman's "container state
@@ -2228,7 +2229,7 @@ Deno.test("stella routines: a run brings a stopped machine back", async () => {
   }
 });
 
-Deno.test("stella routines: a run after a restart still has its skill catalog", async () => {
+test("stella routines: a run after a restart still has its skill catalog", async () => {
   // The catalog is read when a conversation opens, and the cache lives in
   // the server process: a restarted server has none. A routine opens its
   // conversation with the synchronous `openSession`, which primes nothing,
@@ -2298,7 +2299,7 @@ function recordingVm(stopped: number[]): VmManager {
   };
 }
 
-Deno.test("stella disabled: switching an agent off releases what it held", async () => {
+test("stella disabled: switching an agent off releases what it held", async () => {
   const stopped: number[] = [];
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting(

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { MAX_ATTACHMENT_BYTES } from "../shared/mod.ts";
@@ -15,7 +16,7 @@ async function withStore(
   }
 }
 
-Deno.test("put stores the bytes under a name of its own", async () => {
+test("put stores the bytes under a name of its own", async () => {
   await withStore(async (store) => {
     const first = await store.put("s1", new Uint8Array([1, 2, 3]), "a.png");
     const second = await store.put("s1", new Uint8Array([4]), "b.png");
@@ -29,7 +30,7 @@ Deno.test("put stores the bytes under a name of its own", async () => {
   });
 });
 
-Deno.test("put keeps the extension the download needs", async () => {
+test("put keeps the extension the download needs", async () => {
   await withStore(async (store) => {
     // A file without an extension still gets one, so the route can name a
     // content type.
@@ -40,7 +41,7 @@ Deno.test("put keeps the extension the download needs", async () => {
   });
 });
 
-Deno.test("put refuses bytes over the limit", async () => {
+test("put refuses bytes over the limit", async () => {
   await withStore(async (store) => {
     await assertRejects(
       () =>
@@ -51,7 +52,7 @@ Deno.test("put refuses bytes over the limit", async () => {
   });
 });
 
-Deno.test("resolve refuses anything that is not a name the store made", async () => {
+test("resolve refuses anything that is not a name the store made", async () => {
   await withStore(async (store) => {
     const ref = await store.put("s1", new Uint8Array([1]), "a.png");
     assert((await store.resolve("s1", ref.name)) !== undefined);
@@ -67,14 +68,14 @@ Deno.test("resolve refuses anything that is not a name the store made", async ()
   });
 });
 
-Deno.test("resolve does not cross sessions", async () => {
+test("resolve does not cross sessions", async () => {
   await withStore(async (store) => {
     const ref = await store.put("s1", new Uint8Array([1]), "a.png");
     assert((await store.resolve("s2", ref.name)) === undefined);
   });
 });
 
-Deno.test("resolve reports the name the user knows and the content type", async () => {
+test("resolve reports the name the user knows and the content type", async () => {
   await withStore(async (store) => {
     const ref = await store.put("s1", new Uint8Array([1]), "report.pdf");
     const resolved = await store.resolve("s1", ref.name);
@@ -85,7 +86,7 @@ Deno.test("resolve reports the name the user knows and the content type", async 
   });
 });
 
-Deno.test("a session holds an unbounded number of attachments", async () => {
+test("a session holds an unbounded number of attachments", async () => {
   await withStore(async (store) => {
     // A conversation that lives for years hands over files the whole time;
     // a cap would end it with a refusal the user cannot act on.
@@ -97,7 +98,7 @@ Deno.test("a session holds an unbounded number of attachments", async () => {
   });
 });
 
-Deno.test("nothing is created until a session attaches", async () => {
+test("nothing is created until a session attaches", async () => {
   await withStore(async (store, root) => {
     // The store is lazy: a session that never sends a file leaves nothing.
     assertEquals(await store.resolve("s1", "000000000000.png"), undefined);
@@ -107,7 +108,7 @@ Deno.test("nothing is created until a session attaches", async () => {
   });
 });
 
-Deno.test("deleteSession drops one session's files only", async () => {
+test("deleteSession drops one session's files only", async () => {
   await withStore(async (store, root) => {
     const kept = await store.put("s1", new Uint8Array([1]), "a.png");
     const gone = await store.put("s2", new Uint8Array([2]), "b.png");

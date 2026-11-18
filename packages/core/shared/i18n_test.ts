@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { chat } from "./i18n/chat.ts";
 import { chrome } from "./i18n/chrome.ts";
@@ -25,7 +26,7 @@ const AREA_TABLES = { common, chrome, settings, chat, panels, setup };
 
 // --- locale resolution ------------------------------------------------------
 
-Deno.test("isLocale/parseLocale accept the supported languages only", () => {
+test("isLocale/parseLocale accept the supported languages only", () => {
   for (const locale of LOCALES) {
     assertEquals(isLocale(locale), true);
     assertEquals(parseLocale(locale), locale);
@@ -41,7 +42,7 @@ Deno.test("isLocale/parseLocale accept the supported languages only", () => {
   assertEquals(parseLocale("JA"), undefined);
 });
 
-Deno.test("localeForTag: Japanese → ja, every other language → en", () => {
+test("localeForTag: Japanese → ja, every other language → en", () => {
   assertEquals(localeForTag("ja"), "ja");
   assertEquals(localeForTag("ja-JP"), "ja");
   assertEquals(localeForTag("JA-jp"), "ja");
@@ -57,7 +58,7 @@ Deno.test("localeForTag: Japanese → ja, every other language → en", () => {
   assertEquals(localeForTag(null), undefined);
 });
 
-Deno.test("parseAcceptLanguage orders by quality and drops the wildcard", () => {
+test("parseAcceptLanguage orders by quality and drops the wildcard", () => {
   assertEquals(parseAcceptLanguage("ja,en-US;q=0.9,en;q=0.8"), [
     "ja",
     "en-US",
@@ -79,7 +80,7 @@ Deno.test("parseAcceptLanguage orders by quality and drops the wildcard", () => 
   assertEquals(parseAcceptLanguage("fr,ja"), ["fr", "ja"]);
 });
 
-Deno.test("resolveLocale: stored setting wins, then the tags, then the default", () => {
+test("resolveLocale: stored setting wins, then the tags, then the default", () => {
   // The stored setting is the user's explicit choice.
   assertEquals(resolveLocale("en", ["ja-JP"]), "en");
   assertEquals(resolveLocale("ja", ["en-US"]), "ja");
@@ -93,14 +94,14 @@ Deno.test("resolveLocale: stored setting wins, then the tags, then the default",
   assertEquals(resolveLocale(undefined, []), DEFAULT_LOCALE);
 });
 
-Deno.test("localeTag pins an Intl tag per language", () => {
+test("localeTag pins an Intl tag per language", () => {
   assertEquals(localeTag("ja"), "ja-JP");
   assertEquals(localeTag("en"), "en-US");
 });
 
 // --- message lookup ---------------------------------------------------------
 
-Deno.test("translate returns the message of the language", () => {
+test("translate returns the message of the language", () => {
   assertEquals(translate("ja", "common.close"), "閉じる");
   assertEquals(translate("en", "common.close"), "Close");
   // A bound translator behaves the same.
@@ -108,7 +109,7 @@ Deno.test("translate returns the message of the language", () => {
   assertEquals(en("common.close"), "Close");
 });
 
-Deno.test("translate interpolates {name} placeholders", () => {
+test("translate interpolates {name} placeholders", () => {
   assertEquals(
     translate("ja", "common.sessionName", { date: "12:00" }),
     "セッション12:00",
@@ -140,7 +141,7 @@ const AREAS = [
   "setup",
 ] as const;
 
-Deno.test("catalogue: no key is defined in two area files", () => {
+test("catalogue: no key is defined in two area files", () => {
   // `messages` is a spread of the area tables, so a key present in two of
   // them resolves to whichever is spread last — silently, and with no type
   // error (both have the same shape). A key belongs to exactly one surface.
@@ -164,7 +165,7 @@ Deno.test("catalogue: no key is defined in two area files", () => {
   );
 });
 
-Deno.test("catalogue: a generic action is not redefined per surface", () => {
+test("catalogue: a generic action is not redefined per surface", () => {
   // The generic verbs live in common.ts and every surface uses them: a save
   // button, a delete icon's tooltip and a dialog's close are the same act
   // wherever they appear. A surface that spells one of them again (the same
@@ -216,7 +217,7 @@ function placeholders(text: string): string[] {
   return [...text.matchAll(/\{(\w+)\}/g)].map((match) => match[1]!);
 }
 
-Deno.test("catalogue: every entry has both languages, non-empty", () => {
+test("catalogue: every entry has both languages, non-empty", () => {
   const keys = Object.keys(messages);
   assert(keys.length > 0, "the catalogue is not empty");
   for (const key of keys) {
@@ -226,7 +227,7 @@ Deno.test("catalogue: every entry has both languages, non-empty", () => {
   }
 });
 
-Deno.test("catalogue: placeholders match between the languages", () => {
+test("catalogue: placeholders match between the languages", () => {
   // A translation that drops or renames a placeholder renders a sentence
   // with a missing value (or an unreplaced "{x}"), which no type can catch.
   for (const key of Object.keys(messages)) {
@@ -239,7 +240,7 @@ Deno.test("catalogue: placeholders match between the languages", () => {
   }
 });
 
-Deno.test("catalogue: user-facing text is not left in one language only", () => {
+test("catalogue: user-facing text is not left in one language only", () => {
   // A copy-pasted entry (the English left equal to the Japanese) is only
   // legitimate for strings that are the same in both languages: borrowed
   // technical terms and proper nouns that the Japanese UI also spells in

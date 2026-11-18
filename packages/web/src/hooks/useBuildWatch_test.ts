@@ -6,18 +6,19 @@
  * answer "cannot tell", and treating either as stale would make every reload
  * of an older install offer a reload that changes nothing.
  */
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { buildMoved } from "./useBuildWatch.ts";
 
-Deno.test("buildMoved: a different build is a move", () => {
+test("buildMoved: a different build is a move", () => {
   assertEquals(buildMoved('W/"abc"', 'W/"def"'), true);
 });
 
-Deno.test("buildMoved: the same build is not", () => {
+test("buildMoved: the same build is not", () => {
   assertEquals(buildMoved('W/"abc"', 'W/"abc"'), false);
 });
 
-Deno.test("buildMoved: a missing value on either side is not a move", () => {
+test("buildMoved: a missing value on either side is not a move", () => {
   // A server that predates the field reports nothing to compare.
   assertEquals(buildMoved('W/"abc"', undefined), false);
   // A page whose own build id never arrived (an older server's page).

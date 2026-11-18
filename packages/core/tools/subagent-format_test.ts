@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import type { SubagentStatus, TaskInfo } from "../shared/mod.ts";
 import {
@@ -21,7 +22,7 @@ function info(
   };
 }
 
-Deno.test("a failed task hands over the partial output", () => {
+test("a failed task hands over the partial output", () => {
   const payload = formatTaskCompletion(
     info({
       status: "failed",
@@ -40,7 +41,7 @@ Deno.test("a failed task hands over the partial output", () => {
   assertEquals(payload.body.includes("b.ts:40"), true);
 });
 
-Deno.test("a failed task with no output carries only the reason", () => {
+test("a failed task with no output carries only the reason", () => {
   const payload = formatTaskCompletion(
     info({ status: "failed" }),
     "Provider is not configured: openai",
@@ -48,7 +49,7 @@ Deno.test("a failed task with no output carries only the reason", () => {
   assertEquals(payload.body, "Provider is not configured: openai");
 });
 
-Deno.test("an aborted task reports the abort verb", () => {
+test("an aborted task reports the abort verb", () => {
   const payload = formatTaskCompletion(
     info({ status: "aborted", text: "half" }),
   );
@@ -56,7 +57,7 @@ Deno.test("an aborted task reports the abort verb", () => {
   assertEquals(payload.body.includes("half"), true);
 });
 
-Deno.test("the partial output is bounded", () => {
+test("the partial output is bounded", () => {
   const payload = formatTaskCompletion(
     info({ status: "failed", text: "x".repeat(50_000) }),
     "boom",
@@ -66,7 +67,7 @@ Deno.test("the partial output is bounded", () => {
   assertEquals(payload.body.length <= 64 * 1024 + 64, true);
 });
 
-Deno.test("endsWithToolCallSyntax detects a leaked tool block", () => {
+test("endsWithToolCallSyntax detects a leaked tool block", () => {
   // The exact shape observed: a report cut mid-sentence, then the closing
   // tags of the tool-use dialect the provider failed to parse.
   assertEquals(
@@ -84,7 +85,7 @@ Deno.test("endsWithToolCallSyntax detects a leaked tool block", () => {
   assertEquals(endsWithToolCallSyntax("it ended with </invoke> tags"), false);
 });
 
-Deno.test("a finished report ending in tool syntax is flagged", () => {
+test("a finished report ending in tool syntax is flagged", () => {
   const payload = formatTaskCompletion(
     info({ status: "finished", text: "report…</parameter>\n</invoke>" }),
   );
@@ -93,7 +94,7 @@ Deno.test("a finished report ending in tool syntax is flagged", () => {
   assertEquals(payload.body.includes("never executed"), true);
 });
 
-Deno.test("a clean finished report carries no warning", () => {
+test("a clean finished report carries no warning", () => {
   const payload = formatTaskCompletion(
     info({ status: "finished", text: "report complete" }),
   );
@@ -101,7 +102,7 @@ Deno.test("a clean finished report carries no warning", () => {
   assertEquals(payload.body, "report complete");
 });
 
-Deno.test("formatTaskOutput shows the warning for task_output too", () => {
+test("formatTaskOutput shows the warning for task_output too", () => {
   const text = formatTaskOutput(
     info({ status: "finished", text: "partial</invoke>" }),
   );
@@ -112,7 +113,7 @@ Deno.test("formatTaskOutput shows the warning for task_output too", () => {
   assertEquals(text.includes("[warning]"), true);
 });
 
-Deno.test("formatTaskOutput keeps the running live tail readable", () => {
+test("formatTaskOutput keeps the running live tail readable", () => {
   const text = formatTaskOutput(
     info({ status: "running", text: "streaming…" }),
   );
@@ -121,7 +122,7 @@ Deno.test("formatTaskOutput keeps the running live tail readable", () => {
   assertEquals(text.includes("[warning]"), false);
 });
 
-Deno.test("a sub-agent prompt is identity and protocol, with no guideline list", () => {
+test("a sub-agent prompt is identity and protocol, with no guideline list", () => {
   const explore = subagentSystemPrompt("agent_2", "agent_1", "explore", "en");
   // The identity only the caller knows.
   assert(explore.includes("research sub-agent of Lumisca"));

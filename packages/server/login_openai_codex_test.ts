@@ -2,6 +2,7 @@
 // login end to end (device code, token exchange, model catalog) with the
 // OpenAI endpoints stubbed, so nothing here touches the network.
 
+import { test } from "bun:test";
 import { type AuthInteraction, LumiscaCore } from "@lumisca/core";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 
@@ -21,7 +22,7 @@ function jwt(claims: Record<string, unknown>): string {
   return `${b64({ alg: "none" })}.${b64(claims)}.signature`;
 }
 
-Deno.test("stored API keys drive the configured-auth check", async () => {
+test("stored API keys drive the configured-auth check", async () => {
   const core = LumiscaCore.forTesting();
   try {
     // A built-in provider with no stored key and a cleaned env is not
@@ -43,7 +44,7 @@ Deno.test("stored API keys drive the configured-auth check", async () => {
   }
 });
 
-Deno.test("ChatGPT device login stores an OAuth credential and its models", async () => {
+test("ChatGPT device login stores an OAuth credential and its models", async () => {
   const originalFetch = globalThis.fetch;
   const requested: string[] = [];
   globalThis.fetch = ((input: string | URL | Request) => {
@@ -121,7 +122,7 @@ Deno.test("ChatGPT device login stores an OAuth credential and its models", asyn
   }
 });
 
-Deno.test("a failed model catalog leaves the provider unconfigured", async () => {
+test("a failed model catalog leaves the provider unconfigured", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = ((input: string | URL | Request) => {
     const url = String(input);

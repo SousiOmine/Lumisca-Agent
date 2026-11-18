@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertRejects } from "@std/assert";
 import { fauxAssistantMessage } from "./faux.ts";
 import {
@@ -19,7 +20,7 @@ const REPORTED =
 /** An overflow the provider worded without numbers. */
 const UNCOUNTED = "context_length_exceeded: your prompt is too long";
 
-Deno.test("recoveredOutputCap derives the room from the provider's counts", () => {
+test("recoveredOutputCap derives the room from the provider's counts", () => {
   // 1,048,576 - 666,931 - 1,024: the prompt left 381,645 tokens, and the
   // envelope keeps the retry strictly inside the window.
   assertEquals(
@@ -28,7 +29,7 @@ Deno.test("recoveredOutputCap derives the room from the provider's counts", () =
   );
 });
 
-Deno.test("recoveredOutputCap offers no repair when the prompt fills the window", () => {
+test("recoveredOutputCap offers no repair when the prompt fills the window", () => {
   // The prompt alone is over the window: a smaller completion cannot help,
   // and the history has to shrink instead.
   assertEquals(
@@ -42,7 +43,7 @@ Deno.test("recoveredOutputCap offers no repair when the prompt fills the window"
   );
 });
 
-Deno.test("recoveredOutputCap halves a cap the provider never counted", () => {
+test("recoveredOutputCap halves a cap the provider never counted", () => {
   assertEquals(recoveredOutputCap(UNCOUNTED, 100_000), 50_000);
   // Without a cap to halve there is nothing to derive.
   assertEquals(recoveredOutputCap(UNCOUNTED, undefined), undefined);
@@ -53,7 +54,7 @@ Deno.test("recoveredOutputCap halves a cap the provider never counted", () => {
   );
 });
 
-Deno.test("recoveredOutputCap only ever narrows the cap", () => {
+test("recoveredOutputCap only ever narrows the cap", () => {
   // The provider's arithmetic says far more would fit, but the retry must
   // still shrink the request it just refused.
   assertEquals(
@@ -67,7 +68,7 @@ Deno.test("recoveredOutputCap only ever narrows the cap", () => {
   );
 });
 
-Deno.test("recoveredOutputCap ignores other failures", () => {
+test("recoveredOutputCap ignores other failures", () => {
   assertEquals(recoveredOutputCap("invalid api key", 384_000), undefined);
   assertEquals(
     recoveredOutputCap("Stream ended without finish_reason", 384_000),
@@ -116,7 +117,7 @@ async function collect(
   return events;
 }
 
-Deno.test("a rejected request is re-sent with the room the provider reports", async () => {
+test("a rejected request is re-sent with the room the provider reports", async () => {
   const caps: Array<number | undefined> = [];
   const events = await collect(
     withOutputCapRecovery({
@@ -143,7 +144,7 @@ Deno.test("a rejected request is re-sent with the room the provider reports", as
   );
 });
 
-Deno.test("output that already streamed is never replayed", async () => {
+test("output that already streamed is never replayed", async () => {
   // A cap cannot be the cause once content arrived, and re-sending would
   // duplicate it in the transcript.
   const caps: Array<number | undefined> = [];
@@ -163,7 +164,7 @@ Deno.test("output that already streamed is never replayed", async () => {
   );
 });
 
-Deno.test("a failure that is not a window rejection is untouched", async () => {
+test("a failure that is not a window rejection is untouched", async () => {
   const caps: Array<number | undefined> = [];
   const events = await collect(
     withOutputCapRecovery({
@@ -175,7 +176,7 @@ Deno.test("a failure that is not a window rejection is untouched", async () => {
   assertEquals(events.at(-1)!.type, "error");
 });
 
-Deno.test("the recovery budget bounds a provider that keeps refusing", async () => {
+test("the recovery budget bounds a provider that keeps refusing", async () => {
   const caps: Array<number | undefined> = [];
   const always = { events: [START, failure(REPORTED)] };
   const events = await collect(
@@ -193,7 +194,7 @@ Deno.test("the recovery budget bounds a provider that keeps refusing", async () 
   assertEquals(events.at(-1)!.type, "error");
 });
 
-Deno.test("a cancelled call is not retried", async () => {
+test("a cancelled call is not retried", async () => {
   const caps: Array<number | undefined> = [];
   const controller = new AbortController();
   controller.abort();
@@ -208,7 +209,7 @@ Deno.test("a cancelled call is not retried", async () => {
   assertEquals(events.at(-1)!.type, "error");
 });
 
-Deno.test("a thrown overflow is recovered the same way", async () => {
+test("a thrown overflow is recovered the same way", async () => {
   const caps: Array<number | undefined> = [];
   const events = await collect(
     withOutputCapRecovery({
@@ -226,7 +227,7 @@ Deno.test("a thrown overflow is recovered the same way", async () => {
   assertEquals(events.at(-1)!.type, "done");
 });
 
-Deno.test("a thrown failure that no cap can repair propagates unchanged", async () => {
+test("a thrown failure that no cap can repair propagates unchanged", async () => {
   const caps: Array<number | undefined> = [];
   const stream = withOutputCapRecovery({
     initialCap: 384_000,

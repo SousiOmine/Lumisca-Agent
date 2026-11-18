@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { basename, join } from "node:path";
 import { assert, assertEquals } from "@std/assert";
 import { removeDirRetry } from "../test-utils.ts";
@@ -38,7 +39,7 @@ function workspace(): Workspace {
   return { spiller: new OutputSpiller(files, dir), dir, root, files };
 }
 
-Deno.test("a spill is written where the session's own tools can read it", async () => {
+test("a spill is written where the session's own tools can read it", async () => {
   const { spiller, dir, root, files } = workspace();
   try {
     const text = `START\n${"filler line\n".repeat(1000)}END\n`;
@@ -54,7 +55,7 @@ Deno.test("a spill is written where the session's own tools can read it", async 
   }
 });
 
-Deno.test("older spills are dropped once the bound is reached", async () => {
+test("older spills are dropped once the bound is reached", async () => {
   const { spiller, dir, root } = workspace();
   try {
     const names: string[] = [];
@@ -78,7 +79,7 @@ Deno.test("older spills are dropped once the bound is reached", async () => {
   }
 });
 
-Deno.test("clear deletes every spill this instance wrote", async () => {
+test("clear deletes every spill this instance wrote", async () => {
   const mine = workspace();
   const theirs = workspace();
   try {
@@ -98,7 +99,7 @@ Deno.test("clear deletes every spill this instance wrote", async () => {
   }
 });
 
-Deno.test("an existing file at the target name is not overwritten", async () => {
+test("an existing file at the target name is not overwritten", async () => {
   const { spiller, dir, root, files } = workspace();
   try {
     const first = await spiller.save("stdout", "first\n");
@@ -119,7 +120,7 @@ Deno.test("an existing file at the target name is not overwritten", async () => 
   }
 });
 
-Deno.test("an unwritable spill directory is undefined, not an exception", async () => {
+test("an unwritable spill directory is undefined, not an exception", async () => {
   const root = Deno.makeTempDirSync({ prefix: "lumisca-spill-" });
   try {
     const blocked = join(root, "blocked.txt");
@@ -134,7 +135,7 @@ Deno.test("an unwritable spill directory is undefined, not an exception", async 
   }
 });
 
-Deno.test("truncate keeps the tail and truncateHead the head", () => {
+test("truncate keeps the tail and truncateHead the head", () => {
   assertEquals(truncate("abcdef", 10), { text: "abcdef", truncated: false });
   assertEquals(truncate("abcdef", 3), { text: "def", truncated: true });
   assertEquals(

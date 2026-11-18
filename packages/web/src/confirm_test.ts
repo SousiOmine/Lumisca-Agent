@@ -1,10 +1,11 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { confirmAction } from "./confirm.ts";
 
 /** Repository-relative path of the web sources (this file is src/<name>). */
 const SRC = new URL("./", import.meta.url);
 
-Deno.test("confirmAction asks the browser and answers its result", () => {
+test("confirmAction asks the browser and answers its result", () => {
   const globals = globalThis as unknown as { confirm: unknown };
   const original = globals.confirm;
   const asked: string[] = [];
@@ -20,7 +21,7 @@ Deno.test("confirmAction asks the browser and answers its result", () => {
   }
 });
 
-Deno.test("confirm.ts is the only place that calls the browser dialog", async () => {
+test("confirm.ts is the only place that calls the browser dialog", async () => {
   // The module exists so the wording cannot drift: a panel calling
   // `confirm(...)` directly skipped the catalogue and the shared shape.
   const offenders: string[] = [];
@@ -44,7 +45,7 @@ Deno.test("confirm.ts is the only place that calls the browser dialog", async ()
   );
 });
 
-Deno.test("confirm: every catalogue delete confirmation goes through it", async () => {
+test("confirm: every catalogue delete confirmation goes through it", async () => {
   let found = 0;
   for await (const path of sourceFiles(SRC)) {
     const text = await Deno.readTextFile(new URL(path, SRC));

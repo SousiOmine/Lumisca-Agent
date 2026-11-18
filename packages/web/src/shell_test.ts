@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { serverUpdateApi } from "./shell.ts";
 
@@ -59,7 +60,7 @@ type ActionCase = [
  * the four body-less actions — can never drive the updater: pressing any
  * update button in a browser would do nothing at all. The pair is pinned
  * here so a refactor cannot quietly infer the method again. */
-Deno.test("serverUpdateApi: status is a GET, every action is a POST", async () => {
+test("serverUpdateApi: status is a GET, every action is a POST", async () => {
   const status = await record(() => serverUpdateApi.status());
   assertEquals(status.method, "GET");
   assertEquals(status.path, "/api/update/status");

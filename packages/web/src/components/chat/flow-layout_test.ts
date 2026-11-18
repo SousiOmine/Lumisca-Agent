@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import type { UiFlowBlock } from "@lumisca/core/shared";
 import { assertEquals, assertGreater, assertLess } from "@std/assert";
 import type { FlowLayout, FlowNodeBox } from "./flow-layout.ts";
@@ -59,7 +60,7 @@ function expectNoOverlap(layout: FlowLayout): void {
   }
 }
 
-Deno.test("flow layout: splits layers top to bottom and connects the edges", () => {
+test("flow layout: splits layers top to bottom and connects the edges", () => {
   const layout = layoutFlow(
     block([node("a"), node("b"), node("c")], [edge("a", "b"), edge("b", "c")]),
   );
@@ -78,7 +79,7 @@ Deno.test("flow layout: splits layers top to bottom and connects the edges", () 
   );
 });
 
-Deno.test("flow layout: a branching diagram still places every node apart", () => {
+test("flow layout: a branching diagram still places every node apart", () => {
   const layout = layoutFlow(
     block(
       [node("a"), node("b"), node("c"), node("d", "終了", "pill")],
@@ -91,7 +92,7 @@ Deno.test("flow layout: a branching diagram still places every node apart", () =
   assertEquals(boxOf(layout, "b").y, boxOf(layout, "c").y);
 });
 
-Deno.test("flow layout: a long label wraps and makes the node taller", () => {
+test("flow layout: a long label wraps and makes the node taller", () => {
   const short = layoutFlow(block([node("a", "短い")], []));
   const long = layoutFlow(
     block(
@@ -105,13 +106,13 @@ Deno.test("flow layout: a long label wraps and makes the node taller", () => {
   assertGreater(boxOf(long, "a").height, boxOf(short, "a").height);
 });
 
-Deno.test("flow layout: explicit newlines become lines as they are", () => {
+test("flow layout: explicit newlines become lines as they are", () => {
   const layout = layoutFlow(block([node("a", "1 行目\n2 行目")], []));
 
   assertEquals(boxOf(layout, "a").lines, ["1 行目", "2 行目"]);
 });
 
-Deno.test("flow layout: a loop (back edge) is routed to the right", () => {
+test("flow layout: a loop (back edge) is routed to the right", () => {
   const layout = layoutFlow(
     block(
       [node("a"), node("b")],
@@ -138,7 +139,7 @@ Deno.test("flow layout: a loop (back edge) is routed to the right", () => {
   );
 });
 
-Deno.test("flow layout: many nodes do not overlap and repeat the same result", () => {
+test("flow layout: many nodes do not overlap and repeat the same result", () => {
   const nodes = Array.from({ length: 12 }, (_, index) => node(`n${index}`));
   const edges = nodes
     .slice(1)
@@ -153,7 +154,7 @@ Deno.test("flow layout: many nodes do not overlap and repeat the same result", (
   assertEquals(first.nodes.length, 12);
 });
 
-Deno.test("flow layout: a single node still gets the surrounding padding", () => {
+test("flow layout: a single node still gets the surrounding padding", () => {
   const layout = layoutFlow(block([node("only", "開始", "round")], []));
   const box = boxOf(layout, "only");
 

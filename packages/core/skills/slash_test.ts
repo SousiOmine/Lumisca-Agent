@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { buildSkillPrompt } from "./slash.ts";
 
@@ -7,7 +8,7 @@ import { buildSkillPrompt } from "./slash.ts";
  * stays English whatever the request's language is (the answer's language is
  * the session's, see tools/language.ts). */
 
-Deno.test("buildSkillPrompt frames the skill and appends the request", () => {
+test("buildSkillPrompt frames the skill and appends the request", () => {
   assertEquals(
     buildSkillPrompt("canvas-design", ""),
     'Invoke the skill "canvas-design": load it with the skill tool and ' +

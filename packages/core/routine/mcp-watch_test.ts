@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import type { WatchSource } from "../shared/routine.ts";
 import { parseWatchState, runWatch, type WatchState } from "../vm/watch.ts";
@@ -29,20 +30,20 @@ function check(
   return runWatch(inboxWatch, previous, { callTool: call });
 }
 
-Deno.test("mcp watch: the first look is a baseline, never a change", async () => {
+test("mcp watch: the first look is a baseline, never a change", async () => {
   const first = await check(undefined, () => inbox("m1", "m2"));
   assertEquals(first.changed, false);
   assertEquals(first.state, { kind: "mcp", ids: ["m1", "m2"], hash: null });
 });
 
-Deno.test("mcp watch: a new id fires, and the count comes with it", async () => {
+test("mcp watch: a new id fires, and the count comes with it", async () => {
   const first = await check(undefined, () => inbox("m1", "m2"));
   const next = await check(first.state!, () => inbox("m3", "m2", "m1"));
   assertEquals(next.changed, true);
   assertEquals(next.newItems, 1);
 });
 
-Deno.test("mcp watch: an edited or removed item is not a change", async () => {
+test("mcp watch: an edited or removed item is not a change", async () => {
   // A mailbox that fires when mail is read or deleted would fire on every
   // check; only a new id is the event.
   const first = await check(undefined, () => inbox("m1", "m2"));
@@ -59,7 +60,7 @@ Deno.test("mcp watch: an edited or removed item is not a change", async () => {
   );
 });
 
-Deno.test("mcp watch: a hash watch compares the value at the path", async () => {
+test("mcp watch: a hash watch compares the value at the path", async () => {
   const source: Extract<WatchSource, { kind: "mcp" }> = {
     ...inboxWatch,
     expect: { hash: "data.count" },
@@ -83,14 +84,14 @@ Deno.test("mcp watch: a hash watch compares the value at the path", async () => 
   );
 });
 
-Deno.test("mcp watch: an answer with no JSON is a problem, not a change", async () => {
+test("mcp watch: an answer with no JSON is a problem, not a change", async () => {
   const result = await check(undefined, () => Promise.resolve("Deploy is OK"));
   assertEquals(result.state, null);
   assert(result.problem?.includes("not JSON") === true);
   assertEquals(result.changed, false);
 });
 
-Deno.test("mcp watch: a failed call is a problem, not a change", async () => {
+test("mcp watch: a failed call is a problem, not a change", async () => {
   const result = await check(undefined, () =>
     Promise.reject(new Error("Unauthorized")),
   );
@@ -99,13 +100,13 @@ Deno.test("mcp watch: a failed call is a problem, not a change", async () => {
   assertEquals(result.changed, false);
 });
 
-Deno.test("mcp watch: a path with nothing at it is a problem", async () => {
+test("mcp watch: a path with nothing at it is a problem", async () => {
   const result = await check(undefined, () => answer({ data: {} }));
   assertEquals(result.state, null);
   assert(result.problem?.includes("data.messages[].id") === true);
 });
 
-Deno.test("mcp watch: the stored state survives the row's JSON", () => {
+test("mcp watch: the stored state survives the row's JSON", () => {
   const state: WatchState = { kind: "mcp", ids: ["m1", "m2"], hash: null };
   assertEquals(parseWatchState(JSON.parse(JSON.stringify(state))), state);
   // A row edited by hand reads as "no baseline", so the next check records

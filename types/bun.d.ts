@@ -156,3 +156,26 @@ declare module "bun:sqlite" {
     close(throwOnError?: boolean): void;
   }
 }
+
+declare module "bun:test" {
+  type TestFn = (done?: (error?: unknown) => void) => void | Promise<void>;
+  type TestOptions = { timeout?: number; retry?: number; skip?: boolean };
+
+  interface TestApi {
+    (name: string, fn: TestFn, options?: TestOptions): void;
+    (name: string, options: TestOptions, fn: TestFn): void;
+    skip(name: string, fn: TestFn): void;
+    skip(name: string, options: TestOptions, fn: TestFn): void;
+    only(name: string, fn: TestFn, options?: TestOptions): void;
+    skipIf(
+      condition: unknown,
+    ): (name: string, fn: TestFn, options?: TestOptions) => void;
+  }
+
+  export const test: TestApi;
+  export const describe: TestApi;
+  export function beforeAll(fn: TestFn, options?: TestOptions): void;
+  export function afterAll(fn: TestFn, options?: TestOptions): void;
+  export function beforeEach(fn: TestFn, options?: TestOptions): void;
+  export function afterEach(fn: TestFn, options?: TestOptions): void;
+}

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { toBase64Url } from "@lumisca/core/shared";
 import { assert, assertEquals } from "@std/assert";
 import { PushSubscriptions } from "../core/notify/subscriptions.ts";
@@ -82,7 +83,7 @@ async function waitUntil(condition: () => boolean): Promise<void> {
   }
 }
 
-Deno.test("a finished run notifies every subscription", async () => {
+test("a finished run notifies every subscription", async () => {
   const { core, store, emit } = harness();
   await store.add(await subscriber("https://push.example/a"));
   await store.add(await subscriber("https://push.example/b"));
@@ -104,7 +105,7 @@ Deno.test("a finished run notifies every subscription", async () => {
   }
 });
 
-Deno.test("a silent routine's end is not notified", async () => {
+test("a silent routine's end is not notified", async () => {
   // The run left nothing in the conversation, so the notification would ask
   // the user to open an app that shows no change.
   const { core, store, emit } = harness();
@@ -134,7 +135,7 @@ Deno.test("a silent routine's end is not notified", async () => {
   }
 });
 
-Deno.test("a question is urgent and replaces the completion toast", () => {
+test("a question is urgent and replaces the completion toast", () => {
   // The same `tag` is what makes the OS replace rather than stack: an answer
   // prompt arriving after "finished" is the newer, more useful message.
   const { core } = harness();
@@ -170,7 +171,7 @@ Deno.test("a question is urgent and replaces the completion toast", () => {
   assertEquals(core, core);
 });
 
-Deno.test("a hand-over is urgent and carries the reason", () => {
+test("a hand-over is urgent and carries the reason", () => {
   // The run is blocked AT THE SCREEN and only the user can release it. A
   // notification that says nothing about why is one the user cannot act
   // on, and one that is not urgent is a run that waits for the deadline.
@@ -206,7 +207,7 @@ Deno.test("a hand-over is urgent and carries the reason", () => {
   assertEquals(isNotifiable(event), true);
 });
 
-Deno.test("an error notification is titled with the name", () => {
+test("an error notification is titled with the name", () => {
   const japanese = buildPushNotification(
     { type: "session_error", sessionId: "s1", message: "boom" },
     "リファクタ",
@@ -223,7 +224,7 @@ Deno.test("an error notification is titled with the name", () => {
   assertEquals(english.message.body, "Stopped with an error");
 });
 
-Deno.test("a finished run carries its reply", () => {
+test("a finished run carries its reply", () => {
   // "Finished" alone does not say whether opening the app is worth it: the
   // answer is what the notification is for.
   const finished = buildPushNotification(
@@ -242,7 +243,7 @@ Deno.test("a finished run carries its reply", () => {
   assertEquals(finished.urgency, "normal");
 });
 
-Deno.test("a finished run with nothing to show says it finished", () => {
+test("a finished run with nothing to show says it finished", () => {
   // A silent turn, or a message that carried only a card or files: there are
   // no words to put in the body, so the wording says the run is done.
   for (const reply of [undefined, "", "   \n "]) {
@@ -257,7 +258,7 @@ Deno.test("a finished run with nothing to show says it finished", () => {
   }
 });
 
-Deno.test("a long reply is cut to one line of a toast", () => {
+test("a long reply is cut to one line of a toast", () => {
   const finished = buildPushNotification(
     { type: "agent_end", sessionId: "s1", reply: "あ".repeat(300) },
     "リファクタ",
@@ -266,7 +267,7 @@ Deno.test("a long reply is cut to one line of a toast", () => {
   assertEquals(Array.from(finished.message.body).length, 120);
 });
 
-Deno.test("a stella conversation is notified under its agent's name", () => {
+test("a stella conversation is notified under its agent's name", () => {
   // The session row can hold a title generated from the first message (an
   // older conversation) or a name the agent no longer has; the agent is what
   // the user recognizes, and the header shows it too.
@@ -292,7 +293,7 @@ Deno.test("a stella conversation is notified under its agent's name", () => {
   assertEquals(notificationName(undefined, undefined, "en"), "Session");
 });
 
-Deno.test("a gone endpoint is forgotten after one failure", async () => {
+test("a gone endpoint is forgotten after one failure", async () => {
   // 410 means the browser threw the subscription away. Keeping it would pay
   // for the same failure on every later event.
   const { core, store, emit } = harness();
@@ -321,7 +322,7 @@ Deno.test("a gone endpoint is forgotten after one failure", async () => {
   }
 });
 
-Deno.test("a transient failure keeps the subscription for the next try", async () => {
+test("a transient failure keeps the subscription for the next try", async () => {
   const { core, store, emit } = harness();
   const endpoint = await subscriber();
   await store.add(endpoint);
@@ -342,7 +343,7 @@ Deno.test("a transient failure keeps the subscription for the next try", async (
   }
 });
 
-Deno.test("events nobody is notified about send nothing", async () => {
+test("events nobody is notified about send nothing", async () => {
   const { core, store, emit } = harness();
   await store.add(await subscriber());
   let attempts = 0;
@@ -372,7 +373,7 @@ Deno.test("events nobody is notified about send nothing", async () => {
   }
 });
 
-Deno.test("a disposed notifier stops sending", async () => {
+test("a disposed notifier stops sending", async () => {
   const { core, store, emit } = harness();
   await store.add(await subscriber());
   let attempts = 0;
@@ -389,7 +390,7 @@ Deno.test("a disposed notifier stops sending", async () => {
   assertEquals(attempts, 0);
 });
 
-Deno.test("the test button reports how many were accepted", async () => {
+test("the test button reports how many were accepted", async () => {
   const { core, store } = harness();
   await store.add(await subscriber("https://push.example/a"));
   await store.add(await subscriber("https://push.example/b"));

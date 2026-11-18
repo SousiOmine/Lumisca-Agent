@@ -6,6 +6,7 @@
  * lives in `TitleBar_test.tsx` and these two here — one file cannot be both
  * a macOS window and a browser page.
  */
+import { test } from "bun:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -41,7 +42,7 @@ function buttonTag(html: string, label: string): string {
   return html.slice(html.lastIndexOf("<button", at), at);
 }
 
-Deno.test("TitleBar: macOS leaves the window buttons to the window server", () => {
+test("TitleBar: macOS leaves the window buttons to the window server", () => {
   // `tauri.macos.conf.json` keeps `decorations` + `titleBarStyle: overlay`,
   // so the traffic lights are the OS's. A drawn set would be a second one in
   // a different style, under the native bar.
@@ -52,7 +53,7 @@ Deno.test("TitleBar: macOS leaves the window buttons to the window server", () =
   }
 });
 
-Deno.test("TitleBar: macOS still carries the picker and the app menu", () => {
+test("TitleBar: macOS still carries the picker and the app menu", () => {
   // What macOS *does* keep: the strip is the window's toolbar, so the server
   // it shows and the menu stay reachable there.
   const html = render();

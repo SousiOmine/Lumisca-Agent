@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import {
   appFileHeaders,
@@ -12,7 +13,7 @@ import {
  * answering 304 for a changed bundle would pin an old UI against a new API.
  */
 
-Deno.test("appFileHeaders: the page is never stored", () => {
+test("appFileHeaders: the page is never stored", () => {
   // The token travels in the page's own script, so a proxy holding a copy
   // would hand one user's credential to the next.
   assertEquals(appFileHeaders("no-store"), { "cache-control": "no-store" });
@@ -22,7 +23,7 @@ Deno.test("appFileHeaders: the page is never stored", () => {
   });
 });
 
-Deno.test("appFileHeaders: a stable URL revalidates every time", () => {
+test("appFileHeaders: a stable URL revalidates every time", () => {
   const headers = appFileHeaders("revalidate", 'W/"abc"');
   assertEquals(headers["etag"], 'W/"abc"');
   assert(headers["cache-control"]!.includes("max-age=0"));
@@ -30,7 +31,7 @@ Deno.test("appFileHeaders: a stable URL revalidates every time", () => {
   assert(headers["cache-control"]!.includes("private"));
 });
 
-Deno.test("contentEtag: equal bodies share a validator, different ones do not", () => {
+test("contentEtag: equal bodies share a validator, different ones do not", () => {
   assertEquals(
     contentEtag("body { color: red; }"),
     contentEtag("body { color: red; }"),
@@ -41,14 +42,14 @@ Deno.test("contentEtag: equal bodies share a validator, different ones do not", 
   assert(contentEtag("x").startsWith('W/"'));
 });
 
-Deno.test("contentEtag: a long body is hashed, not truncated", () => {
+test("contentEtag: a long body is hashed, not truncated", () => {
   // A prefix collision must not collapse two builds that share a head: the
   // bundle's first 10 KB are the module preamble and rarely change.
   const head = "const x = 1;\n".repeat(2000);
   assert(contentEtag(head + "A") !== contentEtag(head + "B"));
 });
 
-Deno.test("etagMatches: the forms a browser sends", () => {
+test("etagMatches: the forms a browser sends", () => {
   const etag = 'W/"abc"';
   assertEquals(etagMatches(undefined, etag), false);
   assertEquals(etagMatches('W/"abc"', etag), true);
@@ -60,7 +61,7 @@ Deno.test("etagMatches: the forms a browser sends", () => {
   assertEquals(etagMatches('W/"nope"', etag), false);
 });
 
-Deno.test("etagMatches: whitespace around the list is not significant", () => {
+test("etagMatches: whitespace around the list is not significant", () => {
   const etag = 'W/"abc"';
   assertEquals(etagMatches('  W/"abc"  ', etag), true);
   assertEquals(etagMatches('W/"x" ,  W/"abc" ', etag), true);

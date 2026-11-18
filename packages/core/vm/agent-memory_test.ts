@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { buildStellaSystemPrompt } from "../tools/system-prompt.ts";
 import {
@@ -34,7 +35,7 @@ function recording(): { exec: VmExec; calls: string[][] } {
   return { exec, calls };
 }
 
-Deno.test("vm memory: the folder and MEMORY.md are one command", async () => {
+test("vm memory: the folder and MEMORY.md are one command", async () => {
   const { exec, calls } = recording();
   await ensureAgentMemory(exec, AGENT);
 
@@ -55,7 +56,7 @@ Deno.test("vm memory: the folder and MEMORY.md are one command", async () => {
   );
 });
 
-Deno.test("vm memory: an existing MEMORY.md is never emptied", async () => {
+test("vm memory: an existing MEMORY.md is never emptied", async () => {
   const { exec, calls } = recording();
   await ensureAgentMemory(exec, AGENT);
   const [command] = calls;
@@ -65,7 +66,7 @@ Deno.test("vm memory: an existing MEMORY.md is never emptied", async () => {
   assertEquals(command[2], 'mkdir -p -- "$1" && { [ -e "$2" ] || : > "$2"; }');
 });
 
-Deno.test("vm memory: the prompt names the file the machine creates", () => {
+test("vm memory: the prompt names the file the machine creates", () => {
   // The prompt is written by hand and the file by the machine; a rename on one
   // side alone would leave the agent told about a file nobody makes.
   const prompt = buildStellaSystemPrompt({

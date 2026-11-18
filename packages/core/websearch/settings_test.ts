@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import { CoreError } from "../errors.ts";
 import { WEB_SEARCH_KEY } from "../shared/settings-keys.ts";
@@ -55,7 +56,7 @@ function service(fetchImpl: FetchLike = okFetch) {
   return { settings, store, web };
 }
 
-Deno.test("a malformed or unset setting reads as no provider", () => {
+test("a malformed or unset setting reads as no provider", () => {
   for (const raw of [undefined, "", "nonsense", "[]", "null"]) {
     const parsed = parseWebSearchSettings(raw);
     assertEquals(parsed.defaultId, null);
@@ -63,7 +64,7 @@ Deno.test("a malformed or unset setting reads as no provider", () => {
   }
 });
 
-Deno.test("a provider without a key, or with an unknown id, is dropped", () => {
+test("a provider without a key, or with an unknown id, is dropped", () => {
   const parsed = parseWebSearchSettings(
     JSON.stringify({
       default: "gone",
@@ -80,7 +81,7 @@ Deno.test("a provider without a key, or with an unknown id, is dropped", () => {
   assertEquals(parsed.defaultId, "brave");
 });
 
-Deno.test("the first provider added becomes the default", () => {
+test("the first provider added becomes the default", () => {
   const { web, settings } = service();
   const view = web.add({ id: "exa", apiKey: "  key  " });
   assertEquals(view.defaultId, "exa");
@@ -97,7 +98,7 @@ Deno.test("the first provider added becomes the default", () => {
   assertEquals(view.available.map((p) => p.id).includes("exa"), false);
 });
 
-Deno.test("adding a provider twice, or with no key, is refused", () => {
+test("adding a provider twice, or with no key, is refused", () => {
   const { web } = service();
   web.add({ id: "exa", apiKey: "k" });
   assertThrows(
@@ -113,7 +114,7 @@ Deno.test("adding a provider twice, or with no key, is refused", () => {
   assertThrows(() => web.add({ id: "nope", apiKey: "k" }), CoreError);
 });
 
-Deno.test("an empty key on update keeps the stored one", () => {
+test("an empty key on update keeps the stored one", () => {
   const { web, store } = service();
   web.add({ id: "exa", apiKey: "first" });
   web.update("exa", { apiKey: "   " });
@@ -122,7 +123,7 @@ Deno.test("an empty key on update keeps the stored one", () => {
   assertEquals(store.read().providers.get("exa")?.apiKey, "second");
 });
 
-Deno.test("removing the default hands it to the next provider", () => {
+test("removing the default hands it to the next provider", () => {
   const { web } = service();
   web.add({ id: "exa", apiKey: "k" });
   web.add({ id: "brave", apiKey: "k" });
@@ -141,7 +142,7 @@ Deno.test("removing the default hands it to the next provider", () => {
   assertEquals(web.provider(), null);
 });
 
-Deno.test("removing a provider that is not the default keeps the default", () => {
+test("removing a provider that is not the default keeps the default", () => {
   const { web } = service();
   web.add({ id: "exa", apiKey: "k" });
   web.add({ id: "brave", apiKey: "k" });
@@ -150,7 +151,7 @@ Deno.test("removing a provider that is not the default keeps the default", () =>
   assertEquals(after.defaultId, "brave");
 });
 
-Deno.test("the default can be chosen and cleared", () => {
+test("the default can be chosen and cleared", () => {
   const { web, store } = service();
   web.add({ id: "exa", apiKey: "k" });
   web.add({ id: "brave", apiKey: "k" });
@@ -164,7 +165,7 @@ Deno.test("the default can be chosen and cleared", () => {
   assertThrows(() => web.setDefault("gone"), CoreError);
 });
 
-Deno.test("the provider is exactly the default one", () => {
+test("the provider is exactly the default one", () => {
   const { web } = service();
   assertEquals(web.provider(), null);
   web.add({ id: "exa", apiKey: "k" });
@@ -176,7 +177,7 @@ Deno.test("the provider is exactly the default one", () => {
   assertEquals(web.provider(), null);
 });
 
-Deno.test("a key check reports success and failure without saving", async () => {
+test("a key check reports success and failure without saving", async () => {
   const passing = service(okFetch);
   const ok = await passing.web.test({ id: "exa", apiKey: "k" });
   assertEquals(ok, { ok: true, detail: null, results: 1 });
@@ -191,7 +192,7 @@ Deno.test("a key check reports success and failure without saving", async () => 
   assert(failed.detail?.includes("APIキー"));
 });
 
-Deno.test("a check without a key fails before reaching the network", async () => {
+test("a check without a key fails before reaching the network", async () => {
   let called = false;
   const { web } = service(() => {
     called = true;

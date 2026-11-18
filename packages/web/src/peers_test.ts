@@ -1,7 +1,8 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { peerLabel } from "./peers.ts";
 
-Deno.test("peerLabel: the registered name wins", () => {
+test("peerLabel: the registered name wins", () => {
   assertEquals(
     peerLabel({ name: "自宅", url: "http://100.64.0.5:8000" }, "peer1"),
     "自宅",
@@ -13,7 +14,7 @@ Deno.test("peerLabel: the registered name wins", () => {
   );
 });
 
-Deno.test("peerLabel: a nameless entry is labelled by its URL's host", () => {
+test("peerLabel: a nameless entry is labelled by its URL's host", () => {
   assertEquals(
     peerLabel({ name: "", url: "https://host.tailnet.ts.net" }, "peer1"),
     "host.tailnet.ts.net",
@@ -30,7 +31,7 @@ Deno.test("peerLabel: a nameless entry is labelled by its URL's host", () => {
   );
 });
 
-Deno.test("peerLabel: unusable entries fall back, never to an empty label", () => {
+test("peerLabel: unusable entries fall back, never to an empty label", () => {
   // An entry with neither name nor URL: the id at least identifies it.
   assertEquals(peerLabel({ name: "", url: "" }, "peer1"), "peer1");
   assertEquals(peerLabel(undefined, "peer1"), "peer1");

@@ -1,3 +1,4 @@
+import { afterAll, test } from "bun:test";
 import { fauxProvider, LumiscaCore } from "@lumisca/core";
 import { LANGUAGE_KEY, THEME_COLORS } from "@lumisca/core/shared";
 import { assert, assertEquals } from "@std/assert";
@@ -34,12 +35,12 @@ function readOnlyServer(): { base: string; core: LumiscaCore } {
  * never run. */
 let shutdown: (() => void) | undefined;
 
-Deno.test.afterAll(() => {
+afterAll(() => {
   shutdown?.();
   shared = undefined;
 });
 
-Deno.test("unknown static assets return 404, not the HTML shell", async () => {
+test("unknown static assets return 404, not the HTML shell", async () => {
   const { base } = readOnlyServer();
   const favicon = await fetch(`${base}/favicon.ico`);
   assertEquals(favicon.status, 404);
@@ -76,7 +77,7 @@ Deno.test("unknown static assets return 404, not the HTML shell", async () => {
   assertEquals((await fetch(`${base}/assets/constructor`)).status, 404);
 });
 
-Deno.test("server serves the app shell", async () => {
+test("server serves the app shell", async () => {
   const { base } = readOnlyServer();
   // The language is resolved per request; the header pins it so the test
   // does not depend on the machine's locale.
@@ -163,7 +164,7 @@ Deno.test("server serves the app shell", async () => {
   );
 });
 
-Deno.test("token-required page renders in the request's language", async () => {
+test("token-required page renders in the request's language", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
   const app = createApp(core, { token: "secret-token" });
@@ -201,7 +202,7 @@ Deno.test("token-required page renders in the request's language", async () => {
   }
 });
 
-Deno.test("server resolves the app language once and stores it", async () => {
+test("server resolves the app language once and stores it", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
   const server = startServer(core, 0, { repoRoot: Deno.cwd() });
@@ -254,7 +255,7 @@ Deno.test("server resolves the app language once and stores it", async () => {
   }
 });
 
-Deno.test("server bundles and serves the client app", async () => {
+test("server bundles and serves the client app", async () => {
   const { base } = readOnlyServer();
   const res = await fetch(`${base}/assets/app.js`);
   assertEquals(res.status, 200);
@@ -270,7 +271,7 @@ Deno.test("server bundles and serves the client app", async () => {
   );
 });
 
-Deno.test("the client's chunks are served and the entry loads them lazily", async () => {
+test("the client's chunks are served and the entry loads them lazily", async () => {
   const { base } = readOnlyServer();
   const entry = await (await fetch(`${base}/assets/app.js`)).text();
   // Splitting is what keeps noVNC and motion off the first load: the entry
@@ -305,7 +306,7 @@ Deno.test("the client's chunks are served and the entry loads them lazily", asyn
   );
 });
 
-Deno.test("the app's files are compressed and revalidated", async () => {
+test("the app's files are compressed and revalidated", async () => {
   // The app is opened over a tailnet or a WAN as often as on loopback, and
   // everything it serves is text: the bundle is ~600 KB, the stylesheet is
   // inlined into the page (~140 KB), and JSON snapshots repeat. Without
@@ -357,7 +358,7 @@ Deno.test("the app's files are compressed and revalidated", async () => {
   }
 });
 
-Deno.test("the PWA surface is installable and never secret", async () => {
+test("the PWA surface is installable and never secret", async () => {
   const { base } = readOnlyServer();
   // The manifest is generated per request: it reports the theme colour
   // this page starts in (dark is the default) and is valid JSON.

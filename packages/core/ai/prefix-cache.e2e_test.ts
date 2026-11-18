@@ -16,6 +16,7 @@
  * in fixed-size blocks (64 tokens for DeepSeek), so the shared prefix must
  * comfortably span one from the very first request.
  */
+import { test } from "bun:test";
 import { assert } from "@std/assert";
 import { toLlmMessages } from "../ai/llm-view.ts";
 import { Agent } from "./agent.ts";
@@ -95,10 +96,9 @@ function lookupTool(): AgentTool {
   } as AgentTool;
 }
 
-Deno.test({
-  name: "prefix cache: every request after the first is served from the provider's cache",
-  ignore: API_KEY === undefined,
-  fn: async () => {
+test.skipIf(API_KEY === undefined)(
+  "prefix cache: every request after the first is served from the provider's cache",
+  async () => {
     const agent = new Agent({
       initialState: {
         systemPrompt: SYSTEM_PROMPT,
@@ -159,4 +159,4 @@ Deno.test({
       `the tool's value never reached the answer: ${finalText}`,
     );
   },
-});
+);

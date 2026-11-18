@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import {
   createFrameBatcher,
@@ -35,7 +36,7 @@ function harness(flushMs?: number) {
   return { batcher, frames, timers, cleared, timeoutMs };
 }
 
-Deno.test("ws-batch: several deltas of one session leave as one frame", () => {
+test("ws-batch: several deltas of one session leave as one frame", () => {
   const { batcher, frames } = harness();
   batcher.delta("s1", "Hel");
   batcher.delta("s1", "lo ");
@@ -47,7 +48,7 @@ Deno.test("ws-batch: several deltas of one session leave as one frame", () => {
   ]);
 });
 
-Deno.test("ws-batch: two sessions are never merged into one frame", () => {
+test("ws-batch: two sessions are never merged into one frame", () => {
   // One socket carries every open tab's events. Concatenating two tabs'
   // tokens would hand each viewer the other tab's words.
   const { batcher, frames } = harness();
@@ -60,7 +61,7 @@ Deno.test("ws-batch: two sessions are never merged into one frame", () => {
   ]);
 });
 
-Deno.test("ws-batch: the timer flushes the buffered deltas", () => {
+test("ws-batch: the timer flushes the buffered deltas", () => {
   const { batcher, frames, timers, timeoutMs } = harness();
   batcher.delta("s1", "a");
   assertEquals(timers.length, 1);
@@ -70,7 +71,7 @@ Deno.test("ws-batch: the timer flushes the buffered deltas", () => {
   assertEquals(frames, [{ key: "s1", delta: "a", rev: undefined, events: 1 }]);
 });
 
-Deno.test("ws-batch: the timer starts with the first delta only", () => {
+test("ws-batch: the timer starts with the first delta only", () => {
   const { batcher, timers } = harness();
   batcher.delta("s1", "a");
   batcher.delta("s1", "b");
@@ -80,7 +81,7 @@ Deno.test("ws-batch: the timer starts with the first delta only", () => {
   assertEquals(timers.length, 1);
 });
 
-Deno.test("ws-batch: a batch reports the last revision it contains", () => {
+test("ws-batch: a batch reports the last revision it contains", () => {
   // The revision is a count of events, not of frames: a batch of three
   // deltas has to report the third's revision, or the client would read a
   // gap and re-fetch the snapshot on every batch.
@@ -92,7 +93,7 @@ Deno.test("ws-batch: a batch reports the last revision it contains", () => {
   assertEquals(frames, [{ key: "s1", delta: "abc", rev: 13, events: 3 }]);
 });
 
-Deno.test("ws-batch: an empty delta contributes nothing", () => {
+test("ws-batch: an empty delta contributes nothing", () => {
   const { batcher, frames, timers } = harness();
   batcher.delta("s1", "", 1);
   // No text, no timer: an empty delta must not start a flush loop.
@@ -102,7 +103,7 @@ Deno.test("ws-batch: an empty delta contributes nothing", () => {
   assertEquals(batcher.pending, false);
 });
 
-Deno.test("ws-batch: flush twice emits once", () => {
+test("ws-batch: flush twice emits once", () => {
   // The caller flushes before every non-delta frame, and those can arrive in
   // a row; a second flush must not emit an empty frame.
   const { batcher, frames } = harness();
@@ -112,7 +113,7 @@ Deno.test("ws-batch: flush twice emits once", () => {
   assertEquals(frames, [{ key: "s1", delta: "x", rev: undefined, events: 1 }]);
 });
 
-Deno.test("ws-batch: a large batch flushes without waiting", () => {
+test("ws-batch: a large batch flushes without waiting", () => {
   // A fast model must not build one unbounded frame: past maxChars the batch
   // goes out immediately, even though the interval has not elapsed.
   const { batcher, frames, timers } = harness();
@@ -124,7 +125,7 @@ Deno.test("ws-batch: a large batch flushes without waiting", () => {
   assertEquals(batcher.pending, false);
 });
 
-Deno.test("ws-batch: a large batch does not strand another session", () => {
+test("ws-batch: a large batch does not strand another session", () => {
   const { batcher, frames } = harness();
   batcher.delta("s1", "a");
   batcher.delta("s2", "x".repeat(WS_DELTA_MAX_CHARS));
@@ -140,7 +141,7 @@ Deno.test("ws-batch: a large batch does not strand another session", () => {
   );
 });
 
-Deno.test("ws-batch: close flushes what was produced, then stops", () => {
+test("ws-batch: close flushes what was produced, then stops", () => {
   // A socket closing mid-stream must not silently drop text the model
   // already produced.
   const { batcher, frames } = harness();
@@ -154,7 +155,7 @@ Deno.test("ws-batch: close flushes what was produced, then stops", () => {
   assertEquals(frames.length, 1);
 });
 
-Deno.test("ws-batch: close cancels the pending timer", () => {
+test("ws-batch: close cancels the pending timer", () => {
   const { batcher, timers, cleared } = harness();
   batcher.delta("s1", "a");
   batcher.close();
@@ -165,7 +166,7 @@ Deno.test("ws-batch: close cancels the pending timer", () => {
   assertEquals(batcher.pending, false);
 });
 
-Deno.test("ws-batch: pending tracks the buffer", () => {
+test("ws-batch: pending tracks the buffer", () => {
   const { batcher } = harness();
   assertEquals(batcher.pending, false);
   batcher.delta("s1", "a");
@@ -174,7 +175,7 @@ Deno.test("ws-batch: pending tracks the buffer", () => {
   assertEquals(batcher.pending, false);
 });
 
-Deno.test("ws-batch: a flush timer that fires after a manual flush is inert", () => {
+test("ws-batch: a flush timer that fires after a manual flush is inert", () => {
   const { batcher, frames, timers } = harness();
   batcher.delta("s1", "a");
   batcher.flush();

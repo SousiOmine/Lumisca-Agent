@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import type { VmCommandResult } from "./command.ts";
 import type { VmExec, VmExecOptions } from "./container.ts";
@@ -55,7 +56,7 @@ function backend(run: VmExec): VmFileBackend {
 
 // --- path resolution -------------------------------------------------------
 
-Deno.test("vm fs: resolve confines every path to the machine's home", async () => {
+test("vm fs: resolve confines every path to the machine's home", async () => {
   const { run } = script([]);
   const files = backend(run);
 
@@ -89,7 +90,7 @@ Deno.test("vm fs: resolve confines every path to the machine's home", async () =
 
 // --- stat / read / write ---------------------------------------------------
 
-Deno.test("vm fs: stat answers undefined for a missing path", async () => {
+test("vm fs: stat answers undefined for a missing path", async () => {
   const missing = script([{ match: /^sh -c if \[ -e/, stdout: "" }]);
   assertEquals(await backend(missing.run).stat("/home/agent/x"), undefined);
 
@@ -111,7 +112,7 @@ Deno.test("vm fs: stat answers undefined for a missing path", async () => {
   });
 });
 
-Deno.test("vm fs: readHead decodes base64 and reports the size", async () => {
+test("vm fs: readHead decodes base64 and reports the size", async () => {
   // "hello" in base64, after the size line the same call prints.
   const { run } = script([{ match: /^sh -c size=/, stdout: "5\naGVsbG8=\n" }]);
   const result = await backend(run).readHead("/home/agent/x.txt", 1024);
@@ -119,7 +120,7 @@ Deno.test("vm fs: readHead decodes base64 and reports the size", async () => {
   assertEquals(result.size, 5);
 });
 
-Deno.test("vm fs: a read longer than the head reports the whole size", async () => {
+test("vm fs: a read longer than the head reports the whole size", async () => {
   // "hello" is the head of a 1 MiB file: the caller must learn that 1 MiB
   // follows, not an error and not "5 bytes total".
   const { run } = script([
@@ -130,7 +131,7 @@ Deno.test("vm fs: a read longer than the head reports the whole size", async () 
   assertEquals(result.size, 1024 * 1024);
 });
 
-Deno.test("vm fs: readBytes asks for one window by byte offset", async () => {
+test("vm fs: readBytes asks for one window by byte offset", async () => {
   // "ell" in base64, the answer to "bytes 2..4 of hello.txt".
   const { run, calls } = script([
     { match: /^sh -c tail -c/, stdout: "ZWxs\n" },
@@ -145,7 +146,7 @@ Deno.test("vm fs: readBytes asks for one window by byte offset", async () => {
   assertEquals(argv.slice(-2), ["2", "3"]);
 });
 
-Deno.test("vm fs: writeBytes appends when the transfer is not on its first chunk", async () => {
+test("vm fs: writeBytes appends when the transfer is not on its first chunk", async () => {
   const { run, calls } = script([{ match: /^sh -c mkdir -p/, stdout: "" }]);
   await backend(run).writeBytes(
     "/home/agent/a.bin",
@@ -157,7 +158,7 @@ Deno.test("vm fs: writeBytes appends when the transfer is not on its first chunk
   assert(argv.join(" ").includes('base64 --decode >> "$1"'), argv.join(" "));
 });
 
-Deno.test("vm fs: writeText sends the payload over stdin, never inline", async () => {
+test("vm fs: writeText sends the payload over stdin, never inline", async () => {
   const { run, calls } = script([{ match: /^sh -c mkdir -p/, stdout: "" }]);
   await backend(run).writeText("/home/agent/a.txt", "content");
   const [argv] = calls;
@@ -167,7 +168,7 @@ Deno.test("vm fs: writeText sends the payload over stdin, never inline", async (
   assert(argv.join(" ").includes('base64 --decode > "$1"'), argv.join(" "));
 });
 
-Deno.test("vm fs: a private write is owner-only inside the machine", async () => {
+test("vm fs: a private write is owner-only inside the machine", async () => {
   const { run, calls } = script([{ match: /^sh -c umask 077/, stdout: "" }]);
   await backend(run).writeText("/home/agent/spill.txt", "secret", {
     private: true,
@@ -179,7 +180,7 @@ Deno.test("vm fs: a private write is owner-only inside the machine", async () =>
   assert(command.includes('base64 --decode > "$1"'), command);
 });
 
-Deno.test("vm fs: readRanges returns the lines and the file length", async () => {
+test("vm fs: readRanges returns the lines and the file length", async () => {
   const { run } = script([
     {
       match: /^sh -c wc -l/,
@@ -195,7 +196,7 @@ Deno.test("vm fs: readRanges returns the lines and the file length", async () =>
   assertEquals(result.endOfFile, false);
 });
 
-Deno.test("vm fs: readRanges reports a range past the end", async () => {
+test("vm fs: readRanges reports a range past the end", async () => {
   const { run } = script([{ match: /^sh -c wc -l/, stdout: "2\nonly\n" }]);
   const result = await backend(run).readRanges("/home/agent/log.txt", [
     { from: 10, to: 20 },
@@ -206,7 +207,7 @@ Deno.test("vm fs: readRanges reports a range past the end", async () => {
 
 // --- listing ---------------------------------------------------------------
 
-Deno.test("vm fs: listDir reports kind and name", async () => {
+test("vm fs: listDir reports kind and name", async () => {
   const { run } = script([
     {
       match: /^sh -c cd/,
@@ -221,7 +222,7 @@ Deno.test("vm fs: listDir reports kind and name", async () => {
   ]);
 });
 
-Deno.test("vm fs: listDir reports a missing directory", async () => {
+test("vm fs: listDir reports a missing directory", async () => {
   const { run } = script([{ match: /^sh -c cd/, exitCode: 3 }]);
   let message = "";
   try {
@@ -234,7 +235,7 @@ Deno.test("vm fs: listDir reports a missing directory", async () => {
 
 // --- shell quoting ---------------------------------------------------------
 
-Deno.test("vm fs: shellQuote survives quotes and spaces", () => {
+test("vm fs: shellQuote survives quotes and spaces", () => {
   assertEquals(shellQuote("plain"), "'plain'");
   assertEquals(shellQuote("a b"), "'a b'");
   assertEquals(shellQuote("it's"), "'it'\\''s'");

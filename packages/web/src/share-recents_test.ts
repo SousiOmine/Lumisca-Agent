@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import {
   folderName,
@@ -29,7 +30,7 @@ function folder(path: string, overrides: Partial<RecentShareFolder> = {}) {
   };
 }
 
-Deno.test("share recents: a folder is remembered once, newest first", () => {
+test("share recents: a folder is remembered once, newest first", () => {
   const storage = memoryStorage();
   rememberFolder(folder("/Users/me/proj"), storage);
   rememberFolder(folder("/Users/me/notes"), storage);
@@ -44,7 +45,7 @@ Deno.test("share recents: a folder is remembered once, newest first", () => {
   assertEquals(folders[0]?.write, true);
 });
 
-Deno.test("share recents: the list is capped", () => {
+test("share recents: the list is capped", () => {
   const storage = memoryStorage();
   for (let i = 0; i < MAX_RECENT_FOLDERS + 2; i++) {
     rememberFolder(folder(`/tmp/f${i}`), storage);
@@ -54,18 +55,18 @@ Deno.test("share recents: the list is capped", () => {
   assertEquals(folders[0]?.path, `/tmp/f${MAX_RECENT_FOLDERS + 1}`);
 });
 
-Deno.test("share recents: bad storage data is an empty list, not a crash", () => {
+test("share recents: bad storage data is an empty list, not a crash", () => {
   assertEquals(loadRecentFolders(memoryStorage("not json")), []);
   assertEquals(loadRecentFolders(memoryStorage('{"a":1}')), []);
   assertEquals(loadRecentFolders(memoryStorage('[1, null, {"path":3}]')), []);
 });
 
-Deno.test("share recents: a missing name is derived from the path", () => {
+test("share recents: a missing name is derived from the path", () => {
   const storage = memoryStorage('[{"path":"/Users/me/proj"}]');
   assertEquals(loadRecentFolders(storage)[0]?.name, "proj");
 });
 
-Deno.test("folderName keeps the last segment of either separator", () => {
+test("folderName keeps the last segment of either separator", () => {
   assertEquals(folderName("/Users/me/proj"), "proj");
   assertEquals(folderName("C:\\Users\\me\\proj"), "proj");
   assertEquals(folderName("/Users/me/proj/"), "proj");

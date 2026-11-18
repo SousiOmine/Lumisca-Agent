@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import {
   connectionLabel,
@@ -24,7 +25,7 @@ const entry = (id: string, name: string, url: string) => ({
   token: "t",
 });
 
-Deno.test("pageUrl keeps the token in the query and drops trailing slashes", () => {
+test("pageUrl keeps the token in the query and drops trailing slashes", () => {
   assertEquals(
     pageUrl("https://host.tailnet.ts.net/", "abc"),
     "https://host.tailnet.ts.net/?token=abc",
@@ -36,7 +37,7 @@ Deno.test("pageUrl keeps the token in the query and drops trailing slashes", () 
   );
 });
 
-Deno.test("originOf reduces the spellings of one server to one string", () => {
+test("originOf reduces the spellings of one server to one string", () => {
   assertEquals(
     originOf("https://host.tailnet.ts.net/"),
     "https://host.tailnet.ts.net",
@@ -49,13 +50,13 @@ Deno.test("originOf reduces the spellings of one server to one string", () => {
   assertEquals(originOf("homeserver:8000"), "homeserver:8000");
 });
 
-Deno.test("displayedConnectionId names the local server with an empty id", () => {
+test("displayedConnectionId names the local server with an empty id", () => {
   const connections = [entry("a", "Home", "https://home.example")];
   const local: DisplayedServer = { mode: "local", url: null };
   assertEquals(displayedConnectionId(connections, local), "");
 });
 
-Deno.test("displayedConnectionId matches a remote by origin, not by name", () => {
+test("displayedConnectionId matches a remote by origin, not by name", () => {
   const connections = [
     entry("a", "Home", "https://home.example"),
     entry("b", "Tailnet", "http://100.64.0.5:8000"),
@@ -68,7 +69,7 @@ Deno.test("displayedConnectionId matches a remote by origin, not by name", () =>
   assertEquals(displayedConnectionId(connections, remote), "a");
 });
 
-Deno.test("displayedConnectionId: a server the registry does not know is null", () => {
+test("displayedConnectionId: a server the registry does not know is null", () => {
   const connections = [entry("a", "Home", "https://home.example")];
   const stranger: DisplayedServer = {
     mode: "remote",
@@ -85,7 +86,7 @@ Deno.test("displayedConnectionId: a server the registry does not know is null", 
   assertEquals(displayedConnectionId(connections, null), null);
 });
 
-Deno.test("connectionLabel prefers the name, then the host, then the id", () => {
+test("connectionLabel prefers the name, then the host, then the id", () => {
   assertEquals(
     connectionLabel(entry("id", " Home ", "https://h.example")),
     "Home",
@@ -103,7 +104,7 @@ Deno.test("connectionLabel prefers the name, then the host, then the id", () => 
   assertEquals(connectionLabel(entry("id", "", "  ")), "id");
 });
 
-Deno.test("serverLabel prefers the shell's name, then the URL's host", () => {
+test("serverLabel prefers the shell's name, then the URL's host", () => {
   // The name the shell was switched with: the only place that knows it,
   // because a remote page's registry is that server's own.
   assertEquals(serverLabel("自宅", "https://home.example/?token=abc"), "自宅");
@@ -117,7 +118,7 @@ Deno.test("serverLabel prefers the shell's name, then the URL's host", () => {
   assertEquals(serverLabel(undefined, undefined), "");
 });
 
-Deno.test("suggestConnectionName reads the host of a URL being typed", () => {
+test("suggestConnectionName reads the host of a URL being typed", () => {
   assertEquals(suggestConnectionName("https://home.example"), "home.example");
   assertEquals(
     suggestConnectionName("http://100.64.0.5:8000/"),
@@ -131,7 +132,7 @@ Deno.test("suggestConnectionName reads the host of a URL being typed", () => {
   assertEquals(suggestConnectionName("https://"), null);
 });
 
-Deno.test("withUrl derives the name from the address, until one is typed", () => {
+test("withUrl derives the name from the address, until one is typed", () => {
   const fresh = entry("id", "", "");
   // Address first (the required field), name derived from it.
   assertEquals(withUrl(fresh, "https://home.example"), {

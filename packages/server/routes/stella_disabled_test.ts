@@ -7,6 +7,7 @@
  * anything (no machine start, no agent built), and the routes that would
  * make the agent do something refuse with 409 instead of quietly accepting.
  */
+import { test } from "bun:test";
 import type { SessionInfo, StellaAgent } from "@lumisca/core";
 import { assertEquals } from "@std/assert";
 import type { StellaApi } from "./stella.ts";
@@ -68,7 +69,7 @@ function app(core: StellaApi) {
   return routes;
 }
 
-Deno.test("disabled agent: the switch reaches the core untouched", async () => {
+test("disabled agent: the switch reaches the core untouched", async () => {
   const patches: { id: string; patch: Record<string, unknown> }[] = [];
   const core = stellaApiStub({
     updateStellaAgent: (id: string, patch: Record<string, unknown>) => {
@@ -87,7 +88,7 @@ Deno.test("disabled agent: the switch reaches the core untouched", async () => {
   assertEquals((await response.json()).disabledAt, 1);
 });
 
-Deno.test("disabled agent: a non-boolean switch is a 400, not silence", async () => {
+test("disabled agent: a non-boolean switch is a 400, not silence", async () => {
   const core = stellaApiStub({
     updateStellaAgent: () => Promise.resolve(agent()),
   });
@@ -99,7 +100,7 @@ Deno.test("disabled agent: a non-boolean switch is a 400, not silence", async ()
   assertEquals(response.status, 400);
 });
 
-Deno.test("disabled agent: opening the conversation reads the store, not the core's open", async () => {
+test("disabled agent: opening the conversation reads the store, not the core's open", async () => {
   // `getOrCreateStellaSession` is absent from the stub on purpose: the stub
   // throws for any method it was not given, so reaching it would fail here.
   const calls: string[] = [];
@@ -114,7 +115,7 @@ Deno.test("disabled agent: opening the conversation reads the store, not the cor
   assertEquals(calls, ["store:s1:"]);
 });
 
-Deno.test("disabled agent: a conversation that was never opened has no session", async () => {
+test("disabled agent: a conversation that was never opened has no session", async () => {
   const core = stellaApiStub({
     getStellaAgent: () => agent(),
     findStellaSession: () => undefined,
@@ -130,7 +131,7 @@ Deno.test("disabled agent: a conversation that was never opened has no session",
   assertEquals(body.entries, []);
 });
 
-Deno.test("disabled agent: sending is refused before the machine is touched", async () => {
+test("disabled agent: sending is refused before the machine is touched", async () => {
   const core = stellaApiStub({
     getStellaAgent: () => agent(),
     // `ensureStellaReady` and `startPrompt` are absent: the stub throws for
@@ -144,7 +145,7 @@ Deno.test("disabled agent: sending is refused before the machine is touched", as
   assertEquals(response.status, 409);
 });
 
-Deno.test("disabled agent: the clipboard is refused, reading included", async () => {
+test("disabled agent: the clipboard is refused, reading included", async () => {
   const core = stellaApiStub({
     getStellaAgent: () => agent(),
   });
@@ -157,7 +158,7 @@ Deno.test("disabled agent: the clipboard is refused, reading included", async ()
   assertEquals(response.status, 409);
 });
 
-Deno.test("disabled agent: the event stream closes at once", async () => {
+test("disabled agent: the event stream closes at once", async () => {
   const core = stellaApiStub({
     getStellaAgent: () => agent(),
   });

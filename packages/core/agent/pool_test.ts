@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import type { Model } from "../ai/catalog.ts";
 
@@ -137,7 +138,7 @@ function makePool(options: { streaming?: boolean } = {}): {
   return { pool: new SessionPool(deps, factory), teardown };
 }
 
-Deno.test("pool.require throws not_found for an unopened session", () => {
+test("pool.require throws not_found for an unopened session", () => {
   const { pool } = makePool();
   const error = assertThrows(() => pool.require("missing"), CoreError);
   assertEquals((error as CoreError).kind, "not_found");
@@ -145,7 +146,7 @@ Deno.test("pool.require throws not_found for an unopened session", () => {
   assertEquals(pool.lastError("missing"), undefined);
 });
 
-Deno.test("pool.close tears down every resource of the session", async () => {
+test("pool.close tears down every resource of the session", async () => {
   const { pool, teardown } = makePool();
   const session = sessionInfo("s1");
   pool.open(session, WORKSPACE, []);
@@ -159,13 +160,13 @@ Deno.test("pool.close tears down every resource of the session", async () => {
   assertThrows(() => pool.require(session.id), CoreError);
 });
 
-Deno.test("pool.close is a no-op for an unknown session", async () => {
+test("pool.close is a no-op for an unknown session", async () => {
   const { pool, teardown } = makePool();
   await pool.close("missing");
   assertEquals(teardown.agentClosed, 0);
 });
 
-Deno.test("pool.closeAll tears down every open session", async () => {
+test("pool.closeAll tears down every open session", async () => {
   const { pool, teardown } = makePool();
   pool.open(sessionInfo("s1"), WORKSPACE, []);
   pool.open(sessionInfo("s2"), WORKSPACE, []);
@@ -179,7 +180,7 @@ Deno.test("pool.closeAll tears down every open session", async () => {
   assertThrows(() => pool.require("s2"), CoreError);
 });
 
-Deno.test("pool.applyChange refuses while a session is streaming", () => {
+test("pool.applyChange refuses while a session is streaming", () => {
   const { pool, teardown } = makePool({ streaming: true });
   const session = sessionInfo("s1");
   pool.open(session, WORKSPACE, []);
@@ -198,7 +199,7 @@ Deno.test("pool.applyChange refuses while a session is streaming", () => {
   assertEquals(teardown.agentClosed, 0);
 });
 
-Deno.test("pool.applyChange mutates and rebuilds idle sessions", () => {
+test("pool.applyChange mutates and rebuilds idle sessions", () => {
   const { pool, teardown } = makePool();
   const session = sessionInfo("s1");
   pool.open(session, WORKSPACE, []);
@@ -213,7 +214,7 @@ Deno.test("pool.applyChange mutates and rebuilds idle sessions", () => {
   assert(pool.get(session.id) !== undefined);
 });
 
-Deno.test("pool.applyChange with no open sessions only runs the mutation", () => {
+test("pool.applyChange with no open sessions only runs the mutation", () => {
   const { pool, teardown } = makePool();
   let mutated = false;
   pool.applyChange([sessionInfo("closed")], () => {
@@ -223,7 +224,7 @@ Deno.test("pool.applyChange with no open sessions only runs the mutation", () =>
   assertEquals(teardown.agentClosed, 0);
 });
 
-Deno.test("pool.applyCapabilityChange stores while a session streams", () => {
+test("pool.applyCapabilityChange stores while a session streams", () => {
   const { pool, teardown } = makePool({ streaming: true });
   const session = sessionInfo("s1");
   pool.open(session, WORKSPACE, []);
@@ -240,7 +241,7 @@ Deno.test("pool.applyCapabilityChange stores while a session streams", () => {
   assertEquals(teardown.reseeded, 1);
 });
 
-Deno.test("pool.applyCapabilityChange rebuilds idle sessions", () => {
+test("pool.applyCapabilityChange rebuilds idle sessions", () => {
   const { pool, teardown } = makePool();
   const session = sessionInfo("s1");
   pool.open(session, WORKSPACE, []);
@@ -250,7 +251,7 @@ Deno.test("pool.applyCapabilityChange rebuilds idle sessions", () => {
   assertEquals(teardown.reseeded, 0);
 });
 
-Deno.test("pool.applyCapabilityChange with no open sessions only runs the mutation", () => {
+test("pool.applyCapabilityChange with no open sessions only runs the mutation", () => {
   const { pool, teardown } = makePool();
   let mutated = false;
   pool.applyCapabilityChange([sessionInfo("closed")], () => {
@@ -261,7 +262,7 @@ Deno.test("pool.applyCapabilityChange with no open sessions only runs the mutati
   assertEquals(teardown.reseeded, 0);
 });
 
-Deno.test("pool.applyMcpConfigChange stores while a session streams", () => {
+test("pool.applyMcpConfigChange stores while a session streams", () => {
   const { pool, teardown } = makePool({ streaming: true });
   const session = sessionInfo("s1");
   pool.open(session, WORKSPACE, []);
@@ -279,7 +280,7 @@ Deno.test("pool.applyMcpConfigChange stores while a session streams", () => {
   assertEquals(teardown.mcpRefreshed, 1);
 });
 
-Deno.test("pool.applyMcpConfigChange rebuilds idle sessions", () => {
+test("pool.applyMcpConfigChange rebuilds idle sessions", () => {
   const { pool, teardown } = makePool();
   const session = sessionInfo("s1");
   pool.open(session, WORKSPACE, []);
@@ -294,7 +295,7 @@ Deno.test("pool.applyMcpConfigChange rebuilds idle sessions", () => {
   assertEquals(teardown.mcpRefreshed, 0);
 });
 
-Deno.test("pool.applyMcpConfigChange leaves closed sessions alone", () => {
+test("pool.applyMcpConfigChange leaves closed sessions alone", () => {
   const { pool, teardown } = makePool();
   let mutated = false;
   pool.applyMcpConfigChange([sessionInfo("closed")], () => {
@@ -305,7 +306,7 @@ Deno.test("pool.applyMcpConfigChange leaves closed sessions alone", () => {
   assertEquals(teardown.mcpRefreshed, 0);
 });
 
-Deno.test("pool.refreshMcp reconnects a streaming session in place", () => {
+test("pool.refreshMcp reconnects a streaming session in place", () => {
   // The user signs in from Settings while the conversation that needs the
   // server is still working. Refusing the whole batch would leave that
   // conversation on the attachment whose connection already got its 401,
@@ -323,7 +324,7 @@ Deno.test("pool.refreshMcp reconnects a streaming session in place", () => {
   assertEquals(teardown.mcpCredentials, 1);
 });
 
-Deno.test("pool.refreshMcp rebuilds an idle session", () => {
+test("pool.refreshMcp rebuilds an idle session", () => {
   const { pool, teardown } = makePool();
   const session = sessionInfo("s1");
   pool.open(session, WORKSPACE, []);
@@ -333,7 +334,7 @@ Deno.test("pool.refreshMcp rebuilds an idle session", () => {
   assertEquals(teardown.mcpRefreshed, 0);
 });
 
-Deno.test("pool.refreshMcp reconnects the running ones and rebuilds the rest", () => {
+test("pool.refreshMcp reconnects the running ones and rebuilds the rest", () => {
   // One sign-in touches every session that uses the server, and they are not
   // all in the same state: a refusal by one must not cost the others.
   const { pool, teardown } = makePool({ streaming: true });
@@ -350,7 +351,7 @@ Deno.test("pool.refreshMcp reconnects the running ones and rebuilds the rest", (
   assertEquals(idlePool.teardown.agentClosed, 1);
 });
 
-Deno.test("pool.setThinkingLevel ignores a closed session", () => {
+test("pool.setThinkingLevel ignores a closed session", () => {
   // The level is read from settings on the next open(), so a session that is
   // not open must be a silent no-op — not a throw (a stale tab keeps asking)
   // and not a write to some other session. `pool.require` is the throwing
@@ -363,7 +364,7 @@ Deno.test("pool.setThinkingLevel ignores a closed session", () => {
   assertThrows(() => pool.require("missing"));
 });
 
-Deno.test("pool.rebuild ignores a session that is not open", () => {
+test("pool.rebuild ignores a session that is not open", () => {
   const { pool, teardown } = makePool();
   pool.rebuild(sessionInfo("never-opened"));
   assertEquals(teardown.agentClosed, 0);

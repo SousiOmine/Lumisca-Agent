@@ -6,6 +6,7 @@
  * appears, and a start that waits for the program to exit holds the tool call
  * open until the user closes a program they are still using.
  */
+import { test } from "bun:test";
 import { assertEquals, assertRejects } from "@std/assert";
 import type { VmExec, VmExecResult } from "./container.ts";
 import { createVmLaunchTool } from "./launcher.ts";
@@ -70,14 +71,14 @@ function tool(
   };
 }
 
-Deno.test("vm_launch: list names what the machine installed", async () => {
+test("vm_launch: list names what the machine installed", async () => {
   const { launch } = tool({ "files.desktop": ENTRY });
   const result = await launch.execute("t1", { action: "list" }, undefined);
   const text = result.content[0];
   assertEquals(text?.type === "text" && text.text.includes("Files"), true);
 });
 
-Deno.test("vm_launch: start runs the entry's command, detached", async () => {
+test("vm_launch: start runs the entry's command, detached", async () => {
   const { launch, calls } = tool({ "files.desktop": ENTRY });
   const result = await launch.execute(
     "t1",
@@ -94,7 +95,7 @@ Deno.test("vm_launch: start runs the entry's command, detached", async () => {
   assertEquals(started!.includes("&"), true, started);
 });
 
-Deno.test("vm_launch: an id that is not installed says so and lists", async () => {
+test("vm_launch: an id that is not installed says so and lists", async () => {
   const { launch } = tool({ "files.desktop": ENTRY });
   const failure = assertRejects(
     () => launch.execute("t1", { action: "start", id: "nope" }, undefined),
@@ -106,7 +107,7 @@ Deno.test("vm_launch: an id that is not installed says so and lists", async () =
   });
 });
 
-Deno.test("vm_launch: start needs an id", async () => {
+test("vm_launch: start needs an id", async () => {
   const { launch } = tool({ "files.desktop": ENTRY });
   await assertRejects(
     () => launch.execute("t1", { action: "start" }, undefined),
@@ -114,7 +115,7 @@ Deno.test("vm_launch: start needs an id", async () => {
   );
 });
 
-Deno.test("vm_launch: a shell that refuses to start is reported", async () => {
+test("vm_launch: a shell that refuses to start is reported", async () => {
   // The command line itself can fail (a missing binary): the tool says what
   // the shell said instead of claiming the program started.
   const { launch } = tool({ "files.desktop": ENTRY }, () => ({

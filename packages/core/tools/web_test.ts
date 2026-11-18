@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { TOOL_WEB_FETCH, TOOL_WEB_SEARCH } from "../shared/tool-names.ts";
 import { WebSearchError } from "../websearch/errors.ts";
@@ -35,7 +36,7 @@ function textOf(result: {
   return result.content.map((block) => block.text ?? "").join("");
 }
 
-Deno.test("the pair is built with the names the UI and the prompt use", () => {
+test("the pair is built with the names the UI and the prompt use", () => {
   const tools = createWebSearchTools(fakeProvider());
   assertEquals(
     tools.map((tool) => tool.name),
@@ -43,7 +44,7 @@ Deno.test("the pair is built with the names the UI and the prompt use", () => {
   );
 });
 
-Deno.test("web_search lists the hits with urls and excerpts", async () => {
+test("web_search lists the hits with urls and excerpts", async () => {
   const asked: SearchRequest[] = [];
   const tools = createWebSearchTools(
     fakeProvider({
@@ -86,13 +87,13 @@ Deno.test("web_search lists the hits with urls and excerpts", async () => {
   assert(text.includes("untrusted input"));
 });
 
-Deno.test("web_search reports an empty result set plainly", async () => {
+test("web_search reports an empty result set plainly", async () => {
   const tools = createWebSearchTools(fakeProvider());
   const result = await tools[0]!.execute("id", { query: "nothing at all" });
   assertEquals(textOf(result), 'No results for "nothing at all" from Exa.');
 });
 
-Deno.test("web_search passes the caller's abort along", async () => {
+test("web_search passes the caller's abort along", async () => {
   let seen: AbortSignal | undefined;
   const tools = createWebSearchTools(
     fakeProvider({
@@ -108,7 +109,7 @@ Deno.test("web_search passes the caller's abort along", async () => {
   assertEquals(seen, controller.signal);
 });
 
-Deno.test("web_fetch returns the title, the url and the text", async () => {
+test("web_fetch returns the title, the url and the text", async () => {
   const tools = createWebSearchTools(
     fakeProvider({
       fetchPage: () =>
@@ -124,7 +125,7 @@ Deno.test("web_fetch returns the title, the url and the text", async () => {
   assertEquals(textOf(result), "The page\nhttps://example.com/final\n\nBody");
 });
 
-Deno.test("web_fetch says so when the page had no readable text", async () => {
+test("web_fetch says so when the page had no readable text", async () => {
   const tools = createWebSearchTools(
     fakeProvider({
       fetchPage: () =>
@@ -135,7 +136,7 @@ Deno.test("web_fetch says so when the page had no readable text", async () => {
   assert(textOf(result).includes("(the page had no readable text)"));
 });
 
-Deno.test("a provider failure reaches the model as advice, not a stack trace", async () => {
+test("a provider failure reaches the model as advice, not a stack trace", async () => {
   const tools = createWebSearchTools(
     fakeProvider({
       search: () =>
@@ -153,7 +154,7 @@ Deno.test("a provider failure reaches the model as advice, not a stack trace", a
   assert(error.message.includes("Settings"));
 });
 
-Deno.test("an unexpected failure is still reported as a web-search failure", async () => {
+test("an unexpected failure is still reported as a web-search failure", async () => {
   const tools = createWebSearchTools(
     fakeProvider({
       search: () => Promise.reject(new TypeError("offline")),

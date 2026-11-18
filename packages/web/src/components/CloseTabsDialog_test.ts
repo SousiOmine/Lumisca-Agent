@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -18,7 +19,7 @@ function render(names: string[]): string {
   );
 }
 
-Deno.test("CloseTabsDialog warns about the single tab it would stop", () => {
+test("CloseTabsDialog warns about the single tab it would stop", () => {
   const html = render(["買い物リストの改善"]);
   assertStringIncludes(html, "実行中のタブを閉じますか？");
   assertStringIncludes(html, "「買い物リストの改善」は実行中です");
@@ -31,7 +32,7 @@ Deno.test("CloseTabsDialog warns about the single tab it would stop", () => {
   }
 });
 
-Deno.test("CloseTabsDialog lists every running tab of a bulk close", () => {
+test("CloseTabsDialog lists every running tab of a bulk close", () => {
   const html = render(["A の調査", "B の実装"]);
   assertStringIncludes(html, "対象のタブのうち2件が実行中です");
   // The names are rows, not sentence fragments: a title may be long or

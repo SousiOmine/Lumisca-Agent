@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertThrows } from "@std/assert";
 import { CoreError } from "../errors.ts";
 import { MCP_OAUTH_KEY_PREFIX } from "../mcp/oauth.ts";
@@ -19,7 +20,7 @@ import {
   protectedKeyReason,
 } from "./guard.ts";
 
-Deno.test("the settings guard hides every credential category", () => {
+test("the settings guard hides every credential category", () => {
   for (const key of [
     `${CREDENTIAL_KEY_PREFIX}anthropic`,
     // MCP OAuth tokens and client registrations (see mcp/oauth.ts).
@@ -41,7 +42,7 @@ Deno.test("the settings guard hides every credential category", () => {
   assertEquals(protectedKeyReason("mcp_oauth"), undefined);
 });
 
-Deno.test("filterExposedSettings drops the protected entries only", () => {
+test("filterExposedSettings drops the protected entries only", () => {
   const all = new Map([
     ["locale", "ja"],
     [`${MCP_OAUTH_KEY_PREFIX}https://a.example/mcp`, '{"tokens":{}}'],
@@ -57,7 +58,7 @@ Deno.test("filterExposedSettings drops the protected entries only", () => {
 // that set a default model write with `setSetting`, which skips this check —
 // the failure only appeared in the browser as "保存に失敗しました: Unknown
 // setting: model_default".
-Deno.test("the model rows of the settings dialog are writable", () => {
+test("the model rows of the settings dialog are writable", () => {
   for (const key of [DEFAULT_MODEL_KEY, FAST_MODEL_KEY, IMAGE_MODEL_KEY]) {
     // Throws (and so fails this test) when the key is missing from the
     // allow-list.
@@ -65,7 +66,7 @@ Deno.test("the model rows of the settings dialog are writable", () => {
   }
 });
 
-Deno.test("the compaction rows of the settings dialog are writable", () => {
+test("the compaction rows of the settings dialog are writable", () => {
   // Same surface, same failure mode: a row added to the panel without its
   // declaration here only fails in the browser, as "Unknown setting".
   for (const key of [
@@ -77,7 +78,7 @@ Deno.test("the compaction rows of the settings dialog are writable", () => {
   }
 });
 
-Deno.test("a key the client invented is refused", () => {
+test("a key the client invented is refused", () => {
   assertThrows(
     () => assertMutableKey("model_mine"),
     CoreError,

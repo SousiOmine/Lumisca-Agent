@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { makeRealTempDir, removeDirRetry } from "../test-utils.ts";
@@ -39,7 +40,7 @@ async function fixture(): Promise<{
   };
 }
 
-Deno.test("skill catalog is published once and stays quiet while unchanged", async () => {
+test("skill catalog is published once and stays quiet while unchanged", async () => {
   const { root, globals, provider } = await fixture();
   try {
     await writeSkill(root, "demo", "A demo skill.");
@@ -59,7 +60,7 @@ Deno.test("skill catalog is published once and stays quiet while unchanged", asy
   }
 });
 
-Deno.test("skill catalog republishes when a skill changes on disk", async () => {
+test("skill catalog republishes when a skill changes on disk", async () => {
   const { root, globals, provider } = await fixture();
   try {
     await writeSkill(root, "demo", "First description.");
@@ -78,7 +79,7 @@ Deno.test("skill catalog republishes when a skill changes on disk", async () => 
   }
 });
 
-Deno.test("skill catalog publishes whatever the session's resolver returns", () => {
+test("skill catalog publishes whatever the session's resolver returns", () => {
   // A stella session's skills come from the machine, not from a workspace
   // folder chain (vm/skills.ts). The provider must publish that set — the
   // same one the session's skill tool can load — rather than discovering a
@@ -97,7 +98,7 @@ Deno.test("skill catalog publishes whatever the session's resolver returns", () 
   assertStringIncludes(update[0]!.body, "- second: Later.");
 });
 
-Deno.test("a rebased catalog is not republished, an unrebasable one is", async () => {
+test("a rebased catalog is not republished, an unrebasable one is", async () => {
   const { root, globals, provider } = await fixture();
   try {
     await writeSkill(root, "demo", "A demo skill.");
@@ -122,7 +123,7 @@ Deno.test("a rebased catalog is not republished, an unrebasable one is", async (
   }
 });
 
-Deno.test("an emptied catalog is announced once", async () => {
+test("an emptied catalog is announced once", async () => {
   const { root, globals, provider } = await fixture();
   try {
     await writeSkill(root, "demo", "A demo skill.");
@@ -139,7 +140,7 @@ Deno.test("an emptied catalog is announced once", async () => {
   }
 });
 
-Deno.test("a session without skills publishes nothing", async () => {
+test("a session without skills publishes nothing", async () => {
   const { root, globals, provider } = await fixture();
   try {
     assertEquals(provider.next(), []);

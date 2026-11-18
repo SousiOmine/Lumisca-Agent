@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { LumiscaDb } from "../db/mod.ts";
 import { createAgentRepo } from "../stella/agents.ts";
@@ -11,7 +12,7 @@ import { createSessionRepo } from "./repo.ts";
  * old name. Before this, the row kept a copy that was rewritten on the next
  * open — a stale window the notifications and the header could fall into.
  */
-Deno.test("session repo: a stella conversation is named by its agent", () => {
+test("session repo: a stella conversation is named by its agent", () => {
   const db = LumiscaDb.openInMemory();
   try {
     const workspace = createWorkspaceRepo(db).create("W", []);
@@ -47,7 +48,7 @@ Deno.test("session repo: a stella conversation is named by its agent", () => {
 
 /** A stella conversation is still a session row: the lists exclude it, but a
  * read by id finds it, and a session with no agent keeps its own name. */
-Deno.test("session repo: only an agent's conversation borrows its name", () => {
+test("session repo: only an agent's conversation borrows its name", () => {
   const db = LumiscaDb.openInMemory();
   try {
     const workspace = createWorkspaceRepo(db).create("W", []);

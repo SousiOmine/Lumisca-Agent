@@ -8,6 +8,7 @@
  * macOS case — which branches the other way — lives in its own file
  * (`TitleBarMacos_test.tsx`): one module graph cannot be both windows.
  */
+import { test } from "bun:test";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -62,7 +63,7 @@ function buttonTag(html: string, label: string): string {
   return html.slice(html.lastIndexOf("<button", at), at);
 }
 
-Deno.test("TitleBar: the window controls survive a refused bridge call", async () => {
+test("TitleBar: the window controls survive a refused bridge call", async () => {
   // The regression this file exists for. The chrome used to be drawn only
   // once `state` had been read, so a bridge that refused every call took the
   // buttons AND the drag handle down with it: the window (`decorations:
@@ -78,7 +79,7 @@ Deno.test("TitleBar: the window controls survive a refused bridge call", async (
   }
 });
 
-Deno.test("TitleBar: the strip is the drag handle", async () => {
+test("TitleBar: the strip is the drag handle", async () => {
   // A refused bridge must leave the window movable too: the drag goes
   // through the strip's own mousedown, which is only wired when the strip
   // renders (see TitleBar's onMouseDown → windowApi.startDrag).
@@ -89,7 +90,7 @@ Deno.test("TitleBar: the strip is the drag handle", async () => {
   assertStringIncludes(html, "tabbar");
 });
 
-Deno.test("TitleBar: the connection picker is drawn", async () => {
+test("TitleBar: the connection picker is drawn", async () => {
   // Which server this window shows is the window's own state, so it belongs
   // to the chrome — and it must not disappear with the bridge's answer.
   const html = await render();

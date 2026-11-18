@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertNotEquals } from "@std/assert";
 import type { McpServerInfo } from "../../types.ts";
 import { mcpConfigFields, mcpDraftKey } from "./mcpDraft.ts";
@@ -18,7 +19,7 @@ function server(patch: Partial<McpServerInfo> = {}): McpServerInfo {
   };
 }
 
-Deno.test("mcpDraftKey ignores live status, so a refresh is not an edit", () => {
+test("mcpDraftKey ignores live status, so a refresh is not an edit", () => {
   // A server that has just been enabled reports its status later; that must
   // not invalidate the result of a test the user already ran.
   assertEquals(
@@ -31,7 +32,7 @@ Deno.test("mcpDraftKey ignores live status, so a refresh is not an edit", () => 
   );
 });
 
-Deno.test("mcpDraftKey changes with every field a connection uses", () => {
+test("mcpDraftKey changes with every field a connection uses", () => {
   const base = mcpDraftKey(server());
   const edits: Partial<McpServerInfo>[] = [
     { name: "other" },
@@ -48,7 +49,7 @@ Deno.test("mcpDraftKey changes with every field a connection uses", () => {
   }
 });
 
-Deno.test("mcpConfigFields covers exactly the stored fields", () => {
+test("mcpConfigFields covers exactly the stored fields", () => {
   assertEquals(Object.keys(mcpConfigFields(server())).sort(), [
     "args",
     "command",

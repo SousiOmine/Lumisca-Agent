@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import type { RequestShape } from "../ai/agent-types.ts";
 
@@ -32,7 +33,7 @@ function shape(overrides: Partial<RequestShape> = {}): RequestShape {
   };
 }
 
-Deno.test("request shapes: record/list round-trips a session's cache breaks", () => {
+test("request shapes: record/list round-trips a session's cache breaks", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
@@ -70,7 +71,7 @@ Deno.test("request shapes: record/list round-trips a session's cache breaks", ()
   }
 });
 
-Deno.test("request shapes: a limit keeps the newest entries", () => {
+test("request shapes: a limit keeps the newest entries", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
@@ -89,7 +90,7 @@ Deno.test("request shapes: a limit keeps the newest entries", () => {
   }
 });
 
-Deno.test("request shapes: an append-extension is stored without a change reason", () => {
+test("request shapes: an append-extension is stored without a change reason", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
@@ -103,7 +104,7 @@ Deno.test("request shapes: an append-extension is stored without a change reason
   }
 });
 
-Deno.test("request shapes: deleting a session cascades to its rows", () => {
+test("request shapes: deleting a session cascades to its rows", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
@@ -116,7 +117,7 @@ Deno.test("request shapes: deleting a session cascades to its rows", () => {
   }
 });
 
-Deno.test("record keeps only the newest shapes of a session", () => {
+test("record keeps only the newest shapes of a session", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");

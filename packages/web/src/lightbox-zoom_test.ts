@@ -5,6 +5,7 @@
  * drifts away from the pointer, or that can be pushed until there is a gap
  * where the backdrop shows through.
  */
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import {
   type Box,
@@ -25,7 +26,7 @@ import {
 const IMAGE: Box = { width: 800, height: 600 };
 const VIEWPORT: Box = { width: 1000, height: 800 };
 
-Deno.test("zoom: the scale is held between the fit and the limit", () => {
+test("zoom: the scale is held between the fit and the limit", () => {
   assertEquals(clampScale(0.2), ZOOM_FIT);
   assertEquals(clampScale(ZOOM_MAX + 10), ZOOM_MAX);
   assertEquals(clampScale(2.5), 2.5);
@@ -34,7 +35,7 @@ Deno.test("zoom: the scale is held between the fit and the limit", () => {
   assertEquals(clampScale(Number.POSITIVE_INFINITY), ZOOM_MAX);
 });
 
-Deno.test("zoom: a picture that fits cannot be moved", () => {
+test("zoom: a picture that fits cannot be moved", () => {
   // The whole point of the fit state: the picture is centred, so a drag at 1x
   // must not leave it off centre.
   assertEquals(
@@ -43,7 +44,7 @@ Deno.test("zoom: a picture that fits cannot be moved", () => {
   );
 });
 
-Deno.test("zoom: an enlarged picture stops at the overlay's edge", () => {
+test("zoom: an enlarged picture stops at the overlay's edge", () => {
   // At 2x the picture is 1600×1200 in a 1000×800 overlay: 300px of it can be
   // shown either side horizontally, 200px vertically.
   assertEquals(clampOffset({ scale: 2, x: 500, y: -500 }, IMAGE, VIEWPORT), {
@@ -64,7 +65,7 @@ Deno.test("zoom: an enlarged picture stops at the overlay's edge", () => {
   });
 });
 
-Deno.test("zoom: the point under the pointer stays under it", () => {
+test("zoom: the point under the pointer stays under it", () => {
   // A click 100px right of the centre at 2x: that same spot of the picture has
   // to be 100px right of the centre afterwards.
   const zoomed = zoomAround(
@@ -93,7 +94,7 @@ Deno.test("zoom: the point under the pointer stays under it", () => {
   );
 });
 
-Deno.test("zoom: an anchor past the edge is pulled back inside", () => {
+test("zoom: an anchor past the edge is pulled back inside", () => {
   // Zooming at a point near the top-left corner would ask for an offset the
   // clamp cannot give; what must survive is the limit, not the anchor.
   const zoomed = zoomAround(
@@ -110,7 +111,7 @@ Deno.test("zoom: an anchor past the edge is pulled back inside", () => {
   assertEquals(zoomed.y >= -maxY && zoomed.y <= maxY, true);
 });
 
-Deno.test("zoom: a pinch scales by the fingers and follows their midpoint", () => {
+test("zoom: a pinch scales by the fingers and follows their midpoint", () => {
   const start = {
     zoom: { scale: ZOOM_FIT, x: 0, y: 0 },
     distance: 100,
@@ -158,7 +159,7 @@ Deno.test("zoom: a pinch scales by the fingers and follows their midpoint", () =
   );
 });
 
-Deno.test("zoom: the wheel is proportional and reads all three delta modes", () => {
+test("zoom: the wheel is proportional and reads all three delta modes", () => {
   // Scrolling down (away from the reader) leaves the picture, up brings it in.
   assertEquals(wheelScale(2, 100, 0) < 2, true);
   assertEquals(wheelScale(2, -100, 0) > 2, true);
@@ -180,14 +181,14 @@ Deno.test("zoom: the wheel is proportional and reads all three delta modes", () 
   assertEquals(wheelScale(ZOOM_FIT, 400, 0), ZOOM_FIT);
 });
 
-Deno.test("zoom: the transform is the offset, then the scale", () => {
+test("zoom: the transform is the offset, then the scale", () => {
   assertEquals(
     transformOf({ scale: 2, x: -12.5, y: 4 }),
     "translate3d(-12.5px, 4px, 0) scale(2)",
   );
 });
 
-Deno.test("zoom: a pinch is measured from two pointers", () => {
+test("zoom: a pinch is measured from two pointers", () => {
   const a = { x: 100, y: 100 };
   const b = { x: 400, y: 500 };
   assertEquals(distanceOf(a, b), 500);

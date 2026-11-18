@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { SessionAttachmentStore } from "../session/attachments.ts";
@@ -58,7 +59,7 @@ function receipt(result: ToolResult): string {
     .join("");
 }
 
-Deno.test("send_chat: the words are the message", async () => {
+test("send_chat: the words are the message", async () => {
   const test = await fixture();
   try {
     const result = await test.tool.execute("t", { text: "終わりました。" });
@@ -76,7 +77,7 @@ Deno.test("send_chat: the words are the message", async () => {
   }
 });
 
-Deno.test("send_chat: an empty message is refused", async () => {
+test("send_chat: an empty message is refused", async () => {
   const test = await fixture();
   try {
     await assertRejects(() => test.tool.execute("t", { text: "   " }));
@@ -86,7 +87,7 @@ Deno.test("send_chat: an empty message is refused", async () => {
   }
 });
 
-Deno.test("send_chat: files are sent with the message", async () => {
+test("send_chat: files are sent with the message", async () => {
   const test = await fixture({
     "chart.png": new Uint8Array([1, 2, 3, 4]),
     "report.md": "# notes\n",
@@ -118,7 +119,7 @@ Deno.test("send_chat: files are sent with the message", async () => {
   }
 });
 
-Deno.test("send_chat: a call that sends nothing is refused", async () => {
+test("send_chat: a call that sends nothing is refused", async () => {
   const test = await fixture();
   try {
     // An empty message would be an empty row on the screen, so the tool
@@ -131,7 +132,7 @@ Deno.test("send_chat: a call that sends nothing is refused", async () => {
   }
 });
 
-Deno.test("send_chat: a missing file fails the whole call", async () => {
+test("send_chat: a missing file fails the whole call", async () => {
   const test = await fixture({ "ok.txt": "hi" });
   try {
     // Half a message is worse than a failed one: the user would look for a
@@ -147,7 +148,7 @@ Deno.test("send_chat: a missing file fails the whole call", async () => {
   }
 });
 
-Deno.test("send_chat: too many files in one call is refused", async () => {
+test("send_chat: too many files in one call is refused", async () => {
   const files: Record<string, string> = {};
   for (let i = 0; i < MAX_ATTACHMENTS_PER_CALL + 1; i++) {
     files[`f${i}.txt`] = `file ${i}`;
@@ -166,7 +167,7 @@ Deno.test("send_chat: too many files in one call is refused", async () => {
   }
 });
 
-Deno.test("send_chat: the description tells the model to speak before long work", async () => {
+test("send_chat: the description tells the model to speak before long work", async () => {
   // The description is the only place that reaches the model about WHEN to
   // send: no system prompt repeats it.
   // The old wording ("while long work is still running") left the decision to

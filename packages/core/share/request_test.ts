@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import type { ClientEvent } from "../domain/event.ts";
 import { CoreError } from "../errors.ts";
@@ -24,7 +25,7 @@ function hub(timeouts: { lend?: number; disconnect?: number } = {}): {
 
 const grant = (id: string) => ({ id });
 
-Deno.test("share request: asking for a folder announces the reason and waits", async () => {
+test("share request: asking for a folder announces the reason and waits", async () => {
   const { hub: h, events } = hub();
   const before = Date.now();
   const waited = h.askLend("call-1", "read the exports", ["old"]);
@@ -58,7 +59,7 @@ Deno.test("share request: asking for a folder announces the reason and waits", a
   assertEquals(h.pendingShareRequest(), null);
 });
 
-Deno.test("share request: a loan that was already there is not an answer", async () => {
+test("share request: a loan that was already there is not an answer", async () => {
   // The user's announcement also fires when an existing loan's terms change,
   // and that must not settle a request the user has not looked at: only a
   // grant that was not lent when the card appeared answers it.
@@ -73,7 +74,7 @@ Deno.test("share request: a loan that was already there is not an answer", async
   assertEquals(h.pendingShareRequest(), null);
 });
 
-Deno.test("share request: a refusal is an answer, not an error", async () => {
+test("share request: a refusal is an answer, not an error", async () => {
   const { hub: h, events } = hub();
   const waited = h.askLend("call-1", "read the exports", []);
   h.decline("call-1");
@@ -85,7 +86,7 @@ Deno.test("share request: a refusal is an answer, not an error", async () => {
   );
 });
 
-Deno.test("share request: nobody answering closes the card before the run moves on", async () => {
+test("share request: nobody answering closes the card before the run moves on", async () => {
   const { hub: h, events } = hub({ lend: 5 });
   const waited = h.askLend("call-1", "read the exports", []);
   assertEquals(await waited, { kind: "timed_out" });
@@ -99,7 +100,7 @@ Deno.test("share request: nobody answering closes the card before the run moves 
   assertEquals(events.length, 2);
 });
 
-Deno.test("share request: one question at a time", async () => {
+test("share request: one question at a time", async () => {
   const { hub: h } = hub();
   const first = h.askLend("call-1", "read the exports", []);
   await assertRejects(
@@ -116,7 +117,7 @@ Deno.test("share request: one question at a time", async () => {
   await first;
 });
 
-Deno.test("share request: a disconnect asks the app and ends with the loan", async () => {
+test("share request: a disconnect asks the app and ends with the loan", async () => {
   const { hub: h, events } = hub();
   const waited = h.askDisconnect("call-9", { id: "g1", name: "proj" });
   const request = events[0]!;
@@ -135,7 +136,7 @@ Deno.test("share request: a disconnect asks the app and ends with the loan", asy
   assertEquals(await waited, { kind: "disconnected" });
 });
 
-Deno.test("share request: the app's reason reaches the tool as given", async () => {
+test("share request: the app's reason reaches the tool as given", async () => {
   const { hub: h, events } = hub();
   const waited = h.askDisconnect("call-9", { id: "g1", name: "proj" });
   h.failDisconnect("call-9", "フォルダ共有のプロセスに接続できていません");
@@ -147,7 +148,7 @@ Deno.test("share request: the app's reason reaches the tool as given", async () 
   assertEquals(end?.type === "share_request_end" ? end.outcome : "", "failed");
 });
 
-Deno.test("share request: the loan vanishing settles a disconnect too", async () => {
+test("share request: the loan vanishing settles a disconnect too", async () => {
   // The page forwards the request and posts what happened, but the server's
   // own list is the truth: a loan that is gone is a disconnect that worked.
   const { hub: h } = hub();
@@ -156,7 +157,7 @@ Deno.test("share request: the loan vanishing settles a disconnect too", async ()
   assertEquals(await waited, { kind: "disconnected" });
 });
 
-Deno.test("share request: an answer for the other question is refused", async () => {
+test("share request: an answer for the other question is refused", async () => {
   const { hub: h } = hub();
   const waited = h.askLend("call-1", "read the exports", []);
   // A card can only answer the question it shows: a disconnect answer while a
@@ -188,7 +189,7 @@ Deno.test("share request: an answer for the other question is refused", async ()
   await waited;
 });
 
-Deno.test("share request: the run ending cancels the wait and closes the card", async () => {
+test("share request: the run ending cancels the wait and closes the card", async () => {
   const { hub: h, events } = hub();
   const waited = h.askLend("call-1", "read the exports", []);
   h.cancelAll();
@@ -203,7 +204,7 @@ Deno.test("share request: the run ending cancels the wait and closes the card", 
   h.cancelAll();
 });
 
-Deno.test("share request: a registry hands out one hub per session", () => {
+test("share request: a registry hands out one hub per session", () => {
   const events: ClientEvent[] = [];
   const registry = new ShareRequestRegistry((event) => events.push(event));
   const one = registry.for("s1");

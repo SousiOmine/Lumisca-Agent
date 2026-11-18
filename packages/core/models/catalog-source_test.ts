@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import type { ProviderMap } from "@opencode-ai/models";
 import snapshot, {
@@ -53,7 +54,7 @@ function stubFetch(handler: (url: string) => Response | Promise<Response>) {
     Promise.resolve(handler(String(_url)));
 }
 
-Deno.test("fetchLiveCatalog returns the provider map on success", async () => {
+test("fetchLiveCatalog returns the provider map on success", async () => {
   const source = await fetchLiveCatalog({
     fetch: stubFetch(() => jsonResponse(minimalProviders())),
   });
@@ -64,7 +65,7 @@ Deno.test("fetchLiveCatalog returns the provider map on success", async () => {
   );
 });
 
-Deno.test("fetchLiveCatalog throws on non-2xx status", async () => {
+test("fetchLiveCatalog throws on non-2xx status", async () => {
   let threw = false;
   try {
     await fetchLiveCatalog({
@@ -76,7 +77,7 @@ Deno.test("fetchLiveCatalog throws on non-2xx status", async () => {
   assertEquals(threw, true);
 });
 
-Deno.test("fetchLiveCatalog throws on unexpected shape", async () => {
+test("fetchLiveCatalog throws on unexpected shape", async () => {
   let threw = false;
   try {
     await fetchLiveCatalog({
@@ -88,7 +89,7 @@ Deno.test("fetchLiveCatalog throws on unexpected shape", async () => {
   assertEquals(threw, true);
 });
 
-Deno.test("resolveCatalogSource prefers live and caches it", async () =>
+test("resolveCatalogSource prefers live and caches it", async () =>
   await withTempDir("lumisca-catalog-", async (root) => {
     const settings = createInMemorySettingsRepo();
     // Point the cache at the temp dir via a stubbed dir().
@@ -114,7 +115,7 @@ Deno.test("resolveCatalogSource prefers live and caches it", async () =>
     assert((await Deno.stat(join(root, CACHED_CATALOG_FILE))).isFile);
   }));
 
-Deno.test("resolveCatalogSource falls back to cache when live fails", async () =>
+test("resolveCatalogSource falls back to cache when live fails", async () =>
   await withTempDir("lumisca-catalog-", async (root) => {
     saveCachedCatalog(root, {
       providers: minimalProviders(),
@@ -139,7 +140,7 @@ Deno.test("resolveCatalogSource falls back to cache when live fails", async () =
     );
   }));
 
-Deno.test("resolveCatalogSource falls back to snapshot without a cache", async () => {
+test("resolveCatalogSource falls back to snapshot without a cache", async () => {
   const { source, status } = await resolveCatalogSource({
     settings: createInMemorySettingsRepo(),
     fetch: stubFetch(() => {
@@ -152,7 +153,7 @@ Deno.test("resolveCatalogSource falls back to snapshot without a cache", async (
   assertEquals(source.providers, snapshotCatalog().providers);
 });
 
-Deno.test("resolveCatalogSource falls back to snapshot on invalid shape", async () => {
+test("resolveCatalogSource falls back to snapshot on invalid shape", async () => {
   const { status } = await resolveCatalogSource({
     settings: createInMemorySettingsRepo(),
     fetch: stubFetch(() => jsonResponse({ hello: "world" })),
@@ -161,7 +162,7 @@ Deno.test("resolveCatalogSource falls back to snapshot on invalid shape", async 
   assert(typeof status.error === "string" && status.error.length > 0);
 });
 
-Deno.test("loadCachedCatalog ignores corrupt caches", async () =>
+test("loadCachedCatalog ignores corrupt caches", async () =>
   await withTempDir("lumisca-catalog-", async (root) => {
     await Deno.writeTextFile(join(root, CACHED_CATALOG_FILE), "not-json{{{");
     assertEquals(loadCachedCatalog(root), undefined);
@@ -173,7 +174,7 @@ Deno.test("loadCachedCatalog ignores corrupt caches", async () =>
     assertEquals(loadCachedCatalog(undefined), undefined);
   }));
 
-Deno.test("saveCachedCatalog is a no-op without a directory", () =>
+test("saveCachedCatalog is a no-op without a directory", () =>
   withTempDir("lumisca-catalog-", (root) => {
     // No directory means no place to cache (a core in memory): the call must
     // return quietly rather than fall back to the working directory, which
@@ -196,7 +197,7 @@ Deno.test("saveCachedCatalog is a no-op without a directory", () =>
     assertEquals(loadCachedCatalog(root) !== undefined, true);
   }));
 
-Deno.test("buildCatalogProviders maps a foreign provider map like the snapshot path", () => {
+test("buildCatalogProviders maps a foreign provider map like the snapshot path", () => {
   const fromSnapshot = builtinProviders();
   const fromLive = buildCatalogProviders(snapshot.providers);
   assertEquals(
@@ -230,11 +231,11 @@ Deno.test("buildCatalogProviders maps a foreign provider map like the snapshot p
   );
 });
 
-Deno.test("isProviderMap rejects empty maps", () => {
+test("isProviderMap rejects empty maps", () => {
   assertEquals(isProviderMap({}), false);
 });
 
-Deno.test("isProviderMap rejects non-maps", () => {
+test("isProviderMap rejects non-maps", () => {
   assertEquals(isProviderMap(undefined), false);
   assertEquals(isProviderMap({ openai: { models: "nope" } }), false);
   assertEquals(
@@ -243,7 +244,7 @@ Deno.test("isProviderMap rejects non-maps", () => {
   );
 });
 
-Deno.test("fetchLiveCatalog rejects an empty provider map", async () => {
+test("fetchLiveCatalog rejects an empty provider map", async () => {
   let threw = false;
   try {
     await fetchLiveCatalog({

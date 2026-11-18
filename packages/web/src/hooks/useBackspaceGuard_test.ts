@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import type { BackspaceEvent, BackspaceTarget } from "./useBackspaceGuard.ts";
 import {
@@ -10,7 +11,7 @@ function target(props: Partial<BackspaceTarget>): BackspaceTarget {
   return { tagName: "DIV", ...props };
 }
 
-Deno.test("isTextEditTarget: the text fields keep Backspace", () => {
+test("isTextEditTarget: the text fields keep Backspace", () => {
   assertEquals(isTextEditTarget(target({ tagName: "INPUT" })), true);
   assertEquals(
     isTextEditTarget(target({ tagName: "INPUT", type: "text" })),
@@ -37,7 +38,7 @@ Deno.test("isTextEditTarget: the text fields keep Backspace", () => {
   );
 });
 
-Deno.test("isTextEditTarget: no caret means Backspace is not an edit", () => {
+test("isTextEditTarget: no caret means Backspace is not an edit", () => {
   assertEquals(isTextEditTarget(target({ tagName: "DIV" })), false);
   assertEquals(isTextEditTarget(target({ tagName: "BODY" })), false);
   assertEquals(isTextEditTarget(target({ tagName: "BUTTON" })), false);
@@ -65,7 +66,7 @@ Deno.test("isTextEditTarget: no caret means Backspace is not an edit", () => {
   assertEquals(isTextEditTarget({ tagName: "" }), false);
 });
 
-Deno.test("isTextEditTarget: a control that cannot be edited is not an edit", () => {
+test("isTextEditTarget: a control that cannot be edited is not an edit", () => {
   // Read-only and disabled fields hold nothing to delete, and WebKit's
   // delete command refuses them: this is exactly where Backspace would
   // navigate instead.
@@ -99,7 +100,7 @@ function key(props: Partial<BackspaceEvent>): BackspaceEvent {
   };
 }
 
-Deno.test("shouldSwallowBackspace: the settings dialog survives Backspace", () => {
+test("shouldSwallowBackspace: the settings dialog survives Backspace", () => {
   // The report: with the server list open, Backspace that is not a text
   // edit must not reach the WebView's history. Shift is deliberately not
   // consulted — WebKit walks *forward* on Shift+Backspace, and that would
@@ -114,7 +115,7 @@ Deno.test("shouldSwallowBackspace: the settings dialog survives Backspace", () =
   assertEquals(shouldSwallowBackspace(key({}), target({ tagName: "P" })), true);
 });
 
-Deno.test("shouldSwallowBackspace: text editing is never touched", () => {
+test("shouldSwallowBackspace: text editing is never touched", () => {
   // The URL field of the server card, where the user corrects a typo.
   const url = target({ tagName: "INPUT", type: "url" });
   assertEquals(shouldSwallowBackspace(key({}), url), false);

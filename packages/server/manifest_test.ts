@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { THEME_COLORS } from "@lumisca/core/shared";
 import { assertEquals } from "@std/assert";
 import { PWA_ICON_FILES, renderManifest } from "./manifest.ts";
@@ -26,7 +27,7 @@ function parse(
   return JSON.parse(renderManifest({ theme, language })) as ParsedManifest;
 }
 
-Deno.test("the manifest carries what Chromium requires to install", () => {
+test("the manifest carries what Chromium requires to install", () => {
   const manifest = parse("dark");
   assertEquals(manifest.id, "/");
   assertEquals(manifest.name, "Lumisca Agent");
@@ -49,7 +50,7 @@ Deno.test("the manifest carries what Chromium requires to install", () => {
   for (const icon of icons) assertEquals(icon.type, "image/png");
 });
 
-Deno.test("every manifest icon is a file the build ships", () => {
+test("every manifest icon is a file the build ships", () => {
   const names = (parse("dark").icons ?? []).map((icon) =>
     icon.src.replace("/pwa/", ""),
   );
@@ -61,7 +62,7 @@ Deno.test("every manifest icon is a file the build ships", () => {
   assertEquals(PWA_ICON_FILES.includes("apple-touch-icon.png"), true);
 });
 
-Deno.test("theme_color is the canvas colour of the theme being served", () => {
+test("theme_color is the canvas colour of the theme being served", () => {
   for (const theme of ["dark", "light"] as const) {
     const manifest = parse(theme);
     assertEquals(manifest.theme_color, THEME_COLORS[theme], theme);
@@ -71,7 +72,7 @@ Deno.test("theme_color is the canvas colour of the theme being served", () => {
   }
 });
 
-Deno.test("the manifest speaks the app language", () => {
+test("the manifest speaks the app language", () => {
   assertEquals(parse("dark", "ja").lang, "ja");
   assertEquals(parse("dark", "en").lang, "en");
   // The description is user-facing text, so it comes from the catalogue.

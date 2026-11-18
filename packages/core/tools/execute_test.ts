@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { createHostCodeRuntime } from "../code-execution/host.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
@@ -68,7 +69,7 @@ function makeExecute(options: {
   });
 }
 
-Deno.test("execute: a program returns its value and its calls' results", async () => {
+test("execute: a program returns its value and its calls' results", async () => {
   const tool = makeExecute({
     tools: [fakeTool("read", { result: "file body" })],
   });
@@ -86,7 +87,7 @@ Deno.test("execute: a program returns its value and its calls' results", async (
   assert(text.includes("[calls]\nread ×1"), text);
 });
 
-Deno.test("execute: console output is kept and the value inspected", async () => {
+test("execute: console output is kept and the value inspected", async () => {
   const tool = makeExecute({});
   const result = await tool.execute(
     "call-1",
@@ -98,7 +99,7 @@ Deno.test("execute: console output is kept and the value inspected", async () =>
   assert(text.includes("{ ok: true, items: [ 1, 2 ] }"), text);
 });
 
-Deno.test("execute: a failing tool throws inside the program", async () => {
+test("execute: a failing tool throws inside the program", async () => {
   const tool = makeExecute({
     tools: [fakeTool("bash", { throw: "exit code 1" })],
   });
@@ -118,7 +119,7 @@ Deno.test("execute: a failing tool throws inside the program", async () => {
   assert(/bash ×1 \(\d+ms\) failed/.test(text), text);
 });
 
-Deno.test("execute: an unknown tool names the way to look it up", async () => {
+test("execute: an unknown tool names the way to look it up", async () => {
   const tool = makeExecute({});
   const result = await tool.execute(
     "call-1",
@@ -131,7 +132,7 @@ Deno.test("execute: an unknown tool names the way to look it up", async () => {
   assert(text.includes("tools.tool_search"), text);
 });
 
-Deno.test("execute: tool_search is part of the catalog, not the agent", async () => {
+test("execute: tool_search is part of the catalog, not the agent", async () => {
   const tool = makeExecute({ tools: [fakeTool("read")] });
   const result = await tool.execute(
     "call-1",
@@ -143,7 +144,7 @@ Deno.test("execute: tool_search is part of the catalog, not the agent", async ()
   assert(text.includes("tool_search"), text);
 });
 
-Deno.test("execute: the call cap stops a runaway program", async () => {
+test("execute: the call cap stops a runaway program", async () => {
   const tool = makeExecute({ tools: [fakeTool("read")] });
   const result = await tool.execute(
     "call-1",
@@ -157,7 +158,7 @@ Deno.test("execute: the call cap stops a runaway program", async () => {
   assert(text.includes("50 tool calls"), text);
 });
 
-Deno.test("execute: at most three images reach the conversation", async () => {
+test("execute: at most three images reach the conversation", async () => {
   const tool = makeExecute({
     tools: [fakeTool("screenshot", { images: 2 })],
   });
@@ -172,7 +173,7 @@ Deno.test("execute: at most three images reach the conversation", async () => {
   assertEquals(images.length, 3);
 });
 
-Deno.test("execute: a program that never ends is stopped by the timeout", async () => {
+test("execute: a program that never ends is stopped by the timeout", async () => {
   const tool = makeExecute({});
   const result = await tool.execute(
     "call-1",
@@ -184,7 +185,7 @@ Deno.test("execute: a program that never ends is stopped by the timeout", async 
   assert(text.includes("timed out"), text);
 });
 
-Deno.test("execute: a blocked program is a result, not a tool failure", async () => {
+test("execute: a blocked program is a result, not a tool failure", async () => {
   const safety: CommandSafety = {
     check: () => Promise.resolve({ ok: false, reason: "destroys data" }),
   } as unknown as CommandSafety;
@@ -196,7 +197,7 @@ Deno.test("execute: a blocked program is a result, not a tool failure", async ()
   assertEquals(result.details["blocked"], true);
 });
 
-Deno.test("execute: a program may keep state across its own calls only", async () => {
+test("execute: a program may keep state across its own calls only", async () => {
   const tool = makeExecute({});
   await tool.execute("call-1", { code: "var kept = 41;" }, undefined);
   const result = await tool.execute("call-2", { code: "kept + 1" }, undefined);

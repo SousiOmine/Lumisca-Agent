@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { test } from "bun:test";
 import { join } from "node:path";
 import {
   fauxAssistantMessage,
@@ -181,7 +182,7 @@ class FakeComputerHost implements ComputerHost {
   }
 }
 
-Deno.test("session prompt persists messages and restores them", async () => {
+test("session prompt persists messages and restores them", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
@@ -220,7 +221,7 @@ Deno.test("session prompt persists messages and restores them", async () => {
   core.close();
 });
 
-Deno.test("session revisions count the events a session emitted", async () => {
+test("session revisions count the events a session emitted", async () => {
   // The count is what the web's probe compares against (see
   // LumiscaCore.getSessionRevision): 0 before anything happened, then one
   // step per announced event — a jump is what tells a client it lost a
@@ -265,7 +266,7 @@ Deno.test("session revisions count the events a session emitted", async () => {
   }
 });
 
-Deno.test("sessions are listed and deleted", async () => {
+test("sessions are listed and deleted", async () => {
   const { core, faux: _faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
@@ -289,7 +290,7 @@ Deno.test("sessions are listed and deleted", async () => {
   core.close();
 });
 
-Deno.test("model enablement is persisted", () => {
+test("model enablement is persisted", () => {
   const { core, providerId } = setup();
   const models = core.listModelsDetailed(providerId);
   assertEquals(models.length > 0, true);
@@ -311,7 +312,7 @@ Deno.test("model enablement is persisted", () => {
   core.close();
 });
 
-Deno.test("startPrompt steers a prompt sent while streaming", async () => {
+test("startPrompt steers a prompt sent while streaming", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
@@ -354,7 +355,7 @@ Deno.test("startPrompt steers a prompt sent while streaming", async () => {
   core.close();
 });
 
-Deno.test("rewind deletes a user message and everything after it", async () => {
+test("rewind deletes a user message and everything after it", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
@@ -395,7 +396,7 @@ Deno.test("rewind deletes a user message and everything after it", async () => {
   core.close();
 });
 
-Deno.test("rewind deletes a mode message (slash-command prompt) and everything after it", async () => {
+test("rewind deletes a mode message (slash-command prompt) and everything after it", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
@@ -435,7 +436,7 @@ Deno.test("rewind deletes a mode message (slash-command prompt) and everything a
   core.close();
 });
 
-Deno.test("rewind mid-history keeps earlier turns and persists without duplicates", async () => {
+test("rewind mid-history keeps earlier turns and persists without duplicates", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
@@ -493,7 +494,7 @@ Deno.test("rewind mid-history keeps earlier turns and persists without duplicate
   core.close();
 });
 
-Deno.test("rewind while running aborts the run and truncates cleanly", async () => {
+test("rewind while running aborts the run and truncates cleanly", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
@@ -546,7 +547,7 @@ Deno.test("rewind while running aborts the run and truncates cleanly", async () 
   core.close();
 });
 
-Deno.test("rewind of a queued steer drops it without resurrecting it", async () => {
+test("rewind of a queued steer drops it without resurrecting it", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
@@ -612,7 +613,7 @@ Deno.test("rewind of a queued steer drops it without resurrecting it", async () 
   core.close();
 });
 
-Deno.test("rewind with an unknown timestamp throws not_found", async () => {
+test("rewind with an unknown timestamp throws not_found", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
@@ -634,7 +635,7 @@ Deno.test("rewind with an unknown timestamp throws not_found", async () => {
   core.close();
 });
 
-Deno.test("credentials are guarded on every settings surface", async () => {
+test("credentials are guarded on every settings surface", async () => {
   // File-backed settings so "nothing was stored" can be verified at rest.
   const dir = await Deno.makeTempDir({ prefix: "lumisca-settings-" });
   const core = LumiscaCore.open(
@@ -670,7 +671,7 @@ Deno.test("credentials are guarded on every settings surface", async () => {
   }
 });
 
-Deno.test("database migration stamps user_version and is idempotent", async () => {
+test("database migration stamps user_version and is idempotent", async () => {
   const dir = await Deno.makeTempDir({ prefix: "lumisca-migrate-" });
   const path = join(dir, "test.db");
 
@@ -694,7 +695,7 @@ Deno.test("database migration stamps user_version and is idempotent", async () =
   await removeDirRetry(dir);
 });
 
-Deno.test("migration drops the legacy settings table", async () => {
+test("migration drops the legacy settings table", async () => {
   const dir = await Deno.makeTempDir({ prefix: "lumisca-migrate-" });
   const path = join(dir, "legacy.db");
 
@@ -774,7 +775,7 @@ Deno.test("migration drops the legacy settings table", async () => {
 
 // --- chat sessions (ワークスペースなしのシンプルチャット) ----------------
 
-Deno.test("session language: the setting reaches an open session, not a frozen prompt", async () => {
+test("session language: the setting reaches an open session, not a frozen prompt", async () => {
   const { core, faux, providerId, modelId } = setup();
   try {
     // The language is a server setting (the settings dialog writes exactly
@@ -812,7 +813,7 @@ Deno.test("session language: the setting reaches an open session, not a frozen p
   }
 });
 
-Deno.test("session_created event carries the decorated session (chat flag)", async () => {
+test("session_created event carries the decorated session (chat flag)", async () => {
   const { core, faux: _faux, providerId, modelId } = setup();
   const events: ClientEvent[] = [];
   const unsubscribe = core.subscribe((event) => events.push(event));
@@ -836,7 +837,7 @@ Deno.test("session_created event carries the decorated session (chat flag)", asy
   }
 });
 
-Deno.test("thinking level change while streaming applies from the next run without error", async () => {
+test("thinking level change while streaming applies from the next run without error", async () => {
   const faux = fauxProvider({ models: [{ id: "thinky", reasoning: true }] });
   const core = LumiscaCore.forTesting([faux.provider]);
   const { ws } = await makeWorkspace(core);
@@ -891,7 +892,7 @@ async function waitUntil(check: () => boolean, what: string): Promise<void> {
   }
 }
 
-Deno.test("model change while streaming is stored and applied as the run ends", async () => {
+test("model change while streaming is stored and applied as the run ends", async () => {
   // The regression this pins: switching the model while the session ran was a
   // 409 ("Session is already running"), so a user who wanted the next message
   // answered by another model had to wait and try again. The choice is stored
@@ -933,7 +934,7 @@ Deno.test("model change while streaming is stored and applied as the run ends", 
   core.close();
 });
 
-Deno.test("a run's transcript order is also its timestamp order", async () => {
+test("a run's transcript order is also its timestamp order", async () => {
   // The clients keep a window of the transcript and identify messages by role
   // + timestamp (see MessageIdentity): a view drops a live message older than
   // its newest one, and a resync merge anchors on those identities. So the
@@ -998,7 +999,7 @@ Deno.test("a run's transcript order is also its timestamp order", async () => {
   await removeDirRetry(root);
 });
 
-Deno.test("computer use: enabling without a host reports the machine's reason", async () => {
+test("computer use: enabling without a host reports the machine's reason", async () => {
   const { core, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
   const session = await core.createSession({
@@ -1036,7 +1037,7 @@ Deno.test("computer use: enabling without a host reports the machine's reason", 
   }
 });
 
-Deno.test("computer use: a recheck that finds no host keeps the startup verdict", async () => {
+test("computer use: a recheck that finds no host keeps the startup verdict", async () => {
   const { core } = setup();
   core.setComputerHost({
     available: false,
@@ -1057,7 +1058,7 @@ Deno.test("computer use: a recheck that finds no host keeps the startup verdict"
   }
 });
 
-Deno.test("computer use: without a probe the startup verdict stands", async () => {
+test("computer use: without a probe the startup verdict stands", async () => {
   // A core built without the server (tests, an embedding) has no way to ask
   // the machine: the startup verdict must not be silently overridden.
   const { core } = setup();
@@ -1077,7 +1078,7 @@ Deno.test("computer use: without a probe the startup verdict stands", async () =
   }
 });
 
-Deno.test("computer use: a recheck never replaces an attached host", async () => {
+test("computer use: a recheck never replaces an attached host", async () => {
   // The screen-sharing session (and its restore token) belongs to the host
   // the server attached. A recheck that hands back a second host must keep
   // the first one and release the spare, or the agent's session is dropped
@@ -1098,7 +1099,7 @@ Deno.test("computer use: a recheck never replaces an attached host", async () =>
   }
 });
 
-Deno.test("computer use: toggling while a session streams reaches it without a rebuild", async () => {
+test("computer use: toggling while a session streams reaches it without a rebuild", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
   const host = new FakeComputerHost();
@@ -1186,7 +1187,7 @@ Deno.test("computer use: toggling while a session streams reaches it without a r
  * provider; the analysis model is selected through the model_image setting
  * (see ModelPreferencePanel in the web UI). */
 
-Deno.test("compaction persists the checkpoint and survives a reopen", async () => {
+test("compaction persists the checkpoint and survives a reopen", async () => {
   const { core, faux } = setup();
   registerSmallWindowModel(faux);
   const { ws } = await makeWorkspace(core);
@@ -1245,7 +1246,7 @@ Deno.test("compaction persists the checkpoint and survives a reopen", async () =
   await core.close();
 });
 
-Deno.test("compactSession condenses on demand and reports the count", async () => {
+test("compactSession condenses on demand and reports the count", async () => {
   const { core, faux } = setup();
   registerSmallWindowModel(faux);
   const { ws } = await makeWorkspace(core);
@@ -1297,7 +1298,7 @@ Deno.test("compactSession condenses on demand and reports the count", async () =
 /** Directory one session's visual assets live in (the store's layout: a
  * per-session directory beside the database). */
 
-Deno.test("a file-backed core keeps the visuals beside its database", async () => {
+test("a file-backed core keeps the visuals beside its database", async () => {
   const dir = await makeRealTempDir("lumisca-visuals-core-");
   const { core } = await openFileBackedCore(dir);
   try {
@@ -1327,7 +1328,7 @@ Deno.test("a file-backed core keeps the visuals beside its database", async () =
   }
 });
 
-Deno.test("deleting a session drops its visuals", async () => {
+test("deleting a session drops its visuals", async () => {
   const dir = await makeRealTempDir("lumisca-visuals-core-");
   const { core, sessionId } = await openFileBackedCore(dir);
   try {
@@ -1349,7 +1350,7 @@ Deno.test("deleting a session drops its visuals", async () => {
   }
 });
 
-Deno.test("a coding session gets chat_attach and visual; a chat session neither", async () => {
+test("a coding session gets chat_attach and visual; a chat session neither", async () => {
   const dir = await makeRealTempDir("lumisca-visuals-core-");
   const { core, sessionId } = await openFileBackedCore(dir);
   try {

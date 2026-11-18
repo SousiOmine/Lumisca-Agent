@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { removeDirRetry } from "@lumisca/core/test-utils";
 import { assert, assertEquals } from "@std/assert";
@@ -23,7 +24,7 @@ async function writeFixture(root: string): Promise<string> {
   return entry;
 }
 
-Deno.test("bundleClient splits a dynamic import out of the entry chunk", async () => {
+test("bundleClient splits a dynamic import out of the entry chunk", async () => {
   const root = await Deno.makeTempDir();
   try {
     const entry = await writeFixture(root);
@@ -51,7 +52,7 @@ Deno.test("bundleClient splits a dynamic import out of the entry chunk", async (
   }
 });
 
-Deno.test("bundleClient names the entry chunk app.js whatever the entry is", async () => {
+test("bundleClient names the entry chunk app.js whatever the entry is", async () => {
   // The script tag render.ts writes is a fixed `/assets/app.js`: it must not
   // follow the entry's own file name (client.tsx → client.js) or a packaged
   // server would load a 404.

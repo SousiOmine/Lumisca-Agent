@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { realpathSync } from "node:fs";
 import { basename, join } from "node:path";
 import { assert, assertEquals } from "@std/assert";
@@ -71,7 +72,7 @@ async function bounded<T>(
   }
 }
 
-Deno.test("bash tool reports exit code", async () => {
+test("bash tool reports exit code", async () => {
   const { tool, root } = makeTool();
   try {
     const result = await tool.execute(
@@ -86,7 +87,7 @@ Deno.test("bash tool reports exit code", async () => {
   }
 });
 
-Deno.test("bash tool reports how long the command took", async () => {
+test("bash tool reports how long the command took", async () => {
   const { tool, root } = makeTool();
   try {
     // A command that sleeps ~300ms: the measurement has to cover the wait,
@@ -111,7 +112,7 @@ Deno.test("bash tool reports how long the command took", async () => {
   }
 });
 
-Deno.test("bash tool merges stdout and stderr", async () => {
+test("bash tool merges stdout and stderr", async () => {
   const { tool, root } = makeTool();
   try {
     const command =
@@ -127,7 +128,7 @@ Deno.test("bash tool merges stdout and stderr", async () => {
   }
 });
 
-Deno.test("bash tool resolves cwd by workspace folder name", async () => {
+test("bash tool resolves cwd by workspace folder name", async () => {
   const { tool, root } = makeTool();
   try {
     // `pwd` prints the working directory on POSIX and in PowerShell (alias
@@ -144,7 +145,7 @@ Deno.test("bash tool resolves cwd by workspace folder name", async () => {
   }
 });
 
-Deno.test("bash tool rejects an unknown cwd", async () => {
+test("bash tool rejects an unknown cwd", async () => {
   const { tool, root } = makeTool();
   try {
     let message = "";
@@ -162,10 +163,9 @@ Deno.test("bash tool rejects an unknown cwd", async () => {
 // Regression test for Windows mojibake: cmd.exe internal commands emit the
 // OEM code page (Shift_JIS on Japanese Windows), which must be decoded
 // correctly instead of producing U+FFFD replacement characters.
-Deno.test({
-  name: "bash tool decodes cmd.exe output without mojibake (Windows)",
-  ignore: Deno.build.os !== "windows",
-  fn: async () => {
+test.skipIf(Deno.build.os !== "windows")(
+  "bash tool decodes cmd.exe output without mojibake (Windows)",
+  async () => {
     const { tool, root } = makeTool();
     try {
       const result = await tool.execute(
@@ -185,16 +185,15 @@ Deno.test({
       await removeDirRetry(root);
     }
   },
-});
+);
 
 // Regression test for Windows quote mangling: cmd.exe /s /c turned a
 // `"quoted path"` argument into a token with literal quote characters, so
 // the child program could not find the file. PowerShell delivers quoted
 // args intact, so Test-Path must see the clean path.
-Deno.test({
-  name: "bash tool passes quoted path arguments intact (Windows)",
-  ignore: Deno.build.os !== "windows",
-  fn: async () => {
+test.skipIf(Deno.build.os !== "windows")(
+  "bash tool passes quoted path arguments intact (Windows)",
+  async () => {
     const { tool, root } = makeTool();
     try {
       const file = `${root}\\my file.txt`;
@@ -211,14 +210,14 @@ Deno.test({
       await removeDirRetry(root);
     }
   },
-});
+);
 
 // `decodeOutput`'s own suite (decode_test.ts) pins the OEM fallback and the
 // replacement-character path; the Windows tests above run the real shell
 // through it. A third copy that returns early on every other platform only
 // meant the test existed but never ran.
 
-Deno.test("bash tool passes env vars to the command", async () => {
+test("bash tool passes env vars to the command", async () => {
   const { tool, root } = makeTool();
   try {
     const echo =
@@ -236,7 +235,7 @@ Deno.test("bash tool passes env vars to the command", async () => {
   }
 });
 
-Deno.test("bash tool passes the tool-level env to the command", async () => {
+test("bash tool passes the tool-level env to the command", async () => {
   const root = Deno.makeTempDirSync({ prefix: "lumisca-bash-" });
   const tool = hostTool(root, { env: { LUMISCA_TEST_VAR: "tool-level" } });
   try {
@@ -251,7 +250,7 @@ Deno.test("bash tool passes the tool-level env to the command", async () => {
   }
 });
 
-Deno.test("bash tool per-call env overrides the tool-level env", async () => {
+test("bash tool per-call env overrides the tool-level env", async () => {
   const root = Deno.makeTempDirSync({ prefix: "lumisca-bash-" });
   const tool = hostTool(root, { env: { LUMISCA_TEST_VAR: "tool-level" } });
   try {
@@ -272,7 +271,7 @@ Deno.test("bash tool per-call env overrides the tool-level env", async () => {
   }
 });
 
-Deno.test("bash tool returns the safety reason when the check blocks", async () => {
+test("bash tool returns the safety reason when the check blocks", async () => {
   const root = Deno.makeTempDirSync({ prefix: "lumisca-bash-" });
   const safety = {
     check: () => ({ ok: false, reason: "rm -rf / destroys the host" }),
@@ -298,7 +297,7 @@ Deno.test("bash tool returns the safety reason when the check blocks", async () 
   }
 });
 
-Deno.test("bash tool runs normally when the check approves", async () => {
+test("bash tool runs normally when the check approves", async () => {
   const root = Deno.makeTempDirSync({ prefix: "lumisca-bash-" });
   const safety = {
     check: () => ({ ok: true }),
@@ -362,7 +361,7 @@ async function runBigCommand(
   return await tool.execute("1", { cwd: root, command }, undefined);
 }
 
-Deno.test("bash tool spills the complete stdout when it is truncated", async () => {
+test("bash tool spills the complete stdout when it is truncated", async () => {
   const { tool, root, spillDir } = makeTool();
   try {
     const text = toolText(await runBigCommand(tool, root));
@@ -396,7 +395,7 @@ Deno.test("bash tool spills the complete stdout when it is truncated", async () 
   }
 });
 
-Deno.test("bash tool spills the complete stderr when it is truncated", async () => {
+test("bash tool spills the complete stderr when it is truncated", async () => {
   const { tool, root } = makeTool();
   try {
     const command =
@@ -417,7 +416,7 @@ Deno.test("bash tool spills the complete stderr when it is truncated", async () 
   }
 });
 
-Deno.test("bash tool spills nothing when the output fits", async () => {
+test("bash tool spills nothing when the output fits", async () => {
   const { tool, root, spillDir } = makeTool();
   try {
     const result = await tool.execute(
@@ -439,7 +438,7 @@ Deno.test("bash tool spills nothing when the output fits", async () => {
   }
 });
 
-Deno.test("bash tool keeps the result when the spill fails", async () => {
+test("bash tool keeps the result when the spill fails", async () => {
   const root = Deno.makeTempDirSync({ prefix: "lumisca-bash-" });
   // A regular file where the spill directory would go: the mkdir fails, so
   // the note must lose only the path — never the result itself.
@@ -459,7 +458,7 @@ Deno.test("bash tool keeps the result when the spill fails", async () => {
   }
 });
 
-Deno.test("bash tool keeps the plain note when the spill cannot be written", async () => {
+test("bash tool keeps the plain note when the spill cannot be written", async () => {
   const root = Deno.makeTempDirSync({ prefix: "lumisca-bash-" });
   // A spill path under a regular file cannot be created at all; the result
   // must still arrive, with the plain note instead of a dead path.
@@ -481,7 +480,7 @@ Deno.test("bash tool keeps the plain note when the spill cannot be written", asy
   }
 });
 
-Deno.test("the spill is readable through the same file backend", async () => {
+test("the spill is readable through the same file backend", async () => {
   const { tool, root, spillDir } = makeTool();
   const files = new HostFileBackend(new Sandbox([root]));
   try {
@@ -513,7 +512,7 @@ Deno.test("the spill is readable through the same file backend", async () => {
   }
 });
 
-Deno.test("bash tool description says the cut output is in a file", async () => {
+test("bash tool description says the cut output is in a file", async () => {
   const { tool, root } = makeTool();
   try {
     // The one fact a model needs when output is long: the rest is in a file
@@ -530,10 +529,9 @@ Deno.test("bash tool description says the cut output is in a file", async () => 
 // backgrounds a process inheriting the output pipes made the tool wait for
 // an EOF that never comes. The call must end with the command's own exit,
 // report the output it read, and say that a process still holds the streams.
-Deno.test({
-  name: "bash tool returns when a descendant holds the output streams",
-  ignore: Deno.build.os === "windows",
-  fn: async () => {
+test.skipIf(Deno.build.os === "windows")(
+  "bash tool returns when a descendant holds the output streams",
+  async () => {
     const { tool, root } = makeTool();
     try {
       const result = await bounded(
@@ -565,9 +563,9 @@ Deno.test({
       await removeDirRetry(root);
     }
   },
-});
+);
 
-Deno.test("bash tool kills a command that outlives its timeout", async () => {
+test("bash tool kills a command that outlives its timeout", async () => {
   const { tool, root } = makeTool();
   try {
     const command =
@@ -595,7 +593,7 @@ Deno.test("bash tool kills a command that outlives its timeout", async () => {
   }
 });
 
-Deno.test("bash tool returns when the run is aborted", async () => {
+test("bash tool returns when the run is aborted", async () => {
   const { tool, root } = makeTool();
   try {
     const command = Deno.build.os === "windows" ? "Start-Sleep 30" : "sleep 30";
@@ -622,7 +620,7 @@ Deno.test("bash tool returns when the run is aborted", async () => {
 // so: `required` in the JSON Schema is advisory at the wire, and the
 // system prompt no longer carries per-tool guidance (removed in 4f2a5c8).
 // The before/after is measured — omit `cwd` and the call fails, every time.
-Deno.test("bash tells the model that cwd is required", async () => {
+test("bash tells the model that cwd is required", async () => {
   const { tool, root } = makeTool();
   try {
     const parameters = tool.parameters as {

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { LumiscaCore } from "../mod.ts";
 import { inputBudgetTokens } from "../shared/context-usage.ts";
@@ -44,7 +45,7 @@ function envOf(vars: Record<string, string>) {
  * just because the machine running the tests has a key exported. */
 const NO_ENV = envOf({});
 
-Deno.test("models.dev catalog registers DeepInfra, ClinePass, OpenCode Go and CommandCode", () => {
+test("models.dev catalog registers DeepInfra, ClinePass, OpenCode Go and CommandCode", () => {
   const providers = builtinProviders();
   const ids = providers.map((p) => p.id);
   assertEquals(ids.includes(DEEPINFRA_PROVIDER_ID), true);
@@ -75,7 +76,7 @@ Deno.test("models.dev catalog registers DeepInfra, ClinePass, OpenCode Go and Co
   assertEquals(commandcode.auth.apiKey !== undefined, true);
 });
 
-Deno.test("OpenCode Go routes each model over the transport models.dev declares", () => {
+test("OpenCode Go routes each model over the transport models.dev declares", () => {
   const go = opencodeGoProvider();
   const byId = new Map(go.getModels().map((m) => [m.id, m]));
 
@@ -115,7 +116,7 @@ Deno.test("OpenCode Go routes each model over the transport models.dev declares"
   }
 });
 
-Deno.test("the catalog's input caps stay inside the prompt budget", () => {
+test("the catalog's input caps stay inside the prompt budget", () => {
   let capped = 0;
   for (const provider of builtinProviders()) {
     for (const model of provider.getModels()) {
@@ -139,7 +140,7 @@ Deno.test("the catalog's input caps stay inside the prompt budget", () => {
   assert(capped > 0, "no catalog model carries an input cap");
 });
 
-Deno.test("OpenCode Zen routes npm-overridden models over their native transport", () => {
+test("OpenCode Zen routes npm-overridden models over their native transport", () => {
   const zen = builtinProvider("opencode")!;
   const byId = new Map(zen.getModels().map((m) => [m.id, m]));
   assertEquals(byId.get("gpt-5.4")?.api, "openai-responses");
@@ -161,7 +162,7 @@ Deno.test("OpenCode Zen routes npm-overridden models over their native transport
   );
 });
 
-Deno.test("CommandCode serves Claude over Anthropic messages and the rest over chat", () => {
+test("CommandCode serves Claude over Anthropic messages and the rest over chat", () => {
   const commandcode = commandcodeProvider();
   const byId = new Map(commandcode.getModels().map((m) => [m.id, m]));
 
@@ -189,7 +190,7 @@ Deno.test("CommandCode serves Claude over Anthropic messages and the rest over c
   }
 });
 
-Deno.test("DeepInfra models are OpenAI-compatible with documented fields", () => {
+test("DeepInfra models are OpenAI-compatible with documented fields", () => {
   const models = deepinfraProvider().getModels();
   const byId = new Map(models.map((m) => [m.id, m]));
   // A model pulled from the models.dev catalog.
@@ -202,7 +203,7 @@ Deno.test("DeepInfra models are OpenAI-compatible with documented fields", () =>
   );
 });
 
-Deno.test("ClinePass models use the cline-pass slug", () => {
+test("ClinePass models use the cline-pass slug", () => {
   const models = clinepassProvider().getModels();
   for (const model of models) {
     assertEquals(model.id.startsWith("cline-pass/"), true);
@@ -213,7 +214,7 @@ Deno.test("ClinePass models use the cline-pass slug", () => {
   assertEquals(ids.includes("cline-pass/deepseek-v4-flash"), true);
 });
 
-Deno.test("reasoning models expose the levels models.dev documents", () => {
+test("reasoning models expose the levels models.dev documents", () => {
   const flash = clinepassProvider()
     .getModels()
     .find((m) => m.id === "cline-pass/deepseek-v4-flash")!;
@@ -227,7 +228,7 @@ Deno.test("reasoning models expose the levels models.dev documents", () => {
   ]);
 });
 
-Deno.test("OpenCode Go models expose distinct per-model thinking levels", () => {
+test("OpenCode Go models expose distinct per-model thinking levels", () => {
   // Every reasoning model used to collapse to the same provider-default set
   // (off/minimal/low/medium/high) because models.dev's per-model
   // reasoning_options were never mapped into a thinkingLevelMap. Now each
@@ -266,7 +267,7 @@ Deno.test("OpenCode Go models expose distinct per-model thinking levels", () => 
   assert(sets.size >= 3, "opencode-go models must expose distinct levels");
 });
 
-Deno.test("other providers derive per-model levels from reasoning_options", () => {
+test("other providers derive per-model levels from reasoning_options", () => {
   // The same mapping applies to every models.dev provider, not just
   // OpenCode Go — verify a representative spread differs per model.
   const openai = builtinProvider("openai")!;
@@ -320,7 +321,7 @@ Deno.test("other providers derive per-model levels from reasoning_options", () =
   ]);
 });
 
-Deno.test("extra providers register in LumiscaCore and need a stored key", async () => {
+test("extra providers register in LumiscaCore and need a stored key", async () => {
   const core = LumiscaCore.forTesting([], NO_ENV);
   try {
     const deepinfra = core
@@ -362,7 +363,7 @@ Deno.test("extra providers register in LumiscaCore and need a stored key", async
   }
 });
 
-Deno.test("extra providers resolve their env API keys", async () => {
+test("extra providers resolve their env API keys", async () => {
   const core = LumiscaCore.forTesting(
     [],
     envOf({

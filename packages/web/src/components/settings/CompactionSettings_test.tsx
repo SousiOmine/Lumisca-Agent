@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -7,7 +8,7 @@ function html(): string {
   return renderToString(createElement(CompactionSettings, {}));
 }
 
-Deno.test("the reserve row names what it reserves, with no explanation", () => {
+test("the reserve row names what it reserves, with no explanation", () => {
   const panel = html();
   assertStringIncludes(panel, "出力時の予約コンテキスト長（ウィンドウ比 %）");
   // "予約" alone did not say what for, so the row carried a sentence saying
@@ -15,7 +16,7 @@ Deno.test("the reserve row names what it reserves, with no explanation", () => {
   assertEquals(panel.includes("上限に対して残す余裕"), false);
 });
 
-Deno.test("the retention share is not a setting any more", () => {
+test("the retention share is not a setting any more", () => {
   // It is the compactor's default: a reader had no way to judge 20% against
   // 8%, and the row sat next to a reservation whose meaning is the opposite.
   const panel = html();
@@ -23,7 +24,7 @@ Deno.test("the retention share is not a setting any more", () => {
   assertEquals(panel.includes("圧縮後も残す直近の割合"), false);
 });
 
-Deno.test("keeping the compacted log says what it costs", () => {
+test("keeping the compacted log says what it costs", () => {
   const panel = html();
   assertStringIncludes(panel, "圧縮されたログを保持する");
   assertStringIncludes(

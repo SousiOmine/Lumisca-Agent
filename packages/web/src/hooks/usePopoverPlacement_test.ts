@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import {
   fitPopover,
@@ -38,7 +39,7 @@ function fit(
   return fitPopover({ anchor, viewport, layoutHeight, prefer });
 }
 
-Deno.test("fitPopover: a roomy window gets the preferred size above the trigger", () => {
+test("fitPopover: a roomy window gets the preferred size above the trigger", () => {
   const result = fit(composerSwitch, desktop);
   assertEquals(result.side, "above");
   assertEquals(result.width, POPOVER_PREFERRED_WIDTH);
@@ -51,7 +52,7 @@ Deno.test("fitPopover: a roomy window gets the preferred size above the trigger"
   assertEquals(result.top, null);
 });
 
-Deno.test("fitPopover: a short window shrinks the panel instead of cutting it off", () => {
+test("fitPopover: a short window shrinks the panel instead of cutting it off", () => {
   // 420px tall: the composer sits at the bottom and there is no room for the
   // full 420px list above it. The old CSS kept the height and let the first
   // rows leave the screen.
@@ -65,7 +66,7 @@ Deno.test("fitPopover: a short window shrinks the panel instead of cutting it of
   assertEquals(result.bottom! + result.height - result.height >= 0, true);
 });
 
-Deno.test("fitPopover: a trigger with no room above opens below instead", () => {
+test("fitPopover: a trigger with no room above opens below instead", () => {
   // A settings list row near the top of a short window: 40px above it cannot
   // hold the panel, while everything below is free.
   const anchor: PopoverAnchor = { top: 60, bottom: 88, left: 120 };
@@ -77,7 +78,7 @@ Deno.test("fitPopover: a trigger with no room above opens below instead", () => 
   assertEquals(result.bottom, null);
 });
 
-Deno.test("fitPopover: the preferred side is kept unless the other is better", () => {
+test("fitPopover: the preferred side is kept unless the other is better", () => {
   // Above is nominally preferred, but there is only 116px of it while the
   // window has 520px below: flipping is the whole point.
   const anchor: PopoverAnchor = { top: 130, bottom: 160, left: 40 };
@@ -95,7 +96,7 @@ Deno.test("fitPopover: the preferred side is kept unless the other is better", (
   assertEquals(fit(anchorNearBottom, cramped).side, "above");
 });
 
-Deno.test("fitPopover: the preferred width is given up before the panel leaves the window", () => {
+test("fitPopover: the preferred width is given up before the panel leaves the window", () => {
   // A phone 300px wide: the preferred width would run past both edges, so the
   // panel takes the room between the margins and pins to the left one.
   const narrow: PopoverViewport = { left: 0, top: 0, width: 300, height: 700 };
@@ -108,7 +109,7 @@ Deno.test("fitPopover: the preferred width is given up before the panel leaves t
   assertEquals(fit({ top: 400, bottom: 430, left: 200 }, roomy).left, 200);
 });
 
-Deno.test("fitPopover: the panel never leaves the visible area", () => {
+test("fitPopover: the panel never leaves the visible area", () => {
   // The window is 1280 wide but the trigger is at 1000: the panel must not
   // run past the right edge (the old CSS anchored it at the trigger's left).
   const result = fit({ top: 700, bottom: 730, left: 1000 }, desktop);
@@ -116,7 +117,7 @@ Deno.test("fitPopover: the panel never leaves the visible area", () => {
   assertEquals(result.left + result.width, 1280 - POPOVER_MARGIN);
 });
 
-Deno.test("fitPopover: the visible area replaces the window while the keyboard is open", () => {
+test("fitPopover: the visible area replaces the window while the keyboard is open", () => {
   // iOS: the layout viewport keeps its height, the visual viewport loses the
   // bottom 300px to the keyboard. Measuring `innerHeight` would place the
   // panel behind the keyboard.
@@ -139,7 +140,7 @@ Deno.test("fitPopover: the visible area replaces the window while the keyboard i
   assertEquals(behind.bottom, 544 - (544 - POPOVER_MARGIN) + 6);
 });
 
-Deno.test("measurePlacement: the window's bar stays clear", () => {
+test("measurePlacement: the window's bar stays clear", () => {
   // A short window: the panel keeps under the title bar instead of covering
   // the tabs. (900x600 with the bar: 560px of visible room, so the panel is
   // placed normally above the trigger.)
@@ -191,7 +192,7 @@ Deno.test("measurePlacement: the window's bar stays clear", () => {
   assertEquals(tiny.style["--mp-space"], "364px");
 });
 
-Deno.test("measurePlacement: the width is the measured one, capped by the viewport", () => {
+test("measurePlacement: the width is the measured one, capped by the viewport", () => {
   // The stylesheet reads `--mp-width` and `--mp-left`; both come from the
   // measurement, so a narrow window cannot end up with a panel wider than it.
   const wide = measurePlacement(
@@ -213,7 +214,7 @@ Deno.test("measurePlacement: the width is the measured one, capped by the viewpo
   assertEquals(narrow.style["--mp-left"], `${POPOVER_MARGIN}px`);
 });
 
-Deno.test("fitPopover: a room under the minimum fills the visible area", () => {
+test("fitPopover: a room under the minimum fills the visible area", () => {
   // Neither side holds a panel worth showing: rather than a sliver of a list,
   // the panel takes the whole visible area (the stepped layout's header used
   // to be the only way out; outside-click and Escape are that now).

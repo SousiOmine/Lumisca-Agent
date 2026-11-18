@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@lumisca/core";
 import { assert, assertEquals } from "@std/assert";
 import { CODE_EXECUTION_PROVIDER } from "./agent/code-execution-context.ts";
@@ -27,7 +28,7 @@ function toolResultTexts(core: LumiscaCore, sessionId: string): string[] {
     .map((message) => toolText(message));
 }
 
-Deno.test("code execution is off by default", async () => {
+test("code execution is off by default", async () => {
   const { core, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   try {
@@ -48,7 +49,7 @@ Deno.test("code execution is off by default", async () => {
   }
 });
 
-Deno.test("code execution: the model is given execute and nothing else", async () => {
+test("code execution: the model is given execute and nothing else", async () => {
   const { core, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   try {
@@ -71,7 +72,7 @@ Deno.test("code execution: the model is given execute and nothing else", async (
   }
 });
 
-Deno.test("code execution: a program runs the session's real tools", async () => {
+test("code execution: a program runs the session's real tools", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   try {
@@ -111,7 +112,7 @@ Deno.test("code execution: a program runs the session's real tools", async () =>
   }
 });
 
-Deno.test("code execution: the note about it is published once", async () => {
+test("code execution: the note about it is published once", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   try {
@@ -139,7 +140,7 @@ Deno.test("code execution: the note about it is published once", async () => {
   }
 });
 
-Deno.test("code execution: the toggle rebuilds an open session", async () => {
+test("code execution: the toggle rebuilds an open session", async () => {
   const { core, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   try {

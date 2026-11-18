@@ -8,6 +8,7 @@
  * top would see "the desktop shell is not available" for the rest of the
  * run.
  */
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 
 /** The bridge origin the page would have in a desktop window. */
@@ -47,7 +48,7 @@ async function withBridge(
   }
 }
 
-Deno.test("shellState: one bridge call serves every reader", async () => {
+test("shellState: one bridge call serves every reader", async () => {
   // The title bar, the connection picker and the settings list all ask for
   // the same state; before this source existed each mount paid its own round
   // trip (and the trigger needed the answer while its popover was closed).
@@ -64,7 +65,7 @@ Deno.test("shellState: one bridge call serves every reader", async () => {
   });
 });
 
-Deno.test("shellState: a failed read is not cached", async () => {
+test("shellState: a failed read is not cached", async () => {
   const original = globalThis.fetch;
   let attempts = 0;
   globalThis.fetch = (() => {

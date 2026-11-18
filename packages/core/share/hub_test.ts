@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { ShareHub, type ShareSink } from "./hub.ts";
 import type { ShareServerFrame } from "./ops.ts";
@@ -11,7 +12,7 @@ function sinkOf(): ShareSink & { frames: ShareServerFrame[] } {
   return { frames, send: (frame) => frames.push(frame) };
 }
 
-Deno.test("grants are scoped to a session, sorted, and expire on their own", () => {
+test("grants are scoped to a session, sorted, and expire on their own", () => {
   const hub = new ShareHub();
   const sink = sinkOf();
   hub.register(sink, {
@@ -47,7 +48,7 @@ Deno.test("grants are scoped to a session, sorted, and expire on their own", () 
   assert(!("sessionId" in shares[0]!));
 });
 
-Deno.test("a call is one frame, and its answer settles it", async () => {
+test("a call is one frame, and its answer settles it", async () => {
   const hub = new ShareHub();
   const sink = sinkOf();
   hub.register(sink, { clientId: "app-1", host, grants: [grantOf()] });
@@ -68,7 +69,7 @@ Deno.test("a call is one frame, and its answer settles it", async () => {
   assertEquals(await pending, { isFile: true, size: 3 });
 });
 
-Deno.test("a failure from the lent computer is the call's rejection", async () => {
+test("a failure from the lent computer is the call's rejection", async () => {
   const hub = new ShareHub();
   const sink = sinkOf();
   hub.register(sink, { clientId: "app-1", host, grants: [grantOf()] });
@@ -85,7 +86,7 @@ Deno.test("a failure from the lent computer is the call's rejection", async () =
   await assertRejects(() => pending, Error, "EACCES");
 });
 
-Deno.test("an answer from a connection that no longer owns the call is ignored", async () => {
+test("an answer from a connection that no longer owns the call is ignored", async () => {
   const hub = new ShareHub();
   const first = sinkOf();
   const second = sinkOf();
@@ -103,7 +104,7 @@ Deno.test("an answer from a connection that no longer owns the call is ignored",
   await assertRejects(() => pending, Error, "no longer connected");
 });
 
-Deno.test("a wedged computer is timed out, and told to stop", async () => {
+test("a wedged computer is timed out, and told to stop", async () => {
   const hub = new ShareHub({ opTimeoutMs: 5 });
   const sink = sinkOf();
   hub.register(sink, { clientId: "app-1", host, grants: [grantOf()] });
@@ -114,7 +115,7 @@ Deno.test("a wedged computer is timed out, and told to stop", async () => {
   assertEquals(cancel?.type, "cancel");
 });
 
-Deno.test("an exec waits its own timeout, not the file timeout", async () => {
+test("an exec waits its own timeout, not the file timeout", async () => {
   const hub = new ShareHub({ opTimeoutMs: 1, execGraceMs: 10_000 });
   const sink = sinkOf();
   hub.register(sink, {
@@ -149,7 +150,7 @@ Deno.test("an exec waits its own timeout, not the file timeout", async () => {
   assertEquals((await pending).exitCode, 0);
 });
 
-Deno.test("stopping the run cancels the call on the other side", async () => {
+test("stopping the run cancels the call on the other side", async () => {
   const hub = new ShareHub();
   const sink = sinkOf();
   hub.register(sink, { clientId: "app-1", host, grants: [grantOf()] });
@@ -161,7 +162,7 @@ Deno.test("stopping the run cancels the call on the other side", async () => {
   assertEquals(sink.frames[1]?.type, "cancel");
 });
 
-Deno.test("a folder stops answering the moment its app disconnects", async () => {
+test("a folder stops answering the moment its app disconnects", async () => {
   const hub = new ShareHub();
   const sink = sinkOf();
   hub.register(sink, { clientId: "app-1", host, grants: [grantOf()] });
@@ -178,7 +179,7 @@ Deno.test("a folder stops answering the moment its app disconnects", async () =>
   );
 });
 
-Deno.test("changes are reported once per affected session", () => {
+test("changes are reported once per affected session", () => {
   const hub = new ShareHub();
   const changes: string[][] = [];
   hub.onSharesChange((sessions) => changes.push([...sessions]));
@@ -202,7 +203,7 @@ Deno.test("changes are reported once per affected session", () => {
   assertEquals(changes, [["s1"], ["s1"], ["s1", "s2"], ["s2"]]);
 });
 
-Deno.test("an unchanged announcement adds no report", () => {
+test("an unchanged announcement adds no report", () => {
   const hub = new ShareHub();
   const changes: string[][] = [];
   hub.onSharesChange((sessions) => changes.push([...sessions]));
@@ -215,7 +216,7 @@ Deno.test("an unchanged announcement adds no report", () => {
   assertEquals(changes, [["s1"]]);
 });
 
-Deno.test("closing the hub settles everything in flight", async () => {
+test("closing the hub settles everything in flight", async () => {
   const hub = new ShareHub();
   const sink = sinkOf();
   hub.register(sink, { clientId: "app-1", host, grants: [grantOf()] });

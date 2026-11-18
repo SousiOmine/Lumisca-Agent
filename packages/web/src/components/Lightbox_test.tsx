@@ -5,12 +5,13 @@
  * keeps itself mounted while it shrinks, so "closed" is the empty document,
  * not a remembered picture).
  */
+import { test } from "bun:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { renderToString } from "preact-render-to-string";
 import { initLocale } from "../i18n.ts";
 import { Lightbox } from "./Lightbox.tsx";
 
-Deno.test("Lightbox: the picture is a dialog the reader can dismiss", () => {
+test("Lightbox: the picture is a dialog the reader can dismiss", () => {
   initLocale("ja");
   const html = renderToString(
     <Lightbox
@@ -29,7 +30,7 @@ Deno.test("Lightbox: the picture is a dialog the reader can dismiss", () => {
   assertStringIncludes(html, 'src="/api/sessions/s/visual/9f3c2a1b4d5e.png"');
 });
 
-Deno.test("Lightbox: an alt is carried to the picture", () => {
+test("Lightbox: an alt is carried to the picture", () => {
   initLocale("ja");
   const html = renderToString(
     <Lightbox src="/x.png" alt="screenshot.png" onClose={() => {}} />,
@@ -41,7 +42,7 @@ Deno.test("Lightbox: an alt is carried to the picture", () => {
   assertEquals(html.includes("画像の拡大表示"), false);
 });
 
-Deno.test("Lightbox: a closed viewer is not on the page", () => {
+test("Lightbox: a closed viewer is not on the page", () => {
   initLocale("ja");
   // Every message renders one (the overlay keeps itself up while it shrinks),
   // so a closed viewer has to cost nothing.
@@ -49,7 +50,7 @@ Deno.test("Lightbox: a closed viewer is not on the page", () => {
   assertEquals(html, "");
 });
 
-Deno.test("Lightbox: the picture is not draggable by the browser", () => {
+test("Lightbox: the picture is not draggable by the browser", () => {
   initLocale("ja");
   const html = renderToString(<Lightbox src="/x.png" onClose={() => {}} />);
   // The browser's own image drag would take the pan away from the viewer's

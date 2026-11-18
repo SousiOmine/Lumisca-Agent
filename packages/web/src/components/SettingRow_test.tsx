@@ -1,9 +1,10 @@
+import { test } from "bun:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
 import { SettingRow, Toggle } from "./SettingRow.tsx";
 
-Deno.test("Toggle renders the switch markup the styles expect", () => {
+test("Toggle renders the switch markup the styles expect", () => {
   const html = renderToString(
     createElement(Toggle, {
       checked: true,
@@ -19,7 +20,7 @@ Deno.test("Toggle renders the switch markup the styles expect", () => {
   assertStringIncludes(html, "checked");
 });
 
-Deno.test("Toggle can be disabled (a load in flight)", () => {
+test("Toggle can be disabled (a load in flight)", () => {
   const html = renderToString(
     createElement(Toggle, {
       checked: false,
@@ -31,7 +32,7 @@ Deno.test("Toggle can be disabled (a load in flight)", () => {
   assertStringIncludes(html, "disabled");
 });
 
-Deno.test("SettingRow keeps label, description and control in one row", () => {
+test("SettingRow keeps label, description and control in one row", () => {
   const html = renderToString(
     createElement(
       SettingRow,
@@ -46,7 +47,7 @@ Deno.test("SettingRow keeps label, description and control in one row", () => {
   assertStringIncludes(html, "v1.2.3");
 });
 
-Deno.test("SettingRow without a description renders one line", () => {
+test("SettingRow without a description renders one line", () => {
   const html = renderToString(
     createElement(SettingRow, { label: "一行" }, null),
   );

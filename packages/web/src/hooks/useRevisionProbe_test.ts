@@ -7,6 +7,7 @@
  * opposite of what the probe is for (one tiny request per tab, a snapshot
  * re-read only when something actually moved).
  */
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { probeOnce, type RevisionProbeOptions } from "./useRevisionProbe.ts";
 
@@ -36,7 +37,7 @@ function harness(
   return { probe, known, moved, reads };
 }
 
-Deno.test("the first read only seeds the marker", async () => {
+test("the first read only seeds the marker", async () => {
   const revisions = new Map([["a", 7]]);
   const { probe, known, moved } = harness(revisions);
   await probeOnce(probe);
@@ -44,7 +45,7 @@ Deno.test("the first read only seeds the marker", async () => {
   assertEquals(known.get("a"), 7);
 });
 
-Deno.test("a later change is reported once per move", async () => {
+test("a later change is reported once per move", async () => {
   const revisions = new Map([["a", 7]]);
   const { probe, moved } = harness(revisions);
   await probeOnce(probe); // seed
@@ -57,7 +58,7 @@ Deno.test("a later change is reported once per move", async () => {
   assertEquals(moved, ["a"]);
 });
 
-Deno.test("each key is compared on its own", async () => {
+test("each key is compared on its own", async () => {
   const revisions = new Map([
     ["a", 1],
     ["b", 1],
@@ -69,7 +70,7 @@ Deno.test("each key is compared on its own", async () => {
   assertEquals(moved, ["b"]);
 });
 
-Deno.test("a failed read is not a state change", async () => {
+test("a failed read is not a state change", async () => {
   const revisions = new Map<string, number>([["a", 1]]);
   const { probe, moved, known } = harness(revisions);
   await probeOnce(probe);
@@ -79,7 +80,7 @@ Deno.test("a failed read is not a state change", async () => {
   assertEquals(known.get("a"), 1, "the marker survives a failed read");
 });
 
-Deno.test("a disposed or disconnected owner is not probed", async () => {
+test("a disposed or disconnected owner is not probed", async () => {
   const revisions = new Map([["a", 1]]);
   const disposed = harness(revisions, { disposed: () => true });
   await probeOnce(disposed.probe);
@@ -90,7 +91,7 @@ Deno.test("a disposed or disconnected owner is not probed", async () => {
   assertEquals(disconnected.reads, []);
 });
 
-Deno.test("a key closed mid-flight is not re-read", async () => {
+test("a key closed mid-flight is not re-read", async () => {
   const revisions = new Map([
     ["a", 1],
     ["b", 1],

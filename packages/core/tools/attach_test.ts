@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { SessionAttachmentStore } from "../session/attachments.ts";
@@ -60,7 +61,7 @@ function details(result: ToolResult): {
   };
 }
 
-Deno.test("chat_attach: an image is inline, other files are downloads", async () => {
+test("chat_attach: an image is inline, other files are downloads", async () => {
   const test = await fixture({
     "chart.png": new Uint8Array([1, 2, 3, 4]),
     "report.md": "# notes\n",
@@ -91,7 +92,7 @@ Deno.test("chat_attach: an image is inline, other files are downloads", async ()
   }
 });
 
-Deno.test("chat_attach: the download keeps the file's own name", async () => {
+test("chat_attach: the download keeps the file's own name", async () => {
   const test = await fixture();
   try {
     await test.write("summary of the run.txt", "done\n");
@@ -111,7 +112,7 @@ Deno.test("chat_attach: the download keeps the file's own name", async () => {
   }
 });
 
-Deno.test("chat_attach: SVG is a download, never an inline document", async () => {
+test("chat_attach: SVG is a download, never an inline document", async () => {
   const test = await fixture();
   try {
     await test.write("diagram.svg", "<svg/>");
@@ -130,7 +131,7 @@ Deno.test("chat_attach: SVG is a download, never an inline document", async () =
   }
 });
 
-Deno.test("chat_attach: a missing file or a directory fails", async () => {
+test("chat_attach: a missing file or a directory fails", async () => {
   const test = await fixture({ "here.txt": "x" });
   try {
     await assertRejects(
@@ -159,7 +160,7 @@ Deno.test("chat_attach: a missing file or a directory fails", async () => {
   }
 });
 
-Deno.test("chat_attach: too many files in one call is refused", async () => {
+test("chat_attach: too many files in one call is refused", async () => {
   const test = await fixture();
   try {
     const paths = Array.from({ length: 11 }, (_, i) =>
@@ -176,7 +177,7 @@ Deno.test("chat_attach: too many files in one call is refused", async () => {
   }
 });
 
-Deno.test("chat_attach: a call must name at least one file", async () => {
+test("chat_attach: a call must name at least one file", async () => {
   const test = await fixture();
   try {
     await assertRejects(

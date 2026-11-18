@@ -1,10 +1,11 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { removeDirRetry } from "@lumisca/core/test-utils";
 import { assertEquals, assertRejects } from "@std/assert";
 import { contentEtag } from "./app-file-headers.ts";
 import { Assets, type AssetsManifest, bundleStylesCss } from "./assets.ts";
 
-Deno.test("packaged assets use the startup-captured manifest path", async () => {
+test("packaged assets use the startup-captured manifest path", async () => {
   const root = await Deno.makeTempDir();
   const manifestPath = join(root, "assets.json");
   const favicon = new Uint8Array([0, 1, 2, 255]);
@@ -51,7 +52,7 @@ Deno.test("packaged assets use the startup-captured manifest path", async () => 
   }
 });
 
-Deno.test("a manifest read that fails is retried instead of poisoning the process", async () => {
+test("a manifest read that fails is retried instead of poisoning the process", async () => {
   const root = await Deno.makeTempDir();
   const manifestPath = join(root, "assets.json");
   const lateJs = "console.log('late');";
@@ -88,7 +89,7 @@ async function writeStylesEntry(
   return entryPath;
 }
 
-Deno.test("bundleStylesCss inlines imports in manifest order", async () => {
+test("bundleStylesCss inlines imports in manifest order", async () => {
   const root = await Deno.makeTempDir();
   try {
     const entryPath = await writeStylesEntry(
@@ -105,7 +106,7 @@ Deno.test("bundleStylesCss inlines imports in manifest order", async () => {
   }
 });
 
-Deno.test("bundleStylesCss passes a plain stylesheet through", async () => {
+test("bundleStylesCss passes a plain stylesheet through", async () => {
   const root = await Deno.makeTempDir();
   try {
     const entryPath = join(root, "styles.css");
@@ -116,7 +117,7 @@ Deno.test("bundleStylesCss passes a plain stylesheet through", async () => {
   }
 });
 
-Deno.test("bundleStylesCss rejects stray rules and escapes", async () => {
+test("bundleStylesCss rejects stray rules and escapes", async () => {
   const root = await Deno.makeTempDir();
   try {
     const withRule = await writeStylesEntry(

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 
 import {
@@ -104,7 +105,7 @@ function setupFastTitle() {
 /** A model whose window is small enough that a few turns of history cross
  * the pressure threshold; the completion reserve is part of the budget the
  * provider validates against (`window - outputCap`). */
-Deno.test("mode prompt keeps the images attached in the composer", async () => {
+test("mode prompt keeps the images attached in the composer", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
@@ -164,7 +165,7 @@ Deno.test("mode prompt keeps the images attached in the composer", async () => {
   core.close();
 });
 
-Deno.test("workspace instructions are context messages, not prompt text, and edits reach an open session", async () => {
+test("workspace instructions are context messages, not prompt text, and edits reach an open session", async () => {
   const { core, faux, providerId, modelId } = setup();
   const root = await Deno.makeTempDir({ prefix: "lumisca-core-" });
   await Deno.writeTextFile(join(root, "AGENTS.md"), "Use Deno 2.\n");
@@ -252,7 +253,7 @@ Deno.test("workspace instructions are context messages, not prompt text, and edi
   await removeDirRetry(root);
 });
 
-Deno.test("the date is published once as a context message, not rewritten into the prompt", async () => {
+test("the date is published once as a context message, not rewritten into the prompt", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   const session = await core.createSession({
@@ -313,7 +314,7 @@ Deno.test("the date is published once as a context message, not rewritten into t
   await removeDirRetry(root);
 });
 
-Deno.test("startPrompt (web path): first prompt auto-generates the session title", async () => {
+test("startPrompt (web path): first prompt auto-generates the session title", async () => {
   const { core, faux, providerId } = setupFastTitle();
   const { ws } = await makeWorkspace(core);
 
@@ -352,7 +353,7 @@ Deno.test("startPrompt (web path): first prompt auto-generates the session title
   core.close();
 });
 
-Deno.test("reopened session with history does not regenerate the title", async () => {
+test("reopened session with history does not regenerate the title", async () => {
   const { core, faux, providerId } = setupFastTitle();
   const { ws } = await makeWorkspace(core);
 

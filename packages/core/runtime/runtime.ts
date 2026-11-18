@@ -10,8 +10,8 @@
  * did not have to change when the runtime did. It is the migration seam:
  * nothing below calls into Deno, and the server imports it before anything
  * else, so the packaged binary carries it too. Product code uses the
- * `runtime` export; the `Deno` global stays for the test runner's
- * `Deno.test` and for the browser probe.
+ * `runtime` export; the `Deno` global stays for the test suite and for the
+ * browser probe, both of which still call the Deno-shaped APIs directly.
  *
  * FFI is not implemented here: the one caller, the Windows computer host,
  * uses `computer/windows-ffi.ts`, a Deno-shaped bridge over `bun:ffi`.
@@ -443,16 +443,12 @@ class ShimCommand {
     this.#options = options;
   }
   /** The suite spawns helper scripts through `Deno.execPath()` + `run`, and
-   * those children need the shim too: whatever their cwd, the preload is
+   * those children need the runtime too: whatever their cwd, the preload is
    * named here instead of being found in a bunfig.toml. */
   #args(): string[] {
     const args = this.#options.args ?? [];
     if (this.#cmd === process.execPath && args[0] === "run") {
-      return [
-        "--preload",
-        path.join(path.dirname(fileURLToPath(import.meta.url)), "deno-shim.ts"),
-        ...args,
-      ];
+      return ["--preload", fileURLToPath(import.meta.url), ...args];
     }
     return args;
   }
@@ -659,7 +655,7 @@ function denoServe(
       try {
         return await handler(req);
       } catch (error) {
-        console.error("deno-shim: handler threw", error);
+        console.error("runtime: handler threw", error);
         return new Response("Internal Server Error", { status: 500 });
       } finally {
         activeServer = previous;
@@ -917,10 +913,10 @@ const DenoShim = {
   },
 };
 
-// The `Deno` global stays: the test runner's `Deno.test` and the browser
-// probe's expectations are written against it, and a window object that has
-// it is part of the surface the app is developed against. Product code uses
-// the named `runtime` export below instead of the global name.
+// The `Deno` global stays: the test suite and the browser probe call the
+// Deno-shaped APIs directly, and a window object that has it is part of the
+// surface the app is developed against. Product code uses the named `runtime`
+// export below instead of the global name.
 // deno-lint-ignore no-explicit-any
 (globalThis as any).Deno = DenoShim;
 

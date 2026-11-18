@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -27,7 +28,7 @@ function draw(actions: ComposerAttachAction[]): string {
   );
 }
 
-Deno.test("AttachMenuPanel: the rows are a menu of menu items", () => {
+test("AttachMenuPanel: the rows are a menu of menu items", () => {
   const html = draw([action("attach", "画像を添付")]);
   assertStringIncludes(html, 'class="attach-popover"');
   assertStringIncludes(html, 'role="menu"');
@@ -36,7 +37,7 @@ Deno.test("AttachMenuPanel: the rows are a menu of menu items", () => {
   assertStringIncludes(html, 'class="attach-item-label">画像を添付<');
 });
 
-Deno.test("AttachMenuPanel: the rows keep the order they were given", () => {
+test("AttachMenuPanel: the rows keep the order they were given", () => {
   // The composer decides the order (composerMenuItems); the panel must not
   // rearrange it.
   const html = draw([
@@ -51,7 +52,7 @@ Deno.test("AttachMenuPanel: the rows keep the order they were given", () => {
   assertEquals([...html.matchAll(/role="menuitem"/g)].length, 3);
 });
 
-Deno.test("AttachMenuPanel: a row is a button, not a link", () => {
+test("AttachMenuPanel: a row is a button, not a link", () => {
   // It runs an action on the same page (open the picker, insert a trigger),
   // so it must not be a navigation target.
   const html = draw([action("attach", "画像を添付")]);

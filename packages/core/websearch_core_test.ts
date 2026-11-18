@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import { fauxProvider } from "./ai/faux.ts";
 import { LumiscaCore } from "./core.ts";
@@ -12,7 +13,7 @@ import { WEB_SEARCH_KEY } from "./shared/settings-keys.ts";
  * default, and only a configured default gives a session the web tools.
  */
 
-Deno.test("core: the web-search view never carries a key", async () => {
+test("core: the web-search view never carries a key", async () => {
   const core = LumiscaCore.forTesting();
   try {
     const empty = core.getWebSearchSettings();
@@ -38,7 +39,7 @@ Deno.test("core: the web-search view never carries a key", async () => {
   }
 });
 
-Deno.test("core: removing the default hands it to the remaining provider", async () => {
+test("core: removing the default hands it to the remaining provider", async () => {
   const core = LumiscaCore.forTesting();
   try {
     core.addWebSearchProvider({ id: "exa", apiKey: "k" });
@@ -59,7 +60,7 @@ Deno.test("core: removing the default hands it to the remaining provider", async
   }
 });
 
-Deno.test("core: unknown provider ids are refused", async () => {
+test("core: unknown provider ids are refused", async () => {
   const core = LumiscaCore.forTesting();
   try {
     assertThrows(
@@ -92,7 +93,7 @@ function sessionHasWebTools(core: LumiscaCore, sessionId: string): boolean {
   return names.includes("web_search") && names.includes("web_fetch");
 }
 
-Deno.test("core: a search provider becomes the session's web tools", async () => {
+test("core: a search provider becomes the session's web tools", async () => {
   // The faux provider lets the session be opened without a network or a key.
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);

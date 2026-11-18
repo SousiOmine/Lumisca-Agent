@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import type {
   AgentMessage,
   AssistantMessage,
@@ -32,7 +33,7 @@ function createSession(db: LumiscaDb, id: string): void {
     .run(id);
 }
 
-Deno.test("messages: append/list round-trips through the versioned envelope", () => {
+test("messages: append/list round-trips through the versioned envelope", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
@@ -50,7 +51,7 @@ Deno.test("messages: append/list round-trips through the versioned envelope", ()
   }
 });
 
-Deno.test("messages: notification messages round-trip with their fields", () => {
+test("messages: notification messages round-trip with their fields", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
@@ -74,7 +75,7 @@ Deno.test("messages: notification messages round-trip with their fields", () => 
   }
 });
 
-Deno.test("messages: legacy rows (raw AgentMessage JSON) still decode", () => {
+test("messages: legacy rows (raw AgentMessage JSON) still decode", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
@@ -101,7 +102,7 @@ Deno.test("messages: legacy rows (raw AgentMessage JSON) still decode", () => {
   }
 });
 
-Deno.test("messages: mode rows written before the images field decode as imageless", () => {
+test("messages: mode rows written before the images field decode as imageless", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
@@ -161,7 +162,7 @@ Deno.test("messages: mode rows written before the images field decode as imagele
   }
 });
 
-Deno.test("messages: deleteFrom removes a positional suffix", () => {
+test("messages: deleteFrom removes a positional suffix", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
@@ -217,7 +218,7 @@ Deno.test("messages: deleteFrom removes a positional suffix", () => {
   }
 });
 
-Deno.test("messages: insertAt pushes the rows after the position one later", () => {
+test("messages: insertAt pushes the rows after the position one later", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
@@ -276,7 +277,7 @@ Deno.test("messages: insertAt pushes the rows after the position one later", () 
   }
 });
 
-Deno.test("messages: insertAt appends at or past the last row", () => {
+test("messages: insertAt appends at or past the last row", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
@@ -301,7 +302,7 @@ Deno.test("messages: insertAt appends at or past the last row", () => {
   }
 });
 
-Deno.test("messages: insertAt leaves other sessions untouched", () => {
+test("messages: insertAt leaves other sessions untouched", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
@@ -334,7 +335,7 @@ Deno.test("messages: insertAt leaves other sessions untouched", () => {
   }
 });
 
-Deno.test("messages: listBetween bounds the window and keeps transcript order", () => {
+test("messages: listBetween bounds the window and keeps transcript order", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
@@ -383,7 +384,7 @@ Deno.test("messages: listBetween bounds the window and keeps transcript order", 
   }
 });
 
-Deno.test("messages: listModelView starts at the newest checkpoint", () => {
+test("messages: listModelView starts at the newest checkpoint", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
@@ -414,7 +415,7 @@ Deno.test("messages: listModelView starts at the newest checkpoint", () => {
   }
 });
 
-Deno.test("messages: listModelView returns the whole transcript when never compacted", () => {
+test("messages: listModelView returns the whole transcript when never compacted", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
@@ -435,7 +436,7 @@ Deno.test("messages: listModelView returns the whole transcript when never compa
   }
 });
 
-Deno.test("messages: listWindow pages backwards, oldest first", () => {
+test("messages: listWindow pages backwards, oldest first", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
@@ -490,7 +491,7 @@ Deno.test("messages: listWindow pages backwards, oldest first", () => {
   }
 });
 
-Deno.test("messages: listWindow never reads another session's rows", () => {
+test("messages: listWindow never reads another session's rows", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
@@ -526,7 +527,7 @@ Deno.test("messages: listWindow never reads another session's rows", () => {
   }
 });
 
-Deno.test("messages: pruneCondensed reduces only what a checkpoint covers", () => {
+test("messages: pruneCondensed reduces only what a checkpoint covers", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
@@ -597,7 +598,7 @@ Deno.test("messages: pruneCondensed reduces only what a checkpoint covers", () =
   }
 });
 
-Deno.test("messages: usageRows reads every assistant usage in the store", () => {
+test("messages: usageRows reads every assistant usage in the store", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
@@ -623,7 +624,7 @@ Deno.test("messages: usageRows reads every assistant usage in the store", () => 
   }
 });
 
-Deno.test("messages: newestConversationRows reads only what a conversation shows", () => {
+test("messages: newestConversationRows reads only what a conversation shows", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
@@ -721,7 +722,7 @@ Deno.test("messages: newestConversationRows reads only what a conversation shows
   }
 });
 
-Deno.test("messages: newestConversationRows also reads pre-stamped rows", () => {
+test("messages: newestConversationRows also reads pre-stamped rows", () => {
   // The store holds two envelopes, and decodeStoredMessage reads both. A
   // filter that understood only the current one would leave an older
   // conversation's last message invisible in the sidebar while the
@@ -837,7 +838,7 @@ function storedContent(db: LumiscaDb, id: string): AssistantMessage["content"] {
   return stored.message.content;
 }
 
-Deno.test("messages: a stored duplicate thinking block decodes as one", () => {
+test("messages: a stored duplicate thinking block decodes as one", () => {
   // Every turn written before the agent stopped prepending a copy of the
   // transport's own thinking block holds the same reasoning twice. Nothing
   // rewrites those rows, so the repair has to happen on read.
@@ -864,7 +865,7 @@ Deno.test("messages: a stored duplicate thinking block decodes as one", () => {
   }
 });
 
-Deno.test("messages: distinct thinking blocks in one turn are kept", () => {
+test("messages: distinct thinking blocks in one turn are kept", () => {
   // A turn can think in several blocks; only a repeat of the one before it
   // is the duplicate the repair removes.
   const db = LumiscaDb.openInMemory();
@@ -891,7 +892,7 @@ Deno.test("messages: distinct thinking blocks in one turn are kept", () => {
   }
 });
 
-Deno.test("messages: a pruned pair of empty thinking blocks decodes as one", () => {
+test("messages: a pruned pair of empty thinking blocks decodes as one", () => {
   // session/prune.ts empties a thinking block instead of removing it (a
   // replaying model rejects a history that omits reasoning), so a duplicated
   // pair is pruned to two empty blocks. One still satisfies that shape.

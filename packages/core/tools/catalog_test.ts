@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertRejects } from "@std/assert";
 import { ToolCatalog } from "./catalog.ts";
 import { ToolRegistry } from "./registry.ts";
@@ -39,7 +40,7 @@ function textOf(result: ToolResult): string {
   return block.type === "text" ? block.text : "";
 }
 
-Deno.test("catalog: the preloaded set and the registry are one list", () => {
+test("catalog: the preloaded set and the registry are one list", () => {
   const registry = new ToolRegistry();
   registry.setTools([fakeTool("mcp__db__query", { label: "db: query" })]);
   const catalog = new ToolCatalog({
@@ -53,7 +54,7 @@ Deno.test("catalog: the preloaded set and the registry are one list", () => {
   assertEquals(catalog.get("mcp__db__query")?.label, "db: query");
 });
 
-Deno.test("catalog: a name in both sets is the preloaded definition", () => {
+test("catalog: a name in both sets is the preloaded definition", () => {
   const registry = new ToolRegistry();
   registry.setTools([fakeTool("read", { description: "from the registry" })]);
   const catalog = new ToolCatalog({
@@ -64,7 +65,7 @@ Deno.test("catalog: a name in both sets is the preloaded definition", () => {
   assertEquals(catalog.get("read")?.description, "from the agent");
 });
 
-Deno.test("catalog: excluded names are never offered", () => {
+test("catalog: excluded names are never offered", () => {
   const registry = new ToolRegistry();
   registry.setTools([fakeTool("tool_call"), fakeTool("mcp__db__query")]);
   const catalog = new ToolCatalog({
@@ -78,7 +79,7 @@ Deno.test("catalog: excluded names are never offered", () => {
   );
 });
 
-Deno.test("catalog: search and browse cover both sets", () => {
+test("catalog: search and browse cover both sets", () => {
   const registry = new ToolRegistry();
   registry.setTools([
     fakeTool("mcp__db__query", { label: "db: query", description: "SQL" }),
@@ -96,7 +97,7 @@ Deno.test("catalog: search and browse cover both sets", () => {
   assertEquals(listing.includes("mcp__db__query"), true, listing);
 });
 
-Deno.test("catalog: call runs a tool from either set", async () => {
+test("catalog: call runs a tool from either set", async () => {
   const registry = new ToolRegistry();
   registry.setTools([fakeTool("mcp__db__query", { result: "rows" })]);
   const catalog = new ToolCatalog({
@@ -107,7 +108,7 @@ Deno.test("catalog: call runs a tool from either set", async () => {
   assertEquals(textOf(await catalog.call("2", "mcp__db__query", {})), "rows");
 });
 
-Deno.test("catalog: an unknown name says how to look it up", async () => {
+test("catalog: an unknown name says how to look it up", async () => {
   const catalog = new ToolCatalog({
     tools: () => [],
     registry: () => new ToolRegistry(),
@@ -119,7 +120,7 @@ Deno.test("catalog: an unknown name says how to look it up", async () => {
   );
 });
 
-Deno.test("catalog: a failing tool rejects with its message", async () => {
+test("catalog: a failing tool rejects with its message", async () => {
   const catalog = new ToolCatalog({
     tools: () => [fakeTool("bash", { throw: "command failed" })],
     registry: () => new ToolRegistry(),

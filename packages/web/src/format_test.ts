@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { createTranslator } from "@lumisca/core/shared";
 import { assertEquals } from "@std/assert";
 import {
@@ -15,12 +16,12 @@ const en = createTranslator("en");
 /** A fixed "now" so the assertions do not depend on the clock. */
 const NOW = new Date(2026, 8, 15, 12, 0, 0).getTime();
 
-Deno.test("formatRelativeTime: under a minute is the catalogue's 'just now'", () => {
+test("formatRelativeTime: under a minute is the catalogue's 'just now'", () => {
   assertEquals(formatRelativeTime(NOW - 30_000, "ja", NOW), "たった今");
   assertEquals(formatRelativeTime(NOW - 30_000, "en", NOW), "just now");
 });
 
-Deno.test("formatRelativeTime: minutes, hours and days follow the language", () => {
+test("formatRelativeTime: minutes, hours and days follow the language", () => {
   // The English wording is stable enough to assert exactly; the Japanese
   // one is checked for its unit so an ICU spacing change cannot break the
   // test.
@@ -44,7 +45,7 @@ Deno.test("formatRelativeTime: minutes, hours and days follow the language", () 
   assertEquals(days.includes("日前"), true, days);
 });
 
-Deno.test("formatRelativeTime: a week old falls back to a date", () => {
+test("formatRelativeTime: a week old falls back to a date", () => {
   const old = NOW - 10 * 86_400_000;
   assertEquals(
     formatRelativeTime(old, "en", NOW),
@@ -56,7 +57,7 @@ Deno.test("formatRelativeTime: a week old falls back to a date", () => {
   );
 });
 
-Deno.test("formatDate: numeric per language", () => {
+test("formatDate: numeric per language", () => {
   // What the app relies on is the order the parts come in — English leads
   // with the month, Japanese with the year — and that the value is numeric.
   // The separators and the clock format belong to Intl and change with an
@@ -70,7 +71,7 @@ Deno.test("formatDate: numeric per language", () => {
   assertEquals(ja.indexOf("2026") < ja.indexOf("9"), true, `ja: ${ja}`);
 });
 
-Deno.test("formatClockTime: the time of day, in the language's shape", () => {
+test("formatClockTime: the time of day, in the language's shape", () => {
   // The separator carries the date; a message carries the clock. What the
   // app relies on is that the hour and the minute both survive Intl's
   // shape for the language, not the exact separators (see formatDate).
@@ -82,7 +83,7 @@ Deno.test("formatClockTime: the time of day, in the language's shape", () => {
   }
 });
 
-Deno.test("formatDaySeparator: the two days a reader names, then a date", () => {
+test("formatDaySeparator: the two days a reader names, then a date", () => {
   assertEquals(formatDaySeparator(NOW, "ja", NOW), "今日");
   assertEquals(formatDaySeparator(NOW, "en", NOW), "Today");
   const yesterday = NOW - 86_400_000;
@@ -93,7 +94,7 @@ Deno.test("formatDaySeparator: the two days a reader names, then a date", () => 
   assertEquals(formatDaySeparator(older, "en", NOW), formatDate(older, "en"));
 });
 
-Deno.test("formatDaySeparator: a day boundary is the calendar's, not 24 hours", () => {
+test("formatDaySeparator: a day boundary is the calendar's, not 24 hours", () => {
   // Two messages an hour apart across midnight belong to different days,
   // and two on the same day belong to the same one however long the day is.
   const lateEvening = new Date(2026, 8, 15, 23, 30).getTime();
@@ -104,7 +105,7 @@ Deno.test("formatDaySeparator: a day boundary is the calendar's, not 24 hours", 
   assertEquals(startOfDay(lateEvening) === startOfDay(earlySameDay), true);
 });
 
-Deno.test("thinkingLevelLabel: the display names live in the catalogue", () => {
+test("thinkingLevelLabel: the display names live in the catalogue", () => {
   assertEquals(thinkingLevelLabel("off", en), "Off");
   assertEquals(thinkingLevelLabel("off", ja), "オフ");
   assertEquals(thinkingLevelLabel("xhigh", en), "Extra high");

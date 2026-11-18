@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -19,7 +20,7 @@ function render(saveError: string | null): string {
   );
 }
 
-Deno.test("McpDetail reports a failed save inside the form", () => {
+test("McpDetail reports a failed save inside the form", () => {
   // Pressing save here must never look like a button that does nothing: the
   // reason has to show on this screen, because the list's own error line is
   // not visible while the form is up.
@@ -28,6 +29,6 @@ Deno.test("McpDetail reports a failed save inside the form", () => {
   assertStringIncludes(html, "Session is already running: s1");
 });
 
-Deno.test("McpDetail shows no save failure until one happened", () => {
+test("McpDetail shows no save failure until one happened", () => {
   assertEquals(render(null).includes("保存できませんでした"), false);
 });

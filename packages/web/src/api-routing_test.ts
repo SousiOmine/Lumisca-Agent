@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import {
   assertRequest,
@@ -126,21 +127,21 @@ const MODEL_CASES: Array<RoutedCase<ModelApi>> = [
   ],
 ];
 
-Deno.test("api-routing: a bare tab key is this server and never the fed proxy", async () => {
+test("api-routing: a bare tab key is this server and never the fed proxy", async () => {
   const local = sessionApi("sess-1");
   assertEquals(local.peerId, "");
   assertEquals(local.sessionId, "sess-1");
   await assertRouted(SESSION_CASES, sessionApi, [SESSION_THIS_SERVER]);
 });
 
-Deno.test("api-routing: a peer-prefixed tab key sends every session call to the peer", async () => {
+test("api-routing: a peer-prefixed tab key sends every session call to the peer", async () => {
   const remote = sessionApi("peer-1:sess-1");
   assertEquals(remote.peerId, "peer-1");
   assertEquals(remote.sessionId, "sess-1");
   await assertRouted(SESSION_CASES, sessionApi, [SESSION_ON_PEER_1]);
 });
 
-Deno.test("api-routing: the same session id addresses either machine", async () => {
+test("api-routing: the same session id addresses either machine", async () => {
   // Both forms in one run: the id is shared, only the prefix differs, so a
   // routing regression in either direction fails here.
   await assertRouted(SESSION_CASES, sessionApi, [
@@ -149,11 +150,11 @@ Deno.test("api-routing: the same session id addresses either machine", async () 
   ]);
 });
 
-Deno.test("api-routing: the model picker follows the machine running the agent", async () => {
+test("api-routing: the model picker follows the machine running the agent", async () => {
   await assertRouted(MODEL_CASES, modelApi, [THIS_SERVER, PEER_1]);
 });
 
-Deno.test("api-routing: the model catalog stays on this server for every peer", async () => {
+test("api-routing: the model catalog stays on this server for every peer", async () => {
   // api-routing.ts documents the catalog endpoints as intentionally
   // local-only: the settings UI that drives them has no peer switcher.
   assertRequest(
@@ -173,7 +174,7 @@ Deno.test("api-routing: the model catalog stays on this server for every peer", 
   );
 });
 
-Deno.test("api-routing: a disconnected peer fails loudly instead of falling back", async () => {
+test("api-routing: a disconnected peer fails loudly instead of falling back", async () => {
   // A peer that is switched off (or no longer in the registry) makes the
   // hub's fed proxy answer 404 with requirePeer's message
   // (server/routes/federation.ts). Routing must surface that failure: the
@@ -187,7 +188,7 @@ Deno.test("api-routing: a disconnected peer fails loudly instead of falling back
   assertEquals(error?.message, "Peer not found: peer-gone");
 });
 
-Deno.test("api-routing: a colon in the session id survives the whole path", async () => {
+test("api-routing: a colon in the session id survives the whole path", async () => {
   // splitTabKey cuts at the *first* colon, so everything after the peer
   // prefix belongs to the session id, and sessionPath percent-encodes it
   // instead of letting it split a path segment.
@@ -201,7 +202,7 @@ Deno.test("api-routing: a colon in the session id survives the whole path", asyn
   );
 });
 
-Deno.test("api-routing: a colon in a bare session id reads as a peer prefix (pinned)", async () => {
+test("api-routing: a colon in a bare session id reads as a peer prefix (pinned)", async () => {
   // Documented consequence of the key format: PREFIX:SESSION is ambiguous,
   // so a colon in a session id makes the "local" tab look federated. Server
   // session ids come from crypto.randomUUID() (core/session/repo.ts), so a
@@ -216,7 +217,7 @@ Deno.test("api-routing: a colon in a bare session id reads as a peer prefix (pin
   );
 });
 
-Deno.test("api-routing: a peer id containing ':' stays one peer", async () => {
+test("api-routing: a peer id containing ':' stays one peer", async () => {
   // Connection ids are only checked for being non-empty
   // (server/routes/connections.ts) while the UI generates them with
   // crypto.randomUUID(), so a hand-written registry entry may carry the key
@@ -350,7 +351,7 @@ async function withPage(
   }
 }
 
-Deno.test("api-routing: connectEvents opens /ws of the page origin with the token", async () => {
+test("api-routing: connectEvents opens /ws of the page origin with the token", async () => {
   // Same origin as the page that served the UI, upgraded for https — the
   // server serves UI, API and event stream together.
   await withPage({ protocol: "https:", host: "hub:8443" }, () => {
@@ -376,7 +377,7 @@ Deno.test("api-routing: connectEvents opens /ws of the page origin with the toke
   });
 });
 
-Deno.test("api-routing: connectEvents parses events, ignores garbage and reports one drop", async () => {
+test("api-routing: connectEvents parses events, ignores garbage and reports one drop", async () => {
   await withPage({ protocol: "http:", host: "hub:8000" }, () => {
     const events: unknown[] = [];
     let opens = 0;
@@ -410,7 +411,7 @@ Deno.test("api-routing: connectEvents parses events, ignores garbage and reports
   });
 });
 
-Deno.test("api-routing: connectEvents swallows heartbeat frames", async () => {
+test("api-routing: connectEvents swallows heartbeat frames", async () => {
   await withPage({ protocol: "http:", host: "hub:8000" }, () => {
     const events: unknown[] = [];
     const close = connectEvents(
@@ -432,7 +433,7 @@ Deno.test("api-routing: connectEvents swallows heartbeat frames", async () => {
   });
 });
 
-Deno.test("api-routing: connectEvents closes a socket that stays silent", async () => {
+test("api-routing: connectEvents closes a socket that stays silent", async () => {
   await withPage({ protocol: "http:", host: "hub:8000" }, async () => {
     let closes = 0;
     const close = connectEvents(
@@ -457,7 +458,7 @@ Deno.test("api-routing: connectEvents closes a socket that stays silent", async 
   });
 });
 
-Deno.test("api-routing: a hidden page does not judge, and judges on return", async () => {
+test("api-routing: a hidden page does not judge, and judges on return", async () => {
   await withPage({ protocol: "http:", host: "hub:8000" }, async (doc) => {
     let closes = 0;
     const close = connectEvents(

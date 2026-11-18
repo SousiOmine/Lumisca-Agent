@@ -1,10 +1,11 @@
+import { test } from "bun:test";
 import { MINI_PNG, noisyPng } from "@lumisca/core/test-utils";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { base64ToBytes, bytesToBase64 } from "../../core/base64.ts";
 import { parsePromptBody, preparePromptImages } from "./session-requests.ts";
 import { AppError } from "./util.ts";
 
-Deno.test("parsePromptBody passes text-only prompts through", () => {
+test("parsePromptBody passes text-only prompts through", () => {
   assertEquals(parsePromptBody({ text: "hello" }), {
     text: "hello",
     images: undefined,
@@ -13,7 +14,7 @@ Deno.test("parsePromptBody passes text-only prompts through", () => {
   });
 });
 
-Deno.test("parsePromptBody passes mode metadata through", () => {
+test("parsePromptBody passes mode metadata through", () => {
   const { text, mode } = parsePromptBody({
     text: "full mode prompt",
     mode: {
@@ -32,7 +33,7 @@ Deno.test("parsePromptBody passes mode metadata through", () => {
   });
 });
 
-Deno.test("parsePromptBody converts data-URL images to content blocks", () => {
+test("parsePromptBody converts data-URL images to content blocks", () => {
   const { text, images } = parsePromptBody({
     text: "what is this?",
     images: [
@@ -47,12 +48,12 @@ Deno.test("parsePromptBody converts data-URL images to content blocks", () => {
   ]);
 });
 
-Deno.test("parsePromptBody treats an empty image array as no images", () => {
+test("parsePromptBody treats an empty image array as no images", () => {
   const { images } = parsePromptBody({ text: "hi", images: [] });
   assertEquals(images, undefined);
 });
 
-Deno.test("parsePromptBody allows image-only prompts (empty text)", () => {
+test("parsePromptBody allows image-only prompts (empty text)", () => {
   const { text, images } = parsePromptBody({
     text: "",
     images: [{ data: "aGk=", mimeType: "image/png" }],
@@ -66,7 +67,7 @@ Deno.test("parsePromptBody allows image-only prompts (empty text)", () => {
   assertEquals(noText.text, "");
 });
 
-Deno.test("parsePromptBody rejects invalid bodies", () => {
+test("parsePromptBody rejects invalid bodies", () => {
   const expect400 = (body: unknown, fragment: string) => {
     const thrown = assertThrows(() =>
       parsePromptBody(body as { text?: unknown; images?: unknown }),
@@ -111,7 +112,7 @@ Deno.test("parsePromptBody rejects invalid bodies", () => {
   );
 });
 
-Deno.test("parsePromptBody decodes attached files", () => {
+test("parsePromptBody decodes attached files", () => {
   const { text, files } = parsePromptBody({
     text: "このログを見て",
     files: [{ name: "run.log", data: "aGVsbG8=" }],
@@ -122,7 +123,7 @@ Deno.test("parsePromptBody decodes attached files", () => {
   assertEquals(new TextDecoder().decode(files?.[0]?.bytes), "hello");
 });
 
-Deno.test("parsePromptBody: a file alone is a prompt", () => {
+test("parsePromptBody: a file alone is a prompt", () => {
   const { text, files } = parsePromptBody({
     files: [{ name: "shot.png", data: "aGVsbG8=" }],
   });
@@ -130,7 +131,7 @@ Deno.test("parsePromptBody: a file alone is a prompt", () => {
   assertEquals(files?.length, 1);
 });
 
-Deno.test("parsePromptBody: a data-URL header is accepted and stripped", () => {
+test("parsePromptBody: a data-URL header is accepted and stripped", () => {
   const { files } = parsePromptBody({
     text: "x",
     files: [{ name: "a.txt", data: "data:text/plain;base64,aGVsbG8=" }],
@@ -138,7 +139,7 @@ Deno.test("parsePromptBody: a data-URL header is accepted and stripped", () => {
   assertEquals(new TextDecoder().decode(files?.[0]?.bytes), "hello");
 });
 
-Deno.test("parsePromptBody: a malformed file is a 400, not a crash", () => {
+test("parsePromptBody: a malformed file is a 400, not a crash", () => {
   assertThrows(
     () => parsePromptBody({ text: "x", files: [{ name: "a.txt" }] }),
     AppError,
@@ -149,7 +150,7 @@ Deno.test("parsePromptBody: a malformed file is a 400, not a crash", () => {
   );
 });
 
-Deno.test("preparePromptImages: a picture inside the budget is passed through", async () => {
+test("preparePromptImages: a picture inside the budget is passed through", async () => {
   const image = {
     type: "image" as const,
     data: bytesToBase64(MINI_PNG),
@@ -158,7 +159,7 @@ Deno.test("preparePromptImages: a picture inside the budget is passed through", 
   assertEquals(await preparePromptImages([image]), [image]);
 });
 
-Deno.test("preparePromptImages: a heavy picture is bounded before it is stored", async () => {
+test("preparePromptImages: a heavy picture is bounded before it is stored", async () => {
   const png = await noisyPng(1800, 1200);
   const prepared = await preparePromptImages([
     {
@@ -182,12 +183,12 @@ Deno.test("preparePromptImages: a heavy picture is bounded before it is stored",
   );
 });
 
-Deno.test("preparePromptImages: no pictures stay no pictures", async () => {
+test("preparePromptImages: no pictures stay no pictures", async () => {
   assertEquals(await preparePromptImages(undefined), undefined);
   assertEquals(await preparePromptImages([]), undefined);
 });
 
-Deno.test("preparePromptImages: a payload that is not base64 is a 400", async () => {
+test("preparePromptImages: a payload that is not base64 is a 400", async () => {
   const error = await assertRejects(() =>
     preparePromptImages([
       { type: "image", data: "%%%", mimeType: "image/png" },

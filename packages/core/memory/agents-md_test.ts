@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { assert, assertEquals } from "@std/assert";
@@ -9,7 +10,7 @@ function tempDir(prefix: string): Promise<string> {
   return Deno.makeTempDir({ prefix }).then((p) => realpathSync.native(p));
 }
 
-Deno.test("findRepoRoot locates the .git marker", async () => {
+test("findRepoRoot locates the .git marker", async () => {
   const root = await tempDir("lumisca-mem-");
   try {
     await Deno.mkdir(join(root, "sub", "deep"), { recursive: true });
@@ -27,7 +28,7 @@ Deno.test("findRepoRoot locates the .git marker", async () => {
   }
 });
 
-Deno.test("findRepoRoot falls back to the folder itself", async () => {
+test("findRepoRoot falls back to the folder itself", async () => {
   const root = await tempDir("lumisca-mem-");
   try {
     assertEquals(findRepoRoot(root), realpathSync.native(root));
@@ -36,7 +37,7 @@ Deno.test("findRepoRoot falls back to the folder itself", async () => {
   }
 });
 
-Deno.test("loadProjectMemoryFiles reads AGENTS.md from the workspace root", async () => {
+test("loadProjectMemoryFiles reads AGENTS.md from the workspace root", async () => {
   const root = await tempDir("lumisca-mem-");
   try {
     await Deno.writeTextFile(join(root, "AGENTS.md"), "Use Deno.\n");
@@ -49,7 +50,7 @@ Deno.test("loadProjectMemoryFiles reads AGENTS.md from the workspace root", asyn
   }
 });
 
-Deno.test("loadProjectMemoryFiles collects the chain root-first", async () => {
+test("loadProjectMemoryFiles collects the chain root-first", async () => {
   const root = await tempDir("lumisca-mem-");
   try {
     await Deno.mkdir(join(root, ".git"), { recursive: true });
@@ -70,7 +71,7 @@ Deno.test("loadProjectMemoryFiles collects the chain root-first", async () => {
   }
 });
 
-Deno.test("AGENTS.override.md replaces AGENTS.md in the same directory", async () => {
+test("AGENTS.override.md replaces AGENTS.md in the same directory", async () => {
   const root = await tempDir("lumisca-mem-");
   try {
     await Deno.writeTextFile(join(root, "AGENTS.md"), "OLD");
@@ -87,7 +88,7 @@ Deno.test("AGENTS.override.md replaces AGENTS.md in the same directory", async (
   }
 });
 
-Deno.test("loadProjectMemoryFiles reaches the repo root above the folder", async () => {
+test("loadProjectMemoryFiles reaches the repo root above the folder", async () => {
   const root = await tempDir("lumisca-mem-");
   try {
     await Deno.mkdir(join(root, ".git"), { recursive: true });
@@ -104,7 +105,7 @@ Deno.test("loadProjectMemoryFiles reaches the repo root above the folder", async
   }
 });
 
-Deno.test("loadProjectMemoryFiles caps the contents at 32KB", async () => {
+test("loadProjectMemoryFiles caps the contents at 32KB", async () => {
   const root = await tempDir("lumisca-mem-");
   try {
     await Deno.writeTextFile(join(root, "AGENTS.md"), "x".repeat(40 * 1024));
@@ -116,7 +117,7 @@ Deno.test("loadProjectMemoryFiles caps the contents at 32KB", async () => {
   }
 });
 
-Deno.test("loadProjectMemoryFiles returns nothing when no file exists", async () => {
+test("loadProjectMemoryFiles returns nothing when no file exists", async () => {
   const root = await tempDir("lumisca-mem-");
   try {
     assertEquals(loadProjectMemoryFiles([root]), []);

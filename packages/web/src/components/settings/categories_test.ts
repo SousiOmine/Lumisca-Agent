@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import {
   isSettingsCategory,
@@ -15,7 +16,7 @@ function entry(
   return { id, scope, labelKey: "common.settings" };
 }
 
-Deno.test("navGroups groups the entries by what they act on", () => {
+test("navGroups groups the entries by what they act on", () => {
   // Both modes draw every group, so the groups are the effect, not the mode
   // on screen: the shared pages first, then the ones only code mode's
   // sessions use. Nothing in the dialog belongs to one agent, so there is no
@@ -36,7 +37,7 @@ Deno.test("navGroups groups the entries by what they act on", () => {
   );
 });
 
-Deno.test("navGroups keeps the caller's order inside a group", () => {
+test("navGroups keeps the caller's order inside a group", () => {
   // Reading order is the table's, not the alphabet's: sorting would put 一般
   // somewhere in the middle of the shared group.
   const entries = [
@@ -50,7 +51,7 @@ Deno.test("navGroups keeps the caller's order inside a group", () => {
   );
 });
 
-Deno.test("navGroups drops an empty group", () => {
+test("navGroups drops an empty group", () => {
   // A group with no entry gets no heading rather than an empty one.
   const shared = [entry("general", "common")];
   assertEquals(
@@ -60,7 +61,7 @@ Deno.test("navGroups drops an empty group", () => {
   assertEquals(navGroups([]), []);
 });
 
-Deno.test("every category is named once, in the table's order", () => {
+test("every category is named once, in the table's order", () => {
   // The array is both a type and a value: route.ts accepts exactly these
   // segments, and SettingsModal's table is ordered by it. A duplicate would
   // put one page in the navigation twice; a missing entry would be a page no
@@ -84,12 +85,12 @@ Deno.test("every category is named once, in the table's order", () => {
   );
 });
 
-Deno.test("scopeLabelKey names the group", () => {
+test("scopeLabelKey names the group", () => {
   assertEquals(scopeLabelKey("common"), "settings.nav.common");
   assertEquals(scopeLabelKey("code"), "chat.modeSelect.code.title");
 });
 
-Deno.test("isSettingsCategory accepts the table and refuses anything else", () => {
+test("isSettingsCategory accepts the table and refuses anything else", () => {
   // The URL's category segment is checked with this: a name it does not know
   // leaves the dialog open on its first page rather than 404-ing a bookmark.
   for (const id of SETTINGS_CATEGORIES) {

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { resolve as resolvePath } from "node:path";
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import {
@@ -36,7 +37,7 @@ function resolve(
   });
 }
 
-Deno.test("the shipped template renders, and its placeholders match the composer", () => {
+test("the shipped template renders, and its placeholders match the composer", () => {
   const unit = renderUnit(SHIPPED_TEMPLATE, PATHS);
   assert(!unit.includes("{{"), "no placeholder may survive rendering");
   // Commands and environment assignments are quoted so a path with a space
@@ -56,7 +57,7 @@ Deno.test("the shipped template renders, and its placeholders match the composer
   assertEquals(renderUnit(SHIPPED_TEMPLATE, PATHS), unit);
 });
 
-Deno.test("a template and its values must agree in both directions", () => {
+test("a template and its values must agree in both directions", () => {
   assertEquals(renderTemplate("a {{one}} b", { one: "1" }), "a 1 b");
   assertThrows(
     () => renderTemplate("a {{one}} b", {}),
@@ -70,7 +71,7 @@ Deno.test("a template and its values must agree in both directions", () => {
   );
 });
 
-Deno.test("unit values are quoted and % is escaped for systemd", () => {
+test("unit values are quoted and % is escaped for systemd", () => {
   // A path with a space must stay one argument.
   assertEquals(quoteUnitValue("/home/my server/x"), '"/home/my server/x"');
   // systemd expands a single % as a specifier, so a literal one doubles.
@@ -79,7 +80,7 @@ Deno.test("unit values are quoted and % is escaped for systemd", () => {
   assertEquals(quoteUnitValue("a\\b"), '"a\\\\b"');
 });
 
-Deno.test("path directives take their value verbatim, quotes and all", () => {
+test("path directives take their value verbatim, quotes and all", () => {
   // Measured with `systemd-analyze --user verify` (systemd 255): quoting
   // WorkingDirectory= or EnvironmentFile= makes systemd read the quote as part
   // of the path ("path is not absolute"), while the unquoted spelling keeps a
@@ -96,7 +97,7 @@ Deno.test("path directives take their value verbatim, quotes and all", () => {
   assertThrows(() => pathUnitValue(" /home/x"), ServiceDefinitionError, "空白");
 });
 
-Deno.test("values compose over the installed document, then the defaults", () => {
+test("values compose over the installed document, then the defaults", () => {
   // Nothing installed, nothing given: the defaults.
   assertEquals(resolve(), {
     host: "127.0.0.1",
@@ -136,7 +137,7 @@ Deno.test("values compose over the installed document, then the defaults", () =>
   );
 });
 
-Deno.test("exposing the server needs the authorities clients will use", () => {
+test("exposing the server needs the authorities clients will use", () => {
   // A wildcard or specific non-loopback bind without LUMISCA_ALLOWED_HOSTS
   // would answer 403 to every remote browser with nothing to explain it.
   const error = assertThrows(
@@ -162,7 +163,7 @@ Deno.test("exposing the server needs the authorities clients will use", () => {
   );
 });
 
-Deno.test("compose rejects values that would break the document or the unit", () => {
+test("compose rejects values that would break the document or the unit", () => {
   // A bind address and a Host-guard authority are matched verbatim against
   // what the client sends, so whitespace in them is a configuration error.
   assertThrows(
@@ -198,7 +199,7 @@ Deno.test("compose rejects values that would break the document or the unit", ()
   );
 });
 
-Deno.test("XDG_CONFIG_HOME is pinned so the service reads the same settings file", () => {
+test("XDG_CONFIG_HOME is pinned so the service reads the same settings file", () => {
   assertEquals(
     resolve({ xdgConfigHome: "/home/me/.config" }).xdgConfigHome,
     "/home/me/.config",

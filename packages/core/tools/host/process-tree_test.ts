@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { removeDirRetry, waitUntil } from "../../test-utils.ts";
 import { killProcessTree } from "./process-tree.ts";
@@ -16,10 +17,9 @@ import { shellCommand } from "./shell.ts";
  * unaffected by the reparenting the POSIX sweep has to work around.
  */
 
-Deno.test({
-  name: "killProcessTree kills every descendant, not only the shell",
-  ignore: Deno.build.os === "windows",
-  fn: async () => {
+test.skipIf(Deno.build.os === "windows")(
+  "killProcessTree kills every descendant, not only the shell",
+  async () => {
     const root = Deno.makeTempDirSync({ prefix: "lumisca-tree-" });
     const marker = "marker";
     try {
@@ -60,9 +60,9 @@ Deno.test({
       await removeDirRetry(root);
     }
   },
-});
+);
 
-Deno.test("killProcessTree is a no-op once the process is gone", async () => {
+test("killProcessTree is a no-op once the process is gone", async () => {
   const child = shellCommand({ command: "exit 0", cwd: Deno.cwd() }).spawn();
   await child.status;
   // Must not throw: callers kill after a command may have exited on its own.

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -21,7 +22,7 @@ function draw(value: ThinkingLevel, levels: ThinkingLevel[]): string {
   );
 }
 
-Deno.test("ThinkingLevelSelect: the current level is the trigger's text", () => {
+test("ThinkingLevelSelect: the current level is the trigger's text", () => {
   const html = draw("high", ["off", "low", "high"]);
   assertStringIncludes(html, 'class="select"');
   assertStringIncludes(html, 'class="select-trigger"');
@@ -30,14 +31,14 @@ Deno.test("ThinkingLevelSelect: the current level is the trigger's text", () => 
   assertStringIncludes(html, 'aria-label="推論強度（思考レベル）"');
 });
 
-Deno.test("ThinkingLevelSelect: nothing to choose draws nothing", () => {
+test("ThinkingLevelSelect: nothing to choose draws nothing", () => {
   // A model without levels has no choice to offer: a disabled control would
   // take a row in the composer's footer and answer nothing.
   assertEquals(draw("off", []), "");
   assertEquals(draw("off", ["off"]), "");
 });
 
-Deno.test("ThinkingLevelSelect: an unsupported stored level shows the nearest one", () => {
+test("ThinkingLevelSelect: an unsupported stored level shows the nearest one", () => {
   // The catalog changed, or another client wrote a level this model no longer
   // accepts: the trigger must not name a choice that is missing from its own
   // list.

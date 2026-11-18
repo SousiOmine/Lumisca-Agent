@@ -1,22 +1,23 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { createComputerHost } from "./host.ts";
 
-Deno.test("createComputerHost reports the platform when it has no host", {
-  // Windows has a host, and so does Linux (wayland.ts, which reports the
+test.skipIf(Deno.build.os === "windows" || Deno.build.os === "linux")(
+  "createComputerHost reports the platform when it has no host", // Windows has a host, and so does Linux (wayland.ts, which reports the
   // desktop's own reason instead of the platform's name); this expectation
   // is for the platforms that have none yet.
-  ignore: Deno.build.os === "windows" || Deno.build.os === "linux",
-}, async () => {
-  const result = await createComputerHost();
-  assertEquals(result.available, false);
-  if (result.available) return; // narrowed for the assertions below
-  assert(
-    result.reason.includes(Deno.build.os),
-    `the reason must name the platform: ${result.reason}`,
-  );
-});
+  async () => {
+    const result = await createComputerHost();
+    assertEquals(result.available, false);
+    if (result.available) return; // narrowed for the assertions below
+    assert(
+      result.reason.includes(Deno.build.os),
+      `the reason must name the platform: ${result.reason}`,
+    );
+  },
+);
 
-Deno.test("createComputerHost returns either a usable host or a reason", async () => {
+test("createComputerHost returns either a usable host or a reason", async () => {
   const result = await createComputerHost();
   if (result.available) {
     try {

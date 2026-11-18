@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { makeRealTempDir, removeDirRetry } from "../test-utils.ts";
@@ -66,7 +67,7 @@ async function fixture(): Promise<string> {
 
 // --- frontmatter -------------------------------------------------------------
 
-Deno.test("parseSkillFrontmatter accepts a valid frontmatter", () => {
+test("parseSkillFrontmatter accepts a valid frontmatter", () => {
   const meta = parseSkillFrontmatter(VALID);
   assertEquals(meta, {
     name: "alpha",
@@ -74,7 +75,7 @@ Deno.test("parseSkillFrontmatter accepts a valid frontmatter", () => {
   });
 });
 
-Deno.test("parseSkillFrontmatter handles CRLF and colons in descriptions", () => {
+test("parseSkillFrontmatter handles CRLF and colons in descriptions", () => {
   const meta = parseSkillFrontmatter(
     '---\r\nname: crlf-skill\r\ndescription: "Takes a path: resolves it."\r\n---\r\nbody',
   );
@@ -82,12 +83,12 @@ Deno.test("parseSkillFrontmatter handles CRLF and colons in descriptions", () =>
   assertEquals(meta?.description, "Takes a path: resolves it.");
 });
 
-Deno.test("parseSkillFrontmatter rejects files without frontmatter", () => {
+test("parseSkillFrontmatter rejects files without frontmatter", () => {
   assertEquals(parseSkillFrontmatter("# plain markdown"), undefined);
   assertEquals(parseSkillFrontmatter(""), undefined);
 });
 
-Deno.test("parseSkillFrontmatter rejects invalid or missing fields", () => {
+test("parseSkillFrontmatter rejects invalid or missing fields", () => {
   assertEquals(
     parseSkillFrontmatter("---\nname: 123_bad\ndescription: ok\n---\n"),
     undefined,
@@ -118,7 +119,7 @@ Deno.test("parseSkillFrontmatter rejects invalid or missing fields", () => {
 
 // --- discovery ---------------------------------------------------------------
 
-Deno.test("discoverSkills finds skills at every level up to the repo root", async () => {
+test("discoverSkills finds skills at every level up to the repo root", async () => {
   const root = await fixture();
   try {
     const skills = discoverSkills([join(root, "pkg")], { globalDirs: [] });
@@ -140,7 +141,7 @@ Deno.test("discoverSkills finds skills at every level up to the repo root", asyn
   }
 });
 
-Deno.test("discoverSkills skips skills with invalid frontmatter or name mismatch", async () => {
+test("discoverSkills skips skills with invalid frontmatter or name mismatch", async () => {
   const root = await fixture();
   try {
     const skills = discoverSkills([root], { globalDirs: [] });
@@ -154,7 +155,7 @@ Deno.test("discoverSkills skips skills with invalid frontmatter or name mismatch
   }
 });
 
-Deno.test("workspace skills shadow global skills of the same name", async () => {
+test("workspace skills shadow global skills of the same name", async () => {
   const root = await fixture();
   const global = await makeRealTempDir("lumisca-global-");
   try {
@@ -182,7 +183,7 @@ Deno.test("workspace skills shadow global skills of the same name", async () => 
   }
 });
 
-Deno.test("shared skills shadow global ones but not workspace ones", async () => {
+test("shared skills shadow global ones but not workspace ones", async () => {
   const root = await fixture();
   const shared = await makeRealTempDir("lumisca-shared-");
   const global = await makeRealTempDir("lumisca-global-");
@@ -231,7 +232,7 @@ Deno.test("shared skills shadow global ones but not workspace ones", async () =>
   }
 });
 
-Deno.test("discoverSkills dedupes skills reachable from overlapping folders", async () => {
+test("discoverSkills dedupes skills reachable from overlapping folders", async () => {
   const root = await fixture();
   try {
     const skills = discoverSkills([root, join(root, "pkg")], {
@@ -245,7 +246,7 @@ Deno.test("discoverSkills dedupes skills reachable from overlapping folders", as
 
 // --- formatting / loading ----------------------------------------------------
 
-Deno.test("formatAvailableSkills renders one line per skill", async () => {
+test("formatAvailableSkills renders one line per skill", async () => {
   const root = await fixture();
   try {
     const text = formatAvailableSkills(
@@ -258,7 +259,7 @@ Deno.test("formatAvailableSkills renders one line per skill", async () => {
   }
 });
 
-Deno.test("loadSkillContent reads SKILL.md and follow-up files", async () => {
+test("loadSkillContent reads SKILL.md and follow-up files", async () => {
   const root = await fixture();
   try {
     const [alpha] = discoverSkills([root], { globalDirs: [] });
@@ -276,7 +277,7 @@ Deno.test("loadSkillContent reads SKILL.md and follow-up files", async () => {
   }
 });
 
-Deno.test("loadSkillContent rejects paths escaping the skill directory", async () => {
+test("loadSkillContent rejects paths escaping the skill directory", async () => {
   const root = await fixture();
   try {
     const [alpha] = discoverSkills([root], { globalDirs: [] });

@@ -8,10 +8,11 @@
  * both. The switch names the mode it leads to, so one press is the whole
  * interaction.
  */
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { menuEntries } from "./AppMenu.tsx";
 
-Deno.test("AppMenu: code mode offers the tab actions", () => {
+test("AppMenu: code mode offers the tab actions", () => {
   assertEquals(menuEntries({ mode: "code", isDesktop: false }), [
     { kind: "newTab" },
     { kind: "history" },
@@ -21,7 +22,7 @@ Deno.test("AppMenu: code mode offers the tab actions", () => {
   ]);
 });
 
-Deno.test("AppMenu: stella mode drops the tab actions", () => {
+test("AppMenu: stella mode drops the tab actions", () => {
   // Regression: the same menu was drawn in stella mode, so "new tab" opened
   // code mode's empty draft from inside a conversation.
   assertEquals(menuEntries({ mode: "stella", isDesktop: false }), [
@@ -37,7 +38,7 @@ Deno.test("AppMenu: stella mode drops the tab actions", () => {
   ]);
 });
 
-Deno.test("AppMenu: the desktop menu keeps quit in code mode", () => {
+test("AppMenu: the desktop menu keeps quit in code mode", () => {
   assertEquals(menuEntries({ mode: "code", isDesktop: true }), [
     { kind: "newTab" },
     { kind: "history" },
@@ -49,7 +50,7 @@ Deno.test("AppMenu: the desktop menu keeps quit in code mode", () => {
   ]);
 });
 
-Deno.test("AppMenu: the switch never names the mode the reader is in", () => {
+test("AppMenu: the switch never names the mode the reader is in", () => {
   // The menu used to open a chooser, where "in use" marked the current card.
   // Now the entry itself is the whole choice: offering the current mode would
   // be an entry that does nothing.

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { LumiscaDb } from "../db/mod.ts";
 import type { RoutineSchedule } from "../shared/routine.ts";
@@ -55,7 +56,7 @@ const fileWatch: RoutineSchedule = {
   source: { kind: "file", path: "app.log", compare: "mtime" },
 };
 
-Deno.test("checkRoutine: the stored observation is the baseline it compares", async () => {
+test("checkRoutine: the stored observation is the baseline it compares", async () => {
   // The regression from #31: the routine is what carries the previous
   // observation, so a second check must see the first one.
   const { repo: routines, close } = repo();
@@ -101,7 +102,7 @@ Deno.test("checkRoutine: the stored observation is the baseline it compares", as
   }
 });
 
-Deno.test("checkRoutine: two routines on one source keep their own baselines", async () => {
+test("checkRoutine: two routines on one source keep their own baselines", async () => {
   // Looked up by source, the second routine would compare against the
   // first's observation and fire on nothing.
   const { repo: routines, close } = repo();
@@ -146,7 +147,7 @@ Deno.test("checkRoutine: two routines on one source keep their own baselines", a
   }
 });
 
-Deno.test("checkRoutine: a routine that watches nothing is unsupported", async () => {
+test("checkRoutine: a routine that watches nothing is unsupported", async () => {
   const { repo: routines, close } = repo();
   try {
     const created = routines.create({
@@ -168,7 +169,7 @@ Deno.test("checkRoutine: a routine that watches nothing is unsupported", async (
   }
 });
 
-Deno.test("checkRoutine: an http check goes out through the machine", async () => {
+test("checkRoutine: an http check goes out through the machine", async () => {
   // Not the host's fetch: curl runs in the agent's folder (see #32).
   const { repo: routines, close } = repo();
   try {
@@ -232,7 +233,7 @@ Deno.test("checkRoutine: an http check goes out through the machine", async () =
   }
 });
 
-Deno.test("checkRoutine: an mcp check runs without the machine", async () => {
+test("checkRoutine: an mcp check runs without the machine", async () => {
   // The one source whose check does not go through the container: the agent
   // calls the server through the same connection the check uses, so a
   // mailbox watch keeps working while the machine is down.
@@ -275,7 +276,7 @@ Deno.test("checkRoutine: an mcp check runs without the machine", async () => {
   }
 });
 
-Deno.test("checkRoutine: an mcp check without a connection is unsupported", async () => {
+test("checkRoutine: an mcp check without a connection is unsupported", async () => {
   const { repo: routines, close } = repo();
   try {
     const created = routines.create({

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { fauxProvider } from "@lumisca/core";
 import { assertEquals, assertThrows } from "@std/assert";
 import { LumiscaCore } from "./mod.ts";
@@ -21,7 +22,7 @@ function setupReasoning() {
   };
 }
 
-Deno.test("sessions default to thinking off and expose supported levels", async () => {
+test("sessions default to thinking off and expose supported levels", async () => {
   const { core, providerId, modelId } = setupReasoning();
   const { ws } = await makeWorkspace(core);
 
@@ -54,7 +55,7 @@ Deno.test("sessions default to thinking off and expose supported levels", async 
   plain.core.close();
 });
 
-Deno.test("setModelThinkingLevel persists, clamps, and reflects on sessions", async () => {
+test("setModelThinkingLevel persists, clamps, and reflects on sessions", async () => {
   const { core, providerId, modelId } = setupReasoning();
   const { ws } = await makeWorkspace(core);
 
@@ -86,7 +87,7 @@ Deno.test("setModelThinkingLevel persists, clamps, and reflects on sessions", as
   plain.core.close();
 });
 
-Deno.test("setModelThinkingLevel rejects unknown levels and models", () => {
+test("setModelThinkingLevel rejects unknown levels and models", () => {
   const { core, providerId, modelId } = setupReasoning();
   assertThrows(
     () => core.setModelThinkingLevel(providerId, modelId, "turbo"),
@@ -101,7 +102,7 @@ Deno.test("setModelThinkingLevel rejects unknown levels and models", () => {
   core.close();
 });
 
-Deno.test("switching model picks up the new model's thinking level", async () => {
+test("switching model picks up the new model's thinking level", async () => {
   const { core, providerId, modelId } = setupReasoning();
   const { ws } = await makeWorkspace(core);
 

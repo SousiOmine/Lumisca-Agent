@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import {
   type ContextOverflowNumbers,
@@ -15,7 +16,7 @@ const REPORTED =
   "length of the messages or completion. (request_id: af41405c) (status " +
   "400; url https://opencode.ai/inference/go/openai/v1/chat/completions)";
 
-Deno.test("isContextOverflowText classifies the providers' window rejections", () => {
+test("isContextOverflowText classifies the providers' window rejections", () => {
   assertEquals(isContextOverflowText(REPORTED), true);
   // The other families the transport must recognise before it can shrink a
   // cap: Anthropic, Google, and OpenAI's older chat wording.
@@ -36,7 +37,7 @@ Deno.test("isContextOverflowText classifies the providers' window rejections", (
   );
 });
 
-Deno.test("isContextOverflowText leaves other failures alone", () => {
+test("isContextOverflowText leaves other failures alone", () => {
   assertEquals(isContextOverflowText("invalid api key"), false);
   assertEquals(
     isContextOverflowText("Stream ended without finish_reason"),
@@ -45,7 +46,7 @@ Deno.test("isContextOverflowText leaves other failures alone", () => {
   assertEquals(isContextOverflowText("rate_limit_exceeded (429)"), false);
 });
 
-Deno.test("parseContextOverflow reads the reported counts", () => {
+test("parseContextOverflow reads the reported counts", () => {
   type Parsed = ContextOverflowNumbers;
   const expected: Parsed = {
     windowTokens: 1_048_576,
@@ -54,7 +55,7 @@ Deno.test("parseContextOverflow reads the reported counts", () => {
   assertEquals(parseContextOverflow(REPORTED), expected);
 });
 
-Deno.test("parseContextOverflow reads the other providers' counts", () => {
+test("parseContextOverflow reads the other providers' counts", () => {
   assertEquals(
     parseContextOverflow("prompt is too long: 208310 tokens > 200000 maximum"),
     { windowTokens: 200_000, promptTokens: 208_310 },
@@ -76,7 +77,7 @@ Deno.test("parseContextOverflow reads the other providers' counts", () => {
   );
 });
 
-Deno.test("parseContextOverflow never guesses for text without numbers", () => {
+test("parseContextOverflow never guesses for text without numbers", () => {
   assertEquals(parseContextOverflow("context_length_exceeded"), {});
   assertEquals(parseContextOverflow("invalid api key"), {});
 });

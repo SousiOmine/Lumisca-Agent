@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { formatLocalDateTime } from "../shared/misc.ts";
 import {
@@ -25,7 +26,7 @@ function local(
   return new Date(year, month - 1, day, hours, minutes, 0, 0).getTime();
 }
 
-Deno.test("routine schedule: a stored value is read strictly", () => {
+test("routine schedule: a stored value is read strictly", () => {
   assertEquals(parseSchedule({ kind: "daily", time: "08:30" }), {
     kind: "daily",
     time: "08:30",
@@ -56,7 +57,7 @@ Deno.test("routine schedule: a stored value is read strictly", () => {
   assertEquals(parseSchedule({ kind: "cron", expression: "* * * * *" }), null);
 });
 
-Deno.test("routine schedule: a bad value names what is accepted", () => {
+test("routine schedule: a bad value names what is accepted", () => {
   assertEquals(scheduleProblem({ kind: "daily", time: "08:30" }), null);
   const bad = scheduleProblem({ kind: "daily", time: "8:30" });
   assertEquals(bad !== null, true);
@@ -71,7 +72,7 @@ Deno.test("routine schedule: a bad value names what is accepted", () => {
   assertEquals(unknown !== null, true);
 });
 
-Deno.test("routine schedule: the next daily run is strictly after now", () => {
+test("routine schedule: the next daily run is strictly after now", () => {
   const schedule: RoutineSchedule = { kind: "daily", time: "08:30" };
   // Before the time: today.
   assertEquals(
@@ -90,7 +91,7 @@ Deno.test("routine schedule: the next daily run is strictly after now", () => {
   );
 });
 
-Deno.test("routine schedule: a weekly run finds the next chosen day", () => {
+test("routine schedule: a weekly run finds the next chosen day", () => {
   // 2026-10-26 is a Monday.
   const schedule: RoutineSchedule = {
     kind: "weekly",
@@ -113,13 +114,13 @@ Deno.test("routine schedule: a weekly run finds the next chosen day", () => {
   );
 });
 
-Deno.test("routine schedule: an interval counts from the instant asked", () => {
+test("routine schedule: an interval counts from the instant asked", () => {
   const schedule: RoutineSchedule = { kind: "every", minutes: 30 };
   const from = local(2026, 10, 26, 9, 0);
   assertEquals(nextRunAt(schedule, from), from + 30 * 60_000);
 });
 
-Deno.test("routine schedule: a one-off is one local date and time", () => {
+test("routine schedule: a one-off is one local date and time", () => {
   // The stored text is what the list and `routine_list` show, so a value
   // read back from either can be written into a schedule unchanged.
   const schedule: RoutineSchedule = { kind: "once", at: "2026-11-12 09:00" };
@@ -145,7 +146,7 @@ Deno.test("routine schedule: a one-off is one local date and time", () => {
   );
 });
 
-Deno.test("routine schedule: a one-off must be a real minute", () => {
+test("routine schedule: a one-off must be a real minute", () => {
   assertEquals(scheduleProblem({ kind: "once", at: "2026-11-12 09:00" }), null);
   for (const at of [
     "2026-11-12", // no time
@@ -163,7 +164,7 @@ Deno.test("routine schedule: a one-off must be a real minute", () => {
   assertEquals(scheduleProblem({ kind: "once" }) !== null, true);
 });
 
-Deno.test("routine limits are the documented ones", () => {
+test("routine limits are the documented ones", () => {
   assertEquals(ROUTINE_NAME_MAX_CHARS, 60);
   assertEquals(ROUTINES_PER_AGENT_MAX, 50);
   assertEquals(MIN_EVERY_MINUTES, 5);
@@ -184,7 +185,7 @@ Deno.test("routine limits are the documented ones", () => {
   );
 });
 
-Deno.test("routine schedule: the same meaning has the same key", () => {
+test("routine schedule: the same meaning has the same key", () => {
   // An update compares keys to tell a retarget from a re-save: a schedule
   // written in another order (or with its days listed backwards) is the same
   // watch, and its baseline must survive.
@@ -250,7 +251,7 @@ Deno.test("routine schedule: the same meaning has the same key", () => {
   );
 });
 
-Deno.test("routine schedule: an mcp watch names a read tool and one path", () => {
+test("routine schedule: an mcp watch names a read tool and one path", () => {
   const schedule = {
     kind: "watch",
     everyMinutes: 10,
@@ -298,7 +299,7 @@ Deno.test("routine schedule: an mcp watch names a read tool and one path", () =>
   );
 });
 
-Deno.test("routine schedule: an mcp watch's args are compared without order", () => {
+test("routine schedule: an mcp watch's args are compared without order", () => {
   const watch = (args: Record<string, unknown>) =>
     ({
       kind: "watch",

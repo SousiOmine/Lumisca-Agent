@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { realpathSync } from "node:fs";
 import { basename, join } from "node:path";
 
@@ -77,7 +78,7 @@ async function openFileBackedCore(
   return { core, workspaceId: ws.id, sessionId: session.id };
 }
 
-Deno.test("workspace creation resolves folders and rejects missing ones", async () => {
+test("workspace creation resolves folders and rejects missing ones", async () => {
   const { core } = setup();
   const root = await Deno.makeTempDir({ prefix: "lumisca-core-" });
   const ws = await core.createWorkspace("ws1", [root]);
@@ -94,7 +95,7 @@ Deno.test("workspace creation resolves folders and rejects missing ones", async 
   await removeDirRetry(root);
 });
 
-Deno.test("tools block file access outside the workspace", async () => {
+test("tools block file access outside the workspace", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   const outside = await Deno.makeTempDir({ prefix: "lumisca-outside-" });
@@ -149,7 +150,7 @@ Deno.test("tools block file access outside the workspace", async () => {
   await removeDirRetry(outside);
 });
 
-Deno.test("a model switch is stored while streaming; a workspace update waits", async () => {
+test("a model switch is stored while streaming; a workspace update waits", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   const extra = await makeRealTempDir("lumisca-extra-");
@@ -190,7 +191,7 @@ Deno.test("a model switch is stored while streaming; a workspace update waits", 
   await removeDirRetry(extra);
 });
 
-Deno.test("renaming a workspace does not touch the prompt; changing folders does", async () => {
+test("renaming a workspace does not touch the prompt; changing folders does", async () => {
   // The prompt is a function of the folders, not of the workspace's name:
   // re-deriving it on every open must therefore rewrite it for a folder
   // edit and leave it alone (no write, no cache break) for a rename.
@@ -228,7 +229,7 @@ Deno.test("renaming a workspace does not touch the prompt; changing folders does
   }
 });
 
-Deno.test("a prompt stored by an older build is replaced when the session opens", async () => {
+test("a prompt stored by an older build is replaced when the session opens", async () => {
   // The prompt is a derivation, not a frozen snapshot: a session created
   // before a release that changed the prompt must pick the new text up, or
   // it would keep running the old instructions for as long as it exists.
@@ -262,7 +263,7 @@ Deno.test("a prompt stored by an older build is replaced when the session opens"
   }
 });
 
-Deno.test("workspaces require at least one folder", async () => {
+test("workspaces require at least one folder", async () => {
   const { core } = setup();
   await assertRejects(
     () => core.createWorkspace("empty", []),
@@ -279,7 +280,7 @@ Deno.test("workspaces require at least one folder", async () => {
   core.close();
 });
 
-Deno.test("chat session: created without a workspace, chat prompt, no file tools", async () => {
+test("chat session: created without a workspace, chat prompt, no file tools", async () => {
   const { core, faux, providerId, modelId } = setup();
 
   // No workspaceId → a chat session in the folder-less chat workspace.
@@ -380,7 +381,7 @@ Deno.test("chat session: created without a workspace, chat prompt, no file tools
   core.close();
 });
 
-Deno.test("chat workspace cannot be updated or deleted", async () => {
+test("chat workspace cannot be updated or deleted", async () => {
   const { core, faux: _faux, providerId, modelId } = setup();
   const session = await core.createSession({
     modelProvider: providerId,
@@ -410,7 +411,7 @@ Deno.test("chat workspace cannot be updated or deleted", async () => {
 
 // --- thinking level (モデルごとの思考強度) --------------------------------
 
-Deno.test("personalization (machine AGENTS.md) is published with the workspace instructions", async () => {
+test("personalization (machine AGENTS.md) is published with the workspace instructions", async () => {
   const faux = fauxProvider();
   const dir = await Deno.makeTempDir({ prefix: "lumisca-core-" });
   const core = LumiscaCore.open(
@@ -492,7 +493,7 @@ Deno.test("personalization (machine AGENTS.md) is published with the workspace i
   await removeDirRetry(root);
 });
 
-Deno.test("deleting a workspace drops its sessions' visuals", async () => {
+test("deleting a workspace drops its sessions' visuals", async () => {
   const dir = await makeRealTempDir("lumisca-visuals-core-");
   const { core, workspaceId, sessionId } = await openFileBackedCore(dir);
   try {

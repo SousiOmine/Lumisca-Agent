@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { removeDirRetry } from "@lumisca/core/test-utils";
 import { blake2b } from "@noble/hashes/blake2.js";
 import { assertEquals, assertRejects } from "@std/assert";
@@ -21,7 +22,7 @@ async function tempFile(content: Uint8Array | string): Promise<string> {
   return path;
 }
 
-Deno.test("the compiled-in release key mirrors tauri.conf.json", async () => {
+test("the compiled-in release key mirrors tauri.conf.json", async () => {
   // A rotated desktop key must not leave the server updater verifying
   // against the old one: both files carry the same minisign public key.
   const config = JSON.parse(
@@ -36,7 +37,7 @@ Deno.test("the compiled-in release key mirrors tauri.conf.json", async () => {
   assertEquals(decodeMinisignPublicKey(RELEASE_PUBLIC_KEY).key.length, 32);
 });
 
-Deno.test("a signature over the archive digest verifies", async () => {
+test("a signature over the archive digest verifies", async () => {
   const keys = await createSigningKeys();
   const file = await tempFile("hello lumisca");
   try {
@@ -53,7 +54,7 @@ Deno.test("a signature over the archive digest verifies", async () => {
   }
 });
 
-Deno.test("a signature made with another key is rejected", async () => {
+test("a signature made with another key is rejected", async () => {
   const signer = await createSigningKeys();
   const other = await createSigningKeys();
   const file = await tempFile("payload");
@@ -74,7 +75,7 @@ Deno.test("a signature made with another key is rejected", async () => {
   }
 });
 
-Deno.test("a tampered archive is rejected", async () => {
+test("a tampered archive is rejected", async () => {
   const keys = await createSigningKeys();
   const file = await tempFile("payload");
   try {
@@ -93,7 +94,7 @@ Deno.test("a tampered archive is rejected", async () => {
   }
 });
 
-Deno.test("malformed containers are rejected with a readable reason", async () => {
+test("malformed containers are rejected with a readable reason", async () => {
   const keys = await createSigningKeys();
   const file = await tempFile("payload");
   const dir = file.replace(/[\\/][^\\/]+$/, "");
@@ -160,7 +161,7 @@ Deno.test("malformed containers are rejected with a readable reason", async () =
   }
 });
 
-Deno.test("a signature with CRLF line endings still verifies", async () => {
+test("a signature with CRLF line endings still verifies", async () => {
   const keys = await createSigningKeys();
   const file = await tempFile("payload");
   try {
@@ -181,7 +182,7 @@ Deno.test("a signature with CRLF line endings still verifies", async () => {
   }
 });
 
-Deno.test("hashFileBlake2b512 matches the in-memory BLAKE2b-512 digest", async () => {
+test("hashFileBlake2b512 matches the in-memory BLAKE2b-512 digest", async () => {
   const file = await tempFile("lumisca");
   try {
     const digest = await hashFileBlake2b512(file);
@@ -210,7 +211,7 @@ const RECORDED = {
     "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSRFJYeXZHREpWWFRKajdIQ04rTlhjYWJxV2hIdnFCZmlreUw4Y09GclZBNEhvaXV2Yk5ualRHdzZzWlpwZlZmanJtV3ZIUmRzYUxBMjhSRG9WVVR3alNHNjI0TXpSZGdBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg5MTg4MjUzCWZpbGU6cGF5bG9hZC5iaW4KNHVBNWtOTmwzaXdQQkJDMlFRbHdVdUVmQklBS0VSeE9GK0FiUytLRyt1SW5wYWU0c05NS2J3Ukh6U2xnZWNYWXNwNUFiUFl1cUViMnpqNGlBMUgwRHc9PQo=",
 };
 
-Deno.test("a recorded tauri signature verifies", async () => {
+test("a recorded tauri signature verifies", async () => {
   const file = await tempFile(RECORDED.payload);
   try {
     await verifyFileSignature({

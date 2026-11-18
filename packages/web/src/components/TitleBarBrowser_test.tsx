@@ -6,6 +6,7 @@
  * shellState_test.ts). A desktop window is the other branch of the same
  * rule, tested in `TitleBar_test.tsx`.
  */
+import { test } from "bun:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -13,7 +14,7 @@ import { initLocale } from "../i18n.ts";
 
 const { TitleBar } = await import("./TitleBar.tsx");
 
-Deno.test("TitleBar: a plain browser gets the tab bar and no window chrome", () => {
+test("TitleBar: a plain browser gets the tab bar and no window chrome", () => {
   initLocale("ja");
   const html = renderToString(
     createElement(TitleBar, {

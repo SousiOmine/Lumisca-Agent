@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import type { StellaEntry } from "../domain/stella-conversation.ts";
 import {
@@ -37,7 +38,7 @@ function entry(overrides: Partial<StellaEntry> = {}): StellaEntry {
   };
 }
 
-Deno.test("previewText: block markers are not words", () => {
+test("previewText: block markers are not words", () => {
   assertEquals(previewText("## 見出し"), "見出し");
   assertEquals(previewText("- 項目"), "項目");
   assertEquals(previewText("* 項目"), "項目");
@@ -49,14 +50,14 @@ Deno.test("previewText: block markers are not words", () => {
   assertEquals(previewText("---"), "");
 });
 
-Deno.test("previewText: a message becomes one line", () => {
+test("previewText: a message becomes one line", () => {
   assertEquals(previewText("一行目\n二行目"), "一行目 二行目");
   assertEquals(previewText("  余白  \n\n  だらけ  "), "余白 だらけ");
   // A fence's line is markup; the code inside it is what the bubble shows.
   assertEquals(previewText("```ts\nconst x = 1;\n```"), "const x = 1;");
 });
 
-Deno.test("previewText: emphasis and links keep their words", () => {
+test("previewText: emphasis and links keep their words", () => {
   assertEquals(previewText("**重要**です"), "重要です");
   assertEquals(previewText("__重要__です"), "重要です");
   assertEquals(previewText("`npm test` を実行"), "npm test を実行");
@@ -72,13 +73,13 @@ Deno.test("previewText: emphasis and links keep their words", () => {
   assertEquals(previewText("| 項目 | 値 |"), "項目 値");
 });
 
-Deno.test("previewText: a marker inside a word is not emphasis", () => {
+test("previewText: a marker inside a word is not emphasis", () => {
   // Removing these would change what the message said.
   assertEquals(previewText("snake_case の名前"), "snake_case の名前");
   assertEquals(previewText("2*3 は 6"), "2*3 は 6");
 });
 
-Deno.test("previewText: a long message is cut and says so", () => {
+test("previewText: a long message is cut and says so", () => {
   const long = "あ".repeat(PREVIEW_TEXT_CHARS + 50);
   const text = previewText(long);
   assertEquals([...text].length, PREVIEW_TEXT_CHARS + 1);
@@ -90,7 +91,7 @@ Deno.test("previewText: a long message is cut and says so", () => {
   );
 });
 
-Deno.test("previewText: a cut never splits a character", () => {
+test("previewText: a cut never splits a character", () => {
   // An emoji is two UTF-16 units; cutting between them would leave a lone
   // surrogate, which renders as a replacement box.
   const text = previewText("🤖".repeat(PREVIEW_TEXT_CHARS));
@@ -98,7 +99,7 @@ Deno.test("previewText: a cut never splits a character", () => {
   assertEquals(text.isWellFormed(), true);
 });
 
-Deno.test("previewOf: words are the message", () => {
+test("previewOf: words are the message", () => {
   assertEquals(previewOf(entry({ text: "直しました。" })), {
     kind: "text",
     text: "直しました。",
@@ -106,7 +107,7 @@ Deno.test("previewOf: words are the message", () => {
   });
 });
 
-Deno.test("previewOf: a message with no words is described", () => {
+test("previewOf: a message with no words is described", () => {
   const files = [
     { name: "a.png", path: "/a.png", size: 1, ref: "r1", image: true },
     { name: "b.txt", path: "/b.txt", size: 2, ref: "r2", image: false },
@@ -147,7 +148,7 @@ Deno.test("previewOf: a message with no words is described", () => {
   assertEquals(previewOf(entry()), null);
 });
 
-Deno.test("previewOf: words win over a card and files", () => {
+test("previewOf: words win over a card and files", () => {
   // The message read as a sentence, not as "1 file": the words are what the
   // reader scans for.
   assertEquals(
@@ -173,7 +174,7 @@ Deno.test("previewOf: words win over a card and files", () => {
   );
 });
 
-Deno.test("samePreview: the same line is the same preview", () => {
+test("samePreview: the same line is the same preview", () => {
   const text: StellaPreview = { kind: "text", text: "a", at: 1 };
   assertEquals(samePreview(text, { kind: "text", text: "a", at: 1 }), true);
   assertEquals(samePreview(text, { kind: "text", text: "a", at: 2 }), false);
@@ -201,7 +202,7 @@ function row(
   };
 }
 
-Deno.test("compareAgentRows: the list is ordered by the time it shows", () => {
+test("compareAgentRows: the list is ordered by the time it shows", () => {
   const rows = [row("old", 100), row("new", 300), row("mid", 200)];
   assertEquals(
     rows.sort(compareAgentRows).map((r) => r.id),
@@ -209,7 +210,7 @@ Deno.test("compareAgentRows: the list is ordered by the time it shows", () => {
   );
 });
 
-Deno.test("compareAgentRows: conversations with nothing said come last", () => {
+test("compareAgentRows: conversations with nothing said come last", () => {
   // They have no time to show, so they must not interleave with rows that
   // do — among themselves they stay in the agent's own last-used order.
   const rows = [
@@ -223,7 +224,7 @@ Deno.test("compareAgentRows: conversations with nothing said come last", () => {
   );
 });
 
-Deno.test("compareAgentRows: the order is total", () => {
+test("compareAgentRows: the order is total", () => {
   // The list re-reads on a timer, so two rows that compare equal would swap
   // places between refreshes.
   const a = row("a", 100, { createdAt: 5 });
@@ -237,7 +238,7 @@ Deno.test("compareAgentRows: the order is total", () => {
   assertEquals(compareAgentRows(newer, older) < 0, true);
 });
 
-Deno.test("previewOf: a routine's prompt is not a message of the row", () => {
+test("previewOf: a routine's prompt is not a message of the row", () => {
   // The conversation does not draw a routine's prompt (it is the
   // instruction the agent wrote), so the row must not speak for it either:
   // the caller reads the next older entry.
@@ -262,7 +263,7 @@ Deno.test("previewOf: a routine's prompt is not a message of the row", () => {
   );
 });
 
-Deno.test("withAgentRow: a created agent is in the list before it is opened", () => {
+test("withAgentRow: a created agent is in the list before it is opened", () => {
   // Regression: creating an agent selected it before the list had read it,
   // and an address naming an agent the list does not hold is treated as a
   // conversation that is gone (the App sends it back to the list). The
@@ -287,7 +288,7 @@ Deno.test("withAgentRow: a created agent is in the list before it is opened", ()
   assertEquals(rows.length, 2);
 });
 
-Deno.test("withAgentRow: an edit keeps the row's line and does not double it", () => {
+test("withAgentRow: an edit keeps the row's line and does not double it", () => {
   const rows = [row("a1", 100), row("b2", null)];
   const edited = withAgentRow(rows, {
     id: "a1",
@@ -304,7 +305,7 @@ Deno.test("withAgentRow: an edit keeps the row's line and does not double it", (
   assertEquals(row1.preview, { kind: "text", text: "a1", at: 100 });
 });
 
-Deno.test("newestPreview: the newest entry a row may speak for", () => {
+test("newestPreview: the newest entry a row may speak for", () => {
   const entries = [
     entry({ text: "older", timestamp: 100 }),
     // A routine's prompt is not a message: the row reads past it.
@@ -320,7 +321,7 @@ Deno.test("newestPreview: the newest entry a row may speak for", () => {
   assertEquals(newestPreview([]), null);
 });
 
-Deno.test("withAgentPreview: the row moves when its conversation says something", () => {
+test("withAgentPreview: the row moves when its conversation says something", () => {
   const rows = [row("a", 300), row("b", 200), row("c", 100)];
   const next = withAgentPreview(rows, "c", {
     kind: "text",
@@ -338,7 +339,7 @@ Deno.test("withAgentPreview: the row moves when its conversation says something"
   );
 });
 
-Deno.test("withAgentPreview: opening another conversation moves nothing", () => {
+test("withAgentPreview: opening another conversation moves nothing", () => {
   // The row already says what its conversation says, so re-applying it is
   // the same list, not a re-ordered one. This is the bug the old shape had:
   // the list was computed from the selection, so the row that was looked at
@@ -357,7 +358,7 @@ Deno.test("withAgentPreview: opening another conversation moves nothing", () => 
   );
 });
 
-Deno.test("mergeAgentRows: a read older than a message does not move the row back", () => {
+test("mergeAgentRows: a read older than a message does not move the row back", () => {
   // What the client learned from the open conversation...
   const held = [row("fresh", 400), row("old", 100)];
   // ...and a list read the server computed before that message landed.
@@ -376,7 +377,7 @@ Deno.test("mergeAgentRows: a read older than a message does not move the row bac
   assertEquals(merged[0]?.name, "renamed");
 });
 
-Deno.test("mergeAgentRows: the newer answer wins and a gone row is gone", () => {
+test("mergeAgentRows: the newer answer wins and a gone row is gone", () => {
   const merged = mergeAgentRows(
     [row("a", 100), row("gone", 300)],
     [row("a", 200)],

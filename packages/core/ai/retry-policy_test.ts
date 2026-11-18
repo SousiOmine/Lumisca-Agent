@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import {
   fauxAssistantMessage,
   fauxText,
@@ -27,7 +28,7 @@ function errored(
   }) as AssistantMessage;
 }
 
-Deno.test("isTransientStreamError classifies the AI SDK body-read wrapper", () => {
+test("isTransientStreamError classifies the AI SDK body-read wrapper", () => {
   // The exact text observed when a 2xx body read died mid-stream.
   assertEquals(
     isTransientStreamError(errored("Failed to process successful response")),
@@ -45,7 +46,7 @@ Deno.test("isTransientStreamError classifies the AI SDK body-read wrapper", () =
   assertEquals(isTransientStreamError(errored("Invalid JSON response")), true);
 });
 
-Deno.test("a 429 stays the rate-limit classifier's job", () => {
+test("a 429 stays the rate-limit classifier's job", () => {
   // The two classifiers are deliberately separate: a throttle is retried
   // with its own budget and its own backoff, not as a transport fault.
   const throttled = errored("429 rate_limit_exceeded");
@@ -53,7 +54,7 @@ Deno.test("a 429 stays the rate-limit classifier's job", () => {
   assertEquals(isTransientStreamError(throttled), false);
 });
 
-Deno.test("isTransientStreamError trusts the provider's retryable flag", () => {
+test("isTransientStreamError trusts the provider's retryable flag", () => {
   // A wording the pattern does not know, but the provider classified it.
   assertEquals(
     isTransientStreamError(
@@ -63,7 +64,7 @@ Deno.test("isTransientStreamError trusts the provider's retryable flag", () => {
   );
 });
 
-Deno.test("isTransientStreamError leaves permanent failures alone", () => {
+test("isTransientStreamError leaves permanent failures alone", () => {
   assertEquals(
     isTransientStreamError(errored("Provider is not configured: bedrock")),
     false,
@@ -77,7 +78,7 @@ Deno.test("isTransientStreamError leaves permanent failures alone", () => {
   );
 });
 
-Deno.test("isSilentErrorResponse requires an outputless transient failure", () => {
+test("isSilentErrorResponse requires an outputless transient failure", () => {
   assertEquals(
     isSilentErrorResponse(errored("Failed to process successful response")),
     true,
@@ -99,7 +100,7 @@ Deno.test("isSilentErrorResponse requires an outputless transient failure", () =
   );
 });
 
-Deno.test("buildInterruptedRetryNotification tells the model to resume", () => {
+test("buildInterruptedRetryNotification tells the model to resume", () => {
   const notification = buildInterruptedRetryNotification(2);
   assertEquals(notification.kind, "retry");
   assertEquals(notification.title.includes("retry 2"), true);
@@ -114,7 +115,7 @@ Deno.test("buildInterruptedRetryNotification tells the model to resume", () => {
 
 // --- the vacant-response half -------------------------------------------------
 
-Deno.test("hasNoVisibleOutput: thinking alone is not output", () => {
+test("hasNoVisibleOutput: thinking alone is not output", () => {
   assertEquals(hasNoVisibleOutput(fauxAssistantMessage("")), true);
   assertEquals(
     hasNoVisibleOutput(
@@ -124,7 +125,7 @@ Deno.test("hasNoVisibleOutput: thinking alone is not output", () => {
   );
 });
 
-Deno.test("hasNoVisibleOutput: text or a tool call counts as output", () => {
+test("hasNoVisibleOutput: text or a tool call counts as output", () => {
   assertEquals(hasNoVisibleOutput(fauxAssistantMessage("Hello")), false);
   assertEquals(
     hasNoVisibleOutput(
@@ -141,7 +142,7 @@ Deno.test("hasNoVisibleOutput: text or a tool call counts as output", () => {
   );
 });
 
-Deno.test("buildRetryNotification: self-contained continue instruction", () => {
+test("buildRetryNotification: self-contained continue instruction", () => {
   // The retry text is read as a user message with no system-prompt contract
   // behind it, so it has to say everything itself.
   const notification = buildRetryNotification(2);
@@ -152,7 +153,7 @@ Deno.test("buildRetryNotification: self-contained continue instruction", () => {
   assertEquals(notification.body.includes("Continue"), true);
 });
 
-Deno.test("isSilentErrorResponse: the observed stream cut is a silent error", () => {
+test("isSilentErrorResponse: the observed stream cut is a silent error", () => {
   // What a real provider sent (deepseek-v4-flash via opencode-go): thinking
   // streamed, then the stream ended without a finish_reason.
   assertEquals(

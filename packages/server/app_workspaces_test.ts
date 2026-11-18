@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { realpathSync } from "node:fs";
 import { basename, dirname, join, parse } from "node:path";
 import {
@@ -18,7 +19,7 @@ function joinMissing(): string {
   return `Z:\\definitely\\not\\here\\lumisca-${crypto.randomUUID()}`;
 }
 
-Deno.test("health and workspaces API", async () => {
+test("health and workspaces API", async () => {
   const { core, server, base } = await setup();
   try {
     const health = await fetch(`${base}/api/health`);
@@ -63,7 +64,7 @@ Deno.test("health and workspaces API", async () => {
   }
 });
 
-Deno.test("workspace files API returns @-mention suggestions", async () => {
+test("workspace files API returns @-mention suggestions", async () => {
   const { core, server, base } = await setup();
   try {
     const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
@@ -107,7 +108,7 @@ Deno.test("workspace files API returns @-mention suggestions", async () => {
   }
 });
 
-Deno.test("skills API lists the workspace catalog and the chat subset", async () => {
+test("skills API lists the workspace catalog and the chat subset", async () => {
   const { core, server, base } = await setup();
   try {
     const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
@@ -169,7 +170,7 @@ Deno.test("skills API lists the workspace catalog and the chat subset", async ()
   }
 });
 
-Deno.test("workspace update and delete API", async () => {
+test("workspace update and delete API", async () => {
   const { core, server, base } = await setup();
   try {
     const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
@@ -217,7 +218,7 @@ Deno.test("workspace update and delete API", async () => {
   }
 });
 
-Deno.test("messages snapshot serves a window and the way back", async () => {
+test("messages snapshot serves a window and the way back", async () => {
   // A long conversation is not sent whole on every (re)connect: the snapshot
   // is the newest window, and `older` is the cursor for the window before it
   // (see core's session/transcript-window.ts). The turn rule keeps a window
@@ -318,7 +319,7 @@ Deno.test("messages snapshot serves a window and the way back", async () => {
   }
 });
 
-Deno.test("messages snapshot reports a run that is still going", async () => {
+test("messages snapshot reports a run that is still going", async () => {
   // The reported bug: a client that asks for the transcript while the agent
   // is working — a page load, a WS drop, a tab opened on the session — must
   // also be told that the run is active. The event stream carries no
@@ -399,7 +400,7 @@ Deno.test("messages snapshot reports a run that is still going", async () => {
   }
 });
 
-Deno.test("messages snapshot carries a pending ask for a reconnecting client", async () => {
+test("messages snapshot carries a pending ask for a reconnecting client", async () => {
   // The ask tool blocks the run until the user answers, and `question`
   // events are never replayed: a client that (re)connects while the run is
   // blocked learns about the questions from this snapshot — without them
@@ -482,7 +483,7 @@ Deno.test("messages snapshot carries a pending ask for a reconnecting client", a
   }
 });
 
-Deno.test("model enablement API", async () => {
+test("model enablement API", async () => {
   const { core, server, faux, base } = await setup();
   try {
     const modelsRes = await fetch(
@@ -523,7 +524,7 @@ Deno.test("model enablement API", async () => {
   }
 });
 
-Deno.test("filesystem browse API", async () => {
+test("filesystem browse API", async () => {
   const { core, server, base } = await setup();
   try {
     // The picker's sidebar places: the user folders that exist on this
@@ -626,7 +627,7 @@ Deno.test("filesystem browse API", async () => {
   }
 });
 
-Deno.test("providers API includes auth state", async () => {
+test("providers API includes auth state", async () => {
   const { core, server, faux, base } = await setup();
   try {
     // The faux provider always resolves auth, but only an explicit
@@ -649,7 +650,7 @@ Deno.test("providers API includes auth state", async () => {
   }
 });
 
-Deno.test("settings API refuses a preference it does not declare", async () => {
+test("settings API refuses a preference it does not declare", async () => {
   const { core, server, base } = await setup();
   try {
     // A typo, or a client that invents a key: the settings file is shared by
@@ -668,7 +669,7 @@ Deno.test("settings API refuses a preference it does not declare", async () => {
   }
 });
 
-Deno.test("computer use toggle goes through the capability path", async () => {
+test("computer use toggle goes through the capability path", async () => {
   const { core, server, base } = await setup();
   try {
     // This core has no computer host attached (only the server's launcher
@@ -700,7 +701,7 @@ Deno.test("computer use toggle goes through the capability path", async () => {
   }
 });
 
-Deno.test("code execution toggle goes through the tool-set path", async () => {
+test("code execution toggle goes through the tool-set path", async () => {
   const { core, server, base } = await setup();
   try {
     // A plain settings write would store the flag and leave every open
@@ -730,7 +731,7 @@ Deno.test("code execution toggle goes through the tool-set path", async () => {
   }
 });
 
-Deno.test("command safety approvals API lists, deletes and clears", async () => {
+test("command safety approvals API lists, deletes and clears", async () => {
   const { core, server, base } = await setup();
   try {
     // The approvals record is a structured setting (hash + redacted display,
@@ -814,7 +815,7 @@ Deno.test("command safety approvals API lists, deletes and clears", async () => 
   }
 });
 
-Deno.test("connections API: registry roundtrip, validation and protection", async () => {
+test("connections API: registry roundtrip, validation and protection", async () => {
   const { core, server, base } = await setup();
   try {
     // Starts empty.
@@ -877,7 +878,7 @@ Deno.test("connections API: registry roundtrip, validation and protection", asyn
   }
 });
 
-Deno.test("MCP config API rejects invalid input", async () => {
+test("MCP config API rejects invalid input", async () => {
   const { core, server, base } = await setup();
   let root = "";
   try {
@@ -914,7 +915,7 @@ Deno.test("MCP config API rejects invalid input", async () => {
   }
 });
 
-Deno.test("compact condenses the history via the API", async () => {
+test("compact condenses the history via the API", async () => {
   const { core, server, faux, base } = await setup();
   try {
     const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
@@ -1020,7 +1021,7 @@ Deno.test("compact condenses the history via the API", async () => {
 
 // --- stella mode ------------------------------------------------------------
 
-Deno.test("stella API: the status reports the availability and the machine", async () => {
+test("stella API: the status reports the availability and the machine", async () => {
   const { core, server, base } = await setup();
   try {
     // No machine attached (the test core has none): stella is not offered,
@@ -1047,7 +1048,7 @@ Deno.test("stella API: the status reports the availability and the machine", asy
   }
 });
 
-Deno.test("stella API: the first agent list creates the starter agent", async () => {
+test("stella API: the first agent list creates the starter agent", async () => {
   const { core, server, base } = await setup();
   try {
     const first = await json(base, "/api/stella/agents");
@@ -1081,7 +1082,7 @@ Deno.test("stella API: the first agent list creates the starter agent", async ()
   }
 });
 
-Deno.test("stella API: a disabled agent's conversation is served without a machine", async () => {
+test("stella API: a disabled agent's conversation is served without a machine", async () => {
   const { core, server, base } = await setup();
   try {
     const listed = await json(base, "/api/stella/agents");
@@ -1135,7 +1136,7 @@ Deno.test("stella API: a disabled agent's conversation is served without a machi
   }
 });
 
-Deno.test("stella API: the conversation's stream carries only the conversation", async () => {
+test("stella API: the conversation's stream carries only the conversation", async () => {
   // The stream is its own endpoint (`…/events`), not a filter of `/ws`: a
   // stella client learns nothing about tool progress, the panels or the
   // model's context, and no frame carries a session id (the socket belongs
@@ -1240,7 +1241,7 @@ Deno.test("stella API: the conversation's stream carries only the conversation",
   }
 });
 
-Deno.test("stella API: a row carries what its conversation last said", async () => {
+test("stella API: a row carries what its conversation last said", async () => {
   const { core, faux, server, base } = await setup();
   try {
     await core.setProviderApiKey(faux.provider.id, "faux-key");
@@ -1298,7 +1299,7 @@ Deno.test("stella API: a row carries what its conversation last said", async () 
   }
 });
 
-Deno.test("stella API: agents are listed, renamed and deleted with their conversation", async () => {
+test("stella API: agents are listed, renamed and deleted with their conversation", async () => {
   const { core, faux, server, base } = await setup();
   try {
     await core.setProviderApiKey(faux.provider.id, "faux-key");
@@ -1367,7 +1368,7 @@ Deno.test("stella API: agents are listed, renamed and deleted with their convers
   }
 });
 
-Deno.test("stella API: an agent's name and icon are saved together and served", async () => {
+test("stella API: an agent's name and icon are saved together and served", async () => {
   const { core, faux, server, base } = await setup();
   try {
     await core.setProviderApiKey(faux.provider.id, "faux-key");
@@ -1492,7 +1493,7 @@ Deno.test("stella API: an agent's name and icon are saved together and served", 
   }
 });
 
-Deno.test("stella API: a refused name or picture changes nothing", async () => {
+test("stella API: a refused name or picture changes nothing", async () => {
   const { core, faux, server, base } = await setup();
   try {
     await core.setProviderApiKey(faux.provider.id, "faux-key");
@@ -1573,7 +1574,7 @@ Deno.test("stella API: a refused name or picture changes nothing", async () => {
   }
 });
 
-Deno.test("stella API: an icon patch is refused with the reason it failed", async () => {
+test("stella API: an icon patch is refused with the reason it failed", async () => {
   const { core, faux, server, base } = await setup();
   try {
     await core.setProviderApiKey(faux.provider.id, "faux-key");
@@ -1656,7 +1657,7 @@ Deno.test("stella API: an icon patch is refused with the reason it failed", asyn
   }
 });
 
-Deno.test("stella API: an icon URL answers only for a name that agent has", async () => {
+test("stella API: an icon URL answers only for a name that agent has", async () => {
   const { core, faux, server, base } = await setup();
   try {
     await core.setProviderApiKey(faux.provider.id, "faux-key");
@@ -1733,7 +1734,7 @@ Deno.test("stella API: an icon URL answers only for a name that agent has", asyn
   }
 });
 
-Deno.test("routine routes: list, enable, run and remove", async () => {
+test("routine routes: list, enable, run and remove", async () => {
   const { core, server, base } = await setup();
   try {
     // Routines belong to a stella agent, so one has to exist first.

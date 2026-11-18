@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertRejects } from "@std/assert";
 import type { ClientEvent } from "../domain/event.ts";
 import { EnvRequestHub } from "./env-request.ts";
@@ -22,7 +23,7 @@ function textOf(result: { content: unknown[] }): string {
   return first?.type === "text" ? (first.text ?? "") : "";
 }
 
-Deno.test("vm env: the only argument is the variable's name", () => {
+test("vm env: the only argument is the variable's name", () => {
   const tool = createVmEnvTool({
     requests: new EnvRequestHub("s1", () => {}),
     store: storeWith([]),
@@ -34,7 +35,7 @@ Deno.test("vm env: the only argument is the variable's name", () => {
   assertEquals(tool.description.includes("secret"), true);
 });
 
-Deno.test("vm env: asking announces the name and reports that it is set", async () => {
+test("vm env: asking announces the name and reports that it is set", async () => {
   const events: ClientEvent[] = [];
   const hub = new EnvRequestHub("s1", (event) => events.push(event));
   const tool = createVmEnvTool({ requests: hub, store: storeWith([]) });
@@ -57,7 +58,7 @@ Deno.test("vm env: asking announces the name and reports that it is set", async 
   assertEquals(text.includes("The value itself is not returned"), true);
 });
 
-Deno.test("vm env: an existing name is announced as a replacement", async () => {
+test("vm env: an existing name is announced as a replacement", async () => {
   const events: ClientEvent[] = [];
   const hub = new EnvRequestHub("s1", (event) => events.push(event));
   const tool = createVmEnvTool({
@@ -75,7 +76,7 @@ Deno.test("vm env: an existing name is announced as a replacement", async () => 
   await waited;
 });
 
-Deno.test("vm env: a declined dialog sends the run on without the value", async () => {
+test("vm env: a declined dialog sends the run on without the value", async () => {
   const hub = new EnvRequestHub("s1", () => {});
   const tool = createVmEnvTool({ requests: hub, store: storeWith([]) });
   const waited = tool.execute("call-1", { name: "KEY" });
@@ -87,7 +88,7 @@ Deno.test("vm env: a declined dialog sends the run on without the value", async 
   assertEquals(text.includes("do not"), true);
 });
 
-Deno.test("vm env: a deadline is reported as no value, not as a failure", async () => {
+test("vm env: a deadline is reported as no value, not as a failure", async () => {
   const hub = new EnvRequestHub("s1", () => {}, 5);
   const tool = createVmEnvTool({ requests: hub, store: storeWith([]) });
   const text = textOf(await tool.execute("call-1", { name: "KEY" }));
@@ -95,7 +96,7 @@ Deno.test("vm env: a deadline is reported as no value, not as a failure", async 
   assertEquals(text.includes("KEY is not available"), true);
 });
 
-Deno.test("vm env: a name that is not an identifier never opens a dialog", async () => {
+test("vm env: a name that is not an identifier never opens a dialog", async () => {
   const events: ClientEvent[] = [];
   const hub = new EnvRequestHub("s1", (event) => events.push(event));
   const tool = createVmEnvTool({ requests: hub, store: storeWith([]) });
@@ -107,7 +108,7 @@ Deno.test("vm env: a name that is not an identifier never opens a dialog", async
   assertEquals(events.length, 0);
 });
 
-Deno.test("vm env: a second dialog while one waits is refused", async () => {
+test("vm env: a second dialog while one waits is refused", async () => {
   const hub = new EnvRequestHub("s1", () => {});
   const tool = createVmEnvTool({ requests: hub, store: storeWith([]) });
   const first = tool.execute("call-1", { name: "ONE" });

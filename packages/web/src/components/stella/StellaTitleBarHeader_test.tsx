@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -50,7 +51,7 @@ function toggleTag(html: string): string {
   return html.slice(start, html.indexOf(">", at) + 1);
 }
 
-Deno.test("StellaTitleBarHeader: the open agent is the title", () => {
+test("StellaTitleBarHeader: the open agent is the title", () => {
   const html = render();
   // The face and the name are the two things a message app puts at the top
   // of a conversation, and both are the agent's.
@@ -62,7 +63,7 @@ Deno.test("StellaTitleBarHeader: the open agent is the title", () => {
   assertEquals(html.includes("Lumisca Agent"), false);
 });
 
-Deno.test("StellaTitleBarHeader: with nothing picked the strip names nothing", () => {
+test("StellaTitleBarHeader: with nothing picked the strip names nothing", () => {
   // The phone's list screen and the first run both have no open agent. The
   // app's own name stood here, and a window already framed as Lumisca Agent
   // was naming itself twice; the strip is a drag surface and the controls'
@@ -74,7 +75,7 @@ Deno.test("StellaTitleBarHeader: with nothing picked the strip names nothing", (
   assertEquals(html.includes("stella-back"), false);
 });
 
-Deno.test("StellaTitleBarHeader: the info toggle is drawn while a conversation is open", () => {
+test("StellaTitleBarHeader: the info toggle is drawn while a conversation is open", () => {
   const onToggle = () => {};
   const running = render({ onToggleScreen: onToggle });
   const tag = toggleTag(running);
@@ -97,7 +98,7 @@ Deno.test("StellaTitleBarHeader: the info toggle is drawn while a conversation i
   assertStringIncludes(open, 'tabler-icon-layout-sidebar-right-collapse"');
 });
 
-Deno.test("StellaTitleBarHeader: the toggle exists while a conversation is open", () => {
+test("StellaTitleBarHeader: the toggle exists while a conversation is open", () => {
   // The panel now holds what the conversation can reach (a lent folder) as
   // well as the screen, so a starting machine is no reason to withhold it.
   assertStringIncludes(
@@ -109,7 +110,7 @@ Deno.test("StellaTitleBarHeader: the toggle exists while a conversation is open"
   assertEquals(toggleTag(render()), "");
 });
 
-Deno.test("StellaTitleBarHeader: the machine's state is not drawn here", () => {
+test("StellaTitleBarHeader: the machine's state is not drawn here", () => {
   // A reason is a sentence ("podman is not available: ..."), and this strip
   // is one line holding a name. The strip says who the conversation is with;
   // why the machine is down belongs to StellaView, which has the room.
@@ -118,7 +119,7 @@ Deno.test("StellaTitleBarHeader: the machine's state is not drawn here", () => {
   assertEquals(html.includes('role="alert"'), false);
 });
 
-Deno.test("StellaTitleBarHeader: the back button appears only when the caller gives one", () => {
+test("StellaTitleBarHeader: the back button appears only when the caller gives one", () => {
   // A phone has one screen at a time, so the way back to the list is a
   // control on the conversation. A wide window has the list beside it, and
   // a back button there would point at something already visible — which is

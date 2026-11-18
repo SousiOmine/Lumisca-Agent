@@ -1,7 +1,8 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { PROBE_SOURCE } from "./probe.js";
 
-Deno.test("probe source parses as JavaScript", () => {
+test("probe source parses as JavaScript", () => {
   try {
     new Function(PROBE_SOURCE);
   } catch (error) {
@@ -13,7 +14,7 @@ Deno.test("probe source parses as JavaScript", () => {
   }
 });
 
-Deno.test("probe source stays embeddable (no backticks, no ${)", () => {
+test("probe source stays embeddable (no backticks, no ${)", () => {
   // The probe lives inside a String.raw template literal; backticks would
   // terminate it and "${" would interpolate. Both would silently corrupt
   // the Rust-extracted copy.
@@ -21,7 +22,7 @@ Deno.test("probe source stays embeddable (no backticks, no ${)", () => {
   assert(!PROBE_SOURCE.includes("${"), "probe must not contain ${");
 });
 
-Deno.test("probe source stays ASCII", () => {
+test("probe source stays ASCII", () => {
   // Bun rewrites a non-ASCII character inside a template literal into a
   // \uXXXX escape, and inside String.raw that changes the value: the export
   // and the text the Rust hosts extract from the file stopped being equal
@@ -30,7 +31,7 @@ Deno.test("probe source stays ASCII", () => {
   assert(!/[^\x00-\x7F]/.test(PROBE_SOURCE), "probe must be ASCII only");
 });
 
-Deno.test("Rust-style extraction from the file yields the exact export", () => {
+test("Rust-style extraction from the file yields the exact export", () => {
   // The Rust hosts extract the probe from this same file (include_str! +
   // split on "String.raw`"). Mirror that algorithm here so a drift between
   // the two copies fails the Bun test suite.
@@ -50,7 +51,7 @@ Deno.test("Rust-style extraction from the file yields the exact export", () => {
   );
 });
 
-Deno.test("probe implements the required observation surface", () => {
+test("probe implements the required observation surface", () => {
   const needs = [
     "__lumiscaProbe",
     "consoleEntries",

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import {
   CatalogFetchError,
@@ -32,7 +33,7 @@ async function waitLoaded(store: ModelCatalog, peerId = ""): Promise<void> {
   }
 }
 
-Deno.test("ModelCatalog: the first subscriber loads, later ones reuse it", async () => {
+test("ModelCatalog: the first subscriber loads, later ones reuse it", async () => {
   let loads = 0;
   const store = new ModelCatalog(() => {
     loads += 1;
@@ -54,7 +55,7 @@ Deno.test("ModelCatalog: the first subscriber loads, later ones reuse it", async
   unsubscribe2();
 });
 
-Deno.test("ModelCatalog: a committed enablement survives a remount", async () => {
+test("ModelCatalog: a committed enablement survives a remount", async () => {
   const store = new ModelCatalog(() => Promise.resolve(catalog(true)));
   store.subscribe("", () => {});
   await waitLoaded(store);
@@ -76,7 +77,7 @@ Deno.test("ModelCatalog: a committed enablement survives a remount", async () =>
   unsubscribe();
 });
 
-Deno.test("ModelCatalog: applyModelEnabled ignores unknown models", async () => {
+test("ModelCatalog: applyModelEnabled ignores unknown models", async () => {
   const store = new ModelCatalog(() => Promise.resolve(catalog()));
   store.subscribe("", () => {});
   await waitLoaded(store);
@@ -90,7 +91,7 @@ Deno.test("ModelCatalog: applyModelEnabled ignores unknown models", async () => 
   assertEquals(enabledOf(store), true);
 });
 
-Deno.test("ModelCatalog: a committed thinking level survives a remount", async () => {
+test("ModelCatalog: a committed thinking level survives a remount", async () => {
   // The agent edit dialog drew its level control from the catalog, so the
   // level it saved must be here when the dialog is opened again — otherwise
   // the control shows the value from before the save.
@@ -109,7 +110,7 @@ Deno.test("ModelCatalog: a committed thinking level survives a remount", async (
   unsubscribe();
 });
 
-Deno.test("ModelCatalog: a committed level outlives a fetch of the old value", async () => {
+test("ModelCatalog: a committed level outlives a fetch of the old value", async () => {
   // The save reached the server, but a fetch issued before it still carries
   // the previous level. Applying that snapshot verbatim would turn the
   // control back to what the user just changed.
@@ -130,7 +131,7 @@ Deno.test("ModelCatalog: a committed level outlives a fetch of the old value", a
   assertEquals(levelOf(store), "high");
 });
 
-Deno.test("ModelCatalog: a fetch that changes only the level is published", async () => {
+test("ModelCatalog: a fetch that changes only the level is published", async () => {
   // The level is compared when deciding "this read changed nothing": without
   // that, another client's change would arrive and be dropped as identical.
   let serverLevel: ThinkingLevel = "low";
@@ -146,7 +147,7 @@ Deno.test("ModelCatalog: a fetch that changes only the level is published", asyn
   assertEquals(levelOf(store), "high");
 });
 
-Deno.test("ModelCatalog: applyModelThinkingLevel ignores unknown models", async () => {
+test("ModelCatalog: applyModelThinkingLevel ignores unknown models", async () => {
   const store = new ModelCatalog(() => Promise.resolve(catalog()));
   store.subscribe("", () => {});
   await waitLoaded(store);
@@ -158,7 +159,7 @@ Deno.test("ModelCatalog: applyModelThinkingLevel ignores unknown models", async 
   assertEquals(levelOf(store), undefined);
 });
 
-Deno.test("ModelCatalog: the level and the enablement of one model both land", async () => {
+test("ModelCatalog: the level and the enablement of one model both land", async () => {
   const store = new ModelCatalog(() => Promise.resolve(catalog(true, "low")));
   store.subscribe("", () => {});
   await waitLoaded(store);
@@ -169,7 +170,7 @@ Deno.test("ModelCatalog: the level and the enablement of one model both land", a
   assertEquals(levelOf(store), "high");
 });
 
-Deno.test("ModelCatalog: subscribers see every publish", async () => {
+test("ModelCatalog: subscribers see every publish", async () => {
   const store = new ModelCatalog(() => Promise.resolve(catalog()));
   const published: number[] = [];
   const unsubscribe = store.subscribe("", () => {
@@ -188,7 +189,7 @@ Deno.test("ModelCatalog: subscribers see every publish", async () => {
   assertEquals(published.length, seen, "an unsubscribed listener stays quiet");
 });
 
-Deno.test("ModelCatalog: a failed fetch reports the failing phase", async () => {
+test("ModelCatalog: a failed fetch reports the failing phase", async () => {
   const store = new ModelCatalog(() => {
     throw new CatalogFetchError("providers", "server unreachable");
   });
@@ -207,7 +208,7 @@ Deno.test("ModelCatalog: a failed fetch reports the failing phase", async () => 
   assertEquals(store2.state("peer-1").error?.message, "boom");
 });
 
-Deno.test("ModelCatalog: a commit during a fetch is not reverted by its snapshot", async () => {
+test("ModelCatalog: a commit during a fetch is not reverted by its snapshot", async () => {
   let release: (() => void) | undefined;
   const store = new ModelCatalog(
     () =>
@@ -227,7 +228,7 @@ Deno.test("ModelCatalog: a commit during a fetch is not reverted by its snapshot
   assertEquals(enabledOf(store), false);
 });
 
-Deno.test("ModelCatalog: a commit outlives a later fetch of the old value", async () => {
+test("ModelCatalog: a commit outlives a later fetch of the old value", async () => {
   // The server had not persisted the flag yet when the second fetch was
   // issued, so the snapshot still carries the pre-toggle value.
   let serverValue = true;
@@ -246,7 +247,7 @@ Deno.test("ModelCatalog: a commit outlives a later fetch of the old value", asyn
   assertEquals(enabledOf(store), false);
 });
 
-Deno.test("ModelCatalog: commits of one peer never leak into another", async () => {
+test("ModelCatalog: commits of one peer never leak into another", async () => {
   const store = new ModelCatalog(() => Promise.resolve(catalog(true)));
   await store.reload(""); // this server
   await store.reload("peer-1"); // a federated peer
@@ -261,7 +262,7 @@ Deno.test("ModelCatalog: commits of one peer never leak into another", async () 
   assertEquals(enabledOf(store), false);
 });
 
-Deno.test("ModelCatalog: a superseded fetch cannot overwrite the newer one", async () => {
+test("ModelCatalog: a superseded fetch cannot overwrite the newer one", async () => {
   let releaseSlow: (() => void) | undefined;
   let calls = 0;
   const store = new ModelCatalog(async () => {

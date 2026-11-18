@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { builtinSkills } from "../skills/builtin/mod.ts";
@@ -29,7 +30,7 @@ async function makeTool(): Promise<{
   return { root, skills, tool: createSkillTool({ skills: () => skills }) };
 }
 
-Deno.test("skill tool loads SKILL.md content for a known skill", async () => {
+test("skill tool loads SKILL.md content for a known skill", async () => {
   const { root, skills, tool } = await makeTool();
   try {
     assertEquals(skills.length, 1);
@@ -45,7 +46,7 @@ Deno.test("skill tool loads SKILL.md content for a known skill", async () => {
   }
 });
 
-Deno.test("skill tool reads a follow-up file from the skill directory", async () => {
+test("skill tool reads a follow-up file from the skill directory", async () => {
   const { root, tool } = await makeTool();
   try {
     const result = await tool.execute(
@@ -59,7 +60,7 @@ Deno.test("skill tool reads a follow-up file from the skill directory", async ()
   }
 });
 
-Deno.test("skill tool rejects unknown skill names", async () => {
+test("skill tool rejects unknown skill names", async () => {
   const { root, tool } = await makeTool();
   try {
     // execute may throw synchronously; wrap so assertRejects sees a rejection.
@@ -76,7 +77,7 @@ Deno.test("skill tool rejects unknown skill names", async () => {
   }
 });
 
-Deno.test("skill tool rejects follow-up reads that escape the skill directory", async () => {
+test("skill tool rejects follow-up reads that escape the skill directory", async () => {
   const { root, tool } = await makeTool();
   try {
     await assertRejects(
@@ -104,7 +105,7 @@ function makeBuiltinTool(browser: boolean) {
   });
 }
 
-Deno.test("skill tool loads a built-in skill without a filesystem", async () => {
+test("skill tool loads a built-in skill without a filesystem", async () => {
   const tool = makeBuiltinTool(true);
   const result = await tool.execute("1", { name: "web-browser" }, undefined);
   assert(toolText(result).includes("tool_search"));
@@ -114,7 +115,7 @@ Deno.test("skill tool loads a built-in skill without a filesystem", async () => 
   assertEquals(result.details?.dir, undefined);
 });
 
-Deno.test("skill tool rejects follow-up reads on a built-in skill", async () => {
+test("skill tool rejects follow-up reads on a built-in skill", async () => {
   const tool = makeBuiltinTool(true);
   await assertRejects(
     () =>
@@ -130,7 +131,7 @@ Deno.test("skill tool rejects follow-up reads on a built-in skill", async () => 
   );
 });
 
-Deno.test("skill tool hides built-in skills when their capability is absent", async () => {
+test("skill tool hides built-in skills when their capability is absent", async () => {
   const tool = makeBuiltinTool(false);
   await assertRejects(
     () =>
@@ -144,7 +145,7 @@ Deno.test("skill tool hides built-in skills when their capability is absent", as
 
 // --- skills written during the session ---------------------------------------
 
-Deno.test("skill tool resolves the catalog on every call", async () => {
+test("skill tool resolves the catalog on every call", async () => {
   const root = await makeRealTempDir("lumisca-skill-tool-");
   try {
     const tool = createSkillTool({
@@ -177,7 +178,7 @@ Deno.test("skill tool resolves the catalog on every call", async () => {
   }
 });
 
-Deno.test("coding tools reach the shared skills folder and the catalog lists it", async () => {
+test("coding tools reach the shared skills folder and the catalog lists it", async () => {
   const root = await makeRealTempDir("lumisca-skill-shared-");
   const shared = await makeRealTempDir("lumisca-skill-app-");
   try {
@@ -243,7 +244,7 @@ Deno.test("coding tools reach the shared skills folder and the catalog lists it"
   }
 });
 
-Deno.test("the coding set loads the guide its own catalog advertises", async () => {
+test("the coding set loads the guide its own catalog advertises", async () => {
   const root = await makeRealTempDir("lumisca-skill-gate-");
   try {
     const workspace = {

@@ -14,6 +14,7 @@
  * a rewritten history — are reported by the loop as a RequestShape with its
  * reason, so a cache-read drop can be explained afterwards.
  */
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { toLlmMessages } from "../ai/llm-view.ts";
 import { fakeModel } from "../test-utils.ts";
@@ -128,7 +129,7 @@ function toolScript(): Array<(call: number) => AssistantMessage> {
   ];
 }
 
-Deno.test("prefix: each step of a tool-using turn extends the previous request", async () => {
+test("prefix: each step of a tool-using turn extends the previous request", async () => {
   const { agent, requests } = makeAgent({
     script: toolScript(),
     tools: [echoTool()],
@@ -152,7 +153,7 @@ Deno.test("prefix: each step of a tool-using turn extends the previous request",
   );
 });
 
-Deno.test("prefix: a context message published between runs extends the prefix", async () => {
+test("prefix: a context message published between runs extends the prefix", async () => {
   const { agent, requests } = makeAgent({
     script: [
       () => fauxAssistantMessage("First."),
@@ -182,7 +183,7 @@ Deno.test("prefix: a context message published between runs extends the prefix",
   );
 });
 
-Deno.test("prefix: the loop reports the shape and the two changes that cost the cache", async () => {
+test("prefix: the loop reports the shape and the two changes that cost the cache", async () => {
   const shapes: RequestShape[] = [];
   const { agent, requests } = makeAgent({
     script: toolScript(),
@@ -231,7 +232,7 @@ Deno.test("prefix: the loop reports the shape and the two changes that cost the 
   );
 });
 
-Deno.test("repeat guard: an identical call repeated three times earns one reminder", async () => {
+test("repeat guard: an identical call repeated three times earns one reminder", async () => {
   const call = (n: number) => () =>
     fauxAssistantMessage(
       [
@@ -268,7 +269,7 @@ Deno.test("repeat guard: an identical call repeated three times earns one remind
   assertEquals(agent.state.messages[index + 1]!.role, "assistant");
 });
 
-Deno.test("repeat guard: a different call and a new prompt both reset the count", async () => {
+test("repeat guard: a different call and a new prompt both reset the count", async () => {
   const repeated = (n: number) => () =>
     fauxAssistantMessage(
       [fauxToolCall("echo", { value: "same" }, `call_${n}`)],

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxToolCall, LumiscaCore } from "@lumisca/core";
 import { removeDirRetry } from "@lumisca/core/test-utils";
@@ -5,7 +6,7 @@ import { assertEquals } from "@std/assert";
 import { startServer } from "./app.ts";
 import { json, setup } from "./test-utils.ts";
 
-Deno.test("session model switch API", async () => {
+test("session model switch API", async () => {
   const { core, server, faux, base } = await setup();
   try {
     const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
@@ -43,7 +44,7 @@ Deno.test("session model switch API", async () => {
   }
 });
 
-Deno.test("default model API follows the configured providers", async () => {
+test("default model API follows the configured providers", async () => {
   const { core, server, faux, base } = await setup();
   try {
     // Nothing is configured: the built-in catalog entries are registered
@@ -107,7 +108,7 @@ Deno.test("default model API follows the configured providers", async () => {
   }
 });
 
-Deno.test("providers API ignores ambient env keys of built-in providers", async () => {
+test("providers API ignores ambient env keys of built-in providers", async () => {
   // The ambient environment is the test's own object, not the process's (the
   // test runner shares one process environment across every file).
   const ambient: Record<string, string> = { ANTHROPIC_API_KEY: "sk-env-only" };
@@ -144,7 +145,7 @@ Deno.test("providers API ignores ambient env keys of built-in providers", async 
   }
 });
 
-Deno.test("settings API refuses to write credentials", async () => {
+test("settings API refuses to write credentials", async () => {
   const { core, server, base } = await setup();
   try {
     const res = await json(base, "/api/settings/api_key:anthropic", {
@@ -162,7 +163,7 @@ Deno.test("settings API refuses to write credentials", async () => {
   }
 });
 
-Deno.test("settings API writes the model preferences the dialog offers", async () => {
+test("settings API writes the model preferences the dialog offers", async () => {
   // Regression: the dialog's "default model" row writes
   // `PUT /api/settings/model_default`, and the key was missing from the
   // core's allow-list — the row failed only in the browser. This walks the
@@ -211,7 +212,7 @@ Deno.test("settings API writes the model preferences the dialog offers", async (
   }
 });
 
-Deno.test("personalize API reads and writes AGENTS.md next to the settings file", async () => {
+test("personalize API reads and writes AGENTS.md next to the settings file", async () => {
   const dir = await Deno.makeTempDir({ prefix: "lumisca-pers-" });
   const core = LumiscaCore.open(
     join(dir, "lumisca.db"),
@@ -252,7 +253,7 @@ Deno.test("personalize API reads and writes AGENTS.md next to the settings file"
   }
 });
 
-Deno.test("settings API never exposes credentials", async () => {
+test("settings API never exposes credentials", async () => {
   const { core, server, base } = await setup();
   try {
     await core.setProviderApiKey("anthropic", "sk-secret-test-123");
@@ -270,7 +271,7 @@ Deno.test("settings API never exposes credentials", async () => {
   }
 });
 
-Deno.test("stella API: the conversation carries the conversation, never the model's context", async () => {
+test("stella API: the conversation carries the conversation, never the model's context", async () => {
   // Two rules in one endpoint. The reported symptom was `Date: …` and
   // `On-demand tools` rows in stella's chat: they are `context`
   // publications — the model's history — and the conversation must not serve

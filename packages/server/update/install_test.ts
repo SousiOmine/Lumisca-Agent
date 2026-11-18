@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { withTempDir } from "@lumisca/core/test-utils";
 import { assertEquals, assertRejects } from "@std/assert";
@@ -87,7 +88,7 @@ function list(installDir: string): string[] {
   return [...Deno.readDirSync(installDir)].map((entry) => entry.name).sort();
 }
 
-Deno.test("applyStagedUpdate replaces the package files and records the version", async () => {
+test("applyStagedUpdate replaces the package files and records the version", async () => {
   await withTempDir("lumisca-install-", async (installDir) => {
     const { environment, staged } = await fixture(installDir);
     const checked: string[] = [];
@@ -135,7 +136,7 @@ Deno.test("applyStagedUpdate replaces the package files and records the version"
   });
 });
 
-Deno.test("applyStagedUpdate works for a tar.gz package too", async () => {
+test("applyStagedUpdate works for a tar.gz package too", async () => {
   await withTempDir("lumisca-install-", async (installDir) => {
     const { environment, staged } = await fixture(installDir, "tar.gz");
     await applyStagedUpdate({
@@ -152,7 +153,7 @@ Deno.test("applyStagedUpdate works for a tar.gz package too", async () => {
   });
 });
 
-Deno.test("applyStagedUpdate installs the stella container directory as one entry", async () => {
+test("applyStagedUpdate installs the stella container directory as one entry", async () => {
   await withTempDir("lumisca-install-", async (installDir) => {
     // The running version has an older container definition; the package
     // carries a new one. It must be replaced as a whole, so no file of the
@@ -211,7 +212,7 @@ Deno.test("applyStagedUpdate installs the stella container directory as one entr
   });
 });
 
-Deno.test("applyStagedUpdate rolls back when a file cannot be replaced", async () => {
+test("applyStagedUpdate rolls back when a file cannot be replaced", async () => {
   await withTempDir("lumisca-install-", async (installDir) => {
     const { environment, staged } = await fixture(installDir);
     // A non-empty directory where the second file's backup has to go:
@@ -257,7 +258,7 @@ Deno.test("applyStagedUpdate rolls back when a file cannot be replaced", async (
   });
 });
 
-Deno.test("applyStagedUpdate rolls back a file the package added", async () => {
+test("applyStagedUpdate rolls back a file the package added", async () => {
   await withTempDir("lumisca-install-", async (installDir) => {
     await Deno.writeTextFile(join(installDir, BINARY), "old-binary");
     await Deno.writeTextFile(join(installDir, "assets.json"), "old-assets");
@@ -311,7 +312,7 @@ Deno.test("applyStagedUpdate rolls back a file the package added", async () => {
   });
 });
 
-Deno.test("applyStagedUpdate rolls a container directory back as one entry", async () => {
+test("applyStagedUpdate rolls a container directory back as one entry", async () => {
   await withTempDir("lumisca-install-", async (installDir) => {
     await Deno.writeTextFile(join(installDir, BINARY), "old-binary");
     await Deno.writeTextFile(join(installDir, "assets.json"), "old-assets");
@@ -365,7 +366,7 @@ Deno.test("applyStagedUpdate rolls a container directory back as one entry", asy
   });
 });
 
-Deno.test("applyStagedUpdate refuses a binary that is not the promised version", async () => {
+test("applyStagedUpdate refuses a binary that is not the promised version", async () => {
   await withTempDir("lumisca-install-", async (installDir) => {
     const { environment, staged } = await fixture(installDir);
     await assertRejects(
@@ -389,7 +390,7 @@ Deno.test("applyStagedUpdate refuses a binary that is not the promised version",
   });
 });
 
-Deno.test("applyStagedUpdate refuses a package without the server binary", async () => {
+test("applyStagedUpdate refuses a package without the server binary", async () => {
   await withTempDir("lumisca-install-", async (installDir) => {
     await Deno.writeTextFile(join(installDir, BINARY), "old-binary");
     const staged = await newPackage(installDir, "zip", [
@@ -413,7 +414,7 @@ Deno.test("applyStagedUpdate refuses a package without the server binary", async
   });
 });
 
-Deno.test("cleanupStaleFiles removes update leftovers and nothing else", async () => {
+test("cleanupStaleFiles removes update leftovers and nothing else", async () => {
   await withTempDir("lumisca-install-", async (installDir) => {
     const environment = { installDir, execPath: join(installDir, BINARY) };
     await Deno.writeTextFile(join(installDir, `${BINARY}.old-0.7.6`), "x");
@@ -461,7 +462,7 @@ Deno.test("cleanupStaleFiles removes update leftovers and nothing else", async (
   });
 });
 
-Deno.test("successorEnvironment replays the launch configuration", () => {
+test("successorEnvironment replays the launch configuration", () => {
   const env = successorEnvironment(
     {
       LUMISCA_PORT: "8100",

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { fauxAssistantMessage, fauxToolCall } from "@lumisca/core";
 import type { SessionSnapshot } from "@lumisca/core/shared";
 import { summarizeContextUsage } from "@lumisca/core/shared";
@@ -91,7 +92,7 @@ function snapshot(
   };
 }
 
-Deno.test("events: user message is appended on start, replaced on end", () => {
+test("events: user message is appended on start, replaced on end", () => {
   let v = view();
   v = applyEvent(
     {
@@ -124,7 +125,7 @@ Deno.test("events: user message is appended on start, replaced on end", () => {
   assertEquals(v2.messages.length, 1);
 });
 
-Deno.test("events: assistant message_end never duplicates after a resync", () => {
+test("events: assistant message_end never duplicates after a resync", () => {
   // The resync fetch already contains the message; the late message_end
   // event must not append a second copy.
   const existing = view({ messages: [message("assistant", 100, "done")] });
@@ -140,7 +141,7 @@ Deno.test("events: assistant message_end never duplicates after a resync", () =>
   assertEquals(v.streamingText, "");
 });
 
-Deno.test("events: user message_start never duplicates (steered while running)", () => {
+test("events: user message_start never duplicates (steered while running)", () => {
   // A message sent while the agent runs is announced immediately by the
   // server and re-emitted when the running loop drains it; the second
   // emission has the same role + timestamp and must not append a copy.
@@ -154,7 +155,7 @@ Deno.test("events: user message_start never duplicates (steered while running)",
   assertEquals(v.messages.length, 1);
 });
 
-Deno.test("events: assistant stream accumulates deltas and clears on start", () => {
+test("events: assistant stream accumulates deltas and clears on start", () => {
   let v = view();
   v = applyEvent(
     {
@@ -178,7 +179,7 @@ Deno.test("events: assistant stream accumulates deltas and clears on start", () 
   assertEquals(v.streamingText, "");
 });
 
-Deno.test("events: tool start/end track running tools", () => {
+test("events: tool start/end track running tools", () => {
   let v = view();
   v = applyEvent(
     {
@@ -216,7 +217,7 @@ function assistantWithCall(
   }) as AgentMessage;
 }
 
-Deno.test("events: a tool call is drawn from tool_start, before its message lands", () => {
+test("events: a tool call is drawn from tool_start, before its message lands", () => {
   // The AI SDK runs a step's tools inside the stream, so the assistant
   // message carrying the call arrives only after the tool returned. The row
   // has to exist while the tool runs — that is what tool_start reports.
@@ -261,7 +262,7 @@ Deno.test("events: a tool call is drawn from tool_start, before its message land
   assertEquals(v.messages.length, 1);
 });
 
-Deno.test("events: a tool_start behind its own row adds no second one", () => {
+test("events: a tool_start behind its own row adds no second one", () => {
   // Test doubles (the faux provider) do not execute tools inside the stream:
   // the assistant message is announced first and the fallback runs the calls
   // afterwards, so its tool_start follows the row it belongs to. A second
@@ -285,7 +286,7 @@ Deno.test("events: a tool_start behind its own row adds no second one", () => {
   assertEquals(v.runningTools.get("t1"), "bash");
 });
 
-Deno.test("events: a repeated tool_start keeps one live row", () => {
+test("events: a repeated tool_start keeps one live row", () => {
   const call = {
     type: "tool_start",
     sessionId: "s1",
@@ -298,7 +299,7 @@ Deno.test("events: a repeated tool_start keeps one live row", () => {
   assertEquals(v.liveTools.length, 1);
 });
 
-Deno.test("events: a run that ends without its message leaves no live row", () => {
+test("events: a run that ends without its message leaves no live row", () => {
   // A stop can end the run before the step's assistant message is written:
   // the row must not outlive the run that started it.
   const call = {
@@ -314,7 +315,7 @@ Deno.test("events: a run that ends without its message leaves no live row", () =
   assertEquals(v.liveTools, []);
 });
 
-Deno.test("events: rewinding the transcript clears live tool rows", () => {
+test("events: rewinding the transcript clears live tool rows", () => {
   const prompt = message("user", 100);
   let v = view({ messages: [prompt] });
   v = applyEvent(
@@ -334,7 +335,7 @@ Deno.test("events: rewinding the transcript clears live tool rows", () => {
   assertEquals(v.liveTools, []);
 });
 
-Deno.test("events: a live tool result is stored, so the tool line can pair it", () => {
+test("events: a live tool result is stored, so the tool line can pair it", () => {
   // The tool line's checkmark and its `+N -M` badge come from the toolResult
   // message (ChatView's toolResults map) — the tool_end event only clears
   // the spinner. The core announces the message when it appends it to the
@@ -371,7 +372,7 @@ Deno.test("events: a live tool result is stored, so the tool line can pair it", 
   });
 });
 
-Deno.test("events: tool results are keyed by tool call id, not by timestamp", () => {
+test("events: tool results are keyed by tool call id, not by timestamp", () => {
   // A turn's parallel tool calls can finish within the same millisecond:
   // keyed by role + timestamp, the second message would replace the first
   // on the live upsert, and the resync merge (which dedups by key) could
@@ -427,7 +428,7 @@ Deno.test("events: tool results are keyed by tool call id, not by timestamp", ()
   );
 });
 
-Deno.test("events: errors are set on session_error and cleared on agent_start", () => {
+test("events: errors are set on session_error and cleared on agent_start", () => {
   let v = view();
   v = applyEvent(
     { type: "session_error", sessionId: "s1", message: "boom" },
@@ -441,7 +442,7 @@ Deno.test("events: errors are set on session_error and cleared on agent_start", 
   assertEquals(isViewRunning(v), false);
 });
 
-Deno.test("events: other sessions and non-view events are ignored", () => {
+test("events: other sessions and non-view events are ignored", () => {
   const v = view();
   assertEquals(
     applyEvent({ type: "message_delta", sessionId: "other", delta: "x" }, v),
@@ -461,7 +462,7 @@ Deno.test("events: other sessions and non-view events are ignored", () => {
   assertEquals(applyEvent({ type: "agent_end", sessionId: "s1" }, v), null);
 });
 
-Deno.test("events: applyRunState seeds a run the view never saw start", () => {
+test("events: applyRunState seeds a run the view never saw start", () => {
   // The reported bug's fix: a view that (re)connects mid-run — a page load,
   // a WS drop, a tab opened on the session — never received the run's
   // agent_start (events are not replayed), so the transcript snapshot's
@@ -477,7 +478,7 @@ Deno.test("events: applyRunState seeds a run the view never saw start", () => {
   assertEquals(applyRunState(seeded, true), seeded);
 });
 
-Deno.test("events: applyRunState drops a run that ended unwatched", () => {
+test("events: applyRunState drops a run that ended unwatched", () => {
   // The run ended while the view was disconnected and its agent_end is not
   // replayed either: the snapshot must stop the view from showing it as
   // running.
@@ -493,7 +494,7 @@ Deno.test("events: applyRunState drops a run that ended unwatched", () => {
   assertEquals(applyRunState(finished, false), finished);
 });
 
-Deno.test("events: mergeNewestWindow is idempotent and order-preserving", () => {
+test("events: mergeNewestWindow is idempotent and order-preserving", () => {
   const existing = [message("user", 100), message("assistant", 200)];
   const fetched = [
     message("user", 100),
@@ -521,7 +522,7 @@ Deno.test("events: mergeNewestWindow is idempotent and order-preserving", () => 
   );
 });
 
-Deno.test("events: messages_truncated drops the exact removed messages", () => {
+test("events: messages_truncated drops the exact removed messages", () => {
   let v = view({
     messages: [
       message("user", 100),
@@ -579,7 +580,7 @@ Deno.test("events: messages_truncated drops the exact removed messages", () => {
   );
 });
 
-Deno.test("events: filterRemoved drops tombstoned messages from a resync", () => {
+test("events: filterRemoved drops tombstoned messages from a resync", () => {
   const fetched = [
     message("user", 100),
     message("assistant", 200),
@@ -595,7 +596,7 @@ Deno.test("events: filterRemoved drops tombstoned messages from a resync", () =>
   assertEquals(filterRemoved(fetched, new Set()), fetched);
 });
 
-Deno.test("events: session_renamed updates the session name", () => {
+test("events: session_renamed updates the session name", () => {
   let v = view();
   v = applyEvent(
     { type: "session_renamed", sessionId: "s1", name: "Fix login bug" },
@@ -629,7 +630,7 @@ const QUESTION = {
   options: [{ label: "Deno" }, { label: "Node" }],
 };
 
-Deno.test("events: question is shown and cleared by tool_end", () => {
+test("events: question is shown and cleared by tool_end", () => {
   let v = view();
   v = applyEvent(
     {
@@ -680,7 +681,7 @@ const TODOS: TodoPhase[] = [
   },
 ];
 
-Deno.test("events: todo snapshot replaces the plan", () => {
+test("events: todo snapshot replaces the plan", () => {
   let v = view();
   v = applyEvent({ type: "todo", sessionId: "s1", todos: TODOS }, v)!;
   assertEquals(v.todos, TODOS);
@@ -696,7 +697,7 @@ Deno.test("events: todo snapshot replaces the plan", () => {
   );
 });
 
-Deno.test("events: sameTodoPlan compares snapshots exactly", () => {
+test("events: sameTodoPlan compares snapshots exactly", () => {
   assertEquals(sameTodoPlan([], []), true);
   assertEquals(sameTodoPlan(TODOS, structuredClone(TODOS)), true);
   // Any difference in ids, names, order, or statuses is detected.
@@ -712,7 +713,7 @@ Deno.test("events: sameTodoPlan compares snapshots exactly", () => {
   assertEquals(sameTodoPlan(TODOS, []), false);
 });
 
-Deno.test("events: sameQuestions compares pending asks by tool call id", () => {
+test("events: sameQuestions compares pending asks by tool call id", () => {
   const ask = (toolCallId: string): PendingQuestion => ({
     toolCallId,
     questions: [
@@ -732,7 +733,7 @@ Deno.test("events: sameQuestions compares pending asks by tool call id", () => {
   assertEquals(sameQuestions([], [ask("c1")]), false);
 });
 
-Deno.test("events: revisionGap detects a lost frame", () => {
+test("events: revisionGap detects a lost frame", () => {
   // The next event of a session the client has seen up to `known`.
   assertEquals(revisionGap(7, 8), false);
   // A skipped count means frames were lost: the view must re-read.
@@ -744,7 +745,7 @@ Deno.test("events: revisionGap detects a lost frame", () => {
   assertEquals(revisionGap(7, 7), false);
 });
 
-Deno.test("events: applySnapshot applies the live state, or keeps identity", () => {
+test("events: applySnapshot applies the live state, or keeps identity", () => {
   const window = {
     messages: [message("user", 1), message("assistant", 2, "hi")],
     running: true,
@@ -784,7 +785,7 @@ Deno.test("events: applySnapshot applies the live state, or keeps identity", () 
   );
 });
 
-Deno.test("events: applySnapshot lets an event win over the snapshot it raced", () => {
+test("events: applySnapshot lets an event win over the snapshot it raced", () => {
   const v = view();
   // The fetch started before these events: its snapshot still says the run
   // is going, but the run ended while the snapshot was in flight.
@@ -816,7 +817,7 @@ Deno.test("events: applySnapshot lets an event win over the snapshot it raced", 
   assertEquals(applied.info.name, "old-name");
 });
 
-Deno.test("events: applySnapshot merges panels and respects tombstones", () => {
+test("events: applySnapshot merges panels and respects tombstones", () => {
   const rewound = message("user", 1);
   const kept = message("user", 2);
   const v: SessionView = {
@@ -845,7 +846,7 @@ Deno.test("events: applySnapshot merges panels and respects tombstones", () => {
   assertEquals(sameTodoPlan(applied.todos, TODOS), true);
 });
 
-Deno.test("events: a steered prompt reordered by the transcript is not duplicated", () => {
+test("events: a steered prompt reordered by the transcript is not duplicated", () => {
   // A prompt typed while the agent was running is announced at once, but the
   // transcript stores it after the turn it joined. The view holds it above
   // that turn; a resync must keep one copy of each row, not draw the turn
@@ -883,7 +884,7 @@ Deno.test("events: a steered prompt reordered by the transcript is not duplicate
   assertEquals(applied.older, "before-prompt");
 });
 
-Deno.test("events: two pending asks coexist and resolve independently", () => {
+test("events: two pending asks coexist and resolve independently", () => {
   let v = view();
   v = applyEvent(
     {
@@ -920,7 +921,7 @@ Deno.test("events: two pending asks coexist and resolve independently", () => {
   );
 });
 
-Deno.test("events: pending questions are cleared on run teardown", () => {
+test("events: pending questions are cleared on run teardown", () => {
   // agent_end (abort or completion) clears the panels.
   let v = view({
     pendingQuestions: [{ toolCallId: "t1", questions: [QUESTION] }],
@@ -949,7 +950,7 @@ Deno.test("events: pending questions are cleared on run teardown", () => {
 
 // --- task events (the task tool) ----------------------------------------------
 
-Deno.test("events: task events add, feed, and settle tasks", () => {
+test("events: task events add, feed, and settle tasks", () => {
   let v = view();
   const start = {
     type: "task_start" as const,
@@ -1001,7 +1002,7 @@ Deno.test("events: task events add, feed, and settle tasks", () => {
   assertEquals(v.tasks[0]!.status, "finished");
 });
 
-Deno.test("events: mergeTasks merges snapshots without losing live deltas", () => {
+test("events: mergeTasks merges snapshots without losing live deltas", () => {
   const existing: TaskView[] = [
     {
       agentId: "agent_1",
@@ -1054,7 +1055,7 @@ const START = {
   startedAt: 100,
 };
 
-Deno.test("events: background events add, feed, and settle commands", () => {
+test("events: background events add, feed, and settle commands", () => {
   let v = view();
   v = applyEvent(START, v)!;
   assertEquals(v.backgrounds.length, 1);
@@ -1107,7 +1108,7 @@ Deno.test("events: background events add, feed, and settle commands", () => {
   assertEquals(v.backgrounds[0]!.tail, "listen ing on :3000");
 });
 
-Deno.test("events: background_end keeps a longer live view", () => {
+test("events: background_end keeps a longer live view", () => {
   // The end event's tail is a point-in-time snapshot: when the live view
   // (deltas) is already longer, it must not be truncated back.
   let v = view({
@@ -1143,7 +1144,7 @@ Deno.test("events: background_end keeps a longer live view", () => {
   assertEquals(v.backgrounds[0]!.tail, "short");
 });
 
-Deno.test("events: mergeBackgrounds merges snapshots without losing live deltas", () => {
+test("events: mergeBackgrounds merges snapshots without losing live deltas", () => {
   const existing: BackgroundView[] = [
     {
       commandId: "1",
@@ -1190,7 +1191,7 @@ Deno.test("events: mergeBackgrounds merges snapshots without losing live deltas"
   assertEquals(merged[1]!.liveText, "");
 });
 
-Deno.test("events: sameBackgrounds compares snapshots exactly", () => {
+test("events: sameBackgrounds compares snapshots exactly", () => {
   const list: BackgroundView[] = [
     {
       commandId: "1",
@@ -1215,7 +1216,7 @@ Deno.test("events: sameBackgrounds compares snapshots exactly", () => {
   assertEquals(sameBackgrounds(list, []), false);
 });
 
-Deno.test("events: messages_checkpoint inserts the row and keeps run state", () => {
+test("events: messages_checkpoint inserts the row and keeps run state", () => {
   const checkpoint: AgentMessage = {
     role: "checkpoint",
     title: "履歴 2 件を要約しました（約 12K トークン）",
@@ -1296,7 +1297,7 @@ Deno.test("events: messages_checkpoint inserts the row and keeps run state", () 
   );
 });
 
-Deno.test("events: a checkpoint outside the loaded window is not drawn", () => {
+test("events: a checkpoint outside the loaded window is not drawn", () => {
   // The view holds a window of the transcript: a checkpoint whose anchor
   // (`before`) is not in it belongs to history the reader has not loaded.
   // Drawing it would put a "summarized" row above messages it does not
@@ -1320,7 +1321,7 @@ Deno.test("events: a checkpoint outside the loaded window is not drawn", () => {
   assertEquals(v, null);
 });
 
-Deno.test("events: mergeNewestWindow inserts a missed message in place", () => {
+test("events: mergeNewestWindow inserts a missed message in place", () => {
   // The view's window and the newest one overlap but the view lacks one
   // message in the middle (it arrived while the socket was down).
   const existing = [message("user", 100), message("assistant", 200)];
@@ -1344,7 +1345,7 @@ Deno.test("events: mergeNewestWindow inserts a missed message in place", () => {
   assertEquals(merged.older, "older-cursor");
 });
 
-Deno.test("events: mergeNewestWindow replaces a view that shares nothing", () => {
+test("events: mergeNewestWindow replaces a view that shares nothing", () => {
   // The view fell more than a page behind: keeping its messages would leave
   // an invisible gap, so the fetched window is taken as the history.
   const merged = mergeNewestWindow(
@@ -1363,7 +1364,7 @@ Deno.test("events: mergeNewestWindow replaces a view that shares nothing", () =>
   assertEquals(merged.older, "window-cursor");
 });
 
-Deno.test("events: prependOlderWindow puts a page in front and dedups", () => {
+test("events: prependOlderWindow puts a page in front and dedups", () => {
   const current = {
     messages: [message("user", 300), message("assistant", 400)],
     older: "cursor-b",
@@ -1383,7 +1384,7 @@ Deno.test("events: prependOlderWindow puts a page in front and dedups", () => {
   assertEquals(repeated.older, null);
 });
 
-Deno.test("events: prependOlderWindow keeps a page's second copy of a key", () => {
+test("events: prependOlderWindow keeps a page's second copy of a key", () => {
   // A page may carry the same identity twice (a duplicated key in the
   // history). Dropping every fetched message whose key the view already holds
   // would lose both copies instead of the one that is really there.
@@ -1405,7 +1406,7 @@ Deno.test("events: prependOlderWindow keeps a page's second copy of a key", () =
   assertEquals(next.older, "cursor-a");
 });
 
-Deno.test("events: mergeNewestWindow never grows on a repeated resync", () => {
+test("events: mergeNewestWindow never grows on a repeated resync", () => {
   // The reported symptom: the loaded history kept gaining the same context
   // rows on every sync. The dynamic contexts are published in one
   // loop, so two of them can share a millisecond; keyed by role + timestamp
@@ -1431,7 +1432,7 @@ Deno.test("events: mergeNewestWindow never grows on a repeated resync", () => {
   assertEquals(history.messages.map(messageKey), window.map(messageKey));
 });
 
-Deno.test("events: context snapshots of one millisecond coexist and key apart", () => {
+test("events: context snapshots of one millisecond coexist and key apart", () => {
   // Same millisecond, different providers: one message each. Keyed by role +
   // timestamp they looked like one message, so the live upsert replaced the
   // first with the second and the resync merge re-inserted it forever.
@@ -1462,7 +1463,7 @@ Deno.test("events: context snapshots of one millisecond coexist and key apart", 
   ]);
 });
 
-Deno.test("events: a rewound context snapshot is tombstoned by provider", () => {
+test("events: a rewound context snapshot is tombstoned by provider", () => {
   // The server names what it removed by its identity; the provider is what
   // tells two snapshots of one millisecond apart, so a rewind of the date
   // notice must not take the instructions notice with it.
@@ -1480,7 +1481,7 @@ Deno.test("events: a rewound context snapshot is tombstoned by provider", () => 
   assertEquals(v.messages.map(messageKey), ["context:instructions:71"]);
 });
 
-Deno.test("events: a live message moves the context meter", () => {
+test("events: a live message moves the context meter", () => {
   // A turn that streams in moves the context meter now, not at the next
   // resync: the summary the server sent describes the whole transcript.
   const reply: AgentMessage = {
@@ -1496,7 +1497,7 @@ Deno.test("events: a live message moves the context meter", () => {
   assertEquals(v.usage.totalTokens, 1000);
 });
 
-Deno.test("events: a rewound turn is dropped from the meter", () => {
+test("events: a rewound turn is dropped from the meter", () => {
   const reply: AgentMessage = {
     role: "assistant",
     content: [{ type: "text", text: "hi" }],
@@ -1528,7 +1529,7 @@ Deno.test("events: a rewound turn is dropped from the meter", () => {
   assertEquals(v.older, null);
 });
 
-Deno.test("events: a steered message older than the window is not drawn", () => {
+test("events: a steered message older than the window is not drawn", () => {
   // The view holds a window; a live message older than its newest belongs to
   // history the reader has not loaded. Appending it would put it at the wrong
   // end of the transcript, so it stays out until a window carries it.

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import type { TodoPhase } from "@lumisca/core/shared";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
@@ -28,7 +29,7 @@ function phase(
   };
 }
 
-Deno.test("TodoPanel is a one-line row naming the running task", () => {
+test("TodoPanel is a one-line row naming the running task", () => {
   const html = render([
     phase("調査", [
       ["コードを読む", "completed"],
@@ -53,7 +54,7 @@ Deno.test("TodoPanel is a one-line row naming the running task", () => {
   assertStringIncludes(html, 'aria-expanded="false"');
 });
 
-Deno.test("TodoPanel falls back to no detail when nothing is in progress", () => {
+test("TodoPanel falls back to no detail when nothing is in progress", () => {
   // Work left to do, but not yet started: the row shows the count only.
   const html = render([
     phase("調査", [
@@ -65,7 +66,7 @@ Deno.test("TodoPanel falls back to no detail when nothing is in progress", () =>
   assertEquals(html.includes("todo-panel-detail"), false);
 });
 
-Deno.test("TodoPanel keeps a plan with work left to do", () => {
+test("TodoPanel keeps a plan with work left to do", () => {
   // A blocked task is not settled: the row stays, because the plan is not
   // over.
   const blocked = render([phase("待ち", [["返答を待つ", "blocked"]])]);
@@ -75,7 +76,7 @@ Deno.test("TodoPanel keeps a plan with work left to do", () => {
   assertStringIncludes(pending, "todo-panel");
 });
 
-Deno.test("TodoPanel leaves the composer alone once the plan is settled", () => {
+test("TodoPanel leaves the composer alone once the plan is settled", () => {
   // Every task done or dropped: an all-finished plan is read in the
   // transcript, not above the field being typed into.
   assertEquals(
@@ -91,7 +92,7 @@ Deno.test("TodoPanel leaves the composer alone once the plan is settled", () => 
   assertEquals(render([]), "");
 });
 
-Deno.test("TodoPanel counts abandoned tasks in the total but not as done", () => {
+test("TodoPanel counts abandoned tasks in the total but not as done", () => {
   const html = render([
     phase("調査", [
       ["読む", "completed"],

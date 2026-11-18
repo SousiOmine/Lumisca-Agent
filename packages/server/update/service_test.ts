@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { UPDATE_AUTO_KEY, UPDATE_AUTO_RESTART_KEY } from "@lumisca/core/shared";
 import { withTempDir } from "@lumisca/core/test-utils";
@@ -142,7 +143,7 @@ async function waitFor(predicate: () => boolean): Promise<void> {
   }
 }
 
-Deno.test("a manual check reports the available release without downloading", async () => {
+test("a manual check reports the available release without downloading", async () => {
   await withTempDir("lumisca-service-", async (dir) => {
     const fixture = await packageFixture();
     const { service } = harness(dir, {
@@ -163,7 +164,7 @@ Deno.test("a manual check reports the available release without downloading", as
   });
 });
 
-Deno.test("automatic mode downloads, verifies and applies the package", async () => {
+test("automatic mode downloads, verifies and applies the package", async () => {
   await withTempDir("lumisca-service-", async (dir) => {
     await seedInstall(dir);
     const fixture = await packageFixture();
@@ -196,7 +197,7 @@ Deno.test("automatic mode downloads, verifies and applies the package", async ()
   });
 });
 
-Deno.test("restart hands over to a successor with the original launch configuration", async () => {
+test("restart hands over to a successor with the original launch configuration", async () => {
   await withTempDir("lumisca-service-", async (dir) => {
     await seedInstall(dir);
     const fixture = await packageFixture();
@@ -228,7 +229,7 @@ Deno.test("restart hands over to a successor with the original launch configurat
   });
 });
 
-Deno.test("the automatic restart setting restarts once the update is applied", async () => {
+test("the automatic restart setting restarts once the update is applied", async () => {
   await withTempDir("lumisca-service-", async (dir) => {
     await seedInstall(dir);
     const fixture = await packageFixture();
@@ -243,7 +244,7 @@ Deno.test("the automatic restart setting restarts once the update is applied", a
   });
 });
 
-Deno.test("a supervised installation is not restarted by the server", async () => {
+test("a supervised installation is not restarted by the server", async () => {
   await withTempDir("lumisca-service-", async (dir) => {
     await seedInstall(dir);
     const fixture = await packageFixture();
@@ -260,7 +261,7 @@ Deno.test("a supervised installation is not restarted by the server", async () =
   });
 });
 
-Deno.test("under a supervisor the server exits and lets systemd start the new binary", async () => {
+test("under a supervisor the server exits and lets systemd start the new binary", async () => {
   await withTempDir("lumisca-service-", async (dir) => {
     await seedInstall(dir);
     const fixture = await packageFixture();
@@ -282,7 +283,7 @@ Deno.test("under a supervisor the server exits and lets systemd start the new bi
   });
 });
 
-Deno.test("a failed check reports the reason and keeps the server usable", async () => {
+test("a failed check reports the reason and keeps the server usable", async () => {
   await withTempDir("lumisca-service-", async (dir) => {
     const fixture = await packageFixture();
     const failing = harness(dir, {
@@ -313,7 +314,7 @@ Deno.test("a failed check reports the reason and keeps the server usable", async
   });
 });
 
-Deno.test("a release that is not newer is ignored", async () => {
+test("a release that is not newer is ignored", async () => {
   await withTempDir("lumisca-service-", async (dir) => {
     const fixture = await packageFixture(CURRENT);
     const { service } = harness(dir, { fixture });
@@ -325,7 +326,7 @@ Deno.test("a release that is not newer is ignored", async () => {
   });
 });
 
-Deno.test("a package staged by a previous run is ready to install", async () => {
+test("a package staged by a previous run is ready to install", async () => {
   await withTempDir("lumisca-service-", async (dir) => {
     await seedInstall(dir);
     const fixture = await packageFixture();
@@ -361,7 +362,7 @@ Deno.test("a package staged by a previous run is ready to install", async () => 
   });
 });
 
-Deno.test("the status reports the install while the files are being replaced", async () => {
+test("the status reports the install while the files are being replaced", async () => {
   await withTempDir("lumisca-service-", async (dir) => {
     await seedInstall(dir);
     const fixture = await packageFixture();
@@ -396,7 +397,7 @@ Deno.test("the status reports the install while the files are being replaced", a
   });
 });
 
-Deno.test("a failed install clears the installing flag", async () => {
+test("a failed install clears the installing flag", async () => {
   await withTempDir("lumisca-service-", async (dir) => {
     await seedInstall(dir);
     const fixture = await packageFixture();
@@ -423,7 +424,7 @@ Deno.test("a failed install clears the installing flag", async () => {
   });
 });
 
-Deno.test("a staged package that is no longer newer is dropped", async () => {
+test("a staged package that is no longer newer is dropped", async () => {
   await withTempDir("lumisca-service-", async (dir) => {
     const fixture = await packageFixture();
     await stageUpdate({
@@ -441,7 +442,7 @@ Deno.test("a staged package that is no longer newer is dropped", async () => {
   });
 });
 
-Deno.test("an installation whose target has no release reports why", async () => {
+test("an installation whose target has no release reports why", async () => {
   await withTempDir("lumisca-service-", async (dir) => {
     const fixture = await packageFixture();
     // Whether this installation may update itself at all is decided at
@@ -467,7 +468,7 @@ Deno.test("an installation whose target has no release reports why", async () =>
   });
 });
 
-Deno.test("the toggles persist into the settings store", async () => {
+test("the toggles persist into the settings store", async () => {
   await withTempDir("lumisca-service-", async (dir) => {
     const fixture = await packageFixture();
     const test = harness(dir, {
@@ -488,7 +489,7 @@ Deno.test("the toggles persist into the settings store", async () => {
   });
 });
 
-Deno.test("apply keeps the staged package when the version check fails", async () => {
+test("apply keeps the staged package when the version check fails", async () => {
   await withTempDir("lumisca-service-", async (dir) => {
     await seedInstall(dir);
     const fixture = await packageFixture();
@@ -517,7 +518,7 @@ Deno.test("apply keeps the staged package when the version check fails", async (
   });
 });
 
-Deno.test("a failed apply does not pin the installation to that package", async () => {
+test("a failed apply does not pin the installation to that package", async () => {
   // The package of one release can turn out to be uninstallable (v0.10.8's
   // was: a running update reader refused its layout). Keeping it staged is
   // right — a retry must not re-download 100 MB — but it must not stop the
@@ -559,7 +560,7 @@ Deno.test("a failed apply does not pin the installation to that package", async 
   });
 });
 
-Deno.test("a check keeps the staged package when it is still the newest", async () => {
+test("a check keeps the staged package when it is still the newest", async () => {
   // The other half of the rule: checking must not throw away a package that
   // is exactly the release the manifest names — a retry installs it without
   // downloading 100 MB again.
@@ -588,7 +589,7 @@ Deno.test("a check keeps the staged package when it is still the newest", async 
   });
 });
 
-Deno.test("the status payload is JSON-serializable and complete", async () => {
+test("the status payload is JSON-serializable and complete", async () => {
   await withTempDir("lumisca-service-", async (dir) => {
     const fixture = await packageFixture();
     const { service } = harness(dir, { fixture });
@@ -620,7 +621,7 @@ Deno.test("the status payload is JSON-serializable and complete", async () => {
   });
 });
 
-Deno.test("dispose stops the periodic check", async () => {
+test("dispose stops the periodic check", async () => {
   await withTempDir("lumisca-service-", async (dir) => {
     const fixture = await packageFixture();
     const test = harness(dir, { fixture });
@@ -632,7 +633,7 @@ Deno.test("dispose stops the periodic check", async () => {
   });
 });
 
-Deno.test("dispose ends the periodic chain even while a check is in flight", async () => {
+test("dispose ends the periodic chain even while a check is in flight", async () => {
   await withTempDir("lumisca-service-", async (dir) => {
     const fixture = await packageFixture();
     let calls = 0;
@@ -661,7 +662,7 @@ Deno.test("dispose ends the periodic chain even while a check is in flight", asy
   });
 });
 
-Deno.test("a restart that cannot start its successor ends the process", async () => {
+test("a restart that cannot start its successor ends the process", async () => {
   await withTempDir("lumisca-service-", async (dir) => {
     await seedInstall(dir);
     const fixture = await packageFixture();

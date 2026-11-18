@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import {
   createTranslator,
   type Locale,
@@ -41,7 +42,7 @@ const SKILLS: SkillInfo[] = [
   { name: "diagnosing-bugs", description: "Diagnosis loop for hard bugs." },
 ];
 
-Deno.test("slashCommands: plan is a text-taking (complete) command", () => {
+test("slashCommands: plan is a text-taking (complete) command", () => {
   assertEquals(planCommand !== undefined, true);
   assertEquals(planCommand!.kind, "complete");
   assertEquals(planCommand!.items, undefined);
@@ -50,7 +51,7 @@ Deno.test("slashCommands: plan is a text-taking (complete) command", () => {
   assertEquals(reviewCommand!.kind, "run");
 });
 
-Deno.test("buildSlashCommands: the menu text follows the app language", () => {
+test("buildSlashCommands: the menu text follows the app language", () => {
   const jaPlan = commandsFor("ja").find((c) => c.id === "plan");
   const enPlan = commandsFor("en").find((c) => c.id === "plan");
   assertEquals(jaPlan?.label, "プラン");
@@ -72,7 +73,7 @@ Deno.test("buildSlashCommands: the menu text follows the app language", () => {
   );
 });
 
-Deno.test("slashPrompt: text-taking mode wraps the trailing text", () => {
+test("slashPrompt: text-taking mode wraps the trailing text", () => {
   const result = slashPrompt(
     planCommand!,
     undefined,
@@ -90,20 +91,20 @@ Deno.test("slashPrompt: text-taking mode wraps the trailing text", () => {
   assertEquals(result!.text.includes("implementation planner"), true);
 });
 
-Deno.test("slashPrompt: the badge and the review short text are localised", () => {
+test("slashPrompt: the badge and the review short text are localised", () => {
   const result = slashPrompt(reviewCommand!, reviewCommand!.items![1], "", en);
   assertEquals(result !== null, true);
   assertEquals(result!.mode.modeLabel, "Review mode");
   assertEquals(result!.mode.shortText, "Review the uncommitted changes");
 });
 
-Deno.test("slashPrompt: text-taking mode without text builds nothing", () => {
+test("slashPrompt: text-taking mode without text builds nothing", () => {
   assertEquals(slashPrompt(planCommand!, undefined, "", ja), null);
   assertEquals(slashPrompt(planCommand!, undefined, "", ja), null);
   assertEquals(slashPrompt(planCommand!, undefined, "   ", ja), null);
 });
 
-Deno.test("slashPromptFromText: /plan <request> wraps as a text line", () => {
+test("slashPromptFromText: /plan <request> wraps as a text line", () => {
   const line = slashPromptFromText("/plan 履歴機能を追加して", ja);
   if (line === null || line.kind !== "wrap") return;
   assertEquals(line.mode?.modeId, "plan");
@@ -111,7 +112,7 @@ Deno.test("slashPromptFromText: /plan <request> wraps as a text line", () => {
   assertEquals(line.text.includes("履歴機能を追加して"), true);
 });
 
-Deno.test("slashPromptFromText: bare command token needs the request", () => {
+test("slashPromptFromText: bare command token needs the request", () => {
   // The token without a request resolves to "needs-text" (nothing sent).
   assertEquals(slashPromptFromText("/plan", ja)?.kind, "needs-text");
   assertEquals(slashPromptFromText("/plan ", ja)?.kind, "needs-text");
@@ -121,7 +122,7 @@ Deno.test("slashPromptFromText: bare command token needs the request", () => {
   assertEquals(slashPromptFromText(" /plan", ja)?.kind, "needs-text");
 });
 
-Deno.test("slashPromptFromText: plain text and non-text commands pass through", () => {
+test("slashPromptFromText: plain text and non-text commands pass through", () => {
   assertEquals(slashPromptFromText("普通のメッセージ", ja), null);
   assertEquals(slashPromptFromText("レビューして", ja), null);
   // review takes no text: the line is not a text-taking command.
@@ -130,7 +131,7 @@ Deno.test("slashPromptFromText: plain text and non-text commands pass through", 
   assertEquals(slashPromptFromText("/nope なにか", ja), null);
 });
 
-Deno.test("slashPromptFromText: mid-text /plan wraps and keeps both sides", () => {
+test("slashPromptFromText: mid-text /plan wraps and keeps both sides", () => {
   // The command can sit anywhere a word starts; the text the user wrote
   // around it becomes the request (token removed, sides joined by a space).
   const line = slashPromptFromText("背景メモ /plan 履歴を追加して", ja);
@@ -156,7 +157,7 @@ Deno.test("slashPromptFromText: mid-text /plan wraps and keeps both sides", () =
   assertEquals(mid.mode?.shortText, "まず を実行して、それから /unknown 続行");
 });
 
-Deno.test("slashPromptFromText: mid-text token keeps the other side as request", () => {
+test("slashPromptFromText: mid-text token keeps the other side as request", () => {
   // The request is the text the user wrote around the token — both sides
   // trimmed and joined. A completed token at the end of a memo keeps the
   // memo as the request (メモ /plan → 「メモ」); the menu only ever
@@ -176,7 +177,7 @@ Deno.test("slashPromptFromText: mid-text token keeps the other side as request",
   assertEquals(slashPromptFromText("メモ /plan 履歴", ja)?.kind, "wrap");
 });
 
-Deno.test("slashPromptFromText: word-start boundary (no slash inside words)", () => {
+test("slashPromptFromText: word-start boundary (no slash inside words)", () => {
   // A slash glued to a word is not a command (paths, URLs, prose).
   assertEquals(slashPromptFromText("src/plan なにか", ja), null);
   assertEquals(slashPromptFromText("https://example.com/plan", ja), null);
@@ -185,7 +186,7 @@ Deno.test("slashPromptFromText: word-start boundary (no slash inside words)", ()
   assertEquals(slashPromptFromText("（/plan なにか）", ja), null);
 });
 
-Deno.test("modeRewindText: text-taking modes restore as a command line", () => {
+test("modeRewindText: text-taking modes restore as a command line", () => {
   // Plan mode: rewinding restores `/plan <依頼文>`, so a re-send
   // re-enters the mode instead of degrading to a plain message.
   assertEquals(
@@ -203,7 +204,7 @@ Deno.test("modeRewindText: text-taking modes restore as a command line", () => {
 
 // --- detectSlash: where the menu opens --------------------------------
 
-Deno.test("detectSlash: captures the token under the caret", () => {
+test("detectSlash: captures the token under the caret", () => {
   // Caret at the end of `/`: query empty, token covers [0, 1).
   assertEquals(detectSlash("/", 1, false), {
     start: 0,
@@ -227,7 +228,7 @@ Deno.test("detectSlash: captures the token under the caret", () => {
   });
 });
 
-Deno.test("detectSlash: word-start only (no slash inside words)", () => {
+test("detectSlash: word-start only (no slash inside words)", () => {
   assertEquals(detectSlash("src/plan", 8, false), null);
   assertEquals(detectSlash("あれ/plan", 8, false), null);
   assertEquals(detectSlash("https://example.com/plan", 24, false), null);
@@ -240,7 +241,7 @@ Deno.test("detectSlash: word-start only (no slash inside words)", () => {
   assertEquals(detectSlash("（/plan", 6, false), null);
 });
 
-Deno.test("detectSlash: caret must stay in the token (closes after space)", () => {
+test("detectSlash: caret must stay in the token (closes after space)", () => {
   // Space after the command → no menu (typing prose after a completed
   // command keeps it prose).
   assertEquals(detectSlash("/plan ", 6, false), null);
@@ -250,12 +251,12 @@ Deno.test("detectSlash: caret must stay in the token (closes after space)", () =
   assertEquals(detectSlash("/plan なにか", 9, true)?.rest, " なにか");
 });
 
-Deno.test("detectSlash: the nearest token behind the caret wins", () => {
+test("detectSlash: the nearest token behind the caret wins", () => {
   assertEquals(detectSlash("メモ /plan あと /re", 18, false)?.query, "re");
   assertEquals(detectSlash("メモ /plan あと /re", 18, false)?.start, 12);
 });
 
-Deno.test("buildSlashCommands: /compact is offered as an action command", () => {
+test("buildSlashCommands: /compact is offered as an action command", () => {
   const compactCommand = commandsFor("ja").find((c) => c.id === "compact");
   assertEquals(compactCommand !== undefined, true);
   assertEquals(compactCommand!.kind, "action");
@@ -307,7 +308,7 @@ Deno.test("buildSlashCommands: /compact is offered as an action command", () => 
 
 // --- skill palette ------------------------------------------------------
 
-Deno.test("buildSlashCommands: /skill lists the session catalog", () => {
+test("buildSlashCommands: /skill lists the session catalog", () => {
   // Without a catalog the entry is hidden: a submenu that can never load a
   // skill would be a dead end.
   assertEquals(
@@ -349,7 +350,7 @@ Deno.test("buildSlashCommands: /skill lists the session catalog", () => {
   );
 });
 
-Deno.test("skillMenu: long descriptions are capped for the menu", () => {
+test("skillMenu: long descriptions are capped for the menu", () => {
   const [command] = commandsFor("ja", true, [
     {
       name: "long",
@@ -361,7 +362,7 @@ Deno.test("skillMenu: long descriptions are capped for the menu", () => {
   assertEquals(description.endsWith("…"), true);
 });
 
-Deno.test("slashCompletion: a picked item becomes the command's argument", () => {
+test("slashCompletion: a picked item becomes the command's argument", () => {
   const [skill] = commandsFor("ja", true, SKILLS);
   // The command itself completes with no argument (as before).
   assertEquals(slashCompletion(skill!), "/skill ");
@@ -373,7 +374,7 @@ Deno.test("slashCompletion: a picked item becomes the command's argument", () =>
   );
 });
 
-Deno.test("skillPromptFromText: /skill <name> invokes the skill (English prompt)", () => {
+test("skillPromptFromText: /skill <name> invokes the skill (English prompt)", () => {
   const line = skillPromptFromText("/skill canvas-design", SKILLS);
   if (line === null || line.kind !== "wrap") throw new Error("expected wrap");
   // No mode metadata: the transcript shows a plain user message.
@@ -384,7 +385,7 @@ Deno.test("skillPromptFromText: /skill <name> invokes the skill (English prompt)
   assertEquals(line.text.includes("# Request"), false);
 });
 
-Deno.test("skillPromptFromText: the request travels with the skill", () => {
+test("skillPromptFromText: the request travels with the skill", () => {
   const line = skillPromptFromText(
     "/skill canvas-design ポスターを作って",
     SKILLS,
@@ -406,7 +407,7 @@ Deno.test("skillPromptFromText: the request travels with the skill", () => {
   assertEquals(both.text.endsWith("# Request\nA4で 片面で"), true);
 });
 
-Deno.test("skillPromptFromText: incomplete and unknown names send as written", () => {
+test("skillPromptFromText: incomplete and unknown names send as written", () => {
   // `/skill` without a name: nothing is sent (like a text-taking mode
   // without its request).
   assertEquals(skillPromptFromText("/skill", SKILLS)?.kind, "needs-text");
@@ -424,7 +425,7 @@ Deno.test("skillPromptFromText: incomplete and unknown names send as written", (
   assertEquals(skillPromptFromText("src/skill canvas-design", SKILLS), null);
 });
 
-Deno.test("skillPromptFromText: the palette's completion round-trips", () => {
+test("skillPromptFromText: the palette's completion round-trips", () => {
   // What the composer leaves in the input after picking a skill (see
   // slashCompletion) is exactly what the submit path parses.
   const [skill] = commandsFor("ja", true, SKILLS);
@@ -437,7 +438,7 @@ Deno.test("skillPromptFromText: the palette's completion round-trips", () => {
   assertEquals(line.text.endsWith("# Request\nポスターを作って"), true);
 });
 
-Deno.test("actionCommandFromText: /compact runs with the typed focus", () => {
+test("actionCommandFromText: /compact runs with the typed focus", () => {
   assertEquals(actionCommandFromText("/compact"), { commandId: "compact" });
   assertEquals(actionCommandFromText("  /compact  "), {
     commandId: "compact",
@@ -453,7 +454,7 @@ Deno.test("actionCommandFromText: /compact runs with the typed focus", () => {
   });
 });
 
-Deno.test("actionCommandFromText: only a leading token, and only this client's commands", () => {
+test("actionCommandFromText: only a leading token, and only this client's commands", () => {
   // The action sends nothing itself, so a token mid-text stays ordinary
   // text instead of swallowing the message around it.
   assertEquals(actionCommandFromText("メモ /compact して"), null);
@@ -466,7 +467,7 @@ Deno.test("actionCommandFromText: only a leading token, and only this client's c
   assertEquals(actionCommandFromText("/usr/local/bin"), null);
 });
 
-Deno.test("resolveComposerText: a plain message is sent unchanged", () => {
+test("resolveComposerText: a plain message is sent unchanged", () => {
   const t = createTranslator("ja");
   assertEquals(
     resolveComposerText("hello", {
@@ -478,7 +479,7 @@ Deno.test("resolveComposerText: a plain message is sent unchanged", () => {
   );
 });
 
-Deno.test("resolveComposerText: an action command runs instead of sending", () => {
+test("resolveComposerText: an action command runs instead of sending", () => {
   const t = createTranslator("ja");
   const resolved = resolveComposerText("/compact テストに集中", {
     chat: false,
@@ -490,7 +491,7 @@ Deno.test("resolveComposerText: an action command runs instead of sending", () =
   assertEquals(resolved.instructions, "テストに集中");
 });
 
-Deno.test("resolveComposerText: a draft without actions sends /compact as text", () => {
+test("resolveComposerText: a draft without actions sends /compact as text", () => {
   const t = createTranslator("ja");
   // The draft composer has no session to condense: allowActions=false keeps
   // the text untouched instead of silently dropping it.
@@ -504,7 +505,7 @@ Deno.test("resolveComposerText: a draft without actions sends /compact as text",
   );
 });
 
-Deno.test("resolveComposerText: a mode line wraps the request", () => {
+test("resolveComposerText: a mode line wraps the request", () => {
   const t = createTranslator("ja");
   const resolved = resolveComposerText("/plan 履歴を追加", {
     chat: false,
@@ -518,7 +519,7 @@ Deno.test("resolveComposerText: a mode line wraps the request", () => {
   assertNotEquals(resolved.text, "/plan 履歴を追加");
 });
 
-Deno.test("resolveComposerText: a chat session has no modes", () => {
+test("resolveComposerText: a chat session has no modes", () => {
   const t = createTranslator("ja");
   const resolved = resolveComposerText("/plan 履歴を追加", {
     chat: true,
@@ -530,7 +531,7 @@ Deno.test("resolveComposerText: a chat session has no modes", () => {
   assertEquals(resolved, { kind: "send", text: "/plan 履歴を追加" });
 });
 
-Deno.test("resolveComposerText: a command without its argument sends nothing", () => {
+test("resolveComposerText: a command without its argument sends nothing", () => {
   const t = createTranslator("ja");
   assertEquals(
     resolveComposerText("/plan", {
@@ -550,7 +551,7 @@ Deno.test("resolveComposerText: a command without its argument sends nothing", (
   );
 });
 
-Deno.test("resolveComposerText: a skill line wraps into the skill prompt", () => {
+test("resolveComposerText: a skill line wraps into the skill prompt", () => {
   const t = createTranslator("ja");
   const resolved = resolveComposerText("/skill demo 説明して", {
     chat: false,

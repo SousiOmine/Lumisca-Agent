@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import type { AgentMessage } from "../ai/message.ts";
 
@@ -37,7 +38,7 @@ function message(role: AgentMessage["role"], timestamp: number): AgentMessage {
   }
 }
 
-Deno.test("messageCursorOf: parallel tool results are told apart", () => {
+test("messageCursorOf: parallel tool results are told apart", () => {
   const first = message("toolResult", 10);
   const second = { ...message("toolResult", 10), toolCallId: "other" };
   assert(messageCursorOf(first) !== messageCursorOf(second));
@@ -49,7 +50,7 @@ Deno.test("messageCursorOf: parallel tool results are told apart", () => {
   );
 });
 
-Deno.test("messageCursorOf: context snapshots of one millisecond are told apart", () => {
+test("messageCursorOf: context snapshots of one millisecond are told apart", () => {
   // The dynamic contexts are published in one loop, so two of them can share
   // a millisecond. Role + timestamp alone would name one message for two
   // rows, and a client merging a window would insert the same row again on
@@ -63,7 +64,7 @@ Deno.test("messageCursorOf: context snapshots of one millisecond are told apart"
   );
 });
 
-Deno.test("identityCursor: the fields are encoded as JSON, opaque to clients", () => {
+test("identityCursor: the fields are encoded as JSON, opaque to clients", () => {
   assertEquals(
     identityCursor({ role: "user", timestamp: 5 }),
     '["user",5,"",""]',
@@ -78,7 +79,7 @@ Deno.test("identityCursor: the fields are encoded as JSON, opaque to clients", (
   );
 });
 
-Deno.test("startsTranscriptTurn: a retry notification does not open a turn", () => {
+test("startsTranscriptTurn: a retry notification does not open a turn", () => {
   // The renderer drops a retry (the loop's own repair of an empty or cut-off
   // response) instead of drawing a row for it. A window that BEGAN on one
   // therefore began on a row the client never draws — and a window with no
@@ -93,7 +94,7 @@ Deno.test("startsTranscriptTurn: a retry notification does not open a turn", () 
   assertEquals(startsTranscriptTurn(message("notification", 2)), true);
 });
 
-Deno.test("startsTranscriptTurn: prompts, modes and checkpoints open a turn", () => {
+test("startsTranscriptTurn: prompts, modes and checkpoints open a turn", () => {
   assertEquals(startsTranscriptTurn(message("user", 1)), true);
   assertEquals(startsTranscriptTurn(message("mode", 2)), true);
   assertEquals(startsTranscriptTurn(message("checkpoint", 3)), true);

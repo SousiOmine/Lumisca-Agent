@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import {
   MAX_CONSOLE_ENTRIES,
@@ -64,7 +65,7 @@ function rustUsize(expr: string): number {
     .reduce((value, part) => value * Number(part.trim()), 1);
 }
 
-Deno.test("probe.js mirrors the snapshot limits in types.ts", () => {
+test("probe.js mirrors the snapshot limits in types.ts", () => {
   const probe = Deno.readTextFileSync(PROBE_URL);
   const declared = new Map<string, number>();
   for (const match of probe.matchAll(/^\s*var (\w+) = (\d+);/gm)) {
@@ -91,7 +92,7 @@ Deno.test("probe.js mirrors the snapshot limits in types.ts", () => {
   }
 });
 
-Deno.test("the Rust host mirrors the RPC size limits in types.ts", () => {
+test("the Rust host mirrors the RPC size limits in types.ts", () => {
   const limits = rustModule(Deno.readTextFileSync(RUST_LIB_URL), "limits");
   const declared = new Map<string, number>();
   for (const match of limits.matchAll(
@@ -115,7 +116,7 @@ Deno.test("the Rust host mirrors the RPC size limits in types.ts", () => {
   }
 });
 
-Deno.test("the Rust host mirrors the RPC methods and error codes", () => {
+test("the Rust host mirrors the RPC methods and error codes", () => {
   const source = Deno.readTextFileSync(RUST_LIB_URL);
 
   const methods = new Map<string, string>();

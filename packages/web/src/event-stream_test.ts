@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { WS_HEARTBEAT_TYPE } from "@lumisca/core/shared";
 import { assertEquals } from "@std/assert";
 import { openEventStream } from "./event-stream.ts";
@@ -50,7 +51,7 @@ function installFakeSocket(): () => void {
   };
 }
 
-Deno.test("openEventStream: heartbeats never reach the caller", () => {
+test("openEventStream: heartbeats never reach the caller", () => {
   const restore = installFakeSocket();
   try {
     const events: unknown[] = [];
@@ -72,7 +73,7 @@ Deno.test("openEventStream: heartbeats never reach the caller", () => {
   }
 });
 
-Deno.test("openEventStream: closing through the returned function is not an outage", () => {
+test("openEventStream: closing through the returned function is not an outage", () => {
   const restore = installFakeSocket();
   try {
     let closed = 0;
@@ -92,7 +93,7 @@ Deno.test("openEventStream: closing through the returned function is not an outa
   }
 });
 
-Deno.test("openEventStream: a dropped socket reports the close", () => {
+test("openEventStream: a dropped socket reports the close", () => {
   const restore = installFakeSocket();
   try {
     let closed = 0;

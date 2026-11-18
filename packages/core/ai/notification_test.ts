@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import type {
   AgentMessage,
   ImageContent,
@@ -22,7 +23,7 @@ function notification(
   };
 }
 
-Deno.test("notificationText joins title and body, omits empty bodies", () => {
+test("notificationText joins title and body, omits empty bodies", () => {
   assertEquals(
     notificationText(notification()),
     "[Background command #2 finished after 12s (exit code 0)]\nlistening on :3000",
@@ -33,7 +34,7 @@ Deno.test("notificationText joins title and body, omits empty bodies", () => {
   );
 });
 
-Deno.test("toLlmMessages converts notifications to user messages", () => {
+test("toLlmMessages converts notifications to user messages", () => {
   const messages: AgentMessage[] = [
     { role: "user", content: [{ type: "text", text: "start" }], timestamp: 1 },
     notification(),
@@ -73,7 +74,7 @@ Deno.test("toLlmMessages converts notifications to user messages", () => {
   assertEquals(converted[2], messages[2]);
 });
 
-Deno.test("toLlmMessages drops roles the provider cannot see", () => {
+test("toLlmMessages drops roles the provider cannot see", () => {
   const messages: AgentMessage[] = [
     notification(),
     { role: "somethingElse", timestamp: 9 } as unknown as AgentMessage,
@@ -83,7 +84,7 @@ Deno.test("toLlmMessages drops roles the provider cannot see", () => {
   assertEquals(converted[0]!.role, "user");
 });
 
-Deno.test("toLlmMessages converts mode messages to user messages with the full prompt", () => {
+test("toLlmMessages converts mode messages to user messages with the full prompt", () => {
   const modeMsg: ModeMessage = {
     role: "mode",
     modeId: "review",
@@ -103,7 +104,7 @@ Deno.test("toLlmMessages converts mode messages to user messages with the full p
   });
 });
 
-Deno.test("toLlmMessages passes the images attached to a mode message", () => {
+test("toLlmMessages passes the images attached to a mode message", () => {
   // A picture attached in the composer before the mode prompt was sent:
   // the model must receive the same content blocks a plain user message
   // with an image would carry.
@@ -131,7 +132,7 @@ Deno.test("toLlmMessages passes the images attached to a mode message", () => {
   });
 });
 
-Deno.test("notificationMessage stamps the payload", () => {
+test("notificationMessage stamps the payload", () => {
   const before = Date.now();
   const message = notificationMessage({
     kind: "task",
@@ -144,7 +145,7 @@ Deno.test("notificationMessage stamps the payload", () => {
   assertEquals(message.timestamp >= before, true);
 });
 
-Deno.test("toLlmMessages sends modelContent when the prompt has one", () => {
+test("toLlmMessages sends modelContent when the prompt has one", () => {
   // A prompt can carry text addressed to the model that the user never wrote
   // (the notice naming attached files). The request gets that text; the
   // conversation keeps drawing `content`, which stays the user's own words.
@@ -165,7 +166,7 @@ Deno.test("toLlmMessages sends modelContent when the prompt has one", () => {
   );
 });
 
-Deno.test("toLlmMessages sends a prompt whose visible text is empty", () => {
+test("toLlmMessages sends a prompt whose visible text is empty", () => {
   // A prompt that is only files shows nothing on screen but is a real turn:
   // its emptiness is a display fact, not a reason to drop the run.
   const messages: AgentMessage[] = [
@@ -181,7 +182,7 @@ Deno.test("toLlmMessages sends a prompt whose visible text is empty", () => {
   assertEquals(out[0]!.content, "[Attached files]\n- run.log: /vm/run.log");
 });
 
-Deno.test("toLlmMessages: a prompt without modelContent is sent unchanged", () => {
+test("toLlmMessages: a prompt without modelContent is sent unchanged", () => {
   const messages: AgentMessage[] = [
     { role: "user", content: [{ type: "text", text: "hi" }], timestamp: 1 },
   ];
@@ -189,7 +190,7 @@ Deno.test("toLlmMessages: a prompt without modelContent is sent unchanged", () =
   assertEquals(out[0], messages[0]);
 });
 
-Deno.test("toLlmMessages: modelContent replaces the text and keeps the pictures", () => {
+test("toLlmMessages: modelContent replaces the text and keeps the pictures", () => {
   const image = {
     type: "image" as const,
     data: "aGk=",

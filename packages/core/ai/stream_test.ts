@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { assertEquals } from "@std/assert";
@@ -125,7 +126,7 @@ function editTool(): AgentTool {
   };
 }
 
-Deno.test("an SDK-executed tool result keeps its details", async () => {
+test("an SDK-executed tool result keeps its details", async () => {
   const events = await runStream(
     toolCallParts("t1", "edit", { path: "a.ts" }),
     {
@@ -338,7 +339,7 @@ function v4AnswerParts(text: string): unknown[] {
   ];
 }
 
-Deno.test("an SDK-executed tool result keeps its image blocks", async () => {
+test("an SDK-executed tool result keeps its image blocks", async () => {
   const events = await runStream(toolCallParts("t1", "shot", {}), {
     messages: [{ role: "user", content: "screenshot" }],
     tools: [shotTool()],
@@ -355,7 +356,7 @@ Deno.test("an SDK-executed tool result keeps its image blocks", async () => {
   assertEquals(result?.details, { bytes: 67 });
 });
 
-Deno.test("a tool image rides inside the tool message of a compatible model", async () => {
+test("a tool image rides inside the tool message of a compatible model", async () => {
   const messages = await runToChatBody(
     // A gateway endpoint: what languageModelFor routes to the compatible
     // factory (the first-party OpenAI chat model is the test below).
@@ -375,7 +376,7 @@ Deno.test("a tool image rides inside the tool message of a compatible model", as
   assertEquals(messages.filter((m) => m.role === "user").length, 0);
 });
 
-Deno.test("a tool image on the OpenCode gateway follows in a user message", async () => {
+test("a tool image on the OpenCode gateway follows in a user message", async () => {
   // The gateway takes the compatible factory's request but forwards tool
   // messages to its upstream over gRPC, which carries text parts only: a
   // multi-part tool content is rejected with a 400 (see
@@ -404,7 +405,7 @@ Deno.test("a tool image on the OpenCode gateway follows in a user message", asyn
   ]);
 });
 
-Deno.test("a tool image of the OpenAI chat model follows in a user message", async () => {
+test("a tool image of the OpenAI chat model follows in a user message", async () => {
   // api.openai.com's tool messages are text-only (its SDK model has no
   // multi-part option), so the picture follows in the one role every
   // provider takes an image in — instead of being dropped.
@@ -428,7 +429,7 @@ Deno.test("a tool image of the OpenAI chat model follows in a user message", asy
   ]);
 });
 
-Deno.test("images of parallel tool results leave the tool messages contiguous", async () => {
+test("images of parallel tool results leave the tool messages contiguous", async () => {
   // Two tools answered the same assistant turn. A user message between
   // their results would split the run of tool messages a provider reads as
   // the direct answer to that turn, so both images follow the pair.
@@ -449,7 +450,7 @@ Deno.test("images of parallel tool results leave the tool messages contiguous", 
   ]);
 });
 
-Deno.test("an api that carries tool images gets them inside the tool result", async () => {
+test("an api that carries tool images gets them inside the tool result", async () => {
   // Anthropic / OpenAI Responses / Google / Bedrock tool results take image
   // blocks natively, so the image needs no message of its own there.
   const { model, prompts } = recordingV4LanguageModel();
@@ -486,7 +487,7 @@ Deno.test("an api that carries tool images gets them inside the tool result", as
   );
 });
 
-Deno.test("a text-only model is never handed a tool image", async () => {
+test("a text-only model is never handed a tool image", async () => {
   // The image analysis replaces the images before the transport sees them
   // (see agent/image-analysis.ts); an image that survived a failed analysis
   // must not reach a model that cannot take one — the provider would reject
@@ -536,7 +537,7 @@ function v2Parts(usage: {
 /** The transport's errors are delivered as stream events, so the tests
  * drive a fake v2 provider model whose parts are converted by the SDK.
  * The AI SDK warning on v2 compatibility is expected noise. */
-Deno.test("the transport carries the provider usage into the assistant message", async () => {
+test("the transport carries the provider usage into the assistant message", async () => {
   const events = await runStream(
     v2Parts({
       inputTokens: 301200,
@@ -563,7 +564,7 @@ Deno.test("the transport carries the provider usage into the assistant message",
   assertEquals(message.usage.output, 456);
 });
 
-Deno.test("the transport usage feeds the context meter without double counting", async () => {
+test("the transport usage feeds the context meter without double counting", async () => {
   const events = await runStream(
     v2Parts({
       inputTokens: 301200,
@@ -579,7 +580,7 @@ Deno.test("the transport usage feeds the context meter without double counting",
   assertEquals(summary.averageCacheHitRate, 300000 / 301200);
 });
 
-Deno.test("the transport falls back to the step usage when the stream carried none", async () => {
+test("the transport falls back to the step usage when the stream carried none", async () => {
   // A provider stream without a finish part: the SDK derives the step
   // from partial output and reports its own (null) usage. The transport
   // must still emit a valid assistant message with zero usage.
@@ -593,7 +594,7 @@ Deno.test("the transport falls back to the step usage when the stream carried no
   assertEquals(usage.input, 0);
 });
 
-Deno.test("a stream error still reports the usage the provider already consumed", async () => {
+test("a stream error still reports the usage the provider already consumed", async () => {
   // The provider reports deltas and a finish (with usage), then an error
   // part. The SDK records the step from the partial output, and the
   // transport's `finish`-part capture keeps the consumed usage for the
@@ -617,7 +618,7 @@ Deno.test("a stream error still reports the usage the provider already consumed"
   assertEquals(message.usage.cacheRead, 500);
 });
 
-Deno.test("missing usage stays zero (the app's placeholder shape)", async () => {
+test("missing usage stays zero (the app's placeholder shape)", async () => {
   const events = await runStream([
     { type: "text-start", id: "t1" },
     { type: "text-delta", id: "t1", delta: "hi" },
@@ -669,7 +670,7 @@ function fakeHeldLanguageModel() {
   };
 }
 
-Deno.test("an aborted stream ends the turn as an aborted assistant message (never throws)", async () => {
+test("an aborted stream ends the turn as an aborted assistant message (never throws)", async () => {
   const model: Model<Api> = { id: "m", name: "m" } as unknown as Model<Api>;
   const streamFn = createStreamFn(
     transportFor(fakeHeldLanguageModel()),
@@ -739,7 +740,7 @@ function fakeTimingOutLanguageModel() {
   };
 }
 
-Deno.test("a timeout that is not the caller's abort surfaces as an error turn", async () => {
+test("a timeout that is not the caller's abort surfaces as an error turn", async () => {
   // TimeoutError and AbortError look alike; only the caller's aborted signal
   // makes a failure a user stop. A timeout must stay visible (and retryable)
   // instead of ending the turn as if the user had pressed stop.
@@ -766,7 +767,7 @@ Deno.test("a timeout that is not the caller's abort surfaces as an error turn", 
   assertEquals(failure.errorRetryable, true);
 });
 
-Deno.test("interleaved reasoning is passed back as reasoning_content", async () => {
+test("interleaved reasoning is passed back as reasoning_content", async () => {
   let sentBody: Record<string, unknown> | undefined;
   const provider = createOpenAICompatible({
     name: "reasoning-replay-test",
@@ -914,7 +915,7 @@ function windowedModel(contextWindow: number, maxTokens: number): Model<Api> {
 
 const USAGE = { inputTokens: 10, outputTokens: 5, cachedInputTokens: 0 };
 
-Deno.test("the output cap clamp only shrinks, and never invents a cap", () => {
+test("the output cap clamp only shrinks, and never invents a cap", () => {
   // Plenty of room: the caller's cap stands.
   assertEquals(
     clampMaxTokensToContext(windowedModel(100_000, 8_000), 1_000, 8_000),
@@ -935,7 +936,7 @@ Deno.test("the output cap clamp only shrinks, and never invents a cap", () => {
   assertEquals(clampMaxTokensToContext(bare, 5_000, 8_000), 8_000);
 });
 
-Deno.test("the output cap clamp measures the room against the input cap", () => {
+test("the output cap clamp measures the room against the input cap", () => {
   // A model whose window counts the completion can document a smaller
   // input cap (models.dev `limit.input`); the room left for the output is
   // the cap's, because that is what providers validate the request against.
@@ -967,7 +968,7 @@ Deno.test("the output cap clamp measures the room against the input cap", () => 
   );
 });
 
-Deno.test("the clamp charges a share of a large prompt as margin", () => {
+test("the clamp charges a share of a large prompt as margin", () => {
   // The reported failure, priced the way the estimate priced it: a prompt
   // of roughly 570,000 tokens on a 1,000,000 window left the model's full
   // 384,000 cap "fitting" under the old fixed 4,096 margin, and the
@@ -987,7 +988,7 @@ Deno.test("the clamp charges a share of a large prompt as margin", () => {
   assertEquals((cap as number) + 666_931 <= 1_048_576, true);
 });
 
-Deno.test("the margin never takes more than half the room the prompt leaves", () => {
+test("the margin never takes more than half the room the prompt leaves", () => {
   // A prompt just under the window: the proportional margin would swallow
   // the remaining room entirely, leaving a cap no answer fits in. The room
   // is what must be spent, not the margin, so half of it remains.
@@ -1000,7 +1001,7 @@ Deno.test("the margin never takes more than half the room the prompt leaves", ()
   );
 });
 
-Deno.test("the transport clamps the output cap to the room the prompt leaves", async () => {
+test("the transport clamps the output cap to the room the prompt leaves", async () => {
   const { model, calls } = recordingLanguageModel(v2Parts(USAGE));
   const streamFn = createStreamFn(transportFor(model), NO_RESERVATION);
   const request: StreamRequest = {
@@ -1029,7 +1030,7 @@ Deno.test("the transport clamps the output cap to the room the prompt leaves", a
   assertEquals((calls[0]!.maxOutputTokens as number) < 8_000, true);
 });
 
-Deno.test("the transport clamps a caller's override the same way", async () => {
+test("the transport clamps a caller's override the same way", async () => {
   const { model, calls } = recordingLanguageModel(v2Parts(USAGE));
   const streamFn = createStreamFn(transportFor(model), NO_RESERVATION);
   const request: StreamRequest = {
@@ -1054,7 +1055,7 @@ Deno.test("the transport clamps a caller's override the same way", async () => {
   );
 });
 
-Deno.test("the completion cap stops at the room the compaction reserves", async () => {
+test("the completion cap stops at the room the compaction reserves", async () => {
   // A 1,000,000-token window with a documented 384,000-token completion:
   // asking for all of it lets any prompt past ~665,000 tokens overflow the
   // window, which is exactly the range the pressure check lets through (it
@@ -1075,7 +1076,7 @@ Deno.test("the completion cap stops at the room the compaction reserves", async 
   assertEquals(calls[0]!.maxOutputTokens, 80_000);
 });
 
-Deno.test("a policy that reserves nothing leaves the model's cap alone", async () => {
+test("a policy that reserves nothing leaves the model's cap alone", async () => {
   // Turning compaction off removes the threshold the cap was keeping room
   // for: the model's documented cap is then the only request-side bound.
   const { model, calls } = recordingLanguageModel(v2Parts(USAGE));
@@ -1094,7 +1095,7 @@ Deno.test("a policy that reserves nothing leaves the model's cap alone", async (
   assertEquals(calls[0]!.maxOutputTokens, 384_000);
 });
 
-Deno.test("a request the provider rejects as too large is re-sent with a smaller cap", async () => {
+test("a request the provider rejects as too large is re-sent with a smaller cap", async () => {
   // The reported failure, end to end: the transport asks for the model's
   // full 384,000 cap, the gateway rejects prompt + completion on its
   // 1,048,576-token window, and the transport re-sends the identical prompt
@@ -1195,7 +1196,7 @@ Deno.test("a request the provider rejects as too large is re-sent with a smaller
   assertEquals(done.message.content[0]?.text, "very well");
 });
 
-Deno.test("a response the provider cut at the output cap is stopReason length", async () => {
+test("a response the provider cut at the output cap is stopReason length", async () => {
   // The finish reason is the only signal that the model never finished: a
   // truncated answer used to be stored, shown and retried as a complete one.
   const events = await runStream([
@@ -1214,7 +1215,7 @@ Deno.test("a response the provider cut at the output cap is stopReason length", 
   assertEquals(done?.message.stopReason, "length");
 });
 
-Deno.test("an ordinary stop stays stopReason stop", async () => {
+test("an ordinary stop stays stopReason stop", async () => {
   const events = await runStream([
     { type: "text-start", id: "t" },
     { type: "text-delta", id: "t", delta: "done" },

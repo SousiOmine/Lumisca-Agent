@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { THEME_COLORS } from "@lumisca/core/shared";
 import { assert, assertEquals } from "@std/assert";
 
@@ -49,7 +50,7 @@ function referenced(css: string): string[] {
   );
 }
 
-Deno.test("both theme blocks declare the same tokens", async () => {
+test("both theme blocks declare the same tokens", async () => {
   const css = await Deno.readTextFile(
     new URL("./styles/tokens.css", import.meta.url),
   );
@@ -87,7 +88,7 @@ Deno.test("both theme blocks declare the same tokens", async () => {
   );
 });
 
-Deno.test("every token reference resolves", async () => {
+test("every token reference resolves", async () => {
   const tokensCss = await Deno.readTextFile(
     new URL("./styles/tokens.css", import.meta.url),
   );
@@ -176,7 +177,7 @@ async function* styleSheets(): AsyncGenerator<[string, string]> {
   }
 }
 
-Deno.test("width breakpoints are the documented two", async () => {
+test("width breakpoints are the documented two", async () => {
   // The narrow-viewport rules are split across the part sheets, so a fourth
   // value would silently fragment the layout. The documented list is in
   // styles/tokens.css (and styles/README.md).
@@ -206,7 +207,7 @@ function mediaOrder(css: string): string[] {
     .filter((media): media is string => media !== null);
 }
 
-Deno.test("a phone's rules win over a touch device's", async () => {
+test("a phone's rules win over a touch device's", async () => {
   // A phone is both narrow and a coarse pointer, so both blocks apply. The
   // cascade decides with equal specificity: the later rule wins. The phone
   // rules therefore have to be the LAST of the two in every sheet they share
@@ -242,7 +243,7 @@ Deno.test("a phone's rules win over a touch device's", async () => {
   );
 });
 
-Deno.test("hover-only affordances stay visible on touch", async () => {
+test("hover-only affordances stay visible on touch", async () => {
   // A touch screen never fires :hover, so anything a hover rule reveals
   // (opacity 0 / visibility hidden at rest) is unreachable there unless a
   // touch media query keeps it visible. The rewind buttons of a user message
@@ -287,7 +288,7 @@ Deno.test("hover-only affordances stay visible on touch", async () => {
   );
 });
 
-Deno.test("the app height follows the visual viewport", async () => {
+test("the app height follows the visual viewport", async () => {
   // The app is sized by the token (itself the dynamic viewport height) and
   // refined by useAppHeight; a hardcoded height here would put the composer
   // back behind the software keyboard.
@@ -309,7 +310,7 @@ Deno.test("the app height follows the visual viewport", async () => {
   );
 });
 
-Deno.test("the page itself never scrolls", async () => {
+test("the page itself never scrolls", async () => {
   // Regression: html/body had no overflow, so an app root a hair taller than
   // the window scrolled the WHOLE UI — the sidebar and title bar slid away
   // from a conversation pane that was already scrolling on its own. Every
@@ -327,7 +328,7 @@ Deno.test("the page itself never scrolls", async () => {
   );
 });
 
-Deno.test("corners come from the radius ramp", async () => {
+test("corners come from the radius ramp", async () => {
   // The shape of the UI is the radius steps, so a sheet that writes its own
   // pixel value quietly reintroduces the small, square-cornered look the
   // ramp replaced (58 rules once carried a literal 4px). Only the ramp, a
@@ -364,7 +365,7 @@ Deno.test("corners come from the radius ramp", async () => {
   );
 });
 
-Deno.test("the machine's screen canvas is left to noVNC to size", () => {
+test("the machine's screen canvas is left to noVNC to size", () => {
   // Regression: the pane stretched the canvas with `width/height: 100%
   // !important`. noVNC divides every pointer coordinate by the scale it
   // derived from its own `NNNpx` inline size, so the override made the
@@ -405,7 +406,7 @@ function animatedTargets(selector: string): string[] {
     .filter((target) => target !== "");
 }
 
-Deno.test("every animation has a reduced-motion override", () => {
+test("every animation has a reduced-motion override", () => {
   // Reduced motion is a promise about the whole app, and it was being kept
   // one sheet at a time: five selectors (the model popover, the settings
   // select, the connection picker, the server-down banner, the agent's
@@ -450,7 +451,7 @@ Deno.test("every animation has a reduced-motion override", () => {
   );
 });
 
-Deno.test("transitions name their properties and use the motion tokens", async () => {
+test("transitions name their properties and use the motion tokens", async () => {
   // Two rules of the motion contract (styles/README.md): `transition: all`
   // tracks properties nobody chose, and a literal duration or easing forks
   // the scale the tokens define — the app had 30 of them, all slightly
@@ -485,7 +486,7 @@ Deno.test("transitions name their properties and use the motion tokens", async (
 });
 
 /** The part sheets read synchronously (styles_test's helpers above are
- * async generators, and a Deno.test may not await inside a sync helper). */
+ * async generators, and a test may not await inside a sync helper). */
 function styleSheetsSync(): [string, string][] {
   const dir = new URL("./styles/", import.meta.url);
   const sheets: [string, string][] = [];
@@ -496,7 +497,7 @@ function styleSheetsSync(): [string, string][] {
   return sheets;
 }
 
-Deno.test("a card's action lines up with the plain cards around it", async () => {
+test("a card's action lines up with the plain cards around it", async () => {
   // Regression: a registry entry (settings → 接続先サーバー) drew its own
   // padded box instead of using the card's padding, so the 表示 buttons in
   // the column sat a few pixels apart from each other.
@@ -525,7 +526,7 @@ Deno.test("a card's action lines up with the plain cards around it", async () =>
   );
 });
 
-Deno.test("the progress rows stay in the composer's column", async () => {
+test("the progress rows stay in the composer's column", async () => {
   // Regression: the progress stack (todo, tasks, background) was a
   // fixed card stack in the window's top-right corner — the same corner the
   // desktop title bar opens the connection picker's menu in. The two drew
@@ -562,7 +563,7 @@ Deno.test("the progress rows stay in the composer's column", async () => {
   );
 });
 
-Deno.test("every class a stylesheet defines is referenced somewhere", async () => {
+test("every class a stylesheet defines is referenced somewhere", async () => {
   // The other direction of the token check: a rule nothing writes is dead
   // weight that reads as a live contract. `.input-hint` and
   // `.model-pref-panel` had accumulated exactly that way.
@@ -618,7 +619,7 @@ Deno.test("every class a stylesheet defines is referenced somewhere", async () =
   );
 });
 
-Deno.test("the composer draws one frame, and its buttons are one size", async () => {
+test("the composer draws one frame, and its buttons are one size", async () => {
   // Three rules a reader sees at once. Each was wrong in a way a screenshot
   // shows and a type check does not:
   //
@@ -714,7 +715,7 @@ Deno.test("the composer draws one frame, and its buttons are one size", async ()
   );
 });
 
-Deno.test("a lent folder's frame survives the field taking focus", async () => {
+test("a lent folder's frame survives the field taking focus", async () => {
   // While the user's own computer lends a folder, the capsule takes the
   // state colour and the line above it counts the folders (composer.css,
   // the lent folders block). Two things hold that together, and neither is
@@ -764,7 +765,7 @@ Deno.test("a lent folder's frame survives the field taking focus", async () => {
   );
 });
 
-Deno.test("the composer field grows to twelve lines and then scrolls", async () => {
+test("the composer field grows to twelve lines and then scrolls", async () => {
   // The field follows the message (hooks/useAutoGrow.ts writes its height
   // from `scrollHeight`) up to a ceiling the sheet owns. Two things break the
   // growth without breaking anything a type check sees: a fixed `height`
@@ -830,7 +831,7 @@ Deno.test("the composer field grows to twelve lines and then scrolls", async () 
   );
 });
 
-Deno.test("the machine's screen fills the window without reflowing it", async () => {
+test("the machine's screen fills the window without reflowing it", async () => {
   // The pane grows from its column to the whole viewport. `position: fixed`
   // is what makes that possible without re-parenting the element (a new
   // parent would mount a new noVNC client and drop the connection), and
@@ -860,7 +861,7 @@ Deno.test("the machine's screen fills the window without reflowing it", async ()
   );
 });
 
-Deno.test("the columns trade width in one movement", async () => {
+test("the columns trade width in one movement", async () => {
   // The pane widening and the conversation beside it narrowing are one
   // change; without the transition the transcript jumped a hundred pixels in
   // a single frame while the eye was on the pane.
@@ -888,7 +889,7 @@ Deno.test("the columns trade width in one movement", async () => {
   );
 });
 
-Deno.test("stella draws no conversation until an agent is picked", async () => {
+test("stella draws no conversation until an agent is picked", async () => {
   // With nobody picked the window holds one thing: the list. The sheet is not
   // drawn at all — an empty transcript, a placeholder above it and a disabled
   // send button all said "there is nothing here", three times, and the reader's
@@ -970,7 +971,7 @@ Deno.test("stella draws no conversation until an agent is picked", async () => {
   );
 });
 
-Deno.test("stella's list and conversation are two screens on a tablet", async () => {
+test("stella's list and conversation are two screens on a tablet", async () => {
   // A tablet held upright is 800-834px wide. Side by side, the 216px list
   // leaves the conversation a phone's width; above the conversation (what
   // this block used to do) the list was a band of wide, sparse rows over a
@@ -1033,7 +1034,7 @@ Deno.test("stella's list and conversation are two screens on a tablet", async ()
   assertEquals(/animation:\s*none/.test(arrival!.body), true);
 });
 
-Deno.test("a conversation arrives from the right beside the list", async () => {
+test("a conversation arrives from the right beside the list", async () => {
   // The list travels to the left margin and the sheet comes in from the right:
   // one movement, so the sheet is not also faded up from nothing — the travel
   // says which side it came from.
@@ -1080,7 +1081,7 @@ Deno.test("a conversation arrives from the right beside the list", async () => {
   );
 });
 
-Deno.test("the model picker's panel is capped by the room it measured", () => {
+test("the model picker's panel is capped by the room it measured", () => {
   // The height is a cap, not a size: the panel is one column whose list
   // scrolls (it used to be a fixed height, which left an empty box under a
   // two-model catalogue). A `height` here would bring that box back, and an
@@ -1115,7 +1116,7 @@ function canvasColor(css: string, theme: "dark" | "light"): string | undefined {
   return block?.match(/--bg:\s*([^;]+);/)?.[1]?.trim();
 }
 
-Deno.test("the manifest's theme colours are the themes' --bg", async () => {
+test("the manifest's theme colours are the themes' --bg", async () => {
   // The server answers the Web App Manifest's `theme_color` and the page's
   // `theme-color` from THEME_COLORS — it cannot read this stylesheet — so
   // the two have to name the same colours. A mismatch paints the splash
@@ -1142,7 +1143,7 @@ function declarations(rules: CssRule[], selector: string): Map<string, string> {
   return found;
 }
 
-Deno.test("the window controls keep the right edge of the title bar", async () => {
+test("the window controls keep the right edge of the title bar", async () => {
   // Regression: stella mode's strip inside the title bar claimed the whole
   // width (`width: 100%` + `flex: none`), so the controls beside it started
   // past the window's right edge. A remote window (`decorations: false`)
@@ -1188,7 +1189,7 @@ Deno.test("the window controls keep the right edge of the title bar", async () =
   assertEquals(tabbar.get("flex"), "1");
 });
 
-Deno.test("the code-mode sheet is the window's paper, with one edge of canvas", async () => {
+test("the code-mode sheet is the window's paper, with one edge of canvas", async () => {
   // The sheet used to float on the canvas on all four sides: a margin, a
   // border, the largest radius and a shadow. It runs to the window's left,
   // right and bottom edges now, so only the top edge has a shape to draw — a
@@ -1205,7 +1206,7 @@ Deno.test("the code-mode sheet is the window's paper, with one edge of canvas", 
   assertEquals(sheet.get("box-shadow"), "none");
 });
 
-Deno.test("the answer's copy control is drawn without a hover", async () => {
+test("the answer's copy control is drawn without a hover", async () => {
   // Regression: the control existed — stella's answer carries one under its
   // clock — but nothing drew it. `.msg-action-btn` is held at `opacity: 0`
   // and revealed by `.msg-user-wrap` (the reader's own message), and an
@@ -1230,7 +1231,7 @@ Deno.test("the answer's copy control is drawn without a hover", async () => {
   );
 });
 
-Deno.test("a pane behind another tab is not laid out", async () => {
+test("a pane behind another tab is not laid out", async () => {
   // Every open tab keeps its pane mounted so a switch does not rebuild its
   // transcript (components/SessionPane); what hides one is `hidden` on the
   // `.chat` root. This rule is what makes that work: `.chat`'s own
@@ -1246,7 +1247,7 @@ Deno.test("a pane behind another tab is not laid out", async () => {
   );
 });
 
-Deno.test("the tab bar keeps its cards off the window's edges", async () => {
+test("the tab bar keeps its cards off the window's edges", async () => {
   // The bar paints the canvas, so its cards keep the canvas margin even though
   // the sheet below is the window's edge and offers no line to line up with. A
   // card written to the edge would read as a tab strip cut in half.
@@ -1259,7 +1260,7 @@ Deno.test("the tab bar keeps its cards off the window's edges", async () => {
   );
 });
 
-Deno.test("stella's strip starts where the list's rows do", async () => {
+test("stella's strip starts where the list's rows do", async () => {
   // The strip carries the agent's face and name above the list that repeats
   // the same pair row by row. The row's box is one margin in from the pane,
   // and the row steps in by its own padding, so the strip's content has to
@@ -1289,7 +1290,7 @@ Deno.test("stella's strip starts where the list's rows do", async () => {
   );
 });
 
-Deno.test("a screen transition slides where one screen shows and fades elsewhere", async () => {
+test("a screen transition slides where one screen shows and fades elsewhere", async () => {
   // The two halves of the screen-transition contract (<htmldata-vt> is written
   // by screen-transition.ts). A direction that reached the wide layout would
   // slide a full-width column sideways, and a `view-transition-name` on an
@@ -1367,7 +1368,7 @@ Deno.test("a screen transition slides where one screen shows and fades elsewhere
   );
 });
 
-Deno.test("a disclosure animates its height, and only that", async () => {
+test("a disclosure animates its height, and only that", async () => {
   // The one place the app moves a size (styles/README.md rule 4): a body
   // that opens has no height to transform, so the row is animated as
   // `grid-template-rows: 0fr` ⇄ `1fr`. `height`/`width` stay forbidden — the
@@ -1436,7 +1437,7 @@ Deno.test("a disclosure animates its height, and only that", async () => {
   );
 });
 
-Deno.test("a disclosure's body is always mounted", async () => {
+test("a disclosure's body is always mounted", async () => {
   // A body that unmounts cannot animate closed, so `{open && <div>…}` is the
   // thing this rule forbids. The state travels as `data-open` instead.
   const sources = [
@@ -1460,7 +1461,7 @@ Deno.test("a disclosure's body is always mounted", async () => {
   assertEquals(missing, [], "disclosures that do not use the shared shape");
 });
 
-Deno.test("a section's action keeps the right edge, heading or not", async () => {
+test("a section's action keeps the right edge, heading or not", async () => {
   // 保存済みプロンプト and MCPサーバー have no section heading (the page title
   // names them), and their 追加 button then sat at the left edge, one line
   // under that title: read as another heading rather than as the action over
@@ -1476,7 +1477,7 @@ Deno.test("a section's action keeps the right edge, heading or not", async () =>
   assertEquals(heading.get("flex"), "1");
 });
 
-Deno.test("a routine's state stays on its name's line", async () => {
+test("a routine's state stays on its name's line", async () => {
   // A stopped routine's badge wrapped under a long name and was read as part
   // of the line below: the row looked like one that still runs. The title row
   // never wraps; the name gives way (measured per row, so a name that fits
@@ -1505,7 +1506,7 @@ Deno.test("a routine's state stays on its name's line", async () => {
   );
 });
 
-Deno.test("a routine's request folds to three lines", async () => {
+test("a routine's request folds to three lines", async () => {
   // Routines are written by the agent and can be pages long; shown whole, one
   // filled the panel and the next was below the fold. The fold lives in the
   // stylesheet, and the disclosure that opens it in the component

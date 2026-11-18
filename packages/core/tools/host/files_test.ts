@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { assert, assertEquals } from "@std/assert";
 import { Sandbox } from "../../workspace/sandbox.ts";
@@ -9,7 +10,7 @@ async function fixture(): Promise<{ root: string; files: HostFileBackend }> {
   return { root, files: new HostFileBackend(new Sandbox([root])) };
 }
 
-Deno.test("host files: readBytes returns one window, and less at the end", async () => {
+test("host files: readBytes returns one window, and less at the end", async () => {
   const { root, files } = await fixture();
   const path = join(root, "hello.txt");
   try {
@@ -29,7 +30,7 @@ Deno.test("host files: readBytes returns one window, and less at the end", async
   }
 });
 
-Deno.test("host files: writeBytes truncates first, then appends", async () => {
+test("host files: writeBytes truncates first, then appends", async () => {
   const { root, files } = await fixture();
   const path = join(root, "nested", "a.bin");
   try {
@@ -45,7 +46,7 @@ Deno.test("host files: writeBytes truncates first, then appends", async () => {
   }
 });
 
-Deno.test("host files: a private write is owner-only", async () => {
+test("host files: a private write is owner-only", async () => {
   if (Deno.build.os === "windows") return;
   const { root, files } = await fixture();
   const path = join(root, "secret.bin");

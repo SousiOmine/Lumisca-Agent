@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import {
   type CloseOperation,
@@ -7,7 +8,7 @@ import {
   tabKey,
 } from "./tabs.ts";
 
-Deno.test("keysForPeer picks exactly one peer's tabs", () => {
+test("keysForPeer picks exactly one peer's tabs", () => {
   const keys = [
     "sess-1", // this server
     tabKey("peer-1", "sess-2"),
@@ -23,7 +24,7 @@ Deno.test("keysForPeer picks exactly one peer's tabs", () => {
   assertEquals(keysForPeer(keys, "missing"), []);
 });
 
-Deno.test("closeTargets names each operation's tabs in tab order", () => {
+test("closeTargets names each operation's tabs in tab order", () => {
   const tabs = ["a", "b", "c", "d"];
   assertEquals(closeTargets("tab", tabs, "c"), ["c"]);
   assertEquals(closeTargets("toRight", tabs, "b"), ["c", "d"]);
@@ -36,7 +37,7 @@ Deno.test("closeTargets names each operation's tabs in tab order", () => {
   assertEquals(closeTargets("others", ["a"], "a"), []);
 });
 
-Deno.test("closeTargets: a stale anchor targets nothing to the sides", () => {
+test("closeTargets: a stale anchor targets nothing to the sides", () => {
   const tabs = ["a", "b"];
   for (const op of ["toRight", "toLeft"] as CloseOperation[]) {
     assertEquals(closeTargets(op, tabs, "gone"), [], op);
@@ -47,7 +48,7 @@ Deno.test("closeTargets: a stale anchor targets nothing to the sides", () => {
   assertEquals(closeTargets("others", tabs, "gone"), ["a", "b"]);
 });
 
-Deno.test("tabKey/splitTabKey round-trip every id shape", () => {
+test("tabKey/splitTabKey round-trip every id shape", () => {
   // The peer id comes from the connection registry (the user writes it), so
   // it may carry the separator or the escape character; the session half is
   // a server-generated UUID and is taken verbatim.
@@ -70,7 +71,7 @@ Deno.test("tabKey/splitTabKey round-trip every id shape", () => {
   }
 });
 
-Deno.test("a key without a separator belongs to this server", () => {
+test("a key without a separator belongs to this server", () => {
   assertEquals(splitTabKey("sess-1"), { peerId: "", sessionId: "sess-1" });
   assertEquals(tabKey("", "sess-1"), "sess-1");
 });

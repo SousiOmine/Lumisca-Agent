@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { CoreError } from "../errors.ts";
 import type { Tool } from "../tools/schema.ts";
@@ -63,7 +64,7 @@ async function refusal(tool: Tool, args: unknown): Promise<CoreError> {
 
 // --- the three tools exist --------------------------------------------------
 
-Deno.test("vm semantic: the three tools carry the names the prompt keys on", () => {
+test("vm semantic: the three tools carry the names the prompt keys on", () => {
   const { tools } = toolsFor({});
   assertEquals(
     tools.map((tool) => tool.name),
@@ -73,7 +74,7 @@ Deno.test("vm semantic: the three tools carry the names the prompt keys on", () 
 
 // --- vm_find ----------------------------------------------------------------
 
-Deno.test("vm_find asks the helper for the filters it was given", async () => {
+test("vm_find asks the helper for the filters it was given", async () => {
   const { tools, calls } = toolsFor({
     snapshot: "s12345",
     complete: true,
@@ -114,7 +115,7 @@ Deno.test("vm_find asks the helper for the filters it was given", async () => {
   assert(!text.text.includes("showContextMenu"), text.text);
 });
 
-Deno.test("vm_find reads a window without filters when asked to", async () => {
+test("vm_find reads a window without filters when asked to", async () => {
   const { tools, calls } = toolsFor({ snapshot: "s1", matches: [] });
   const find = tools[0]!;
   // `actionable: "no"` is how a caller asks for static text as well.
@@ -123,7 +124,7 @@ Deno.test("vm_find reads a window without filters when asked to", async () => {
   assertEquals(request.actionable, false);
 });
 
-Deno.test("vm_find reports the roles a window does have when nothing matches", async () => {
+test("vm_find reports the roles a window does have when nothing matches", async () => {
   // A mistyped role and an empty window read the same unless the miss says
   // what IS there.
   const { tools } = toolsFor({
@@ -143,7 +144,7 @@ Deno.test("vm_find reports the roles a window does have when nothing matches", a
   assert(error.message.includes("entry"), error.message);
 });
 
-Deno.test("vm_find marks a truncated walk instead of implying it saw everything", async () => {
+test("vm_find marks a truncated walk instead of implying it saw everything", async () => {
   const { tools } = toolsFor({
     snapshot: "s1",
     complete: false,
@@ -166,7 +167,7 @@ Deno.test("vm_find marks a truncated walk instead of implying it saw everything"
   assert(text.text.includes("larger than the walk budget"), text.text);
 });
 
-Deno.test("vm_find spells out a disabled control", async () => {
+test("vm_find spells out a disabled control", async () => {
   const { tools } = toolsFor({
     snapshot: "s1",
     matches: [
@@ -192,7 +193,7 @@ Deno.test("vm_find spells out a disabled control", async () => {
 
 // --- vm_do ------------------------------------------------------------------
 
-Deno.test("vm_do sends the action and reports what was read back", async () => {
+test("vm_do sends the action and reports what was read back", async () => {
   const { tools, calls } = toolsFor({
     ok: true,
     delivery: "delivered_verified",
@@ -215,7 +216,7 @@ Deno.test("vm_do sends the action and reports what was read back", async () => {
   assert(!text.text.includes("may act twice"), text.text);
 });
 
-Deno.test("vm_do warns before an unverified action is repeated", async () => {
+test("vm_do warns before an unverified action is repeated", async () => {
   // `delivered_unverified` means the app accepted the action but nothing
   // readable changed. Repeating a click is how a form submits twice.
   const { tools } = toolsFor({
@@ -235,7 +236,7 @@ Deno.test("vm_do warns before an unverified action is repeated", async () => {
   assert(text.text.includes("may act twice"), text.text);
 });
 
-Deno.test("vm_do passes set_value, select and key through", async () => {
+test("vm_do passes set_value, select and key through", async () => {
   const { tools, calls } = toolsFor({
     ok: true,
     delivery: "delivered_verified",
@@ -262,7 +263,7 @@ Deno.test("vm_do passes set_value, select and key through", async () => {
   assertEquals(requests[2]!.key, "ctrl+a");
 });
 
-Deno.test("vm_do refuses a missing argument before calling the machine", async () => {
+test("vm_do refuses a missing argument before calling the machine", async () => {
   const { tools, calls } = toolsFor({ ok: true });
   const action = tools[1]!;
   const value = await refusal(action, { ref: "@s1:e1", action: "set_value" });
@@ -279,7 +280,7 @@ Deno.test("vm_do refuses a missing argument before calling the machine", async (
   assertEquals(calls.length, 0);
 });
 
-Deno.test("vm_do says when a check found the box already set", async () => {
+test("vm_do says when a check found the box already set", async () => {
   const { tools } = toolsFor({
     ok: true,
     unchanged: true,
@@ -298,7 +299,7 @@ Deno.test("vm_do says when a check found the box already set", async () => {
 
 // --- vm_wait ----------------------------------------------------------------
 
-Deno.test("vm_wait passes a plain delay through", async () => {
+test("vm_wait passes a plain delay through", async () => {
   const { tools, calls } = toolsFor({ ok: true, waited_ms: 500 });
   const wait = tools[2]!;
   const result = await wait.execute("1", { ms: 500 }, undefined);
@@ -309,7 +310,7 @@ Deno.test("vm_wait passes a plain delay through", async () => {
   assert(text.text.includes("500"), text.text);
 });
 
-Deno.test("vm_wait turns the filters into a condition", async () => {
+test("vm_wait turns the filters into a condition", async () => {
   const { tools, calls } = toolsFor({
     ok: true,
     present: true,
@@ -332,7 +333,7 @@ Deno.test("vm_wait turns the filters into a condition", async () => {
   assert(text.text.includes("present"), text.text);
 });
 
-Deno.test("vm_wait supports waiting for something to disappear", async () => {
+test("vm_wait supports waiting for something to disappear", async () => {
   const { tools, calls } = toolsFor({
     ok: true,
     present: false,
@@ -347,7 +348,7 @@ Deno.test("vm_wait supports waiting for something to disappear", async () => {
   assertEquals(requestOf(calls[0]!).gone, true);
 });
 
-Deno.test("vm_wait refuses an app with no condition and a condition with no app", async () => {
+test("vm_wait refuses an app with no condition and a condition with no app", async () => {
   const { tools, calls } = toolsFor({ ok: true });
   const wait = tools[2]!;
   const noCondition = await refusal(wait, { app: "chromium" });
@@ -362,7 +363,7 @@ Deno.test("vm_wait refuses an app with no condition and a condition with no app"
 
 // --- the helper's own failures ----------------------------------------------
 
-Deno.test("a helper error reaches the agent as the sentence it wrote", async () => {
+test("a helper error reaches the agent as the sentence it wrote", async () => {
   // The helper's messages name what happened inside the machine ("the element
   // is gone"), which is what the agent bases its next move on.
   const { tools } = toolsFor({
@@ -374,7 +375,7 @@ Deno.test("a helper error reaches the agent as the sentence it wrote", async () 
   assert(error.message.includes("the element @s1:e4 is gone"), error.message);
 });
 
-Deno.test("a helper that never ran is reported as the machine's problem", async () => {
+test("a helper that never ran is reported as the machine's problem", async () => {
   // Empty stdout means the helper did not get as far as writing its own
   // answer: a missing interpreter or package, not a missing element.
   const { tools } = toolsFor("", {
@@ -388,7 +389,7 @@ Deno.test("a helper that never ran is reported as the machine's problem", async 
   assert(error.message.includes("a11y.py"), error.message);
 });
 
-Deno.test("a helper that answers non-JSON is reported, not parsed loosely", async () => {
+test("a helper that answers non-JSON is reported, not parsed loosely", async () => {
   const { tools } = toolsFor("Traceback (most recent call last): ...");
   const find = tools[0]!;
   const error = await refusal(find, { app: "chromium" });

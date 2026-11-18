@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertRejects } from "@std/assert";
 import { base64ToBytes, bytesToBase64 } from "../base64.ts";
 import { MountedFiles } from "../share/mounted-files.ts";
@@ -165,7 +166,7 @@ function fixture() {
   return { primary, host, files };
 }
 
-Deno.test("share_upload moves a file into the lent folder, chunk by chunk", async () => {
+test("share_upload moves a file into the lent folder, chunk by chunk", async () => {
   const { primary, host, files } = fixture();
   const bytes = new Uint8Array(TRANSFER_CHUNK_BYTES + 5);
   for (let i = 0; i < bytes.length; i++) bytes[i] = i % 251;
@@ -195,7 +196,7 @@ function assertWrites(writes: readonly ShareCall[]): void {
   assertEquals(flags, [false, true]);
 }
 
-Deno.test("share_download moves a file out of the lent folder", async () => {
+test("share_download moves a file out of the lent folder", async () => {
   const { primary, host, files } = fixture();
   const bytes = new TextEncoder().encode("a zip's bytes\n");
   host.files.set("bundle.zip", bytes);
@@ -214,7 +215,7 @@ Deno.test("share_download moves a file out of the lent folder", async () => {
   );
 });
 
-Deno.test("share_upload creates an empty file as an empty file", async () => {
+test("share_upload creates an empty file as an empty file", async () => {
   const { primary, host, files } = fixture();
   primary.files.set("/home/agent/empty.txt", new Uint8Array(0));
 
@@ -227,7 +228,7 @@ Deno.test("share_upload creates an empty file as an empty file", async () => {
   assertEquals(host.calls.filter((call) => call.op === "readBytes").length, 0);
 });
 
-Deno.test("the tools refuse a copy that would not cross the loan", async () => {
+test("the tools refuse a copy that would not cross the loan", async () => {
   const { primary, files } = fixture();
   primary.files.set("/home/agent/a.txt", new TextEncoder().encode("a"));
   const upload = createShareUploadTool(files);
@@ -263,7 +264,7 @@ Deno.test("the tools refuse a copy that would not cross the loan", async () => {
   );
 });
 
-Deno.test("a file over the transfer limit is refused before any byte moves", async () => {
+test("a file over the transfer limit is refused before any byte moves", async () => {
   const { primary, host, files } = fixture();
   primary.sizes.set("/home/agent/huge.bin", MAX_TRANSFER_BYTES + 1);
 
@@ -279,7 +280,7 @@ Deno.test("a file over the transfer limit is refused before any byte moves", asy
   assertEquals(host.calls.length, 0);
 });
 
-Deno.test("a missing source is reported as missing, not as a failed write", async () => {
+test("a missing source is reported as missing, not as a failed write", async () => {
   const { host, files } = fixture();
   await assertRejects(
     () =>

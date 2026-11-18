@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { assert, assertEquals } from "@std/assert";
 import type { CommandSafety } from "../safety/command-safety.ts";
@@ -8,13 +9,13 @@ function makeEval() {
   return createEvalTool();
 }
 
-Deno.test("eval returns the completion value of an expression", async () => {
+test("eval returns the completion value of an expression", async () => {
   const tool = makeEval();
   const result = await tool.execute("1", { code: "1 + 2" }, undefined);
   assertEquals(toolText(result), "[result]\n3");
 });
 
-Deno.test("eval captures console output and inspects values", async () => {
+test("eval captures console output and inspects values", async () => {
   const tool = makeEval();
   const result = await tool.execute(
     "1",
@@ -25,7 +26,7 @@ Deno.test("eval captures console output and inspects values", async () => {
   assertEquals(text, "[output]\nhello 2\n\n[result]\n{ items: [ 1, 2, 3 ] }");
 });
 
-Deno.test("eval keeps var, function and globalThis state between calls", async () => {
+test("eval keeps var, function and globalThis state between calls", async () => {
   const tool = makeEval();
   await tool.execute(
     "1",
@@ -48,7 +49,7 @@ Deno.test("eval keeps var, function and globalThis state between calls", async (
   assertEquals(toolText(viaGlobalThis), "[result]\n100");
 });
 
-Deno.test("eval reset clears the state", async () => {
+test("eval reset clears the state", async () => {
   const tool = makeEval();
   await tool.execute("1", { code: "var n = 41" }, undefined);
   const result = await tool.execute(
@@ -62,14 +63,14 @@ Deno.test("eval reset clears the state", async () => {
   );
 });
 
-Deno.test("eval keeps const and let state between calls", async () => {
+test("eval keeps const and let state between calls", async () => {
   const tool = makeEval();
   await tool.execute("1", { code: "const x = 1; let y = 2" }, undefined);
   const result = await tool.execute("1", { code: "x + y" }, undefined);
   assertEquals(toolText(result), "[result]\n3");
 });
 
-Deno.test("eval rejects re-declaring a const or let name", async () => {
+test("eval rejects re-declaring a const or let name", async () => {
   const tool = makeEval();
   await tool.execute("1", { code: "const x = 1" }, undefined);
   const result = await tool.execute("1", { code: "const x = 5" }, undefined);
@@ -82,7 +83,7 @@ Deno.test("eval rejects re-declaring a const or let name", async () => {
   );
 });
 
-Deno.test("eval keeps the state after a runtime error", async () => {
+test("eval keeps the state after a runtime error", async () => {
   const tool = makeEval();
   await tool.execute("1", { code: "var y = 5" }, undefined);
   const error = await tool.execute("1", { code: "y.unknown.deep" }, undefined);
@@ -91,7 +92,7 @@ Deno.test("eval keeps the state after a runtime error", async () => {
   assertEquals(toolText(after), "[result]\n5");
 });
 
-Deno.test("eval enforces the timeout", async () => {
+test("eval enforces the timeout", async () => {
   const tool = makeEval();
   const result = await tool.execute(
     "1",
@@ -101,7 +102,7 @@ Deno.test("eval enforces the timeout", async () => {
   assert(toolText(result).includes("timed out"), `result: ${toolText(result)}`);
 });
 
-Deno.test("eval strips TypeScript types", async () => {
+test("eval strips TypeScript types", async () => {
   const tool = makeEval();
   const result = await tool.execute(
     "1",
@@ -111,7 +112,7 @@ Deno.test("eval strips TypeScript types", async () => {
   assertEquals(toolText(result), "[result]\n42");
 });
 
-Deno.test("eval exposes Deno and fetch deliberately, but not node globals", async () => {
+test("eval exposes Deno and fetch deliberately, but not node globals", async () => {
   const tool = makeEval();
   const result = await tool.execute(
     "1",
@@ -126,7 +127,7 @@ Deno.test("eval exposes Deno and fetch deliberately, but not node globals", asyn
   );
 });
 
-Deno.test("eval provides the web globals real snippets need", async () => {
+test("eval provides the web globals real snippets need", async () => {
   const tool = makeEval();
   // The snippet runs in a vm context: only what the sandbox lists exists.
   // Missing TextEncoder/AbortController/setInterval used to fail ordinary
@@ -168,7 +169,7 @@ Deno.test("eval provides the web globals real snippets need", async () => {
   );
 });
 
-Deno.test("eval can decode, hash and abort with the web globals", async () => {
+test("eval can decode, hash and abort with the web globals", async () => {
   const tool = makeEval();
   const decoded = await tool.execute(
     "1",
@@ -195,7 +196,7 @@ Deno.test("eval can decode, hash and abort with the web globals", async () => {
   assertEquals(toolText(aborted), "[output]\nrejected:true");
 });
 
-Deno.test("eval state is isolated per tool instance", async () => {
+test("eval state is isolated per tool instance", async () => {
   const a = makeEval();
   const b = makeEval();
   await a.execute("1", { code: "var shared = 1" }, undefined);
@@ -203,13 +204,13 @@ Deno.test("eval state is isolated per tool instance", async () => {
   assertEquals(toolText(result), "[result]\n'undefined'");
 });
 
-Deno.test("eval reports no output for statements without a value", async () => {
+test("eval reports no output for statements without a value", async () => {
   const tool = makeEval();
   const result = await tool.execute("1", { code: "const z = 1" }, undefined);
   assertEquals(toolText(result), "(no output)");
 });
 
-Deno.test("eval can read files via the exposed Deno namespace", async () => {
+test("eval can read files via the exposed Deno namespace", async () => {
   const root = await Deno.makeTempDir({ prefix: "lumisca-eval-" });
   try {
     const file = join(root, "data.json");
@@ -226,7 +227,7 @@ Deno.test("eval can read files via the exposed Deno namespace", async () => {
   }
 });
 
-Deno.test("eval supports top-level await and awaits promise completions", async () => {
+test("eval supports top-level await and awaits promise completions", async () => {
   const root = await Deno.makeTempDir({ prefix: "lumisca-eval-" });
   try {
     const file = join(root, "data.txt");
@@ -252,7 +253,7 @@ Deno.test("eval supports top-level await and awaits promise completions", async 
   }
 });
 
-Deno.test("eval persists globalThis state across async calls", async () => {
+test("eval persists globalThis state across async calls", async () => {
   const tool = makeEval();
   await tool.execute("1", { code: "globalThis.g = 41" }, undefined);
   const result = await tool.execute(
@@ -263,7 +264,7 @@ Deno.test("eval persists globalThis state across async calls", async () => {
   assertEquals(toolText(result), "[output]\n42");
 });
 
-Deno.test("eval times out a promise that never resolves", async () => {
+test("eval times out a promise that never resolves", async () => {
   const tool = makeEval();
   const result = await tool.execute(
     "1",
@@ -273,7 +274,7 @@ Deno.test("eval times out a promise that never resolves", async () => {
   assert(toolText(result).includes("timed out"), `result: ${toolText(result)}`);
 });
 
-Deno.test("eval times out top-level await that never settles", async () => {
+test("eval times out top-level await that never settles", async () => {
   // The async wrapper's promise is the snippet's completion: `runInContext`
   // only bounds the synchronous part, so an unawaited wrapper used to hold
   // the tool call — and the whole run — for good. Both an explicit await
@@ -296,7 +297,7 @@ Deno.test("eval times out top-level await that never settles", async () => {
   }
 });
 
-Deno.test("eval returns the safety reason when the check blocks", async () => {
+test("eval returns the safety reason when the check blocks", async () => {
   const safety = {
     check: () => ({
       ok: false,
@@ -316,7 +317,7 @@ Deno.test("eval returns the safety reason when the check blocks", async () => {
   assert(text.includes("exfiltrates credentials"), `text: ${text}`);
 });
 
-Deno.test("eval runs normally when the check approves", async () => {
+test("eval runs normally when the check approves", async () => {
   const safety = {
     check: () => ({ ok: true }),
   } as unknown as CommandSafety;
@@ -325,7 +326,7 @@ Deno.test("eval runs normally when the check approves", async () => {
   assertEquals(toolText(result), "[result]\n3");
 });
 
-Deno.test("eval: reset stops the timers its snippets scheduled", async () => {
+test("eval: reset stops the timers its snippets scheduled", async () => {
   const tool = makeEval();
   const dir = Deno.makeTempDirSync({ prefix: "lumisca-eval-" });
   const marker = join(dir, "ticks.txt");

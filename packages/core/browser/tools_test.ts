@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertMatch } from "@std/assert";
 import { base64ToBytes, bytesToBase64 } from "../base64.ts";
 import type { Workspace } from "../domain/workspace.ts";
@@ -132,13 +133,13 @@ function snapshot(): PageSnapshot {
   };
 }
 
-Deno.test("createBrowserTools provides exactly the six required tools", () => {
+test("createBrowserTools provides exactly the six required tools", () => {
   const { byName } = toolMap();
   assertEquals(byName.size, 6);
   assertEquals(new Set(byName.keys()), new Set(BROWSER_TOOL_NAMES));
 });
 
-Deno.test("browser tools resolve the backend at execute time", async () => {
+test("browser tools resolve the backend at execute time", async () => {
   // A backend swapped through setBrowserBackend after the tools were
   // built must be the one the next call reaches — the tools never hold a
   // stale reference.
@@ -169,7 +170,7 @@ Deno.test("browser tools resolve the backend at execute time", async () => {
   assertMatch(error.message, /browser backend is not available/);
 });
 
-Deno.test("browser_open validates the URL against the policy and calls the backend", async () => {
+test("browser_open validates the URL against the policy and calls the backend", async () => {
   const { backend, byName } = toolMap();
   const backend2 = new FakeBackend({
     open: { url: "http://127.0.0.1:5173/", title: "T" },
@@ -251,7 +252,7 @@ Deno.test("browser_open validates the URL against the policy and calls the backe
   assert(schema.includes("url"));
 });
 
-Deno.test("browser_observe formats the snapshot for the LLM", async () => {
+test("browser_observe formats the snapshot for the LLM", async () => {
   const backend = new FakeBackend({ observe: snapshot() });
   const tools = createBrowserTools(backend);
   const observe = tools.find((t) => t.name === TOOL_BROWSER_OBSERVE)!;
@@ -274,7 +275,7 @@ Deno.test("browser_observe formats the snapshot for the LLM", async () => {
   assertEquals(result.details?.elementCount, 3);
 });
 
-Deno.test("browser_observe says so when the page has no actionable elements", async () => {
+test("browser_observe says so when the page has no actionable elements", async () => {
   const empty = { ...snapshot(), elements: [], pageText: "" };
   const backend = new FakeBackend({ observe: empty });
   const observe = createBrowserTools(backend).find(
@@ -286,7 +287,7 @@ Deno.test("browser_observe says so when the page has no actionable elements", as
   assertMatch(text, /\(no actionable elements\)/);
 });
 
-Deno.test("browser_observe announces a snapshot cut at the cap", () => {
+test("browser_observe announces a snapshot cut at the cap", () => {
   // A snapshot over the 48 KiB cap keeps its head and carries the note: the
   // model must never receive a silently shortened result.
   const text = formatSnapshot({
@@ -300,7 +301,7 @@ Deno.test("browser_observe announces a snapshot cut at the cap", () => {
   );
 });
 
-Deno.test("browser_observe include_text=false skips the digest", async () => {
+test("browser_observe include_text=false skips the digest", async () => {
   const backend = new FakeBackend({ observe: snapshot() });
   const tools = createBrowserTools(backend);
   await tools
@@ -310,7 +311,7 @@ Deno.test("browser_observe include_text=false skips the digest", async () => {
   assertEquals(callArgs.includeText, false);
 });
 
-Deno.test("browser_act builds every action kind and throws on page failures", async () => {
+test("browser_act builds every action kind and throws on page failures", async () => {
   const okBackend = new FakeBackend({
     act: { ok: true, element: snapshot().elements[0] },
   });
@@ -365,7 +366,7 @@ Deno.test("browser_act builds every action kind and throws on page failures", as
   assertMatch(error.message, /ref not found: e99/);
 });
 
-Deno.test("browser_act validates its arguments", async () => {
+test("browser_act validates its arguments", async () => {
   const { byName } = toolMap();
   const act = byName.get(TOOL_BROWSER_ACT)!;
   const cases: Array<[Record<string, unknown>, RegExp]> = [
@@ -383,7 +384,7 @@ Deno.test("browser_act validates its arguments", async () => {
   }
 });
 
-Deno.test("browser_wait passes options through and reports the result", async () => {
+test("browser_wait passes options through and reports the result", async () => {
   const backend = new FakeBackend({
     wait: { ok: true, reason: "idle", durationMs: 320 },
   });
@@ -415,7 +416,7 @@ Deno.test("browser_wait passes options through and reports the result", async ()
   }
 });
 
-Deno.test("browser_screenshot returns the image as ToolResult content", async () => {
+test("browser_screenshot returns the image as ToolResult content", async () => {
   const backend = new FakeBackend({
     screenshot: {
       mimeType: "image/png",
@@ -440,7 +441,7 @@ Deno.test("browser_screenshot returns the image as ToolResult content", async ()
   assertMatch(bad.message, /format must be one of png, jpeg/);
 });
 
-Deno.test("browser_screenshot keeps a bounded copy of a large capture", async () => {
+test("browser_screenshot keeps a bounded copy of a large capture", async () => {
   const png = await noisyPng(2000, 1500);
   const backend = new FakeBackend({
     screenshot: {
@@ -467,7 +468,7 @@ Deno.test("browser_screenshot keeps a bounded copy of a large capture", async ()
   assert(text.includes("downscaled from 2000×1500"), `line: ${text}`);
 });
 
-Deno.test("browser_close is forwarded and backend.close is called", async () => {
+test("browser_close is forwarded and backend.close is called", async () => {
   const { backend, byName } = toolMap();
   const close = byName.get(TOOL_BROWSER_CLOSE)!;
   await close.execute("1", {}, undefined);
@@ -475,7 +476,7 @@ Deno.test("browser_close is forwarded and backend.close is called", async () => 
   assertEquals(backend.closeCount, 2);
 });
 
-Deno.test("browser tools are never preloaded — they live in the registry", async () => {
+test("browser tools are never preloaded — they live in the registry", async () => {
   const root = await Deno.makeTempDir({ prefix: "lumisca-browser-tools-" });
   try {
     const workspace: Workspace = {

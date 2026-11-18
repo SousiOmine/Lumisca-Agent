@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertRejects } from "@std/assert";
 import type { ClientEvent } from "../domain/event.ts";
 import { HandoverHub } from "./handover.ts";
@@ -20,7 +21,7 @@ function hub(timeoutMs?: number): {
   };
 }
 
-Deno.test("handover: waiting announces the request and resolves on finish", async () => {
+test("handover: waiting announces the request and resolves on finish", async () => {
   const { hub: h, events } = hub();
   const before = Date.now();
   const waited = h.wait(
@@ -49,7 +50,7 @@ Deno.test("handover: waiting announces the request and resolves on finish", asyn
   assertEquals(h.pendingHandover(), null);
 });
 
-Deno.test("handover: the deadline hands the run back without an answer", async () => {
+test("handover: the deadline hands the run back without an answer", async () => {
   // The user never comes. The wait must end on its own and say so — the
   // run continues, it is not stopped (#36).
   const { hub: h, events } = hub(20);
@@ -76,7 +77,7 @@ Deno.test("handover: the deadline hands the run back without an answer", async (
   assertEquals(message.includes("No handover"), true);
 });
 
-Deno.test("handover: a settled wait leaves no timer behind", async () => {
+test("handover: a settled wait leaves no timer behind", async () => {
   // The deadline timer keeps running in the background; a leaked one would
   // fire later and emit a second `handover_end`, closing a pane the user is
   // no longer handing over.
@@ -89,7 +90,7 @@ Deno.test("handover: a settled wait leaves no timer behind", async () => {
   assertEquals(h.pendingHandover(), null);
 });
 
-Deno.test("handover: only one at a time", async () => {
+test("handover: only one at a time", async () => {
   const { hub: h } = hub();
   const first = h.wait("call-1", "one", null);
   await assertRejects(
@@ -101,7 +102,7 @@ Deno.test("handover: only one at a time", async () => {
   await first;
 });
 
-Deno.test("handover: finishing when nothing waits is refused", () => {
+test("handover: finishing when nothing waits is refused", () => {
   const { hub: h } = hub();
   let message = "";
   try {
@@ -112,7 +113,7 @@ Deno.test("handover: finishing when nothing waits is refused", () => {
   assertEquals(message.includes("No handover"), true);
 });
 
-Deno.test("handover: a mismatched tool call does not resolve the wait", async () => {
+test("handover: a mismatched tool call does not resolve the wait", async () => {
   const { hub: h } = hub();
   const waited = h.wait("call-1", "one", null);
   let message = "";
@@ -127,7 +128,7 @@ Deno.test("handover: a mismatched tool call does not resolve the wait", async ()
   await waited;
 });
 
-Deno.test("handover: cancelling rejects the wait and clears the pane", async () => {
+test("handover: cancelling rejects the wait and clears the pane", async () => {
   const { hub: h, events } = hub();
   const waited = h.wait("call-1", "one", null);
   h.cancelAll();
@@ -139,7 +140,7 @@ Deno.test("handover: cancelling rejects the wait and clears the pane", async () 
   h.cancelAll();
 });
 
-Deno.test("handover: an already aborted signal never registers", async () => {
+test("handover: an already aborted signal never registers", async () => {
   const { hub: h, events } = hub();
   const controller = new AbortController();
   controller.abort();
@@ -151,7 +152,7 @@ Deno.test("handover: an already aborted signal never registers", async () => {
   assertEquals(events.length, 0);
 });
 
-Deno.test("handover: aborting the run settles the wait", async () => {
+test("handover: aborting the run settles the wait", async () => {
   const { hub: h } = hub();
   const controller = new AbortController();
   const waited = h.wait("call-1", "one", null, controller.signal);

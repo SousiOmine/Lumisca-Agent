@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { basename, join } from "node:path";
 
 import { fauxAssistantMessage, fauxToolCall } from "@lumisca/core";
@@ -5,7 +6,7 @@ import { removeDirRetry } from "@lumisca/core/test-utils";
 import { assert, assertEquals } from "@std/assert";
 import { json, setup } from "./test-utils.ts";
 
-Deno.test("the event stream batches a reply's deltas into few frames", async () => {
+test("the event stream batches a reply's deltas into few frames", async () => {
   // A run streams one text delta per token. Forwarding each as its own frame
   // is free on a loopback socket and expensive on a link with a real round
   // trip: the frames arrive as bursts and the reply renders in jumps. The
@@ -82,7 +83,7 @@ Deno.test("the event stream batches a reply's deltas into few frames", async () 
   }
 });
 
-Deno.test("websocket streams agent events", async () => {
+test("websocket streams agent events", async () => {
   const { core, server, faux, base } = await setup();
   try {
     const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
@@ -188,7 +189,7 @@ Deno.test("websocket streams agent events", async () => {
   }
 });
 
-Deno.test("the event stream carries heartbeat frames while it is idle", async () => {
+test("the event stream carries heartbeat frames while it is idle", async () => {
   // An idle stream looks exactly like a dead socket (nothing arrives either
   // way), so the server proves it is still there on a fixed cadence; the
   // client's watchdog treats silence past its deadline as a dead socket
@@ -222,7 +223,7 @@ Deno.test("the event stream carries heartbeat frames while it is idle", async ()
   }
 });
 
-Deno.test("cors and websocket reject other local ports (authority check)", async () => {
+test("cors and websocket reject other local ports (authority check)", async () => {
   const { core, server, base } = await setup();
   try {
     // Same host, different port: must be treated as cross-origin.

@@ -4,6 +4,7 @@
  * left the browser — a drop or a paste worked in code mode and silently did
  * nothing here.
  */
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { record } from "./api-test-utils.ts";
 
@@ -21,14 +22,14 @@ function bodyOf(sent: { body?: string }): unknown {
   return JSON.parse(sent.body!);
 }
 
-Deno.test("stella prompt: text alone sends only the text", async () => {
+test("stella prompt: text alone sends only the text", async () => {
   const sent = await record(() => stellaApi.prompt("a1", "こんにちは"));
   assertEquals(sent.method, "POST");
   assertEquals(sent.path, "/api/stella/conversations/a1/prompt");
   assertEquals(bodyOf(sent), { text: "こんにちは" });
 });
 
-Deno.test("stella prompt: attached images travel as base64 blocks", async () => {
+test("stella prompt: attached images travel as base64 blocks", async () => {
   const sent = await record(() =>
     stellaApi.prompt("a1", "見て", [
       {
@@ -46,7 +47,7 @@ Deno.test("stella prompt: attached images travel as base64 blocks", async () => 
   });
 });
 
-Deno.test("stella prompt: an image with no text is still a body", async () => {
+test("stella prompt: an image with no text is still a body", async () => {
   const sent = await record(() =>
     stellaApi.prompt("a1", "", [
       { data: dataUrl("aGVsbG8=", "image/png"), mimeType: "image/png" },
@@ -58,7 +59,7 @@ Deno.test("stella prompt: an image with no text is still a body", async () => {
   });
 });
 
-Deno.test("stella prompt: the token rides every request", async () => {
+test("stella prompt: the token rides every request", async () => {
   const sent = await record(() => stellaApi.prompt("a1", "x"));
   assertEquals(sent.headers.get("x-lumisca-token"), "test-token");
 });

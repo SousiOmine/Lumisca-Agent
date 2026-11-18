@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { fauxAssistantMessage } from "@lumisca/core";
 import { assertEquals } from "@std/assert";
 import {
@@ -27,7 +28,7 @@ function rateLimited(message: string) {
   });
 }
 
-Deno.test("isRetryableRateLimit reaches the shared classifier", () => {
+test("isRetryableRateLimit reaches the shared classifier", () => {
   // The retryable wording and its excluded quota cousins are one decision,
   // made in ai/rate-limit.ts; one round trip each way is enough to prove the
   // message shape is unwrapped and handed over.
@@ -44,7 +45,7 @@ Deno.test("isRetryableRateLimit reaches the shared classifier", () => {
   assertEquals(isRetryableRateLimit(rateLimited("connection reset")), false);
 });
 
-Deno.test("isRetryableRateLimit: only an error stop is a candidate", () => {
+test("isRetryableRateLimit: only an error stop is a candidate", () => {
   // A normal finish is never a failure, and an empty error message leaves
   // nothing to classify — neither may be retried just because a pattern
   // happens to sit in some unrelated field.
@@ -64,7 +65,7 @@ Deno.test("isRetryableRateLimit: only an error stop is a candidate", () => {
   );
 });
 
-Deno.test("applyProviderRetryDefaults fills an unset budget", () => {
+test("applyProviderRetryDefaults fills an unset budget", () => {
   assertEquals(applyProviderRetryDefaults(undefined), {
     maxRetries: PROVIDER_DEFAULT_MAX_RETRIES,
   });
@@ -77,7 +78,7 @@ Deno.test("applyProviderRetryDefaults fills an unset budget", () => {
   });
 });
 
-Deno.test("applyProviderRetryDefaults leaves a caller's budget alone", () => {
+test("applyProviderRetryDefaults leaves a caller's budget alone", () => {
   // A caller that owns the budget keeps it — the same object, so a caller
   // comparing identity is not surprised.
   const onlyRetries: StreamOptions = { maxRetries: 1 };

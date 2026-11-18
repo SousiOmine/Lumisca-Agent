@@ -22,6 +22,7 @@
  * exists, a stella conversation, the sign-in the user walks through, and the
  * tools the conversation can finally discover.
  */
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { fauxProvider } from "../ai/faux.ts";
 import { LumiscaCore } from "../core.ts";
@@ -56,7 +57,7 @@ async function waitForStatus(
   );
 }
 
-Deno.test("E2E: a stella conversation reaches an MCP server after signing in", async () => {
+test("E2E: a stella conversation reaches an MCP server after signing in", async () => {
   const auth = startFakeAuthServer();
   const mcp = startFakeMcpServer({
     token: "access-token-1",

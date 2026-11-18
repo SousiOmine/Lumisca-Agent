@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { buildModelList } from "./model-groups.ts";
 import type { ModelInfo } from "./types.ts";
@@ -48,7 +49,7 @@ function list(overrides: Partial<Parameters<typeof buildModelList>[0]> = {}) {
   });
 }
 
-Deno.test("model list: the recent section comes first, then the providers", () => {
+test("model list: the recent section comes first, then the providers", () => {
   const result = list({
     current: { provider: "openai", modelId: "gpt-5" },
     recent: [
@@ -76,7 +77,7 @@ Deno.test("model list: the recent section comes first, then the providers", () =
   assertEquals(result.empty, false);
 });
 
-Deno.test("model list: the recent section cannot offer what the filters hide", () => {
+test("model list: the recent section cannot offer what the filters hide", () => {
   const result = list({
     recent: [
       { provider: "anthropic", modelId: "claude-haiku" }, // disabled
@@ -102,7 +103,7 @@ Deno.test("model list: the recent section cannot offer what the filters hide", (
   assertEquals(result.listable, 4);
 });
 
-Deno.test("model list: image-only keeps the models that take images", () => {
+test("model list: image-only keeps the models that take images", () => {
   const result = list({
     imageOnly: true,
     recent: [{ provider: "openai", modelId: "vision" }],
@@ -114,7 +115,7 @@ Deno.test("model list: image-only keeps the models that take images", () => {
   assertEquals(result.listable, 1);
 });
 
-Deno.test("model list: a search filters the sections, and empty sections go", () => {
+test("model list: a search filters the sections, and empty sections go", () => {
   const result = list({ query: "gpt" });
   assertEquals(
     result.groups.map((g) => g.key),
@@ -134,7 +135,7 @@ Deno.test("model list: a search filters the sections, and empty sections go", ()
   assertEquals(none.listable, 4);
 });
 
-Deno.test("model list: the recent section is capped", () => {
+test("model list: the recent section is capped", () => {
   const recent = [
     { provider: "openai", modelId: "gpt-5" },
     { provider: "openai", modelId: "gpt-5-mini" },

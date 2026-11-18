@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import {
   createShutdown,
@@ -24,7 +25,7 @@ function harness(
   return { shutdown, exits, signals, errors };
 }
 
-Deno.test("a supervisor's stop is a clean exit, an interrupt is 130", () => {
+test("a supervisor's stop is a clean exit, an interrupt is 130", () => {
   // systemd reads the exit code: SIGTERM must look like a clean stop (and
   // Restart=always brings the server back after an applied update), while an
   // interactive Ctrl+C reports the shell convention.
@@ -32,7 +33,7 @@ Deno.test("a supervisor's stop is a clean exit, an interrupt is 130", () => {
   assertEquals(exitCodeForSignal("SIGINT"), 130);
 });
 
-Deno.test("the drain is awaited before the process exits", async () => {
+test("the drain is awaited before the process exits", async () => {
   let released = false;
   const test = harness({
     drain: async () => {
@@ -49,7 +50,7 @@ Deno.test("the drain is awaited before the process exits", async () => {
   assertEquals(test.errors, []);
 });
 
-Deno.test("a drain that overruns is bounded by the grace budget", async () => {
+test("a drain that overruns is bounded by the grace budget", async () => {
   // A child ignoring its signal must not keep the process alive; the unit's
   // TimeoutStopSec=10 is the outer bound.
   const test = harness({ drain: () => new Promise(() => {}), graceMs: 5 });
@@ -60,7 +61,7 @@ Deno.test("a drain that overruns is bounded by the grace budget", async () => {
   assertStringIncludes(test.errors[0]!, "強制終了");
 });
 
-Deno.test("a second signal stops waiting for the drain", () => {
+test("a second signal stops waiting for the drain", () => {
   const test = harness({ drain: () => new Promise(() => {}), graceMs: 10_000 });
   test.shutdown("SIGTERM");
   assertEquals(test.exits, []);
@@ -69,7 +70,7 @@ Deno.test("a second signal stops waiting for the drain", () => {
   assertEquals(test.exits, [0]);
 });
 
-Deno.test("a failing drain is reported in the log, not as an exit code", async () => {
+test("a failing drain is reported in the log, not as an exit code", async () => {
   const test = harness({
     drain: () => Promise.reject(new Error("database is locked")),
   });
@@ -79,7 +80,7 @@ Deno.test("a failing drain is reported in the log, not as an exit code", async (
   assertStringIncludes(test.errors.join("\n"), "database is locked");
 });
 
-Deno.test("the exit code follows the first signal and is reported once", async () => {
+test("the exit code follows the first signal and is reported once", async () => {
   const test = harness();
   test.shutdown("SIGINT");
   await delay(20);

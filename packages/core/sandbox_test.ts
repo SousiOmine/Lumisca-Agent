@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { realpathSync } from "node:fs";
 import { basename, join } from "node:path";
 import { assertEquals } from "@std/assert";
@@ -12,7 +13,7 @@ function real(p: string): string {
   return realpathSync.native(p);
 }
 
-Deno.test("sandbox resolves absolute paths inside the workspace", async () => {
+test("sandbox resolves absolute paths inside the workspace", async () => {
   const root = await tempDir("lumisca-sb-");
   const sandbox = new Sandbox([root]);
   const file = join(root, "sub", "file.txt");
@@ -29,7 +30,7 @@ Deno.test("sandbox resolves absolute paths inside the workspace", async () => {
   await Deno.remove(root, { recursive: true });
 });
 
-Deno.test("sandbox resolves workspace-folder-relative paths", async () => {
+test("sandbox resolves workspace-folder-relative paths", async () => {
   const root = await tempDir("lumisca-sb-");
   const sandbox = new Sandbox([root]);
   const file = join(root, "sub", "file.txt");
@@ -49,7 +50,7 @@ Deno.test("sandbox resolves workspace-folder-relative paths", async () => {
   await Deno.remove(root, { recursive: true });
 });
 
-Deno.test("sandbox resolves each folder of a multi-folder workspace by name", async () => {
+test("sandbox resolves each folder of a multi-folder workspace by name", async () => {
   const aaa = await tempDir("lumisca-aaa-");
   const star = await tempDir("lumisca-star-");
   const nitro = await tempDir("lumisca-nitro-");
@@ -78,7 +79,7 @@ Deno.test("sandbox resolves each folder of a multi-folder workspace by name", as
   }
 });
 
-Deno.test("sandbox matches folder names case-insensitively on Windows", async () => {
+test("sandbox matches folder names case-insensitively on Windows", async () => {
   const root = await tempDir("lumisca-case-");
   try {
     const sandbox = new Sandbox([root]);
@@ -93,7 +94,7 @@ Deno.test("sandbox matches folder names case-insensitively on Windows", async ()
   }
 });
 
-Deno.test("sandbox roots are sorted by path regardless of registration order", async () => {
+test("sandbox roots are sorted by path regardless of registration order", async () => {
   const a = await tempDir("lumisca-aaa-");
   const z = await tempDir("lumisca-zzz-");
   try {
@@ -110,7 +111,7 @@ Deno.test("sandbox roots are sorted by path regardless of registration order", a
   }
 });
 
-Deno.test("sandbox rejects paths outside the workspace", async () => {
+test("sandbox rejects paths outside the workspace", async () => {
   const root = await tempDir("lumisca-sb-");
   const outside = await tempDir("lumisca-outside-");
   const sandbox = new Sandbox([root]);
@@ -128,7 +129,7 @@ Deno.test("sandbox rejects paths outside the workspace", async () => {
   await Deno.remove(outside, { recursive: true });
 });
 
-Deno.test("sandbox rejects paths without a workspace folder name", async () => {
+test("sandbox rejects paths without a workspace folder name", async () => {
   const root = await tempDir("lumisca-sb-");
   const sandbox = new Sandbox([root]);
 
@@ -139,7 +140,7 @@ Deno.test("sandbox rejects paths without a workspace folder name", async () => {
   await Deno.remove(root, { recursive: true });
 });
 
-Deno.test("sandbox rejects an ambiguous folder name", async () => {
+test("sandbox rejects an ambiguous folder name", async () => {
   const parent = await Deno.makeTempDir({ prefix: "lumisca-amb-" });
   const one = join(parent, "same");
   const two = join(parent, "other", "same");
@@ -155,7 +156,7 @@ Deno.test("sandbox rejects an ambiguous folder name", async () => {
   }
 });
 
-Deno.test("sandbox allows writing to not-yet-existing files inside the workspace", async () => {
+test("sandbox allows writing to not-yet-existing files inside the workspace", async () => {
   const root = await tempDir("lumisca-sb-");
   const sandbox = new Sandbox([root]);
   const target = join(root, "new", "file.txt");
@@ -167,7 +168,7 @@ Deno.test("sandbox allows writing to not-yet-existing files inside the workspace
   await Deno.remove(root, { recursive: true });
 });
 
-Deno.test("sandbox resolves deep new paths in full (no truncation)", async () => {
+test("sandbox resolves deep new paths in full (no truncation)", async () => {
   const root = await tempDir("lumisca-sb-");
   const sandbox = new Sandbox([root]);
 
@@ -200,7 +201,7 @@ Deno.test("sandbox resolves deep new paths in full (no truncation)", async () =>
   await Deno.remove(root, { recursive: true });
 });
 
-Deno.test("sandbox resolves new files via folder-relative paths", async () => {
+test("sandbox resolves new files via folder-relative paths", async () => {
   const root = await tempDir("lumisca-sb-");
   const sandbox = new Sandbox([root]);
 
@@ -213,12 +214,12 @@ Deno.test("sandbox resolves new files via folder-relative paths", async () => {
   await Deno.remove(root, { recursive: true });
 });
 
-Deno.test("sandbox rejects workspace folders that do not exist", async () => {
+test("sandbox rejects workspace folders that do not exist", async () => {
   const r = await Sandbox.resolveFolder("Z:\\definitely\\not\\here\\lumisca");
   assertEquals(r.ok, false);
 });
 
-Deno.test("sandbox: an extra root is reachable by absolute path, not by name", async () => {
+test("sandbox: an extra root is reachable by absolute path, not by name", async () => {
   const root = await tempDir("lumisca-sb-");
   // The shared skills folder, outside the workspace and named like a folder
   // a repository could have.
@@ -255,7 +256,7 @@ Deno.test("sandbox: an extra root is reachable by absolute path, not by name", a
   }
 });
 
-Deno.test("sandbox: a workspace folder named like the extra root stays unambiguous", async () => {
+test("sandbox: a workspace folder named like the extra root stays unambiguous", async () => {
   // A repository whose workspace folder is called `skills`, next to a
   // shared folder of the same name: the relative path must mean the
   // workspace folder (the extra root never takes part in name matching).

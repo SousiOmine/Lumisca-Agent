@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@lumisca/core";
@@ -91,7 +92,7 @@ async function searchListing(
 
 /** In-memory computer host: serves one tiny display and records what the
  * tools asked it to do (the unused methods are never reachable here). */
-Deno.test("sessions attach MCP tools from .mcp.json and call them", async () => {
+test("sessions attach MCP tools from .mcp.json and call them", async () => {
   const { core, faux, providerId, modelId } = setup();
   const root = await makeRealTempDir("lumisca-core-");
   const fakeServer = join(
@@ -192,7 +193,7 @@ Deno.test("sessions attach MCP tools from .mcp.json and call them", async () => 
   }
 });
 
-Deno.test("app-level MCP config persists and applies to sessions", async () => {
+test("app-level MCP config persists and applies to sessions", async () => {
   const { core, faux, providerId, modelId } = setup();
   const root = await makeRealTempDir("lumisca-core-");
   const fakeServer = join(
@@ -278,7 +279,7 @@ Deno.test("app-level MCP config persists and applies to sessions", async () => {
   }
 });
 
-Deno.test("an MCP config saved while a session streams reaches that session", async () => {
+test("an MCP config saved while a session streams reaches that session", async () => {
   const { core, faux, providerId, modelId } = setup();
   const root = await makeRealTempDir("lumisca-core-");
   const fakeServer = join(
@@ -389,7 +390,7 @@ Deno.test("an MCP config saved while a session streams reaches that session", as
   }
 });
 
-Deno.test("workspace .mcp.json overrides same-named app servers", async () => {
+test("workspace .mcp.json overrides same-named app servers", async () => {
   const { core, faux, providerId, modelId } = setup();
   const root = await makeRealTempDir("lumisca-core-");
   const fakeServer = join(
@@ -461,7 +462,7 @@ Deno.test("workspace .mcp.json overrides same-named app servers", async () => {
   }
 });
 
-Deno.test("first prompt waits for MCP tools to attach", async () => {
+test("first prompt waits for MCP tools to attach", async () => {
   const { core, faux, providerId, modelId } = setup();
   const root = await makeRealTempDir("lumisca-core-");
   const fakeServer = join(
@@ -534,7 +535,7 @@ Deno.test("first prompt waits for MCP tools to attach", async () => {
  * never reachable in this test — the tools are only exercised through
  * browser_open). */
 
-Deno.test("detaching the browser backend removes browser tools on rebuild", async () => {
+test("detaching the browser backend removes browser tools on rebuild", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
   core.setBrowserBackend(new FakeBrowserBackend());
@@ -613,7 +614,7 @@ Deno.test("detaching the browser backend removes browser tools on rebuild", asyn
   }
 });
 
-Deno.test("the agent adds and removes an MCP server with its own tools", async () => {
+test("the agent adds and removes an MCP server with its own tools", async () => {
   const { core, faux, providerId, modelId } = setup();
   const root = await makeRealTempDir("lumisca-core-");
   const fakeServer = join(

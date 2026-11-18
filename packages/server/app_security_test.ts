@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { fauxProvider, LumiscaCore } from "@lumisca/core";
 import { LANGUAGE_KEY } from "@lumisca/core/shared";
 import { assert, assertEquals } from "@std/assert";
@@ -5,7 +6,7 @@ import { createApp } from "./app.ts";
 import { validateHostConfig } from "./security.ts";
 import { setup } from "./test-utils.ts";
 
-Deno.test("server rejects non-loopback Host headers (DNS rebinding guard)", async () => {
+test("server rejects non-loopback Host headers (DNS rebinding guard)", async () => {
   // Deno's fetch forbids overriding Host, so exercise the handler directly
   // with requests that target external hostnames.
   const faux = fauxProvider();
@@ -27,7 +28,7 @@ Deno.test("server rejects non-loopback Host headers (DNS rebinding guard)", asyn
   }
 });
 
-Deno.test("cors only allows same-origin and the tauri webview origin", async () => {
+test("cors only allows same-origin and the tauri webview origin", async () => {
   const { core, server, base } = await setup();
   try {
     const evil = await fetch(`${base}/api/health`, {
@@ -57,7 +58,7 @@ Deno.test("cors only allows same-origin and the tauri webview origin", async () 
   }
 });
 
-Deno.test("websocket rejects cross-port origins", async () => {
+test("websocket rejects cross-port origins", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
   const app = createApp(core);
@@ -73,7 +74,7 @@ Deno.test("websocket rejects cross-port origins", async () => {
   }
 });
 
-Deno.test("token auth guards the API, websocket and page", async () => {
+test("token auth guards the API, websocket and page", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
   const app = createApp(core, { token: "secret-token" });
@@ -191,7 +192,7 @@ Deno.test("token auth guards the API, websocket and page", async () => {
   }
 });
 
-Deno.test("token auth remembers a presented token in a cookie", async () => {
+test("token auth remembers a presented token in a cookie", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
   const app = createApp(core, { token: "secret-token" });
@@ -325,7 +326,7 @@ Deno.test("token auth remembers a presented token in a cookie", async () => {
   }
 });
 
-Deno.test("the MCP OAuth callback is reachable without the token", async () => {
+test("the MCP OAuth callback is reachable without the token", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
   const app = createApp(core, { token: "secret-token" });
@@ -355,7 +356,7 @@ Deno.test("the MCP OAuth callback is reachable without the token", async () => {
   }
 });
 
-Deno.test("host guard rejects non-loopback hosts by default", async () => {
+test("host guard rejects non-loopback hosts by default", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
   const app = createApp(core);
@@ -380,7 +381,7 @@ Deno.test("host guard rejects non-loopback hosts by default", async () => {
   }
 });
 
-Deno.test("host guard accepts LUMISCA_ALLOWED_HOSTS", async () => {
+test("host guard accepts LUMISCA_ALLOWED_HOSTS", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
   const app = createApp(core, {
@@ -423,7 +424,7 @@ Deno.test("host guard accepts LUMISCA_ALLOWED_HOSTS", async () => {
   }
 });
 
-Deno.test("validateHostConfig requires a token for non-loopback binds", () => {
+test("validateHostConfig requires a token for non-loopback binds", () => {
   assertEquals(validateHostConfig("127.0.0.1", undefined), null);
   assertEquals(validateHostConfig("localhost", undefined), null);
   assertEquals(validateHostConfig("::1", undefined), null);
@@ -433,7 +434,7 @@ Deno.test("validateHostConfig requires a token for non-loopback binds", () => {
   assertEquals(validateHostConfig("100.64.0.5", "token"), null);
 });
 
-Deno.test("websocket rejects cross-origin connections", async () => {
+test("websocket rejects cross-origin connections", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
   const app = createApp(core);
@@ -466,7 +467,7 @@ Deno.test("websocket rejects cross-origin connections", async () => {
   }
 });
 
-Deno.test("websocket accepts a TLS front end's https origin for the same host", async () => {
+test("websocket accepts a TLS front end's https origin for the same host", async () => {
   // `tailscale serve` (and any TLS-terminating proxy) terminates https and
   // forwards plain http: the page's Origin says https: while the Host this
   // server sees is the same host. Comparing whole origins made that page

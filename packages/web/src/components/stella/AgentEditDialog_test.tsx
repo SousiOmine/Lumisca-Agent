@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -35,7 +36,7 @@ function render(target: StellaAgentSummary = agent): string {
   );
 }
 
-Deno.test("AgentEditDialog: the name is a field with its current value", () => {
+test("AgentEditDialog: the name is a field with its current value", () => {
   const html = render();
   assertStringIncludes(html, "「Aide」を編集");
   // The field starts with what the agent is called now: editing is a change
@@ -43,7 +44,7 @@ Deno.test("AgentEditDialog: the name is a field with its current value", () => {
   assert(/<input[^>]*value="Aide"/.test(html), html);
 });
 
-Deno.test("AgentEditDialog: the role is not editable here", () => {
+test("AgentEditDialog: the role is not editable here", () => {
   const html = render();
   // The role is the instruction the agent works from and is baked into its
   // session's system prompt, so a field for it would promise a change that
@@ -52,7 +53,7 @@ Deno.test("AgentEditDialog: the role is not editable here", () => {
   assertEquals(html.includes("役割"), false);
 });
 
-Deno.test("AgentEditDialog: an agent without a picture offers no reset", () => {
+test("AgentEditDialog: an agent without a picture offers no reset", () => {
   // A control that removes something which is not there is one more thing to
   // read (and it would be a no-op the user has to interpret).
   assertEquals(render().includes("既定に戻す"), false);
@@ -62,7 +63,7 @@ Deno.test("AgentEditDialog: an agent without a picture offers no reset", () => {
   );
 });
 
-Deno.test("AgentEditDialog: saving is one action for both fields", () => {
+test("AgentEditDialog: saving is one action for both fields", () => {
   const html = render();
   // One primary button: the name and the picture travel in one request, so
   // there is no "save name" beside a picture that saves itself.
@@ -73,7 +74,7 @@ Deno.test("AgentEditDialog: saving is one action for both fields", () => {
   assertEquals((html.match(/btn primary/g) ?? []).length, 1);
 });
 
-Deno.test("AgentEditDialog: an agent without a model follows the default", () => {
+test("AgentEditDialog: an agent without a model follows the default", () => {
   const html = render();
   // Unset is a state to show, not an empty row: the sentence the user needs
   // is that this agent runs on whatever the app's default model is.
@@ -83,7 +84,7 @@ Deno.test("AgentEditDialog: an agent without a model follows the default", () =>
   assertEquals(html.includes("既定に戻す"), false);
 });
 
-Deno.test("AgentEditDialog: a chosen model is shown and can be cleared", () => {
+test("AgentEditDialog: a chosen model is shown and can be cleared", () => {
   const html = render({
     ...agent,
     model: { provider: "faux", modelId: "large" },

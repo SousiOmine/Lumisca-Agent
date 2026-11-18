@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { test } from "bun:test";
 import { basename, dirname, join } from "node:path";
 import { assertEquals } from "@std/assert";
 import { closeDatabase } from "./close.ts";
@@ -34,7 +35,7 @@ function sizeOf(path: string): Promise<number> {
   return Deno.stat(path).then((stat) => stat.size);
 }
 
-Deno.test("vacuum: the marker sits beside the database on any platform's path", () => {
+test("vacuum: the marker sits beside the database on any platform's path", () => {
   // A Windows path is separated by `\`, not `/`. Splitting on `/` alone put
   // the drive and the whole directory list into the marker's name, which
   // Windows cannot create — so a database that pruned enough to ask for a
@@ -55,7 +56,7 @@ Deno.test("vacuum: the marker sits beside the database on any platform's path", 
   }
 });
 
-Deno.test("vacuum: no marker means nothing happens", async () => {
+test("vacuum: no marker means nothing happens", async () => {
   const dir = await Deno.makeTempDir({ prefix: "lumisca-vacuum-" });
   try {
     const path = join(dir, "l.db");
@@ -68,7 +69,7 @@ Deno.test("vacuum: no marker means nothing happens", async () => {
   }
 });
 
-Deno.test("vacuum: a marker below the threshold is dropped untouched", async () => {
+test("vacuum: a marker below the threshold is dropped untouched", async () => {
   const dir = await Deno.makeTempDir({ prefix: "lumisca-vacuum-" });
   try {
     const path = join(dir, "l.db");
@@ -90,7 +91,7 @@ Deno.test("vacuum: a marker below the threshold is dropped untouched", async () 
   }
 });
 
-Deno.test("vacuum: a due request rewrites the file and keeps its contents", async () => {
+test("vacuum: a due request rewrites the file and keeps its contents", async () => {
   const dir = await Deno.makeTempDir({ prefix: "lumisca-vacuum-" });
   try {
     const path = join(dir, "l.db");
@@ -130,7 +131,7 @@ Deno.test("vacuum: a due request rewrites the file and keeps its contents", asyn
   }
 });
 
-Deno.test("vacuum: a failed rewrite leaves the database usable and the marker in place", async () => {
+test("vacuum: a failed rewrite leaves the database usable and the marker in place", async () => {
   const dir = await Deno.makeTempDir({ prefix: "lumisca-vacuum-" });
   try {
     const path = join(dir, "l.db");
@@ -161,7 +162,7 @@ Deno.test("vacuum: a failed rewrite leaves the database usable and the marker in
   }
 });
 
-Deno.test("vacuum: a real database keeps its schema version, indexes and rows", async () => {
+test("vacuum: a real database keeps its schema version, indexes and rows", async () => {
   const dir = await Deno.makeTempDir({ prefix: "lumisca-vacuum-" });
   try {
     const path = join(dir, "lumisca.db");

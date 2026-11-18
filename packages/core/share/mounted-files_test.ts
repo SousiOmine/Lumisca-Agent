@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { SHARE_ROOT, shareRootOf } from "./grant.ts";
 import { MountedFiles } from "./mounted-files.ts";
@@ -15,7 +16,7 @@ function mounted(grants: ReturnType<typeof grantOf>[]) {
   return { primary, transport, files };
 }
 
-Deno.test("a lent folder is addressable only by its absolute path", async () => {
+test("a lent folder is addressable only by its absolute path", async () => {
   const { files, transport } = mounted([grantOf({ name: "proj" })]);
   const root = shareRootOf("proj");
 
@@ -46,7 +47,7 @@ Deno.test("a lent folder is addressable only by its absolute path", async () => 
   assertEquals(transport.calls.length, 0);
 });
 
-Deno.test("an unknown lent name is refused with the names that exist", async () => {
+test("an unknown lent name is refused with the names that exist", async () => {
   const { files } = mounted([
     grantOf({ name: "proj" }),
     grantOf({ id: "g2", name: "data" }),
@@ -59,14 +60,14 @@ Deno.test("an unknown lent name is refused with the names that exist", async () 
   }
 });
 
-Deno.test("a path that climbs out of the grant is not the grant's", async () => {
+test("a path that climbs out of the grant is not the grant's", async () => {
   const { files, transport } = mounted([grantOf({ name: "proj" })]);
   const result = await files.resolve(`${shareRootOf("proj")}/../../etc/passwd`);
   assertEquals(result.ok, false);
   assertEquals(transport.calls.length, 0);
 });
 
-Deno.test("operations are routed by the longest matching root", async () => {
+test("operations are routed by the longest matching root", async () => {
   const grants = [
     grantOf({ id: "a", name: "proj" }),
     grantOf({ id: "b", name: "proj-src" }),
@@ -89,12 +90,12 @@ Deno.test("operations are routed by the longest matching root", async () => {
   assertEquals(primary.calls[0]?.op, "readText");
 });
 
-Deno.test("the session's own roots come first, so spills stay on its machine", async () => {
+test("the session's own roots come first, so spills stay on its machine", async () => {
   const { files } = mounted([grantOf({ name: "proj" })]);
   assertEquals(files.roots, ["/home/agent", "/lend/proj"]);
 });
 
-Deno.test("a read-only loan refuses writes in the backend, not in a tool", async () => {
+test("a read-only loan refuses writes in the backend, not in a tool", async () => {
   const { files, transport } = mounted([
     grantOf({ name: "proj", write: false }),
   ]);
@@ -120,7 +121,7 @@ Deno.test("a read-only loan refuses writes in the backend, not in a tool", async
   assertEquals(transport.calls.length, 0);
 });
 
-Deno.test("a writable loan sends the text to the lent computer", async () => {
+test("a writable loan sends the text to the lent computer", async () => {
   const { files, transport } = mounted([grantOf({ name: "proj" })]);
   await files.writeText(`${shareRootOf("proj")}/a.txt`, "hi", {
     private: true,
@@ -133,7 +134,7 @@ Deno.test("a writable loan sends the text to the lent computer", async () => {
   });
 });
 
-Deno.test("the namespace root lists the lent folders", async () => {
+test("the namespace root lists the lent folders", async () => {
   const { files, transport } = mounted([
     grantOf({ id: "a", name: "proj" }),
     grantOf({ id: "b", name: "data" }),
@@ -148,7 +149,7 @@ Deno.test("the namespace root lists the lent folders", async () => {
   assertEquals(transport.calls.length, 0);
 });
 
-Deno.test("the namespace root is not a folder to read, write or delete", async () => {
+test("the namespace root is not a folder to read, write or delete", async () => {
   const { files, primary } = mounted([grantOf({ name: "proj" })]);
   await assertRejects(() => files.readText(SHARE_ROOT), Error, "not one");
   await assertRejects(() => files.writeText(SHARE_ROOT, "x"), Error, "not one");
@@ -157,7 +158,7 @@ Deno.test("the namespace root is not a folder to read, write or delete", async (
   assertEquals(primary.calls.length, 0);
 });
 
-Deno.test("nothing is lent: the namespace does not exist", async () => {
+test("nothing is lent: the namespace does not exist", async () => {
   const { files } = mounted([]);
   const root = await files.resolve(SHARE_ROOT);
   assertEquals(root.ok, false);
@@ -165,7 +166,7 @@ Deno.test("nothing is lent: the namespace does not exist", async () => {
   assertEquals(await files.listDir(SHARE_ROOT), []);
 });
 
-Deno.test("an expired grant stops resolving", async () => {
+test("an expired grant stops resolving", async () => {
   const { files } = mounted([
     grantOf({ name: "proj", expiresAt: Date.now() - 1 }),
   ]);

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import type { Api, Model, StreamFn } from "@lumisca/core";
 import {
@@ -191,7 +192,7 @@ function rateLimitThenOk(): StreamFn {
   };
 }
 
-Deno.test("sub-agent retries a rate-limited turn then succeeds", async () => {
+test("sub-agent retries a rate-limited turn then succeeds", async () => {
   const { hub, events } = makeHub(rateLimitThenOk(), instantSleep);
   hub.spawn("session-1", 0, "general", "desc", "prompt");
   await waitFor(() => hub.list()[0]?.status === "finished", "task finish");
@@ -238,7 +239,7 @@ function interruptedThenOk(): { streamFn: StreamFn; requests: unknown[][] } {
   return { streamFn, requests };
 }
 
-Deno.test("sub-agent continues after a transport cut instead of dying", async () => {
+test("sub-agent continues after a transport cut instead of dying", async () => {
   const { streamFn, requests } = interruptedThenOk();
   const { hub } = makeHub(streamFn, instantSleep);
   hub.spawn("session-1", 0, "explore", "desc", "prompt");
@@ -252,7 +253,7 @@ Deno.test("sub-agent continues after a transport cut instead of dying", async ()
   assertEquals(second.includes("Continue from where it stopped"), true);
 });
 
-Deno.test("a permanent sub-agent failure is not retried", async () => {
+test("a permanent sub-agent failure is not retried", async () => {
   let calls = 0;
   const streamFn: StreamFn = () => {
     calls++;
@@ -272,7 +273,7 @@ Deno.test("a permanent sub-agent failure is not retried", async () => {
   assertEquals(calls, 1);
 });
 
-Deno.test("a failed sub-agent's notification keeps its partial output", async () => {
+test("a failed sub-agent's notification keeps its partial output", async () => {
   const streamFn: StreamFn = () => {
     const stream = createAssistantMessageEventStream();
     stream.push({ type: "start", partial: fauxAssistantMessage("") });
@@ -328,7 +329,7 @@ function messageText(message: unknown): string {
 
 // --- hub: spawn and lifecycle -------------------------------------------------
 
-Deno.test("spawn returns a running snapshot immediately and emits task_start", () => {
+test("spawn returns a running snapshot immediately and emits task_start", () => {
   const { events, hub } = makeHub();
   try {
     const info = hub.spawn("session-1", 0, "explore", "調査", "Do research");
@@ -347,7 +348,7 @@ Deno.test("spawn returns a running snapshot immediately and emits task_start", (
   }
 });
 
-Deno.test("the sub-agent runtime is resolved at spawn time", () => {
+test("the sub-agent runtime is resolved at spawn time", () => {
   const { events, hub, model, root } = makeHub();
   try {
     // The resolver (refreshed on every session open) is read per spawn, so
@@ -375,7 +376,7 @@ Deno.test("the sub-agent runtime is resolved at spawn time", () => {
   }
 });
 
-Deno.test("the per-session concurrency limit is enforced", () => {
+test("the per-session concurrency limit is enforced", () => {
   const { hub } = makeHub();
   try {
     for (let i = 0; i < MAX_SUBAGENTS; i++) {
@@ -393,7 +394,7 @@ Deno.test("the per-session concurrency limit is enforced", () => {
   }
 });
 
-Deno.test("close aborts every running sub-agent and settles waiters", async () => {
+test("close aborts every running sub-agent and settles waiters", async () => {
   const { events, hub } = makeHub();
   const info = hub.spawn("session-1", 0, "explore", "調査", "Do research");
   // A waiter registered before the close receives the aborted snapshot
@@ -412,7 +413,7 @@ Deno.test("close aborts every running sub-agent and settles waiters", async () =
 
 // --- hub: send_message (mesh) --------------------------------------------------
 
-Deno.test("send_message rejects unknown, finished, and parentless targets", async () => {
+test("send_message rejects unknown, finished, and parentless targets", async () => {
   const { faux, hub } = makeScriptedHub();
   try {
     assertThrowsCoreError(
@@ -442,7 +443,7 @@ Deno.test("send_message rejects unknown, finished, and parentless targets", asyn
   }
 });
 
-Deno.test("send_message delivers to the parent and to a running sub-agent", () => {
+test("send_message delivers to the parent and to a running sub-agent", () => {
   const { hub } = makeHub();
   const received: NotificationPayload[] = [];
   hub.setParentDelivery({
@@ -484,7 +485,7 @@ Deno.test("send_message delivers to the parent and to a running sub-agent", () =
 
 // --- hub: task_output wait ------------------------------------------------------
 
-Deno.test("wait returns the current state on timeout", async () => {
+test("wait returns the current state on timeout", async () => {
   const { hub } = makeHub();
   try {
     const info = hub.spawn("session-1", 0, "explore", "調査", "Do research");
@@ -497,7 +498,7 @@ Deno.test("wait returns the current state on timeout", async () => {
   }
 });
 
-Deno.test("wait rejects when the caller's run aborts", async () => {
+test("wait rejects when the caller's run aborts", async () => {
   const { hub } = makeHub();
   try {
     const info = hub.spawn("session-1", 0, "explore", "調査", "Do research");
@@ -525,7 +526,7 @@ Deno.test("wait rejects when the caller's run aborts", async () => {
   }
 });
 
-Deno.test("wait on a finished task resolves immediately with the result", async () => {
+test("wait on a finished task resolves immediately with the result", async () => {
   const { faux, hub } = makeScriptedHub();
   try {
     faux.setResponses([fauxAssistantMessage("Answer: 42")]);
@@ -541,7 +542,7 @@ Deno.test("wait on a finished task resolves immediately with the result", async 
 
 // --- sub-agent tool sets (depth / type gating) -----------------------------------
 
-Deno.test("a general sub-agent can delegate once more, but not beyond the depth limit", async () => {
+test("a general sub-agent can delegate once more, but not beyond the depth limit", async () => {
   const { faux, hub } = makeScriptedHub();
   try {
     // Depth-1 general agent: has the task tool; its first turn spawns a
@@ -574,7 +575,7 @@ Deno.test("a general sub-agent can delegate once more, but not beyond the depth 
   }
 });
 
-Deno.test("a depth-2 agent has no task tool: the call fails instead of spawning", async () => {
+test("a depth-2 agent has no task tool: the call fails instead of spawning", async () => {
   const { faux, hub } = makeScriptedHub();
   try {
     // Spawned at parent depth 1, so its own depth is 2 (the limit).
@@ -599,7 +600,7 @@ Deno.test("a depth-2 agent has no task tool: the call fails instead of spawning"
   }
 });
 
-Deno.test("an explore sub-agent has no task tool", async () => {
+test("an explore sub-agent has no task tool", async () => {
   const { faux, hub } = makeScriptedHub();
   try {
     faux.setResponses([
@@ -623,7 +624,7 @@ Deno.test("an explore sub-agent has no task tool", async () => {
 
 // --- tools: validation -----------------------------------------------------------
 
-Deno.test("the task tool rejects an unknown subagent type", () => {
+test("the task tool rejects an unknown subagent type", () => {
   const { hub } = makeHub();
   try {
     const tool = createTaskTool(hub, "session-1", 0);
@@ -646,7 +647,7 @@ Deno.test("the task tool rejects an unknown subagent type", () => {
   }
 });
 
-Deno.test("the task_output tool validates timeout_sec and unknown ids", async () => {
+test("the task_output tool validates timeout_sec and unknown ids", async () => {
   const { hub } = makeHub();
   try {
     const tool = createTaskOutputTool(hub, "session-1");
@@ -667,7 +668,7 @@ Deno.test("the task_output tool validates timeout_sec and unknown ids", async ()
   }
 });
 
-Deno.test("the send_message tool reports the delivery target", () => {
+test("the send_message tool reports the delivery target", () => {
   const { hub } = makeHub();
   const received: NotificationPayload[] = [];
   hub.setParentDelivery({
@@ -720,7 +721,7 @@ function assertThrowsCoreError(
 
 // --- end to end: the parent agent ------------------------------------------------
 
-Deno.test("a task runs in the background and its completion reaches the parent", async () => {
+test("a task runs in the background and its completion reaches the parent", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
   const events: ClientEvent[] = [];
@@ -791,7 +792,7 @@ Deno.test("a task runs in the background and its completion reaches the parent",
   }
 });
 
-Deno.test("a waiting task_output receives the result and suppresses the notification", async () => {
+test("a waiting task_output receives the result and suppresses the notification", async () => {
   // The sub-agent's answer streams slowly enough (a long padded text) that
   // the parent registers its blocking task_output wait before the sub-agent
   // finishes; the completion notification must then be suppressed.
@@ -849,7 +850,7 @@ Deno.test("a waiting task_output receives the result and suppresses the notifica
   }
 });
 
-Deno.test("sub-agents survive a session rebuild and remain listed", async () => {
+test("sub-agents survive a session rebuild and remain listed", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
   const root = await Deno.makeTempDir({ prefix: "lumisca-task-rebuild-" });
@@ -992,7 +993,7 @@ async function makePingAttachment(
   return { attachment, shutdown: mcp.shutdown };
 }
 
-Deno.test("general sub-agents discover and call the session's MCP tools", async () => {
+test("general sub-agents discover and call the session's MCP tools", async () => {
   const { faux, hub, root } = makeScriptedHub();
   const { attachment, shutdown } = await makePingAttachment(root);
   const registry = new ToolRegistry();
@@ -1037,7 +1038,7 @@ Deno.test("general sub-agents discover and call the session's MCP tools", async 
   }
 });
 
-Deno.test("general sub-agents do not preload browser tools — only the pair is attached", async () => {
+test("general sub-agents do not preload browser tools — only the pair is attached", async () => {
   const { faux, hub } = makeScriptedHub();
   const registry = new ToolRegistry();
   registry.addTools(createBrowserTools(new FakeBrowserBackend()));
@@ -1078,7 +1079,7 @@ Deno.test("general sub-agents do not preload browser tools — only the pair is 
   }
 });
 
-Deno.test("general sub-agents discover and call the session's browser tools", async () => {
+test("general sub-agents discover and call the session's browser tools", async () => {
   const { faux, hub } = makeScriptedHub();
   const backend = new FakeBrowserBackend();
   const registry = new ToolRegistry();
@@ -1124,7 +1125,7 @@ Deno.test("general sub-agents discover and call the session's browser tools", as
   }
 });
 
-Deno.test("explore sub-agents have no MCP tools", async () => {
+test("explore sub-agents have no MCP tools", async () => {
   const { faux, hub, root } = makeScriptedHub();
   const { attachment, shutdown } = await makePingAttachment(root);
   const registry = new ToolRegistry();
@@ -1166,7 +1167,7 @@ Deno.test("explore sub-agents have no MCP tools", async () => {
   }
 });
 
-Deno.test("a stella sub-agent has no eval: it runs in the server process", async () => {
+test("a stella sub-agent has no eval: it runs in the server process", async () => {
   const { faux, hub } = makeScriptedHub({ eval: false });
   try {
     // The session's premise is that its tools run inside the machine; eval
@@ -1195,7 +1196,7 @@ Deno.test("a stella sub-agent has no eval: it runs in the server process", async
   }
 });
 
-Deno.test("a code-mode sub-agent keeps eval", async () => {
+test("a code-mode sub-agent keeps eval", async () => {
   const { faux, hub } = makeScriptedHub({ eval: true });
   try {
     faux.setResponses([
@@ -1218,7 +1219,7 @@ Deno.test("a code-mode sub-agent keeps eval", async () => {
   }
 });
 
-Deno.test("a sub-agent's skill tool reads the catalog the runtime supplies", async () => {
+test("a sub-agent's skill tool reads the catalog the runtime supplies", async () => {
   const { faux, hub } = makeScriptedHub({
     skills: () => [memorySkill("vm-notes")],
   });
@@ -1245,7 +1246,7 @@ Deno.test("a sub-agent's skill tool reads the catalog the runtime supplies", asy
   }
 });
 
-Deno.test("a sub-agent starts with the skill catalog listing", async () => {
+test("a sub-agent starts with the skill catalog listing", async () => {
   // Without the listing the `skill` tool names a catalog the sub-agent has
   // never seen: it would have to guess a skill name or call it to be told.
   const { faux, hub } = makeScriptedHub({
@@ -1279,7 +1280,7 @@ function memorySkill(name: string): SkillDef {
   };
 }
 
-Deno.test("a sub-agent's tool_search never finds a stella agent's own tools", async () => {
+test("a sub-agent's tool_search never finds a stella agent's own tools", async () => {
   const { faux, hub } = makeScriptedHub();
   // The session's main registry holds the tools that belong to its own
   // agent; the sub-agents' does not (see tools/registries.ts). This is the
@@ -1339,7 +1340,7 @@ function fakeMcpTool(name: string): Tool {
   };
 }
 
-Deno.test("a config change redirects a running general sub-agent to the new registry", async () => {
+test("a config change redirects a running general sub-agent to the new registry", async () => {
   const { faux, hub, root } = makeScriptedHub();
   const first = await makePingAttachment(root, "remote");
   const firstRegistry = new ToolRegistry();
@@ -1395,7 +1396,7 @@ Deno.test("a config change redirects a running general sub-agent to the new regi
   }
 });
 
-Deno.test("a stale attachment's discovery cannot overwrite the current registry", async () => {
+test("a stale attachment's discovery cannot overwrite the current registry", async () => {
   const { hub, root } = makeScriptedHub();
   const slow = startPingMcpServer(400);
   const fast = startPingMcpServer(0);

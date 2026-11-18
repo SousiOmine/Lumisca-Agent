@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import type { ClientEvent } from "../domain/event.ts";
 import { toolText } from "../test-utils.ts";
@@ -14,7 +15,7 @@ function makeHub() {
 /** The tool call id the tests execute with. */
 const TOOL_CALL_ID = "call-1";
 
-Deno.test("ask emits a question event and resolves with the answers", async () => {
+test("ask emits a question event and resolves with the answers", async () => {
   const { hub, events } = makeHub();
   const tool = createAskTool(hub);
   const questions = [
@@ -42,7 +43,7 @@ Deno.test("ask emits a question event and resolves with the answers", async () =
   assertEquals(result.details, { answers: [{ id: "q1", values: ["Deno"] }] });
 });
 
-Deno.test("pendingQuestions lists the asks that are still waiting", async () => {
+test("pendingQuestions lists the asks that are still waiting", async () => {
   const { hub } = makeHub();
   const questions = [
     {
@@ -69,7 +70,7 @@ Deno.test("pendingQuestions lists the asks that are still waiting", async () => 
   await assertRejects(() => rejected);
 });
 
-Deno.test("ask with multiple questions resolves with all answers", async () => {
+test("ask with multiple questions resolves with all answers", async () => {
   const { hub } = makeHub();
   const tool = createAskTool(hub);
   const promise = tool.execute(
@@ -109,7 +110,7 @@ Deno.test("ask with multiple questions resolves with all answers", async () => {
   );
 });
 
-Deno.test("answer rejects for an unknown tool call id", () => {
+test("answer rejects for an unknown tool call id", () => {
   const { hub } = makeHub();
   assertThrowsCoreError(
     () => hub.answer("call-unknown", [{ id: "q1", values: ["Deno"] }]),
@@ -118,7 +119,7 @@ Deno.test("answer rejects for an unknown tool call id", () => {
   );
 });
 
-Deno.test("answer rejects for unknown question ids", async () => {
+test("answer rejects for unknown question ids", async () => {
   const { hub } = makeHub();
   const tool = createAskTool(hub);
   const promise = tool.execute(
@@ -144,7 +145,7 @@ Deno.test("answer rejects for unknown question ids", async () => {
   await promise;
 });
 
-Deno.test("answer accepts free-text values outside the options", async () => {
+test("answer accepts free-text values outside the options", async () => {
   const { hub } = makeHub();
   const tool = createAskTool(hub);
   const promise = tool.execute(
@@ -169,7 +170,7 @@ Deno.test("answer accepts free-text values outside the options", async () => {
   assertEquals(result.details, { answers: [{ id: "q1", values: ["Python"] }] });
 });
 
-Deno.test("answer rejects empty values", async () => {
+test("answer rejects empty values", async () => {
   const { hub } = makeHub();
   const tool = createAskTool(hub);
   const promise = tool.execute(
@@ -195,7 +196,7 @@ Deno.test("answer rejects empty values", async () => {
   await promise;
 });
 
-Deno.test("answer requires a value for every question", async () => {
+test("answer requires a value for every question", async () => {
   const { hub } = makeHub();
   const tool = createAskTool(hub);
   const promise = tool.execute(
@@ -228,7 +229,7 @@ Deno.test("answer requires a value for every question", async () => {
   await promise;
 });
 
-Deno.test("rejectAll rejects a pending ask (run teardown)", async () => {
+test("rejectAll rejects a pending ask (run teardown)", async () => {
   const { hub } = makeHub();
   const tool = createAskTool(hub);
   const promise = tool.execute(
@@ -258,7 +259,7 @@ Deno.test("rejectAll rejects a pending ask (run teardown)", async () => {
   );
 });
 
-Deno.test("ask rejects duplicate question ids", async () => {
+test("ask rejects duplicate question ids", async () => {
   const { hub } = makeHub();
   const tool = createAskTool(hub);
   await assertRejects(
@@ -278,7 +279,7 @@ Deno.test("ask rejects duplicate question ids", async () => {
   );
 });
 
-Deno.test("ask rejects a non-string id or option label", async () => {
+test("ask rejects a non-string id or option label", async () => {
   // The schema tells the provider `id` is a string; models still send
   // numbers. Such a question used to reach the panel and travel back on the
   // answer, where the route's own type check rejected the whole answer with
@@ -321,7 +322,7 @@ Deno.test("ask rejects a non-string id or option label", async () => {
   assertEquals(hub.pendingQuestions(), []);
 });
 
-Deno.test("ask rejects empty options and out-of-range recommended", async () => {
+test("ask rejects empty options and out-of-range recommended", async () => {
   const { hub } = makeHub();
   const tool = createAskTool(hub);
   await assertRejects(

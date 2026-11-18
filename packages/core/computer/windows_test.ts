@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import { concatBytes } from "../bytes.ts";
 import {
@@ -34,7 +35,7 @@ if (probe?.available === true) probe.host.close();
 
 // --- absolute coordinate normalization --------------------------------------
 
-Deno.test("normalizeAbsolute maps the virtual desktop onto 0..65535", () => {
+test("normalizeAbsolute maps the virtual desktop onto 0..65535", () => {
   // A desktop starting at -2560 (a monitor left of the primary) with a
   // width of 7680: the far edges are the extremes, the primary's origin is
   // the ratio between them.
@@ -46,13 +47,13 @@ Deno.test("normalizeAbsolute maps the virtual desktop onto 0..65535", () => {
   assertEquals(normalizeAbsolute(9999, -2560, 7680), 65535);
 });
 
-Deno.test("normalizeAbsolute handles a degenerate extent", () => {
+test("normalizeAbsolute handles a degenerate extent", () => {
   assertEquals(normalizeAbsolute(5, 5, 1), 0);
 });
 
 // --- INPUT structure packing ------------------------------------------------
 
-Deno.test("inputSize follows the pointer width", () => {
+test("inputSize follows the pointer width", () => {
   assertEquals(inputSize(8), 40);
   assertEquals(inputSize(4), 28);
   assertEquals(pointerSizeFor("x86_64"), 8);
@@ -60,7 +61,7 @@ Deno.test("inputSize follows the pointer width", () => {
   assertEquals(pointerSizeFor("x86"), 4);
 });
 
-Deno.test("buildMouseInput lays the fields out where SendInput expects them", () => {
+test("buildMouseInput lays the fields out where SendInput expects them", () => {
   for (const pointerSize of [8, 4]) {
     const buffer = buildMouseInput(7, 9, 0x8001, 120, pointerSize);
     assertEquals(buffer.length, inputSize(pointerSize));
@@ -75,7 +76,7 @@ Deno.test("buildMouseInput lays the fields out where SendInput expects them", ()
   }
 });
 
-Deno.test("buildKeyInput lays the fields out where SendInput expects them", () => {
+test("buildKeyInput lays the fields out where SendInput expects them", () => {
   for (const pointerSize of [8, 4]) {
     const buffer = buildKeyInput(0x41, 0x3042, 0x0004, pointerSize);
     assertEquals(buffer.length, inputSize(pointerSize));
@@ -89,7 +90,7 @@ Deno.test("buildKeyInput lays the fields out where SendInput expects them", () =
   }
 });
 
-Deno.test("buildUnicodeInputs emits a down and an up per code unit", () => {
+test("buildUnicodeInputs emits a down and an up per code unit", () => {
   const buffer = buildUnicodeInputs([0x41, 0x3042], 8);
   assertEquals(buffer.length, 4 * inputSize(8));
   const view = new DataView(buffer.buffer);
@@ -101,7 +102,7 @@ Deno.test("buildUnicodeInputs emits a down and an up per code unit", () => {
   assertEquals([scan(2), scan(3)], [0x3042, 0x3042]);
 });
 
-Deno.test("buildKeyChordInputs holds modifiers around the key", () => {
+test("buildKeyChordInputs holds modifiers around the key", () => {
   const buffer = buildKeyChordInputs(0x53, [0x11, 0x10], 8);
   // Two modifiers down, the key down and up, then the modifiers up again.
   assertEquals(buffer.length, 6 * inputSize(8));
@@ -118,7 +119,7 @@ Deno.test("buildKeyChordInputs holds modifiers around the key", () => {
   assertEquals(entry(5), { vk: 0x11, flags: 0x0002 }, "ctrl up");
 });
 
-Deno.test("concatBytes joins the structures in order", () => {
+test("concatBytes joins the structures in order", () => {
   const joined = concatBytes([
     new Uint8Array([1, 2]),
     new Uint8Array([3]),
@@ -129,7 +130,7 @@ Deno.test("concatBytes joins the structures in order", () => {
 
 // --- key chords -------------------------------------------------------------
 
-Deno.test("resolveKeyChord understands named keys and modifiers", () => {
+test("resolveKeyChord understands named keys and modifiers", () => {
   assertEquals(resolveKeyChord("enter", asciiScan), {
     vk: 0x0d,
     modifiers: [],
@@ -153,7 +154,7 @@ Deno.test("resolveKeyChord understands named keys and modifiers", () => {
   });
 });
 
-Deno.test("resolveKeyChord resolves single characters through the layout", () => {
+test("resolveKeyChord resolves single characters through the layout", () => {
   // A character that needs Shift on this layout has it pressed implicitly:
   // "press the key that produces this character".
   assertEquals(
@@ -173,7 +174,7 @@ Deno.test("resolveKeyChord resolves single characters through the layout", () =>
   );
 });
 
-Deno.test("resolveKeyChord refuses chords it cannot honour", () => {
+test("resolveKeyChord refuses chords it cannot honour", () => {
   assertThrows(
     () => resolveKeyChord("", asciiScan),
     Error,
@@ -199,12 +200,12 @@ Deno.test("resolveKeyChord refuses chords it cannot honour", () => {
 
 // --- window ids -------------------------------------------------------------
 
-Deno.test("window ids round-trip through the hex form", () => {
+test("window ids round-trip through the hex form", () => {
   assertEquals(formatWindowId(parseWindowId("0x000A0B2C")), "0x000A0B2C");
   assertEquals(formatWindowId(parseWindowId("0xa0b2c")), "0x000A0B2C");
 });
 
-Deno.test("parseWindowId refuses anything but a hex handle", () => {
+test("parseWindowId refuses anything but a hex handle", () => {
   for (const bad of ["", "1234", "0x", "0xzz", "0x 12"]) {
     assertThrows(() => parseWindowId(bad), Error, "must look like");
   }
@@ -212,89 +213,90 @@ Deno.test("parseWindowId refuses anything but a hex handle", () => {
 
 // --- the live host (Windows with a display only) ----------------------------
 
-Deno.test("the Windows host describes itself and lists its displays", {
-  ignore: liveHost === undefined,
-}, () => {
-  const host = createWindowsComputerHost();
-  assert(host.available, "the probe found a host, so creating one must too");
-  try {
-    const displays = host.host.displays();
-    assert(displays.length > 0, "at least one display");
-    assertEquals(
-      displays.map((display) => display.index),
-      displays.map((_, index) => index),
-      "indices follow the reported order",
-    );
-    assertEquals(
-      displays.filter((display) => display.primary).length,
-      1,
-      "exactly one primary display",
-    );
-    for (const display of displays) {
-      assert(display.bounds.width > 0 && display.bounds.height > 0);
+test.skipIf(liveHost === undefined)(
+  "the Windows host describes itself and lists its displays",
+  () => {
+    const host = createWindowsComputerHost();
+    assert(host.available, "the probe found a host, so creating one must too");
+    try {
+      const displays = host.host.displays();
+      assert(displays.length > 0, "at least one display");
+      assertEquals(
+        displays.map((display) => display.index),
+        displays.map((_, index) => index),
+        "indices follow the reported order",
+      );
+      assertEquals(
+        displays.filter((display) => display.primary).length,
+        1,
+        "exactly one primary display",
+      );
+      for (const display of displays) {
+        assert(display.bounds.width > 0 && display.bounds.height > 0);
+      }
+      // Left to right, which is the order the indices promise.
+      const xs = displays.map((display) => display.bounds.x);
+      assertEquals(
+        [...xs].sort((a, b) => a - b),
+        xs,
+      );
+      assert(host.host.describe().includes("Windows"));
+      host.host.close();
+    } finally {
+      host.host.close();
     }
-    // Left to right, which is the order the indices promise.
-    const xs = displays.map((display) => display.bounds.x);
-    assertEquals(
-      [...xs].sort((a, b) => a - b),
-      xs,
-    );
-    assert(host.host.describe().includes("Windows"));
-    host.host.close();
-  } finally {
-    host.host.close();
-  }
-});
+  },
+);
 
-Deno.test("the Windows host captures the requested region at 1:1", {
-  ignore: liveHost === undefined,
-}, async () => {
-  const host = createWindowsComputerHost();
-  assert(host.available);
-  try {
-    const primary = host.host.displays().find((display) => display.primary)!;
-    const region = {
-      x: primary.bounds.x + 4,
-      y: primary.bounds.y + 4,
-      width: 32,
-      height: 24,
-    };
-    const capture = await host.host.capture(region);
-    assertEquals(capture.screen, region);
-    assertEquals([capture.width, capture.height], [32, 24]);
-    assertEquals(capture.pixels.length, 32 * 24 * 4);
-  } finally {
-    host.host.close();
-  }
-});
-
-Deno.test("the Windows host reports windows with usable ids", {
-  ignore: liveHost === undefined,
-}, () => {
-  const host = createWindowsComputerHost();
-  assert(host.available);
-  try {
-    const windows = host.host.windows();
-    assert(windows.length > 0, "a desktop session has windows");
-    for (const window of windows) {
-      // Every reported id must be accepted back by the focus action.
-      assertEquals(formatWindowId(parseWindowId(window.id)), window.id);
-      assert(window.title.length > 0, "untitled windows are not reported");
-      assert(window.title.length <= MAX_WINDOW_TITLE_CHARS);
+test.skipIf(liveHost === undefined)(
+  "the Windows host captures the requested region at 1:1",
+  async () => {
+    const host = createWindowsComputerHost();
+    assert(host.available);
+    try {
+      const primary = host.host.displays().find((display) => display.primary)!;
+      const region = {
+        x: primary.bounds.x + 4,
+        y: primary.bounds.y + 4,
+        width: 32,
+        height: 24,
+      };
+      const capture = await host.host.capture(region);
+      assertEquals(capture.screen, region);
+      assertEquals([capture.width, capture.height], [32, 24]);
+      assertEquals(capture.pixels.length, 32 * 24 * 4);
+    } finally {
+      host.host.close();
     }
-    assertEquals(
-      windows.filter((window) => window.focused).length <= 1,
-      true,
-      "at most one window holds the focus",
-    );
-  } finally {
-    host.host.close();
-  }
-});
+  },
+);
 
-Deno.test("closing the host twice is safe", {
-  ignore: liveHost === undefined,
-}, () => {
+test.skipIf(liveHost === undefined)(
+  "the Windows host reports windows with usable ids",
+  () => {
+    const host = createWindowsComputerHost();
+    assert(host.available);
+    try {
+      const windows = host.host.windows();
+      assert(windows.length > 0, "a desktop session has windows");
+      for (const window of windows) {
+        // Every reported id must be accepted back by the focus action.
+        assertEquals(formatWindowId(parseWindowId(window.id)), window.id);
+        assert(window.title.length > 0, "untitled windows are not reported");
+        assert(window.title.length <= MAX_WINDOW_TITLE_CHARS);
+      }
+      assertEquals(
+        windows.filter((window) => window.focused).length <= 1,
+        true,
+        "at most one window holds the focus",
+      );
+    } finally {
+      host.host.close();
+    }
+  },
+);
+
+test.skipIf(liveHost === undefined)("closing the host twice is safe", () => {
   const host = createWindowsComputerHost();
   assert(host.available);
   host.host.close();

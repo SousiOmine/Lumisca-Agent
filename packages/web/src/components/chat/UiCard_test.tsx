@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import {
   parseUiMarkup,
   resolveUiView,
@@ -29,7 +30,7 @@ function draw(view: UiResolvedView): string {
   return renderToString(createElement(UiCard, { view, onSend: () => {} }));
 }
 
-Deno.test("UiCard draws a metric beside another in a row of columns", () => {
+test("UiCard draws a metric beside another in a row of columns", () => {
   const html = draw(
     viewOf(`<Card title="状況">
       <Columns gap="m">
@@ -49,7 +50,7 @@ Deno.test("UiCard draws a metric beside another in a row of columns", () => {
   assertEquals(first !== -1 && second > first, true, html);
 });
 
-Deno.test("UiCard draws a repeated block once per item", () => {
+test("UiCard draws a repeated block once per item", () => {
   const html = draw(
     viewOf(`<Card>
       <Data>{"envs":[{"name":"prod","load":81},{"name":"stg","load":42}]}</Data>
@@ -62,7 +63,7 @@ Deno.test("UiCard draws a repeated block once per item", () => {
   assertEquals(html.includes("$item"), false, html);
 });
 
-Deno.test("UiCard draws a grid on its columns and stacks the rest", () => {
+test("UiCard draws a grid on its columns and stacks the rest", () => {
   const html = draw(
     viewOf(`<Card>
       <Grid columns="3"><Text>a</Text><Text>b</Text></Grid>
@@ -76,7 +77,7 @@ Deno.test("UiCard draws a grid on its columns and stacks the rest", () => {
   assertStringIncludes(html, 'data-gap="s"');
 });
 
-Deno.test("UiCard draws a choice as a row of buttons when asked", () => {
+test("UiCard draws a choice as a row of buttons when asked", () => {
   const html = draw(
     viewOf(
       '<Card><Choice layout="row"><Option>再実行</Option><Option>中止</Option></Choice></Card>',
@@ -88,7 +89,7 @@ Deno.test("UiCard draws a choice as a row of buttons when asked", () => {
   assertStringIncludes(html, "中止");
 });
 
-Deno.test("InvalidCard keeps a card's markup behind the note", () => {
+test("InvalidCard keeps a card's markup behind the note", () => {
   initLocale("ja");
   const markup = '<Card><Metric label="本番" value="81" /></Card>trailing';
   const html = renderToString(createElement(InvalidCard, { markup }));
@@ -102,7 +103,7 @@ Deno.test("InvalidCard keeps a card's markup behind the note", () => {
   assert(html.length > 0);
 });
 
-Deno.test("UiCard draws the line a field carries under its input", () => {
+test("UiCard draws the line a field carries under its input", () => {
   const html = draw(
     viewOf(`<Card><Form submit="送る">
       <Field label="日時" required>毎週の曜日と時間帯を書いてください</Field>

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import type { StellaAgent } from "@lumisca/core";
 /**
  * What an agent's edit dialog saves besides its name and picture: the model
@@ -67,7 +68,7 @@ async function patch(body: unknown, received: Received[]) {
   });
 }
 
-Deno.test("agent model: a chosen model reaches the core as one pair", async () => {
+test("agent model: a chosen model reaches the core as one pair", async () => {
   const received: Received[] = [];
   const response = await patch(
     { model: { provider: "faux", modelId: "large" } },
@@ -80,7 +81,7 @@ Deno.test("agent model: a chosen model reaches the core as one pair", async () =
   });
 });
 
-Deno.test("agent model: null asks for the app's default model", async () => {
+test("agent model: null asks for the app's default model", async () => {
   // Clearing the choice is a change like any other, so it must travel: an
   // absent key would mean "leave the chosen model alone".
   const received: Received[] = [];
@@ -88,14 +89,14 @@ Deno.test("agent model: null asks for the app's default model", async () => {
   assertEquals(received[0]?.patch.model, null);
 });
 
-Deno.test("agent model: an absent key leaves the choice alone", async () => {
+test("agent model: an absent key leaves the choice alone", async () => {
   const received: Received[] = [];
   assertEquals((await patch({ name: "Renamed" }, received)).status, 200);
   assertEquals(received[0]?.patch.model, undefined);
   assertEquals(received[0]?.patch.name, "Renamed");
 });
 
-Deno.test("agent model: a malformed pair is a 400, not a stored row", async () => {
+test("agent model: a malformed pair is a 400, not a stored row", async () => {
   const received: Received[] = [];
   // A string, a missing half and a blank half all describe the request
   // wrongly: none of them names a model, and the core never sees them.
@@ -112,7 +113,7 @@ Deno.test("agent model: a malformed pair is a 400, not a stored row", async () =
   assertEquals(received, []);
 });
 
-Deno.test("agent thinking level: the level travels with the model it is for", async () => {
+test("agent thinking level: the level travels with the model it is for", async () => {
   // The level is a MODEL setting, so the request names the model instead of
   // letting the server re-resolve "the agent's model" (the two could
   // disagree when the default model changed while the dialog was open).
@@ -131,13 +132,13 @@ Deno.test("agent thinking level: the level travels with the model it is for", as
   });
 });
 
-Deno.test("agent thinking level: an absent key leaves the stored level alone", async () => {
+test("agent thinking level: an absent key leaves the stored level alone", async () => {
   const received: Received[] = [];
   assertEquals((await patch({ name: "Renamed" }, received)).status, 200);
   assertEquals(received[0]?.patch.thinkingLevel, undefined);
 });
 
-Deno.test("agent thinking level: a malformed level is a 400, not a stored row", async () => {
+test("agent thinking level: a malformed level is a 400, not a stored row", async () => {
   // A save is one act: a level the route cannot read must not reach the core
   // next to the name it would otherwise store.
   const received: Received[] = [];

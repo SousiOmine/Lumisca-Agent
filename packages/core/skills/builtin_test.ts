@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { makeRealTempDir, removeDirRetry } from "../test-utils.ts";
@@ -47,7 +48,7 @@ function computerBuiltins() {
 
 // --- the built-in registry ---------------------------------------------------
 
-Deno.test("builtinSkills advertises the stella-only skills for a stella session", async () => {
+test("builtinSkills advertises the stella-only skills for a stella session", async () => {
   const skills = builtinSkills({
     browser: false,
     computer: false,
@@ -122,7 +123,7 @@ Deno.test("builtinSkills advertises the stella-only skills for a stella session"
   );
 });
 
-Deno.test("builtinSkills advertises vm-env only in a stella session", async () => {
+test("builtinSkills advertises vm-env only in a stella session", async () => {
   // `vm_env` is discoverable, so this skill is the only thing that tells the
   // agent the tool exists at all. It has to name the tool and the search that
   // finds it, and it has to say the one rule the tool's description cannot
@@ -153,7 +154,7 @@ Deno.test("builtinSkills advertises vm-env only in a stella session", async () =
   );
 });
 
-Deno.test("builtinSkills advertises folder-share only in a stella session", async () => {
+test("builtinSkills advertises folder-share only in a stella session", async () => {
   // Both folder tools are discoverable, so this guide is the only thing that
   // tells the agent they exist. It has to name them, name the search that
   // finds them, and carry the two rules the tool descriptions cannot: the
@@ -181,7 +182,7 @@ Deno.test("builtinSkills advertises folder-share only in a stella session", asyn
   );
 });
 
-Deno.test("builtinSkills advertises desktop-apps only in a stella session", async () => {
+test("builtinSkills advertises desktop-apps only in a stella session", async () => {
   const stella = builtinSkills({
     browser: false,
     computer: false,
@@ -214,7 +215,7 @@ Deno.test("builtinSkills advertises desktop-apps only in a stella session", asyn
   );
 });
 
-Deno.test("builtinSkills advertises web-browser when the browser is available", () => {
+test("builtinSkills advertises web-browser when the browser is available", () => {
   const skills = browserBuiltins();
   assertEquals(
     skills.map((s) => s.name),
@@ -229,14 +230,14 @@ Deno.test("builtinSkills advertises web-browser when the browser is available", 
   assertEquals(typeof skill.read, "function");
 });
 
-Deno.test("builtinSkills hides web-browser without a browser backend", () => {
+test("builtinSkills hides web-browser without a browser backend", () => {
   assertEquals(
     builtinSkills({ browser: false, computer: false, subagents: false }),
     [],
   );
 });
 
-Deno.test("builtinSkills advertises computer-use only when the machine can be driven", () => {
+test("builtinSkills advertises computer-use only when the machine can be driven", () => {
   const skills = computerBuiltins();
   assertEquals(
     skills.map((s) => s.name),
@@ -260,7 +261,7 @@ Deno.test("builtinSkills advertises computer-use only when the machine can be dr
   );
 });
 
-Deno.test("both built-in skills are advertised when both capabilities are present", () => {
+test("both built-in skills are advertised when both capabilities are present", () => {
   assertEquals(
     builtinSkills({ browser: true, computer: true, subagents: false }).map(
       (s) => s.name,
@@ -269,7 +270,7 @@ Deno.test("both built-in skills are advertised when both capabilities are presen
   );
 });
 
-Deno.test("loadSkillContent reads the embedded computer-use guide", async () => {
+test("loadSkillContent reads the embedded computer-use guide", async () => {
   const [skill] = computerBuiltins();
   assert(skill !== undefined);
   const content = await loadSkillContent(skill);
@@ -280,7 +281,7 @@ Deno.test("loadSkillContent reads the embedded computer-use guide", async () => 
   assert(content.includes("no screenshot yet"));
 });
 
-Deno.test("the computer-use guide has no follow-up files", async () => {
+test("the computer-use guide has no follow-up files", async () => {
   const [skill] = computerBuiltins();
   assert(skill !== undefined);
   await assertRejects(
@@ -292,7 +293,7 @@ Deno.test("the computer-use guide has no follow-up files", async () => {
 
 // --- loading ----------------------------------------------------------------
 
-Deno.test("loadSkillContent reads the embedded SKILL.md without a filesystem", async () => {
+test("loadSkillContent reads the embedded SKILL.md without a filesystem", async () => {
   const [skill] = browserBuiltins();
   assert(skill !== undefined);
   const content = await loadSkillContent(skill);
@@ -302,7 +303,7 @@ Deno.test("loadSkillContent reads the embedded SKILL.md without a filesystem", a
   assert(content.includes("localhost"));
 });
 
-Deno.test("built-in skills have no follow-up files", async () => {
+test("built-in skills have no follow-up files", async () => {
   const [skill] = browserBuiltins();
   assert(skill !== undefined);
   await assertRejects(
@@ -314,7 +315,7 @@ Deno.test("built-in skills have no follow-up files", async () => {
 
 // --- precedence -------------------------------------------------------------
 
-Deno.test("built-in skills fill gaps when no user skill exists", async () => {
+test("built-in skills fill gaps when no user skill exists", async () => {
   const root = await fixtureRoot(false);
   try {
     const skills = discoverSkills([root], {
@@ -329,7 +330,7 @@ Deno.test("built-in skills fill gaps when no user skill exists", async () => {
   }
 });
 
-Deno.test("workspace skills shadow built-in skills of the same name", async () => {
+test("workspace skills shadow built-in skills of the same name", async () => {
   const root = await fixtureRoot(true);
   try {
     const skills = discoverSkills([root], {
@@ -347,7 +348,7 @@ Deno.test("workspace skills shadow built-in skills of the same name", async () =
   }
 });
 
-Deno.test("global skills shadow built-in skills of the same name", async () => {
+test("global skills shadow built-in skills of the same name", async () => {
   const root = await fixtureRoot(false);
   const global = await makeRealTempDir("lumisca-builtin-global-");
   try {
@@ -367,7 +368,7 @@ Deno.test("global skills shadow built-in skills of the same name", async () => {
   }
 });
 
-Deno.test("plugin skills shadow built-in skills of the same name", () => {
+test("plugin skills shadow built-in skills of the same name", () => {
   const pluginSkill = {
     name: "web-browser",
     description: "Plugin's browser skill.",
@@ -387,7 +388,7 @@ Deno.test("plugin skills shadow built-in skills of the same name", () => {
 
 // --- formatting -------------------------------------------------------------
 
-Deno.test("formatAvailableSkills lists built-in skills like any other", () => {
+test("formatAvailableSkills lists built-in skills like any other", () => {
   const text = formatAvailableSkills(browserBuiltins());
   assert(text.startsWith("- web-browser:"));
   // The line the catalog publishes is the trigger the model reads, so it
@@ -395,7 +396,7 @@ Deno.test("formatAvailableSkills lists built-in skills like any other", () => {
   assert(text.includes("Use this skill whenever"));
 });
 
-Deno.test("the coding-agents skill calls the preloaded task tool directly", async () => {
+test("the coding-agents skill calls the preloaded task tool directly", async () => {
   // The `subagents` flag that advertises this skill is the same fact as the
   // tool hub, so `task` is in the agent's tool set wherever the guide is
   // read. A `tool_search` step here made a literal reader conclude it could
@@ -434,7 +435,7 @@ Deno.test("the coding-agents skill calls the preloaded task tool directly", asyn
   );
 });
 
-Deno.test("every built-in description is a trigger, not a table of contents", () => {
+test("every built-in description is a trigger, not a table of contents", () => {
   // The catalog shows only `name: description` (level one of progressive
   // disclosure), so the description is what makes the model load a skill at
   // all. It starts with when to use the skill, not with what it contains.
@@ -459,7 +460,7 @@ Deno.test("every built-in description is a trigger, not a table of contents", ()
   }
 });
 
-Deno.test("a session without a sub-agent hub is not pointed at one", () => {
+test("a session without a sub-agent hub is not pointed at one", () => {
   const skills = builtinSkills({
     browser: false,
     computer: false,
@@ -472,7 +473,7 @@ Deno.test("a session without a sub-agent hub is not pointed at one", () => {
   );
 });
 
-Deno.test("builtinSkills advertises the MCP guide only where the tools are", async () => {
+test("builtinSkills advertises the MCP guide only where the tools are", async () => {
   const skills = builtinSkills({
     browser: false,
     computer: false,
@@ -518,7 +519,7 @@ Deno.test("builtinSkills advertises the MCP guide only where the tools are", asy
   );
 });
 
-Deno.test("builtinSkills advertises the skill guide only where skills can be written", async () => {
+test("builtinSkills advertises the skill guide only where skills can be written", async () => {
   // A coding session has the file tools the guide teaches.
   const coding = builtinSkills({
     browser: false,

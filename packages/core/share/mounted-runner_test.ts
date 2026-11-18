@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import type { RunOptions, ShellRunResult } from "../tools/command-backend.ts";
 import { shareRootOf } from "./grant.ts";
@@ -27,7 +28,7 @@ function options(cwd: string): RunOptions {
   return { cwd, timeoutSec: 5, maxOutputChars: 1000 };
 }
 
-Deno.test("a command outside a lent folder runs where the session works", async () => {
+test("a command outside a lent folder runs where the session works", async () => {
   primary.calls.length = 0;
   const transport = new RecordingTransport(answerOf);
   const runner = new MountedRunner(primary, transport, () => [
@@ -39,7 +40,7 @@ Deno.test("a command outside a lent folder runs where the session works", async 
   assertEquals(transport.calls.length, 0);
 });
 
-Deno.test("a command in a lent folder runs on the computer that lent it", async () => {
+test("a command in a lent folder runs on the computer that lent it", async () => {
   primary.calls.length = 0;
   const transport = new RecordingTransport(answerOf);
   const runner = new MountedRunner(primary, transport, () => [
@@ -62,7 +63,7 @@ Deno.test("a command in a lent folder runs on the computer that lent it", async 
   });
 });
 
-Deno.test("a read-only folder still runs a command there", async () => {
+test("a read-only folder still runs a command there", async () => {
   // The write permission governs the file tools. A shell that could only
   // read would not run the `git status` or `grep` the folder was lent for.
   primary.calls.length = 0;

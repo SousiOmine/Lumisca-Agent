@@ -1,9 +1,9 @@
 # Bun migration
 
 The server runs, tests, checks and builds on Bun. The migration landed on
-`master`; this file records what moved and how it was verified. `tools/bun/`
-keeps the one piece that is still needed at runtime — the `Deno.test` glue
-(`deno-shim.ts`) — and the script that loads it (`bunfig.toml`).
+`master`; this file records what moved and how it was verified. The suite uses
+`bun:test` directly; `bunfig.toml` preloads the runtime so the tests and the
+helper scripts they spawn still see the Deno-shaped APIs.
 
 ## What changed
 
@@ -13,14 +13,15 @@ keeps the one piece that is still needed at runtime — the `Deno.test` glue
   Deno's (the names, the option objects and the quirks: `status` ends at
   process exit, `env` merges over the parent, a missing program throws from
   `spawn`). Product code calls it as `runtime.*`; the `Deno` global is kept
-  for the test runner's `Deno.test` and the browser probe.
+  for the test suite and the browser probe, which call those APIs directly.
 - `packages/server/mod.ts` imports that module first, so the packaged binary
   carries it.
 - `scripts/build-server.ts` compiles with `bun build --compile` instead of
   `deno compile`; the desktop dev launch uses `bun run`.
 - `scripts/fake-mcp-*.ts` use Node/Bun stdin/stdout instead of `Deno.*`.
-- `tools/bun/deno-shim.ts` is only `Deno.test` → `bun:test` glue (hooks
-  included), loaded with `bunfig.toml`.
+- Tests import `test`, `afterAll` and the other hooks from `bun:test`. The
+  conditional cases use `test.skipIf(...)`. `bunfig.toml` preloads
+  `packages/core/runtime/runtime.ts` so the Deno-shaped APIs stay available.
 - Formatting and lint are Biome (`biome.json`), the type check is `tsc`
   (`tsconfig.json`), and both are package.json scripts: `fmt`, `fmt:check`,
   `check`. The suite is `bun test --parallel --timeout 30000` (`test`).

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { assertEquals, assertThrows } from "@std/assert";
 import { removeDirRetry } from "../test-utils.ts";
@@ -7,7 +8,7 @@ import { createFileSettingsRepo, createInMemorySettingsRepo } from "./repo.ts";
 
 // --- parseJsonc -----------------------------------------------------------
 
-Deno.test("parseJsonc strips comments and trailing commas", () => {
+test("parseJsonc strips comments and trailing commas", () => {
   const text = `{
     // テーマ設定
     "theme": "dark", /* block comment */
@@ -23,7 +24,7 @@ Deno.test("parseJsonc strips comments and trailing commas", () => {
   });
 });
 
-Deno.test("parseJsonc keeps string literals intact", () => {
+test("parseJsonc keeps string literals intact", () => {
   const text = `{
     "url": "http://example.com//path",
     "code": "a /* not a comment */ b",
@@ -36,7 +37,7 @@ Deno.test("parseJsonc keeps string literals intact", () => {
   });
 });
 
-Deno.test("parseJsonc throws SettingsFileError with position and path", () => {
+test("parseJsonc throws SettingsFileError with position and path", () => {
   assertThrows(
     () => parseJsonc('{\n  "theme": ,\n}', "/tmp/settings.jsonc"),
     SettingsFileError,
@@ -50,7 +51,7 @@ Deno.test("parseJsonc throws SettingsFileError with position and path", () => {
 
 // --- createFileSettingsRepo ------------------------------------------------
 
-Deno.test("file settings repo: string roundtrip and persistence", async () => {
+test("file settings repo: string roundtrip and persistence", async () => {
   const dir = await Deno.makeTempDir({ prefix: "lumisca-settings-" });
   const path = join(dir, "settings.jsonc");
   try {
@@ -77,7 +78,7 @@ Deno.test("file settings repo: string roundtrip and persistence", async () => {
   }
 });
 
-Deno.test("file settings repo: JSON values are written natively", async () => {
+test("file settings repo: JSON values are written natively", async () => {
   const dir = await Deno.makeTempDir({ prefix: "lumisca-settings-" });
   const path = join(dir, "settings.jsonc");
   try {
@@ -100,7 +101,7 @@ Deno.test("file settings repo: JSON values are written natively", async () => {
   }
 });
 
-Deno.test("file settings repo: missing file means empty settings", async () => {
+test("file settings repo: missing file means empty settings", async () => {
   const dir = await Deno.makeTempDir({ prefix: "lumisca-settings-" });
   const path = join(dir, "nested", "settings.jsonc");
   try {
@@ -113,7 +114,7 @@ Deno.test("file settings repo: missing file means empty settings", async () => {
   }
 });
 
-Deno.test("file settings repo: malformed file fails fast with its path", async () => {
+test("file settings repo: malformed file fails fast with its path", async () => {
   const dir = await Deno.makeTempDir({ prefix: "lumisca-settings-" });
   const path = join(dir, "settings.jsonc");
   try {
@@ -124,7 +125,7 @@ Deno.test("file settings repo: malformed file fails fast with its path", async (
   }
 });
 
-Deno.test("file settings repo: non-object top level is rejected", async () => {
+test("file settings repo: non-object top level is rejected", async () => {
   const dir = await Deno.makeTempDir({ prefix: "lumisca-settings-" });
   const path = join(dir, "settings.jsonc");
   try {
@@ -141,7 +142,7 @@ Deno.test("file settings repo: non-object top level is rejected", async () => {
 
 // --- createInMemorySettingsRepo ---------------------------------------------
 
-Deno.test("in-memory settings repo: basic roundtrip", () => {
+test("in-memory settings repo: basic roundtrip", () => {
   const repo = createInMemorySettingsRepo();
   repo.set("theme", "dark");
   repo.set("api_key:anthropic", "sk-test");
@@ -155,7 +156,7 @@ Deno.test("in-memory settings repo: basic roundtrip", () => {
 
 // --- dir() -------------------------------------------------------------------
 
-Deno.test("file settings repo exposes its directory; in-memory has none", async () => {
+test("file settings repo exposes its directory; in-memory has none", async () => {
   const dir = await Deno.makeTempDir({ prefix: "lumisca-settings-" });
   try {
     const path = join(dir, "nested", "settings.jsonc");
@@ -169,7 +170,7 @@ Deno.test("file settings repo exposes its directory; in-memory has none", async 
 
 // --- resolveSettingsPath ----------------------------------------------------
 
-Deno.test("resolveSettingsPath honors XDG_CONFIG_HOME", () => {
+test("resolveSettingsPath honors XDG_CONFIG_HOME", () => {
   // The environment is passed in, never mutated: Deno.env is shared by every
   // test file the runner parallels.
   assertEquals(
@@ -178,7 +179,7 @@ Deno.test("resolveSettingsPath honors XDG_CONFIG_HOME", () => {
   );
 });
 
-Deno.test("resolveSettingsPath defaults to ~/.config", () => {
+test("resolveSettingsPath defaults to ~/.config", () => {
   assertEquals(
     resolveSettingsPath(() => ({ HOME: join("C:", "users", "me") })),
     join("C:", "users", "me", ".config", "lumisca-agent", "settings.jsonc"),
@@ -197,7 +198,7 @@ Deno.test("resolveSettingsPath defaults to ~/.config", () => {
   );
 });
 
-Deno.test("file settings repo: an external edit survives the next write", async () => {
+test("file settings repo: an external edit survives the next write", async () => {
   const dir = await Deno.makeTempDir({ prefix: "lumisca-settings-" });
   const path = join(dir, "settings.jsonc");
   try {

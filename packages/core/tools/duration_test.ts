@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { formatDuration } from "./duration.ts";
 
@@ -6,7 +7,7 @@ import { formatDuration } from "./duration.ts";
  * so they are checked together, with the band edges kept explicit: the
  * edges are what a rewrite breaks, not the middle of a band. */
 
-Deno.test("formatDuration picks the band and keeps its edges readable", () => {
+test("formatDuration picks the band and keeps its edges readable", () => {
   // Sub-second: milliseconds, rounded down.
   assertEquals(formatDuration(0), "0ms");
   assertEquals(formatDuration(12.4), "12ms");
@@ -32,7 +33,7 @@ Deno.test("formatDuration picks the band and keeps its edges readable", () => {
   assertEquals(formatDuration(3_661_000), "1h 01m 01s");
 });
 
-Deno.test("formatDuration clamps a negative duration to zero", () => {
+test("formatDuration clamps a negative duration to zero", () => {
   // A clock correction can put the end before the start; "-5ms" would be
   // shown to the user.
   assertEquals(formatDuration(-5), "0ms");

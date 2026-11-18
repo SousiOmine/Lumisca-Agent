@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { generateCookie } from "hono/cookie";
 import {
@@ -6,7 +7,7 @@ import {
   tokenCookieName,
 } from "./auth-cookie.ts";
 
-Deno.test("tokenCookieName keys the cookie by host and port", () => {
+test("tokenCookieName keys the cookie by host and port", () => {
   assertEquals(tokenCookieName("homeserver:8000"), "lumisca_token_8000");
   assertEquals(tokenCookieName("127.0.0.1:8100"), "lumisca_token_8100");
   // IPv6 literals keep their brackets in the Host header.
@@ -27,7 +28,7 @@ Deno.test("tokenCookieName keys the cookie by host and port", () => {
   assertEquals(tokenCookieName("homeserver:not-a-port"), "lumisca_token");
 });
 
-Deno.test("the token cookie is long-lived, script-proof and not Secure", () => {
+test("the token cookie is long-lived, script-proof and not Secure", () => {
   const cookie = generateCookie(
     tokenCookieName("homeserver:8000"),
     "secret-token",

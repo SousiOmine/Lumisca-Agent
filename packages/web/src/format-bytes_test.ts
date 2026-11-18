@@ -1,7 +1,8 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { formatBytes } from "./format-bytes.ts";
 
-Deno.test("formatBytes keeps small files in bytes and larger ones short", () => {
+test("formatBytes keeps small files in bytes and larger ones short", () => {
   assertEquals(formatBytes(0), "0 B");
   assertEquals(formatBytes(1023), "1023 B");
   assertEquals(formatBytes(1024), "1.0 KB");

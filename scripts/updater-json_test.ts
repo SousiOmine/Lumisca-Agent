@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import "../packages/core/runtime/runtime.ts";
 import { assertEquals, assertThrows } from "@std/assert";
 import {
@@ -60,7 +61,7 @@ function manifest(overrides: Record<string, unknown> = {}) {
   };
 }
 
-Deno.test("an API asset URL becomes the tag's public download link", () => {
+test("an API asset URL becomes the tag's public download link", () => {
   const rewrite = rewriteUpdaterJson(manifest(), ASSETS, TAG);
 
   assertEquals(rewrite.version, "0.9.0");
@@ -92,7 +93,7 @@ Deno.test("an API asset URL becomes the tag's public download link", () => {
   ]);
 });
 
-Deno.test("a draft's placeholder URLs become the tag's download links", () => {
+test("a draft's placeholder URLs become the tag's download links", () => {
   // What the rewrite finds on a draft release: the asset list reports the
   // `untagged-<hash>` placeholder, which must not reach the manifest — it
   // stops addressing the asset the moment the release is published.
@@ -110,7 +111,7 @@ Deno.test("a draft's placeholder URLs become the tag's download links", () => {
   );
 });
 
-Deno.test("a manifest that already has the tag's links is left alone", () => {
+test("a manifest that already has the tag's links is left alone", () => {
   // What a second run over this script's own output finds.
   const published = rewriteUpdaterJson(manifest(), ASSETS, TAG).manifest;
 
@@ -127,7 +128,7 @@ Deno.test("a manifest that already has the tag's links is left alone", () => {
   );
 });
 
-Deno.test("a platform key like __proto__ stays an own property", () => {
+test("a platform key like __proto__ stays an own property", () => {
   // The keys come from the manifest, so a key a plain object would treat as
   // a prototype write must survive as the own property the manifest had.
   const withProtoKey = manifest({
@@ -145,7 +146,7 @@ Deno.test("a platform key like __proto__ stays an own property", () => {
   assertEquals(published.platforms["__proto__"].url, APPLE.url);
 });
 
-Deno.test("a URL that is no asset of the release fails", () => {
+test("a URL that is no asset of the release fails", () => {
   const stale = manifest({
     platforms: {
       "darwin-aarch64": {
@@ -164,7 +165,7 @@ Deno.test("a URL that is no asset of the release fails", () => {
   );
 });
 
-Deno.test("a tag that does not match the manifest's version fails", () => {
+test("a tag that does not match the manifest's version fails", () => {
   // The links would address a release the manifest does not belong to.
   assertThrows(
     () => rewriteUpdaterJson(manifest(), ASSETS, "v0.9.1"),
@@ -185,7 +186,7 @@ Deno.test("a tag that does not match the manifest's version fails", () => {
   );
 });
 
-Deno.test("a platform entry without a signature or a url fails", () => {
+test("a platform entry without a signature or a url fails", () => {
   const noSignature = manifest({
     platforms: { "darwin-aarch64": { url: APPLE.apiUrl } },
   });
@@ -212,7 +213,7 @@ Deno.test("a platform entry without a signature or a url fails", () => {
   );
 });
 
-Deno.test("a manifest without a version or platforms fails", () => {
+test("a manifest without a version or platforms fails", () => {
   const { version: _version, ...withoutVersion } = manifest();
   assertThrows(
     () => rewriteUpdaterJson(withoutVersion, ASSETS, TAG),
@@ -233,7 +234,7 @@ Deno.test("a manifest without a version or platforms fails", () => {
   );
 });
 
-Deno.test("the asset list must be a list of named assets", () => {
+test("the asset list must be a list of named assets", () => {
   assertEquals(parseReleaseAssets(ASSETS), ASSETS);
 
   assertThrows(

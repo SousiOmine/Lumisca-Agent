@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import {
   parseStoredRecents,
@@ -10,7 +11,7 @@ import {
  * per model, a short list, and a value that never throws (it lives in a
  * browser profile the app does not control). */
 
-Deno.test("stored recents: a pick moves to the front", () => {
+test("stored recents: a pick moves to the front", () => {
   const raw = withRecentModel(null, "", { provider: "a", modelId: "1" });
   const twice = withRecentModel(raw, "", { provider: "b", modelId: "2" });
   assertEquals(recentsOf(twice, ""), [
@@ -26,7 +27,7 @@ Deno.test("stored recents: a pick moves to the front", () => {
   ]);
 });
 
-Deno.test("stored recents: the list stops at the limit", () => {
+test("stored recents: the list stops at the limit", () => {
   let raw: string | null = null;
   for (let i = 0; i < RECENT_MODEL_LIMIT + 3; i++) {
     raw = withRecentModel(raw, "", { provider: "p", modelId: `m${i}` });
@@ -41,7 +42,7 @@ Deno.test("stored recents: the list stops at the limit", () => {
   );
 });
 
-Deno.test("stored recents: peers keep separate lists", () => {
+test("stored recents: peers keep separate lists", () => {
   const raw = withRecentModel(null, "", { provider: "a", modelId: "1" });
   const peer = withRecentModel(raw, "peer-1", { provider: "b", modelId: "2" });
   assertEquals(recentsOf(peer, ""), [{ provider: "a", modelId: "1" }]);
@@ -50,7 +51,7 @@ Deno.test("stored recents: peers keep separate lists", () => {
   assertEquals(recentsOf(peer, "peer-2"), []);
 });
 
-Deno.test("stored recents: a malformed value is an empty list, not a throw", () => {
+test("stored recents: a malformed value is an empty list, not a throw", () => {
   assertEquals(parseStoredRecents(null), {});
   assertEquals(parseStoredRecents(""), {});
   assertEquals(parseStoredRecents("not json"), {});

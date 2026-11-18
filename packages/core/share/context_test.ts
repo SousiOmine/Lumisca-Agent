@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { createShareProvider, shareSeedMessages } from "./context.ts";
 import { shareRootOf } from "./grant.ts";
@@ -19,12 +20,12 @@ function providerOf(grants: ReturnType<typeof grantOf>[]) {
   };
 }
 
-Deno.test("a conversation with nothing lent is told nothing", () => {
+test("a conversation with nothing lent is told nothing", () => {
   const { provider } = providerOf([]);
   assertEquals(provider.next(), []);
 });
 
-Deno.test("a loan is announced with how to address it and what it allows", () => {
+test("a loan is announced with how to address it and what it allows", () => {
   const provider = providerOf([
     grantOf({
       name: "proj",
@@ -55,7 +56,7 @@ Deno.test("a loan is announced with how to address it and what it allows", () =>
   assert(!update.body.includes("machine"), update.body);
 });
 
-Deno.test("an unchanged list is not published twice", () => {
+test("an unchanged list is not published twice", () => {
   const fixture = providerOf([grantOf()]);
   assert(fixture.body() !== undefined);
   assertEquals(fixture.provider.next(), []);
@@ -64,7 +65,7 @@ Deno.test("an unchanged list is not published twice", () => {
   assertEquals(fixture.provider.next(), []);
 });
 
-Deno.test("a changed loan republishes the whole list", () => {
+test("a changed loan republishes the whole list", () => {
   const fixture = providerOf([grantOf({ name: "proj" })]);
   fixture.body();
   // Writing taken away: the same folder, narrower terms.
@@ -74,7 +75,7 @@ Deno.test("a changed loan republishes the whole list", () => {
   assert(update.body.includes("read-only"));
 });
 
-Deno.test("the last withdrawal is announced once, and then nothing", () => {
+test("the last withdrawal is announced once, and then nothing", () => {
   const fixture = providerOf([grantOf()]);
   fixture.body();
   fixture.set([]);
@@ -88,7 +89,7 @@ Deno.test("the last withdrawal is announced once, and then nothing", () => {
   assertEquals(fresh.provider.next(), []);
 });
 
-Deno.test("a rebase to the last publication does not repeat it", () => {
+test("a rebase to the last publication does not repeat it", () => {
   const fixture = providerOf([grantOf()]);
   const [update] = fixture.provider.next();
   assert(update?.state !== undefined);
@@ -102,7 +103,7 @@ Deno.test("a rebase to the last publication does not repeat it", () => {
   assertEquals(forgotten.next().length, 1);
 });
 
-Deno.test("a rebase onto the empty list still knows the loan ended", () => {
+test("a rebase onto the empty list still knows the loan ended", () => {
   // The state carried by the "no longer available" message is the empty
   // signature: nothing is lent, and there is nothing left to say.
   const provider = createShareProvider({ grants: () => [] });
@@ -110,7 +111,7 @@ Deno.test("a rebase onto the empty list still knows the loan ended", () => {
   assertEquals(provider.next(), []);
 });
 
-Deno.test("a sub-agent is seeded with the loans of its session", () => {
+test("a sub-agent is seeded with the loans of its session", () => {
   const provider = createShareProvider({
     grants: () => [grantOf({ name: "proj" })],
   });

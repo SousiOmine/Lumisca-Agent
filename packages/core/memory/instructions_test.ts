@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { makeRealTempDir, removeDirRetry } from "../test-utils.ts";
@@ -18,7 +19,7 @@ async function fixture(personal?: () => { path: string; content: string }) {
   return { root, sub, provider };
 }
 
-Deno.test("instructions are published as a baseline once, then stay quiet", async () => {
+test("instructions are published as a baseline once, then stay quiet", async () => {
   const { root, provider } = await fixture();
   try {
     await Deno.writeTextFile(join(root, "AGENTS.md"), "Use Deno.\n");
@@ -43,7 +44,7 @@ Deno.test("instructions are published as a baseline once, then stay quiet", asyn
   }
 });
 
-Deno.test("an edited instruction file is republished as an update", async () => {
+test("an edited instruction file is republished as an update", async () => {
   const { root, provider } = await fixture();
   try {
     await Deno.writeTextFile(join(root, "AGENTS.md"), "Use Deno 2.\n");
@@ -68,7 +69,7 @@ Deno.test("an edited instruction file is republished as an update", async () => 
   }
 });
 
-Deno.test("a removed instruction file is announced as removed", async () => {
+test("a removed instruction file is announced as removed", async () => {
   const { root, provider } = await fixture();
   try {
     await Deno.writeTextFile(join(root, "AGENTS.md"), "Use Deno.\n");
@@ -88,7 +89,7 @@ Deno.test("a removed instruction file is announced as removed", async () => {
   }
 });
 
-Deno.test("a new instruction file is announced as additional", async () => {
+test("a new instruction file is announced as additional", async () => {
   const { root, sub, provider } = await fixture();
   try {
     await Deno.writeTextFile(join(root, "AGENTS.md"), "Root.\n");
@@ -106,7 +107,7 @@ Deno.test("a new instruction file is announced as additional", async () => {
   }
 });
 
-Deno.test("one update carries every change of a turn", async () => {
+test("one update carries every change of a turn", async () => {
   const { root, sub, provider } = await fixture();
   try {
     await Deno.writeTextFile(join(root, "AGENTS.md"), "Root.\n");
@@ -127,7 +128,7 @@ Deno.test("one update carries every change of a turn", async () => {
   }
 });
 
-Deno.test("a rebased provider does not republish unchanged instructions", async () => {
+test("a rebased provider does not republish unchanged instructions", async () => {
   const { root, provider } = await fixture();
   try {
     await Deno.writeTextFile(join(root, "AGENTS.md"), "Use Deno.\n");
@@ -146,7 +147,7 @@ Deno.test("a rebased provider does not republish unchanged instructions", async 
   }
 });
 
-Deno.test("a reopened session reports what changed while it was closed", async () => {
+test("a reopened session reports what changed while it was closed", async () => {
   const { root, provider } = await fixture();
   try {
     await Deno.writeTextFile(join(root, "AGENTS.md"), "Old.\n");
@@ -166,7 +167,7 @@ Deno.test("a reopened session reports what changed while it was closed", async (
   }
 });
 
-Deno.test("a session without instructions publishes nothing", async () => {
+test("a session without instructions publishes nothing", async () => {
   const { root, provider } = await fixture();
   try {
     assertEquals(provider.next(), []);
@@ -175,7 +176,7 @@ Deno.test("a session without instructions publishes nothing", async () => {
   }
 });
 
-Deno.test("an empty instruction file is not published", async () => {
+test("an empty instruction file is not published", async () => {
   const dir = await makeRealTempDir("lumisca-personal-");
   const personalPath = join(dir, "AGENTS.md");
   // The shape Settings → カスタマイズ has while nothing is configured: a path
@@ -208,7 +209,7 @@ Deno.test("an empty instruction file is not published", async () => {
   }
 });
 
-Deno.test("personal instructions ride along with the workspace ones", async () => {
+test("personal instructions ride along with the workspace ones", async () => {
   const dir = await makeRealTempDir("lumisca-personal-");
   const personalPath = join(dir, "AGENTS.md");
   await Deno.writeTextFile(personalPath, "Answer in Japanese.\n");

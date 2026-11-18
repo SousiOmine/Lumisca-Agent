@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { fauxAssistantMessage } from "../ai/faux.ts";
 import type { AgentMessage } from "../ai/message.ts";
@@ -34,13 +35,13 @@ function sent(
   } as AgentMessage;
 }
 
-Deno.test("RunReply: the run's answer is what the notification carries", () => {
+test("RunReply: the run's answer is what the notification carries", () => {
   const reply = new RunReply();
   reply.observe(assistant("直しました。"));
   assertEquals(reply.gist(), "直しました。");
 });
 
-Deno.test("RunReply: a silent run carries no reply", () => {
+test("RunReply: a silent run carries no reply", () => {
   // The sentinel is how an agent says nothing on purpose (silent-reply.ts):
   // a notification must not print it as if it were an answer.
   const reply = new RunReply();
@@ -48,7 +49,7 @@ Deno.test("RunReply: a silent run carries no reply", () => {
   assertEquals(reply.gist(), undefined);
 });
 
-Deno.test("RunReply: the narration before a tool call is not the reply", () => {
+test("RunReply: the narration before a tool call is not the reply", () => {
   // A run that works through ten tools writes ten of these; the user's
   // answer is the turn that did not end in a tool call.
   const reply = new RunReply();
@@ -60,7 +61,7 @@ Deno.test("RunReply: the narration before a tool call is not the reply", () => {
   assertEquals(reply.gist(), "3 件直しました。");
 });
 
-Deno.test("RunReply: what send_chat sent is a reply", () => {
+test("RunReply: what send_chat sent is a reply", () => {
   // In stella the answer may arrive only through the tool: the assistant's
   // final text is then the sentinel, and the words are in the result.
   const reply = new RunReply();
@@ -70,7 +71,7 @@ Deno.test("RunReply: what send_chat sent is a reply", () => {
   assertEquals(reply.gist(), "デプロイは緑です。");
 });
 
-Deno.test("RunReply: a message that only carried a card or files is no reply", () => {
+test("RunReply: a message that only carried a card or files is no reply", () => {
   // The conversation shows an empty bubble's worth of words: there is
   // nothing a one-line notification can say.
   const reply = new RunReply();
@@ -78,14 +79,14 @@ Deno.test("RunReply: a message that only carried a card or files is no reply", (
   assertEquals(reply.gist(), undefined);
 });
 
-Deno.test("RunReply: reset forgets what the previous run said", () => {
+test("RunReply: reset forgets what the previous run said", () => {
   const reply = new RunReply();
   reply.observe(assistant("前の返信"));
   reply.reset();
   assertEquals(reply.gist(), undefined);
 });
 
-Deno.test("RunReply: the gist is capped and says so by its length", () => {
+test("RunReply: the gist is capped and says so by its length", () => {
   const reply = new RunReply();
   reply.observe(assistant("あ".repeat(MAX_REPLY_CHARS + 50)));
   const gist = reply.gist();

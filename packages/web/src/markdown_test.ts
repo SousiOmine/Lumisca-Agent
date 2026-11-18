@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { createTranslator, MAX_VISUAL_SVG_BYTES } from "@lumisca/core/shared";
 import { assertEquals } from "@std/assert";
 import { type MarkdownOptions, renderMarkdown } from "./markdown.ts";
@@ -18,7 +19,7 @@ const DIAGRAM =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">' +
   '<title>Flow</title><rect width="10" height="10" /></svg>';
 
-Deno.test("markdown renders headings, code and lists", () => {
+test("markdown renders headings, code and lists", () => {
   const html = render("# Title\n\n```ts\nconst x = 1;\n```\n\n- a\n- b");
   assertEquals(html.includes("<h1>Title</h1>"), true);
   assertEquals(html.includes("<code"), true);
@@ -26,19 +27,19 @@ Deno.test("markdown renders headings, code and lists", () => {
   assertEquals(html.includes("<li>a</li>"), true);
 });
 
-Deno.test("markdown escapes raw HTML from the model", () => {
+test("markdown escapes raw HTML from the model", () => {
   const html = render("hello <script>alert(1)</script> world");
   assertEquals(html.includes("<script>"), false);
   assertEquals(html.includes("&lt;script&gt;"), true);
 });
 
-Deno.test("markdown blocks javascript: links", () => {
+test("markdown blocks javascript: links", () => {
   const html = render("[click](javascript:alert(1))");
   assertEquals(html.includes('href="javascript:'), false);
   assertEquals(html.includes('href="#"'), true);
 });
 
-Deno.test("markdown allows safe links", () => {
+test("markdown allows safe links", () => {
   const html = render("[pi](https://pi.dev)");
   assertEquals(html.includes('href="https://pi.dev"'), true);
   // A link a reader clicks belongs in a new tab of the browser: the app is
@@ -53,7 +54,7 @@ Deno.test("markdown allows safe links", () => {
   assertEquals(bare.includes('target="_blank"'), true);
 });
 
-Deno.test("markdown blocks unsafe image sources", () => {
+test("markdown blocks unsafe image sources", () => {
   // Images fire network requests from untrusted model output: localhost,
   // data: URIs, and protocol-relative URLs must not render.
   const local = render("![x](http://127.0.0.1:8080/admin)");
@@ -70,13 +71,13 @@ Deno.test("markdown blocks unsafe image sources", () => {
   assertEquals(ok.includes('src="https://example.com/pic.png"'), true);
 });
 
-Deno.test("markdown handles inline formatting", () => {
+test("markdown handles inline formatting", () => {
   const html = render("**bold** and `code` and ~~strike~~");
   assertEquals(html.includes("<strong>bold</strong>"), true);
   assertEquals(html.includes("<code>code</code>"), true);
 });
 
-Deno.test("a visual: image resolves against the session's asset base", () => {
+test("a visual: image resolves against the session's asset base", () => {
   const html = render("before\n\n![chart](visual:9f3c2a1b4d5e.png)\n\nafter");
   assertEquals(
     html.includes('src="/api/sessions/s/visual/9f3c2a1b4d5e.png"'),
@@ -98,7 +99,7 @@ Deno.test("a visual: image resolves against the session's asset base", () => {
   );
 });
 
-Deno.test("a malformed visual: reference never renders", () => {
+test("a malformed visual: reference never renders", () => {
   // Anything but an asset name is dropped like the other unsafe sources: the
   // store's names are the only thing the route serves.
   for (const href of [
@@ -112,7 +113,7 @@ Deno.test("a malformed visual: reference never renders", () => {
   }
 });
 
-Deno.test("an svg fence renders a diagram as an image", () => {
+test("an svg fence renders a diagram as an image", () => {
   const html = render("text\n\n```svg\n" + DIAGRAM + "\n```\n\nmore");
   // An image the document embeds, never markup in it: an image context runs
   // no script and loads no external resource.
@@ -129,7 +130,7 @@ Deno.test("an svg fence renders a diagram as an image", () => {
   assertEquals(html.indexOf("<img") < html.indexOf("more"), true);
 });
 
-Deno.test("an svg fence without a <svg> root is reported, not shown", () => {
+test("an svg fence without a <svg> root is reported, not shown", () => {
   const html = render("```svg\n<rect width='10' height='10' />\n```");
   assertEquals(html.includes("<img"), false);
   assertEquals(html.includes('class="visual-error"'), true);
@@ -138,28 +139,28 @@ Deno.test("an svg fence without a <svg> root is reported, not shown", () => {
   assertEquals(html.includes("&lt;rect width=&#39;10&#39;"), true);
 });
 
-Deno.test("an svg fence with a script is refused", () => {
+test("an svg fence with a script is refused", () => {
   const html = render("```svg\n<svg><script>alert(1)</script></svg>\n```");
   assertEquals(html.includes("<img"), false);
   assertEquals(html.includes("may not contain scripts"), true);
   assertEquals(html.includes("<script>"), false);
 });
 
-Deno.test("an oversized svg fence is refused", () => {
+test("an oversized svg fence is refused", () => {
   const filler = "x".repeat(MAX_VISUAL_SVG_BYTES + 1);
   const html = render(`\`\`\`svg\n<svg>${filler}</svg>\n\`\`\``);
   assertEquals(html.includes("<img"), false);
   assertEquals(html.includes("Diagram is too large"), true);
 });
 
-Deno.test("a fence tagged anything else keeps rendering as code", () => {
+test("a fence tagged anything else keeps rendering as code", () => {
   const html = render(`\`\`\`svgcopy\n${DIAGRAM}\n\`\`\``);
   assertEquals(html.includes("<img"), false);
   assertEquals(html.includes("<pre>"), true);
   assertEquals(html.includes("&lt;svg"), true);
 });
 
-Deno.test("a fence that is still streaming stays code until it closes", () => {
+test("a fence that is still streaming stays code until it closes", () => {
   // While a message streams, the closing fence has not arrived: the partial
   // text is a code block, and the diagram appears when the block closes.
   // Without this, every delta would re-mount a picture that is not there yet.
@@ -170,7 +171,7 @@ Deno.test("a fence that is still streaming stays code until it closes", () => {
   assertEquals(closed.includes('class="visual-svg"'), true);
 });
 
-Deno.test("the render parser keeps no state across calls", () => {
+test("the render parser keeps no state across calls", () => {
   // renderMarkdown reuses one Marked instance per (visualBase, t) — a streamed
   // reply must not build a parser per frame. That is only sound if a parse
   // leaves nothing behind: the same text renders the same HTML twice in a row,
@@ -201,7 +202,7 @@ Deno.test("the render parser keeps no state across calls", () => {
   );
 });
 
-Deno.test("the error card is written in the app language", () => {
+test("the error card is written in the app language", () => {
   const ja = renderMarkdown("```svg\nnope\n```", {
     ...OPTIONS,
     t: createTranslator("ja"),

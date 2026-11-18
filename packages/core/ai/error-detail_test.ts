@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { describeFailedCall, failureText } from "./error-detail.ts";
 
@@ -9,7 +10,7 @@ function apiCallError(
   return Object.assign(new Error(message), extra);
 }
 
-Deno.test("describeFailedCall renders the HTTP context", () => {
+test("describeFailedCall renders the HTTP context", () => {
   const failed = describeFailedCall(
     apiCallError("Invalid JSON response", {
       statusCode: 502,
@@ -25,7 +26,7 @@ Deno.test("describeFailedCall renders the HTTP context", () => {
   );
 });
 
-Deno.test("describeFailedCall unwraps the cause chain", () => {
+test("describeFailedCall unwraps the cause chain", () => {
   // The shape the transport actually saw: a generic wrapper whose reason
   // hides one (or more) levels down.
   const cause = Object.assign(
@@ -48,7 +49,7 @@ Deno.test("describeFailedCall unwraps the cause chain", () => {
   );
 });
 
-Deno.test("describeFailedCall keeps the provider's retryability flag", () => {
+test("describeFailedCall keeps the provider's retryability flag", () => {
   const retryable = describeFailedCall(
     apiCallError("Cannot connect to API", { isRetryable: true }),
   );
@@ -61,13 +62,13 @@ Deno.test("describeFailedCall keeps the provider's retryability flag", () => {
   assertEquals(describeFailedCall(apiCallError("boom")).retryable, undefined);
 });
 
-Deno.test("describeFailedCall handles non-Error throws", () => {
+test("describeFailedCall handles non-Error throws", () => {
   assertEquals(describeFailedCall("plain text"), { message: "plain text" });
   assertEquals(describeFailedCall(42), { message: "42" });
   assertEquals(describeFailedCall(null), { message: "null" });
 });
 
-Deno.test("describeFailedCall bounds the rendered detail", () => {
+test("describeFailedCall bounds the rendered detail", () => {
   const failed = describeFailedCall(
     apiCallError("boom", {
       responseBody: "x".repeat(5000),
@@ -80,11 +81,11 @@ Deno.test("describeFailedCall bounds the rendered detail", () => {
   );
 });
 
-Deno.test("describeFailedCall falls back to the error name for an empty message", () => {
+test("describeFailedCall falls back to the error name for an empty message", () => {
   assertEquals(describeFailedCall(new TypeError("")).message, "TypeError");
 });
 
-Deno.test("failureText appends the detail only when there is one", () => {
+test("failureText appends the detail only when there is one", () => {
   assertEquals(failureText({ message: "boom" }), "boom");
   assertEquals(
     failureText({ message: "boom", detail: "status 500" }),

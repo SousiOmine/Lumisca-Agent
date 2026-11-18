@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { fauxAssistantMessage, fauxToolCall } from "../ai/faux.ts";
 import type { AgentMessage } from "../ai/message.ts";
@@ -31,7 +32,7 @@ function sent(details: Record<string, unknown>, timestamp = 10): AgentMessage {
   } as AgentMessage;
 }
 
-Deno.test("stellaEntryOf: the user's words are the user's entry", () => {
+test("stellaEntryOf: the user's words are the user's entry", () => {
   assertEquals(stellaEntryOf(user("README を直して", 5)), {
     role: "user",
     text: "README を直して",
@@ -45,7 +46,7 @@ Deno.test("stellaEntryOf: the user's words are the user's entry", () => {
   assertEquals(stellaEntryOf(user("", 6)), null);
 });
 
-Deno.test("stellaEntryOf: the agent's text is the conversation's message", () => {
+test("stellaEntryOf: the agent's text is the conversation's message", () => {
   // The default is to speak. A run that has nothing to say writes the
   // sentinel (silent-reply.ts) — silence is the deliberate act, so a forgotten
   // decision produces a message rather than an unanswered question.
@@ -58,7 +59,7 @@ Deno.test("stellaEntryOf: the agent's text is the conversation's message", () =>
   assertEquals(entry?.timestamp, 7);
 });
 
-Deno.test("stellaEntryOf: the sentinel is how a run stays silent", () => {
+test("stellaEntryOf: the sentinel is how a run stays silent", () => {
   const silent = fauxAssistantMessage(NO_RESPONSE, {
     timestamp: 7,
   }) as AgentMessage;
@@ -77,7 +78,7 @@ Deno.test("stellaEntryOf: the sentinel is how a run stays silent", () => {
   assertEquals(entry?.text, "直しました。");
 });
 
-Deno.test("stellaEntryOf: narration before a tool is not a message", () => {
+test("stellaEntryOf: narration before a tool is not a message", () => {
   // A message that ends in a tool call is the model thinking out loud with a
   // tool attached. A run that runs ten tools writes ten of these, and showing
   // them buries the answer under its own working notes.
@@ -97,7 +98,7 @@ Deno.test("stellaEntryOf: narration before a tool is not a message", () => {
   assertEquals(stellaEntryOf(withCall), null);
 });
 
-Deno.test("stellaEntryOf: the final text of a run is the message", () => {
+test("stellaEntryOf: the final text of a run is the message", () => {
   // What the model says when it STOPS (no tool call) is its answer.
   const final = fauxAssistantMessage("直しました。テストも通っています。", {
     stopReason: "stop",
@@ -108,7 +109,7 @@ Deno.test("stellaEntryOf: the final text of a run is the message", () => {
   assertEquals(entry?.text, "直しました。テストも通っています。");
 });
 
-Deno.test("stellaEntryOf: a turn that only ran a tool says nothing", () => {
+test("stellaEntryOf: a turn that only ran a tool says nothing", () => {
   // No text at all: the agent has not spoken yet, and a tool call is the
   // model's record of its work, not a message.
   const toolOnly = fauxAssistantMessage(
@@ -118,7 +119,7 @@ Deno.test("stellaEntryOf: a turn that only ran a tool says nothing", () => {
   assertEquals(stellaEntryOf(toolOnly), null);
 });
 
-Deno.test("stellaEntryOf: what send_chat sent is the conversation's message", () => {
+test("stellaEntryOf: what send_chat sent is the conversation's message", () => {
   assertEquals(stellaEntryOf(sent({ text: "確認します。", attachments: [] })), {
     role: "assistant",
     text: "確認します。",
@@ -174,7 +175,7 @@ Deno.test("stellaEntryOf: what send_chat sent is the conversation's message", ()
   );
 });
 
-Deno.test("stellaEntryOf: the files an agent sent travel with its message", () => {
+test("stellaEntryOf: the files an agent sent travel with its message", () => {
   const attachments = [
     {
       name: "9f3c2a1b4d5e.png",
@@ -212,7 +213,7 @@ Deno.test("stellaEntryOf: the files an agent sent travel with its message", () =
   });
 });
 
-Deno.test("stellaEntryOf: a failed or empty send_chat shows nothing", () => {
+test("stellaEntryOf: a failed or empty send_chat shows nothing", () => {
   const details = {
     text: "送れませんでした",
     attachments: [
@@ -237,7 +238,7 @@ Deno.test("stellaEntryOf: a failed or empty send_chat shows nothing", () => {
   assertEquals(stellaEntryOf(sent({ text: null })), null);
 });
 
-Deno.test("stellaEntryOf: the tools send_chat replaced show nothing", () => {
+test("stellaEntryOf: the tools send_chat replaced show nothing", () => {
   // A conversation that predates send_chat keeps only its user's side: the
   // old rows are the record of a rule that no longer exists.
   const old: AgentMessage[] = [
@@ -267,7 +268,7 @@ Deno.test("stellaEntryOf: the tools send_chat replaced show nothing", () => {
   }
 });
 
-Deno.test("stellaEntryOf: an old chat_ui call shows its words, not its card", () => {
+test("stellaEntryOf: an old chat_ui call shows its words, not its card", () => {
   // The assistant message that made the old call wrote a sentence first. That
   // sentence is a message under the current rule (the agent's text is the
   // conversation's), while the card it attached is not: a card only arrives
@@ -286,7 +287,7 @@ Deno.test("stellaEntryOf: an old chat_ui call shows its words, not its card", ()
   assertEquals(entry?.segments, [{ type: "text", text: "確認します。" }]);
 });
 
-Deno.test("stellaEntryOf: the model's own rows are never conversation entries", () => {
+test("stellaEntryOf: the model's own rows are never conversation entries", () => {
   const modelOnly: AgentMessage[] = [
     {
       role: "context",
@@ -324,7 +325,7 @@ Deno.test("stellaEntryOf: the model's own rows are never conversation entries", 
   }
 });
 
-Deno.test("stellaEventsOf: the run's own events pass through", () => {
+test("stellaEventsOf: the run's own events pass through", () => {
   assertEquals(stellaEventsOf({ type: "agent_start", sessionId: "s" }), [
     { type: "agent_start" },
   ]);
@@ -344,7 +345,7 @@ Deno.test("stellaEventsOf: the run's own events pass through", () => {
   );
 });
 
-Deno.test("stellaEventsOf: a message becomes an entry, twice over", () => {
+test("stellaEventsOf: a message becomes an entry, twice over", () => {
   // Both events carry the same message (a synthetic start/end pair for an
   // injected prompt): sending the entry twice is harmless, and a client that
   // missed the start still gets the message.
@@ -360,7 +361,7 @@ Deno.test("stellaEventsOf: a message becomes an entry, twice over", () => {
   );
 });
 
-Deno.test("stellaEventsOf: the model's tool traffic stays out of the stream", () => {
+test("stellaEventsOf: the model's tool traffic stays out of the stream", () => {
   const toolStart = stellaEventsOf({
     type: "tool_start",
     sessionId: "s",
@@ -378,7 +379,7 @@ Deno.test("stellaEventsOf: the model's tool traffic stays out of the stream", ()
   assertEquals(toolEnd, []);
 });
 
-Deno.test("stellaEventsOf: a failure reaches the conversation", () => {
+test("stellaEventsOf: a failure reaches the conversation", () => {
   assertEquals(
     stellaEventsOf({
       type: "session_error",
@@ -389,7 +390,7 @@ Deno.test("stellaEventsOf: a failure reaches the conversation", () => {
   );
 });
 
-Deno.test("stellaEventsOf: an ask and a hand-over are the run's own state", () => {
+test("stellaEventsOf: an ask and a hand-over are the run's own state", () => {
   assertEquals(
     stellaEventsOf({
       type: "question",
@@ -455,7 +456,7 @@ Deno.test("stellaEventsOf: an ask and a hand-over are the run's own state", () =
   );
 });
 
-Deno.test("stellaEntryOf: a prompt's files are its own content", () => {
+test("stellaEntryOf: a prompt's files are its own content", () => {
   // The user dropped a screenshot in and asked nothing. Dropping the entry
   // would show an agent reply with no question above it, so the file it
   // brought in keeps the turn.
@@ -502,7 +503,7 @@ Deno.test("stellaEntryOf: a prompt's files are its own content", () => {
   assertEquals(entry?.files[0]?.ref, "uploads/1-ab/01-image-1.png");
 });
 
-Deno.test("stellaEntryOf: a prompt with only model instruction stays hidden", () => {
+test("stellaEntryOf: a prompt with only model instruction stays hidden", () => {
   // UserMessage.modelContent lets a prompt carry text for the model that the
   // user never sees. When that is ALL the prompt is, the conversation draws
   // nothing — the decision this pins: a message with no visible text and no
@@ -517,7 +518,7 @@ Deno.test("stellaEntryOf: a prompt with only model instruction stays hidden", ()
   assertEquals(stellaEntryOf(message), null);
 });
 
-Deno.test("stellaEntryOf: a prompt that is only files IS shown", () => {
+test("stellaEntryOf: a prompt that is only files IS shown", () => {
   // The other half of the rule above: files are something to draw, so the
   // prompt is a real entry even with no words.
   const message: AgentMessage = {
@@ -543,7 +544,7 @@ Deno.test("stellaEntryOf: a prompt that is only files IS shown", () => {
   );
 });
 
-Deno.test("stellaEntryOf: a routine's prompt keeps the routine's name", () => {
+test("stellaEntryOf: a routine's prompt keeps the routine's name", () => {
   // The prompt sits on the user's side (the run is delivered like a typed
   // message), but the user did not write it: the projection must carry the
   // name so a client can say who asked (#37).
@@ -581,7 +582,7 @@ Deno.test("stellaEntryOf: a routine's prompt keeps the routine's name", () => {
   );
 });
 
-Deno.test("stellaEntryCursor: a routine's prompt and the same words differ", () => {
+test("stellaEntryCursor: a routine's prompt and the same words differ", () => {
   const typed: AgentMessage = {
     role: "user",
     content: [{ type: "text", text: "確認して" }],

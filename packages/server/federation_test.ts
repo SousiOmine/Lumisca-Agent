@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { type ConnectionEntry, fauxProvider, LumiscaCore } from "@lumisca/core";
 import { assert, assertEquals } from "@std/assert";
 import { startServer } from "./app.ts";
@@ -28,7 +29,7 @@ function visiblePeers(selfOrigin: string, urls: readonly string[]): string[] {
  * literal `URL.hostname` reports (`connectionUrls` prints it too). */
 const SPELLINGS = ["127.0.0.1", "localhost", "[::1]"];
 
-Deno.test("federation: the hub recognises itself under every loopback spelling", () => {
+test("federation: the hub recognises itself under every loopback spelling", () => {
   for (const selfHost of SPELLINGS) {
     for (const peerHost of SPELLINGS) {
       assertEquals(
@@ -40,7 +41,7 @@ Deno.test("federation: the hub recognises itself under every loopback spelling",
   }
 });
 
-Deno.test("federation: a wildcard bind's loopback origin still matches", () => {
+test("federation: a wildcard bind's loopback origin still matches", () => {
   // `app.ts` builds the hub's own origin with `hostForUrl`, which maps a
   // `::` bind to `[::1]`; a bare concatenation produced `http://:::8000`,
   // which is not a URL — so no peer was ever seen as the hub.
@@ -54,7 +55,7 @@ Deno.test("federation: a wildcard bind's loopback origin still matches", () => {
   );
 });
 
-Deno.test("federation: another port on loopback stays a peer", () => {
+test("federation: another port on loopback stays a peer", () => {
   // The desktop-managed server (8000) and a resident one (8100) are two
   // servers on one machine; the self-check must hide only the first.
   assertEquals(
@@ -66,7 +67,7 @@ Deno.test("federation: another port on loopback stays a peer", () => {
   );
 });
 
-Deno.test("federation: remote peers are never mistaken for the hub", () => {
+test("federation: remote peers are never mistaken for the hub", () => {
   assertEquals(
     visiblePeers("http://127.0.0.1:8000", [
       "http://100.64.0.5:8000",
@@ -76,7 +77,7 @@ Deno.test("federation: remote peers are never mistaken for the hub", () => {
   );
 });
 
-Deno.test("federation: without a known origin every peer is listed", () => {
+test("federation: without a known origin every peer is listed", () => {
   // The origin is only known after the listener binds (port 0 =
   // ephemeral); until then nothing may be hidden.
   assertEquals(visiblePeers("", ["http://127.0.0.1:8000"]), [
@@ -93,7 +94,7 @@ async function waitFor(done: () => boolean): Promise<void> {
   }
 }
 
-Deno.test("federation: a peer's stream state is relayed to the UI", async () => {
+test("federation: a peer's stream state is relayed to the UI", async () => {
   // A stub peer with one WebSocket endpoint the test can drop. The hub must
   // announce the stream's state: while its relay to a peer is down, the
   // peer's sessions miss events, and the UI's own socket to the hub says
@@ -142,7 +143,7 @@ Deno.test("federation: a peer's stream state is relayed to the UI", async () => 
   }
 });
 
-Deno.test("federation: restart leaves one live stream per peer", async () => {
+test("federation: restart leaves one live stream per peer", async () => {
   // The registry was re-saved: restart() drops the old streams and opens new
   // ones. A dropped stream must not schedule a reconnect of its own — the
   // orphan socket relays the peer's events a second time and nothing keeps a
@@ -188,7 +189,7 @@ Deno.test("federation: restart leaves one live stream per peer", async () => {
   }
 });
 
-Deno.test("federation: a frame the peer relayed from its own peer is not relayed again", async () => {
+test("federation: a frame the peer relayed from its own peer is not relayed again", async () => {
   // `/ws` stamps every frame it sends: "" for an event of the server itself,
   // the source peer's id for one it relayed. A hub that relays the second
   // kind again sends the same event twice, and when the "peer" is the hub
@@ -247,7 +248,7 @@ Deno.test("federation: a frame the peer relayed from its own peer is not relayed
   }
 });
 
-Deno.test("federation: the hub recognises itself under any URL", async () => {
+test("federation: the hub recognises itself under any URL", async () => {
   // The URL check recognises loopback aliases only. The same server is also
   // reachable as its tailnet name — which is exactly what the settings'
   // connection list holds, because that list is the user's servers to switch
@@ -296,7 +297,7 @@ Deno.test("federation: the hub recognises itself under any URL", async () => {
   }
 });
 
-Deno.test("federation: a slow path gets a longer budget than an ordinary one", () => {
+test("federation: a slow path gets a longer budget than an ordinary one", () => {
   // A transcript snapshot, a cold session open and an explicit compaction do
   // real work; an ordinary read answers from a row. One budget for both is
   // what made the remote path fail on the slow ones (a 10 s cut-off turned a
@@ -328,7 +329,7 @@ Deno.test("federation: a slow path gets a longer budget than an ordinary one", (
   );
 });
 
-Deno.test("the fed proxy keeps the headers only the peer can set", async () => {
+test("the fed proxy keeps the headers only the peer can set", async () => {
   // A proxied answer is not just its JSON. The peer decides the download
   // name (`chat_attach`), whether a client may cache the bytes, and what an
   // SVG may execute; dropping those made a remote file arrive under a random

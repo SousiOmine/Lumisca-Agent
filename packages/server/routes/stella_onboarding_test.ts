@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import type { SessionInfo, StellaAgent } from "@lumisca/core";
 /**
  * The setup turn's entry point.
@@ -78,7 +79,7 @@ function app(calls: string[], started = true) {
   return routes;
 }
 
-Deno.test("stella onboarding route: opening a conversation offers the setup turn", async () => {
+test("stella onboarding route: opening a conversation offers the setup turn", async () => {
   const calls: string[] = [];
   const response = await app(calls).request("/stella/conversations/a1");
   assertEquals(response.status, 200);

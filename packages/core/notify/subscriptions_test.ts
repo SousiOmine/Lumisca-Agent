@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { createInMemorySettingsRepo } from "../settings/repo.ts";
 import {
@@ -39,7 +40,7 @@ function record(
   };
 }
 
-Deno.test("base64url round-trips and tolerates a missing pad", () => {
+test("base64url round-trips and tolerates a missing pad", () => {
   const bytes = new Uint8Array([0, 1, 250, 251, 252, 255, 62, 63]);
   const encoded = toBase64Url(bytes);
   assert(!encoded.includes("="), "no padding in the url-safe form");
@@ -49,7 +50,7 @@ Deno.test("base64url round-trips and tolerates a missing pad", () => {
   assertEquals(fromBase64Url("AQID"), new Uint8Array([1, 2, 3]));
 });
 
-Deno.test("a stored subscription list drops what cannot be addressed", () => {
+test("a stored subscription list drops what cannot be addressed", () => {
   const parsed = parsePushSubscriptions(
     JSON.stringify([
       record("https://push.example/1"),
@@ -68,7 +69,7 @@ Deno.test("a stored subscription list drops what cannot be addressed", () => {
   assertEquals(parsePushSubscriptions(undefined), []);
 });
 
-Deno.test("the same endpoint stored twice reads once, newest first", () => {
+test("the same endpoint stored twice reads once, newest first", () => {
   const parsed = parsePushSubscriptions(
     serializePushSubscriptions([
       record("https://push.example/a", { createdAt: 1 }),
@@ -84,7 +85,7 @@ Deno.test("the same endpoint stored twice reads once, newest first", () => {
   assertEquals(parsed[0]!.createdAt, 2);
 });
 
-Deno.test("subscribing twice replaces instead of duplicating", async () => {
+test("subscribing twice replaces instead of duplicating", async () => {
   const settings = createInMemorySettingsRepo();
   const service = new PushSubscriptions(settings);
   const keys = await subscriber();
@@ -93,7 +94,7 @@ Deno.test("subscribing twice replaces instead of duplicating", async () => {
   assertEquals(service.list().length, 1);
 });
 
-Deno.test("removing an endpoint is idempotent and reports the first", () => {
+test("removing an endpoint is idempotent and reports the first", () => {
   const settings = createInMemorySettingsRepo();
   const service = new PushSubscriptions(settings);
   service.add({
@@ -105,7 +106,7 @@ Deno.test("removing an endpoint is idempotent and reports the first", () => {
   assertEquals(settings.get(PUSH_SUBSCRIPTIONS_KEY), "[]");
 });
 
-Deno.test("a bad subscription is refused, not stored", () => {
+test("a bad subscription is refused, not stored", () => {
   const service = new PushSubscriptions(createInMemorySettingsRepo());
   for (const input of [
     { endpoint: "http://push.example/1", keys: { p256dh: "p", auth: "a" } },
@@ -123,7 +124,7 @@ Deno.test("a bad subscription is refused, not stored", () => {
   }
 });
 
-Deno.test("the VAPID pair is created once and then reused", async () => {
+test("the VAPID pair is created once and then reused", async () => {
   const settings = createInMemorySettingsRepo();
   const first = await loadVapidKeys(settings);
   assertEquals(first.publicKey.length > 80, true);
@@ -131,7 +132,7 @@ Deno.test("the VAPID pair is created once and then reused", async () => {
   assertEquals(second.publicKey, first.publicKey);
 });
 
-Deno.test("a VAPID pair whose halves disagree is refused", async () => {
+test("a VAPID pair whose halves disagree is refused", async () => {
   // Replacing the pair silently would leave every subscription subscribed to a
   // key the browser no longer sees, and the messages would vanish unseen.
   const settings = createInMemorySettingsRepo();
@@ -156,7 +157,7 @@ Deno.test("a VAPID pair whose halves disagree is refused", async () => {
   assert(otherPublic !== created.publicKey);
 });
 
-Deno.test("a corrupt VAPID record fails instead of rotating the key", async () => {
+test("a corrupt VAPID record fails instead of rotating the key", async () => {
   const settings = createInMemorySettingsRepo();
   settings.set("push_vapid", "{not json");
   await assertRejects(() => loadVapidKeys(settings));

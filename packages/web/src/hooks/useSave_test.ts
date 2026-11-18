@@ -1,9 +1,10 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { createDebouncedWriter } from "./useSave.ts";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-Deno.test("a debounced writer writes the pending value when disposed", () => {
+test("a debounced writer writes the pending value when disposed", () => {
   const written: string[] = [];
   const writer = createDebouncedWriter<string>((value) => {
     written.push(value);
@@ -13,7 +14,7 @@ Deno.test("a debounced writer writes the pending value when disposed", () => {
   assertEquals(written, ["typed"]);
 });
 
-Deno.test("a disposed writer does not write again", async () => {
+test("a disposed writer does not write again", async () => {
   const written: string[] = [];
   const writer = createDebouncedWriter<string>((value) => {
     written.push(value);
@@ -24,7 +25,7 @@ Deno.test("a disposed writer does not write again", async () => {
   assertEquals(written, ["typed"]);
 });
 
-Deno.test("cancel drops the pending value", async () => {
+test("cancel drops the pending value", async () => {
   const written: string[] = [];
   const writer = createDebouncedWriter<string>((value) => {
     written.push(value);
@@ -35,7 +36,7 @@ Deno.test("cancel drops the pending value", async () => {
   assertEquals(written, []);
 });
 
-Deno.test("flush writes the pending value immediately", async () => {
+test("flush writes the pending value immediately", async () => {
   const written: string[] = [];
   const writer = createDebouncedWriter<string>((value) => {
     written.push(value);
@@ -45,7 +46,7 @@ Deno.test("flush writes the pending value immediately", async () => {
   assertEquals(written, ["typed"]);
 });
 
-Deno.test("the last scheduled value wins", async () => {
+test("the last scheduled value wins", async () => {
   const written: string[] = [];
   const writer = createDebouncedWriter<string>((value) => {
     written.push(value);
@@ -56,7 +57,7 @@ Deno.test("the last scheduled value wins", async () => {
   assertEquals(written, ["second"]);
 });
 
-Deno.test("the latest write callback is used", () => {
+test("the latest write callback is used", () => {
   const written: string[] = [];
   const writer = createDebouncedWriter<string>((value) => {
     written.push(`old:${value}`);

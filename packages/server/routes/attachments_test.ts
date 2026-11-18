@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import {
   ATTACHMENTS_DIR_NAME,
@@ -68,7 +69,7 @@ async function withApp(
   }
 }
 
-Deno.test("an attached image is served inline", async () => {
+test("an attached image is served inline", async () => {
   await withApp(async ({ get, sessionId }) => {
     const res = await get(`/api/sessions/${sessionId}/attachment/${PNG_NAME}`);
     assertEquals(res.status, 200);
@@ -87,7 +88,7 @@ Deno.test("an attached image is served inline", async () => {
   });
 });
 
-Deno.test("any other attachment is a download under the sender's name", async () => {
+test("any other attachment is a download under the sender's name", async () => {
   await withApp(async ({ get, sessionId }) => {
     const res = await get(`/api/sessions/${sessionId}/attachment/${TXT_NAME}`);
     assertEquals(res.status, 200);
@@ -104,7 +105,7 @@ Deno.test("any other attachment is a download under the sender's name", async ()
   });
 });
 
-Deno.test("an SVG attachment is a download, never an inline document", async () => {
+test("an SVG attachment is a download, never an inline document", async () => {
   await withApp(async ({ get, sessionId, storeDir }) => {
     const name = "1a2b3c4d5e6f.svg";
     await Deno.writeTextFile(join(storeDir, name), "<svg/>");
@@ -120,7 +121,7 @@ Deno.test("an SVG attachment is a download, never an inline document", async () 
   });
 });
 
-Deno.test("the route serves only names the session's store made", async () => {
+test("the route serves only names the session's store made", async () => {
   await withApp(async ({ get, sessionId, storeDir }) => {
     // A file the store never named — even one in the session's own
     // directory — is not reachable.

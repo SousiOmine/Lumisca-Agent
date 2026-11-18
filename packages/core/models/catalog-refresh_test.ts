@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import type { ProviderMap } from "@opencode-ai/models";
 import { assert, assertEquals } from "@std/assert";
 import { LumiscaCore } from "../mod.ts";
@@ -45,7 +46,7 @@ function failingFetch() {
     Promise.reject(new Error("offline"));
 }
 
-Deno.test("refreshCatalog applies live additions and removals", async () => {
+test("refreshCatalog applies live additions and removals", async () => {
   const core = LumiscaCore.forTesting();
   try {
     assertEquals(core.getModelCatalogStatus().source, "snapshot");
@@ -80,7 +81,7 @@ Deno.test("refreshCatalog applies live additions and removals", async () => {
   }
 });
 
-Deno.test("refreshCatalog keeps custom and user providers", async () => {
+test("refreshCatalog keeps custom and user providers", async () => {
   const core = LumiscaCore.forTesting();
   try {
     await core.addUserProvider({
@@ -102,7 +103,7 @@ Deno.test("refreshCatalog keeps custom and user providers", async () => {
   }
 });
 
-Deno.test("refreshCatalog keeps an existing session usable after upstream removal", async () => {
+test("refreshCatalog keeps an existing session usable after upstream removal", async () => {
   const core = LumiscaCore.forTesting();
   try {
     const doomed = core.listModels("openai")[0]!;
@@ -144,7 +145,7 @@ Deno.test("refreshCatalog keeps an existing session usable after upstream remova
   }
 });
 
-Deno.test("a retired provider still resolves the credential it served with", async () => {
+test("a retired provider still resolves the credential it served with", async () => {
   const core = LumiscaCore.forTesting();
   try {
     // A stored key is what a session created before the removal used.
@@ -170,7 +171,7 @@ Deno.test("a retired provider still resolves the credential it served with", asy
   }
 });
 
-Deno.test("refreshCatalog reports custom-provider failure on the status", async () => {
+test("refreshCatalog reports custom-provider failure on the status", async () => {
   // The models file appears *after* the core is built: only the refresh
   // re-reads the custom sources, so the failure lands on the status rather
   // than in the constructor.
@@ -195,7 +196,7 @@ Deno.test("refreshCatalog reports custom-provider failure on the status", async 
   }
 });
 
-Deno.test("refreshCatalog restores the built-in after a stale override is removed", async () => {
+test("refreshCatalog restores the built-in after a stale override is removed", async () => {
   const dir = await Deno.makeTempDir({ prefix: "lumisca-models-" });
   const path = `${dir}/models.json`;
   const vars: Record<string, string> = {};
@@ -229,7 +230,7 @@ Deno.test("refreshCatalog restores the built-in after a stale override is remove
   }
 });
 
-Deno.test("refreshCatalog falls back to snapshot when offline", async () => {
+test("refreshCatalog falls back to snapshot when offline", async () => {
   const core = LumiscaCore.forTesting();
   try {
     const status = await core.refreshModelCatalog({

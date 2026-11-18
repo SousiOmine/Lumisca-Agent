@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import { SERVER_STARTUP_ENV_KEYS } from "../startup.ts";
 import {
@@ -24,7 +25,7 @@ function values(patch: Partial<ServiceValues> = {}): ServiceValues {
   };
 }
 
-Deno.test("a rendered document round-trips through the parser", () => {
+test("a rendered document round-trips through the parser", () => {
   const rendered = renderDocument(
     values({
       db: "/home/me/lumisca.db",
@@ -45,7 +46,7 @@ Deno.test("a rendered document round-trips through the parser", () => {
   assertEquals(renderDocument(values()), renderDocument(values()));
 });
 
-Deno.test("the document pins the restart mode the unit requires", () => {
+test("the document pins the restart mode the unit requires", () => {
   assert(
     renderDocument(values()).includes(
       `LUMISCA_UPDATE_RESTART="${SERVICE_RESTART_MODE}"`,
@@ -59,7 +60,7 @@ Deno.test("the document pins the restart mode the unit requires", () => {
   );
 });
 
-Deno.test("optional values are omitted rather than written empty", () => {
+test("optional values are omitted rather than written empty", () => {
   const rendered = renderDocument(values());
   assert(!rendered.includes("LUMISCA_DB"));
   assert(!rendered.includes("LUMISCA_ALLOWED_HOSTS"));
@@ -70,12 +71,12 @@ Deno.test("optional values are omitted rather than written empty", () => {
   assertEquals(parseDocument(rendered).allowedHosts, undefined);
 });
 
-Deno.test("values with spaces, quotes and backslashes survive a round trip", () => {
+test("values with spaces, quotes and backslashes survive a round trip", () => {
   const rendered = renderDocument(values({ db: '/home/me/my "db"\\x.db' }));
   assertEquals(parseDocument(rendered).db, '/home/me/my "db"\\x.db');
 });
 
-Deno.test("comments, blank lines and single quotes are read like systemd does", () => {
+test("comments, blank lines and single quotes are read like systemd does", () => {
   const parsed = parseDocument(
     [
       "# a comment",
@@ -88,7 +89,7 @@ Deno.test("comments, blank lines and single quotes are read like systemd does", 
   assertEquals(parsed, { host: "192.0.2.1", port: 9000 });
 });
 
-Deno.test("a document this server cannot read exactly is rejected, not guessed", () => {
+test("a document this server cannot read exactly is rejected, not guessed", () => {
   // An unknown key is a typo'd configuration: ignoring it would leave remote
   // clients with a 403 and nothing to point at.
   const unknown = assertThrows(
@@ -128,7 +129,7 @@ Deno.test("a document this server cannot read exactly is rejected, not guessed",
   );
 });
 
-Deno.test("a malformed document names the line it failed on", () => {
+test("a malformed document names the line it failed on", () => {
   const error = assertThrows(
     () => parseDocument('LUMISCA_HOST="127.0.0.1"\nLUMISCA_BOGUS=1'),
     ServiceDefinitionError,
@@ -136,7 +137,7 @@ Deno.test("a malformed document names the line it failed on", () => {
   assert(error.message.includes("2 行目"), error.message);
 });
 
-Deno.test("documents may only carry the launcher keys the server reads", () => {
+test("documents may only carry the launcher keys the server reads", () => {
   // The single source of what a launcher may set is startup.ts; the document
   // adds XDG_CONFIG_HOME (the settings file lives under it) and nothing else.
   for (const key of DOCUMENT_KEYS) {
@@ -152,7 +153,7 @@ Deno.test("documents may only carry the launcher keys the server reads", () => {
   );
 });
 
-Deno.test("the displayed document hides the credential", () => {
+test("the displayed document hides the credential", () => {
   const rendered = renderDocument(values({ token: "super-secret-token" }));
   const shown = documentForDisplay(rendered);
   assert(!shown.includes("super-secret-token"));
@@ -166,14 +167,14 @@ Deno.test("the displayed document hides the credential", () => {
   assertEquals(documentForDisplay("LUMISCA_HOST=x\n"), "LUMISCA_HOST=x\n");
 });
 
-Deno.test("a generated token is a fresh 32-byte hex secret", () => {
+test("a generated token is a fresh 32-byte hex secret", () => {
   const first = generateToken();
   assertEquals(first.length, 64);
   assert(/^[0-9a-f]{64}$/.test(first));
   assert(first !== generateToken());
 });
 
-Deno.test("host lists are normalized the way the server reads them", () => {
+test("host lists are normalized the way the server reads them", () => {
   assertEquals(splitHosts(" A.example , ,b.example,"), [
     "a.example",
     "b.example",

@@ -4,6 +4,7 @@
  * agent can be edited or deleted from. The menu has no button now: the row
  * itself carries it, on a right click or a held finger.
  */
+import { test } from "bun:test";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { renderToString } from "preact-render-to-string";
 import { initLocale } from "../i18n.ts";
@@ -58,7 +59,7 @@ function render(
   );
 }
 
-Deno.test("StellaSidebar: a row's second line is what was said last", () => {
+test("StellaSidebar: a row's second line is what was said last", () => {
   const html = render();
   assertStringIncludes(html, "3件の不具合を直しました。");
   // The name is still there, and the message is the row's faint second line
@@ -67,7 +68,7 @@ Deno.test("StellaSidebar: a row's second line is what was said last", () => {
   assertStringIncludes(html, "stella-agent-meta");
 });
 
-Deno.test("StellaSidebar: a message with no words is described", () => {
+test("StellaSidebar: a message with no words is described", () => {
   // "3 files" is a caption, not something the user wrote: it comes from the
   // catalogue, so it reads in the app's language.
   assertStringIncludes(
@@ -80,7 +81,7 @@ Deno.test("StellaSidebar: a message with no words is described", () => {
   );
 });
 
-Deno.test("StellaSidebar: a fresh agent is one line", () => {
+test("StellaSidebar: a fresh agent is one line", () => {
   // Nothing has been said, so there is no second line and no time to show:
   // a row that invented "まだメッセージはありません" would be a line of text
   // that says nothing.
@@ -90,7 +91,7 @@ Deno.test("StellaSidebar: a fresh agent is one line", () => {
   assertEquals(html.includes("stella-agent-time"), false);
 });
 
-Deno.test("StellaSidebar: the time is the message's, not the last visit", () => {
+test("StellaSidebar: the time is the message's, not the last visit", () => {
   // The regression this pins: the row used to date the agent by when its
   // conversation was OPENED, so a list ordered by recency of speech showed
   // times about the reader.
@@ -103,7 +104,7 @@ Deno.test("StellaSidebar: the time is the message's, not the last visit", () => 
   assertStringIncludes(time[0], new Date(AT).toISOString());
 });
 
-Deno.test("StellaSidebar: no row is marked as working", () => {
+test("StellaSidebar: no row is marked as working", () => {
   // The list used to put a pulsing dot on the active row while its
   // conversation ran. The conversation itself shows the work, and the list
   // only ever marked the row that was already open, so the dot said nothing
@@ -113,7 +114,7 @@ Deno.test("StellaSidebar: no row is marked as working", () => {
   assertEquals(html.includes("作業中"), false);
 });
 
-Deno.test("StellaSidebar: the face is what identifies a row", () => {
+test("StellaSidebar: the face is what identifies a row", () => {
   // 32px read as a badge beside the name rather than as the face the reader
   // scans down. 40 gives the two lines a face of their own height without
   // turning the row into a profile header (the conversation's header keeps
@@ -122,7 +123,7 @@ Deno.test("StellaSidebar: the face is what identifies a row", () => {
   assertStringIncludes(html, "width:40px;height:40px");
 });
 
-Deno.test("StellaSidebar: the row itself is what opens its menu", () => {
+test("StellaSidebar: the row itself is what opens its menu", () => {
   const html = render();
   // Regression: every row carried a ⋮ beside the name, drawn on hover and
   // always on touch. It competed with the name for attention, and the row's
@@ -153,7 +154,7 @@ Deno.test("StellaSidebar: the row itself is what opens its menu", () => {
   assertStringIncludes(source, 'event.key === "F10"');
 });
 
-Deno.test("StellaSidebar: disabled agents sit under their own fold", () => {
+test("StellaSidebar: disabled agents sit under their own fold", () => {
   const off = { ...agent("a2"), name: "Aide off", disabledAt: AT };
   const html = render([agent("a1"), off]);
   // The fold names what it holds, with the count beside the label, and it is
@@ -172,7 +173,7 @@ Deno.test("StellaSidebar: disabled agents sit under their own fold", () => {
   assert(active < fold && fold < offRow, html);
 });
 
-Deno.test("StellaSidebar: the empty list is not shown while it is being read", () => {
+test("StellaSidebar: the empty list is not shown while it is being read", () => {
   // An empty list and a list still on its way look the same on screen, and
   // the empty state's advice ("create one") is wrong for half of them: the
   // wait is said instead until the read settles.
@@ -193,7 +194,7 @@ Deno.test("StellaSidebar: the empty list is not shown while it is being read", (
   assertStringIncludes(render(undefined, true), "Aide");
 });
 
-Deno.test("StellaSidebar: the create dialog asks for the job, and names it later", async () => {
+test("StellaSidebar: the create dialog asks for the job, and names it later", async () => {
   // The dialog itself is behind a click; the copy lives in the catalogue, and
   // it is the promise the form makes. The ONE required answer is what the
   // agent should do; how it works is asked by the agent itself, in the
@@ -217,7 +218,7 @@ Deno.test("StellaSidebar: the create dialog asks for the job, and names it later
   }
 });
 
-Deno.test("StellaSidebar: the row menu is placed from the left edge", () => {
+test("StellaSidebar: the row menu is placed from the left edge", () => {
   // Regression: the menu was anchored to the viewport's RIGHT edge, so a
   // right click near the left edge (the sidebar IS the left edge) pushed the
   // menu off the screen. It is drawn from the point it was opened at, and
@@ -242,7 +243,7 @@ Deno.test("StellaSidebar: the row menu is placed from the left edge", () => {
   assertStringIncludes(source, 'pos === null ? "hidden" : "visible"');
 });
 
-Deno.test("StellaSidebar: a created agent is in the list before it is opened", () => {
+test("StellaSidebar: a created agent is in the list before it is opened", () => {
   // Regression: 作成 closed the dialog and left the screen on the list. The
   // selection was made first, and the App sends an address naming an agent
   // its list cannot find back to the list — a new agent is exactly that

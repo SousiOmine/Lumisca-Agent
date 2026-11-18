@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { basename, join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import type { Workspace } from "../domain/workspace.ts";
@@ -67,14 +68,14 @@ function makeTool(root: string, totalPages = 2) {
   return tools[0]!;
 }
 
-Deno.test("pdf tool is named pdf_read_pages and listed in PDF_TOOL_NAMES", () => {
+test("pdf tool is named pdf_read_pages and listed in PDF_TOOL_NAMES", () => {
   assertEquals(PDF_TOOL_NAMES, [TOOL_PDF_READ_PAGES]);
   const tools = createPdfTools({ files: new HostFileBackend(new Sandbox([])) });
   assertEquals(tools.length, 1);
   assertEquals(tools[0]!.name, TOOL_PDF_READ_PAGES);
 });
 
-Deno.test("pdf tool renders requested pages as image blocks", async () => {
+test("pdf tool renders requested pages as image blocks", async () => {
   const { root, folder } = await fixture();
   try {
     const result = await makeTool(root).execute("id", {
@@ -105,7 +106,7 @@ Deno.test("pdf tool renders requested pages as image blocks", async () => {
   }
 });
 
-Deno.test("pdf tool stores a page at the model's budget", async () => {
+test("pdf tool stores a page at the model's budget", async () => {
   const { root, folder } = await fixture();
   try {
     const page = await noisyPng(1800, 1200);
@@ -143,7 +144,7 @@ Deno.test("pdf tool stores a page at the model's budget", async () => {
   }
 });
 
-Deno.test("pdf tool dedupes duplicate pages keeping the requested order", async () => {
+test("pdf tool dedupes duplicate pages keeping the requested order", async () => {
   const { root, folder } = await fixture();
   try {
     const result = await makeTool(root, 3).execute("id", {
@@ -157,7 +158,7 @@ Deno.test("pdf tool dedupes duplicate pages keeping the requested order", async 
   }
 });
 
-Deno.test("pdf tool rejects invalid pages and dpi", async () => {
+test("pdf tool rejects invalid pages and dpi", async () => {
   const { root, folder } = await fixture();
   try {
     const tool = makeTool(root);
@@ -200,7 +201,7 @@ Deno.test("pdf tool rejects invalid pages and dpi", async () => {
   }
 });
 
-Deno.test("pdf tool surfaces out-of-range pages", async () => {
+test("pdf tool surfaces out-of-range pages", async () => {
   const { root, folder } = await fixture();
   try {
     const error = await makeTool(root, 2)
@@ -219,7 +220,7 @@ Deno.test("pdf tool surfaces out-of-range pages", async () => {
   }
 });
 
-Deno.test("pdf tool stays inside the workspace sandbox", async () => {
+test("pdf tool stays inside the workspace sandbox", async () => {
   const { root, folder } = await fixture();
   try {
     const tool = makeTool(root);
@@ -238,7 +239,7 @@ Deno.test("pdf tool stays inside the workspace sandbox", async () => {
   }
 });
 
-Deno.test("preloaded tool sets never contain the pdf tool", async () => {
+test("preloaded tool sets never contain the pdf tool", async () => {
   const root = await makeRealTempDir("lumisca-pdf-tools-");
   try {
     const workspace: Workspace = {
@@ -267,7 +268,7 @@ Deno.test("preloaded tool sets never contain the pdf tool", async () => {
   }
 });
 
-Deno.test("pdf tool is discoverable via tool_search and callable via tool_call", async () => {
+test("pdf tool is discoverable via tool_search and callable via tool_call", async () => {
   const { root, folder } = await fixture();
   try {
     const registry = new ToolRegistry();
@@ -295,7 +296,7 @@ Deno.test("pdf tool is discoverable via tool_search and callable via tool_call",
   }
 });
 
-Deno.test("pdf tool renders a real PDF with the bundled renderer", async () => {
+test("pdf tool renders a real PDF with the bundled renderer", async () => {
   const { root, folder } = await fixture();
   try {
     await Deno.copyFile(
@@ -338,7 +339,7 @@ Deno.test("pdf tool renders a real PDF with the bundled renderer", async () => {
   }
 });
 
-Deno.test("pdf tool fails fast on malformed and encrypted PDFs", async () => {
+test("pdf tool fails fast on malformed and encrypted PDFs", async () => {
   const { root, folder } = await fixture();
   try {
     const tools = createPdfTools({
@@ -364,74 +365,78 @@ Deno.test("pdf tool fails fast on malformed and encrypted PDFs", async () => {
   }
 });
 
-Deno.test("pdf renderer requires the bundled ICU data file on Windows", {
-  ignore: Deno.build.os !== "windows",
-}, () => {
-  // Windows Skia loads icudtl.dat from the library/executable directory
-  // and aborts the whole process when it is missing, so the guard must
-  // locate the data file this host's Skia binary needs. macOS/Linux
-  // Skia embeds its ICU data and ships no data file — see
-  // createUnpdfRenderer.
-  assert(
-    findCanvasIcuDataFile() !== undefined,
-    "expected icudtl.dat next to the canvas native binding",
-  );
-});
+test.skipIf(Deno.build.os !== "windows")(
+  "pdf renderer requires the bundled ICU data file on Windows",
+  () => {
+    // Windows Skia loads icudtl.dat from the library/executable directory
+    // and aborts the whole process when it is missing, so the guard must
+    // locate the data file this host's Skia binary needs. macOS/Linux
+    // Skia embeds its ICU data and ships no data file — see
+    // createUnpdfRenderer.
+    assert(
+      findCanvasIcuDataFile() !== undefined,
+      "expected icudtl.dat next to the canvas native binding",
+    );
+  },
+);
 
-Deno.test("pdf renderer refuses to load Skia without its ICU data file", {
-  ignore: Deno.build.os !== "windows",
-}, async () => {
-  const { root, folder } = await fixture();
-  try {
-    await Deno.copyFile(
-      join(import.meta.dirname!, "testdata", "two-pages.pdf"),
-      join(root, "doc.pdf"),
-    );
-    // A missing icudtl.dat makes Windows Skia abort the whole server
-    // process (fatal check → STATUS_ILLEGAL_INSTRUCTION), so the renderer
-    // must refuse with a clear tool error before touching Skia.
-    const tools = createPdfTools({
-      files: new HostFileBackend(new Sandbox([root])),
-      renderer: createUnpdfRenderer({ findIcuDataFile: () => undefined }),
-    });
-    await assertRejects(
-      () => tools[0]!.execute("id", { path: `${folder}/doc.pdf`, pages: [1] }),
-      Error,
-      "icudtl.dat",
-    );
-  } finally {
-    await removeDirRetry(root);
-  }
-});
+test.skipIf(Deno.build.os !== "windows")(
+  "pdf renderer refuses to load Skia without its ICU data file",
+  async () => {
+    const { root, folder } = await fixture();
+    try {
+      await Deno.copyFile(
+        join(import.meta.dirname!, "testdata", "two-pages.pdf"),
+        join(root, "doc.pdf"),
+      );
+      // A missing icudtl.dat makes Windows Skia abort the whole server
+      // process (fatal check → STATUS_ILLEGAL_INSTRUCTION), so the renderer
+      // must refuse with a clear tool error before touching Skia.
+      const tools = createPdfTools({
+        files: new HostFileBackend(new Sandbox([root])),
+        renderer: createUnpdfRenderer({ findIcuDataFile: () => undefined }),
+      });
+      await assertRejects(
+        () =>
+          tools[0]!.execute("id", { path: `${folder}/doc.pdf`, pages: [1] }),
+        Error,
+        "icudtl.dat",
+      );
+    } finally {
+      await removeDirRetry(root);
+    }
+  },
+);
 
-Deno.test("pdf renderer honors the LUMISCA_ICU_DATA override", {
-  ignore: Deno.build.os !== "windows",
-}, async () => {
-  const { root, folder } = await fixture();
-  try {
-    await Deno.copyFile(
-      join(import.meta.dirname!, "testdata", "two-pages.pdf"),
-      join(root, "doc.pdf"),
-    );
-    const real = findCanvasIcuDataFile(() => ({}));
-    assert(real !== undefined, "expected a bundled icudtl.dat on this host");
-    // The override is read from the *injected* environment: Deno.env is
-    // shared by every test file the runner parallels, so it is never mutated
-    // here.
-    assertEquals(
-      findCanvasIcuDataFile(() => ({ LUMISCA_ICU_DATA: real })),
-      real,
-    );
-    const tools = createPdfTools({
-      files: new HostFileBackend(new Sandbox([root])),
-      renderer: createUnpdfRenderer({ findIcuDataFile: () => real }),
-    });
-    const result = await tools[0]!.execute("id", {
-      path: `${folder}/doc.pdf`,
-      pages: [1],
-    });
-    assert(toolText(result).includes("pages 1 of 2"), toolText(result));
-  } finally {
-    await removeDirRetry(root);
-  }
-});
+test.skipIf(Deno.build.os !== "windows")(
+  "pdf renderer honors the LUMISCA_ICU_DATA override",
+  async () => {
+    const { root, folder } = await fixture();
+    try {
+      await Deno.copyFile(
+        join(import.meta.dirname!, "testdata", "two-pages.pdf"),
+        join(root, "doc.pdf"),
+      );
+      const real = findCanvasIcuDataFile(() => ({}));
+      assert(real !== undefined, "expected a bundled icudtl.dat on this host");
+      // The override is read from the *injected* environment: Deno.env is
+      // shared by every test file the runner parallels, so it is never mutated
+      // here.
+      assertEquals(
+        findCanvasIcuDataFile(() => ({ LUMISCA_ICU_DATA: real })),
+        real,
+      );
+      const tools = createPdfTools({
+        files: new HostFileBackend(new Sandbox([root])),
+        renderer: createUnpdfRenderer({ findIcuDataFile: () => real }),
+      });
+      const result = await tools[0]!.execute("id", {
+        path: `${folder}/doc.pdf`,
+        pages: [1],
+      });
+      assert(toolText(result).includes("pages 1 of 2"), toolText(result));
+    } finally {
+      await removeDirRetry(root);
+    }
+  },
+);

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import type { VmChannel, VmChannelOptions } from "../vm/channel.ts";
 import type { VmExec, VmExecOptions } from "../vm/container.ts";
@@ -76,7 +77,7 @@ function makeRuntime(fake: FakeChannel, execWrites: { exec: VmExec }) {
   });
 }
 
-Deno.test("vm runtime: a tool call is answered over the channel", async () => {
+test("vm runtime: a tool call is answered over the channel", async () => {
   const fake = fakeChannel([
     JSON.stringify({ type: "call", id: 1, name: "read", args: { path: "a" } }),
     JSON.stringify({ type: "done", value: { ok: true } }),
@@ -103,7 +104,7 @@ Deno.test("vm runtime: a tool call is answered over the channel", async () => {
   assert(writes[0]!.includes("callTool"), "the protocol prelude must be there");
 });
 
-Deno.test("vm runtime: a failing tool answers with its message", async () => {
+test("vm runtime: a failing tool answers with its message", async () => {
   const fake = fakeChannel([
     JSON.stringify({ type: "call", id: 7, name: "bash" }),
     JSON.stringify({ type: "done", value: null }),
@@ -119,7 +120,7 @@ Deno.test("vm runtime: a failing tool answers with its message", async () => {
   assertEquals(answer.error, "exit code 1");
 });
 
-Deno.test("vm runtime: a program error is the run's error", async () => {
+test("vm runtime: a program error is the run's error", async () => {
   const fake = fakeChannel([
     JSON.stringify({ type: "error", message: "boom" }),
   ]);
@@ -136,7 +137,7 @@ Deno.test("vm runtime: a program error is the run's error", async () => {
   );
 });
 
-Deno.test("vm runtime: a program killed by its timeout says so", async () => {
+test("vm runtime: a program killed by its timeout says so", async () => {
   const fake = fakeChannel([], 124);
   const { exec } = fakeExec();
   const runtime = makeRuntime(fake, { exec });
@@ -151,7 +152,7 @@ Deno.test("vm runtime: a program killed by its timeout says so", async () => {
   );
 });
 
-Deno.test("vm runtime: a stopped run stops the program", async () => {
+test("vm runtime: a stopped run stops the program", async () => {
   const fake = fakeChannel([]);
   const { exec } = fakeExec();
   const runtime = makeRuntime(fake, { exec });
@@ -168,7 +169,7 @@ Deno.test("vm runtime: a stopped run stops the program", async () => {
   );
 });
 
-Deno.test("vm runtime: the channel is opened under the program's timeout", async () => {
+test("vm runtime: the channel is opened under the program's timeout", async () => {
   const fake = fakeChannel([JSON.stringify({ type: "done", value: 1 })]);
   const { exec } = fakeExec();
   const runtime = makeRuntime(fake, { exec });

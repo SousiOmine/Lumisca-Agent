@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import type { Workspace } from "../domain/workspace.ts";
 import {
@@ -52,7 +53,7 @@ const workspace: Workspace = {
  * the gate the test is checking (the built-ins are only the fallback). */
 const NO_USER_SKILLS = { globalDirs: [], appSkillDirs: [] } as const;
 
-Deno.test("sessionSkills advertises the web-browser skill only with a browser backend", () => {
+test("sessionSkills advertises the web-browser skill only with a browser backend", () => {
   const withBrowser = sessionSkills([], {
     browserAvailable: true,
     ...NO_USER_SKILLS,
@@ -74,7 +75,7 @@ Deno.test("sessionSkills advertises the web-browser skill only with a browser ba
   }
 });
 
-Deno.test("sessionSkills advertises the computer-use skill only when the machine can be driven", () => {
+test("sessionSkills advertises the computer-use skill only when the machine can be driven", () => {
   const withComputer = sessionSkills([], {
     computerAvailable: true,
     ...NO_USER_SKILLS,
@@ -103,7 +104,7 @@ Deno.test("sessionSkills advertises the computer-use skill only when the machine
 
 // --- prompt contents ---------------------------------------------------------
 
-Deno.test("coding prompt carries the workspace and nothing that drifts", () => {
+test("coding prompt carries the workspace and nothing that drifts", () => {
   const prompt = buildSystemPrompt(workspace);
   assert(prompt.includes("You are Lumisca, a coding agent"));
   assert(prompt.includes("The workspace contains these folders"));
@@ -123,7 +124,7 @@ Deno.test("coding prompt carries the workspace and nothing that drifts", () => {
   assertEquals(prompt.includes("web-browser"), false);
 });
 
-Deno.test("coding prompt never mentions a tool", () => {
+test("coding prompt never mentions a tool", () => {
   // The set is not an input any more: a prompt that named the tools would
   // change whenever a backend detached or an MCP server was added, and the
   // session would rewrite its head on an event that has nothing to do with
@@ -142,7 +143,7 @@ Deno.test("coding prompt never mentions a tool", () => {
   }
 });
 
-Deno.test("every prompt whose reply a person reads teaches the card grammar", () => {
+test("every prompt whose reply a person reads teaches the card grammar", () => {
   // The grammar used to live in a prompt-sections module that only the
   // sub-agent prompt rendered, so no main session was ever told how to write
   // a card: the screen drew plain lists where a Choice belonged, and nothing
@@ -159,7 +160,7 @@ Deno.test("every prompt whose reply a person reads teaches the card grammar", ()
   }
 });
 
-Deno.test("chat prompt is the folder-less framing alone", () => {
+test("chat prompt is the folder-less framing alone", () => {
   const prompt = buildChatSystemPrompt();
   assert(prompt.includes("You are Lumisca, a helpful AI assistant."));
   // No guidelines at all: the per-tool guidance is the tools' own

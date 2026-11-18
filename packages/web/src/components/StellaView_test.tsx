@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -84,7 +85,7 @@ function render(
   );
 }
 
-Deno.test("StellaView: the pane is the conversation's information", () => {
+test("StellaView: the pane is the conversation's information", () => {
   // Nothing of the pane is drawn before the reader asks for it: no column,
   // and with it no VNC connection (StellaPane connects on mount).
   assertEquals(render().includes("stella-pane"), false);
@@ -106,7 +107,7 @@ Deno.test("StellaView: the pane is the conversation's information", () => {
   );
 });
 
-Deno.test("StellaView: the panel is named without a title row", () => {
+test("StellaView: the panel is named without a title row", () => {
   // The two sections inside the panel (the screen and the lent folders) name
   // themselves, so a heading over them said it twice and took a row for it.
   // The region keeps its name for assistive technology.
@@ -115,7 +116,7 @@ Deno.test("StellaView: the panel is named without a title row", () => {
   assertEquals(html.includes(">情報<"), false);
 });
 
-Deno.test("StellaView: a lent folder is named in the panel, with its way back", () => {
+test("StellaView: a lent folder is named in the panel, with its way back", () => {
   // `screenOpen` is what the lending effect sets (StellaView opens the panel
   // when a loan arrives); a static render does not run effects.
   const html = render({
@@ -139,7 +140,7 @@ Deno.test("StellaView: a lent folder is named in the panel, with its way back", 
   assertStringIncludes(html, "切断");
 });
 
-Deno.test("StellaView: a hand-over draws the pane whatever the caller chose", () => {
+test("StellaView: a hand-over draws the pane whatever the caller chose", () => {
   const html = render({
     conversation: {
       handover: {
@@ -161,7 +162,7 @@ Deno.test("StellaView: a hand-over draws the pane whatever the caller chose", ()
   assertStringIncludes(html, "stella-handover-clipboard");
 });
 
-Deno.test("StellaView: the env request is a card in the conversation", () => {
+test("StellaView: the env request is a card in the conversation", () => {
   // The run is blocked on this request, but it is drawn as a card at the live
   // edge of the transcript rather than as a sheet over the window: reading
   // the conversation, or writing a sentence of one's own, must stay possible
@@ -204,7 +205,7 @@ Deno.test("StellaView: the env request is a card in the conversation", () => {
   );
 });
 
-Deno.test("StellaView: the folder request is a card too, and a browser says it cannot pick", () => {
+test("StellaView: the folder request is a card too, and a browser says it cannot pick", () => {
   // The same edge as the env card: the agent asks, the run waits, and the
   // reader answers in the conversation. This test runs as a plain browser (no
   // bridge origin), so the card has to say that a folder cannot be chosen
@@ -230,7 +231,7 @@ Deno.test("StellaView: the folder request is a card too, and a browser says it c
   assertEquals(html.includes("stella-running"), false, html);
 });
 
-Deno.test("StellaView: a folder disconnect is the page's errand, not a card", () => {
+test("StellaView: a folder disconnect is the page's errand, not a card", () => {
   // Nothing is put in front of the user: the page forwards the request to the
   // desktop shell, so the conversation shows the run still working (the dots)
   // and no question.
@@ -250,7 +251,7 @@ Deno.test("StellaView: a folder disconnect is the page's errand, not a card", ()
   assertStringIncludes(html, "stella-running");
 });
 
-Deno.test("StellaView: a failed send leaves the conversation on screen", () => {
+test("StellaView: a failed send leaves the conversation on screen", () => {
   // The hook puts a prompt/abort failure on the conversation, not on the
   // "could not open it" error: replacing the transcript with an error screen
   // because one send failed throws away the history the user retries from.
@@ -276,7 +277,7 @@ Deno.test("StellaView: a failed send leaves the conversation on screen", () => {
   assertEquals(html.includes("会話を開けませんでした"), false);
 });
 
-Deno.test("StellaView: opening a conversation shows the wait, not an empty pane", () => {
+test("StellaView: opening a conversation shows the wait, not an empty pane", () => {
   // Opening means starting the machine, so the pane has a placeholder while
   // it is in flight. An empty transcript reads as "the tap did nothing".
   const waiting = render({ conversation: null, loading: true });
@@ -298,7 +299,7 @@ const lent: FolderShare = {
   expiresAt: 0,
 };
 
-Deno.test("StellaView: a lent folder colours the composer and counts itself", () => {
+test("StellaView: a lent folder colours the composer and counts itself", () => {
   // A loan is a fact about what the next message can reach, and it leaves no
   // other trace on screen: the tools reach /lend/<name> without saying so.
   // Without the line and the frame, a user has no way to see from the
@@ -313,7 +314,7 @@ Deno.test("StellaView: a lent folder colours the composer and counts itself", ()
   assertStringIncludes(html, "/Users/me/proj");
 });
 
-Deno.test("StellaView: the line counts the loans it was given", () => {
+test("StellaView: the line counts the loans it was given", () => {
   // The whole list travels on every change (see stella-state), so the count
   // is the length of what arrived — no client-side tally to drift.
   const html = render({
@@ -328,7 +329,7 @@ Deno.test("StellaView: the line counts the loans it was given", () => {
   assertStringIncludes(html, "/Users/me/docs");
 });
 
-Deno.test("StellaView: no lent folder leaves the composer alone", () => {
+test("StellaView: no lent folder leaves the composer alone", () => {
   // The usual conversation: no loans, so nothing about them is drawn and the
   // capsule keeps its neutral frame.
   const html = render();
@@ -336,7 +337,7 @@ Deno.test("StellaView: no lent folder leaves the composer alone", () => {
   assertEquals(html.includes("input-composer sharing"), false);
 });
 
-Deno.test("StellaView: a disabled conversation has no composer", () => {
+test("StellaView: a disabled conversation has no composer", () => {
   // A disabled agent keeps its history readable and nothing else: the field
   // is gone rather than disabled (an input that accepts text and a button
   // that refuses it promises something the screen cannot keep), and the way

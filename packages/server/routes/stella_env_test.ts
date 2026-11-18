@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import type { SessionInfo, StellaAgent } from "@lumisca/core";
 import { CoreError } from "@lumisca/core";
 /**
@@ -90,7 +91,7 @@ function post(body: unknown): RequestInit {
   };
 }
 
-Deno.test("stella env: the value reaches the core and is not echoed", async () => {
+test("stella env: the value reaches the core and is not echoed", async () => {
   const { app, received } = setup();
   const response = await app.request(
     "/stella/conversations/a1/env",
@@ -109,7 +110,7 @@ Deno.test("stella env: the value reaches the core and is not echoed", async () =
   ]);
 });
 
-Deno.test("stella env: a refusal lets the run continue", async () => {
+test("stella env: a refusal lets the run continue", async () => {
   const { app, received } = setup();
   const response = await app.request(
     "/stella/conversations/a1/env/decline",
@@ -119,7 +120,7 @@ Deno.test("stella env: a refusal lets the run continue", async () => {
   assertEquals(received.declined, [{ sessionId: "s1", toolCallId: "t1" }]);
 });
 
-Deno.test("stella env: a dialog nobody waits on answers 404", async () => {
+test("stella env: a dialog nobody waits on answers 404", async () => {
   // The deadline passed (or the run was stopped) while the dialog was open:
   // the answer has nowhere to go, and the client must say so rather than
   // close as if it had been saved.
@@ -136,7 +137,7 @@ Deno.test("stella env: a dialog nobody waits on answers 404", async () => {
   assertEquals(response.status, 404);
 });
 
-Deno.test("stella env: the route hands the value over unread", async () => {
+test("stella env: the route hands the value over unread", async () => {
   // Validation (empty, too long, NUL) lives in one place — the store the core
   // writes with — so this pins that the route does not trim or coerce it on
   // the way; 42 reaches the core as 42 and is refused there.
@@ -148,7 +149,7 @@ Deno.test("stella env: the route hands the value over unread", async () => {
   assertEquals(received.provided[0]?.value, 42);
 });
 
-Deno.test("stella env: a toolCallId that is not a string answers 400", async () => {
+test("stella env: a toolCallId that is not a string answers 400", async () => {
   const { app } = setup();
   const response = await app.request(
     "/stella/conversations/a1/env",
@@ -157,7 +158,7 @@ Deno.test("stella env: a toolCallId that is not a string answers 400", async () 
   assertEquals(response.status, 400);
 });
 
-Deno.test("stella env: an unknown agent answers 404", async () => {
+test("stella env: an unknown agent answers 404", async () => {
   const { app } = setup();
   const response = await app.request(
     "/stella/conversations/nope/env",

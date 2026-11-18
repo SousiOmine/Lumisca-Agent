@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertRejects } from "@std/assert";
 import { CoreError } from "../errors.ts";
 import type { VmExec, VmExecBytes } from "./container.ts";
@@ -72,7 +73,7 @@ function okBytes(stdout: Uint8Array = new Uint8Array()): {
   };
 }
 
-Deno.test("uploads: a file is written under the agent's folder and usable as a ref", async () => {
+test("uploads: a file is written under the agent's folder and usable as a ref", async () => {
   const machine = fakeMachine();
   const saved = await saveUploads(
     [
@@ -98,7 +99,7 @@ Deno.test("uploads: a file is written under the agent's folder and usable as a r
   assertEquals(machine.files.has(saved[0]!.path), true);
 });
 
-Deno.test("uploads: a document is not marked as a picture", async () => {
+test("uploads: a document is not marked as a picture", async () => {
   const machine = fakeMachine();
   const saved = await saveUploads(
     [
@@ -117,7 +118,7 @@ Deno.test("uploads: a document is not marked as a picture", async () => {
   assertEquals(saved[0]!.image, false);
 });
 
-Deno.test("uploads: only names this module generates are refs", () => {
+test("uploads: only names this module generates are refs", () => {
   assertEquals(isUploadRef("uploads/1000-abcd1234/01-shot.png"), true);
   // Escapes are refused before an answer becomes a path.
   assertEquals(isUploadRef("uploads/../../etc/passwd"), false);
@@ -126,7 +127,7 @@ Deno.test("uploads: only names this module generates are refs", () => {
   assertEquals(isUploadRef("uploads/1000-abcd1234/01-a/b.png"), false);
 });
 
-Deno.test("uploads: a file that exists is read back as bytes", async () => {
+test("uploads: a file that exists is read back as bytes", async () => {
   const machine = fakeMachine();
   const saved = await saveUploads(
     [
@@ -151,7 +152,7 @@ Deno.test("uploads: a file that exists is read back as bytes", async () => {
   assertEquals(read?.name, "01-p.png");
 });
 
-Deno.test("uploads: a file the machine no longer has answers undefined", async () => {
+test("uploads: a file the machine no longer has answers undefined", async () => {
   const machine = fakeMachine();
   // The agent deleted it: that is an answer, not an error (see the route).
   assertEquals(
@@ -164,7 +165,7 @@ Deno.test("uploads: a file the machine no longer has answers undefined", async (
   );
 });
 
-Deno.test("uploads: a malformed ref never reaches the machine", async () => {
+test("uploads: a malformed ref never reaches the machine", async () => {
   const machine = fakeMachine();
   let touched = false;
   const exec: VmExec = (command, options) => {
@@ -182,7 +183,7 @@ Deno.test("uploads: a malformed ref never reaches the machine", async () => {
   assertEquals(touched, false);
 });
 
-Deno.test("uploads: a file over the limit is an error, not 'gone'", async () => {
+test("uploads: a file over the limit is an error, not 'gone'", async () => {
   const machine = fakeMachine();
   const saved = await saveUploads(
     [

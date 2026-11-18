@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import {
   fauxAssistantMessage,
@@ -12,7 +13,7 @@ import { bytesToBase64 } from "../core/base64.ts";
 import { disposeServer, startServer } from "./app.ts";
 import { conversationOf, json, setup } from "./test-utils.ts";
 
-Deno.test("session prompt roundtrip via API", async () => {
+test("session prompt roundtrip via API", async () => {
   const { core, server, faux, base } = await setup();
   try {
     const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
@@ -75,7 +76,7 @@ Deno.test("session prompt roundtrip via API", async () => {
   }
 });
 
-Deno.test("prompt API stores a bounded copy of an attached picture", async () => {
+test("prompt API stores a bounded copy of an attached picture", async () => {
   const { core, server, faux, base } = await setup();
   const root = await Deno.makeTempDir({ prefix: "lumisca-srv-img-" });
   try {
@@ -141,7 +142,7 @@ Deno.test("prompt API stores a bounded copy of an attached picture", async () =>
   }
 });
 
-Deno.test("chat session API: no workspaceId creates a chat session", async () => {
+test("chat session API: no workspaceId creates a chat session", async () => {
   const { core, server, faux, base } = await setup();
   try {
     faux.setResponses([fauxAssistantMessage("chat reply")]);
@@ -206,7 +207,7 @@ Deno.test("chat session API: no workspaceId creates a chat session", async () =>
   }
 });
 
-Deno.test("rewind truncates messages via the API and rejects bad bodies", async () => {
+test("rewind truncates messages via the API and rejects bad bodies", async () => {
   const { core, server, faux, base } = await setup();
   try {
     const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
@@ -304,7 +305,7 @@ Deno.test("rewind truncates messages via the API and rejects bad bodies", async 
   }
 });
 
-Deno.test("revision endpoint tracks the events of a session", async () => {
+test("revision endpoint tracks the events of a session", async () => {
   // The web's probe reads this on a low interval and re-reads the snapshot
   // only when the count moved; it must therefore start at 0, grow with the
   // run, and agree with the snapshot's own `rev` (the client seeds its
@@ -360,7 +361,7 @@ Deno.test("revision endpoint tracks the events of a session", async () => {
   }
 });
 
-Deno.test("sessions API returns 404 for unknown sessions", async () => {
+test("sessions API returns 404 for unknown sessions", async () => {
   const { core, server, base } = await setup();
   try {
     const get = await fetch(`${base}/api/sessions/nope`);
@@ -381,7 +382,7 @@ Deno.test("sessions API returns 404 for unknown sessions", async () => {
   }
 });
 
-Deno.test("prompt API steers a prompt sent while the session is streaming", async () => {
+test("prompt API steers a prompt sent while the session is streaming", async () => {
   const { core, server, faux, base } = await setup();
   try {
     const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
@@ -435,7 +436,7 @@ Deno.test("prompt API steers a prompt sent while the session is streaming", asyn
   }
 });
 
-Deno.test("federation: hub reports its peers and proxies their workspaces and sessions", async () => {
+test("federation: hub reports its peers and proxies their workspaces and sessions", async () => {
   // Peer first: the hub's federation client connects to it at startup.
   const peerFaux = fauxProvider();
   const peerCore = LumiscaCore.forTesting([peerFaux.provider]);
@@ -658,7 +659,7 @@ Deno.test("federation: hub reports its peers and proxies their workspaces and se
   }
 });
 
-Deno.test("MCP config API: get, put, validate and rebuild sessions", async () => {
+test("MCP config API: get, put, validate and rebuild sessions", async () => {
   const { core, server, base, faux } = await setup();
   const providerId = faux.provider.id;
   const modelId = faux.getModel().id;
@@ -752,7 +753,7 @@ Deno.test("MCP config API: get, put, validate and rebuild sessions", async () =>
   }
 });
 
-Deno.test("todo API returns the session's current plan", async () => {
+test("todo API returns the session's current plan", async () => {
   const { core, server, faux, base } = await setup();
   let root: string | undefined;
   try {
@@ -832,7 +833,7 @@ Deno.test("todo API returns the session's current plan", async () => {
   }
 });
 
-Deno.test("stella API: the conversation is opened by agent and never listed as a session", async () => {
+test("stella API: the conversation is opened by agent and never listed as a session", async () => {
   const { core, faux, server, base } = await setup();
   try {
     await core.setProviderApiKey(faux.provider.id, "faux-key");
@@ -904,7 +905,7 @@ Deno.test("stella API: the conversation is opened by agent and never listed as a
   }
 });
 
-Deno.test("panel snapshots answer for a session with nothing running", async () => {
+test("panel snapshots answer for a session with nothing running", async () => {
   const { core, server, base, faux } = await setup();
   try {
     const created = await json(base, "/api/sessions", {
@@ -944,7 +945,7 @@ Deno.test("panel snapshots answer for a session with nothing running", async () 
   }
 });
 
-Deno.test("saved prompts and user providers: the routes exist and validate", async () => {
+test("saved prompts and user providers: the routes exist and validate", async () => {
   const { core, server, base } = await setup();
   try {
     // Saved prompts: list, create, update, delete.

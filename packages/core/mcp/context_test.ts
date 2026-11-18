@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import {
   createMcpToolsProvider,
@@ -6,7 +7,7 @@ import {
   withOnDemandToolsNote,
 } from "./context.ts";
 
-Deno.test("mcp context: publishes the note when the pair appears, once", () => {
+test("mcp context: publishes the note when the pair appears, once", () => {
   let searchable = false;
   const provider = createMcpToolsProvider({ searchable: () => searchable });
   assertEquals(provider.name, MCP_TOOLS_PROVIDER);
@@ -24,7 +25,7 @@ Deno.test("mcp context: publishes the note when the pair appears, once", () => {
   assertEquals(provider.next(), []);
 });
 
-Deno.test("mcp context: a disappeared pair is announced once", () => {
+test("mcp context: a disappeared pair is announced once", () => {
   let searchable = true;
   const provider = createMcpToolsProvider({ searchable: () => searchable });
   provider.next();
@@ -41,7 +42,7 @@ Deno.test("mcp context: a disappeared pair is announced once", () => {
   assertEquals(provider.next(), []);
 });
 
-Deno.test("mcp context: rebase re-anchors to the last publication", () => {
+test("mcp context: rebase re-anchors to the last publication", () => {
   let searchable = true;
   const provider = createMcpToolsProvider({ searchable: () => searchable });
   provider.rebase({ available: true });
@@ -60,7 +61,7 @@ Deno.test("mcp context: rebase re-anchors to the last publication", () => {
   assertEquals(provider.next(), []);
 });
 
-Deno.test("on-demand note: the prompt form is idempotent", () => {
+test("on-demand note: the prompt form is idempotent", () => {
   const base = "You are a test agent.";
   const once = withOnDemandToolsNote(base);
   assertEquals(once.startsWith(base), true);

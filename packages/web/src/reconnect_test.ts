@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import {
   createReconnectScheduler,
@@ -34,7 +35,7 @@ function withFakeTimers(): {
   };
 }
 
-Deno.test("reconnect: the wait doubles per failure and stops at the cap", () => {
+test("reconnect: the wait doubles per failure and stops at the cap", () => {
   const timers = withFakeTimers();
   try {
     const scheduler = createReconnectScheduler();
@@ -54,7 +55,7 @@ Deno.test("reconnect: the wait doubles per failure and stops at the cap", () => 
   }
 });
 
-Deno.test("reconnect: a second schedule while one is pending is ignored", () => {
+test("reconnect: a second schedule while one is pending is ignored", () => {
   const timers = withFakeTimers();
   try {
     const scheduler = createReconnectScheduler();
@@ -66,7 +67,7 @@ Deno.test("reconnect: a second schedule while one is pending is ignored", () => 
   }
 });
 
-Deno.test("reconnect: a successful connection resets the backoff", () => {
+test("reconnect: a successful connection resets the backoff", () => {
   const timers = withFakeTimers();
   try {
     const scheduler = createReconnectScheduler();
@@ -85,7 +86,7 @@ Deno.test("reconnect: a successful connection resets the backoff", () => {
   }
 });
 
-Deno.test("reconnect: a closed stream schedules nothing", () => {
+test("reconnect: a closed stream schedules nothing", () => {
   const timers = withFakeTimers();
   try {
     let closed = false;
@@ -99,7 +100,7 @@ Deno.test("reconnect: a closed stream schedules nothing", () => {
   }
 });
 
-Deno.test("reconnect: cancel drops the pending attempt", () => {
+test("reconnect: cancel drops the pending attempt", () => {
   const original = globalThis.clearTimeout;
   let cleared = 0;
   globalThis.clearTimeout = ((id: number) => {

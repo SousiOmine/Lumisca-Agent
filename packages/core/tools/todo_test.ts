@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import type { ClientEvent } from "../domain/event.ts";
 import type { TodoPhase } from "../shared/mod.ts";
@@ -58,7 +59,7 @@ async function errorOf(
   }
 }
 
-Deno.test("todo sets the whole plan, defaults statuses, and emits a snapshot", async () => {
+test("todo sets the whole plan, defaults statuses, and emits a snapshot", async () => {
   const { hub, events } = makeHub();
   const tool = createTodoTool(hub, { panel: true });
   const result = await run(tool, {
@@ -94,7 +95,7 @@ Deno.test("todo sets the whole plan, defaults statuses, and emits a snapshot", a
   assertEquals(result.details, { todos });
 });
 
-Deno.test("todo replaces the previous plan on every call", async () => {
+test("todo replaces the previous plan on every call", async () => {
   const { hub, events } = makeHub();
   const tool = createTodoTool(hub, { panel: true });
   await run(tool, { phases: [{ name: "A", tasks: [{ name: "a1" }] }] });
@@ -116,7 +117,7 @@ Deno.test("todo replaces the previous plan on every call", async () => {
   assertEquals(toolText(result), "Updated todo list: 1 pending, 1 completed.");
 });
 
-Deno.test("todo keeps ids stable for unchanged phases and tasks", async () => {
+test("todo keeps ids stable for unchanged phases and tasks", async () => {
   const { hub } = makeHub();
   const tool = createTodoTool(hub, { panel: true });
   await run(tool, {
@@ -154,7 +155,7 @@ Deno.test("todo keeps ids stable for unchanged phases and tasks", async () => {
   );
 });
 
-Deno.test("todo ids are never reused after a plan is cleared", async () => {
+test("todo ids are never reused after a plan is cleared", async () => {
   const { hub } = makeHub();
   const tool = createTodoTool(hub, { panel: true });
   await run(tool, { phases: [{ name: "A", tasks: [{ name: "a1" }] }] });
@@ -165,7 +166,7 @@ Deno.test("todo ids are never reused after a plan is cleared", async () => {
   assertEquals(todos[0]!.tasks[0]!.id, "t2");
 });
 
-Deno.test("todo carries parallel in_progress tasks", async () => {
+test("todo carries parallel in_progress tasks", async () => {
   const { hub } = makeHub();
   const tool = createTodoTool(hub, { panel: true });
   await run(tool, {
@@ -186,7 +187,7 @@ Deno.test("todo carries parallel in_progress tasks", async () => {
   );
 });
 
-Deno.test("todo clearing the plan reports it and emits an empty snapshot", async () => {
+test("todo clearing the plan reports it and emits an empty snapshot", async () => {
   const { hub, events } = makeHub();
   const tool = createTodoTool(hub, { panel: true });
   await run(tool, { phases: [{ name: "A", tasks: [{ name: "a1" }] }] });
@@ -196,7 +197,7 @@ Deno.test("todo clearing the plan reports it and emits an empty snapshot", async
   assertEquals(toolText(result), "Cleared the todo list.");
 });
 
-Deno.test("todo accepts every status and trims names", async () => {
+test("todo accepts every status and trims names", async () => {
   const { hub } = makeHub();
   const tool = createTodoTool(hub, { panel: true });
   await run(tool, {
@@ -223,7 +224,7 @@ Deno.test("todo accepts every status and trims names", async () => {
   );
 });
 
-Deno.test("todo rejects malformed plans", async () => {
+test("todo rejects malformed plans", async () => {
   const { hub } = makeHub();
   const tool = createTodoTool(hub, { panel: true });
   assertThrows(
@@ -273,7 +274,7 @@ Deno.test("todo rejects malformed plans", async () => {
   assertEquals(hub.getPlan(), []);
 });
 
-Deno.test("formatTodoCounts reports the statuses in use", () => {
+test("formatTodoCounts reports the statuses in use", () => {
   assertEquals(formatTodoCounts([]), "Cleared the todo list.");
   const phases: TodoPhase[] = [
     {
@@ -293,7 +294,7 @@ Deno.test("formatTodoCounts reports the statuses in use", () => {
   );
 });
 
-Deno.test("todo promises the panel only where there is one", () => {
+test("todo promises the panel only where there is one", () => {
   const { hub } = makeHub();
   const withPanel = createTodoTool(hub, { panel: true }).description;
   const withoutPanel = createTodoTool(hub, { panel: false }).description;

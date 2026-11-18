@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { type DraftStartState, startDraft } from "./draftStart.ts";
 
@@ -29,7 +30,7 @@ function recorder() {
 
 const describe = () => "理由";
 
-Deno.test("startDraft: a start that succeeds releases the flag", async () => {
+test("startDraft: a start that succeeds releases the flag", async () => {
   const { state, writes, busy, error } = recorder();
   let ran = 0;
   await startDraft(
@@ -46,7 +47,7 @@ Deno.test("startDraft: a start that succeeds releases the flag", async () => {
   assertEquals(error(), undefined);
 });
 
-Deno.test("startDraft: a start that fails releases the flag too", async () => {
+test("startDraft: a start that fails releases the flag too", async () => {
   const { state, writes, busy, error } = recorder();
   let described = 0;
   await startDraft(
@@ -69,7 +70,7 @@ Deno.test("startDraft: a start that fails releases the flag too", async () => {
   assertEquals(error(), "理由");
 });
 
-Deno.test("startDraft: the next start clears the previous reason", async () => {
+test("startDraft: the next start clears the previous reason", async () => {
   const { state, error } = recorder();
   await startDraft(() => Promise.reject(new Error("first")), state, describe);
   assertEquals(error(), "理由");

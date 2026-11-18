@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { fromBase64Url, toBase64Url } from "@lumisca/core/shared";
 import { assertEquals } from "@std/assert";
 import { canUsePush } from "./push.ts";
@@ -6,7 +7,7 @@ import { canUsePush } from "./push.ts";
  * with the worker's copy (public/sw.js, which cannot import it): a key read
  * with one spelling and compared with another is a subscription that silently
  * never verifies. */
-Deno.test("the page encodes keys the way the server writes them", () => {
+test("the page encodes keys the way the server writes them", () => {
   const bytes = new Uint8Array([4, 0, 255, 62, 63, 1, 2, 3]);
   const encoded = toBase64Url(bytes);
   assertEquals(encoded.includes("="), false);
@@ -15,7 +16,7 @@ Deno.test("the page encodes keys the way the server writes them", () => {
   assertEquals(fromBase64Url(encoded), bytes);
 });
 
-Deno.test("a P-256 point survives the round trip a subscription makes", async () => {
+test("a P-256 point survives the round trip a subscription makes", async () => {
   // The exact shape `applicationServerKey` receives: 65 bytes, byte 0 = 0x04.
   const pair = await crypto.subtle.generateKey(
     { name: "ECDH", namedCurve: "P-256" },
@@ -31,7 +32,7 @@ Deno.test("a P-256 point survives the round trip a subscription makes", async ()
   assertEquals(decoded, raw);
 });
 
-Deno.test("Web Push needs a secure origin a worker is registered on", () => {
+test("Web Push needs a secure origin a worker is registered on", () => {
   // The same rule that decides whether the worker is registered at all
   // (pwa.ts): https outside the desktop shell. A phone on http, or the
   // desktop's loopback page, has no push channel — the settings row says so
@@ -50,7 +51,7 @@ Deno.test("Web Push needs a secure origin a worker is registered on", () => {
   );
 });
 
-Deno.test("a browser without the Push API is unsupported on https", () => {
+test("a browser without the Push API is unsupported on https", () => {
   // Safari on iOS before 16.4, and an ordinary tab there even after it: the
   // origin is fine, the API is not.
   assertEquals(

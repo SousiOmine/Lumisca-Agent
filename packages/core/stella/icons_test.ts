@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { MAX_AGENT_ICON_BYTES } from "../shared/mod.ts";
@@ -49,7 +50,7 @@ const MINI_WEBP = new Uint8Array([
   0x20,
 ]);
 
-Deno.test("icons: put names the icon and resolve finds it", async () => {
+test("icons: put names the icon and resolve finds it", async () => {
   await withStore(async (store) => {
     const name = await store.put("a1", MINI_PNG, ".png");
     // The name is what the row carries and what the route's URL ends in.
@@ -63,7 +64,7 @@ Deno.test("icons: put names the icon and resolve finds it", async () => {
   });
 });
 
-Deno.test("icons: every accepted format is stored and served with its type", async () => {
+test("icons: every accepted format is stored and served with its type", async () => {
   await withStore(async (store) => {
     const cases: Array<[Uint8Array, string, string]> = [
       [MINI_PNG, ".png", "image/png"],
@@ -84,7 +85,7 @@ Deno.test("icons: every accepted format is stored and served with its type", asy
   });
 });
 
-Deno.test("icons: the extension is normalized, not trusted", async () => {
+test("icons: the extension is normalized, not trusted", async () => {
   await withStore(async (store) => {
     const name = await store.put("a1", MINI_PNG, ".PNG");
     assertEquals(name.endsWith(".png"), true);
@@ -92,7 +93,7 @@ Deno.test("icons: the extension is normalized, not trusted", async () => {
   });
 });
 
-Deno.test("icons: a format icons do not support is refused", async () => {
+test("icons: a format icons do not support is refused", async () => {
   await withStore(async (store) => {
     // SVG is a document that can carry script; the visual store accepts it,
     // the icon store must not.
@@ -109,7 +110,7 @@ Deno.test("icons: a format icons do not support is refused", async () => {
   });
 });
 
-Deno.test("icons: bytes that are not the format they claim are refused", async () => {
+test("icons: bytes that are not the format they claim are refused", async () => {
   await withStore(async (store, root) => {
     // A renamed text file: the browser would report its own guess from the
     // extension, so the store is where "it is really a JPEG" is decided.
@@ -144,7 +145,7 @@ Deno.test("icons: bytes that are not the format they claim are refused", async (
   });
 });
 
-Deno.test("icons: an oversized or empty file is refused, never truncated", async () => {
+test("icons: an oversized or empty file is refused, never truncated", async () => {
   await withStore(async (store) => {
     const tooBig = new Uint8Array(MAX_AGENT_ICON_BYTES + 1);
     tooBig.set(MINI_PNG.subarray(0, 8));
@@ -157,7 +158,7 @@ Deno.test("icons: an oversized or empty file is refused, never truncated", async
   });
 });
 
-Deno.test("icons: resolve answers only names the store generated", async () => {
+test("icons: resolve answers only names the store generated", async () => {
   await withStore(async (store) => {
     const name = await store.put("a1", MINI_PNG, ".png");
     assert(name !== "");
@@ -178,7 +179,7 @@ Deno.test("icons: resolve answers only names the store generated", async () => {
   });
 });
 
-Deno.test("icons: remove drops one file and is quiet when it is gone", async () => {
+test("icons: remove drops one file and is quiet when it is gone", async () => {
   await withStore(async (store) => {
     const first = await store.put("a1", MINI_PNG, ".png");
     const second = await store.put("a1", MINI_PNG, ".png");
@@ -190,7 +191,7 @@ Deno.test("icons: remove drops one file and is quiet when it is gone", async () 
   });
 });
 
-Deno.test("icons: an agent that never uploaded one has no directory", async () => {
+test("icons: an agent that never uploaded one has no directory", async () => {
   await withStore(async (store, root) => {
     assertEquals(await store.resolve("a1", "9f3c2a1b4d5e.png"), undefined);
     await assertRejects(() => Deno.stat(join(root, "a1")));
@@ -199,7 +200,7 @@ Deno.test("icons: an agent that never uploaded one has no directory", async () =
   });
 });
 
-Deno.test("icons: deleteAgent drops that agent's files only", async () => {
+test("icons: deleteAgent drops that agent's files only", async () => {
   await withStore(async (store, root) => {
     const mine = await store.put("a1", MINI_PNG, ".png");
     const other = await store.put("a2", MINI_PNG, ".png");
@@ -210,7 +211,7 @@ Deno.test("icons: deleteAgent drops that agent's files only", async () => {
   });
 });
 
-Deno.test("icons: the per-agent cap keeps a loop from filling the disk", async () => {
+test("icons: the per-agent cap keeps a loop from filling the disk", async () => {
   await withStore(async (store) => {
     for (let i = 0; i < MAX_AGENT_ICONS_PER_AGENT; i++) {
       await store.put("a1", MINI_PNG, ".png");

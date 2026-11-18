@@ -4,6 +4,7 @@
  * empty `name`/`role` before the core ever saw them — so a user who wanted an
  * agent without describing it first was stuck at a disabled button.
  */
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import type { StellaApi } from "./stella.ts";
 import { stellaRoutes } from "./stella.ts";
@@ -47,14 +48,14 @@ async function create(
   });
 }
 
-Deno.test("agent create: an empty body creates an agent", async () => {
+test("agent create: an empty body creates an agent", async () => {
   const received: { name: string; role: string }[] = [];
   const response = await create({}, received);
   assertEquals(response.status, 201);
   assertEquals(received, [{ name: "", role: "" }]);
 });
 
-Deno.test("agent create: a missing field reads as empty, not as an error", async () => {
+test("agent create: a missing field reads as empty, not as an error", async () => {
   const received: { name: string; role: string }[] = [];
   assertEquals((await create({ name: "Notes" }, received)).status, 201);
   assertEquals((await create({ role: "Keeps notes" }, received)).status, 201);
@@ -64,7 +65,7 @@ Deno.test("agent create: a missing field reads as empty, not as an error", async
   ]);
 });
 
-Deno.test("agent create: a non-string field is still a client bug", async () => {
+test("agent create: a non-string field is still a client bug", async () => {
   const received: { name: string; role: string }[] = [];
   const response = await create({ name: 42 }, received);
   assertEquals(response.status, 400);

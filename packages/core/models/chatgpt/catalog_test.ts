@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import type { Api, Model } from "../../ai/catalog.ts";
 
@@ -18,7 +19,7 @@ function json(data: unknown, status = 200): Response {
   });
 }
 
-Deno.test("catalog maps the account's models", async () => {
+test("catalog maps the account's models", async () => {
   let headers: Headers | undefined;
   const fetchImpl: FetchLike = (input, init) => {
     assertEquals(
@@ -83,7 +84,7 @@ Deno.test("catalog maps the account's models", async () => {
   assertEquals(headers?.get("originator"), "lumisca");
 });
 
-Deno.test("catalog refuses a response without models", async () => {
+test("catalog refuses a response without models", async () => {
   const fetchImpl: FetchLike = () => Promise.resolve(json({ models: [] }));
   const error = await assertRejects(
     () => fetchChatGptModels(fetchImpl, { token: "t", accountId: "a" }),
@@ -92,7 +93,7 @@ Deno.test("catalog refuses a response without models", async () => {
   assert(error.message.includes("no usable models"));
 });
 
-Deno.test("catalog surfaces the HTTP failure", async () => {
+test("catalog surfaces the HTTP failure", async () => {
   const fetchImpl: FetchLike = () =>
     Promise.resolve(new Response("upstream down", { status: 503 }));
   const error = await assertRejects(
@@ -103,7 +104,7 @@ Deno.test("catalog surfaces the HTTP failure", async () => {
   assert(error.message.includes("upstream down"));
 });
 
-Deno.test("the catalog round-trips through settings", () => {
+test("the catalog round-trips through settings", () => {
   const settings = createInMemorySettingsRepo();
   assertEquals(readChatGptModels(settings), []);
 

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertThrows } from "@std/assert";
 import {
   archiveAssetName,
@@ -33,7 +34,7 @@ function manifest(overrides: Record<string, unknown> = {}) {
   };
 }
 
-Deno.test("the release layout names assets and URLs consistently", () => {
+test("the release layout names assets and URLs consistently", () => {
   const windows = releaseTargetFor("x86_64-pc-windows-msvc")!;
   const linux = releaseTargetFor("x86_64-unknown-linux-gnu")!;
   assertEquals(windows.format, "zip");
@@ -68,7 +69,7 @@ Deno.test("the release layout names assets and URLs consistently", () => {
   assertEquals(releaseTargetFor("aarch64-apple-darwin"), undefined);
 });
 
-Deno.test("parseReleaseManifest accepts a complete manifest", () => {
+test("parseReleaseManifest accepts a complete manifest", () => {
   const parsed = parseReleaseManifest(manifest(), TARGET);
   assertEquals(parsed.version, "0.7.8");
   assertEquals(parsed.target, TARGET);
@@ -76,7 +77,7 @@ Deno.test("parseReleaseManifest accepts a complete manifest", () => {
   assertEquals(parsed.url.endsWith(".zip"), true);
 });
 
-Deno.test("parseReleaseManifest rejects what cannot be installed", () => {
+test("parseReleaseManifest rejects what cannot be installed", () => {
   const cases: Array<[string, Record<string, unknown>]> = [
     ["not an object", { ...manifest(), ...{} }],
     ["no version", manifest({ version: undefined })],
@@ -99,7 +100,7 @@ Deno.test("parseReleaseManifest rejects what cannot be installed", () => {
   }
 });
 
-Deno.test("versions compare numerically, not lexically", () => {
+test("versions compare numerically, not lexically", () => {
   assertEquals(parseVersion("0.7.8"), [0, 7, 8]);
   assertEquals(parseVersion(" 1.2 "), [1, 2]);
   assertEquals(parseVersion("v0.7.8"), null);
@@ -110,7 +111,7 @@ Deno.test("versions compare numerically, not lexically", () => {
   assertThrows(() => compareVersions("nope", "0.7.8"), ReleaseManifestError);
 });
 
-Deno.test("isNewerVersion only accepts a strictly newer release", () => {
+test("isNewerVersion only accepts a strictly newer release", () => {
   assertEquals(isNewerVersion("0.7.8", "0.7.7"), true);
   assertEquals(isNewerVersion("0.7.10", "0.7.9"), true);
   assertEquals(isNewerVersion("0.7.7", "0.7.7"), false);
@@ -122,7 +123,7 @@ Deno.test("isNewerVersion only accepts a strictly newer release", () => {
   assertEquals(isNewerVersion("0.7.8", "unknown"), true);
 });
 
-Deno.test("the check cadence matches the desktop updater", async () => {
+test("the check cadence matches the desktop updater", async () => {
   // Two updaters, one schedule: the desktop shell updates the app bundle and
   // the standalone server updates its own binary, but a user running both
   // should not see them poll on different clocks. The Rust constant cannot be

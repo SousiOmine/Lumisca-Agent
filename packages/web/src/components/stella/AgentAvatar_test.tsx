@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -32,7 +33,7 @@ function render(props: {
   );
 }
 
-Deno.test("AgentAvatar: a stored picture is drawn from the agent's route", () => {
+test("AgentAvatar: a stored picture is drawn from the agent's route", () => {
   const html = render({ name: "Aide", icon: "9f3c2a1b4d5e.png" });
   assertStringIncludes(
     html,
@@ -47,7 +48,7 @@ Deno.test("AgentAvatar: a stored picture is drawn from the agent's route", () =>
   assertStringIncludes(html, "agent-avatar");
 });
 
-Deno.test("AgentAvatar: without a picture it draws the name's initial", () => {
+test("AgentAvatar: without a picture it draws the name's initial", () => {
   const html = render({ name: "aide", icon: "" });
   // Uppercased, because a lowercase initial reads as a truncated word.
   assertStringIncludes(html, ">A<");
@@ -59,7 +60,7 @@ Deno.test("AgentAvatar: without a picture it draws the name's initial", () => {
   assertStringIncludes(html.includes("<img") ? "has-img" : "no-img", "no-img");
 });
 
-Deno.test("AgentAvatar: the colour is the id's, as a CSS variable", () => {
+test("AgentAvatar: the colour is the id's, as a CSS variable", () => {
   const html = render({ name: "Aide", icon: "" });
   // The hue reaches the stylesheet as a variable (styles/README.md: dynamic
   // values go through CSS variables, never an inline colour), so the rule
@@ -75,7 +76,7 @@ Deno.test("AgentAvatar: the colour is the id's, as a CSS variable", () => {
   );
 });
 
-Deno.test("AgentAvatar: the size is the caller's, on the element", () => {
+test("AgentAvatar: the size is the caller's, on the element", () => {
   const html = render({ name: "Aide", icon: "", size: 72 });
   assertStringIncludes(html, "width:72px");
   assertStringIncludes(html, "height:72px");

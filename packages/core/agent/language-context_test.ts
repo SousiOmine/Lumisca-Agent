@@ -6,6 +6,7 @@
  * it froze at session creation, so switching the app to English left every
  * open session answering in the old language.
  */
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import {
   createLanguageProvider,
@@ -16,7 +17,7 @@ function providerWith(language: () => "ja" | "en") {
   return createLanguageProvider({ language });
 }
 
-Deno.test("language context: the first publication names the language", () => {
+test("language context: the first publication names the language", () => {
   const provider = providerWith(() => "ja");
   const updates = provider.next();
   assertEquals(updates.length, 1);
@@ -27,7 +28,7 @@ Deno.test("language context: the first publication names the language", () => {
   assertEquals(updates[0]!.body.includes("Do not switch"), true);
 });
 
-Deno.test("language context: unchanged language publishes nothing", () => {
+test("language context: unchanged language publishes nothing", () => {
   // A context is appended to the transcript, so an unchanged value must not
   // add a message on every run.
   const provider = providerWith(() => "ja");
@@ -36,7 +37,7 @@ Deno.test("language context: unchanged language publishes nothing", () => {
   assertEquals(provider.next(), []);
 });
 
-Deno.test("language context: a changed setting replaces the rule", () => {
+test("language context: a changed setting replaces the rule", () => {
   // The point of the change: an open session follows the setting.
   let language: "ja" | "en" = "ja";
   const provider = providerWith(() => language);
@@ -54,7 +55,7 @@ Deno.test("language context: a changed setting replaces the rule", () => {
   assertEquals(updates[0]!.body.includes("English"), true);
 });
 
-Deno.test("language context: a reopened session does not repeat its rule", () => {
+test("language context: a reopened session does not repeat its rule", () => {
   // rebase() teaches the provider what the transcript already holds, so
   // reopening a session does not append the same line again.
   const published = providerWith(() => "ja").next()[0]!;

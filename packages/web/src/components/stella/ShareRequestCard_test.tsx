@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -44,7 +45,7 @@ function pickButton(html: string): string {
   return html.slice(open, html.indexOf("</button>", start) + 9);
 }
 
-Deno.test("ShareRequestCard: the agent's reason is what the card leads with", () => {
+test("ShareRequestCard: the agent's reason is what the card leads with", () => {
   // The reason is the agent's own sentence: it is the only part of the card
   // that says whether lending anything is worth it, so it is drawn as given.
   const html = render();

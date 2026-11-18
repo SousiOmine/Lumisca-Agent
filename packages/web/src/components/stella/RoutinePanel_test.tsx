@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -41,7 +42,7 @@ function html(routines: RoutineView[], agentDisabled = false): string {
   );
 }
 
-Deno.test("a stopped routine says so on its name's line", () => {
+test("a stopped routine says so on its name's line", () => {
   // The state was the one fact a long name could push out of sight: it
   // wrapped under the name, and the row then read like a running one. The
   // badge is the name's neighbour in the title row, which is what the
@@ -55,7 +56,7 @@ Deno.test("a stopped routine says so on its name's line", () => {
   assertEquals(badge > name && badge < meta, true);
 });
 
-Deno.test("a short request is a paragraph, not a disclosure", () => {
+test("a short request is a paragraph, not a disclosure", () => {
   // Only a text past three lines may claim to open something: the element is
   // plain until the row has measured it (the disclosure props come from the
   // measurement, which a server render does not run).
@@ -64,7 +65,7 @@ Deno.test("a short request is a paragraph, not a disclosure", () => {
   assertEquals(page.includes('role="button"'), false);
 });
 
-Deno.test("a disabled agent's routines say they do not run", () => {
+test("a disabled agent's routines say they do not run", () => {
   // The list is not hidden: the reader may still be deciding what to keep.
   // What it says is that nothing here fires until the agent is switched on,
   // so a "next 8:30" line is not read as a promise.

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { fauxAssistantMessage, fauxProvider, LumiscaCore } from "@lumisca/core";
 import { assertEquals } from "@std/assert";
 import { startServer } from "./app.ts";
@@ -46,7 +47,7 @@ function clipboardMachine() {
   };
 }
 
-Deno.test("stella clipboard: the machine's text crosses the server, in UTF-8", async () => {
+test("stella clipboard: the machine's text crosses the server, in UTF-8", async () => {
   const machine = clipboardMachine();
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider], () => ({}), machine);

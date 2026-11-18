@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { runtime } from "./runtime.ts";
 
@@ -9,7 +10,7 @@ import { runtime } from "./runtime.ts";
  */
 const probe = "console.log(process.env.LUMISCA_PROBE ?? 'unset')";
 
-Deno.test("runtime: Command.output inherits the parent environment", async () => {
+test("runtime: Command.output inherits the parent environment", async () => {
   process.env["LUMISCA_PROBE"] = "inherited";
   try {
     const result = await new runtime.Command(runtime.execPath(), {
@@ -23,7 +24,7 @@ Deno.test("runtime: Command.output inherits the parent environment", async () =>
   }
 });
 
-Deno.test("runtime: Command.output drops the parent env when clearEnv is set", async () => {
+test("runtime: Command.output drops the parent env when clearEnv is set", async () => {
   process.env["LUMISCA_PROBE"] = "inherited";
   try {
     const result = await new runtime.Command(runtime.execPath(), {
@@ -37,7 +38,7 @@ Deno.test("runtime: Command.output drops the parent env when clearEnv is set", a
   }
 });
 
-Deno.test("runtime: Command.output merges a partial env over the parent", async () => {
+test("runtime: Command.output merges a partial env over the parent", async () => {
   process.env["LUMISCA_PROBE"] = "inherited";
   try {
     const result = await new runtime.Command(runtime.execPath(), {

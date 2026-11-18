@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import {
   clampThinkingLevel,
@@ -5,13 +6,13 @@ import {
   isThinkingLevel,
 } from "./thinking.ts";
 
-Deno.test("getSupportedThinkingLevels: non-reasoning models only support off", () => {
+test("getSupportedThinkingLevels: non-reasoning models only support off", () => {
   assertEquals(getSupportedThinkingLevels({ reasoning: false }), ["off"]);
   assertEquals(getSupportedThinkingLevels({}), ["off"]);
   assertEquals(getSupportedThinkingLevels(undefined), ["off"]);
 });
 
-Deno.test("getSupportedThinkingLevels: reasoning model without a map", () => {
+test("getSupportedThinkingLevels: reasoning model without a map", () => {
   // Without a map, the provider defaults apply: everything except xhigh/max
   // (those require an explicit map entry).
   assertEquals(getSupportedThinkingLevels({ reasoning: true }), [
@@ -23,7 +24,7 @@ Deno.test("getSupportedThinkingLevels: reasoning model without a map", () => {
   ]);
 });
 
-Deno.test("getSupportedThinkingLevels: map entries filter levels", () => {
+test("getSupportedThinkingLevels: map entries filter levels", () => {
   assertEquals(
     getSupportedThinkingLevels({
       reasoning: true,
@@ -38,13 +39,13 @@ Deno.test("getSupportedThinkingLevels: map entries filter levels", () => {
   );
 });
 
-Deno.test("clampThinkingLevel: supported levels pass through", () => {
+test("clampThinkingLevel: supported levels pass through", () => {
   const model = { reasoning: true };
   assertEquals(clampThinkingLevel(model, "off"), "off");
   assertEquals(clampThinkingLevel(model, "medium"), "medium");
 });
 
-Deno.test("clampThinkingLevel: unsupported levels clamp to nearest", () => {
+test("clampThinkingLevel: unsupported levels clamp to nearest", () => {
   const model = { reasoning: true };
   // xhigh/max need a map entry; request clamps down to high.
   assertEquals(clampThinkingLevel(model, "max"), "high");
@@ -53,7 +54,7 @@ Deno.test("clampThinkingLevel: unsupported levels clamp to nearest", () => {
   assertEquals(clampThinkingLevel({ reasoning: false }, "high"), "off");
 });
 
-Deno.test("clampThinkingLevel: map-filtered levels", () => {
+test("clampThinkingLevel: map-filtered levels", () => {
   const model = {
     reasoning: true,
     thinkingLevelMap: {
@@ -70,7 +71,7 @@ Deno.test("clampThinkingLevel: map-filtered levels", () => {
   assertEquals(clampThinkingLevel(model, "off"), "minimal");
 });
 
-Deno.test("isThinkingLevel accepts only known levels", () => {
+test("isThinkingLevel accepts only known levels", () => {
   assertEquals(isThinkingLevel("off"), true);
   assertEquals(isThinkingLevel("max"), true);
   assertEquals(isThinkingLevel("high"), true);

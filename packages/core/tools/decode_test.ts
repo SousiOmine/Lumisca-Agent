@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { decodeOutput, detectOemLabel } from "./decode.ts";
 
@@ -12,7 +13,7 @@ const UTF8_JP = new TextEncoder().encode("日本語");
  * back to the label — so both steps and the fallback's failure mode are
  * checked together. */
 
-Deno.test("decodeOutput prefers UTF-8 and falls back to the OEM label", () => {
+test("decodeOutput prefers UTF-8 and falls back to the OEM label", () => {
   // Valid UTF-8 wins, whether or not a label was offered: a UTF-8 console on
   // an OEM-labeled system still emits UTF-8.
   assertEquals(decodeOutput(UTF8_JP, null), "日本語");
@@ -25,7 +26,7 @@ Deno.test("decodeOutput prefers UTF-8 and falls back to the OEM label", () => {
   assertEquals(decodeOutput(ascii, "shift_jis"), "exit code: 1");
 });
 
-Deno.test("decodeOutput leaves bytes nothing can decode to the UTF-8 decoder", () => {
+test("decodeOutput leaves bytes nothing can decode to the UTF-8 decoder", () => {
   // Neither valid UTF-8 nor decodable by the label: the replacement
   // character is visible, which is better than dropping the byte or
   // throwing inside a tool result.
@@ -33,7 +34,7 @@ Deno.test("decodeOutput leaves bytes nothing can decode to the UTF-8 decoder", (
   assertEquals(text.includes("\uFFFD"), true);
 });
 
-Deno.test("detectOemLabel reports the label of this platform", async () => {
+test("detectOemLabel reports the label of this platform", async () => {
   // Windows asks the console; everywhere else there is no OEM code page to
   // detect. The second call is the cached one, which must agree — a cached
   // undefined turning into a different value would silently stop the

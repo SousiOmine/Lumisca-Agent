@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import type { VmCommandBytesRunner, VmCommandRunner } from "./command.ts";
 import type { VmManager, VmStatus } from "./container.ts";
@@ -101,7 +102,7 @@ async function settled(check: () => boolean): Promise<void> {
   throw new Error("the skill catalog read did not settle");
 }
 
-Deno.test("a cold catalog reads itself instead of staying empty", async () => {
+test("a cold catalog reads itself instead of staying empty", async () => {
   const runner = skillRunner();
   const stella = machineWith(runner);
   stella.set(fakeManager());
@@ -120,7 +121,7 @@ Deno.test("a cold catalog reads itself instead of staying empty", async () => {
   assertEquals(runner.listings(), 2);
 });
 
-Deno.test("a run and the skill tool asking together share one read", async () => {
+test("a run and the skill tool asking together share one read", async () => {
   const runner = skillRunner();
   const stella = machineWith(runner);
   stella.set(fakeManager());
@@ -137,7 +138,7 @@ Deno.test("a run and the skill tool asking together share one read", async () =>
   assertEquals(stella.skills("agent-1").length > 0, true);
 });
 
-Deno.test("without a machine nothing is read and nothing is promised", async () => {
+test("without a machine nothing is read and nothing is promised", async () => {
   const runner = skillRunner();
   const stella = machineWith(runner);
   // No `set`: this installation has no virtual machine (code mode only).
@@ -147,7 +148,7 @@ Deno.test("without a machine nothing is read and nothing is promised", async () 
   assertEquals(stella.skills("agent-1"), []);
 });
 
-Deno.test("a failed read does not fail the run and is not retried at once", async () => {
+test("a failed read does not fail the run and is not retried at once", async () => {
   const runner = skillRunner();
   const stella = machineWith(runner);
   stella.set(fakeManager());

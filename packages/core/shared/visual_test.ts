@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import {
   isVisualExtension,
@@ -9,7 +10,7 @@ import {
   visualRef,
 } from "./visual.ts";
 
-Deno.test("visualMimeType accepts the names the store generates", () => {
+test("visualMimeType accepts the names the store generates", () => {
   assertEquals(visualMimeType("9f3c2a1b4d5e.png"), "image/png");
   assertEquals(visualMimeType("9f3c2a1b4d5e.jpg"), "image/jpeg");
   assertEquals(visualMimeType("9f3c2a1b4d5e.jpeg"), "image/jpeg");
@@ -19,7 +20,7 @@ Deno.test("visualMimeType accepts the names the store generates", () => {
   assertEquals(visualMimeType("9f3c2a1b4d5e.svg"), "image/svg+xml");
 });
 
-Deno.test("visualMimeType rejects anything but an asset name", () => {
+test("visualMimeType rejects anything but an asset name", () => {
   // A path (or traversal) is never an asset: the shape check comes first, so
   // an image-looking name with a directory in it is refused.
   assertEquals(visualMimeType("../9f3c2a1b4d5e.png"), undefined);
@@ -34,7 +35,7 @@ Deno.test("visualMimeType rejects anything but an asset name", () => {
   assertEquals(visualMimeType(""), undefined);
 });
 
-Deno.test("parseVisualRef reads only visual references", () => {
+test("parseVisualRef reads only visual references", () => {
   assertEquals(parseVisualRef("visual:9f3c2a1b4d5e.png"), "9f3c2a1b4d5e.png");
   // A normal image URL is not a visual reference.
   assertEquals(parseVisualRef("https://example.com/pic.png"), undefined);
@@ -48,7 +49,7 @@ Deno.test("parseVisualRef reads only visual references", () => {
   assertEquals(parseVisualRef("visualx:9f3c2a1b4d5e.png"), undefined);
 });
 
-Deno.test("visualRef is what parseVisualRef reads", () => {
+test("visualRef is what parseVisualRef reads", () => {
   assertEquals(visualRef("9f3c2a1b4d5e.png"), "visual:9f3c2a1b4d5e.png");
   assertEquals(
     parseVisualRef(visualRef("9f3c2a1b4d5e.svg")),
@@ -56,7 +57,7 @@ Deno.test("visualRef is what parseVisualRef reads", () => {
   );
 });
 
-Deno.test("isVisualExtension covers the map and nothing else", () => {
+test("isVisualExtension covers the map and nothing else", () => {
   for (const extension of VISUAL_EXTENSIONS) {
     assertEquals(isVisualExtension(extension), true);
     assertEquals(isVisualExtension(extension.toUpperCase()), true);
@@ -66,7 +67,7 @@ Deno.test("isVisualExtension covers the map and nothing else", () => {
   assertEquals(isVisualExtension(""), false);
 });
 
-Deno.test("the raster limit exceeds the SVG limit", () => {
+test("the raster limit exceeds the SVG limit", () => {
   // The asset route caps what it serves by these two constants; an SVG is
   // text and never needs the room a screenshot does.
   assertEquals(MAX_VISUAL_SVG_BYTES < MAX_VISUAL_ASSET_BYTES, true);

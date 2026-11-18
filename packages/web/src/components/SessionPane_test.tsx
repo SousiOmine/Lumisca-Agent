@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { summarizeContextUsage } from "@lumisca/core/shared";
 import { assert, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
@@ -72,7 +73,7 @@ function render(active: boolean): string {
   );
 }
 
-Deno.test("SessionPane: a pane behind another tab is hidden, not rebuilt", () => {
+test("SessionPane: a pane behind another tab is hidden, not rebuilt", () => {
   const html = render(false);
   // `hidden` is the whole switch: the element stays, its layout and paint do
   // not (`.chat[hidden] { display: none }`, pinned by styles_test.ts).
@@ -82,13 +83,13 @@ Deno.test("SessionPane: a pane behind another tab is hidden, not rebuilt", () =>
   assertStringIncludes(html, "hidden but still drawn");
 });
 
-Deno.test("SessionPane: the pane the address names is the one on screen", () => {
+test("SessionPane: the pane the address names is the one on screen", () => {
   const html = render(true);
   assertStringIncludes(rootTag(html), 'class="chat"');
   assert(!rootTag(html).includes("hidden"));
 });
 
-Deno.test("DraftPane: the new-session screen is hidden the same way", () => {
+test("DraftPane: the new-session screen is hidden the same way", () => {
   const props = {
     draft: EMPTY_DRAFT,
     workspaces: [],

@@ -5,6 +5,7 @@
  * when it loads, so this file sets the globals first and imports the module
  * dynamically (the same reason as shellState_test.ts).
  */
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 
 const globals = globalThis as unknown as Record<string, unknown>;
@@ -40,7 +41,7 @@ async function withFetch(
   }
 }
 
-Deno.test("shellCall: a transport failure falls back to Tauri IPC", async () => {
+test("shellCall: a transport failure falls back to Tauri IPC", async () => {
   invocations = [];
   await withFetch(
     // What WebKit reports for a mixed-content fetch from an HTTPS page.
@@ -58,7 +59,7 @@ Deno.test("shellCall: a transport failure falls back to Tauri IPC", async () => 
   );
 });
 
-Deno.test("shellCall: an HTTP error is not replayed over IPC", async () => {
+test("shellCall: an HTTP error is not replayed over IPC", async () => {
   invocations = [];
   await withFetch(
     () =>
@@ -79,7 +80,7 @@ Deno.test("shellCall: an HTTP error is not replayed over IPC", async () => {
   );
 });
 
-Deno.test("shellCall: a page without a bridge origin still reaches IPC", async () => {
+test("shellCall: a page without a bridge origin still reaches IPC", async () => {
   // The initialization script normally sets both; if only the bridge origin
   // is missing, IPC is still a working road to the shell.
   invocations = [];
@@ -102,7 +103,7 @@ Deno.test("shellCall: a page without a bridge origin still reaches IPC", async (
   }
 });
 
-Deno.test("shellCall: without IPC the transport failure surfaces", async () => {
+test("shellCall: without IPC the transport failure surfaces", async () => {
   // A fresh module instance: `invoke` is captured at import time, so the
   // first module's ordinary fallback cannot be removed from under it.
   const withIpc = globals.__TAURI_INTERNALS__;

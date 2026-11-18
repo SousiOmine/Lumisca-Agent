@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { assert, assertEquals } from "@std/assert";
 import { discoverSkills } from "../skills/discover.ts";
@@ -160,7 +161,7 @@ async function globalFixture(): Promise<{
 
 // --- discovery ---------------------------------------------------------------
 
-Deno.test("discoverPlugins finds plugins with skills and MCP servers", async () => {
+test("discoverPlugins finds plugins with skills and MCP servers", async () => {
   const root = await fixture();
   const dataRoot = await Deno.makeTempDir({ prefix: "lumisca-data-" });
   const plugins = discoverPlugins([root], { pluginDataRoot: dataRoot });
@@ -188,7 +189,7 @@ Deno.test("discoverPlugins finds plugins with skills and MCP servers", async () 
   assertEquals(demo.warnings, []);
 });
 
-Deno.test("discoverPlugins skips directories without a plugin.json", async () => {
+test("discoverPlugins skips directories without a plugin.json", async () => {
   const root = await fixture();
   const plugins = discoverPlugins([root]);
   assertEquals(
@@ -197,7 +198,7 @@ Deno.test("discoverPlugins skips directories without a plugin.json", async () =>
   );
 });
 
-Deno.test("discoverPlugins rejects plugins with fatal manifests", async () => {
+test("discoverPlugins rejects plugins with fatal manifests", async () => {
   const root = await fixture();
   const plugins = discoverPlugins([root]);
   const broken = plugins.find((p) => p.name === "broken");
@@ -209,7 +210,7 @@ Deno.test("discoverPlugins rejects plugins with fatal manifests", async () => {
   assert(broken.warnings[0]!.includes("name"));
 });
 
-Deno.test("discoverPlugins does not recurse into nested skill directories", async () => {
+test("discoverPlugins does not recurse into nested skill directories", async () => {
   const root = await fixture();
   const plugins = discoverPlugins([root]);
   const demo = plugins.find((p) => p.name === "demo")!;
@@ -220,7 +221,7 @@ Deno.test("discoverPlugins does not recurse into nested skill directories", asyn
   );
 });
 
-Deno.test("discoverPlugins isolates wrong-kinded component locations", async () => {
+test("discoverPlugins isolates wrong-kinded component locations", async () => {
   const root = await fixture();
   const plugins = discoverPlugins([root]);
   const badskills = plugins.find((p) => p.name === "badskills")!;
@@ -235,7 +236,7 @@ Deno.test("discoverPlugins isolates wrong-kinded component locations", async () 
   assert(plugins.some((p) => p.name === "demo"));
 });
 
-Deno.test("discoverPlugins appends global plugins after workspace ones", async () => {
+test("discoverPlugins appends global plugins after workspace ones", async () => {
   const root = await fixture();
   const globals = await globalFixture();
   const plugins = discoverPlugins([root], { globalDirs: [globals.pluginDir] });
@@ -249,7 +250,7 @@ Deno.test("discoverPlugins appends global plugins after workspace ones", async (
 
 // --- skill precedence --------------------------------------------------------
 
-Deno.test("plugin skills merge after workspace skills and before global ones", async () => {
+test("plugin skills merge after workspace skills and before global ones", async () => {
   const root = await fixture();
   const globals = await globalFixture();
   const plugins = discoverPlugins([root], { globalDirs: [globals.pluginDir] });

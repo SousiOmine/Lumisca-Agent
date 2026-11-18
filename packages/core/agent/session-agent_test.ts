@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import type {
   AgentMessage,
   Api,
@@ -203,7 +204,7 @@ function textsOf(messages: AgentMessage[]): string[] {
     .map((m) => contentText(m.content as never));
 }
 
-Deno.test("stream calls carry the session id (conversation affinity)", async () => {
+test("stream calls carry the session id (conversation affinity)", async () => {
   const seen: (StreamOptions | undefined)[] = [];
   const base = streamSequence([fauxAssistantMessage("hi")]);
   const streamFn: StreamFn = (model, context, options) => {
@@ -255,7 +256,7 @@ function fauxQuotaError(): AssistantMessage {
 /** No-delay backoff sleep for rate-limit restart tests. */
 const instantSleep = (): Promise<void> => Promise.resolve();
 
-Deno.test("a vacant response is retried within the same run", async () => {
+test("a vacant response is retried within the same run", async () => {
   const agent = makeAgent(
     streamSequence([
       fauxAssistantMessage(""),
@@ -273,7 +274,7 @@ Deno.test("a vacant response is retried within the same run", async () => {
   assertEquals((last.content[0] as TextContent).text, "Here is the answer.");
 });
 
-Deno.test("consecutive vacant responses stop retrying after the limit", async () => {
+test("consecutive vacant responses stop retrying after the limit", async () => {
   const { errors, onEvent } = collectSessionErrors();
   const agent = makeAgent(
     streamSequence(
@@ -301,7 +302,7 @@ Deno.test("consecutive vacant responses stop retrying after the limit", async ()
   );
 });
 
-Deno.test("a tool call resets the retry counter within a run", async () => {
+test("a tool call resets the retry counter within a run", async () => {
   // vacant → retry → tool call (resets the counter) → vacant → retry →
   // vacant → retry → vacant → retry → vacant (stop): four retries total.
   // Without the reset the tool call would not reset, and the counter would
@@ -323,7 +324,7 @@ Deno.test("a tool call resets the retry counter within a run", async () => {
   assertEquals(retryNotifications(agent.messages).length, 4);
 });
 
-Deno.test("the retry counter resets between runs", async () => {
+test("the retry counter resets between runs", async () => {
   // The first run burns through the retry limit; a new prompt starts a
   // fresh run, so its vacant response is retried again.
   const agent = makeAgent(
@@ -343,7 +344,7 @@ Deno.test("the retry counter resets between runs", async () => {
   assertEquals(agent.messages.at(-1)?.role, "assistant");
 });
 
-Deno.test("a silent stream error restarts the run and recovers", async () => {
+test("a silent stream error restarts the run and recovers", async () => {
   const agent = makeAgent(
     streamSequence([fauxSilentError(), fauxAssistantMessage("Recovered.")]),
   );
@@ -357,7 +358,7 @@ Deno.test("a silent stream error restarts the run and recovers", async () => {
   assertEquals((last.content[0] as TextContent).text, "Recovered.");
 });
 
-Deno.test("silent stream errors stop restarting after the limit", async () => {
+test("silent stream errors stop restarting after the limit", async () => {
   const agent = makeAgent(
     streamSequence([
       fauxSilentError(),
@@ -377,7 +378,7 @@ Deno.test("silent stream errors stop restarting after the limit", async () => {
   assertEquals(agent.messages.at(-1)?.role, "assistant");
 });
 
-Deno.test("the retry budget spans in-run vacancies and silent errors", async () => {
+test("the retry budget spans in-run vacancies and silent errors", async () => {
   // error → vacant → error → vacant: four outputless turns share one
   // budget; only the first three are retried.
   const agent = makeAgent(
@@ -397,7 +398,7 @@ Deno.test("the retry budget spans in-run vacancies and silent errors", async () 
   assertEquals(agent.messages.at(-1)?.role, "assistant");
 });
 
-Deno.test("an aborted silent turn is never retried", async () => {
+test("an aborted silent turn is never retried", async () => {
   const agent = makeAgent(
     streamSequence([
       fauxAssistantMessage("", { stopReason: "aborted" }),
@@ -410,7 +411,7 @@ Deno.test("an aborted silent turn is never retried", async () => {
   assertEquals(last.stopReason, "aborted");
 });
 
-Deno.test("a new user prompt resets the silent-error retry count", async () => {
+test("a new user prompt resets the silent-error retry count", async () => {
   // First prompt burns through the limit; the second prompt starts a
   // fresh exchange and gets its own retries.
   const agent = makeAgent(
@@ -437,7 +438,7 @@ Deno.test("a new user prompt resets the silent-error retry count", async () => {
   );
 });
 
-Deno.test("a transient error turn with visible output continues the run", async () => {
+test("a transient error turn with visible output continues the run", async () => {
   const agent = makeAgent(
     streamSequence([
       fauxAssistantMessage([fauxText("partial answer")], {
@@ -459,7 +460,7 @@ Deno.test("a transient error turn with visible output continues the run", async 
   assertEquals((last.content[0] as TextContent).text, "continued answer");
 });
 
-Deno.test("a permanent error turn with visible output is not restarted", async () => {
+test("a permanent error turn with visible output is not restarted", async () => {
   const agent = makeAgent(
     streamSequence([
       fauxAssistantMessage([fauxText("partial answer")], {
@@ -476,7 +477,7 @@ Deno.test("a permanent error turn with visible output is not restarted", async (
   assertEquals(last.stopReason, "error");
 });
 
-Deno.test("a permanent silent error is not restarted", async () => {
+test("a permanent silent error is not restarted", async () => {
   const agent = makeAgent(
     streamSequence([
       fauxAssistantMessage([fauxThinking("...")], {
@@ -494,7 +495,7 @@ Deno.test("a permanent silent error is not restarted", async () => {
   assertEquals(agent.messages.length, 2);
 });
 
-Deno.test("a rate-limit (429) turn restarts the run and recovers", async () => {
+test("a rate-limit (429) turn restarts the run and recovers", async () => {
   const agent = makeAgent(
     streamSequence([fauxRateLimit(), fauxAssistantMessage("Recovered.")]),
     [],
@@ -511,7 +512,7 @@ Deno.test("a rate-limit (429) turn restarts the run and recovers", async () => {
   assertEquals((last.content[0] as TextContent).text, "Recovered.");
 });
 
-Deno.test("rate-limit turns stop restarting after the limit", async () => {
+test("rate-limit turns stop restarting after the limit", async () => {
   const agent = makeAgent(
     streamSequence(
       Array.from({ length: MAX_RATE_LIMIT_RETRIES + 2 }, () => fauxRateLimit()),
@@ -530,7 +531,7 @@ Deno.test("rate-limit turns stop restarting after the limit", async () => {
   assertEquals(agent.messages.at(-1)?.role, "assistant");
 });
 
-Deno.test("quota exhaustion (non-rate) is not restarted", async () => {
+test("quota exhaustion (non-rate) is not restarted", async () => {
   const agent = makeAgent(
     streamSequence([fauxQuotaError(), fauxAssistantMessage("never produced")]),
   );
@@ -541,7 +542,7 @@ Deno.test("quota exhaustion (non-rate) is not restarted", async () => {
   assertEquals(agent.messages.length, 2);
 });
 
-Deno.test("a rate-limit turn with partial output surfaces (no restart)", async () => {
+test("a rate-limit turn with partial output surfaces (no restart)", async () => {
   const agent = makeAgent(
     streamSequence([
       fauxAssistantMessage([fauxText("partial answer")], {
@@ -560,7 +561,7 @@ Deno.test("a rate-limit turn with partial output surfaces (no restart)", async (
   assertEquals(last.stopReason, "error");
 });
 
-Deno.test("the rate-limit budget is independent of the vacant budget", async () => {
+test("the rate-limit budget is independent of the vacant budget", async () => {
   // MAX_RATE_LIMIT_RETRIES rate-limit turns, then a vacant turn: the vacant
   // turn is still retried because its own budget was never consumed.
   const agent = makeAgent(
@@ -596,7 +597,7 @@ function collectSessionErrors(): {
   };
 }
 
-Deno.test("an error-stopped turn emits session_error with the error text", async () => {
+test("an error-stopped turn emits session_error with the error text", async () => {
   const { errors, onEvent } = collectSessionErrors();
   const agent = makeAgent(
     streamSequence([
@@ -616,7 +617,7 @@ Deno.test("an error-stopped turn emits session_error with the error text", async
   assertEquals(errors, ["Stream ended without finish_reason"]);
 });
 
-Deno.test("an error turn with partial output still surfaces session_error", async () => {
+test("an error turn with partial output still surfaces session_error", async () => {
   const { errors, onEvent } = collectSessionErrors();
   const agent = makeAgent(
     streamSequence([
@@ -636,7 +637,7 @@ Deno.test("an error turn with partial output still surfaces session_error", asyn
   assertEquals(errors, ["connection reset"]);
 });
 
-Deno.test("successful, vacant, and aborted turns emit no session_error", async () => {
+test("successful, vacant, and aborted turns emit no session_error", async () => {
   const { errors, onEvent } = collectSessionErrors();
   const agent = makeAgent(
     streamSequence([
@@ -654,7 +655,7 @@ Deno.test("successful, vacant, and aborted turns emit no session_error", async (
   assertEquals(errors, []);
 });
 
-Deno.test("a run after a stop still reaches the model", async () => {
+test("a run after a stop still reaches the model", async () => {
   // The reported failure: stop (or a rewind) while the agent works, then
   // send again — the session silently stopped running because every later
   // call carried the aborted signal.
@@ -671,7 +672,7 @@ Deno.test("a run after a stop still reaches the model", async () => {
   assertEquals(textsOf(agent.messages).at(-1), "after the stop");
 });
 
-Deno.test("a stop while a tool never returns leaves the session usable", async () => {
+test("a stop while a tool never returns leaves the session usable", async () => {
   // The reported failure: a tool the abort cannot release (a silent MCP
   // server, a hung await) held the run and `isStreaming` open forever, so
   // every later prompt was queued into a session that never ran again —
@@ -715,7 +716,7 @@ Deno.test("a stop while a tool never returns leaves the session usable", async (
   assertEquals(textsOf(agent.messages).at(-1), "after the stop");
 });
 
-Deno.test("a resend while the rewind runs starts after the truncation", async () => {
+test("a resend while the rewind runs starts after the truncation", async () => {
   // The reported flow: rewind during a run, edit the restored text, send.
   // The resend must not be swallowed by the aborting run (its queue is
   // dropped) nor started before the truncation (which would delete it).
@@ -753,7 +754,7 @@ Deno.test("a resend while the rewind runs starts after the truncation", async ()
   );
 });
 
-Deno.test("a rewind names removed tool results by their call id", async () => {
+test("a rewind names removed tool results by their call id", async () => {
   // The client keys a tool result by its tool call id — parallel results
   // can finish within the same millisecond, so role + timestamp is not a
   // unique identity (see the web's messageKey). The deletion notice must
@@ -862,7 +863,7 @@ function twoBigTurns(): AssistantMessage[] {
   ];
 }
 
-Deno.test("compaction condenses the history before a request crosses the window", async () => {
+test("compaction condenses the history before a request crosses the window", async () => {
   const { streamFn } = deltaStreamSequence([
     fauxAssistantMessage([fauxToolCall("mock_tool", {}, "t1")]),
     fauxAssistantMessage([fauxToolCall("mock_tool", {}, "t2")]),
@@ -915,7 +916,7 @@ Deno.test("compaction condenses the history before a request crosses the window"
   );
 });
 
-Deno.test("compaction keeps the transcript and the stored rows in step", async () => {
+test("compaction keeps the transcript and the stored rows in step", async () => {
   const { streamFn } = deltaStreamSequence([
     fauxAssistantMessage([fauxToolCall("mock_tool", {}, "t1")]),
     fauxAssistantMessage([fauxToolCall("mock_tool", {}, "t2")]),
@@ -994,7 +995,7 @@ Deno.test("compaction keeps the transcript and the stored rows in step", async (
   assertEquals(rows.length > 8, true);
 });
 
-Deno.test("a context overflow condenses the history and restarts the run", async () => {
+test("a context overflow condenses the history and restarts the run", async () => {
   const overflow = fauxAssistantMessage("", {
     stopReason: "error",
     errorMessage:
@@ -1043,7 +1044,7 @@ Deno.test("a context overflow condenses the history and restarts the run", async
   );
 });
 
-Deno.test("a second context overflow surfaces the provider's error", async () => {
+test("a second context overflow surfaces the provider's error", async () => {
   const overflow = fauxAssistantMessage("", {
     stopReason: "error",
     errorMessage:
@@ -1079,7 +1080,7 @@ Deno.test("a second context overflow surfaces the provider's error", async () =>
   assertEquals(errors.at(-1)!.message.includes("maximum context length"), true);
 });
 
-Deno.test("compaction does not run when the model documents no window", async () => {
+test("compaction does not run when the model documents no window", async () => {
   const { streamFn } = deltaStreamSequence(twoBigTurns());
   const agent = makeAgent(streamFn, [bigTool]);
   await agent.prompt("go");
@@ -1090,7 +1091,7 @@ Deno.test("compaction does not run when the model documents no window", async ()
   );
 });
 
-Deno.test("compactNow condenses on demand and reports the outcome", async () => {
+test("compactNow condenses on demand and reports the outcome", async () => {
   // Seeded history (no run): the automatic path would only fire above the
   // pressure threshold, so this is what a user's `/compact` condenses.
   const { streamFn } = deltaStreamSequence([
@@ -1178,7 +1179,7 @@ Deno.test("compactNow condenses on demand and reports the outcome", async () => 
   );
 });
 
-Deno.test("compactNow reports nothing when no safe span exists", async () => {
+test("compactNow reports nothing when no safe span exists", async () => {
   const { streamFn } = deltaStreamSequence([
     fauxAssistantMessage([fauxText("ok")]),
   ]);
@@ -1190,7 +1191,7 @@ Deno.test("compactNow reports nothing when no safe span exists", async () => {
   assertEquals(await agent.compactNow(), undefined);
 });
 
-Deno.test("a compaction republishes the context its checkpoint left behind", async () => {
+test("a compaction republishes the context its checkpoint left behind", async () => {
   // A provider whose value never changes: the only reason to publish again
   // is that a compaction moved the model's view past the first publication.
   const provider = {
@@ -1346,7 +1347,7 @@ function backgroundDone(commandId: string): BackgroundCommandDone {
   };
 }
 
-Deno.test("a notification delivered mid-run carries steered", async () => {
+test("a notification delivered mid-run carries steered", async () => {
   const background = fakeBackgroundManager();
   const events: ClientEvent[] = [];
   // The tool reports a completion while its own run is still active: the
@@ -1393,7 +1394,7 @@ Deno.test("a notification delivered mid-run carries steered", async () => {
   );
 });
 
-Deno.test("a notification delivered while idle starts its own run", async () => {
+test("a notification delivered while idle starts its own run", async () => {
   const background = fakeBackgroundManager();
   const events: ClientEvent[] = [];
   const agent = makeAgent(
@@ -1445,7 +1446,7 @@ function deliverTool(deliver: () => void): Tool {
   };
 }
 
-Deno.test("a prompt delivered mid-run carries steered", async () => {
+test("a prompt delivered mid-run carries steered", async () => {
   const events: ClientEvent[] = [];
   // The tool needs the agent that owns it, so the agent is built after it
   // (the closure only runs when the model calls the tool).
@@ -1484,7 +1485,7 @@ Deno.test("a prompt delivered mid-run carries steered", async () => {
   );
 });
 
-Deno.test("a mode prompt delivered mid-run carries steered", async () => {
+test("a mode prompt delivered mid-run carries steered", async () => {
   const events: ClientEvent[] = [];
   const holder: { agent?: SessionAgent } = {};
   // Mode messages travel the same delivery path (a slash-command prompt
@@ -1517,7 +1518,7 @@ Deno.test("a mode prompt delivered mid-run carries steered", async () => {
   assertEquals(events.filter((e) => e.type === "agent_start").length, 1);
 });
 
-Deno.test("a prompt delivered while idle starts its own run unstamped", async () => {
+test("a prompt delivered while idle starts its own run unstamped", async () => {
   const events: ClientEvent[] = [];
   const agent = makeAgent(
     streamSequence([
@@ -1570,7 +1571,7 @@ function idleHistory(): AgentMessage[] {
   ];
 }
 
-Deno.test("a silent conversation is condensed without waiting for pressure", async () => {
+test("a silent conversation is condensed without waiting for pressure", async () => {
   const { streamFn, calls } = deltaStreamSequence([
     summaryResponse("## Summary\n- condensed"),
   ]);
@@ -1605,7 +1606,7 @@ Deno.test("a silent conversation is condensed without waiting for pressure", asy
   assertEquals(agent.messages.at(-1)!.role, "checkpoint");
 });
 
-Deno.test("the request after an idle compaction carries the checkpoint alone", async () => {
+test("the request after an idle compaction carries the checkpoint alone", async () => {
   // What the idle compaction is for: the first request after the silence
   // starts at the checkpoint. No verbatim turn survives it, so no finished
   // turn's tool traffic — or, on a model that requires its reasoning
@@ -1642,7 +1643,7 @@ Deno.test("the request after an idle compaction carries the checkpoint alone", a
   assertEquals(messages[1]!.role, "user");
 });
 
-Deno.test("a run cancels the pending idle compaction", async () => {
+test("a run cancels the pending idle compaction", async () => {
   // The history is stamped in the past, so the timer is already due when the
   // agent is built. A run that starts before it fires cancels it: a
   // checkpoint may not be spliced into a transcript a run is working on.
@@ -1670,7 +1671,7 @@ Deno.test("a run cancels the pending idle compaction", async () => {
   agent.close();
 });
 
-Deno.test("the idle compaction leaves a conversation with nothing to condense alone", async () => {
+test("the idle compaction leaves a conversation with nothing to condense alone", async () => {
   // Two short messages: the span selector refuses a head too small to free
   // anything, so no request is spent — and the timer is not re-armed by its
   // own check, so it is not asked again either.
@@ -1694,7 +1695,7 @@ Deno.test("the idle compaction leaves a conversation with nothing to condense al
   );
 });
 
-Deno.test("an idle conversation below the rule's floor is left alone", async () => {
+test("an idle conversation below the rule's floor is left alone", async () => {
   // The rule condenses only once the projection is large enough to be worth
   // a summarization call. Below the floor the check returns without asking
   // the model: no request, no checkpoint.
@@ -1716,7 +1717,7 @@ Deno.test("an idle conversation below the rule's floor is left alone", async () 
   );
 });
 
-Deno.test("the idle compaction condenses the whole view regardless of the policy's share", async () => {
+test("the idle compaction condenses the whole view regardless of the policy's share", async () => {
   // The policy keeps 90% of the window (3,600 of 4,000), more than this
   // history holds, so a pressure compaction would refuse to cut anything.
   // The idle check keeps nothing, which is what makes it do work on exactly
@@ -1739,7 +1740,7 @@ Deno.test("the idle compaction condenses the whole view regardless of the policy
   assertEquals(agent.messages.at(-1)!.role, "checkpoint");
 });
 
-Deno.test("a prompt's file notice reaches the model, not the transcript", async () => {
+test("a prompt's file notice reaches the model, not the transcript", async () => {
   // The notice that names the attached files is addressed to the model. It
   // travels in `modelContent`, so the conversation keeps drawing the words
   // the user wrote while the request carries the paths.
@@ -1788,7 +1789,7 @@ Deno.test("a prompt's file notice reaches the model, not the transcript", async 
   assert(text.includes("/home/agent/agents/a1/uploads/1-ab/01-run.log"));
 });
 
-Deno.test("a prompt that is only files still reaches the model", async () => {
+test("a prompt that is only files still reaches the model", async () => {
   // Its visible text is empty, which is a display fact: the turn is real.
   const requests: Array<{ messages: Array<{ content?: unknown }> }> = [];
   const base = streamSequence([fauxAssistantMessage("ok")]);
@@ -1816,7 +1817,7 @@ Deno.test("a prompt that is only files still reaches the model", async () => {
   assertEquals(user.content[0]!.text, "");
 });
 
-Deno.test("runRoutine: the silence guidance travels in modelContent, not the bubble", async () => {
+test("runRoutine: the silence guidance travels in modelContent, not the bubble", async () => {
   const agent = makeAgent(streamSequence([fauxAssistantMessage("all good")]));
   await agent.runRoutine("check the deploy", { id: "r1", name: "check" });
 
@@ -1837,7 +1838,7 @@ Deno.test("runRoutine: the silence guidance travels in modelContent, not the bub
   assert(!contentText(stored.content).includes("NO_RESPONSE"));
 });
 
-Deno.test("runRoutine: carries the routine's name on the message", async () => {
+test("runRoutine: carries the routine's name on the message", async () => {
   const agent = makeAgent(streamSequence([fauxAssistantMessage("done")]));
   await agent.runRoutine("check the deploy", { id: "r1", name: "check" });
   const stored = agent.messages.find((m) => m.role === "user") as
@@ -1846,7 +1847,7 @@ Deno.test("runRoutine: carries the routine's name on the message", async () => {
   assertEquals(stored?.routine, "check");
 });
 
-Deno.test("runRoutine: a silent run leaves no row in the conversation", async () => {
+test("runRoutine: a silent run leaves no row in the conversation", async () => {
   const agent = makeAgent(streamSequence([fauxAssistantMessage(NO_RESPONSE)]));
   await agent.runRoutine("check the deploy", { id: "r1", name: "check" });
 
@@ -1854,7 +1855,7 @@ Deno.test("runRoutine: a silent run leaves no row in the conversation", async ()
   assertEquals(messages.length, 0);
 });
 
-Deno.test("runRoutine: a reporting run stays", async () => {
+test("runRoutine: a reporting run stays", async () => {
   const agent = makeAgent(
     streamSequence([fauxAssistantMessage("The deploy failed")]),
   );
@@ -1866,7 +1867,7 @@ Deno.test("runRoutine: a reporting run stays", async () => {
   assertEquals(messages[1]?.role, "assistant");
 });
 
-Deno.test("runRoutine: a run that narrates through tools and then stays silent leaves no row", async () => {
+test("runRoutine: a run that narrates through tools and then stays silent leaves no row", async () => {
   const agent = makeAgent(
     streamSequence([
       fauxAssistantMessage([
@@ -1886,7 +1887,7 @@ Deno.test("runRoutine: a run that narrates through tools and then stays silent l
 
 // ---- the reply a notification carries (see RunReply) ----------------------
 
-Deno.test("agent_end carries what the run said", async () => {
+test("agent_end carries what the run said", async () => {
   // The PWA notification shows the answer instead of "finished": a routine's
   // result, or a long reply, is the case the words matter for.
   const events: ClientEvent[] = [];
@@ -1907,7 +1908,7 @@ Deno.test("agent_end carries what the run said", async () => {
   );
 });
 
-Deno.test("a silent run's agent_end carries no reply", async () => {
+test("a silent run's agent_end carries no reply", async () => {
   // Silence is deliberate (silent-reply.ts): a notification must not print
   // the sentinel as an answer.
   const events: ClientEvent[] = [];
@@ -1924,7 +1925,7 @@ Deno.test("a silent run's agent_end carries no reply", async () => {
   assertEquals(end.type === "agent_end" ? end.reply : "missing", undefined);
 });
 
-Deno.test("runRoutine: a silent run's end is marked so it does not notify", async () => {
+test("runRoutine: a silent run's end is marked so it does not notify", async () => {
   // The run leaves no row, so a "finished" toast would be its only trace:
   // the end is still sent (the client stops drawing the run), marked quiet.
   const events: ClientEvent[] = [];
@@ -1941,7 +1942,7 @@ Deno.test("runRoutine: a silent run's end is marked so it does not notify", asyn
   assertEquals(end.type === "agent_end" ? end.silent : undefined, true);
 });
 
-Deno.test("runRoutine: a reporting run's end is not marked silent", async () => {
+test("runRoutine: a reporting run's end is not marked silent", async () => {
   const events: ClientEvent[] = [];
   const agent = makeAgent(
     streamSequence([fauxAssistantMessage("The deploy failed")]),
@@ -1956,7 +1957,7 @@ Deno.test("runRoutine: a reporting run's end is not marked silent", async () => 
   assertEquals(end.type === "agent_end" ? end.silent : "missing", undefined);
 });
 
-Deno.test("a typed silent run is not marked silent", async () => {
+test("a typed silent run is not marked silent", async () => {
   // Only a routine's silence is removed from the conversation; a typed
   // prompt keeps its row, so its end still says the run finished.
   const events: ClientEvent[] = [];
@@ -1973,7 +1974,7 @@ Deno.test("a typed silent run is not marked silent", async () => {
   assertEquals(end.type === "agent_end" ? end.silent : "missing", undefined);
 });
 
-Deno.test("runRoutine: a run that dies empty is retried before it counts as silent", async () => {
+test("runRoutine: a run that dies empty is retried before it counts as silent", async () => {
   // The dead turn's end says nothing, but the run is not over: the restart
   // is what decides whether there is anything to report.
   const events: ClientEvent[] = [];
@@ -1999,7 +2000,7 @@ Deno.test("runRoutine: a run that dies empty is retried before it counts as sile
   assertEquals(agent.messages.length, 4);
 });
 
-Deno.test("runRoutine: a run retried into silence leaves no row and no notice", async () => {
+test("runRoutine: a run retried into silence leaves no row and no notice", async () => {
   const events: ClientEvent[] = [];
   const agent = makeAgent(
     streamSequence([fauxSilentError(), fauxAssistantMessage(NO_RESPONSE)]),
@@ -2017,7 +2018,7 @@ Deno.test("runRoutine: a run retried into silence leaves no row and no notice", 
   }
 });
 
-Deno.test("the reply belongs to the run that said it", async () => {
+test("the reply belongs to the run that said it", async () => {
   // A second run that says nothing must not repeat the first one's answer:
   // that is the notification a user reads as "it said the same thing again".
   const events: ClientEvent[] = [];
@@ -2039,7 +2040,7 @@ Deno.test("the reply belongs to the run that said it", async () => {
   assertEquals(replies, ["一つ目", undefined]);
 });
 
-Deno.test("titleGeneration: false sends no title request and renames nothing", async () => {
+test("titleGeneration: false sends no title request and renames nothing", async () => {
   // A stella conversation is named by its agent: generating a title would
   // spend a request to contradict the name the user chose.
   let calls = 0;
@@ -2065,7 +2066,7 @@ Deno.test("titleGeneration: false sends no title request and renames nothing", a
   assertEquals(calls, 1);
 });
 
-Deno.test("an abort with no run to end announces nothing", async () => {
+test("an abort with no run to end announces nothing", async () => {
   // Closing a session aborts it, and a stop can land just after a run
   // finished. `agent_end` means a run ended, so an idle abort must not
   // produce one: the PWA's notification would report a run that finished —
@@ -2084,7 +2085,7 @@ Deno.test("an abort with no run to end announces nothing", async () => {
   assertEquals(events.filter((e) => e.type === "agent_end").length, 1);
 });
 
-Deno.test("closing a session with a run in flight announces nothing", async () => {
+test("closing a session with a run in flight announces nothing", async () => {
   // The × on a tab closes the session, which aborts the run: the tab that
   // asked is gone, and nothing about it belongs in a notification.
   const { streamFn, calls } = abortAwareStreamFn(["held"]);

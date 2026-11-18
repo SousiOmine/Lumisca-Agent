@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { MAX_DIRECT_FETCH_BYTES } from "./constants.ts";
 import { fetchDirect } from "./direct-fetch.ts";
@@ -14,7 +15,7 @@ function html(body: string, headers: Record<string, string> = {}): Response {
   });
 }
 
-Deno.test("htmlToText drops markup and keeps block boundaries", () => {
+test("htmlToText drops markup and keeps block boundaries", () => {
   const text = htmlToText(
     "<html><head><title>T</title><style>p{}</style></head>" +
       "<body><h1>Head</h1><p>One &amp; two</p><script>alert(1)</script>" +
@@ -23,17 +24,17 @@ Deno.test("htmlToText drops markup and keeps block boundaries", () => {
   assertEquals(text, "Head\nOne & two\nThree\nFour");
 });
 
-Deno.test("pageTitle reads and decodes the title, null when absent", () => {
+test("pageTitle reads and decodes the title, null when absent", () => {
   assertEquals(pageTitle("<title> A &amp; B </title>"), "A & B");
   assertEquals(pageTitle("<html><body>no title</body></html>"), null);
   assertEquals(pageTitle("<title>   </title>"), null);
 });
 
-Deno.test("decodeEntities keeps unknown entities as written", () => {
+test("decodeEntities keeps unknown entities as written", () => {
   assertEquals(decodeEntities("&amp;&#65;&#x42;&bogus;"), "&AB&bogus;");
 });
 
-Deno.test("the direct fetch converts HTML and follows redirects", async () => {
+test("the direct fetch converts HTML and follows redirects", async () => {
   const seen: string[] = [];
   const fetchImpl: FetchLike = (url) => {
     seen.push(url);
@@ -60,7 +61,7 @@ Deno.test("the direct fetch converts HTML and follows redirects", async () => {
   assertEquals(page.text, "Body text");
 });
 
-Deno.test("the direct fetch refuses this machine's addresses", async () => {
+test("the direct fetch refuses this machine's addresses", async () => {
   const fetchImpl: FetchLike = () => {
     throw new Error("must not be called");
   };
@@ -83,7 +84,7 @@ Deno.test("the direct fetch refuses this machine's addresses", async () => {
   }
 });
 
-Deno.test("the direct fetch allows public addresses", async () => {
+test("the direct fetch allows public addresses", async () => {
   const fetchImpl: FetchLike = () => Promise.resolve(html("<p>ok</p>"));
   // A public IPv6 and a dotted IPv4 outside every private range.
   for (const url of ["https://[2606:4700::1111]/", "https://8.8.8.8/"]) {
@@ -92,7 +93,7 @@ Deno.test("the direct fetch allows public addresses", async () => {
   }
 });
 
-Deno.test("the direct fetch refuses non-http schemes and PDFs", async () => {
+test("the direct fetch refuses non-http schemes and PDFs", async () => {
   const fetchImpl: FetchLike = () =>
     Promise.resolve(
       new Response("%PDF", {
@@ -113,7 +114,7 @@ Deno.test("the direct fetch refuses non-http schemes and PDFs", async () => {
   assertEquals(pdf.code, "unsupported");
 });
 
-Deno.test("the direct fetch stops at the size limit while reading", async () => {
+test("the direct fetch stops at the size limit while reading", async () => {
   // A body that keeps producing chunks: the reader must stop counting at the
   // limit instead of buffering everything.
   let sent = 0;
@@ -145,13 +146,13 @@ Deno.test("the direct fetch stops at the size limit while reading", async () => 
   );
 });
 
-Deno.test("failureText speaks each reader's language", () => {
+test("failureText speaks each reader's language", () => {
   const message = "Tavily returned HTTP 401";
   assert(failureText("ja", "auth", message).includes("APIキー"));
   assert(failureText("en", "auth", message).includes("API key"));
 });
 
-Deno.test("a provider without a page API falls back to the direct fetch", async () => {
+test("a provider without a page API falls back to the direct fetch", async () => {
   // Brave searches only; its fetchPage goes through the direct fetch.
   const fetchImpl: FetchLike = (url) => {
     if (url.startsWith("https://api.search.brave.com/")) {
@@ -197,7 +198,7 @@ Deno.test("a provider without a page API falls back to the direct fetch", async 
   assertEquals(page.text, "Text");
 });
 
-Deno.test("a provider with a page API uses it instead of the direct fetch", async () => {
+test("a provider with a page API uses it instead of the direct fetch", async () => {
   const calls: string[] = [];
   const fetchImpl: FetchLike = (url) => {
     calls.push(url);
@@ -221,7 +222,7 @@ Deno.test("a provider with a page API uses it instead of the direct fetch", asyn
   assertEquals(page.text, "Body");
 });
 
-Deno.test("a fetched page is cut to maxChars and says how much was left out", async () => {
+test("a fetched page is cut to maxChars and says how much was left out", async () => {
   // Tavily's extract answers with `raw_content`, the first result's body.
   const fetchImpl: FetchLike = () =>
     Promise.resolve(
@@ -246,7 +247,7 @@ Deno.test("a fetched page is cut to maxChars and says how much was left out", as
   assert(page.text.includes("[3000 characters omitted]"));
 });
 
-Deno.test("an HTTP error becomes a typed failure", async () => {
+test("an HTTP error becomes a typed failure", async () => {
   const fetchImpl: FetchLike = () =>
     Promise.resolve(
       new Response(JSON.stringify({ error: { message: "bad key" } }), {

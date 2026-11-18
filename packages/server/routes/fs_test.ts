@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join, parse, sep } from "node:path";
 import { withTempDir } from "@lumisca/core/test-utils";
 import { assertEquals } from "@std/assert";
@@ -16,7 +17,7 @@ function env(
   return (key) => values[key];
 }
 
-Deno.test("placeCandidates: the home folders first, then the root", () => {
+test("placeCandidates: the home folders first, then the root", () => {
   const places = placeCandidates(env({ HOME: "/Users/me" }), "darwin");
   assertEquals(
     places.map((place) => place.kind),
@@ -31,7 +32,7 @@ Deno.test("placeCandidates: the home folders first, then the root", () => {
   assertEquals(places.at(-1), { kind: "root", path: "/" });
 });
 
-Deno.test("placeCandidates: Linux prefers the XDG folders", () => {
+test("placeCandidates: Linux prefers the XDG folders", () => {
   const places = placeCandidates(
     env({ HOME: "/home/me", XDG_DESKTOP_DIR: "/home/me/Bureau" }),
     "linux",
@@ -41,7 +42,7 @@ Deno.test("placeCandidates: Linux prefers the XDG folders", () => {
   assertEquals(places[2]!.path, join("/home/me", "Documents"));
 });
 
-Deno.test("placeCandidates: the XDG file fills in for a process without a session", () => {
+test("placeCandidates: the XDG file fills in for a process without a session", () => {
   // A server started by systemd has no XDG_* variables at all; the file the
   // desktop wrote is the only place the localized names exist.
   const declared: Record<string, string | null> = {
@@ -62,7 +63,7 @@ Deno.test("placeCandidates: the XDG file fills in for a process without a sessio
   assertEquals(places[2]!.path, join("/home/me", "Documents"));
 });
 
-Deno.test("placeCandidates: a folder the user turned off is not offered", () => {
+test("placeCandidates: a folder the user turned off is not offered", () => {
   // `$HOME` (or a variable naming it) is how the spec disables a folder.
   const places = placeCandidates(
     env({ HOME: "/home/me", XDG_DOWNLOAD_DIR: "/home/me" }),
@@ -74,7 +75,7 @@ Deno.test("placeCandidates: a folder the user turned off is not offered", () => 
   );
 });
 
-Deno.test("readUserDirs: the localized folders of a desktop session", async () => {
+test("readUserDirs: the localized folders of a desktop session", async () => {
   await withTempDir("lumisca-userdirs-", async (root) => {
     const file = join(root, "user-dirs.dirs");
     await Deno.writeTextFile(
@@ -96,14 +97,14 @@ Deno.test("readUserDirs: the localized folders of a desktop session", async () =
   });
 });
 
-Deno.test("readUserDirs: without the file nothing is declared", async () => {
+test("readUserDirs: without the file nothing is declared", async () => {
   await withTempDir("lumisca-userdirs-", async (root) => {
     const dirs = await readUserDirs(join(root, "user-dirs.dirs"), "/home/me");
     assertEquals(dirs("XDG_DESKTOP_DIR"), undefined);
   });
 });
 
-Deno.test("placeCandidates: Windows reads USERPROFILE and offers every drive", () => {
+test("placeCandidates: Windows reads USERPROFILE and offers every drive", () => {
   // A Windows shell may also export HOME (git bash), but USERPROFILE is the
   // Windows-native answer; XDG has no meaning there.
   const places = placeCandidates(
@@ -117,13 +118,13 @@ Deno.test("placeCandidates: Windows reads USERPROFILE and offers every drive", (
   assertEquals(roots[0], { kind: "root", path: "A:\\" });
 });
 
-Deno.test("placeCandidates: without a home folder only the root remains", () => {
+test("placeCandidates: without a home folder only the root remains", () => {
   assertEquals(placeCandidates(env({}), "darwin"), [
     { kind: "root", path: "/" },
   ]);
 });
 
-Deno.test("buildPlaces keeps the existing directories, in order", async () => {
+test("buildPlaces keeps the existing directories, in order", async () => {
   const places = await buildPlaces(
     [
       { kind: "home", path: "/home/me" },
@@ -138,7 +139,7 @@ Deno.test("buildPlaces keeps the existing directories, in order", async () => {
   ]);
 });
 
-Deno.test("breadcrumbs: one step per segment, from the root down", () => {
+test("breadcrumbs: one step per segment, from the root down", () => {
   // Built from the running platform's root so the expectation holds on
   // Windows ("C:\") as well as on POSIX ("/").
   const root = parse(Deno.cwd()).root;

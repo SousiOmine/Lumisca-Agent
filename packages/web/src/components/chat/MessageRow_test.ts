@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import type { AgentMessage } from "../../types.ts";
 import { MessageRow } from "./MessageRow.tsx";
@@ -12,7 +13,7 @@ function routinePrompt(): AgentMessage {
   };
 }
 
-Deno.test("MessageRow: a routine's prompt is not drawn", () => {
+test("MessageRow: a routine's prompt is not drawn", () => {
   // The text is the routine's standing instruction, not something the user
   // typed, so the transcript draws only what the run answered. The message
   // still reaches the row (a turn is grouped by it) — the row has to drop it.
@@ -26,7 +27,7 @@ Deno.test("MessageRow: a routine's prompt is not drawn", () => {
   assertEquals(row, null);
 });
 
-Deno.test("MessageRow: the same words typed are drawn", () => {
+test("MessageRow: the same words typed are drawn", () => {
   // The guard must key on the routine stamp, not on the role: hiding every
   // user message would erase the conversation.
   const typed: AgentMessage = {

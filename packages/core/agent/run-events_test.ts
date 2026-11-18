@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { fauxAssistantMessage } from "../ai/faux.ts";
 import type { AgentMessage } from "../ai/message.ts";
@@ -12,7 +13,7 @@ import { TextCards, translateRunEvent } from "./run-events.ts";
  * drawn while the model writes it. What a client gets is appended, so each
  * piece must be only what became readable since the last one.
  */
-Deno.test("TextCards: a card is read as its fence arrives", () => {
+test("TextCards: a card is read as its fence arrives", () => {
   const cards = new TextCards();
   const pieces: string[] = [];
   const push = (delta: string) => {
@@ -47,7 +48,7 @@ Deno.test("TextCards: a card is read as its fence arrives", () => {
   );
 });
 
-Deno.test("TextCards: a second card starts over", () => {
+test("TextCards: a second card starts over", () => {
   const cards = new TextCards();
   const first = cards.push("```card\n<Card><Text>a</Text></Card>");
   assertEquals(first?.delta, "<Card><Text>a</Text></Card>");
@@ -60,7 +61,7 @@ Deno.test("TextCards: a second card starts over", () => {
   assertEquals(second?.delta, "<Card><Text>b");
 });
 
-Deno.test("TextCards: a message's buffer does not leak into the next", () => {
+test("TextCards: a message's buffer does not leak into the next", () => {
   const cards = new TextCards();
   cards.push("```card\n<Card><Text>a");
   assertEquals(cards.end(), true);
@@ -72,13 +73,13 @@ Deno.test("TextCards: a message's buffer does not leak into the next", () => {
   });
 });
 
-Deno.test("TextCards: a message that drew nothing says so", () => {
+test("TextCards: a message that drew nothing says so", () => {
   const cards = new TextCards();
   cards.push("ただの文です。");
   assertEquals(cards.end(), false);
 });
 
-Deno.test("translateRunEvent: a card in the text reaches a stella client", () => {
+test("translateRunEvent: a card in the text reaches a stella client", () => {
   // The conversation's clients never see the text, so the card is cut out of
   // it on the way out — with the text delta that carried it.
   const cards = new TextCards();
@@ -120,7 +121,7 @@ Deno.test("translateRunEvent: a card in the text reaches a stella client", () =>
   );
 });
 
-Deno.test("translateRunEvent: code mode's client cuts the card from the text", () => {
+test("translateRunEvent: code mode's client cuts the card from the text", () => {
   // Nothing is extracted here: the client receives `message_delta` itself.
   const update = translateRunEvent(
     {
@@ -139,7 +140,7 @@ Deno.test("translateRunEvent: code mode's client cuts the card from the text", (
   );
 });
 
-Deno.test("translateRunEvent: a silent routine's end says so", () => {
+test("translateRunEvent: a silent routine's end says so", () => {
   // The end still ends the run a client is drawing, but it carries nothing
   // to notify: the whole run was removed from the conversation.
   const silent = translateRunEvent(

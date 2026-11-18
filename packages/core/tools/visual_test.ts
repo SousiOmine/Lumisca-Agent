@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { basename, dirname, join } from "node:path";
 import {
   assert,
@@ -57,7 +58,7 @@ async function withFixture(
   }
 }
 
-Deno.test("visual publishes a workspace image and returns the snippet", async () => {
+test("visual publishes a workspace image and returns the snippet", async () => {
   await withFixture("chart.png", async ({ folder, store, tool }) => {
     const result = await tool.execute("id", {
       path: `${folder}/chart.png`,
@@ -81,7 +82,7 @@ Deno.test("visual publishes a workspace image and returns the snippet", async ()
   });
 });
 
-Deno.test("visual names the image after the file without a caption", async () => {
+test("visual names the image after the file without a caption", async () => {
   await withFixture("bench/chart.png", async ({ folder, tool }) => {
     const result = await tool.execute("id", {
       path: `${folder}/bench/chart.png`,
@@ -90,7 +91,7 @@ Deno.test("visual names the image after the file without a caption", async () =>
   });
 });
 
-Deno.test("visual keeps the snippet pasteable whatever the caption holds", async () => {
+test("visual keeps the snippet pasteable whatever the caption holds", async () => {
   await withFixture("chart.png", async ({ folder, tool }) => {
     // Brackets and line breaks would break the markdown the agent pastes.
     const result = await tool.execute("id", {
@@ -107,7 +108,7 @@ Deno.test("visual keeps the snippet pasteable whatever the caption holds", async
   });
 });
 
-Deno.test("visual publishes a diagram file too", async () => {
+test("visual publishes a diagram file too", async () => {
   const source =
     '<svg xmlns="http://www.w3.org/2000/svg"><title>D</title></svg>';
   await withFixture(
@@ -126,7 +127,7 @@ Deno.test("visual publishes a diagram file too", async () => {
   );
 });
 
-Deno.test("visual refuses a path outside the workspace", async () => {
+test("visual refuses a path outside the workspace", async () => {
   await withFixture("chart.png", async ({ root, folder, tool }) => {
     // A relative path whose first segment names no workspace folder...
     await assertRejects(
@@ -147,7 +148,7 @@ Deno.test("visual refuses a path outside the workspace", async () => {
   });
 });
 
-Deno.test("visual refuses what it cannot show", async () => {
+test("visual refuses what it cannot show", async () => {
   await withFixture("notes.pdf", async ({ folder, tool }) => {
     await assertRejects(
       () => tool.execute("id", { path: `${folder}/notes.pdf` }),
@@ -167,7 +168,7 @@ Deno.test("visual refuses what it cannot show", async () => {
   });
 });
 
-Deno.test("visual refuses an oversized image", async () => {
+test("visual refuses an oversized image", async () => {
   // One byte over the SVG limit (proving the raster limit the same way would
   // need a 4 MiB fixture).
   await withFixture(
@@ -183,7 +184,7 @@ Deno.test("visual refuses an oversized image", async () => {
   );
 });
 
-Deno.test("visual refuses an SVG that carries a script", async () => {
+test("visual refuses an SVG that carries a script", async () => {
   const source =
     '<svg xmlns="http://www.w3.org/2000/svg">' +
     "<script>alert(1)</script></svg>";

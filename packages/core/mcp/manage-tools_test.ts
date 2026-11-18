@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import type { McpServerConfig } from "../shared/mcp-config.ts";
 import { toolText } from "../test-utils.ts";
@@ -77,7 +78,7 @@ function byName(admin: McpAdmin): Map<string, Tool> {
 
 // --- mcp_list ---------------------------------------------------------------
 
-Deno.test("mcp_list reports names, state and live status", async () => {
+test("mcp_list reports names, state and live status", async () => {
   const { admin } = fakeAdmin({
     servers: [
       serverInfo("filesystem", { toolCount: 12 }),
@@ -106,7 +107,7 @@ Deno.test("mcp_list reports names, state and live status", async () => {
   assertEquals(result.details.count, 4);
 });
 
-Deno.test("mcp_list says when nothing is configured", async () => {
+test("mcp_list says when nothing is configured", async () => {
   const { admin } = fakeAdmin();
   const list = byName(admin).get("mcp_list")!;
   const result = await list.execute("1", {} as never, undefined);
@@ -118,7 +119,7 @@ Deno.test("mcp_list says when nothing is configured", async () => {
 
 // --- mcp_add ----------------------------------------------------------------
 
-Deno.test("mcp_add refuses a shape the config cannot express", async () => {
+test("mcp_add refuses a shape the config cannot express", async () => {
   const cases: Array<[Record<string, unknown>, string]> = [
     [{ name: "  ", command: "npx" }, "name must not be empty"],
     [{ name: "x" }, "either command (stdio) or url (HTTP)"],
@@ -152,7 +153,7 @@ Deno.test("mcp_add refuses a shape the config cannot express", async () => {
   }
 });
 
-Deno.test("mcp_add tests the connection, then saves exactly that server", async () => {
+test("mcp_add tests the connection, then saves exactly that server", async () => {
   const { admin, log } = fakeAdmin({
     test: () => ({
       ok: true,
@@ -199,7 +200,7 @@ Deno.test("mcp_add tests the connection, then saves exactly that server", async 
   });
 });
 
-Deno.test("mcp_add saves nothing when the connection test fails", async () => {
+test("mcp_add saves nothing when the connection test fails", async () => {
   const { admin, log } = fakeAdmin({
     test: () => ({ ok: false, tools: [], error: "spawn npx ENOENT" }),
   });
@@ -215,7 +216,7 @@ Deno.test("mcp_add saves nothing when the connection test fails", async () => {
   assertEquals(log.added, []);
 });
 
-Deno.test("mcp_add saves a server that needs a sign-in, and says where", async () => {
+test("mcp_add saves a server that needs a sign-in, and says where", async () => {
   const { admin, log } = fakeAdmin({
     test: () => ({
       ok: false,
@@ -243,7 +244,7 @@ Deno.test("mcp_add saves a server that needs a sign-in, and says where", async (
   assertEquals(result.details.toolCount, undefined);
 });
 
-Deno.test("mcp_add skips the test with verify: false and says so", async () => {
+test("mcp_add skips the test with verify: false and says so", async () => {
   const { admin, log } = fakeAdmin();
   const add = byName(admin).get("mcp_add")!;
   const result = await add.execute(
@@ -263,7 +264,7 @@ Deno.test("mcp_add skips the test with verify: false and says so", async () => {
   assertEquals(result.details.verified, false);
 });
 
-Deno.test("mcp_add refuses a taken name before it connects to anything", async () => {
+test("mcp_add refuses a taken name before it connects to anything", async () => {
   const { admin, log } = fakeAdmin({ servers: [serverInfo("filesystem")] });
   const add = byName(admin).get("mcp_add")!;
   await assertRejects(
@@ -280,7 +281,7 @@ Deno.test("mcp_add refuses a taken name before it connects to anything", async (
 
 // --- mcp_remove -------------------------------------------------------------
 
-Deno.test("mcp_remove removes one server and leaves the rest", async () => {
+test("mcp_remove removes one server and leaves the rest", async () => {
   const { admin, log } = fakeAdmin({
     servers: [serverInfo("a"), serverInfo("b")],
   });
@@ -293,7 +294,7 @@ Deno.test("mcp_remove removes one server and leaves the rest", async () => {
   assertEquals(result.details, { server: "b", remaining: 1 });
 });
 
-Deno.test("mcp_remove says when the config is empty again", async () => {
+test("mcp_remove says when the config is empty again", async () => {
   const { admin } = fakeAdmin({ servers: [serverInfo("only")] });
   const remove = byName(admin).get("mcp_remove")!;
   const result = await remove.execute("1", { name: "only" } as never);
@@ -303,7 +304,7 @@ Deno.test("mcp_remove says when the config is empty again", async () => {
   );
 });
 
-Deno.test("mcp_remove refuses a name that is not configured", async () => {
+test("mcp_remove refuses a name that is not configured", async () => {
   const { admin, log } = fakeAdmin({ servers: [serverInfo("a")] });
   const remove = byName(admin).get("mcp_remove")!;
   await assertRejects(

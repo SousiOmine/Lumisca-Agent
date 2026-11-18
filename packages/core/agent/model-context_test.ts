@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import {
   createModelProvider,
@@ -5,7 +6,7 @@ import {
   modelLabelOf,
 } from "./model-context.ts";
 
-Deno.test("model context: publishes the model once, then only when it changes", () => {
+test("model context: publishes the model once, then only when it changes", () => {
   let model = { provider: "faux", modelId: "small", name: "Small" };
   const provider = createModelProvider({ model: () => model });
   assertEquals(provider.name, MODEL_PROVIDER);
@@ -35,7 +36,7 @@ Deno.test("model context: publishes the model once, then only when it changes", 
   assertEquals(next[0]!.state, { label: "Large" });
 });
 
-Deno.test("model context: a model without a name falls back to its ids", () => {
+test("model context: a model without a name falls back to its ids", () => {
   const provider = createModelProvider({
     model: () => ({ provider: "custom", modelId: "m1" }),
   });
@@ -47,14 +48,14 @@ Deno.test("model context: a model without a name falls back to its ids", () => {
   );
 });
 
-Deno.test("model context: an unknown model publishes nothing", () => {
+test("model context: an unknown model publishes nothing", () => {
   // A caller that cannot name the model must not publish an empty line: the
   // transcript would then say the session runs on nothing.
   const provider = createModelProvider({ model: () => undefined });
   assertEquals(provider.next(), []);
 });
 
-Deno.test("model context: rebase re-anchors to the last publication", () => {
+test("model context: rebase re-anchors to the last publication", () => {
   const model = { provider: "faux", modelId: "m", name: "M" };
   const provider = createModelProvider({ model: () => model });
   const published = provider.next()[0]!;
@@ -73,7 +74,7 @@ Deno.test("model context: rebase re-anchors to the last publication", () => {
   assertEquals(provider.next().length, 1);
 });
 
-Deno.test("model context: state is the label, never the body text", () => {
+test("model context: state is the label, never the body text", () => {
   const provider = createModelProvider({
     model: () => ({ provider: "faux", modelId: "m", name: "M" }),
   });

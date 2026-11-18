@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { encodeCapture } from "./image.ts";
 import type {
@@ -184,7 +185,7 @@ function makeHost(): { portal: FakePortal; host: WaylandComputerHost } {
 
 // --- geometry ---------------------------------------------------------------
 
-Deno.test("a Wayland host describes itself and reports the desktop bounding box", () => {
+test("a Wayland host describes itself and reports the desktop bounding box", () => {
   const { host } = makeHost();
   assertEquals(host.capabilities, { windows: false, cursor: false });
   assertEquals(
@@ -209,7 +210,7 @@ Deno.test("a Wayland host describes itself and reports the desktop bounding box"
   host.close();
 });
 
-Deno.test("Wayland reports no pointer and no windows", () => {
+test("Wayland reports no pointer and no windows", () => {
   const { host } = makeHost();
   assertEquals(host.cursor(), undefined);
   assertEquals(host.windows(), []);
@@ -218,7 +219,7 @@ Deno.test("Wayland reports no pointer and no windows", () => {
 
 // --- capture ----------------------------------------------------------------
 
-Deno.test("capture crops the whole-desktop image at the compositor's scale", async () => {
+test("capture crops the whole-desktop image at the compositor's scale", async () => {
   const { host } = makeHost();
   // The primary monitor's region starts at screen x = 320, which is image
   // x = 640 when the screenshot is painted at scale 2.
@@ -240,7 +241,7 @@ Deno.test("capture crops the whole-desktop image at the compositor's scale", asy
   host.close();
 });
 
-Deno.test("capture of the smaller-scale monitor keeps that monitor's picture", async () => {
+test("capture of the smaller-scale monitor keeps that monitor's picture", async () => {
   const { host } = makeHost();
   const raw = await host.capture({ x: 0, y: 0, width: 320, height: 180 });
   assertEquals([raw.width, raw.height], [640, 360]);
@@ -251,7 +252,7 @@ Deno.test("capture of the smaller-scale monitor keeps that monitor's picture", a
   host.close();
 });
 
-Deno.test("the reported image scale maps image pixels back to screen units", async () => {
+test("the reported image scale maps image pixels back to screen units", async () => {
   const { host } = makeHost();
   const raw = await host.capture({ x: 320, y: 0, width: 480, height: 270 });
   // 960 image pixels cover 480 screen units: dividing by the reported scale
@@ -267,7 +268,7 @@ Deno.test("the reported image scale maps image pixels back to screen units", asy
   host.close();
 });
 
-Deno.test("capture refuses a screenshot that does not match the layout", async () => {
+test("capture refuses a screenshot that does not match the layout", async () => {
   const { portal, host } = makeHost();
   portal.image = makeImage(100, 100);
   await assertRejects(
@@ -278,7 +279,7 @@ Deno.test("capture refuses a screenshot that does not match the layout", async (
   host.close();
 });
 
-Deno.test("capture refuses a region outside the desktop", async () => {
+test("capture refuses a region outside the desktop", async () => {
   const { host } = makeHost();
   await assertRejects(
     () => host.capture({ x: 0, y: 0, width: 900, height: 270 }),
@@ -290,7 +291,7 @@ Deno.test("capture refuses a region outside the desktop", async () => {
 
 // --- input ------------------------------------------------------------------
 
-Deno.test("a click is converted into the target monitor's physical grid", async () => {
+test("a click is converted into the target monitor's physical grid", async () => {
   const { portal, host } = makeHost();
   // Screen (100, 50) is on the scale-2 monitor: its stream grid is twice the
   // distance from that monitor's own origin, which is 0 in screen units.
@@ -315,7 +316,7 @@ Deno.test("a click is converted into the target monitor's physical grid", async 
   host.close();
 });
 
-Deno.test("pointer movement is interpolated and ends exactly on the target", async () => {
+test("pointer movement is interpolated and ends exactly on the target", async () => {
   const { portal, host } = makeHost();
   const result = await host.act({ kind: "move", x: 460, y: 200 });
   assert(
@@ -332,7 +333,7 @@ Deno.test("pointer movement is interpolated and ends exactly on the target", asy
   host.close();
 });
 
-Deno.test("scrolling carries the tool layer's sign convention", async () => {
+test("scrolling carries the tool layer's sign convention", async () => {
   const { portal, host } = makeHost();
   await host.act({ kind: "scroll", x: 400, y: 100, deltaX: 3, deltaY: -2 });
   const session = portal.sessions.at(0)!;
@@ -345,7 +346,7 @@ Deno.test("scrolling carries the tool layer's sign convention", async () => {
   host.close();
 });
 
-Deno.test("typing sends one keysym per character and Enter for a newline", async () => {
+test("typing sends one keysym per character and Enter for a newline", async () => {
   const { portal, host } = makeHost();
   await host.act({ kind: "type", text: "a\nあ" });
   const session = portal.sessions.at(0)!;
@@ -360,7 +361,7 @@ Deno.test("typing sends one keysym per character and Enter for a newline", async
   host.close();
 });
 
-Deno.test("a key chord holds its modifiers around the key", async () => {
+test("a key chord holds its modifiers around the key", async () => {
   const { portal, host } = makeHost();
   await host.act({ kind: "key", key: "ctrl+shift+s" });
   const session = portal.sessions.at(0)!;
@@ -375,7 +376,7 @@ Deno.test("a key chord holds its modifiers around the key", async () => {
   host.close();
 });
 
-Deno.test("focus_window is refused with the Wayland reason", async () => {
+test("focus_window is refused with the Wayland reason", async () => {
   const { host } = makeHost();
   await assertRejects(
     () => host.act({ kind: "focus_window", window: "0x00000001" }),
@@ -385,7 +386,7 @@ Deno.test("focus_window is refused with the Wayland reason", async () => {
   host.close();
 });
 
-Deno.test("wait sleeps without touching the session", async () => {
+test("wait sleeps without touching the session", async () => {
   const { portal, host } = makeHost();
   const result = await host.act({ kind: "wait", durationMs: 5 });
   assertEquals(result.steps, 0);
@@ -395,7 +396,7 @@ Deno.test("wait sleeps without touching the session", async () => {
 
 // --- the screen-sharing session ---------------------------------------------
 
-Deno.test("the screen-sharing session is opened once, on the first input", async () => {
+test("the screen-sharing session is opened once, on the first input", async () => {
   const { portal, host } = makeHost();
   await host.act({ kind: "move", x: 400, y: 100 });
   await host.act({ kind: "click", x: 400, y: 100, button: "left", count: 1 });
@@ -407,7 +408,7 @@ Deno.test("the screen-sharing session is opened once, on the first input", async
   host.close();
 });
 
-Deno.test("a monitor the user did not share is reported and the session dropped", async () => {
+test("a monitor the user did not share is reported and the session dropped", async () => {
   const { portal, host } = makeHost();
   portal.streams = mixedStreams().filter((stream) =>
     stream.connectors.includes("Virtual-1"),
@@ -425,7 +426,7 @@ Deno.test("a monitor the user did not share is reported and the session dropped"
   host.close();
 });
 
-Deno.test("a failing input call drops the session so the next one can restart it", async () => {
+test("a failing input call drops the session so the next one can restart it", async () => {
   const { portal, host } = makeHost();
   portal.failMotion = true;
   await assertRejects(
@@ -442,7 +443,7 @@ Deno.test("a failing input call drops the session so the next one can restart it
   host.close();
 });
 
-Deno.test("closing a host is idempotent and closes the session", async () => {
+test("closing a host is idempotent and closes the session", async () => {
   const { portal, host } = makeHost();
   await host.act({ kind: "move", x: 400, y: 100 });
   host.close();
@@ -453,7 +454,7 @@ Deno.test("closing a host is idempotent and closes the session", async () => {
 
 // --- creation ---------------------------------------------------------------
 
-Deno.test("no session bus means no host, and the reason says so", async () => {
+test("no session bus means no host, and the reason says so", async () => {
   // The verdict is the portal's, so an environment with no bus address at
   // all is the one thing that must still report a reason (and it must name
   // what is missing: the settings toggle shows this sentence).
@@ -468,7 +469,7 @@ Deno.test("no session bus means no host, and the reason says so", async () => {
   );
 });
 
-Deno.test("the display variables do not decide availability", async () => {
+test("the display variables do not decide availability", async () => {
   // A server started by systemd has the session bus but not the session's
   // display variables (gnome-session publishes those to the bus's activation
   // environment, which reaches a unit only when the desktop was already up).
@@ -497,7 +498,7 @@ Deno.test("the display variables do not decide availability", async () => {
   );
 });
 
-Deno.test("the key parsing errors reach the caller", async () => {
+test("the key parsing errors reach the caller", async () => {
   const { host } = makeHost();
   await assertRejects(
     () => host.act({ kind: "key", key: "nope+nope" }),

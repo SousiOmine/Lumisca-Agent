@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -20,7 +21,7 @@ function render(
   );
 }
 
-Deno.test("AttachmentCard: an image is drawn from the session's base", () => {
+test("AttachmentCard: an image is drawn from the session's base", () => {
   const html = render([
     {
       name: "9f3c2a1b4d5e.png",
@@ -41,7 +42,7 @@ Deno.test("AttachmentCard: an image is drawn from the session's base", () => {
   assertEquals(/alt="chart\.png"/.test(html), false, html);
 });
 
-Deno.test("AttachmentCard: the picture opens in the app, not in a new tab", () => {
+test("AttachmentCard: the picture opens in the app, not in a new tab", () => {
   // A new tab would leave the conversation behind and lose the scroll
   // position on the way back; the lightbox is the app's own way of showing
   // one picture whole (see Lightbox).
@@ -69,7 +70,7 @@ Deno.test("AttachmentCard: the picture opens in the app, not in a new tab", () =
   assertStringIncludes(source, "<Lightbox");
 });
 
-Deno.test("AttachmentCard: anything else is a download row", () => {
+test("AttachmentCard: anything else is a download row", () => {
   const html = render([
     {
       name: "0f1e2d3c4b5a.txt",
@@ -86,7 +87,7 @@ Deno.test("AttachmentCard: anything else is a download row", () => {
   assertStringIncludes(html, "ダウンロード");
 });
 
-Deno.test("AttachmentCard: no attachment renders no card", () => {
+test("AttachmentCard: no attachment renders no card", () => {
   // An empty list is the normal case (a message with only words): it must
   // not leave an empty frame behind.
   const html = render([]);

@@ -8,6 +8,7 @@
  * These tests fix the depth each entry records and the number of steps a close
  * takes.
  */
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import {
   APP_ENTRY,
@@ -30,7 +31,7 @@ const list = code({ category: null });
 const general = code({ category: "general" });
 const appearance = code({ category: "appearance" });
 
-Deno.test("history entry: a push is the app's and records how deep the dialog is", () => {
+test("history entry: a push is the app's and records how deep the dialog is", () => {
   // Opened over a screen with no dialog: the dialog's first entry.
   const opened = pushedState(null, list);
   assertEquals(opened[APP_ENTRY], true);
@@ -49,7 +50,7 @@ Deno.test("history entry: a push is the app's and records how deep the dialog is
   assertEquals(dialogDepth(pushedState(left, list)), 1);
 });
 
-Deno.test("history entry: a known state never passes for the app's", () => {
+test("history entry: a known state never passes for the app's", () => {
   // `history.state` is whatever the page put there, and the app has run on
   // origins it does not control: only its own marker may unlock `back()`.
   for (const state of [null, undefined, 0, "lumisca", {}, { lumisca: false }]) {
@@ -58,7 +59,7 @@ Deno.test("history entry: a known state never passes for the app's", () => {
   }
 });
 
-Deno.test("history entry: a depth that is not a positive integer is none", () => {
+test("history entry: a depth that is not a positive integer is none", () => {
   // Walking back an unknown number of entries would skip the screen the
   // dialog covered; one step is wrong too, so the caller has to stop
   // believing the value and fall back to a single move.
@@ -71,7 +72,7 @@ Deno.test("history entry: a depth that is not a positive integer is none", () =>
   }
 });
 
-Deno.test("history entry: closing the dialog walks back over all its pages", () => {
+test("history entry: closing the dialog walks back over all its pages", () => {
   // Opened, three categories picked, then closed: four entries to undo.
   assertEquals(dismissSteps(4, closed), 4);
   // Opened and closed: one.
@@ -91,7 +92,7 @@ Deno.test("history entry: closing the dialog walks back over all its pages", () 
   );
 });
 
-Deno.test("history entry: a replace drops a depth the new address does not name", () => {
+test("history entry: a replace drops a depth the new address does not name", () => {
   const page = pushedState(pushedState(null, list), general);
   // The session the dialog covered was deleted: its fallback replaces the
   // entry with a screen that has no dialog. Keeping depth 2 would make the
@@ -102,7 +103,7 @@ Deno.test("history entry: a replace drops a depth the new address does not name"
   assertEquals(dialogDepth(pushedState(replaced, list)), 1);
 });
 
-Deno.test("history entry: a replace keeps an entry the app did not push unknown", () => {
+test("history entry: a replace keeps an entry the app did not push unknown", () => {
   // A page loaded from a link stays the page that was loaded: writing the
   // app's marker would claim a screen behind it.
   assertEquals(replacedState(null, closed), null);

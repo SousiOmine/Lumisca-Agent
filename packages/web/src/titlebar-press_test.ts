@@ -6,15 +6,16 @@
  * capture swallows the release, so waiting for `dblclick` waits forever. The
  * rule is that the second press carries the decision.
  */
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { captionPress } from "./titlebar-press.ts";
 
-Deno.test("captionPress: the first press drags, the second maximizes", () => {
+test("captionPress: the first press drags, the second maximizes", () => {
   assertEquals(captionPress(1), "drag");
   assertEquals(captionPress(2), "toggle-maximize");
 });
 
-Deno.test("captionPress: a press outside the double click does nothing", () => {
+test("captionPress: a press outside the double click does nothing", () => {
   // A third press is still the same caption sequence; acting on it would
   // toggle the window back. Zero never reaches a real mousedown, but the
   // answer must not be a drag by accident.

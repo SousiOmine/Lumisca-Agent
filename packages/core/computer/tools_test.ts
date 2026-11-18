@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import {
   TOOL_COMPUTER_ACT,
@@ -135,7 +136,7 @@ function tools(host: ComputerHost | undefined) {
 
 // --- the family -------------------------------------------------------------
 
-Deno.test("the computer family is exactly the three documented tools", () => {
+test("the computer family is exactly the three documented tools", () => {
   const family = tools(new FakeHost());
   assertEquals(
     [family.screenshot.name, family.act.name, family.windows.name],
@@ -156,7 +157,7 @@ function rejectsWith(
   return assertRejects(() => Promise.resolve().then(call), Error, message);
 }
 
-Deno.test("every tool fails clearly when no host is attached", async () => {
+test("every tool fails clearly when no host is attached", async () => {
   const family = tools(undefined);
   await rejectsWith(
     () => family.screenshot.execute("id", {}),
@@ -174,7 +175,7 @@ Deno.test("every tool fails clearly when no host is attached", async () => {
 
 // --- computer_screenshot ----------------------------------------------------
 
-Deno.test("screenshot captures the primary display and states the mapping", async () => {
+test("screenshot captures the primary display and states the mapping", async () => {
   const host = new FakeHost();
   const result = await tools(host).screenshot.execute("id", {});
   // The primary display's bounds are what the host was asked for.
@@ -210,7 +211,7 @@ Deno.test("screenshot captures the primary display and states the mapping", asyn
   assertEquals(result.details["scale"], 1);
 });
 
-Deno.test("screenshot scales to max_dimension and reports the exact scale", async () => {
+test("screenshot scales to max_dimension and reports the exact scale", async () => {
   const host = new FakeHost();
   const result = await tools(host).screenshot.execute("id", {
     max_dimension: 128,
@@ -260,7 +261,7 @@ class NoisyHost extends FakeHost {
   }
 }
 
-Deno.test("screenshot maps a resized copy back to the screen", async () => {
+test("screenshot maps a resized copy back to the screen", async () => {
   // A 4K-sized display captured 1:1: the transcript copy is bounded, so the
   // picture comes back smaller than the screen.
   const host = new NoisyHost(3000, 2000);
@@ -296,7 +297,7 @@ Deno.test("screenshot maps a resized copy back to the screen", async () => {
   assert(Math.abs(click.y - screen.y) <= 1, `y: ${click.y}`);
 });
 
-Deno.test("screenshot resolves a display index", async () => {
+test("screenshot resolves a display index", async () => {
   const host = new FakeHost();
   const result = await tools(host).screenshot.execute("id", { display: 1 });
   assertEquals(host.captures, [{ x: 256, y: 0, width: 192, height: 108 }]);
@@ -306,7 +307,7 @@ Deno.test("screenshot resolves a display index", async () => {
   assertEquals(result.details["display"], 1);
 });
 
-Deno.test("screenshot captures an explicit region and keeps its origin", async () => {
+test("screenshot captures an explicit region and keeps its origin", async () => {
   const host = new FakeHost();
   const result = await tools(host).screenshot.execute("id", {
     region: { x: 100, y: 50, width: 80, height: 40 },
@@ -318,7 +319,7 @@ Deno.test("screenshot captures an explicit region and keeps its origin", async (
   assertEquals(result.details["display"], undefined);
 });
 
-Deno.test("screenshot refuses unknown displays and regions off every display", async () => {
+test("screenshot refuses unknown displays and regions off every display", async () => {
   const host = new FakeHost();
   const family = tools(host);
   await assertRejects(
@@ -336,7 +337,7 @@ Deno.test("screenshot refuses unknown displays and regions off every display", a
   );
 });
 
-Deno.test("screenshot validates max_dimension and the region size", async () => {
+test("screenshot validates max_dimension and the region size", async () => {
   const family = tools(new FakeHost());
   for (const maxDimension of [0, 63, 4097, 1.5]) {
     await assertRejects(
@@ -366,7 +367,7 @@ Deno.test("screenshot validates max_dimension and the region size", async () => 
 
 // --- computer_act -----------------------------------------------------------
 
-Deno.test("act converts image coordinates through the last screenshot", async () => {
+test("act converts image coordinates through the last screenshot", async () => {
   const host = new FakeHost();
   const family = tools(host);
   await family.screenshot.execute("id", { max_dimension: 128 }); // scale 0.5
@@ -396,7 +397,7 @@ Deno.test("act converts image coordinates through the last screenshot", async ()
   assertEquals(result.details["screen"], { x: 128, y: 72 });
 });
 
-Deno.test("act maps coordinates of a region capture through its origin", async () => {
+test("act maps coordinates of a region capture through its origin", async () => {
   const host = new FakeHost();
   const family = tools(host);
   await family.screenshot.execute("id", {
@@ -406,7 +407,7 @@ Deno.test("act maps coordinates of a region capture through its origin", async (
   assertEquals(host.actions, [{ kind: "move", x: 110, y: 70 }]);
 });
 
-Deno.test("act refuses coordinate actions before any screenshot", async () => {
+test("act refuses coordinate actions before any screenshot", async () => {
   const family = tools(new FakeHost());
   const coordinateActions: Array<Record<string, number | string>> = [
     { action: "move", x: 1, y: 2 },
@@ -424,7 +425,7 @@ Deno.test("act refuses coordinate actions before any screenshot", async () => {
   }
 });
 
-Deno.test("act forwards every action kind to the host", async () => {
+test("act forwards every action kind to the host", async () => {
   const host = new FakeHost();
   const family = tools(host);
   await family.screenshot.execute("id", {});
@@ -466,7 +467,7 @@ Deno.test("act forwards every action kind to the host", async () => {
   ]);
 });
 
-Deno.test("act reports the focused window for keyboard actions", async () => {
+test("act reports the focused window for keyboard actions", async () => {
   const host = new FakeHost();
   const family = tools(host);
   const typed = await family.act.execute("id", { action: "type", text: "hi" });
@@ -485,7 +486,7 @@ Deno.test("act reports the focused window for keyboard actions", async () => {
   assertEquals(typed.details["windowTitle"], "index.html - Visual Studio Code");
 });
 
-Deno.test("act validates its arguments", async () => {
+test("act validates its arguments", async () => {
   const family = tools(new FakeHost());
   const act = (params: Record<string, unknown>) =>
     family.act.execute("id", params as never);
@@ -545,7 +546,7 @@ Deno.test("act validates its arguments", async () => {
 
 // --- computer_list_windows --------------------------------------------------
 
-Deno.test("list_windows formats the z-order list and filters by title", async () => {
+test("list_windows formats the z-order list and filters by title", async () => {
   const host = new FakeHost();
   const family = tools(host);
   const all = toolText(await family.windows.execute("id", {}));
@@ -575,7 +576,7 @@ Deno.test("list_windows formats the z-order list and filters by title", async ()
   );
 });
 
-Deno.test("list_windows announces the windows it did not list", async () => {
+test("list_windows announces the windows it did not list", async () => {
   const host = new FakeHost();
   host.windowList = Array.from({ length: MAX_WINDOW_LINES + 7 }, (_, i) => ({
     id: `0x${(i + 1).toString(16).padStart(8, "0")}`,
@@ -596,7 +597,7 @@ Deno.test("list_windows announces the windows it did not list", async () => {
 
 // --- platforms that cannot do everything ------------------------------------
 
-Deno.test("list_windows explains a host that cannot enumerate windows", async () => {
+test("list_windows explains a host that cannot enumerate windows", async () => {
   const host = new FakeHost();
   host.capabilities = { windows: false, cursor: false };
   const result = await tools(host).windows.execute("id", {});
@@ -606,7 +607,7 @@ Deno.test("list_windows explains a host that cannot enumerate windows", async ()
   assertEquals(result.details.unsupported, true);
 });
 
-Deno.test("screenshot says when the pointer position is not reported", async () => {
+test("screenshot says when the pointer position is not reported", async () => {
   const host = new FakeHost();
   host.capabilities = { windows: true, cursor: false };
   const text = toolText(await tools(host).screenshot.execute("id", {}));
@@ -614,7 +615,7 @@ Deno.test("screenshot says when the pointer position is not reported", async () 
   assert(!text.includes("Cursor at screen"), text);
 });
 
-Deno.test("a mouse action claims no cursor position when there is none", async () => {
+test("a mouse action claims no cursor position when there is none", async () => {
   const host = new FakeHost();
   host.capabilities = { windows: true, cursor: false };
   const family = tools(host);
@@ -630,7 +631,7 @@ Deno.test("a mouse action claims no cursor position when there is none", async (
 
 // --- registry contract ------------------------------------------------------
 
-Deno.test("the tools are discoverable via tool_search and callable via tool_call", async () => {
+test("the tools are discoverable via tool_search and callable via tool_call", async () => {
   const host = new FakeHost();
   const registry = new ToolRegistry();
   registry.addTools(createComputerTools({ resolveHost: () => host }));

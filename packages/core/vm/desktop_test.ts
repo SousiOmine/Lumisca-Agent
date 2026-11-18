@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertRejects } from "@std/assert";
 import type { VmCommandBytesRunner, VmCommandRunner } from "./command.ts";
 import type { VmManager, VmStatus } from "./container.ts";
@@ -120,7 +121,7 @@ function agents(): string[] {
   return Array.from({ length: VM_DESKTOP_SLOTS }, (_, i) => `agent-${i}`);
 }
 
-Deno.test("desktop slots have their own display, ports and session bus", () => {
+test("desktop slots have their own display, ports and session bus", () => {
   // :99 is the machine's own screen; the desktops start above it, so a
   // program started outside a desktop never lands on an agent's screen.
   assertEquals(VM_DISPLAY, ":99");
@@ -144,7 +145,7 @@ Deno.test("desktop slots have their own display, ports and session bus", () => {
   assertEquals(VM_VNC_RFB_PORT, 5900);
 });
 
-Deno.test("exec: the first call starts the agent's desktop and carries its display and bus", async () => {
+test("exec: the first call starts the agent's desktop and carries its display and bus", async () => {
   const { stella, manager, calls } = machine();
   const exec = stella.execFor("agent-a");
   await exec!(["true"], { timeoutMs: 1000 });
@@ -162,7 +163,7 @@ Deno.test("exec: the first call starts the agent's desktop and carries its displ
   }
 });
 
-Deno.test("exec: a second agent gets the next slot and its own display", async () => {
+test("exec: a second agent gets the next slot and its own display", async () => {
   const { stella, manager, calls } = machine();
   await stella.execFor("agent-a")!(["true"], { timeoutMs: 1000 });
   await stella.execFor("agent-b")!(["true"], { timeoutMs: 1000 });
@@ -179,7 +180,7 @@ Deno.test("exec: a second agent gets the next slot and its own display", async (
   );
 });
 
-Deno.test("exec: two agents that start at once get different slots", async () => {
+test("exec: two agents that start at once get different slots", async () => {
   // Two conversations can use their screens in the same turn. Reserving the
   // slot has to happen before the start is awaited, or both read the same
   // free slot and one of them works in the other's browser.
@@ -197,7 +198,7 @@ Deno.test("exec: two agents that start at once get different slots", async () =>
   );
 });
 
-Deno.test("exec: the next agent takes the idle desktop used least recently", async () => {
+test("exec: the next agent takes the idle desktop used least recently", async () => {
   const { stella, manager } = machine();
   for (const agent of agents()) {
     await stella.execFor(agent)!(["true"], { timeoutMs: 1000 });
@@ -209,7 +210,7 @@ Deno.test("exec: the next agent takes the idle desktop used least recently", asy
   assertEquals(manager.started.at(-1), { slot: 0, agentId: "extra" });
 });
 
-Deno.test("exec: a working conversation's desktop is never taken", async () => {
+test("exec: a working conversation's desktop is never taken", async () => {
   // Taking a desktop from a run in progress kills its browser under it. The
   // next agent must take another idle desktop instead, even though this one
   // is the least recently used.
@@ -224,7 +225,7 @@ Deno.test("exec: a working conversation's desktop is never taken", async () => {
   assertEquals(manager.stopped, [1]);
 });
 
-Deno.test("exec: a request waits for a slot instead of interrupting a run", async () => {
+test("exec: a request waits for a slot instead of interrupting a run", async () => {
   const busy = new Set<string>();
   const { stella, manager } = machine({
     busy: (id) => busy.has(id),
@@ -242,7 +243,7 @@ Deno.test("exec: a request waits for a slot instead of interrupting a run", asyn
   assertEquals(manager.stopped, [3]);
 });
 
-Deno.test("exec: when every conversation is working, the request fails with a reason", async () => {
+test("exec: when every conversation is working, the request fails with a reason", async () => {
   // The machine cannot tell a run that ended from one that never started: it
   // may only ask. Guessing would take a desktop from a run, so the request is
   // refused instead, with a sentence the agent can act on.
@@ -257,7 +258,7 @@ Deno.test("exec: when every conversation is working, the request fails with a re
   );
 });
 
-Deno.test("a stopped machine's agents start their desktops again", async () => {
+test("a stopped machine's agents start their desktops again", async () => {
   // `podman stop` ends every process in the container, desktops included.
   // Remembering the slots across that would leave an agent with a display
   // nothing is running on.
@@ -271,7 +272,7 @@ Deno.test("a stopped machine's agents start their desktops again", async () => {
   ]);
 });
 
-Deno.test("a machine that restarted before a send starts its desktops again", async () => {
+test("a machine that restarted before a send starts its desktops again", async () => {
   // The other way a container comes back: the app is still running, the
   // machine was stopped (or crashed) and the next send brings it up.
   const { stella, manager } = machine();
@@ -282,7 +283,7 @@ Deno.test("a machine that restarted before a send starts its desktops again", as
   assertEquals(manager.started.length, 2);
 });
 
-Deno.test("a replaced machine forgets which slot belonged to whom", async () => {
+test("a replaced machine forgets which slot belonged to whom", async () => {
   // A new manager is a new container: nothing is running inside it.
   const { stella, manager } = machine();
   await stella.desktopFor("agent-a");
@@ -291,7 +292,7 @@ Deno.test("a replaced machine forgets which slot belonged to whom", async () => 
   assertEquals(manager.started.length, 2);
 });
 
-Deno.test("vncPortFor: the screen pane finds the agent's own desktop", async () => {
+test("vncPortFor: the screen pane finds the agent's own desktop", async () => {
   const { stella } = machine();
   assertEquals(await stella.vncPortFor("agent-a"), 49152);
   await stella.execFor("agent-b")!(["true"], { timeoutMs: 1000 });

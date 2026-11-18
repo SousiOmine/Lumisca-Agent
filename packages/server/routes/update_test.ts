@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { fauxProvider, LumiscaCore } from "@lumisca/core";
 import { assertEquals } from "@std/assert";
 import { createApp } from "../app.ts";
@@ -71,7 +72,7 @@ function hostHeaders(): HeadersInit {
   return { host: "127.0.0.1:8000", "content-type": "application/json" };
 }
 
-Deno.test("update endpoints drive the updater and answer with its status", async () => {
+test("update endpoints drive the updater and answer with its status", async () => {
   const core = LumiscaCore.forTesting([fauxProvider().provider]);
   const { api, calls } = fakeApi();
   const app = createApp(core, { update: api });
@@ -142,7 +143,7 @@ Deno.test("update endpoints drive the updater and answer with its status", async
   }
 });
 
-Deno.test("update endpoints reject malformed bodies with 400", async () => {
+test("update endpoints reject malformed bodies with 400", async () => {
   const core = LumiscaCore.forTesting([fauxProvider().provider]);
   const { api, calls } = fakeApi();
   const app = createApp(core, { update: api });
@@ -163,7 +164,7 @@ Deno.test("update endpoints reject malformed bodies with 400", async () => {
   }
 });
 
-Deno.test("without an updater the endpoints are absent, not empty", async () => {
+test("without an updater the endpoints are absent, not empty", async () => {
   const core = LumiscaCore.forTesting([fauxProvider().provider]);
   const app = createApp(core);
   try {
@@ -181,7 +182,7 @@ Deno.test("without an updater the endpoints are absent, not empty", async () => 
   }
 });
 
-Deno.test("the routes module can be mounted on its own", async () => {
+test("the routes module can be mounted on its own", async () => {
   // updateRoutes is a plain Hono app (the shape every route module in this
   // package has), so it can be exercised without the whole server.
   const { api, calls } = fakeApi();

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { createToolCallTool } from "./call-tool.ts";
 import { MAX_SEARCH_DESCRIPTION_CHARS, ToolRegistry } from "./registry.ts";
@@ -47,7 +48,7 @@ function searchResult(
 
 // --- search ranking ---------------------------------------------------------
 
-Deno.test("search ranks exact name matches above partial and description matches", () => {
+test("search ranks exact name matches above partial and description matches", () => {
   const registry = new ToolRegistry();
   registry.setTools([
     fakeTool("db_query", { description: "run sql against the database" }),
@@ -70,7 +71,7 @@ Deno.test("search ranks exact name matches above partial and description matches
   assertEquals(searchResult(registry, ""), []);
 });
 
-Deno.test("search is case-insensitive and matches the server label", () => {
+test("search is case-insensitive and matches the server label", () => {
   const registry = new ToolRegistry();
   registry.setTools([
     fakeTool("query", { label: "postgres: query" }),
@@ -80,7 +81,7 @@ Deno.test("search is case-insensitive and matches the server label", () => {
   assertEquals(searchResult(registry, "mysql"), ["connect"]);
 });
 
-Deno.test("search respects the limit", () => {
+test("search respects the limit", () => {
   const registry = new ToolRegistry();
   registry.setTools([
     fakeTool("a", { description: "alpha" }),
@@ -92,7 +93,7 @@ Deno.test("search respects the limit", () => {
 
 // --- describe ---------------------------------------------------------------
 
-Deno.test("describe reports name, label and a truncated description", () => {
+test("describe reports name, label and a truncated description", () => {
   const registry = new ToolRegistry();
   registry.setTools([
     fakeTool("echo", {
@@ -118,7 +119,7 @@ Deno.test("describe reports name, label and a truncated description", () => {
   );
 });
 
-Deno.test("describe appends the parameter schema when it carries explicit properties", () => {
+test("describe appends the parameter schema when it carries explicit properties", () => {
   const registry = new ToolRegistry();
   registry.setTools([
     {
@@ -184,7 +185,7 @@ Deno.test("describe appends the parameter schema when it carries explicit proper
 
 // --- browse -----------------------------------------------------------------
 
-Deno.test("browse groups tools by label prefix and caps the listing", () => {
+test("browse groups tools by label prefix and caps the listing", () => {
   const registry = new ToolRegistry();
   registry.setTools([
     fakeTool("mcp__db__query", { label: "db: query" }),
@@ -199,7 +200,7 @@ Deno.test("browse groups tools by label prefix and caps the listing", () => {
 
 // --- registration -----------------------------------------------------------
 
-Deno.test("setTools replaces and addTools merges idempotently", () => {
+test("setTools replaces and addTools merges idempotently", () => {
   const registry = new ToolRegistry();
   const a = fakeTool("a");
   const b = fakeTool("b");
@@ -212,7 +213,7 @@ Deno.test("setTools replaces and addTools merges idempotently", () => {
   assert(!registry.isEmpty);
 });
 
-Deno.test("removeTools deletes by name, ignores unknown names, reports the count", () => {
+test("removeTools deletes by name, ignores unknown names, reports the count", () => {
   const registry = new ToolRegistry();
   registry.setTools([fakeTool("a"), fakeTool("b"), fakeTool("c")]);
   assertEquals(registry.removeTools(["a", "nope"]), 1);
@@ -235,7 +236,7 @@ function textOf(result: { content: ToolContentBlock[] }): string {
   return block.type === "text" ? block.text : "";
 }
 
-Deno.test("call dispatches to the tool's execute with prepared arguments", async () => {
+test("call dispatches to the tool's execute with prepared arguments", async () => {
   const calls: unknown[] = [];
   const registry = new ToolRegistry();
   const sumSchema = object({ a: string(), b: string() }, {});
@@ -262,7 +263,7 @@ Deno.test("call dispatches to the tool's execute with prepared arguments", async
   assertEquals(calls, [{ a: "1", b: "2" }]);
 });
 
-Deno.test("call rejects unknown tools", async () => {
+test("call rejects unknown tools", async () => {
   const registry = new ToolRegistry();
   await assertRejects(
     () => registry.call("call-1", "nope", {}),
@@ -273,7 +274,7 @@ Deno.test("call rejects unknown tools", async () => {
 
 // --- the search / call tools ------------------------------------------------
 
-Deno.test("tool_search returns matches with usage instructions", async () => {
+test("tool_search returns matches with usage instructions", async () => {
   const registry = new ToolRegistry();
   registry.setTools([
     fakeTool("mcp__db__query", {
@@ -290,7 +291,7 @@ Deno.test("tool_search returns matches with usage instructions", async () => {
   assert(text.includes("Call one with tool_call(name, args)."));
 });
 
-Deno.test("tool_search with an empty query browses instead of searching", async () => {
+test("tool_search with an empty query browses instead of searching", async () => {
   const registry = new ToolRegistry();
   registry.setTools([fakeTool("mcp__db__query", { label: "db: query" })]);
   const tool = createToolSearchTool(() => registry);
@@ -301,7 +302,7 @@ Deno.test("tool_search with an empty query browses instead of searching", async 
   assert(!text.includes("Call one with tool_call"));
 });
 
-Deno.test("tool_search reports no matches with the browse listing", async () => {
+test("tool_search reports no matches with the browse listing", async () => {
   const registry = new ToolRegistry();
   registry.setTools([fakeTool("mcp__db__query", { label: "db: query" })]);
   const tool = createToolSearchTool(() => registry);
@@ -310,7 +311,7 @@ Deno.test("tool_search reports no matches with the browse listing", async () => 
   assert(textOf(result).includes("mcp__db__query"));
 });
 
-Deno.test("tool_call executes the named tool and prefixes its name", async () => {
+test("tool_call executes the named tool and prefixes its name", async () => {
   const registry = new ToolRegistry();
   registry.setTools([
     fakeTool("mcp__db__query", {
@@ -326,7 +327,7 @@ Deno.test("tool_call executes the named tool and prefixes its name", async () =>
   assertEquals(result.details.tool, "mcp__db__query");
 });
 
-Deno.test("tool_call rejects unknown names with a search hint", async () => {
+test("tool_call rejects unknown names with a search hint", async () => {
   const registry = new ToolRegistry();
   const tool = createToolCallTool(() => registry);
   await assertRejects(
@@ -336,7 +337,7 @@ Deno.test("tool_call rejects unknown names with a search hint", async () => {
   );
 });
 
-Deno.test("the search/call pair resolves the registry through the provider", async () => {
+test("the search/call pair resolves the registry through the provider", async () => {
   const first = new ToolRegistry();
   first.setTools([fakeTool("mcp__old__ping")]);
   const second = new ToolRegistry();

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { stellaAvailability } from "./availability.ts";
@@ -198,7 +199,7 @@ function runningMachine(
   };
 }
 
-Deno.test("status: podman missing is reported with its reason", async () => {
+test("status: podman missing is reported with its reason", async () => {
   const dir = await containerDir();
   const { run } = makeRunner({
     answers: [
@@ -222,7 +223,7 @@ Deno.test("status: podman missing is reported with its reason", async () => {
   }
 });
 
-Deno.test("status: image_missing / container_missing / stopped", async () => {
+test("status: image_missing / container_missing / stopped", async () => {
   const dir = await containerDir();
   const digest = await currentDigest(dir);
   try {
@@ -270,7 +271,7 @@ Deno.test("status: image_missing / container_missing / stopped", async () => {
   }
 });
 
-Deno.test("status: a running machine reports its VNC port", async () => {
+test("status: a running machine reports its VNC port", async () => {
   const dir = await containerDir();
   const digest = await currentDigest(dir);
   const { run } = makeRunner(runningMachine(digest));
@@ -285,7 +286,7 @@ Deno.test("status: a running machine reports its VNC port", async () => {
   }
 });
 
-Deno.test("status: a drifted contract is reported as stopped with the reason", async () => {
+test("status: a drifted contract is reported as stopped with the reason", async () => {
   const dir = await containerDir();
   const digest = await currentDigest(dir);
   // A screen of the wrong size: every coordinate the agent reads off a
@@ -318,7 +319,7 @@ Deno.test("status: a drifted contract is reported as stopped with the reason", a
   }
 });
 
-Deno.test("status: desktops numbered otherwise than the server expects are refused", async () => {
+test("status: desktops numbered otherwise than the server expects are refused", async () => {
   const dir = await containerDir();
   const digest = await currentDigest(dir);
   // The helper and the server both write the numbering down; a machine built
@@ -346,7 +347,7 @@ Deno.test("status: desktops numbered otherwise than the server expects are refus
   }
 });
 
-Deno.test("status: a machine without passwordless sudo is refused", async () => {
+test("status: a machine without passwordless sudo is refused", async () => {
   const dir = await containerDir();
   const digest = await currentDigest(dir);
   const { run } = makeRunner({
@@ -378,7 +379,7 @@ Deno.test("status: a machine without passwordless sudo is refused", async () => 
   }
 });
 
-Deno.test("status: a machine whose screen is not up is refused", async () => {
+test("status: a machine whose screen is not up is refused", async () => {
   const dir = await containerDir();
   const digest = await currentDigest(dir);
   // The ordinary failure of a container that has not finished booting: the
@@ -410,7 +411,7 @@ Deno.test("status: a machine whose screen is not up is refused", async () => {
   }
 });
 
-Deno.test("status: a machine without the accessibility bus is refused", async () => {
+test("status: a machine without the accessibility bus is refused", async () => {
   // The semantic tools (vm_find / vm_do / vm_wait) reach the machine's widgets
   // through one bus at a fixed address. A machine whose bus is somewhere else
   // answers every find with "no running application", which reads like a
@@ -444,7 +445,7 @@ Deno.test("status: a machine without the accessibility bus is refused", async ()
   }
 });
 
-Deno.test("status: a machine with accessibility off is refused", async () => {
+test("status: a machine with accessibility off is refused", async () => {
   // An application started while `toolkit-accessibility` was false never
   // appears on the bus, whatever is set afterwards: the whole GUI is invisible
   // to the semantic tools and only the pixel path works. Say so at start-up.
@@ -476,7 +477,7 @@ Deno.test("status: a machine with accessibility off is refused", async () => {
   }
 });
 
-Deno.test("status: a machine whose accessibility helper is missing is refused", async () => {
+test("status: a machine whose accessibility helper is missing is refused", async () => {
   // A helper that cannot run turns every semantic call into an unexplained
   // "the machine did not answer". The probe runs it once with a request that
   // cannot find anything, so success only proves the program runs.
@@ -510,7 +511,7 @@ Deno.test("status: a machine whose accessibility helper is missing is refused", 
   }
 });
 
-Deno.test("status: the accessibility helper is probed with a request that finds nothing", async () => {
+test("status: the accessibility helper is probed with a request that finds nothing", async () => {
   // The probe must not depend on any window existing, and it must not report
   // a healthy bus as broken because a find legitimately matched nothing.
   const dir = await containerDir();
@@ -531,7 +532,7 @@ Deno.test("status: the accessibility helper is probed with a request that finds 
   }
 });
 
-Deno.test("status: an image built from older container files is stale", async () => {
+test("status: an image built from older container files is stale", async () => {
   const dir = await containerDir();
   const { run } = makeRunner(runningMachine("a-digest-from-some-other-build"));
   try {
@@ -543,7 +544,7 @@ Deno.test("status: an image built from older container files is stale", async ()
   }
 });
 
-Deno.test("status: an image without a digest label counts as stale", async () => {
+test("status: an image without a digest label counts as stale", async () => {
   const dir = await containerDir();
   const digest = await currentDigest(dir);
   // An image built before the label existed answers with nothing for it.
@@ -569,7 +570,7 @@ Deno.test("status: an image without a digest label counts as stale", async () =>
   }
 });
 
-Deno.test("container files digest: every file in the directory counts", async () => {
+test("container files digest: every file in the directory counts", async () => {
   const dir = await containerDir();
   try {
     const before = await containerFilesDigest(dir);
@@ -592,7 +593,7 @@ Deno.test("container files digest: every file in the directory counts", async ()
   }
 });
 
-Deno.test("container files digest: a nested file still counts", async () => {
+test("container files digest: a nested file still counts", async () => {
   // The container directory ships as a tree and the digest walks it: a
   // digest that only hashed the top level would keep an image whose files
   // are out of date for the life of the installation.
@@ -613,7 +614,7 @@ Deno.test("container files digest: a nested file still counts", async () => {
   }
 });
 
-Deno.test("status: the answer is cached, and fresh bypasses the cache", async () => {
+test("status: the answer is cached, and fresh bypasses the cache", async () => {
   const dir = await containerDir();
   const digest = await currentDigest(dir);
   const { run, calls } = makeRunner(runningMachine(digest));
@@ -630,7 +631,7 @@ Deno.test("status: the answer is cached, and fresh bypasses the cache", async ()
   }
 });
 
-Deno.test("start: a missing image is built, created, started and verified", async () => {
+test("start: a missing image is built, created, started and verified", async () => {
   const dir = await containerDir();
   const progress: VmProgress[] = [];
   const { run, calls } = makeRunner({
@@ -693,7 +694,7 @@ Deno.test("start: a missing image is built, created, started and verified", asyn
   }
 });
 
-Deno.test("start: a running machine is left alone", async () => {
+test("start: a running machine is left alone", async () => {
   const dir = await containerDir();
   const digest = await currentDigest(dir);
   const { run, calls } = makeRunner(runningMachine(digest));
@@ -714,7 +715,7 @@ Deno.test("start: a running machine is left alone", async () => {
   }
 });
 
-Deno.test("start: a missing image definition fails with its path", async () => {
+test("start: a missing image definition fails with its path", async () => {
   const root = await Deno.makeTempDir({ prefix: "lumisca-vm-" });
   try {
     const { run } = makeRunner({
@@ -734,7 +735,7 @@ Deno.test("start: a missing image definition fails with its path", async () => {
   }
 });
 
-Deno.test("start: a broken container is recreated on the same home volume", async () => {
+test("start: a broken container is recreated on the same home volume", async () => {
   const dir = await containerDir();
   const digest = await currentDigest(dir);
   const { run, calls } = makeRunner({
@@ -803,7 +804,7 @@ Deno.test("start: a broken container is recreated on the same home volume", asyn
   }
 });
 
-Deno.test("start: a machine created without its ceilings is replaced", async () => {
+test("start: a machine created without its ceilings is replaced", async () => {
   const dir = await containerDir();
   const digest = await currentDigest(dir);
   const { run, calls } = makeRunner({
@@ -865,7 +866,7 @@ Deno.test("start: a machine created without its ceilings is replaced", async () 
   }
 });
 
-Deno.test("start: a stale image is rebuilt from the container files", async () => {
+test("start: a stale image is rebuilt from the container files", async () => {
   const dir = await containerDir();
   const { run, calls } = makeRunner({
     answers: [
@@ -919,7 +920,7 @@ Deno.test("start: a stale image is rebuilt from the container files", async () =
   }
 });
 
-Deno.test("start: an image with no container yet needs no home to carry", async () => {
+test("start: an image with no container yet needs no home to carry", async () => {
   const dir = await containerDir();
   const digest = await currentDigest(dir);
   const { run, calls } = makeRunner({
@@ -957,7 +958,7 @@ Deno.test("start: an image with no container yet needs no home to carry", async 
   }
 });
 
-Deno.test("stop: a stopped or absent machine is not an error", async () => {
+test("stop: a stopped or absent machine is not an error", async () => {
   const dir = await containerDir();
   const digest = await currentDigest(dir);
   try {
@@ -994,7 +995,7 @@ Deno.test("stop: a stopped or absent machine is not an error", async () => {
   }
 });
 
-Deno.test("status: the VNC port is null when the machine publishes none", async () => {
+test("status: the VNC port is null when the machine publishes none", async () => {
   const dir = await containerDir();
   const digest = await currentDigest(dir);
   const { run } = makeRunner({
@@ -1018,7 +1019,7 @@ Deno.test("status: the VNC port is null when the machine publishes none", async 
   }
 });
 
-Deno.test("status: the contract is proven once per container instance", async () => {
+test("status: the contract is proven once per container instance", async () => {
   // The client polls the status while it watches stella mode. Re-proving the
   // contract on every read made each poll four `podman exec` spawns; the
   // answer cannot change while the same instance runs, so it is asked once.
@@ -1062,7 +1063,7 @@ Deno.test("status: the contract is proven once per container instance", async ()
   }
 });
 
-Deno.test("status: a machine that is still booting is not remembered as broken", async () => {
+test("status: a machine that is still booting is not remembered as broken", async () => {
   // The ordinary mismatch is a container that has not finished bringing its
   // screen up. Remembering that would report a working machine as broken for
   // as long as the container lived.
@@ -1092,7 +1093,7 @@ Deno.test("status: a machine that is still booting is not remembered as broken",
   }
 });
 
-Deno.test("status: a second fresh read does not ask about the image again", async () => {
+test("status: a second fresh read does not ask about the image again", async () => {
   // The status endpoint polls, and every `podman` call is a round trip the
   // user waits on when the server is reached over a phone. Once an image has
   // been seen, `image exists` is not asked again; the container inspect still
@@ -1118,7 +1119,7 @@ Deno.test("status: a second fresh read does not ask about the image again", asyn
   }
 });
 
-Deno.test("status: concurrent reads share one round of podman calls", async () => {
+test("status: concurrent reads share one round of podman calls", async () => {
   // The status poll, an open and the screen's port lookup can overlap. One
   // read has to serve all of them: a podman spawn per caller multiplies the
   // cost of a page that only wants to know whether the machine is up.
@@ -1142,7 +1143,7 @@ Deno.test("status: concurrent reads share one round of podman calls", async () =
   }
 });
 
-Deno.test("status: podman that cannot start a container is not offered", async () => {
+test("status: podman that cannot start a container is not offered", async () => {
   // Regression: `podman --version` succeeding was taken as "stella mode
   // works here". Inside a sandboxed container podman answers and every start
   // fails at the runtime — the mode was offered, an image build ran for
@@ -1183,7 +1184,7 @@ Deno.test("status: podman that cannot start a container is not offered", async (
   }
 });
 
-Deno.test("the home volume is mounted on every container the machine makes", async () => {
+test("the home volume is mounted on every container the machine makes", async () => {
   // The reason the volume exists: a container is replaced (a release rebuilds
   // it) and can be removed by anything, and the files the agent wrote must
   // not go with it. A container created WITHOUT the mount would start on an
@@ -1249,7 +1250,7 @@ Deno.test("the home volume is mounted on every container the machine makes", asy
   }
 });
 
-Deno.test("an install older than the volume has its home moved onto it", async () => {
+test("an install older than the volume has its home moved onto it", async () => {
   // The container from before the volume keeps its home in its own writable
   // layer. Replacing it without moving the files would start the machine on
   // an empty volume and delete the old container — the files would be gone
@@ -1308,7 +1309,7 @@ Deno.test("an install older than the volume has its home moved onto it", async (
   }
 });
 
-Deno.test("a container already on the volume is not migrated again", async () => {
+test("a container already on the volume is not migrated again", async () => {
   // Every start after the first would otherwise copy the home through a
   // temporary directory, on every release, forever.
   const dir = await containerDir();

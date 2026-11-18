@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { assertEquals, assertThrows } from "@std/assert";
 import { LumiscaCore } from "../mod.ts";
@@ -29,7 +30,7 @@ async function writeModelsFile(content: string): Promise<string> {
   return path;
 }
 
-Deno.test("env vars register the custom provider", () => {
+test("env vars register the custom provider", () => {
   const provider = customProviderFromEnv(
     envOf({
       LUMISCA_BASE_URL: "http://localhost:5002/v1",
@@ -52,12 +53,12 @@ Deno.test("env vars register the custom provider", () => {
   assertEquals(models[0]!.reasoning, false);
 });
 
-Deno.test("env custom provider is absent without LUMISCA_BASE_URL", () => {
+test("env custom provider is absent without LUMISCA_BASE_URL", () => {
   assertEquals(customProviderFromEnv(NO_ENV), undefined);
   assertEquals(loadCustomProviders(NO_ENV).length, 0);
 });
 
-Deno.test("env custom provider requires LUMISCA_MODEL", () => {
+test("env custom provider requires LUMISCA_MODEL", () => {
   assertThrows(
     () => customProviderFromEnv(envOf({ LUMISCA_BASE_URL: "http://x/v1" })),
     Error,
@@ -65,7 +66,7 @@ Deno.test("env custom provider requires LUMISCA_MODEL", () => {
   );
 });
 
-Deno.test("models.json registers multiple providers and models", async () => {
+test("models.json registers multiple providers and models", async () => {
   const path = await writeModelsFile(
     JSON.stringify({
       providers: {
@@ -106,7 +107,7 @@ Deno.test("models.json registers multiple providers and models", async () => {
   await Deno.remove(join(path, ".."), { recursive: true });
 });
 
-Deno.test("models.json apiKey ${ENV} resolves from the environment", async () => {
+test("models.json apiKey ${ENV} resolves from the environment", async () => {
   const path = await writeModelsFile(
     JSON.stringify({
       providers: {
@@ -140,7 +141,7 @@ Deno.test("models.json apiKey ${ENV} resolves from the environment", async () =>
   await Deno.remove(join(path, ".."), { recursive: true });
 });
 
-Deno.test("models.json literal apiKey resolves without env vars", async () => {
+test("models.json literal apiKey resolves without env vars", async () => {
   const path = await writeModelsFile(
     JSON.stringify({
       providers: {
@@ -162,7 +163,7 @@ Deno.test("models.json literal apiKey resolves without env vars", async () => {
   await Deno.remove(join(path, ".."), { recursive: true });
 });
 
-Deno.test("models.json provider headers propagate to every model", async () => {
+test("models.json provider headers propagate to every model", async () => {
   const path = await writeModelsFile(
     JSON.stringify({
       providers: {
@@ -192,7 +193,7 @@ Deno.test("models.json provider headers propagate to every model", async () => {
   await Deno.remove(join(path, ".."), { recursive: true });
 });
 
-Deno.test("models.json without apiKey falls back to LUMISCA_API_KEY_<ID>", async () => {
+test("models.json without apiKey falls back to LUMISCA_API_KEY_<ID>", async () => {
   const path = await writeModelsFile(
     JSON.stringify({
       providers: {
@@ -219,7 +220,7 @@ Deno.test("models.json without apiKey falls back to LUMISCA_API_KEY_<ID>", async
   await Deno.remove(join(path, ".."), { recursive: true });
 });
 
-Deno.test("models.json without baseUrl throws", async () => {
+test("models.json without baseUrl throws", async () => {
   const path = await writeModelsFile(
     JSON.stringify({
       providers: { custom: { models: [{ id: "m" }] } },
@@ -233,7 +234,7 @@ Deno.test("models.json without baseUrl throws", async () => {
   await Deno.remove(join(path, ".."), { recursive: true });
 });
 
-Deno.test("models.json with unsupported api throws", async () => {
+test("models.json with unsupported api throws", async () => {
   const path = await writeModelsFile(
     JSON.stringify({
       providers: {
@@ -252,7 +253,7 @@ Deno.test("models.json with unsupported api throws", async () => {
   await Deno.remove(join(path, ".."), { recursive: true });
 });
 
-Deno.test("models.json invalid shape and missing file throw", async () => {
+test("models.json invalid shape and missing file throw", async () => {
   const path = await writeModelsFile('{"notProviders": {}}');
   assertThrows(
     () => customProvidersFromModelsFile(envOf({ LUMISCA_MODELS_FILE: path })),
@@ -271,7 +272,7 @@ Deno.test("models.json invalid shape and missing file throw", async () => {
   );
 });
 
-Deno.test("env provider wins id collisions with models.json", async () => {
+test("env provider wins id collisions with models.json", async () => {
   const path = await writeModelsFile(
     JSON.stringify({
       providers: {
@@ -311,7 +312,7 @@ Deno.test("env provider wins id collisions with models.json", async () => {
   await Deno.remove(join(path, ".."), { recursive: true });
 });
 
-Deno.test("LumiscaCore.open registers the custom provider from env", async () => {
+test("LumiscaCore.open registers the custom provider from env", async () => {
   const dir = await Deno.makeTempDir({ prefix: "lumisca-custom-" });
   const dbPath = join(dir, "test.db");
   const settingsPath = join(dir, "settings.jsonc");
@@ -345,7 +346,7 @@ Deno.test("LumiscaCore.open registers the custom provider from env", async () =>
   await removeDirRetry(dir);
 });
 
-Deno.test("a models.json entry may declare the input cap it publishes", async () => {
+test("a models.json entry may declare the input cap it publishes", async () => {
   // models.dev publishes limit.input separately from limit.context; a
   // provider rejects a prompt past the smaller number, so the app's budgets
   // must be able to see it. models.json could express neither before.

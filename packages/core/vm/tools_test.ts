@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { loadImage } from "@napi-rs/canvas";
 import { assert, assertEquals } from "@std/assert";
 import { base64ToBytes } from "../base64.ts";
@@ -43,7 +44,7 @@ function exec(
 
 // --- skills ----------------------------------------------------------------
 
-Deno.test("vm skills: a skill's frontmatter name must match its directory", async () => {
+test("vm skills: a skill's frontmatter name must match its directory", async () => {
   const { run } = exec([
     {
       match: /^sh -c cd/,
@@ -76,7 +77,7 @@ Deno.test("vm skills: a skill's frontmatter name must match its directory", asyn
   assertEquals(alpha.dir, `${VM_SKILLS_DIR}/alpha`);
 });
 
-Deno.test("vm skills: reading a skill goes through the exec seam", async () => {
+test("vm skills: reading a skill goes through the exec seam", async () => {
   const { run, calls } = exec([
     {
       match: /^sh -c cd/,
@@ -96,7 +97,7 @@ Deno.test("vm skills: reading a skill goes through the exec seam", async () => {
   );
 });
 
-Deno.test("vm skills: a follow-up path escaping the skill directory is refused", async () => {
+test("vm skills: a follow-up path escaping the skill directory is refused", async () => {
   const { run } = exec([
     {
       match: /^sh -c cd/,
@@ -114,7 +115,7 @@ Deno.test("vm skills: a follow-up path escaping the skill directory is refused",
   assert(message.includes("escapes"), message);
 });
 
-Deno.test("vm skills: a missing skills directory yields an empty catalog", async () => {
+test("vm skills: a missing skills directory yields an empty catalog", async () => {
   const { run } = exec([{ match: /^sh -c cd/, exitCode: 0, stdout: "" }]);
   assertEquals(await scanVmSkillsDir(run, VM_SKILLS_DIR), []);
 });
@@ -150,7 +151,7 @@ const enclosing = (
   return { tools: createVmTools({ screen }), screen, calls: scripted.calls };
 };
 
-Deno.test("vm tools: the screenshot reports the 1:1 coordinate contract", async () => {
+test("vm tools: the screenshot reports the 1:1 coordinate contract", async () => {
   const { tools } = enclosing({ bytes: "\x89PNG" });
   const [screenshot] = tools;
   assert(screenshot !== undefined);
@@ -168,7 +169,7 @@ Deno.test("vm tools: the screenshot reports the 1:1 coordinate contract", async 
   );
 });
 
-Deno.test("vm tools: the stored screenshot keeps its shape and names the screen", async () => {
+test("vm tools: the stored screenshot keeps its shape and names the screen", async () => {
   const png = await noisyPng(VM_SCREEN_WIDTH, VM_SCREEN_HEIGHT);
   const { tools } = enclosing({ bytes: png });
   const screenshot = tools[0];
@@ -205,7 +206,7 @@ Deno.test("vm tools: the stored screenshot keeps its shape and names the screen"
   });
 });
 
-Deno.test("vm tools: a shrunk copy states the screen-to-image factor", async () => {
+test("vm tools: a shrunk copy states the screen-to-image factor", async () => {
   // The store shrinks a capture over its byte budget. The VM screen is
   // 1280x800 today, so this hands the tool a bigger frame to exercise the
   // branch that has to explain the ratio.
@@ -229,7 +230,7 @@ Deno.test("vm tools: a shrunk copy states the screen-to-image factor", async () 
   );
 });
 
-Deno.test("vm tools: a position outside the screen fails instead of clamping", async () => {
+test("vm tools: a position outside the screen fails instead of clamping", async () => {
   const { tools } = enclosing();
   const act = tools[1];
   assert(act !== undefined);
@@ -246,7 +247,7 @@ Deno.test("vm tools: a position outside the screen fails instead of clamping", a
   assert(message.includes("outside the screen"), message);
 });
 
-Deno.test("vm tools: act builds the xdotool call for each action", async () => {
+test("vm tools: act builds the xdotool call for each action", async () => {
   const { tools, calls } = enclosing();
   const act = tools[1];
   assert(act !== undefined);
@@ -270,7 +271,7 @@ Deno.test("vm tools: act builds the xdotool call for each action", async () => {
   );
 });
 
-Deno.test("vm tools: scroll needs an amount", async () => {
+test("vm tools: scroll needs an amount", async () => {
   const { tools } = enclosing();
   const act = tools[1];
   assert(act !== undefined);
@@ -283,7 +284,7 @@ Deno.test("vm tools: scroll needs an amount", async () => {
   assert(message.includes("vertical or horizontal"), message);
 });
 
-Deno.test("vm tools: an unknown action names the valid ones", async () => {
+test("vm tools: an unknown action names the valid ones", async () => {
   const { tools } = enclosing();
   const act = tools[1];
   assert(act !== undefined);
@@ -296,7 +297,7 @@ Deno.test("vm tools: an unknown action names the valid ones", async () => {
   assert(message.includes("move, click, drag"), message);
 });
 
-Deno.test("vm tools: click carries the button and count", async () => {
+test("vm tools: click carries the button and count", async () => {
   const { tools, calls } = enclosing();
   const act = tools[1];
   assert(act !== undefined);
@@ -309,7 +310,7 @@ Deno.test("vm tools: click carries the button and count", async () => {
   assert(joined.includes("click --repeat 2 right"), joined);
 });
 
-Deno.test("vm tools: a positive scroll amount scrolls DOWN", async () => {
+test("vm tools: a positive scroll amount scrolls DOWN", async () => {
   // X11's wheel buttons name the direction the wheel rolls: 4 is up, 5 is
   // down. The tool's schema says "positive scrolls down", so a positive
   // amount must send button 5 — the opposite of the number, which is exactly
@@ -339,7 +340,7 @@ Deno.test("vm tools: a positive scroll amount scrolls DOWN", async () => {
   );
 });
 
-Deno.test("vm tools: a positive horizontal amount scrolls RIGHT", async () => {
+test("vm tools: a positive horizontal amount scrolls RIGHT", async () => {
   const { tools, calls } = enclosing();
   const act = tools[1];
   assert(act !== undefined);
@@ -360,7 +361,7 @@ Deno.test("vm tools: a positive horizontal amount scrolls RIGHT", async () => {
   assert(left !== undefined && left.endsWith(" 6"), `left sent: ${left}`);
 });
 
-Deno.test("vm tools: one scroll amount is one notch, capped at 20", async () => {
+test("vm tools: one scroll amount is one notch, capped at 20", async () => {
   // The unit is documented (VM_SCROLL_NOTCH per notch) and the cap keeps a
   // stray large amount from spinning a list for minutes.
   assertEquals(scrollNotches({ vertical: 100, horizontal: 0 }), 1);

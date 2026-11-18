@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { LumiscaDb } from "./mod.ts";
 import {
@@ -8,7 +9,7 @@ import {
   SCHEMA_VERSION,
 } from "./schema.ts";
 
-Deno.test("migrate brings an empty database to the newest user_version", () => {
+test("migrate brings an empty database to the newest user_version", () => {
   const db = LumiscaDb.openInMemory();
   try {
     const [current] = db.db
@@ -20,7 +21,7 @@ Deno.test("migrate brings an empty database to the newest user_version", () => {
   }
 });
 
-Deno.test("migrate adds the session workspace index", () => {
+test("migrate adds the session workspace index", () => {
   const db = LumiscaDb.openInMemory();
   try {
     const rows = db.db
@@ -78,7 +79,7 @@ function storedUsages(
   });
 }
 
-Deno.test("migrate turns a double-counted prompt into its uncached part", () => {
+test("migrate turns a double-counted prompt into its uncached part", () => {
   const db = LumiscaDb.openInMemory();
   try {
     insertAssistantRows(db, [
@@ -127,7 +128,7 @@ Deno.test("migrate turns a double-counted prompt into its uncached part", () => 
   }
 });
 
-Deno.test("migrate leaves rows that already report an uncached prompt alone", () => {
+test("migrate leaves rows that already report an uncached prompt alone", () => {
   const db = LumiscaDb.openInMemory();
   try {
     insertAssistantRows(db, [
@@ -161,7 +162,7 @@ Deno.test("migrate leaves rows that already report an uncached prompt alone", ()
   }
 });
 
-Deno.test("a failing migration rolls back together with its stamp", () => {
+test("a failing migration rolls back together with its stamp", () => {
   // A killed process between an ALTER and its stamp used to leave a column
   // without the version, and the retried migration then failed with
   // `duplicate column name` — the database could never be opened again.
@@ -219,7 +220,7 @@ Deno.test("a failing migration rolls back together with its stamp", () => {
  * change what this test is about. */
 const PRE_ONBOARDING_VERSION = 18;
 
-Deno.test("migrate stamps existing agents as already set up", () => {
+test("migrate stamps existing agents as already set up", () => {
   const db = new Database(":memory:");
   try {
     // A database from before the setup turn: every row it holds belongs to
@@ -267,7 +268,7 @@ function insertMessages(db: Database, sessionId: string, ids: string[]): void {
   }
 }
 
-Deno.test("migrate rebuilds sessions: one column per fact, children kept", () => {
+test("migrate rebuilds sessions: one column per fact, children kept", () => {
   const db = new Database(":memory:");
   try {
     applyMigrations(db, MIGRATIONS.slice(0, PRE_SESSION_REBUILD_VERSION));
@@ -362,7 +363,7 @@ Deno.test("migrate rebuilds sessions: one column per fact, children kept", () =>
   }
 });
 
-Deno.test("a migration that would commit a dangling reference is refused", () => {
+test("a migration that would commit a dangling reference is refused", () => {
   // Migrations run with foreign keys off (a table rebuild needs that), so
   // the check before the commit is what keeps "a migration cannot land a
   // broken reference" true.

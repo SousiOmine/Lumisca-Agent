@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { removeDirRetry } from "@lumisca/core/test-utils";
 import { assertEquals, assertRejects } from "@std/assert";
 import { ArchiveError, extractArchive, packageEntryPath } from "./archive.ts";
@@ -24,7 +25,7 @@ async function writeArchive(
   return path;
 }
 
-Deno.test("packageEntryPath keeps the package layout and refuses the rest", () => {
+test("packageEntryPath keeps the package layout and refuses the rest", () => {
   assertEquals(
     packageEntryPath(`${WINDOWS_PREFIX}/lumisca-server.exe`),
     "lumisca-server.exe",
@@ -76,7 +77,7 @@ Deno.test("packageEntryPath keeps the package layout and refuses the rest", () =
   }
 });
 
-Deno.test("zip: deflated and stored entries extract with their content", async () => {
+test("zip: deflated and stored entries extract with their content", async () => {
   const archive = await writeArchive(
     await buildZip([
       { name: `${WINDOWS_PREFIX}/assets.json`, content: "{}" },
@@ -102,7 +103,7 @@ Deno.test("zip: deflated and stored entries extract with their content", async (
   }
 });
 
-Deno.test("zip: the stella container directory extracts under its own name", async () => {
+test("zip: the stella container directory extracts under its own name", async () => {
   const archive = await writeArchive(
     await buildZip([
       { name: `${LINUX_PREFIX}/lumisca-server`, content: "bin" },
@@ -139,7 +140,7 @@ Deno.test("zip: the stella container directory extracts under its own name", asy
   }
 });
 
-Deno.test("tar.gz: entries extract with their content and mode", async () => {
+test("tar.gz: entries extract with their content and mode", async () => {
   const archive = await writeArchive(
     await buildTarGz([
       { name: `${LINUX_PREFIX}/lumisca-server`, content: "bin" },
@@ -163,7 +164,7 @@ Deno.test("tar.gz: entries extract with their content and mode", async () => {
   }
 });
 
-Deno.test("zip: a truncated archive fails instead of writing a half file", async () => {
+test("zip: a truncated archive fails instead of writing a half file", async () => {
   const bytes = await buildZip([
     { name: `${WINDOWS_PREFIX}/assets.json`, content: "{}" },
   ]);
@@ -184,7 +185,7 @@ Deno.test("zip: a truncated archive fails instead of writing a half file", async
   }
 });
 
-Deno.test("zip: unsafe paths and duplicate names are refused", async () => {
+test("zip: unsafe paths and duplicate names are refused", async () => {
   const escaping = await writeArchive(
     await buildZip([{ name: "../evil.txt", content: "x" }]),
     "escape.zip",
@@ -222,7 +223,7 @@ Deno.test("zip: unsafe paths and duplicate names are refused", async () => {
   }
 });
 
-Deno.test("tar.gz: a symlink entry is refused, not followed", async () => {
+test("tar.gz: a symlink entry is refused, not followed", async () => {
   const blocks: Uint8Array<ArrayBuffer>[] = [
     ustarHeader(`${LINUX_PREFIX}/link`, 0, "2"),
     new Uint8Array(1024),
@@ -255,7 +256,7 @@ Deno.test("tar.gz: a symlink entry is refused, not followed", async () => {
   }
 });
 
-Deno.test("tar.gz: metadata entries are skipped, long names are refused", async () => {
+test("tar.gz: metadata entries are skipped, long names are refused", async () => {
   const encoder = new TextEncoder();
   const buildTar = (
     blocks: Uint8Array<ArrayBuffer>[],

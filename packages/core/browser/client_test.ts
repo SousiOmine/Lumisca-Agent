@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertMatch } from "@std/assert";
 import { unusedPort } from "../test-utils.ts";
 import { HttpBrowserBackend } from "./client.ts";
@@ -131,7 +132,7 @@ function rpcFailure(id: number, code: string, message: string): string {
   return JSON.stringify({ id, ok: false, error: { code, message } });
 }
 
-Deno.test("HttpBrowserBackend round-trips open/observe with the token", async () => {
+test("HttpBrowserBackend round-trips open/observe with the token", async () => {
   const host = new MockHost();
   await host.start("tok123");
   try {
@@ -161,7 +162,7 @@ Deno.test("HttpBrowserBackend round-trips open/observe with the token", async ()
   }
 });
 
-Deno.test("RPC failures map to BrowserBackendError with the host's code", async () => {
+test("RPC failures map to BrowserBackendError with the host's code", async () => {
   const host = new MockHost();
   await host.start("t");
   try {
@@ -183,7 +184,7 @@ Deno.test("RPC failures map to BrowserBackendError with the host's code", async 
   }
 });
 
-Deno.test("auth failures and HTTP errors surface distinctly", async () => {
+test("auth failures and HTTP errors surface distinctly", async () => {
   const host = new MockHost();
   await host.start("t");
   try {
@@ -204,7 +205,7 @@ Deno.test("auth failures and HTTP errors surface distinctly", async () => {
   }
 });
 
-Deno.test("malformed replies are explicit errors, not silent values", async () => {
+test("malformed replies are explicit errors, not silent values", async () => {
   const host = new MockHost();
   await host.start("t");
   try {
@@ -220,7 +221,7 @@ Deno.test("malformed replies are explicit errors, not silent values", async () =
   }
 });
 
-Deno.test("connect-refused hosts produce transport_refused", async () => {
+test("connect-refused hosts produce transport_refused", async () => {
   // A number nothing listens on, and that nothing else can be handed while
   // the connection is attempted: the connection has to be refused.
   const port = unusedPort();
@@ -232,7 +233,7 @@ Deno.test("connect-refused hosts produce transport_refused", async () => {
   await expectCode(() => backend.observe(), TRANSPORT_REFUSED);
 });
 
-Deno.test("abort settles the call with transport_aborted", async () => {
+test("abort settles the call with transport_aborted", async () => {
   const host = new MockHost();
   await host.start("t");
   let release: () => void = () => {};
@@ -263,7 +264,7 @@ Deno.test("abort settles the call with transport_aborted", async () => {
   }
 });
 
-Deno.test("oversized replies are refused with too_large", async () => {
+test("oversized replies are refused with too_large", async () => {
   const host = new MockHost();
   await host.start("t");
   try {
@@ -276,7 +277,7 @@ Deno.test("oversized replies are refused with too_large", async () => {
   }
 });
 
-Deno.test("close treats a dead host as already closed (idempotent)", async () => {
+test("close treats a dead host as already closed (idempotent)", async () => {
   const host = new MockHost();
   await host.start("t");
   const url = host.url;
@@ -285,7 +286,7 @@ Deno.test("close treats a dead host as already closed (idempotent)", async () =>
   await backend.close(); // must not throw
 });
 
-Deno.test("the endpoint must be loopback (security)", () => {
+test("the endpoint must be loopback (security)", () => {
   let message = "";
   try {
     new HttpBrowserBackend({ url: "http://10.0.0.1:9000", token: "t" });
@@ -307,7 +308,7 @@ Deno.test("the endpoint must be loopback (security)", () => {
   assert(httpsBackend instanceof HttpBrowserBackend);
 });
 
-Deno.test("screenshot results pass through as data", async () => {
+test("screenshot results pass through as data", async () => {
   const host = new MockHost();
   await host.start("t");
   try {

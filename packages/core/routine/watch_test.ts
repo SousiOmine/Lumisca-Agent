@@ -2,6 +2,7 @@
  * The `watch` schedule: what it accepts, what it stores, and what it counts
  * as a change.
  */
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import {
   MIN_WATCH_MINUTES,
@@ -24,7 +25,7 @@ function watch(
   return { kind: "watch", everyMinutes, source };
 }
 
-Deno.test("watch: an http watch is accepted and read back", () => {
+test("watch: an http watch is accepted and read back", () => {
   const schedule = watch({
     kind: "http",
     url: "https://example.com/deploy",
@@ -34,7 +35,7 @@ Deno.test("watch: an http watch is accepted and read back", () => {
   assertEquals(parseSchedule(schedule), schedule);
 });
 
-Deno.test("watch: every source shape is accepted", () => {
+test("watch: every source shape is accepted", () => {
   for (const source of [
     { kind: "http", url: "https://example.com", expect: { hash: true } },
     { kind: "file", path: "out/report.md", compare: "hash" },
@@ -44,7 +45,7 @@ Deno.test("watch: every source shape is accepted", () => {
   }
 });
 
-Deno.test("watch: a bad interval, url, compare or expect is refused", () => {
+test("watch: a bad interval, url, compare or expect is refused", () => {
   // Each message names what to fix, because the model wrote the value.
   assert(
     scheduleProblem(
@@ -69,7 +70,7 @@ Deno.test("watch: a bad interval, url, compare or expect is refused", () => {
   );
 });
 
-Deno.test("watch: a field the checker does not read is refused", () => {
+test("watch: a field the checker does not read is refused", () => {
   // A rule the user wrote and the server ignored would be worse than an
   // error: the routine would look like it watched something it does not.
   const problem = scheduleProblem(
@@ -83,7 +84,7 @@ Deno.test("watch: a field the checker does not read is refused", () => {
   assert(problem.includes("expect.contains"));
 });
 
-Deno.test("watch: nextRunAt is the check cadence", () => {
+test("watch: nextRunAt is the check cadence", () => {
   const from = 1_000_000;
   assertEquals(
     nextRunAt(watch({ kind: "file", path: "a", compare: "mtime" }, 10), from),
@@ -110,7 +111,7 @@ const deps = (runner: CommandRunner) => ({
   machine: { runner, workdir: "/home/agent/agents/a1" },
 });
 
-Deno.test("runWatch: the first check is a baseline, never a change", async () => {
+test("runWatch: the first check is a baseline, never a change", async () => {
   // Nothing has been compared yet, so nothing can differ. Firing here would
   // run the routine the moment it was saved.
   const runner = runnerOf([{ stdout: "1700000000\n" }]);
@@ -123,7 +124,7 @@ Deno.test("runWatch: the first check is a baseline, never a change", async () =>
   assert(outcome.state !== null);
 });
 
-Deno.test("runWatch: a file whose timestamp moved is a change", async () => {
+test("runWatch: a file whose timestamp moved is a change", async () => {
   const runner = runnerOf([
     { stdout: "1700000000\n" },
     { stdout: "1700000100\n" },
@@ -134,7 +135,7 @@ Deno.test("runWatch: a file whose timestamp moved is a change", async () => {
   assertEquals(second.changed, true);
 });
 
-Deno.test("runWatch: a command that fails the check is the change", async () => {
+test("runWatch: a command that fails the check is the change", async () => {
   const runner = runnerOf([{ exitCode: 0 }, { exitCode: 1 }]);
   const source = {
     kind: "command",
@@ -146,7 +147,7 @@ Deno.test("runWatch: a command that fails the check is the change", async () => 
   assertEquals(second.changed, true);
 });
 
-Deno.test("runWatch: an http watch compares only what it names", async () => {
+test("runWatch: an http watch compares only what it names", async () => {
   // A status watch must not fire because the page's words changed.
   let status = 200;
   let body = "one";
@@ -175,7 +176,7 @@ Deno.test("runWatch: an http watch compares only what it names", async () => {
   assertEquals(fired.changed, true);
 });
 
-Deno.test("runWatch: an unreachable address is a problem, not a change", async () => {
+test("runWatch: an unreachable address is a problem, not a change", async () => {
   // A machine offline or a site down must not fire the routine: there was
   // nothing to compare.
   const fake = (() =>
@@ -190,7 +191,7 @@ Deno.test("runWatch: an unreachable address is a problem, not a change", async (
   assert(outcome.problem !== undefined);
 });
 
-Deno.test("parseWatchState: an unreadable state reads as no state", () => {
+test("parseWatchState: an unreadable state reads as no state", () => {
   // The next check must then be a baseline: an unreadable comparison must
   // not fire a run.
   assertEquals(parseWatchState(undefined), undefined);
@@ -260,7 +261,7 @@ function curlingRunner(
   };
 }
 
-Deno.test("machineWatchFetch: the request goes out from the machine", async () => {
+test("machineWatchFetch: the request goes out from the machine", async () => {
   // The whole point of #32: curl runs in the agent's folder, so the address
   // is one that machine can reach.
   const store = new Map<string, string>();
@@ -280,7 +281,7 @@ Deno.test("machineWatchFetch: the request goes out from the machine", async () =
   assertEquals(store.size, 0, "the body file is removed");
 });
 
-Deno.test("machineWatchFetch: the body is read through the file backend", async () => {
+test("machineWatchFetch: the body is read through the file backend", async () => {
   const store = new Map<string, string>();
   const reads: number[] = [];
   const runner = curlingRunner(store, { body: "hello" });
@@ -295,7 +296,7 @@ Deno.test("machineWatchFetch: the body is read through the file backend", async 
   assert(reads[0]! >= 5_000_000);
 });
 
-Deno.test("machineWatchFetch: an HTTP error is an observation", async () => {
+test("machineWatchFetch: an HTTP error is an observation", async () => {
   // A watch on "the status is 200" must fire when the server starts
   // answering 500, so a failing status is not a transport failure.
   const store = new Map<string, string>();
@@ -316,7 +317,7 @@ Deno.test("machineWatchFetch: an HTTP error is an observation", async () => {
   assertEquals(await empty.text(), "");
 });
 
-Deno.test("machineWatchFetch: a transport failure throws and cleans up", async () => {
+test("machineWatchFetch: a transport failure throws and cleans up", async () => {
   const store = new Map<string, string>();
   const runner = curlingRunner(store, {
     exitCode: 6,
@@ -337,7 +338,7 @@ Deno.test("machineWatchFetch: a transport failure throws and cleans up", async (
   assertEquals(store.size, 0, "the body file is removed on failure too");
 });
 
-Deno.test("runWatch: an http check through the machine fetch compares like any other", async () => {
+test("runWatch: an http check through the machine fetch compares like any other", async () => {
   // The fetch is a seam, so the check's own decisions must not depend on
   // which side of it the request runs: the baseline and the change are the
   // same.
@@ -391,12 +392,9 @@ Deno.test("runWatch: an http check through the machine fetch compares like any o
  * the tool-output directory the fetch writes into does not exist. That is
  * the state of a machine nobody has filled the terminal of, and it is the
  * ordinary first check of an http watch. */
-Deno.test({
-  name: "machineWatchFetch: works before any tool has spilled an output",
-  // Real curl and a real shell: the fake runner above writes the body
-  // itself and cannot see that a directory is missing.
-  ignore: Deno.build.os === "windows",
-  fn: async () => {
+test.skipIf(Deno.build.os === "windows")(
+  "machineWatchFetch: works before any tool has spilled an output",
+  async () => {
     const root = await Deno.makeTempDir({ prefix: "lumisca-watch-" });
     const server = Deno.serve(
       { port: 0, onListen: () => {} },
@@ -422,4 +420,4 @@ Deno.test({
       await Deno.remove(root, { recursive: true });
     }
   },
-});
+);

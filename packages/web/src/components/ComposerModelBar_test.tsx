@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -20,12 +21,12 @@ function render(model: { provider: string; modelId: string } | null): string {
   );
 }
 
-Deno.test("ComposerModelBar names the model in the switch", () => {
+test("ComposerModelBar names the model in the switch", () => {
   const html = render({ provider: "openai", modelId: "gpt-5" });
   assertStringIncludes(html, "openai/gpt-5");
 });
 
-Deno.test("ComposerModelBar's switch carries no live indicator", () => {
+test("ComposerModelBar's switch carries no live indicator", () => {
   // The pulsing dot belongs to the tab of a running session; a decorative
   // copy here pulsed on a row that is never "working".
   const html = render({ provider: "openai", modelId: "gpt-5" });

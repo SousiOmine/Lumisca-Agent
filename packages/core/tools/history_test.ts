@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import { stellaEntryOf } from "../agent/stella-stream.ts";
 import type { AgentMessage } from "../ai/message.ts";
@@ -67,7 +68,7 @@ function localDay(day: string, hour = 12): number {
   return new Date(year!, month! - 1, date!, hour).getTime();
 }
 
-Deno.test("history_search: the tool is the preloaded one", () => {
+test("history_search: the tool is the preloaded one", () => {
   const { db, tool } = setup();
   try {
     assertEquals(tool.name, TOOL_HISTORY_SEARCH);
@@ -77,7 +78,7 @@ Deno.test("history_search: the tool is the preloaded one", () => {
   }
 });
 
-Deno.test("history_search: every word must appear, in any order and case", async () => {
+test("history_search: every word must appear, in any order and case", async () => {
   const { db, repo, tool } = setup();
   try {
     say(repo, "Deploy the RUST service to staging", localDay("2026-10-01"));
@@ -103,7 +104,7 @@ Deno.test("history_search: every word must appear, in any order and case", async
   }
 });
 
-Deno.test("history_search: terms are literal, not regular expressions", async () => {
+test("history_search: terms are literal, not regular expressions", async () => {
   const { db, repo, tool } = setup();
   try {
     say(repo, "Price is $5 (tax included)", localDay("2026-10-01"));
@@ -120,7 +121,7 @@ Deno.test("history_search: terms are literal, not regular expressions", async ()
   }
 });
 
-Deno.test("history_search: no query lists the period, newest last", async () => {
+test("history_search: no query lists the period, newest last", async () => {
   const { db, repo, tool } = setup();
   try {
     say(repo, "first", localDay("2026-10-01", 9));
@@ -144,7 +145,7 @@ Deno.test("history_search: no query lists the period, newest last", async () => 
   }
 });
 
-Deno.test("history_search: the newest matches fill the limit, shown in order", async () => {
+test("history_search: the newest matches fill the limit, shown in order", async () => {
   const { db, repo, tool } = setup();
   try {
     for (let i = 1; i <= 5; i++) {
@@ -163,7 +164,7 @@ Deno.test("history_search: the newest matches fill the limit, shown in order", a
   }
 });
 
-Deno.test("history_search: arguments are checked, not clamped", () => {
+test("history_search: arguments are checked, not clamped", () => {
   const { db, tool } = setup();
   try {
     assertThrows(
@@ -198,7 +199,7 @@ Deno.test("history_search: arguments are checked, not clamped", () => {
   }
 });
 
-Deno.test("history_search: the same day at both ends is allowed", async () => {
+test("history_search: the same day at both ends is allowed", async () => {
   const { db, repo, tool } = setup();
   try {
     say(repo, "same day", localDay("2026-10-01", 23));
@@ -209,7 +210,7 @@ Deno.test("history_search: the same day at both ends is allowed", async () => {
   }
 });
 
-Deno.test("history_search: tool calls and their output are not history", async () => {
+test("history_search: tool calls and their output are not history", async () => {
   const { db, repo, tool } = setup();
   try {
     repo.append("s1", {
@@ -259,7 +260,7 @@ Deno.test("history_search: tool calls and their output are not history", async (
   }
 });
 
-Deno.test("history_search: an empty conversation says so, with a next step", async () => {
+test("history_search: an empty conversation says so, with a next step", async () => {
   const { db, tool } = setup();
   try {
     const empty = await run(tool);
@@ -273,7 +274,7 @@ Deno.test("history_search: an empty conversation says so, with a next step", asy
   }
 });
 
-Deno.test("history_search: its own earlier results are not history", async () => {
+test("history_search: its own earlier results are not history", async () => {
   const { db, repo, tool } = setup();
   try {
     say(repo, "The code word is pelican", localDay("2026-10-01"));
@@ -305,7 +306,7 @@ Deno.test("history_search: its own earlier results are not history", async () =>
   }
 });
 
-Deno.test("history_search: a picture-only prompt is a turn, not a hole", async () => {
+test("history_search: a picture-only prompt is a turn, not a hole", async () => {
   const { db, repo, tool } = setup();
   try {
     // A picture is a file the prompt brought into the machine, not a block in
@@ -332,7 +333,7 @@ Deno.test("history_search: a picture-only prompt is a turn, not a hole", async (
   }
 });
 
-Deno.test("history_search: what the agent sent is part of the conversation", async () => {
+test("history_search: what the agent sent is part of the conversation", async () => {
   const { db, repo, tool } = setup();
   try {
     say(repo, "send me the report", localDay("2026-10-01", 10));

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -45,7 +46,7 @@ function draw(
   );
 }
 
-Deno.test("ComposerPopover: the row class follows the popover's own class", () => {
+test("ComposerPopover: the row class follows the popover's own class", () => {
   const mention = draw();
   assertStringIncludes(mention, 'class="mention-popover"');
   // Row 0 is active by default, so the class carries the state suffix.
@@ -60,14 +61,14 @@ Deno.test("ComposerPopover: the row class follows the popover's own class", () =
   assertStringIncludes(slash, 'class="slash-item active"');
 });
 
-Deno.test("ComposerPopover: an upward placement appends its class", () => {
+test("ComposerPopover: an upward placement appends its class", () => {
   assertStringIncludes(
     draw({ placementClass: "below" }),
     'class="mention-popover below"',
   );
 });
 
-Deno.test("ComposerPopover: the active row is the only one marked", () => {
+test("ComposerPopover: the active row is the only one marked", () => {
   const html = draw({
     items: [
       { id: "a", label: "A" },
@@ -79,7 +80,7 @@ Deno.test("ComposerPopover: the active row is the only one marked", () => {
   assertStringIncludes(html, 'class="mention-item active">B');
 });
 
-Deno.test("ComposerPopover: no rows draws the empty state instead", () => {
+test("ComposerPopover: no rows draws the empty state instead", () => {
   const html = draw({ items: [] });
   assertStringIncludes(html, 'class="empty-status"');
   assertStringIncludes(html, "none");
@@ -87,7 +88,7 @@ Deno.test("ComposerPopover: no rows draws the empty state instead", () => {
   assertEqualsNoItem(html);
 });
 
-Deno.test("ComposerPopover: a click-commit row binds no click on mousedown-only menus", () => {
+test("ComposerPopover: a click-commit row binds no click on mousedown-only menus", () => {
   // The difference is behavioural (the rendered attribute list is the same
   // shape either way), so this pins the decision's documentation boundary:
   // both menus keep the focus by preventing the mousedown default.

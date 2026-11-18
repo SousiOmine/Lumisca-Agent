@@ -6,20 +6,21 @@
  * main mode (Lumisca) rather than at any choice screen, and a client that has
  * chosen before starts where it left off.
  */
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { MAIN_MODE, startModeOf } from "./useAppMode.ts";
 
-Deno.test("startModeOf: a client that never chose starts in the main mode", () => {
+test("startModeOf: a client that never chose starts in the main mode", () => {
   assertEquals(MAIN_MODE, "stella");
   assertEquals(startModeOf(null), "stella");
 });
 
-Deno.test("startModeOf: a stored mode is the answer", () => {
+test("startModeOf: a stored mode is the answer", () => {
   assertEquals(startModeOf("stella"), "stella");
   assertEquals(startModeOf("code"), "code");
 });
 
-Deno.test("startModeOf: an unknown value is the same as no choice", () => {
+test("startModeOf: an unknown value is the same as no choice", () => {
   // An older spelling, a hand-edited entry, or a value a later version adds:
   // none of them may leave the reader without a screen.
   assertEquals(startModeOf(""), "stella");

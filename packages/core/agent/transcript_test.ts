@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import type { AgentMessage } from "../ai/message.ts";
 
@@ -40,7 +41,7 @@ function checkpoint(text: string, timestamp: number): AgentMessage {
   } as AgentMessage;
 }
 
-Deno.test("transcript store: a view loaded from the middle knows where it is", () => {
+test("transcript store: a view loaded from the middle knows where it is", () => {
   const { db, repo } = setup(5);
   try {
     repo.append("s1", checkpoint("summary", 6));
@@ -53,7 +54,7 @@ Deno.test("transcript store: a view loaded from the middle knows where it is", (
   }
 });
 
-Deno.test("transcript store: an append writes only what is missing", () => {
+test("transcript store: an append writes only what is missing", () => {
   const { db, repo } = setup(5);
   try {
     // The view begins at position 2 and holds the 3 rows after it; anything
@@ -74,7 +75,7 @@ Deno.test("transcript store: an append writes only what is missing", () => {
   }
 });
 
-Deno.test("transcript store: an insert translates the view position", () => {
+test("transcript store: an insert translates the view position", () => {
   const { db, repo } = setup(5);
   try {
     // The view begins at position 2; inserting at view position 1 must land
@@ -88,7 +89,7 @@ Deno.test("transcript store: an insert translates the view position", () => {
   }
 });
 
-Deno.test("transcript store: an insertion at the end is counted, not written twice", () => {
+test("transcript store: an insertion at the end is counted, not written twice", () => {
   const { db, repo } = setup(3);
   try {
     // The idle compaction appends its checkpoint after the last message: the
@@ -111,7 +112,7 @@ Deno.test("transcript store: an insertion at the end is counted, not written twi
   }
 });
 
-Deno.test("transcript store: a rewind beyond the view re-reads it", () => {
+test("transcript store: a rewind beyond the view re-reads it", () => {
   const { db, repo } = setup(5);
   try {
     repo.append("s1", checkpoint("summary", 6));
@@ -136,7 +137,7 @@ Deno.test("transcript store: a rewind beyond the view re-reads it", () => {
   }
 });
 
-Deno.test("transcript store: a rewind inside the view keeps the rows before it", () => {
+test("transcript store: a rewind inside the view keeps the rows before it", () => {
   const { db, repo } = setup(5);
   try {
     repo.append("s1", checkpoint("summary", 6));

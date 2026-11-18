@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import type { Api, Model } from "../ai/catalog.ts";
 import { ContextCompactor } from "../ai/context-compaction.ts";
@@ -73,7 +74,7 @@ function requestText(request: RecordedRequest): string {
   return message.content[0]!.text;
 }
 
-Deno.test("the record puts a tools line between the messages around it", () => {
+test("the record puts a tools line between the messages around it", () => {
   const messages: AgentMessage[] = [
     user("hello", at(10)),
     ...toolPair("t1", "secret output", at(11)),
@@ -87,7 +88,7 @@ Deno.test("the record puts a tools line between the messages around it", () => {
   ]);
 });
 
-Deno.test("a call's arguments and a result's output never reach the record", () => {
+test("a call's arguments and a result's output never reach the record", () => {
   const messages: AgentMessage[] = [
     user("hello", at(10)),
     ...toolPair("t1", "secret output", at(11)),
@@ -101,7 +102,7 @@ Deno.test("a call's arguments and a result's output never reach the record", () 
   assert(!text.includes("secret output"));
 });
 
-Deno.test("each run of tool calls gets its own line where it happened", () => {
+test("each run of tool calls gets its own line where it happened", () => {
   const messages: AgentMessage[] = [
     user("go", at(10)),
     assistant("looking", at(11)),
@@ -122,7 +123,7 @@ Deno.test("each run of tool calls gets its own line where it happened", () => {
   ]);
 });
 
-Deno.test("a run that ends the span still gets its line", () => {
+test("a run that ends the span still gets its line", () => {
   // The span was cut while the work was in flight (no message after it):
   // dropping the line would hide that the work happened at all.
   const messages: AgentMessage[] = [
@@ -135,7 +136,7 @@ Deno.test("a run that ends the span still gets its line", () => {
   ]);
 });
 
-Deno.test("send_chat is the conversation, not a tool to tally", () => {
+test("send_chat is the conversation, not a tool to tally", () => {
   const messages: AgentMessage[] = [
     user("hi", at(10)),
     fauxAssistantMessage([fauxToolCall("send_chat", { text: "hello" }, "s1")], {
@@ -160,7 +161,7 @@ Deno.test("send_chat is the conversation, not a tool to tally", () => {
   ]);
 });
 
-Deno.test("a failed call is counted as a call and marked as failed", () => {
+test("a failed call is counted as a call and marked as failed", () => {
   const messages: AgentMessage[] = [
     user("go", at(10)),
     fauxAssistantMessage(
@@ -181,7 +182,7 @@ Deno.test("a failed call is counted as a call and marked as failed", () => {
   ]);
 });
 
-Deno.test("the tools line names at most 12 tools", () => {
+test("the tools line names at most 12 tools", () => {
   const messages: AgentMessage[] = [user("go", at(10))];
   for (let i = 0; i < 13; i++) {
     messages.push(
@@ -198,7 +199,7 @@ Deno.test("the tools line names at most 12 tools", () => {
   assert(line.endsWith(", +1 more"));
 });
 
-Deno.test("a conversation with no tool calls has no tools line", () => {
+test("a conversation with no tool calls has no tools line", () => {
   const messages: AgentMessage[] = [
     user("hi", at(10)),
     assistant("hello", at(11)),
@@ -209,7 +210,7 @@ Deno.test("a conversation with no tool calls has no tools line", () => {
   ]);
 });
 
-Deno.test("the stella record prompt explains the tools line and its limits", () => {
+test("the stella record prompt explains the tools line and its limits", () => {
   const first = STELLA_COMPACTION_STYLE.prompt(undefined);
   assert(first.includes("## Now"));
   assert(first.includes("[tools]"));
@@ -223,7 +224,7 @@ Deno.test("the stella record prompt explains the tools line and its limits", () 
   assert(next.includes("rewrite it in full"));
 });
 
-Deno.test("a stella compaction sends the record prompt and the stella preamble", async () => {
+test("a stella compaction sends the record prompt and the stella preamble", async () => {
   const messages: AgentMessage[] = [
     user(`start ${"x".repeat(10_000)}`, 1),
     assistant(`earlier reply ${"y".repeat(10_000)}`, 2),
@@ -288,7 +289,7 @@ Deno.test("a stella compaction sends the record prompt and the stella preamble",
   );
 });
 
-Deno.test("a routine's run is recorded as the routine's, not the user's", () => {
+test("a routine's run is recorded as the routine's, not the user's", () => {
   // The record is what a future turn believes about the user. Reading the
   // scheduled request as their words would credit them with a request they
   // scheduled days ago (#37).

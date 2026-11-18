@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { join } from "node:path";
 import { assertEquals } from "@std/assert";
 import { Agent } from "../ai/agent.ts";
@@ -70,7 +71,7 @@ function toolStartArgs(events: AgentEvent[]): unknown[] {
     .map((e) => (e as { args: unknown }).args);
 }
 
-Deno.test("SDK-executed tools keep their args and are not re-executed", async () => {
+test("SDK-executed tools keep their args and are not re-executed", async () => {
   const counter = { calls: 0 };
   const toolCall: ToolCall = {
     type: "toolCall",
@@ -169,7 +170,7 @@ Deno.test("SDK-executed tools keep their args and are not re-executed", async ()
   assertEquals(announced, [recordedResult]);
 });
 
-Deno.test("tool calls without SDK results still run via the fallback", async () => {
+test("tool calls without SDK results still run via the fallback", async () => {
   const counter = { calls: 0 };
   const events: AgentEvent[] = [];
   const streamFn = scriptedStreamFn([
@@ -287,7 +288,7 @@ function scriptedLanguageModel(scripts: unknown[][]) {
 /** The whole path end to end: the Agent drives the real transport, the SDK
  * executes the tool, and the result reaches both audiences —the UI (the
  * details) and the model (the text alone). */
-Deno.test("the tool result keeps its details for the UI and stays text for the model", async () => {
+test("the tool result keeps its details for the UI and stays text for the model", async () => {
   const call = { args: undefined as unknown };
   const editTool: AgentTool = {
     name: "edit",
@@ -349,7 +350,7 @@ Deno.test("the tool result keeps its details for the UI and stays text for the m
 
 // ---- stop while the SDK runs a tool ---------------------------------------
 
-Deno.test("a stop during an SDK-executed tool leaves a session that still runs", async () => {
+test("a stop during an SDK-executed tool leaves a session that still runs", async () => {
   // The reported failure: the SDK executes the tool, the tool ignores the
   // abort signal (a silent MCP server, a hung `eval`), and the stop button
   // looked like it worked while the session never ran again. Two things must
@@ -506,7 +507,7 @@ function scriptedEndpoint(scripts: Response[]): {
  * image file, the tool returns the pixels, and both audiences get them —
  * the transcript (UI, DB, image analysis) and the next request, where the
  * image must arrive as an image and not merely as its text marker. */
-Deno.test("a read tool image reaches the model and the transcript", async () => {
+test("a read tool image reaches the model and the transcript", async () => {
   await withTempDir("lumisca-read-image-", async (root) => {
     const imagePath = join(root, "pic.png");
     await Deno.writeFile(imagePath, MINI_PNG);

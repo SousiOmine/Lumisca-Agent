@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals, assertThrows } from "@std/assert";
 import { CoreError } from "../errors.ts";
 import { toAgentTool } from "./pi-adapter.ts";
@@ -22,7 +23,7 @@ function errorMessage(fn: () => void): string {
   return "";
 }
 
-Deno.test("a required argument that was not sent is reported by name", () => {
+test("a required argument that was not sent is reported by name", () => {
   // The regression this guards: a model omits `cwd` (one call in twenty in a
   // recorded session), the value reached path resolution as `undefined`, and
   // the tool returned "Path must be a non-empty string" — a message that
@@ -40,7 +41,7 @@ Deno.test("a required argument that was not sent is reported by name", () => {
   );
 });
 
-Deno.test("a null required argument counts as missing", () => {
+test("a null required argument counts as missing", () => {
   // `null` is what a model sends for a field it decided not to fill; it is
   // not a usable path and does not mean "absent" to the tool either.
   assertEquals(
@@ -51,13 +52,13 @@ Deno.test("a null required argument counts as missing", () => {
   );
 });
 
-Deno.test("a complete argument object passes", () => {
+test("a complete argument object passes", () => {
   assertSchemaBounds(bashSchema, { cwd: "Aaa", command: "ls" });
   // An optional argument may be absent, which is what `optional()` declares.
   assertSchemaBounds(bashSchema, { cwd: "Aaa", command: "ls", timeout: 60 });
 });
 
-Deno.test("the omission is an invalid error, not a crash", () => {
+test("the omission is an invalid error, not a crash", () => {
   assertThrows(
     () => assertSchemaBounds(bashSchema, { command: "ls" }),
     CoreError,
@@ -65,7 +66,7 @@ Deno.test("the omission is an invalid error, not a crash", () => {
   );
 });
 
-Deno.test("empty strings are the tool's business, not the boundary's", () => {
+test("empty strings are the tool's business, not the boundary's", () => {
   // `""` was sent on purpose (or by a model that means it), so the tool's own
   // contract reports it — `cwd: ""` reaches path resolution, which explains
   // what a working directory must be. Widening this check to "" would move
@@ -73,7 +74,7 @@ Deno.test("empty strings are the tool's business, not the boundary's", () => {
   assertSchemaBounds(bashSchema, { cwd: "", command: "ls" });
 });
 
-Deno.test("declared integer bounds still hold", () => {
+test("declared integer bounds still hold", () => {
   assertEquals(
     errorMessage(() =>
       assertSchemaBounds(bashSchema, {
@@ -86,7 +87,7 @@ Deno.test("declared integer bounds still hold", () => {
   );
 });
 
-Deno.test("non-object arguments are left to the tool", () => {
+test("non-object arguments are left to the tool", () => {
   // A provider may hand over anything; the schema's shape is the tool's own
   // contract to enforce (each tool reads its arguments defensively), and the
   // boundary only checks what it can read.
@@ -111,7 +112,7 @@ function bashLikeTool(seen: unknown[]): Tool<typeof bashSchema> {
   };
 }
 
-Deno.test("the preloaded path rejects an omitted argument before execute", () => {
+test("the preloaded path rejects an omitted argument before execute", () => {
   // toAgentTool is the boundary every preloaded tool call passes through.
   const seen: unknown[] = [];
   const agentTool = toAgentTool(bashLikeTool(seen));
@@ -123,7 +124,7 @@ Deno.test("the preloaded path rejects an omitted argument before execute", () =>
   assertEquals(seen.length, 0, "execute must not run with a missing argument");
 });
 
-Deno.test("the discoverable path rejects an omitted argument before execute", async () => {
+test("the discoverable path rejects an omitted argument before execute", async () => {
   // tool_call reaches a tool through the registry instead, so the same check
   // has to hold there (it applies the tool's prepareArguments first).
   const seen: unknown[] = [];

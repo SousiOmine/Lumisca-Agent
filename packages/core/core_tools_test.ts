@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@lumisca/core";
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import { MCP_TOOLS_PROVIDER, ON_DEMAND_TOOLS_NOTE } from "./mcp/context.ts";
@@ -138,7 +139,7 @@ function waitForQuestion(
   });
 }
 
-Deno.test("workspace update rebuilds session tools", async () => {
+test("workspace update rebuilds session tools", async () => {
   const { core, faux: _faux, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   const extra = await Deno.makeTempDir({ prefix: "lumisca-extra-" });
@@ -165,7 +166,7 @@ Deno.test("workspace update rebuilds session tools", async () => {
   await removeDirRetry(extra);
 });
 
-Deno.test("browser tools are discoverable via tool_search, never preloaded", async () => {
+test("browser tools are discoverable via tool_search, never preloaded", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
   const backend = new FakeBrowserBackend();
@@ -271,7 +272,7 @@ Deno.test("browser tools are discoverable via tool_search, never preloaded", asy
   }
 });
 
-Deno.test("pdf tool is seeded into the session registry via tool_search", async () => {
+test("pdf tool is seeded into the session registry via tool_search", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
   try {
@@ -320,7 +321,7 @@ Deno.test("pdf tool is seeded into the session registry via tool_search", async 
   }
 });
 
-Deno.test("computer use: the tools are seeded via tool_search only when enabled", async () => {
+test("computer use: the tools are seeded via tool_search only when enabled", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
   const host = new FakeComputerHost();
@@ -447,7 +448,7 @@ Deno.test("computer use: the tools are seeded via tool_search only when enabled"
   }
 });
 
-Deno.test("computer use: enabling asks the machine again, so a late desktop is usable", async () => {
+test("computer use: enabling asks the machine again, so a late desktop is usable", async () => {
   // A server started by systemd runs before the desktop session does, so at
   // startup there is nothing to ask and the verdict is "no host". By the
   // time the user flips the toggle the desktop is up: the toggle must ask
@@ -473,7 +474,7 @@ Deno.test("computer use: enabling asks the machine again, so a late desktop is u
   }
 });
 
-Deno.test("ask tool blocks the run until the user answers, then continues", async () => {
+test("ask tool blocks the run until the user answers, then continues", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
   const session = await core.createSession({
@@ -527,7 +528,7 @@ Deno.test("ask tool blocks the run until the user answers, then continues", asyn
   core.close();
 });
 
-Deno.test("todo tool records the whole plan and replaces it on the next call", async () => {
+test("todo tool records the whole plan and replaces it on the next call", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
   const session = await core.createSession({
@@ -609,7 +610,7 @@ Deno.test("todo tool records the whole plan and replaces it on the next call", a
   core.close();
 });
 
-Deno.test("rewind while a question is pending aborts the run cleanly", async () => {
+test("rewind while a question is pending aborts the run cleanly", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
   const session = await core.createSession({

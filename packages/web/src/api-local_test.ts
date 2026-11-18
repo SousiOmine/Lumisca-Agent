@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import {
   intercept,
@@ -528,24 +529,23 @@ const SETTINGS_CASES: Case[] = [
   },
 ];
 
-Deno.test("api-local: workspace, skill and filesystem calls", () =>
+test("api-local: workspace, skill and filesystem calls", () =>
   assertCases(WORKSPACE_CASES));
 
-Deno.test("api-local: session calls", () => assertCases(SESSION_CASES));
+test("api-local: session calls", () => assertCases(SESSION_CASES));
 
-Deno.test("api-local: provider and model calls", () =>
-  assertCases(PROVIDER_CASES));
+test("api-local: provider and model calls", () => assertCases(PROVIDER_CASES));
 
-Deno.test("api-local: settings, MCP, personalization and connections", () =>
+test("api-local: settings, MCP, personalization and connections", () =>
   assertCases(SETTINGS_CASES));
 
-Deno.test("api-local: the page token rides on every request", async () => {
+test("api-local: the page token rides on every request", async () => {
   const sent = await record(() => api.listSessions());
   assertEquals(sent.headers.get("x-lumisca-token"), "test-token");
   assertEquals(sent.headers.get("content-type"), "application/json");
 });
 
-Deno.test("api-local: an HTTP error becomes an Error carrying the server's message", async () => {
+test("api-local: an HTTP error becomes an Error carrying the server's message", async () => {
   // Errors are answered as { error: "..." } with a 4xx/5xx status, so the
   // client must surface that text and not a generic status message — the UI
   // shows the string as-is.
@@ -557,7 +557,7 @@ Deno.test("api-local: an HTTP error becomes an Error carrying the server's messa
   assertEquals(error.message, "Workspace store is locked");
 });
 
-Deno.test("api-local: a non-JSON error body falls back to the status", async () => {
+test("api-local: a non-JSON error body falls back to the status", async () => {
   // A proxy or a half-dead server answers HTML; res.json() then fails and
   // the rejection must still name the status instead of a parse error.
   const { error } = await intercept(
@@ -568,7 +568,7 @@ Deno.test("api-local: a non-JSON error body falls back to the status", async () 
   assertEquals(error.message, "Request failed: 503");
 });
 
-Deno.test("api-local: a network failure notifies the health monitor, an HTTP error does not", async () => {
+test("api-local: a network failure notifies the health monitor, an HTTP error does not", async () => {
   // The desktop shell registers a listener (hooks/useServerHealth.ts) to
   // classify a dead server; only a fetch-level rejection is an outage, an
   // answered 500 is not.
@@ -599,7 +599,7 @@ Deno.test("api-local: a network failure notifies the health monitor, an HTTP err
   }
 });
 
-Deno.test("api-local: a failure is classified by what went wrong", async () => {
+test("api-local: a failure is classified by what went wrong", async () => {
   // The reader is told the KIND of failure (i18n.describeError), so the
   // classification has to be right: "retrying will not help" is the wrong
   // thing to say about a dropped connection, and the opposite is wrong for a
@@ -675,7 +675,7 @@ Deno.test("api-local: a failure is classified by what went wrong", async () => {
   }
 });
 
-Deno.test("api-local: a request that never answers gives up instead of hanging", async () => {
+test("api-local: a request that never answers gives up instead of hanging", async () => {
   // A server that accepted the connection and then stopped (a hang, a
   // suspended machine) leaves `fetch` pending forever: no error to show, no
   // retry, and the composer would hold a promise it can never settle. The
@@ -701,7 +701,7 @@ Deno.test("api-local: a request that never answers gives up instead of hanging",
   }
 });
 
-Deno.test("peerRoutes: the same path is written once for both machines", async () => {
+test("peerRoutes: the same path is written once for both machines", async () => {
   // The table backs `api` (peer "") and `fed` (a peer id), so the local and
   // proxied spellings of one call cannot drift apart.
   const { api, peerRoutes } = await import("./api-local.ts");

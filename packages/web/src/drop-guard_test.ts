@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import {
   carriesFiles,
@@ -20,14 +21,14 @@ function drag(types: string[] | undefined): FileDragEvent & {
   return event;
 }
 
-Deno.test("carriesFiles: only a drag with files is the page's to consume", () => {
+test("carriesFiles: only a drag with files is the page's to consume", () => {
   assertEquals(carriesFiles(["Files"]), true);
   assertEquals(carriesFiles(["text/plain"]), false);
   assertEquals(carriesFiles([]), false);
   assertEquals(carriesFiles(undefined), false);
 });
 
-Deno.test("consumeFileDrag: a file drag is cancelled, anything else is left alone", () => {
+test("consumeFileDrag: a file drag is cancelled, anything else is left alone", () => {
   const file = drag(["Files"]);
   consumeFileDrag(file);
   assertEquals(file.cancelled, true);
@@ -44,7 +45,7 @@ Deno.test("consumeFileDrag: a file drag is cancelled, anything else is left alon
   assertEquals(none.cancelled, false);
 });
 
-Deno.test("installFileDropGuard: both the drag over the page and the drop are refused", () => {
+test("installFileDropGuard: both the drag over the page and the drop are refused", () => {
   const listeners = new Map<string, (event: FileDragEvent) => void>();
   const target = {
     addEventListener(type: string, listener: (event: FileDragEvent) => void) {

@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import type {
   AuthInteraction,
@@ -65,7 +66,7 @@ function noNetwork(): FetchLike {
   return () => Promise.reject(new Error("unexpected network request"));
 }
 
-Deno.test("resolveCredential returns the account headers without a refresh", async () => {
+test("resolveCredential returns the account headers without a refresh", async () => {
   const token = accountToken("acct-1", Math.floor(Date.now() / 1000) + 3600);
   const credential: OAuthCredential = {
     type: "oauth",
@@ -91,7 +92,7 @@ Deno.test("resolveCredential returns the account headers without a refresh", asy
   });
 });
 
-Deno.test("resolveCredential reads the account id from the token when absent", async () => {
+test("resolveCredential reads the account id from the token when absent", async () => {
   const token = accountToken(
     "acct-token",
     Math.floor(Date.now() / 1000) + 3600,
@@ -112,7 +113,7 @@ Deno.test("resolveCredential reads the account id from the token when absent", a
   assertEquals(resolved?.headers?.["ChatGPT-Account-Id"], "acct-token");
 });
 
-Deno.test("an expiring credential is refreshed once for concurrent callers", async () => {
+test("an expiring credential is refreshed once for concurrent callers", async () => {
   let refreshes = 0;
   const fetchImpl: FetchLike = () => {
     refreshes += 1;
@@ -157,7 +158,7 @@ Deno.test("an expiring credential is refreshed once for concurrent callers", asy
   assertEquals(stored.accountId, "acct-2");
 });
 
-Deno.test("an expired credential without a refresh token fails fast", async () => {
+test("an expired credential without a refresh token fails fast", async () => {
   const expired: OAuthCredential = {
     type: "oauth",
     token: accountToken("acct-1", 1),
@@ -178,7 +179,7 @@ Deno.test("an expired credential without a refresh token fails fast", async () =
   );
 });
 
-Deno.test("an api-key credential does not resolve for this provider", async () => {
+test("an api-key credential does not resolve for this provider", async () => {
   const credentials = memoryStore();
   const provider = chatgptProvider({
     credentials: credentials.store,
@@ -195,7 +196,7 @@ Deno.test("an api-key credential does not resolve for this provider", async () =
   assertEquals(await provider.resolveCredential({ env: {} }), undefined);
 });
 
-Deno.test("login without a method fails fast", async () => {
+test("login without a method fails fast", async () => {
   const credentials = memoryStore();
   const provider = chatgptProvider({
     credentials: credentials.store,
@@ -214,7 +215,7 @@ Deno.test("login without a method fails fast", async () => {
   );
 });
 
-Deno.test("getModels serves the catalog stored at login", () => {
+test("getModels serves the catalog stored at login", () => {
   const settings = createInMemorySettingsRepo();
   saveChatGptModels(settings, [
     {

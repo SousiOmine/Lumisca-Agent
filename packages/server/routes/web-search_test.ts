@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import type {
   WebSearchSettingsView,
   WebSearchTestView,
@@ -48,7 +49,7 @@ function makeApp(fake: FakeWebSearchApi) {
   return app;
 }
 
-Deno.test("/web-search serves the setting without keys", async () => {
+test("/web-search serves the setting without keys", async () => {
   const fake = new FakeWebSearchApi();
   const response = await makeApp(fake).request("/web-search");
   assertEquals(response.status, 200);
@@ -58,7 +59,7 @@ Deno.test("/web-search serves the setting without keys", async () => {
   assert(!("apiKey" in view));
 });
 
-Deno.test("/web-search/providers adds with the id and key it was given", async () => {
+test("/web-search/providers adds with the id and key it was given", async () => {
   const fake = new FakeWebSearchApi();
   const response = await makeApp(fake).request("/web-search/providers", {
     method: "POST",
@@ -74,7 +75,7 @@ Deno.test("/web-search/providers adds with the id and key it was given", async (
   ]);
 });
 
-Deno.test("/web-search/providers rejects a missing or empty field", async () => {
+test("/web-search/providers rejects a missing or empty field", async () => {
   const app = makeApp(new FakeWebSearchApi());
 
   const noKey = await app.request("/web-search/providers", {
@@ -99,7 +100,7 @@ Deno.test("/web-search/providers rejects a missing or empty field", async () => 
   assertEquals(badJson.status, 400);
 });
 
-Deno.test("/web-search/providers/:id updates with an empty key when omitted", async () => {
+test("/web-search/providers/:id updates with an empty key when omitted", async () => {
   const fake = new FakeWebSearchApi();
   const app = makeApp(fake);
 
@@ -123,7 +124,7 @@ Deno.test("/web-search/providers/:id updates with an empty key when omitted", as
   assertEquals(wrong.status, 400);
 });
 
-Deno.test("/web-search default accepts a string or null", async () => {
+test("/web-search default accepts a string or null", async () => {
   const fake = new FakeWebSearchApi();
   const app = makeApp(fake);
 
@@ -150,7 +151,7 @@ Deno.test("/web-search default accepts a string or null", async () => {
   assertEquals(wrong.status, 400);
 });
 
-Deno.test("/web-search/test reports a failed check as a result, not an error", async () => {
+test("/web-search/test reports a failed check as a result, not an error", async () => {
   const fake = new FakeWebSearchApi();
   fake.testResult = {
     ok: false,
@@ -166,7 +167,7 @@ Deno.test("/web-search/test reports a failed check as a result, not an error", a
   assertEquals(await response.json(), fake.testResult);
 });
 
-Deno.test("/web-search/test forwards a null key (the stored one is used)", async () => {
+test("/web-search/test forwards a null key (the stored one is used)", async () => {
   const fake = new FakeWebSearchApi();
   await makeApp(fake).request("/web-search/test", {
     method: "POST",
@@ -178,7 +179,7 @@ Deno.test("/web-search/test forwards a null key (the stored one is used)", async
   ]);
 });
 
-Deno.test("/web-search/providers/:id deletes", async () => {
+test("/web-search/providers/:id deletes", async () => {
   const fake = new FakeWebSearchApi();
   const response = await makeApp(fake).request("/web-search/providers/exa", {
     method: "DELETE",

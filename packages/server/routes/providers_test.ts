@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import type {
   AuthCheck,
   AuthInteraction,
@@ -172,7 +173,7 @@ async function pollUntil(
   throw new Error(`timed out waiting for login ${status}, got ${snap.status}`);
 }
 
-Deno.test("/providers exposes authType per provider", async () => {
+test("/providers exposes authType per provider", async () => {
   const app = makeApp(new FakeProviderApi());
   const res = await app.request("/providers");
   assertEquals(res.status, 200);
@@ -196,7 +197,7 @@ Deno.test("/providers exposes authType per provider", async () => {
   ]);
 });
 
-Deno.test("ambient env auth does not mark a provider as configured", async () => {
+test("ambient env auth does not mark a provider as configured", async () => {
   const fake = new FakeProviderApi();
   // ANTHROPIC_API_KEY is set in the environment: the SDK resolves auth,
   // but the user never stored anything in Lumisca.
@@ -223,7 +224,7 @@ Deno.test("ambient env auth does not mark a provider as configured", async () =>
   assertEquals(auth.source, "ANTHROPIC_API_KEY");
 });
 
-Deno.test("OAuth login runs a device-code flow and marks the provider configured", async () => {
+test("OAuth login runs a device-code flow and marks the provider configured", async () => {
   const fake = new FakeProviderApi();
   fake.loginScript = (interaction) => {
     assertEquals(interaction.method, "device_code");
@@ -261,7 +262,7 @@ Deno.test("OAuth login runs a device-code flow and marks the provider configured
   );
 });
 
-Deno.test("login is refused for non-OAuth providers and unknown ids", async () => {
+test("login is refused for non-OAuth providers and unknown ids", async () => {
   const app = makeApp(new FakeProviderApi());
   const nonOAuth = await app.request("/providers/anthropic/login", {
     method: "POST",
@@ -273,7 +274,7 @@ Deno.test("login is refused for non-OAuth providers and unknown ids", async () =
   assertEquals(unknown.status, 404);
 });
 
-Deno.test("login needs an explicit method", async () => {
+test("login needs an explicit method", async () => {
   const app = makeApp(new FakeProviderApi());
   const missing = await app.request("/providers/openai-codex/login", {
     method: "POST",
@@ -286,7 +287,7 @@ Deno.test("login needs an explicit method", async () => {
   assertEquals(unknown.status, 400);
 });
 
-Deno.test("browser login is refused for a page that is not on this machine", async () => {
+test("browser login is refused for a page that is not on this machine", async () => {
   const app = makeApp(new FakeProviderApi());
   const remote = await startLogin(app, "browser", {
     host: "myserver.tailnet.ts.net:8000",
@@ -300,7 +301,7 @@ Deno.test("browser login is refused for a page that is not on this machine", asy
   assertEquals(mismatch.status, 400);
 });
 
-Deno.test("browser login runs when the page is on this machine", async () => {
+test("browser login runs when the page is on this machine", async () => {
   const fake = new FakeProviderApi();
   fake.loginScript = (interaction) => {
     assertEquals(interaction.method, "browser");
@@ -325,7 +326,7 @@ Deno.test("browser login runs when the page is on this machine", async () => {
   ]);
 });
 
-Deno.test("a forwarded prompt resolves through POST respond", async () => {
+test("a forwarded prompt resolves through POST respond", async () => {
   const fake = new FakeProviderApi();
   fake.loginScript = async (interaction) => {
     const picked = await interaction.prompt({
@@ -364,7 +365,7 @@ Deno.test("a forwarded prompt resolves through POST respond", async () => {
   assertEquals(done.events, [{ type: "progress", message: "chose b" }]);
 });
 
-Deno.test("cancelling a login leaves the provider unconfigured", async () => {
+test("cancelling a login leaves the provider unconfigured", async () => {
   const fake = new FakeProviderApi();
   fake.loginScript = async (interaction) => {
     await interaction.prompt({ type: "manual_code", message: "paste code" });
@@ -390,7 +391,7 @@ Deno.test("cancelling a login leaves the provider unconfigured", async () => {
   assert(!fake.loggedIn.has("openai-codex"));
 });
 
-Deno.test("a second login request reuses the running session", async () => {
+test("a second login request reuses the running session", async () => {
   const fake = new FakeProviderApi();
   let started = 0;
   fake.loginScript = async (interaction) => {
@@ -408,7 +409,7 @@ Deno.test("a second login request reuses the running session", async () => {
   });
 });
 
-Deno.test("a failing login surfaces as error without configuring the provider", async () => {
+test("a failing login surfaces as error without configuring the provider", async () => {
   const fake = new FakeProviderApi();
   fake.loginScript = () => {
     throw new Error("token exchange failed");
@@ -420,7 +421,7 @@ Deno.test("a failing login surfaces as error without configuring the provider", 
   assert(!fake.loggedIn.has("openai-codex"));
 });
 
-Deno.test("logout removes the credential and invalidates the auth cache", async () => {
+test("logout removes the credential and invalidates the auth cache", async () => {
   const fake = new FakeProviderApi();
   fake.loggedIn.add("openai-codex");
   const app = makeApp(fake);
@@ -439,7 +440,7 @@ Deno.test("logout removes the credential and invalidates the auth cache", async 
   );
 });
 
-Deno.test("GET /providers/catalog reports the catalog status", async () => {
+test("GET /providers/catalog reports the catalog status", async () => {
   const app = makeApp(new FakeProviderApi());
   const res = await app.request("/providers/catalog");
   assertEquals(res.status, 200);
@@ -449,7 +450,7 @@ Deno.test("GET /providers/catalog reports the catalog status", async () => {
   assertEquals(body.providerCount, 2);
 });
 
-Deno.test("POST /providers/catalog/refresh refreshes and reports", async () => {
+test("POST /providers/catalog/refresh refreshes and reports", async () => {
   const fake = new FakeProviderApi();
   const app = makeApp(fake);
   const res = await app.request("/providers/catalog/refresh", {

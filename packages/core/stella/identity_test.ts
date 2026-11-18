@@ -1,3 +1,4 @@
+import { test } from "bun:test";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { LumiscaDb } from "../db/mod.ts";
 import { CoreError } from "../errors.ts";
@@ -41,7 +42,7 @@ function bodies(updates: Array<{ body: string }>): string {
   return updates.map((update) => update.body).join("\n\n");
 }
 
-Deno.test("identity tool: read says there is none yet, then returns the text", async () => {
+test("identity tool: read says there is none yet, then returns the text", async () => {
   const target = memoryTarget();
   const tool = createIdentityTool(target);
 
@@ -61,7 +62,7 @@ Deno.test("identity tool: read says there is none yet, then returns the text", a
   assertEquals(target.text, "I keep notes.");
 });
 
-Deno.test("identity tool: a write says when it takes effect and can clear the text", async () => {
+test("identity tool: a write says when it takes effect and can clear the text", async () => {
   const target = memoryTarget("Old text.");
   const tool = createIdentityTool(target);
 
@@ -82,7 +83,7 @@ Deno.test("identity tool: a write says when it takes effect and can clear the te
   assertStringIncludes(toolText(cleared), "was cleared");
 });
 
-Deno.test("identity tool: edit changes one passage and keeps the rest", async () => {
+test("identity tool: edit changes one passage and keeps the rest", async () => {
   const target = memoryTarget(
     "How I speak: polite.\nThe user: Mio.\nMy hours: 9-18.",
   );
@@ -106,7 +107,7 @@ Deno.test("identity tool: edit changes one passage and keeps the rest", async ()
   assertStringIncludes(toolText(result), "next turn");
 });
 
-Deno.test("identity tool: edit refuses a missing or ambiguous match", async () => {
+test("identity tool: edit refuses a missing or ambiguous match", async () => {
   const tool = createIdentityTool(memoryTarget("One. Two. Two."));
 
   let missing: unknown;
@@ -138,7 +139,7 @@ Deno.test("identity tool: edit refuses a missing or ambiguous match", async () =
   assertStringIncludes(ambiguous.message, "appears 2 times");
 });
 
-Deno.test("identity tool: edit before a passage exists says what to do", async () => {
+test("identity tool: edit before a passage exists says what to do", async () => {
   const tool = createIdentityTool(memoryTarget());
 
   let missing: unknown;
@@ -164,7 +165,7 @@ Deno.test("identity tool: edit before a passage exists says what to do", async (
   assertStringIncludes(empty.message, "nothing to edit");
 });
 
-Deno.test("identity tool: an edit is held to the identity's length limit", async () => {
+test("identity tool: an edit is held to the identity's length limit", async () => {
   const original = "x".repeat(10);
   const target = memoryTarget(original);
   const tool = createIdentityTool(target);
@@ -187,7 +188,7 @@ Deno.test("identity tool: an edit is held to the identity's length limit", async
   assertEquals(target.text, original);
 });
 
-Deno.test("identity tool: write without content, and unknown actions, explain themselves", async () => {
+test("identity tool: write without content, and unknown actions, explain themselves", async () => {
   const tool = createIdentityTool(memoryTarget());
   let missing: unknown;
   try {
@@ -208,7 +209,7 @@ Deno.test("identity tool: write without content, and unknown actions, explain th
   assertStringIncludes(unknown.message, 'Use "read", "write" or "edit"');
 });
 
-Deno.test("identity provider: publishes the agent's text once, and only on change", () => {
+test("identity provider: publishes the agent's text once, and only on change", () => {
   const target = memoryTarget();
   const provider = createIdentityProvider(target);
 
@@ -241,7 +242,7 @@ Deno.test("identity provider: publishes the agent's text once, and only on chang
   assertStringIncludes(bodies(update), "I keep notes and check facts.");
 });
 
-Deno.test("identity provider: clearing the text is announced once", () => {
+test("identity provider: clearing the text is announced once", () => {
   const target = memoryTarget("I keep notes.");
   const provider = createIdentityProvider(target);
   provider.next();
@@ -260,7 +261,7 @@ Deno.test("identity provider: clearing the text is announced once", () => {
   assertEquals(target.text, "");
 });
 
-Deno.test("identity provider: writing again after a clear is a fresh statement", () => {
+test("identity provider: writing again after a clear is a fresh statement", () => {
   const target = memoryTarget("First.");
   const provider = createIdentityProvider(target);
   provider.next();
@@ -276,7 +277,7 @@ Deno.test("identity provider: writing again after a clear is a fresh statement",
   assertStringIncludes(again[0]!.body, "<identity>\nSecond.\n</identity>");
 });
 
-Deno.test("identity provider: a rebased session republishes only what it lost", () => {
+test("identity provider: a rebased session republishes only what it lost", () => {
   const target = memoryTarget();
   const provider = createIdentityProvider(target);
   assertEquals(provider.name, IDENTITY_PROVIDER);
@@ -296,7 +297,7 @@ Deno.test("identity provider: a rebased session republishes only what it lost", 
   assertEquals(again[0]!.body.includes("replaces the earlier one"), false);
 });
 
-Deno.test("identity: the repo target reads and writes the agent's row", async () => {
+test("identity: the repo target reads and writes the agent's row", async () => {
   const db = LumiscaDb.openInMemory();
   try {
     const repo = createAgentRepo(db);
