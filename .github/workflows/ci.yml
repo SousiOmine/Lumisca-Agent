@@ -59,6 +59,15 @@ jobs:
       - name: Type check
         run: bun run check
 
+      # Structural checks tsc cannot make: import cycles and the browser
+      # entry list agreeing with tsconfig (#REFACTORING P0).
+      - name: Architecture
+        run: bun run check:arch
+
+      # Catalogue keys: unused entries and references the catalogue lacks.
+      - name: UI keys
+        run: bun run check:i18n
+
       # The catalogue's Japanese is data, not code: a wording rule broken
       # here would compile and still read wrong on a screen.
       - name: UI Japanese

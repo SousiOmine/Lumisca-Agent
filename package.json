@@ -34,6 +34,8 @@
   "scripts": {
     "build:server": "bun run scripts/build-server.ts",
     "check": "tsc --noEmit -p tsconfig.json",
+    "check:arch": "bun run scripts/check-architecture.ts",
+    "check:i18n": "bun run scripts/check-ui-keys.ts",
     "check:ja": "bun run scripts/check-ui-japanese.ts",
     "check:versions": "bun run scripts/check-versions.ts",
     "demo": "bun run scripts/demo-server.ts",
@@ -53,7 +55,8 @@
     "test": "bun test --parallel --timeout 30000",
     "test:core": "bun test --parallel --timeout 30000 packages/core",
     "test:server": "bun test --parallel --timeout 30000 packages/server",
-    "test:web": "bun test --parallel --timeout 30000 packages/web"
+    "test:web": "bun test --parallel --timeout 30000 packages/web",
+    "measure": "bun run scripts/measure.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.7",
