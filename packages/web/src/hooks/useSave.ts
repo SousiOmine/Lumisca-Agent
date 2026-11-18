@@ -96,52 +96,86 @@ export function useSaveAction(formatError: (error: unknown) => string): {
 export const SAVE_DEBOUNCE_MS = 600;
 
 /**
- * A debounced writer: each call resets the timer, the last value wins, and an
- * unmount or {@link DebouncedWriter.flush} settles the pending run.
+ * The timer and the pending value of {@link useDebouncedWrite}, kept outside
+ * the hook so a test can drive it with a real clock and call {@link
+ * DebouncedWriter.dispose} where a component would unmount.
  *
  * `T` is whatever the write needs (the text of one field, or an object
  * naming which setting it is): the timer is about WHEN to write, not what.
- * Callers that must persist immediately (a blur, Enter) call `flush`; a
- * caller that is being torn down relies on the unmount cancel, which is why
- * the cleanup lives in the hook rather than in every panel.
+ */
+export function createDebouncedWriter<T>(
+  write: (value: T) => void | Promise<void>,
+  ms: number,
+): DebouncedWriter<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let pending: { value: T } | undefined;
+  let latestWrite = write;
+  let delay = ms;
+  /** Take the queued value and stop the timer. */
+  const settle = (): { value: T } | undefined => {
+    clearTimeout(timer);
+    timer = undefined;
+    const next = pending;
+    pending = undefined;
+    return next;
+  };
+  return {
+    schedule(value) {
+      pending = { value };
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const next = settle();
+        if (next !== undefined) void latestWrite(next.value);
+      }, delay);
+    },
+    async flush() {
+      const next = settle();
+      if (next !== undefined) await latestWrite(next.value);
+    },
+    cancel() {
+      settle();
+    },
+    dispose() {
+      const next = settle();
+      if (next !== undefined) void latestWrite(next.value);
+    },
+    setWrite(next) {
+      latestWrite = next;
+    },
+    setMs(next) {
+      delay = next;
+    },
+  };
+}
+
+/**
+ * A debounced writer: each call resets the timer, the last value wins, and a
+ * flush, an explicit dispose, or the component unmounting settles the
+ * pending run.
+ *
+ * Callers that must persist immediately (a blur, Enter) call `flush`. The
+ * unmount path writes what was typed rather than dropping it: a dialog
+ * closed with the caret still in the box has to keep its text, and the
+ * pending value is exactly the text the user stopped typing on.
  */
 export function useDebouncedWrite<T>(
   write: (value: T) => void | Promise<void>,
   ms = SAVE_DEBOUNCE_MS,
 ): DebouncedWriter<T> {
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const pending = useRef<{ value: T } | undefined>(undefined);
+  const writer = useRef<DebouncedWriter<T> | undefined>(undefined);
+  if (writer.current === undefined) {
+    writer.current = createDebouncedWriter(write, ms);
+  }
+  const current = writer.current;
   // The write callback is usually an inline closure over the render's state;
-  // holding it in a ref keeps the timer callback current without restarting
-  // the timer on every render.
-  const latestWrite = useRef(write);
+  // handing it over on every render keeps the timer callback current without
+  // restarting the timer. The delay is kept current the same way.
   useEffect(() => {
-    latestWrite.current = write;
+    current.setWrite(write);
+    current.setMs(ms);
   });
-  useEffect(() => () => clearTimeout(timer.current), []);
-  const schedule = useCallback(
-    (value: T) => {
-      pending.current = { value };
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => {
-        const next = pending.current;
-        pending.current = undefined;
-        if (next !== undefined) void latestWrite.current(next.value);
-      }, ms);
-    },
-    [ms],
-  );
-  const flush = useCallback(async () => {
-    clearTimeout(timer.current);
-    const next = pending.current;
-    pending.current = undefined;
-    if (next !== undefined) await latestWrite.current(next.value);
-  }, []);
-  const cancel = useCallback(() => {
-    clearTimeout(timer.current);
-    pending.current = undefined;
-  }, []);
-  return { schedule, flush, cancel };
+  useEffect(() => () => current.dispose(), [current]);
+  return current;
 }
 
 /** What {@link useDebouncedWrite} returns. */
@@ -152,4 +186,11 @@ export interface DebouncedWriter<T> {
   flush: () => Promise<void>;
   /** Drop the queued value without writing. */
   cancel: () => void;
+  /** Write the queued value now and stop the timer. The hook calls this on
+   * unmount so a closed panel keeps what was typed. */
+  dispose: () => void;
+  /** Replace the write callback. */
+  setWrite: (write: (value: T) => void | Promise<void>) => void;
+  /** Replace the debounce delay. */
+  setMs: (ms: number) => void;
 }
