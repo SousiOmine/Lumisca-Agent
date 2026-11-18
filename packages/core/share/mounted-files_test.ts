@@ -109,6 +109,13 @@ Deno.test("a read-only loan refuses writes in the backend, not in a tool", async
     Error,
     "read-only",
   );
+  // The transfer path is a write too: a read-only loan must refuse it before
+  // anything reaches the lent computer.
+  await assertRejects(
+    () => files.writeBytes(`${root}/a.bin`, new Uint8Array([1, 2])),
+    Error,
+    "read-only",
+  );
   // Refused here: the lent computer never saw the write at all.
   assertEquals(transport.calls.length, 0);
 });

@@ -146,7 +146,7 @@ import {
 } from "./tools/mod.ts";
 import type { StellaAvailability } from "./vm/availability.ts";
 import type { VmCommandBytesRunner, VmCommandRunner } from "./vm/command.ts";
-import type { VmManager, VmProgress } from "./vm/container.ts";
+import type { VmManager } from "./vm/container.ts";
 import { vmAgentDir } from "./vm/contract.ts";
 import type { PendingEnvRequest } from "./vm/env-request.ts";
 import { EnvRequestRegistry } from "./vm/env-request.ts";
@@ -1441,10 +1441,8 @@ export class LumiscaCore {
     return true;
   }
 
-  ensureStellaReady(
-    onProgress?: (progress: VmProgress) => void,
-  ): Promise<void> {
-    return this.services.stellaMachines.ensureStellaReady(onProgress);
+  ensureStellaReady(): Promise<void> {
+    return this.services.stellaMachines.ensureStellaReady();
   }
 
   isStellaStarting(): boolean {

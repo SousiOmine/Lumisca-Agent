@@ -7,12 +7,7 @@ import type { StellaAvailability } from "./availability.ts";
 import { stellaAvailability } from "./availability.ts";
 import type { VmCommandBytesRunner, VmCommandRunner } from "./command.ts";
 import { runVmCommand, runVmCommandBytes } from "./command.ts";
-import type {
-  VmExec,
-  VmExecBytes,
-  VmManager,
-  VmProgress,
-} from "./container.ts";
+import type { VmExec, VmExecBytes, VmManager } from "./container.ts";
 import { createVmExec, createVmExecBytes } from "./container.ts";
 import {
   VM_DESKTOP_SLOTS,
@@ -146,9 +141,7 @@ export class StellaMachine {
    * Idempotent and safe to call concurrently: two prompts racing on a cold
    * machine share one start (the promise is memoized until it settles).
    */
-  async ensureReady(
-    onProgress?: (progress: VmProgress) => void,
-  ): Promise<void> {
+  async ensureReady(): Promise<void> {
     const vm = this.require();
     // One read answers both questions. The availability check and the
     // running check used to be two `vm.status` calls, and the second one
@@ -176,7 +169,6 @@ export class StellaMachine {
         // and the slot each agent held no longer names a display.
         this.#desktops.clear();
         this.#slotUse.clear();
-        void onProgress;
       } finally {
         this.#starting = undefined;
         this.#verdict = undefined;

@@ -123,6 +123,9 @@ export function createCodingTools(
       browserAvailable: options.browserAvailable,
       computerAvailable: options.computerAvailable?.(),
       mcpAdmin: options.mcpAdmin,
+      // The catalog provider gates the same guide on the tool hub; the tool
+      // must agree or it advertises a skill this session cannot load.
+      subagents: options.task !== undefined,
       // The coding set has the file tools the guide teaches.
       skillAuthoring: true,
       ...(options.appSkillDirs !== undefined

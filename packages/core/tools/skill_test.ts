@@ -4,6 +4,7 @@ import { builtinSkills } from "../skills/builtin/mod.ts";
 import { discoverSkills, type SkillDef } from "../skills/discover.ts";
 import { createSkillTool } from "../skills/tool.ts";
 import { makeRealTempDir, removeDirRetry, toolText } from "../test-utils.ts";
+import type { TaskHub } from "./task-hub.ts";
 import { sessionSkills } from "./tool-pieces.ts";
 import { createCodingTools } from "./toolsets.ts";
 
@@ -239,5 +240,36 @@ Deno.test("coding tools reach the shared skills folder and the catalog lists it"
   } finally {
     await removeDirRetry(root);
     await removeDirRetry(shared);
+  }
+});
+
+Deno.test("the coding set loads the guide its own catalog advertises", async () => {
+  const root = await makeRealTempDir("lumisca-skill-gate-");
+  try {
+    const workspace = {
+      id: "w",
+      name: "project",
+      folders: [root],
+      createdAt: 0,
+      chat: false,
+    };
+    // The catalog provider gates coding-agents on the tool hub (`subagents:
+    // !chat`). The skill tool must be built from the same gate: with the hub
+    // present, a name the catalog lists has to load.
+    const hub = { parentTools: () => [] } as unknown as TaskHub;
+    const tools = createCodingTools(workspace, {
+      task: hub,
+      globalSkillDirs: [],
+    });
+    const skill = tools.find((tool) => tool.name === "skill");
+    assert(skill !== undefined, "the coding set has the skill tool");
+    const loaded = await skill!.execute(
+      "1",
+      { name: "coding-agents" },
+      undefined,
+    );
+    assert(toolText(loaded).length > 0);
+  } finally {
+    await removeDirRetry(root);
   }
 });

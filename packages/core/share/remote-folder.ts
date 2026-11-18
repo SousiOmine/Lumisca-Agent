@@ -145,6 +145,7 @@ export class RemoteFolderBackend implements FileBackend {
     bytes: Uint8Array,
     options: { private?: boolean; append?: boolean } = {},
   ): Promise<void> {
+    this.#requireWrite();
     return this.#call("writeBytes", {
       path: this.#segments(path),
       base64: bytesToBase64(bytes),

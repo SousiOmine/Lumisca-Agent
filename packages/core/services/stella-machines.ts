@@ -27,7 +27,7 @@ import { createVmAskUserTool } from "../vm/ask-user.ts";
 import type { StellaAvailability } from "../vm/availability.ts";
 import type { VmClipboard } from "../vm/clipboard.ts";
 import { createVmClipboard } from "../vm/clipboard.ts";
-import type { VmExec, VmManager, VmProgress } from "../vm/container.ts";
+import type { VmExec, VmManager } from "../vm/container.ts";
 import { vmAgentDir } from "../vm/contract.ts";
 import type { EnvRequestRegistry } from "../vm/env-request.ts";
 import { requireEnvValue, VmEnvStore } from "../vm/env-store.ts";
@@ -252,11 +252,9 @@ export class StellaMachineService {
    * Idempotent and safe to call concurrently: two prompts racing on a cold
    * machine share one start (the promise is memoized until it settles).
    */
-  async ensureStellaReady(
-    onProgress?: (progress: VmProgress) => void,
-  ): Promise<void> {
+  async ensureStellaReady(): Promise<void> {
     try {
-      await this.deps.machine.ensureReady(onProgress);
+      await this.deps.machine.ensureReady();
     } catch (error) {
       // The machine's reasons are user-facing (an image to build, podman
       // missing); classify them as unavailable, not as a server fault.

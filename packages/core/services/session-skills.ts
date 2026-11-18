@@ -37,6 +37,9 @@ export class SessionSkills {
       computerAvailable: this.deps.computerAvailable(),
       // The palette lists what this workspace's main agent can load.
       mcpAdmin: true,
+      // The catalog provider gates this guide on the tool hub, which a
+      // workspace session has; a chat session does not.
+      subagents: workspaceId !== undefined,
       // A workspace session is a coding session (it has the file tools the
       // guide teaches); the folder-less chat subset does not.
       skillAuthoring: workspaceId !== undefined,
