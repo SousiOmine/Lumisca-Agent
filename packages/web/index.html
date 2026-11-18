@@ -1,29 +1,7 @@
 <!doctype html>
 <html lang="ja" data-theme="dark">
   <head>
-    <meta charset="UTF-8" />
-    <!-- `interactive-widget=resizes-content` keeps the layout viewport the
-         same on Android when the software keyboard opens (the app height is
-         then reduced by the browser itself); browsers that do not know the
-         key ignore it, and iOS is handled by hooks/useAppHeight.ts. -->
-    <!-- Keep this viewport (and the meta comment above it) identical to the
-         one packages/server/render.ts writes: the dev page and the served
-         page are two shells for the same app, and a phone that behaves in one
-         and not the other is a difference nobody looks for here. -->
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
-    />
-    <title>Lumisca Agent</title>
-    <!-- This shell has no server-side theme (the dev server is not this
-         app's server), so the dark canvas is the initial value and useTheme
-         rewrites it as soon as the app renders. Everything else below is the
-         same install surface packages/server/render.ts writes; the manifest
-         itself is proxied to the app server (see vite.config.ts). -->
-    <meta name="theme-color" content="#0c0c11" />
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="apple-touch-icon" href="/pwa/apple-touch-icon.png" />
-    <link rel="icon" href="/favicon.png" />
+<!-- shell-head -->
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>

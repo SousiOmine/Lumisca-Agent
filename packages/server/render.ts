@@ -9,7 +9,12 @@
  * `renderTokenRequiredPage` is what an unauthenticated browser lands on
  * instead (the token guard's 401).
  */
-import { type Locale, THEME_COLORS, translate } from "@lumisca/core/shared";
+import {
+  type Locale,
+  shellHeadTags,
+  THEME_COLORS,
+  translate,
+} from "@lumisca/core/shared";
 
 /**
  * Content-Security-Policy for the page. Inline scripts are banned, so
@@ -89,25 +94,10 @@ export function renderHtmlDocument(
   return `<!doctype html>
 <html lang="${options.language}" data-theme="${theme}">
   <head>
-    <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
-    />
-    <meta http-equiv="Content-Security-Policy" content="${pageCsp(
-      options.pageHost,
-    )}" />
-    <title>Lumisca Agent</title>
-    <!-- The page's own canvas colour: the browser paints its chrome (the
-         address bar, an installed app's system bars) with it, and useTheme
-         keeps it in step when the reader switches theme. -->
-    <meta name="theme-color" content="${THEME_COLORS[theme]}" />
-    <!-- Installable as a PWA. The manifest is generated per request, so its
-         theme colour and language are this document's own; the icons are the
-         desktop app's artwork. iOS reads the touch icon from this link. -->
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="apple-touch-icon" href="/pwa/apple-touch-icon.png" />
-    <link rel="icon" href="/favicon.png" />
+${shellHeadTags({
+  csp: pageCsp(options.pageHost),
+  themeColor: THEME_COLORS[theme],
+})}
     <style>${css}</style>
   </head>
   <body>

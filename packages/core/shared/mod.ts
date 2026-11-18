@@ -58,6 +58,7 @@ export * from "./providers.ts";
 export * from "./push.ts";
 export * from "./routine.ts";
 export * from "./settings-keys.ts";
+export * from "./shell-head.ts";
 export * from "./stella-preview.ts";
 export * from "./theme-colors.ts";
 export * from "./token-estimate.ts";
