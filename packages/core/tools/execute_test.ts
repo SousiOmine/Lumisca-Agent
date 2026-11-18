@@ -113,7 +113,9 @@ Deno.test("execute: a failing tool throws inside the program", async () => {
   );
   const text = toolText(result);
   assert(text.includes("caught: exit code 1"), text);
-  assert(text.includes("bash ×1 (0ms) failed"), text);
+  // The reported duration is the measured one, so a slow runner says 1ms:
+  // this checks the shape (one call, marked failed) and not the number.
+  assert(/bash ×1 \(\d+ms\) failed/.test(text), text);
 });
 
 Deno.test("execute: an unknown tool names the way to look it up", async () => {
