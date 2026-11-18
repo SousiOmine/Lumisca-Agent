@@ -66,6 +66,27 @@
   --mono: "Cascadia Code", "JetBrains Mono", "SF Mono", Consolas, monospace;
   --ui: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
 
+  /* The type scale. Sizes are named by their pixel value on purpose: the
+   * scale grew one label at a time, and a half step (12.5 beside 13) is a
+   * deliberate difference. A token keeps the value, so converting a rule
+   * cannot change how it renders; moving the whole app to another scale is
+   * then an edit to these lines only. */
+  --type-10: 10px;
+  --type-10-5: 10.5px;
+  --type-11: 11px;
+  --type-11-5: 11.5px;
+  --type-12: 12px;
+  --type-12-5: 12.5px;
+  --type-13: 13px;
+  --type-13-5: 13.5px;
+  --type-14: 14px;
+  --type-15: 15px;
+  --type-16: 16px;
+  --type-17: 17px;
+  --type-18: 18px;
+  --type-20: 20px;
+  --type-22: 22px;
+
   /* The radius ramp. Each step has one job, so a new surface picks a step
    * instead of inventing a pixel value:
    *   xs    inline code, kbd, meter bars

@@ -30,7 +30,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--ui);
-  font-size: 14px;
+  font-size: var(--type-14);
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -117,7 +117,7 @@ select:focus:not(:focus-visible) {
   padding: 7px 14px;
   background: var(--surface-2);
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--type-13);
   transition:
     background var(--lum-dur-fast) var(--lum-ease-out),
     border-color var(--lum-dur-fast) var(--lum-ease-out),
@@ -150,7 +150,7 @@ select:focus:not(:focus-visible) {
 
 .btn.small {
   padding: 4px 10px;
-  font-size: 12px;
+  font-size: var(--type-12);
 }
 
 .btn:disabled {
@@ -226,7 +226,7 @@ select:focus:not(:focus-visible) {
   input,
   textarea,
   select {
-    font-size: 16px;
+    font-size: var(--type-16);
   }
 
   .icon-btn {
@@ -251,20 +251,20 @@ select:focus:not(:focus-visible) {
   input,
   textarea,
   select {
-    font-size: 16px;
+    font-size: var(--type-16);
     padding: 10px 14px;
   }
 
   .btn {
     min-height: 40px;
     padding: 9px 16px;
-    font-size: 14px;
+    font-size: var(--type-14);
   }
 
   .btn.small {
     min-height: 36px;
     padding: 7px 12px;
-    font-size: 13px;
+    font-size: var(--type-13);
   }
 
   .icon-btn {

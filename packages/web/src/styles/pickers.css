@@ -28,7 +28,7 @@
 
 .new-session-card h2 {
   margin: 0;
-  font-size: 17px;
+  font-size: var(--type-17);
   font-weight: 600;
 }
 
@@ -47,7 +47,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12.5px;
+  font-size: var(--type-12-5);
   color: var(--text-dim);
 }
 
@@ -99,7 +99,7 @@
   padding: 7px 8px;
   border-radius: var(--radius-sm);
   color: var(--text);
-  font-size: 12.5px;
+  font-size: var(--type-12-5);
   text-align: left;
   cursor: pointer;
 }
@@ -117,7 +117,7 @@
 }
 
 .recent-item-name {
-  font-size: 13px;
+  font-size: var(--type-13);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -127,7 +127,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11.5px;
+  font-size: var(--type-11-5);
   color: var(--text-dim);
 }
 
@@ -136,21 +136,21 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
   color: var(--text-faint);
-  font-size: 10.5px;
+  font-size: var(--type-10-5);
   white-space: nowrap;
 }
 
 .recent-item-time {
   flex: none;
   color: var(--text-faint);
-  font-size: 11.5px;
+  font-size: var(--type-11-5);
   white-space: nowrap;
 }
 
 .recent-empty {
   padding: 12px 8px;
   color: var(--text-faint);
-  font-size: 12.5px;
+  font-size: var(--type-12-5);
   text-align: center;
 }
 
@@ -176,7 +176,7 @@
 
 .new-session-recent-header h3 {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--type-13);
   font-weight: 600;
 }
 
@@ -193,7 +193,7 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  font-size: 13px;
+  font-size: var(--type-13);
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border);
@@ -242,7 +242,7 @@
 
 .workspace-popover-empty {
   padding: 8px;
-  font-size: 12px;
+  font-size: var(--type-12);
   color: var(--text-faint);
 }
 
@@ -253,7 +253,7 @@
   padding: 6px 8px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 12.5px;
+  font-size: var(--type-12-5);
   transition: background-color var(--lum-dur-fast) var(--lum-ease-out);
 }
 
@@ -289,7 +289,7 @@
 }
 
 .workspace-option-meta {
-  font-size: 10.5px;
+  font-size: var(--type-10-5);
   color: var(--text-faint);
   flex: none;
 }
@@ -415,11 +415,11 @@
   }
 
   .recent-item-name {
-    font-size: 14px;
+    font-size: var(--type-14);
   }
 
   .recent-item-meta {
-    font-size: 12.5px;
+    font-size: var(--type-12-5);
   }
 
   .workspace-picker-trigger {

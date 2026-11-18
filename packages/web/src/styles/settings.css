@@ -93,14 +93,14 @@
 
 .settings-note {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--type-12);
   color: var(--text-faint);
 }
 
 /* The device-code shown during an OAuth login (ChatGPT etc.). */
 .login-code {
   font-family: var(--mono);
-  font-size: 20px;
+  font-size: var(--type-20);
   letter-spacing: 0.15em;
   padding: 8px 12px;
   border: 1px solid var(--border);
@@ -112,7 +112,7 @@
 /* command safety panel */
 .settings-warning {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--type-12);
   color: var(--error);
 }
 
@@ -131,7 +131,7 @@
 }
 
 .approval-title {
-  font-size: 13px;
+  font-size: var(--type-13);
   font-weight: 600;
 }
 
@@ -165,14 +165,14 @@
 }
 
 .approval-command {
-  font-size: 12px;
+  font-size: var(--type-12);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .approval-meta {
-  font-size: 11px;
+  font-size: var(--type-11);
   color: var(--text-dim);
   white-space: nowrap;
   overflow: hidden;
@@ -226,7 +226,7 @@
 }
 
 .settings-saved {
-  font-size: 12px;
+  font-size: var(--type-12);
   color: var(--ok);
 }
 
@@ -253,7 +253,7 @@
 
 .saved-prompt-id {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--type-12);
   color: var(--text-dim);
   padding: 1px 8px;
   background: var(--accent-soft);
@@ -261,7 +261,7 @@
 }
 
 .saved-prompt-label {
-  font-size: 13px;
+  font-size: var(--type-13);
   color: var(--text);
   flex: 1;
   min-width: 0;
@@ -279,7 +279,7 @@
 .saved-prompt-text {
   margin: 0;
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: var(--type-11-5);
   color: var(--text-dim);
   white-space: pre-wrap;
   word-break: break-word;
@@ -315,12 +315,12 @@
   display: flex;
   flex-direction: column;
   gap: 5px;
-  font-size: 12.5px;
+  font-size: var(--type-12-5);
   color: var(--text-dim);
 }
 
 .field textarea {
-  font-size: 12.5px;
+  font-size: var(--type-12-5);
   min-height: 80px;
   resize: vertical;
 }
@@ -351,12 +351,12 @@
 }
 
 .model-pref-label {
-  font-size: 13px;
+  font-size: var(--type-13);
   font-weight: 600;
 }
 
 .model-pref-desc {
-  font-size: 12px;
+  font-size: var(--type-12);
   color: var(--text-faint);
 }
 
@@ -371,7 +371,7 @@
   min-width: 0;
   height: var(--model-pref-control-height);
   padding: 0 8px 0 10px;
-  font-size: 12.5px;
+  font-size: var(--type-12-5);
   color: var(--text);
   background: var(--input-bg);
   border: 1px solid var(--border);
@@ -476,7 +476,7 @@
 .settings-nav-heading {
   margin: 0 0 4px;
   padding: 0 12px;
-  font-size: 11px;
+  font-size: var(--type-11);
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--text-faint);
@@ -489,7 +489,7 @@
   padding: 8px 12px;
   border-radius: var(--radius-sm);
   text-align: left;
-  font-size: 13px;
+  font-size: var(--type-13);
   color: var(--text-dim);
   transition:
     background var(--lum-dur-fast) var(--lum-ease-out),
@@ -571,7 +571,7 @@
   flex: 1;
   min-width: 0;
   margin: 0;
-  font-size: 16px;
+  font-size: var(--type-16);
   font-weight: 600;
 }
 
@@ -614,7 +614,7 @@
   align-items: center;
   gap: 4px;
   padding: 0;
-  font-size: 12.5px;
+  font-size: var(--type-12-5);
   color: var(--text-dim);
 }
 
@@ -623,7 +623,7 @@
 }
 
 .settings-subhead-title {
-  font-size: 14px;
+  font-size: var(--type-14);
   font-weight: 600;
   flex: 1;
   min-width: 0;
@@ -674,7 +674,7 @@
 
 .settings-section-head h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--type-14);
   font-weight: 600;
   flex: 1;
   min-width: 0;
@@ -704,7 +704,7 @@
   border-bottom: 1px solid var(--border);
   background: none;
   color: var(--text-dim);
-  font-size: 13px;
+  font-size: var(--type-13);
   font-weight: 600;
   text-align: left;
   cursor: pointer;
@@ -770,7 +770,7 @@ button.provider-row-body:hover .provider-row-chevron {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: var(--type-13);
   font-weight: 500;
 }
 
@@ -779,7 +779,7 @@ button.provider-row-body:hover .provider-row-chevron {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 11.5px;
+  font-size: var(--type-11-5);
   color: var(--text-dim);
 }
 
@@ -790,7 +790,7 @@ button.provider-row-body:hover .provider-row-chevron {
   border-radius: var(--radius-pill);
   background: var(--accent-soft);
   color: var(--text-dim);
-  font-size: 10.5px;
+  font-size: var(--type-10-5);
   line-height: 17px;
 }
 
@@ -864,7 +864,7 @@ button.provider-row-body:hover .provider-row-chevron {
   width: 100%;
   padding: 10px 12px;
   background: var(--surface-2);
-  font-size: 13px;
+  font-size: var(--type-13);
   font-weight: 500;
   text-align: left;
   transition: background var(--lum-dur-fast) var(--lum-ease-out);
@@ -894,7 +894,7 @@ button.provider-row-body:hover .provider-row-chevron {
 }
 
 .model-group-count {
-  font-size: 11.5px;
+  font-size: var(--type-11-5);
   font-weight: 400;
   color: var(--text-faint);
 }
@@ -909,7 +909,7 @@ button.provider-row-body:hover .provider-row-chevron {
   align-items: center;
   padding: 8px 12px 8px 36px;
   border-top: 1px solid var(--border);
-  font-size: 13px;
+  font-size: var(--type-13);
 }
 
 .model-toggle-name {
@@ -1003,12 +1003,12 @@ button.provider-row-body:hover .provider-row-chevron {
 }
 
 .update-label {
-  font-size: 13px;
+  font-size: var(--type-13);
   font-weight: 600;
 }
 
 .update-desc {
-  font-size: 12px;
+  font-size: var(--type-12);
   color: var(--text-faint);
 }
 
@@ -1057,7 +1057,7 @@ button.provider-row-body:hover .provider-row-chevron {
 .update-status-text {
   flex: 1;
   min-width: 0;
-  font-size: 13px;
+  font-size: var(--type-13);
   color: var(--text-dim);
 }
 
@@ -1084,7 +1084,7 @@ button.provider-row-body:hover .provider-row-chevron {
 }
 
 .update-percent {
-  font-size: 12px;
+  font-size: var(--type-12);
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
 }
@@ -1191,7 +1191,7 @@ button.provider-row-body:hover .provider-row-chevron {
   }
 
   .field textarea {
-    font-size: 16px;
+    font-size: var(--type-16);
   }
 }
 
@@ -1221,7 +1221,7 @@ button.provider-row-body:hover .provider-row-chevron {
   width: 100%;
   min-width: 0;
   padding: 7px 10px 7px 12px;
-  font-size: 12.5px;
+  font-size: var(--type-12-5);
   color: var(--text);
   background: var(--input-bg);
   border: 1px solid var(--border);
@@ -1301,7 +1301,7 @@ button.provider-row-body:hover .provider-row-chevron {
   padding: 7px 8px;
   border-radius: var(--radius-sm);
   color: var(--text);
-  font-size: 12.5px;
+  font-size: var(--type-12-5);
   text-align: left;
 }
 
@@ -1328,7 +1328,7 @@ button.provider-row-body:hover .provider-row-chevron {
 }
 
 .select-option-desc {
-  font-size: 11.5px;
+  font-size: var(--type-11-5);
   font-weight: 400;
   color: var(--text-faint);
   overflow: hidden;
@@ -1371,11 +1371,11 @@ button.provider-row-body:hover .provider-row-chevron {
   }
 
   .update-label {
-    font-size: 14px;
+    font-size: var(--type-14);
   }
 
   .update-desc {
-    font-size: 13px;
+    font-size: var(--type-13);
   }
 
   .setting-card {
@@ -1384,12 +1384,12 @@ button.provider-row-body:hover .provider-row-chevron {
 
   .settings-nav-item {
     padding: 12px;
-    font-size: 13px;
+    font-size: var(--type-13);
   }
 
   .select-trigger,
   .select-option {
-    font-size: 14px;
+    font-size: var(--type-14);
   }
 
   .select-trigger {

@@ -68,7 +68,7 @@
 
 .modal h2 {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--type-16);
   font-weight: 600;
 }
 
@@ -89,7 +89,7 @@
 
 .error-text {
   color: var(--error);
-  font-size: 12.5px;
+  font-size: var(--type-12-5);
 }
 
 /* the session error banner: the whole row is clickable to copy the
@@ -125,7 +125,7 @@
 
 .faint-box {
   padding: 8px;
-  font-size: 12.5px;
+  font-size: var(--type-12-5);
   color: var(--text-faint);
 }
 
@@ -133,7 +133,7 @@
   display: flex;
   flex-direction: column;
   gap: 5px;
-  font-size: 12.5px;
+  font-size: var(--type-12-5);
   color: var(--text-dim);
 }
 
@@ -148,14 +148,14 @@
  * below it reuse .settings-note, the dialogs' small print. */
 .confirm-body {
   margin: 0;
-  font-size: 13.5px;
+  font-size: var(--type-13-5);
   overflow-wrap: anywhere;
 }
 
 .confirm-list {
   margin: 0;
   padding-left: 18px;
-  font-size: 12.5px;
+  font-size: var(--type-12-5);
   color: var(--text-dim);
   overflow-wrap: anywhere;
 }
@@ -183,7 +183,7 @@
   padding: 6px 8px;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 12.5px;
+  font-size: var(--type-12-5);
   text-align: left;
 }
 
@@ -211,7 +211,7 @@
 }
 
 .model-item .model-meta {
-  font-size: 10.5px;
+  font-size: var(--type-10-5);
   color: var(--text-faint);
   flex: none;
   display: inline-flex;
@@ -269,7 +269,7 @@
  * taps. The title gains the one step the rest of the app's text gains. */
 @media (max-width: 600px) {
   .modal h2 {
-    font-size: 17px;
+    font-size: var(--type-17);
   }
 
   .modal-header {
@@ -279,7 +279,7 @@
   .modal-header .btn {
     min-height: 40px;
     padding: 9px 14px;
-    font-size: 14px;
+    font-size: var(--type-14);
   }
 
   .model-item {
@@ -287,6 +287,6 @@
   }
 
   .error-text {
-    font-size: 13px;
+    font-size: var(--type-13);
   }
 }

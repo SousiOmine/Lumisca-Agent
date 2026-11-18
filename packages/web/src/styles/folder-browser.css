@@ -29,7 +29,7 @@
 .folder-path {
   flex: 1;
   min-width: 0;
-  font-size: 12.5px;
+  font-size: var(--type-12-5);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -61,7 +61,7 @@
 
 .folder-browser-sidebar-title {
   padding: 4px 8px 6px;
-  font-size: 10.5px;
+  font-size: var(--type-10-5);
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--text-faint);
@@ -75,7 +75,7 @@
   padding: 6px 8px;
   border-radius: var(--radius-sm);
   color: var(--text-dim);
-  font-size: 12.5px;
+  font-size: var(--type-12-5);
   text-align: left;
 }
 
@@ -130,7 +130,7 @@
   padding: 2px 5px;
   border-radius: var(--radius-sm);
   color: var(--text-dim);
-  font-size: 12px;
+  font-size: var(--type-12);
 }
 
 .folder-browser-crumb:hover:not(:disabled) {
@@ -179,7 +179,7 @@
   gap: 8px;
   padding: 5px 8px;
   border-radius: var(--radius-sm);
-  font-size: 12.5px;
+  font-size: var(--type-12-5);
   /* A double click would otherwise select the row's text. */
   user-select: none;
 }
@@ -213,7 +213,7 @@
 
 .folder-browser-empty {
   padding: 8px;
-  font-size: 12px;
+  font-size: var(--type-12);
   color: var(--text-faint);
 }
 
@@ -281,11 +281,11 @@
 @media (max-width: 600px) {
   .folder-browser-row {
     padding: 12px 10px;
-    font-size: 14px;
+    font-size: var(--type-14);
   }
 
   .folder-browser-crumb {
     padding: 8px 10px;
-    font-size: 13px;
+    font-size: var(--type-13);
   }
 }

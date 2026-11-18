@@ -16,7 +16,7 @@
   background: var(--accent-soft);
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
-  font-size: 13px;
+  font-size: var(--type-13);
   animation: lum-slide-down var(--lum-dur-mid) var(--lum-ease-out) both;
 }
 
@@ -43,7 +43,7 @@
   background: var(--error-soft);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  font-size: 13px;
+  font-size: var(--type-13);
   animation: lum-slide-down var(--lum-dur-mid) var(--lum-ease-out) both;
 }
 
@@ -66,7 +66,7 @@
 }
 
 .server-down-error {
-  font-size: 12.5px;
+  font-size: var(--type-12-5);
 }
 
 .server-down-log {
@@ -76,7 +76,7 @@
   white-space: pre-wrap;
   word-break: break-all;
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: var(--type-11-5);
   line-height: 1.5;
   background: var(--surface-2);
   border: 1px solid var(--border);
