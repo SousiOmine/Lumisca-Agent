@@ -645,6 +645,7 @@ export function App({ initialData }: AppProps): ReactElement {
         <div className="app-body">
           {setup.pending && (
             <SetupScreen
+              desktop={desktop}
               theme={theme}
               themeError={themeError}
               onThemeChange={setTheme}

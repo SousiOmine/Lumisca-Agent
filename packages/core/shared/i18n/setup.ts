@@ -1,13 +1,16 @@
 /**
- * The first-run setup (packages/web/src/components/setup/): the four steps a
- * new installation walks through before its first conversation.
+ * The first-run setup (packages/web/src/components/setup/): the screens a new
+ * installation walks through before its first conversation.
  *
- * The wizard is its own surface, so its text lives here rather than in
- * `settings.ts`: the steps decide the same things the settings dialog does,
- * but in a different order, with the reader's attention in a different place.
- * What the two screens share — the words for the language, the theme, the
- * default model and "not set" — is reused from `settings.*` instead of being
- * spelled again, so a rewording reaches both.
+ * The desktop app opens on the connection screen, because its window can
+ * display any server and this computer's own is one of them; a browser page
+ * walks the four local steps alone. The wizard is its own surface, so its
+ * text lives here rather than in `settings.ts`: the screens decide the same
+ * things the settings dialog does, but in a different order, with the
+ * reader's attention in a different place. What the two screens share — the
+ * words for the language, the theme, the default model and "not set" — is
+ * reused from `settings.*` instead of being spelled again, so a rewording
+ * reaches both.
  */
 export const setup = {
   "setup.title": { ja: "初期セットアップ", en: "Initial setup" },
@@ -18,6 +21,26 @@ export const setup = {
   },
   "setup.next": { ja: "次へ", en: "Next" },
   "setup.start": { ja: "はじめる", en: "Start" },
+
+  // --- the desktop's gate: which server this window shows -------------------
+  /** The first screen of the desktop app's setup. The local walk waits one
+   * press away under it, so this screen answers "where do I work", not "how
+   * do I work". */
+  "setup.server.title": { ja: "サーバーに接続", en: "Connect to a server" },
+  "setup.server.connect": { ja: "接続", en: "Connect" },
+  /** The quiet way into the local walk. This screen is the desktop app's
+   * only, so "local" names this computer's server without having to say
+   * which server the page came from. */
+  "setup.server.local": {
+    ja: "ローカルでセットアップを続行",
+    en: "Continue setup locally",
+  },
+  /** The registry write failed after the server answered, so the window did
+   * not switch: the server would not be in the title bar's picker. */
+  "setup.server.saveFailed": {
+    ja: "接続先を保存できませんでした: {error}",
+    en: "Could not save the server: {error}",
+  },
 
   // --- step 1: welcome ------------------------------------------------------
   "setup.welcome.title": {

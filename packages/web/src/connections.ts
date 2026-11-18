@@ -223,3 +223,27 @@ export function withUrl(entry: ConnectionEntry, url: string): ConnectionEntry {
         url,
       };
 }
+
+/**
+ * `entries` with the row for `entry`'s server replaced, or `entry` appended.
+ *
+ * The first-run setup writes the server it is about to switch to, so the
+ * reader can come back to it from the title bar's picker. A second row for
+ * the same origin would make "which entry is displayed"
+ * (`displayedConnectionId`) name the first one and hide the other, so the
+ * existing row is replaced; its id is kept because that is what the row is
+ * addressed by elsewhere.
+ */
+export function upsertConnection(
+  entries: readonly ConnectionEntry[],
+  entry: ConnectionEntry,
+): ConnectionEntry[] {
+  const origin = originOf(entry.url);
+  const index = entries.findIndex(
+    (existing) => originOf(existing.url) === origin,
+  );
+  if (index === -1) return [...entries, entry];
+  return entries.map((existing, at) =>
+    at === index ? { ...entry, id: existing.id } : existing,
+  );
+}

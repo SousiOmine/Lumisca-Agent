@@ -78,6 +78,55 @@
   line-height: 1.35;
 }
 
+/* The connection screen's fields: one column, the shape every settings form
+ * uses. The primary move sits under them, where the footer's forward button
+ * sits on the local steps, so the screen reads the same way down. */
+.setup-server-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* The primary move stays reachable while the fields scroll: on a window
+ * shorter than the card, the body is the scroller, and a submit button at the
+ * end of the form would be the one thing below the fold. */
+.setup-server-submit {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 0;
+  background: var(--surface);
+}
+
+/* The quiet way into the local walk. It sits at the bottom of the body
+ * rather than in the footer: the footer's single forward button belongs to
+ * the local steps, and a second capsule beside the form's 接続 would read as
+ * an equal choice. `margin-top: auto` keeps it away from the form on a tall
+ * card and still under it when the body scrolls. */
+.setup-alt {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* The local path, under the divider at the card's bottom right. It is a
+ * filled capsule rather than a link: on this screen it is a way forward, and
+ * the reader has to see it as one. The fill is the accent, the same step the
+ * primary uses, so it inverts with the theme; the weight stays one step
+ * lighter so the form's 接続 is still read first. */
+.setup-local {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.setup-local:hover {
+  background: var(--accent);
+  filter: brightness(1.08);
+}
+
 /* The two moves stay reachable because they are outside the scroller: a
  * step taller than the window scrolls its body, not the way out of it. */
 .setup-actions {

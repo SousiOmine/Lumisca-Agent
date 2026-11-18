@@ -398,7 +398,7 @@ function ServerCard({
               placeholder={t("settings.connection.serverNamePlaceholder")}
             />
           </Field>
-          <Field label="URL">
+          <Field label={t("settings.connection.urlLabel")}>
             <input
               value={server.url}
               onChange={(e) => onChange(withUrl(server, e.currentTarget.value))}

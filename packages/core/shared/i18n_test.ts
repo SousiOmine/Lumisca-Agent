@@ -251,6 +251,7 @@ test("catalogue: user-facing text is not left in one language only", () => {
     "settings.userProvider.apiLabel", // "API" in both
     "settings.mcp.typeHttp", // protocol name: "HTTP (streamable)" in both
     "settings.mcp.urlLabel", // "URL" in both
+    "settings.connection.urlLabel", // "URL" in both
     // Product names: the mode names are the same word in every language.
     "chat.modeSelect.code.title",
     "chat.modeSelect.stella.title",

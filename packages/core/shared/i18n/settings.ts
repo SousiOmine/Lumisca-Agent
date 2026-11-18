@@ -742,6 +742,9 @@ export const settings = {
     en: "Cannot reach server: {url}",
   },
   "settings.connection.testOk": { ja: "接続OK", en: "Connection OK" },
+  /** The address field of a connection. The setup's connection screen uses
+   * the same label, so one word is not spelled twice. */
+  "settings.connection.urlLabel": { ja: "URL", en: "URL" },
   "settings.connection.serverNameLabel": { ja: "名前", en: "Name" },
   "settings.connection.serverNamePlaceholder": {
     ja: "例: 自宅サーバー",

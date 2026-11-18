@@ -8,6 +8,7 @@ import {
   pageUrl,
   serverLabel,
   suggestConnectionName,
+  upsertConnection,
   withUrl,
 } from "./connections.ts";
 
@@ -161,4 +162,34 @@ test("withUrl derives the name from the address, until one is typed", () => {
     withUrl(entry("id", "", "https://a.example"), "https://b.example").name,
     "b.example",
   );
+});
+
+test("upsertConnection replaces the row for the same server and keeps its id", () => {
+  const connections = [
+    entry("a", "Home", "https://home.example"),
+    entry("b", "Tailnet", "http://100.64.0.5:8000"),
+  ];
+  // The same server spelled with a trailing slash and a page token is the
+  // same row, not a second one. The first row's id survives: the title bar
+  // addresses the displayed entry by it.
+  const next = upsertConnection(connections, {
+    id: "new",
+    name: "自宅",
+    url: pageUrl("https://home.example/", "tok"),
+    token: "t2",
+  });
+  assertEquals(next.length, 2);
+  assertEquals(next[0], {
+    id: "a",
+    name: "自宅",
+    url: pageUrl("https://home.example/", "tok"),
+    token: "t2",
+  });
+  assertEquals(next[1], connections[1]);
+});
+
+test("upsertConnection appends a server the registry does not know", () => {
+  const connections = [entry("a", "Home", "https://home.example")];
+  const added = entry("b", "Tailnet", "http://100.64.0.5:8000");
+  assertEquals(upsertConnection(connections, added), [connections[0], added]);
 });
