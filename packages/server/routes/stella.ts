@@ -36,7 +36,9 @@ import {
 } from "./session-requests.ts";
 import {
   AppError,
+  notFound,
   optionalString,
+  optionalToolCallId,
   parseBody,
   parseWindowQuery,
   requireNonEmptyString,
@@ -587,16 +589,9 @@ export function stellaRoutes(core: StellaApi): Hono {
       toolCallId?: unknown;
     }>(c);
     const note = body?.note === undefined ? "" : String(body.note);
-    const toolCallId = body?.toolCallId;
-    if (toolCallId !== undefined && typeof toolCallId !== "string") {
-      throw new AppError("toolCallId must be a string", 400);
-    }
+    const toolCallId = optionalToolCallId(body?.toolCallId);
     const session = requireConversation(c.req.param("agentId"));
-    core.finishHandover(
-      session.id,
-      note,
-      typeof toolCallId === "string" ? toolCallId : undefined,
-    );
+    core.finishHandover(session.id, note, toolCallId);
     return c.json({ ok: true });
   });
 
@@ -611,16 +606,9 @@ export function stellaRoutes(core: StellaApi): Hono {
       value?: unknown;
       toolCallId?: unknown;
     }>(c);
-    const toolCallId = body?.toolCallId;
-    if (toolCallId !== undefined && typeof toolCallId !== "string") {
-      throw new AppError("toolCallId must be a string", 400);
-    }
+    const toolCallId = optionalToolCallId(body?.toolCallId);
     const session = requireConversation(c.req.param("agentId"));
-    await core.provideStellaEnv(
-      session.id,
-      body?.value,
-      typeof toolCallId === "string" ? toolCallId : undefined,
-    );
+    await core.provideStellaEnv(session.id, body?.value, toolCallId);
     return c.json({ ok: true });
   });
 
@@ -628,15 +616,9 @@ export function stellaRoutes(core: StellaApi): Hono {
    * error: the run continues without the variable. */
   app.post("/stella/conversations/:agentId/env/decline", async (c) => {
     const body = await parseBody<{ toolCallId?: unknown }>(c);
-    const toolCallId = body?.toolCallId;
-    if (toolCallId !== undefined && typeof toolCallId !== "string") {
-      throw new AppError("toolCallId must be a string", 400);
-    }
+    const toolCallId = optionalToolCallId(body?.toolCallId);
     const session = requireConversation(c.req.param("agentId"));
-    core.declineStellaEnv(
-      session.id,
-      typeof toolCallId === "string" ? toolCallId : undefined,
-    );
+    core.declineStellaEnv(session.id, toolCallId);
     return c.json({ ok: true });
   });
 
@@ -648,15 +630,9 @@ export function stellaRoutes(core: StellaApi): Hono {
    * the model that a folder exists when it does not. */
   app.post("/stella/conversations/:agentId/share/lend", async (c) => {
     const body = await parseBody<{ toolCallId?: unknown }>(c);
-    const toolCallId = body?.toolCallId;
-    if (toolCallId !== undefined && typeof toolCallId !== "string") {
-      throw new AppError("toolCallId must be a string", 400);
-    }
+    const toolCallId = optionalToolCallId(body?.toolCallId);
     const session = requireConversation(c.req.param("agentId"));
-    core.finishShareLend(
-      session.id,
-      typeof toolCallId === "string" ? toolCallId : undefined,
-    );
+    core.finishShareLend(session.id, toolCallId);
     return c.json({ ok: true });
   });
 
@@ -664,15 +640,9 @@ export function stellaRoutes(core: StellaApi): Hono {
    * without one. */
   app.post("/stella/conversations/:agentId/share/decline", async (c) => {
     const body = await parseBody<{ toolCallId?: unknown }>(c);
-    const toolCallId = body?.toolCallId;
-    if (toolCallId !== undefined && typeof toolCallId !== "string") {
-      throw new AppError("toolCallId must be a string", 400);
-    }
+    const toolCallId = optionalToolCallId(body?.toolCallId);
     const session = requireConversation(c.req.param("agentId"));
-    core.declineShareRequest(
-      session.id,
-      typeof toolCallId === "string" ? toolCallId : undefined,
-    );
+    core.declineShareRequest(session.id, toolCallId);
     return c.json({ ok: true });
   });
 
@@ -806,7 +776,7 @@ export function stellaRoutes(core: StellaApi): Hono {
   function requireConversation(agentId: string): SessionInfo {
     const agent = core.getStellaAgent(agentId);
     if (agent === undefined) {
-      throw new AppError(`Agent not found: ${agentId}`, 404);
+      throw notFound("Agent", agentId);
     }
     const session = core.findStellaSession(agentId);
     if (session === undefined) {

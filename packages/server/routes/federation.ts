@@ -4,7 +4,7 @@ import { type Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { FederationClient } from "../federation.ts";
 import { probeHealth } from "../health-probe.ts";
-import { AppError } from "./util.ts";
+import { AppError, notFound } from "./util.ts";
 
 /** How long the peer-reachability probe may take (see the route below): long
  * enough for a slow tailnet hop, short enough that one unreachable peer does
@@ -62,7 +62,7 @@ export function federationRoutes(fed: FederationClient): Hono {
     }
     const peer = fed.find(peerId);
     if (!peer) {
-      throw new AppError(`Peer not found: ${peerId}`, 404);
+      throw notFound("Peer", peerId);
     }
     return peer;
   };

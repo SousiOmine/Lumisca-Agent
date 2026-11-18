@@ -124,9 +124,3 @@ export function conversationRoutes(
     });
   }
 }
-
-/** Throw the 404 a route owes when an id names nothing (kept out of the
- * per-surface resolvers so both say it the same way). */
-export function notFound(what: string, id: string): AppError {
-  return new AppError(`${what} not found: ${id}`, 404);
-}

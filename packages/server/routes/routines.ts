@@ -14,7 +14,7 @@
 import type { Routine, StellaAgent } from "@lumisca/core";
 import type { RoutineView } from "@lumisca/core/shared";
 import { Hono } from "hono";
-import { AppError, parseBody, requireBoolean } from "./util.ts";
+import { notFound, parseBody, requireBoolean } from "./util.ts";
 
 export interface RoutineApi {
   listRoutinesOf(agentId: string): Routine[];
@@ -53,7 +53,7 @@ export function routineRoutes(core: RoutineApi): Hono {
   const listOf = (agentId: string): { routines: RoutineView[] } => {
     const agent = core.listStellaAgents().find((item) => item.id === agentId);
     if (agent === undefined) {
-      throw new AppError(`Agent not found: ${agentId}`, 404);
+      throw notFound("Agent", agentId);
     }
     return {
       routines: core.listRoutinesOf(agentId).map((routine) => ({
@@ -70,7 +70,7 @@ export function routineRoutes(core: RoutineApi): Hono {
   const agentOf = (routineId: string): string => {
     const routine = core.getRoutineRepo().get(routineId);
     if (routine === undefined) {
-      throw new AppError(`Routine not found: ${routineId}`, 404);
+      throw notFound("Routine", routineId);
     }
     return routine.agentId;
   };
@@ -89,7 +89,7 @@ export function routineRoutes(core: RoutineApi): Hono {
     const repo = core.getRoutineRepo();
     const routine = repo.get(id);
     if (routine === undefined) {
-      throw new AppError(`Routine not found: ${id}`, 404);
+      throw notFound("Routine", id);
     }
     repo.update(id, {
       enabled,

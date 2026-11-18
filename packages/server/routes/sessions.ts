@@ -22,7 +22,7 @@ import {
   parsePromptBody,
   preparePromptImages,
 } from "./session-requests.ts";
-import { AppError, parseBody, parseWindowQuery } from "./util.ts";
+import { AppError, notFound, parseBody, parseWindowQuery } from "./util.ts";
 
 /** The slice of the core these routes need (interface segregation). */
 export interface SessionApi {
@@ -135,7 +135,7 @@ export function sessionRoutes(core: SessionApi): Hono {
   /** 404 unless a session with this id exists. */
   const requireSession = (id: string) => {
     const session = core.getSession(id);
-    if (!session) throw new AppError(`Session not found: ${id}`, 404);
+    if (!session) throw notFound("Session", id);
     return session;
   };
 

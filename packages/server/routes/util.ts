@@ -13,6 +13,28 @@ export class AppError extends Error {
   }
 }
 
+/** The 404 a route owes when an id names nothing. Kept out of the
+ * per-surface resolvers so every route says it the same way. */
+export function notFound(what: string, id: string): AppError {
+  return new AppError(`${what} not found: ${id}`, 404);
+}
+
+/** The 404 for a thing with no id to name (a session that timed out, a
+ * prompt that was never saved). */
+export function missing(what: string): AppError {
+  return new AppError(`${what} not found`, 404);
+}
+
+/** The `toolCallId` a body may carry: absent, or a string. Anything else is
+ * the caller's mistake, not a stale click. */
+export function optionalToolCallId(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") {
+    throw new AppError("toolCallId must be a string", 400);
+  }
+  return value;
+}
+
 /** Classify an unknown error into an HTTP status. Route handlers throw
  * AppError; the core throws typed CoreError (kind maps to a status), so
  * error messages are never matched by text. Anything unclassified is a

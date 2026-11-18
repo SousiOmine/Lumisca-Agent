@@ -9,7 +9,7 @@ import type { Context } from "hono";
 import { Hono } from "hono";
 import { renderMcpAuthPage } from "../render.ts";
 import { sameServerAuthority } from "../security.ts";
-import { AppError, requireNonEmptyString } from "./util.ts";
+import { AppError, missing, requireNonEmptyString } from "./util.ts";
 
 /** The slice of the core these routes need (interface segregation). */
 export interface McpApi {
@@ -128,14 +128,14 @@ export function mcpRoutes(
   app.get("/mcp/auth/:id", (c) => {
     const snapshot = core.getMcpAuth(c.req.param("id"));
     if (snapshot === undefined) {
-      throw new AppError("MCP sign-in session not found", 404);
+      throw missing("MCP sign-in session");
     }
     return c.json(snapshot);
   });
 
   app.post("/mcp/auth/:id/cancel", (c) => {
     if (!core.cancelMcpAuth(c.req.param("id"))) {
-      throw new AppError("MCP sign-in session not found", 404);
+      throw missing("MCP sign-in session");
     }
     return c.json({ ok: true });
   });

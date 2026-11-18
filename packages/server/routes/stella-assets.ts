@@ -14,7 +14,7 @@ import { Hono } from "hono";
 import { renderPreview } from "../../core/media/preview.ts";
 import { runtime } from "../../core/runtime/runtime.ts";
 import { assetHeaders } from "./asset-headers.ts";
-import { AppError } from "./util.ts";
+import { AppError, notFound } from "./util.ts";
 
 /** The slice of the core the file routes need (interface segregation). */
 export interface StellaAssetApi {
@@ -48,12 +48,12 @@ export function stellaAssetRoutes(core: StellaAssetApi): Hono {
   app.get("/stella/agents/:id/icon/:name", async (c) => {
     const agentId = c.req.param("id");
     if (core.getStellaAgent(agentId) === undefined) {
-      throw new AppError(`Agent not found: ${agentId}`, 404);
+      throw notFound("Agent", agentId);
     }
     const name = c.req.param("name");
     const icon = await core.resolveStellaAgentIcon(agentId, name);
     if (icon === undefined) {
-      throw new AppError(`Icon not found: ${name}`, 404);
+      throw notFound("Icon", name);
     }
     const bytes = await runtime.readFile(icon.path);
     return new Response(bytes, {
@@ -78,7 +78,7 @@ export function stellaAssetRoutes(core: StellaAssetApi): Hono {
     const agentId = c.req.param("agentId");
     const ref = c.req.query("ref") ?? "";
     if (core.getStellaAgent(agentId) === undefined) {
-      throw new AppError(`Agent not found: ${agentId}`, 404);
+      throw notFound("Agent", agentId);
     }
     const file = await core.resolvePromptUpload(agentId, ref);
     if (file === undefined) {

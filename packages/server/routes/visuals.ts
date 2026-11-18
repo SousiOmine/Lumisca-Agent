@@ -6,7 +6,7 @@ import {
 } from "../../core/media/preview-cache.ts";
 import { runtime } from "../../core/runtime/runtime.ts";
 import { assetHeaders } from "./asset-headers.ts";
-import { AppError } from "./util.ts";
+import { notFound } from "./util.ts";
 
 /** The slice of the core these routes need (interface segregation). */
 export interface VisualApi {
@@ -39,11 +39,11 @@ export function visualRoutes(core: VisualApi): Hono {
     // The session must exist: an asset outlives nothing, and a name alone
     // must not tell a caller whether a session ever existed.
     if (core.getSession(sessionId) === undefined) {
-      throw new AppError(`Session not found: ${sessionId}`, 404);
+      throw notFound("Session", sessionId);
     }
     const visual = await core.resolveSessionVisual(sessionId, name);
     if (visual === undefined) {
-      throw new AppError(`Visual not found: ${name}`, 404);
+      throw notFound("Visual", name);
     }
     const headers = assetHeaders({ mimeType: visual.mimeType });
     // A picture is drawn small: the conversation gets a downscaled copy, and

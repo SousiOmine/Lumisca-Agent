@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import { ttlCache } from "../cache.ts";
 import {
   AppError,
+  notFound,
   parseBody,
   requireNonEmptyString,
   requireStringArray,
@@ -57,7 +58,7 @@ export function workspaceRoutes(core: WorkspaceApi): Hono {
   app.get("/workspaces/:id", (c) => {
     const ws = core.getWorkspace(c.req.param("id"));
     if (!ws) {
-      throw new AppError(`Workspace not found: ${c.req.param("id")}`, 404);
+      throw notFound("Workspace", c.req.param("id"));
     }
     return c.json(ws);
   });
@@ -99,7 +100,7 @@ export function workspaceRoutes(core: WorkspaceApi): Hono {
     const id = c.req.param("id");
     const ws = core.getWorkspace(id);
     if (!ws) {
-      throw new AppError(`Workspace not found: ${id}`, 404);
+      throw notFound("Workspace", id);
     }
     const query = c.req.query("query") ?? "";
     let entries = fileCache.get(id);

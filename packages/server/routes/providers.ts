@@ -16,6 +16,8 @@ import { LoginSessions } from "../login.ts";
 import { hostnameOf } from "../security.ts";
 import {
   AppError,
+  missing,
+  notFound,
   parseBody,
   requireBody,
   requireBoolean,
@@ -155,7 +157,7 @@ export function providerRoutes(
     const id = c.req.param("id");
     const provider = core.listProviders().find((p) => p.id === id);
     if (!provider) {
-      throw new AppError(`Provider not found: ${id}`, 404);
+      throw notFound("Provider", id);
     }
     return c.json(core.listModelsDetailed(id));
   });
@@ -226,7 +228,7 @@ export function providerRoutes(
     const id = c.req.param("id");
     const provider = core.listProviders().find((p) => p.id === id);
     if (provider === undefined) {
-      throw new AppError(`Provider not found: ${id}`, 404);
+      throw notFound("Provider", id);
     }
     const oauth = provider.auth.oauth;
     if (oauth === undefined) {
@@ -264,7 +266,7 @@ export function providerRoutes(
     const id = c.req.param("id");
     const session = loginSessions.get(c.req.param("sessionId"));
     if (!session || session.providerId !== id) {
-      throw new AppError("Login session not found", 404);
+      throw missing("Login session");
     }
     // Once the flow has persisted a credential, drop the stale auth cache
     // so the model picker sees the provider as configured.
@@ -276,7 +278,7 @@ export function providerRoutes(
     const id = c.req.param("id");
     const session = loginSessions.get(c.req.param("sessionId"));
     if (!session || session.providerId !== id) {
-      throw new AppError("Login session not found", 404);
+      throw missing("Login session");
     }
     const body = await parseBody<{ promptId?: unknown; value?: unknown }>(c);
     if (
@@ -287,7 +289,7 @@ export function providerRoutes(
       throw new AppError("promptId and value (strings) are required", 400);
     }
     if (!session.respond(body.promptId, body.value)) {
-      throw new AppError("Prompt not found", 404);
+      throw missing("Prompt");
     }
     return c.json({ ok: true });
   });
@@ -296,7 +298,7 @@ export function providerRoutes(
     const id = c.req.param("id");
     const session = loginSessions.get(c.req.param("sessionId"));
     if (!session || session.providerId !== id) {
-      throw new AppError("Login session not found", 404);
+      throw missing("Login session");
     }
     session.cancel();
     return c.json({ ok: true });

@@ -6,7 +6,7 @@ import {
 } from "../../core/media/preview-cache.ts";
 import { runtime } from "../../core/runtime/runtime.ts";
 import { assetHeaders } from "./asset-headers.ts";
-import { AppError } from "./util.ts";
+import { notFound } from "./util.ts";
 
 /** The slice of the core these routes need (interface segregation). */
 export interface AttachmentApi {
@@ -41,11 +41,11 @@ export function attachmentRoutes(core: AttachmentApi): Hono {
     const sessionId = c.req.param("id");
     const name = c.req.param("name");
     if (core.getSession(sessionId) === undefined) {
-      throw new AppError(`Session not found: ${sessionId}`, 404);
+      throw notFound("Session", sessionId);
     }
     const attachment = await core.resolveSessionAttachment(sessionId, name);
     if (attachment === undefined) {
-      throw new AppError(`Attachment not found: ${name}`, 404);
+      throw notFound("Attachment", name);
     }
     // The download carries the name the user knows, not the store's random
     // one (see asset-headers.ts for the rest of the rules).
