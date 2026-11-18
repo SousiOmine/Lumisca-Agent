@@ -19,7 +19,7 @@ import {
   UPDATE_SUMMARIZATION_PROMPT,
 } from "./compaction-prompts.ts";
 import { serializeHead } from "./compaction-span.ts";
-import type { AgentMessage } from "./types.ts";
+import type { AgentMessage } from "./message.ts";
 
 export interface CompactionStyle {
   /** System prompt of the summarization call. */

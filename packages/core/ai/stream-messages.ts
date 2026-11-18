@@ -10,7 +10,11 @@
 
 import type { AssistantContent, ModelMessage, ToolSet, UserContent } from "ai";
 import { jsonSchema, tool } from "ai";
+import type { AgentTool } from "./agent-types.ts";
+
+import type { Api, Model } from "./catalog.ts";
 import { toolResultTakesImages } from "./lang-model.ts";
+import type { LlmMessage } from "./message.ts";
 import {
   imageFilePart,
   readToolOutput,
@@ -21,7 +25,6 @@ import {
   toolModelOutput,
   toolResultOutput,
 } from "./tool-envelope.ts";
-import type { AgentTool, Api, LlmMessage, Model } from "./types.ts";
 
 /** The SDK shapes the converters index into: the two content unions, and the
  * provider-options record the reasoning flag goes into. */

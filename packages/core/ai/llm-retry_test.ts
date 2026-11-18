@@ -5,7 +5,7 @@ import {
   isRetryableRateLimit,
   PROVIDER_DEFAULT_MAX_RETRIES,
 } from "./llm-retry.ts";
-import type { StreamOptions } from "./types.ts";
+import type { StreamOptions } from "./transport.ts";
 
 /**
  * `llm-retry.ts` is two thin adapters: a message-level view of the shared

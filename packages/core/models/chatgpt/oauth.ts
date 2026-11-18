@@ -12,7 +12,8 @@
  * the shape (instructions required, store:false, ChatGPT-Account-Id).
  */
 
-import type { AuthInteraction } from "../../ai/types.ts";
+import type { AuthInteraction } from "../../ai/catalog.ts";
+
 import { isRecord } from "../../fs.ts";
 import {
   type HttpServer,

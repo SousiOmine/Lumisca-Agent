@@ -1,4 +1,5 @@
-import type { AgentMessage } from "../ai/types.ts";
+import type { AgentMessage } from "../ai/message.ts";
+
 import { CoreError } from "../errors.ts";
 import type { MessageRepo, StoredMessage, TranscriptRows } from "./messages.ts";
 import {

@@ -1,16 +1,14 @@
+import type { AgentTool } from "../ai/agent-types.ts";
+
+import type { Api, Model } from "../ai/catalog.ts";
 import type { CompactionStyle } from "../ai/compaction-style.ts";
 import {
   type CompactionResult,
   ContextCompactor,
 } from "../ai/context-compaction.ts";
-import type {
-  AgentMessage,
-  AgentTool,
-  Api,
-  CheckpointMessage,
-  Model,
-  StreamFn,
-} from "../ai/types.ts";
+import type { AgentMessage, CheckpointMessage } from "../ai/message.ts";
+import type { StreamFn } from "../ai/transport.ts";
+
 import { errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";
 import { runtime } from "../runtime/runtime.ts";

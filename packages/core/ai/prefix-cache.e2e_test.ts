@@ -19,15 +19,12 @@
 import { assert } from "@std/assert";
 import { toLlmMessages } from "../ai/llm-view.ts";
 import { Agent } from "./agent.ts";
+import type { AgentTool } from "./agent-types.ts";
+import type { Api, Model } from "./catalog.ts";
 import { languageModelFor } from "./lang-model.ts";
+import type { AssistantMessage } from "./message.ts";
 import { createStreamFn } from "./stream.ts";
-import type {
-  AgentTool,
-  Api,
-  AssistantMessage,
-  Model,
-  StreamFn,
-} from "./types.ts";
+import type { StreamFn } from "./transport.ts";
 
 const API_KEY =
   Deno.env.get("LUMISCA_E2E_API_KEY") ?? Deno.env.get("DEEPSEEK_API_KEY");

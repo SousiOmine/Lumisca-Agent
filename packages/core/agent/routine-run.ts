@@ -1,4 +1,5 @@
-import type { AgentMessage } from "../ai/types.ts";
+import type { AgentMessage } from "../ai/message.ts";
+
 import type { MessageIdentity } from "../domain/event.ts";
 import { contentText } from "../shared/content.ts";
 import { TOOL_SEND_CHAT } from "../shared/mod.ts";

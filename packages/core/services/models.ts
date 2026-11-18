@@ -5,7 +5,8 @@ import type {
   AuthType,
   Model,
   Provider,
-} from "../ai/types.ts";
+} from "../ai/catalog.ts";
+
 import { CoreError } from "../errors.ts";
 import type { CatalogStatus, ModelManager } from "../models/mod.ts";
 import {

@@ -1,4 +1,3 @@
-import { LumiscaModels } from "../ai/models.ts";
 import type {
   Api,
   AuthCheck,
@@ -8,7 +7,9 @@ import type {
   CredentialStore,
   Model,
   Provider,
-} from "../ai/types.ts";
+} from "../ai/catalog.ts";
+import { LumiscaModels } from "../ai/models.ts";
+
 import { CoreError, errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";
 import { setApiKey } from "../settings/credentials.ts";

@@ -1,5 +1,10 @@
 import type { Agent } from "../ai/agent.ts";
 import { isRetryableRateLimit } from "../ai/llm-retry.ts";
+import type {
+  AgentMessage,
+  AssistantMessage,
+  NotificationMessage,
+} from "../ai/message.ts";
 import {
   MAX_RATE_LIMIT_RETRIES,
   rateLimitRetryDelayMs,
@@ -18,11 +23,6 @@ import {
   isTransientStreamError,
   MAX_EMPTY_RESPONSE_RETRIES,
 } from "../ai/retry-policy.ts";
-import type {
-  AgentMessage,
-  AssistantMessage,
-  NotificationMessage,
-} from "../ai/types.ts";
 
 /** Outcome of classifying one assistant turn for retry. */
 export type RetryDecision =

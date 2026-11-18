@@ -40,24 +40,21 @@ export {
 } from "./tool-envelope.ts";
 
 import { contentText } from "../shared/mod.ts";
+import type { Api, Model } from "./catalog.ts";
 import { describeFailedCall, failureText } from "./error-detail.ts";
 import { sessionHeadersFor } from "./lang-model.ts";
+import type { AssistantMessage, StopReason, Usage } from "./message.ts";
 import {
   isRetryableRateLimitError,
   type RateLimitRetryOptions,
   retryOnRateLimitError,
 } from "./rate-limit.ts";
 import type {
-  Api,
-  AssistantMessage,
-  Model,
-  StopReason,
   StreamEvent,
   StreamFn,
   StreamOptions,
   StreamRequest,
-  Usage,
-} from "./types.ts";
+} from "./transport.ts";
 // (no direct event-stream imports here; streams are produced by the
 // transport from the Vercel result, and consumers type them via types.ts)
 

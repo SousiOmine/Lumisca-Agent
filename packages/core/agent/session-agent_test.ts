@@ -15,9 +15,11 @@ import {
 } from "@lumisca/core";
 import { assert, assertEquals } from "@std/assert";
 import { WORK_COMPACTION_STYLE } from "../ai/compaction-style.ts";
+import type { NotificationMessage } from "../ai/message.ts";
 import { MAX_RATE_LIMIT_RETRIES } from "../ai/rate-limit.ts";
 import { MAX_EMPTY_RESPONSE_RETRIES } from "../ai/retry-policy.ts";
-import type { NotificationMessage, StreamOptions } from "../ai/types.ts";
+import type { StreamOptions } from "../ai/transport.ts";
+
 import type { ClientEvent } from "../domain/event.ts";
 import { contentText } from "../shared/mod.ts";
 import { AskHub } from "../tools/ask.ts";

@@ -1,14 +1,11 @@
 import { assert, assertEquals } from "@std/assert";
+import type { Api, Model } from "../ai/catalog.ts";
 import { ContextCompactor } from "../ai/context-compaction.ts";
 import { createAssistantMessageEventStream } from "../ai/event-stream.ts";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "../ai/faux.ts";
-import type {
-  AgentMessage,
-  Api,
-  Model,
-  StreamFn,
-  ToolResultMessage,
-} from "../ai/types.ts";
+import type { AgentMessage, ToolResultMessage } from "../ai/message.ts";
+import type { StreamFn } from "../ai/transport.ts";
+
 import {
   STELLA_CHECKPOINT_PREAMBLE,
   STELLA_COMPACTION_STYLE,

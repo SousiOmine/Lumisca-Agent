@@ -1,11 +1,12 @@
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@lumisca/core";
 import { assertEquals } from "@std/assert";
+import type { AgentMessage } from "../ai/message.ts";
 import { MAX_RATE_LIMIT_RETRIES } from "../ai/rate-limit.ts";
 import {
   isContextOverflowError,
   MAX_EMPTY_RESPONSE_RETRIES,
 } from "../ai/retry-policy.ts";
-import type { AgentMessage } from "../ai/types.ts";
+
 import { MAX_OUTPUT_CAP_RETRIES, RetryManager } from "./retry-manager.ts";
 
 /** An error-stopped, outputless assistant turn with the given message. */

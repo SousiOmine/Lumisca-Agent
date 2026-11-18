@@ -3,7 +3,8 @@ import {
   stellaEntryCursorOf,
   stellaEntryOf,
 } from "../agent/stella-stream.ts";
-import type { AgentMessage } from "../ai/types.ts";
+import type { AgentMessage } from "../ai/message.ts";
+
 import type { StellaEntry } from "../domain/stella-conversation.ts";
 import { readTranscriptPage } from "../session/transcript-pager.ts";
 import {

@@ -1,5 +1,6 @@
 import { assertEquals } from "@std/assert";
-import type { RequestShape } from "../ai/types.ts";
+import type { RequestShape } from "../ai/agent-types.ts";
+
 import { LumiscaDb } from "../db/mod.ts";
 import {
   createRequestShapeRepo,

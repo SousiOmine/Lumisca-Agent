@@ -1,6 +1,7 @@
 import { assertEquals } from "@std/assert";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "./ai/faux.ts";
-import type { AgentMessage, ImageContent } from "./ai/types.ts";
+import type { AgentMessage, ImageContent } from "./ai/message.ts";
+
 import {
   compactionUsageRatio,
   contextTokensOf,

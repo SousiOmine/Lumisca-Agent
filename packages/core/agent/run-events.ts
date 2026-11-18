@@ -1,4 +1,7 @@
-import type { AgentEvent, AgentMessage } from "../ai/types.ts";
+import type { AgentEvent } from "../ai/agent-types.ts";
+
+import type { AgentMessage } from "../ai/message.ts";
+
 import type { ClientEvent } from "../domain/event.ts";
 import { splitChatText } from "../shared/ui-markup/segments.ts";
 

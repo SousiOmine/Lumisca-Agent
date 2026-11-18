@@ -1,12 +1,13 @@
 import { assertEquals } from "@std/assert";
-import { isPruned } from "../ai/pruned.ts";
 import type {
   AgentMessage,
   AssistantMessage,
   ContextMessage,
   NotificationMessage,
   ToolResultMessage,
-} from "../ai/types.ts";
+} from "../ai/message.ts";
+import { isPruned } from "../ai/pruned.ts";
+
 import {
   PRUNED_CONTEXT,
   PRUNED_TOOL_CALL,

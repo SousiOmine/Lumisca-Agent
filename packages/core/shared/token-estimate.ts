@@ -1,5 +1,5 @@
 /** Frontend-safe shared helpers (see shared/mod.ts): pure functions and constants with no runtime dependencies, bundled into the browser client. */
-import type { AgentMessage, LlmMessage } from "../ai/types.ts";
+import type { AgentMessage, LlmMessage } from "../ai/message.ts";
 
 /*
  * Token estimation for history that has no provider-reported usage to lean

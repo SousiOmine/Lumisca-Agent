@@ -1,6 +1,8 @@
+import type { Api, Model } from "../ai/catalog.ts";
 import { WORK_COMPACTION_STYLE } from "../ai/compaction-style.ts";
 import type { ContextProvider } from "../ai/context-providers.ts";
-import type { AgentMessage, Api, Model } from "../ai/types.ts";
+import type { AgentMessage } from "../ai/message.ts";
+
 import {
   BROWSER_TOOL_NAMES,
   createBrowserToolsFrom,

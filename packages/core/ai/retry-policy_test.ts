@@ -6,6 +6,7 @@ import {
 } from "@lumisca/core";
 import { assertEquals } from "@std/assert";
 import { isRetryableRateLimit } from "./llm-retry.ts";
+import type { AssistantMessage } from "./message.ts";
 import {
   buildInterruptedRetryNotification,
   buildRetryNotification,
@@ -13,7 +14,6 @@ import {
   isSilentErrorResponse,
   isTransientStreamError,
 } from "./retry-policy.ts";
-import type { AssistantMessage } from "./types.ts";
 
 function errored(
   errorMessage: string,

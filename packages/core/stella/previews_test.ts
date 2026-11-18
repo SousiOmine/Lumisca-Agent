@@ -1,5 +1,6 @@
 import { assertEquals } from "@std/assert";
-import type { AgentMessage } from "../ai/types.ts";
+import type { AgentMessage } from "../ai/message.ts";
+
 import { LumiscaDb } from "../db/mod.ts";
 import { createMessageRepo } from "../session/messages.ts";
 import { latestPreview } from "./previews.ts";

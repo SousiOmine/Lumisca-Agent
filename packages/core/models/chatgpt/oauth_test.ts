@@ -1,5 +1,6 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
-import type { AuthInteraction, AuthNotice } from "../../ai/types.ts";
+import type { AuthInteraction, AuthNotice } from "../../ai/catalog.ts";
+
 import type { FetchLike } from "./http.ts";
 import {
   buildAuthorizeUrl,

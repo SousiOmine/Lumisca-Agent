@@ -1,6 +1,6 @@
 import { isContextOverflowText } from "./context-overflow.ts";
+import type { AssistantMessage, NotificationMessage } from "./message.ts";
 import { notificationMessage } from "./notification.ts";
-import type { AssistantMessage, NotificationMessage } from "./types.ts";
 
 /** Maximum consecutive vacant responses (no text, no tool call) to retry
  * before giving up and ending the run normally. Shared by both retry

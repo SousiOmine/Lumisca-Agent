@@ -1,21 +1,20 @@
 import { join } from "node:path";
 import { assertEquals } from "@std/assert";
 import { Agent } from "../ai/agent.ts";
+import type { AgentEvent, AgentTool } from "../ai/agent-types.ts";
+import type { Api, Model } from "../ai/catalog.ts";
 import { createAssistantMessageEventStream } from "../ai/event-stream.ts";
 import { fauxAssistantMessage, fauxToolCall } from "../ai/faux.ts";
 import { languageModelFor } from "../ai/lang-model.ts";
-import { createStreamFn, type StreamTransport } from "../ai/stream.ts";
 import type {
-  AgentEvent,
   AgentMessage,
-  AgentTool,
-  Api,
   AssistantMessage,
-  Model,
-  StreamFn,
   ToolCall,
   ToolResultMessage,
-} from "../ai/types.ts";
+} from "../ai/message.ts";
+import { createStreamFn, type StreamTransport } from "../ai/stream.ts";
+import type { StreamFn } from "../ai/transport.ts";
+
 import { bytesToBase64 } from "../base64.ts";
 import { contentText } from "../shared/mod.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";

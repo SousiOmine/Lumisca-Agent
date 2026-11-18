@@ -5,7 +5,8 @@ import type {
 } from "@lumisca/core";
 import { fauxAssistantMessage } from "@lumisca/core";
 import { assert, assertEquals, assertRejects } from "@std/assert";
-import type { StreamOptions } from "../ai/types.ts";
+import type { StreamOptions } from "../ai/transport.ts";
+
 import { fakeModel } from "../test-utils.ts";
 import {
   cleanTitle,

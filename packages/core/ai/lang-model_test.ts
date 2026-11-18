@@ -1,12 +1,12 @@
 import { assertEquals, assertThrows } from "@std/assert";
 import { opencodeGoProvider } from "../models/dev-catalog.ts";
+import type { Api, Model } from "./catalog.ts";
 import {
   languageModelFor,
   sessionHeadersFor,
   toolResultTakesImages,
 } from "./lang-model.ts";
 import { reasoningForceOption } from "./stream.ts";
-import type { Api, Model } from "./types.ts";
 
 /** A plain first-party OpenAI model (no session affinity). */
 const openaiModel: Model<Api> = {

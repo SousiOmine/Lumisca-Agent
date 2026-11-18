@@ -1,11 +1,7 @@
+import type { Api, Model } from "../ai/catalog.ts";
+import type { ImageContent, TextContent } from "../ai/message.ts";
 import { streamText } from "../ai/stream.ts";
-import type {
-  Api,
-  ImageContent,
-  Model,
-  StreamFn,
-  TextContent,
-} from "../ai/types.ts";
+import type { StreamFn } from "../ai/transport.ts";
 
 /** System prompt for the image analysis model: it must produce a
  * description complete enough for a text-only model to work from. */

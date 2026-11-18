@@ -7,8 +7,6 @@
 
 import { runtime } from "../runtime/runtime.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
-import { languageModelFor, type ResolvedApiKey } from "./lang-model.ts";
-import { createStreamFn, type StreamTransport } from "./stream.ts";
 import type {
   AuthCheck,
   AuthInteraction,
@@ -17,8 +15,10 @@ import type {
   CredentialStore,
   Model,
   Provider,
-  StreamFn,
-} from "./types.ts";
+} from "./catalog.ts";
+import { languageModelFor, type ResolvedApiKey } from "./lang-model.ts";
+import { createStreamFn, type StreamTransport } from "./stream.ts";
+import type { StreamFn } from "./transport.ts";
 
 export interface LumiscaModelsOptions {
   credentials?: CredentialStore;

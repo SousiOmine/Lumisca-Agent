@@ -1,4 +1,5 @@
-import type { AgentTool } from "../ai/types.ts";
+import type { AgentTool } from "../ai/agent-types.ts";
+
 import type { Infer, Tool, ToolSchema } from "./schema.ts";
 import { assertSchemaBounds } from "./validate.ts";
 

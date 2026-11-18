@@ -7,7 +7,7 @@ import {
   recoveredOutputCap,
   withOutputCapRecovery,
 } from "./output-cap-recovery.ts";
-import type { StreamEvent } from "./types.ts";
+import type { StreamEvent } from "./transport.ts";
 
 /** The reported rejection, verbatim (OpenCode Go / Console Go). */
 const REPORTED =

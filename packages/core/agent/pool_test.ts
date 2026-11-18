@@ -1,5 +1,6 @@
 import { assert, assertEquals, assertThrows } from "@std/assert";
-import type { Model } from "../ai/types.ts";
+import type { Model } from "../ai/catalog.ts";
+
 import type { SessionInfo } from "../domain/session.ts";
 import type { Workspace } from "../domain/workspace.ts";
 import { CoreError } from "../errors.ts";

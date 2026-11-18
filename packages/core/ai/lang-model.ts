@@ -17,7 +17,8 @@ import { createMistral } from "@ai-sdk/mistral";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModel } from "ai";
-import type { Api, Model, StreamOptions } from "./types.ts";
+import type { Api, Model } from "./catalog.ts";
+import type { StreamOptions } from "./transport.ts";
 
 export interface ResolvedApiKey {
   apiKey: string;

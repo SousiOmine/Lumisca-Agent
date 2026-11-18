@@ -19,7 +19,8 @@ import {
   type ContextUpdate,
   contextMessage,
 } from "../ai/context-providers.ts";
-import type { ContextMessage } from "../ai/types.ts";
+import type { ContextMessage } from "../ai/message.ts";
+
 import type { FolderGrant } from "./grant.ts";
 import { describeGrant, shareRootOf } from "./grant.ts";
 

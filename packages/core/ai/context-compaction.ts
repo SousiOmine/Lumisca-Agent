@@ -41,23 +41,23 @@ import {
   estimateTextTokens,
   estimateToolTokens,
 } from "../shared/token-estimate.ts";
+import type { AgentTool } from "./agent-types.ts";
+
+import type { Api, Model } from "./catalog.ts";
 import {
   buildSummarizationPrompt,
   contextStart,
   estimateMessagesTokensFrom,
   selectCompactionSpan,
 } from "./compaction-span.ts";
-import { streamText } from "./stream.ts";
 import type {
   AgentMessage,
-  AgentTool,
-  Api,
   AssistantMessage,
   CheckpointMessage,
   LlmMessage,
-  Model,
-  StreamFn,
-} from "./types.ts";
+} from "./message.ts";
+import { streamText } from "./stream.ts";
+import type { StreamFn } from "./transport.ts";
 
 export type { CompactionSpan } from "./compaction-span.ts";
 export {

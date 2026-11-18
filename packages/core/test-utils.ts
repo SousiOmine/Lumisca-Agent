@@ -7,8 +7,10 @@
  */
 
 import { realpathSync } from "node:fs";
+import type { Api, Model } from "./ai/catalog.ts";
 import { fauxProvider } from "./ai/faux.ts";
-import type { Api, ImageContent, Model } from "./ai/types.ts";
+import type { ImageContent } from "./ai/message.ts";
+
 import { LumiscaCore } from "./core.ts";
 import { CoreError } from "./errors.ts";
 import { type Listener, runtime } from "./runtime/runtime.ts";

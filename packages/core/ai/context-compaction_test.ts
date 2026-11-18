@@ -1,13 +1,9 @@
 import { assert, assertEquals } from "@std/assert";
 import { createAssistantMessageEventStream } from "../ai/event-stream.ts";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "../ai/faux.ts";
-import type {
-  AgentMessage,
-  AgentTool,
-  Api,
-  Model,
-  StreamFn,
-} from "../ai/types.ts";
+import type { AgentTool } from "./agent-types.ts";
+
+import type { Api, Model } from "./catalog.ts";
 import { WORK_COMPACTION_STYLE } from "./compaction-style.ts";
 import {
   CHECKPOINT_PREAMBLE,
@@ -25,6 +21,8 @@ import {
   transcriptUnits,
   UPDATE_SUMMARIZATION_PROMPT,
 } from "./context-compaction.ts";
+import type { AgentMessage } from "./message.ts";
+import type { StreamFn } from "./transport.ts";
 
 /** A model with a wide window: the summarization request then has room for
  * the whole head, so a test can assert on the request as it was built. */

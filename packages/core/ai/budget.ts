@@ -14,8 +14,9 @@ import {
   estimateTextTokens,
   estimateToolTokens,
 } from "../shared/token-estimate.ts";
+import type { Api, Model } from "./catalog.ts";
 import { reservedCompletionTokens } from "./compaction-policy.ts";
-import type { Api, Model, StreamOptions, StreamRequest } from "./types.ts";
+import type { StreamOptions, StreamRequest } from "./transport.ts";
 
 /** The completion cap to send for one request: the caller's override when it
  * set one, else the model's documented `maxTokens`, else none (the

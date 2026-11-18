@@ -1,5 +1,7 @@
+import type { Api, Model } from "../ai/catalog.ts";
 import { streamText } from "../ai/stream.ts";
-import type { Api, Model, StreamFn } from "../ai/types.ts";
+import type { StreamFn } from "../ai/transport.ts";
+
 import type { CommandApproval, CommandSafetyKind } from "../shared/mod.ts";
 import {
   COMMAND_SAFETY_APPROVALS_KEY,

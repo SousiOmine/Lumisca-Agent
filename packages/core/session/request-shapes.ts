@@ -1,4 +1,5 @@
-import type { RequestShape } from "../ai/types.ts";
+import type { RequestShape } from "../ai/agent-types.ts";
+
 import type { LumiscaDb } from "../db/mod.ts";
 
 /** How many shapes one session keeps. A session's rows are proportional to

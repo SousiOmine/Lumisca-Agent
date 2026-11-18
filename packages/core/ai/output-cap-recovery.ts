@@ -26,7 +26,7 @@ import {
   parseContextOverflow,
 } from "./context-overflow.ts";
 import { describeFailedCall, failureText } from "./error-detail.ts";
-import type { StreamEvent } from "./types.ts";
+import type { StreamEvent } from "./transport.ts";
 
 const log = createLogger("ai");
 

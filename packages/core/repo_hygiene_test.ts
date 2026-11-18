@@ -443,9 +443,22 @@ Deno.test("the core's own modules form a DAG", async () => {
     const deps: string[] = [];
     const source = texts.get(path) ?? "";
     for (const match of source.matchAll(
-      /(?:import|export)[\s\S]*?from\s*"(\.[^"]+)"/g,
+      /(?:import|export)([^;]*?)from\s*"(\.[^"]+)"/g,
     )) {
-      const target = resolve(path.slice(0, path.lastIndexOf("/")), match[1]!);
+      // A type-only import is erased: it cannot form a runtime cycle, and the
+      // split of ai/types.ts makes the type modules point at one another.
+      const declaration = match[0];
+      const names =
+        declaration
+          .match(/\{([^}]*)\}/)?.[1]
+          ?.split(",")
+          .map((name) => name.trim())
+          .filter(Boolean) ?? [];
+      const typeOnly =
+        /^(?:import|export)\s+type\b/.test(declaration) ||
+        (names.length > 0 && names.every((name) => name.startsWith("type ")));
+      if (typeOnly) continue;
+      const target = resolve(path.slice(0, path.lastIndexOf("/")), match[2]!);
       if (target !== undefined) deps.push(target);
     }
     graph.set(path, deps);

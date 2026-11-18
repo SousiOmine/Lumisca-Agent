@@ -1,6 +1,7 @@
 import { assert, assertEquals } from "@std/assert";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "./ai/faux.ts";
-import type { AgentMessage } from "./ai/types.ts";
+import type { AgentMessage } from "./ai/message.ts";
+
 import { LumiscaCore } from "./core.ts";
 import { promptSession } from "./test-utils.ts";
 import { createVmManager } from "./vm/container.ts";

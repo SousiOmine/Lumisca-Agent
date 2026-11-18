@@ -59,15 +59,41 @@ function resolveSpecifier(from: string, specifier: string): string | undefined {
   return undefined;
 }
 
-const IMPORT = /(?:from\s+|import\s*\()\s*"(\.[^"]+)"/g;
+/**
+ * The specifiers a module loads at runtime. Type-only imports are erased and
+ * cannot form a runtime cycle; after the split of `ai/types.ts` the type
+ * modules point at one another by design.
+ */
+function runtimeSpecifiers(text: string): string[] {
+  const out: string[] = [];
+  for (const match of text.matchAll(
+    /import\s+(type\s+)?(\{[^}]*\}|\*\s+as\s+\w+|[\w]+)\s+from\s+"(\.[^"]+)"/g,
+  )) {
+    const names = match[2]!.startsWith("{")
+      ? match[2]!
+          .slice(1, -1)
+          .split(",")
+          .map((name) => name.trim())
+          .filter(Boolean)
+      : [];
+    const typeOnly =
+      match[1] !== undefined ||
+      (names.length > 0 && names.every((name) => name.startsWith("type ")));
+    if (!typeOnly) out.push(match[3]!);
+  }
+  for (const match of text.matchAll(/import\s*\(\s*"(\.[^"]+)"/g)) {
+    out.push(match[1]!);
+  }
+  return out;
+}
 
 function findCycles(): string[][] {
   const files = sources();
   const graph = new Map<string, string[]>();
   for (const file of files) {
     const deps: string[] = [];
-    for (const match of file.text.matchAll(IMPORT)) {
-      const target = resolveSpecifier(file.path, match[1]!);
+    for (const specifier of runtimeSpecifiers(file.text)) {
+      const target = resolveSpecifier(file.path, specifier);
       if (target !== undefined) deps.push(target);
     }
     graph.set(file.path, deps);

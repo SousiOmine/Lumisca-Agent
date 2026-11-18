@@ -2,18 +2,18 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { SessionPool } from "./agent/pool.ts";
 import type { SessionAgent } from "./agent/session-agent.ts";
-import { withProviderRetryDefaults } from "./ai/llm-retry.ts";
 import type {
-  AgentMessage,
   Api,
   AuthCheck,
   AuthInteraction,
   AuthType,
   CredentialStore,
-  ImageContent,
   Model,
   Provider,
-} from "./ai/types.ts";
+} from "./ai/catalog.ts";
+import { withProviderRetryDefaults } from "./ai/llm-retry.ts";
+import type { AgentMessage, ImageContent } from "./ai/message.ts";
+
 import { type CoreServices, createCoreServices } from "./bootstrap.ts";
 import type { BrowserBackend } from "./browser/types.ts";
 import type { ComputerHost, ComputerHostResult } from "./computer/types.ts";

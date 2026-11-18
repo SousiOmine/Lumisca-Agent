@@ -1,4 +1,5 @@
-import type { ApiKeyAuth, Credential, Provider } from "../ai/types.ts";
+import type { ApiKeyAuth, Credential, Provider } from "../ai/catalog.ts";
+
 import { CoreError } from "../errors.ts";
 import { isRecord } from "../fs.ts";
 import type { SettingsRepo } from "../settings/repo.ts";

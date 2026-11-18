@@ -33,7 +33,8 @@
  * replayed out of order, or a reload that starts mid-conversation, would put
  * the message in the wrong place).
  */
-import type { AgentMessage } from "../ai/types.ts";
+import type { AgentMessage } from "../ai/message.ts";
+
 import type { ClientEvent } from "../domain/event.ts";
 import type {
   StellaEntry,

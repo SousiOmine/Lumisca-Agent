@@ -13,7 +13,7 @@ import {
   COMPACTION_DEFAULT_KEEP_RECENT_PERCENT,
   COMPACTION_DEFAULT_RESERVE_PERCENT,
 } from "../shared/settings-keys.ts";
-import type { Api, Model } from "./types.ts";
+import type { Api, Model } from "./catalog.ts";
 
 /** Output floor of the summarization request. Below this a summary could
  * not say anything, so the conversation is trimmed instead of failing. */

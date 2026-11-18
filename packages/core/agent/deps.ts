@@ -1,4 +1,6 @@
-import type { Api, Model, StreamFn } from "../ai/types.ts";
+import type { Api, Model } from "../ai/catalog.ts";
+import type { StreamFn } from "../ai/transport.ts";
+
 import type { BrowserBackend } from "../browser/types.ts";
 import type { ComputerHost } from "../computer/types.ts";
 import type { ClientEvent } from "../domain/event.ts";

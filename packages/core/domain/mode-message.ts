@@ -7,7 +7,7 @@
  * The message shape itself lives in ai/types.ts (with every other message
  * shape); this module builds and reads it.
  */
-import type { ImageContent, ModeMessage } from "../ai/types.ts";
+import type { ImageContent, ModeMessage } from "../ai/message.ts";
 
 /** Input data the client sends when a mode prompt is submitted. */
 export interface ModePrompt {

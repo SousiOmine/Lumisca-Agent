@@ -1,5 +1,6 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
-import type { Api, Model } from "../../ai/types.ts";
+import type { Api, Model } from "../../ai/catalog.ts";
+
 import { createInMemorySettingsRepo } from "../../settings/repo.ts";
 import {
   CHATGPT_PROVIDER_ID,

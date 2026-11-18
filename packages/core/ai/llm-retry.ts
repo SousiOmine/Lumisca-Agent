@@ -1,5 +1,6 @@
+import type { AssistantMessage } from "./message.ts";
 import { isRetryableRateLimitMessage } from "./rate-limit.ts";
-import type { AssistantMessage, StreamFn } from "./types.ts";
+import type { StreamFn } from "./transport.ts";
 
 /** Retry budget the agent seeds for every LLM call: the AI SDK's own retry
  * loop for the initial provider request, with the SDK's backoff (see

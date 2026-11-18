@@ -1,6 +1,7 @@
 import { assertEquals } from "@std/assert";
 import { fauxAssistantMessage } from "../ai/faux.ts";
-import type { AgentMessage } from "../ai/types.ts";
+import type { AgentMessage } from "../ai/message.ts";
+
 import { TextCards, translateRunEvent } from "./run-events.ts";
 
 /**

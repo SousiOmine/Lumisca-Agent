@@ -1,4 +1,5 @@
-import type { AgentMessage, CheckpointMessage } from "../ai/types.ts";
+import type { AgentMessage, CheckpointMessage } from "../ai/message.ts";
+
 import type {
   AskQuestion,
   SubagentStatus,

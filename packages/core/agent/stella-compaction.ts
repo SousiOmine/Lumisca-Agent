@@ -22,7 +22,8 @@
  */
 
 import type { CompactionStyle } from "../ai/compaction-style.ts";
-import type { AgentMessage } from "../ai/types.ts";
+import type { AgentMessage } from "../ai/message.ts";
+
 import { formatLocalDateTime } from "../shared/misc.ts";
 import { TOOL_SEND_CHAT } from "../shared/tool-names.ts";
 import { stellaEntryText } from "../tools/history.ts";

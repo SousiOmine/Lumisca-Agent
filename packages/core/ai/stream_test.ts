@@ -6,6 +6,8 @@ import { summarizeContextUsage } from "../shared/mod.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import { estimateLlmMessagesTokens } from "../shared/token-estimate.ts";
 import { MINI_PNG } from "../test-utils.ts";
+import type { AgentTool } from "./agent-types.ts";
+
 import {
   CONTEXT_SAFETY_RATIO,
   CONTEXT_SAFETY_TOKENS,
@@ -13,16 +15,11 @@ import {
   contextSafetyTokens,
   MIN_MAX_TOKENS,
 } from "./budget.ts";
+import type { Api, Model } from "./catalog.ts";
+import type { LlmMessage } from "./message.ts";
 import { OVERFLOW_SAFETY_TOKENS } from "./output-cap-recovery.ts";
 import { createStreamFn, type StreamTransport } from "./stream.ts";
-import type {
-  AgentTool,
-  Api,
-  LlmMessage,
-  Model,
-  StreamOptions,
-  StreamRequest,
-} from "./types.ts";
+import type { StreamOptions, StreamRequest } from "./transport.ts";
 
 /** A policy that reserves nothing. The transport tests below are about the
  * clamp, so the model's own cap has to reach the request unchanged; the

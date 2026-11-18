@@ -1,4 +1,5 @@
-import type { AgentMessage, AssistantMessage } from "../ai/types.ts";
+import type { AgentMessage, AssistantMessage } from "../ai/message.ts";
+
 import type { LumiscaDb } from "../db/mod.ts";
 import type { ContextUsageMessageLike } from "../shared/context-usage.ts";
 import { reduceMessage } from "./prune.ts";

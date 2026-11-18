@@ -4,7 +4,8 @@ import type {
   Credential,
   Model,
   Provider,
-} from "../ai/types.ts";
+} from "../ai/catalog.ts";
+
 import { errorMessage } from "../errors.ts";
 import { isRecord } from "../fs.ts";
 import { runtime } from "../runtime/runtime.ts";

@@ -11,7 +11,8 @@ import type {
   ModelThinkingLevel,
   Provider,
   ThinkingLevelMap,
-} from "../ai/types.ts";
+} from "../ai/catalog.ts";
+
 import { THINKING_LEVEL_ORDER } from "../shared/providers.ts";
 import { buildProvider, envApiKeyAuth } from "./custom.ts";
 

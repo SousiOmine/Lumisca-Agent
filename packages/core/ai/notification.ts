@@ -6,7 +6,7 @@
  * in this directory produces them too, and a dependency on `domain` would
  * have run the wrong way.
  */
-import type { NotificationMessage } from "./types.ts";
+import type { NotificationMessage } from "./message.ts";
 
 /** What the generators (background / task) produce; the session agent
  * stamps role, timestamp and `steered` when injecting — only the delivery

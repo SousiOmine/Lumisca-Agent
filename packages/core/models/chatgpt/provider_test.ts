@@ -4,7 +4,8 @@ import type {
   Credential,
   CredentialStore,
   OAuthCredential,
-} from "../../ai/types.ts";
+} from "../../ai/catalog.ts";
+
 import { createInMemorySettingsRepo } from "../../settings/repo.ts";
 import { saveChatGptModels } from "./catalog.ts";
 import type { FetchLike } from "./http.ts";

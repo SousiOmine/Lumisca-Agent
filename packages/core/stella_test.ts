@@ -9,7 +9,8 @@ import {
   fauxToolCall,
 } from "./ai/faux.ts";
 import { PRUNED_MARKER } from "./ai/pruned.ts";
-import type { StreamFn } from "./ai/types.ts";
+import type { StreamFn } from "./ai/transport.ts";
+
 import { LumiscaCore } from "./core.ts";
 import type { StellaEntry } from "./domain/stella-conversation.ts";
 import { CoreError } from "./errors.ts";

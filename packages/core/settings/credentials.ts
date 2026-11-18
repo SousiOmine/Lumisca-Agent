@@ -3,7 +3,8 @@ import type {
   Credential,
   CredentialInfo,
   CredentialStore,
-} from "../ai/types.ts";
+} from "../ai/catalog.ts";
+
 import { safeJsonParse } from "../shared/mod.ts";
 import type { SettingsRepo } from "./repo.ts";
 

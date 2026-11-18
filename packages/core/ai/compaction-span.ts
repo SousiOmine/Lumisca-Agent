@@ -16,7 +16,7 @@ import {
 } from "../shared/token-estimate.ts";
 import { CONTEXT_SAFETY_TOKENS } from "./budget.ts";
 import type { CompactionBudgets } from "./compaction-policy.ts";
-import type { AgentMessage, Message } from "./types.ts";
+import type { AgentMessage, Message } from "./message.ts";
 
 const log = createLogger("compaction");
 

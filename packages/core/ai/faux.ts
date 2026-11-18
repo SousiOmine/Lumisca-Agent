@@ -10,24 +10,24 @@
  */
 
 import { errorMessage } from "../errors.ts";
-import { createAssistantMessageEventStream } from "./event-stream.ts";
 import type {
   Api,
-  AssistantMessage,
-  AssistantMessageContent,
   Model,
   ModelThinkingLevel,
   Provider,
+  ThinkingLevelMap,
+} from "./catalog.ts";
+import { createAssistantMessageEventStream } from "./event-stream.ts";
+import type {
+  AssistantMessage,
+  AssistantMessageContent,
   StopReason,
-  StreamFn,
-  StreamOptions,
-  StreamRequest,
   TextContent,
   ThinkingContent,
-  ThinkingLevelMap,
   ToolCall,
   Usage,
-} from "./types.ts";
+} from "./message.ts";
+import type { StreamFn, StreamOptions, StreamRequest } from "./transport.ts";
 
 export function fauxText(text: string): TextContent {
   return { type: "text", text };

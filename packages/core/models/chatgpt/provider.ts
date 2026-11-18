@@ -14,7 +14,8 @@ import type {
   Model,
   OAuthCredential,
   Provider,
-} from "../../ai/types.ts";
+} from "../../ai/catalog.ts";
+
 import type { SettingsRepo } from "../../settings/repo.ts";
 import {
   CHATGPT_PROVIDER_ID,

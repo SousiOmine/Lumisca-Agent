@@ -14,6 +14,16 @@
 
 export { SessionAgent } from "./agent/session-agent.ts";
 export { stellaEventsOf } from "./agent/stella-stream.ts";
+export type {
+  Api,
+  AuthCheck,
+  AuthInteraction,
+  AuthNotice,
+  AuthPrompt,
+  AuthType,
+  Model,
+  Provider,
+} from "./ai/catalog.ts";
 export { createAssistantMessageEventStream } from "./ai/event-stream.ts";
 export {
   fauxAssistantMessage,
@@ -24,28 +34,22 @@ export {
 } from "./ai/faux.ts";
 export type {
   AgentMessage,
-  Api,
   AssistantMessage,
-  AssistantMessageEventStream,
-  AuthCheck,
-  AuthInteraction,
-  AuthNotice,
-  AuthPrompt,
-  AuthType,
   CheckpointMessage,
   ImageContent,
   Message,
-  Model,
   ModeMessage,
   NotificationKind,
   NotificationMessage,
   NotificationStatus,
-  Provider,
-  StreamFn,
-  StreamRequest,
   TextContent,
   ToolCall,
-} from "./ai/types.ts";
+} from "./ai/message.ts";
+export type {
+  AssistantMessageEventStream,
+  StreamFn,
+  StreamRequest,
+} from "./ai/transport.ts";
 export { base64ToBytes, bytesToBase64 } from "./base64.ts";
 export { HttpBrowserBackend } from "./browser/client.ts";
 export type { BrowserBackend } from "./browser/types.ts";

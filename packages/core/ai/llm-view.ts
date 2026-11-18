@@ -17,13 +17,14 @@
  * rule: `ai` used to import it from `domain`, which made the dependency run
  * backwards.
  */
-import { isPruned } from "./pruned.ts";
+
 import type {
   AgentMessage,
   Message,
   ModeMessage,
   NotificationMessage,
-} from "./types.ts";
+} from "./message.ts";
+import { isPruned } from "./pruned.ts";
 
 /** The agent-visible text of a notification: the title (its "[...]" head)
  * followed by the body on the next line when present. */

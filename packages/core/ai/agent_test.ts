@@ -2,16 +2,15 @@ import { assert, assertEquals } from "@std/assert";
 import { contentText } from "../shared/mod.ts";
 import { fakeModel } from "../test-utils.ts";
 import { Agent } from "./agent.ts";
+import type { AgentEvent, AgentTool } from "./agent-types.ts";
 import { createAssistantMessageEventStream } from "./event-stream.ts";
 import { fauxAssistantMessage, fauxToolCall } from "./faux.ts";
 import type {
-  AgentEvent,
   AgentMessage,
-  AgentTool,
-  StreamFn,
   ThinkingContent,
   ToolResultMessage,
-} from "./types.ts";
+} from "./message.ts";
+import type { StreamFn } from "./transport.ts";
 
 /** One scheduler turn: lets the run reach the stream function. */
 function tick(): Promise<void> {

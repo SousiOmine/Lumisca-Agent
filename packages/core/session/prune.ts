@@ -1,11 +1,12 @@
-import { isPruned } from "../ai/pruned.ts";
 import type {
   AgentMessage,
   AssistantMessage,
   ContextMessage,
   NotificationMessage,
   ToolResultMessage,
-} from "../ai/types.ts";
+} from "../ai/message.ts";
+import { isPruned } from "../ai/pruned.ts";
+
 import { TOOL_SEND_CHAT } from "../shared/tool-names.ts";
 
 /**
