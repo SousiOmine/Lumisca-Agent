@@ -17,11 +17,7 @@ import { decodeOutput, detectOemLabel, trimIncompleteUtf8 } from "./decode.ts";
 import { formatDuration } from "./duration.ts";
 import type { FileBackend } from "./file-backend.ts";
 import { HostBackgroundSpawner } from "./host/background.ts";
-import {
-  FINAL_FLUSH_GRACE_MS,
-  KILL_SETTLE_WAIT_MS,
-  KILL_WAIT_MS,
-} from "./process-policy.ts";
+import { FINAL_FLUSH_GRACE_MS, KILL_SETTLE_WAIT_MS } from "./process-policy.ts";
 import { requireResolved } from "./resolve.ts";
 import { safetyBlockResult } from "./safety.ts";
 import {
