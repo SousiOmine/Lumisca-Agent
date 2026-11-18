@@ -195,8 +195,7 @@ fn remember_approved(app: &AppHandle, folder: &str) -> Result<(), String> {
 /// Whether `folder` may be lent: the picker returned it at some point, or it
 /// is already lent (changing the terms of an existing loan).
 fn may_lend(approved: &[String], granted: &[ShareGrantView], folder: &str) -> bool {
-    approved.iter().any(|path| path == folder)
-        || granted.iter().any(|grant| grant.path == folder)
+    approved.iter().any(|path| path == folder) || granted.iter().any(|grant| grant.path == folder)
 }
 
 /// Lend `path` to `session_id`, replacing the terms if this conversation
