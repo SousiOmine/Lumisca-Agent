@@ -6,10 +6,10 @@ import {
   createInMemorySettingsRepo,
   type SettingsRepo,
 } from "../settings/repo.ts";
+import type { McpServerConfig } from "../shared/mcp-config.ts";
 import { APP_MCP_SETTINGS_KEY } from "../shared/mod.ts";
 import { makeRealTempDir, removeDirRetry } from "../test-utils.ts";
 import { McpCallTimeoutError, probeMcpServer } from "./client.ts";
-import type { McpServerConfig } from "./config.ts";
 import {
   loadMcpConfig,
   McpConfigError,

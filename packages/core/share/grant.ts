@@ -179,3 +179,23 @@ export function grantOwning(
 export function grantAccess(grant: FolderGrant): "read-write" | "read-only" {
   return grant.write ? "read-write" : "read-only";
 }
+
+/** One loan as the model reads it: the path it addresses, what it may
+ * write, and which computer and shell it is. Shared by the context message
+ * and the share tools so the two cannot describe one loan differently. */
+export function describeGrant(grant: FolderGrant): string {
+  const root = shareRootOf(grant.name);
+  const access = grantAccess(grant);
+  const where = grant.host.name === "" ? grant.host.platform : grant.host.name;
+  const shell = grant.host.shell === "" ? "" : `, ${grant.host.shell}`;
+  return `${root} — ${access}, commands run there${shell} — lent from ${where}`;
+}
+
+/** What is lent right now, for a message that has to say why something is
+ * not there. */
+export function lentLine(grants: readonly FolderGrant[]): string {
+  if (grants.length === 0) {
+    return "No folder is lent to this conversation.";
+  }
+  return `Lent now: ${grants.map((grant) => shareRootOf(grant.name)).join(", ")}.`;
+}

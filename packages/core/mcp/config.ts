@@ -1,24 +1,8 @@
 import { isAbsolute, join } from "node:path";
 import { runtime } from "../runtime/runtime.ts";
+import type { McpServerConfig } from "../shared/mcp-config.ts";
 import { parseJsonOrThrow, serializeMcpServers } from "../shared/mod.ts";
 import type { McpServerStatus } from "./status.ts";
-
-/** One configured MCP server (normalized form of `.mcp.json`). */
-export interface McpServerConfig {
-  name: string;
-  /** "stdio" servers are child processes; "http" servers use streamable HTTP. */
-  type: "stdio" | "http";
-  command?: string;
-  args: string[];
-  env: Record<string, string>;
-  /** Working directory for stdio servers; relative paths resolve against
-   * the workspace root. */
-  cwd?: string;
-  url?: string;
-  headers: Record<string, string>;
-  /** `enabled: false` keeps the config while excluding the server. */
-  enabled: boolean;
-}
 
 export interface McpConfig {
   servers: McpServerConfig[];

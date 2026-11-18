@@ -1,8 +1,8 @@
 import { basename, join } from "node:path";
 import { readIfExists, resolveGlobalDirs } from "../fs.ts";
-import type { McpServerConfig } from "../mcp/config.ts";
 import { repoChain } from "../memory/agents-md.ts";
 import { type DirEntry, runtime } from "../runtime/runtime.ts";
+import type { McpServerConfig } from "../shared/mcp-config.ts";
 import type { SkillDef } from "../skills/discover.ts";
 import { parseSkillFrontmatter } from "../skills/frontmatter.ts";
 import { isWithinRealpath } from "../workspace/path-util.ts";

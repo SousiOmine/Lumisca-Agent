@@ -20,10 +20,10 @@
  */
 import { CoreError } from "../errors.ts";
 import {
+  describeGrant,
   type FolderGrant,
-  grantAccess,
   isShareName,
-  shareRootOf,
+  lentLine,
 } from "../share/grant.ts";
 import {
   SHARE_DISCONNECT_TIMEOUT_MS,
@@ -287,23 +287,9 @@ function requireShareName(raw: string, grants: readonly FolderGrant[]): string {
   );
 }
 
-/** What is lent right now, for a message that has to say why something is
- * not there. */
-function lentLine(grants: readonly FolderGrant[]): string {
-  if (grants.length === 0) {
-    return "No folder is lent to this conversation.";
-  }
-  return `Lent now: ${grants.map((grant) => shareRootOf(grant.name)).join(", ")}.`;
-}
-
-/** One loan as the model reads it: the path it addresses, what it may write,
- * and which computer and shell it is. */
+/** One loan as the model reads it. */
 function describe(grant: FolderGrant): string {
-  const root = shareRootOf(grant.name);
-  const access = grantAccess(grant);
-  const where = grant.host.name === "" ? grant.host.platform : grant.host.name;
-  const shell = grant.host.shell === "" ? "" : `, ${grant.host.shell}`;
-  return `${root} — ${access}, commands run there${shell} — lent from ${where}`;
+  return describeGrant(grant);
 }
 
 /** The tool's answer to a disconnect attempt, from how it ended and what the

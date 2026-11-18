@@ -21,20 +21,13 @@ import {
 } from "../ai/context-providers.ts";
 import type { ContextMessage } from "../ai/types.ts";
 import type { FolderGrant } from "./grant.ts";
-import { grantAccess, shareRootOf } from "./grant.ts";
+import { describeGrant, shareRootOf } from "./grant.ts";
 
 const TITLE = "Lent folders";
 
-/** What the model reads for one loan: the path it addresses, what it may
- * write, and which computer and shell it is. */
+/** One loan's line in the context message. */
 function describe(grant: FolderGrant): string {
-  const root = shareRootOf(grant.name);
-  const access = grantAccess(grant);
-  const where = grant.host.name === "" ? grant.host.platform : grant.host.name;
-  return (
-    `- ${root} — ${access}, commands run there (${grant.host.shell}) — ` +
-    `lent from ${where}`
-  );
+  return `- ${describeGrant(grant)}`;
 }
 
 function signatureOf(grants: readonly FolderGrant[]): string {

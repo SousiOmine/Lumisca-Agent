@@ -1,4 +1,5 @@
 import type { Agent } from "../ai/agent.ts";
+import { asArgsRecord } from "../tools/arguments.ts";
 import { createToolCallTool } from "../tools/call-tool.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
 import type { ToolRegistry } from "../tools/registry.ts";
@@ -54,10 +55,7 @@ function createMcpTool(manager: McpManager, def: McpToolDef): Tool {
     label: `${def.server}: ${def.name}`,
     description: buildDescription(def),
     parameters: mcpArgsSchema,
-    prepareArguments: (args) =>
-      (typeof args === "object" && args !== null && !Array.isArray(args)
-        ? args
-        : {}) as Record<string, unknown>,
+    prepareArguments: asArgsRecord,
     execute: async (_id, params, signal) => {
       const text = await manager.callTool(def.server, def.name, params, signal);
       return {

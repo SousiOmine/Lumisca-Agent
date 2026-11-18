@@ -7,6 +7,7 @@ import { atomicWriteTextFileSync } from "../fs.ts";
 import { discoverPlugins } from "../plugins/discover.ts";
 import { runtime } from "../runtime/runtime.ts";
 import type { SettingsRepo } from "../settings/repo.ts";
+import type { McpServerConfig } from "../shared/mcp-config.ts";
 import { APP_MCP_SETTINGS_KEY, mcpServerEntry } from "../shared/mod.ts";
 import { probeMcpServer } from "./client.ts";
 import {
@@ -16,7 +17,6 @@ import {
   MCP_TEST_SOURCE,
   type McpConfig,
   type McpInfo,
-  type McpServerConfig,
   parseMcpConfig,
 } from "./config.ts";
 import { McpManager } from "./manager.ts";

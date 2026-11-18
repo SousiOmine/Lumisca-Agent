@@ -1,5 +1,6 @@
 import type { CommandSafety } from "../safety/command-safety.ts";
 import { TOOL_BASH } from "../shared/mod.ts";
+import { defaultCwdArguments, WORKDIR_DESCRIPTION } from "./arguments.ts";
 import {
   type CommandRunner,
   MAX_RAW_COMMAND_OUTPUT,
@@ -32,12 +33,7 @@ export const DEFAULT_BASH_TIMEOUT_SEC = 120;
 export const MAX_BASH_TIMEOUT_SEC = 3600;
 
 const bashSchema = object({
-  cwd: string(
-    "Working directory (required): a workspace folder name (e.g. `Aaa`) or " +
-      "an absolute path. Pass it on every call, even when the command starts " +
-      "with `cd` — this argument decides where the shell starts and the " +
-      "call fails without it.",
-  ),
+  cwd: string(WORKDIR_DESCRIPTION),
   command: string("The shell command to execute"),
   timeout: optional(
     integer("Timeout in seconds (default 120)", {
@@ -106,6 +102,7 @@ export function createBashTool(
 ): Tool<typeof bashSchema> {
   const { files, runner } = options;
   const spiller = new OutputSpiller(files, options.spillDir);
+  const prepare = defaultCwdArguments(options.defaultCwd);
 
   /** Note for a cut stream: spill the full text and point at it, or fall
    * back to the plain note when the spill could not be written (the result
@@ -129,19 +126,7 @@ export function createBashTool(
     // A session with one working folder does not make the model repeat it on
     // every call (see defaultCwd). Injecting it here, before validation,
     // keeps the schema — and every caller that passes `cwd` — unchanged.
-    ...(options.defaultCwd !== undefined
-      ? {
-          prepareArguments: (args: unknown) => {
-            const record =
-              typeof args === "object" && args !== null
-                ? (args as Record<string, unknown>)
-                : {};
-            return record.cwd === undefined
-              ? { ...record, cwd: options.defaultCwd as string }
-              : record;
-          },
-        }
-      : {}),
+    ...(prepare === undefined ? {} : { prepareArguments: prepare }),
     execute: async (_id, params, signal) => {
       // Resolve the working directory before the safety check so the check
       // judges the exact context the command would run in.

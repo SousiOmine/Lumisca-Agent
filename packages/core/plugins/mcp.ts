@@ -1,7 +1,7 @@
 import { join, normalize, sep } from "node:path";
 import { errorMessage } from "../errors.ts";
-import type { McpServerConfig } from "../mcp/config.ts";
 import { runtime } from "../runtime/runtime.ts";
+import type { McpServerConfig } from "../shared/mcp-config.ts";
 import { isWithinRealpath } from "../workspace/path-util.ts";
 
 /** Canonical identifier of the mcp.json schema this client implements

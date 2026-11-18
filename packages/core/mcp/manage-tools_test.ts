@@ -1,7 +1,8 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
+import type { McpServerConfig } from "../shared/mcp-config.ts";
 import { toolText } from "../test-utils.ts";
 import type { Tool } from "../tools/schema.ts";
-import type { McpInfo, McpServerConfig, McpServerInfo } from "./config.ts";
+import type { McpInfo, McpServerInfo } from "./config.ts";
 import { parseMcpConfig } from "./config.ts";
 import { createMcpAdminTools, type McpAdmin } from "./manage-tools.ts";
 import type { McpTestResult } from "./service.ts";

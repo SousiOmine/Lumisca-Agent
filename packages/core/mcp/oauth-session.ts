@@ -15,8 +15,8 @@ import { randomUUID } from "node:crypto";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { errorMessage } from "../errors.ts";
+import type { McpServerConfig } from "../shared/mcp-config.ts";
 import { createHttpTransport } from "./client.ts";
-import type { McpServerConfig } from "./config.ts";
 import { McpOAuthProvider, type McpOAuthStore } from "./oauth.ts";
 
 /** Where a sign-in is in its life: `starting` while the connection that

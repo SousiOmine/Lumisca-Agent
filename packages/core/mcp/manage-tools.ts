@@ -13,6 +13,7 @@
  * actually offers instead of promising names it guessed.
  */
 import { CoreError } from "../errors.ts";
+import type { McpServerConfig } from "../shared/mcp-config.ts";
 import { serializeMcpServers } from "../shared/mcp-config.ts";
 import {
   TOOL_MCP_ADD,
@@ -29,7 +30,7 @@ import {
   type Tool,
   type ToolResult,
 } from "../tools/schema.ts";
-import type { McpInfo, McpServerConfig, McpServerInfo } from "./config.ts";
+import type { McpInfo, McpServerInfo } from "./config.ts";
 import type { McpTestResult } from "./service.ts";
 
 /** The MCP admin surface the tools need (implemented by McpService). */

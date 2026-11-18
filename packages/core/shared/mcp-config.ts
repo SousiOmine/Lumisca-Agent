@@ -1,8 +1,9 @@
 /** Frontend-safe shared helpers (see shared/mod.ts): pure functions and constants with no runtime dependencies (no db, no Node APIs), bundled into the browser client. */
 
-/** Minimal server-config shape accepted by serializeMcpServers (config
- * fields only; the live status fields of McpServerInfo are ignored). */
-export interface McpServerConfigLike {
+/** One MCP server's configuration: the fields `.mcp.json` carries. The
+ * settings UI, the file parser and the serializer all use this one shape, so
+ * a field added here is read and written without a second edit. */
+export interface McpServerConfig {
   name: string;
   type: "stdio" | "http";
   command?: string;
@@ -19,7 +20,7 @@ export interface McpServerConfigLike {
  * server to an existing document (the agent's mcp_add, see mcp/service.ts)
  * both go through here, so an entry is written one way only. */
 export function mcpServerEntry(
-  server: McpServerConfigLike,
+  server: McpServerConfig,
 ): Record<string, unknown> {
   const entry: Record<string, unknown> = {};
   if (server.type === "stdio") {
@@ -41,7 +42,7 @@ export function mcpServerEntry(
  * app-level config the settings UI PUTs and the workspace file format).
  * Shared by the core (serializeMcpConfig) and the web settings UI so the
  * format can never drift between them. */
-export function serializeMcpServers(servers: McpServerConfigLike[]): string {
+export function serializeMcpServers(servers: McpServerConfig[]): string {
   // A null-prototype map, so a server literally named "__proto__" becomes an
   // entry instead of setting the object's prototype (and vanishing).
   const mcpServers: Record<string, unknown> = Object.create(null);

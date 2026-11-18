@@ -1,4 +1,5 @@
-import type { McpConfig, McpServerConfig } from "./config.ts";
+import type { McpServerConfig } from "../shared/mcp-config.ts";
+import type { McpConfig } from "./config.ts";
 import type { McpServerStatus } from "./status.ts";
 
 export type { McpServerStatus } from "./status.ts";

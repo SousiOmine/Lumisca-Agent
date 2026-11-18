@@ -38,7 +38,7 @@ Deno.test("a loan is announced with how to address it and what it allows", () =>
   assertEquals(update.title, "Lent folders");
   // Every loan, with its own terms.
   assert(update.body.includes(`- ${shareRootOf("proj")} — read-write`));
-  assert(update.body.includes("commands run there (zsh)"));
+  assert(update.body.includes("commands run there, zsh"));
   assert(update.body.includes(`- ${shareRootOf("data")} — read-only`));
   // Commands are always allowed, whichever way the folder was lent.
   assert(update.body.includes("commands run there"));

@@ -8,6 +8,7 @@ import {
   TOOL_ASYNC_BASH_KILL,
   TOOL_ASYNC_BASH_STATUS,
 } from "../shared/mod.ts";
+import { defaultCwdArguments, WORKDIR_DESCRIPTION } from "./arguments.ts";
 import type {
   BackgroundProcess,
   BackgroundSpawner,
@@ -520,12 +521,7 @@ export interface AsyncBashToolOptions {
 }
 
 const startSchema = object({
-  cwd: string(
-    "Working directory (required): a workspace folder name (e.g. `Aaa`) or " +
-      "an absolute path. Pass it on every call, even when the command starts " +
-      "with `cd` — this argument decides where the shell starts and the " +
-      "call fails without it.",
-  ),
+  cwd: string(WORKDIR_DESCRIPTION),
   command: string("The shell command to execute in the background"),
   timeout: optional(
     integer(
@@ -581,6 +577,7 @@ function formatListLine(info: BackgroundCommandInfo): string {
  * (which subscribes to the manager's onExit), not by the tools. */
 export function createAsyncBashTools(options: AsyncBashToolOptions): Tool[] {
   const { manager, files, safety } = options;
+  const prepare = defaultCwdArguments(options.defaultCwd);
 
   const startTool: Tool<typeof startSchema> = {
     name: TOOL_ASYNC_BASH,
@@ -594,19 +591,7 @@ export function createAsyncBashTools(options: AsyncBashToolOptions): Tool[] {
     // Same contract as the bash tool: a session with one working folder
     // supplies it instead of making the model repeat it (see
     // BashToolOptions.defaultCwd).
-    ...(options.defaultCwd !== undefined
-      ? {
-          prepareArguments: (args: unknown) => {
-            const record =
-              typeof args === "object" && args !== null
-                ? (args as Record<string, unknown>)
-                : {};
-            return record.cwd === undefined
-              ? { ...record, cwd: options.defaultCwd as string }
-              : record;
-          },
-        }
-      : {}),
+    ...(prepare === undefined ? {} : { prepareArguments: prepare }),
     execute: async (_id, params) => {
       const cwd = await requireResolved(files, params.cwd);
       const blocked = await safetyBlockResult(

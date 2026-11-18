@@ -27,8 +27,8 @@ import type {
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { SettingsRepo } from "../settings/repo.ts";
+import type { McpServerConfig } from "../shared/mcp-config.ts";
 import { safeJsonParse } from "../shared/mod.ts";
-import type { McpServerConfig } from "./config.ts";
 
 /** Settings key prefix of one MCP server's OAuth state. Kept out of the
  * generic settings API by the server's settings guard (these are
