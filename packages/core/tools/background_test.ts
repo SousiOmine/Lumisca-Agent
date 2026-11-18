@@ -23,13 +23,13 @@ import {
   createAsyncBashTools,
   formatBackgroundNotification,
   MAX_BACKGROUND_COMMANDS,
-  trimIncompleteUtf8,
 } from "./background.ts";
 import type {
   BackgroundProcess,
   BackgroundSpawner,
   BackgroundSpawnInput,
 } from "./background-backend.ts";
+import { trimIncompleteUtf8 } from "./decode.ts";
 import { HostFileBackend } from "./host/files.ts";
 
 /** Cross-platform commands. The Windows shell has no sleep; ping is the

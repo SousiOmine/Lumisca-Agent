@@ -68,3 +68,22 @@ export function decodeOutput(
     return new TextDecoder().decode(bytes);
   }
 }
+
+/** Drop trailing bytes that begin an incomplete UTF-8 sequence, so slicing
+ * a byte buffer mid-character cannot garble the last glyph of a tail. */
+export function trimIncompleteUtf8(bytes: Uint8Array): Uint8Array {
+  if (bytes.length === 0) return bytes;
+  let start = bytes.length;
+  // Walk back over continuation bytes to the lead byte of the last sequence.
+  while (start > 0 && (bytes[start - 1]! & 0b1100_0000) === 0b1000_0000) {
+    start--;
+  }
+  if (start === 0) return bytes; // leading continuations: let the decoder cope
+  const lead = bytes[start - 1]!;
+  let len: number;
+  if ((lead & 0b1110_0000) === 0b1100_0000) len = 2;
+  else if ((lead & 0b1111_0000) === 0b1110_0000) len = 3;
+  else if ((lead & 0b1111_1000) === 0b1111_0000) len = 4;
+  else return bytes; // ASCII tail: clean cut
+  return start - 1 + len <= bytes.length ? bytes : bytes.slice(0, start - 1);
+}

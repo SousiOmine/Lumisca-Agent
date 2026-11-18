@@ -5,18 +5,10 @@ import {
   type RunOptions,
   type ShellRunResult,
 } from "../command-backend.ts";
+import { FINAL_FLUSH_GRACE_MS, KILL_WAIT_MS } from "../process-policy.ts";
 import { MAX_UTF8_BYTES_PER_CHAR, OutputTail } from "./output-tail.ts";
 import { killProcessTree } from "./process-tree.ts";
 import { shellCommand } from "./shell.ts";
-
-/** How long the pipes get to flush the last output after the process exits
- * before the call reports what it has (a descendant that keeps a pipe open
- * must not block the report). */
-const FINAL_FLUSH_GRACE_MS = 250;
-/** Upper bound for a kill to wait for the process to actually die. Mirrors
- * the constant background.ts uses (it lives there because both share it,
- * and this module must not import the background manager). */
-const KILL_WAIT_MS = 3000;
 
 /**
  * The host implementation of {@link CommandRunner}: one shell command on
