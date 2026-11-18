@@ -4,7 +4,7 @@ import {
   FAST_MODEL_KEY,
   parseModelPreference,
 } from "@lumisca/core/shared";
-import { useEffect, useState } from "preact/compat";
+import { useEffect, useState } from "preact/hooks";
 import { api } from "../../api.ts";
 import { useAsyncEffect } from "../../hooks/useAsync.ts";
 import { useSaveAction } from "../../hooks/useSave.ts";

@@ -1,5 +1,5 @@
 import { THINKING_LEVEL_ORDER } from "@lumisca/core/shared";
-import { useMemo } from "preact/compat";
+import { useMemo } from "preact/hooks";
 import { thinkingLevelLabel } from "../format.ts";
 import type { SelectSide } from "../hooks/useSelectPlacement.ts";
 import { useT } from "../i18n.ts";

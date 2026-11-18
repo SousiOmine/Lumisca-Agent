@@ -17,7 +17,7 @@ import {
   useMemo,
   useRef,
   useState,
-} from "preact/compat";
+} from "preact/hooks";
 import { useExpandableRow } from "../../hooks/useExpandableRow.ts";
 import { NEVER, useVisibleInterval } from "../../hooks/useVisibleInterval.ts";
 import { useLocale, useT } from "../../i18n.ts";

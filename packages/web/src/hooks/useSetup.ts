@@ -1,5 +1,5 @@
 import type { SetupState } from "@lumisca/core/shared";
-import { useCallback, useState } from "preact/compat";
+import { useCallback, useState } from "preact/hooks";
 import { api } from "../api.ts";
 import { errorText } from "../providers.ts";
 

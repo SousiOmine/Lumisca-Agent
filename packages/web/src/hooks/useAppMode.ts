@@ -1,5 +1,5 @@
 import { type AppMode, isAppMode } from "@lumisca/core/shared";
-import { useCallback, useEffect, useRef, useState } from "preact/compat";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../api.ts";
 import type { StellaStatus } from "../types.ts";
 import { NEVER, useVisibleInterval } from "./useVisibleInterval.ts";

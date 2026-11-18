@@ -1,5 +1,5 @@
 import { errorMessage } from "@lumisca/core/shared";
-import { useCallback, useEffect, useRef, useState } from "preact/compat";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { onServerFailure, token } from "../api-client.ts";
 import { type LocalServerStatus, serverApi } from "../shell.ts";
 

@@ -1,5 +1,5 @@
 import { IconChevronRight, IconLoader2 } from "@tabler/icons-preact";
-import { useEffect, useState } from "preact/compat";
+import { useEffect, useState } from "preact/hooks";
 import { useT } from "../i18n.ts";
 
 /** Format elapsed milliseconds as "Xm Ys" or "Ys". */

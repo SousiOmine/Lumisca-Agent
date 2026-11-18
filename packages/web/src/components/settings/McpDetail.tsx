@@ -6,7 +6,7 @@ import {
   IconLoader2,
 } from "@tabler/icons-preact";
 import type { CSSProperties } from "preact/compat";
-import { useState } from "preact/compat";
+import { useState } from "preact/hooks";
 import { api } from "../../api.ts";
 import { useMcpSignIn } from "../../hooks/useMcpSignIn.ts";
 import { useT } from "../../i18n.ts";

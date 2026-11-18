@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "preact/compat";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, fed } from "../api.ts";
 import { describeError, useT } from "../i18n.ts";
 import { peerLabel } from "../peers.ts";

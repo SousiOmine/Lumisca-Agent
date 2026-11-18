@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "preact/compat";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { useT } from "../i18n.ts";
 import { isViewRunning, type SessionView } from "../types.ts";
 

@@ -1,5 +1,5 @@
 import { IconPlus } from "@tabler/icons-preact";
-import { useState } from "preact/compat";
+import { useState } from "preact/hooks";
 import { api } from "../../api.ts";
 import { useAsyncData } from "../../hooks/useAsync.ts";
 import { useT } from "../../i18n.ts";

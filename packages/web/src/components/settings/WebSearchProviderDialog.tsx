@@ -1,4 +1,4 @@
-import { useState } from "preact/compat";
+import { useState } from "preact/hooks";
 import { api } from "../../api.ts";
 import { useT } from "../../i18n.ts";
 import { errorText } from "../../providers.ts";

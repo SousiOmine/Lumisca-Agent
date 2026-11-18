@@ -2,7 +2,7 @@
 // targeted event types live in the module root (they always did, the
 // namespace used to re-export them).
 import type { TargetedKeyboardEvent } from "preact";
-import { useCallback, useState } from "preact/compat";
+import { useCallback, useState } from "preact/hooks";
 
 /** Props that turn a row element into a keyboard-operable disclosure. */
 export interface ExpandableRowProps {

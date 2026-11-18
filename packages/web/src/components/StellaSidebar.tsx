@@ -5,7 +5,7 @@ import {
   IconRepeat,
   IconTrash,
 } from "@tabler/icons-preact";
-import { useEffect, useRef, useState } from "preact/compat";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../api.ts";
 import { formatRelativeTime } from "../format.ts";
 import { useArrivals } from "../hooks/useArrivals.ts";

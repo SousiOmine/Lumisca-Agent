@@ -5,7 +5,7 @@ import {
   IconTrash,
   IconX,
 } from "@tabler/icons-preact";
-import { useEffect, useRef, useState } from "preact/compat";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../../api.ts";
 import { confirmAction } from "../../confirm.ts";
 import { useSavedPrompts } from "../../hooks/useSavedPrompts.ts";

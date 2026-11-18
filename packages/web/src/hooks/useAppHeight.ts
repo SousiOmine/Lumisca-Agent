@@ -1,4 +1,4 @@
-import { useEffect } from "preact/compat";
+import { useEffect } from "preact/hooks";
 
 /** The CSS variable the app height is written to. Declared in
  * styles/tokens.css (its default, `100dvh`, is what an environment without

@@ -1,6 +1,6 @@
 import { errorMessage } from "@lumisca/core/shared";
 import { IconMessageQuestion, IconSend } from "@tabler/icons-preact";
-import { useState } from "preact/compat";
+import { useState } from "preact/hooks";
 import { useT } from "../i18n.ts";
 import type { AskAnswer, AskQuestion, PendingQuestion } from "../types.ts";
 

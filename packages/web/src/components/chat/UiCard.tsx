@@ -9,7 +9,7 @@ import type {
   UiResolvedView,
   UiStackBlock,
 } from "@lumisca/core/shared";
-import { useId, useState } from "preact/compat";
+import { useId, useState } from "preact/hooks";
 import { useT } from "../../i18n.ts";
 import { Flowchart } from "./Flowchart.tsx";
 

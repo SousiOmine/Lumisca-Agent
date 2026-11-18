@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "preact/compat";
+import { useEffect, useRef, useState } from "preact/hooks";
 
 /**
  * Which rows of a list are genuinely NEW, so an entrance animation can run

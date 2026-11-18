@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "preact/compat";
+import { useEffect, useRef } from "preact/hooks";
 
 /**
  * Run `tick` on a fixed cadence, but never while the page is hidden.

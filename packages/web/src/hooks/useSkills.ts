@@ -1,5 +1,5 @@
 import { errorMessage as errorText } from "@lumisca/core/shared";
-import { useState } from "preact/compat";
+import { useState } from "preact/hooks";
 import { api, fed } from "../api.ts";
 import { peerRouted } from "../api-client.ts";
 import type { SkillInfo } from "../types.ts";

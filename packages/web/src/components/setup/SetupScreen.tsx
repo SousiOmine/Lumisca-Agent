@@ -1,4 +1,4 @@
-import { useState } from "preact/compat";
+import { useState } from "preact/hooks";
 import { useT } from "../../i18n.ts";
 import type { Locale, ThemeSetting } from "../../types.ts";
 import { DoneStep } from "./DoneStep.tsx";

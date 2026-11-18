@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "preact/compat";
+import { useCallback, useRef, useState } from "preact/hooks";
 
 /**
  * Keep an element mounted while it animates out.

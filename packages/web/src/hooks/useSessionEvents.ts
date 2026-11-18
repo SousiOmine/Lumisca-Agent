@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "preact/compat";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { connectEvents, type SessionSnapshot, sessionApi } from "../api.ts";
 import {
   applyEvent,

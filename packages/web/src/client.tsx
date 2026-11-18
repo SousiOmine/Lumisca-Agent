@@ -1,5 +1,5 @@
 import { DEFAULT_LOCALE } from "@lumisca/core/shared";
-import { Component } from "preact/compat";
+import { Component } from "preact";
 import { createRoot } from "preact/compat/client";
 import { App } from "./App.tsx";
 import { installFileDropGuard } from "./drop-guard.ts";

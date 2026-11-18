@@ -1,4 +1,5 @@
-import { memo, useCallback } from "preact/compat";
+import { memo } from "preact/compat";
+import { useCallback } from "preact/hooks";
 import type { TabDraft } from "../hooks/useDrafts.ts";
 import type { SessionActions } from "../hooks/useSessionActions.ts";
 import { DRAFT_TAB, splitTabKey } from "../tabs.ts";

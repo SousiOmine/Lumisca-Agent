@@ -4,7 +4,7 @@ import {
   IconServer,
   IconSettings,
 } from "@tabler/icons-preact";
-import { useEffect, useRef, useState } from "preact/compat";
+import { useEffect, useRef, useState } from "preact/hooks";
 import {
   connectionLabel,
   displayedConnectionId,

@@ -1,5 +1,5 @@
 import { errorMessage } from "@lumisca/core/shared";
-import { useCallback, useEffect, useState } from "preact/compat";
+import { useCallback, useEffect, useState } from "preact/hooks";
 import {
   disablePush,
   enablePush,

@@ -1,6 +1,7 @@
 import type { AgentMessage } from "../ai/types.ts";
 import type { MessageIdentity } from "../domain/event.ts";
 import type { MessageRepo } from "../session/messages.ts";
+import { modelViewOf } from "../session/model-view.ts";
 import { messageIdentityOf } from "../session/transcript-window.ts";
 
 /**
@@ -127,10 +128,10 @@ export class TranscriptStore {
   /** Re-read the model's view from the store (after a rewind that reached
    * behind it) and re-anchor this store to it. */
   reload(): AgentMessage[] {
-    const rows = this.repo.listModelView(this.sessionId);
-    this.base = this.repo.count(this.sessionId, "all") - rows.length;
-    this.count = rows.length;
-    return rows.map((row) => row.message);
+    const view = modelViewOf(this.repo, this.sessionId);
+    this.base = view.baseIndex;
+    this.count = view.messages.length;
+    return view.messages;
   }
 
   /** Reduce the rows behind the newest checkpoint (see session/prune.ts) and

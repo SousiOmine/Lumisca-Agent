@@ -5,7 +5,7 @@ import {
   withAgentPreview,
   withAgentRow,
 } from "@lumisca/core/shared";
-import { useCallback, useEffect, useRef, useState } from "preact/compat";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../api.ts";
 import { connectStellaEvents, stellaApi } from "../api-stella.ts";
 import { describeError, useT } from "../i18n.ts";

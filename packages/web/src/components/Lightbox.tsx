@@ -21,7 +21,7 @@
  * teleported (hooks/usePresence). The travel is `play()` (motion.ts), which
  * cancels itself for a reader who asked for less motion; the fades stay.
  */
-import { useCallback, useEffect, useRef } from "preact/compat";
+import { useCallback, useEffect, useRef } from "preact/hooks";
 import { useReducedMotion } from "../hooks/useMediaQuery.ts";
 import { useModalKeyboard } from "../hooks/useModalKeyboard.ts";
 import { usePresence } from "../hooks/usePresence.ts";

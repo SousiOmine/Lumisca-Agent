@@ -22,7 +22,8 @@ import {
   type Translator,
   translate,
 } from "@lumisca/core/shared";
-import { useMemo, useSyncExternalStore } from "preact/compat";
+import { useSyncExternalStore } from "preact/compat";
+import { useMemo } from "preact/hooks";
 import { ApiError } from "./api-client.ts";
 import { createStore } from "./store.ts";
 

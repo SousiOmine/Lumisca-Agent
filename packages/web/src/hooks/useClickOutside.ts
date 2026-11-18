@@ -1,4 +1,5 @@
-import { type RefObject, useEffect } from "preact/compat";
+import type { RefObject } from "preact/compat";
+import { useEffect } from "preact/hooks";
 
 /** Close a popover/menu on outside click and Escape; optionally also on
  * scroll and window blur. Scroll closes for any scroll outside the

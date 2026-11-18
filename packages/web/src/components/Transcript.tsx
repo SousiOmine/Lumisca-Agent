@@ -1,6 +1,6 @@
 import { splitChatText } from "@lumisca/core/shared";
 import type { ComponentChildren } from "preact";
-import { useMemo, useRef } from "preact/compat";
+import { useMemo, useRef } from "preact/hooks";
 import { messageKey } from "../events.ts";
 import { useArrivals, withoutHandoff } from "../hooks/useArrivals.ts";
 import { useTranscriptScroll } from "../hooks/useTranscriptScroll.ts";

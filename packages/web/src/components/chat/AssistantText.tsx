@@ -1,5 +1,5 @@
 import { contentText, segmentsText, splitChatText } from "@lumisca/core/shared";
-import { useMemo } from "preact/compat";
+import { useMemo } from "preact/hooks";
 import type { AssistantMessage } from "../../types.ts";
 import { CardView } from "./CardView.tsx";
 import { MarkdownBlock } from "./MarkdownBlock.tsx";

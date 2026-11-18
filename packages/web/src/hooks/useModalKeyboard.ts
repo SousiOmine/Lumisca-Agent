@@ -11,7 +11,8 @@
  * mount/unmount timing: a dialog plays an exit before it removes itself (see
  * Modal) and a viewer does not, so the caller keeps that decision.
  */
-import { type RefObject, useEffect } from "preact/compat";
+import type { RefObject } from "preact/compat";
+import { useEffect } from "preact/hooks";
 
 export interface ModalKeyboardOptions {
   /** The element that should hold the focus while the surface is open. */

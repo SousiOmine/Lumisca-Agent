@@ -1,4 +1,4 @@
-import { useEffect } from "preact/compat";
+import { useEffect } from "preact/hooks";
 
 /** The parts of a key event's target the Backspace rule reads. Structural
  * rather than `Element` so the rule stays a plain function the tests can

@@ -1,9 +1,5 @@
-import {
-  type RefObject,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "preact/compat";
+import type { RefObject } from "preact/compat";
+import { useLayoutEffect, useRef, useState } from "preact/hooks";
 
 /**
  * Which side a `Select` list opens on, measured per opening.

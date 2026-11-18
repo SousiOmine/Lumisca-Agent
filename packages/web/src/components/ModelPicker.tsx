@@ -1,6 +1,6 @@
 import { formatModelMeta, type Translator } from "@lumisca/core/shared";
 import { IconCheck, IconSettings } from "@tabler/icons-preact";
-import { useMemo, useState } from "preact/compat";
+import { useMemo, useState } from "preact/hooks";
 import { useT } from "../i18n.ts";
 import {
   buildModelList,

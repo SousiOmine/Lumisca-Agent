@@ -1,6 +1,6 @@
 import { IconChevronDown, IconChevronUp } from "@tabler/icons-preact";
 import type { ComponentChildren } from "preact";
-import { useState } from "preact/compat";
+import { useState } from "preact/hooks";
 import { useT } from "../i18n.ts";
 
 interface CollapsiblePanelProps {

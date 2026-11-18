@@ -1,6 +1,6 @@
 import { IconCheck, IconChevronDown } from "@tabler/icons-preact";
 import type { ComponentChildren } from "preact";
-import { useRef, useState } from "preact/compat";
+import { useRef, useState } from "preact/hooks";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import {
   type SelectSide,

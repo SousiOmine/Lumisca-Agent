@@ -18,7 +18,7 @@ import {
   MAX_PROMPT_FILES,
   stripDataUrlHeader,
 } from "@lumisca/core/shared";
-import { useEffect, useRef, useState } from "preact/compat";
+import { useEffect, useRef, useState } from "preact/hooks";
 import type { PendingFile, PendingImage } from "../types.ts";
 
 /**

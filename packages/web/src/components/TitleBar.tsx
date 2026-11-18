@@ -1,11 +1,7 @@
 import type { AppMode } from "@lumisca/core/shared";
 import { IconCopy, IconMinus, IconSquare, IconX } from "@tabler/icons-preact";
-import {
-  type MouseEvent,
-  type ReactNode,
-  useRef,
-  useState,
-} from "preact/compat";
+import type { MouseEvent, ReactNode } from "preact/compat";
+import { useRef, useState } from "preact/hooks";
 import { useVisibleInterval } from "../hooks/useVisibleInterval.ts";
 import { useT } from "../i18n.ts";
 import {

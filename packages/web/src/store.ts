@@ -1,4 +1,5 @@
-import { useCallback, useSyncExternalStore } from "preact/compat";
+import { useSyncExternalStore } from "preact/compat";
+import { useCallback } from "preact/hooks";
 
 /**
  * The UI's shared values: one store shape, and the loading it needs.

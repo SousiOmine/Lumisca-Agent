@@ -1,4 +1,8 @@
-import { stellaEntryCursorOf, stellaEntryOf } from "../agent/stella-stream.ts";
+import {
+  conversationEntriesOf,
+  stellaEntryCursorOf,
+  stellaEntryOf,
+} from "../agent/stella-stream.ts";
 import type { AgentMessage } from "../ai/types.ts";
 import type { StellaEntry } from "../domain/stella-conversation.ts";
 import { readTranscriptPage } from "../session/transcript-pager.ts";
@@ -13,17 +17,6 @@ import { summarizeContextUsage } from "../shared/context-usage.ts";
 import type { SessionServiceDeps } from "./session-deps.ts";
 
 type Deps = Pick<SessionServiceDeps, "messages" | "pool">;
-
-/** The conversation entries a set of stored rows projects to, oldest
- * first: one projection shared by the window reader and `history_search`. */
-function entriesOf(messages: readonly AgentMessage[]): StellaEntry[] {
-  const entries: StellaEntry[] = [];
-  for (const message of messages) {
-    const entry = stellaEntryOf(message);
-    if (entry !== null) entries.push(entry);
-  }
-  return entries;
-}
 
 /**
  * Reading a session's history: one window at a time from the store, plus the
@@ -79,7 +72,7 @@ export class SessionTranscript {
     if ((query.older ?? null) !== null) return page;
     // The prompt of a run in flight is not written yet; a conversation read
     // mid-run must still show it (see unpersistedTail).
-    const tail = entriesOf(this.unpersistedTail(id));
+    const tail = conversationEntriesOf(this.unpersistedTail(id));
     return tail.length === 0
       ? page
       : { items: page.items.concat(tail), older: page.older };

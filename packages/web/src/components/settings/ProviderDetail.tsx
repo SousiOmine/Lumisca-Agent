@@ -15,7 +15,7 @@ import {
 // Since preact 11 the JSX namespace carries only the intrinsic elements;
 // targeted event types live in the module root.
 import type { TargetedEvent, TargetedKeyboardEvent } from "preact";
-import { useEffect, useRef, useState } from "preact/compat";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../../api.ts";
 import { confirmAction } from "../../confirm.ts";
 import { useAsyncEffect } from "../../hooks/useAsync.ts";

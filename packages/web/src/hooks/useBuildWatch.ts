@@ -1,4 +1,4 @@
-import { useState } from "preact/compat";
+import { useState } from "preact/hooks";
 import { request } from "../api-client.ts";
 import { NEVER, useVisibleInterval } from "./useVisibleInterval.ts";
 

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "preact/compat";
+import { useCallback, useState } from "preact/hooks";
 import { api } from "../api.ts";
 import { confirmAction } from "../confirm.ts";
 import { useT } from "../i18n.ts";

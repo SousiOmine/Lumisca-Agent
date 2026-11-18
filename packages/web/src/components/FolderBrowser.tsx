@@ -12,7 +12,8 @@ import {
   IconFolder,
   IconHome,
 } from "@tabler/icons-preact";
-import { Fragment, useEffect, useRef, useState } from "preact/compat";
+import { Fragment } from "preact";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../api.ts";
 import { useAsyncEffect } from "../hooks/useAsync.ts";
 import { useTouchInput } from "../hooks/useMediaQuery.ts";

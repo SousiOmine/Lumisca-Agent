@@ -1,5 +1,5 @@
 import { COMPUTER_USE_ENABLED_KEY } from "@lumisca/core/shared";
-import { useEffect, useState } from "preact/compat";
+import { useEffect, useState } from "preact/hooks";
 import { useSaveAction } from "../../hooks/useSave.ts";
 import { useT } from "../../i18n.ts";
 import { errorText } from "../../providers.ts";

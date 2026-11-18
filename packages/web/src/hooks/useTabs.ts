@@ -1,11 +1,5 @@
-import {
-  type Dispatch,
-  type SetStateAction,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "preact/compat";
+import type { Dispatch, SetStateAction } from "preact/compat";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import {
   type SessionInfoDto,
   type SessionSnapshot,

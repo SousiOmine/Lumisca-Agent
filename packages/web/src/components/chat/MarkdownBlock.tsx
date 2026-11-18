@@ -1,4 +1,5 @@
-import { memo, useMemo, useState } from "preact/compat";
+import { memo } from "preact/compat";
+import { useMemo, useState } from "preact/hooks";
 import { useT } from "../../i18n.ts";
 import { renderMarkdown } from "../../markdown.ts";
 import { Lightbox } from "../Lightbox.tsx";

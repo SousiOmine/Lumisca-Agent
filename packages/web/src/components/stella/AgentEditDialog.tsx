@@ -1,5 +1,5 @@
 import { DEFAULT_MODEL_KEY, parseModelPreference } from "@lumisca/core/shared";
-import { useRef, useState } from "preact/compat";
+import { useRef, useState } from "preact/hooks";
 import { api } from "../../api.ts";
 import { useT } from "../../i18n.ts";
 import {

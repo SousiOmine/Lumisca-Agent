@@ -7,7 +7,7 @@ import {
   serializeModelPreference,
 } from "@lumisca/core/shared";
 import { IconChevronDown } from "@tabler/icons-preact";
-import { useEffect, useMemo, useRef, useState } from "preact/compat";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { useT } from "../../i18n.ts";
 import {
   errorText,

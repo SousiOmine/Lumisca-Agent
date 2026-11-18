@@ -1,10 +1,6 @@
 import { summarizeContextUsage } from "@lumisca/core/shared";
-import {
-  type Dispatch,
-  type SetStateAction,
-  useCallback,
-  useRef,
-} from "preact/compat";
+import type { Dispatch, SetStateAction } from "preact/compat";
+import { useCallback, useRef } from "preact/hooks";
 import { api, sessionApi } from "../api.ts";
 import type { ComposerModel } from "../components/Composer.tsx";
 import {

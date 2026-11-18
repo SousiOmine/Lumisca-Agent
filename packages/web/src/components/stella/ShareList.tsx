@@ -1,5 +1,5 @@
 import { errorMessage } from "@lumisca/core/shared";
-import { useState } from "preact/compat";
+import { useState } from "preact/hooks";
 import { useT } from "../../i18n.ts";
 import { shellCall } from "../../shell.ts";
 import type { FolderShare } from "../../types.ts";

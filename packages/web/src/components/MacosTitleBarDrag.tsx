@@ -1,4 +1,5 @@
-import { type MouseEvent, useRef } from "preact/compat";
+import type { MouseEvent } from "preact/compat";
+import { useRef } from "preact/hooks";
 import { windowApi } from "../shell.ts";
 
 /**

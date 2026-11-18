@@ -1,5 +1,5 @@
 import { assertStringIncludes } from "@std/assert";
-import { createElement } from "preact/compat";
+import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
 import { ComposerPopover } from "./ComposerPopover.tsx";
 

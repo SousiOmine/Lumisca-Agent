@@ -4,7 +4,7 @@ import {
   IconRefresh,
   IconX,
 } from "@tabler/icons-preact";
-import { useEffect, useRef, useState } from "preact/compat";
+import { useEffect, useRef, useState } from "preact/hooks";
 import type { UpdateControls } from "../hooks/useUpdateStatus.ts";
 import { useT } from "../i18n.ts";
 

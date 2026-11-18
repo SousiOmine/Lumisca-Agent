@@ -1,5 +1,5 @@
 import { toDataUrl } from "@lumisca/core/shared";
-import { useState } from "preact/compat";
+import { useState } from "preact/hooks";
 import { Lightbox } from "./Lightbox.tsx";
 
 /** Render image content blocks (base64 `data`) as thumbnails that open

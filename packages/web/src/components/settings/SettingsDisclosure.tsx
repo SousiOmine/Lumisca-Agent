@@ -1,6 +1,6 @@
 import { IconChevronRight } from "@tabler/icons-preact";
 import type { ReactNode } from "preact/compat";
-import { useState } from "preact/compat";
+import { useState } from "preact/hooks";
 
 /**
  * A disclosure on a settings page: one row that opens the rest of the page.

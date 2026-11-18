@@ -14,7 +14,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-} from "preact/compat";
+} from "preact/hooks";
 import { token } from "../api-client.ts";
 import { stellaApi } from "../api-stella.ts";
 import { formatClockTime } from "../format.ts";

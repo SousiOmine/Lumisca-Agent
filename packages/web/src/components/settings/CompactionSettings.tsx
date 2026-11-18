@@ -5,7 +5,7 @@ import {
   parsePercentSetting,
   STELLA_KEEP_FULL_LOG_KEY,
 } from "@lumisca/core/shared";
-import { useEffect, useRef, useState } from "preact/compat";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { useDebouncedWrite, useSavedNotice } from "../../hooks/useSave.ts";
 import { useT } from "../../i18n.ts";
 import { errorText } from "../../providers.ts";

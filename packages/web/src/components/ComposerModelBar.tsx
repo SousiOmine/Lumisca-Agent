@@ -1,5 +1,5 @@
 import { IconChevronRight } from "@tabler/icons-preact";
-import { createPortal, type RefObject } from "preact/compat";
+import { createPortal, type RefObject } from "preact";
 import type { PopoverPlacement } from "../hooks/usePopoverPlacement.ts";
 import { useT } from "../i18n.ts";
 import type { ModelInfo, ThinkingLevel } from "../types.ts";

@@ -1,6 +1,7 @@
 import type { AppMode } from "@lumisca/core/shared";
 import { IconChevronRight, IconPlus, IconX } from "@tabler/icons-preact";
-import { memo, useEffect, useRef, useState } from "preact/compat";
+import { memo } from "preact/compat";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { useT } from "../i18n.ts";
 import { AppMenu } from "./AppMenu.tsx";

@@ -1,5 +1,6 @@
 import type { SessionInfo } from "../domain/session.ts";
 import { CoreError } from "../errors.ts";
+import { modelViewOf } from "../session/model-view.ts";
 import { formatSessionName, type ThinkingLevel } from "../shared/mod.ts";
 import type { SessionServiceDeps } from "./session-deps.ts";
 
@@ -135,7 +136,7 @@ export class SessionLifecycle {
     }
     if (!this.deps.pool.get(id)) {
       const workspace = this.deps.requireWorkspace(session.workspaceId);
-      const view = this.modelViewOf(id);
+      const view = modelViewOf(this.deps.messages, id);
       this.deps.pool.open(session, workspace, view.messages, view.baseIndex);
     }
     return this.deps.decorate(session);
@@ -238,18 +239,5 @@ export class SessionLifecycle {
   /** The thinking level stored for a model. */
   getModelThinkingLevel(provider: string, modelId: string): ThinkingLevel {
     return this.deps.models.getThinkingLevel(provider, modelId);
-  }
-
-  /** The messages the model is shown: from the newest checkpoint on, with
-   * the whole-transcript position they start at. */
-  private modelViewOf(id: string): {
-    messages: import("../ai/types.ts").AgentMessage[];
-    baseIndex: number;
-  } {
-    const rows = this.deps.messages.listModelView(id);
-    return {
-      messages: rows.map((row) => row.message),
-      baseIndex: this.deps.messages.count(id, "all") - rows.length,
-    };
   }
 }

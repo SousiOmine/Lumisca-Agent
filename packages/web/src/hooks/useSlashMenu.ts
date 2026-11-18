@@ -1,10 +1,5 @@
-import {
-  type Dispatch,
-  type KeyboardEvent,
-  type SetStateAction,
-  useCallback,
-  useState,
-} from "preact/compat";
+import type { Dispatch, KeyboardEvent, SetStateAction } from "preact/compat";
+import { useCallback, useState } from "preact/hooks";
 import type { SlashCommand, SlashCommandItem } from "../slashCommands.ts";
 
 export type { SlashCommand, SlashCommandItem };

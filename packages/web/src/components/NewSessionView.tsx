@@ -1,5 +1,5 @@
 import { IconArrowUp } from "@tabler/icons-preact";
-import { useEffect, useMemo, useRef, useState } from "preact/compat";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { api } from "../api.ts";
 import { rememberDefaultModel } from "../defaultModel.ts";
 import { startDraft } from "../draftStart.ts";

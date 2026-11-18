@@ -1,5 +1,6 @@
 import { errorMessage as errorText } from "@lumisca/core/shared";
-import { useCallback, useSyncExternalStore } from "preact/compat";
+import { useSyncExternalStore } from "preact/compat";
+import { useCallback } from "preact/hooks";
 import { api, modelApi } from "./api.ts";
 import { modelCatalog, type PeerCatalogState } from "./modelCatalog.ts";
 import { createResourceStore, useStore } from "./store.ts";

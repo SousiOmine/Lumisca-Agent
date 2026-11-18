@@ -4,7 +4,7 @@ import {
   resolveUiView,
   type UiResolvedView,
 } from "@lumisca/core/shared";
-import { useMemo } from "preact/compat";
+import { useMemo } from "preact/hooks";
 import { InvalidCard, UiCard } from "./UiCard.tsx";
 
 /**

@@ -1,5 +1,5 @@
 import { type Icon, IconPlus } from "@tabler/icons-preact";
-import { useRef, useState } from "preact/compat";
+import { useRef, useState } from "preact/hooks";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 
 /** One row: what it says, what it draws, and what picking it does. The

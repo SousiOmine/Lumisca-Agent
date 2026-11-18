@@ -1,9 +1,7 @@
 import type { SessionPool } from "../agent/pool.ts";
-import { stellaEntryOf } from "../agent/stella-stream.ts";
-import type { AgentMessage } from "../ai/types.ts";
+import { conversationEntriesOf } from "../agent/stella-stream.ts";
 import type { ClientEvent } from "../domain/event.ts";
 import type { SessionInfo } from "../domain/session.ts";
-import type { StellaEntry } from "../domain/stella-conversation.ts";
 import type { Workspace } from "../domain/workspace.ts";
 import { CoreError, errorMessage } from "../errors.ts";
 import type { RoutineRepo } from "../routine/repo.ts";
@@ -11,6 +9,7 @@ import type { RoutineScheduler } from "../routine/scheduler.ts";
 import { createRoutineTools } from "../routine/tools.ts";
 import { createHistorySearchTool } from "../session/history.ts";
 import type { MessageRepo } from "../session/messages.ts";
+import { modelViewOf } from "../session/model-view.ts";
 import type { SessionRepo } from "../session/repo.ts";
 import type { Locale } from "../shared/mod.ts";
 import type { StellaStatus } from "../shared/wire.ts";
@@ -44,17 +43,6 @@ import {
   VmCommandRunner as VmCommandRunnerImpl,
 } from "../vm/shell.ts";
 import { createVmTools } from "../vm/tools.ts";
-
-/** The conversation entries a set of stored rows projects to, oldest first —
- * the same projection the conversation endpoints serve. */
-function entriesOf(messages: readonly AgentMessage[]): StellaEntry[] {
-  const entries: StellaEntry[] = [];
-  for (const message of messages) {
-    const entry = stellaEntryOf(message);
-    if (entry !== null) entries.push(entry);
-  }
-  return entries;
-}
 
 /**
  * The stella machine and the conversations that run inside it.
@@ -197,11 +185,7 @@ export class StellaMachineService {
     ]);
     this.deps.agents.touch(agent.id);
     if (existing !== undefined) {
-      const rows = this.deps.messages.listModelView(existing.id);
-      const view = {
-        messages: rows.map((row) => row.message),
-        baseIndex: this.deps.messages.count(existing.id, "all") - rows.length,
-      };
+      const view = modelViewOf(this.deps.messages, existing.id);
       this.deps.pool.open(
         existing,
         this.deps.requireWorkspace(existing.workspaceId),
@@ -460,7 +444,7 @@ export class StellaMachineService {
       // the projection is the same one the conversation endpoints serve.
       historyTool: createHistorySearchTool({
         entries: (window) =>
-          entriesOf(
+          conversationEntriesOf(
             this.deps.messages
               .listBetween(session.id, window)
               .map((row) => row.message),

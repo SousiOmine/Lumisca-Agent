@@ -1,10 +1,5 @@
-import {
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "preact/compat";
+import type { ReactNode } from "preact/compat";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { useReducedMotion } from "../hooks/useMediaQuery.ts";
 
 interface ModalProps {

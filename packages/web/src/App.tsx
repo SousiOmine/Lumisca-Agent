@@ -1,13 +1,13 @@
 import type { AppMode } from "@lumisca/core/shared";
 import { IconPlus } from "@tabler/icons-preact";
+import type { ReactElement } from "preact/compat";
 import {
-  type ReactElement,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-} from "preact/compat";
+} from "preact/hooks";
 import { AppDialogs } from "./components/AppDialogs.tsx";
 import { AppMenu } from "./components/AppMenu.tsx";
 import { MacosTitleBarDrag } from "./components/MacosTitleBarDrag.tsx";

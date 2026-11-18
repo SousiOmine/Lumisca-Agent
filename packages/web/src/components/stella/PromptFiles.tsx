@@ -1,5 +1,5 @@
 import { formatAttachmentSize, type PromptFileRef } from "@lumisca/core/shared";
-import { useState } from "preact/compat";
+import { useState } from "preact/hooks";
 import { useT } from "../../i18n.ts";
 import { Lightbox } from "../Lightbox.tsx";
 

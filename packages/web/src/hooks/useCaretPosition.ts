@@ -1,10 +1,5 @@
-import {
-  type Dispatch,
-  type RefObject,
-  type SetStateAction,
-  useCallback,
-  useState,
-} from "preact/compat";
+import type { Dispatch, RefObject, SetStateAction } from "preact/compat";
+import { useCallback, useState } from "preact/hooks";
 
 /** Pixel position of the caret within the textarea (mirror-div technique:
  * clone the textarea's metrics, render the text up to the caret, and read

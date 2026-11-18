@@ -10,16 +10,13 @@ import {
   IconPlayerStop,
   IconX,
 } from "@tabler/icons-preact";
-import {
-  type ClipboardEvent,
-  type DragEvent,
-  type KeyboardEvent,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
+import type {
+  ClipboardEvent,
+  DragEvent,
+  KeyboardEvent,
+  ReactNode,
 } from "preact/compat";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import {
   ContextUsageCard,
   type ContextUsageData,

@@ -1,5 +1,5 @@
 import { IconPlus, IconTrash } from "@tabler/icons-preact";
-import { useEffect, useState } from "preact/compat";
+import { useEffect, useState } from "preact/hooks";
 import { api } from "../../api.ts";
 import { confirmAction } from "../../confirm.ts";
 import { useT } from "../../i18n.ts";

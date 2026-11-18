@@ -1,6 +1,6 @@
 import { DEFAULT_MODEL_KEY, parseModelPreference } from "@lumisca/core/shared";
 import { IconChevronDown } from "@tabler/icons-preact";
-import { useRef, useState } from "preact/compat";
+import { useRef, useState } from "preact/hooks";
 import { rememberDefaultModel } from "../../defaultModel.ts";
 import { useT } from "../../i18n.ts";
 import { errorText, useProviderModels } from "../../providers.ts";

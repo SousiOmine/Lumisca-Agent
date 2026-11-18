@@ -1,9 +1,5 @@
-import {
-  type RefObject,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-} from "preact/compat";
+import type { RefObject } from "preact/compat";
+import { useCallback, useEffect, useLayoutEffect } from "preact/hooks";
 
 /**
  * Size a text field to its content, up to the ceiling its stylesheet allows.

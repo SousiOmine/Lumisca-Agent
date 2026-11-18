@@ -3,7 +3,7 @@ import {
   IconCheck,
   IconClipboard,
 } from "@tabler/icons-preact";
-import { useState } from "preact/compat";
+import { useState } from "preact/hooks";
 import { useSavedNotice } from "../hooks/useSave.ts";
 import type { ServerHealth } from "../hooks/useServerHealth.ts";
 import { useT } from "../i18n.ts";

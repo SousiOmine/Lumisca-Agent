@@ -12,7 +12,7 @@ import {
   IconX,
 } from "@tabler/icons-preact";
 import type { ReactNode } from "preact/compat";
-import { useEffect, useState } from "preact/compat";
+import { useEffect, useState } from "preact/hooks";
 import { COMPACT_QUERY, useMediaQuery } from "../hooks/useMediaQuery.ts";
 import type { PushControls } from "../hooks/usePush.ts";
 import type { UpdateControls } from "../hooks/useUpdateStatus.ts";

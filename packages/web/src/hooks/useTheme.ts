@@ -1,5 +1,5 @@
 import { THEME_KEY } from "@lumisca/core/shared";
-import { useCallback, useLayoutEffect } from "preact/compat";
+import { useCallback, useLayoutEffect } from "preact/hooks";
 import type { ThemeSetting } from "../types.ts";
 import { usePreference } from "./usePreference.ts";
 

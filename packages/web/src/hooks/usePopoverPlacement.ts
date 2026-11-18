@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState } from "preact/compat";
+import { useLayoutEffect, useState } from "preact/hooks";
 
 /**
  * Placement of the model picker's popover.

@@ -1,5 +1,5 @@
 import { IconPlugConnected } from "@tabler/icons-preact";
-import { useMemo, useState } from "preact/compat";
+import { useMemo, useState } from "preact/hooks";
 import { useT } from "../../i18n.ts";
 import { filterByQuery, useProviderModels } from "../../providers.ts";
 import { SettingsSubHeader } from "./SettingsSubHeader.tsx";

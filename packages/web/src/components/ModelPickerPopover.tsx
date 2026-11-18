@@ -1,4 +1,5 @@
-import { createPortal, type RefObject, useRef } from "preact/compat";
+import { createPortal, type RefObject } from "preact";
+import { useRef } from "preact/hooks";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { usePopoverPlacement } from "../hooks/usePopoverPlacement.ts";
 import type { ModelInfo } from "../types.ts";

@@ -1,5 +1,5 @@
 import type { UiFlowBlock, UiFlowShape } from "@lumisca/core/shared";
-import { useId, useMemo } from "preact/compat";
+import { useId, useMemo } from "preact/hooks";
 import { useT } from "../../i18n.ts";
 import { FLOW_LINE_HEIGHT, layoutFlow } from "./flow-layout.ts";
 

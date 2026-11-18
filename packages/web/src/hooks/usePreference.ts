@@ -1,5 +1,5 @@
 import { errorMessage as errorText } from "@lumisca/core/shared";
-import { useCallback, useRef, useState } from "preact/compat";
+import { useCallback, useRef, useState } from "preact/hooks";
 import { settingsStore } from "../settingsStore.ts";
 
 /**

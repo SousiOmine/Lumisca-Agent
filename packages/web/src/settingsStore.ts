@@ -1,4 +1,4 @@
-import { useCallback } from "preact/compat";
+import { useCallback } from "preact/hooks";
 import { api } from "./api.ts";
 import { createResourceStore, useStore } from "./store.ts";
 

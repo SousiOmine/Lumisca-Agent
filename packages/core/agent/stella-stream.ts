@@ -190,6 +190,21 @@ export function stellaEntryOf(message: AgentMessage): StellaEntry | null {
  * messages in the same millisecond (two `send_chat` calls in one turn) would
  * otherwise have them collapse into one. Opaque to clients, which only echo
  * it. */
+/** The conversation entries a set of stored rows projects to, oldest
+ * first: one projection shared by the window reader, the conversation
+ * endpoints and `history_search`. A row with no visible entry (a tool
+ * result, a context message) is skipped. */
+export function conversationEntriesOf(
+  messages: readonly AgentMessage[],
+): StellaEntry[] {
+  const entries: StellaEntry[] = [];
+  for (const message of messages) {
+    const entry = stellaEntryOf(message);
+    if (entry !== null) entries.push(entry);
+  }
+  return entries;
+}
+
 export function stellaEntryCursorOf(entry: StellaEntry): string {
   return JSON.stringify([
     entry.role,

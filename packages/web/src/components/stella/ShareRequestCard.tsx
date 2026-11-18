@@ -1,5 +1,5 @@
 import { errorMessage } from "@lumisca/core/shared";
-import { useState } from "preact/compat";
+import { useState } from "preact/hooks";
 import { formatClockTime } from "../../format.ts";
 import { useLocale, useT } from "../../i18n.ts";
 import { inDesktopShell } from "../../shell.ts";

@@ -1,6 +1,6 @@
 import { IconChevronDown, IconPlus, IconTrash } from "@tabler/icons-preact";
 import type { CSSProperties } from "preact/compat";
-import { useEffect, useState } from "preact/compat";
+import { useEffect, useState } from "preact/hooks";
 import { confirmAction } from "../../confirm.ts";
 import {
   connectionLabel,

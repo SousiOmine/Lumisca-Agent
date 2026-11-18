@@ -6,14 +6,14 @@ import {
   parsePercentSetting,
 } from "@lumisca/core/shared";
 import { IconSend } from "@tabler/icons-preact";
+import type { KeyboardEvent } from "preact/compat";
 import {
-  type KeyboardEvent,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-} from "preact/compat";
+} from "preact/hooks";
 import { sessionAttachmentBase, sessionVisualBase } from "../api-client.ts";
 import { useSavedPrompts } from "../hooks/useSavedPrompts.ts";
 import { useSkills } from "../hooks/useSkills.ts";

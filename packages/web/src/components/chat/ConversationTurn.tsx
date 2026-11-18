@@ -4,7 +4,8 @@ import {
   contentText,
   TOOL_CHAT_ATTACH,
 } from "@lumisca/core/shared";
-import { memo, useState } from "preact/compat";
+import { memo } from "preact/compat";
+import { useState } from "preact/hooks";
 import type {
   AgentMessage,
   AssistantMessage,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "preact/compat";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../api.ts";
 import { errorText } from "../providers.ts";
 import type { RoutineView } from "../types.ts";

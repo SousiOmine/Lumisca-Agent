@@ -8,7 +8,7 @@ import {
   IconSettings,
   IconSparkles,
 } from "@tabler/icons-preact";
-import { useRef, useState } from "preact/compat";
+import { useRef, useState } from "preact/hooks";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { useT } from "../i18n.ts";
 

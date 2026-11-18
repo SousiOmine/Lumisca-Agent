@@ -1,10 +1,5 @@
-import {
-  type RefObject,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-} from "preact/compat";
+import type { RefObject } from "preact/compat";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "preact/hooks";
 
 /** The scroll contract of a transcript: stay pinned to the newest content
  * while the reader is at the bottom, never yank them back when they scroll up,

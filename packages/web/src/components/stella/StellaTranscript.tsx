@@ -1,4 +1,5 @@
-import { Fragment, useMemo } from "preact/compat";
+import { Fragment } from "preact";
+import { useMemo } from "preact/hooks";
 import { formatDaySeparator, startOfDay } from "../../format.ts";
 import { useArrivals } from "../../hooks/useArrivals.ts";
 import { useTranscriptScroll } from "../../hooks/useTranscriptScroll.ts";

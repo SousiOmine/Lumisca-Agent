@@ -1,13 +1,10 @@
-import {
-  type Dispatch,
-  type KeyboardEvent,
-  type RefObject,
-  type SetStateAction,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
+import type {
+  Dispatch,
+  KeyboardEvent,
+  RefObject,
+  SetStateAction,
 } from "preact/compat";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api, fed, peerRouted } from "../api.ts";
 import type { WorkspaceFileEntry } from "../types.ts";
 
