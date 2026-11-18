@@ -1,4 +1,5 @@
 import type { ClientEvent } from "../domain/event.ts";
+import { HubRegistry } from "../interruptions/hub-registry.ts";
 import { HandoverHub } from "./handover.ts";
 
 /**
@@ -11,27 +12,24 @@ import { HandoverHub } from "./handover.ts";
  * screen over has no entry.
  */
 export class HandoverRegistry {
-  private readonly hubs = new Map<string, HandoverHub>();
+  private readonly hubs: HubRegistry<HandoverHub>;
 
   /** `emit` publishes the hub's events to every frontend listener. */
-  constructor(private readonly emit: (event: ClientEvent) => void) {}
+  constructor(emit: (event: ClientEvent) => void) {
+    this.hubs = new HubRegistry(
+      (sessionId) => new HandoverHub(sessionId, emit),
+    );
+  }
 
-  /** The hub of a session, created on first use. */
   for(sessionId: string): HandoverHub {
-    const existing = this.hubs.get(sessionId);
-    if (existing !== undefined) return existing;
-    const hub = new HandoverHub(sessionId, (event) => this.emit(event));
-    this.hubs.set(sessionId, hub);
-    return hub;
+    return this.hubs.for(sessionId);
   }
 
-  /** Drop a session's hub (the session is gone). */
   forget(sessionId: string): void {
-    this.hubs.delete(sessionId);
+    this.hubs.forget(sessionId);
   }
 
-  /** The sessions that have a hub (the shutdown sweep). */
   sessionIds(): Iterable<string> {
-    return this.hubs.keys();
+    return this.hubs.sessionIds();
   }
 }

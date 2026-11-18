@@ -24,7 +24,8 @@
 
 import type { ClientEvent } from "../domain/event.ts";
 import { CoreError } from "../errors.ts";
-import { abortError } from "../shared/misc.ts";
+import { HubRegistry } from "../interruptions/hub-registry.ts";
+import { PendingRequest } from "../interruptions/pending-request.ts";
 
 /** How long the lending card stays before the run continues without a
  * folder. The same 15 minutes the screen hand-over waits: long enough to
@@ -74,15 +75,6 @@ export type PendingShareRequest =
       expiresAt: number;
     };
 
-interface Waiting {
-  request: PendingShareRequest;
-  /** The grants that were already lent when a lend request was asked: a
-   * loan that was there before the request is not an answer to it. */
-  known: readonly string[];
-  resolve: (outcome: ShareRequestOutcome) => void;
-  reject: (error: Error) => void;
-}
-
 /**
  * Owns the share requests of one session. The tools ask here and await the
  * returned promise; the HTTP routes answer once the user (or their computer)
@@ -93,20 +85,46 @@ interface Waiting {
  * stay up with nothing waiting behind it.
  */
 export class ShareRequestHub {
-  private pending: Waiting | null = null;
-  /** Overridable so a test can watch a deadline pass without waiting a
-   * quarter of an hour (the production values are the constants above). */
+  private readonly request: PendingRequest<
+    PendingShareRequest,
+    ShareRequestOutcome,
+    readonly string[]
+  >;
+  private readonly sessionId: string;
+  private readonly emit: (event: ClientEvent) => void;
   private readonly lendTimeoutMs: number;
   private readonly disconnectTimeoutMs: number;
 
+  /** Overridable so a test can watch a deadline pass without waiting a
+   * quarter of an hour (the production values are the constants above). */
   constructor(
-    private readonly sessionId: string,
-    private readonly emit: (event: ClientEvent) => void,
+    sessionId: string,
+    emit: (event: ClientEvent) => void,
     timeouts: { lend?: number; disconnect?: number } = {},
   ) {
+    this.sessionId = sessionId;
+    this.emit = emit;
     this.lendTimeoutMs = timeouts.lend ?? SHARE_LEND_TIMEOUT_MS;
     this.disconnectTimeoutMs =
       timeouts.disconnect ?? SHARE_DISCONNECT_TIMEOUT_MS;
+    this.request = new PendingRequest<
+      PendingShareRequest,
+      ShareRequestOutcome,
+      readonly string[]
+    >({
+      cancelled: "The folder request was cancelled",
+      // Remove the card BEFORE the run moves on: the user may be choosing a
+      // folder right now, and a loan made afterwards would answer nothing.
+      onTimeout: (pending) => {
+        this.emit({
+          type: "share_request_end",
+          sessionId: this.sessionId,
+          toolCallId: pending.toolCallId,
+          outcome: "timed_out",
+        });
+        return { kind: "timed_out" };
+      },
+    });
   }
 
   /**
@@ -124,13 +142,17 @@ export class ShareRequestHub {
     known: readonly string[],
     signal?: AbortSignal,
   ): Promise<ShareRequestOutcome> {
-    const request: PendingShareRequest = {
-      kind: "lend",
-      toolCallId,
-      reason,
-      expiresAt: Date.now() + this.lendTimeoutMs,
-    };
-    return this.#ask(request, known, this.lendTimeoutMs, signal);
+    return this.#ask(
+      {
+        kind: "lend",
+        toolCallId,
+        reason,
+        expiresAt: Date.now() + this.lendTimeoutMs,
+      },
+      known,
+      this.lendTimeoutMs,
+      signal,
+    );
   }
 
   /**
@@ -161,77 +183,28 @@ export class ShareRequestHub {
     timeoutMs: number,
     signal?: AbortSignal,
   ): Promise<ShareRequestOutcome> {
-    if (this.pending !== null) {
-      return Promise.reject(
-        new CoreError(
-          "The user is already being asked about a lent folder",
-          "conflict",
-        ),
-      );
-    }
-    if (signal?.aborted === true) {
-      return Promise.reject(abortError());
-    }
-    this.emit({
-      type: "share_request",
-      sessionId: this.sessionId,
-      toolCallId: request.toolCallId,
-      ...(request.kind === "lend"
-        ? { kind: "lend", reason: request.reason }
-        : { kind: "disconnect", id: request.id, name: request.name }),
-      expiresAt: request.expiresAt,
-    });
-    return new Promise<ShareRequestOutcome>((resolve, reject) => {
-      // Every way out (answer, decline, abort, deadline) runs through here,
-      // so a settled wait never leaves a timer behind to close a LATER
-      // request.
-      const release = () => {
-        clearTimeout(timer);
-        signal?.removeEventListener("abort", onAbort);
-      };
-      const onAbort = () => {
-        if (this.pending?.request.toolCallId !== request.toolCallId) return;
-        this.pending = null;
-        release();
-        reject(abortError());
-      };
-      const timer = setTimeout(() => {
-        // The wait may already have been settled (or replaced) by the time a
-        // stale timer fires; only the request that set this timer may be
-        // closed here.
-        if (this.pending?.request.toolCallId !== request.toolCallId) return;
-        this.pending = null;
-        release();
-        // Remove the card BEFORE the run moves on: the user may be choosing
-        // a folder right now, and a loan made afterwards would answer
-        // nothing.
+    return this.request.open(request, {
+      timeoutMs,
+      signal,
+      context: known,
+      conflict: "The user is already being asked about a lent folder",
+      announce: (pending) => {
         this.emit({
-          type: "share_request_end",
+          type: "share_request",
           sessionId: this.sessionId,
-          toolCallId: request.toolCallId,
-          outcome: "timed_out",
+          toolCallId: pending.toolCallId,
+          ...(pending.kind === "lend"
+            ? { kind: "lend", reason: pending.reason }
+            : { kind: "disconnect", id: pending.id, name: pending.name }),
+          expiresAt: pending.expiresAt,
         });
-        resolve({ kind: "timed_out" });
-      }, timeoutMs);
-      signal?.addEventListener("abort", onAbort, { once: true });
-      this.pending = {
-        request,
-        known,
-        resolve: (outcome) => {
-          release();
-          resolve(outcome);
-        },
-        reject: (error) => {
-          release();
-          reject(error);
-        },
-      };
+      },
     });
   }
 
   /** The request still waiting for the user, or null. */
   pendingShareRequest(): PendingShareRequest | null {
-    return this.pending?.request ?? null;
+    return this.request.pending();
   }
 
   /**
@@ -244,52 +217,29 @@ export class ShareRequestHub {
    * 404/409 instead of silently accepting a stale answer.
    */
   finishLend(toolCallId?: string): void {
-    const pending = this.#take("lend", toolCallId);
-    this.emit({
-      type: "share_request_end",
-      sessionId: this.sessionId,
-      toolCallId: pending.request.toolCallId,
-      outcome: "lent",
-    });
-    pending.resolve({ kind: "lent" });
+    this.#settle("lend", toolCallId, "lent", { kind: "lent" });
   }
 
   /** The user pressed the button that declines. The run continues without a
    * folder; it is not an error. */
   decline(toolCallId?: string): void {
-    const pending = this.#take("lend", toolCallId);
-    this.emit({
-      type: "share_request_end",
-      sessionId: this.sessionId,
-      toolCallId: pending.request.toolCallId,
-      outcome: "declined",
-    });
-    pending.resolve({ kind: "declined" });
+    this.#settle("lend", toolCallId, "declined", { kind: "declined" });
   }
 
   /** The desktop app withdrew the loan. */
   finishDisconnect(toolCallId?: string): void {
-    const pending = this.#take("disconnect", toolCallId);
-    this.emit({
-      type: "share_request_end",
-      sessionId: this.sessionId,
-      toolCallId: pending.request.toolCallId,
-      outcome: "disconnected",
+    this.#settle("disconnect", toolCallId, "disconnected", {
+      kind: "disconnected",
     });
-    pending.resolve({ kind: "disconnected" });
   }
 
   /** The desktop app could not withdraw it, and said why. The loan is still
    * there: the words go into the tool's result as they were given. */
   failDisconnect(toolCallId: string, error: string): void {
-    const pending = this.#take("disconnect", toolCallId);
-    this.emit({
-      type: "share_request_end",
-      sessionId: this.sessionId,
-      toolCallId: pending.request.toolCallId,
-      outcome: "failed",
+    this.#settle("disconnect", toolCallId, "failed", {
+      kind: "failed",
+      error,
     });
-    pending.resolve({ kind: "failed", error });
   }
 
   /**
@@ -301,60 +251,64 @@ export class ShareRequestHub {
    * server's own list, so this is the truth rather than a claim by a client.
    */
   settleFromGrants(grants: readonly { id: string }[]): void {
-    const pending = this.pending;
+    const pending = this.request.pendingWithContext();
     if (pending === null) return;
     const ids = grants.map((grant) => grant.id);
-    if (pending.request.kind === "lend") {
-      if (ids.some((id) => !pending.known.includes(id))) {
-        this.finishLend(pending.request.toolCallId);
+    if (pending.payload.kind === "lend") {
+      if (ids.some((id) => !pending.context.includes(id))) {
+        this.finishLend(pending.payload.toolCallId);
       }
       return;
     }
-    if (!ids.includes(pending.request.id)) {
-      this.finishDisconnect(pending.request.toolCallId);
+    if (!ids.includes(pending.payload.id)) {
+      this.finishDisconnect(pending.payload.toolCallId);
     }
   }
 
   /** Reject the pending request. Called when the run ends or the session
    * closes, so a torn-down run cannot leave the wait hanging. Idempotent. */
   cancelAll(): void {
-    const pending = this.pending;
-    if (pending === null) return;
-    this.pending = null;
+    const taken = this.request.takeIfPresent();
+    if (taken === null) return;
     this.emit({
       type: "share_request_end",
       sessionId: this.sessionId,
-      toolCallId: pending.request.toolCallId,
+      toolCallId: taken.payload.toolCallId,
       outcome: "declined",
     });
-    pending.reject(
+    taken.fail(
       new CoreError("The folder request was cancelled", "unavailable"),
     );
   }
 
-  /** Take the pending request out, or throw when it is not the one named (or
-   * is of the other kind: a card can only answer the question it shows). */
-  #take(
+  /** Take the pending request out and answer it. Throws when nothing waits
+   * or the card's kind does not match (a card can only answer what it
+   * shows). */
+  #settle(
     kind: PendingShareRequest["kind"],
     toolCallId: string | undefined,
-  ): Waiting {
-    const pending = this.pending;
-    if (pending === null || pending.request.kind !== kind) {
+    outcome: "lent" | "declined" | "disconnected" | "failed",
+    result: ShareRequestOutcome,
+  ): void {
+    const notFound =
+      kind === "lend"
+        ? "No folder is waiting to be lent"
+        : "No lent folder is waiting to be withdrawn";
+    const pending = this.request.pending();
+    if (pending === null || pending.kind !== kind) {
       throw new CoreError(
-        kind === "lend"
-          ? "No folder is waiting to be lent"
-          : "No lent folder is waiting to be withdrawn",
+        toolCallId === undefined ? notFound : `${notFound}: ${toolCallId}`,
         "not_found",
       );
     }
-    if (toolCallId !== undefined && toolCallId !== pending.request.toolCallId) {
-      throw new CoreError(
-        `No folder request is waiting for tool call: ${toolCallId}`,
-        "not_found",
-      );
-    }
-    this.pending = null;
-    return pending;
+    const taken = this.request.take(toolCallId, notFound);
+    this.emit({
+      type: "share_request_end",
+      sessionId: this.sessionId,
+      toolCallId: taken.payload.toolCallId,
+      outcome,
+    });
+    taken.settle(result);
   }
 }
 
@@ -367,33 +321,28 @@ export class ShareRequestHub {
  * has no entry.
  */
 export class ShareRequestRegistry {
-  private readonly hubs = new Map<string, ShareRequestHub>();
+  private readonly hubs: HubRegistry<ShareRequestHub>;
 
   /** `emit` publishes the hubs' events to every frontend listener. */
-  constructor(private readonly emit: (event: ClientEvent) => void) {}
-
-  /** The hub of a session, created on first use. */
-  for(sessionId: string): ShareRequestHub {
-    const existing = this.hubs.get(sessionId);
-    if (existing !== undefined) return existing;
-    const hub = new ShareRequestHub(sessionId, (event) => this.emit(event));
-    this.hubs.set(sessionId, hub);
-    return hub;
+  constructor(emit: (event: ClientEvent) => void) {
+    this.hubs = new HubRegistry(
+      (sessionId) => new ShareRequestHub(sessionId, emit),
+    );
   }
 
-  /** The hub of a session only if it exists (no entry is created: reading
-   * the pending request of a session that never asked must not). */
+  for(sessionId: string): ShareRequestHub {
+    return this.hubs.for(sessionId);
+  }
+
   get(sessionId: string): ShareRequestHub | undefined {
     return this.hubs.get(sessionId);
   }
 
-  /** Drop a session's hub (the session is gone). */
   forget(sessionId: string): void {
-    this.hubs.delete(sessionId);
+    this.hubs.forget(sessionId);
   }
 
-  /** The sessions that have a hub (the shutdown sweep). */
   sessionIds(): Iterable<string> {
-    return this.hubs.keys();
+    return this.hubs.sessionIds();
   }
 }

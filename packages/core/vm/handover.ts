@@ -26,7 +26,7 @@
 
 import type { ClientEvent } from "../domain/event.ts";
 import { CoreError } from "../errors.ts";
-import { abortError } from "../shared/misc.ts";
+import { PendingRequest } from "../interruptions/pending-request.ts";
 
 /** How long the agent waits at the screen before it continues without the
  * user. Long enough for a password reset or a CAPTCHA in another window,
@@ -54,11 +54,6 @@ export interface PendingHandover {
   expiresAt: number;
 }
 
-interface Waiting extends PendingHandover {
-  resolve: (outcome: HandoverOutcome) => void;
-  reject: (error: Error) => void;
-}
-
 /**
  * Owns the handover of one session. The tool registers here and awaits the
  * returned promise; `finish()` resolves it with what the user reported
@@ -68,18 +63,40 @@ interface Waiting extends PendingHandover {
  * pending handover down when its run ends or the session closes, so a
  * handover can never outlive the run that asked for it (the screen would
  * stay interactive with nothing waiting for it). The deadline is the third
- * way out, for a user who never comes (see `wait`).
+ * way out, for a user who never comes.
  */
 export class HandoverHub {
-  private pending: Waiting | null = null;
+  private readonly request: PendingRequest<PendingHandover, HandoverOutcome>;
+  private readonly sessionId: string;
+  private readonly emit: (event: ClientEvent) => void;
+  private readonly timeoutMs: number;
 
   constructor(
-    private readonly sessionId: string,
-    private readonly emit: (event: ClientEvent) => void,
+    sessionId: string,
+    emit: (event: ClientEvent) => void,
     /** Overridable so a test can watch a deadline pass without waiting a
      * quarter of an hour. */
-    private readonly timeoutMs: number = HANDOVER_TIMEOUT_MS,
-  ) {}
+    timeoutMs: number = HANDOVER_TIMEOUT_MS,
+  ) {
+    this.sessionId = sessionId;
+    this.emit = emit;
+    this.timeoutMs = timeoutMs;
+    this.request = new PendingRequest<PendingHandover, HandoverOutcome>({
+      cancelled: "The handover was cancelled",
+      // Close the interaction BEFORE the run moves on: the user may be at
+      // the screen right now, and the agent must not start clicking while
+      // the pane still accepts their input.
+      onTimeout: (pending) => {
+        this.emit({
+          type: "handover_end",
+          sessionId: this.sessionId,
+          toolCallId: pending.toolCallId,
+          note: "",
+        });
+        return { kind: "timed_out" };
+      },
+    });
+  }
 
   /**
    * Ask the user to take over the screen and wait for them.
@@ -96,85 +113,35 @@ export class HandoverHub {
     instructions: string | null,
     signal?: AbortSignal,
   ): Promise<HandoverOutcome> {
-    if (this.pending !== null) {
-      return Promise.reject(
-        new CoreError(
-          "The user is already being asked to take over the screen",
-          "conflict",
-        ),
-      );
-    }
-    if (signal?.aborted === true) {
-      return Promise.reject(abortError());
-    }
-    const expiresAt = Date.now() + this.timeoutMs;
-    this.emit({
-      type: "handover",
-      sessionId: this.sessionId,
-      toolCallId,
-      reason,
-      instructions,
-      expiresAt,
-    });
-    return new Promise<HandoverOutcome>((resolve, reject) => {
-      // Every way out (finish, abort, cancel, deadline) runs through here,
-      // so a settled wait never leaves a timer behind to close a LATER
-      // hand-over.
-      const release = () => {
-        clearTimeout(timer);
-        signal?.removeEventListener("abort", onAbort);
-      };
-      const onAbort = () => {
-        if (this.pending?.toolCallId !== toolCallId) return;
-        this.pending = null;
-        release();
-        reject(abortError());
-      };
-      const timer = setTimeout(() => {
-        // The wait may already have been settled (or replaced) by the time
-        // a stale timer fires; only the hand-over that set this timer may
-        // be closed here.
-        if (this.pending?.toolCallId !== toolCallId) return;
-        this.pending = null;
-        release();
-        // Close the interaction BEFORE the run moves on: the user may be
-        // at the screen right now, and the agent must not start clicking
-        // while the pane still accepts their input.
-        this.emit({
-          type: "handover_end",
-          sessionId: this.sessionId,
-          toolCallId,
-          note: "",
-        });
-        resolve({ kind: "timed_out" });
-      }, this.timeoutMs);
-      signal?.addEventListener("abort", onAbort, { once: true });
-      this.pending = {
+    return this.request.open(
+      {
         toolCallId,
         reason,
         instructions,
-        expiresAt,
-        resolve: (outcome) => {
-          release();
-          resolve(outcome);
+        expiresAt: Date.now() + this.timeoutMs,
+      },
+      {
+        timeoutMs: this.timeoutMs,
+        signal,
+        context: undefined,
+        conflict: "The user is already being asked to take over the screen",
+        announce: (pending) => {
+          this.emit({
+            type: "handover",
+            sessionId: this.sessionId,
+            toolCallId: pending.toolCallId,
+            reason: pending.reason,
+            instructions: pending.instructions,
+            expiresAt: pending.expiresAt,
+          });
         },
-        reject: (error) => {
-          release();
-          reject(error);
-        },
-      };
-    });
+      },
+    );
   }
 
   /** The handover still waiting for the user, or null. */
   pendingHandover(): PendingHandover | null {
-    if (this.pending === null) return null;
-    return {
-      toolCallId: this.pending.toolCallId,
-      reason: this.pending.reason,
-      instructions: this.pending.instructions,
-      expiresAt: this.pending.expiresAt,
-    };
+    return this.request.pending();
   }
 
   /**
@@ -185,39 +152,31 @@ export class HandoverHub {
    * instead of silently accepting a stale click.
    */
   finish(note: string, toolCallId?: string): void {
-    const pending = this.pending;
-    if (pending === null) {
-      throw new CoreError("No handover is waiting for the user", "not_found");
-    }
-    if (toolCallId !== undefined && toolCallId !== pending.toolCallId) {
-      throw new CoreError(
-        `No handover is waiting for tool call: ${toolCallId}`,
-        "not_found",
-      );
-    }
-    this.pending = null;
+    const taken = this.request.take(
+      toolCallId,
+      "No handover is waiting for the user",
+    );
     this.emit({
       type: "handover_end",
       sessionId: this.sessionId,
-      toolCallId: pending.toolCallId,
+      toolCallId: taken.payload.toolCallId,
       note,
     });
-    pending.resolve({ kind: "finished", note });
+    taken.settle({ kind: "finished", note });
   }
 
   /** Reject the pending handover. Called when the run ends or the session
    * closes, so a torn-down run cannot leave the wait hanging (or the
    * screen interactive with nothing behind it). Idempotent. */
   cancelAll(): void {
-    const pending = this.pending;
-    if (pending === null) return;
-    this.pending = null;
+    const taken = this.request.takeIfPresent();
+    if (taken === null) return;
     this.emit({
       type: "handover_end",
       sessionId: this.sessionId,
-      toolCallId: pending.toolCallId,
+      toolCallId: taken.payload.toolCallId,
       note: "",
     });
-    pending.reject(new CoreError("The handover was cancelled", "unavailable"));
+    taken.fail(new CoreError("The handover was cancelled", "unavailable"));
   }
 }

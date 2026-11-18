@@ -20,7 +20,8 @@
 
 import type { ClientEvent } from "../domain/event.ts";
 import { CoreError } from "../errors.ts";
-import { abortError } from "../shared/misc.ts";
+import { HubRegistry } from "../interruptions/hub-registry.ts";
+import { PendingRequest } from "../interruptions/pending-request.ts";
 
 /** How long the card stays before the run continues without a value.
  * The same 15 minutes the screen hand-over waits: long enough to fetch a key
@@ -49,11 +50,6 @@ export interface PendingEnvRequest {
   expiresAt: number;
 }
 
-interface Waiting extends PendingEnvRequest {
-  resolve: (outcome: EnvRequestOutcome) => void;
-  reject: (error: Error) => void;
-}
-
 /**
  * Owns the environment-variable request of one session. The tool asks here
  * and awaits the returned promise; the HTTP route answers it once the value
@@ -61,19 +57,43 @@ interface Waiting extends PendingEnvRequest {
  *
  * The lifecycle is bound to the session's run: the agent tears every pending
  * request down when its run ends or the session closes, so a request can
- * never outlive the run that asked for it (a card would stay with
+ * never outlive the run that asked it (a card would stay with
  * nothing waiting behind it).
  */
 export class EnvRequestHub {
-  private pending: Waiting | null = null;
+  private readonly request: PendingRequest<
+    PendingEnvRequest,
+    EnvRequestOutcome
+  >;
+  private readonly sessionId: string;
+  private readonly emit: (event: ClientEvent) => void;
+  private readonly timeoutMs: number;
 
   constructor(
-    private readonly sessionId: string,
-    private readonly emit: (event: ClientEvent) => void,
+    sessionId: string,
+    emit: (event: ClientEvent) => void,
     /** Overridable so a test can watch a deadline pass without waiting a
      * quarter of an hour. */
-    private readonly timeoutMs: number = ENV_REQUEST_TIMEOUT_MS,
-  ) {}
+    timeoutMs: number = ENV_REQUEST_TIMEOUT_MS,
+  ) {
+    this.sessionId = sessionId;
+    this.emit = emit;
+    this.timeoutMs = timeoutMs;
+    this.request = new PendingRequest<PendingEnvRequest, EnvRequestOutcome>({
+      cancelled: "The environment variable request was cancelled",
+      // Remove the card BEFORE the run moves on: the user may be typing
+      // right now, and a value arriving afterwards has nowhere to go.
+      onTimeout: (pending) => {
+        this.emit({
+          type: "env_request_end",
+          sessionId: this.sessionId,
+          toolCallId: pending.toolCallId,
+          outcome: "timed_out",
+        });
+        return { kind: "timed_out" };
+      },
+    });
+  }
 
   /**
    * Ask the user for `name`'s value and wait for the answer.
@@ -87,84 +107,30 @@ export class EnvRequestHub {
     exists: boolean,
     signal?: AbortSignal,
   ): Promise<EnvRequestOutcome> {
-    if (this.pending !== null) {
-      return Promise.reject(
-        new CoreError(
-          "The user is already being asked for an environment variable",
-          "conflict",
-        ),
-      );
-    }
-    if (signal?.aborted === true) {
-      return Promise.reject(abortError());
-    }
-    const expiresAt = Date.now() + this.timeoutMs;
-    this.emit({
-      type: "env_request",
-      sessionId: this.sessionId,
-      toolCallId,
-      name,
-      exists,
-      expiresAt,
-    });
-    return new Promise<EnvRequestOutcome>((resolve, reject) => {
-      // Every way out (answer, decline, abort, deadline) runs through here,
-      // so a settled wait never leaves a timer behind to close a LATER
-      // request.
-      const release = () => {
-        clearTimeout(timer);
-        signal?.removeEventListener("abort", onAbort);
-      };
-      const onAbort = () => {
-        if (this.pending?.toolCallId !== toolCallId) return;
-        this.pending = null;
-        release();
-        reject(abortError());
-      };
-      const timer = setTimeout(() => {
-        // The wait may already have been settled (or replaced) by the time
-        // a stale timer fires; only the request that set this timer may be
-        // closed here.
-        if (this.pending?.toolCallId !== toolCallId) return;
-        this.pending = null;
-        release();
-        // Remove the card BEFORE the run moves on: the user may be typing
-        // right now, and a value arriving afterwards has nowhere to go.
-        this.emit({
-          type: "env_request_end",
-          sessionId: this.sessionId,
-          toolCallId,
-          outcome: "timed_out",
-        });
-        resolve({ kind: "timed_out" });
-      }, this.timeoutMs);
-      signal?.addEventListener("abort", onAbort, { once: true });
-      this.pending = {
-        toolCallId,
-        name,
-        exists,
-        expiresAt,
-        resolve: (outcome) => {
-          release();
-          resolve(outcome);
+    return this.request.open(
+      { toolCallId, name, exists, expiresAt: Date.now() + this.timeoutMs },
+      {
+        timeoutMs: this.timeoutMs,
+        signal,
+        context: undefined,
+        conflict: "The user is already being asked for an environment variable",
+        announce: (pending) => {
+          this.emit({
+            type: "env_request",
+            sessionId: this.sessionId,
+            toolCallId: pending.toolCallId,
+            name: pending.name,
+            exists: pending.exists,
+            expiresAt: pending.expiresAt,
+          });
         },
-        reject: (error) => {
-          release();
-          reject(error);
-        },
-      };
-    });
+      },
+    );
   }
 
   /** The request still waiting for the user, or null. */
   pendingEnvRequest(): PendingEnvRequest | null {
-    if (this.pending === null) return null;
-    return {
-      toolCallId: this.pending.toolCallId,
-      name: this.pending.name,
-      exists: this.pending.exists,
-      expiresAt: this.pending.expiresAt,
-    };
+    return this.request.pending();
   }
 
   /**
@@ -178,67 +144,53 @@ export class EnvRequestHub {
    * instead of silently accepting a stale answer.
    */
   finish(toolCallId?: string): void {
-    const pending = this.#take(toolCallId);
+    const taken = this.request.take(
+      toolCallId,
+      "No environment variable is waiting for the user",
+    );
     this.emit({
       type: "env_request_end",
       sessionId: this.sessionId,
-      toolCallId: pending.toolCallId,
+      toolCallId: taken.payload.toolCallId,
       outcome: "set",
     });
-    pending.resolve({ kind: "set" });
+    taken.settle({ kind: "set" });
   }
 
   /** The user pressed the button that declines. The run continues without a
    * value; it is not an error. */
   decline(toolCallId?: string): void {
-    const pending = this.#take(toolCallId);
+    const taken = this.request.take(
+      toolCallId,
+      "No environment variable is waiting for the user",
+    );
     this.emit({
       type: "env_request_end",
       sessionId: this.sessionId,
-      toolCallId: pending.toolCallId,
+      toolCallId: taken.payload.toolCallId,
       outcome: "declined",
     });
-    pending.resolve({ kind: "declined" });
+    taken.settle({ kind: "declined" });
   }
 
   /** Reject the pending request. Called when the run ends or the session
    * closes, so a torn-down run cannot leave the wait hanging (or the card
    * up with nothing behind it). Idempotent. */
   cancelAll(): void {
-    const pending = this.pending;
-    if (pending === null) return;
-    this.pending = null;
+    const taken = this.request.takeIfPresent();
+    if (taken === null) return;
     this.emit({
       type: "env_request_end",
       sessionId: this.sessionId,
-      toolCallId: pending.toolCallId,
+      toolCallId: taken.payload.toolCallId,
       outcome: "declined",
     });
-    pending.reject(
+    taken.fail(
       new CoreError(
         "The environment variable request was cancelled",
         "unavailable",
       ),
     );
-  }
-
-  /** Take the pending request out, or throw when it is not the one named. */
-  #take(toolCallId: string | undefined): Waiting {
-    const pending = this.pending;
-    if (pending === null) {
-      throw new CoreError(
-        "No environment variable is waiting for the user",
-        "not_found",
-      );
-    }
-    if (toolCallId !== undefined && toolCallId !== pending.toolCallId) {
-      throw new CoreError(
-        `No environment variable is waiting for tool call: ${toolCallId}`,
-        "not_found",
-      );
-    }
-    this.pending = null;
-    return pending;
   }
 }
 
@@ -251,33 +203,28 @@ export class EnvRequestHub {
  * demand: a session that never asks has no entry.
  */
 export class EnvRequestRegistry {
-  private readonly hubs = new Map<string, EnvRequestHub>();
+  private readonly hubs: HubRegistry<EnvRequestHub>;
 
   /** `emit` publishes the hub's events to every frontend listener. */
-  constructor(private readonly emit: (event: ClientEvent) => void) {}
-
-  /** The hub of a session, created on first use. */
-  for(sessionId: string): EnvRequestHub {
-    const existing = this.hubs.get(sessionId);
-    if (existing !== undefined) return existing;
-    const hub = new EnvRequestHub(sessionId, (event) => this.emit(event));
-    this.hubs.set(sessionId, hub);
-    return hub;
+  constructor(emit: (event: ClientEvent) => void) {
+    this.hubs = new HubRegistry(
+      (sessionId) => new EnvRequestHub(sessionId, emit),
+    );
   }
 
-  /** The hub of a session only if it exists (no entry is created: reading
-   * the pending request of a session that never asked must not). */
+  for(sessionId: string): EnvRequestHub {
+    return this.hubs.for(sessionId);
+  }
+
   get(sessionId: string): EnvRequestHub | undefined {
     return this.hubs.get(sessionId);
   }
 
-  /** Drop a session's hub (the session is gone). */
   forget(sessionId: string): void {
-    this.hubs.delete(sessionId);
+    this.hubs.forget(sessionId);
   }
 
-  /** The sessions that have a hub (the shutdown sweep). */
   sessionIds(): Iterable<string> {
-    return this.hubs.keys();
+    return this.hubs.sessionIds();
   }
 }
