@@ -284,7 +284,22 @@ fn create_main_window(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::
         Some(bridge) => bridge_server::main_window_initialization_script(&bridge.origin()),
         None => String::new(),
     };
-    let mut builder = tauri::WebviewWindowBuilder::from_config(app, &config)?;
+    // Every `target="_blank"` link and every `window.open` of the page lands
+    // here: the window has no address bar, tabs or back button, so a page it
+    // opened itself would leave the reader no way back to the conversation.
+    // The URL leaves the app instead, and the window stays where it was.
+    let links = app.clone();
+    let mut builder = tauri::WebviewWindowBuilder::from_config(app, &config)?.on_new_window(
+        move |url, _features| {
+            if window::opens_externally(&url) {
+                if let Err(error) = window::open_externally(&url) {
+                    eprintln!("[lumisca] link not opened: {error}");
+                    server_log::note(&links, format!("could not open a link: {error}"));
+                }
+            }
+            tauri::webview::NewWindowResponse::Deny
+        },
+    );
     if !script.is_empty() {
         builder = builder.initialization_script(script);
     }

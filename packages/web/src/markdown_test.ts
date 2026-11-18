@@ -41,6 +41,16 @@ Deno.test("markdown blocks javascript: links", () => {
 Deno.test("markdown allows safe links", () => {
   const html = render("[pi](https://pi.dev)");
   assertEquals(html.includes('href="https://pi.dev"'), true);
+  // A link a reader clicks belongs in a new tab of the browser: the app is
+  // one page, and replacing it would take the conversation away. The
+  // desktop shell hands the same click to the OS browser (see
+  // packages/desktop/src-tauri/src/window.rs).
+  assertEquals(html.includes('target="_blank"'), true);
+  assertEquals(html.includes('rel="noopener noreferrer"'), true);
+  // A bare URL is a link too (GFM autolinking) and opens the same way.
+  const bare = render("see https://example.com/a?b=1 end");
+  assertEquals(bare.includes('href="https://example.com/a?b=1"'), true);
+  assertEquals(bare.includes('target="_blank"'), true);
 });
 
 Deno.test("markdown blocks unsafe image sources", () => {

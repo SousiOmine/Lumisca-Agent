@@ -96,6 +96,11 @@ push の前にも `git fetch` して `git log --oneline HEAD..origin/master` を
   コンポーザ以外へファイルを落としても、ウィンドウがそのファイルへ遷移して戻れなくなります。
   スプラッシュ（`frontend/splash.js`）も同じガードを持ちます。
   `repo_hygiene_test.ts` が `false` を固定しています。
+- リンクはOSのブラウザで開きます。
+  main ウィンドウは `on_new_window` で新しい窓を断り、http(s) と mailto だけを OS の既定ブラウザへ渡します（`packages/desktop/src-tauri/src/window.rs` の `open_externally`）。
+  窓にはアドレスバーもタブも戻る操作も無いため、外部ページをここで開くと会話へ戻れなくなります。
+  `window.open` を使うログイン画面も同じ経路です。
+  http(s) と mailto 以外のスキームは OS へ渡しません。
 
 ## 2. 自動アップデート
 
