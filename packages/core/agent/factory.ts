@@ -7,6 +7,8 @@ import {
   BROWSER_TOOL_NAMES,
   createBrowserToolsFrom,
 } from "../browser/tools.ts";
+import { createHostCodeRuntime } from "../code-execution/host.ts";
+import { createVmCodeRuntime } from "../code-execution/vm.ts";
 import { COMPUTER_TOOL_NAMES, createComputerTools } from "../computer/tools.ts";
 import type { ClientEvent } from "../domain/event.ts";
 import type { SessionInfo } from "../domain/session.ts";
@@ -30,6 +32,8 @@ import { mountedBackends } from "../share/mounted-backends.ts";
 import { canonicalJson } from "../shared/digest.ts";
 import {
   TOOL_AGENT_CREATE,
+  TOOL_CALL,
+  TOOL_EXECUTE,
   TOOL_IDENTITY,
   TOOL_ROUTINE_CREATE,
   TOOL_ROUTINE_DELETE,
@@ -45,6 +49,8 @@ import {
 import { createSkillCatalogProvider } from "../skills/catalog.ts";
 import { AskHub } from "../tools/ask.ts";
 import { BackgroundProcessManager } from "../tools/background.ts";
+import { ToolCatalog } from "../tools/catalog.ts";
+import { createExecuteTool } from "../tools/execute.ts";
 import {
   createChatTools,
   createCodingTools,
@@ -52,6 +58,7 @@ import {
 } from "../tools/mod.ts";
 import { SessionToolRegistries } from "../tools/registries.ts";
 import type { Tool } from "../tools/schema.ts";
+import { createToolSearchTool } from "../tools/search-tool.ts";
 import { createShareRequestTools } from "../tools/share-request.ts";
 import { createShareTransferTools } from "../tools/share-transfer.ts";
 import { TaskHub } from "../tools/task-hub.ts";
@@ -64,6 +71,7 @@ import {
 } from "../tools/toolsets.ts";
 import type { StellaRuntime } from "../vm/runtime.ts";
 import type { SearchProvider } from "../websearch/types.ts";
+import { createCodeExecutionProvider } from "./code-execution-context.ts";
 import { createDateProvider } from "./date-context.ts";
 import type { SessionPoolDeps, SessionResources } from "./deps.ts";
 import { createLanguageProvider } from "./language-context.ts";
@@ -157,6 +165,11 @@ interface SessionWhere {
    * session without rebuilding it (see SessionPool.applyCapabilityChange),
    * so a value captured at open would go stale exactly where it matters. */
   computerAvailable: () => boolean;
+  /** Whether the model is given `execute` instead of its tool set (see
+   * applyCodeExecution). A value, not a getter: the tool set is fixed for
+   * the life of an agent, and the pool rebuilds the open sessions when the
+   * toggle changes (see SessionPool.applyToolSetChange). */
+  codeExecution: boolean;
   /** The user's web-search provider, when one is configured. */
   webSearch: SearchProvider | undefined;
   /** The app-level MCP config this agent may change, or undefined when the
@@ -212,7 +225,11 @@ export class AgentFactory {
     const where = this.resolveWhere(session, workspace);
     this.seedDiscoverableTools(where, registries, session.id);
     const hubs = this.buildHubs(session, where, resources, mcp);
-    const tools = this.buildToolSet(session, workspace, where, hubs);
+    const tools = this.applyCodeExecution(
+      this.buildToolSet(session, workspace, where, hubs),
+      where,
+      registries,
+    );
     const systemPrompt = this.ensureSystemPrompt(session, workspace);
     const contextProviders = this.buildContextProviders(
       session,
@@ -269,6 +286,7 @@ export class AgentFactory {
         : {}),
       taskHub: hubs.tasks,
       toolRegistry: registries,
+      codeExecution: where.codeExecution,
       contextProviders,
       imageAnalysisModel: this.deps.getImageAnalysisModel(),
       fastModel: this.deps.getFastModel(),
@@ -429,6 +447,9 @@ export class AgentFactory {
       // every turn (see seedDiscoverableTools for the tools themselves).
       computerAvailable: () =>
         stella === undefined && this.deps.computer?.() !== undefined,
+      // Read once per open: the answer decides the whole tool set of this
+      // agent, which cannot change under a run.
+      codeExecution: this.deps.isCodeExecutionEnabled(),
       // The user's web-search provider. Resolved once per open (the tools
       // hold it, so a rebuild picks up a changed default) and undefined when
       // the user has not configured one; the tools are then simply absent.
@@ -767,6 +788,58 @@ export class AgentFactory {
   }
 
   /**
+   * The tool set the model is given when code execution is on: `execute`,
+   * and nothing else.
+   *
+   * The set built by buildToolSet is not discarded — it becomes the catalog
+   * a program calls tools from, together with the session's discoverable
+   * registry. That is the point of the mode: every tool definition leaves
+   * the request, and one program does the work that used to cost a round
+   * trip per call. `tool_search` travels INSIDE the catalog rather than on
+   * the agent, because the program is where a name is looked up.
+   *
+   * Both `execute` and `tool_call` are left out of the catalog: a program
+   * running a program is a way to multiply the limits one of them enforces,
+   * and tool_call is what execute replaces.
+   */
+  private applyCodeExecution(
+    tools: Tool[],
+    where: SessionWhere,
+    registries: SessionToolRegistries,
+  ): Tool[] {
+    if (!where.codeExecution) return tools;
+    // The search tool is built first and reads the catalog through a
+    // closure: the catalog has to contain tool_search, and tool_search has
+    // to search the catalog. Only the call order matters, never the
+    // construction order.
+    const search = createToolSearchTool(() => catalog, "code");
+    const catalog = new ToolCatalog({
+      tools: () => [...tools, search],
+      registry: () => registries.main,
+      exclude: [TOOL_EXECUTE, TOOL_CALL],
+    });
+    // A stella program runs under the machine's own node and asks the
+    // server for each tool call; every other session runs it in the
+    // server-process sandbox (see code-execution/).
+    const codeRuntime =
+      where.stella !== undefined
+        ? createVmCodeRuntime({
+            exec: where.stella.exec,
+            channel: where.stella.channel,
+            cwd: where.stella.cwd,
+          })
+        : createHostCodeRuntime();
+    return [
+      createExecuteTool({
+        catalog,
+        runtime: codeRuntime,
+        cwd: where.stella?.cwd ?? runtime.cwd(),
+        safety: this.deps.commandSafety,
+      }),
+    ];
+  }
+
+  /**
    * The session's system prompt, re-derived from what the prompt is a
    * function of: the mode, the workspace folders, and a stella agent's role
    * and working folder. Persisted, but not frozen: a stored value that no
@@ -887,6 +960,10 @@ export class AgentFactory {
       createMcpToolsProvider({
         searchable: () => !registries.main.isEmpty,
       }),
+      // The contract of `execute`, published only while the mode is on: the
+      // tool itself cannot say how a program reaches the tools it is not
+      // given.
+      ...(where.codeExecution ? [createCodeExecutionProvider()] : []),
       // The language the session answers in. Published rather than put in
       // the prompt for the same reason as the date and the model: it is a
       // setting, so it can change while the session lives, and the prompt is

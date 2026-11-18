@@ -63,6 +63,21 @@ export const WEB_SEARCH_KEY = "web_search";
  * LumiscaCore.setComputerUseEnabled). */
 export const COMPUTER_USE_ENABLED_KEY = "computer_use_enabled";
 
+/** Settings-table key for code execution: the model is given ONE tool that
+ * runs a JavaScript program, and reaches every other tool from inside it
+ * (`tools.<name>(args)`). "1" enables the mode; unset (or any other value) =
+ * off, because it changes how every tool reaches the model and costs a turn
+ * of latency on work that needs one call. */
+export const CODE_EXECUTION_ENABLED_KEY = "code_execution_enabled";
+
+/** Whether code execution is on. Follows the "1"-is-on convention of the
+ * other flags; anything else, unset included, is off. */
+export function codeExecutionEnabled(
+  read: (key: string) => string | undefined,
+): boolean {
+  return read(CODE_EXECUTION_ENABLED_KEY) === "1";
+}
+
 /** Settings-table key for the Wayland screen-sharing permission (the
  * portal's restore token). Machine state, not a secret: the token only lets
  * the portal skip its consent dialog for this user's own session, and it is

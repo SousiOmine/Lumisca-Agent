@@ -46,6 +46,7 @@ export const SETTINGS_CATEGORIES = [
   "security",
   "computerUse",
   "prompts",
+  "experimental",
 ] as const;
 
 export type SettingsCategory = (typeof SETTINGS_CATEGORIES)[number];

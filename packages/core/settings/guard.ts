@@ -2,6 +2,7 @@ import { CoreError } from "../errors.ts";
 import { MCP_OAUTH_KEY_PREFIX } from "../mcp/oauth.ts";
 import {
   APP_MCP_SETTINGS_KEY,
+  CODE_EXECUTION_ENABLED_KEY,
   COMMAND_SAFETY_APPROVALS_KEY,
   COMMAND_SAFETY_ENABLED_KEY,
   COMPACTION_ENABLED_KEY,
@@ -111,6 +112,8 @@ const MUTABLE_KEYS: ReadonlySet<string> = new Set([
   FAST_MODEL_KEY,
   IMAGE_MODEL_KEY,
   COMPUTER_USE_ENABLED_KEY,
+  // The experimental page of the settings dialog.
+  CODE_EXECUTION_ENABLED_KEY,
   UPDATE_AUTO_KEY,
   UPDATE_AUTO_RESTART_KEY,
   COMMAND_SAFETY_ENABLED_KEY,

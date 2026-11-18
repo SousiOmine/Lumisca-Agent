@@ -1,4 +1,5 @@
 import {
+  CODE_EXECUTION_ENABLED_KEY,
   COMPUTER_USE_ENABLED_KEY,
   type CommandApproval,
   type SavedPrompt,
@@ -24,6 +25,10 @@ export interface SettingsApi {
    * (an idle one is rebuilt; a running one keeps its run and has its
    * discoverable tools reseeded in place). */
   setComputerUseEnabled(enabled: boolean): Promise<void>;
+  /** Enable or disable code execution. Not a plain setting write either: it
+   * replaces the tool set every session is built with, so the core rebuilds
+   * the open sessions (a running one when its run ends). */
+  setCodeExecutionEnabled(enabled: boolean): void;
   getPersonalization(): { path: string; content: string };
   setPersonalization(content: string): void;
   /** The recorded approvals of the fast-model safety check. Entries carry a
@@ -64,6 +69,13 @@ export function settingRoutes(core: SettingsApi): Hono {
       // and brings the open sessions onto it, so the tools appear or
       // disappear immediately — a running session included.
       await core.setComputerUseEnabled(value === "1");
+      return c.json({ ok: true });
+    }
+    if (key === CODE_EXECUTION_ENABLED_KEY) {
+      // A tool-set toggle: the open sessions follow it (see the method's
+      // contract), so a plain write would leave every open conversation on
+      // the old tool set until it was reopened.
+      core.setCodeExecutionEnabled(value === "1");
       return c.json({ ok: true });
     }
     core.setUserSetting(key, value);

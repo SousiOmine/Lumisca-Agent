@@ -112,7 +112,9 @@ import type {
   WebSearchTestView,
 } from "./shared/mod.ts";
 import {
+  CODE_EXECUTION_ENABLED_KEY,
   CONNECTIONS_KEY,
+  codeExecutionEnabled,
   DEFAULT_MODEL_KEY,
   formatLocalDateTime,
   LANGUAGE_KEY,
@@ -145,6 +147,7 @@ import {
   buildSystemPrompt,
 } from "./tools/mod.ts";
 import type { StellaAvailability } from "./vm/availability.ts";
+import type { VmChannelRunner } from "./vm/channel.ts";
 import type { VmCommandBytesRunner, VmCommandRunner } from "./vm/command.ts";
 import type { VmManager } from "./vm/container.ts";
 import { vmAgentDir } from "./vm/contract.ts";
@@ -334,6 +337,9 @@ export class LumiscaCore {
       stellaRun?: {
         run: VmCommandRunner;
         runBytes: VmCommandBytesRunner;
+        /** Interactive exec (code execution's channel). Omitted → the real
+         * one; a test that runs code in a stella session supplies it. */
+        openChannel?: VmChannelRunner;
       };
     } = {},
   ) {
@@ -449,6 +455,7 @@ export class LumiscaCore {
         getLanguage: () => this.getLanguage(),
         getCompactionPolicy: () => this.getCompactionPolicy(),
         getStellaKeepFullLog: () => this.getStellaKeepFullLog(),
+        isCodeExecutionEnabled: () => this.isCodeExecutionEnabled(),
         recordFreedBytes: (bytes) => {
           this.freedBytes += bytes;
         },
@@ -645,7 +652,11 @@ export class LumiscaCore {
   static forTesting(
     extraProviders: Provider[] = [],
     env: EnvReader = () => ({}),
-    stellaRun?: { run: VmCommandRunner; runBytes: VmCommandBytesRunner },
+    stellaRun?: {
+      run: VmCommandRunner;
+      runBytes: VmCommandBytesRunner;
+      openChannel?: VmChannelRunner;
+    },
   ): LumiscaCore {
     const core = new LumiscaCore(
       LumiscaDb.openInMemory(),
@@ -932,6 +943,23 @@ export class LumiscaCore {
   /** Enable or disable computer use; open sessions follow the change. */
   setComputerUseEnabled(enabled: boolean): Promise<void> {
     return this.computer.setEnabled(enabled);
+  }
+
+  /** Whether the user turned code execution on (the experimental toggle). */
+  isCodeExecutionEnabled(): boolean {
+    return codeExecutionEnabled((key) => this.settings.get(key));
+  }
+
+  /** Turn code execution on or off. The flag decides the whole tool set of
+   * an agent, so every open session follows: an idle one is rebuilt at
+   * once, and a running one is rebuilt when its run ends (its request
+   * already carried the old tool set). */
+  setCodeExecutionEnabled(enabled: boolean): void {
+    this.pool.applyToolSetChange(
+      this.services.sessions.listEverySession(),
+      () => this.settings.set(CODE_EXECUTION_ENABLED_KEY, enabled ? "1" : ""),
+      (id) => this.services.sessions.deferRebuild(id),
+    );
   }
 
   /** The host a session may drive (attached AND enabled). */

@@ -14,6 +14,7 @@ import type { BackgroundSpawner } from "../tools/background-backend.ts";
 import type { CommandRunner } from "../tools/command-backend.ts";
 import type { FileBackend } from "../tools/file-backend.ts";
 import type { Tool } from "../tools/schema.ts";
+import type { VmChannelOpener, VmExec } from "./container.ts";
 import type { EnvRequestHub } from "./env-request.ts";
 import type { HandoverHub } from "./handover.ts";
 
@@ -24,6 +25,12 @@ export interface StellaRuntime {
   cwd: string;
   files: FileBackend;
   runner: CommandRunner;
+  /** One-shot exec on the machine's seam (code execution writes its program
+   * file through it). */
+  exec: VmExec;
+  /** Opens an interactive exec: how code execution keeps a program's tool
+   * calls connected to the server (see code-execution/vm.ts). */
+  channel: VmChannelOpener;
   backgroundSpawner: BackgroundSpawner;
   /** The session's skill catalog: the machine's `.agents/skills` plus the
    * user's host-global and built-in skills. Read synchronously because the

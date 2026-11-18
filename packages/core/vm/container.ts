@@ -15,6 +15,11 @@ import { concatBytes } from "../bytes.ts";
 import { firstLine } from "../lines.ts";
 import { runtime } from "../runtime/runtime.ts";
 import { sleep } from "../shared/misc.ts";
+import type {
+  VmChannel,
+  VmChannelOptions,
+  VmChannelRunner,
+} from "./channel.ts";
 import {
   runVmCommand,
   VM_TEXT_OUTPUT_LIMIT,
@@ -1236,6 +1241,58 @@ export function createVmExecBytes(options: {
   const container = options.containerName ?? VM_CONTAINER_NAME;
   return (command, exec) =>
     options.runBytes(execArgv(container, command, exec), execOptions(exec));
+}
+
+/** Options of one interactive exec: a channel to a program inside the
+ * machine, with the container's name and workdir already applied. */
+export interface VmChannelExecOptions extends VmChannelOptions {
+  workdir?: string;
+  env?: Record<string, string>;
+}
+
+/** Opens an interactive exec in the machine (see vm/channel.ts). */
+export type VmChannelOpener = (
+  command: readonly string[],
+  options: VmChannelExecOptions,
+) => Promise<VmChannel>;
+
+/** The argv of one interactive exec: always `--interactive`, because the
+ * channel writes to the program's stdin. */
+function channelArgv(
+  container: string,
+  command: readonly string[],
+  options: VmChannelExecOptions,
+): string[] {
+  return podman([
+    "exec",
+    "--interactive",
+    ...Object.entries(options.env ?? {}).flatMap(([name, value]) => [
+      "--env",
+      `${name}=${value}`,
+    ]),
+    "--workdir",
+    options.workdir ?? VM_WORKDIR,
+    container,
+    ...command,
+  ]);
+}
+
+/** Open an interactive exec, with the container's name and workdir already
+ * applied. Code execution's seam: the only caller that needs the exchange
+ * to stay live (see vm/channel.ts). */
+export function createVmChannel(options: {
+  open: VmChannelRunner;
+  containerName?: string;
+}): VmChannelOpener {
+  const container = options.containerName ?? VM_CONTAINER_NAME;
+  return (command, exec) =>
+    options.open(channelArgv(container, command, exec), {
+      timeoutMs: exec.timeoutMs,
+      ...(exec.signal !== undefined ? { signal: exec.signal } : {}),
+      ...(exec.maxStderrChars !== undefined
+        ? { maxStderrChars: exec.maxStderrChars }
+        : {}),
+    });
 }
 
 /** The canonical container name, re-exported for the backends. */

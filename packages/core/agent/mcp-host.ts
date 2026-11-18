@@ -31,6 +31,10 @@ export class McpAttachmentHost {
     private readonly agent: Agent,
     private readonly registries: SessionToolRegistries | null,
     private readonly isClosed: () => boolean,
+    /** The session calls tools from code: the pair would only distract the
+     * model — `execute`'s catalog carries tool_search, and tool_call is
+     * what the mode replaces. */
+    private readonly codeExecution = false,
   ) {}
 
   /** The status the settings panel shows, or null without an attachment. */
@@ -136,6 +140,7 @@ export class McpAttachmentHost {
    * was empty when the agent opened (see AgentFactory.reseedDiscoverable):
    * the pair is then the only way the new tools reach the model. */
   ensureSearchTools(): void {
+    if (this.codeExecution) return;
     if (this.registries === null || this.registries.main.isEmpty) return;
     addToolsToAgent(
       this.agent,

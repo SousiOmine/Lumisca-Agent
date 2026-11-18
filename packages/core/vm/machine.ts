@@ -6,10 +6,20 @@ import type { SkillDef } from "../skills/discover.ts";
 import { ensureAgentMemory } from "./agent-memory.ts";
 import type { StellaAvailability } from "./availability.ts";
 import { stellaAvailability } from "./availability.ts";
+import { openVmChannel, type VmChannelRunner } from "./channel.ts";
 import type { VmCommandBytesRunner, VmCommandRunner } from "./command.ts";
 import { runVmCommand, runVmCommandBytes } from "./command.ts";
-import type { VmExec, VmExecBytes, VmManager } from "./container.ts";
-import { createVmExec, createVmExecBytes } from "./container.ts";
+import type {
+  VmChannelOpener,
+  VmExec,
+  VmExecBytes,
+  VmManager,
+} from "./container.ts";
+import {
+  createVmChannel,
+  createVmExec,
+  createVmExecBytes,
+} from "./container.ts";
 import {
   VM_DESKTOP_SLOTS,
   VM_DESKTOP_WAIT_MS,
@@ -46,7 +56,14 @@ export class StellaMachine {
   /** The exec seams of the attached machine, rebuilt whenever the machine is
    * replaced (never carried across a detach, so a removed machine cannot be
    * reached through a stale reference). */
-  #seams: { vm: VmManager; exec: VmExec; execBytes: VmExecBytes } | undefined;
+  #seams:
+    | {
+        vm: VmManager;
+        exec: VmExec;
+        execBytes: VmExecBytes;
+        channel: VmChannelOpener;
+      }
+    | undefined;
   /** The skill catalogs, one per stella agent (keyed by agent id), refreshed
    * before each open. A catalog is per agent because an agent's own skills
    * live in its folder: only the machine-wide folder is shared. */
@@ -73,7 +90,11 @@ export class StellaMachine {
   constructor(
     private readonly globalSkillDirs: string[] | undefined,
     private readonly run?:
-      | { run: VmCommandRunner; runBytes: VmCommandBytesRunner }
+      | {
+          run: VmCommandRunner;
+          runBytes: VmCommandBytesRunner;
+          openChannel?: VmChannelRunner;
+        }
       | undefined,
     /** Test seam: shorten the wait so a test can reach its end. */
     options: { desktopWaitMs?: number } = {},
@@ -415,7 +436,20 @@ export class StellaMachine {
     return this.#seamCache()?.execBytes;
   }
 
-  #seamCache(): { exec: VmExec; execBytes: VmExecBytes } | undefined {
+  /** The interactive seam of the attached machine (code execution), or
+   * undefined without one. */
+  channel(): VmChannelOpener | undefined {
+    return this.#seamCache()?.channel;
+  }
+
+  #seamCache():
+    | {
+        vm: VmManager;
+        exec: VmExec;
+        execBytes: VmExecBytes;
+        channel: VmChannelOpener;
+      }
+    | undefined {
     const vm = this.#vm;
     if (vm === undefined) return undefined;
     if (this.#seams?.vm !== vm) {
@@ -424,6 +458,9 @@ export class StellaMachine {
         exec: createVmExec({ run: this.run?.run ?? runVmCommand }),
         execBytes: createVmExecBytes({
           runBytes: this.run?.runBytes ?? runVmCommandBytes,
+        }),
+        channel: createVmChannel({
+          open: this.run?.openChannel ?? openVmChannel,
         }),
       };
     }

@@ -73,6 +73,10 @@ export class SessionService {
     return this.lifecycle.listSessions(workspaceId);
   }
 
+  listEverySession(): SessionInfo[] {
+    return this.lifecycle.listEverySession();
+  }
+
   getSession(id: string): SessionInfo | undefined {
     return this.lifecycle.getSession(id);
   }
@@ -95,6 +99,10 @@ export class SessionService {
 
   setSessionModel(id: string, provider: string, modelId: string): void {
     this.lifecycle.setSessionModel(id, provider, modelId);
+  }
+
+  deferRebuild(id: string): void {
+    this.lifecycle.deferRebuild(id);
   }
 
   releasePendingRebuild(id: string): void {

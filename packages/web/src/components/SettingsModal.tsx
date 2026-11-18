@@ -1,6 +1,7 @@
 import {
   IconBookmark,
   IconCpu,
+  IconFlask,
   IconPalette,
   IconPlugConnected,
   IconPointer,
@@ -32,6 +33,7 @@ import {
   type SettingsNavEntry,
   scopeLabelKey,
 } from "./settings/categories.ts";
+import { ExperimentalPanel } from "./settings/ExperimentalPanel.tsx";
 import { GeneralPanel } from "./settings/GeneralPanel.tsx";
 import { McpList } from "./settings/McpList.tsx";
 import { ModelsPage } from "./settings/ModelsPage.tsx";
@@ -322,6 +324,16 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     labelKey: "settings.nav.prompts",
     icon: <IconBookmark size={18} />,
     render: () => <SavedPromptsPanel />,
+  },
+  {
+    id: "experimental",
+    scope: "common",
+    labelKey: "settings.nav.experimental",
+    icon: <IconFlask size={18} />,
+    // Code execution reaches both modes' sessions, so the page is shared
+    // rather than one mode's. It sits last: nothing a reader relies on is
+    // below it.
+    render: () => <ExperimentalPanel />,
   },
 ];
 

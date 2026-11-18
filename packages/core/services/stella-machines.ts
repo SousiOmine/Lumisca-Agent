@@ -410,6 +410,15 @@ export class StellaMachineService {
     // resolve paths the same way, so a role file is exactly a file this
     // agent may read.
     const files = new VmFileBackend(exec, { cwd });
+    // Code execution's channel: the program runs under the machine's own
+    // node and asks the server for each tool call (see code-execution/vm.ts).
+    const channel = this.deps.machine.channel();
+    if (channel === undefined) {
+      throw new CoreError(
+        "The machine went away while the conversation was opening",
+        "unavailable",
+      );
+    }
     const identity: IdentityTarget = {
       read: () => this.deps.agents.get(agentId)?.identity ?? "",
       write: (content) => this.deps.agents.writeIdentity(agentId, content),
@@ -418,6 +427,8 @@ export class StellaMachineService {
       cwd,
       files,
       runner: new VmCommandRunnerImpl(exec),
+      exec,
+      channel,
       backgroundSpawner: new VmBackgroundSpawner(exec),
       skills,
       refreshSkills: () => this.deps.machine.refreshSkills(agentId),

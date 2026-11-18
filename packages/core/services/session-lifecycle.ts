@@ -52,9 +52,10 @@ type Deps = Pick<
  * together.
  */
 export class SessionLifecycle {
-  /** Sessions whose model change arrived while a run was in flight: their
-   * agent is rebuilt as that run ends (see releasePendingRebuild). */
-  private readonly pendingModelRebuilds = new Set<string>();
+  /** Sessions whose model or tool-set change arrived while a run was in
+   * flight: their agent is rebuilt as that run ends (see
+   * releasePendingRebuild). */
+  private readonly pendingRebuilds = new Set<string>();
 
   constructor(private readonly deps: Deps) {}
 
@@ -115,6 +116,13 @@ export class SessionLifecycle {
       .map((s) => this.deps.decorate(s));
   }
 
+  /** Every session row, stella conversations included: the tool-set toggle
+   * has to reach the conversations too, and `listSessions` hides them (stella
+   * has no session list in the UI). */
+  listEverySession(): SessionInfo[] {
+    return this.deps.sessions.listEvery().map((s) => this.deps.decorate(s));
+  }
+
   getSession(id: string): SessionInfo | undefined {
     const session = this.deps.sessions.get(id);
     return session ? this.deps.decorate(session) : undefined;
@@ -146,7 +154,7 @@ export class SessionLifecycle {
     await this.deps.pool.close(id);
     // A change that was waiting for a run has nothing left to apply: the row
     // already carries it, and the next open reads the row.
-    this.pendingModelRebuilds.delete(id);
+    this.pendingRebuilds.delete(id);
     // The session's in-memory state (and with it the revision count) is
     // gone: a client still holding the old count sees a difference and
     // re-reads the snapshot — the right reaction, since the reopened agent
@@ -159,7 +167,7 @@ export class SessionLifecycle {
     // drop the persisted row synchronously so the session is synchronously
     // gone for callers that do not await.
     const closing = this.deps.pool.delete(id);
-    this.pendingModelRebuilds.delete(id);
+    this.pendingRebuilds.delete(id);
     this.deps.sessions.delete(id);
     this.deps.forget(id);
     await closing;
@@ -200,22 +208,33 @@ export class SessionLifecycle {
     // Closed: the next open builds from the row that was just written.
     if (agent === undefined) return;
     if (agent.isStreaming) {
-      this.pendingModelRebuilds.add(id);
+      this.pendingRebuilds.add(id);
       return;
     }
     this.deps.pool.rebuild(updated);
   }
 
   /**
-   * The run of `id` has ended: rebuild its agent if a model change waited for
-   * it.
+   * Rebuild a session's agent as soon as its run ends.
+   *
+   * Used by a change that cannot be applied to a live agent without
+   * replacing it: the tool set the model was given (code execution on or
+   * off). The replacement would duplicate the rows of the run in flight, so
+   * it waits for the end of that run (see releasePendingRebuild). */
+  deferRebuild(id: string): void {
+    this.pendingRebuilds.add(id);
+  }
+
+  /**
+   * The run of `id` has ended: rebuild its agent if a model or tool-set
+   * change waited for it.
    *
    * Deferred by a microtask because the caller is the `agent_end` event, which
    * the running agent emits from its own teardown; rebuilding closes that
    * agent, so it happens after the emission has returned.
    */
   releasePendingRebuild(id: string): void {
-    if (!this.pendingModelRebuilds.delete(id)) return;
+    if (!this.pendingRebuilds.delete(id)) return;
     queueMicrotask(() => {
       // Re-read the row: the choice the user settled on, not the one that
       // was pending when a run started.
@@ -223,7 +242,7 @@ export class SessionLifecycle {
       if (session === undefined) return;
       if (this.deps.pool.get(id)?.isStreaming) {
         // Another run started first; its end releases this one.
-        this.pendingModelRebuilds.add(id);
+        this.pendingRebuilds.add(id);
         return;
       }
       this.deps.pool.rebuild(session);

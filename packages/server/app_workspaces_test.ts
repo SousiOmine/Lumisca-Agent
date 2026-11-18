@@ -700,6 +700,36 @@ Deno.test("computer use toggle goes through the capability path", async () => {
   }
 });
 
+Deno.test("code execution toggle goes through the tool-set path", async () => {
+  const { core, server, base } = await setup();
+  try {
+    // A plain settings write would store the flag and leave every open
+    // conversation on its old tool set; the core's answer is what proves the
+    // toggle reached setCodeExecutionEnabled (which rebuilds them).
+    const enable = await json(base, "/api/settings/code_execution_enabled", {
+      method: "PUT",
+      body: JSON.stringify({ value: "1" }),
+    });
+    assertEquals(enable.status, 200);
+    assertEquals(core.isCodeExecutionEnabled(), true);
+
+    const settings = (await (
+      await fetch(`${base}/api/settings`)
+    ).json()) as Record<string, string>;
+    assertEquals(settings["code_execution_enabled"], "1");
+
+    const disable = await json(base, "/api/settings/code_execution_enabled", {
+      method: "PUT",
+      body: JSON.stringify({ value: "" }),
+    });
+    assertEquals(disable.status, 200);
+    assertEquals(core.isCodeExecutionEnabled(), false);
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
 Deno.test("command safety approvals API lists, deletes and clears", async () => {
   const { core, server, base } = await setup();
   try {

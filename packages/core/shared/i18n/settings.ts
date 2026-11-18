@@ -23,6 +23,7 @@ export const settings = {
   "settings.nav.prompts": { ja: "保存済みプロンプト", en: "Saved prompts" },
   "settings.nav.computerUse": { ja: "画面操作", en: "Screen control" },
   "settings.nav.security": { ja: "セキュリティ", en: "Security" },
+  "settings.nav.experimental": { ja: "実験的機能", en: "Experimental" },
   // --- appearance panel -----------------------------------------------------
   "settings.appearance.theme.label": { ja: "テーマ設定", en: "Theme" },
   "settings.appearance.theme.light": { ja: "ライト", en: "Light" },
@@ -907,6 +908,31 @@ export const settings = {
     en: "Computer use: the agent captures the real screen and clicks or types on it. Disabled by default.",
   },
   "settings.computerUse.operationFailed": {
+    ja: "変更に失敗しました: {error}",
+    en: "Failed to change: {error}",
+  },
+  // --- experimental panel ----------------------------------------------------
+  /** The page's own note, above its rows. It is the one thing a reader must
+   * know before flipping anything here. */
+  "settings.experimental.description": {
+    ja: "試験中の機能です。予告なく変わるか、無くなる場合があります。",
+    en: "Features under test. They may change or disappear without notice.",
+  },
+  /** The switch that turns code execution on: the model gets one tool and
+   * calls every other tool from inside a short program. */
+  "settings.experimental.codeExecution.title": {
+    ja: "コード実行",
+    en: "Code execution",
+  },
+  "settings.experimental.codeExecution.description": {
+    ja: "モデルに渡すツールを1つにまとめ、ファイルやシェル、MCPのツールを短いプログラムから呼ばせます。ツールの定義がリクエストから消えるぶん、やり取りが減ります。",
+    en: "Gives the model one tool and lets a short program call files, the shell and MCP tools. The tool definitions leave the request, so fewer round trips are needed.",
+  },
+  "settings.experimental.codeExecution.tooltip": {
+    ja: "コード実行: モデルがJavaScriptを書き、その中からツールを呼びます。既定は無効です。",
+    en: "Code execution: the model writes JavaScript and calls tools from it. Disabled by default.",
+  },
+  "settings.experimental.codeExecution.operationFailed": {
     ja: "変更に失敗しました: {error}",
     en: "Failed to change: {error}",
   },

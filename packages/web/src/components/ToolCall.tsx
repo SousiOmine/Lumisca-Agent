@@ -20,6 +20,7 @@ import {
   TOOL_COMPUTER_SCREENSHOT,
   TOOL_EDIT,
   TOOL_EVAL,
+  TOOL_EXECUTE,
   TOOL_HISTORY_SEARCH,
   TOOL_IDENTITY,
   TOOL_LIST_DIR,
@@ -173,6 +174,10 @@ const PRESENTATION: Readonly<Record<string, ToolPresentation>> = {
   },
   [TOOL_ASYNC_BASH_KILL]: { icon: IconTerminal2, summary: (a) => `#${id(a)}` },
   [TOOL_EVAL]: { icon: IconCode, summary: (a) => truncate(arg(a, "code"), 60) },
+  [TOOL_EXECUTE]: {
+    icon: IconCode,
+    summary: (a) => truncate(arg(a, "code"), 60),
+  },
   [TOOL_WEB_SEARCH]: { icon: IconWorldSearch, summary: query },
   [TOOL_WEB_FETCH]: { icon: IconWorldSearch, summary: url },
   [TOOL_BROWSER_OPEN]: { icon: IconWorld, summary: url },

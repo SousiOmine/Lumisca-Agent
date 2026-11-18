@@ -154,6 +154,11 @@ export interface SessionAgentOptions {
    * request's tool definitions stay small and stable. Omitted → no
    * discoverable tools (the pair is not built). */
   toolRegistry?: SessionToolRegistries;
+  /** Whether the model calls tools from code (see AgentFactory). Omitted →
+   * false: the tool_search / tool_call pair is attached to the agent as
+   * before. When true the pair stays out of the agent — the catalog that
+   * `execute` runs tools from carries tool_search instead. */
+  codeExecution?: boolean;
   /** The app language of this agent: the language of the text the core
    * writes into the transcript (compaction checkpoints) and
    * of the session's title. The pool passes the setting read when the
@@ -388,6 +393,7 @@ export class SessionAgent {
       this.agent,
       this.toolRegistry,
       () => this.closed,
+      options.codeExecution === true,
     );
     // Condense the history before a request would exceed the model's window
     // (see context-compaction.ts). The compactor reads the live prompt and

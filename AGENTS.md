@@ -205,7 +205,7 @@ npm outdated                                                   # packages/deskto
 モードで隠す項目はなく、モードはその値が効くセッションを決めるだけです。
 ナビは効く範囲で 2 群に区切り、見出しでどちらに効くのかを示します。
 
-- 共通: 一般 / 外観 / プロバイダー / モデル設定 / MCPサーバー / カスタマイズ / 接続先サーバー / セキュリティ
+- 共通: 一般 / 外観 / プロバイダー / モデル設定 / MCPサーバー / カスタマイズ / 接続先サーバー / セキュリティ / 実験的機能
 - Lumisca code: 画面操作 / 保存済みプロンプト
 
 設定画面が持つのは、このインストール全体の設定だけです。
@@ -231,6 +231,10 @@ npm outdated                                                   # packages/deskto
   呼び出し側の `preferredSide` は希望で、収まらなければ反対側へ開き、どちらにも収まらなければ切り取らずに高さを切ってスクロールさせます（`.modal` は `overflow-y: auto` なので、ダイアログの中ではダイアログの縁が一覧を切ります）。
 - 設定の行は面を塗りません。
   `SettingRow` や `.setting-card` / `.provider-row` は下線で区切った行です。
+- ツールの構成を変えるトグルは `SessionPool.applyToolSetChange` を通します（コード実行）。
+  待機中のセッションはその場で再構築し、実行中のセッションは run が終わってから再構築します（`SessionLifecycle.deferRebuild`）。
+  ツールの定義は送信済みのリクエストに入っているため、実行中に差し替えると run の行が二重になります。
+  能力のフラグだけを変える computer use とは、そこが違います。
 - 能力のトグルは実行中のセッションにも効きます（computer use など）。
   設定への保存は実行中のセッションがあっても必ず行います（`SessionPool.applyCapabilityChange`）。
   待機中のセッションは再構築し、実行中のセッションはエージェントを差し替えず（差し替えると run の行が二重になる）ツールレジストリと能力フラグだけをその場で更新します。
@@ -981,3 +985,33 @@ https（`tailscale serve` など）で開いた端末から、ページを PWA �
   `methods` を増やすときは 3 つとも合わせてください。
 - 確認: `bun test packages/core/models/chatgpt packages/server/login_openai_codex_test.ts packages/server/routes/providers_test.ts`。
   実機の確認には ChatGPT アカウントが必要で、デバイスコード方式は ChatGPT のセキュリティ設定で有効化しておきます。
+
+## 14. コード実行（`execute`）
+
+設定 → 実験的機能のトグル（`code_execution_enabled`）を入れると、モデルに渡すツールは `execute` 1 つになります。
+設計の理由は `ARCHITECTURE.md` の「コード実行（`execute`）」にあります。
+
+- モデルが見るツールは `execute` だけです。
+  `tool_search` も `tool_call` もエージェントには付けません。
+  `tool_search` は目録（`packages/core/tools/catalog.ts`）の中に入り、プログラムから `tools.tool_search` で呼びます。
+  プリロード済みの組とセッションのレジストリを 1 つの目録として見せるのが `ToolCatalog` です。
+- 実行場所はセッションで変わります。
+  ホストはサーバープロセスの sandbox（`packages/core/tools/js-sandbox.ts`）で、`eval` と同じものです。
+  stella は VM の中の `node` です（`packages/core/code-execution/vm.ts`）。
+  stella のツール呼び出しは `podman exec` の標準入出力を 1 行ずつ往復します（`packages/core/vm/channel.ts`）。
+  サーバーが待ち受ける口を増やさないでください。
+- `execute` と `tool_call` は目録から外します。
+  プログラムからプログラムを走らせると、1 回の実行に掛けた上限が何重にもなります。
+- 上限は `packages/core/tools/execute.ts` にあります。
+  ツール呼び出し 50 回、実行時間は既定 120 秒で最大 600 秒、転送する画像は 3 枚です。
+  値を上げるときは、モデルが 1 ターンで待てる時間と、コマンド安全判定が 1 回ごとに走ることを思い出してください。
+- 安全判定は `eval` の種別を再利用します（`safetyBlockResult(..., "eval", ...)`）。
+  同じ権限の同じ JavaScript なので、承認の記録も共有できます。
+  中から呼ぶ `bash` は今までどおり毎回判定されます。
+- サブエージェントは従来のツールのままです。
+  `task` は目録から呼べますが、子は普通のツールで走ります。
+- トグルは `LumiscaCore.setCodeExecutionEnabled` → `SessionPool.applyToolSetChange` を通します。
+  待機中のセッションはその場で再構築し、実行中のセッションは run が終わってから再構築します（`SessionLifecycle.deferRebuild`）。
+  ツールの定義は送信済みのリクエストに入っているためです。
+- 確認: `bun test packages/core/tools packages/core/code-execution packages/core/vm/channel_test.ts packages/core/core_code_execution_test.ts packages/core/agent/code-execution-context_test.ts`。
+  実機の stella で確かめるときは `LUMISCA_STELLA_LIVE=1` を付けます。

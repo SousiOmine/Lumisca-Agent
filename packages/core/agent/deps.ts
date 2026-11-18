@@ -136,6 +136,11 @@ export interface AgentRuntime {
    * no browser tools. A getter so a backend attached after the pool was
    * built still reaches new agents. */
   browser?: () => BrowserBackend | undefined;
+  /** Whether the user turned code execution on (see
+   * CODE_EXECUTION_ENABLED_KEY). Read once per open: it decides the whole
+   * tool set of the agent, so the pool rebuilds the open sessions when the
+   * toggle changes (see SessionPool.applyToolSetChange). */
+  isCodeExecutionEnabled(): boolean;
   /** The user's web-search provider, or undefined when none is configured:
    * a session that cannot search is never given `web_search` / `web_fetch`.
    * A getter so a provider configured after the pool was built reaches new

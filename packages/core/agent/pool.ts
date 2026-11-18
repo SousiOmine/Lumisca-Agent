@@ -241,6 +241,28 @@ export class SessionPool {
     }
   }
 
+  /** Apply a change to the TOOLS the model is given (code execution on or
+   * off). The mutation runs unconditionally, then every open session
+   * follows: an idle one is rebuilt at once, and a streaming one keeps its
+   * agent — its tool set is part of the request it already sent — and is
+   * rebuilt when the run ends, through `defer`. */
+  applyToolSetChange(
+    sessions: SessionInfo[],
+    mutate: () => void,
+    defer: (id: string) => void,
+  ): void {
+    mutate();
+    for (const session of sessions) {
+      const resources = this.sessions.get(session.id);
+      if (resources?.agent === undefined) continue;
+      if (resources.agent.isStreaming) {
+        defer(session.id);
+        continue;
+      }
+      this.rebuild(session);
+    }
+  }
+
   /** Apply an MCP config change to the listed sessions. The mutation runs
    * unconditionally: the config is the user's edit, and refusing to store it
    * because some session happens to be running would lose that edit — the

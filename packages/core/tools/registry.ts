@@ -14,6 +14,12 @@ import { assertSchemaBounds } from "./validate.ts";
  * The registry is owned by the session pool (one per session) so every
  * agent of the session — the main agent and its sub-agents — shares the
  * same set, and a rebuild (model change etc.) keeps the tools searchable.
+ *
+ * The ranking, listing and dispatch live as functions over `Tool[]` rather
+ * than as methods only: code execution searches a set that is the agent's
+ * preloaded tools PLUS this registry (see tools/catalog.ts), and both sides
+ * must describe and run a tool the same way or the model would get two
+ * answers for one name.
  */
 
 /** Cap for one tool's description in a search result. The result text stays
@@ -38,11 +44,21 @@ export interface ToolSearchEntry {
   description: string;
 }
 
-/** Resolves the session's current tool registry. The search/call tools
+/** What the search and listing tools need from whatever holds the tools: a
+ * registry, or the catalog code execution searches. */
+export interface ToolSearchSource {
+  search(query: string, limit: number): ToolSearchEntry[];
+  browse(): string;
+}
+
+/** Resolves the session's current tool source. The search/call tools
  * capture this instead of an instance, so a config change that rebuilds
  * the registry (the session pool replaces the MCP attachment) redirects
  * existing pairs — e.g. the ones already attached to a running sub-agent —
  * without touching the agent that holds them. */
+export type ToolSearchProvider = () => ToolSearchSource;
+
+/** Resolves the session's current tool registry (the dispatch side). */
 export type ToolRegistryProvider = () => ToolRegistry;
 
 /** Rank a tool against a search query. Name matches dominate; the label
@@ -62,7 +78,106 @@ function score(tool: Tool, terms: string[]): number {
   return score;
 }
 
-export class ToolRegistry {
+/** The search-result metadata of one tool: the description plus its
+ * parameter schema when it carries explicit properties, so the model
+ * sees the argument names/defaults it must pass. MCP tools cover the same
+ * ground by embedding their schema in the description (their registry
+ * `parameters` stay permissive); tools with typed schemas (browser-lab,
+ * future extensions) get the schema appended here so every tool reports its
+ * arguments the same way. */
+export function describeTool(tool: Tool): ToolSearchEntry {
+  const { text, truncated } = truncateHead(
+    tool.description + parameterSchemaText(tool.parameters),
+    MAX_SEARCH_DESCRIPTION_CHARS,
+  );
+  return {
+    name: tool.name,
+    label: tool.label,
+    description: truncated
+      ? text + truncatedHeadNote("description", MAX_SEARCH_DESCRIPTION_CHARS)
+      : text,
+  };
+}
+
+/** Ranked keyword search over names, labels and descriptions. An empty
+ * query matches nothing — callers use {@link browseTools} for the
+ * overview. */
+export function searchTools(
+  tools: readonly Tool[],
+  query: string,
+  limit: number,
+): ToolSearchEntry[] {
+  const terms = query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((t) => t.length > 0);
+  if (terms.length === 0) return [];
+  const ranked = tools
+    .map((tool) => ({ tool, score: score(tool, terms) }))
+    .filter((entry) => entry.score > 0)
+    .sort(
+      (a, b) => b.score - a.score || a.tool.name.localeCompare(b.tool.name),
+    );
+  return ranked.slice(0, limit).map((entry) => describeTool(entry.tool));
+}
+
+/** Browse listing: every tool grouped by its label prefix (the MCP
+ * server, for MCP tools), names only, capped at MAX_BROWSE_LISTING_CHARS.
+ * `limit` bounds the names per group; overflow is announced so the model
+ * knows the listing is not exhaustive. */
+export function browseTools(tools: readonly Tool[], groupLimit = 50): string {
+  const groups = new Map<string, string[]>();
+  const overflow = new Map<string, number>();
+  for (const tool of [...tools].sort((a, b) => a.name.localeCompare(b.name))) {
+    const group = labelPrefix(tool.label);
+    const names = groups.get(group) ?? [];
+    if (names.length < groupLimit) {
+      names.push(tool.name);
+    } else {
+      overflow.set(group, (overflow.get(group) ?? 0) + 1);
+    }
+    groups.set(group, names);
+  }
+  const lines = [
+    `${tools.length} tools available across ${groups.size} groups; ` +
+      "search for a specific tool with tool_search.",
+  ];
+  for (const [group, names] of groups) {
+    const hidden = overflow.get(group) ?? 0;
+    lines.push(
+      `${group} (${names.length}${
+        hidden > 0 ? `; +${hidden} more — search with tool_search` : ""
+      }): ${names.join(", ")}`,
+    );
+  }
+  const { text, truncated } = truncateHead(
+    lines.join("\n"),
+    MAX_BROWSE_LISTING_CHARS,
+  );
+  return truncated
+    ? text + truncatedHeadNote("listing", MAX_BROWSE_LISTING_CHARS)
+    : text;
+}
+
+/** Run one tool with the arguments a model supplied, applying its
+ * prepareArguments shim and the bounds its schema declares (see
+ * assertSchemaBounds; a discoverable tool is called through tool_call or a
+ * code script, neither of which passed through the agent adapter).
+ * Field-level types stay the tool's own contract: the calling schemas are
+ * permissive, and MCP tools delegate validation to their server. */
+export async function callTool(
+  tool: Tool,
+  toolCallId: string,
+  args: unknown,
+  signal?: AbortSignal,
+): Promise<ToolResult> {
+  const prepared =
+    tool.prepareArguments !== undefined ? tool.prepareArguments(args) : args;
+  assertSchemaBounds(tool.parameters, prepared);
+  return await tool.execute(toolCallId, prepared as never, signal);
+}
+
+export class ToolRegistry implements ToolSearchSource {
   private readonly tools = new Map<string, Tool>();
 
   /** Replace the whole registry (MCP discovery finished / re-ran). */
@@ -98,95 +213,32 @@ export class ToolRegistry {
     return this.tools.size === 0;
   }
 
+  /** Every tool, in insertion order. */
+  list(): Tool[] {
+    return [...this.tools.values()];
+  }
+
   get(name: string): Tool | undefined {
     return this.tools.get(name);
   }
 
-  /** Ranked keyword search over names, labels and descriptions. An empty
-   * query matches nothing — callers use `browse()` for the overview. */
+  /** See {@link searchTools}. */
   search(query: string, limit: number): ToolSearchEntry[] {
-    const terms = query
-      .toLowerCase()
-      .split(/\s+/)
-      .filter((t) => t.length > 0);
-    if (terms.length === 0) return [];
-    const ranked = [...this.tools.values()]
-      .map((tool) => ({ tool, score: score(tool, terms) }))
-      .filter((entry) => entry.score > 0)
-      .sort(
-        (a, b) => b.score - a.score || a.tool.name.localeCompare(b.tool.name),
-      );
-    return ranked.slice(0, limit).map((entry) => this.describe(entry.tool));
+    return searchTools(this.list(), query, limit);
   }
 
-  /** Browse listing: every tool grouped by its label prefix (the MCP
-   * server, for MCP tools), names only, capped at MAX_BROWSE_LISTING_CHARS.
-   * `limit` bounds the names per group; overflow is announced so the model
-   * knows the listing is not exhaustive. */
+  /** See {@link browseTools}. */
   browse(groupLimit = 50): string {
-    const groups = new Map<string, string[]>();
-    const overflow = new Map<string, number>();
-    for (const tool of [...this.tools.values()].sort((a, b) =>
-      a.name.localeCompare(b.name),
-    )) {
-      const group = labelPrefix(tool.label);
-      const names = groups.get(group) ?? [];
-      if (names.length < groupLimit) {
-        names.push(tool.name);
-      } else {
-        overflow.set(group, (overflow.get(group) ?? 0) + 1);
-      }
-      groups.set(group, names);
-    }
-    const lines = [
-      `${this.tools.size} tools available across ${groups.size} groups; ` +
-        "search for a specific tool with tool_search.",
-    ];
-    for (const [group, names] of groups) {
-      const hidden = overflow.get(group) ?? 0;
-      lines.push(
-        `${group} (${names.length}${
-          hidden > 0 ? `; +${hidden} more — search with tool_search` : ""
-        }): ${names.join(", ")}`,
-      );
-    }
-    const { text, truncated } = truncateHead(
-      lines.join("\n"),
-      MAX_BROWSE_LISTING_CHARS,
-    );
-    return truncated
-      ? text + truncatedHeadNote("listing", MAX_BROWSE_LISTING_CHARS)
-      : text;
+    return browseTools(this.list(), groupLimit);
   }
 
-  /** The search-result metadata of one tool: the description plus its
-   * parameter schema when it carries explicit properties, so the model
-   * sees the argument names/defaults it must pass to tool_call. MCP tools
-   * cover the same ground by embedding their schema in the description
-   * (their registry `parameters` stay permissive); tools with typed
-   * schemas (browser-lab, future extensions) get the schema appended here
-   * so every registry tool reports its arguments the same way. */
+  /** See {@link describeTool}. */
   describe(tool: Tool): ToolSearchEntry {
-    const { text, truncated } = truncateHead(
-      tool.description + parameterSchemaText(tool.parameters),
-      MAX_SEARCH_DESCRIPTION_CHARS,
-    );
-    return {
-      name: tool.name,
-      label: tool.label,
-      description: truncated
-        ? text + truncatedHeadNote("description", MAX_SEARCH_DESCRIPTION_CHARS)
-        : text,
-    };
+    return describeTool(tool);
   }
 
-  /** Execute a registered tool by name, applying its prepareArguments shim
-   * and the bounds its schema declares (see assertSchemaBounds; a discoverable
-   * tool is called through tool_call, which never passed through the agent
-   * adapter). Field-level types stay the tool's own contract: tool_call's
-   * schema is permissive, and MCP tools delegate validation to their server.
-   * Throws for unknown names — the caller turns that into an error tool
-   * result. */
+  /** Execute a registered tool by name. Throws for unknown names — the
+   * caller turns that into an error tool result. */
   async call(
     toolCallId: string,
     name: string,
@@ -199,10 +251,7 @@ export class ToolRegistry {
         `Unknown tool ${name}. Use tool_search to find available tools.`,
       );
     }
-    const prepared =
-      tool.prepareArguments !== undefined ? tool.prepareArguments(args) : args;
-    assertSchemaBounds(tool.parameters, prepared);
-    return await tool.execute(toolCallId, prepared as never, signal);
+    return await callTool(tool, toolCallId, args, signal);
   }
 }
 
