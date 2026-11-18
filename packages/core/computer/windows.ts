@@ -36,7 +36,7 @@
 
 import { concatBytes } from "../bytes.ts";
 import { CoreError, errorMessage } from "../errors.ts";
-import { runtime } from "../runtime/runtime.ts";
+import { ARCH } from "../platform.ts";
 import { sleep } from "../shared/misc.ts";
 import { MAX_CAPTURE_DIMENSION } from "./image.ts";
 import {
@@ -66,13 +66,13 @@ import type {
   WindowInfo,
 } from "./types.ts";
 import {
-  type DynamicLibrary,
   dlopen,
-  type ForeignLibraryInterface,
+  type FfiLibrary,
+  NativeCallback,
+  type NativeLibrary,
+  Pointer,
   type PointerValue,
-  UnsafeCallback,
-  UnsafePointer,
-  UnsafePointerView,
+  PointerView,
 } from "./windows-ffi.ts";
 
 // The timings, the interpolation, the key chord syntax and the typing split
@@ -136,61 +136,53 @@ const IME_MESSAGE_TIMEOUT_MS = 250;
 // precisely; the libraries themselves are opened by the factory below.
 
 const USER32_SYMBOLS = {
-  SetProcessDpiAwarenessContext: { parameters: ["pointer"], result: "i32" },
-  GetThreadDpiAwarenessContext: { parameters: [], result: "pointer" },
+  SetProcessDpiAwarenessContext: { args: ["pointer"], returns: "i32" },
+  GetThreadDpiAwarenessContext: { args: [], returns: "pointer" },
   GetAwarenessFromDpiAwarenessContext: {
-    parameters: ["pointer"],
-    result: "i32",
+    args: ["pointer"],
+    returns: "i32",
   },
-  GetSystemMetrics: { parameters: ["i32"], result: "i32" },
-  GetCursorPos: { parameters: ["buffer"], result: "i32" },
-  SendInput: { parameters: ["u32", "buffer", "i32"], result: "u32" },
-  GetDC: { parameters: ["pointer"], result: "pointer" },
-  ReleaseDC: { parameters: ["pointer", "pointer"], result: "i32" },
+  GetSystemMetrics: { args: ["i32"], returns: "i32" },
+  GetCursorPos: { args: ["buffer"], returns: "i32" },
+  SendInput: { args: ["u32", "buffer", "i32"], returns: "u32" },
+  GetDC: { args: ["pointer"], returns: "pointer" },
+  ReleaseDC: { args: ["pointer", "pointer"], returns: "i32" },
   EnumDisplayMonitors: {
-    parameters: ["pointer", "pointer", "pointer", "pointer"],
-    result: "i32",
+    args: ["pointer", "pointer", "pointer", "pointer"],
+    returns: "i32",
   },
-  GetMonitorInfoW: { parameters: ["pointer", "buffer"], result: "i32" },
-  EnumWindows: { parameters: ["pointer", "pointer"], result: "i32" },
-  GetWindowTextW: { parameters: ["pointer", "buffer", "i32"], result: "i32" },
-  GetWindowRect: { parameters: ["pointer", "buffer"], result: "i32" },
-  IsWindowVisible: { parameters: ["pointer"], result: "i32" },
-  IsIconic: { parameters: ["pointer"], result: "i32" },
-  IsWindow: { parameters: ["pointer"], result: "i32" },
-  GetForegroundWindow: { parameters: [], result: "pointer" },
-  SetForegroundWindow: { parameters: ["pointer"], result: "i32" },
-  ShowWindow: { parameters: ["pointer", "i32"], result: "i32" },
-  VkKeyScanW: { parameters: ["u16"], result: "i16" },
+  GetMonitorInfoW: { args: ["pointer", "buffer"], returns: "i32" },
+  EnumWindows: { args: ["pointer", "pointer"], returns: "i32" },
+  GetWindowTextW: { args: ["pointer", "buffer", "i32"], returns: "i32" },
+  GetWindowRect: { args: ["pointer", "buffer"], returns: "i32" },
+  IsWindowVisible: { args: ["pointer"], returns: "i32" },
+  IsIconic: { args: ["pointer"], returns: "i32" },
+  IsWindow: { args: ["pointer"], returns: "i32" },
+  GetForegroundWindow: { args: [], returns: "pointer" },
+  SetForegroundWindow: { args: ["pointer"], returns: "i32" },
+  ShowWindow: { args: ["pointer", "i32"], returns: "i32" },
+  VkKeyScanW: { args: ["u16"], returns: "i16" },
   SendMessageTimeoutW: {
-    parameters: [
-      "pointer",
-      "u32",
-      "pointer",
-      "pointer",
-      "u32",
-      "u32",
-      "buffer",
-    ],
-    result: "pointer",
+    args: ["pointer", "u32", "pointer", "pointer", "u32", "u32", "buffer"],
+    returns: "pointer",
   },
-} as const satisfies ForeignLibraryInterface;
+} as const satisfies FfiLibrary;
 
 /** imm32: the IME of a window, needed to keep an open IME from intercepting
  * injected characters (see WindowsComputerHost.withImeOff). */
 const IMM32_SYMBOLS = {
-  ImmGetDefaultIMEWnd: { parameters: ["pointer"], result: "pointer" },
-} as const satisfies ForeignLibraryInterface;
+  ImmGetDefaultIMEWnd: { args: ["pointer"], returns: "pointer" },
+} as const satisfies FfiLibrary;
 
 const GDI32_SYMBOLS = {
-  CreateCompatibleDC: { parameters: ["pointer"], result: "pointer" },
+  CreateCompatibleDC: { args: ["pointer"], returns: "pointer" },
   CreateCompatibleBitmap: {
-    parameters: ["pointer", "i32", "i32"],
-    result: "pointer",
+    args: ["pointer", "i32", "i32"],
+    returns: "pointer",
   },
-  SelectObject: { parameters: ["pointer", "pointer"], result: "pointer" },
+  SelectObject: { args: ["pointer", "pointer"], returns: "pointer" },
   BitBlt: {
-    parameters: [
+    args: [
       "pointer",
       "i32",
       "i32",
@@ -201,19 +193,19 @@ const GDI32_SYMBOLS = {
       "i32",
       "u32",
     ],
-    result: "i32",
+    returns: "i32",
   },
   GetDIBits: {
-    parameters: ["pointer", "pointer", "u32", "u32", "buffer", "buffer", "u32"],
-    result: "i32",
+    args: ["pointer", "pointer", "u32", "u32", "buffer", "buffer", "u32"],
+    returns: "i32",
   },
-  DeleteObject: { parameters: ["pointer"], result: "i32" },
-  DeleteDC: { parameters: ["pointer"], result: "i32" },
-} as const satisfies ForeignLibraryInterface;
+  DeleteObject: { args: ["pointer"], returns: "i32" },
+  DeleteDC: { args: ["pointer"], returns: "i32" },
+} as const satisfies FfiLibrary;
 
-type User32 = DynamicLibrary<typeof USER32_SYMBOLS>;
-type Gdi32 = DynamicLibrary<typeof GDI32_SYMBOLS>;
-type Imm32 = DynamicLibrary<typeof IMM32_SYMBOLS>;
+type User32 = NativeLibrary<typeof USER32_SYMBOLS>;
+type Gdi32 = NativeLibrary<typeof GDI32_SYMBOLS>;
+type Imm32 = NativeLibrary<typeof IMM32_SYMBOLS>;
 
 /** Pointer width of this process (both Windows targets Bun builds for are
  * 64-bit, but the input structs are built from the width rather than
@@ -426,12 +418,12 @@ export function parseWindowId(id: string): PointerValue {
       "invalid",
     );
   }
-  return UnsafePointer.create(BigInt(hex));
+  return Pointer.from(BigInt(hex));
 }
 
 /** Render a window handle the way `WindowInfo.id` carries it. */
 export function formatWindowId(handle: PointerValue): string {
-  const value = handle === null ? 0n : UnsafePointer.value(handle);
+  const value = handle === null ? 0n : Pointer.toBigInt(handle);
   return `0x${value.toString(16).toUpperCase().padStart(8, "0")}`;
 }
 
@@ -442,10 +434,10 @@ export function formatWindowId(handle: PointerValue): string {
  * reason (the settings toggle shows it verbatim), never as a half-working
  * host. */
 export function createWindowsComputerHost(): ComputerHostResult {
-  if (runtime.build.arch !== "x86_64" && runtime.build.arch !== "aarch64") {
+  if (ARCH !== "x86_64" && ARCH !== "aarch64") {
     return {
       available: false,
-      reason: `computer use is not supported on this CPU architecture (${runtime.build.arch})`,
+      reason: `computer use is not supported on this CPU architecture (${ARCH})`,
     };
   }
   let user32: User32;
@@ -503,7 +495,7 @@ export function createWindowsComputerHost(): ComputerHostResult {
  * library), so the check — not the return value — is what decides. */
 function ensurePerMonitorAware(user32: User32): string | undefined {
   user32.symbols.SetProcessDpiAwarenessContext(
-    UnsafePointer.create(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2),
+    Pointer.from(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2),
   );
   const context = user32.symbols.GetThreadDpiAwarenessContext();
   const awareness = user32.symbols.GetAwarenessFromDpiAwarenessContext(context);
@@ -521,12 +513,12 @@ function ensurePerMonitorAware(user32: User32): string | undefined {
  * the indices are stable and follow the physical arrangement. */
 function enumerateDisplays(user32: User32): DisplayInfo[] {
   const monitors: Array<{ handle: PointerValue; bounds: Rect }> = [];
-  const callback = new UnsafeCallback(
-    { parameters: ["pointer", "pointer", "pointer", "pointer"], result: "i32" },
+  const callback = new NativeCallback(
+    { args: ["pointer", "pointer", "pointer", "pointer"], returns: "i32" },
     (monitor: PointerValue, _hdc: PointerValue, rect: PointerValue) => {
       try {
         if (rect !== null) {
-          const view = new UnsafePointerView(rect);
+          const view = new PointerView(rect);
           const left = view.getInt32(0);
           const top = view.getInt32(4);
           const right = view.getInt32(8);
@@ -585,7 +577,7 @@ class WindowsComputerHost implements ComputerHost {
     private readonly gdi32: Gdi32,
     private readonly imm32: Imm32,
   ) {
-    this.pointerSize = pointerSizeFor(runtime.build.arch);
+    this.pointerSize = pointerSizeFor(ARCH);
   }
 
   describe(): string {
@@ -725,8 +717,8 @@ class WindowsComputerHost implements ComputerHost {
 
   windows(): WindowInfo[] {
     const handles: PointerValue[] = [];
-    const callback = new UnsafeCallback(
-      { parameters: ["pointer", "pointer"], result: "i32" },
+    const callback = new NativeCallback(
+      { args: ["pointer", "pointer"], returns: "i32" },
       (handle: PointerValue) => {
         try {
           if (handle !== null) handles.push(handle);
@@ -930,8 +922,8 @@ class WindowsComputerHost implements ComputerHost {
     const answered = this.user32.symbols.SendMessageTimeoutW(
       imeWnd,
       WM_IME_CONTROL,
-      UnsafePointer.create(BigInt(command)),
-      UnsafePointer.create(BigInt(value)),
+      Pointer.from(BigInt(command)),
+      Pointer.from(BigInt(value)),
       SMTO_ABORTIFHUNG,
       IME_MESSAGE_TIMEOUT_MS,
       result,
@@ -970,7 +962,7 @@ class WindowsComputerHost implements ComputerHost {
     this.user32.symbols.SetForegroundWindow(handle);
     await sleep(FOCUS_SETTLE_MS);
     const foreground = this.user32.symbols.GetForegroundWindow();
-    if (!UnsafePointer.equals(foreground, handle)) {
+    if (!Pointer.equals(foreground, handle)) {
       throw new CoreError(
         `could not bring window ${id} to the foreground (Windows kept ` +
           `${formatWindowId(foreground)} focused)`,
@@ -1007,7 +999,7 @@ class WindowsComputerHost implements ComputerHost {
         width: right - left,
         height: bottom - top,
       },
-      focused: UnsafePointer.equals(handle, foreground),
+      focused: Pointer.equals(handle, foreground),
       visible: this.user32.symbols.IsWindowVisible(handle) !== 0,
       minimized: this.user32.symbols.IsIconic(handle) !== 0,
     };

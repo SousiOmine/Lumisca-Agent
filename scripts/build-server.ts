@@ -26,9 +26,11 @@
  * disagree about what an asset is.
  */
 
+import * as fsp from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { findCanvasIcuDataFile } from "../packages/core/pdf/icu-data.ts";
-import { exit, runtime } from "../packages/core/runtime/runtime.ts";
+import { OS, TARGET } from "../packages/core/platform.ts";
+import { exit, spawnProcess } from "../packages/core/process.ts";
 import { VM_CONTAINER_DIR_NAME } from "../packages/core/vm/contract.ts";
 import { buildAssetsManifest } from "../packages/server/assets.ts";
 import {
@@ -58,10 +60,10 @@ function usage(message?: string): never {
 }
 
 /** Where a standalone server package is staged by default: one directory
- * per build target (Deno's triple names, which the release manifests still
+ * per build target (Rust target triples, which the release manifests still
  * use), so several platforms can be built side by side. */
 function defaultOutDir(): string {
-  return join(repoRoot, "dist", "server", "stage", runtime.build.target);
+  return join(repoRoot, "dist", "server", "stage", TARGET);
 }
 
 function parseArgs(args: readonly string[]): Options {
@@ -91,13 +93,13 @@ function parseArgs(args: readonly string[]): Options {
       ? defaultOutDir()
       : isAbsolute(out)
         ? out
-        : resolve(runtime.cwd(), out);
+        : resolve(process.cwd(), out);
   return { outDir, compile };
 }
 
 async function exists(path: string): Promise<boolean> {
   try {
-    await runtime.stat(path);
+    await fsp.stat(path);
     return true;
   } catch {
     return false;
@@ -108,22 +110,30 @@ async function exists(path: string): Promise<boolean> {
  * replaced by hand first: an existing file (notably the `--no-compile`
  * placeholder) makes the compiler refuse to write. */
 async function compileServer(outputPath: string): Promise<void> {
-  await runtime.remove(outputPath).catch(() => {});
-  // Bun builds a single executable from the same entry. The Deno permission
-  // list is gone with the runtime; Bun has no equivalent capability list.
-  const status = await new runtime.Command(runtime.execPath(), {
-    args: ["build", "--compile", "--outfile", outputPath, SERVER_ENTRY],
-    cwd: repoRoot,
-    stdin: "null",
-    stdout: "inherit",
-    stderr: "inherit",
-  }).spawn().status;
-  if (!status.success) {
+  await fsp.rm(outputPath).catch(() => {});
+  // Bun builds a single executable from the same entry.
+  const code = await spawnProcess(
+    [
+      process.execPath,
+      "build",
+      "--compile",
+      "--outfile",
+      outputPath,
+      SERVER_ENTRY,
+    ],
+    {
+      cwd: repoRoot,
+      stdin: "ignore",
+      stdout: "inherit",
+      stderr: "inherit",
+    },
+  ).exited;
+  if (code !== 0) {
     console.error(
-      `build-server: bun build --compile failed (exit ${status.code}); ` +
+      `build-server: bun build --compile failed (exit ${code}); ` +
         "the packaged server was not produced",
     );
-    exit(status.code === 0 ? 1 : status.code);
+    exit(code);
   }
 }
 
@@ -138,11 +148,11 @@ async function compileServer(outputPath: string): Promise<void> {
  */
 async function stageCanvasIcuData(outDir: string): Promise<void> {
   const target = join(outDir, ICU_DATA_FILE_NAME);
-  if (runtime.build.os !== "windows") {
+  if (OS !== "windows") {
     // macOS/Linux Skia embeds its ICU data; no file to ship. Drop any
     // stale file a previous Windows run left in a shared output directory
     // (the desktop resources dir is the same directory for both platforms).
-    await runtime.remove(target).catch(() => {});
+    await fsp.rm(target).catch(() => {});
     return;
   }
   // The search the server itself runs at startup (packages/core/pdf/
@@ -157,8 +167,8 @@ async function stageCanvasIcuData(outDir: string): Promise<void> {
     );
     return;
   }
-  await runtime.copyFile(source, target);
-  const { size } = await runtime.stat(target);
+  await fsp.copyFile(source, target);
+  const { size } = await fsp.stat(target);
   console.log(`ICU data: ${target} (${size} bytes, from ${source})`);
 }
 
@@ -174,7 +184,7 @@ async function stageCanvasIcuData(outDir: string): Promise<void> {
 async function stageStellaContainer(outDir: string): Promise<void> {
   const source = join(repoRoot, "packages", "core", "vm", "container");
   const target = join(outDir, VM_CONTAINER_DIR_NAME);
-  await runtime.remove(target, { recursive: true }).catch(() => {});
+  await fsp.rm(target, { recursive: true }).catch(() => {});
   await copyContainerTree(source, target);
   console.log(`stella container files: ${target}`);
 }
@@ -192,26 +202,26 @@ async function copyContainerTree(
   source: string,
   target: string,
 ): Promise<void> {
-  await runtime.mkdir(target, { recursive: true });
-  for await (const entry of runtime.readDir(source)) {
+  await fsp.mkdir(target, { recursive: true });
+  for (const entry of await fsp.readdir(source, { withFileTypes: true })) {
     const from = join(source, entry.name);
     const to = join(target, entry.name);
-    if (entry.isDirectory) {
+    if (entry.isDirectory()) {
       await copyContainerTree(from, to);
       continue;
     }
-    if (!entry.isFile) continue;
-    await runtime.copyFile(from, to);
+    if (!entry.isFile()) continue;
+    await fsp.copyFile(from, to);
     // entry.sh must stay executable: podman runs it as the container's CMD,
     // and a copied mode is not guaranteed by every platform's filesystem.
     if (entry.name.endsWith(".sh")) {
-      await runtime.chmod(to, 0o755).catch(() => {});
+      await fsp.chmod(to, 0o755).catch(() => {});
     }
   }
 }
 
-const options = parseArgs(runtime.args);
-await runtime.mkdir(options.outDir, { recursive: true });
+const options = parseArgs(process.argv.slice(2));
+await fsp.mkdir(options.outDir, { recursive: true });
 
 // 1. Bundle the client and read the static assets into the manifest. The
 //    client's chunks travel inside `assets.json`, so a package stays the
@@ -219,7 +229,7 @@ await runtime.mkdir(options.outDir, { recursive: true });
 //    stage, and no directory whose contents could go stale.
 const { manifest, clientBytes } = await buildAssetsManifest(repoRoot);
 const assetsFile = join(options.outDir, ASSETS_FILE_NAME);
-await runtime.writeTextFile(assetsFile, JSON.stringify(manifest));
+await fsp.writeFile(assetsFile, JSON.stringify(manifest));
 console.log(
   `Assets: ${assetsFile} (${clientBytes} bytes of JS: ` +
     `${Object.keys(manifest.client).join(", ")})`,
@@ -235,12 +245,12 @@ await stageStellaContainer(options.outDir);
 const binaryPath = join(options.outDir, binaryName());
 if (options.compile) {
   await compileServer(binaryPath);
-  const { size } = await runtime.stat(binaryPath);
+  const { size } = await fsp.stat(binaryPath);
   console.log(`Server binary: ${binaryPath} (${size} bytes)`);
 } else if (await exists(binaryPath)) {
   console.log(`Placeholder binary kept at ${binaryPath} (--no-compile)`);
 } else {
-  await runtime.writeFile(binaryPath, new Uint8Array(0));
+  await fsp.writeFile(binaryPath, new Uint8Array(0));
   console.log(`Placeholder binary written to ${binaryPath} (--no-compile)`);
 }
 

@@ -1,10 +1,11 @@
+import type { Dirent } from "node:fs";
+import * as fsSync from "node:fs";
 import { isAbsolute, join, normalize, sep } from "node:path";
 import {
   readIfExists,
   resolveGlobalDirs as resolveGlobalDirsBase,
 } from "../fs.ts";
 import { repoChain } from "../memory/agents-md.ts";
-import { type DirEntry, runtime } from "../runtime/runtime.ts";
 import { appSkillDirs as resolveAppSkillDirs } from "../settings/path.ts";
 import { truncatedHeadNote, truncateHead } from "../tools/truncate.ts";
 import { isWithinRealpath } from "../workspace/path-util.ts";
@@ -188,16 +189,16 @@ function scanSkillsDir(
   byName: Map<string, SkillDef>,
   seenPaths: Set<string>,
 ): void {
-  let entries: DirEntry[];
+  let entries: Dirent[];
   try {
-    entries = [...runtime.readDirSync(dir)];
+    entries = [...fsSync.readdirSync(dir, { withFileTypes: true })];
   } catch {
     return; // no skills directory at this level
   }
   // Sort for deterministic precedence when several skills share a name.
   entries.sort((a, b) => a.name.localeCompare(b.name));
   for (const entry of entries) {
-    if (!entry.isDirectory) continue;
+    if (!entry.isDirectory()) continue;
     const skillDir = join(dir, entry.name);
     const skillPath = join(skillDir, "SKILL.md");
     if (seenPaths.has(skillPath)) continue;

@@ -26,8 +26,10 @@
  * published package is checked against the key servers actually carry.
  */
 
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { exit, runtime } from "../packages/core/runtime/runtime.ts";
+import { exit } from "../packages/core/process.ts";
 import {
   type ArchiveFormat,
   extractArchive,
@@ -74,7 +76,7 @@ function parseArgs(args: readonly string[]): Options {
 
 const { check, failures } = createChecker();
 
-const options = parseArgs(runtime.args);
+const options = parseArgs(process.argv.slice(2));
 const archiveName = basename(options.archive);
 const format: ArchiveFormat = archiveName.endsWith(".zip") ? "zip" : "tar.gz";
 const binaryName =
@@ -86,7 +88,7 @@ console.log(`Verifying ${options.archive}`);
 try {
   await verifyFileSignature({
     file: options.archive,
-    signature: await runtime.readTextFile(options.signature),
+    signature: await fsp.readFile(options.signature, "utf8"),
     publicKey: options.publicKey,
   });
   check("signature verifies against the release key", true);
@@ -99,9 +101,9 @@ try {
 }
 
 // 2. The container the updater reads, and the files inside it.
-const extractDir = await runtime.makeTempDir({
-  prefix: "lumisca-archive-check-",
-});
+const extractDir = await fsp.mkdtemp(
+  join(osTmpdir(), "lumisca-archive-check-"),
+);
 let extracted: string[] | undefined;
 try {
   extracted = await extractArchive(options.archive, format, extractDir);
@@ -122,8 +124,8 @@ try {
     let detail = "";
     try {
       const [fromArchive, fromStage] = await Promise.all([
-        runtime.readFile(join(extractDir, name)),
-        runtime.readFile(staged),
+        fsp.readFile(join(extractDir, name)),
+        fsp.readFile(staged),
       ]);
       same =
         fromArchive.length === fromStage.length &&
@@ -141,7 +143,7 @@ try {
     error instanceof Error ? error.message : String(error),
   );
 } finally {
-  await runtime.remove(extractDir, { recursive: true }).catch(() => {});
+  await fsp.rm(extractDir, { recursive: true }).catch(() => {});
 }
 
 // 3. Completeness, the direction the per-file comparison cannot see: every
@@ -157,9 +159,9 @@ if (extracted !== undefined) {
     // written here would silently stop checking a file added below it.
     const stagedFiles: string[] = [];
     const walk = async (dir: string, prefix: string): Promise<void> => {
-      for await (const entry of runtime.readDir(dir)) {
-        if (entry.isFile) stagedFiles.push(`${prefix}${entry.name}`);
-        else if (entry.isDirectory) {
+      for (const entry of await fsp.readdir(dir, { withFileTypes: true })) {
+        if (entry.isFile()) stagedFiles.push(`${prefix}${entry.name}`);
+        else if (entry.isDirectory()) {
           await walk(join(dir, entry.name), `${prefix}${entry.name}/`);
         }
       }

@@ -1,5 +1,8 @@
 import { test } from "bun:test";
-import { join } from "node:path";
+import * as fsSync from "node:fs";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join, join as pathJoin } from "node:path";
 import { assert, assertEquals } from "@std/assert";
 import type { CommandSafety } from "../safety/command-safety.ts";
 import { removeDirRetry, toolText } from "../test-utils.ts";
@@ -112,12 +115,12 @@ test("eval strips TypeScript types", async () => {
   assertEquals(toolText(result), "[result]\n42");
 });
 
-test("eval exposes Deno and fetch deliberately, but not node globals", async () => {
+test("eval exposes Bun and fetch deliberately, but not node globals", async () => {
   const tool = makeEval();
   const result = await tool.execute(
     "1",
     {
-      code: "[typeof Deno, typeof fetch, typeof process, typeof require].join(',')",
+      code: "[typeof Bun, typeof fetch, typeof process, typeof require].join(',')",
     },
     undefined,
   );
@@ -210,41 +213,43 @@ test("eval reports no output for statements without a value", async () => {
   assertEquals(toolText(result), "(no output)");
 });
 
-test("eval can read files via the exposed Deno namespace", async () => {
-  const root = await Deno.makeTempDir({ prefix: "lumisca-eval-" });
+test("eval can read files through Bun", async () => {
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-eval-"));
   try {
     const file = join(root, "data.json");
-    await Deno.writeTextFile(file, '{"a": 41}');
+    await fsp.writeFile(file, '{"a": 41}');
     const tool = makeEval();
     const result = await tool.execute(
       "1",
-      { code: `JSON.parse(Deno.readTextFileSync(${JSON.stringify(file)}))` },
+      {
+        code: `console.log(JSON.stringify(await Bun.file(${JSON.stringify(file)}).json()))`,
+      },
       undefined,
     );
-    assertEquals(toolText(result), "[result]\n{ a: 41 }");
+    assertEquals(toolText(result), '[output]\n{"a":41}');
   } finally {
     await removeDirRetry(root);
   }
 });
 
 test("eval supports top-level await and awaits promise completions", async () => {
-  const root = await Deno.makeTempDir({ prefix: "lumisca-eval-" });
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-eval-"));
   try {
     const file = join(root, "data.txt");
-    await Deno.writeTextFile(file, "hello");
+    await fsp.writeFile(file, "hello");
     const tool = makeEval();
     // Top-level await runs in the async wrapper; results come via
     // console.log (the wrapper cannot return a completion value).
     const tla = await tool.execute(
       "1",
-      { code: `console.log(await Deno.readTextFile(${JSON.stringify(file)}))` },
+      { code: `console.log(await Bun.file(${JSON.stringify(file)}).text())` },
       undefined,
     );
     assertEquals(toolText(tla), "[output]\nhello");
     // A promise completion without await is awaited by the host.
     const promised = await tool.execute(
       "1",
-      { code: `Deno.readTextFile(${JSON.stringify(file)})` },
+      { code: `Bun.file(${JSON.stringify(file)}).text()` },
       undefined,
     );
     assertEquals(toolText(promised), "[result]\nhello");
@@ -328,7 +333,7 @@ test("eval runs normally when the check approves", async () => {
 
 test("eval: reset stops the timers its snippets scheduled", async () => {
   const tool = makeEval();
-  const dir = Deno.makeTempDirSync({ prefix: "lumisca-eval-" });
+  const dir = fsSync.mkdtempSync(pathJoin(osTmpdir(), "lumisca-eval-"));
   const marker = join(dir, "ticks.txt");
   try {
     await tool.execute(
@@ -337,14 +342,14 @@ test("eval: reset stops the timers its snippets scheduled", async () => {
         code: `let n = 0;
           setInterval(() => {
             n++;
-            Deno.writeTextFileSync(${JSON.stringify(marker)}, String(n));
+            Bun.write(${JSON.stringify(marker)}, String(n));
           }, 10);
           "armed"`,
       },
       undefined,
     );
     await new Promise((resolve) => setTimeout(resolve, 80));
-    const before = Number(Deno.readTextFileSync(marker));
+    const before = Number(fsSync.readFileSync(marker, "utf8"));
     assert(before > 0, "the interval must have run before the reset");
 
     // reset throws the sandbox (and the closure the interval captured)
@@ -352,7 +357,7 @@ test("eval: reset stops the timers its snippets scheduled", async () => {
     // server process for the rest of the session.
     await tool.execute("2", { code: "'reset'", reset: true }, undefined);
     await new Promise((resolve) => setTimeout(resolve, 150));
-    const after = Number(Deno.readTextFileSync(marker));
+    const after = Number(fsSync.readFileSync(marker, "utf8"));
     assertEquals(after, before, "the interval kept running after reset");
   } finally {
     tool.dispose?.();

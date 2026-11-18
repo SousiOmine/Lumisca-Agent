@@ -1,4 +1,5 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
 import { join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { makeRealTempDir, removeDirRetry } from "../test-utils.ts";
@@ -34,12 +35,12 @@ Do the alpha thing.
  */
 async function fixture(): Promise<string> {
   const root = await makeRealTempDir("lumisca-skills-");
-  await Deno.mkdir(join(root, ".git"), { recursive: true });
+  await fsp.mkdir(join(root, ".git"), { recursive: true });
 
   const skill = (dir: string, content: string) =>
-    Deno.mkdir(dir, { recursive: true }).then(() =>
-      Deno.writeTextFile(join(dir, "SKILL.md"), content),
-    );
+    fsp
+      .mkdir(dir, { recursive: true })
+      .then(() => fsp.writeFile(join(dir, "SKILL.md"), content));
 
   await skill(join(root, ".agents", "skills", "alpha"), VALID);
   await skill(
@@ -159,13 +160,13 @@ test("workspace skills shadow global skills of the same name", async () => {
   const root = await fixture();
   const global = await makeRealTempDir("lumisca-global-");
   try {
-    await Deno.mkdir(join(global, "alpha"), { recursive: true });
-    await Deno.writeTextFile(
+    await fsp.mkdir(join(global, "alpha"), { recursive: true });
+    await fsp.writeFile(
       join(global, "alpha", "SKILL.md"),
       "---\nname: alpha\ndescription: Global alpha.\n---\n",
     );
-    await Deno.mkdir(join(global, "global-only"), { recursive: true });
-    await Deno.writeTextFile(
+    await fsp.mkdir(join(global, "global-only"), { recursive: true });
+    await fsp.writeFile(
       join(global, "global-only", "SKILL.md"),
       "---\nname: global-only\ndescription: Only in global.\n---\n",
     );
@@ -194,14 +195,14 @@ test("shared skills shadow global ones but not workspace ones", async () => {
       [shared, "Shared alpha."],
       [global, "Global alpha."],
     ] as const) {
-      await Deno.mkdir(join(dir, "alpha"), { recursive: true });
-      await Deno.writeTextFile(
+      await fsp.mkdir(join(dir, "alpha"), { recursive: true });
+      await fsp.writeFile(
         join(dir, "alpha", "SKILL.md"),
         `---\nname: alpha\ndescription: ${description}\n---\n`,
       );
     }
-    await Deno.mkdir(join(shared, "shared-only"), { recursive: true });
-    await Deno.writeTextFile(
+    await fsp.mkdir(join(shared, "shared-only"), { recursive: true });
+    await fsp.writeFile(
       join(shared, "shared-only", "SKILL.md"),
       "---\nname: shared-only\ndescription: Only shared.\n---\n",
     );
@@ -267,7 +268,7 @@ test("loadSkillContent reads SKILL.md and follow-up files", async () => {
     const content = await loadSkillContent(alpha);
     assert(content.includes("# Alpha"));
     // Follow-up file inside the skill directory.
-    await Deno.writeTextFile(join(alpha.dir!, "reference.md"), "# Reference\n");
+    await fsp.writeFile(join(alpha.dir!, "reference.md"), "# Reference\n");
     assertEquals(
       await loadSkillContent(alpha, "reference.md"),
       "# Reference\n",

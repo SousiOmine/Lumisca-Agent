@@ -1,4 +1,6 @@
 import { test } from "bun:test";
+import * as fsSync from "node:fs";
+import * as fsp from "node:fs/promises";
 import { join } from "node:path";
 import { withTempDir } from "@lumisca/core/test-utils";
 import { assertEquals, assertRejects } from "@std/assert";
@@ -45,8 +47,8 @@ async function newPackage(
     stagingDir(installDir),
     format === "zip" ? "update.zip" : "update.tar.gz",
   );
-  await Deno.mkdir(stagingDir(installDir), { recursive: true });
-  await Deno.writeFile(archivePath, archive);
+  await fsp.mkdir(stagingDir(installDir), { recursive: true });
+  await fsp.writeFile(archivePath, archive);
   const staged: StagedUpdate = {
     version: NEXT,
     target: "x86_64-pc-windows-msvc",
@@ -57,7 +59,7 @@ async function newPackage(
     stagedAt: new Date().toISOString(),
     archivePath,
   };
-  await Deno.writeTextFile(
+  await fsp.writeFile(
     join(stagingDir(installDir), "staged.json"),
     JSON.stringify(staged, null, 2) + "\n",
   );
@@ -69,9 +71,9 @@ async function fixture(
   installDir: string,
   format: "zip" | "tar.gz" = "zip",
 ): Promise<InstallFixture> {
-  await Deno.writeTextFile(join(installDir, BINARY), "old-binary");
-  await Deno.writeTextFile(join(installDir, "assets.json"), "old-assets");
-  await Deno.writeTextFile(join(installDir, "icudtl.dat"), "old-icu");
+  await fsp.writeFile(join(installDir, BINARY), "old-binary");
+  await fsp.writeFile(join(installDir, "assets.json"), "old-assets");
+  await fsp.writeFile(join(installDir, "icudtl.dat"), "old-icu");
   const staged = await newPackage(installDir, format, [
     { name: BINARY, content: "new-binary" },
     { name: "assets.json", content: "new-assets" },
@@ -85,7 +87,9 @@ async function fixture(
 }
 
 function list(installDir: string): string[] {
-  return [...Deno.readDirSync(installDir)].map((entry) => entry.name).sort();
+  return [...fsSync.readdirSync(installDir, { withFileTypes: true })]
+    .map((entry) => entry.name)
+    .sort();
 }
 
 test("applyStagedUpdate replaces the package files and records the version", async () => {
@@ -105,20 +109,20 @@ test("applyStagedUpdate replaces the package files and records the version", asy
     assertEquals(result.version, NEXT);
     // The new files are in place…
     assertEquals(
-      await Deno.readTextFile(join(installDir, BINARY)),
+      await fsp.readFile(join(installDir, BINARY), "utf8"),
       "new-binary",
     );
     assertEquals(
-      await Deno.readTextFile(join(installDir, "assets.json")),
+      await fsp.readFile(join(installDir, "assets.json"), "utf8"),
       "new-assets",
     );
     assertEquals(
-      await Deno.readTextFile(join(installDir, "icudtl.dat")),
+      await fsp.readFile(join(installDir, "icudtl.dat"), "utf8"),
       "new-icu",
     );
     // …the previous binary is kept aside for the next startup to remove…
     assertEquals(
-      await Deno.readTextFile(join(installDir, `${BINARY}.old-${CURRENT}`)),
+      await fsp.readFile(join(installDir, `${BINARY}.old-${CURRENT}`), "utf8"),
       "old-binary",
     );
     // …the staging names are gone…
@@ -146,7 +150,7 @@ test("applyStagedUpdate works for a tar.gz package too", async () => {
       versionCheck: () => Promise.resolve(NEXT),
     });
     assertEquals(
-      await Deno.readTextFile(join(installDir, BINARY)),
+      await fsp.readFile(join(installDir, BINARY), "utf8"),
       "new-binary",
     );
     assertEquals(readAppliedUpdate(installDir)?.version, NEXT);
@@ -158,13 +162,13 @@ test("applyStagedUpdate installs the stella container directory as one entry", a
     // The running version has an older container definition; the package
     // carries a new one. It must be replaced as a whole, so no file of the
     // previous definition is left behind.
-    await Deno.writeTextFile(join(installDir, BINARY), "old-binary");
-    await Deno.mkdir(join(installDir, "stella-container"));
-    await Deno.writeTextFile(
+    await fsp.writeFile(join(installDir, BINARY), "old-binary");
+    await fsp.mkdir(join(installDir, "stella-container"));
+    await fsp.writeFile(
       join(installDir, "stella-container/Containerfile"),
       "old-containerfile",
     );
-    await Deno.writeTextFile(
+    await fsp.writeFile(
       join(installDir, "stella-container/stale.sh"),
       "left over",
     );
@@ -182,26 +186,29 @@ test("applyStagedUpdate installs the stella container directory as one entry", a
 
     assertEquals(result.replaced, [BINARY, "stella-container"]);
     assertEquals(
-      await Deno.readTextFile(
+      await fsp.readFile(
         join(installDir, "stella-container/Containerfile"),
+        "utf8",
       ),
       "new-containerfile",
     );
     assertEquals(
-      await Deno.readTextFile(join(installDir, "stella-container/entry.sh")),
+      await fsp.readFile(join(installDir, "stella-container/entry.sh"), "utf8"),
       "#!/bin/sh\n",
     );
     // The previous directory is kept aside in full (it may hold files the
     // new package no longer ships).
     assertEquals(
-      await Deno.readTextFile(
+      await fsp.readFile(
         join(installDir, `stella-container.old-${CURRENT}/Containerfile`),
+        "utf8",
       ),
       "old-containerfile",
     );
     assertEquals(
-      await Deno.readTextFile(
+      await fsp.readFile(
         join(installDir, `stella-container.old-${CURRENT}/stale.sh`),
+        "utf8",
       ),
       "left over",
     );
@@ -219,8 +226,8 @@ test("applyStagedUpdate rolls back when a file cannot be replaced", async () => 
     // renaming a file onto it fails on every platform, mid-swap (the binary
     // has already landed by then).
     const blocked = join(installDir, `assets.json.old-${CURRENT}`);
-    await Deno.mkdir(blocked);
-    await Deno.writeTextFile(join(blocked, "keep"), "x");
+    await fsp.mkdir(blocked);
+    await fsp.writeFile(join(blocked, "keep"), "x");
 
     await assertRejects(
       () =>
@@ -236,15 +243,15 @@ test("applyStagedUpdate rolls back when a file cannot be replaced", async () => 
 
     // Every file is the previous version again…
     assertEquals(
-      await Deno.readTextFile(join(installDir, BINARY)),
+      await fsp.readFile(join(installDir, BINARY), "utf8"),
       "old-binary",
     );
     assertEquals(
-      await Deno.readTextFile(join(installDir, "assets.json")),
+      await fsp.readFile(join(installDir, "assets.json"), "utf8"),
       "old-assets",
     );
     assertEquals(
-      await Deno.readTextFile(join(installDir, "icudtl.dat")),
+      await fsp.readFile(join(installDir, "icudtl.dat"), "utf8"),
       "old-icu",
     );
     // …no staging name survives…
@@ -260,9 +267,9 @@ test("applyStagedUpdate rolls back when a file cannot be replaced", async () => 
 
 test("applyStagedUpdate rolls back a file the package added", async () => {
   await withTempDir("lumisca-install-", async (installDir) => {
-    await Deno.writeTextFile(join(installDir, BINARY), "old-binary");
-    await Deno.writeTextFile(join(installDir, "assets.json"), "old-assets");
-    await Deno.writeTextFile(join(installDir, "icudtl.dat"), "old-icu");
+    await fsp.writeFile(join(installDir, BINARY), "old-binary");
+    await fsp.writeFile(join(installDir, "assets.json"), "old-assets");
+    await fsp.writeFile(join(installDir, "icudtl.dat"), "old-icu");
     // The new package brings a file the running version does not have (a
     // future resource). It is swapped in before the next file fails, so the
     // rollback has to undo an ADDITION, not a replacement.
@@ -275,8 +282,8 @@ test("applyStagedUpdate rolls back a file the package added", async () => {
     // A non-empty directory where assets.json's backup has to go: the swap
     // fails there, after the binary and extra.dat already landed.
     const blocked = join(installDir, `assets.json.old-${CURRENT}`);
-    await Deno.mkdir(blocked);
-    await Deno.writeTextFile(join(blocked, "keep"), "x");
+    await fsp.mkdir(blocked);
+    await fsp.writeFile(join(blocked, "keep"), "x");
 
     await assertRejects(
       () =>
@@ -294,15 +301,15 @@ test("applyStagedUpdate rolls back a file the package added", async () => {
     // leaving it behind would mix two versions in one installation.
     assertEquals(list(installDir).includes("extra.dat"), false);
     assertEquals(
-      await Deno.readTextFile(join(installDir, BINARY)),
+      await fsp.readFile(join(installDir, BINARY), "utf8"),
       "old-binary",
     );
     assertEquals(
-      await Deno.readTextFile(join(installDir, "assets.json")),
+      await fsp.readFile(join(installDir, "assets.json"), "utf8"),
       "old-assets",
     );
     assertEquals(
-      await Deno.readTextFile(join(installDir, "icudtl.dat")),
+      await fsp.readFile(join(installDir, "icudtl.dat"), "utf8"),
       "old-icu",
     );
     assertEquals(
@@ -314,10 +321,10 @@ test("applyStagedUpdate rolls back a file the package added", async () => {
 
 test("applyStagedUpdate rolls a container directory back as one entry", async () => {
   await withTempDir("lumisca-install-", async (installDir) => {
-    await Deno.writeTextFile(join(installDir, BINARY), "old-binary");
-    await Deno.writeTextFile(join(installDir, "assets.json"), "old-assets");
-    await Deno.mkdir(join(installDir, "stella-container"));
-    await Deno.writeTextFile(
+    await fsp.writeFile(join(installDir, BINARY), "old-binary");
+    await fsp.writeFile(join(installDir, "assets.json"), "old-assets");
+    await fsp.mkdir(join(installDir, "stella-container"));
+    await fsp.writeFile(
       join(installDir, "stella-container/Containerfile"),
       "old-containerfile",
     );
@@ -330,8 +337,8 @@ test("applyStagedUpdate rolls a container directory back as one entry", async ()
     // fails there, after the container directory has already landed, so the
     // rollback has to remove a whole directory this apply created.
     const blocked = join(installDir, `assets.json.old-${CURRENT}`);
-    await Deno.mkdir(blocked);
-    await Deno.writeTextFile(join(blocked, "keep"), "x");
+    await fsp.mkdir(blocked);
+    await fsp.writeFile(join(blocked, "keep"), "x");
 
     await assertRejects(
       () =>
@@ -348,15 +355,18 @@ test("applyStagedUpdate rolls a container directory back as one entry", async ()
     // The directory is the previous version again, with no file of the new
     // package left inside it.
     assertEquals(
-      await Deno.readTextFile(
+      await fsp.readFile(
         join(installDir, "stella-container/Containerfile"),
+        "utf8",
       ),
       "old-containerfile",
     );
     assertEquals(
-      [...Deno.readDirSync(join(installDir, "stella-container"))].map(
-        (e) => e.name,
-      ),
+      [
+        ...fsSync.readdirSync(join(installDir, "stella-container"), {
+          withFileTypes: true,
+        }),
+      ].map((e) => e.name),
       ["Containerfile"],
     );
     assertEquals(
@@ -392,7 +402,7 @@ test("applyStagedUpdate refuses a binary that is not the promised version", asyn
 
 test("applyStagedUpdate refuses a package without the server binary", async () => {
   await withTempDir("lumisca-install-", async (installDir) => {
-    await Deno.writeTextFile(join(installDir, BINARY), "old-binary");
+    await fsp.writeFile(join(installDir, BINARY), "old-binary");
     const staged = await newPackage(installDir, "zip", [
       { name: "assets.json", content: "new-assets" },
     ]);
@@ -408,7 +418,7 @@ test("applyStagedUpdate refuses a package without the server binary", async () =
       "含まれていません",
     );
     assertEquals(
-      await Deno.readTextFile(join(installDir, BINARY)),
+      await fsp.readFile(join(installDir, BINARY), "utf8"),
       "old-binary",
     );
   });
@@ -417,26 +427,23 @@ test("applyStagedUpdate refuses a package without the server binary", async () =
 test("cleanupStaleFiles removes update leftovers and nothing else", async () => {
   await withTempDir("lumisca-install-", async (installDir) => {
     const environment = { installDir, execPath: join(installDir, BINARY) };
-    await Deno.writeTextFile(join(installDir, `${BINARY}.old-0.7.6`), "x");
-    await Deno.writeTextFile(join(installDir, `assets.json.old-0.7.6`), "x");
-    await Deno.writeTextFile(join(installDir, "icudtl.dat.new"), "x");
+    await fsp.writeFile(join(installDir, `${BINARY}.old-0.7.6`), "x");
+    await fsp.writeFile(join(installDir, `assets.json.old-0.7.6`), "x");
+    await fsp.writeFile(join(installDir, "icudtl.dat.new"), "x");
     // A directory entry's leftovers are directories (the stella machine's
     // container files are installed as one).
-    await Deno.mkdir(join(installDir, "stella-container.old-0.7.6"));
-    await Deno.writeTextFile(
+    await fsp.mkdir(join(installDir, "stella-container.old-0.7.6"));
+    await fsp.writeFile(
       join(installDir, "stella-container.old-0.7.6/Containerfile"),
       "x",
     );
-    await Deno.mkdir(join(installDir, "stella-container.new"));
-    await Deno.writeTextFile(
+    await fsp.mkdir(join(installDir, "stella-container.new"));
+    await fsp.writeFile(
       join(installDir, "stella-container.new/Containerfile"),
       "x",
     );
-    await Deno.writeTextFile(join(installDir, "notes.txt"), "keep me");
-    await Deno.writeTextFile(
-      join(installDir, "restart-notes.old-1"),
-      "keep me",
-    );
+    await fsp.writeFile(join(installDir, "notes.txt"), "keep me");
+    await fsp.writeFile(join(installDir, "restart-notes.old-1"), "keep me");
 
     const removed = await cleanupStaleFiles(environment);
     assertEquals(

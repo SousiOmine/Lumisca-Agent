@@ -1,12 +1,14 @@
 import { test } from "bun:test";
-import { join } from "node:path";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join, join as pathJoin } from "node:path";
 import { removeDirRetry } from "@lumisca/core/test-utils";
 import { assertEquals, assertRejects } from "@std/assert";
 import { contentEtag } from "./app-file-headers.ts";
 import { Assets, type AssetsManifest, bundleStylesCss } from "./assets.ts";
 
 test("packaged assets use the startup-captured manifest path", async () => {
-  const root = await Deno.makeTempDir();
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "tmp-"));
   const manifestPath = join(root, "assets.json");
   const favicon = new Uint8Array([0, 1, 2, 255]);
   const icon = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 7, 8]);
@@ -23,7 +25,7 @@ test("packaged assets use the startup-captured manifest path", async () => {
     pwaIcons: { "icon-192.png": btoa(String.fromCharCode(...icon)) },
     "sw.js": worker,
   };
-  await Deno.writeTextFile(manifestPath, JSON.stringify(manifest));
+  await fsp.writeFile(manifestPath, JSON.stringify(manifest));
 
   try {
     const assets = new Assets(root, join(root, "cache"), manifestPath);
@@ -53,7 +55,7 @@ test("packaged assets use the startup-captured manifest path", async () => {
 });
 
 test("a manifest read that fails is retried instead of poisoning the process", async () => {
-  const root = await Deno.makeTempDir();
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "tmp-"));
   const manifestPath = join(root, "assets.json");
   const lateJs = "console.log('late');";
   try {
@@ -63,7 +65,7 @@ test("a manifest read that fails is retried instead of poisoning the process", a
     const assets = new Assets(root, join(root, "cache"), manifestPath);
     await assertRejects(() => assets.getClientFile("app.js"));
 
-    await Deno.writeTextFile(
+    await fsp.writeFile(
       manifestPath,
       JSON.stringify({
         client: { "app.js": { body: lateJs, etag: contentEtag(lateJs) } },
@@ -80,17 +82,17 @@ async function writeStylesEntry(
   entry: string,
   parts: Record<string, string>,
 ): Promise<string> {
-  await Deno.mkdir(join(root, "src", "styles"), { recursive: true });
+  await fsp.mkdir(join(root, "src", "styles"), { recursive: true });
   for (const [name, body] of Object.entries(parts)) {
-    await Deno.writeTextFile(join(root, "src", "styles", name), body);
+    await fsp.writeFile(join(root, "src", "styles", name), body);
   }
   const entryPath = join(root, "src", "styles.css");
-  await Deno.writeTextFile(entryPath, entry);
+  await fsp.writeFile(entryPath, entry);
   return entryPath;
 }
 
 test("bundleStylesCss inlines imports in manifest order", async () => {
-  const root = await Deno.makeTempDir();
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "tmp-"));
   try {
     const entryPath = await writeStylesEntry(
       root,
@@ -107,10 +109,10 @@ test("bundleStylesCss inlines imports in manifest order", async () => {
 });
 
 test("bundleStylesCss passes a plain stylesheet through", async () => {
-  const root = await Deno.makeTempDir();
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "tmp-"));
   try {
     const entryPath = join(root, "styles.css");
-    await Deno.writeTextFile(entryPath, "body { color: white; }\n");
+    await fsp.writeFile(entryPath, "body { color: white; }\n");
     assertEquals(await bundleStylesCss(entryPath), "body { color: white; }\n");
   } finally {
     await removeDirRetry(root);
@@ -118,7 +120,7 @@ test("bundleStylesCss passes a plain stylesheet through", async () => {
 });
 
 test("bundleStylesCss rejects stray rules and escapes", async () => {
-  const root = await Deno.makeTempDir();
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "tmp-"));
   try {
     const withRule = await writeStylesEntry(
       root,
@@ -127,7 +129,7 @@ test("bundleStylesCss rejects stray rules and escapes", async () => {
     );
     await assertRejects(() => bundleStylesCss(withRule), Error);
     // An import pointing outside the web sources is rejected.
-    await Deno.writeTextFile(join(root, "evil.css"), ".e {}\n");
+    await fsp.writeFile(join(root, "evil.css"), ".e {}\n");
     const escaping = await writeStylesEntry(root, `@import "../evil.css";\n`, {
       "a.css": ".a { color: red; }\n",
     });

@@ -1,4 +1,5 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import {
   assert,
@@ -39,8 +40,8 @@ async function withFixture(
   const storeRoot = await makeRealTempDir("lumisca-visual-store-");
   try {
     const path = join(root, file);
-    await Deno.mkdir(dirname(path), { recursive: true });
-    await Deno.writeFile(path, bytes);
+    await fsp.mkdir(dirname(path), { recursive: true });
+    await fsp.writeFile(path, bytes);
     const store = new SessionVisualStore(storeRoot);
     await fn({
       root,
@@ -76,7 +77,7 @@ test("visual publishes a workspace image and returns the snippet", async () => {
     // The copy is what the reply shows from now on: the bytes travel with
     // the session, not with the file the agent happened to read.
     assertEquals(
-      (await Deno.readFile(stored!.path)).byteLength,
+      (await fsp.readFile(stored!.path)).byteLength,
       MINI_PNG.byteLength,
     );
   });

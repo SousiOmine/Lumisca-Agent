@@ -100,7 +100,7 @@ test("core: a search provider becomes the session's web tools", async () => {
   // A new session needs a provider with a key to resolve a default model.
   await core.setProviderApiKey(faux.provider.id, "faux-key");
   try {
-    const workspace = await core.createWorkspace("web", [Deno.cwd()]);
+    const workspace = await core.createWorkspace("web", [process.cwd()]);
 
     // No provider configured: a new session is not given the web tools, and
     // its prompt does not point at them.

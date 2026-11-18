@@ -1,4 +1,5 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
 import { join } from "node:path";
 import {
   ATTACHMENTS_DIR_NAME,
@@ -37,7 +38,7 @@ async function withApp(
 ): Promise<void> {
   const dir = await makeRealTempDir("lumisca-attachments-route-");
   const workspaceDir = join(dir, "repo");
-  await Deno.mkdir(workspaceDir, { recursive: true });
+  await fsp.mkdir(workspaceDir, { recursive: true });
   const core = Core.open(join(dir, "lumisca.db"), join(dir, "settings.jsonc"));
   try {
     const faux = fauxProvider();
@@ -52,14 +53,14 @@ async function withApp(
     // Written directly rather than through the tool: this file is about what
     // the route serves, and the tool has its own test.
     const storeDir = join(dir, ATTACHMENTS_DIR_NAME, session.id);
-    await Deno.mkdir(storeDir, { recursive: true });
-    await Deno.writeFile(join(storeDir, PNG_NAME), MINI_PNG);
-    await Deno.writeTextFile(join(storeDir, TXT_NAME), "the run summary\n");
-    await Deno.writeTextFile(
+    await fsp.mkdir(storeDir, { recursive: true });
+    await fsp.writeFile(join(storeDir, PNG_NAME), MINI_PNG);
+    await fsp.writeFile(join(storeDir, TXT_NAME), "the run summary\n");
+    await fsp.writeFile(
       join(storeDir, `${TXT_NAME}.json`),
       JSON.stringify({ displayName: "summary of the run.txt" }),
     );
-    const app = createApp(core, { repoRoot: Deno.cwd() });
+    const app = createApp(core, { repoRoot: process.cwd() });
     const get = async (path: string) =>
       await app.request(`${BASE}${path}`, { headers: { host: HOST } });
     await fn({ core, sessionId: session.id, storeDir, get });
@@ -108,7 +109,7 @@ test("any other attachment is a download under the sender's name", async () => {
 test("an SVG attachment is a download, never an inline document", async () => {
   await withApp(async ({ get, sessionId, storeDir }) => {
     const name = "1a2b3c4d5e6f.svg";
-    await Deno.writeTextFile(join(storeDir, name), "<svg/>");
+    await fsp.writeFile(join(storeDir, name), "<svg/>");
     const res = await get(`/api/sessions/${sessionId}/attachment/${name}`);
     assertEquals(res.status, 200);
     // Inline SVG could carry script; as a download it is just a file.
@@ -125,7 +126,7 @@ test("the route serves only names the session's store made", async () => {
   await withApp(async ({ get, sessionId, storeDir }) => {
     // A file the store never named — even one in the session's own
     // directory — is not reachable.
-    await Deno.writeTextFile(join(storeDir, "notes.txt"), "secret");
+    await fsp.writeFile(join(storeDir, "notes.txt"), "secret");
     for (const name of [
       "notes.txt",
       "9f3c2a1b4d5e.pdf",

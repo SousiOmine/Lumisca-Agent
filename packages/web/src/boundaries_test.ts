@@ -1,4 +1,5 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
 import { BROWSER_CORE_ENTRIES } from "@lumisca/core/browser-entries";
 import { assert, assertEquals } from "@std/assert";
 
@@ -32,14 +33,14 @@ interface SourceFile {
 }
 
 async function* sourceFiles(dir: URL, prefix = ""): AsyncGenerator<SourceFile> {
-  for await (const entry of Deno.readDir(dir)) {
-    if (entry.isDirectory) {
+  for (const entry of await fsp.readdir(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
       yield* sourceFiles(
         new URL(`${entry.name}/`, dir),
         `${prefix}${entry.name}/`,
       );
     } else if (entry.name.endsWith(".ts") || entry.name.endsWith(".tsx")) {
-      // Tests are not part of the bundle: they run under Deno with the
+      // Tests are not part of the bundle: they run under Bun with the
       // whole core available, so importing its fixtures (or the barrel)
       // there is fine.
       if (entry.name.includes("_test.")) continue;
@@ -65,7 +66,7 @@ test("the web bundle imports only the core's pure modules", async () => {
   let inspected = 0;
 
   for await (const file of sourceFiles(new URL("./", import.meta.url))) {
-    const source = await Deno.readTextFile(file.url);
+    const source = await fsp.readFile(file.url, "utf8");
     inspected++;
 
     const report = (specifier: string, detail: string) => {

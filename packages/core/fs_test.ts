@@ -1,4 +1,5 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { assertEquals } from "@std/assert";
 import { bytesToBase64 } from "./base64.ts";
@@ -10,10 +11,12 @@ test("atomicWriteTextFileSync writes the file and creates the parent", async () 
   try {
     const target = join(root, "nested", "deep", "settings.jsonc");
     atomicWriteTextFileSync(target, "{}\n");
-    assertEquals(await Deno.readTextFile(target), "{}\n");
+    assertEquals(await fsp.readFile(target, "utf8"), "{}\n");
     // The temp file must not survive the write.
     const names: string[] = [];
-    for await (const entry of Deno.readDir(dirname(target))) {
+    for (const entry of await fsp.readdir(dirname(target), {
+      withFileTypes: true,
+    })) {
       names.push(entry.name);
     }
     assertEquals(names, ["settings.jsonc"]);
@@ -28,7 +31,7 @@ test("atomicWriteTextFileSync replaces an existing file in place", async () => {
     const target = join(root, "settings.jsonc");
     atomicWriteTextFileSync(target, "first\n");
     atomicWriteTextFileSync(target, "second\n");
-    assertEquals(await Deno.readTextFile(target), "second\n");
+    assertEquals(await fsp.readFile(target, "utf8"), "second\n");
   } finally {
     await removeDirRetry(root);
   }
@@ -39,7 +42,7 @@ test("readIfExists returns undefined for a missing path", async () => {
   try {
     assertEquals(readIfExists(join(root, "absent.txt")), undefined);
     const present = join(root, "present.txt");
-    await Deno.writeTextFile(present, "hi");
+    await fsp.writeFile(present, "hi");
     assertEquals(readIfExists(present), "hi");
   } finally {
     await removeDirRetry(root);

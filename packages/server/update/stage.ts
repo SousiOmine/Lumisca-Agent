@@ -9,9 +9,10 @@
  * good package or nothing — never a half package that "looks" ready.
  */
 
+import * as fsSync from "node:fs";
+import * as fsp from "node:fs/promises";
 import { join } from "node:path";
 import { errorMessage } from "@lumisca/core";
-import { runtime } from "../../core/runtime/runtime.ts";
 import type { ArchiveFormat, ReleaseManifest } from "./release.ts";
 import { releaseTargetFor } from "./release.ts";
 import { verifyFileSignature } from "./verify.ts";
@@ -62,7 +63,7 @@ export function stagedArchivePath(
 
 function readJson(path: string): Record<string, unknown> | undefined {
   try {
-    const parsed = JSON.parse(runtime.readTextFileSync(path));
+    const parsed = JSON.parse(fsSync.readFileSync(path, "utf8"));
     return typeof parsed === "object" && parsed !== null
       ? (parsed as Record<string, unknown>)
       : undefined;
@@ -91,7 +92,7 @@ export function readStagedUpdate(installDir: string): StagedUpdate | undefined {
   }
   const archivePath = stagedArchivePath(installDir, format);
   try {
-    if (!runtime.statSync(archivePath).isFile) return undefined;
+    if (!fsSync.statSync(archivePath).isFile()) return undefined;
   } catch {
     return undefined;
   }
@@ -126,8 +127,8 @@ export async function writeAppliedUpdate(
   version: string,
 ): Promise<void> {
   const dir = stagingDir(installDir);
-  await runtime.mkdir(dir, { recursive: true });
-  await runtime.writeTextFile(
+  await fsp.mkdir(dir, { recursive: true });
+  await fsp.writeFile(
     join(dir, APPLIED_METADATA_FILE),
     JSON.stringify({ version, appliedAt: new Date().toISOString() }, null, 2) +
       "\n",
@@ -136,9 +137,7 @@ export async function writeAppliedUpdate(
 
 /** Remove the staging area entirely (nothing staged, nothing pending). */
 export async function clearStaging(installDir: string): Promise<void> {
-  await runtime
-    .remove(stagingDir(installDir), { recursive: true })
-    .catch(() => {});
+  await fsp.rm(stagingDir(installDir), { recursive: true }).catch(() => {});
 }
 
 /** Remove the staged package and its metadata, keeping the applied marker
@@ -146,9 +145,9 @@ export async function clearStaging(installDir: string): Promise<void> {
 export async function clearStagedPackage(installDir: string): Promise<void> {
   const dir = stagingDir(installDir);
   for (const format of ["zip", "tar.gz"] as const) {
-    await runtime.remove(stagedArchivePath(installDir, format)).catch(() => {});
+    await fsp.rm(stagedArchivePath(installDir, format)).catch(() => {});
   }
-  await runtime.remove(join(dir, STAGED_METADATA_FILE)).catch(() => {});
+  await fsp.rm(join(dir, STAGED_METADATA_FILE)).catch(() => {});
 }
 
 export interface DownloadProgress {
@@ -202,8 +201,8 @@ export async function stageUpdate(
   const archivePath = stagedArchivePath(options.installDir, target.format);
   const doFetch = options.fetch ?? fetch;
 
-  await runtime.mkdir(dir, { recursive: true });
-  await runtime.remove(partPath).catch(() => {});
+  await fsp.mkdir(dir, { recursive: true });
+  await fsp.rm(partPath).catch(() => {});
 
   const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
   const signal =
@@ -228,11 +227,7 @@ export async function stageUpdate(
         ? declared
         : options.manifest.size;
 
-    const file = await runtime.open(partPath, {
-      create: true,
-      write: true,
-      truncate: true,
-    });
+    const file = await fsp.open(partPath, "w");
     try {
       if (response.body === null) {
         throw new UpdateDownloadError("更新パッケージの本体が空です");
@@ -250,12 +245,17 @@ export async function stageUpdate(
         }
         let written = 0;
         while (written < value.length) {
-          written += await file.write(value.subarray(written));
+          const { bytesWritten } = await file.write(
+            value,
+            written,
+            value.length - written,
+          );
+          written += bytesWritten;
         }
         options.onProgress?.({ received, total });
       }
     } finally {
-      file.close();
+      await file.close();
     }
 
     if (received !== options.manifest.size) {
@@ -274,7 +274,7 @@ export async function stageUpdate(
       publicKey: options.publicKey,
     });
   } catch (error) {
-    await runtime.remove(partPath).catch(() => {});
+    await fsp.rm(partPath).catch(() => {});
     if (error instanceof UpdateDownloadError) throw error;
     throw new UpdateDownloadError(
       `更新パッケージを取得できませんでした: ${errorMessage(error)}`,
@@ -283,7 +283,7 @@ export async function stageUpdate(
 
   // The new package replaces any previous one only now that it is verified.
   await clearStagedPackage(options.installDir);
-  await runtime.rename(partPath, archivePath);
+  await fsp.rename(partPath, archivePath);
   const staged: StagedUpdate = {
     version: options.manifest.version,
     target: options.manifest.target,
@@ -294,7 +294,7 @@ export async function stageUpdate(
     stagedAt: new Date().toISOString(),
     archivePath,
   };
-  await runtime.writeTextFile(
+  await fsp.writeFile(
     join(dir, STAGED_METADATA_FILE),
     JSON.stringify(
       {

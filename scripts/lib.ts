@@ -18,7 +18,8 @@
 
 import { isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { exit, runtime } from "../packages/core/runtime/runtime.ts";
+import { OS } from "../packages/core/platform.ts";
+import { exit } from "../packages/core/process.ts";
 
 /** Repository root. This file lives in `scripts/`, so the root is one
  * directory up. `fileURLToPath` (not `.pathname`) so a repository path
@@ -28,9 +29,7 @@ export const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 /** Name of the server binary on this platform (the compiled server and the
  * desktop shell both expect the `.exe` suffix on Windows). */
 export function binaryName(): string {
-  return runtime.build.os === "windows"
-    ? "lumisca-server.exe"
-    : "lumisca-server";
+  return OS === "windows" ? "lumisca-server.exe" : "lumisca-server";
 }
 
 /** One script's usage handler. `usage("--out needs a directory")` reports
@@ -83,7 +82,7 @@ export function parseOptions(
 /** Resolve a caller-supplied path against the working directory, so a
  * relative argument means what the shell that typed it means. */
 export function absolutePath(path: string): string {
-  return isAbsolute(path) ? path : resolve(runtime.cwd(), path);
+  return isAbsolute(path) ? path : resolve(process.cwd(), path);
 }
 
 /** The `ok/FAIL` reporter shared by the verification scripts: each check

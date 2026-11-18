@@ -1,6 +1,6 @@
+import * as fsp from "node:fs/promises";
 import { basename } from "node:path";
 import type { Workspace } from "../domain/workspace.ts";
-import { runtime } from "../runtime/runtime.ts";
 import { BUILD_ARTIFACT_DIRS, walkEntries } from "./walk.ts";
 
 /** One entry in a workspace file listing, for @-mention suggestions.
@@ -15,16 +15,16 @@ export interface WorkspaceFileEntry {
 
 /** True when `path` exists (any kind). Never throws: missing paths,
  * permission errors, and races with deletion all read as "absent". Single
- * home for the `runtime.stat(path).catch(() => null)` existence probe. */
+ * home for the `fsp.stat(path).catch(() => null)` existence probe. */
 export async function fileExists(path: string): Promise<boolean> {
-  return (await runtime.stat(path).catch(() => null)) !== null;
+  return (await fsp.stat(path).catch(() => null)) !== null;
 }
 
 /** True when `path` is an existing directory. Never throws (see
  * {@link fileExists}). */
 export async function isDirectory(path: string): Promise<boolean> {
-  const stat = await runtime.stat(path).catch(() => null);
-  return stat !== null && stat.isDirectory;
+  const stat = await fsp.stat(path).catch(() => null);
+  return stat !== null && stat.isDirectory();
 }
 
 /** Directories skipped while walking (on top of hidden `.`-prefixed ones):
@@ -50,8 +50,8 @@ export async function listWorkspaceFiles(
   const entries: WorkspaceFileEntry[] = [];
 
   for (const folder of workspace.folders) {
-    const stat = await runtime.stat(folder).catch(() => null);
-    if (!stat || !stat.isDirectory) continue;
+    const stat = await fsp.stat(folder).catch(() => null);
+    if (!stat || !stat.isDirectory()) continue;
     const folderName = basename(folder);
     entries.push({ path: folderName, name: folderName, isDir: true });
     for await (const item of walkEntries(folder, {

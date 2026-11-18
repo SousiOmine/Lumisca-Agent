@@ -28,9 +28,13 @@
  * applied-update record next to it (stage.ts) and by the release manifest.
  */
 
+import type { Dirent } from "node:fs";
+import * as fsSync from "node:fs";
+import * as fsp from "node:fs/promises";
 import { basename, join } from "node:path";
 import { errorMessage } from "@lumisca/core";
-import { type DirEntry, runtime } from "../../core/runtime/runtime.ts";
+import { OS } from "../../core/platform.ts";
+import { inheritedEnv, runProcess, spawnProcess } from "../../core/process.ts";
 import { installedFileNames } from "../layout.ts";
 import { PORT_WAIT_ENV_KEY } from "../startup.ts";
 import { extractArchive } from "./archive.ts";
@@ -46,7 +50,7 @@ import {
 export interface InstallEnvironment {
   /** Directory holding the server binary and its assets. */
   installDir: string;
-  /** Path of the running server binary (`runtime.execPath()`). */
+  /** Path of the running server binary (`process.execPath`). */
   execPath: string;
 }
 
@@ -61,16 +65,13 @@ export class InstallError extends Error {
 /** Run `<binary> --version` and return its output. Used to prove a staged
  * binary is runnable and really is the version the manifest promised. */
 export async function runVersionCommand(binary: string): Promise<string> {
-  const output = await new runtime.Command(binary, {
-    args: ["--version"],
+  const output = await runProcess([binary, "--version"], {
     // The staged binary must not inherit this process's launch configuration
     // (it is not supposed to start a server, but a startup value slipping in
     // could otherwise make the check bind a port or touch a database).
-    clearEnv: true,
-    stdin: "null",
-    stdout: "piped",
-    stderr: "piped",
-  }).output();
+    env: {},
+    stdin: "ignore",
+  });
   if (!output.success) {
     throw new InstallError(
       `新しいバイナリを実行できませんでした (終了コード ${output.code})${messageFromStderr(
@@ -91,7 +92,7 @@ async function removeQuietly(
   options?: { recursive?: boolean },
 ): Promise<void> {
   try {
-    await runtime.remove(path, { recursive: options?.recursive ?? false });
+    await fsp.rm(path, { recursive: options?.recursive ?? false });
   } catch {
     // Missing, not empty (a leftover directory this call may not remove
     // recursively), or still held by a process that has not exited yet.
@@ -152,8 +153,8 @@ export async function applyStagedUpdate(
 
   // 1. Unpack into the staging area and prove the new binary runs and
   //    reports the version the manifest promised.
-  await runtime.remove(extractDir, { recursive: true }).catch(() => {});
-  await runtime.mkdir(extractDir, { recursive: true });
+  await fsp.rm(extractDir, { recursive: true }).catch(() => {});
+  await fsp.mkdir(extractDir, { recursive: true });
   let files: string[];
   try {
     files = await extractArchive(
@@ -170,7 +171,7 @@ export async function applyStagedUpdate(
     // The execute bit must survive the move into the install directory
     // (tar entries usually carry it, but the mode is not part of the
     // contract this updater relies on).
-    await runtime.chmod(extractedBinary, 0o755).catch(() => {});
+    await fsp.chmod(extractedBinary, 0o755).catch(() => {});
     const reported = (await versionCheck(extractedBinary)).trim();
     if (reported !== options.staged.version) {
       throw new InstallError(
@@ -179,7 +180,7 @@ export async function applyStagedUpdate(
       );
     }
   } catch (error) {
-    await runtime.remove(extractDir, { recursive: true }).catch(() => {});
+    await fsp.rm(extractDir, { recursive: true }).catch(() => {});
     throw error;
   }
 
@@ -194,14 +195,14 @@ export async function applyStagedUpdate(
     for (const entry of entries) {
       const target = join(installDir, `${entry.name}.new`);
       await removeQuietly(target);
-      await runtime.rename(join(extractDir, entry.name), target);
+      await fsp.rename(join(extractDir, entry.name), target);
       prepared.push(entry.name);
     }
   } catch (error) {
     for (const name of prepared) {
       await removeQuietly(join(installDir, `${name}.new`));
     }
-    await runtime.remove(extractDir, { recursive: true }).catch(() => {});
+    await fsp.rm(extractDir, { recursive: true }).catch(() => {});
     throw new InstallError(
       `更新ファイルを配置できませんでした (${installDir}): ` +
         `${errorMessage(error)}`,
@@ -234,15 +235,15 @@ export async function applyStagedUpdate(
     const backupPath = join(installDir, `${name}${backupSuffix}`);
     try {
       await removeQuietly(backupPath, { recursive: isDirectory });
-      const existing = await runtime
+      const existing = await fsp
         .stat(target)
         .then(() => true)
         .catch(() => false);
       if (existing) {
-        await runtime.rename(target, backupPath);
+        await fsp.rename(target, backupPath);
         backups.push({ backup: backupPath, target, isDirectory });
       }
-      await runtime.rename(newPath, target);
+      await fsp.rename(newPath, target);
       if (!existing) added.push({ target, isDirectory });
     } catch (error) {
       failures.push(`${name}: ${errorMessage(error)}`);
@@ -257,7 +258,7 @@ export async function applyStagedUpdate(
     // the installation would be a mixture of two versions.
     for (const entry of backups.reverse()) {
       await removeQuietly(entry.target, { recursive: entry.isDirectory });
-      await runtime.rename(entry.backup, entry.target).catch(() => {});
+      await fsp.rename(entry.backup, entry.target).catch(() => {});
     }
     for (const entry of added) {
       await removeQuietly(entry.target, { recursive: entry.isDirectory });
@@ -267,7 +268,7 @@ export async function applyStagedUpdate(
         recursive: entry.isDirectory,
       });
     }
-    await runtime.remove(extractDir, { recursive: true }).catch(() => {});
+    await fsp.rm(extractDir, { recursive: true }).catch(() => {});
     throw new InstallError(
       `更新の適用に失敗しました (以前のファイルに戻しました): ${failures.join(
         " / ",
@@ -278,7 +279,7 @@ export async function applyStagedUpdate(
   // 4. The swap completed: the package is no longer needed, and the backups
   //    are the next startup's cleanup job (a file may still be held open by
   //    the running process — measured on Windows for the binary itself).
-  await runtime.remove(extractDir, { recursive: true }).catch(() => {});
+  await fsp.rm(extractDir, { recursive: true }).catch(() => {});
   await removeQuietly(options.staged.archivePath);
   await removeQuietly(join(stagingDir(installDir), STAGED_METADATA_FILE));
   await writeAppliedUpdate(installDir, options.staged.version);
@@ -324,10 +325,10 @@ export function successorEnvironment(
  * Start the successor process that takes over after this one exits, and
  * return its pid.
  *
- * Launching it naively (`runtime.Command(...).spawn()` + `unref`) is **not**
- * enough on Windows: measured on this project's machine, a child spawned
- * that way dies with its parent (Deno tracks spawned children in a Job
- * Object), so the restart would silently leave the user with no server. The
+ * Launching it naively (`Bun.spawn(...)` + `unref`) is **not** enough on
+ * Windows: measured on this project's machine, a child spawned that way
+ * dies with its parent (the shell owns its children in a Job Object), so the
+ * restart would silently leave the user with no server. The
  * hand-over therefore goes through the shell's `start /b`, which asks the OS
  * for a process of its own:
  *
@@ -340,33 +341,32 @@ export function successorEnvironment(
  * still attached to ours, and the working directory of `cwd`.
  */
 export function startSuccessor(options: SuccessorOptions): number {
-  const env = options.env;
-  if (runtime.build.os !== "windows") {
-    const child = new runtime.Command(options.execPath, {
+  // The successor still needs PATH, HOME and the rest of the inherited
+  // environment; the captured launch values are laid over it.
+  const env = inheritedEnv(options.env);
+  if (OS !== "windows") {
+    const child = spawnProcess([options.execPath], {
       cwd: options.cwd,
       env,
-      stdin: "null",
+      stdin: "ignore",
       stdout: "inherit",
       stderr: "inherit",
-    }).spawn();
+    });
     child.unref();
     return child.pid;
   }
 
   // cmd.exe parses its own command line, so the binary path (which may
-  // contain spaces) is quoted here rather than left to Deno's per-argument
+  // contain spaces) is quoted here rather than left to Bun's per-argument
   // quoting of the cmd invocation.
   const commandLine = quoteWindowsArgument(options.execPath);
-  const child = new runtime.Command("cmd", {
-    // The empty argument is `start`'s window-title slot: without it, a quoted
-    // path would be taken as the title instead of the program.
-    args: ["/c", "start", '""', "/b", commandLine],
+  const child = spawnProcess(["cmd", "/c", "start", '""', "/b", commandLine], {
     cwd: options.cwd,
     env,
-    stdin: "null",
+    stdin: "ignore",
     stdout: "inherit",
     stderr: "inherit",
-  }).spawn();
+  });
   child.unref();
   return child.pid;
 }
@@ -389,9 +389,11 @@ export async function cleanupStaleFiles(
 ): Promise<string[]> {
   const names = new Set(installedFileNames(environment.execPath));
   const removed: string[] = [];
-  let entries: DirEntry[];
+  let entries: Dirent[];
   try {
-    entries = [...runtime.readDirSync(environment.installDir)];
+    entries = [
+      ...fsSync.readdirSync(environment.installDir, { withFileTypes: true }),
+    ];
   } catch {
     return removed;
   }
@@ -406,7 +408,7 @@ export async function cleanupStaleFiles(
       names.has(entry.name.slice(0, -".new".length));
     if (!isBackup && !isStaged) continue;
     try {
-      await runtime.remove(join(environment.installDir, entry.name), {
+      await fsp.rm(join(environment.installDir, entry.name), {
         recursive: true,
       });
       removed.push(entry.name);

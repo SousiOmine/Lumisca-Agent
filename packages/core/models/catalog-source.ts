@@ -1,12 +1,12 @@
+import * as fsSync from "node:fs";
 import { join } from "node:path";
 import type { ProviderMap } from "@opencode-ai/models";
 import snapshot, {
   generatedAt as snapshotGeneratedAt,
 } from "@opencode-ai/models/snapshot";
-import { errorMessage } from "../errors.ts";
+import { errorMessage, isNotFoundError } from "../errors.ts";
 import { atomicWriteTextFileSync, isRecord } from "../fs.ts";
 import { createLogger } from "../log.ts";
-import { runtime } from "../runtime/runtime.ts";
 import type { SettingsRepo } from "../settings/repo.ts";
 import type { CatalogSourceKind, CatalogStatus } from "../shared/providers.ts";
 
@@ -120,9 +120,9 @@ export function loadCachedCatalog(
   if (dir === undefined) return undefined;
   let text: string;
   try {
-    text = runtime.readTextFileSync(cachedPath(dir));
+    text = fsSync.readFileSync(cachedPath(dir), "utf8");
   } catch (error) {
-    if (!(error instanceof runtime.errors.NotFound)) {
+    if (!isNotFoundError(error)) {
       log.debug(`cached catalog unreadable: ${errorMessage(error)}`);
     }
     return undefined;

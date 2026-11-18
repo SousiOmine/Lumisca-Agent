@@ -9,11 +9,11 @@ import { MAX_TOOL_OUTPUT, truncatedNote } from "./truncate.ts";
  * the `eval` tool (a REPL whose globals persist across calls) and code
  * execution (`execute`, one program per call).
  *
- * The sandbox is deliberately NOT a security boundary: the host `Deno`
- * namespace, `fetch` and the standard web globals are exposed, so code
- * here has the same *permissions* as `bash` (files, network, processes,
- * env). It is still a separate vm context, so only the globals this module
- * lists exist in addition to the ECMAScript built-ins — node internals
+ * The sandbox is deliberately NOT a security boundary: the host `Bun`
+ * object, `fetch` and the standard web globals are exposed, so code here
+ * has the same *permissions* as `bash` (files, network, processes, env).
+ * It is still a separate vm context, so only the globals this module lists
+ * exist in addition to the ECMAScript built-ins — node internals
  * (`process`, `require`, `Buffer`) are absent on purpose.
  *
  * stella never uses this: its code runs inside the virtual machine (see
@@ -202,7 +202,7 @@ export class JsSandbox {
       // without TextEncoder/TextDecoder (their absence used to fail
       // perfectly ordinary snippets). Node internals (process, require,
       // Buffer) stay out on purpose.
-      Deno,
+      Bun,
       fetch,
       Request,
       Response,

@@ -85,7 +85,5 @@ for (const [path, lines] of largest)
   console.log(`  ${String(lines).padStart(5)} ${path}`);
 console.log("\nmarkers");
 console.log(`  core.ts methods        ${coreMethods}`);
-console.log(`  Deno. references       ${countRefs(/\bDeno\./g)}`);
-console.log(`  runtime. references    ${countRefs(/\bruntime\./g)}`);
 console.log(`  preact/compat imports  ${countRefs(/preact\/compat/g)}`);
 console.log(`  preact/hooks imports   ${countRefs(/preact\/hooks/g)}`);

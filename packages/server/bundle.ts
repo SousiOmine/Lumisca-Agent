@@ -53,8 +53,9 @@ export async function bundleClient(
     logLevel: "warning",
     define: { "process.env.NODE_ENV": '"production"' },
     // The web package imports the core's browser-safe helpers
-    // (`@lumisca/core/shared` and friends); esbuild does not read deno.json
-    // workspace exports, so resolve them from the list the core declares
+    // (`@lumisca/core/shared` and friends); esbuild does not read the
+    // workspace's tsconfig paths, so resolve them from the list the core
+    // declares
     // (packages/core/browser-entries.ts) — the same list the web boundary
     // test and Vite's dev aliases read.
     alias: Object.fromEntries(

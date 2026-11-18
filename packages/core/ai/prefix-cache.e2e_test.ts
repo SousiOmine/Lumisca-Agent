@@ -28,10 +28,10 @@ import { createStreamFn } from "./stream.ts";
 import type { StreamFn } from "./transport.ts";
 
 const API_KEY =
-  Deno.env.get("LUMISCA_E2E_API_KEY") ?? Deno.env.get("DEEPSEEK_API_KEY");
-const MODEL_ID = Deno.env.get("LUMISCA_E2E_MODEL") ?? "deepseek-chat";
+  process.env["LUMISCA_E2E_API_KEY"] ?? process.env["DEEPSEEK_API_KEY"];
+const MODEL_ID = process.env["LUMISCA_E2E_MODEL"] ?? "deepseek-chat";
 const BASE_URL =
-  Deno.env.get("LUMISCA_E2E_BASE_URL") ?? "https://api.deepseek.com/v1";
+  process.env["LUMISCA_E2E_BASE_URL"] ?? "https://api.deepseek.com/v1";
 
 const SYSTEM_PROMPT =
   "You are a terse coding assistant used in an automated cache test. " +

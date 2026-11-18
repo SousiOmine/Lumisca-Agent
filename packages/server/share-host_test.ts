@@ -1,6 +1,9 @@
 import { test } from "bun:test";
+import * as fsSync from "node:fs";
 import { realpathSync } from "node:fs";
-import { join } from "node:path";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join, join as pathJoin } from "node:path";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@lumisca/core";
 import { TOOL_READ } from "@lumisca/core/shared";
 import { assert, assertEquals, assertRejects } from "@std/assert";
@@ -19,7 +22,9 @@ const SESSION = "sess-lend";
 /** A temp folder, resolved so macOS's /var symlink does not make the sandbox's
  * realpath differ from the path the test wrote. */
 function folder(): string {
-  return realpathSync.native(Deno.makeTempDirSync({ prefix: "lumisca-lend-" }));
+  return realpathSync.native(
+    fsSync.mkdtempSync(pathJoin(osTmpdir(), "lumisca-lend-")),
+  );
 }
 
 function grant(path: string, overrides: Partial<LocalGrant> = {}): LocalGrant {
@@ -45,12 +50,9 @@ test("the lending process serves a folder over the socket", async () => {
   const root = folder();
   const lender = createShareHost({ retryMs: 10 });
   try {
-    await Deno.writeTextFile(
-      join(root, "a.txt"),
-      "hello from the lent folder\n",
-    );
-    await Deno.mkdir(join(root, "src"));
-    await Deno.writeTextFile(join(root, "src", "b.ts"), "one\ntwo\n");
+    await fsp.writeFile(join(root, "a.txt"), "hello from the lent folder\n");
+    await fsp.mkdir(join(root, "src"));
+    await fsp.writeFile(join(root, "src", "b.ts"), "one\ntwo\n");
 
     lender.command(JSON.stringify({ type: "hello", url: base, token: "" }));
     lender.command(JSON.stringify({ type: "grants", grants: [grant(root)] }));
@@ -91,7 +93,7 @@ test("the lending process serves a folder over the socket", async () => {
       private: false,
     });
     assertEquals(
-      await Deno.readTextFile(join(root, "written.txt")),
+      await fsp.readFile(join(root, "written.txt"), "utf8"),
       "from the agent\n",
     );
 
@@ -117,7 +119,7 @@ test("a read-only loan refuses to write, in the process that holds the disk", as
   const root = folder();
   const lender = createShareHost({ retryMs: 10 });
   try {
-    await Deno.writeTextFile(join(root, "a.txt"), "x\n");
+    await fsp.writeFile(join(root, "a.txt"), "x\n");
     lender.command(JSON.stringify({ type: "hello", url: base, token: "" }));
     lender.command(
       JSON.stringify({
@@ -139,7 +141,7 @@ test("a read-only loan refuses to write, in the process that holds the disk", as
       Error,
       "read-only",
     );
-    assertEquals(await Deno.readTextFile(join(root, "a.txt")), "x\n");
+    assertEquals(await fsp.readFile(join(root, "a.txt"), "utf8"), "x\n");
     // Commands are always allowed: read-only governs the file tools, not the
     // shell (see domain/share.ts).
     const exec = await core.shares.call("g1", "exec", {
@@ -162,7 +164,7 @@ test("a read-only loan refuses to write, in the process that holds the disk", as
 test("a call cannot climb out of the lent folder", async () => {
   const root = folder();
   const outside = `${root}-outside`;
-  await Deno.mkdir(outside, { recursive: true });
+  await fsp.mkdir(outside, { recursive: true });
   try {
     const mount = new Mount(grant(root));
     await assertRejects(
@@ -184,7 +186,7 @@ test("a call cannot climb out of the lent folder", async () => {
 test("a whole-file read larger than one frame is refused with a next step", async () => {
   const root = folder();
   try {
-    await Deno.writeTextFile(join(root, "big.txt"), "0123456789");
+    await fsp.writeFile(join(root, "big.txt"), "0123456789");
     const mount = new Mount(grant(root));
     await assertRejects(
       () => runCall(mount, { op: "readText", path: ["big.txt"], maxBytes: 4 }),
@@ -297,7 +299,7 @@ test("an agent's read reaches the folder through the whole chain", async () => {
   const lent = folder();
   const lender = createShareHost({ retryMs: 10 });
   try {
-    await Deno.writeTextFile(join(lent, "notes.md"), "lent notes\n");
+    await fsp.writeFile(join(lent, "notes.md"), "lent notes\n");
     const ws = await core.createWorkspace("ws", [workspace]);
     const session = await core.createSession({
       workspaceId: ws.id,

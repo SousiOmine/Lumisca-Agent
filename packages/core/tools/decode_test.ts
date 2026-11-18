@@ -40,6 +40,9 @@ test("detectOemLabel reports the label of this platform", async () => {
   // undefined turning into a different value would silently stop the
   // fallback above from ever running.
   const first = await detectOemLabel();
-  if (Deno.build.os !== "windows") assertEquals(first, null);
+  if (
+    (process.platform === "win32" ? "windows" : process.platform) !== "windows"
+  )
+    assertEquals(first, null);
   assertEquals(await detectOemLabel(), first);
 });

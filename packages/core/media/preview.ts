@@ -68,7 +68,7 @@ export function previewSize(
  * smaller than any re-encode would be.
  *
  * Asynchronous because it decodes through `loadImage`. Setting `Image.src`
- * decodes synchronously, and on Deno 2.9.8 a process that did so once
+ * decodes synchronously, and a process that did so once
  * segfaults while shutting down (exit 139, intermittently) — the test runner
  * loses the whole file, and a server would die on its way out. `loadImage`
  * decodes on a microtask after `onload` and does not leave that state behind.

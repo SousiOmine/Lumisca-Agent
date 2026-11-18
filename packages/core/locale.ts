@@ -3,13 +3,12 @@
  * neither the stored setting nor the request names a language (see
  * shared/i18n resolveLocale).
  *
- * Kept out of `shared/` on purpose: it reads the runtime's environment
+ * Kept out of `shared/` on purpose: it reads the process's environment
  * (POSIX variables, the ICU default locale), which the browser bundle must
  * never reach.
  */
 
 /** POSIX locale variables, most specific first (the order glibc uses). */
-import { runtime } from "./runtime/runtime.ts";
 
 const POSIX_VARIABLES = ["LC_ALL", "LC_MESSAGES", "LANG"] as const;
 
@@ -42,7 +41,7 @@ export function systemLanguageTags(): string[] {
   return tags;
 }
 
-/** The runtime's default locale ("ja-JP" on a Japanese machine). */
+/** The process's default locale ("ja-JP" on a Japanese machine). */
 function resolvedLocaleTag(): string | undefined {
   try {
     return Intl.DateTimeFormat().resolvedOptions().locale;
@@ -54,7 +53,7 @@ function resolvedLocaleTag(): string | undefined {
 function readEnv(name: string): string | undefined {
   try {
     // Without --allow-env this throws; the fallback chain continues.
-    return runtime.env.get(name) ?? undefined;
+    return process.env[name] ?? undefined;
   } catch {
     return undefined;
   }

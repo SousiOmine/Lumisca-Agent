@@ -20,7 +20,7 @@
       "@lumisca/core/*": ["./packages/core/*"],
       "@lumisca/server": ["./packages/server/mod.ts"]
     },
-    "types": ["deno", "node"],
+    "types": ["node"],
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "skipLibCheck": true
   },

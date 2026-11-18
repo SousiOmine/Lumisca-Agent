@@ -1,4 +1,5 @@
 import { test } from "bun:test";
+import * as fsSync from "node:fs";
 import { assert, assertEquals } from "@std/assert";
 import { PROBE_SOURCE } from "./probe.js";
 
@@ -35,8 +36,9 @@ test("Rust-style extraction from the file yields the exact export", () => {
   // The Rust hosts extract the probe from this same file (include_str! +
   // split on "String.raw`"). Mirror that algorithm here so a drift between
   // the two copies fails the Bun test suite.
-  const fileText = Deno.readTextFileSync(
+  const fileText = fsSync.readFileSync(
     new URL("./probe.js", import.meta.url),
+    "utf8",
   );
   const marker = "String.raw`";
   const start = fileText.indexOf(marker);

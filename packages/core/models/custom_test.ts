@@ -1,5 +1,7 @@
 import { test } from "bun:test";
-import { join } from "node:path";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join, join as pathJoin } from "node:path";
 import { assertEquals, assertThrows } from "@std/assert";
 import { LumiscaCore } from "../mod.ts";
 import { inputBudgetTokens } from "../shared/context-usage.ts";
@@ -13,7 +15,7 @@ import {
 } from "./custom.ts";
 
 /** The custom-provider sources take their environment as an argument, so
- * a test never touches `Deno.env`: the test runner shares ONE process
+ * a test never touches `process.env`: the test runner shares ONE process
  * environment across every test file, and a value set here would be read
  * by whatever else happens to be running at that moment. */
 function envOf(vars: Record<string, string>): EnvReader {
@@ -24,9 +26,9 @@ function envOf(vars: Record<string, string>): EnvReader {
 const NO_ENV = envOf({});
 
 async function writeModelsFile(content: string): Promise<string> {
-  const dir = await Deno.makeTempDir({ prefix: "lumisca-models-" });
+  const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-models-"));
   const path = join(dir, "models.json");
-  await Deno.writeTextFile(path, content);
+  await fsp.writeFile(path, content);
   return path;
 }
 
@@ -104,7 +106,7 @@ test("models.json registers multiple providers and models", async () => {
 
   const other = providers.find((p) => p.id === "other")!;
   assertEquals(other.getModels()[0]!.baseUrl, "http://other:8000/v1");
-  await Deno.remove(join(path, ".."), { recursive: true });
+  await fsp.rm(join(path, ".."), { recursive: true });
 });
 
 test("models.json apiKey ${ENV} resolves from the environment", async () => {
@@ -138,7 +140,7 @@ test("models.json apiKey ${ENV} resolves from the environment", async () => {
   } finally {
     core.close();
   }
-  await Deno.remove(join(path, ".."), { recursive: true });
+  await fsp.rm(join(path, ".."), { recursive: true });
 });
 
 test("models.json literal apiKey resolves without env vars", async () => {
@@ -160,7 +162,7 @@ test("models.json literal apiKey resolves without env vars", async () => {
   } finally {
     core.close();
   }
-  await Deno.remove(join(path, ".."), { recursive: true });
+  await fsp.rm(join(path, ".."), { recursive: true });
 });
 
 test("models.json provider headers propagate to every model", async () => {
@@ -190,7 +192,7 @@ test("models.json provider headers propagate to every model", async () => {
       "X-Custom": "yes",
     });
   }
-  await Deno.remove(join(path, ".."), { recursive: true });
+  await fsp.rm(join(path, ".."), { recursive: true });
 });
 
 test("models.json without apiKey falls back to LUMISCA_API_KEY_<ID>", async () => {
@@ -217,7 +219,7 @@ test("models.json without apiKey falls back to LUMISCA_API_KEY_<ID>", async () =
   } finally {
     core.close();
   }
-  await Deno.remove(join(path, ".."), { recursive: true });
+  await fsp.rm(join(path, ".."), { recursive: true });
 });
 
 test("models.json without baseUrl throws", async () => {
@@ -231,7 +233,7 @@ test("models.json without baseUrl throws", async () => {
     Error,
     "baseUrl",
   );
-  await Deno.remove(join(path, ".."), { recursive: true });
+  await fsp.rm(join(path, ".."), { recursive: true });
 });
 
 test("models.json with unsupported api throws", async () => {
@@ -250,7 +252,7 @@ test("models.json with unsupported api throws", async () => {
     Error,
     "not-a-real-api",
   );
-  await Deno.remove(join(path, ".."), { recursive: true });
+  await fsp.rm(join(path, ".."), { recursive: true });
 });
 
 test("models.json invalid shape and missing file throw", async () => {
@@ -260,7 +262,7 @@ test("models.json invalid shape and missing file throw", async () => {
     Error,
     "providers",
   );
-  await Deno.remove(join(path, ".."), { recursive: true });
+  await fsp.rm(join(path, ".."), { recursive: true });
 
   assertThrows(
     () =>
@@ -309,11 +311,11 @@ test("env provider wins id collisions with models.json", async () => {
   } finally {
     core.close();
   }
-  await Deno.remove(join(path, ".."), { recursive: true });
+  await fsp.rm(join(path, ".."), { recursive: true });
 });
 
 test("LumiscaCore.open registers the custom provider from env", async () => {
-  const dir = await Deno.makeTempDir({ prefix: "lumisca-custom-" });
+  const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-custom-"));
   const dbPath = join(dir, "test.db");
   const settingsPath = join(dir, "settings.jsonc");
   const core = LumiscaCore.open(
@@ -374,6 +376,6 @@ test("a models.json entry may declare the input cap it publishes", async () => {
     assertEquals(inputBudgetTokens(model!), 922_000);
   } finally {
     await core.close();
-    await Deno.remove(join(path, ".."), { recursive: true });
+    await fsp.rm(join(path, ".."), { recursive: true });
   }
 });

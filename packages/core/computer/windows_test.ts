@@ -29,7 +29,9 @@ const asciiScan = (char: string): number | undefined => {
  * runs. Creating it here also covers the "no display / no libraries" path
  * (the result is then a reason, and the live tests are skipped). */
 const probe =
-  Deno.build.os === "windows" ? createWindowsComputerHost() : undefined;
+  (process.platform === "win32" ? "windows" : process.platform) === "windows"
+    ? createWindowsComputerHost()
+    : undefined;
 const liveHost = probe?.available === true ? probe.host : undefined;
 if (probe?.available === true) probe.host.close();
 

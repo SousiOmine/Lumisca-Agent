@@ -2,13 +2,8 @@ import { join } from "node:path";
 import { type LumiscaCore, nextRunAt } from "@lumisca/core";
 import { hostForUrl } from "@lumisca/core/shared";
 import { Hono } from "hono";
+import { websocket } from "hono/bun";
 import { compress } from "hono/compress";
-import { upgradeWebSocket } from "hono/deno";
-import {
-  type HttpServer,
-  type NetAddr,
-  runtime,
-} from "../core/runtime/runtime.ts";
 import { Assets } from "./assets.ts";
 import { FederationClient } from "./federation.ts";
 import { languageForRequest, registerPages } from "./pages.ts";
@@ -36,6 +31,7 @@ import { workspaceRoutes } from "./routes/workspaces.ts";
 import { createEventStream } from "./routes/ws-stream.ts";
 import { installSecurityMiddleware } from "./security.ts";
 import { stellaScreenRoute } from "./stella-screen.ts";
+import { upgradeWebSocket } from "./websocket.ts";
 
 export interface AppOptions {
   /** Repository root (defaults to the current working directory). */
@@ -94,9 +90,15 @@ export interface AppOptions {
   pushFetch?: typeof fetch;
 }
 
+/** A started server: the address it bound and the way to stop it. */
+export interface LumiscaServer {
+  readonly addr: { readonly hostname: string; readonly port: number };
+  shutdown(): void;
+}
+
 /** Cleanup hooks per app instance, reached via disposeServer. */
 const appDisposers = new WeakMap<Hono, () => void>();
-const serverDisposers = new WeakMap<HttpServer<NetAddr>, () => void>();
+const serverDisposers = new WeakMap<LumiscaServer, () => void>();
 
 function disposeApp(app: Hono): void {
   appDisposers.get(app)?.();
@@ -105,7 +107,7 @@ function disposeApp(app: Hono): void {
 /** Create the HTTP + WebSocket application. */
 export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   const app = new Hono();
-  const repoRoot = options.repoRoot ?? runtime.cwd();
+  const repoRoot = options.repoRoot ?? process.cwd();
   const assets = new Assets(
     repoRoot,
     join(repoRoot, ".lumisca-cache"),
@@ -388,7 +390,7 @@ export function startServer(
   core: LumiscaCore,
   port = 8000,
   options?: AppOptions,
-): HttpServer<NetAddr> {
+): LumiscaServer {
   const hostname = options?.hostname ?? "127.0.0.1";
   // The hub's real origin is only known after binding (port 0 =
   // ephemeral); the federation self-guard reads it through this holder,
@@ -401,27 +403,29 @@ export function startServer(
     { selfId: () => instanceId },
   );
   const app = createApp(core, { ...options, selfOrigin, fed, instanceId });
-  const server = runtime.serve(
-    {
-      hostname,
-      port,
-      onListen(addr) {
-        // `hostForUrl` brackets IPv6 literals and maps a wildcard bind to
-        // loopback: `http://::1:8000` is not a URL, so a bare concatenation
-        // used to leave the hub unable to recognise its own origin (every
-        // peer looked remote, including the hub itself).
-        selfOrigin.current = `http://${hostForUrl(addr.hostname)}:${addr.port}`;
-        fed.start();
-      },
-    },
-    app.fetch,
-  );
+  const binding = Bun.serve({
+    hostname,
+    port,
+    fetch: (request, server) => app.fetch(request, server),
+    websocket,
+  });
+  // `hostForUrl` brackets IPv6 literals and maps a wildcard bind to
+  // loopback: `http://::1:8000` is not a URL, so a bare concatenation used
+  // to leave the hub unable to recognise its own origin (every peer looked
+  // remote, including the hub itself).
+  const addr = { hostname: binding.hostname, port: binding.port };
+  selfOrigin.current = `http://${hostForUrl(addr.hostname)}:${addr.port}`;
+  fed.start();
+  const server: LumiscaServer = {
+    addr,
+    shutdown: () => binding.stop(true),
+  };
   serverDisposers.set(server, () => disposeApp(app));
   return server;
 }
 
 /** Release resources tied to a running server (e.g. the dev watcher).
  * Call before server.shutdown() when shutting down gracefully. */
-export function disposeServer(server: HttpServer<NetAddr>): void {
+export function disposeServer(server: LumiscaServer): void {
   serverDisposers.get(server)?.();
 }

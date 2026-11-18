@@ -1,4 +1,5 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
 import { basename, join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import {
@@ -31,10 +32,10 @@ function bodyOf(text: string): string {
 
 async function fixture(): Promise<{ root: string; folder: string }> {
   const root = await makeRealTempDir("lumisca-read-");
-  await Deno.writeFile(join(root, "pic.png"), MINI_PNG);
-  await Deno.writeTextFile(join(root, "notes.txt"), "hello world\n");
-  await Deno.writeTextFile(join(root, "drawing.svg"), "<svg></svg>");
-  await Deno.writeTextFile(
+  await fsp.writeFile(join(root, "pic.png"), MINI_PNG);
+  await fsp.writeFile(join(root, "notes.txt"), "hello world\n");
+  await fsp.writeFile(join(root, "drawing.svg"), "<svg></svg>");
+  await fsp.writeFile(
     join(root, "main.ts"),
     Array.from({ length: 15 }, (_, i) => `line ${i + 1}`).join("\n") + "\n",
   );
@@ -67,7 +68,7 @@ test("read stores a bounded copy of a large image", async () => {
   const folder = basename(root);
   try {
     const png = await noisyPng(1800, 1200);
-    await Deno.writeFile(join(root, "big.png"), png);
+    await fsp.writeFile(join(root, "big.png"), png);
     const result = await makeRead(root).execute("id", {
       path: `${folder}/big.png`,
     });
@@ -104,13 +105,13 @@ test("read maps common image extensions to mime types", async () => {
       [".PNG", "image/png"], // case-insensitive
     ] as const) {
       const name = `photo${ext}`;
-      await Deno.writeFile(join(root, name), MINI_PNG);
+      await fsp.writeFile(join(root, name), MINI_PNG);
       const result = await makeRead(root).execute("id", {
         path: `${folder}/${name}`,
       });
       const image = result.content.find((c) => c.type === "image");
       assertEquals(image?.mimeType, mime, ext);
-      await Deno.remove(join(root, name));
+      await fsp.rm(join(root, name));
     }
   } finally {
     await removeDirRetry(root);
@@ -226,7 +227,7 @@ test("read suggests a line range when a large file is cut off", async () => {
   const folder = basename(root);
   try {
     // ~600KB, so the whole-file read caps at the 512KB chunk limit.
-    await Deno.writeTextFile(join(root, "big.txt"), "x".repeat(600 * 1024));
+    await fsp.writeFile(join(root, "big.txt"), "x".repeat(600 * 1024));
     const result = await makeRead(root).execute("id", {
       path: `${folder}/big.txt`,
     });
@@ -244,7 +245,7 @@ test("read line ranges stay memory-bounded on huge single-line files", async () 
     // A 4MB line with no newlines — far beyond any output budget; the
     // read must keep only its tail instead of buffering the whole file.
     const tail = "TAILMARKER";
-    await Deno.writeTextFile(
+    await fsp.writeFile(
       join(root, "huge.txt"),
       "x".repeat(4 * 1024 * 1024 - tail.length) + tail,
     );
@@ -270,7 +271,7 @@ test("read reports the lines a huge ranged read had to drop", async () => {
       { length: 3000 },
       (_, i) => `${i + 1}:${"x".repeat(99)}`,
     );
-    await Deno.writeTextFile(join(root, "big.txt"), rows.join("\n") + "\n");
+    await fsp.writeFile(join(root, "big.txt"), rows.join("\n") + "\n");
     const result = await makeRead(root).execute("id", {
       path: `${folder}/big.txt:1-3000`,
     });
@@ -295,7 +296,7 @@ test("read reports the lines a huge ranged read had to drop", async () => {
 
 /** Write a file with CRLF line endings. */
 async function writeCrlf(path: string, lines: string[]): Promise<void> {
-  await Deno.writeFile(
+  await fsp.writeFile(
     path,
     new TextEncoder().encode(lines.join("\r\n") + "\r\n"),
   );
@@ -326,7 +327,7 @@ test("edit matches CRLF files with an LF old_string and keeps CRLF", async () =>
       new_string: "const a = 1;\nconst b = 20;", // LF too
     });
     assert(toolText(result).startsWith("Edited"), toolText(result));
-    const text = await Deno.readTextFile(file);
+    const text = await fsp.readFile(file, "utf8");
     assertEquals(text, "const a = 1;\r\nconst b = 20;\r\nconst c = 3;\r\n");
   } finally {
     await removeDirRetry(root);
@@ -343,7 +344,7 @@ test("edit matches CRLF files with a CRLF old_string", async () => {
       old_string: "const a = 1;\r\nconst b = 2;",
       new_string: "const a = 1;\r\nconst b = 20;",
     });
-    const text = await Deno.readTextFile(file);
+    const text = await fsp.readFile(file, "utf8");
     assertEquals(text, "const a = 1;\r\nconst b = 20;\r\nconst c = 3;\r\n");
   } finally {
     await removeDirRetry(root);
@@ -354,16 +355,13 @@ test("edit matches LF files with a CRLF old_string", async () => {
   const { root, folder } = await fsFixture();
   const file = join(root, "sample.txt");
   try {
-    await Deno.writeTextFile(
-      file,
-      "const a = 1;\nconst b = 2;\nconst c = 3;\n",
-    );
+    await fsp.writeFile(file, "const a = 1;\nconst b = 2;\nconst c = 3;\n");
     await makeFs(root).edit.execute("id", {
       path: `${folder}/sample.txt`,
       old_string: "const a = 1;\r\nconst b = 2;",
       new_string: "const a = 1;\nconst b = 20;",
     });
-    const text = await Deno.readTextFile(file);
+    const text = await fsp.readFile(file, "utf8");
     assertEquals(text, "const a = 1;\nconst b = 20;\nconst c = 3;\n");
   } finally {
     await removeDirRetry(root);
@@ -380,7 +378,7 @@ test("edit converts an LF new_string to CRLF in a CRLF file", async () => {
       old_string: "const b = 2;",
       new_string: "const b = 20;\nconst d = 4;", // LF only
     });
-    const text = await Deno.readTextFile(file);
+    const text = await fsp.readFile(file, "utf8");
     // No mixed line endings: the replacement follows the file's CRLF.
     assertEquals(
       text,
@@ -395,7 +393,7 @@ test("edit throws when old_string is missing", async () => {
   const { root, folder } = await fsFixture();
   const file = join(root, "sample.txt");
   try {
-    await Deno.writeTextFile(file, "hello\nworld\n");
+    await fsp.writeFile(file, "hello\nworld\n");
     await assertRejects(
       () =>
         makeFs(root).edit.execute("id", {
@@ -416,7 +414,7 @@ test("edit fails on an ambiguous old_string and leaves the file", async () => {
   const file = join(root, "sample.txt");
   try {
     const original = "a\nb\na\nb\n";
-    await Deno.writeTextFile(file, original);
+    await fsp.writeFile(file, original);
     const edit = makeFs(root).edit;
     const error = await assertRejects(
       () =>
@@ -432,7 +430,7 @@ test("edit fails on an ambiguous old_string and leaves the file", async () => {
     assert(error.message.includes(`${folder}/sample.txt`), error.message);
     // Nothing was written: picking one of the two matches would risk
     // rewriting the wrong place.
-    assertEquals(await Deno.readTextFile(file), original);
+    assertEquals(await fsp.readFile(file, "utf8"), original);
 
     // The prescribed fix — more surrounding context — makes it unique.
     const result = await edit.execute("id", {
@@ -441,7 +439,7 @@ test("edit fails on an ambiguous old_string and leaves the file", async () => {
       new_string: "A\nB",
     });
     assert(toolText(result).startsWith("Edited"), toolText(result));
-    assertEquals(await Deno.readTextFile(file), "A\nB\n");
+    assertEquals(await fsp.readFile(file, "utf8"), "A\nB\n");
   } finally {
     await removeDirRetry(root);
   }
@@ -457,7 +455,7 @@ test("edit fails on an ambiguous old_string in a CRLF file", async () => {
       "const a = 1;",
       "const b = 2;",
     ]);
-    const original = await Deno.readTextFile(file);
+    const original = await fsp.readFile(file, "utf8");
     // The LF old_string matches the CRLF file leniently, so the count must
     // see both matches and refuse the edit.
     await assertRejects(
@@ -470,7 +468,7 @@ test("edit fails on an ambiguous old_string in a CRLF file", async () => {
       Error,
       "old_string appears 2 times",
     );
-    assertEquals(await Deno.readTextFile(file), original);
+    assertEquals(await fsp.readFile(file, "utf8"), original);
   } finally {
     await removeDirRetry(root);
   }
@@ -485,7 +483,7 @@ test("write keeps an existing CRLF file's line endings", async () => {
       path: `${folder}/sample.txt`,
       content: "const a = 1;\nconst b = 20;\nconst c = 3;\n", // LF as sent
     });
-    const text = await Deno.readTextFile(file);
+    const text = await fsp.readFile(file, "utf8");
     assertEquals(text, "const a = 1;\r\nconst b = 20;\r\nconst c = 3;\r\n");
   } finally {
     await removeDirRetry(root);
@@ -500,7 +498,7 @@ test("write creates new files with line endings as sent", async () => {
       path: `${folder}/new.txt`,
       content: "a\nb\n",
     });
-    assertEquals(await Deno.readTextFile(file), "a\nb\n");
+    assertEquals(await fsp.readFile(file, "utf8"), "a\nb\n");
   } finally {
     await removeDirRetry(root);
   }
@@ -540,7 +538,7 @@ test("parallel edits to the same file are serialized (no lost update)", async ()
     // must never happen.
     for (let round = 0; round < 10; round++) {
       const lines = Array.from({ length: 10000 }, (_, i) => `line-${i}`);
-      await Deno.writeTextFile(file, lines.join("\n"));
+      await fsp.writeFile(file, lines.join("\n"));
       const [r1, r2, r3] = await Promise.all([
         edit.execute("id-1", {
           path: `${folder}/sample.txt`,
@@ -564,7 +562,7 @@ test("parallel edits to the same file are serialized (no lost update)", async ()
           `round ${round}: ${toolText(result)}`,
         );
       }
-      const text = await Deno.readTextFile(file);
+      const text = await fsp.readFile(file, "utf8");
       assert(
         text.includes("line-1000-EDITED"),
         `round ${round}: first edit was lost`,
@@ -601,7 +599,7 @@ test("parallel writes to the same file are serialized", async () => {
         content: "BBBB\n".repeat(5000),
       }),
     ]);
-    const text = await Deno.readTextFile(file);
+    const text = await fsp.readFile(file, "utf8");
     const lines = text.split("\n").filter((line) => line.length > 0);
     const onlyA = lines.every((line) => line === "AAAA");
     const onlyB = lines.every((line) => line === "BBBB");
@@ -615,7 +613,7 @@ test("edit reports added/removed line counts in details", async () => {
   const { root, folder } = await fsFixture();
   const file = join(root, "sample.txt");
   try {
-    await Deno.writeTextFile(file, "one\ntwo\nthree\nfour\nfive\n");
+    await fsp.writeFile(file, "one\ntwo\nthree\nfour\nfive\n");
     const replaced = await makeFs(root).edit.execute("id", {
       path: `${folder}/sample.txt`,
       old_string: "two\nthree",

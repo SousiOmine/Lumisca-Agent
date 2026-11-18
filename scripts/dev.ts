@@ -1,6 +1,5 @@
 /**
- * Run the server and the Vite dev server together, the way `deno task dev`
- * used to.
+ * Run the server and the Vite dev server together.
  *
  * The server is the product: it owns the API, the sessions and a client
  * built on the fly from the repository sources. Vite serves the same client
@@ -8,13 +7,19 @@
  * reload. Stopping either one stops both, so a crashed server cannot leave
  * a Vite server pointing at nothing.
  */
-import { spawn } from "node:child_process";
+import { exit, spawnProcess } from "../packages/core/process.ts";
 
 const bun = process.execPath;
 const children = [
-  spawn(bun, ["run", "packages/server/mod.ts"], { stdio: "inherit" }),
-  spawn(bun, ["x", "vite", "packages/web", "--configLoader", "native"], {
-    stdio: "inherit",
+  spawnProcess([bun, "run", "packages/server/mod.ts"], {
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
+  }),
+  spawnProcess([bun, "x", "vite", "packages/web", "--configLoader", "native"], {
+    stdin: "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
   }),
 ];
 
@@ -23,11 +28,17 @@ function stop(code: number): void {
   if (stopping) return;
   stopping = true;
   for (const child of children) {
-    if (child.exitCode === null && child.signalCode === null) child.kill();
+    try {
+      child.kill();
+    } catch {
+      // Already exited.
+    }
   }
-  process.exit(code);
+  exit(code);
 }
 
 process.on("SIGINT", () => stop(0));
 process.on("SIGTERM", () => stop(0));
-for (const child of children) child.on("exit", (code) => stop(code ?? 0));
+for (const child of children) {
+  void child.exited.then((code) => stop(code));
+}

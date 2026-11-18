@@ -310,7 +310,7 @@ function restore(
 
 /** Run `body` with the page globals replaced by a stand-in page: location,
  * WebSocket and the visibility API are plain properties on globalThis in
- * Deno, and the descriptors are put back in a `finally` so nothing leaks
+ * Bun, and the descriptors are put back in a `finally` so nothing leaks
  * into another test or file. The stand-in document is passed to the body so
  * a test can drive the page's visibility. */
 async function withPage(
@@ -319,7 +319,7 @@ async function withPage(
 ): Promise<void> {
   const location = Object.getOwnPropertyDescriptor(globalThis, "location");
   const socket = Object.getOwnPropertyDescriptor(globalThis, "WebSocket");
-  // Deno has no `document`: the stub is added, then removed again.
+  // Bun has no `document`: the stub is added, then removed again.
   const docDescriptor = Object.getOwnPropertyDescriptor(globalThis, "document");
   const doc = new FakeDocument();
   FakeWebSocket.created.length = 0;
@@ -338,7 +338,7 @@ async function withPage(
   try {
     await body(doc);
   } finally {
-    // `location` and `WebSocket` only exist in a browser (and in Deno's test
+    // `location` and `WebSocket` only exist in a browser (and in Bun's test
     // environment); under Bun they are absent, and there is no descriptor to
     // put back — defining `undefined` throws instead.
     restore(globalThis, "location", location);

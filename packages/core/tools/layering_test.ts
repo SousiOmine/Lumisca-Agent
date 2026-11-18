@@ -13,6 +13,7 @@
  * naming `Agent` as a constructor.
  */
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
 import { assert, assertEquals } from "@std/assert";
 
 const TOOLS_DIR = new URL("./", import.meta.url);
@@ -27,16 +28,19 @@ interface Offender {
 async function toolsSources(): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   const walk = async (dir: URL, prefix: string): Promise<void> => {
-    for await (const entry of Deno.readDir(dir)) {
-      const url = new URL(`${entry.name}${entry.isDirectory ? "/" : ""}`, dir);
-      if (entry.isDirectory) {
+    for (const entry of await fsp.readdir(dir, { withFileTypes: true })) {
+      const url = new URL(
+        `${entry.name}${entry.isDirectory() ? "/" : ""}`,
+        dir,
+      );
+      if (entry.isDirectory()) {
         await walk(url, `${prefix}${entry.name}/`);
         continue;
       }
       if (!entry.name.endsWith(".ts") || entry.name.includes("_test.")) {
         continue;
       }
-      out.set(`${prefix}${entry.name}`, await Deno.readTextFile(url));
+      out.set(`${prefix}${entry.name}`, await fsp.readFile(url, "utf8"));
     }
   };
   await walk(TOOLS_DIR, "");

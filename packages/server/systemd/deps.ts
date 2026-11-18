@@ -15,10 +15,9 @@
  * launcher's unhandled-rejection handler, print, and let the process drain
  * its event loop into a silent exit 0.
  */
-import {
-  type NetworkInterfaceInfo,
-  runtime,
-} from "../../core/runtime/runtime.ts";
+import { type NetworkInterfaceInfo, networkInterfaces } from "node:os";
+import { IS_STANDALONE, OS } from "../../core/platform.ts";
+import { processEnvironment } from "../../core/process.ts";
 import { probeHealth as probeHealthShared } from "../health-probe.ts";
 import {
   DESKTOP_ENV_KEY,
@@ -48,16 +47,20 @@ export interface ServiceDeps {
   /** Injected so a first install's credential stays testable. */
   generateToken: () => string;
   /** Network interfaces of this machine, for the connection URLs a wildcard
-   * bind expands to (`runtime.networkInterfaces()`). */
-  interfaces: () => NetworkInterfaceInfo[];
+   * bind expands to. */
+  interfaces: () => HostNetworkInterface[];
 }
 
+/** A network interface with the name Node's map carries beside it. */
+export type HostNetworkInterface = NetworkInterfaceInfo & { name: string };
+
 /** The real machine, the real systemd, and the real network. `env` is a
- * parameter rather than a direct read: runtime.env is shared by every test file
- * the runner executes in parallel, so a test that needs another environment
- * (no HOME, say) passes one instead of clearing the real one. */
+ * parameter rather than a direct read: the process environment is shared by
+ * every test file the runner executes in parallel, so a test that needs
+ * another environment (no HOME, say) passes one instead of clearing the real
+ * one. */
 export function defaultServiceDeps(
-  env: EnvironmentSource = runtime.env,
+  env: EnvironmentSource = processEnvironment,
 ): ServiceDeps {
   const home = env.get("USERPROFILE") ?? env.get("HOME") ?? "";
   if (home === "") {
@@ -73,13 +76,13 @@ export function defaultServiceDeps(
   }
   return {
     host: {
-      os: runtime.build.os,
-      standalone: runtime.build.standalone,
+      os: OS,
+      standalone: IS_STANDALONE,
       desktopManaged: isDesktopManaged(env.get(DESKTOP_ENV_KEY)),
-      execPath: runtime.execPath(),
+      execPath: process.execPath,
       home,
       user,
-      cwd: runtime.cwd(),
+      cwd: process.cwd(),
       xdgConfigHome: env.get("XDG_CONFIG_HOME") || undefined,
     },
     runner: createSystemdRunner(),
@@ -89,7 +92,10 @@ export function defaultServiceDeps(
     probeIntervalMs: PROBE_INTERVAL_MS,
     probeTimeoutMs: PROBE_TIMEOUT_MS,
     generateToken,
-    interfaces: () => runtime.networkInterfaces(),
+    interfaces: () =>
+      Object.entries(networkInterfaces()).flatMap(([name, infos]) =>
+        (infos ?? []).map((info) => ({ name, ...info })),
+      ),
   };
 }
 

@@ -1,4 +1,5 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
 import { join } from "node:path";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { makeRealTempDir, removeDirRetry } from "../test-utils.ts";
@@ -12,8 +13,8 @@ async function writeSkill(
   description: string,
 ): Promise<void> {
   const dir = join(root, ".agents", "skills", name);
-  await Deno.mkdir(dir, { recursive: true });
-  await Deno.writeTextFile(
+  await fsp.mkdir(dir, { recursive: true });
+  await fsp.writeFile(
     join(dir, "SKILL.md"),
     `---\nname: ${name}\ndescription: ${description}\n---\n\nBody.\n`,
   );
@@ -129,7 +130,7 @@ test("an emptied catalog is announced once", async () => {
     await writeSkill(root, "demo", "A demo skill.");
     provider.next();
 
-    await Deno.remove(join(root, ".agents"), { recursive: true });
+    await fsp.rm(join(root, ".agents"), { recursive: true });
     const update = provider.next();
     assertEquals(update.length, 1);
     assertEquals(update[0]!.title, "Skills (none available)");

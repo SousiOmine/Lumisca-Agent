@@ -31,7 +31,11 @@ import {
   Variant,
 } from "@jellybrick/dbus-next";
 import { CoreError, errorMessage } from "../../errors.ts";
-import { runtime } from "../../runtime/runtime.ts";
+import {
+  connectUnixSocket,
+  type EnvironmentReader,
+  processEnvironment,
+} from "../../process.ts";
 
 /** How long one method call may wait. Portal methods answer immediately:
  * waiting for the user (consent, screen selection) is not a method call —
@@ -89,7 +93,7 @@ interface MessageEmittingBus {
  * does not say where it is. The fallback is the standard path every desktop
  * session bus socket lives at. */
 export function sessionBusAddress(
-  env: { get(key: string): string | undefined } = runtime.env,
+  env: EnvironmentReader = processEnvironment,
 ): string | undefined {
   const address = env.get("DBUS_SESSION_BUS_ADDRESS");
   if (address !== undefined && address.length > 0) return address;
@@ -102,7 +106,7 @@ export function sessionBusAddress(
 
 /** The filesystem path of a `unix:path=...` bus address, or undefined for
  * any other form (abstract sockets, tcp, a list of alternatives). It exists
- * to pre-flight the socket with runtime.connect, whose failure is an ordinary
+ * to pre-flight the socket with `node:net`, whose failure is an ordinary
  * rejection, while the library reports a failed connect as an unhandled
  * `error` event. */
 export function unixSocketPath(address: string): string | undefined {
@@ -198,7 +202,7 @@ function callFailure(call: MethodCall, error: unknown): CoreError {
  * crashed process.
  */
 export async function connectPortalBus(
-  env: { get(key: string): string | undefined } = runtime.env,
+  env: EnvironmentReader = processEnvironment,
 ): Promise<PortalConnection> {
   const address = sessionBusAddress(env);
   if (address === undefined) {
@@ -211,7 +215,7 @@ export async function connectPortalBus(
   const socketPath = unixSocketPath(address);
   if (socketPath !== undefined) {
     try {
-      (await runtime.connect({ path: socketPath, transport: "unix" })).close();
+      (await connectUnixSocket(socketPath)).close();
     } catch (error) {
       throw new CoreError(
         `no session bus at ${socketPath} (${errorMessage(error)})`,

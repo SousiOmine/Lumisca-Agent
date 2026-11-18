@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import preact from "@preact/preset-vite";
 import { defineConfig } from "vite";
-// Relative on purpose: this file is loaded by Vite (not by Deno), which does
+// Relative on purpose: this file is loaded by Vite (not by Bun), which does
 // not resolve the workspace's `@lumisca/core/...` exports.
 import { BROWSER_CORE_ENTRIES } from "../core/browser-entries.ts";
 import { shellHeadTags } from "../core/shared/shell-head.ts";

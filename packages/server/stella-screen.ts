@@ -1,4 +1,4 @@
-import { upgradeWebSocket } from "hono/deno";
+import { upgradeWebSocket } from "./websocket.ts";
 
 /**
  * The stella machine's screen relay.
@@ -47,7 +47,7 @@ export function stellaScreenRoute(options: StellaScreenOptions) {
     return {
       async onOpen(_event, ws) {
         // The adapter does not await this handler (see `socket.onopen` in
-        // hono/deno), so a rejection would leave the page's socket open with
+        // hono/bun), so a rejection would leave the page's socket open with
         // no desktop behind it: the pane would sit on "connecting" forever.
         // Starting a desktop can fail (the machine went away, its helper
         // refused), and that is what this closes on.

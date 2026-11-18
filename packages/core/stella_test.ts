@@ -1,4 +1,7 @@
 import { test } from "bun:test";
+import * as fsSync from "node:fs";
+import { tmpdir as osTmpdir } from "node:os";
+import { join as pathJoin } from "node:path";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { NO_RESPONSE } from "./agent/silent-reply.ts";
 import {
@@ -11,7 +14,6 @@ import {
 } from "./ai/faux.ts";
 import { PRUNED_MARKER } from "./ai/pruned.ts";
 import type { StreamFn } from "./ai/transport.ts";
-
 import { LumiscaCore } from "./core.ts";
 import type { StellaEntry } from "./domain/stella-conversation.ts";
 import { CoreError } from "./errors.ts";
@@ -802,7 +804,7 @@ test("stella tool set: eval is absent, the screen tools present", () => {
     todo: new TodoHub("s1", () => {}),
     sendChat: {
       store: new SessionAttachmentStore(
-        Deno.makeTempDirSync({ prefix: "lumisca-stella-attach-" }),
+        fsSync.mkdtempSync(pathJoin(osTmpdir(), "lumisca-stella-attach-")),
       ),
       sessionId: "s1",
     },
@@ -881,7 +883,7 @@ test("stella tool set: the conversation's tools are preloaded", () => {
     todo: new TodoHub("s1", () => {}),
     sendChat: {
       store: new SessionAttachmentStore(
-        Deno.makeTempDirSync({ prefix: "lumisca-stella-sections-" }),
+        fsSync.mkdtempSync(pathJoin(osTmpdir(), "lumisca-stella-sections-")),
       ),
       sessionId: "s1",
     },

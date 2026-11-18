@@ -31,7 +31,7 @@
  */
 
 import { errorMessage } from "@lumisca/core";
-import { runtime } from "../../core/runtime/runtime.ts";
+import { processEnvironment } from "../../core/process.ts";
 import type { EnvironmentSource } from "../startup.ts";
 import { runConfig } from "./config.ts";
 import { defaultServiceDeps, type ServiceDeps } from "./deps.ts";
@@ -60,7 +60,7 @@ export async function runServiceCommand(
   deps?: ServiceDeps,
   /** The environment the machine is resolved from; see
    * {@link defaultServiceDeps}. */
-  env: EnvironmentSource = runtime.env,
+  env: EnvironmentSource = processEnvironment,
 ): Promise<number> {
   let invocation: ServiceInvocation;
   try {

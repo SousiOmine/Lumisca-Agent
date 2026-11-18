@@ -11,7 +11,7 @@
  */
 
 import { errorMessage } from "@lumisca/core";
-import { runtime } from "../../core/runtime/runtime.ts";
+import { runProcess } from "../../core/process.ts";
 
 /** Result of one external command, decoded and trimmed. */
 export interface CommandResult {
@@ -41,18 +41,13 @@ export function createSystemdRunner(): ServiceRunner {
     program: string,
     args: readonly string[],
   ): Promise<CommandResult> => {
-    const output = await new runtime.Command(program, {
-      args: [...args],
-      stdin: "null",
-      stdout: "piped",
-      stderr: "piped",
-    })
-      .output()
-      .catch((error) => {
-        throw new ServiceCommandError(
-          `${program} を実行できません: ${errorMessage(error)}`,
-        );
-      });
+    const output = await runProcess([program, ...args], {
+      stdin: "ignore",
+    }).catch((error) => {
+      throw new ServiceCommandError(
+        `${program} を実行できません: ${errorMessage(error)}`,
+      );
+    });
     const decode = (bytes: Uint8Array) =>
       new TextDecoder().decode(bytes).trim();
     return {

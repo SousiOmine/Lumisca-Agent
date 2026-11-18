@@ -1,5 +1,4 @@
 import { errorMessage } from "../errors.ts";
-import { runtime } from "../runtime/runtime.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
 import { TOOL_EVAL } from "../shared/mod.ts";
 import { composeScriptResult, JsSandbox, transpileToJs } from "./js-sandbox.ts";
@@ -82,7 +81,7 @@ export function createEvalTool(
           options.safety,
           "eval",
           params.code,
-          runtime.cwd(),
+          process.cwd(),
           {
             prefix: "[error]\n",
             fallbackReason: "The snippet was judged unsafe.",

@@ -1,6 +1,7 @@
 import { test } from "bun:test";
-import { basename, join } from "node:path";
-
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { basename, join, join as pathJoin } from "node:path";
 import { fauxAssistantMessage, fauxToolCall } from "@lumisca/core";
 import { removeDirRetry } from "@lumisca/core/test-utils";
 import { assert, assertEquals } from "@std/assert";
@@ -16,7 +17,7 @@ test("the event stream batches a reply's deltas into few frames", async () => {
     deltaFlushMs: 5,
   });
   try {
-    const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-srv-"));
     const ws = await (
       await json(base, "/api/workspaces", {
         method: "POST",
@@ -86,8 +87,8 @@ test("the event stream batches a reply's deltas into few frames", async () => {
 test("websocket streams agent events", async () => {
   const { core, server, faux, base } = await setup();
   try {
-    const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
-    await Deno.writeTextFile(join(root, "a.txt"), "one\n");
+    const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-srv-"));
+    await fsp.writeFile(join(root, "a.txt"), "one\n");
     const create = await json(base, "/api/workspaces", {
       method: "POST",
       body: JSON.stringify({ name: "ws", folders: [root] }),

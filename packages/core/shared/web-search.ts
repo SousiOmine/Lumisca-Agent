@@ -2,7 +2,7 @@
  * The wire shape of the web-search setting: what the server answers and what
  * the settings screen renders.
  *
- * Frontend-safe (no Deno, no `node:`): the settings screen renders these
+ * Frontend-safe (no Bun APIs, no `node:`): the settings screen renders these
  * shapes, and it must not pull the search library (which reaches the
  * network) into the bundle.
  */

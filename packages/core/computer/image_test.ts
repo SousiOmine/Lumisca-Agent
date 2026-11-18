@@ -18,7 +18,11 @@ import type { RawCapture } from "./types.ts";
  * aborts the whole process when icudtl.dat is missing, so the import is
  * gated on the same lookup the PDF renderer guards with. */
 const canvasModule = await (async () => {
-  if (Deno.build.os === "windows" && findCanvasIcuDataFile() === undefined) {
+  if (
+    (process.platform === "win32" ? "windows" : process.platform) ===
+      "windows" &&
+    findCanvasIcuDataFile() === undefined
+  ) {
     return undefined;
   }
   try {

@@ -9,7 +9,7 @@
  * field the server stopped sending stayed in the client's type looking
  * required (see `boundaries_test.ts`, which checks imports, not shapes).
  *
- * Frontend-safe (no Deno, no `node:`): the web bundle imports this through
+ * Frontend-safe (no Bun APIs, no `node:`): the web bundle imports this through
  * `@lumisca/core/shared`.
  */
 import type { AgentMessage } from "../ai/message.ts";

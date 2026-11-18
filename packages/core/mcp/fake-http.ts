@@ -9,7 +9,6 @@
  */
 
 /** One request a fake server saw. */
-import { runtime } from "../runtime/runtime.ts";
 export interface FakeRequest {
   method: string;
   path: string;
@@ -144,16 +143,19 @@ export function startFakeMcpServer(
     return json(answers.length === 1 ? answers[0] : answers);
   };
 
-  const server = runtime.serve(
-    { hostname: "127.0.0.1", port: 0, onListen: () => {} },
-    handler,
-  );
-  baseUrl = `http://127.0.0.1:${server.addr.port}`;
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: handler,
+  });
+  baseUrl = `http://127.0.0.1:${server.port}`;
   return {
     url: `${baseUrl}${FAKE_MCP_PATH}`,
     protectedResourceMetadataUrl: `${baseUrl}${FAKE_PRM_PATH}`,
     requests,
-    close: () => server.shutdown(),
+    close: async () => {
+      server.stop(true);
+    },
   };
 }
 
@@ -192,7 +194,9 @@ export function startFakeAuthServer(
     authorizations: 0,
     tokenRequests: 0,
     lastTokenRequest: undefined,
-    close: () => server.shutdown(),
+    close: async () => {
+      server.stop(true);
+    },
   };
 
   const metadata = () => ({
@@ -245,11 +249,12 @@ export function startFakeAuthServer(
     return new Response("not found", { status: 404 });
   };
 
-  const server = runtime.serve(
-    { hostname: "127.0.0.1", port: 0, onListen: () => {} },
-    handler,
-  );
-  baseUrl = `http://127.0.0.1:${server.addr.port}`;
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: handler,
+  });
+  baseUrl = `http://127.0.0.1:${server.port}`;
   state.url = baseUrl;
   return state;
 }

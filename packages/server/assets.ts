@@ -1,5 +1,7 @@
+import * as fsSync from "node:fs";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
-import { runtime } from "../core/runtime/runtime.ts";
 import { contentEtag } from "./app-file-headers.ts";
 import { bundleClient } from "./bundle.ts";
 import { PWA_ICON_FILES } from "./manifest.ts";
@@ -51,7 +53,7 @@ export interface AssetsManifest {
  * in order so the cascade matches what Vite serves in dev. A plain
  * stylesheet without imports is returned as-is (backwards compatible). */
 export async function bundleStylesCss(entryPath: string): Promise<string> {
-  const entry = await runtime.readTextFile(entryPath);
+  const entry = await fsp.readFile(entryPath, "utf8");
   const importPattern = /@import\s+"([^"]+)";/g;
   const parts: string[] = [];
   let match: RegExpExecArray | null;
@@ -81,7 +83,7 @@ export async function bundleStylesCss(entryPath: string): Promise<string> {
       if (relative(dir, resolved).startsWith("..")) {
         throw new Error(`${entryPath}: import escapes the web sources: ${rel}`);
       }
-      return await runtime.readTextFile(resolved);
+      return await fsp.readFile(resolved, "utf8");
     }),
   );
   return bodies.join("\n");
@@ -95,7 +97,7 @@ async function bundleClientFiles(
   repoRoot: string,
   outdir: string,
 ): Promise<Record<string, AssetFile>> {
-  await runtime.mkdir(outdir, { recursive: true });
+  await fsp.mkdir(outdir, { recursive: true });
   const bundle = await bundleClient({
     cwd: repoRoot,
     entry: webClientEntry(repoRoot),
@@ -103,7 +105,7 @@ async function bundleClientFiles(
   });
   const files: Record<string, AssetFile> = {};
   for (const name of bundle.files) {
-    const body = await runtime.readTextFile(join(outdir, name));
+    const body = await fsp.readFile(join(outdir, name), "utf8");
     files[name] = { body, etag: contentEtag(body) };
   }
   return files;
@@ -136,19 +138,20 @@ function base64Of(bytes: Uint8Array): string {
 export async function buildAssetsManifest(
   repoRoot: string,
 ): Promise<{ manifest: AssetsManifest; clientBytes: number }> {
-  const outdir = await runtime.makeTempDir({ prefix: "lumisca-client-" });
+  const outdir = await fsp.mkdtemp(join(osTmpdir(), "lumisca-client-"));
   try {
     const client = await bundleClientFiles(repoRoot, outdir);
     const css = await bundleStylesCss(webStylesPath(repoRoot));
-    const favicon = base64Of(await runtime.readFile(webFaviconPath(repoRoot)));
+    const favicon = base64Of(await fsp.readFile(webFaviconPath(repoRoot)));
     const pwaIcons: Record<string, string> = {};
     for (const name of PWA_ICON_FILES) {
       pwaIcons[name] = base64Of(
-        await runtime.readFile(join(webPwaIconDir(repoRoot), name)),
+        await fsp.readFile(join(webPwaIconDir(repoRoot), name)),
       );
     }
-    const serviceWorker = await runtime.readTextFile(
+    const serviceWorker = await fsp.readFile(
       webServiceWorkerPath(repoRoot),
+      "utf8",
     );
     return {
       manifest: {
@@ -161,13 +164,13 @@ export async function buildAssetsManifest(
       clientBytes: clientBytesOf(client),
     };
   } finally {
-    await runtime.remove(outdir, { recursive: true }).catch(() => {});
+    await fsp.rm(outdir, { recursive: true }).catch(() => {});
   }
 }
 
 /** Load a prebuilt manifest from a JSON file (LUMISCA_ASSETS_FILE). */
 export function readAssetsManifest(path: string): AssetsManifest {
-  return JSON.parse(runtime.readTextFileSync(path)) as AssetsManifest;
+  return JSON.parse(fsSync.readFileSync(path, "utf8")) as AssetsManifest;
 }
 
 /** Lazily built/loaded frontend assets (client files, css, favicon). */
@@ -221,7 +224,7 @@ export class Assets {
 
   private hasWebSources(): boolean {
     try {
-      return runtime.statSync(webClientEntry(this.repoRoot)).isFile;
+      return fsSync.statSync(webClientEntry(this.repoRoot)).isFile();
     } catch {
       return false;
     }
@@ -288,7 +291,7 @@ export class Assets {
     return this.source(
       async () => {
         const outdir = join(this.cacheDir, "client");
-        await runtime.mkdir(outdir, { recursive: true });
+        await fsp.mkdir(outdir, { recursive: true });
         return await bundleClientFiles(this.repoRoot, outdir);
       },
       (manifest) => manifest.client,
@@ -316,7 +319,7 @@ export class Assets {
   async getFavicon(): Promise<Uint8Array> {
     if (this.faviconCache === null) {
       this.faviconCache = await this.source(
-        () => runtime.readFile(webFaviconPath(this.repoRoot)),
+        () => fsp.readFile(webFaviconPath(this.repoRoot)),
         // The packaged manifest stores binary assets as base64 text.
         (manifest) => {
           const encoded = manifest["favicon.png"];
@@ -342,7 +345,7 @@ export class Assets {
     const cached = this.pwaIconCache.get(name);
     if (cached !== undefined) return cached;
     const bytes = await this.source(
-      () => runtime.readFile(join(webPwaIconDir(this.repoRoot), name)),
+      () => fsp.readFile(join(webPwaIconDir(this.repoRoot), name)),
       (manifest) => {
         const encoded = manifest.pwaIcons[name];
         return encoded === undefined
@@ -363,7 +366,7 @@ export class Assets {
   async getServiceWorker(): Promise<string> {
     if (this.serviceWorkerCache === null) {
       this.serviceWorkerCache = await this.source(
-        () => runtime.readTextFile(webServiceWorkerPath(this.repoRoot)),
+        () => fsp.readFile(webServiceWorkerPath(this.repoRoot), "utf8"),
         (manifest) => manifest["sw.js"],
         "sw.js not found and no embedded assets",
       );

@@ -1,5 +1,7 @@
 import { test } from "bun:test";
-import { join } from "node:path";
+import * as fsSync from "node:fs";
+import { tmpdir as osTmpdir } from "node:os";
+import { join, join as pathJoin } from "node:path";
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import { MCP_SCHEMA_URL, parsePluginMcp } from "./mcp.ts";
 
@@ -69,12 +71,12 @@ test("parsePluginMcp maps a minimal stdio server", () => {
   assertEquals(server.env.PLUGIN_ROOT, "C:\\plugin");
   assertEquals(server.env.PLUGIN_DATA, join(dataRoot, "my-tools"));
   // PLUGIN_DATA dir was created for the stdio server.
-  assert(Deno.statSync(join(dataRoot, "my-tools")).isDirectory);
+  assert(fsSync.statSync(join(dataRoot, "my-tools")).isDirectory());
 });
 
 test("parsePluginMcp resolves ./commands and ./cwd against the root", () => {
-  const root = Deno.makeTempDirSync({ prefix: "lumisca-plugin-" });
-  const dataRoot = Deno.makeTempDirSync({ prefix: "lumisca-data-" });
+  const root = fsSync.mkdtempSync(pathJoin(osTmpdir(), "lumisca-plugin-"));
+  const dataRoot = fsSync.mkdtempSync(pathJoin(osTmpdir(), "lumisca-data-"));
   const result = parsePluginMcp(
     doc({
       server: {
@@ -94,14 +96,16 @@ test("parsePluginMcp resolves ./commands and ./cwd against the root", () => {
 });
 
 test("parsePluginMcp rejects commands that escape the plugin root", () => {
-  const root = Deno.makeTempDirSync({ prefix: "lumisca-plugin-" });
+  const root = fsSync.mkdtempSync(pathJoin(osTmpdir(), "lumisca-plugin-"));
   // A "./" command that walks out of the root via ".." must be rejected;
   // bare commands like "../evil" are opaque tokens (platform search).
   const result = parsePluginMcp(
     doc({ server: { type: "stdio", command: "./../evil" } }),
     root,
     "p",
-    { pluginDataRoot: Deno.makeTempDirSync({ prefix: "lumisca-data-" }) },
+    {
+      pluginDataRoot: fsSync.mkdtempSync(pathJoin(osTmpdir(), "lumisca-data-")),
+    },
   );
   assertEquals(result.servers, []);
   assertEquals(result.warnings.length, 1);
@@ -183,7 +187,7 @@ test("parsePluginMcp rejects entries with unknown fields or transports", () => {
 });
 
 test("parsePluginMcp isolates bad entries from good siblings", () => {
-  const dataRoot = Deno.makeTempDirSync({ prefix: "lumisca-data-" });
+  const dataRoot = fsSync.mkdtempSync(pathJoin(osTmpdir(), "lumisca-data-"));
   const result = parsePluginMcp(
     doc({
       good: { type: "stdio", command: "run" },
@@ -247,7 +251,7 @@ test("parsePluginMcp validates but skips sse servers (unsupported)", () => {
 });
 
 test("parsePluginMcp does not create PLUGIN_DATA for http-only plugins", () => {
-  const dataRoot = Deno.makeTempDirSync({ prefix: "lumisca-data-" });
+  const dataRoot = fsSync.mkdtempSync(pathJoin(osTmpdir(), "lumisca-data-"));
   parsePluginMcp(
     doc({
       remote: { type: "streamable-http", url: "https://example.com/mcp" },
@@ -256,11 +260,11 @@ test("parsePluginMcp does not create PLUGIN_DATA for http-only plugins", () => {
     "p",
     { pluginDataRoot: dataRoot },
   );
-  assertThrows(() => Deno.statSync(join(dataRoot, "p")));
+  assertThrows(() => fsSync.statSync(join(dataRoot, "p")));
 });
 
 function tempDataRoot(): string {
-  return Deno.makeTempDirSync({ prefix: "lumisca-data-" });
+  return fsSync.mkdtempSync(pathJoin(osTmpdir(), "lumisca-data-"));
 }
 
 function assertFatal(fatal: string | undefined, needle: string): void {

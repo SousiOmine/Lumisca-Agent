@@ -21,7 +21,7 @@ function readOnlyServer(): { base: string; core: LumiscaCore } {
     const faux = fauxProvider();
     const core = LumiscaCore.forTesting([faux.provider]);
     core.setSetting(LANGUAGE_KEY, "ja");
-    const server = startServer(core, 0, { repoRoot: Deno.cwd() });
+    const server = startServer(core, 0, { repoRoot: process.cwd() });
     shared = { base: `http://127.0.0.1:${server.addr.port}`, core };
     shutdown = () => {
       server.shutdown();
@@ -205,7 +205,7 @@ test("token-required page renders in the request's language", async () => {
 test("server resolves the app language once and stores it", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
-  const server = startServer(core, 0, { repoRoot: Deno.cwd() });
+  const server = startServer(core, 0, { repoRoot: process.cwd() });
   try {
     const base = `http://127.0.0.1:${server.addr.port}`;
 

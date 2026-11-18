@@ -18,7 +18,7 @@
  * Exits 1 on findings.
  */
 
-import { exit, runtime } from "../packages/core/runtime/runtime.ts";
+import { exit } from "../packages/core/process.ts";
 import { chat } from "../packages/core/shared/i18n/chat.ts";
 import { chrome } from "../packages/core/shared/i18n/chrome.ts";
 import { common } from "../packages/core/shared/i18n/common.ts";
@@ -298,7 +298,7 @@ function list(prefix: string): void {
 }
 
 function main(): void {
-  const [first, second] = runtime.args;
+  const [first, second] = process.argv.slice(2);
   if (first === "--list") {
     list(second ?? "");
     exit(0);

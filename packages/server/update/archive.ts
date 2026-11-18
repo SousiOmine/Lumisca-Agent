@@ -16,9 +16,10 @@
  * defense in depth rather than the trust boundary.
  */
 
+import type { FileHandle } from "node:fs/promises";
+import * as fsp from "node:fs/promises";
 import { dirname } from "node:path";
 import { type TarStreamEntry, UntarStream } from "@std/tar/untar-stream";
-import { type FsFile, runtime } from "../../core/runtime/runtime.ts";
 import type { ArchiveFormat } from "./release.ts";
 
 /** The container formats this module can read (the release layout owns
@@ -106,28 +107,37 @@ export function packageEntryPath(path: string): string | undefined {
 /** Read exactly `length` bytes at `offset`, or throw (a short read means
  * the archive was truncated). */
 async function readAt(
-  file: FsFile,
+  file: FileHandle,
   offset: number,
   length: number,
 ): Promise<Bytes> {
   if (length < 0) throw new ArchiveError("アーカイブのオフセットが不正です");
   const buffer = new Uint8Array(length);
-  await file.seek(offset, runtime.SeekMode.Start);
   let filled = 0;
   while (filled < length) {
-    const read = await file.read(buffer.subarray(filled));
-    if (read === null) {
+    const { bytesRead } = await file.read(
+      buffer,
+      filled,
+      length - filled,
+      offset + filled,
+    );
+    if (bytesRead === 0) {
       throw new ArchiveError("アーカイブが途中で終わっています");
     }
-    filled += read;
+    filled += bytesRead;
   }
   return buffer;
 }
 
-async function writeAll(file: FsFile, bytes: Uint8Array): Promise<void> {
+async function writeAll(file: FileHandle, bytes: Uint8Array): Promise<void> {
   let written = 0;
   while (written < bytes.length) {
-    written += await file.write(bytes.subarray(written));
+    const { bytesWritten } = await file.write(
+      bytes,
+      written,
+      bytes.length - written,
+    );
+    written += bytesWritten;
   }
 }
 
@@ -136,7 +146,7 @@ async function writeAll(file: FsFile, bytes: Uint8Array): Promise<void> {
 async function ensureParent(path: string): Promise<boolean> {
   const parent = dirname(path);
   try {
-    await runtime.mkdir(parent, { recursive: true });
+    await fsp.mkdir(parent, { recursive: true });
     return true;
   } catch {
     // Already there (the common case: files of one directory share it).
@@ -151,12 +161,7 @@ async function writeStream(
   mode?: number,
 ): Promise<number> {
   await ensureParent(path);
-  const file = await runtime.open(path, {
-    create: true,
-    write: true,
-    truncate: true,
-    ...(mode === undefined ? {} : { mode }),
-  });
+  const file = await fsp.open(path, "w", mode);
   let written = 0;
   try {
     const reader = stream.getReader();
@@ -167,7 +172,7 @@ async function writeStream(
       written += value.length;
     }
   } finally {
-    file.close();
+    await file.close();
   }
   return written;
 }
@@ -184,7 +189,7 @@ interface ZipEntry {
 /** Parse the central directory of a zip file (the authoritative record:
  * entries written with a data descriptor carry zero sizes in their local
  * header). */
-async function readZipEntries(file: FsFile): Promise<ZipEntry[]> {
+async function readZipEntries(file: FileHandle): Promise<ZipEntry[]> {
   const { size } = await file.stat();
   if (size < 22) throw new ArchiveError("ZIP アーカイブが小さすぎます");
 
@@ -297,7 +302,7 @@ async function extractZip(
   archivePath: string,
   targetDir: string,
 ): Promise<string[]> {
-  const file = await runtime.open(archivePath, { read: true });
+  const file = await fsp.open(archivePath, "r");
   try {
     const entries = await readZipEntries(file);
     const written: string[] = [];
@@ -315,15 +320,11 @@ async function extractZip(
         if (compressed.length !== entry.size) {
           throw new ArchiveError(`展開サイズが一致しません: ${entry.name}`);
         }
-        const out = await runtime.open(target, {
-          create: true,
-          write: true,
-          truncate: true,
-        });
+        const out = await fsp.open(target, "w");
         try {
           await writeAll(out, compressed);
         } finally {
-          out.close();
+          await out.close();
         }
       } else {
         const stream = new ReadableStream<Bytes>({
@@ -341,7 +342,7 @@ async function extractZip(
     }
     return written;
   } finally {
-    file.close();
+    await file.close();
   }
 }
 
@@ -377,67 +378,56 @@ async function extractTarGz(
   archivePath: string,
   targetDir: string,
 ): Promise<string[]> {
-  const file = await runtime.open(archivePath, { read: true });
   const written: string[] = [];
-  try {
-    const entries = file.readable
-      .pipeThrough(new DecompressionStream("gzip"))
-      .pipeThrough(new UntarStream());
-    for await (const entry of entries) {
-      const typeflag = entry.header.typeflag;
-      // Directories carry no payload; the package layout is flat.
-      if (typeflag === "5") continue;
-      if (METADATA_TYPEFLAGS.has(typeflag)) {
-        if (entry.readable === undefined) continue;
-        await assertMetadataOnly(entry, entry.readable);
-        continue;
-      }
-      if (typeflag !== "0") {
-        const label = LONG_NAME_TYPEFLAGS.has(typeflag)
-          ? "長いパス名"
-          : `type ${typeflag}`;
-        throw new ArchiveError(
-          `アーカイブに未対応のエントリがあります (${label}): ${entry.path}`,
-        );
-      }
-      if (entry.readable === undefined) {
-        throw new ArchiveError(`エントリの内容を読めません: ${entry.path}`);
-      }
-      const name = packageEntryPath(entry.path);
-      if (name === undefined) {
-        throw new ArchiveError(
-          `アーカイブに想定外のパスがあります: ${entry.path}`,
-        );
-      }
-      if (written.includes(name)) {
-        throw new ArchiveError(`アーカイブに同名のファイルがあります: ${name}`);
-      }
-      const mode = entry.header.mode;
-      const size = await writeStream(
-        entry.readable,
-        `${targetDir}/${name}`,
-        mode !== undefined && mode > 0 ? mode & 0o777 : undefined,
-      );
-      if (size > MAX_ENTRY_BYTES) {
-        throw new ArchiveError(`エントリが大きすぎます: ${name}`);
-      }
-      written.push(name);
+  const gunzip = new DecompressionStream("gzip") as unknown as TransformStream<
+    Uint8Array,
+    Uint8Array
+  >;
+  const entries = Bun.file(archivePath)
+    .stream()
+    .pipeThrough(gunzip)
+    .pipeThrough(new UntarStream());
+  for await (const entry of entries) {
+    const typeflag = entry.header.typeflag;
+    // Directories carry no payload; the package layout is flat.
+    if (typeflag === "5") continue;
+    if (METADATA_TYPEFLAGS.has(typeflag)) {
+      if (entry.readable === undefined) continue;
+      await assertMetadataOnly(entry, entry.readable);
+      continue;
     }
-    return written;
-  } finally {
-    closeQuietly(file);
+    if (typeflag !== "0") {
+      const label = LONG_NAME_TYPEFLAGS.has(typeflag)
+        ? "長いパス名"
+        : `type ${typeflag}`;
+      throw new ArchiveError(
+        `アーカイブに未対応のエントリがあります (${label}): ${entry.path}`,
+      );
+    }
+    if (entry.readable === undefined) {
+      throw new ArchiveError(`エントリの内容を読めません: ${entry.path}`);
+    }
+    const name = packageEntryPath(entry.path);
+    if (name === undefined) {
+      throw new ArchiveError(
+        `アーカイブに想定外のパスがあります: ${entry.path}`,
+      );
+    }
+    if (written.includes(name)) {
+      throw new ArchiveError(`アーカイブに同名のファイルがあります: ${name}`);
+    }
+    const mode = entry.header.mode;
+    const size = await writeStream(
+      entry.readable,
+      `${targetDir}/${name}`,
+      mode !== undefined && mode > 0 ? mode & 0o777 : undefined,
+    );
+    if (size > MAX_ENTRY_BYTES) {
+      throw new ArchiveError(`エントリが大きすぎます: ${name}`);
+    }
+    written.push(name);
   }
-}
-
-/** Close a file whose readable stream may have closed the resource already
- * (`file.readable` releases the resource at EOF and on cancel, so the
- * explicit close after a successful extraction is a no-op error rather than
- * a fault). */ function closeQuietly(file: FsFile): void {
-  try {
-    file.close();
-  } catch {
-    // Already released by the stream that consumed it.
-  }
+  return written;
 }
 
 /**

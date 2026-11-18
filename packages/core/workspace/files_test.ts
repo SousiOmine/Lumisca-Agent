@@ -1,5 +1,7 @@
 import { test } from "bun:test";
-import { basename, join } from "node:path";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { basename, join, join as pathJoin } from "node:path";
 import { assertEquals } from "@std/assert";
 import {
   listWorkspaceFiles,
@@ -14,12 +16,12 @@ function workspace(root: string): Workspace {
 }
 
 test("listWorkspaceFiles returns folder-relative posix paths", async () => {
-  const root = await Deno.makeTempDir({ prefix: "lumisca-files-" });
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-files-"));
   try {
-    await Deno.mkdir(join(root, "src", "util"), { recursive: true });
-    await Deno.writeTextFile(join(root, "README.md"), "r");
-    await Deno.writeTextFile(join(root, "src", "main.ts"), "m");
-    await Deno.writeTextFile(join(root, "src", "util", "math.ts"), "x");
+    await fsp.mkdir(join(root, "src", "util"), { recursive: true });
+    await fsp.writeFile(join(root, "README.md"), "r");
+    await fsp.writeFile(join(root, "src", "main.ts"), "m");
+    await fsp.writeFile(join(root, "src", "util", "math.ts"), "x");
 
     const entries = await listWorkspaceFiles(workspace(root));
     const folderName = basename(root);
@@ -45,24 +47,21 @@ test("listWorkspaceFiles returns folder-relative posix paths", async () => {
 });
 
 test("listWorkspaceFiles skips hidden entries, excluded dirs and symlinks", async () => {
-  const root = await Deno.makeTempDir({ prefix: "lumisca-files-" });
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-files-"));
   try {
-    await Deno.mkdir(join(root, "node_modules", "pkg"), { recursive: true });
-    await Deno.mkdir(join(root, ".hidden"), { recursive: true });
-    await Deno.mkdir(join(root, ".git"), { recursive: true });
-    await Deno.writeTextFile(join(root, ".git", "config"), "g");
-    await Deno.writeTextFile(join(root, "visible.txt"), "v");
-    await Deno.writeTextFile(join(root, ".env"), "e");
-    await Deno.writeTextFile(
-      join(root, "node_modules", "pkg", "index.js"),
-      "i",
-    );
-    await Deno.mkdir(join(root, "bin", "Release"), { recursive: true });
-    await Deno.writeTextFile(join(root, "bin", "Release", "x.dll"), "b");
-    await Deno.mkdir(join(root, "obj"), { recursive: true });
-    await Deno.writeTextFile(join(root, "obj", "file.txt"), "o");
+    await fsp.mkdir(join(root, "node_modules", "pkg"), { recursive: true });
+    await fsp.mkdir(join(root, ".hidden"), { recursive: true });
+    await fsp.mkdir(join(root, ".git"), { recursive: true });
+    await fsp.writeFile(join(root, ".git", "config"), "g");
+    await fsp.writeFile(join(root, "visible.txt"), "v");
+    await fsp.writeFile(join(root, ".env"), "e");
+    await fsp.writeFile(join(root, "node_modules", "pkg", "index.js"), "i");
+    await fsp.mkdir(join(root, "bin", "Release"), { recursive: true });
+    await fsp.writeFile(join(root, "bin", "Release", "x.dll"), "b");
+    await fsp.mkdir(join(root, "obj"), { recursive: true });
+    await fsp.writeFile(join(root, "obj", "file.txt"), "o");
     try {
-      await Deno.symlink(join(root, "visible.txt"), join(root, "link.txt"));
+      await fsp.symlink(join(root, "visible.txt"), join(root, "link.txt"));
     } catch {
       // symlinks may be unavailable (permissions); the walk must not fail
     }
@@ -99,14 +98,14 @@ test("listWorkspaceFiles skips hidden entries, excluded dirs and symlinks", asyn
 });
 
 test("listWorkspaceFiles emits files before subdirectories of a level", async () => {
-  const root = await Deno.makeTempDir({ prefix: "lumisca-files-" });
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-files-"));
   try {
     // `z.txt` sorts after the `a` directory alphabetically, but the walk
     // must still surface it before descending into `a`: a deep tree must
     // not starve later siblings of the entry budget.
-    await Deno.writeTextFile(join(root, "z.txt"), "z");
-    await Deno.mkdir(join(root, "a"), { recursive: true });
-    await Deno.writeTextFile(join(root, "a", "inner.txt"), "i");
+    await fsp.writeFile(join(root, "z.txt"), "z");
+    await fsp.mkdir(join(root, "a"), { recursive: true });
+    await fsp.writeFile(join(root, "a", "inner.txt"), "i");
 
     const entries = await listWorkspaceFiles(workspace(root));
     const folderName = basename(root);
@@ -125,10 +124,10 @@ test("listWorkspaceFiles emits files before subdirectories of a level", async ()
 });
 
 test("listWorkspaceFiles stops at the max entry cap", async () => {
-  const root = await Deno.makeTempDir({ prefix: "lumisca-files-" });
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-files-"));
   try {
     for (let i = 0; i < 10; i++) {
-      await Deno.writeTextFile(join(root, `f${i}.txt`), "x");
+      await fsp.writeFile(join(root, `f${i}.txt`), "x");
     }
     const entries = await listWorkspaceFiles(workspace(root), 5);
     assertEquals(entries.length, 5);
@@ -138,11 +137,11 @@ test("listWorkspaceFiles stops at the max entry cap", async () => {
 });
 
 test("listWorkspaceFiles covers every folder of a multi-folder workspace", async () => {
-  const a = await Deno.makeTempDir({ prefix: "lumisca-a-" });
-  const b = await Deno.makeTempDir({ prefix: "lumisca-b-" });
+  const a = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-a-"));
+  const b = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-b-"));
   try {
-    await Deno.writeTextFile(join(a, "one.txt"), "1");
-    await Deno.writeTextFile(join(b, "two.txt"), "2");
+    await fsp.writeFile(join(a, "one.txt"), "1");
+    await fsp.writeFile(join(b, "two.txt"), "2");
     const entries = await listWorkspaceFiles({
       id: "w2",
       name: "ws2",

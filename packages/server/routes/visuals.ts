@@ -1,10 +1,10 @@
+import * as fsp from "node:fs/promises";
 import type { SessionInfo } from "@lumisca/core";
 import { Hono } from "hono";
 import {
   ensurePreview,
   previewPathOf,
 } from "../../core/media/preview-cache.ts";
-import { runtime } from "../../core/runtime/runtime.ts";
 import { assetResponse } from "./asset-response.ts";
 import { notFound } from "./util.ts";
 
@@ -64,7 +64,7 @@ export function visualRoutes(core: VisualApi): Hono {
         mimeType: visual.mimeType,
       });
     }
-    const bytes = await runtime.readFile(visual.path);
+    const bytes = await fsp.readFile(visual.path);
     // The asset is bounded by the store's limit (4 MiB), so buffering it
     // needs no stream handling; the buffer is an ArrayBuffer of its own.
     return assetResponse(c, {

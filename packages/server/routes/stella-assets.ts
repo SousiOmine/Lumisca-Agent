@@ -9,10 +9,10 @@
  * as another — the two have nothing in common but their path prefix.
  */
 
+import * as fsp from "node:fs/promises";
 import type { StellaAgent } from "@lumisca/core";
 import { Hono } from "hono";
 import { renderPreview } from "../../core/media/preview.ts";
-import { runtime } from "../../core/runtime/runtime.ts";
 import { assetResponse } from "./asset-response.ts";
 import { AppError, notFound } from "./util.ts";
 
@@ -55,7 +55,7 @@ export function stellaAssetRoutes(core: StellaAssetApi): Hono {
     if (icon === undefined) {
       throw notFound("Icon", name);
     }
-    const bytes = await runtime.readFile(icon.path);
+    const bytes = await fsp.readFile(icon.path);
     return assetResponse(c, {
       bytes: bytes.buffer as ArrayBuffer,
       mimeType: icon.mimeType,

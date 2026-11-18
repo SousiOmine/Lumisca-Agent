@@ -1,5 +1,7 @@
 import { test } from "bun:test";
-import { join } from "node:path";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join, join as pathJoin } from "node:path";
 import { removeDirRetry } from "@lumisca/core/test-utils";
 import { assert, assertEquals } from "@std/assert";
 import { bundleClient } from "./bundle.ts";
@@ -13,9 +15,9 @@ async function writeFixture(root: string): Promise<string> {
   const entry = join(root, "entry.ts");
   const eager = join(root, "eager.ts");
   const lazy = join(root, "lazy.ts");
-  await Deno.writeTextFile(eager, `export const eager = "eager";\n`);
-  await Deno.writeTextFile(lazy, `export const lazy = "lazy";\n`);
-  await Deno.writeTextFile(
+  await fsp.writeFile(eager, `export const eager = "eager";\n`);
+  await fsp.writeFile(lazy, `export const lazy = "lazy";\n`);
+  await fsp.writeFile(
     entry,
     `import { eager } from "./eager.ts";\n` +
       `export const load = () => import("./lazy.ts");\n` +
@@ -25,7 +27,7 @@ async function writeFixture(root: string): Promise<string> {
 }
 
 test("bundleClient splits a dynamic import out of the entry chunk", async () => {
-  const root = await Deno.makeTempDir();
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "tmp-"));
   try {
     const entry = await writeFixture(root);
     const outdir = join(root, "out");
@@ -41,7 +43,7 @@ test("bundleClient splits a dynamic import out of the entry chunk", async () => 
     const chunks = result.files.filter((name) => name.startsWith("lazy-"));
     assertEquals(chunks.length, 1, result.files.join(", "));
 
-    const entryBody = await Deno.readTextFile(join(outdir, "app.js"));
+    const entryBody = await fsp.readFile(join(outdir, "app.js"), "utf8");
     assert(entryBody.includes("./lazy-"), entryBody);
     // A dynamic import survives the build: the browser fetches the chunk when
     // the code reaches it, not when the page loads.
@@ -56,15 +58,15 @@ test("bundleClient names the entry chunk app.js whatever the entry is", async ()
   // The script tag render.ts writes is a fixed `/assets/app.js`: it must not
   // follow the entry's own file name (client.tsx → client.js) or a packaged
   // server would load a 404.
-  const root = await Deno.makeTempDir();
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "tmp-"));
   try {
     const entry = join(root, "main.ts");
-    await Deno.writeTextFile(entry, `console.log("hi");\n`);
+    await fsp.writeFile(entry, `console.log("hi");\n`);
     const outdir = join(root, "out");
     const result = await bundleClient({ cwd: root, entry, outdir });
     assertEquals(result.entry, "app.js");
     assertEquals(result.files, ["app.js"]);
-    assert((await Deno.readTextFile(join(outdir, "app.js"))).includes("hi"));
+    assert((await fsp.readFile(join(outdir, "app.js"), "utf8")).includes("hi"));
   } finally {
     await removeDirRetry(root);
   }

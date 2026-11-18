@@ -13,7 +13,7 @@ import {
 
 /**
  * The connection registry's reading rules, shared by the settings list and
- * the title bar's picker. The desktop bridge is not available under Deno, so
+ * the title bar's picker. The desktop bridge is not available under Bun, so
  * these cover the pure part: which entry is the one being shown, and what to
  * call it.
  */

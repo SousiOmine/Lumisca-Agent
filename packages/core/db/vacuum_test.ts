@@ -1,6 +1,8 @@
 import { Database } from "bun:sqlite";
 import { test } from "bun:test";
-import { basename, dirname, join } from "node:path";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { basename, dirname, join, join as pathJoin } from "node:path";
 import { assertEquals } from "@std/assert";
 import { closeDatabase } from "./close.ts";
 import { LumiscaDb } from "./mod.ts";
@@ -32,7 +34,7 @@ function makeDatabase(path: string, rows: number): void {
 }
 
 function sizeOf(path: string): Promise<number> {
-  return Deno.stat(path).then((stat) => stat.size);
+  return fsp.stat(path).then((stat) => stat.size);
 }
 
 test("vacuum: the marker sits beside the database on any platform's path", () => {
@@ -46,7 +48,7 @@ test("vacuum: the marker sits beside the database on any platform's path", () =>
   // shapes this OS uses can be asserted. The other separator is covered by
   // `basename` itself, and by this test running on every OS in CI.
   const paths =
-    Deno.build.os === "windows"
+    (process.platform === "win32" ? "windows" : process.platform) === "windows"
       ? ["C:\\Users\\me\\AppData\\l.db", "l.db"]
       : ["/home/me/.lumisca/l.db", "l.db"];
   for (const path of paths) {
@@ -57,7 +59,7 @@ test("vacuum: the marker sits beside the database on any platform's path", () =>
 });
 
 test("vacuum: no marker means nothing happens", async () => {
-  const dir = await Deno.makeTempDir({ prefix: "lumisca-vacuum-" });
+  const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-vacuum-"));
   try {
     const path = join(dir, "l.db");
     makeDatabase(path, 10);
@@ -65,34 +67,35 @@ test("vacuum: no marker means nothing happens", async () => {
     await vacuumOnStartup(path);
     assertEquals(await sizeOf(path), before);
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
 test("vacuum: a marker below the threshold is dropped untouched", async () => {
-  const dir = await Deno.makeTempDir({ prefix: "lumisca-vacuum-" });
+  const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-vacuum-"));
   try {
     const path = join(dir, "l.db");
     makeDatabase(path, 10);
     const before = await sizeOf(path);
     // A conversation that grew a little is not worth a restart's delay.
-    await Deno.writeTextFile(vacuumMarkerPath(path), "1024");
+    await fsp.writeFile(vacuumMarkerPath(path), "1024");
     await vacuumOnStartup(path);
     assertEquals(await sizeOf(path), before);
     // The marker is gone: it described a request that no longer applies.
     assertEquals(
-      await Deno.stat(vacuumMarkerPath(path))
+      await fsp
+        .stat(vacuumMarkerPath(path))
         .then(() => true)
         .catch(() => false),
       false,
     );
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
 test("vacuum: a due request rewrites the file and keeps its contents", async () => {
-  const dir = await Deno.makeTempDir({ prefix: "lumisca-vacuum-" });
+  const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-vacuum-"));
   try {
     const path = join(dir, "l.db");
     makeDatabase(path, 200);
@@ -102,7 +105,7 @@ test("vacuum: a due request rewrites the file and keeps its contents", async () 
     db.exec("DELETE FROM t WHERE id > 10");
     closeDatabase(db);
     const before = await sizeOf(path);
-    await Deno.writeTextFile(vacuumMarkerPath(path), String(MIN_VACUUM_BYTES));
+    await fsp.writeFile(vacuumMarkerPath(path), String(MIN_VACUUM_BYTES));
 
     await vacuumOnStartup(path);
 
@@ -121,25 +124,26 @@ test("vacuum: a due request rewrites the file and keeps its contents", async () 
     }
     // The request was consumed.
     assertEquals(
-      await Deno.stat(vacuumMarkerPath(path))
+      await fsp
+        .stat(vacuumMarkerPath(path))
         .then(() => true)
         .catch(() => false),
       false,
     );
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
 test("vacuum: a failed rewrite leaves the database usable and the marker in place", async () => {
-  const dir = await Deno.makeTempDir({ prefix: "lumisca-vacuum-" });
+  const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-vacuum-"));
   try {
     const path = join(dir, "l.db");
     makeDatabase(path, 20);
-    await Deno.writeTextFile(vacuumMarkerPath(path), String(MIN_VACUUM_BYTES));
+    await fsp.writeFile(vacuumMarkerPath(path), String(MIN_VACUUM_BYTES));
     // A directory where the copy must go: the copy fails, and that must not
     // damage the original (a full disk is the ordinary cause).
-    await Deno.mkdir(`${path}.vacuum-copy`);
+    await fsp.mkdir(`${path}.vacuum-copy`);
 
     await vacuumOnStartup(path);
 
@@ -154,16 +158,16 @@ test("vacuum: a failed rewrite leaves the database usable and the marker in plac
     }
     // Left for the next start.
     assertEquals(
-      await Deno.readTextFile(vacuumMarkerPath(path)),
+      await fsp.readFile(vacuumMarkerPath(path), "utf8"),
       String(MIN_VACUUM_BYTES),
     );
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
 test("vacuum: a real database keeps its schema version, indexes and rows", async () => {
-  const dir = await Deno.makeTempDir({ prefix: "lumisca-vacuum-" });
+  const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-vacuum-"));
   try {
     const path = join(dir, "lumisca.db");
     // A database this build creates: migrations, indexes and all.
@@ -192,7 +196,7 @@ test("vacuum: a real database keeps its schema version, indexes and rows", async
     ).user_version;
     original.close();
 
-    await Deno.writeTextFile(vacuumMarkerPath(path), String(MIN_VACUUM_BYTES));
+    await fsp.writeFile(vacuumMarkerPath(path), String(MIN_VACUUM_BYTES));
     await vacuumOnStartup(path);
 
     // Opening it migrates nothing (the version travelled) and the rows are
@@ -222,6 +226,6 @@ test("vacuum: a real database keeps its schema version, indexes and rows", async
       reread.close();
     }
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });

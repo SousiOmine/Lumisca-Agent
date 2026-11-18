@@ -1,6 +1,8 @@
 import { test } from "bun:test";
 import { realpathSync } from "node:fs";
-import { join } from "node:path";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join, join as pathJoin } from "node:path";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { LumiscaDb } from "../db/mod.ts";
 import { CoreError } from "../errors.ts";
@@ -418,13 +420,13 @@ async function agentToolFixture(
   // macOS `/var` → `/private/var` — compare equal to the path a tool
   // reports), so `path()` must hand out the same canonical form.
   const root = realpathSync.native(
-    await Deno.makeTempDir({ prefix: "lumisca-agent-create-" }),
+    await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-agent-create-")),
   );
   for (const [name, data] of Object.entries(options.files ?? {})) {
     if (typeof data === "string") {
-      await Deno.writeTextFile(join(root, name), data);
+      await fsp.writeFile(join(root, name), data);
     } else {
-      await Deno.writeFile(join(root, name), data);
+      await fsp.writeFile(join(root, name), data);
     }
   }
   const created: Array<{ name: string; role: string }> = [];
@@ -451,7 +453,7 @@ async function agentToolFixture(
     tool,
     created,
     path: (name) => join(root, name),
-    cleanup: () => Deno.remove(root, { recursive: true }),
+    cleanup: () => fsp.rm(root, { recursive: true }),
   };
 }
 

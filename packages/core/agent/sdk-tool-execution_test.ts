@@ -1,4 +1,5 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
 import { join } from "node:path";
 import { assertEquals } from "@std/assert";
 import { Agent } from "../ai/agent.ts";
@@ -15,7 +16,6 @@ import type {
 } from "../ai/message.ts";
 import { createStreamFn, type StreamTransport } from "../ai/stream.ts";
 import type { StreamFn } from "../ai/transport.ts";
-
 import { bytesToBase64 } from "../base64.ts";
 import { contentText } from "../shared/mod.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
@@ -489,17 +489,19 @@ function scriptedEndpoint(scripts: Response[]): {
   close: () => Promise<void>;
 } {
   const bodies: Array<Record<string, unknown>> = [];
-  const server = Deno.serve({ port: 0, onListen: () => {} }, async (req) => {
-    bodies.push((await req.json()) as Record<string, unknown>);
-    return scripts[Math.min(bodies.length - 1, scripts.length - 1)]!;
+  const server = Bun.serve({
+    port: 0,
+    fetch: async (req) => {
+      bodies.push((await req.json()) as Record<string, unknown>);
+      return scripts[Math.min(bodies.length - 1, scripts.length - 1)]!;
+    },
   });
-  // The port is assigned by the listener, which Deno starts with the
-  // server: `addr` is readable right away (see browser/client_test.ts).
-  const { port } = server.addr as Deno.NetAddr;
   return {
-    baseUrl: `http://127.0.0.1:${port}/v1`,
+    baseUrl: `http://127.0.0.1:${server.port}/v1`,
     bodies,
-    close: () => server.shutdown(),
+    close: async () => {
+      server.stop(true);
+    },
   };
 }
 
@@ -510,7 +512,7 @@ function scriptedEndpoint(scripts: Response[]): {
 test("a read tool image reaches the model and the transcript", async () => {
   await withTempDir("lumisca-read-image-", async (root) => {
     const imagePath = join(root, "pic.png");
-    await Deno.writeFile(imagePath, MINI_PNG);
+    await fsp.writeFile(imagePath, MINI_PNG);
     const endpoint = scriptedEndpoint([
       toolCallAnswer("t1", "read", { path: imagePath }),
       textAnswer("I can see it."),

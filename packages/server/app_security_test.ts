@@ -7,7 +7,7 @@ import { validateHostConfig } from "./security.ts";
 import { setup } from "./test-utils.ts";
 
 test("server rejects non-loopback Host headers (DNS rebinding guard)", async () => {
-  // Deno's fetch forbids overriding Host, so exercise the handler directly
+  // Bun's fetch forbids overriding Host, so exercise the handler directly
   // with requests that target external hostnames.
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);

@@ -51,8 +51,8 @@ jobs:
 
       # Formatting and lint are one command (`biome check`), the type check
       # is tsc. Both are package.json scripts, so this file does not repeat
-      # their arguments. The suite needs no runtime permission flags — Bun
-      # grants the process what it can reach, as Deno's --allow-* flags did.
+      # their arguments. The suite needs no permission flags: Bun runs the
+      # process with the access it already has.
       - name: Format and lint
         run: bun run fmt:check
 

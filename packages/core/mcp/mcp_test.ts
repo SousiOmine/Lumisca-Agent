@@ -1,5 +1,7 @@
 import { test } from "bun:test";
-import { join } from "node:path";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join, join as pathJoin } from "node:path";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import type { Workspace } from "../domain/workspace.ts";
 import { CoreError, errorMessage } from "../errors.ts";
@@ -98,9 +100,9 @@ test("loadMcpConfig reads the workspace file and expands env", async () => {
   try {
     // Missing file → empty config.
     assertEquals(loadMcpConfig(root).servers.length, 0);
-    Deno.env.set("LUMISCA_TEST_TOKEN", "secret-value");
+    process.env["LUMISCA_TEST_TOKEN"] = "secret-value";
     try {
-      await Deno.writeTextFile(
+      await fsp.writeFile(
         join(root, ".mcp.json"),
         JSON.stringify({
           mcpServers: {
@@ -112,7 +114,7 @@ test("loadMcpConfig reads the workspace file and expands env", async () => {
       assertEquals(config.servers[0]!.env.TOKEN, "secret-value");
       assertEquals(config.filePath, join(root, ".mcp.json"));
     } finally {
-      Deno.env.delete("LUMISCA_TEST_TOKEN");
+      delete process.env["LUMISCA_TEST_TOKEN"];
     }
   } finally {
     await removeDirRetry(root);
@@ -155,7 +157,7 @@ function makeManager(cwd: string, extra: Record<string, unknown> = {}) {
     JSON.stringify({
       mcpServers: {
         fake: {
-          command: Deno.execPath(),
+          command: process.execPath,
           args: ["run", FAKE_SERVER],
           ...extra,
         },
@@ -167,7 +169,7 @@ function makeManager(cwd: string, extra: Record<string, unknown> = {}) {
 }
 
 test("manager discovers MCP tools and calls them", async () => {
-  const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-" });
+  const cwd = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-mcp-"));
   const manager = makeManager(cwd);
   try {
     const tools = await createMcpTools(manager);
@@ -192,7 +194,7 @@ test("manager discovers MCP tools and calls them", async () => {
 });
 
 test("manager maps isError results to thrown errors", async () => {
-  const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-" });
+  const cwd = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-mcp-"));
   const manager = makeManager(cwd);
   try {
     const tools = await createMcpTools(manager);
@@ -205,7 +207,7 @@ test("manager maps isError results to thrown errors", async () => {
 });
 
 test("manager turns image content into a placeholder note", async () => {
-  const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-" });
+  const cwd = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-mcp-"));
   const manager = makeManager(cwd);
   try {
     const tools = await createMcpTools(manager);
@@ -222,7 +224,7 @@ test("manager turns image content into a placeholder note", async () => {
 });
 
 test("manager respawns a crashed server on the next call", async () => {
-  const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-" });
+  const cwd = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-mcp-"));
   const manager = makeManager(cwd);
   try {
     const tools = await createMcpTools(manager);
@@ -252,7 +254,7 @@ test("manager respawns a crashed server on the next call", async () => {
 });
 
 test("aborting a call rejects and does not kill the server", async () => {
-  const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-" });
+  const cwd = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-mcp-"));
   const manager = makeManager(cwd);
   try {
     const tools = await createMcpTools(manager);
@@ -283,7 +285,7 @@ test("aborting a call rejects and does not kill the server", async () => {
 });
 
 test("a call that never answers fails at its time limit and is not retried", async () => {
-  const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-" });
+  const cwd = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-mcp-"));
   const manager = makeManager(cwd);
   try {
     const tools = await createMcpTools(manager);
@@ -323,7 +325,7 @@ test("a call that never answers fails at its time limit and is not retried", asy
 });
 
 test("an aborted call stays an abort, not a timeout", async () => {
-  const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-" });
+  const cwd = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-mcp-"));
   const manager = makeManager(cwd);
   try {
     await createMcpTools(manager);
@@ -350,7 +352,7 @@ test("an aborted call stays an abort, not a timeout", async () => {
 });
 
 test("manager.close kills server processes", async () => {
-  const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-" });
+  const cwd = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-mcp-"));
   const manager = makeManager(cwd);
   await createMcpTools(manager);
   assertEquals(manager.getStatus()[0]!.status, "ok");
@@ -368,12 +370,12 @@ test("manager.close kills server processes", async () => {
 });
 
 test("failed server startup is reported per server", async () => {
-  const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-" });
+  const cwd = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-mcp-"));
   const config = parseMcpConfig(
     JSON.stringify({
       mcpServers: {
         broken: { command: "definitely-not-a-real-binary", args: [] },
-        fake: { command: Deno.execPath(), args: ["run", FAKE_SERVER] },
+        fake: { command: process.execPath, args: ["run", FAKE_SERVER] },
       },
     }),
     join(cwd, ".mcp.json"),
@@ -409,76 +411,79 @@ test("http servers work over streamable HTTP with session ids", async () => {
   // A minimal streamable-HTTP MCP server: issues a session id on
   // initialize, expects it back afterwards, answers tools/call over SSE.
   let sessionId: string | null = null;
-  const server = Deno.serve({ port: 0, onListen: () => {} }, async (req) => {
-    if (req.method !== "POST") return new Response("nope", { status: 405 });
-    const body = (await req.json()) as {
-      id?: string;
-      method?: string;
-      params?: Record<string, unknown>;
-    };
-    if (body.method === "initialize") {
-      sessionId = crypto.randomUUID();
-      return new Response(
-        JSON.stringify({
+  const server = Bun.serve({
+    port: 0,
+    fetch: async (req) => {
+      if (req.method !== "POST") return new Response("nope", { status: 405 });
+      const body = (await req.json()) as {
+        id?: string;
+        method?: string;
+        params?: Record<string, unknown>;
+      };
+      if (body.method === "initialize") {
+        sessionId = crypto.randomUUID();
+        return new Response(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: body.id,
+            result: {
+              protocolVersion: "2024-11-05",
+              capabilities: { tools: {} },
+              serverInfo: { name: "http-fake", version: "1" },
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+              "Mcp-Session-Id": sessionId,
+            },
+          },
+        );
+      }
+      if (body.method === "tools/list") {
+        return Response.json({
           jsonrpc: "2.0",
           id: body.id,
           result: {
-            protocolVersion: "2024-11-05",
-            capabilities: { tools: {} },
-            serverInfo: { name: "http-fake", version: "1" },
+            tools: [
+              {
+                name: "ping",
+                description: "Pings",
+                inputSchema: { type: "object" },
+              },
+            ],
           },
-        }),
-        {
-          headers: {
-            "Content-Type": "application/json",
-            "Mcp-Session-Id": sessionId,
-          },
-        },
-      );
-    }
-    if (body.method === "tools/list") {
+        });
+      }
+      if (body.method === "tools/call") {
+        const sentSession = req.headers.get("mcp-session-id");
+        const text =
+          sentSession === sessionId
+            ? "pong (session ok)"
+            : `pong (session missing: ${sentSession ?? "none"})`;
+        // Respond as SSE to exercise the SSE parser.
+        return new Response(
+          `event: message\ndata: ${JSON.stringify({
+            jsonrpc: "2.0",
+            id: body.id,
+            result: { content: [{ type: "text", text }] },
+          })}\n\n`,
+          { headers: { "Content-Type": "text/event-stream" } },
+        );
+      }
       return Response.json({
         jsonrpc: "2.0",
         id: body.id,
-        result: {
-          tools: [
-            {
-              name: "ping",
-              description: "Pings",
-              inputSchema: { type: "object" },
-            },
-          ],
-        },
+        error: { code: -32601, message: `unknown: ${body.method}` },
       });
-    }
-    if (body.method === "tools/call") {
-      const sentSession = req.headers.get("mcp-session-id");
-      const text =
-        sentSession === sessionId
-          ? "pong (session ok)"
-          : `pong (session missing: ${sentSession ?? "none"})`;
-      // Respond as SSE to exercise the SSE parser.
-      return new Response(
-        `event: message\ndata: ${JSON.stringify({
-          jsonrpc: "2.0",
-          id: body.id,
-          result: { content: [{ type: "text", text }] },
-        })}\n\n`,
-        { headers: { "Content-Type": "text/event-stream" } },
-      );
-    }
-    return Response.json({
-      jsonrpc: "2.0",
-      id: body.id,
-      error: { code: -32601, message: `unknown: ${body.method}` },
-    });
+    },
   });
   try {
-    const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-http-" });
+    const cwd = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-mcp-http-"));
     const config = parseMcpConfig(
       JSON.stringify({
         mcpServers: {
-          remote: { url: `http://127.0.0.1:${server.addr.port}/mcp` },
+          remote: { url: `http://127.0.0.1:${server.port}/mcp` },
         },
       }),
       join(cwd, ".mcp.json"),
@@ -498,7 +503,7 @@ test("http servers work over streamable HTTP with session ids", async () => {
       await removeDirRetry(cwd);
     }
   } finally {
-    await server.shutdown();
+    server.stop(true);
   }
 });
 
@@ -507,15 +512,15 @@ test("http servers work over streamable HTTP with session ids", async () => {
 test("loadMergedConfig merges app, workspace and plugin MCP servers", async () => {
   const root = await makeRealTempDir("lumisca-mcp-plugins-");
   const pluginDir = join(root, ".agents", "plugins", "demo");
-  await Deno.mkdir(pluginDir, { recursive: true });
-  await Deno.writeTextFile(
+  await fsp.mkdir(pluginDir, { recursive: true });
+  await fsp.writeFile(
     join(pluginDir, "plugin.json"),
     JSON.stringify({
       $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
       name: "demo",
     }),
   );
-  await Deno.writeTextFile(
+  await fsp.writeFile(
     join(pluginDir, "mcp.json"),
     JSON.stringify({
       $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
@@ -526,7 +531,7 @@ test("loadMergedConfig merges app, workspace and plugin MCP servers", async () =
       },
     }),
   );
-  await Deno.writeTextFile(
+  await fsp.writeFile(
     join(root, ".mcp.json"),
     JSON.stringify({ mcpServers: { clash: { command: "workspace-clash" } } }),
   );
@@ -614,10 +619,10 @@ function makeTestService(): McpService {
 }
 
 test("probeMcpServer lists the server's tools", async () => {
-  const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-probe-" });
+  const cwd = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-mcp-probe-"));
   try {
     const tools = await probeMcpServer(
-      probeTarget(Deno.execPath(), ["run", FAKE_SERVER]),
+      probeTarget(process.execPath, ["run", FAKE_SERVER]),
       cwd,
     );
     assertEquals(tools.map((t) => t.name).sort(), [
@@ -638,19 +643,19 @@ test("probeMcpServer fails for a server that cannot start", async () => {
   await assertRejects(() =>
     probeMcpServer(
       probeTarget("lumisca-definitely-missing-command", []),
-      Deno.cwd(),
+      process.cwd(),
       5_000,
     ),
   );
 });
 
 test("a timed-out probe leaves no server process behind", async () => {
-  const cwd = await Deno.makeTempDir({ prefix: "lumisca-mcp-hang-" });
+  const cwd = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-mcp-hang-"));
   const marker = join(cwd, "exited");
   try {
     await assertRejects(() =>
       probeMcpServer(
-        probeTarget(Deno.execPath(), [
+        probeTarget(process.execPath, [
           "run",
           "--allow-write",
           FAKE_HANG,
@@ -662,7 +667,7 @@ test("a timed-out probe leaves no server process behind", async () => {
     );
     // Closing the transport ends the fixture's stdin and waits for the
     // child, so its exit marker is there by the time the probe settled.
-    assertEquals(await Deno.readTextFile(marker), "exited");
+    assertEquals(await fsp.readFile(marker, "utf8"), "exited");
   } finally {
     await removeDirRetry(cwd);
   }
@@ -673,7 +678,7 @@ test("testServer reports a server with its tools", async () => {
   const result = await service.testServer(
     JSON.stringify({
       mcpServers: {
-        fake: { command: Deno.execPath(), args: ["run", FAKE_SERVER] },
+        fake: { command: process.execPath, args: ["run", FAKE_SERVER] },
       },
     }),
   );
@@ -692,7 +697,7 @@ test("testServer tests a disabled server too", async () => {
     JSON.stringify({
       mcpServers: {
         fake: {
-          command: Deno.execPath(),
+          command: process.execPath,
           args: ["run", FAKE_SERVER],
           enabled: false,
         },
@@ -749,7 +754,7 @@ test("an HTTP server receives the configured headers", async () => {
         headers: { Authorization: "Bearer test-token", "X-Extra": "1" },
         enabled: true,
       },
-      Deno.cwd(),
+      process.cwd(),
       10_000,
     );
     assertEquals(
@@ -824,7 +829,7 @@ function stdioServer(name: string, command = "npx"): McpServerConfig {
 
 test("addAppServer appends without expanding the other servers' env", () => {
   const { service, settings } = makeAppEditService();
-  Deno.env.set("LUMISCA_ADD_TEST_TOKEN", "secret-value");
+  process.env["LUMISCA_ADD_TEST_TOKEN"] = "secret-value";
   try {
     settings.set(
       APP_MCP_SETTINGS_KEY,
@@ -851,7 +856,7 @@ test("addAppServer appends without expanding the other servers' env", () => {
     // The runtime view still expands it.
     assertEquals(info.servers[0]!.env.TOKEN, "secret-value");
   } finally {
-    Deno.env.delete("LUMISCA_ADD_TEST_TOKEN");
+    delete process.env["LUMISCA_ADD_TEST_TOKEN"];
   }
 });
 

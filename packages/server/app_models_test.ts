@@ -1,5 +1,8 @@
 import { test } from "bun:test";
-import { join } from "node:path";
+import * as fsSync from "node:fs";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join, join as pathJoin } from "node:path";
 import { fauxAssistantMessage, fauxToolCall, LumiscaCore } from "@lumisca/core";
 import { removeDirRetry } from "@lumisca/core/test-utils";
 import { assertEquals } from "@std/assert";
@@ -9,7 +12,7 @@ import { json, setup } from "./test-utils.ts";
 test("session model switch API", async () => {
   const { core, server, faux, base } = await setup();
   try {
-    const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-srv-"));
     const create = await json(base, "/api/workspaces", {
       method: "POST",
       body: JSON.stringify({ name: "ws", folders: [root] }),
@@ -54,7 +57,7 @@ test("default model API follows the configured providers", async () => {
     assertEquals(empty.status, 200);
     assertEquals(await empty.json(), null);
 
-    const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-srv-"));
     const create = await json(base, "/api/workspaces", {
       method: "POST",
       body: JSON.stringify({ name: "ws", folders: [root] }),
@@ -213,7 +216,7 @@ test("settings API writes the model preferences the dialog offers", async () => 
 });
 
 test("personalize API reads and writes AGENTS.md next to the settings file", async () => {
-  const dir = await Deno.makeTempDir({ prefix: "lumisca-pers-" });
+  const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-pers-"));
   const core = LumiscaCore.open(
     join(dir, "lumisca.db"),
     join(dir, "settings.jsonc"),
@@ -234,7 +237,10 @@ test("personalize API reads and writes AGENTS.md next to the settings file", asy
       body: JSON.stringify({ content: "Answer in Japanese.\n" }),
     });
     assertEquals(put.status, 200);
-    assertEquals(Deno.readTextFileSync(agentFile), "Answer in Japanese.\n");
+    assertEquals(
+      fsSync.readFileSync(agentFile, "utf8"),
+      "Answer in Japanese.\n",
+    );
 
     const get = await fetch(`${base}/api/personalize`);
     const info = (await get.json()) as { path: string; content: string };

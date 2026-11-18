@@ -1,4 +1,6 @@
 import { test } from "bun:test";
+import * as fsSync from "node:fs";
+import * as fsp from "node:fs/promises";
 import { THEME_COLORS } from "@lumisca/core/shared";
 import { assert, assertEquals } from "@std/assert";
 
@@ -34,8 +36,8 @@ function blocks(css: string): Block[] {
 /** The files under `src` that can carry a design token: the stylesheets and
  * the components (their inline styles use the same variables). */
 async function* sourceFiles(dir: URL): AsyncGenerator<URL> {
-  for await (const entry of Deno.readDir(dir)) {
-    if (entry.isDirectory) {
+  for (const entry of await fsp.readdir(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
       yield* sourceFiles(new URL(`${entry.name}/`, dir));
     } else if (/\.(css|ts|tsx)$/.test(entry.name)) {
       yield new URL(entry.name, dir);
@@ -51,8 +53,9 @@ function referenced(css: string): string[] {
 }
 
 test("both theme blocks declare the same tokens", async () => {
-  const css = await Deno.readTextFile(
+  const css = await fsp.readFile(
     new URL("./styles/tokens.css", import.meta.url),
+    "utf8",
   );
   const themed = new Map<string, string[]>();
   for (const block of blocks(css)) {
@@ -89,14 +92,15 @@ test("both theme blocks declare the same tokens", async () => {
 });
 
 test("every token reference resolves", async () => {
-  const tokensCss = await Deno.readTextFile(
+  const tokensCss = await fsp.readFile(
     new URL("./styles/tokens.css", import.meta.url),
+    "utf8",
   );
   const declared = new Set(blocks(tokensCss).flatMap((block) => block.tokens));
   const missing = new Set<string>();
   for await (const file of sourceFiles(new URL("./", import.meta.url))) {
     if (file.pathname.endsWith("styles/tokens.css")) continue;
-    for (const token of referenced(await Deno.readTextFile(file))) {
+    for (const token of referenced(await fsp.readFile(file, "utf8"))) {
       if (!declared.has(token)) missing.add(token);
     }
   }
@@ -172,7 +176,7 @@ async function* styleSheets(): AsyncGenerator<[string, string]> {
     if (!file.pathname.endsWith(".css")) continue;
     yield [
       file.pathname.split("/styles/")[1] ?? file.pathname,
-      await Deno.readTextFile(file),
+      await fsp.readFile(file, "utf8"),
     ];
   }
 }
@@ -292,16 +296,18 @@ test("the app height follows the visual viewport", async () => {
   // The app is sized by the token (itself the dynamic viewport height) and
   // refined by useAppHeight; a hardcoded height here would put the composer
   // back behind the software keyboard.
-  const layout = await Deno.readTextFile(
+  const layout = await fsp.readFile(
     new URL("./styles/layout.css", import.meta.url),
+    "utf8",
   );
   assertEquals(
     /\.app\s*\{[^}]*height:\s*var\(--app-height\)/.test(layout),
     true,
     "styles/layout.css must size .app from --app-height",
   );
-  const tokens = await Deno.readTextFile(
+  const tokens = await fsp.readFile(
     new URL("./styles/tokens.css", import.meta.url),
+    "utf8",
   );
   assertEquals(
     /--app-height:\s*\S+/.test(tokens),
@@ -315,8 +321,9 @@ test("the page itself never scrolls", async () => {
   // the window scrolled the WHOLE UI — the sidebar and title bar slid away
   // from a conversation pane that was already scrolling on its own. Every
   // scrolling surface here is an inner element; the document is the window.
-  const base = await Deno.readTextFile(
+  const base = await fsp.readFile(
     new URL("./styles/base.css", import.meta.url),
+    "utf8",
   );
   const rule = /html,\s*body\s*\{([^}]*)\}/.exec(base);
   assertEquals(rule !== null, true, "styles/base.css must style html and body");
@@ -372,8 +379,9 @@ test("the machine's screen canvas is left to noVNC to size", () => {
   // picture look right and the input land elsewhere — a click at the pane's
   // centre reached the machine's bottom edge, and the screen read as
   // unresponsive. Sizing is the client's, not the stylesheet's.
-  const css = Deno.readTextFileSync(
+  const css = fsSync.readFileSync(
     new URL("./styles/stella.css", import.meta.url),
+    "utf8",
   );
   const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
   for (const match of stripped.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
@@ -424,8 +432,9 @@ test("every animation has a reduced-motion override", () => {
   // Only the reduce block counts, and only its animation/transition rules —
   // a selector merely mentioned elsewhere (a comment, another property) is
   // not an override.
-  const reduced = Deno.readTextFileSync(
+  const reduced = fsSync.readFileSync(
     new URL("./styles/reduced-motion.css", import.meta.url),
+    "utf8",
   );
   const start = reduced.indexOf("@media (prefers-reduced-motion: reduce)");
   collect(start === -1 ? "" : reduced.slice(start));
@@ -490,9 +499,12 @@ test("transitions name their properties and use the motion tokens", async () => 
 function styleSheetsSync(): [string, string][] {
   const dir = new URL("./styles/", import.meta.url);
   const sheets: [string, string][] = [];
-  for (const entry of Deno.readDirSync(dir)) {
-    if (!entry.isFile || !entry.name.endsWith(".css")) continue;
-    sheets.push([entry.name, Deno.readTextFileSync(new URL(entry.name, dir))]);
+  for (const entry of fsSync.readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith(".css")) continue;
+    sheets.push([
+      entry.name,
+      fsSync.readFileSync(new URL(entry.name, dir), "utf8"),
+    ]);
   }
   return sheets;
 }
@@ -501,8 +513,9 @@ test("a card's action lines up with the plain cards around it", async () => {
   // Regression: a registry entry (settings → 接続先サーバー) drew its own
   // padded box instead of using the card's padding, so the 表示 buttons in
   // the column sat a few pixels apart from each other.
-  const settings = await Deno.readTextFile(
+  const settings = await fsp.readFile(
     new URL("./styles/settings.css", import.meta.url),
+    "utf8",
   );
   assertEquals(
     /\.setting-card-stack\s*\{[^}]*flex-direction:\s*column/.test(settings),
@@ -534,8 +547,9 @@ test("the progress rows stay in the composer's column", async () => {
   // covered the server list. The rows now sit in the input area's own
   // column, where nothing can be stacked on them; this test fails if one
   // goes back to floating over the page.
-  const css = await Deno.readTextFile(
+  const css = await fsp.readFile(
     new URL("./styles/side-panels.css", import.meta.url),
+    "utf8",
   );
   const rule = /\.progress-panels\s*\{([^}]*)\}/.exec(css);
   assertEquals(rule !== null, true, ".progress-panels must be styled");
@@ -576,7 +590,7 @@ test("every class a stylesheet defines is referenced somewhere", async () => {
   const sheets = new Map<string, string>();
   const sources: string[] = [];
   for await (const url of sourceFiles(new URL("./", import.meta.url))) {
-    const text = await Deno.readTextFile(url);
+    const text = await fsp.readFile(url, "utf8");
     if (url.pathname.endsWith(".css")) sheets.set(url.pathname, text);
     else sources.push(text);
   }
@@ -629,8 +643,9 @@ test("the composer draws one frame, and its buttons are one size", async () => {
   //   field from where the writing starts;
   // - the stop and send buttons carried one glyph each but were as wide as
   //   their padding made them, so they were not square.
-  const css = await Deno.readTextFile(
+  const css = await fsp.readFile(
     new URL("./styles/composer.css", import.meta.url),
+    "utf8",
   );
 
   // The field keeps no frame of its own, in either focus state.
@@ -729,8 +744,9 @@ test("a lent folder's frame survives the field taking focus", async () => {
   //   disk.
   // - the line above must keep the composer's width, or the column reads as
   //   two unrelated controls instead of one.
-  const css = await Deno.readTextFile(
+  const css = await fsp.readFile(
     new URL("./styles/composer.css", import.meta.url),
+    "utf8",
   );
   const focusAt = css.indexOf(".input-composer:focus-within {");
   const sharingAt = css.indexOf(".input-composer.sharing {");
@@ -770,8 +786,9 @@ test("the message field keeps one type size between the two views", async () => 
   // type used to differ by a step between them, so selecting a session (or
   // coming back to the new-session tab) resized the text the reader was
   // writing. The height still tells the two apart; the type does not.
-  const css = await Deno.readTextFile(
+  const css = await fsp.readFile(
     new URL("./styles/composer.css", import.meta.url),
+    "utf8",
   );
   const rules = cssRules(css);
   const shared = rules.find((rule) =>
@@ -801,8 +818,9 @@ test("the composer field grows to twelve lines and then scrolls", async () => {
   // (the field never moves), and a ceiling in pixels (the two sizes the
   // field takes would each need their own number, and the new-session one
   // would keep a different idea of "too tall").
-  const css = await Deno.readTextFile(
+  const css = await fsp.readFile(
     new URL("./styles/composer.css", import.meta.url),
+    "utf8",
   );
   const field = cssRules(css).filter((rule) =>
     rule.selector.includes(".input-box"),
@@ -865,8 +883,9 @@ test("the machine's screen fills the window without reflowing it", async () => {
   // is what makes that possible without re-parenting the element (a new
   // parent would mount a new noVNC client and drop the connection), and
   // without reflowing the transcript behind it.
-  const css = await Deno.readTextFile(
+  const css = await fsp.readFile(
     new URL("./styles/stella.css", import.meta.url),
+    "utf8",
   );
   const rule = /\.stella-pane\.fullscreen \{([^}]*)\}/.exec(css);
   assertEquals(rule !== null, true, ".stella-pane.fullscreen must exist");
@@ -899,8 +918,9 @@ test("the columns trade width in one movement", async () => {
   // one requestAnimationFrame that writes the canvas's CSS width
   // (`Display._rescale`) — it does not repaint the pixels, so following the
   // box costs nothing per frame.
-  const css = await Deno.readTextFile(
+  const css = await fsp.readFile(
     new URL("./styles/stella.css", import.meta.url),
+    "utf8",
   );
   const pane = /\.stella-pane \{([^}]*)\}/.exec(css);
   assertEquals(pane !== null, true, ".stella-pane must exist");
@@ -928,8 +948,9 @@ test("stella draws no conversation until an agent is picked", async () => {
   // window's layout too (it also happens to be what makes the list a screen of
   // its own below the breakpoint). A rule that only lived in the media query
   // would leave a desktop window showing an empty conversation beside the list.
-  const css = await Deno.readTextFile(
+  const css = await fsp.readFile(
     new URL("./styles/stella.css", import.meta.url),
+    "utf8",
   );
   const rules = cssRules(css);
   const hidden = rules.find(
@@ -971,7 +992,10 @@ test("stella draws no conversation until an agent is picked", async () => {
   );
   const tokens = declarations(
     cssRules(
-      await Deno.readTextFile(new URL("./styles/tokens.css", import.meta.url)),
+      await fsp.readFile(
+        new URL("./styles/tokens.css", import.meta.url),
+        "utf8",
+      ),
     ),
     ":root",
   );
@@ -1012,8 +1036,9 @@ test("stella's list and conversation are two screens on a tablet", async () => {
   // a row squeezed the conversation to the 2px of its border and left a
   // horizontal scroll in stella only, because code mode has no column beside
   // its chat. The hide is therefore the part worth pinning.
-  const css = await Deno.readTextFile(
+  const css = await fsp.readFile(
     new URL("./styles/stella.css", import.meta.url),
+    "utf8",
   );
   const rules = cssRules(css);
   const tablet = (selector: string): CssRule | undefined =>
@@ -1067,8 +1092,9 @@ test("a conversation arrives from the right beside the list", async () => {
   // The list travels to the left margin and the sheet comes in from the right:
   // one movement, so the sheet is not also faded up from nothing — the travel
   // says which side it came from.
-  const css = await Deno.readTextFile(
+  const css = await fsp.readFile(
     new URL("./styles/stella.css", import.meta.url),
+    "utf8",
   );
   const rules = cssRules(css);
   const arrival = rules.find(
@@ -1091,8 +1117,9 @@ test("a conversation arrives from the right beside the list", async () => {
 
   // Only opacity and transform move (styles/README.md, rule 4): the transcript
   // is streaming and the noVNC canvas reads its box for the scale.
-  const motion = await Deno.readTextFile(
+  const motion = await fsp.readFile(
     new URL("./styles/motion.css", import.meta.url),
+    "utf8",
   );
   const block = /@keyframes lum-enter-right \{[\s\S]*?\n\}/.exec(motion);
   assertEquals(block !== null, true, "lum-enter-right must be declared");
@@ -1116,24 +1143,24 @@ test("the model picker's panel is capped by the room it measured", () => {
   // two-model catalogue). A `height` here would bring that box back, and an
   // uncapped panel would run past the screen — the room is measured per
   // opening by hooks/usePopoverPlacement.ts.
-  return Deno.readTextFile(
-    new URL("./styles/model-picker.css", import.meta.url),
-  ).then((css) => {
-    const panel = cssRules(css).find(
-      (rule) => rule.selector === ".mp-popover" && rule.media === null,
-    );
-    assertEquals(panel !== undefined, true, ".mp-popover must be placed");
-    assertEquals(
-      /max-height:\s*var\(--mp-space\)/.test(panel!.body),
-      true,
-      "the panel must be capped by the measured room",
-    );
-    assertEquals(
-      /(^|[^-])height:\s*var\(--mp-space\)/.test(panel!.body),
-      false,
-      "the panel must shrink to its contents below the cap",
-    );
-  });
+  return fsp
+    .readFile(new URL("./styles/model-picker.css", import.meta.url), "utf8")
+    .then((css) => {
+      const panel = cssRules(css).find(
+        (rule) => rule.selector === ".mp-popover" && rule.media === null,
+      );
+      assertEquals(panel !== undefined, true, ".mp-popover must be placed");
+      assertEquals(
+        /max-height:\s*var\(--mp-space\)/.test(panel!.body),
+        true,
+        "the panel must be capped by the measured room",
+      );
+      assertEquals(
+        /(^|[^-])height:\s*var\(--mp-space\)/.test(panel!.body),
+        false,
+        "the panel must shrink to its contents below the cap",
+      );
+    });
 });
 
 /** The canvas colour a theme's block declares (`--bg`), or undefined when
@@ -1151,8 +1178,9 @@ test("the manifest's theme colours are the themes' --bg", async () => {
   // the two have to name the same colours. A mismatch paints the splash
   // screen and the installed app's status bar in a colour the app never
   // shows.
-  const css = await Deno.readTextFile(
+  const css = await fsp.readFile(
     new URL("./styles/tokens.css", import.meta.url),
+    "utf8",
   );
   for (const theme of ["dark", "light"] as const) {
     assertEquals(canvasColor(css, theme), THEME_COLORS[theme], theme);
@@ -1183,11 +1211,13 @@ test("the window controls keep the right edge of the title bar", async () => {
   // The strip is a column child in a plain browser (nothing to share a row
   // with), so its width belongs to that case; inside the bar it has to be
   // the flexible child, exactly like the tab bar.
-  const chrome = await Deno.readTextFile(
+  const chrome = await fsp.readFile(
     new URL("./styles/chrome.css", import.meta.url),
+    "utf8",
   );
-  const stella = await Deno.readTextFile(
+  const stella = await fsp.readFile(
     new URL("./styles/stella.css", import.meta.url),
+    "utf8",
   );
   const controls = declarations(cssRules(chrome), ".titlebar-controls");
   assertEquals(
@@ -1224,8 +1254,9 @@ test("the code-mode sheet is the window's paper, with one edge of canvas", async
   // right and bottom edges now, so only the top edge has a shape to draw — a
   // hairline under the strip of canvas the tab bar leaves. Rounding or
   // shadowing it again would draw the window's own edge a second time.
-  const chat = await Deno.readTextFile(
+  const chat = await fsp.readFile(
     new URL("./styles/chat.css", import.meta.url),
+    "utf8",
   );
   const sheet = declarations(cssRules(chat), ".chat");
   assertEquals(sheet.get("margin"), "var(--chat-top-gap) 0 0");
@@ -1242,8 +1273,9 @@ test("the answer's copy control is drawn without a hover", async () => {
   // answer owns no such wrapper, so it answered the pointer and its tooltip
   // while showing nothing. The fix is the visible variant, which the agent's
   // answer uses in both modes (chat.css, MessageCopyButton.tsx).
-  const chat = await Deno.readTextFile(
+  const chat = await fsp.readFile(
     new URL("./styles/chat.css", import.meta.url),
+    "utf8",
   );
   const rules = cssRules(chat);
   assertEquals(
@@ -1267,8 +1299,9 @@ test("a pane behind another tab is not laid out", async () => {
   // `display: flex` outranks the user agent's `[hidden]`, so without it two
   // transcripts would be stacked in the window — and the hidden pane would
   // still be laid out and (for a screen reader) still be there.
-  const chat = await Deno.readTextFile(
+  const chat = await fsp.readFile(
     new URL("./styles/chat.css", import.meta.url),
+    "utf8",
   );
   assertEquals(
     declarations(cssRules(chat), ".chat[hidden]").get("display"),
@@ -1280,8 +1313,9 @@ test("the tab bar keeps its cards off the window's edges", async () => {
   // The bar paints the canvas, so its cards keep the canvas margin even though
   // the sheet below is the window's edge and offers no line to line up with. A
   // card written to the edge would read as a tab strip cut in half.
-  const chrome = await Deno.readTextFile(
+  const chrome = await fsp.readFile(
     new URL("./styles/chrome.css", import.meta.url),
+    "utf8",
   );
   assertEquals(
     declarations(cssRules(chrome), ".tabbar").get("padding"),
@@ -1296,8 +1330,9 @@ test("stella's strip starts where the list's rows do", async () => {
   // take both: a gutter of its own left the two left edges a few pixels
   // apart. The shell's and the rows' narrower values (stella.css: the two
   // screens, the phone) carry their own strip rule beside them.
-  const stella = await Deno.readTextFile(
+  const stella = await fsp.readFile(
     new URL("./styles/stella.css", import.meta.url),
+    "utf8",
   );
   const rules = cssRules(stella);
   assertEquals(
@@ -1330,8 +1365,9 @@ test("a screen transition slides where one screen shows and fades elsewhere", as
   // The breakpoint is the compact one, not the phone's: it is where both
   // layouts (stella's two screens, settings' list and page) stop showing the
   // destination beside the source.
-  const motion = await Deno.readTextFile(
+  const motion = await fsp.readFile(
     new URL("./styles/motion.css", import.meta.url),
+    "utf8",
   );
   const rules = cssRules(motion);
   const named = rules.filter((rule) => /view-transition-name/.test(rule.body));
@@ -1382,8 +1418,9 @@ test("a screen transition slides where one screen shows and fades elsewhere", as
 
   // Reduced motion keeps the fades and drops the travel (the sheet's own
   // rule: fewer and gentler, not none).
-  const reduced = await Deno.readTextFile(
+  const reduced = await fsp.readFile(
     new URL("./styles/reduced-motion.css", import.meta.url),
+    "utf8",
   );
   const overrides = cssRules(reduced).filter(
     (rule) =>
@@ -1404,8 +1441,9 @@ test("a disclosure animates its height, and only that", async () => {
   // former has no "as tall as the content" answer and would be a number
   // written from a measurement that the streaming body invalidates, and the
   // latter the noVNC canvas reads for its scale.
-  const motion = await Deno.readTextFile(
+  const motion = await fsp.readFile(
     new URL("./styles/motion.css", import.meta.url),
+    "utf8",
   );
   const rules = cssRules(motion);
   const base = declarations(rules, ".collapse");
@@ -1451,8 +1489,9 @@ test("a disclosure animates its height, and only that", async () => {
   }
 
   // Reduced motion: the travel goes and the fade stays (rule 6).
-  const reduced = await Deno.readTextFile(
+  const reduced = await fsp.readFile(
     new URL("./styles/reduced-motion.css", import.meta.url),
+    "utf8",
   );
   const stopped = cssRules(reduced).filter(
     (rule) =>
@@ -1477,8 +1516,9 @@ test("a disclosure's body is always mounted", async () => {
   ];
   const missing: string[] = [];
   for (const name of sources) {
-    const source = await Deno.readTextFile(
+    const source = await fsp.readFile(
       new URL(`./${name}`, import.meta.url),
+      "utf8",
     );
     if (!/className="collapse/.test(source)) {
       missing.push(`${name}: no collapse`);
@@ -1497,8 +1537,9 @@ test("a section's action keeps the right edge, heading or not", async () => {
   // the list it adds to, and off the right edge where each row's own buttons
   // are. A section that does have a heading pushes its action there through
   // the heading's own growth, which is why both halves are checked.
-  const settings = await Deno.readTextFile(
+  const settings = await fsp.readFile(
     new URL("./styles/settings.css", import.meta.url),
+    "utf8",
   );
   const head = declarations(cssRules(settings), ".settings-section-head");
   assertEquals(head.get("justify-content"), "flex-end");
@@ -1512,8 +1553,9 @@ test("a routine's state stays on its name's line", async () => {
   // never wraps; the name gives way (measured per row, so a name that fits
   // keeps its last letters) and fades into the row instead of being cut
   // square beside the badge.
-  const stella = await Deno.readTextFile(
+  const stella = await fsp.readFile(
     new URL("./styles/stella.css", import.meta.url),
+    "utf8",
   );
   const rules = cssRules(stella);
   assertEquals(
@@ -1540,8 +1582,9 @@ test("a routine's request folds to three lines", async () => {
   // filled the panel and the next was below the fold. The fold lives in the
   // stylesheet, and the disclosure that opens it in the component
   // (RoutinePrompt).
-  const stella = await Deno.readTextFile(
+  const stella = await fsp.readFile(
     new URL("./styles/stella.css", import.meta.url),
+    "utf8",
   );
   const rules = cssRules(stella);
   const prompt = declarations(rules, ".routine-prompt");

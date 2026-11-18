@@ -20,13 +20,17 @@
  * the downloaded package.
  */
 
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { OS, TARGET } from "../packages/core/platform.ts";
 import {
-  type ChildProcess,
   exit,
-  type NetAddr,
-  runtime,
-} from "../packages/core/runtime/runtime.ts";
+  inheritedEnv,
+  runProcess,
+  runProcessSync,
+  spawnProcess,
+} from "../packages/core/process.ts";
 import { installedFileNames } from "../packages/server/layout.ts";
 import { SERVER_STARTUP_ENV_KEYS } from "../packages/server/startup.ts";
 import { SERVER_VERSION } from "../packages/server/version.ts";
@@ -55,14 +59,7 @@ function usage(message?: string): never {
 
 /** Staged release build for this host (see scripts/build-server.ts). */
 function defaultBinary(): string {
-  return join(
-    repoRoot,
-    "dist",
-    "server",
-    "stage",
-    runtime.build.target,
-    binaryName(),
-  );
+  return join(repoRoot, "dist", "server", "stage", TARGET, binaryName());
 }
 
 function parseArgs(args: readonly string[]): string {
@@ -92,9 +89,18 @@ const delay = (ms: number) => new Promise((done) => setTimeout(done, ms));
  * (A pre-bound port cannot be inherited by the child, and LUMISCA_PORT
  * rejects 0.) */
 function freePort(): number {
-  const listener = runtime.listen({ hostname: "127.0.0.1", port: 0 });
-  const { port } = listener.addr as NetAddr;
-  listener.close();
+  const listener = Bun.listen({
+    hostname: "127.0.0.1",
+    port: 0,
+    socket: {
+      data() {},
+      open(socket) {
+        socket.end();
+      },
+    },
+  });
+  const port = listener.port;
+  listener.stop(true);
   return port;
 }
 
@@ -113,7 +119,7 @@ function freePort(): number {
 function serviceEnv(): Record<string, string> {
   const env: Record<string, string> = {};
   for (const key of ["HOME", "USER", "USERPROFILE", "USERNAME"] as const) {
-    const value = runtime.env.get(key);
+    const value = process.env[key];
     if (value !== undefined) env[key] = value;
   }
   if (env.USER === undefined && env.USERNAME === undefined) {
@@ -128,13 +134,9 @@ function serviceEnv(): Record<string, string> {
  * binary says. On Windows USER/USERNAME are set by the system, so the fallback
  * is not needed. */
 function currentAccount(): string | undefined {
-  if (runtime.build.os === "windows") return undefined;
+  if (OS === "windows") return undefined;
   try {
-    const { success, stdout } = new runtime.Command("id", {
-      args: ["-un"],
-      stdout: "piped",
-      stderr: "null",
-    }).outputSync();
+    const { success, stdout } = runProcessSync(["id", "-un"]);
     if (!success) return undefined;
     const name = new TextDecoder().decode(stdout).trim();
     return name.length > 0 ? name : undefined;
@@ -146,15 +148,13 @@ function currentAccount(): string | undefined {
 /** Stop the server and wait for it: SIGTERM on POSIX (the server shuts
  * down gracefully), a tree kill on Windows (it has no signal handling
  * there, and tool processes must not outlive it). */
-async function stop(child: ChildProcess, status: Promise<unknown>) {
-  if (runtime.build.os === "windows") {
-    await new runtime.Command("taskkill", {
-      args: ["/PID", String(child.pid), "/T", "/F"],
-      stdout: "null",
-      stderr: "null",
-    })
-      .output()
-      .catch(() => {});
+async function stop(child: Bun.Subprocess, status: Promise<unknown>) {
+  if (OS === "windows") {
+    try {
+      runProcessSync(["taskkill", "/PID", String(child.pid), "/T", "/F"]);
+    } catch {
+      // Already gone.
+    }
   } else {
     try {
       child.kill("SIGTERM");
@@ -177,9 +177,9 @@ async function stop(child: ChildProcess, status: Promise<unknown>) {
   }
 }
 
-const sourceBinary = parseArgs(runtime.args);
+const sourceBinary = parseArgs(process.argv.slice(2));
 try {
-  if (!(await runtime.stat(sourceBinary)).isFile) {
+  if (!(await fsp.stat(sourceBinary)).isFile()) {
     usage(`not a file: ${sourceBinary}`);
   }
 } catch {
@@ -190,19 +190,19 @@ const { check, failures } = createChecker();
 
 const port = freePort();
 const base = `http://127.0.0.1:${port}`;
-const workDir = await runtime.makeTempDir({ prefix: "lumisca-smoke-" });
+const workDir = await fsp.mkdtemp(join(osTmpdir(), "lumisca-smoke-"));
 
 /** Copy a directory tree (the stella machine's container files: the
  * Containerfile, the entry script and the accessibility helper).
  * A depth written here would silently drop the files below it, so it
  * descends as far as the tree does. */
 async function copyTree(from: string, to: string): Promise<void> {
-  await runtime.mkdir(to, { recursive: true });
-  for await (const entry of runtime.readDir(from)) {
+  await fsp.mkdir(to, { recursive: true });
+  for (const entry of await fsp.readdir(from, { withFileTypes: true })) {
     const source = join(from, entry.name);
     const target = join(to, entry.name);
-    if (entry.isDirectory) await copyTree(source, target);
-    else if (entry.isFile) await runtime.copyFile(source, target);
+    if (entry.isDirectory()) await copyTree(source, target);
+    else if (entry.isFile()) await fsp.copyFile(source, target);
   }
 }
 
@@ -212,22 +212,22 @@ async function copyTree(from: string, to: string): Promise<void> {
  * directory tree (the stella machine's container files) and is copied whole.
  * Returns the copied binary's path. */
 async function copyPackage(source: string, targetDir: string): Promise<string> {
-  await runtime.mkdir(targetDir, { recursive: true });
+  await fsp.mkdir(targetDir, { recursive: true });
   let copied = 0;
   for (const name of installedFileNames(source)) {
     const from = join(dirname(source), name);
     const to = join(targetDir, name);
-    const info = await runtime.stat(from).catch(() => undefined);
+    const info = await fsp.stat(from).catch(() => undefined);
     if (info === undefined) {
       // Optional entries (icudtl.dat is Windows-only, the container files
       // ship with the server package only): the packaged server must
       // tolerate their absence, so the copy does.
       continue;
     }
-    if (info.isDirectory) {
+    if (info.isDirectory()) {
       await copyTree(from, to);
     } else {
-      await runtime.copyFile(from, to);
+      await fsp.copyFile(from, to);
     }
     copied++;
   }
@@ -243,13 +243,13 @@ async function copyPackage(source: string, targetDir: string): Promise<string> {
 
 const binary = await copyPackage(sourceBinary, join(workDir, "package"));
 
-// runtime.Command inherits the parent environment and `env` only adds to /
-// overrides it, so a LUMISCA_ASSETS_FILE (or any other startup value) in the
-// caller's environment would leak into the child and defeat this check:
-// `clearEnv` hands the child exactly `childEnv`, with the launcher-only keys
-// removed. The packaged server must find everything it needs beside its own
-// binary.
-const childEnv = runtime.env.toObject();
+// A child inherits the parent environment unless `env` replaces it, so a
+// LUMISCA_ASSETS_FILE (or any other startup value) in the caller's
+// environment would leak into the child and defeat this check: `childEnv`
+// is handed over as the child's whole environment, with the launcher-only
+// keys removed. The packaged server must find everything it needs beside
+// its own binary.
+const childEnv = inheritedEnv();
 for (const key of SERVER_STARTUP_ENV_KEYS) delete childEnv[key];
 childEnv.LUMISCA_PORT = String(port);
 childEnv.LUMISCA_DB = join(workDir, "smoke.db");
@@ -257,13 +257,10 @@ childEnv.LUMISCA_DB = join(workDir, "smoke.db");
 // The updater's self-check: it runs a staged binary with `--version` and
 // compares the answer with the manifest before replacing anything, so a
 // package whose binary cannot report its version is not installable.
-const versionProbe = await new runtime.Command(binary, {
-  args: ["--version"],
-  clearEnv: true,
-  stdin: "null",
-  stdout: "piped",
-  stderr: "piped",
-}).output();
+const versionProbe = await runProcess([binary, "--version"], {
+  env: {},
+  stdin: "ignore",
+});
 const reportedVersion = new TextDecoder().decode(versionProbe.stdout).trim();
 check(
   "--version reports the built version",
@@ -272,19 +269,18 @@ check(
 );
 
 console.log(`Starting ${binary} on ${base}`);
-const child = new runtime.Command(binary, {
+const child = spawnProcess([binary], {
   // Run from the directory the package was extracted into, like a user
   // following the release notes would — a temporary copy, so the running
   // server's own background update check can only ever touch that copy
   // (see copyPackage above).
   cwd: dirname(binary),
   env: childEnv,
-  clearEnv: true,
-  stdin: "null",
-  stdout: "piped",
-  stderr: "piped",
-}).spawn();
-const statusPromise = child.status;
+  stdin: "ignore",
+  stdout: "pipe",
+  stderr: "pipe",
+});
+const statusPromise = child.exited;
 const outputPromise = (async () => {
   const read = (stream: ReadableStream<Uint8Array> | null) =>
     stream === null ? Promise.resolve("") : new Response(stream).text();
@@ -364,7 +360,7 @@ try {
       update.status === 200 &&
         updateBody?.supported === true &&
         updateBody.currentVersion === SERVER_VERSION &&
-        updateBody.target === runtime.build.target,
+        updateBody.target === TARGET,
       `status ${update.status}, ${JSON.stringify(updateBody)}`,
     );
 
@@ -382,14 +378,10 @@ try {
     // whose `service install` cannot produce a unit. `config`
     // is the verb that only composes and prints (it never touches systemd),
     // which makes it the checkable half of the feature on every platform.
-    const config = await new runtime.Command(binary, {
-      args: ["service", "config", "--defaults"],
-      env: serviceEnv(),
-      clearEnv: true,
-      stdin: "null",
-      stdout: "piped",
-      stderr: "piped",
-    }).output();
+    const config = await runProcess(
+      [binary, "service", "config", "--defaults"],
+      { env: serviceEnv(), stdin: "ignore" },
+    );
     const composed = new TextDecoder().decode(config.stdout);
     check(
       "service config renders the embedded unit template",
@@ -402,15 +394,11 @@ try {
     );
 
     // Outside Linux the residency feature must refuse, not half-install.
-    if (runtime.build.os !== "linux") {
-      const refused = await new runtime.Command(binary, {
-        args: ["service", "install"],
+    if (OS !== "linux") {
+      const refused = await runProcess([binary, "service", "install"], {
         env: serviceEnv(),
-        clearEnv: true,
-        stdin: "null",
-        stdout: "piped",
-        stderr: "piped",
-      }).output();
+        stdin: "ignore",
+      });
       const complaint = new TextDecoder().decode(refused.stderr);
       check(
         "service install refuses a platform without systemd",
@@ -425,7 +413,7 @@ try {
   if (failures.length > 0 && serverOutput !== "") {
     console.error(`--- server output ---\n${serverOutput}\n--- end ---`);
   }
-  await runtime.remove(workDir, { recursive: true }).catch(() => {});
+  await fsp.rm(workDir, { recursive: true }).catch(() => {});
 }
 
 if (failures.length > 0) {

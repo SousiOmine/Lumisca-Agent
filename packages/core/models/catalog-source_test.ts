@@ -1,4 +1,6 @@
 import { test } from "bun:test";
+import * as fsSync from "node:fs";
+import * as fsp from "node:fs/promises";
 import { join } from "node:path";
 import type { ProviderMap } from "@opencode-ai/models";
 import snapshot, {
@@ -112,7 +114,7 @@ test("resolveCatalogSource prefers live and caches it", async () =>
       cached?.providers["openai"]?.models["test-model"]?.name,
       "Test Model",
     );
-    assert((await Deno.stat(join(root, CACHED_CATALOG_FILE))).isFile);
+    assert((await fsp.stat(join(root, CACHED_CATALOG_FILE))).isFile());
   }));
 
 test("resolveCatalogSource falls back to cache when live fails", async () =>
@@ -164,9 +166,9 @@ test("resolveCatalogSource falls back to snapshot on invalid shape", async () =>
 
 test("loadCachedCatalog ignores corrupt caches", async () =>
   await withTempDir("lumisca-catalog-", async (root) => {
-    await Deno.writeTextFile(join(root, CACHED_CATALOG_FILE), "not-json{{{");
+    await fsp.writeFile(join(root, CACHED_CATALOG_FILE), "not-json{{{");
     assertEquals(loadCachedCatalog(root), undefined);
-    await Deno.writeTextFile(
+    await fsp.writeFile(
       join(root, CACHED_CATALOG_FILE),
       JSON.stringify({ providers: { openai: {} } }),
     );
@@ -179,14 +181,16 @@ test("saveCachedCatalog is a no-op without a directory", () =>
     // No directory means no place to cache (a core in memory): the call must
     // return quietly rather than fall back to the working directory, which
     // would scatter `models.json` wherever the process happened to start.
-    const before = [...Deno.readDirSync(root)].map((e) => e.name);
+    const before = [...fsSync.readdirSync(root, { withFileTypes: true })].map(
+      (e) => e.name,
+    );
     saveCachedCatalog(undefined, { providers: minimalProviders() });
     assertEquals(
-      [...Deno.readDirSync(root)].map((e) => e.name),
+      [...fsSync.readdirSync(root, { withFileTypes: true })].map((e) => e.name),
       before,
     );
     assertEquals(
-      [...Deno.readDirSync(Deno.cwd())].some(
+      [...fsSync.readdirSync(process.cwd(), { withFileTypes: true })].some(
         (e) => e.name === CACHED_CATALOG_FILE,
       ),
       false,

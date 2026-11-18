@@ -63,7 +63,7 @@ export function parseJsonOrThrow<T>(
 
 // ---- text -----------------------------------------------------------------
 
-/** Decode UTF-8 bytes (TextDecoder is available in browsers and Deno, so
+/** Decode UTF-8 bytes (TextDecoder is available in browsers and Bun, so
  * this stays frontend-safe). Single home for the `new TextDecoder()`
  * pattern scattered across tools and the client. */
 export function decodeUtf8(bytes: Uint8Array): string {

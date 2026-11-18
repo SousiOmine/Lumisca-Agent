@@ -1,5 +1,7 @@
+import type { Dirent } from "node:fs";
+import * as fsSync from "node:fs";
+import * as fsp from "node:fs/promises";
 import { join, relative } from "node:path";
-import { type DirEntry, runtime } from "../runtime/runtime.ts";
 import { isWithin } from "./path-util.ts";
 
 /** VCS metadata and build-output directories always pruned by the workspace
@@ -74,18 +76,18 @@ export async function* walkEntries(
 
   async function* walk(dir: string, depth: number): AsyncGenerator<WalkEntry> {
     if (depth > maxDepth || emitted >= maxEntries) return;
-    let list: DirEntry[];
+    let list: Dirent[];
     try {
-      list = [...runtime.readDirSync(dir)];
+      list = [...fsSync.readdirSync(dir, { withFileTypes: true })];
     } catch {
       return; // unreadable directory (permissions, race) — skip
     }
     list.sort((a, b) => a.name.localeCompare(b.name));
 
     const filtered = list.filter((entry) => {
-      if (entry.isSymlink) return false; // never follow symlinks
+      if (entry.isSymbolicLink()) return false; // never follow symlinks
       if (skipHidden && entry.name.startsWith(".")) return false;
-      if (entry.isDirectory && options.excludedDirs?.has(entry.name)) {
+      if (entry.isDirectory() && options.excludedDirs?.has(entry.name)) {
         return false;
       }
       return true;
@@ -94,13 +96,13 @@ export async function* walkEntries(
     if (options.filesFirst === true) {
       // Files first: emit the directory's files, then each subdirectory
       // entry, then recurse into it.
-      const subdirs: DirEntry[] = [];
+      const subdirs: Dirent[] = [];
       for (const entry of filtered) {
-        if (entry.isDirectory) {
+        if (entry.isDirectory()) {
           subdirs.push(entry);
           continue;
         }
-        if (!entry.isFile) continue;
+        if (!entry.isFile()) continue;
         const item = entryFor(dir, entry.name);
         if (item === undefined) continue;
         if (emitted >= maxEntries) return;
@@ -123,7 +125,7 @@ export async function* walkEntries(
     // yield as encountered.
     for (const entry of filtered) {
       if (emitted >= maxEntries) return;
-      if (entry.isDirectory) {
+      if (entry.isDirectory()) {
         const full = join(dir, entry.name);
         const rel = relative(root, full);
         // An ignored directory means everything below it is ignored too.
@@ -131,7 +133,7 @@ export async function* walkEntries(
         yield* walk(full, depth + 1);
         continue;
       }
-      if (!entry.isFile) continue;
+      if (!entry.isFile()) continue;
       const item = entryFor(dir, entry.name);
       if (item === undefined) continue;
       emitted++;
@@ -170,8 +172,8 @@ export class GitignoreMatcher {
     const rulesByRoot = new Map<string, IgnoreRule[]>();
     for (const root of roots) {
       try {
-        const canonical = await runtime.realPath(root);
-        const text = await runtime.readTextFile(join(canonical, ".gitignore"));
+        const canonical = await fsp.realpath(root);
+        const text = await fsp.readFile(join(canonical, ".gitignore"), "utf8");
         rulesByRoot.set(canonical, parseGitignore(text));
       } catch {
         // No .gitignore in this root (or the root no longer exists).

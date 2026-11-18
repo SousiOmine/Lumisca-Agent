@@ -1,4 +1,5 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
 import { basename, join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import type { Workspace } from "../domain/workspace.ts";
@@ -56,7 +57,7 @@ function fakeRenderer(totalPages: number): PdfRenderer {
 
 async function fixture(): Promise<{ root: string; folder: string }> {
   const root = await makeRealTempDir("lumisca-pdf-");
-  await Deno.writeFile(join(root, "doc.pdf"), new Uint8Array([1, 2, 3]));
+  await fsp.writeFile(join(root, "doc.pdf"), new Uint8Array([1, 2, 3]));
   return { root, folder: basename(root) };
 }
 
@@ -299,7 +300,7 @@ test("pdf tool is discoverable via tool_search and callable via tool_call", asyn
 test("pdf tool renders a real PDF with the bundled renderer", async () => {
   const { root, folder } = await fixture();
   try {
-    await Deno.copyFile(
+    await fsp.copyFile(
       join(import.meta.dirname!, "testdata", "two-pages.pdf"),
       join(root, "doc.pdf"),
     );
@@ -351,7 +352,7 @@ test("pdf tool fails fast on malformed and encrypted PDFs", async () => {
       Error,
       "Invalid PDF structure",
     );
-    await Deno.copyFile(
+    await fsp.copyFile(
       join(import.meta.dirname!, "testdata", "encrypted.pdf"),
       join(root, "locked.pdf"),
     );
@@ -365,78 +366,74 @@ test("pdf tool fails fast on malformed and encrypted PDFs", async () => {
   }
 });
 
-test.skipIf(Deno.build.os !== "windows")(
-  "pdf renderer requires the bundled ICU data file on Windows",
-  () => {
-    // Windows Skia loads icudtl.dat from the library/executable directory
-    // and aborts the whole process when it is missing, so the guard must
-    // locate the data file this host's Skia binary needs. macOS/Linux
-    // Skia embeds its ICU data and ships no data file — see
-    // createUnpdfRenderer.
-    assert(
-      findCanvasIcuDataFile() !== undefined,
-      "expected icudtl.dat next to the canvas native binding",
+test.skipIf(
+  (process.platform === "win32" ? "windows" : process.platform) !== "windows",
+)("pdf renderer requires the bundled ICU data file on Windows", () => {
+  // Windows Skia loads icudtl.dat from the library/executable directory
+  // and aborts the whole process when it is missing, so the guard must
+  // locate the data file this host's Skia binary needs. macOS/Linux
+  // Skia embeds its ICU data and ships no data file — see
+  // createUnpdfRenderer.
+  assert(
+    findCanvasIcuDataFile() !== undefined,
+    "expected icudtl.dat next to the canvas native binding",
+  );
+});
+
+test.skipIf(
+  (process.platform === "win32" ? "windows" : process.platform) !== "windows",
+)("pdf renderer refuses to load Skia without its ICU data file", async () => {
+  const { root, folder } = await fixture();
+  try {
+    await fsp.copyFile(
+      join(import.meta.dirname!, "testdata", "two-pages.pdf"),
+      join(root, "doc.pdf"),
     );
-  },
-);
+    // A missing icudtl.dat makes Windows Skia abort the whole server
+    // process (fatal check → STATUS_ILLEGAL_INSTRUCTION), so the renderer
+    // must refuse with a clear tool error before touching Skia.
+    const tools = createPdfTools({
+      files: new HostFileBackend(new Sandbox([root])),
+      renderer: createUnpdfRenderer({ findIcuDataFile: () => undefined }),
+    });
+    await assertRejects(
+      () => tools[0]!.execute("id", { path: `${folder}/doc.pdf`, pages: [1] }),
+      Error,
+      "icudtl.dat",
+    );
+  } finally {
+    await removeDirRetry(root);
+  }
+});
 
-test.skipIf(Deno.build.os !== "windows")(
-  "pdf renderer refuses to load Skia without its ICU data file",
-  async () => {
-    const { root, folder } = await fixture();
-    try {
-      await Deno.copyFile(
-        join(import.meta.dirname!, "testdata", "two-pages.pdf"),
-        join(root, "doc.pdf"),
-      );
-      // A missing icudtl.dat makes Windows Skia abort the whole server
-      // process (fatal check → STATUS_ILLEGAL_INSTRUCTION), so the renderer
-      // must refuse with a clear tool error before touching Skia.
-      const tools = createPdfTools({
-        files: new HostFileBackend(new Sandbox([root])),
-        renderer: createUnpdfRenderer({ findIcuDataFile: () => undefined }),
-      });
-      await assertRejects(
-        () =>
-          tools[0]!.execute("id", { path: `${folder}/doc.pdf`, pages: [1] }),
-        Error,
-        "icudtl.dat",
-      );
-    } finally {
-      await removeDirRetry(root);
-    }
-  },
-);
-
-test.skipIf(Deno.build.os !== "windows")(
-  "pdf renderer honors the LUMISCA_ICU_DATA override",
-  async () => {
-    const { root, folder } = await fixture();
-    try {
-      await Deno.copyFile(
-        join(import.meta.dirname!, "testdata", "two-pages.pdf"),
-        join(root, "doc.pdf"),
-      );
-      const real = findCanvasIcuDataFile(() => ({}));
-      assert(real !== undefined, "expected a bundled icudtl.dat on this host");
-      // The override is read from the *injected* environment: Deno.env is
-      // shared by every test file the runner parallels, so it is never mutated
-      // here.
-      assertEquals(
-        findCanvasIcuDataFile(() => ({ LUMISCA_ICU_DATA: real })),
-        real,
-      );
-      const tools = createPdfTools({
-        files: new HostFileBackend(new Sandbox([root])),
-        renderer: createUnpdfRenderer({ findIcuDataFile: () => real }),
-      });
-      const result = await tools[0]!.execute("id", {
-        path: `${folder}/doc.pdf`,
-        pages: [1],
-      });
-      assert(toolText(result).includes("pages 1 of 2"), toolText(result));
-    } finally {
-      await removeDirRetry(root);
-    }
-  },
-);
+test.skipIf(
+  (process.platform === "win32" ? "windows" : process.platform) !== "windows",
+)("pdf renderer honors the LUMISCA_ICU_DATA override", async () => {
+  const { root, folder } = await fixture();
+  try {
+    await fsp.copyFile(
+      join(import.meta.dirname!, "testdata", "two-pages.pdf"),
+      join(root, "doc.pdf"),
+    );
+    const real = findCanvasIcuDataFile(() => ({}));
+    assert(real !== undefined, "expected a bundled icudtl.dat on this host");
+    // The override is read from the *injected* environment: process.env is
+    // shared by every test file the runner parallels, so it is never mutated
+    // here.
+    assertEquals(
+      findCanvasIcuDataFile(() => ({ LUMISCA_ICU_DATA: real })),
+      real,
+    );
+    const tools = createPdfTools({
+      files: new HostFileBackend(new Sandbox([root])),
+      renderer: createUnpdfRenderer({ findIcuDataFile: () => real }),
+    });
+    const result = await tools[0]!.execute("id", {
+      path: `${folder}/doc.pdf`,
+      pages: [1],
+    });
+    assert(toolText(result).includes("pages 1 of 2"), toolText(result));
+  } finally {
+    await removeDirRetry(root);
+  }
+});

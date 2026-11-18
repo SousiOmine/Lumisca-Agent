@@ -1,4 +1,5 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
 import { assertEquals, assertThrows } from "@std/assert";
 import {
   archiveAssetName,
@@ -128,8 +129,9 @@ test("the check cadence matches the desktop updater", async () => {
   // the standalone server updates its own binary, but a user running both
   // should not see them poll on different clocks. The Rust constant cannot be
   // imported, so its source is read.
-  const rust = await Deno.readTextFile(
+  const rust = await fsp.readFile(
     new URL("../../desktop/src-tauri/src/update.rs", import.meta.url),
+    "utf8",
   );
   const seconds = (name: string): number | undefined => {
     const raw = rust.match(

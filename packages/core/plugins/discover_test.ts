@@ -1,5 +1,8 @@
 import { test } from "bun:test";
-import { join } from "node:path";
+import * as fsSync from "node:fs";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join, join as pathJoin } from "node:path";
 import { assert, assertEquals } from "@std/assert";
 import { discoverSkills } from "../skills/discover.ts";
 import { makeRealTempDir } from "../test-utils.ts";
@@ -39,15 +42,15 @@ const MANIFEST = (name: string) =>
  */
 async function fixture(): Promise<string> {
   const root = await makeRealTempDir("lumisca-plugins-");
-  await Deno.mkdir(join(root, ".git"), { recursive: true });
+  await fsp.mkdir(join(root, ".git"), { recursive: true });
 
   const writeAt = (rel: string, content: string) =>
-    Deno.mkdir(join(root, rel, ".."), { recursive: true }).then(() =>
-      Deno.writeTextFile(join(root, rel), content),
-    );
+    fsp
+      .mkdir(join(root, rel, ".."), { recursive: true })
+      .then(() => fsp.writeFile(join(root, rel), content));
 
   const plugins = join(root, ".agents", "plugins");
-  await Deno.mkdir(plugins, { recursive: true });
+  await fsp.mkdir(plugins, { recursive: true });
 
   await writeAt(
     join(".agents", "plugins", "demo", "plugin.json"),
@@ -84,17 +87,17 @@ async function fixture(): Promise<string> {
     join(".agents", "plugins", "broken", "plugin.json"),
     JSON.stringify({ $schema: PLUGIN_SCHEMA_URL, name: "Bad Name" }),
   );
-  await Deno.mkdir(join(plugins, "empty"), { recursive: true });
+  await fsp.mkdir(join(plugins, "empty"), { recursive: true });
   await writeAt(
     join(".agents", "plugins", "badskills", "plugin.json"),
     MANIFEST("badskills"),
   );
-  await Deno.writeTextFile(join(plugins, "badskills", "skills"), "not a dir");
+  await fsp.writeFile(join(plugins, "badskills", "skills"), "not a dir");
   await writeAt(
     join(".agents", "plugins", "badmcp", "plugin.json"),
     MANIFEST("badmcp"),
   );
-  await Deno.mkdir(join(plugins, "badmcp", "mcp.json"), { recursive: true });
+  await fsp.mkdir(join(plugins, "badmcp", "mcp.json"), { recursive: true });
 
   // Workspace skills for the precedence tests.
   await writeAt(
@@ -116,13 +119,13 @@ async function globalFixture(): Promise<{
   const dir = await makeRealTempDir("lumisca-global-");
   const pluginDir = join(dir, ".agents", "plugins");
   const skillsDir = join(dir, ".agents", "skills");
-  await Deno.mkdir(pluginDir, { recursive: true });
-  await Deno.mkdir(skillsDir, { recursive: true });
+  await fsp.mkdir(pluginDir, { recursive: true });
+  await fsp.mkdir(skillsDir, { recursive: true });
 
   const writeAt = (rel: string, content: string) =>
-    Deno.mkdir(join(dir, rel, ".."), { recursive: true }).then(() =>
-      Deno.writeTextFile(join(dir, rel), content),
-    );
+    fsp
+      .mkdir(join(dir, rel, ".."), { recursive: true })
+      .then(() => fsp.writeFile(join(dir, rel), content));
 
   // Same name as the workspace plugin: the workspace one must win.
   await writeAt(
@@ -163,7 +166,7 @@ async function globalFixture(): Promise<{
 
 test("discoverPlugins finds plugins with skills and MCP servers", async () => {
   const root = await fixture();
-  const dataRoot = await Deno.makeTempDir({ prefix: "lumisca-data-" });
+  const dataRoot = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-data-"));
   const plugins = discoverPlugins([root], { pluginDataRoot: dataRoot });
 
   const demo = plugins.find((p) => p.name === "demo");
@@ -185,7 +188,7 @@ test("discoverPlugins finds plugins with skills and MCP servers", async () => {
   );
   assertEquals(demo.mcpServers[0]!.cwd, demo.root);
   // PLUGIN_DATA for the stdio server lives under the data root.
-  assert(Deno.statSync(join(dataRoot, "demo")).isDirectory);
+  assert(fsSync.statSync(join(dataRoot, "demo")).isDirectory());
   assertEquals(demo.warnings, []);
 });
 

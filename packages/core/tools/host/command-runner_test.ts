@@ -1,6 +1,9 @@
 import { test } from "bun:test";
+import * as fsSync from "node:fs";
 import { realpathSync } from "node:fs";
-import { join } from "node:path";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join, join as pathJoin } from "node:path";
 import { assertEquals } from "@std/assert";
 import { removeDirRetry } from "../../test-utils.ts";
 import { HostCommandRunner } from "./command-runner.ts";
@@ -10,7 +13,7 @@ import { HostCommandRunner } from "./command-runner.ts";
  * does not change the path under the runner. */
 function workspace(): string {
   return realpathSync.native(
-    Deno.makeTempDirSync({ prefix: "lumisca-runner-" }),
+    fsSync.mkdtempSync(pathJoin(osTmpdir(), "lumisca-runner-")),
   );
 }
 
@@ -20,7 +23,7 @@ test("command runner: a capped stream keeps its tail, not its head", async () =>
     // ~60 KiB, where this held ~600 KB: the assertion is about which end
     // survives a 64-character cap, and every byte goes through the platform
     // shell to get there (the same 600 KB took 9s on Windows, 0.7s here).
-    await Deno.writeTextFile(
+    await fsp.writeFile(
       join(root, "big.txt"),
       `START-OF-OUTPUT\n${"filler line\n".repeat(5_000)}END-OF-OUTPUT\n`,
     );
@@ -43,7 +46,7 @@ test("command runner: a capped stream keeps its tail, not its head", async () =>
 test("command runner: a stream under the cap is returned whole", async () => {
   const root = workspace();
   try {
-    await Deno.writeTextFile(join(root, "small.txt"), "small output\n");
+    await fsp.writeFile(join(root, "small.txt"), "small output\n");
     const result = await new HostCommandRunner().run("cat small.txt", {
       cwd: root,
       timeoutSec: 30,

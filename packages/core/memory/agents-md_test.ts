@@ -1,30 +1,34 @@
 import { test } from "bun:test";
 import { realpathSync } from "node:fs";
-import { join } from "node:path";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join, join as pathJoin } from "node:path";
 import { assert, assertEquals } from "@std/assert";
 import { findRepoRoot, loadProjectMemoryFiles } from "./agents-md.ts";
 
 /** Realpath'd temp dir: makeTempDir may return 8.3 short names on Windows
  * (e.g. `MAINPC~1`), which would break path equality assertions. */
 function tempDir(prefix: string): Promise<string> {
-  return Deno.makeTempDir({ prefix }).then((p) => realpathSync.native(p));
+  return fsp
+    .mkdtemp(pathJoin(osTmpdir(), prefix))
+    .then((p) => realpathSync.native(p));
 }
 
 test("findRepoRoot locates the .git marker", async () => {
   const root = await tempDir("lumisca-mem-");
   try {
-    await Deno.mkdir(join(root, "sub", "deep"), { recursive: true });
-    await Deno.mkdir(join(root, ".git"), { recursive: true });
+    await fsp.mkdir(join(root, "sub", "deep"), { recursive: true });
+    await fsp.mkdir(join(root, ".git"), { recursive: true });
     assertEquals(
       findRepoRoot(join(root, "sub", "deep")),
       realpathSync.native(root),
     );
     // A .git file (worktree / submodule) counts too.
-    await Deno.remove(join(root, ".git"), { recursive: true });
-    await Deno.writeTextFile(join(root, ".git"), "gitdir: ../other\n");
+    await fsp.rm(join(root, ".git"), { recursive: true });
+    await fsp.writeFile(join(root, ".git"), "gitdir: ../other\n");
     assertEquals(findRepoRoot(join(root, "sub")), realpathSync.native(root));
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await fsp.rm(root, { recursive: true });
   }
 });
 
@@ -33,49 +37,46 @@ test("findRepoRoot falls back to the folder itself", async () => {
   try {
     assertEquals(findRepoRoot(root), realpathSync.native(root));
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await fsp.rm(root, { recursive: true });
   }
 });
 
 test("loadProjectMemoryFiles reads AGENTS.md from the workspace root", async () => {
   const root = await tempDir("lumisca-mem-");
   try {
-    await Deno.writeTextFile(join(root, "AGENTS.md"), "Use Deno.\n");
+    await fsp.writeFile(join(root, "AGENTS.md"), "Use Rust.\n");
     const files = loadProjectMemoryFiles([root]);
     assertEquals(files.length, 1);
     assertEquals(files[0]!.path, join(realpathSync.native(root), "AGENTS.md"));
-    assertEquals(files[0]!.content, "Use Deno.\n");
+    assertEquals(files[0]!.content, "Use Rust.\n");
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await fsp.rm(root, { recursive: true });
   }
 });
 
 test("loadProjectMemoryFiles collects the chain root-first", async () => {
   const root = await tempDir("lumisca-mem-");
   try {
-    await Deno.mkdir(join(root, ".git"), { recursive: true });
-    await Deno.mkdir(join(root, "sub", "deep"), { recursive: true });
-    await Deno.writeTextFile(join(root, "AGENTS.md"), "ROOT_MEMORY");
-    await Deno.writeTextFile(join(root, "sub", "AGENTS.md"), "SUB_MEMORY");
-    await Deno.writeTextFile(
-      join(root, "sub", "deep", "AGENTS.md"),
-      "DEEP_MEMORY",
-    );
+    await fsp.mkdir(join(root, ".git"), { recursive: true });
+    await fsp.mkdir(join(root, "sub", "deep"), { recursive: true });
+    await fsp.writeFile(join(root, "AGENTS.md"), "ROOT_MEMORY");
+    await fsp.writeFile(join(root, "sub", "AGENTS.md"), "SUB_MEMORY");
+    await fsp.writeFile(join(root, "sub", "deep", "AGENTS.md"), "DEEP_MEMORY");
     const files = loadProjectMemoryFiles([join(root, "sub", "deep")]);
     assertEquals(
       files.map((f) => f.content),
       ["ROOT_MEMORY", "SUB_MEMORY", "DEEP_MEMORY"],
     );
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await fsp.rm(root, { recursive: true });
   }
 });
 
 test("AGENTS.override.md replaces AGENTS.md in the same directory", async () => {
   const root = await tempDir("lumisca-mem-");
   try {
-    await Deno.writeTextFile(join(root, "AGENTS.md"), "OLD");
-    await Deno.writeTextFile(join(root, "AGENTS.override.md"), "NEW");
+    await fsp.writeFile(join(root, "AGENTS.md"), "OLD");
+    await fsp.writeFile(join(root, "AGENTS.override.md"), "NEW");
     const files = loadProjectMemoryFiles([root]);
     assertEquals(files.length, 1);
     assertEquals(files[0]!.content, "NEW");
@@ -84,36 +85,36 @@ test("AGENTS.override.md replaces AGENTS.md in the same directory", async () => 
       join(realpathSync.native(root), "AGENTS.override.md"),
     );
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await fsp.rm(root, { recursive: true });
   }
 });
 
 test("loadProjectMemoryFiles reaches the repo root above the folder", async () => {
   const root = await tempDir("lumisca-mem-");
   try {
-    await Deno.mkdir(join(root, ".git"), { recursive: true });
-    await Deno.mkdir(join(root, "sub"), { recursive: true });
-    await Deno.writeTextFile(join(root, "AGENTS.md"), "REPO_ROOT");
-    await Deno.writeTextFile(join(root, "sub", "AGENTS.md"), "SUBDIR");
+    await fsp.mkdir(join(root, ".git"), { recursive: true });
+    await fsp.mkdir(join(root, "sub"), { recursive: true });
+    await fsp.writeFile(join(root, "AGENTS.md"), "REPO_ROOT");
+    await fsp.writeFile(join(root, "sub", "AGENTS.md"), "SUBDIR");
     const files = loadProjectMemoryFiles([join(root, "sub")]);
     assertEquals(
       files.map((f) => f.content),
       ["REPO_ROOT", "SUBDIR"],
     );
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await fsp.rm(root, { recursive: true });
   }
 });
 
 test("loadProjectMemoryFiles caps the contents at 32KB", async () => {
   const root = await tempDir("lumisca-mem-");
   try {
-    await Deno.writeTextFile(join(root, "AGENTS.md"), "x".repeat(40 * 1024));
+    await fsp.writeFile(join(root, "AGENTS.md"), "x".repeat(40 * 1024));
     const files = loadProjectMemoryFiles([root]);
     const total = files.reduce((sum, file) => sum + file.content.length, 0);
     assert(total <= 32 * 1024, `memory too large: ${total}`);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await fsp.rm(root, { recursive: true });
   }
 });
 
@@ -122,6 +123,6 @@ test("loadProjectMemoryFiles returns nothing when no file exists", async () => {
   try {
     assertEquals(loadProjectMemoryFiles([root]), []);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await fsp.rm(root, { recursive: true });
   }
 });

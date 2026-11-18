@@ -1,7 +1,8 @@
+import type { Dirent } from "node:fs";
+import * as fsSync from "node:fs";
 import { basename, join } from "node:path";
 import { readIfExists, resolveGlobalDirs } from "../fs.ts";
 import { repoChain } from "../memory/agents-md.ts";
-import { type DirEntry, runtime } from "../runtime/runtime.ts";
 import type { McpServerConfig } from "../shared/mcp-config.ts";
 import type { SkillDef } from "../skills/discover.ts";
 import { parseSkillFrontmatter } from "../skills/frontmatter.ts";
@@ -67,15 +68,15 @@ function scanPluginsDir(
   options: DiscoverPluginsOptions,
   byName: Map<string, PluginDef>,
 ): void {
-  let entries: DirEntry[];
+  let entries: Dirent[];
   try {
-    entries = [...runtime.readDirSync(dir)];
+    entries = [...fsSync.readdirSync(dir, { withFileTypes: true })];
   } catch {
     return; // no plugins directory at this level
   }
   entries.sort((a, b) => a.name.localeCompare(b.name));
   for (const entry of entries) {
-    if (!entry.isDirectory) continue;
+    if (!entry.isDirectory()) continue;
     const plugin = loadPlugin(join(dir, entry.name), options);
     if (plugin === undefined) continue;
     if (byName.has(plugin.name)) continue; // first discovery wins
@@ -138,18 +139,18 @@ function loadPlugin(
 function scanPluginSkills(root: string, warnings: string[]): SkillDef[] {
   const skillsDir = join(root, "skills");
   try {
-    if (!runtime.statSync(skillsDir).isDirectory) {
+    if (!fsSync.statSync(skillsDir).isDirectory()) {
       warnings.push(`"skills" is not a directory; skills disabled`);
       return [];
     }
   } catch {
     return []; // no skills component (valid absence)
   }
-  const entries = [...runtime.readDirSync(skillsDir)];
+  const entries = [...fsSync.readdirSync(skillsDir, { withFileTypes: true })];
   entries.sort((a, b) => a.name.localeCompare(b.name));
   const skills: SkillDef[] = [];
   for (const entry of entries) {
-    if (!entry.isDirectory) continue;
+    if (!entry.isDirectory()) continue;
     const skillDir = join(skillsDir, entry.name);
     const skillPath = join(skillDir, "SKILL.md");
     if (!isWithinRealpath(root, skillPath)) {
@@ -188,11 +189,11 @@ function scanPluginMcp(
   const mcpJsonPath = join(root, "mcp.json");
   let text: string;
   try {
-    if (!runtime.statSync(mcpJsonPath).isFile) {
+    if (!fsSync.statSync(mcpJsonPath).isFile()) {
       warnings.push(`"mcp.json" is not a file; MCP disabled`);
       return [];
     }
-    text = runtime.readTextFileSync(mcpJsonPath);
+    text = fsSync.readFileSync(mcpJsonPath, "utf8");
   } catch {
     return []; // no mcp.json (valid absence)
   }

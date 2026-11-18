@@ -1,5 +1,7 @@
 import { test } from "bun:test";
-import { join } from "node:path";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join, join as pathJoin } from "node:path";
 import { removeDirRetry } from "@lumisca/core/test-utils";
 import { assertEquals } from "@std/assert";
 import { json, setup } from "./test-utils.ts";
@@ -27,7 +29,7 @@ test("app-level MCP config API applies to every workspace", async () => {
       method: "PUT",
       body: JSON.stringify({
         mcpServers: {
-          fake: { command: Deno.execPath(), args: ["run", fakeServer] },
+          fake: { command: process.execPath, args: ["run", fakeServer] },
         },
       }),
     });
@@ -44,7 +46,7 @@ test("app-level MCP config API applies to every workspace", async () => {
 
     // A session in any workspace picks up the app-level tools (as the
     // search/call pair over the registry).
-    root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-srv-"));
     const create = await json(base, "/api/workspaces", {
       method: "POST",
       body: JSON.stringify({ name: "ws", folders: [root] }),

@@ -30,7 +30,9 @@
  * whose URLs cannot be mapped must not reach users. `--out` may be the
  * input path: the manifest is read before it is written.
  */
-import { exit, runtime } from "../packages/core/runtime/runtime.ts";
+
+import * as fsp from "node:fs/promises";
+import { exit } from "../packages/core/process.ts";
 import { absolutePath, parseOptions, reportUsage } from "./lib.ts";
 import {
   parseReleaseAssets,
@@ -81,7 +83,7 @@ function describe(error: unknown): string {
 async function readJson(path: string, what: string): Promise<unknown> {
   let text: string;
   try {
-    text = await runtime.readTextFile(path);
+    text = await fsp.readFile(path, "utf8");
   } catch (error) {
     fail(`cannot read ${what} ${path}: ${describe(error)}`);
   }
@@ -92,7 +94,7 @@ async function readJson(path: string, what: string): Promise<unknown> {
   }
 }
 
-const options = parseArgs(runtime.args);
+const options = parseArgs(process.argv.slice(2));
 
 const rewrite = await (async () => {
   const manifest = await readJson(options.manifest, "manifest");
@@ -111,7 +113,7 @@ const rewrite = await (async () => {
 
 const document = JSON.stringify(rewrite.manifest, null, 2) + "\n";
 try {
-  await runtime.writeTextFile(options.out, document);
+  await fsp.writeFile(options.out, document);
 } catch (error) {
   fail(`cannot write ${options.out}: ${describe(error)}`);
 }

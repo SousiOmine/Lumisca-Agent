@@ -1,4 +1,5 @@
 import { test } from "bun:test";
+import * as fsSync from "node:fs";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -63,8 +64,9 @@ test("AttachmentCard: the picture opens in the app, not in a new tab", () => {
   );
   // The original is asked for, not the downscaled copy the list drew.
   // (Checked on the source, because the lightbox only mounts on a click.)
-  const source = Deno.readTextFileSync(
+  const source = fsSync.readFileSync(
     new URL("./AttachmentCard.tsx", import.meta.url),
+    "utf8",
   );
   assertStringIncludes(source, "?preview=0");
   assertStringIncludes(source, "<Lightbox");

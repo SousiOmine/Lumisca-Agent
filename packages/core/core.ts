@@ -1,3 +1,4 @@
+import * as fsp from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { SessionPool } from "./agent/pool.ts";
@@ -13,7 +14,6 @@ import type {
 } from "./ai/catalog.ts";
 import { withProviderRetryDefaults } from "./ai/llm-retry.ts";
 import type { AgentMessage, ImageContent } from "./ai/message.ts";
-
 import { type CoreServices, createCoreServices } from "./bootstrap.ts";
 import type { BrowserBackend } from "./browser/types.ts";
 import type { ComputerHost, ComputerHostResult } from "./computer/types.ts";
@@ -54,7 +54,6 @@ import {
   type RoutineScheduler,
   type RoutineTrigger,
 } from "./routine/scheduler.ts";
-import { runtime } from "./runtime/runtime.ts";
 import { CommandSafety } from "./safety/command-safety.ts";
 import { SavedPromptsService } from "./saved-prompts.ts";
 import { ComputerUseService } from "./services/computer.ts";
@@ -641,7 +640,7 @@ export class LumiscaCore {
    * sees).
    *
    * The model layer reads its environment through `env`, which defaults to
-   * EMPTY. `runtime.env` is global to the whole test process (the runner runs
+   * EMPTY. `process.env` is global to the whole test process (the runner runs
    * every test file in one process, in parallel worker threads), so reading
    * it would make a test depend on the machine — and on whatever another
    * file happened to set at that moment. A test that wants ambient
@@ -734,7 +733,7 @@ export class LumiscaCore {
       return;
     }
     try {
-      await runtime.writeTextFile(
+      await fsp.writeFile(
         vacuumMarkerPath(this.dbPath),
         String(this.freedBytes),
         { mode: 0o600 },

@@ -1,5 +1,6 @@
 /** Windows code page number -> WHATWG TextDecoder label. */
-import { runtime } from "../runtime/runtime.ts";
+import { OS } from "../platform.ts";
+import { runProcess } from "../process.ts";
 
 const OEM_CP_TO_LABEL: Record<number, string> = {
   874: "windows-874",
@@ -28,14 +29,10 @@ let oemLabelCache: string | null | undefined;
  * TextDecoder label.
  */
 export async function detectOemLabel(): Promise<string | null> {
-  if (runtime.build.os !== "windows") return null;
+  if (OS !== "windows") return null;
   if (oemLabelCache !== undefined) return oemLabelCache;
   try {
-    const { stdout } = await new runtime.Command("cmd.exe", {
-      args: ["/d", "/c", "chcp"],
-      stdout: "piped",
-      stderr: "piped",
-    }).output();
+    const { stdout } = await runProcess(["cmd.exe", "/d", "/c", "chcp"]);
     const text = new TextDecoder().decode(stdout);
     const cp = Number(text.match(/(\d+)/)?.[1]);
     oemLabelCache = OEM_CP_TO_LABEL[cp] ?? null;

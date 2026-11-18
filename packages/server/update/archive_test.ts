@@ -1,4 +1,8 @@
 import { test } from "bun:test";
+import * as fsSync from "node:fs";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join as pathJoin } from "node:path";
 import { removeDirRetry } from "@lumisca/core/test-utils";
 import { assertEquals, assertRejects } from "@std/assert";
 import { ArchiveError, extractArchive, packageEntryPath } from "./archive.ts";
@@ -12,7 +16,7 @@ const WINDOWS_PREFIX = "lumisca-server-windows-x64";
 const LINUX_PREFIX = "lumisca-server-linux-x64";
 
 async function tempDir(): Promise<string> {
-  return await Deno.makeTempDir({ prefix: "lumisca-archive-" });
+  return await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-archive-"));
 }
 
 async function writeArchive(
@@ -21,7 +25,7 @@ async function writeArchive(
 ): Promise<string> {
   const dir = await tempDir();
   const path = `${dir}/${name}`;
-  await Deno.writeFile(path, bytes);
+  await fsp.writeFile(path, bytes);
   return path;
 }
 
@@ -94,9 +98,12 @@ test("zip: deflated and stored entries extract with their content", async () => 
   try {
     const written = await extractArchive(archive, "zip", out);
     assertEquals(written, ["assets.json", "icudtl.dat", "README.txt"]);
-    assertEquals(await Deno.readTextFile(`${out}/assets.json`), "{}");
-    assertEquals(await Deno.readTextFile(`${out}/icudtl.dat`), "icu-data");
-    assertEquals((await Deno.readTextFile(`${out}/README.txt`)).length, 5000);
+    assertEquals(await fsp.readFile(`${out}/assets.json`, "utf8"), "{}");
+    assertEquals(await fsp.readFile(`${out}/icudtl.dat`, "utf8"), "icu-data");
+    assertEquals(
+      (await fsp.readFile(`${out}/README.txt`, "utf8")).length,
+      5000,
+    );
   } finally {
     await removeDirRetry(archive);
     await removeDirRetry(out);
@@ -127,11 +134,11 @@ test("zip: the stella container directory extracts under its own name", async ()
       "stella-container/entry.sh",
     ]);
     assertEquals(
-      await Deno.readTextFile(`${out}/stella-container/Containerfile`),
+      await fsp.readFile(`${out}/stella-container/Containerfile`, "utf8"),
       "FROM debian",
     );
     assertEquals(
-      await Deno.readTextFile(`${out}/stella-container/entry.sh`),
+      await fsp.readFile(`${out}/stella-container/entry.sh`, "utf8"),
       "#!/bin/sh\n",
     );
   } finally {
@@ -152,10 +159,13 @@ test("tar.gz: entries extract with their content and mode", async () => {
   try {
     const written = await extractArchive(archive, "tar.gz", out);
     assertEquals(written, ["lumisca-server", "assets.json"]);
-    assertEquals(await Deno.readTextFile(`${out}/lumisca-server`), "bin");
-    assertEquals(await Deno.readTextFile(`${out}/assets.json`), "{}");
-    if (Deno.build.os !== "windows") {
-      const info = await Deno.stat(`${out}/lumisca-server`);
+    assertEquals(await fsp.readFile(`${out}/lumisca-server`, "utf8"), "bin");
+    assertEquals(await fsp.readFile(`${out}/assets.json`, "utf8"), "{}");
+    if (
+      (process.platform === "win32" ? "windows" : process.platform) !==
+      "windows"
+    ) {
+      const info = await fsp.stat(`${out}/lumisca-server`);
       assertEquals(info.mode! & 0o111, 0o111, "the binary keeps its exec bit");
     }
   } finally {
@@ -178,7 +188,10 @@ test("zip: a truncated archive fails instead of writing a half file", async () =
       () => extractArchive(archive, "zip", out),
       ArchiveError,
     );
-    assertEquals([...Deno.readDirSync(out)].length, 0);
+    assertEquals(
+      [...fsSync.readdirSync(out, { withFileTypes: true })].length,
+      0,
+    );
   } finally {
     await removeDirRetry(archive);
     await removeDirRetry(out);
@@ -214,7 +227,10 @@ test("zip: unsafe paths and duplicate names are refused", async () => {
         ArchiveError,
       );
     }
-    assertEquals([...Deno.readDirSync(out)].length, 0);
+    assertEquals(
+      [...fsSync.readdirSync(out, { withFileTypes: true })].length,
+      0,
+    );
   } finally {
     for (const path of [escaping, nested, duplicate]) {
       await removeDirRetry(path);
@@ -249,7 +265,10 @@ test("tar.gz: a symlink entry is refused, not followed", async () => {
       ArchiveError,
       "未対応のエントリ",
     );
-    assertEquals([...Deno.readDirSync(out)].length, 0);
+    assertEquals(
+      [...fsSync.readdirSync(out, { withFileTypes: true })].length,
+      0,
+    );
   } finally {
     await removeDirRetry(archive);
     await removeDirRetry(out);
@@ -306,7 +325,7 @@ test("tar.gz: metadata entries are skipped, long names are refused", async () =>
   try {
     const written = await extractArchive(withMetadata, "tar.gz", out);
     assertEquals(written, ["assets.json"]);
-    assertEquals(await Deno.readTextFile(`${out}/assets.json`), "{}");
+    assertEquals(await fsp.readFile(`${out}/assets.json`, "utf8"), "{}");
   } finally {
     await removeDirRetry(withMetadata);
     await removeDirRetry(out);

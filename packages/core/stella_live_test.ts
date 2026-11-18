@@ -1,9 +1,10 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
 import { assert, assertEquals } from "@std/assert";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "./ai/faux.ts";
 import type { AgentMessage } from "./ai/message.ts";
-
 import { LumiscaCore } from "./core.ts";
+import { runProcess } from "./process.ts";
 import { promptSession } from "./test-utils.ts";
 import { createVmManager } from "./vm/container.ts";
 import { VM_WORKDIR, vmAgentDir } from "./vm/contract.ts";
@@ -30,7 +31,7 @@ import { VM_WORKDIR, vmAgentDir } from "./vm/contract.ts";
 
 const containerDir = new URL("./vm/container/", import.meta.url).pathname;
 
-const live = Deno.env.get("LUMISCA_STELLA_LIVE") === "1";
+const live = process.env["LUMISCA_STELLA_LIVE"] === "1";
 
 /** Whether this host can run the machine at all (podman plus a built image).
  * Read without side effects: a status query only. */
@@ -76,7 +77,7 @@ test.skipIf(!(await machineReady()))(
 
       // A write through the file tool must land inside the machine.
       const target = `${VM_WORKDIR}/live-check.txt`;
-      await Deno.remove(target).catch(() => {});
+      await fsp.rm(target).catch(() => {});
 
       faux.setResponses([
         fauxAssistantMessage(
@@ -94,18 +95,15 @@ test.skipIf(!(await machineReady()))(
       // the assertions below see the transcript the run produced.
       await promptSession(core, session.id, "write the file");
 
-      const exists = await new Deno.Command("podman", {
-        args: [
-          "exec",
-          "--workdir",
-          VM_WORKDIR,
-          "lumisca-stella",
-          "cat",
-          target,
-        ],
-        stdout: "piped",
-        stderr: "piped",
-      }).output();
+      const exists = await runProcess([
+        "podman",
+        "exec",
+        "--workdir",
+        VM_WORKDIR,
+        "lumisca-stella",
+        "cat",
+        target,
+      ]);
       assert(
         exists.success,
         `the file is not in the machine: ${new TextDecoder().decode(
@@ -120,7 +118,7 @@ test.skipIf(!(await machineReady()))(
       // Nowhere on this host did it appear.
       let onHost = true;
       try {
-        await Deno.stat(target);
+        await fsp.stat(target);
       } catch {
         onHost = false;
       }
@@ -350,11 +348,14 @@ test.skipIf(!(await machineReady()))(
 
 /** Run a command in the machine for an assertion outside the core. */
 async function runInMachine(args: string[]): Promise<string> {
-  const result = await new Deno.Command("podman", {
-    args: ["exec", "--workdir", VM_WORKDIR, "lumisca-stella", ...args],
-    stdout: "piped",
-    stderr: "piped",
-  }).output();
+  const result = await runProcess([
+    "podman",
+    "exec",
+    "--workdir",
+    VM_WORKDIR,
+    "lumisca-stella",
+    ...args,
+  ]);
   if (!result.success) {
     throw new Error(
       `podman exec failed: ${new TextDecoder().decode(result.stderr)}`,

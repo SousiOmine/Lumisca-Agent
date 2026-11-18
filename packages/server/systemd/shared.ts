@@ -12,15 +12,13 @@
  * the server it just started.
  */
 
+import * as fsp from "node:fs/promises";
 import { hostForUrl } from "@lumisca/core/shared";
-import {
-  type NetworkInterfaceInfo,
-  runtime,
-} from "../../core/runtime/runtime.ts";
+import { isNotFoundError } from "../../core/errors.ts";
 import { DEFAULT_PORT } from "../default-port.ts";
 import { DEFAULT_HOST, DESKTOP_ENV_KEY } from "../startup.ts";
 import { resolveValues, type ServicePaths } from "./compose.ts";
-import type { ServiceDeps } from "./deps.ts";
+import type { HostNetworkInterface, ServiceDeps } from "./deps.ts";
 import {
   parseDocument,
   type ServiceLayer,
@@ -87,9 +85,9 @@ export async function readTextIfPresent(
   path: string,
 ): Promise<string | undefined> {
   try {
-    return await runtime.readTextFile(path);
+    return await fsp.readFile(path, "utf8");
   } catch (error) {
-    if (error instanceof runtime.errors.NotFound) return undefined;
+    if (isNotFoundError(error)) return undefined;
     throw error;
   }
 }
@@ -152,7 +150,7 @@ export async function isLingerEnabled(deps: ServiceDeps): Promise<boolean> {
 export function connectionUrls(
   host: string,
   port: number,
-  interfaces: readonly NetworkInterfaceInfo[],
+  interfaces: readonly HostNetworkInterface[],
 ): string[] {
   const hosts: string[] = [];
   if (host === "0.0.0.0" || host === "::") {

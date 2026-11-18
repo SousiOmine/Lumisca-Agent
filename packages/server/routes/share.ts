@@ -24,7 +24,7 @@ import {
   type ShareServerFrame,
   type ShareSink,
 } from "@lumisca/core";
-import { upgradeWebSocket } from "hono/deno";
+import { upgradeWebSocket } from "../websocket.ts";
 
 const log = createLogger("share");
 

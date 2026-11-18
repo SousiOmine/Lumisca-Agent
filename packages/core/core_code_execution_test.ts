@@ -1,4 +1,5 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@lumisca/core";
 import { assert, assertEquals } from "@std/assert";
 import { CODE_EXECUTION_PROVIDER } from "./agent/code-execution-context.ts";
@@ -76,7 +77,7 @@ test("scripting tool call: a program runs the session's real tools", async () =>
   const { core, faux, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   try {
-    await Deno.writeTextFile(`${root}/hello.txt`, "scripting tool call works");
+    await fsp.writeFile(`${root}/hello.txt`, "scripting tool call works");
     core.setCodeExecutionEnabled(true);
     const session = await core.createSession({
       workspaceId: ws.id,

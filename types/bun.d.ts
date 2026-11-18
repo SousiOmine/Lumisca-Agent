@@ -1,23 +1,25 @@
 /**
- * The Bun globals the runtime shim uses. Deliberately hand-written and small:
- * pulling `@types/bun` in would also pull Node's global types, which disagree
- * with Deno's (a timer is a `Timeout`, `fetch` carries `preconnect`) and turn
- * every call site into a type error. This file declares only what is called.
+ * The Bun globals the app uses. Deliberately hand-written and small: pulling
+ * `@types/bun` in would also pull a second copy of Node's global types and
+ * turn every call site into a type error. This file declares only what is
+ * called.
  */
-interface BunSocket {
-  data: unknown;
-  send(data: unknown): void;
+interface BunSocket<Data = unknown> {
+  data: Data;
+  readyState: 0 | 1 | 2 | 3;
+  send(data: string | ArrayBuffer | Uint8Array): void;
   close(code?: number, reason?: string): void;
   end(): void;
 }
 
-interface BunServer {
+interface BunServer<Data = unknown> {
   hostname: string;
   port: number;
+  url: URL;
   stop(closeActiveConnections?: boolean): void;
   upgrade(
     req: Request,
-    options?: { data?: unknown; headers?: Record<string, string> },
+    options?: { data?: Data; headers?: Record<string, string> },
   ): boolean;
 }
 
@@ -27,21 +29,83 @@ interface BunListenServer {
   stop(closeActiveConnections?: boolean): void;
 }
 
+interface BunFileSink {
+  write(data: string | Uint8Array): number | Promise<number>;
+  flush(): Promise<number>;
+  end(error?: Error): Promise<number>;
+  close(): Promise<number>;
+}
+
+interface BunSubprocess {
+  readonly pid: number;
+  readonly stdin: BunFileSink;
+  readonly stdout: ReadableStream<Uint8Array>;
+  readonly stderr: ReadableStream<Uint8Array>;
+  readonly exited: Promise<number>;
+  kill(signal?: string | number): void;
+  ref(): void;
+  unref(): void;
+  [Symbol.asyncDispose](): Promise<void>;
+}
+
+interface BunSpawnOptions {
+  cwd?: string;
+  env?: Record<string, string>;
+  stdin?: "pipe" | "ignore" | "inherit";
+  stdout?: "pipe" | "ignore" | "inherit";
+  stderr?: "pipe" | "ignore" | "inherit";
+  signal?: AbortSignal;
+}
+
+interface BunSpawnSyncResult {
+  exitCode: number;
+  success: boolean;
+  stdout: Uint8Array;
+  stderr: Uint8Array;
+}
+
+interface BunFile {
+  size: number;
+  type: string;
+  exists(): Promise<boolean>;
+  text(): Promise<string>;
+  json(): Promise<unknown>;
+  arrayBuffer(): Promise<ArrayBuffer>;
+  bytes(): Promise<Uint8Array>;
+  stream(): ReadableStream<Uint8Array>;
+}
+
+declare namespace Bun {
+  type Subprocess = BunSubprocess;
+  type Server<Data = unknown> = BunServer<Data>;
+  type Socket<Data = unknown> = BunSocket<Data>;
+  type FileSink = BunFileSink;
+}
+
 declare const Bun: {
   argv: string[];
   main: string;
+  version: string;
   isStandaloneExecutable: boolean;
   gc(force: boolean): void;
-  serve(options: {
+  file(path: string): BunFile;
+  write(
+    destination: string | BunFile,
+    data: string | Uint8Array | ArrayBuffer | Blob | Response,
+  ): Promise<number>;
+  spawn(command: string[], options?: BunSpawnOptions): BunSubprocess;
+  spawnSync(command: string[], options?: BunSpawnOptions): BunSpawnSyncResult;
+  serve<Data = unknown>(options: {
     hostname?: string;
     port?: number;
-    fetch(req: Request): Response | Promise<Response>;
+    fetch(req: Request, server: BunServer<Data>): Response | Promise<Response>;
     websocket?: {
-      open(ws: BunSocket): void;
-      message(ws: BunSocket, message: string | Uint8Array): void;
-      close(ws: BunSocket, code: number, reason: string): void;
+      open?(ws: BunSocket<Data>): void;
+      message?(ws: BunSocket<Data>, message: string | Uint8Array): void;
+      close?(ws: BunSocket<Data>, code: number, reason: string): void;
     };
-  }): BunServer;
+    error?(error: Error): Response | Promise<Response>;
+  }): BunServer<Data>;
   listen(options: {
     hostname?: string;
     port?: number;
@@ -126,8 +190,8 @@ declare module "bun:sqlite" {
     Row extends Record<string, SQLOutputValue> = Record<string, SQLOutputValue>,
   > {
     run(...params: SQLQueryBindings[]): Changes;
-    /** `null` when the statement returned no row (Deno's `node:sqlite`
-     * answered `undefined`; callers here use a truthiness check). */
+    /** `null` when the statement returned no row; callers use a
+     * truthiness check. */
     get(...params: SQLQueryBindings[]): Row | null;
     all(...params: SQLQueryBindings[]): Row[];
     iterate(...params: SQLQueryBindings[]): IterableIterator<Row>;

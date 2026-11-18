@@ -1,5 +1,7 @@
 import { test } from "bun:test";
-import { join } from "node:path";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join, join as pathJoin } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { stellaAvailability } from "./availability.ts";
 import type { VmCommandResult, VmCommandRunner } from "./command.ts";
@@ -93,8 +95,8 @@ function makeRunner(script: Script): {
  * manager takes the directory that CONTAINS the container files, wherever the
  * server resolved it). */
 async function containerDir(): Promise<string> {
-  const root = await Deno.makeTempDir({ prefix: "lumisca-vm-" });
-  await Deno.writeTextFile(join(root, "Containerfile"), "FROM scratch\n");
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-vm-"));
+  await fsp.writeFile(join(root, "Containerfile"), "FROM scratch\n");
   return root;
 }
 
@@ -219,7 +221,7 @@ test("status: podman missing is reported with its reason", async () => {
       `reason: ${status.reason}`,
     );
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -267,7 +269,7 @@ test("status: image_missing / container_missing / stopped", async () => {
       assertEquals(status.reason, "");
     }
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -282,7 +284,7 @@ test("status: a running machine reports its VNC port", async () => {
     assertEquals(status.vncPort, 49153);
     assertEquals(status.reason, "");
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -315,7 +317,7 @@ test("status: a drifted contract is reported as stopped with the reason", async 
       `reason must name the mismatch: ${status.reason}`,
     );
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -343,7 +345,7 @@ test("status: desktops numbered otherwise than the server expects are refused", 
       `reason must name the drift: ${status.reason}`,
     );
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -375,7 +377,7 @@ test("status: a machine without passwordless sudo is refused", async () => {
       `reason must name sudo: ${status.reason}`,
     );
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -407,7 +409,7 @@ test("status: a machine whose screen is not up is refused", async () => {
       `reason must name the screen: ${status.reason}`,
     );
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -441,7 +443,7 @@ test("status: a machine without the accessibility bus is refused", async () => {
       `reason must name the bus: ${status.reason}`,
     );
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -473,7 +475,7 @@ test("status: a machine with accessibility off is refused", async () => {
       `reason must name the setting: ${status.reason}`,
     );
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -507,7 +509,7 @@ test("status: a machine whose accessibility helper is missing is refused", async
     );
     assert(status.reason.includes("a11y.py"), status.reason);
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -528,7 +530,7 @@ test("status: the accessibility helper is probed with a request that finds nothi
     assert(joined.includes(VM_A11Y_HELPER), joined);
     assert(joined.includes("definitely-not-running"), joined);
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -540,7 +542,7 @@ test("status: an image built from older container files is stale", async () => {
     const status = await manager.status();
     assertEquals(status.state, "image_stale");
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -566,7 +568,7 @@ test("status: an image without a digest label counts as stale", async () => {
     }).status();
     assertEquals(status.state, "running");
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -576,20 +578,17 @@ test("container files digest: every file in the directory counts", async () => {
     const before = await containerFilesDigest(dir);
     assert(before !== null, "the digest must be computable");
     // A second file (entry.sh is COPYed by the Containerfile) changes it.
-    await Deno.writeTextFile(join(dir, "entry.sh"), "#!/bin/sh\n");
+    await fsp.writeFile(join(dir, "entry.sh"), "#!/bin/sh\n");
     const afterFile = await containerFilesDigest(dir);
     assert(afterFile !== before, "adding a file must change the digest");
     // So does an edit to the instruction itself.
-    await Deno.writeTextFile(
-      join(dir, "Containerfile"),
-      "FROM scratch\nRUN true\n",
-    );
+    await fsp.writeFile(join(dir, "Containerfile"), "FROM scratch\nRUN true\n");
     const afterEdit = await containerFilesDigest(dir);
     assert(afterEdit !== afterFile, "an edit must change the digest");
     // A directory that does not exist has no definition to hash.
     assertEquals(await containerFilesDigest(join(dir, "missing")), null);
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -600,17 +599,17 @@ test("container files digest: a nested file still counts", async () => {
   const dir = await containerDir();
   try {
     const before = await containerFilesDigest(dir);
-    await Deno.mkdir(join(dir, "nested"));
-    await Deno.writeTextFile(join(dir, "nested", "extra.txt"), "one\n");
+    await fsp.mkdir(join(dir, "nested"));
+    await fsp.writeFile(join(dir, "nested", "extra.txt"), "one\n");
     const after = await containerFilesDigest(dir);
     assert(after !== before, "adding a nested file must change the digest");
 
     // An edit inside it must too, not only its presence.
-    await Deno.writeTextFile(join(dir, "nested", "extra.txt"), "two\n");
+    await fsp.writeFile(join(dir, "nested", "extra.txt"), "two\n");
     const edited = await containerFilesDigest(dir);
     assert(edited !== after, "editing a nested file must change the digest");
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -627,7 +626,7 @@ test("status: the answer is cached, and fresh bypasses the cache", async () => {
     await manager.status({ fresh: true });
     assert(calls.length > afterFirst, "fresh must ask podman again");
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -690,7 +689,7 @@ test("start: a missing image is built, created, started and verified", async () 
       ],
     );
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -711,12 +710,12 @@ test("start: a running machine is left alone", async () => {
       `nothing must be started: ${joined.join("\n")}`,
     );
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
 test("start: a missing image definition fails with its path", async () => {
-  const root = await Deno.makeTempDir({ prefix: "lumisca-vm-" });
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-vm-"));
   try {
     const { run } = makeRunner({
       answers: [
@@ -731,7 +730,7 @@ test("start: a missing image definition fails with its path", async () => {
       "image definition is missing",
     );
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await fsp.rm(root, { recursive: true });
   }
 });
 
@@ -800,7 +799,7 @@ test("start: a broken container is recreated on the same home volume", async () 
       `the new container must be started: ${joined.join("\n")}`,
     );
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -862,7 +861,7 @@ test("start: a machine created without its ceilings is replaced", async () => {
       `the replacement must carry the ceilings: ${create}`,
     );
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -916,7 +915,7 @@ test("start: a stale image is rebuilt from the container files", async () => {
       `the rebuilt machine must mount the home volume: ${joined.join("\n")}`,
     );
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -954,7 +953,7 @@ test("start: an image with no container yet needs no home to carry", async () =>
       `there is no home to carry: ${joined.join("\n")}`,
     );
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -991,7 +990,7 @@ test("stop: a stopped or absent machine is not an error", async () => {
       );
     }
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -1015,7 +1014,7 @@ test("status: the VNC port is null when the machine publishes none", async () =>
     // The port constant is part of the contract; the mapping is not.
     assertEquals(VM_VNC_PORT, 6080);
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -1059,7 +1058,7 @@ test("status: the contract is proven once per container instance", async () => {
     ).length;
     assertEquals(secondProbes, 1, "a fresh manager asks once");
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -1089,7 +1088,7 @@ test("status: a machine that is still booting is not remembered as broken", asyn
     const second = await manager.status({ fresh: true });
     assertEquals(second.state, "running");
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -1115,7 +1114,7 @@ test("status: a second fresh read does not ask about the image again", async () 
     ).length;
     assertEquals(afterSecond, 1);
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -1139,7 +1138,7 @@ test("status: concurrent reads share one round of podman calls", async () => {
     ).length;
     assertEquals(versionCalls, 1);
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -1180,7 +1179,7 @@ test("status: podman that cannot start a container is not offered", async () => 
       `verdict: ${verdict.reason}`,
     );
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -1246,7 +1245,7 @@ test("the home volume is mounted on every container the machine makes", async ()
       `the machine must run inside its ceilings: ${create}`,
     );
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -1305,7 +1304,7 @@ test("an install older than the volume has its home moved onto it", async () => 
     assert(created > removed, "the replacement comes after the removal");
     assert(copyIn > created, "the files go into the volume-backed container");
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });
 
@@ -1346,6 +1345,6 @@ test("a container already on the volume is not migrated again", async () => {
       `an already-migrated machine must not copy: ${joined.join("\n")}`,
     );
   } finally {
-    await Deno.remove(dir, { recursive: true });
+    await fsp.rm(dir, { recursive: true });
   }
 });

@@ -1,4 +1,6 @@
 import { test } from "bun:test";
+import * as fsSync from "node:fs";
+import * as fsp from "node:fs/promises";
 import { join } from "node:path";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { makeRealTempDir, removeDirRetry } from "../test-utils.ts";
@@ -9,9 +11,9 @@ import { createInstructionsProvider } from "./instructions.ts";
  * directories are on the chain and can carry their own AGENTS.md. */
 async function fixture(personal?: () => { path: string; content: string }) {
   const root = await makeRealTempDir("lumisca-instructions-");
-  await Deno.mkdir(join(root, ".git"), { recursive: true });
+  await fsp.mkdir(join(root, ".git"), { recursive: true });
   const sub = join(root, "sub");
-  await Deno.mkdir(sub, { recursive: true });
+  await fsp.mkdir(sub, { recursive: true });
   const provider = createInstructionsProvider({
     folders: [root, sub],
     personal,
@@ -22,7 +24,7 @@ async function fixture(personal?: () => { path: string; content: string }) {
 test("instructions are published as a baseline once, then stay quiet", async () => {
   const { root, provider } = await fixture();
   try {
-    await Deno.writeTextFile(join(root, "AGENTS.md"), "Use Deno.\n");
+    await fsp.writeFile(join(root, "AGENTS.md"), "Use Rust.\n");
 
     const first = provider.next();
     assertEquals(first.length, 1);
@@ -35,7 +37,7 @@ test("instructions are published as a baseline once, then stay quiet", async () 
       first[0]!.body,
       `Instructions from: ${join(root, "AGENTS.md")}`,
     );
-    assertStringIncludes(first[0]!.body, "Use Deno.");
+    assertStringIncludes(first[0]!.body, "Use Rust.");
 
     // Unchanged → nothing to publish.
     assertEquals(provider.next(), []);
@@ -47,17 +49,17 @@ test("instructions are published as a baseline once, then stay quiet", async () 
 test("an edited instruction file is republished as an update", async () => {
   const { root, provider } = await fixture();
   try {
-    await Deno.writeTextFile(join(root, "AGENTS.md"), "Use Deno 2.\n");
+    await fsp.writeFile(join(root, "AGENTS.md"), "Use Rust 2.\n");
     provider.next();
 
-    await Deno.writeTextFile(join(root, "AGENTS.md"), "Use Deno 3.\n");
+    await fsp.writeFile(join(root, "AGENTS.md"), "Use Rust 3.\n");
     const update = provider.next();
     assertEquals(update.length, 1);
     assertStringIncludes(update[0]!.title, "Instructions updated:");
     assertStringIncludes(update[0]!.body, "Updated instructions from:");
-    assertStringIncludes(update[0]!.body, "Use Deno 3.");
+    assertStringIncludes(update[0]!.body, "Use Rust 3.");
     assertEquals(
-      update[0]!.body.includes("Use Deno 2."),
+      update[0]!.body.includes("Use Rust 2."),
       false,
       "the superseded content must not be resent",
     );
@@ -72,10 +74,10 @@ test("an edited instruction file is republished as an update", async () => {
 test("a removed instruction file is announced as removed", async () => {
   const { root, provider } = await fixture();
   try {
-    await Deno.writeTextFile(join(root, "AGENTS.md"), "Use Deno.\n");
+    await fsp.writeFile(join(root, "AGENTS.md"), "Use Rust.\n");
     provider.next();
 
-    await Deno.remove(join(root, "AGENTS.md"));
+    await fsp.rm(join(root, "AGENTS.md"));
     const update = provider.next();
     assertEquals(update.length, 1);
     assertStringIncludes(update[0]!.body, "Instructions removed:");
@@ -92,10 +94,10 @@ test("a removed instruction file is announced as removed", async () => {
 test("a new instruction file is announced as additional", async () => {
   const { root, sub, provider } = await fixture();
   try {
-    await Deno.writeTextFile(join(root, "AGENTS.md"), "Root.\n");
+    await fsp.writeFile(join(root, "AGENTS.md"), "Root.\n");
     provider.next();
 
-    await Deno.writeTextFile(join(sub, "AGENTS.md"), "Nested.\n");
+    await fsp.writeFile(join(sub, "AGENTS.md"), "Nested.\n");
     const update = provider.next();
     assertEquals(update.length, 1);
     assertStringIncludes(update[0]!.body, "Additional instructions from:");
@@ -110,12 +112,12 @@ test("a new instruction file is announced as additional", async () => {
 test("one update carries every change of a turn", async () => {
   const { root, sub, provider } = await fixture();
   try {
-    await Deno.writeTextFile(join(root, "AGENTS.md"), "Root.\n");
-    await Deno.writeTextFile(join(sub, "AGENTS.md"), "Nested.\n");
+    await fsp.writeFile(join(root, "AGENTS.md"), "Root.\n");
+    await fsp.writeFile(join(sub, "AGENTS.md"), "Nested.\n");
     provider.next();
 
-    await Deno.writeTextFile(join(root, "AGENTS.md"), "Root 2.\n");
-    await Deno.writeTextFile(join(sub, "AGENTS.md"), "Nested 2.\n");
+    await fsp.writeFile(join(root, "AGENTS.md"), "Root 2.\n");
+    await fsp.writeFile(join(sub, "AGENTS.md"), "Nested 2.\n");
 
     const update = provider.next();
     assertEquals(update.length, 1, "one message per turn");
@@ -131,7 +133,7 @@ test("one update carries every change of a turn", async () => {
 test("a rebased provider does not republish unchanged instructions", async () => {
   const { root, provider } = await fixture();
   try {
-    await Deno.writeTextFile(join(root, "AGENTS.md"), "Use Deno.\n");
+    await fsp.writeFile(join(root, "AGENTS.md"), "Use Rust.\n");
     const published = provider.next()[0]!;
 
     provider.rebase(published.state);
@@ -141,7 +143,7 @@ test("a rebased provider does not republish unchanged instructions", async () =>
     provider.rebase(undefined);
     const again = provider.next();
     assertEquals(again.length, 1);
-    assertStringIncludes(again[0]!.body, "Use Deno.");
+    assertStringIncludes(again[0]!.body, "Use Rust.");
   } finally {
     await removeDirRetry(root);
   }
@@ -150,12 +152,12 @@ test("a rebased provider does not republish unchanged instructions", async () =>
 test("a reopened session reports what changed while it was closed", async () => {
   const { root, provider } = await fixture();
   try {
-    await Deno.writeTextFile(join(root, "AGENTS.md"), "Old.\n");
+    await fsp.writeFile(join(root, "AGENTS.md"), "Old.\n");
     const published = provider.next()[0]!;
 
     // The session closes; the file changes; a new agent rebases from the
     // stored transcript state.
-    await Deno.writeTextFile(join(root, "AGENTS.md"), "New.\n");
+    await fsp.writeFile(join(root, "AGENTS.md"), "New.\n");
     const reopened = createInstructionsProvider({ folders: [root] });
     reopened.rebase(published.state);
     const update = reopened.next();
@@ -188,7 +190,7 @@ test("an empty instruction file is not published", async () => {
   }));
   try {
     assertEquals(provider.next(), []);
-    await Deno.writeTextFile(join(root, "AGENTS.md"), "  \n");
+    await fsp.writeFile(join(root, "AGENTS.md"), "  \n");
     assertEquals(provider.next(), []);
 
     content = "Answer in Japanese.\n";
@@ -212,20 +214,20 @@ test("an empty instruction file is not published", async () => {
 test("personal instructions ride along with the workspace ones", async () => {
   const dir = await makeRealTempDir("lumisca-personal-");
   const personalPath = join(dir, "AGENTS.md");
-  await Deno.writeTextFile(personalPath, "Answer in Japanese.\n");
+  await fsp.writeFile(personalPath, "Answer in Japanese.\n");
   const { root, provider } = await fixture(() => ({
     path: personalPath,
-    content: Deno.readTextFileSync(personalPath),
+    content: fsSync.readFileSync(personalPath, "utf8"),
   }));
   try {
-    await Deno.writeTextFile(join(root, "AGENTS.md"), "Workspace.\n");
+    await fsp.writeFile(join(root, "AGENTS.md"), "Workspace.\n");
     const [baseline] = provider.next();
     assertEquals(baseline!.title, "Workspace instructions (2)");
     assertStringIncludes(baseline!.body, `Instructions from: ${personalPath}`);
     assertStringIncludes(baseline!.body, "Answer in Japanese.");
 
     // An edit to the personal file is an update like any other.
-    await Deno.writeTextFile(personalPath, "Answer in English.\n");
+    await fsp.writeFile(personalPath, "Answer in English.\n");
     const update = provider.next();
     assertEquals(update.length, 1);
     assertStringIncludes(update[0]!.body, "Updated instructions from:");

@@ -9,11 +9,13 @@
  * believing the machine is up.
  */
 
+import * as fsSync from "node:fs";
 import { existsSync } from "node:fs";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { concatBytes } from "../bytes.ts";
 import { firstLine } from "../lines.ts";
-import { runtime } from "../runtime/runtime.ts";
 import { sleep } from "../shared/misc.ts";
 import type {
   VmChannel,
@@ -334,14 +336,14 @@ async function readContainerFiles(
   prefix = "",
 ): Promise<{ path: string; bytes: Uint8Array }[]> {
   const out: { path: string; bytes: Uint8Array }[] = [];
-  for (const entry of runtime.readDirSync(dir)) {
+  for (const entry of fsSync.readdirSync(dir, { withFileTypes: true })) {
     const path = `${prefix}${entry.name}`;
-    if (entry.isDirectory) {
+    if (entry.isDirectory()) {
       out.push(
         ...(await readContainerFiles(join(dir, entry.name), `${path}/`)),
       );
-    } else if (entry.isFile) {
-      out.push({ path, bytes: await runtime.readFile(join(dir, entry.name)) });
+    } else if (entry.isFile()) {
+      out.push({ path, bytes: await fsp.readFile(join(dir, entry.name)) });
     }
   }
   return out;
@@ -896,9 +898,7 @@ export function createVmManager(options: VmManagerOptions): VmManager {
   async function migrateHomeToVolume(options: {
     rebuildImage: boolean;
   }): Promise<void> {
-    const home = await runtime.makeTempDir({
-      prefix: "lumisca-stella-migrate-",
-    });
+    const home = await fsp.mkdtemp(join(osTmpdir(), "lumisca-stella-migrate-"));
     try {
       const stopped = await run(
         podman(["stop", "--time", "5", VM_CONTAINER_NAME]),
@@ -947,7 +947,7 @@ export function createVmManager(options: VmManagerOptions): VmManager {
         );
       }
     } finally {
-      await runtime.remove(home, { recursive: true }).catch(() => {});
+      await fsp.rm(home, { recursive: true }).catch(() => {});
     }
   }
 

@@ -11,7 +11,7 @@
  * The frame is transport-level, not a `ClientEvent`: `connectEvents` swallows
  * it and only refreshes its watchdog, so no reducer ever sees it. WebSocket
  * ping frames are not available on either side of this stack (the browser API
- * and Deno's WebSocket expose data frames only), hence a plain JSON frame.
+ * and Bun's WebSocket expose data frames only), hence a plain JSON frame.
  *
  * The client's deadline spans three server intervals: one lost frame (a
  * hiccup, a throttled background tab) must not tear a live connection down.

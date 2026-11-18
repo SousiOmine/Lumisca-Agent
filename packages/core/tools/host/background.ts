@@ -6,22 +6,22 @@ import type {
   BackgroundSpawnInput,
 } from "../background-backend.ts";
 import { killProcessTree } from "./process-tree.ts";
-import { shellCommand } from "./shell.ts";
+import { spawnShell } from "./shell.ts";
 
 /** The host spawner: a real child process on this machine, with both pipes
  * captured by the manager's reader. */
 export class HostBackgroundSpawner implements BackgroundSpawner {
   spawn(input: BackgroundSpawnInput): Promise<BackgroundProcess> {
-    const child = shellCommand({
+    const child = spawnShell({
       command: input.command,
       cwd: input.cwd,
       baseEnv: input.baseEnv,
       env: input.env,
-    }).spawn();
+    });
     return Promise.resolve({
       pid: child.pid,
       output: mergeStreams(child.stdout, child.stderr),
-      exited: child.status.then((status) => status.code ?? undefined),
+      exited: child.exited,
       kill: () => killProcessTree(child),
     });
   }

@@ -4,6 +4,59 @@ import { assert, assertEquals } from "@std/assert";
 import { startServer } from "./app.ts";
 import { FederationClient, proxyTimeoutFor } from "./federation.ts";
 
+/** A stub peer: a health endpoint under `healthId`, and a `/ws` that
+ * accepts an upgrade. The caller owns the sockets it opened and stops the
+ * server. */
+function startPeer(
+  options: { healthId?: string; onOpen?: (ws: BunSocket) => void } = {},
+): {
+  url: string;
+  sockets: Set<BunSocket>;
+  readonly connections: number;
+  stop(): void;
+} {
+  const sockets = new Set<BunSocket>();
+  let connections = 0;
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(req, server) {
+      const path = new URL(req.url).pathname;
+      if (path === "/api/health") {
+        return Response.json({
+          ok: true,
+          now: Date.now(),
+          instanceId: options.healthId ?? "peer",
+        });
+      }
+      if (path !== "/ws") return new Response("not found", { status: 404 });
+      if (!server.upgrade(req, { data: {} })) {
+        return new Response("upgrade failed", { status: 400 });
+      }
+      return new Response(null);
+    },
+    websocket: {
+      open(ws) {
+        connections++;
+        sockets.add(ws);
+        options.onOpen?.(ws);
+      },
+      close(ws) {
+        sockets.delete(ws);
+      },
+      message() {},
+    },
+  });
+  return {
+    url: `http://127.0.0.1:${server.port}`,
+    sockets,
+    get connections() {
+      return connections;
+    },
+    stop: () => server.stop(true),
+  };
+}
+
 /** The first reconnect backoff the restart test gives the client. Small
  * enough that a leaked stream would retry many times during the wait, so the
  * test still proves the leak; short enough that it costs milliseconds. */
@@ -99,25 +152,8 @@ test("federation: a peer's stream state is relayed to the UI", async () => {
   // announce the stream's state: while its relay to a peer is down, the
   // peer's sessions miss events, and the UI's own socket to the hub says
   // nothing about it.
-  const sockets = new Set<WebSocket>();
-  const peerServer = Deno.serve(
-    {
-      hostname: "127.0.0.1",
-      port: 0,
-      // Keep the test output clean: the stub's address is not interesting.
-      onListen: () => {},
-    },
-    (req) => {
-      if (new URL(req.url).pathname !== "/ws") {
-        return new Response("not found", { status: 404 });
-      }
-      const { socket, response } = Deno.upgradeWebSocket(req);
-      sockets.add(socket);
-      socket.onclose = () => sockets.delete(socket);
-      return response;
-    },
-  );
-  const peerUrl = `http://127.0.0.1:${(peerServer.addr as Deno.NetAddr).port}`;
+  const peerServer = startPeer();
+  const peerUrl = peerServer.url;
   const client = new FederationClient(
     () => [{ id: "peer1", name: "peer1", url: peerUrl, token: "t" }],
     // Never this stub (port 1 is unbound), so the peer stays visible.
@@ -134,12 +170,12 @@ test("federation: a peer's stream state is relayed to the UI", async () => {
     await waitFor(() => states.length >= 1);
     assertEquals(states[0], true, "the opened relay is announced");
 
-    for (const socket of [...sockets]) socket.close();
+    for (const socket of [...peerServer.sockets]) socket.close();
     await waitFor(() => states.length >= 2);
     assertEquals(states[1], false, "the dropped relay is announced");
   } finally {
     client.close();
-    await peerServer.shutdown();
+    peerServer.stop();
   }
 });
 
@@ -148,22 +184,8 @@ test("federation: restart leaves one live stream per peer", async () => {
   // ones. A dropped stream must not schedule a reconnect of its own — the
   // orphan socket relays the peer's events a second time and nothing keeps a
   // reference to close it.
-  let connections = 0;
-  const peerServer = Deno.serve(
-    {
-      hostname: "127.0.0.1",
-      port: 0,
-      onListen: () => {},
-    },
-    (req) => {
-      if (new URL(req.url).pathname !== "/ws") {
-        return new Response("not found", { status: 404 });
-      }
-      connections++;
-      return Deno.upgradeWebSocket(req).response;
-    },
-  );
-  const peerUrl = `http://127.0.0.1:${(peerServer.addr as Deno.NetAddr).port}`;
+  const peerServer = startPeer();
+  const peerUrl = peerServer.url;
   const client = new FederationClient(
     () => [{ id: "peer1", name: "peer1", url: peerUrl, token: "t" }],
     // Never this stub, so the peer stays visible.
@@ -175,17 +197,25 @@ test("federation: restart leaves one live stream per peer", async () => {
   );
   try {
     client.start();
-    await waitFor(() => connections === 1);
+    await waitFor(() => peerServer.connections === 1);
     client.restart();
-    await waitFor(() => connections === 2);
-    assertEquals(connections, 2, "the restarted peer is connected once");
+    await waitFor(() => peerServer.connections === 2);
+    assertEquals(
+      peerServer.connections,
+      2,
+      "the restarted peer is connected once",
+    );
     // Past the backoff (and a few multiples of it): an orphaned stream would
     // dial in again here, and keep doing so.
     await new Promise((resolve) => setTimeout(resolve, 250));
-    assertEquals(connections, 2, "the dropped stream must not reconnect");
+    assertEquals(
+      peerServer.connections,
+      2,
+      "the dropped stream must not reconnect",
+    );
   } finally {
     client.close();
-    await peerServer.shutdown();
+    peerServer.stop();
   }
 });
 
@@ -196,37 +226,25 @@ test("federation: a frame the peer relayed from its own peer is not relayed agai
   // under another URL, the relayed copy comes back as an input and the relay
   // never stops: the loop pegged a core and grew the process until the OOM
   // killer took it down (taking every session with it).
-  const peerServer = Deno.serve(
-    {
-      hostname: "127.0.0.1",
-      port: 0,
-      onListen: () => {},
+  const peerServer = startPeer({
+    onOpen(socket) {
+      socket.send(
+        JSON.stringify({
+          type: "agent_end",
+          sessionId: "local",
+          peerId: "",
+        }),
+      );
+      socket.send(
+        JSON.stringify({
+          type: "agent_end",
+          sessionId: "relayed",
+          peerId: "someone-else",
+        }),
+      );
     },
-    (req) => {
-      if (new URL(req.url).pathname !== "/ws") {
-        return new Response("not found", { status: 404 });
-      }
-      const { socket, response } = Deno.upgradeWebSocket(req);
-      socket.onopen = () => {
-        socket.send(
-          JSON.stringify({
-            type: "agent_end",
-            sessionId: "local",
-            peerId: "",
-          }),
-        );
-        socket.send(
-          JSON.stringify({
-            type: "agent_end",
-            sessionId: "relayed",
-            peerId: "someone-else",
-          }),
-        );
-      };
-      return response;
-    },
-  );
-  const peerUrl = `http://127.0.0.1:${(peerServer.addr as Deno.NetAddr).port}`;
+  });
+  const peerUrl = peerServer.url;
   const client = new FederationClient(
     () => [{ id: "peer1", name: "peer1", url: peerUrl, token: "t" }],
     () => "http://127.0.0.1:1",
@@ -244,7 +262,7 @@ test("federation: a frame the peer relayed from its own peer is not relayed agai
     assertEquals(sessionIds, ["local"]);
   } finally {
     client.close();
-    await peerServer.shutdown();
+    peerServer.stop();
   }
 });
 
@@ -255,28 +273,8 @@ test("federation: the hub recognises itself under any URL", async () => {
   // to — and a hub that federates with itself there is the echo above. Its
   // identity is its instanceId (a per-process uuid), not its address.
   const selfId = crypto.randomUUID();
-  const sockets = new Set<WebSocket>();
-  const peerServer = Deno.serve(
-    {
-      hostname: "127.0.0.1",
-      port: 0,
-      onListen: () => {},
-    },
-    (req) => {
-      const path = new URL(req.url).pathname;
-      if (path === "/api/health") {
-        return Response.json({ ok: true, now: Date.now(), instanceId: selfId });
-      }
-      if (path === "/ws") {
-        const { socket, response } = Deno.upgradeWebSocket(req);
-        sockets.add(socket);
-        socket.onclose = () => sockets.delete(socket);
-        return response;
-      }
-      return new Response("not found", { status: 404 });
-    },
-  );
-  const url = `http://127.0.0.1:${(peerServer.addr as Deno.NetAddr).port}`;
+  const peerServer = startPeer({ healthId: selfId });
+  const url = peerServer.url;
   const client = new FederationClient(
     () => [{ id: "self", name: "self", url, token: "t" }],
     // The stub is not this origin: only the identity probe can tell.
@@ -288,12 +286,20 @@ test("federation: the hub recognises itself under any URL", async () => {
     await waitFor(() => client.peers().length === 0);
     assertEquals(client.peers(), [], "the hub's own entry is not a peer");
     // Not one event stream may be opened, and nothing may dial in later.
-    assertEquals(sockets.size, 0, "the hub must not federate with itself");
+    assertEquals(
+      peerServer.sockets.size,
+      0,
+      "the hub must not federate with itself",
+    );
     await new Promise((resolve) => setTimeout(resolve, 100));
-    assertEquals(sockets.size, 0, "the hub must not federate with itself");
+    assertEquals(
+      peerServer.sockets.size,
+      0,
+      "the hub must not federate with itself",
+    );
   } finally {
     client.close();
-    await peerServer.shutdown();
+    peerServer.stop();
   }
 });
 
@@ -335,13 +341,10 @@ test("the fed proxy keeps the headers only the peer can set", async () => {
   // SVG may execute; dropping those made a remote file arrive under a random
   // name. `content-encoding` is deliberately absent: the hub's fetch decoded
   // the body, so passing it on would make the client decompress plain text.
-  const peerServer = Deno.serve(
-    {
-      hostname: "127.0.0.1",
-      port: 0,
-      onListen: () => {},
-    },
-    (req) => {
+  const peerServer = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: (req) => {
       if (new URL(req.url).pathname === "/api/health") {
         return Response.json({ ok: true, now: Date.now(), instanceId: "peer" });
       }
@@ -356,8 +359,8 @@ test("the fed proxy keeps the headers only the peer can set", async () => {
         },
       });
     },
-  );
-  const peerUrl = `http://127.0.0.1:${(peerServer.addr as Deno.NetAddr).port}`;
+  });
+  const peerUrl = `http://127.0.0.1:${peerServer.port}`;
   const core = LumiscaCore.forTesting([fauxProvider().provider]);
   core.setConnections([{ id: "p1", name: "p1", url: peerUrl, token: "t" }]);
   const server = startServer(core, 0, {});
@@ -383,6 +386,6 @@ test("the fed proxy keeps the headers only the peer can set", async () => {
   } finally {
     server.shutdown();
     await core.close();
-    await peerServer.shutdown();
+    peerServer.stop(true);
   }
 });

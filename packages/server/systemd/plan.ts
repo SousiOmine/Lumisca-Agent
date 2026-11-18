@@ -25,13 +25,13 @@ export const DOCUMENT_NAME = "service.env";
 /** What `service` needs to know about the machine it runs on, injected so
  * every decision is testable. */
 export interface ServiceHost {
-  /** `runtime.build.os`. */
+  /** Operating system, in the names `OS` uses. */
   os: string;
-  /** `runtime.build.standalone`: only a packaged server owns its installation. */
+  /** `IS_STANDALONE`: only a packaged server owns its installation. */
   standalone: boolean;
   /** `LUMISCA_DESKTOP` was set: the desktop shell owns this binary. */
   desktopManaged: boolean;
-  /** `runtime.execPath()`. */
+  /** Path of the running binary (`process.execPath`). */
   execPath: string;
   /** HOME the unit sets (the server resolves its settings file under it). */
   home: string;

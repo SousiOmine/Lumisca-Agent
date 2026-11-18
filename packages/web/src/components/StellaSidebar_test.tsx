@@ -5,6 +5,7 @@
  * itself carries it, on a right click or a held finger.
  */
 import { test } from "bun:test";
+import * as fsSync from "node:fs";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { renderToString } from "preact-render-to-string";
 import { initLocale } from "../i18n.ts";
@@ -134,8 +135,9 @@ test("StellaSidebar: the row itself is what opens its menu", () => {
   // behind the menu, which is closed here and so not in the markup at all.
   assertEquals(html.includes(">削除<"), false);
 
-  const source = Deno.readTextFileSync(
+  const source = fsSync.readFileSync(
     new URL("./StellaSidebar.tsx", import.meta.url),
+    "utf8",
   );
   // A mouse's right click opens it...
   assertStringIncludes(source, "onContextMenu=");
@@ -223,8 +225,9 @@ test("StellaSidebar: the row menu is placed from the left edge", () => {
   // right click near the left edge (the sidebar IS the left edge) pushed the
   // menu off the screen. It is drawn from the point it was opened at, and
   // that point is measured against the left edge.
-  const source = Deno.readTextFileSync(
+  const source = fsSync.readFileSync(
     new URL("./StellaSidebar.tsx", import.meta.url),
+    "utf8",
   );
   // The anchor stores a left offset, not a right one.
   assertStringIncludes(source, "x: number;");
@@ -255,11 +258,15 @@ test("StellaSidebar: a created agent is in the list before it is opened", () => 
   // widths), so the two steps are in two files: the dialog hands over only
   // the row the server answered, and the App puts it into the list before it
   // moves the address.
-  const dialog = Deno.readTextFileSync(
+  const dialog = fsSync.readFileSync(
     new URL("./stella/AgentCreateDialog.tsx", import.meta.url),
+    "utf8",
   );
   assertStringIncludes(dialog, "onCreated(agent)");
-  const app = Deno.readTextFileSync(new URL("../App.tsx", import.meta.url));
+  const app = fsSync.readFileSync(
+    new URL("../App.tsx", import.meta.url),
+    "utf8",
+  );
   const start = app.indexOf("agentCreate={");
   const body = app.slice(start, app.indexOf("agentEdit={", start));
   const row = body.indexOf("stella.applyAgent(agent)");

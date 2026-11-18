@@ -19,8 +19,9 @@
  * (1) are asked, which is what a normal `bun run dev` user wants.
  */
 
+import * as fsSync from "node:fs";
 import { LumiscaCore } from "../packages/core/mod.ts";
-import { exit, runtime } from "../packages/core/runtime/runtime.ts";
+import { exit, runProcess } from "../packages/core/process.ts";
 import { runVmCommand } from "../packages/core/vm/command.ts";
 import {
   createVmExec,
@@ -31,24 +32,20 @@ import { createVmSemanticTools } from "../packages/core/vm/semantic.ts";
 import { stellaContainerDir } from "../packages/server/paths.ts";
 import { repoRoot } from "./lib.ts";
 
-const start = runtime.args.includes("--start");
-const noStop = runtime.args.includes("--no-stop");
+const start = process.argv.slice(2).includes("--start");
+const noStop = process.argv.slice(2).includes("--no-stop");
 
 function log(message: string): void {
   console.log(message);
 }
 
-const containerDir = stellaContainerDir(
-  repoRoot,
-  runtime.execPath(),
-  (path) => {
-    try {
-      return runtime.statSync(path).isDirectory;
-    } catch {
-      return false;
-    }
-  },
-);
+const containerDir = stellaContainerDir(repoRoot, process.execPath, (path) => {
+  try {
+    return fsSync.statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+});
 log(`container files: ${containerDir}`);
 
 const vm = createVmManager({ containerDir });
@@ -112,21 +109,18 @@ const listing = await exec(["sh", "-c", "ls -a /home/agent | head -5"], {
 log(`home: ${listing.stdout.trim().replaceAll("\n", " ")}`);
 
 // The screen capture the agent's vm_screenshot tool takes.
-const shot = await new runtime.Command("podman", {
-  args: [
-    "exec",
-    "--workdir",
-    "/home/agent",
-    VM_CONTAINER_NAME,
-    "scrot",
-    "--pointer",
-    "--overwrite",
-    "--silent",
-    "/dev/stdout",
-  ],
-  stdout: "piped",
-  stderr: "piped",
-}).output();
+const shot = await runProcess([
+  "podman",
+  "exec",
+  "--workdir",
+  "/home/agent",
+  VM_CONTAINER_NAME,
+  "scrot",
+  "--pointer",
+  "--overwrite",
+  "--silent",
+  "/dev/stdout",
+]);
 log(
   shot.success
     ? `screenshot: ${shot.stdout.byteLength} bytes (PNG signature ${new Uint8Array(

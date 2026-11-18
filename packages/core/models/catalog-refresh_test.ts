@@ -1,4 +1,7 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join as pathJoin } from "node:path";
 import type { ProviderMap } from "@opencode-ai/models";
 import { assert, assertEquals } from "@std/assert";
 import { LumiscaCore } from "../mod.ts";
@@ -107,7 +110,9 @@ test("refreshCatalog keeps an existing session usable after upstream removal", a
   const core = LumiscaCore.forTesting();
   try {
     const doomed = core.listModels("openai")[0]!;
-    const ws = await core.createWorkspace("ws", [await Deno.makeTempDir()]);
+    const ws = await core.createWorkspace("ws", [
+      await fsp.mkdtemp(pathJoin(osTmpdir(), "tmp-")),
+    ]);
     const session = await core.createSession({
       workspaceId: ws.id,
       modelProvider: "openai",
@@ -197,12 +202,12 @@ test("refreshCatalog reports custom-provider failure on the status", async () =>
 });
 
 test("refreshCatalog restores the built-in after a stale override is removed", async () => {
-  const dir = await Deno.makeTempDir({ prefix: "lumisca-models-" });
+  const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-models-"));
   const path = `${dir}/models.json`;
   const vars: Record<string, string> = {};
   const core = LumiscaCore.forTesting([], () => vars);
   try {
-    await Deno.writeTextFile(
+    await fsp.writeFile(
       path,
       JSON.stringify({
         providers: {
@@ -217,7 +222,7 @@ test("refreshCatalog restores the built-in after a stale override is removed", a
     await core.refreshModelCatalog({ fetch: stubFetch(liveProviders()) });
     assert(core.listProviders().some((p) => p.id === "my-corp"));
     // Remove the custom entry: the stale provider must disappear.
-    await Deno.writeTextFile(path, JSON.stringify({ providers: {} }));
+    await fsp.writeFile(path, JSON.stringify({ providers: {} }));
     await core.refreshModelCatalog({ fetch: stubFetch(liveProviders()) });
     assertEquals(
       core.listProviders().some((p) => p.id === "my-corp"),
@@ -225,7 +230,7 @@ test("refreshCatalog restores the built-in after a stale override is removed", a
       "stale custom providers must not linger",
     );
   } finally {
-    await Deno.remove(dir, { recursive: true }).catch(() => {});
+    await fsp.rm(dir, { recursive: true }).catch(() => {});
     await core.close();
   }
 });

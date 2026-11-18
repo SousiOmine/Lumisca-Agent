@@ -1,4 +1,7 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join as pathJoin } from "node:path";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@lumisca/core";
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import { MCP_TOOLS_PROVIDER, ON_DEMAND_TOOLS_NOTE } from "./mcp/context.ts";
@@ -21,7 +24,6 @@ import {
   TOOL_PDF_READ_PAGES,
   TOOL_SEARCH,
 } from "./shared/mod.ts";
-
 import {
   makeWorkspace,
   promptSession,
@@ -142,7 +144,7 @@ function waitForQuestion(
 test("workspace update rebuilds session tools", async () => {
   const { core, faux: _faux, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
-  const extra = await Deno.makeTempDir({ prefix: "lumisca-extra-" });
+  const extra = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-extra-"));
 
   await core.createSession({
     workspaceId: ws.id,
@@ -490,7 +492,7 @@ test("ask tool blocks the run until the user answers, then continues", async () 
           {
             id: "lang",
             question: "Which language?",
-            options: [{ label: "Deno" }, { label: "Node" }],
+            options: [{ label: "Rust" }, { label: "Node" }],
           },
         ],
       }),
@@ -506,7 +508,7 @@ test("ask tool blocks the run until the user answers, then continues", async () 
   const question = await waitForQuestion(core, session.id);
   assertEquals(question.toolCallId.length > 0, true);
   core.answerQuestion(question.sessionId, question.toolCallId, [
-    { id: "lang", values: ["Deno"] },
+    { id: "lang", values: ["Rust"] },
   ]);
   await run;
 
@@ -516,7 +518,7 @@ test("ask tool blocks the run until the user answers, then continues", async () 
   assertEquals(toolResults.length, 1);
   const resultText = (toolResults[0] as { content: Array<{ text: string }> })
     .content[0]!.text;
-  assertEquals(resultText, "Answers from the user:\n- Which language?: Deno");
+  assertEquals(resultText, "Answers from the user:\n- Which language?: Rust");
   const last = messages.at(-1) as { content: Array<{ text: string }> };
   assertEquals(last.content[0]!.text, "Great choice!");
   assertEquals(
@@ -626,7 +628,7 @@ test("rewind while a question is pending aborts the run cleanly", async () => {
           {
             id: "lang",
             question: "Which language?",
-            options: [{ label: "Deno" }, { label: "Node" }],
+            options: [{ label: "Rust" }, { label: "Node" }],
           },
         ],
       }),
@@ -647,7 +649,7 @@ test("rewind while a question is pending aborts the run cleanly", async () => {
   assertThrows(
     () =>
       core.answerQuestion(session.id, question.toolCallId, [
-        { id: "lang", values: ["Deno"] },
+        { id: "lang", values: ["Rust"] },
       ]),
     Error,
     "No pending question for tool call",

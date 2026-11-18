@@ -1,5 +1,0 @@
-[test]
-preload = ["./packages/core/runtime/runtime.ts"]
-
-[run]
-preload = ["./packages/core/runtime/runtime.ts"]

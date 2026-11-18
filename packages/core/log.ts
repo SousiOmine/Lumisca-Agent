@@ -12,14 +12,13 @@
  * remaining available when diagnosing MCP / federation / browser issues.
  * `info`/`warn`/`error` always print.
  */
-import { runtime } from "./runtime/runtime.ts";
 import { errorMessage } from "./shared/misc.ts";
 
 function debugEnabled(): boolean {
   try {
-    const flag = runtime.env.get("LUMISCA_DEBUG") ?? "";
+    const flag = process.env["LUMISCA_DEBUG"] ?? "";
     if (flag === "1" || flag.toLowerCase() === "true") return true;
-    const debug = runtime.env.get("DEBUG") ?? "";
+    const debug = process.env["DEBUG"] ?? "";
     return debug.toLowerCase().includes("lumisca");
   } catch {
     // No env access (browser bundle, restricted permissions): debug off.

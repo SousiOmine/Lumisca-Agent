@@ -1,10 +1,12 @@
 import { test } from "bun:test";
-import { join } from "node:path";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join, join as pathJoin } from "node:path";
 import { SETTINGS_DIR_NAME } from "@lumisca/core";
 import { unusedPort } from "@lumisca/core/test-utils";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { pathUnitValue, quoteUnitValue } from "./compose.ts";
-import type { ServiceDeps } from "./deps.ts";
+import type { HostNetworkInterface, ServiceDeps } from "./deps.ts";
 import { runServiceCommand } from "./mod.ts";
 import { DOCUMENT_NAME, UNIT_NAME } from "./plan.ts";
 import type { CommandResult, ServiceRunner } from "./runner.ts";
@@ -116,18 +118,18 @@ async function harness(
     desktopManaged?: boolean;
     probe?: boolean;
     generateToken?: () => string;
-    interfaces?: Deno.NetworkInterfaceInfo[];
+    interfaces?: HostNetworkInterface[];
   } = {},
 ): Promise<Harness> {
-  const root = await Deno.makeTempDir({ prefix: "lumisca-service-test-" });
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-service-test-"));
   const installDir = join(root, "install");
-  await Deno.mkdir(installDir, { recursive: true });
+  await fsp.mkdir(installDir, { recursive: true });
   const os = options.os ?? "linux";
   const execPath = join(
     installDir,
     os === "windows" ? "lumisca-server.exe" : "lumisca-server",
   );
-  await Deno.writeTextFile(execPath, "");
+  await fsp.writeFile(execPath, "");
   const configHome = join(root, "config");
   const systemd = new FakeSystemd();
   const lines: string[] = [];
@@ -164,13 +166,13 @@ async function harness(
     lines,
     errors,
     port: unusedPort(),
-    cleanup: () => Deno.remove(root, { recursive: true }).catch(() => {}),
+    cleanup: () => fsp.rm(root, { recursive: true }).catch(() => {}),
   };
 }
 
 async function readIfPresent(path: string): Promise<string | undefined> {
   try {
-    return await Deno.readTextFile(path);
+    return await fsp.readFile(path, "utf8");
   } catch {
     return undefined;
   }
@@ -185,7 +187,7 @@ test("install writes the definition and starts the service", async () => {
     );
     assertEquals(code, 0, test.errors.join("\n"));
 
-    const unit = await Deno.readTextFile(test.unitPath);
+    const unit = await fsp.readFile(test.unitPath, "utf8");
     assertStringIncludes(
       unit,
       `ExecStart=${quoteUnitValue(test.deps.host.execPath)}`,
@@ -200,7 +202,7 @@ test("install writes the definition and starts the service", async () => {
     );
     assertStringIncludes(unit, "Restart=always");
 
-    const document = await Deno.readTextFile(test.documentPath);
+    const document = await fsp.readFile(test.documentPath, "utf8");
     assertStringIncludes(document, 'LUMISCA_HOST="127.0.0.1"');
     assertStringIncludes(document, `LUMISCA_PORT="${test.port}"`);
     assertStringIncludes(document, 'LUMISCA_TOKEN="generated-token"');
@@ -215,7 +217,7 @@ test("install writes the definition and starts the service", async () => {
     // The check creates the staging area the updater will use and leaves no
     // probe file behind.
     const staging = join(test.installDir, ".lumisca-update");
-    assert((await Deno.stat(staging)).isDirectory);
+    assert((await fsp.stat(staging)).isDirectory());
     assertEquals(await readIfPresent(join(staging, ".write-test")), undefined);
 
     const output = test.lines.join("\n");
@@ -245,7 +247,7 @@ test("reinstalling keeps the installed values and credential", async () => {
       throw new Error("must not regenerate the credential");
     };
     assertEquals(await runServiceCommand(["install"], test.deps), 0);
-    const document = await Deno.readTextFile(test.documentPath);
+    const document = await fsp.readFile(test.documentPath, "utf8");
     assertStringIncludes(document, 'LUMISCA_PORT="8100"');
     assertStringIncludes(document, 'LUMISCA_TOKEN="generated-token"');
   } finally {
@@ -267,7 +269,7 @@ test("explicit flags override the installed layer", async () => {
       ),
       0,
     );
-    const document = await Deno.readTextFile(test.documentPath);
+    const document = await fsp.readFile(test.documentPath, "utf8");
     assertStringIncludes(document, 'LUMISCA_PORT="8200"');
     // A relative database path is resolved at install time, so the unit does
     // not depend on systemd's working directory.
@@ -283,7 +285,16 @@ test("explicit flags override the installed layer", async () => {
 test("install refuses a port another process holds", async () => {
   const test = await harness();
   const port = unusedPort();
-  const listener = Deno.listen({ hostname: "127.0.0.1", port });
+  const listener = Bun.listen({
+    hostname: "127.0.0.1",
+    port,
+    socket: {
+      data() {},
+      open(socket) {
+        socket.end();
+      },
+    },
+  });
   try {
     const code = await runServiceCommand(
       ["install", "--port", String(port)],
@@ -294,7 +305,7 @@ test("install refuses a port another process holds", async () => {
     assertEquals(await readIfPresent(test.unitPath), undefined);
     assertEquals(await readIfPresent(test.documentPath), undefined);
   } finally {
-    listener.close();
+    listener.stop(true);
     await test.cleanup();
   }
 });
@@ -302,7 +313,16 @@ test("install refuses a port another process holds", async () => {
 test("an active unit owns its port, so a reinstall does not test it", async () => {
   const test = await harness();
   const port = unusedPort();
-  const listener = Deno.listen({ hostname: "127.0.0.1", port });
+  const listener = Bun.listen({
+    hostname: "127.0.0.1",
+    port,
+    socket: {
+      data() {},
+      open(socket) {
+        socket.end();
+      },
+    },
+  });
   test.systemd.active = true;
   try {
     const code = await runServiceCommand(
@@ -312,7 +332,7 @@ test("an active unit owns its port, so a reinstall does not test it", async () =
     assertEquals(code, 0, test.errors.join("\n"));
     assert(test.systemd.has(`systemctl restart ${UNIT_NAME}`));
   } finally {
-    listener.close();
+    listener.stop(true);
     await test.cleanup();
   }
 });
@@ -436,7 +456,7 @@ test("install names every address a wildcard bind answers on", async () => {
       output,
       "ブラウザで一度開くとトークンが Cookie に保存され",
     );
-    const document = await Deno.readTextFile(test.documentPath);
+    const document = await fsp.readFile(test.documentPath, "utf8");
     assertStringIncludes(document, 'LUMISCA_HOST="0.0.0.0"');
     assertStringIncludes(document, 'LUMISCA_ALLOWED_HOSTS="homeserver"');
   } finally {
@@ -525,7 +545,7 @@ test("status reports the installation, its drift, and where it is", async () => 
 
     // A unit written by another version of the template is drift: status must
     // not report a healthy installation that a restart would change.
-    await Deno.writeTextFile(test.unitPath, "[Service]\nType=simple\n");
+    await fsp.writeFile(test.unitPath, "[Service]\nType=simple\n");
     test.lines.length = 0;
     assertEquals(await runServiceCommand(["status"], test.deps), 1);
     assertStringIncludes(test.lines.join("\n"), "一致しません");
@@ -631,7 +651,7 @@ test("a machine this command cannot resolve is reported, never a silent exit", a
   console.error = (line: string) => void errored.push(String(line));
   try {
     // An empty environment is injected instead of clearing the real one: the
-    // runner shares Deno.env with every test file it parallels.
+    // runner shares process.env with every test file it parallels.
     const code = await runServiceCommand(["config", "--defaults"], undefined, {
       get: () => undefined,
       delete: () => {},

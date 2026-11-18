@@ -1,5 +1,8 @@
 import { test } from "bun:test";
-import { join } from "node:path";
+import * as fsSync from "node:fs";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join, join as pathJoin } from "node:path";
 import { LumiscaCore } from "@lumisca/core";
 import { removeDirRetry } from "@lumisca/core/test-utils";
 import { assertEquals } from "@std/assert";
@@ -14,7 +17,7 @@ async function initialDataOf(base: string): Promise<string> {
 }
 
 test("setup API: a new installation owes the setup until it is finished", async () => {
-  const dir = await Deno.makeTempDir({ prefix: "lumisca-setup-" });
+  const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-setup-"));
   const core = LumiscaCore.open(
     join(dir, "lumisca.db"),
     join(dir, "settings.jsonc"),
@@ -36,7 +39,7 @@ test("setup API: a new installation owes the setup until it is finished", async 
     const done = await fetch(`${base}/api/setup/complete`, { method: "POST" });
     assertEquals(done.status, 200);
     assertEquals(await done.json(), { completed: true });
-    assertEquals(Deno.statSync(marker).isFile, true);
+    assertEquals(fsSync.statSync(marker).isFile(), true);
 
     const after = await fetch(`${base}/api/setup`);
     assertEquals(await after.json(), { completed: true });
@@ -60,7 +63,7 @@ test("setup API: a new installation owes the setup until it is finished", async 
 });
 
 test("setup API: deleting the marker asks for the setup again, with no restart", async () => {
-  const dir = await Deno.makeTempDir({ prefix: "lumisca-setup-" });
+  const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-setup-"));
   const core = LumiscaCore.open(
     join(dir, "lumisca.db"),
     join(dir, "settings.jsonc"),
@@ -76,7 +79,7 @@ test("setup API: deleting the marker asks for the setup again, with no restart",
 
     // The documented way back into the wizard: the file is the state, so the
     // same process answers with the new one. There is no API to reset it.
-    Deno.removeSync(marker);
+    fsSync.rmSync(marker);
     assertEquals(await (await fetch(`${base}/api/setup`)).json(), {
       completed: false,
     });

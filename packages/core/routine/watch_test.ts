@@ -3,6 +3,10 @@
  * as a change.
  */
 import { test } from "bun:test";
+import * as fsSync from "node:fs";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join as pathJoin } from "node:path";
 import { assert, assertEquals } from "@std/assert";
 import {
   MIN_WATCH_MINUTES,
@@ -392,16 +396,18 @@ test("runWatch: an http check through the machine fetch compares like any other"
  * the tool-output directory the fetch writes into does not exist. That is
  * the state of a machine nobody has filled the terminal of, and it is the
  * ordinary first check of an http watch. */
-test.skipIf(Deno.build.os === "windows")(
+test.skipIf(
+  (process.platform === "win32" ? "windows" : process.platform) === "windows",
+)(
   "machineWatchFetch: works before any tool has spilled an output",
   async () => {
-    const root = await Deno.makeTempDir({ prefix: "lumisca-watch-" });
-    const server = Deno.serve(
-      { port: 0, onListen: () => {} },
-      () => new Response("deploy ok", { status: 200 }),
-    );
+    const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-watch-"));
+    const server = Bun.serve({
+      port: 0,
+      fetch: () => new Response("deploy ok", { status: 200 }),
+    });
     try {
-      const port = (server.addr as Deno.NetAddr).port;
+      const port = server.port;
       const fetched = await machineWatchFetch({
         runner: new HostCommandRunner(),
         files: new HostFileBackend(new Sandbox([root])),
@@ -412,12 +418,14 @@ test.skipIf(Deno.build.os === "windows")(
       // Nothing is left in the folder: the body file is removed, and the
       // directory that was created is empty.
       assertEquals(
-        [...Deno.readDirSync(root)].filter((entry) => entry.isFile).length,
+        [...fsSync.readdirSync(root, { withFileTypes: true })].filter((entry) =>
+          entry.isFile(),
+        ).length,
         0,
       );
     } finally {
-      await server.shutdown();
-      await Deno.remove(root, { recursive: true });
+      server.stop(true);
+      await fsp.rm(root, { recursive: true });
     }
   },
 );

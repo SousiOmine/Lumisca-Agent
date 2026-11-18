@@ -191,9 +191,9 @@ test("shouldNotifyFromState matrix", () => {
   assertEquals(shouldNotifyFromState(null, true, false), true);
 });
 
-/** An in-memory stand-in for the browser's localStorage: Bun's test
- * environment has none (Deno's had one), and this test is about what the
- * setting does with storage, not about the absence of it. */
+/** An in-memory stand-in for the browser's localStorage: this test is
+ * about what the setting does with storage, not about whether the test
+ * runtime provides one. */
 class MemoryStorage {
   readonly #items = new Map<string, string>();
   getItem(key: string): string | null {

@@ -14,12 +14,8 @@
 
 import type { AuthInteraction } from "../../ai/catalog.ts";
 
+import { isAddrInUseError } from "../../errors.ts";
 import { isRecord } from "../../fs.ts";
-import {
-  type HttpServer,
-  type NetAddr,
-  runtime,
-} from "../../runtime/runtime.ts";
 import {
   CHATGPT_REQUEST_TIMEOUT_MS,
   type FetchLike,
@@ -316,7 +312,7 @@ type CallbackOutcome = { code?: string; error?: Error };
  * device code. The listener is bound to 127.0.0.1: the browser's callback
  * never leaves the machine. */
 function startCallbackServer(state: string): CallbackServer {
-  let server: HttpServer<NetAddr> | undefined;
+  let server: BunServer | undefined;
   let port: number | undefined;
   let settle: (outcome: CallbackOutcome) => void = () => {};
   const received = new Promise<CallbackOutcome>((resolve) => {
@@ -367,14 +363,15 @@ function startCallbackServer(state: string): CallbackServer {
 
   for (const candidate of BROWSER_PORTS) {
     try {
-      server = runtime.serve(
-        { hostname: "127.0.0.1", port: candidate },
-        handler,
-      );
+      server = Bun.serve({
+        hostname: "127.0.0.1",
+        port: candidate,
+        fetch: handler,
+      });
       port = candidate;
       break;
     } catch (error) {
-      if (!(error instanceof runtime.errors.AddrInUse)) throw error;
+      if (!isAddrInUseError(error)) throw error;
     }
   }
   if (server === undefined || port === undefined) {
@@ -392,7 +389,7 @@ function startCallbackServer(state: string): CallbackServer {
     close: async () => {
       if (closed) return;
       closed = true;
-      await server.shutdown();
+      server.stop(true);
     },
   };
 }

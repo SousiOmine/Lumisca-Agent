@@ -17,7 +17,7 @@ export const SKILLS_DIR_NAME = "skills";
  * first-run setup marker among them (`settings/setup.ts`):
  * <config home>/lumisca-agent.
  *
- * The environment is a parameter, not a direct `runtime.env` read: the process
+ * The environment is a parameter, not a direct `process.env` read: the process
  * environment is shared by every test file the runner executes in parallel,
  * so a test that needs a different one passes it instead of mutating the
  * real thing. */
@@ -72,7 +72,7 @@ function configHomeOrUndefined(env: EnvReader): string | undefined {
   const values = env();
   const configured = values["XDG_CONFIG_HOME"];
   if (configured !== undefined && configured !== "") return configured;
-  // Windows uses USERPROFILE; POSIX uses HOME (Deno 2 removed runtime.homedir).
+  // Windows uses USERPROFILE; POSIX uses HOME.
   const home = values["USERPROFILE"] ?? values["HOME"];
   if (home === undefined || home === "") return undefined;
   return join(home, ".config");

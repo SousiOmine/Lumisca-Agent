@@ -4,10 +4,12 @@
  * workspace boundary, so it must never drift between implementations.
  */
 
+import * as fsSync from "node:fs";
+import { OS } from "../platform.ts";
+
 /** Lowercase for case-insensitive comparison on Windows. */
-import { runtime } from "../runtime/runtime.ts";
 export function normalizeCase(p: string): string {
-  return runtime.build.os === "windows" ? p.toLowerCase() : p;
+  return OS === "windows" ? p.toLowerCase() : p;
 }
 
 /** Convert backslashes to forward slashes (portable rel paths). */
@@ -33,7 +35,7 @@ export function isWithin(root: string, candidate: string): boolean {
  * inside; the lexical check must have run first. */
 export function isWithinRealpath(root: string, path: string): boolean {
   try {
-    return isWithin(runtime.realPathSync(root), runtime.realPathSync(path));
+    return isWithin(fsSync.realpathSync(root), fsSync.realpathSync(path));
   } catch {
     return true;
   }

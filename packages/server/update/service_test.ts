@@ -1,4 +1,6 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
 import { join } from "node:path";
 import { UPDATE_AUTO_KEY, UPDATE_AUTO_RESTART_KEY } from "@lumisca/core/shared";
 import { withTempDir } from "@lumisca/core/test-utils";
@@ -36,9 +38,9 @@ async function packageFixture(
     { name: `${prefix}/icudtl.dat`, content: `icu-${version}` },
   ]);
   const keys = await createSigningKeys();
-  const path = await Deno.makeTempFile({ prefix: "lumisca-service-" });
+  const path = join(osTmpdir(), `lumisca-service-${crypto.randomUUID()}`);
   try {
-    await Deno.writeFile(path, archive);
+    await fsp.writeFile(path, archive);
     const signature = await keys.sign(path);
     const manifest: ReleaseManifest = {
       version,
@@ -62,7 +64,7 @@ async function packageFixture(
     }) as typeof fetch;
     return { manifest, publicKey: keys.publicKey, fetch: fetchStub };
   } finally {
-    await Deno.remove(path).catch(() => {});
+    await fsp.rm(path).catch(() => {});
   }
 }
 
@@ -130,9 +132,9 @@ function harness(installDir: string, options: HarnessOptions): Harness {
 /** The files of an installation running version 0.7.7 (their contents are
  * only markers here: the version check is injected). */
 async function seedInstall(dir: string): Promise<void> {
-  await Deno.writeTextFile(join(dir, BINARY), "binary-0.7.7");
-  await Deno.writeTextFile(join(dir, "assets.json"), "assets-0.7.7");
-  await Deno.writeTextFile(join(dir, "icudtl.dat"), "icu-0.7.7");
+  await fsp.writeFile(join(dir, BINARY), "binary-0.7.7");
+  await fsp.writeFile(join(dir, "assets.json"), "assets-0.7.7");
+  await fsp.writeFile(join(dir, "icudtl.dat"), "icu-0.7.7");
 }
 
 /** Wait until `predicate` holds (a restart is scheduled, not inline). */
@@ -180,14 +182,17 @@ test("automatic mode downloads, verifies and applies the package", async () => {
     assertEquals(status.downloading, false);
 
     // The files on disk are the new version…
-    assertEquals(await Deno.readTextFile(join(dir, BINARY)), `binary-${NEXT}`);
     assertEquals(
-      await Deno.readTextFile(join(dir, "assets.json")),
+      await fsp.readFile(join(dir, BINARY), "utf8"),
+      `binary-${NEXT}`,
+    );
+    assertEquals(
+      await fsp.readFile(join(dir, "assets.json"), "utf8"),
       `assets-${NEXT}`,
     );
     // …the previous binary is kept for the next startup to clean up…
     assertEquals(
-      (await Deno.stat(join(dir, `${BINARY}.old-${CURRENT}`))).isFile,
+      (await fsp.stat(join(dir, `${BINARY}.old-${CURRENT}`))).isFile(),
       true,
     );
     // …the applied version is recorded… and no restart happened (that is the
@@ -257,7 +262,10 @@ test("a supervised installation is not restarted by the server", async () => {
     assertEquals(test.events, []);
     // The update itself is applied: only the restart is skipped.
     assertEquals(status.restartPending, true);
-    assertEquals(await Deno.readTextFile(join(dir, BINARY)), `binary-${NEXT}`);
+    assertEquals(
+      await fsp.readFile(join(dir, BINARY), "utf8"),
+      `binary-${NEXT}`,
+    );
   });
 });
 
@@ -351,7 +359,10 @@ test("a package staged by a previous run is ready to install", async () => {
     const applied = await service.apply();
     assertEquals(applied.applied, true);
     assertEquals(applied.restartPending, true);
-    assertEquals(await Deno.readTextFile(join(dir, BINARY)), `binary-${NEXT}`);
+    assertEquals(
+      await fsp.readFile(join(dir, BINARY), "utf8"),
+      `binary-${NEXT}`,
+    );
 
     // A fresh process seeing the applied marker reports "a restart finishes
     // the update" instead of offering the same package again.
@@ -418,7 +429,7 @@ test("a failed install clears the installing flag", async () => {
     assertEquals(status.error?.includes("バージョンが一致しません"), true);
     assertEquals(status.applied, false);
     assertEquals(
-      await Deno.readTextFile(join(dir, BINARY)),
+      await fsp.readFile(join(dir, BINARY), "utf8"),
       `binary-${CURRENT}`,
     );
   });
@@ -508,13 +519,16 @@ test("apply keeps the staged package when the version check fails", async () => 
     assertEquals(status.error?.includes("バージョンが一致しません"), true);
     // The package is kept, so a retry does not re-download 100 MB…
     assertEquals(readStagedUpdate(dir)?.version, NEXT);
-    assertEquals(await Deno.readTextFile(join(dir, BINARY)), "binary-0.7.7");
+    assertEquals(await fsp.readFile(join(dir, BINARY), "utf8"), "binary-0.7.7");
 
     // …and the same instance applies it once the binary reports the
     // promised version.
     const retry = harness(dir, { fixture });
     assertEquals((await retry.service.apply()).applied, true);
-    assertEquals(await Deno.readTextFile(join(dir, BINARY)), `binary-${NEXT}`);
+    assertEquals(
+      await fsp.readFile(join(dir, BINARY), "utf8"),
+      `binary-${NEXT}`,
+    );
   });
 });
 

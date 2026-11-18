@@ -1,5 +1,8 @@
 import { test } from "bun:test";
-import { basename } from "node:path";
+import * as fsSync from "node:fs";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { basename, join as pathJoin } from "node:path";
 import {
   fauxAssistantMessage,
   fauxProvider,
@@ -43,17 +46,19 @@ import { HostFileBackend } from "./host/files.ts";
  * `start()` contract is checked (Windows pays ~0.5s for `cmd.exe` startup
  * before `ping` runs, so it gets an extra ping). */
 const longCommand =
-  Deno.build.os === "windows" ? "ping -n 60 127.0.0.1 > $null" : "sleep 60";
+  (process.platform === "win32" ? "windows" : process.platform) === "windows"
+    ? "ping -n 60 127.0.0.1 > $null"
+    : "sleep 60";
 const briefCommand =
-  Deno.build.os === "windows"
+  (process.platform === "win32" ? "windows" : process.platform) === "windows"
     ? "ping -n 1 127.0.0.1 > $null; echo done"
     : "sleep 0.4; echo done";
 const startContractCommand =
-  Deno.build.os === "windows"
+  (process.platform === "win32" ? "windows" : process.platform) === "windows"
     ? "ping -n 2 127.0.0.1 > $null; echo done"
     : "sleep 0.8; echo done";
 const linesCommand =
-  Deno.build.os === "windows"
+  (process.platform === "win32" ? "windows" : process.platform) === "windows"
     ? "echo start; echo line1; echo line2"
     : "echo start; echo line1; echo line2";
 
@@ -134,7 +139,7 @@ test("start returns immediately and notifies on completion", async () => {
   // Do not await: start() has a synchronous contract and must return while a
   // command whose runtime comfortably exceeds Windows process startup is live.
   const { commandId } = await manager.start({
-    cwd: Deno.cwd(),
+    cwd: process.cwd(),
     command: startContractCommand,
   });
   assert(manager.get(commandId)!.state === "running");
@@ -154,7 +159,7 @@ test("lifecycle events announce start, output deltas and end", async () => {
   });
   const startedAt = Date.now();
   const { commandId } = await manager.start({
-    cwd: Deno.cwd(),
+    cwd: process.cwd(),
     command: linesCommand,
   });
   // start() must announce the command synchronously, before it can finish.
@@ -164,7 +169,7 @@ test("lifecycle events announce start, output deltas and end", async () => {
   assertEquals(start.sessionId, "s1");
   assertEquals(start.commandId, commandId);
   assertEquals(start.command, linesCommand);
-  assertEquals(start.cwd, Deno.cwd());
+  assertEquals(start.cwd, process.cwd());
   assert(start.pid > 0, `pid must be positive: ${start.pid}`);
   assert(Math.abs(start.startedAt - startedAt) < 5000);
 
@@ -203,7 +208,7 @@ test("kill announces a killed end event", async () => {
     emit: (event) => events.push(event),
   });
   const { commandId } = await manager.start({
-    cwd: Deno.cwd(),
+    cwd: process.cwd(),
     command: longCommand,
   });
   // Let the shell spawn before tearing it down (taskkill needs a live pid).
@@ -224,7 +229,7 @@ test("status reports state, exit code and output tail", async () => {
   const manager = new BackgroundProcessManager();
   const exitPromise = waitForExit(manager);
   const { commandId } = await manager.start({
-    cwd: Deno.cwd(),
+    cwd: process.cwd(),
     command: briefCommand,
   });
   const tailWhileRunning = await manager.tail(commandId);
@@ -244,11 +249,11 @@ test("per-command env vars are passed and override the manager-level env", async
   });
   const exitPromise = waitForExit(manager);
   const echo =
-    Deno.build.os === "windows"
+    (process.platform === "win32" ? "windows" : process.platform) === "windows"
       ? "echo $env:LUMISCA_TEST_ENV"
       : "echo $LUMISCA_TEST_ENV";
   const { commandId } = await manager.start({
-    cwd: Deno.cwd(),
+    cwd: process.cwd(),
     command: echo,
     env: { LUMISCA_TEST_ENV: "command-level" },
   });
@@ -262,13 +267,14 @@ test("per-command env vars are passed and override the manager-level env", async
 test("async_bash start tool forwards env vars", async () => {
   const manager = new BackgroundProcessManager();
   const exitPromise = waitForExit(manager);
-  const root = Deno.makeTempDirSync({ prefix: "lumisca-async-env-" });
+  const root = fsSync.mkdtempSync(pathJoin(osTmpdir(), "lumisca-async-env-"));
   const files = new HostFileBackend(new Sandbox([root]));
   try {
     const [start] = createAsyncBashTools({ manager, files });
     if (start === undefined) throw new Error("start tool missing");
     const echo =
-      Deno.build.os === "windows"
+      (process.platform === "win32" ? "windows" : process.platform) ===
+      "windows"
         ? "echo $env:LUMISCA_TEST_ENV"
         : "echo $LUMISCA_TEST_ENV";
     const result = await start.execute(
@@ -297,7 +303,7 @@ test("kill stops the process tree and is idempotent", async () => {
   const manager = new BackgroundProcessManager();
   const exitPromise = waitForExit(manager);
   const { commandId } = await manager.start({
-    cwd: Deno.cwd(),
+    cwd: process.cwd(),
     command: longCommand,
   });
   // Let the shell spawn before tearing it down (taskkill needs a live pid).
@@ -315,7 +321,7 @@ test("timeout kills the command and notifies with reason timeout", async () => {
   const manager = new BackgroundProcessManager();
   const exitPromise = waitForExit(manager);
   const { commandId } = await manager.start({
-    cwd: Deno.cwd(),
+    cwd: process.cwd(),
     command: longCommand,
     timeoutSec: 0.3,
   });
@@ -330,56 +336,55 @@ test("timeout kills the command and notifies with reason timeout", async () => {
 // running (and holding their pipes — a killed dev server stayed alive and
 // took its pipes with it). POSIX-only: the Windows kill walks the tree via
 // taskkill /T, and the command syntax below is /bin/sh's.
-test.skipIf(Deno.build.os === "windows")(
-  "kill stops the command's own process, not only its shell",
-  async () => {
-    const root = Deno.makeTempDirSync({ prefix: "lumisca-kill-tree-" });
-    const marker = "marker";
-    const manager = new BackgroundProcessManager();
-    try {
-      const exitPromise = waitForExit(manager);
-      // The shell backgrounds a child that keeps writing, then waits: a kill
-      // that reaches only the shell leaves that child appending.
-      const { commandId } = await manager.start({
-        cwd: root,
-        command: `sh -c 'while :; do echo tick >> ${marker}; sleep 0.2; done' & wait`,
-      });
-      await waitUntil(() => {
-        try {
-          return Deno.statSync(`${root}/${marker}`).size > 0;
-        } catch {
-          return false;
-        }
-      }, "the command's child to write its first tick");
+test.skipIf(
+  (process.platform === "win32" ? "windows" : process.platform) === "windows",
+)("kill stops the command's own process, not only its shell", async () => {
+  const root = fsSync.mkdtempSync(pathJoin(osTmpdir(), "lumisca-kill-tree-"));
+  const marker = "marker";
+  const manager = new BackgroundProcessManager();
+  try {
+    const exitPromise = waitForExit(manager);
+    // The shell backgrounds a child that keeps writing, then waits: a kill
+    // that reaches only the shell leaves that child appending.
+    const { commandId } = await manager.start({
+      cwd: root,
+      command: `sh -c 'while :; do echo tick >> ${marker}; sleep 0.2; done' & wait`,
+    });
+    await waitUntil(() => {
+      try {
+        return fsSync.statSync(`${root}/${marker}`).size > 0;
+      } catch {
+        return false;
+      }
+    }, "the command's child to write its first tick");
 
-      const killed = await manager.kill(commandId);
-      assertEquals(killed.timedOut, false);
-      assertEquals((await exitPromise).reason, "killed");
+    const killed = await manager.kill(commandId);
+    assertEquals(killed.timedOut, false);
+    assertEquals((await exitPromise).reason, "killed");
 
-      // A survivor (or a zombie) cannot append: let any write already in
-      // flight land, then require the file to keep that size for longer than
-      // the writer's interval.
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      const size = Deno.statSync(`${root}/${marker}`).size;
-      await new Promise((resolve) => setTimeout(resolve, 600));
-      assertEquals(
-        Deno.statSync(`${root}/${marker}`).size,
-        size,
-        "the command's own process is still writing: the kill reached only its shell",
-      );
-    } finally {
-      await manager.killAll();
-      await removeDirRetry(root);
-    }
-  },
-);
+    // A survivor (or a zombie) cannot append: let any write already in
+    // flight land, then require the file to keep that size for longer than
+    // the writer's interval.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const size = fsSync.statSync(`${root}/${marker}`).size;
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    assertEquals(
+      fsSync.statSync(`${root}/${marker}`).size,
+      size,
+      "the command's own process is still writing: the kill reached only its shell",
+    );
+  } finally {
+    await manager.killAll();
+    await removeDirRetry(root);
+  }
+});
 
 test("killAll stops every running command", async () => {
   const manager = new BackgroundProcessManager();
   const exitPromises: Promise<BackgroundCommandDone>[] = [];
   for (let i = 0; i < 3; i++) {
     exitPromises.push(waitForExit(manager));
-    await manager.start({ cwd: Deno.cwd(), command: longCommand });
+    await manager.start({ cwd: process.cwd(), command: longCommand });
   }
   await manager.killAll();
   for (const promise of exitPromises) {
@@ -420,11 +425,11 @@ test("the per-session concurrency limit is enforced", async () => {
   const spawner = idleSpawner();
   const manager = new BackgroundProcessManager({ spawner });
   for (let i = 0; i < MAX_BACKGROUND_COMMANDS; i++) {
-    await manager.start({ cwd: Deno.cwd(), command: longCommand });
+    await manager.start({ cwd: process.cwd(), command: longCommand });
   }
   let message = "";
   try {
-    await manager.start({ cwd: Deno.cwd(), command: longCommand });
+    await manager.start({ cwd: process.cwd(), command: longCommand });
   } catch (error) {
     message = error instanceof Error ? error.message : String(error);
   }
@@ -442,12 +447,12 @@ test("finished commands free their slot for new starts", async () => {
     // slot limit is a concurrency limit, so a finished command must not
     // keep blocking new starts (regression: records were never released).
     for (let i = 0; i < MAX_BACKGROUND_COMMANDS; i++) {
-      await manager.start({ cwd: Deno.cwd(), command: "echo hi" });
+      await manager.start({ cwd: process.cwd(), command: "echo hi" });
     }
     while (manager.list().some((info) => info.state === "running")) {
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
-    await manager.start({ cwd: Deno.cwd(), command: "echo ninth" });
+    await manager.start({ cwd: process.cwd(), command: "echo ninth" });
     assertEquals(manager.list().length, MAX_BACKGROUND_COMMANDS + 1);
     // The finished commands stay queryable via get/tail.
     const first = manager.get("1");
@@ -461,10 +466,10 @@ test("output tail is capped and keeps the last bytes", async () => {
   const manager = new BackgroundProcessManager();
   const exitPromise = waitForExit(manager);
   const spam =
-    Deno.build.os === "windows"
+    (process.platform === "win32" ? "windows" : process.platform) === "windows"
       ? "for ($i = 0; $i -lt 4000; $i++) { echo 12345678901234567890 }"
       : "for i in $(seq 1 4000); do echo 12345678901234567890; done";
-  await manager.start({ cwd: Deno.cwd(), command: spam });
+  await manager.start({ cwd: process.cwd(), command: spam });
   const done = await exitPromise;
   assertEquals(done.reason, "exited");
   assert(
@@ -480,7 +485,7 @@ test("output tail is capped and keeps the last bytes", async () => {
 // --- tools -----------------------------------------------------------------
 
 function makeTools() {
-  const root = Deno.makeTempDirSync({ prefix: "lumisca-async-" });
+  const root = fsSync.mkdtempSync(pathJoin(osTmpdir(), "lumisca-async-"));
   const files = new HostFileBackend(new Sandbox([root]));
   const manager = new BackgroundProcessManager();
   const tools = createAsyncBashTools({ manager, files });
@@ -683,7 +688,7 @@ async function waitForMessage(
 test("background completion is injected into the agent loop", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
-  const root = await Deno.makeTempDir({ prefix: "lumisca-async-e2e-" });
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-async-e2e-"));
   try {
     const ws = await core.createWorkspace("ws", [root]);
     const session = await core.createSession({
@@ -722,7 +727,9 @@ test("background completion is injected into the agent loop", async () => {
 test("background commands survive a session rebuild", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
-  const root = await Deno.makeTempDir({ prefix: "lumisca-async-rebuild-" });
+  const root = await fsp.mkdtemp(
+    pathJoin(osTmpdir(), "lumisca-async-rebuild-"),
+  );
   try {
     const ws = await core.createWorkspace("ws", [root]);
     const session = await core.createSession({

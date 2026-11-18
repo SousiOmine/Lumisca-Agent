@@ -1,5 +1,8 @@
 import { test } from "bun:test";
-import { join } from "node:path";
+import * as fsSync from "node:fs";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join, join as pathJoin } from "node:path";
 import type { Api, Model, StreamFn } from "@lumisca/core";
 import {
   createAssistantMessageEventStream,
@@ -71,7 +74,7 @@ function makeHub(
   const core = LumiscaCore.forTesting([faux.provider]);
   const model = core.models.getModel(faux.provider.id, faux.getModel().id)!;
   const events: ClientEvent[] = [];
-  const root = Deno.makeTempDirSync({ prefix: "lumisca-task-" });
+  const root = fsSync.mkdtempSync(pathJoin(osTmpdir(), "lumisca-task-"));
   const hub = new TaskHub({
     sessionId: "session-1",
     resolveRuntime: () => ({
@@ -103,7 +106,7 @@ function makeScriptedHub(
   const model = core.models.getModel(faux.provider.id, faux.getModel().id)!;
   const streamFn = core.models.models.streamFn();
   const events: ClientEvent[] = [];
-  const root = Deno.makeTempDirSync({ prefix: "lumisca-task-" });
+  const root = fsSync.mkdtempSync(pathJoin(osTmpdir(), "lumisca-task-"));
   const hub = new TaskHub({
     sessionId: "session-1",
     resolveRuntime: () => ({
@@ -726,7 +729,7 @@ test("a task runs in the background and its completion reaches the parent", asyn
   const core = LumiscaCore.forTesting([faux.provider]);
   const events: ClientEvent[] = [];
   const unsubscribe = core.subscribe((event) => events.push(event));
-  const root = await Deno.makeTempDir({ prefix: "lumisca-task-e2e-" });
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-task-e2e-"));
   try {
     const ws = await core.createWorkspace("ws", [root]);
     const session = await core.createSession({
@@ -798,7 +801,7 @@ test("a waiting task_output receives the result and suppresses the notification"
   // finishes; the completion notification must then be suppressed.
   const faux = fauxProvider({ tokensPerSecond: 50 });
   const core = LumiscaCore.forTesting([faux.provider]);
-  const root = await Deno.makeTempDir({ prefix: "lumisca-task-wait-" });
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-task-wait-"));
   try {
     const ws = await core.createWorkspace("ws", [root]);
     const session = await core.createSession({
@@ -853,7 +856,7 @@ test("a waiting task_output receives the result and suppresses the notification"
 test("sub-agents survive a session rebuild and remain listed", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
-  const root = await Deno.makeTempDir({ prefix: "lumisca-task-rebuild-" });
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-task-rebuild-"));
   try {
     const ws = await core.createWorkspace("ws", [root]);
     const session = await core.createSession({
@@ -903,10 +906,9 @@ function startPingMcpServer(delayMs = 0): {
   shutdown: () => void;
 } {
   let sessionId: string | null = null;
-  const controller = new AbortController();
-  const server = Deno.serve(
-    { port: 0, onListen: () => {}, signal: controller.signal },
-    async (req) => {
+  const server = Bun.serve({
+    port: 0,
+    fetch: async (req) => {
       if (req.method !== "POST") return new Response("nope", { status: 405 });
       const body = (await req.json()) as {
         id?: string;
@@ -968,8 +970,8 @@ function startPingMcpServer(delayMs = 0): {
         error: { code: -32601, message: `unknown: ${body.method}` },
       });
     },
-  );
-  return { port: server.addr.port, shutdown: () => controller.abort() };
+  });
+  return { port: server.port, shutdown: () => server.stop(true) };
 }
 
 /** A session's shared MCP attachment pointed at the ping server.

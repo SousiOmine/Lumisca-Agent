@@ -70,13 +70,13 @@ test("web_search lists the hits with urls and excerpts", async () => {
     }),
   );
 
-  const result = await tools[0]!.execute("id", { query: "deno" });
-  assertEquals(asked[0]?.query, "deno");
+  const result = await tools[0]!.execute("id", { query: "bun" });
+  assertEquals(asked[0]?.query, "bun");
   // The default limit is applied when the model does not give one.
   assertEquals(asked[0]?.limit, 5);
 
   const text = textOf(result);
-  assert(text.includes('2 result(s) from Exa for "deno"'));
+  assert(text.includes('2 result(s) from Exa for "bun"'));
   assert(text.includes("1. First"));
   assert(text.includes("   https://example.com/1"));
   assert(text.includes("   2024-01-02"));

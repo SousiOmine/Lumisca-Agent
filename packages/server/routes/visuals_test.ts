@@ -1,4 +1,5 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
 import { join } from "node:path";
 import {
   LumiscaCore as Core,
@@ -42,7 +43,7 @@ async function withApp(
 ): Promise<void> {
   const dir = await makeRealTempDir("lumisca-visuals-route-");
   const workspaceDir = join(dir, "repo");
-  await Deno.mkdir(workspaceDir, { recursive: true });
+  await fsp.mkdir(workspaceDir, { recursive: true });
   const core = Core.open(join(dir, "lumisca.db"), join(dir, "settings.jsonc"));
   try {
     const faux = fauxProvider();
@@ -58,13 +59,13 @@ async function withApp(
     // Written directly rather than through the visual tool: this file is
     // about what the route serves, and the tool has its own test.
     const storeDir = join(dir, VISUALS_DIR_NAME, session.id);
-    await Deno.mkdir(storeDir, { recursive: true });
-    await Deno.writeFile(join(storeDir, PNG_NAME), MINI_PNG);
-    await Deno.writeFile(
+    await fsp.mkdir(storeDir, { recursive: true });
+    await fsp.writeFile(join(storeDir, PNG_NAME), MINI_PNG);
+    await fsp.writeFile(
       join(storeDir, SVG_NAME),
       new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" />'),
     );
-    const app = createApp(core, { repoRoot: Deno.cwd() });
+    const app = createApp(core, { repoRoot: process.cwd() });
     const get = async (path: string) =>
       await app.request(`${BASE}${path}`, { headers: { host: HOST } });
     await fn({ core, sessionId: session.id, storeDir, get });
@@ -109,7 +110,7 @@ test("the asset route serves only the session's own assets", async () => {
   await withApp(async ({ get, sessionId, storeDir }) => {
     // A file the store never named — even one sitting in the session's own
     // directory — is not reachable.
-    await Deno.writeTextFile(join(storeDir, "notes.txt"), "secret");
+    await fsp.writeFile(join(storeDir, "notes.txt"), "secret");
     for (const name of [
       "notes.txt",
       "9f3c2a1b4d5e.pdf",
@@ -139,7 +140,7 @@ test("the asset route serves only the session's own assets", async () => {
 test("a cookie is enough: an <img> can send nothing else", async () => {
   await withApp(async ({ core, sessionId }) => {
     const token = "s3cret-token";
-    const app = createApp(core, { repoRoot: Deno.cwd(), token });
+    const app = createApp(core, { repoRoot: process.cwd(), token });
     const path = `/api/sessions/${sessionId}/visual/${PNG_NAME}`;
     const request = async (headers: Record<string, string>) =>
       await app.request(`${BASE}${path}`, {
@@ -175,7 +176,7 @@ test("a big visual is served downscaled, and whole on request", async () => {
       context.fillRect(0, 0, 2000, 1000);
       const bytes = new Uint8Array(canvas.toBuffer("image/png"));
       const name = "aaaaaaaabbbb.png";
-      await Deno.writeFile(join(storeDir, name), bytes);
+      await fsp.writeFile(join(storeDir, name), bytes);
 
       // The default answer is the small copy: the list draws it a few
       // hundred pixels wide, so the rest is bytes nobody sees.

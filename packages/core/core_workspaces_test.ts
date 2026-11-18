@@ -1,7 +1,9 @@
 import { test } from "bun:test";
+import * as fsSync from "node:fs";
 import { realpathSync } from "node:fs";
-import { basename, join } from "node:path";
-
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { basename, join, join as pathJoin } from "node:path";
 import {
   fauxAssistantMessage,
   fauxProvider,
@@ -11,7 +13,6 @@ import {
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import type { AgentMessage } from "./mod.ts";
 import { LumiscaCore, VISUALS_DIR_NAME } from "./mod.ts";
-
 import {
   MINI_PNG,
   makeRealTempDir,
@@ -68,7 +69,7 @@ async function openFileBackedCore(
   const faux = fauxProvider();
   core.models.models.setProvider(faux.provider);
   const workspaceDir = join(dir, "repo");
-  await Deno.mkdir(workspaceDir, { recursive: true });
+  await fsp.mkdir(workspaceDir, { recursive: true });
   const ws = await core.createWorkspace("ws", [workspaceDir]);
   const session = await core.createSession({
     workspaceId: ws.id,
@@ -80,7 +81,7 @@ async function openFileBackedCore(
 
 test("workspace creation resolves folders and rejects missing ones", async () => {
   const { core } = setup();
-  const root = await Deno.makeTempDir({ prefix: "lumisca-core-" });
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-core-"));
   const ws = await core.createWorkspace("ws1", [root]);
   assertEquals(ws.folders.length, 1);
   assertEquals(ws.folders[0], realpathSync.native(root));
@@ -98,8 +99,8 @@ test("workspace creation resolves folders and rejects missing ones", async () =>
 test("tools block file access outside the workspace", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
-  const outside = await Deno.makeTempDir({ prefix: "lumisca-outside-" });
-  await Deno.writeTextFile(join(outside, "secret.txt"), "secret");
+  const outside = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-outside-"));
+  await fsp.writeFile(join(outside, "secret.txt"), "secret");
 
   const session = await core.createSession({
     workspaceId: ws.id,
@@ -128,7 +129,7 @@ test("tools block file access outside the workspace", async () => {
   assertEquals(tr.content[0]!.text.includes("outside the workspace"), true);
 
   // Inside the workspace reads work (folder-name-relative path).
-  await Deno.writeTextFile(join(root, "inside.txt"), "hello");
+  await fsp.writeFile(join(root, "inside.txt"), "hello");
   faux.setResponses([
     fauxAssistantMessage([
       fauxText("Reading."),
@@ -413,20 +414,20 @@ test("chat workspace cannot be updated or deleted", async () => {
 
 test("personalization (machine AGENTS.md) is published with the workspace instructions", async () => {
   const faux = fauxProvider();
-  const dir = await Deno.makeTempDir({ prefix: "lumisca-core-" });
+  const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-core-"));
   const core = LumiscaCore.open(
     join(dir, "lumisca.db"),
     join(dir, "settings.jsonc"),
   );
   core.models.models.setProvider(faux.provider);
 
-  const root = await Deno.makeTempDir({ prefix: "lumisca-ws-" });
-  await Deno.writeTextFile(join(root, "AGENTS.md"), "Workspace memory.\n");
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-ws-"));
+  await fsp.writeFile(join(root, "AGENTS.md"), "Workspace memory.\n");
   const ws = await core.createWorkspace("ws", [root]);
 
   // Personalization lives in AGENTS.md next to the settings file.
   const agentFile = join(dir, "AGENTS.md");
-  await Deno.writeTextFile(agentFile, "Answer in Japanese.\n");
+  await fsp.writeFile(agentFile, "Answer in Japanese.\n");
   assertEquals(core.getPersonalization().path, agentFile);
   assertEquals(core.getPersonalization().content, "Answer in Japanese.\n");
 
@@ -461,7 +462,7 @@ test("personalization (machine AGENTS.md) is published with the workspace instru
   );
 
   // An edit to the personal file reaches the open session...
-  await Deno.writeTextFile(agentFile, "Answer in English.\n");
+  await fsp.writeFile(agentFile, "Answer in English.\n");
   faux.setResponses([fauxAssistantMessage("ok")]);
   await promptSession(core, session.id, "second");
   const updated = instructionsMessages(agent);
@@ -486,7 +487,7 @@ test("personalization (machine AGENTS.md) is published with the workspace instru
 
   // setPersonalization writes the file.
   core.setPersonalization("New instructions.\n");
-  assertEquals(Deno.readTextFileSync(agentFile), "New instructions.\n");
+  assertEquals(fsSync.readFileSync(agentFile, "utf8"), "New instructions.\n");
 
   core.close();
   await removeDirRetry(dir);
@@ -497,8 +498,8 @@ test("deleting a workspace drops its sessions' visuals", async () => {
   const dir = await makeRealTempDir("lumisca-visuals-core-");
   const { core, workspaceId, sessionId } = await openFileBackedCore(dir);
   try {
-    await Deno.mkdir(visualDir(dir, sessionId), { recursive: true });
-    await Deno.writeFile(
+    await fsp.mkdir(visualDir(dir, sessionId), { recursive: true });
+    await fsp.writeFile(
       join(visualDir(dir, sessionId), "9f3c2a1b4d5e.png"),
       MINI_PNG,
     );

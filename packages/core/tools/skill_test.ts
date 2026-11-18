@@ -1,4 +1,5 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
 import { join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { builtinSkills } from "../skills/builtin/mod.ts";
@@ -15,14 +16,14 @@ async function makeTool(): Promise<{
   tool: ReturnType<typeof createSkillTool>;
 }> {
   const root = await makeRealTempDir("lumisca-skill-tool-");
-  await Deno.mkdir(join(root, ".agents", "skills", "demo"), {
+  await fsp.mkdir(join(root, ".agents", "skills", "demo"), {
     recursive: true,
   });
-  await Deno.writeTextFile(
+  await fsp.writeFile(
     join(root, ".agents", "skills", "demo", "SKILL.md"),
     "---\nname: demo\ndescription: Demo skill.\n---\n\n# Demo\n\nDo the demo.\n",
   );
-  await Deno.writeTextFile(
+  await fsp.writeFile(
     join(root, ".agents", "skills", "demo", "reference.md"),
     "# Reference\nDetails.\n",
   );
@@ -165,8 +166,8 @@ test("skill tool resolves the catalog on every call", async () => {
     // kept the array it was built with would answer "unknown" here while the
     // catalog already listed the skill.
     const dir = join(root, ".agents", "skills", "fresh");
-    await Deno.mkdir(dir, { recursive: true });
-    await Deno.writeTextFile(
+    await fsp.mkdir(dir, { recursive: true });
+    await fsp.writeFile(
       join(dir, "SKILL.md"),
       "---\nname: fresh\ndescription: Written during the session.\n---\n\n# Fresh\n",
     );
@@ -207,7 +208,7 @@ test("coding tools reach the shared skills folder and the catalog lists it", asy
     );
     // The write landed outside the workspace: the shared folder is an extra
     // sandbox root.
-    assert((await Deno.stat(skillFile)).isFile);
+    assert((await fsp.stat(skillFile)).isFile());
 
     // ...and the session's discovery (the same call the catalog provider and
     // the skill tool make) lists and loads it.

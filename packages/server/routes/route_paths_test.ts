@@ -1,4 +1,5 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
 import type { SessionInfo, StellaAgent } from "@lumisca/core";
 /**
  * The shared session builder's mounted paths.
@@ -130,8 +131,9 @@ async function registrationsIn(
   file: string,
 ): Promise<Array<{ method: string; path: string }>> {
   const here = import.meta.url;
-  const text = await Deno.readTextFile(
+  const text = await fsp.readFile(
     new URL(here.slice(0, here.lastIndexOf("/") + 1) + file),
+    "utf8",
   );
   const out: Array<{ method: string; path: string }> = [];
   for (const match of text.matchAll(

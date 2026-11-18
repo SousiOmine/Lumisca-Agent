@@ -121,7 +121,7 @@ export async function prepareStoredImage(
   let source: DecodedImage;
   try {
     // `loadImage`, never `Image.src`: a synchronous decode leaves state that
-    // segfaults a Deno process on shutdown (see media/preview.ts).
+    // segfaults the process on shutdown (see media/preview.ts).
     source = await canvas.loadImage(bytes);
   } catch {
     return unchanged;

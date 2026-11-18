@@ -9,7 +9,7 @@
  * bundle can use it too (the browser must hand a key to `subscribe` in the
  * same encoding it reads from the server).
  *
- * Frontend-safe (no Deno, no `node:`), like the rest of `shared/`.
+ * Frontend-safe (no Bun APIs, no `node:`), like the rest of `shared/`.
  */
 import { safeJsonParse } from "./misc.ts";
 

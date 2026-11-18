@@ -23,8 +23,8 @@ export interface ReleaseTarget {
 }
 
 /**
- * Platforms the release workflow publishes. Keys are `runtime.build.target`
- * values, so the running server looks itself up with no configuration.
+ * Platforms the release workflow publishes. Keys are `TARGET` values,
+ * so the running server looks itself up with no configuration.
  * Adding a platform is one entry here plus one matrix row in
  * `.github/workflows/release.yml`; an unknown target simply has no updates
  * (the UI reports "この構成では利用できません") instead of fetching a
@@ -82,7 +82,7 @@ export function defaultManifestUrl(target: string): string {
 export interface ReleaseManifest {
   /** Version of the release (e.g. "0.7.8"). */
   version: string;
-  /** `runtime.build.target` the manifest was written for. */
+  /** `TARGET` the manifest was written for. */
   target: string;
   /** Absolute URL of the archive to download. */
   url: string;

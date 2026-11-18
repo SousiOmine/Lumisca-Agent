@@ -1,4 +1,5 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
 import { join, parse, sep } from "node:path";
 import { withTempDir } from "@lumisca/core/test-utils";
 import { assertEquals } from "@std/assert";
@@ -78,7 +79,7 @@ test("placeCandidates: a folder the user turned off is not offered", () => {
 test("readUserDirs: the localized folders of a desktop session", async () => {
   await withTempDir("lumisca-userdirs-", async (root) => {
     const file = join(root, "user-dirs.dirs");
-    await Deno.writeTextFile(
+    await fsp.writeFile(
       file,
       [
         "# Managed by xdg-user-dirs-update",
@@ -142,7 +143,7 @@ test("buildPlaces keeps the existing directories, in order", async () => {
 test("breadcrumbs: one step per segment, from the root down", () => {
   // Built from the running platform's root so the expectation holds on
   // Windows ("C:\") as well as on POSIX ("/").
-  const root = parse(Deno.cwd()).root;
+  const root = parse(process.cwd()).root;
   const folder = join(root, "Users", "me");
   assertEquals(breadcrumbs(folder), [
     { name: root, path: root },

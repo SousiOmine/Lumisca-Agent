@@ -1,6 +1,7 @@
 import { test } from "bun:test";
-import { join } from "node:path";
-
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join, join as pathJoin } from "node:path";
 import {
   fauxAssistantMessage,
   fauxProvider,
@@ -167,8 +168,8 @@ test("mode prompt keeps the images attached in the composer", async () => {
 
 test("workspace instructions are context messages, not prompt text, and edits reach an open session", async () => {
   const { core, faux, providerId, modelId } = setup();
-  const root = await Deno.makeTempDir({ prefix: "lumisca-core-" });
-  await Deno.writeTextFile(join(root, "AGENTS.md"), "Use Deno 2.\n");
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-core-"));
+  await fsp.writeFile(join(root, "AGENTS.md"), "Use Rust 2.\n");
   const ws = await core.createWorkspace("ws", [root]);
 
   const session = await core.createSession({
@@ -179,7 +180,7 @@ test("workspace instructions are context messages, not prompt text, and edits re
   const agent = core.getAgent(session.id)!;
   const prompt = agent.agent.state.systemPrompt;
   assertEquals(
-    prompt.includes("Use Deno 2."),
+    prompt.includes("Use Rust 2."),
     false,
     "AGENTS.md must not be baked into the prompt",
   );
@@ -192,7 +193,7 @@ test("workspace instructions are context messages, not prompt text, and edits re
   const published = instructionsMessages(agent);
   assertEquals(published.length, 1);
   assert(
-    published[0]!.body.includes("Use Deno 2."),
+    published[0]!.body.includes("Use Rust 2."),
     `baseline must carry the file: ${published[0]!.body}`,
   );
   assert(published[0]!.title.startsWith("Workspace instructions"));
@@ -203,13 +204,13 @@ test("workspace instructions are context messages, not prompt text, and edits re
   );
 
   // An edit reaches the open session: the next run publishes only the change.
-  await Deno.writeTextFile(join(root, "AGENTS.md"), "Use Deno 3.\n");
+  await fsp.writeFile(join(root, "AGENTS.md"), "Use Rust 3.\n");
   faux.setResponses([fauxAssistantMessage("ok")]);
   await promptSession(core, session.id, "second");
   const updated = instructionsMessages(agent);
   assertEquals(updated.length, 2);
   assert(
-    updated[1]!.body.includes("Use Deno 3."),
+    updated[1]!.body.includes("Use Rust 3."),
     `the update must carry the new content: ${updated[1]!.body}`,
   );
   assert(updated[1]!.title.startsWith("Instructions updated"));
@@ -245,7 +246,7 @@ test("workspace instructions are context messages, not prompt text, and edits re
   const freshBaseline = instructionsMessages(freshAgent);
   assertEquals(freshBaseline.length, 1);
   assert(
-    freshBaseline[0]!.body.includes("Use Deno 3."),
+    freshBaseline[0]!.body.includes("Use Rust 3."),
     "new sessions must read the current AGENTS.md",
   );
 

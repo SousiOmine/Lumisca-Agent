@@ -1,5 +1,7 @@
 import { test } from "bun:test";
-import { join } from "node:path";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join, join as pathJoin } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { SessionAttachmentStore } from "../session/attachments.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
@@ -18,15 +20,17 @@ async function fixture(
   write: (path: string, data: string) => Promise<void>;
   cleanup: () => Promise<void>;
 }> {
-  const root = await Deno.makeTempDir({ prefix: "lumisca-attach-" });
-  const storeRoot = await Deno.makeTempDir({ prefix: "lumisca-attach-store-" });
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-attach-"));
+  const storeRoot = await fsp.mkdtemp(
+    pathJoin(osTmpdir(), "lumisca-attach-store-"),
+  );
   const backend = new HostFileBackend(new Sandbox([root]));
   const store = new SessionAttachmentStore(storeRoot);
   for (const [path, data] of Object.entries(files)) {
     if (typeof data === "string") {
-      await Deno.writeTextFile(join(root, path), data);
+      await fsp.writeFile(join(root, path), data);
     } else {
-      await Deno.writeFile(join(root, path), data);
+      await fsp.writeFile(join(root, path), data);
     }
   }
   return {
@@ -35,10 +39,10 @@ async function fixture(
     store,
     storeRoot,
     write: (path, data) =>
-      Deno.writeTextFile(path.startsWith(root) ? path : join(root, path), data),
+      fsp.writeFile(path.startsWith(root) ? path : join(root, path), data),
     cleanup: async () => {
-      await Deno.remove(root, { recursive: true });
-      await Deno.remove(storeRoot, { recursive: true });
+      await fsp.rm(root, { recursive: true });
+      await fsp.rm(storeRoot, { recursive: true });
     },
   };
 }
@@ -144,7 +148,7 @@ test("chat_attach: a missing file or a directory fails", async () => {
       Error,
       "does not exist",
     );
-    await Deno.mkdir(join(test.root, "folder"));
+    await fsp.mkdir(join(test.root, "folder"));
     await assertRejects(
       () =>
         test.tool.execute(

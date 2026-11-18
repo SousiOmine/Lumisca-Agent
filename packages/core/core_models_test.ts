@@ -1,6 +1,6 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
 import { join } from "node:path";
-
 import {
   fauxAssistantMessage,
   fauxProvider,
@@ -337,7 +337,7 @@ test("text-only model: user images are analyzed and passed as text", async () =>
 test("text-only model: read tool images are analyzed and passed as text", async () => {
   const { core, faux, providerId } = setupImageAnalysis();
   const { ws, root } = await makeWorkspace(core);
-  await Deno.writeFile(join(root, "pic.png"), MINI_PNG);
+  await fsp.writeFile(join(root, "pic.png"), MINI_PNG);
 
   const session = await core.createSession({
     workspaceId: ws.id,

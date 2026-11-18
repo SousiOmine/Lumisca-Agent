@@ -113,7 +113,7 @@ export type MessageParams = Record<string, string | number | null | undefined>;
 
 /** The BCP-47 tag used for `Intl` formatting (dates, numbers, relative
  * times) in a locale. Pinned per language instead of left to the runtime:
- * the app language is the user's choice, and the runtime's default locale
+ * the app language is the user's choice, and the process's default locale
  * (the browser's, the machine's) may differ from it. */
 export function localeTag(locale: Locale): string {
   return locale === "ja" ? "ja-JP" : "en-US";

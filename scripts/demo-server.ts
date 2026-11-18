@@ -24,7 +24,8 @@ import {
   LumiscaCore,
   type StreamRequest,
 } from "../packages/core/mod.ts";
-import { exit, runtime } from "../packages/core/runtime/runtime.ts";
+import { OS } from "../packages/core/platform.ts";
+import { exit } from "../packages/core/process.ts";
 import {
   TOOL_BASH,
   TOOL_CALL,
@@ -46,13 +47,13 @@ function parsePort(raw: string | undefined): number {
   return port;
 }
 
-const PORT = parsePort(runtime.args[0]);
+const PORT = parsePort(process.argv.slice(2)[0]);
 /** Tool arguments are workspace-relative: the sandbox addresses a folder
  * by its directory name (`<folder>/<path>`), and `bash` takes the folder
  * as its required `cwd`. */
 const folder = basename(repoRoot);
 /** The demo's directory listing (the shell differs per OS). */
-const LIST_COMMAND = runtime.build.os === "windows" ? "dir" : "ls -la";
+const LIST_COMMAND = OS === "windows" ? "dir" : "ls -la";
 
 /** The app card the demo's `send_chat` answer writes into its text. */
 const DEMO_UI = JSON.stringify({
@@ -228,7 +229,7 @@ core.createSession({
 const server = startServer(core, PORT, { repoRoot });
 console.log(`E2E demo server on http://127.0.0.1:${PORT}`);
 console.log("workspace: E2E Demo / session: e2e-session");
-runtime.addSignalListener("SIGINT", () => {
+process.on("SIGINT", () => {
   console.log("\nShutting down...");
   server.shutdown();
   // Await the teardown so background commands and MCP child processes

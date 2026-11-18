@@ -1,5 +1,7 @@
 import { test } from "bun:test";
-import { join } from "node:path";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join, join as pathJoin } from "node:path";
 import {
   fauxAssistantMessage,
   fauxProvider,
@@ -16,7 +18,7 @@ import { conversationOf, json, setup } from "./test-utils.ts";
 test("session prompt roundtrip via API", async () => {
   const { core, server, faux, base } = await setup();
   try {
-    const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-srv-"));
     const create = await json(base, "/api/workspaces", {
       method: "POST",
       body: JSON.stringify({ name: "ws", folders: [root] }),
@@ -78,7 +80,7 @@ test("session prompt roundtrip via API", async () => {
 
 test("prompt API stores a bounded copy of an attached picture", async () => {
   const { core, server, faux, base } = await setup();
-  const root = await Deno.makeTempDir({ prefix: "lumisca-srv-img-" });
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-srv-img-"));
   try {
     const ws = await (
       await json(base, "/api/workspaces", {
@@ -210,7 +212,7 @@ test("chat session API: no workspaceId creates a chat session", async () => {
 test("rewind truncates messages via the API and rejects bad bodies", async () => {
   const { core, server, faux, base } = await setup();
   try {
-    const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-srv-"));
     const create = await json(base, "/api/workspaces", {
       method: "POST",
       body: JSON.stringify({ name: "ws", folders: [root] }),
@@ -312,7 +314,7 @@ test("revision endpoint tracks the events of a session", async () => {
   // marker from that).
   const { core, server, faux, base } = await setup();
   try {
-    const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-srv-"));
     const ws = await (
       await json(base, "/api/workspaces", {
         method: "POST",
@@ -385,7 +387,7 @@ test("sessions API returns 404 for unknown sessions", async () => {
 test("prompt API steers a prompt sent while the session is streaming", async () => {
   const { core, server, faux, base } = await setup();
   try {
-    const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-srv-"));
     const create = await json(base, "/api/workspaces", {
       method: "POST",
       body: JSON.stringify({ name: "ws", folders: [root] }),
@@ -444,7 +446,7 @@ test("federation: hub reports its peers and proxies their workspaces and session
   const peerBase = `http://127.0.0.1:${peerServer.addr.port}`;
   let peerRoot = "";
   try {
-    peerRoot = await Deno.makeTempDir({ prefix: "lumisca-peer-" });
+    peerRoot = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-peer-"));
     const peerWsRes = await json(peerBase, "/api/workspaces", {
       method: "POST",
       body: JSON.stringify({ name: "peer-ws", folders: [peerRoot] }),
@@ -470,7 +472,7 @@ test("federation: hub reports its peers and proxies their workspaces and session
     ]);
     try {
       const auth = { "x-lumisca-token": "hub-token" };
-      const hubRoot = await Deno.makeTempDir({ prefix: "lumisca-hub-" });
+      const hubRoot = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-hub-"));
       await json(hubBase, "/api/workspaces", {
         method: "POST",
         body: JSON.stringify({ name: "hub-ws", folders: [hubRoot] }),
@@ -654,7 +656,7 @@ test("federation: hub reports its peers and proxies their workspaces and session
     }
   } finally {
     if (peerRoot !== "") {
-      await Deno.remove(peerRoot, { recursive: true }).catch(() => {});
+      await fsp.rm(peerRoot, { recursive: true }).catch(() => {});
     }
   }
 });
@@ -665,7 +667,7 @@ test("MCP config API: get, put, validate and rebuild sessions", async () => {
   const modelId = faux.getModel().id;
   let root = "";
   try {
-    root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-srv-"));
     const fakeServer = join(
       import.meta.dirname!,
       "..",
@@ -698,7 +700,7 @@ test("MCP config API: get, put, validate and rebuild sessions", async () => {
       method: "PUT",
       body: JSON.stringify({
         mcpServers: {
-          fake: { command: Deno.execPath(), args: ["run", fakeServer] },
+          fake: { command: process.execPath, args: ["run", fakeServer] },
           disabled: { command: "nope", enabled: false },
         },
       }),
@@ -757,7 +759,7 @@ test("todo API returns the session's current plan", async () => {
   const { core, server, faux, base } = await setup();
   let root: string | undefined;
   try {
-    root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-srv-"));
     const create = await json(base, "/api/workspaces", {
       method: "POST",
       body: JSON.stringify({ name: "ws", folders: [root] }),

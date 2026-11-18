@@ -11,10 +11,10 @@
  * is the one command that touches the system (see mod.ts).
  */
 
+import * as fsp from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { errorMessage } from "@lumisca/core";
 import { hostForUrl, isLoopbackHost } from "@lumisca/core/shared";
-import { type Listener, runtime } from "../../core/runtime/runtime.ts";
 import { isAddressInUseError } from "../startup.ts";
 import { STAGING_DIR_NAME } from "../update/stage.ts";
 import { renderUnit, type ServicePaths } from "./compose.ts";
@@ -51,19 +51,16 @@ const WRITE_PROBE_NAME = ".write-test";
  * platform this runs on, POSIX and Windows alike).
  */
 async function writeDocument(path: string, text: string): Promise<void> {
-  await runtime.mkdir(dirname(path), { recursive: true });
+  await fsp.mkdir(dirname(path), { recursive: true });
   const temporary = `${path}.tmp`;
   // A leftover temp file from an interrupted install is not worth failing
   // over: recreating it truncates it (the same reasoning as the updater's
   // removeQuietly).
-  await runtime.remove(temporary).catch(() => {});
+  await fsp.rm(temporary).catch(() => {});
   // `writeTextFile` truncates unless `append` is set, which is what a
   // leftover temp file needs.
-  await runtime.writeTextFile(temporary, text, {
-    create: true,
-    mode: 0o600,
-  });
-  await runtime.rename(temporary, path);
+  await fsp.writeFile(temporary, text, { mode: 0o600 });
+  await fsp.rename(temporary, path);
 }
 
 /**
@@ -77,9 +74,9 @@ async function requireWritableInstallDir(paths: ServicePaths): Promise<void> {
   const staging = join(paths.installDir, STAGING_DIR_NAME);
   const probe = join(staging, WRITE_PROBE_NAME);
   try {
-    await runtime.mkdir(staging, { recursive: true });
-    await runtime.writeTextFile(probe, "");
-    await runtime.remove(probe);
+    await fsp.mkdir(staging, { recursive: true });
+    await fsp.writeFile(probe, "");
+    await fsp.rm(probe);
   } catch (error) {
     throw new ServiceDefinitionError(
       `インストール先に書き込めません (${paths.installDir}): ` +
@@ -102,11 +99,17 @@ function isBindableHere(host: string, deps: ServiceDeps): boolean {
 /** Refuse to install onto a port another process already holds. */
 function requireFreePort(values: ServiceValues, deps: ServiceDeps): void {
   if (!isBindableHere(values.host, deps)) return;
-  let listener: Listener;
+  let listener: ReturnType<typeof Bun.listen>;
   try {
-    listener = runtime.listen({
+    listener = Bun.listen({
       hostname: values.host === "localhost" ? "127.0.0.1" : values.host,
       port: values.port,
+      socket: {
+        data() {},
+        open(socket) {
+          socket.end();
+        },
+      },
     });
   } catch (error) {
     if (isAddressInUseError(error)) {
@@ -117,7 +120,7 @@ function requireFreePort(values: ServiceValues, deps: ServiceDeps): void {
     }
     throw error;
   }
-  listener.close();
+  listener.stop(true);
 }
 
 async function waitForHealth(
@@ -165,11 +168,8 @@ export async function runInstall(
   if (!active) requireFreePort(values, deps);
 
   await writeDocument(paths.documentPath, renderDocument(values));
-  await runtime.mkdir(dirname(paths.unitPath), { recursive: true });
-  await runtime.writeTextFile(
-    paths.unitPath,
-    renderUnit(SERVICE_UNIT_TEMPLATE, paths),
-  );
+  await fsp.mkdir(dirname(paths.unitPath), { recursive: true });
+  await fsp.writeFile(paths.unitPath, renderUnit(SERVICE_UNIT_TEMPLATE, paths));
   deps.out(`ユニット: ${paths.unitPath}`);
   deps.out(`設定:     ${paths.documentPath} (0600)`);
   await reloadSystemd(deps);

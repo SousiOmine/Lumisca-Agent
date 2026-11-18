@@ -2,7 +2,7 @@
  * Shared HTTP test helpers: the app-startup and fetch patterns that used to
  * be copy-pasted across every `app_*_test.ts`.
  *
- * Test-only module (imports Deno + the server's app). Never imported from
+ * Test-only module (imports the core and the server's app). Never imported
  * production code or the browser bundle — `repo_hygiene_test.ts` only
  * exempts `*_test.ts` files from the core-barrel rule, so keeping this file
  * out of any non-test import path is the caller's job.

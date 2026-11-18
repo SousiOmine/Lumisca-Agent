@@ -1,4 +1,5 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
 import { join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { makeRealTempDir, removeDirRetry } from "../test-utils.ts";
@@ -27,11 +28,11 @@ Do it my way.
  * `web-browser` skill in `.agents/skills`. */
 async function fixtureRoot(withUserBrowser: boolean): Promise<string> {
   const root = await makeRealTempDir("lumisca-builtin-");
-  await Deno.mkdir(join(root, ".git"), { recursive: true });
+  await fsp.mkdir(join(root, ".git"), { recursive: true });
   if (withUserBrowser) {
     const dir = join(root, ".agents", "skills", "web-browser");
-    await Deno.mkdir(dir, { recursive: true });
-    await Deno.writeTextFile(join(dir, "SKILL.md"), USER_WEB_BROWSER);
+    await fsp.mkdir(dir, { recursive: true });
+    await fsp.writeFile(join(dir, "SKILL.md"), USER_WEB_BROWSER);
   }
   return root;
 }
@@ -356,8 +357,8 @@ test("global skills shadow built-in skills of the same name", async () => {
   const global = await makeRealTempDir("lumisca-builtin-global-");
   try {
     const dir = join(global, "web-browser");
-    await Deno.mkdir(dir, { recursive: true });
-    await Deno.writeTextFile(join(dir, "SKILL.md"), USER_WEB_BROWSER);
+    await fsp.mkdir(dir, { recursive: true });
+    await fsp.writeFile(join(dir, "SKILL.md"), USER_WEB_BROWSER);
     const skills = discoverSkills([root], {
       globalDirs: [global],
       builtinSkills: browserBuiltins(),

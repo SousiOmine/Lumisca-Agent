@@ -4,16 +4,16 @@
 // The DB path follows the server convention (LUMISCA_DB, default test-lumisca.db).
 
 import { Database } from "bun:sqlite";
-import { exit, runtime } from "../packages/core/runtime/runtime.ts";
+import { exit } from "../packages/core/process.ts";
 
-const sessionId = runtime.args[0];
-const nPairs = Number(runtime.args[1] ?? 12);
+const sessionId = process.argv.slice(2)[0];
+const nPairs = Number(process.argv.slice(2)[1] ?? 12);
 if (!sessionId) {
   console.error("usage: seed-test-history.ts <sessionId> [nPairs]");
   exit(1);
 }
 
-const db = new Database(runtime.env.get("LUMISCA_DB") ?? "test-lumisca.db");
+const db = new Database(process.env["LUMISCA_DB"] ?? "test-lumisca.db");
 const insert = db.prepare(
   "INSERT INTO messages (id, session_id, role, content, timestamp) VALUES (?, ?, ?, ?, ?)",
 );

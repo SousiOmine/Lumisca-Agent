@@ -2,7 +2,10 @@ import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { createComputerHost } from "./host.ts";
 
-test.skipIf(Deno.build.os === "windows" || Deno.build.os === "linux")(
+test.skipIf(
+  (process.platform === "win32" ? "windows" : process.platform) === "windows" ||
+    (process.platform === "win32" ? "windows" : process.platform) === "linux",
+)(
   "createComputerHost reports the platform when it has no host", // Windows has a host, and so does Linux (wayland.ts, which reports the
   // desktop's own reason instead of the platform's name); this expectation
   // is for the platforms that have none yet.
@@ -11,7 +14,9 @@ test.skipIf(Deno.build.os === "windows" || Deno.build.os === "linux")(
     assertEquals(result.available, false);
     if (result.available) return; // narrowed for the assertions below
     assert(
-      result.reason.includes(Deno.build.os),
+      result.reason.includes(
+        process.platform === "win32" ? "windows" : process.platform,
+      ),
       `the reason must name the platform: ${result.reason}`,
     );
   },

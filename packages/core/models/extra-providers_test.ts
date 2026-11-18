@@ -35,7 +35,7 @@ const OPENCODE_GO_BASE_URLS = new Set([
 ]);
 
 /** The model layer reads its environment through this, so a test never
- * mutates `Deno.env` — the test runner shares ONE process environment
+ * mutates `process.env` — the test runner shares ONE process environment
  * across every test file. */
 function envOf(vars: Record<string, string>) {
   return () => vars;

@@ -1,7 +1,7 @@
+import * as fsSync from "node:fs";
 import { dirname, join } from "node:path";
-import { CoreError, errorMessage } from "./errors.ts";
+import { CoreError, errorMessage, isNotFoundError } from "./errors.ts";
 import { createLogger } from "./log.ts";
-import { runtime } from "./runtime/runtime.ts";
 import type { SettingsRepo } from "./settings/repo.ts";
 
 const log = createLogger("personalization");
@@ -29,8 +29,8 @@ export class PersonalizationService {
     if (path === undefined) {
       throw new CoreError("No settings directory", "unavailable");
     }
-    runtime.mkdirSync(dirname(path), { recursive: true });
-    runtime.writeTextFileSync(path, content, { mode: 0o600 });
+    fsSync.mkdirSync(dirname(path), { recursive: true });
+    fsSync.writeFileSync(path, content, { mode: 0o600 });
   }
 
   /** Personal instructions to append to generated system prompts. Absent
@@ -39,11 +39,11 @@ export class PersonalizationService {
     const path = this.path();
     if (path === undefined) return undefined;
     try {
-      return runtime.readTextFileSync(path);
+      return fsSync.readFileSync(path, "utf8");
     } catch (error) {
       // Absent file is the normal case (no personalization configured);
       // anything else (permissions, I/O) is worth a debug line.
-      if (!(error instanceof runtime.errors.NotFound)) {
+      if (!isNotFoundError(error)) {
         log.debug(
           `personalization unreadable at ${path}: ${errorMessage(error)}`,
         );

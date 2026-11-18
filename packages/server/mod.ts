@@ -1,6 +1,4 @@
-// The runtime API this server is written against (`runtime.*`), implemented
-// on Bun. Imported first: every module below reaches for it at load time.
-
+import * as fsSync from "node:fs";
 import { dirname } from "node:path";
 import {
   createComputerHost,
@@ -15,13 +13,9 @@ import {
   COMPUTER_USE_SESSION_TOKEN_KEY,
   errorMessage,
 } from "@lumisca/core/shared";
-import {
-  exit,
-  type HttpServer,
-  type NetAddr,
-  runtime,
-} from "../core/runtime/runtime.ts";
-import { disposeServer, startServer } from "./app.ts";
+import { commandArgs, IS_STANDALONE } from "../core/platform.ts";
+import { exit } from "../core/process.ts";
+import { disposeServer, type LumiscaServer, startServer } from "./app.ts";
 import { DEFAULT_PORT } from "./default-port.ts";
 import { stellaContainerDir } from "./paths.ts";
 import { validateHostConfig } from "./security.ts";
@@ -54,8 +48,8 @@ import { SERVER_VERSION } from "./version.ts";
 const PORT_RETRY_INTERVAL_MS = 250;
 
 // A fire-and-forget promise that rejects without a handler would otherwise
-// terminate the whole server process (Deno exits on unhandled rejections),
-// leaving the desktop WebView frozen on a dead page with no explanation.
+// terminate the whole server process on Bun's default policy, leaving the
+// desktop WebView frozen on a dead page with no explanation.
 // Log loudly and keep serving instead: the failure itself still surfaces as
 // a session_error on its own session, and the desktop shell captures this
 // output for copy-paste (see packages/desktop server.rs).
@@ -75,7 +69,7 @@ globalThis.addEventListener("unhandledrejection", (event) => {
 // install.ts runs the staged binary with it before replacing anything) and
 // any "which build is this?" support question. Handled before the
 // environment is consumed so it reads nothing and starts nothing.
-if (runtime.args.includes("--version")) {
+if (commandArgs().includes("--version")) {
   console.log(SERVER_VERSION);
   exit(0);
 }
@@ -96,7 +90,7 @@ const LAUNCHER_USAGE = [
 // mistyped flag or an option meant for a subcommand would be a running
 // service nobody asked for. The desktop shell spawns this binary with no
 // arguments, so the strict surface costs it nothing.
-const launcherCommand = runtime.args[0];
+const launcherCommand = commandArgs()[0];
 if (launcherCommand === "--help" || launcherCommand === "-h") {
   console.log(LAUNCHER_USAGE);
   exit(0);
@@ -106,7 +100,7 @@ if (
   launcherCommand !== "service" &&
   launcherCommand !== "share"
 ) {
-  console.error(`lumisca-server: 不明な引数です: ${runtime.args.join(" ")}\n`);
+  console.error(`lumisca-server: 不明な引数です: ${commandArgs().join(" ")}\n`);
   console.error(LAUNCHER_USAGE);
   exit(2);
 }
@@ -133,7 +127,7 @@ if (launcherCommand === "service") {
   // success (the smoke test caught exactly that shape when the machine could
   // not be resolved).
   try {
-    exit(await runServiceCommand(runtime.args.slice(1)));
+    exit(await runServiceCommand(commandArgs().slice(1)));
   } catch (error) {
     console.error(`lumisca-server service: ${errorMessage(error)}`);
     exit(1);
@@ -198,10 +192,10 @@ export async function main(): Promise<void> {
   function attachStellaVm(core: LumiscaCore): void {
     const containerDir = stellaContainerDir(
       repoRoot,
-      runtime.execPath(),
+      process.execPath,
       (path) => {
         try {
-          return runtime.statSync(path).isDirectory;
+          return fsSync.statSync(path).isDirectory();
         } catch {
           return false;
         }
@@ -273,7 +267,7 @@ export async function main(): Promise<void> {
   // own binary (scripts/build-server.ts), so it runs without configuration.
   // (`||` so a blank value counts as unset, like every other startup value.)
   const assetsFile =
-    startupEnv.LUMISCA_ASSETS_FILE || defaultAssetsFile(runtime.execPath());
+    startupEnv.LUMISCA_ASSETS_FILE || defaultAssetsFile(process.execPath);
 
   let core: LumiscaCore;
   // A previous run may have left a request to rewrite the database file (see
@@ -302,10 +296,10 @@ export async function main(): Promise<void> {
   // The updater of this installation. `server` is filled in below (the
   // restart path needs to release the listener before its successor starts,
   // and the listener does not exist yet).
-  let server: HttpServer<NetAddr> | undefined;
+  let server: LumiscaServer | undefined;
   const support = updateSupport({
     desktopManaged: isDesktopManaged(startupEnv[DESKTOP_ENV_KEY]),
-    standalone: runtime.build.standalone,
+    standalone: IS_STANDALONE,
   });
   // No updater object when this installation cannot update itself: without it
   // the `/api/update/*` routes are not registered at all (see app.ts), so a
@@ -314,14 +308,14 @@ export async function main(): Promise<void> {
   const update = support.enabled
     ? new UpdateService({
         environment: {
-          installDir: dirname(runtime.execPath()),
-          execPath: runtime.execPath(),
+          installDir: dirname(process.execPath),
+          execPath: process.execPath,
         },
         settings: core,
         // The successor must start exactly like this process did, so the launch
         // configuration captured at startup is replayed for it.
         startupEnv,
-        cwd: runtime.cwd(),
+        cwd: process.cwd(),
         manifestUrl: startupEnv[UPDATE_MANIFEST_ENV_KEY] || undefined,
         restartMode: parseUpdateRestartMode(startupEnv[UPDATE_RESTART_ENV_KEY]),
         shutdown: async () => {
@@ -422,8 +416,8 @@ export async function main(): Promise<void> {
     onSignal: (signal) => console.log(`${signal} を受信しました`),
     onError: (message) => console.error(`Lumisca: ${message}`),
   });
-  runtime.addSignalListener("SIGINT", () => shutdown("SIGINT"));
-  runtime.addSignalListener("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
 }
 
 if (import.meta.main) await main();

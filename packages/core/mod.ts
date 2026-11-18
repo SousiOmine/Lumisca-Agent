@@ -79,7 +79,11 @@ export type {
   StellaShareRequest,
 } from "./domain/stella-conversation.ts";
 export type { Workspace } from "./domain/workspace.ts";
-export { CoreError, errorMessage } from "./errors.ts";
+export {
+  CoreError,
+  errorMessage,
+  isAddrInUseError,
+} from "./errors.ts";
 export { systemLanguageTags } from "./locale.ts";
 export { createLogger } from "./log.ts";
 export type { McpInfo, McpServerInfo } from "./mcp/config.ts";

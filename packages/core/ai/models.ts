@@ -5,7 +5,6 @@
  * {@link buildStreamFn}.
  */
 
-import { runtime } from "../runtime/runtime.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import type {
   AuthCheck,
@@ -43,7 +42,7 @@ export class LumiscaModels {
 
   constructor(options: LumiscaModelsOptions) {
     this.credentials = options.credentials;
-    this.env = options.env ?? (() => ({ ...runtime.env.toObject() }));
+    this.env = options.env ?? (() => ({ ...process.env }));
     this.compactionPolicy = options.compactionPolicy;
   }
 

@@ -1,4 +1,5 @@
 import { test } from "bun:test";
+import * as fsSync from "node:fs";
 import { assertEquals } from "@std/assert";
 import {
   MAX_CONSOLE_ENTRIES,
@@ -66,7 +67,7 @@ function rustUsize(expr: string): number {
 }
 
 test("probe.js mirrors the snapshot limits in types.ts", () => {
-  const probe = Deno.readTextFileSync(PROBE_URL);
+  const probe = fsSync.readFileSync(PROBE_URL, "utf8");
   const declared = new Map<string, number>();
   for (const match of probe.matchAll(/^\s*var (\w+) = (\d+);/gm)) {
     declared.set(match[1]!, Number(match[2]));
@@ -93,7 +94,10 @@ test("probe.js mirrors the snapshot limits in types.ts", () => {
 });
 
 test("the Rust host mirrors the RPC size limits in types.ts", () => {
-  const limits = rustModule(Deno.readTextFileSync(RUST_LIB_URL), "limits");
+  const limits = rustModule(
+    fsSync.readFileSync(RUST_LIB_URL, "utf8"),
+    "limits",
+  );
   const declared = new Map<string, number>();
   for (const match of limits.matchAll(
     /pub const (\w+): usize = ([0-9*\s]+);/g,
@@ -117,7 +121,7 @@ test("the Rust host mirrors the RPC size limits in types.ts", () => {
 });
 
 test("the Rust host mirrors the RPC methods and error codes", () => {
-  const source = Deno.readTextFileSync(RUST_LIB_URL);
+  const source = fsSync.readFileSync(RUST_LIB_URL, "utf8");
 
   const methods = new Map<string, string>();
   for (const match of rustModule(source, "methods").matchAll(

@@ -10,7 +10,7 @@
 
 import { concatBytes } from "../bytes.ts";
 import { errorMessage } from "../errors.ts";
-import { type ChildProcess, runtime } from "../runtime/runtime.ts";
+import { spawnProcess } from "../process.ts";
 
 /** The result of one command, already decoded and capped. */
 export interface VmCommandResult {
@@ -76,15 +76,14 @@ export async function runVmCommand(
     options.signal === undefined
       ? timeout
       : AbortSignal.any([options.signal, timeout]);
-  let process: ChildProcess;
+  let child: Bun.Subprocess;
   try {
-    process = new runtime.Command(command[0]!, {
-      args: command.slice(1),
-      stdin: options.stdin === undefined ? "null" : "piped",
-      stdout: "piped",
-      stderr: "piped",
+    child = spawnProcess([command[0]!, ...command.slice(1)], {
+      stdin: options.stdin === undefined ? "ignore" : "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
       signal,
-    }).spawn();
+    });
   } catch (error) {
     // A missing program (podman not installed) is a result, not a throw: the
     // caller reports it as the reason the machine is unavailable.
@@ -99,16 +98,16 @@ export async function runVmCommand(
   const writing =
     options.stdin === undefined
       ? Promise.resolve()
-      : writeStdin(process, options.stdin);
+      : writeStdin(child, options.stdin);
   const limit = options.maxOutput ?? VM_TEXT_OUTPUT_LIMIT;
   const [stdout, stderr] = await Promise.all([
-    readText(process.stdout, limit, options.keep ?? "tail"),
-    readText(process.stderr, limit, options.keep ?? "tail"),
+    readText(child.stdout, limit, options.keep ?? "tail"),
+    readText(child.stderr, limit, options.keep ?? "tail"),
   ]);
-  const code = await process.status;
+  const code = await child.exited;
   await writing;
   return {
-    exitCode: code.code,
+    exitCode: code,
     stdout: stdout.text,
     stderr: stderr.text,
     truncated: stdout.truncated || stderr.truncated,
@@ -126,15 +125,14 @@ export async function runVmCommandBytes(
     options.signal === undefined
       ? timeout
       : AbortSignal.any([options.signal, timeout]);
-  let process: ChildProcess;
+  let child: Bun.Subprocess;
   try {
-    process = new runtime.Command(command[0]!, {
-      args: command.slice(1),
-      stdin: options.stdin === undefined ? "null" : "piped",
-      stdout: "piped",
-      stderr: "piped",
+    child = spawnProcess([command[0]!, ...command.slice(1)], {
+      stdin: options.stdin === undefined ? "ignore" : "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
       signal,
-    }).spawn();
+    });
   } catch (error) {
     return {
       exitCode: -1,
@@ -147,16 +145,16 @@ export async function runVmCommandBytes(
   const writing =
     options.stdin === undefined
       ? Promise.resolve()
-      : writeStdin(process, options.stdin);
+      : writeStdin(child, options.stdin);
   const limit = options.maxOutput ?? VM_BYTES_OUTPUT_LIMIT;
   const [stdout, stderr] = await Promise.all([
-    readBytes(process.stdout, limit, options.keep ?? "tail"),
-    readText(process.stderr, VM_TEXT_OUTPUT_LIMIT, "tail"),
+    readBytes(child.stdout, limit, options.keep ?? "tail"),
+    readText(child.stderr, VM_TEXT_OUTPUT_LIMIT, "tail"),
   ]);
-  const code = await process.status;
+  const code = await child.exited;
   await writing;
   return {
-    exitCode: code.code,
+    exitCode: code,
     stdout: stdout.bytes,
     stderr: stderr.text,
     truncated: stdout.truncated || stderr.truncated,
@@ -167,17 +165,16 @@ export async function runVmCommandBytes(
 /** Feed `stdin` and close it. A command that exits without reading all of it
  * makes the write fail; that is not an error (the exit code says why). */
 async function writeStdin(
-  process: ChildProcess,
+  child: Bun.Subprocess,
   stdin: Uint8Array,
 ): Promise<void> {
-  const writer = process.stdin.getWriter();
   try {
-    await writer.write(stdin);
+    await child.stdin.write(stdin);
   } catch {
     // The command stopped reading; its exit code carries the reason.
   } finally {
     try {
-      await writer.close();
+      await child.stdin.end();
     } catch {
       // Already closed by the process exiting.
     }

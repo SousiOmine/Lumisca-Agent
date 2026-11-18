@@ -1,4 +1,5 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
 import { join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { MAX_AGENT_ICON_BYTES } from "../shared/mod.ts";
@@ -58,7 +59,7 @@ test("icons: put names the icon and resolve finds it", async () => {
     const found = await store.resolve("a1", name);
     assertEquals(found?.mimeType, "image/png");
     assertEquals(
-      (await Deno.readFile(found!.path)).byteLength,
+      (await fsp.readFile(found!.path)).byteLength,
       MINI_PNG.byteLength,
     );
   });
@@ -141,7 +142,7 @@ test("icons: bytes that are not the format they claim are refused", async () => 
     );
     // Nothing was stored by the refusals: no file was written and no
     // directory was created.
-    await assertRejects(() => Deno.stat(join(root, "a1")));
+    await assertRejects(() => fsp.stat(join(root, "a1")));
   });
 });
 
@@ -194,7 +195,7 @@ test("icons: remove drops one file and is quiet when it is gone", async () => {
 test("icons: an agent that never uploaded one has no directory", async () => {
   await withStore(async (store, root) => {
     assertEquals(await store.resolve("a1", "9f3c2a1b4d5e.png"), undefined);
-    await assertRejects(() => Deno.stat(join(root, "a1")));
+    await assertRejects(() => fsp.stat(join(root, "a1")));
     // Deleting an agent that never had a picture is a no-op, not a failure.
     await store.deleteAgent("a1");
   });
@@ -207,7 +208,7 @@ test("icons: deleteAgent drops that agent's files only", async () => {
     await store.deleteAgent("a1");
     assertEquals(await store.resolve("a1", mine), undefined);
     assert((await store.resolve("a2", other)) !== undefined);
-    await assertRejects(() => Deno.stat(join(root, "a1")));
+    await assertRejects(() => fsp.stat(join(root, "a1")));
   });
 });
 

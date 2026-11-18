@@ -46,22 +46,16 @@ class MockHost {
         | { status: number; body: string }
         | Promise<{ status: number; body: string }>)
   > = [];
-  private server: Deno.HttpServer | null = null;
+  private server: BunServer | null = null;
   url = "";
 
   start(_token: string): void {
-    const controller = new AbortController();
-    this.server = Deno.serve(
-      {
-        hostname: "127.0.0.1",
-        port: 0,
-        onListen: () => {},
-        signal: controller.signal,
-      },
-      (request) => this.handle(request),
-    );
-    const addr = this.server.addr as Deno.NetAddr;
-    this.url = `http://127.0.0.1:${addr.port}`;
+    this.server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: (request) => this.handle(request),
+    });
+    this.url = `http://127.0.0.1:${this.server.port}`;
   }
 
   private async handle(request: Request): Promise<Response> {
@@ -120,7 +114,7 @@ class MockHost {
   }
 
   async stop(): Promise<void> {
-    await this.server?.shutdown();
+    this.server?.stop(true);
   }
 }
 

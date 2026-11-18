@@ -256,7 +256,7 @@ test("OAuth: a session's connections use the stored grant", async () => {
 
     // The session path (tool discovery through a manager) reads the same
     // store, so the grant works there without another sign-in.
-    const manager = new McpManager(config, Deno.cwd(), service.oauth);
+    const manager = new McpManager(config, process.cwd(), service.oauth);
     try {
       const tools = await manager.listTools();
       assertEquals(
@@ -281,7 +281,7 @@ test("OAuth: a session's server without a grant reports needsAuth", async () => 
   try {
     const manager = new McpManager(
       config,
-      Deno.cwd(),
+      process.cwd(),
       new McpOAuthStore(createInMemorySettingsRepo()),
     );
     try {

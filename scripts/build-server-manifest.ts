@@ -21,8 +21,8 @@
  * file on disk.
  */
 
+import * as fsp from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { runtime } from "../packages/core/runtime/runtime.ts";
 import {
   archiveAssetName,
   manifestAssetName,
@@ -65,7 +65,7 @@ function parseArgs(args: readonly string[]): Options {
   };
 }
 
-const options = parseArgs(runtime.args);
+const options = parseArgs(process.argv.slice(2));
 
 const target = releaseTargetFor(options.target);
 if (target === undefined) {
@@ -93,7 +93,7 @@ const resolvedSignature = await (async (): Promise<string> => {
   if (options.signature.includes("/") || options.signature.includes("\\")) {
     const path = absolutePath(options.signature);
     try {
-      return (await runtime.readTextFile(path)).trim();
+      return (await fsp.readFile(path, "utf8")).trim();
     } catch (error) {
       usage(
         `cannot read --signature ${path}: ` +
@@ -106,7 +106,7 @@ const resolvedSignature = await (async (): Promise<string> => {
 
 let size: number;
 try {
-  size = (await runtime.stat(options.archive)).size;
+  size = (await fsp.stat(options.archive)).size;
 } catch (error) {
   usage(
     `cannot read --archive ${options.archive}: ` +
@@ -128,7 +128,7 @@ const manifest = {
 // Read the document back through the runtime's parser: the release must not
 // publish a manifest the updater would refuse.
 parseReleaseManifest(manifest, options.target);
-await runtime.writeTextFile(out, JSON.stringify(manifest, null, 2) + "\n");
+await fsp.writeFile(out, JSON.stringify(manifest, null, 2) + "\n");
 console.log(
   `Manifest: ${out} (${version}, ${options.target}, ${size} bytes, ` +
     `${assetName})`,

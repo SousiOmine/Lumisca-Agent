@@ -22,7 +22,7 @@ test("ask emits a question event and resolves with the answers", async () => {
     {
       id: "q1",
       question: "Which language?",
-      options: [{ label: "Deno" }, { label: "Node" }],
+      options: [{ label: "Rust" }, { label: "Node" }],
     },
   ];
   const promise = tool.execute(TOOL_CALL_ID, { questions }, undefined);
@@ -34,13 +34,13 @@ test("ask emits a question event and resolves with the answers", async () => {
   assertEquals(event.toolCallId, TOOL_CALL_ID);
   assertEquals(event.questions, questions);
 
-  hub.answer(TOOL_CALL_ID, [{ id: "q1", values: ["Deno"] }]);
+  hub.answer(TOOL_CALL_ID, [{ id: "q1", values: ["Rust"] }]);
   const result = await promise;
   assertEquals(
     toolText(result),
-    "Answers from the user:\n- Which language?: Deno",
+    "Answers from the user:\n- Which language?: Rust",
   );
-  assertEquals(result.details, { answers: [{ id: "q1", values: ["Deno"] }] });
+  assertEquals(result.details, { answers: [{ id: "q1", values: ["Rust"] }] });
 });
 
 test("pendingQuestions lists the asks that are still waiting", async () => {
@@ -49,7 +49,7 @@ test("pendingQuestions lists the asks that are still waiting", async () => {
     {
       id: "q1",
       question: "Which language?",
-      options: [{ label: "Deno" }, { label: "Node" }],
+      options: [{ label: "Rust" }, { label: "Node" }],
     },
   ];
   assertEquals(hub.pendingQuestions(), []);
@@ -60,7 +60,7 @@ test("pendingQuestions lists the asks that are still waiting", async () => {
   assertEquals(hub.pendingQuestions(), [{ toolCallId: "call-1", questions }]);
 
   // Answering (or the run being torn down) removes the ask from the list.
-  hub.answer("call-1", [{ id: "q1", values: ["Deno"] }]);
+  hub.answer("call-1", [{ id: "q1", values: ["Rust"] }]);
   assertEquals(hub.pendingQuestions(), []);
   await pending;
 
@@ -80,7 +80,7 @@ test("ask with multiple questions resolves with all answers", async () => {
         {
           id: "lang",
           question: "Language?",
-          options: [{ label: "Deno" }, { label: "Node" }],
+          options: [{ label: "Rust" }, { label: "Node" }],
         },
         {
           id: "scale",
@@ -100,20 +100,20 @@ test("ask with multiple questions resolves with all answers", async () => {
     undefined,
   );
   hub.answer(TOOL_CALL_ID, [
-    { id: "lang", values: ["Deno"] },
+    { id: "lang", values: ["Rust"] },
     { id: "scale", values: ["Medium", "Large"] },
   ]);
   const result = await promise;
   assertEquals(
     toolText(result),
-    "Answers from the user:\n- Language?: Deno\n- Scale?: Medium, Large",
+    "Answers from the user:\n- Language?: Rust\n- Scale?: Medium, Large",
   );
 });
 
 test("answer rejects for an unknown tool call id", () => {
   const { hub } = makeHub();
   assertThrowsCoreError(
-    () => hub.answer("call-unknown", [{ id: "q1", values: ["Deno"] }]),
+    () => hub.answer("call-unknown", [{ id: "q1", values: ["Rust"] }]),
     "No pending question for tool call: call-unknown",
     "not_found",
   );
@@ -129,19 +129,19 @@ test("answer rejects for unknown question ids", async () => {
         {
           id: "q1",
           question: "Which language?",
-          options: [{ label: "Deno" }, { label: "Node" }],
+          options: [{ label: "Rust" }, { label: "Node" }],
         },
       ],
     },
     undefined,
   );
   assertThrowsCoreError(
-    () => hub.answer(TOOL_CALL_ID, [{ id: "q2", values: ["Deno"] }]),
+    () => hub.answer(TOOL_CALL_ID, [{ id: "q2", values: ["Rust"] }]),
     "Unknown question id: q2",
     "invalid",
   );
   // A rejected validation must not consume the pending ask.
-  hub.answer(TOOL_CALL_ID, [{ id: "q1", values: ["Deno"] }]);
+  hub.answer(TOOL_CALL_ID, [{ id: "q1", values: ["Rust"] }]);
   await promise;
 });
 
@@ -155,7 +155,7 @@ test("answer accepts free-text values outside the options", async () => {
         {
           id: "q1",
           question: "Which language?",
-          options: [{ label: "Deno" }, { label: "Node" }],
+          options: [{ label: "Rust" }, { label: "Node" }],
         },
       ],
     },
@@ -180,7 +180,7 @@ test("answer rejects empty values", async () => {
         {
           id: "q1",
           question: "Which language?",
-          options: [{ label: "Deno" }, { label: "Node" }],
+          options: [{ label: "Rust" }, { label: "Node" }],
         },
       ],
     },
@@ -192,7 +192,7 @@ test("answer rejects empty values", async () => {
     "invalid",
   );
   // A rejected validation must not consume the pending ask.
-  hub.answer(TOOL_CALL_ID, [{ id: "q1", values: ["Deno"] }]);
+  hub.answer(TOOL_CALL_ID, [{ id: "q1", values: ["Rust"] }]);
   await promise;
 });
 
@@ -239,7 +239,7 @@ test("rejectAll rejects a pending ask (run teardown)", async () => {
         {
           id: "q1",
           question: "Which language?",
-          options: [{ label: "Deno" }, { label: "Node" }],
+          options: [{ label: "Rust" }, { label: "Node" }],
         },
       ],
     },
@@ -253,7 +253,7 @@ test("rejectAll rejects a pending ask (run teardown)", async () => {
   );
   // Rejected asks are gone: a later answer must not resurrect them.
   assertThrowsCoreError(
-    () => hub.answer(TOOL_CALL_ID, [{ id: "q1", values: ["Deno"] }]),
+    () => hub.answer(TOOL_CALL_ID, [{ id: "q1", values: ["Rust"] }]),
     "No pending question for tool call: call-1",
     "not_found",
   );

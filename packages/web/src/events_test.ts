@@ -627,7 +627,7 @@ test("events: session_renamed updates the session name", () => {
 const QUESTION = {
   id: "q1",
   question: "Which language?",
-  options: [{ label: "Deno" }, { label: "Node" }],
+  options: [{ label: "Rust" }, { label: "Node" }],
 };
 
 test("events: question is shown and cleared by tool_end", () => {

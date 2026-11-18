@@ -1,10 +1,10 @@
+import * as fsp from "node:fs/promises";
 import type { SessionInfo } from "@lumisca/core";
 import { Hono } from "hono";
 import {
   ensurePreview,
   previewPathOf,
 } from "../../core/media/preview-cache.ts";
-import { runtime } from "../../core/runtime/runtime.ts";
 import { assetResponse } from "./asset-response.ts";
 import { notFound } from "./util.ts";
 
@@ -68,7 +68,7 @@ export function attachmentRoutes(core: AttachmentApi): Hono {
         downloadName: attachment.downloadName,
       });
     }
-    const bytes = await runtime.readFile(attachment.path);
+    const bytes = await fsp.readFile(attachment.path);
     return assetResponse(c, {
       bytes: bytes.buffer as ArrayBuffer,
       mimeType: attachment.mimeType,

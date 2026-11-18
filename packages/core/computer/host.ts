@@ -14,7 +14,8 @@
  * also why this function is asynchronous while the Windows path is not —
  * one signature for both keeps the callers single-path.
  */
-import { runtime } from "../runtime/runtime.ts";
+
+import { OS } from "../platform.ts";
 import type { ComputerHostResult } from "./types.ts";
 import {
   createWaylandComputerHost,
@@ -31,7 +32,7 @@ export type ComputerHostOptions = WaylandHostOptions;
 export function createComputerHost(
   options: ComputerHostOptions = {},
 ): Promise<ComputerHostResult> {
-  switch (runtime.build.os) {
+  switch (OS) {
     case "windows":
       return Promise.resolve(createWindowsComputerHost());
     case "linux":
@@ -39,7 +40,7 @@ export function createComputerHost(
     default:
       return Promise.resolve({
         available: false,
-        reason: `computer use is not supported on this platform yet (${runtime.build.os})`,
+        reason: `computer use is not supported on this platform yet (${OS})`,
       });
   }
 }

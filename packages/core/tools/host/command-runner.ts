@@ -8,7 +8,7 @@ import {
 import { FINAL_FLUSH_GRACE_MS, KILL_WAIT_MS } from "../process-policy.ts";
 import { MAX_UTF8_BYTES_PER_CHAR, OutputTail } from "./output-tail.ts";
 import { killProcessTree } from "./process-tree.ts";
-import { shellCommand } from "./shell.ts";
+import { spawnShell } from "./shell.ts";
 
 /**
  * The host implementation of {@link CommandRunner}: one shell command on
@@ -30,12 +30,12 @@ export class HostCommandRunner implements CommandRunner {
     // Per-call env vars override the tool's own values (`baseEnv`), and both
     // override the shell's own (NO_COLOR and friends): a tool set the
     // environment deliberately, so it must win over a cosmetic default.
-    const process = shellCommand({
+    const process = spawnShell({
       command,
       cwd: options.cwd,
       baseEnv: this.baseEnv,
       env: { ...options.baseEnv, ...options.env },
-    }).spawn();
+    });
 
     // The pipes are read here rather than through child.output(): that call
     // waits for their EOF, and the wait below must not (see the class
@@ -66,7 +66,7 @@ export class HostCommandRunner implements CommandRunner {
 
     try {
       const status = await Promise.race([
-        process.status,
+        process.exited,
         new Promise<undefined>((resolve) => {
           deadline = setTimeout(
             () => resolve(undefined),
@@ -97,7 +97,7 @@ export class HostCommandRunner implements CommandRunner {
       const out = cap(outTail, options.maxOutputChars);
       const err = cap(errTail, options.maxOutputChars);
       return {
-        exitCode: status?.code,
+        exitCode: status,
         stdout: out.text,
         stderr: err.text,
         stdoutTruncated: out.truncated,

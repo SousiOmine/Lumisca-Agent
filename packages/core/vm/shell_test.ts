@@ -1,5 +1,6 @@
 import { test } from "bun:test";
 import { assertEquals, assertRejects } from "@std/assert";
+import { runProcess } from "../process.ts";
 import type { VmCommandResult } from "./command.ts";
 import type { VmExec, VmExecOptions } from "./container.ts";
 import { VM_ENV_SH } from "./contract.ts";
@@ -171,18 +172,19 @@ test("vm shell: a start without a pid is refused", async () => {
   );
 });
 
-test.skipIf(Deno.build.os === "windows")(
-  "vm shell: shellQuote round-trips through a real shell",
-  async () => {
-    // The quoting is the one piece that must be exactly right: a value with
-    // a quote in it must reach the command unchanged. Only a POSIX shell can
-    // answer this: the VM image has no `sh` at C:\bin, and the quoting the
-    // host uses on Windows is PowerShell's, not this one (fs_test covers the
-    // strings shellQuote itself produces on every platform).
-    const value = 'it\'s a "test"';
-    const result = await new Deno.Command("/bin/sh", {
-      args: ["-c", `printf '%s' ${shellQuote(value)}`],
-    }).output();
-    assertEquals(new TextDecoder().decode(result.stdout), value);
-  },
-);
+test.skipIf(
+  (process.platform === "win32" ? "windows" : process.platform) === "windows",
+)("vm shell: shellQuote round-trips through a real shell", async () => {
+  // The quoting is the one piece that must be exactly right: a value with
+  // a quote in it must reach the command unchanged. Only a POSIX shell can
+  // answer this: the VM image has no `sh` at C:\bin, and the quoting the
+  // host uses on Windows is PowerShell's, not this one (fs_test covers the
+  // strings shellQuote itself produces on every platform).
+  const value = 'it\'s a "test"';
+  const result = await runProcess([
+    "/bin/sh",
+    "-c",
+    `printf '%s' ${shellQuote(value)}`,
+  ]);
+  assertEquals(new TextDecoder().decode(result.stdout), value);
+});

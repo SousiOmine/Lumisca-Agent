@@ -16,9 +16,10 @@
  * preview, and the byte cache needs no invalidation at all.
  */
 
+import * as fsp from "node:fs/promises";
 import { join } from "node:path";
+import { isNotFoundError } from "../errors.ts";
 import { renderPreview } from "../media/preview.ts";
-import { runtime } from "../runtime/runtime.ts";
 
 /** Suffix appended to a source name to name its preview. `.preview` cannot
  * collide with a real asset extension (an extension starts with the media
@@ -49,13 +50,13 @@ export async function ensurePreview(
 ): Promise<Uint8Array | undefined> {
   // The cache hits on every draw after the first, so it is asked first.
   try {
-    return await runtime.readFile(previewPath);
+    return await fsp.readFile(previewPath);
   } catch (error) {
-    if (!(error instanceof runtime.errors.NotFound)) throw error;
+    if (!isNotFoundError(error)) throw error;
   }
   let source: Uint8Array;
   try {
-    source = await runtime.readFile(sourcePath);
+    source = await fsp.readFile(sourcePath);
   } catch {
     // The asset went away between the resolve and this read: the caller
     // answers 404 from its own resolve, so nothing to add here.
@@ -67,8 +68,8 @@ export async function ensurePreview(
     // Written to a temporary name and renamed: a concurrent request must
     // never read a half-written preview.
     const temporary = `${previewPath}.${crypto.randomUUID()}.tmp`;
-    await runtime.writeFile(temporary, preview);
-    await runtime.rename(temporary, previewPath);
+    await fsp.writeFile(temporary, preview);
+    await fsp.rename(temporary, previewPath);
   } catch {
     // A preview is an optimisation: keep serving the original.
   }

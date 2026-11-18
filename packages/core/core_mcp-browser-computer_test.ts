@@ -1,12 +1,11 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
 import { join } from "node:path";
-
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@lumisca/core";
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import { MCP_TOOLS_PROVIDER, ON_DEMAND_TOOLS_NOTE } from "./mcp/context.ts";
 import type { AgentMessage, BrowserBackend, LumiscaCore } from "./mod.ts";
 import { TOOL_CALL, TOOL_PDF_READ_PAGES, TOOL_SEARCH } from "./shared/mod.ts";
-
 import {
   makeRealTempDir,
   makeWorkspace,
@@ -102,11 +101,11 @@ test("sessions attach MCP tools from .mcp.json and call them", async () => {
     "scripts",
     "fake-mcp-server.ts",
   );
-  await Deno.writeTextFile(
+  await fsp.writeFile(
     join(root, ".mcp.json"),
     JSON.stringify({
       mcpServers: {
-        fake: { command: Deno.execPath(), args: ["run", fakeServer] },
+        fake: { command: process.execPath, args: ["run", fakeServer] },
       },
     }),
   );
@@ -214,7 +213,7 @@ test("app-level MCP config persists and applies to sessions", async () => {
     const info = await core.setAppMcpConfig(
       JSON.stringify({
         mcpServers: {
-          fake: { command: Deno.execPath(), args: ["run", fakeServer] },
+          fake: { command: process.execPath, args: ["run", fakeServer] },
         },
       }),
     );
@@ -323,7 +322,7 @@ test("an MCP config saved while a session streams reaches that session", async (
     const info = await core.setAppMcpConfig(
       JSON.stringify({
         mcpServers: {
-          fake: { command: Deno.execPath(), args: ["run", fakeServer] },
+          fake: { command: process.execPath, args: ["run", fakeServer] },
         },
       }),
     );
@@ -405,16 +404,16 @@ test("workspace .mcp.json overrides same-named app servers", async () => {
     JSON.stringify({
       mcpServers: {
         fake: { command: "definitely-not-a-real-binary", args: [] },
-        "app-only": { command: Deno.execPath(), args: ["run", fakeServer] },
+        "app-only": { command: process.execPath, args: ["run", fakeServer] },
       },
     }),
   );
   // ...but the workspace's own .mcp.json overrides it with a working one.
-  await Deno.writeTextFile(
+  await fsp.writeFile(
     join(root, ".mcp.json"),
     JSON.stringify({
       mcpServers: {
-        fake: { command: Deno.execPath(), args: ["run", fakeServer] },
+        fake: { command: process.execPath, args: ["run", fakeServer] },
       },
     }),
   );
@@ -472,11 +471,11 @@ test("first prompt waits for MCP tools to attach", async () => {
     "scripts",
     "fake-mcp-server.ts",
   );
-  await Deno.writeTextFile(
+  await fsp.writeFile(
     join(root, ".mcp.json"),
     JSON.stringify({
       mcpServers: {
-        fake: { command: Deno.execPath(), args: ["run", fakeServer] },
+        fake: { command: process.execPath, args: ["run", fakeServer] },
       },
     }),
   );
@@ -671,7 +670,7 @@ test("the agent adds and removes an MCP server with its own tools", async () => 
           name: "mcp_add",
           args: {
             name: "fake",
-            command: Deno.execPath(),
+            command: process.execPath,
             args: ["run", fakeServer],
           },
         },

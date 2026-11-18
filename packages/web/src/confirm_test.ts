@@ -1,4 +1,5 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
 import { assert, assertEquals } from "@std/assert";
 import { confirmAction } from "./confirm.ts";
 
@@ -27,7 +28,7 @@ test("confirm.ts is the only place that calls the browser dialog", async () => {
   const offenders: string[] = [];
   for await (const path of sourceFiles(SRC)) {
     if (path === "confirm.ts") continue;
-    const text = await Deno.readTextFile(new URL(path, SRC));
+    const text = await fsp.readFile(new URL(path, SRC), "utf8");
     // `confirmAction(` is the allowed spelling; a bare `confirm(` is not.
     // Comments are not calls: this module's own documentation names the
     // browser dialog, and a prose mention is not a second call site.
@@ -48,15 +49,15 @@ test("confirm.ts is the only place that calls the browser dialog", async () => {
 test("confirm: every catalogue delete confirmation goes through it", async () => {
   let found = 0;
   for await (const path of sourceFiles(SRC)) {
-    const text = await Deno.readTextFile(new URL(path, SRC));
+    const text = await fsp.readFile(new URL(path, SRC), "utf8");
     if (text.includes("confirmAction(")) found++;
   }
   assert(found > 3, `only ${found} call sites were found`);
 });
 
 async function* sourceFiles(dir: URL, prefix = ""): AsyncGenerator<string> {
-  for await (const entry of Deno.readDir(dir)) {
-    if (entry.isDirectory) {
+  for (const entry of await fsp.readdir(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
       yield* sourceFiles(
         new URL(`${entry.name}/`, dir),
         `${prefix}${entry.name}/`,

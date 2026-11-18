@@ -28,9 +28,10 @@ function serve(served: Served): {
   seen: { headers: Headers | null };
 } {
   const seen: { headers: Headers | null } = { headers: null };
-  const server = Deno.serve(
-    { hostname: "127.0.0.1", port: 0, onListen() {} },
-    (request) => {
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: (request) => {
       seen.headers = request.headers;
       if (served.throws === true) throw new Error("boom");
       return new Response(
@@ -41,11 +42,10 @@ function serve(served: Served): {
         },
       );
     },
-  );
-  const { port } = server.addr;
+  });
   return {
-    url: `http://127.0.0.1:${port}`,
-    close: () => server.shutdown(),
+    url: `http://127.0.0.1:${server.port}`,
+    close: () => server.stop(true),
     seen,
   };
 }

@@ -2,18 +2,20 @@
  * Shared test helpers: single home for the setup/teardown patterns that
  * used to be copy-pasted across every `*_test.ts`.
  *
- * Test-only module (imports Deno + node:fs); never imported from
- * production code or the browser bundle.
+ * Test-only module (imports node:fs); never imported from production code
+ * or the browser bundle.
  */
 
 import { realpathSync } from "node:fs";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join as pathJoin } from "node:path";
 import type { Api, Model } from "./ai/catalog.ts";
 import { fauxProvider } from "./ai/faux.ts";
 import type { ImageContent } from "./ai/message.ts";
 
 import { LumiscaCore } from "./core.ts";
-import { CoreError } from "./errors.ts";
-import { type Listener, runtime } from "./runtime/runtime.ts";
+import { CoreError, isAddrInUseError } from "./errors.ts";
 
 /**
  * An in-memory core with the faux provider, and the ids a test needs to
@@ -130,20 +132,20 @@ export function toolText(result: ToolResultLike): string {
 export async function removeDirRetry(path: string): Promise<void> {
   for (let i = 0; i < 50; i++) {
     try {
-      await runtime.remove(path, { recursive: true });
+      await fsp.rm(path, { recursive: true });
       return;
     } catch {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
   }
-  await runtime.remove(path, { recursive: true }); // last attempt: surface errors
+  await fsp.rm(path, { recursive: true }); // last attempt: surface errors
 }
 
 /** Create a temp dir and resolve it to its real path: `makeTempDir` may
  * return 8.3 short names on Windows (e.g. `MAINPC~1`) while the sandbox
  * resolves real paths, so tests must compare against the realpath'd form. */
 export async function makeRealTempDir(prefix: string): Promise<string> {
-  return realpathSync.native(await runtime.makeTempDir({ prefix }));
+  return realpathSync.native(await fsp.mkdtemp(pathJoin(osTmpdir(), prefix)));
 }
 
 /** Poll `check` until it holds, or fail naming what was awaited: a test that
@@ -223,7 +225,7 @@ const UNUSED_PORT_LAST = FIRST_EPHEMERAL_PORT - 1000;
  * the port (a command under test) or must find nobody listening on it (a
  * connection that has to be refused).
  *
- * `runtime.listen({ port: 0 })` cannot serve that: the kernel picks out of the
+ * `Bun.listen({ port: 0 })` cannot serve that: the kernel picks out of the
  * ephemeral range and the port is free for anyone the moment the listener
  * closes, so with the suite running in parallel another test's socket can
  * be handed that exact number in between. A loaded CI runner did exactly
@@ -240,24 +242,25 @@ export function unusedPort(): number {
   const start = UNUSED_PORT_FIRST + Math.floor(Math.random() * span);
   for (let step = 0; step < span; step++) {
     const port = UNUSED_PORT_FIRST + ((start + step) % span);
-    let listener: Listener;
+    let listener: ReturnType<typeof Bun.listen>;
     try {
-      listener = runtime.listen({ hostname: "0.0.0.0", port });
+      listener = Bun.listen({
+        hostname: "0.0.0.0",
+        port,
+        socket: {
+          data() {},
+          open(socket) {
+            socket.end();
+          },
+        },
+      });
     } catch (error) {
       // "Someone holds this number" — the next one may be free. Anything
-      // else is a problem with the bind itself and must surface. The name
-      // check mirrors the server's own classifier
-      // (packages/server/startup.ts), which allows for a listen failure
-      // that arrives as a plain Error.
-      if (
-        error instanceof runtime.errors.AddrInUse ||
-        (error instanceof Error && error.name === "AddrInUse")
-      ) {
-        continue;
-      }
+      // else is a problem with the bind itself and must surface.
+      if (isAddrInUseError(error)) continue;
       throw error;
     }
-    listener.close();
+    listener.stop(true);
     return port;
   }
   throw new Error(

@@ -1,5 +1,7 @@
 import { test } from "bun:test";
-import { join } from "node:path";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join, join as pathJoin } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { MAX_ATTACHMENT_BYTES } from "../shared/mod.ts";
 import { SessionAttachmentStore } from "./attachments.ts";
@@ -8,11 +10,11 @@ import { SessionAttachmentStore } from "./attachments.ts";
 async function withStore(
   fn: (store: SessionAttachmentStore, root: string) => Promise<void>,
 ): Promise<void> {
-  const root = await Deno.makeTempDir({ prefix: "lumisca-attachments-" });
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-attachments-"));
   try {
     await fn(new SessionAttachmentStore(root), root);
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await fsp.rm(root, { recursive: true });
   }
 }
 
@@ -103,7 +105,9 @@ test("nothing is created until a session attaches", async () => {
     // The store is lazy: a session that never sends a file leaves nothing.
     assertEquals(await store.resolve("s1", "000000000000.png"), undefined);
     let count = 0;
-    for await (const _entry of Deno.readDir(root)) count++;
+    for (const _entry of await fsp.readdir(root, { withFileTypes: true })) {
+      count++;
+    }
     assertEquals(count, 0);
   });
 });
@@ -117,8 +121,10 @@ test("deleteSession drops one session's files only", async () => {
     assertEquals(await store.resolve("s2", gone.name), undefined);
     // The other session's directory is intact.
     let keptFiles = 0;
-    for await (const entry of Deno.readDir(join(root, "s1"))) {
-      if (entry.isFile) keptFiles++;
+    for (const entry of await fsp.readdir(join(root, "s1"), {
+      withFileTypes: true,
+    })) {
+      if (entry.isFile()) keptFiles++;
     }
     assertEquals(keptFiles > 0, true);
   });

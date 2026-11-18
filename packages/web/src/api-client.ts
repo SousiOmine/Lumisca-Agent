@@ -104,7 +104,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // The deadline is an AbortController and a timer that is ALWAYS cleared,
   // not `AbortSignal.timeout`: that helper's timer stays pending for the
   // whole interval, which keeps the event loop alive for two minutes after
-  // every call (Deno's test sanitizer reports exactly that, and a server-side
+  // every call (the test runner reports exactly that, and a server-side
   // caller would be held open the same way).
   const deadline = new AbortController();
   const timer = setTimeout(() => deadline.abort(), requestTimeoutMs);

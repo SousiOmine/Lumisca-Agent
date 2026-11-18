@@ -13,9 +13,9 @@
  * leftover PNG per screenshot would pile up in the runtime directory.
  */
 
+import * as fsp from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { CoreError, errorMessage } from "../../errors.ts";
-import { runtime } from "../../runtime/runtime.ts";
 import { decodePngToBgra } from "../image.ts";
 import { type PortalConnection, unwrapVariant } from "./connection.ts";
 import {
@@ -84,7 +84,7 @@ export async function captureScreen(
   const path = fileURLToPath(uri);
   let encoded: Uint8Array;
   try {
-    encoded = await runtime.readFile(path);
+    encoded = await fsp.readFile(path);
   } catch (error) {
     throw new CoreError(
       `could not read the screenshot file ${path}: ${errorMessage(error)}`,
@@ -92,7 +92,7 @@ export async function captureScreen(
     );
   }
   try {
-    await runtime.remove(path);
+    await fsp.rm(path);
   } catch {
     // A file the desktop wants to keep (or already removed) is not a
     // reason to fail a capture that succeeded.

@@ -1,5 +1,7 @@
 import { test } from "bun:test";
+import * as fsSync from "node:fs";
 import { assert, assertEquals, assertThrows } from "@std/assert";
+import { runProcess } from "../core/process.ts";
 import { DEFAULT_PORT } from "./default-port.ts";
 import {
   consumeServerStartupEnvironment,
@@ -159,8 +161,9 @@ test("parseServerPort rejects garbage and out-of-range values", () => {
   }
 });
 
-test("isAddressInUseError matches Deno's AddrInUse", () => {
-  assertEquals(isAddressInUseError(new Deno.errors.AddrInUse("taken")), true);
+test("isAddressInUseError recognises a taken port", () => {
+  const coded = Object.assign(new Error("taken"), { code: "EADDRINUSE" });
+  assertEquals(isAddressInUseError(coded), true);
   const shaped = new Error("taken");
   shaped.name = "AddrInUse";
   assertEquals(isAddressInUseError(shaped), true);
@@ -171,11 +174,11 @@ test("isAddressInUseError matches Deno's AddrInUse", () => {
 
 test("defaultAssetsFile picks up the manifest staged next to the binary", () => {
   const execPath =
-    Deno.build.os === "windows"
+    (process.platform === "win32" ? "windows" : process.platform) === "windows"
       ? "C:\\opt\\lumisca\\lumisca-server.exe"
       : "/opt/lumisca/lumisca-server";
   const beside =
-    Deno.build.os === "windows"
+    (process.platform === "win32" ? "windows" : process.platform) === "windows"
       ? "C:\\opt\\lumisca\\assets.json"
       : "/opt/lumisca/assets.json";
   const seen: string[] = [];
@@ -202,7 +205,7 @@ test("describeListenError guides away from an occupied port", () => {
   const message = describeListenError(
     "127.0.0.1",
     8000,
-    new Deno.errors.AddrInUse("taken"),
+    Object.assign(new Error("taken"), { code: "EADDRINUSE" }),
   );
   assert(message.includes("8000"), "names the port");
   assert(message.includes("netstat"), "tells how to find the holder");
@@ -240,8 +243,9 @@ test("the desktop shell mirrors this module's port contract", () => {
   // repeats the default port, the port key and the desktop marker the shell
   // passes to the child. Nothing else compares the copies, and a changed
   // default on either side would silently start the server on another port.
-  const shell = Deno.readTextFileSync(
+  const shell = fsSync.readFileSync(
     new URL("../desktop/src-tauri/src/server.rs", import.meta.url),
+    "utf8",
   );
   assertEquals(
     shell.includes(`const DEFAULT_PORT: u16 = ${DEFAULT_PORT};`),
@@ -292,27 +296,22 @@ test("unset server startup variables are still removed", () => {
 
 test("spawned commands inherit the cleaned process environment", async () => {
   const keys = [...SERVER_STARTUP_ENV_KEYS, "LUMISCA_MODEL"];
-  const saved = new Map(keys.map((key) => [key, Deno.env.get(key)]));
+  const saved = new Map(keys.map((key) => [key, process.env[key]]));
 
   try {
-    Deno.env.set("LUMISCA_PORT", "42000");
-    Deno.env.set("LUMISCA_TOKEN", "server-secret");
-    Deno.env.set("LUMISCA_MODEL", "test-model");
+    process.env["LUMISCA_PORT"] = "42000";
+    process.env["LUMISCA_TOKEN"] = "server-secret";
+    process.env["LUMISCA_MODEL"] = "test-model";
     consumeServerStartupEnvironment();
 
-    // The child reads the environment from the runtime itself (Bun has no
-    // `eval` subcommand, and no Deno namespace without the shim): what the
+    // The child reads the environment from the runtime itself: what the
     // test is about is the environment it is handed, not how it is read.
     const code = `console.log(JSON.stringify([
       process.env.LUMISCA_PORT ?? null,
       process.env.LUMISCA_TOKEN ?? null,
       process.env.LUMISCA_MODEL ?? null,
     ]))`;
-    const output = await new Deno.Command(Deno.execPath(), {
-      args: ["--eval", code],
-      stdout: "piped",
-      stderr: "piped",
-    }).output();
+    const output = await runProcess([process.execPath, "--eval", code]);
 
     assertEquals(output.success, true, new TextDecoder().decode(output.stderr));
     assertEquals(JSON.parse(new TextDecoder().decode(output.stdout)), [
@@ -322,8 +321,8 @@ test("spawned commands inherit the cleaned process environment", async () => {
     ]);
   } finally {
     for (const [key, value] of saved) {
-      if (value === undefined) Deno.env.delete(key);
-      else Deno.env.set(key, value);
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
     }
   }
 });

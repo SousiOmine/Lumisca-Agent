@@ -19,8 +19,9 @@
  * Exits 1 and prints `::error::` annotations on any mismatch.
  */
 
+import * as fsSync from "node:fs";
 import { join } from "node:path";
-import { exit, runtime } from "../packages/core/runtime/runtime.ts";
+import { exit } from "../packages/core/process.ts";
 import { repoRoot } from "./lib.ts";
 
 interface Manifest {
@@ -63,7 +64,7 @@ const MANIFESTS: Manifest[] = [
 function readVersion(manifest: Manifest): string | undefined {
   try {
     return manifest.read(
-      runtime.readTextFileSync(join(repoRoot, manifest.path)),
+      fsSync.readFileSync(join(repoRoot, manifest.path), "utf8"),
     );
   } catch (error) {
     console.error(
@@ -76,7 +77,7 @@ function readVersion(manifest: Manifest): string | undefined {
 }
 
 const expected =
-  runtime.args[0]?.replace(/^v/, "") ?? readVersion(MANIFESTS[0]!);
+  process.argv.slice(2)[0]?.replace(/^v/, "") ?? readVersion(MANIFESTS[0]!);
 if (expected === undefined) {
   console.error(`::error::no version found in ${REFERENCE}`);
   exit(1);

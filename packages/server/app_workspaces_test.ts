@@ -1,6 +1,8 @@
 import { test } from "bun:test";
 import { realpathSync } from "node:fs";
-import { basename, dirname, join, parse } from "node:path";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { basename, dirname, join, parse, join as pathJoin } from "node:path";
 import {
   fauxAssistantMessage,
   fauxToolCall,
@@ -38,7 +40,7 @@ test("health and workspaces API", async () => {
     // federation client's self-check).
     assertEquals(typeof healthBody.instanceId, "string");
 
-    const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-srv-"));
     const create = await json(base, "/api/workspaces", {
       method: "POST",
       body: JSON.stringify({ name: "ws", folders: [root] }),
@@ -67,18 +69,19 @@ test("health and workspaces API", async () => {
 test("workspace files API returns @-mention suggestions", async () => {
   const { core, server, base } = await setup();
   try {
-    const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-srv-"));
     const create = await json(base, "/api/workspaces", {
       method: "POST",
       body: JSON.stringify({ name: "ws", folders: [root] }),
     });
     const ws = await create.json();
-    await Deno.mkdir(join(root, "src"), { recursive: true });
-    await Deno.writeTextFile(join(root, "src", "main.ts"), "m");
-    await Deno.writeTextFile(join(root, "README.md"), "r");
+    await fsp.mkdir(join(root, "src"), { recursive: true });
+    await fsp.writeFile(join(root, "src", "main.ts"), "m");
+    await fsp.writeFile(join(root, "README.md"), "r");
 
     const folderName =
-      Deno.build.os === "windows"
+      (process.platform === "win32" ? "windows" : process.platform) ===
+      "windows"
         ? root.split("\\").pop()!
         : root.split("/").pop()!;
 
@@ -111,7 +114,7 @@ test("workspace files API returns @-mention suggestions", async () => {
 test("skills API lists the workspace catalog and the chat subset", async () => {
   const { core, server, base } = await setup();
   try {
-    const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-srv-"));
     const create = await json(base, "/api/workspaces", {
       method: "POST",
       body: JSON.stringify({ name: "ws", folders: [root] }),
@@ -122,8 +125,8 @@ test("skills API lists the workspace catalog and the chat subset", async () => {
     // browser backend is attached, so the only built-in skill a main agent
     // gets is the MCP guide (the tools it teaches are always available).
     const skillDir = join(root, ".agents", "skills", "demo");
-    await Deno.mkdir(skillDir, { recursive: true });
-    await Deno.writeTextFile(
+    await fsp.mkdir(skillDir, { recursive: true });
+    await fsp.writeFile(
       join(skillDir, "SKILL.md"),
       "---\nname: demo\ndescription: Demo skill.\n---\n\nDo the demo thing.\n",
     );
@@ -176,8 +179,8 @@ test("skills API lists the workspace catalog and the chat subset", async () => {
 test("workspace update and delete API", async () => {
   const { core, server, base } = await setup();
   try {
-    const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
-    const extra = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-srv-"));
+    const extra = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-srv-"));
     const create = await json(base, "/api/workspaces", {
       method: "POST",
       body: JSON.stringify({ name: "ws", folders: [root] }),
@@ -228,7 +231,7 @@ test("messages snapshot serves a window and the way back", async () => {
   // from starting in the middle of one.
   const { core, server, faux, base } = await setup();
   try {
-    const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-srv-"));
     const ws = await (
       await json(base, "/api/workspaces", {
         method: "POST",
@@ -332,7 +335,7 @@ test("messages snapshot reports a run that is still going", async () => {
   // one snapshot, read at the same instant.
   const { core, server, faux, base } = await setup();
   try {
-    const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-srv-"));
     const create = await json(base, "/api/workspaces", {
       method: "POST",
       body: JSON.stringify({ name: "ws", folders: [root] }),
@@ -410,7 +413,7 @@ test("messages snapshot carries a pending ask for a reconnecting client", async 
   // the run would wait forever with no visible way to answer.
   const { core, server, faux, base } = await setup();
   try {
-    const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-srv-"));
     const ws = await (
       await json(base, "/api/workspaces", {
         method: "POST",
@@ -422,7 +425,7 @@ test("messages snapshot carries a pending ask for a reconnecting client", async 
       {
         id: "q1",
         question: "Which language?",
-        options: [{ label: "Deno" }, { label: "Node" }],
+        options: [{ label: "Rust" }, { label: "Node" }],
       },
     ];
     faux.setResponses([
@@ -469,7 +472,7 @@ test("messages snapshot carries a pending ask for a reconnecting client", async 
       method: "POST",
       body: JSON.stringify({
         toolCallId: snapshot.questions[0]!.toolCallId,
-        answers: [{ id: "q1", values: ["Deno"] }],
+        answers: [{ id: "q1", values: ["Rust"] }],
       }),
     });
     await core.getAgent(session.id)!.waitForIdle();
@@ -548,29 +551,31 @@ test("filesystem browse API", async () => {
         `unknown place kind: ${place.kind}`,
       );
       // Only directories that exist are offered.
-      assertEquals((await Deno.stat(place.path)).isDirectory, true);
+      assertEquals((await fsp.stat(place.path)).isDirectory(), true);
     }
     assertEquals(
       places.some((place) => place.kind === "root"),
       true,
     );
     // The home folder of the server's environment is one of them.
-    const home = Deno.env.get("USERPROFILE") ?? Deno.env.get("HOME") ?? "";
+    const home = process.env["USERPROFILE"] ?? process.env["HOME"] ?? "";
     if (home !== "") {
       assertEquals(places.find((place) => place.kind === "home")?.path, home);
     }
 
     // Create a nested dir structure in a temp folder and browse it.
-    const root = await Deno.makeTempDir({ prefix: "lumisca-fs-" });
+    const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-fs-"));
     const sub = join(root, "alpha");
-    await Deno.mkdir(sub, { recursive: true });
-    await Deno.mkdir(join(sub, "beta"), { recursive: true });
-    await Deno.writeTextFile(join(root, "file.txt"), "x");
+    await fsp.mkdir(sub, { recursive: true });
+    await fsp.mkdir(join(sub, "beta"), { recursive: true });
+    await fsp.writeFile(join(root, "file.txt"), "x");
     // A symlinked folder stays a folder (its dirent describes the link, but
     // the picker must still be able to pick the folder). Symlinks need
     // privileges on Windows.
-    const linked = Deno.build.os !== "windows";
-    if (linked) await Deno.symlink(sub, join(root, "link"), { type: "dir" });
+    const linked =
+      (process.platform === "win32" ? "windows" : process.platform) !==
+      "windows";
+    if (linked) await fsp.symlink(sub, join(root, "link"), "dir");
 
     const browseRes = await fetch(
       `${base}/api/fs/browse?path=${encodeURIComponent(root)}`,
@@ -885,7 +890,7 @@ test("MCP config API rejects invalid input", async () => {
   const { core, server, base } = await setup();
   let root = "";
   try {
-    root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-srv-"));
     const create = await json(base, "/api/workspaces", {
       method: "POST",
       body: JSON.stringify({ name: "ws", folders: [root] }),
@@ -921,7 +926,7 @@ test("MCP config API rejects invalid input", async () => {
 test("compact condenses the history via the API", async () => {
   const { core, server, faux, base } = await setup();
   try {
-    const root = await Deno.makeTempDir({ prefix: "lumisca-srv-" });
+    const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-srv-"));
     const create = await json(base, "/api/workspaces", {
       method: "POST",
       body: JSON.stringify({ name: "ws", folders: [root] }),

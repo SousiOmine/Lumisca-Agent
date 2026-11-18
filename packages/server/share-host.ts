@@ -34,7 +34,7 @@ import {
   type ShareServerFrame,
   shareNameFrom,
 } from "@lumisca/core";
-import { runtime } from "../core/runtime/runtime.ts";
+import { OS } from "../core/platform.ts";
 
 /** Largest file one read may return. Mirrors the server's ceiling (the two
  * are checked independently: the notebook is the one that would spend memory).
@@ -517,11 +517,11 @@ export async function runCall(
 
 /** How this computer names itself to the model and the UI. */
 export function describeHost(): ShareHostInfo {
-  const os = runtime.build.os;
+  const os = OS;
   const platform =
     os === "darwin" ? "macos" : os === "windows" ? "windows" : "linux";
   const name =
-    runtime.env.get("COMPUTERNAME") ?? runtime.env.get("HOSTNAME") ?? platform;
+    process.env["COMPUTERNAME"] ?? process.env["HOSTNAME"] ?? platform;
   // The shell a command actually reaches, named for the model: PowerShell 7
   // and `sh` are not interchangeable command languages.
   const shell = basename(getShell().file).replace(/\.exe$/i, "");

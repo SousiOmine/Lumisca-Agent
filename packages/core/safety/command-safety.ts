@@ -35,7 +35,7 @@ const SAFETY_SYSTEM_PROMPT =
   "project workspace. You judge whether a command the agent wants to run " +
   "is safe. Development activity is NORMAL and must NOT be blocked: " +
   "builds, tests, linting, package installation (npm install, pip install, " +
-  "deno add, ...), git operations, reading/editing files inside the " +
+  "bun add, ...), git operations, reading/editing files inside the " +
   "workspace, process inspection, downloading public packages or docs, " +
   "running servers/watchers/migrations, and data-processing code. " +
   "Block only what would: irreversibly destroy user data outside build " +

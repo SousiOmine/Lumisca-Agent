@@ -1,5 +1,6 @@
+import { createReadStream } from "node:fs";
+import * as fsp from "node:fs/promises";
 import { mergeRanges, stripTrailingCR } from "../../lines.ts";
-import { runtime } from "../../runtime/runtime.ts";
 import type { ResolvedPath, Sandbox } from "../../workspace/sandbox.ts";
 import type {
   BackendDirEntry,
@@ -12,7 +13,7 @@ import { MAX_TOOL_OUTPUT } from "../truncate.ts";
 
 /**
  * The host (this machine) implementation of {@link FileBackend}: a workspace
- * sandbox for path resolution plus the Deno filesystem for everything else.
+ * sandbox for path resolution plus the local filesystem for everything else.
  */
 export class HostFileBackend implements FileBackend {
   readonly roots: readonly string[];
@@ -28,32 +29,37 @@ export class HostFileBackend implements FileBackend {
   }
 
   async stat(path: string): Promise<BackendStat | undefined> {
-    const stat = await runtime.stat(path).catch(() => null);
+    const stat = await fsp.stat(path).catch(() => null);
     if (stat === null) return undefined;
-    return { isFile: stat.isFile, size: stat.size };
+    return { isFile: stat.isFile(), size: stat.size };
   }
 
   readText(path: string): Promise<string> {
-    return runtime.readTextFile(path);
+    return fsp.readFile(path, "utf8");
   }
 
   async readHead(
     path: string,
     maxBytes: number,
   ): Promise<{ bytes: Uint8Array; size: number }> {
-    const stat = await runtime.stat(path);
-    const file = await runtime.open(path, { read: true });
+    const info = await fsp.stat(path);
+    const file = await fsp.open(path, "r");
     try {
-      const buffer = new Uint8Array(Math.min(maxBytes, stat.size));
+      const buffer = new Uint8Array(Math.min(maxBytes, info.size));
       let read = 0;
       while (read < buffer.length) {
-        const n = await file.read(buffer.subarray(read));
-        if (n === null) break;
-        read += n;
+        const { bytesRead } = await file.read(
+          buffer,
+          read,
+          buffer.length - read,
+          read,
+        );
+        if (bytesRead === 0) break;
+        read += bytesRead;
       }
-      return { bytes: buffer.subarray(0, read), size: stat.size };
+      return { bytes: buffer.subarray(0, read), size: info.size };
     } finally {
-      file.close();
+      await file.close();
     }
   }
 
@@ -62,19 +68,23 @@ export class HostFileBackend implements FileBackend {
     offset: number,
     length: number,
   ): Promise<Uint8Array> {
-    const file = await runtime.open(path, { read: true });
+    const file = await fsp.open(path, "r");
     try {
-      await file.seek(offset, 0);
       const buffer = new Uint8Array(length);
       let read = 0;
       while (read < length) {
-        const n = await file.read(buffer.subarray(read));
-        if (n === null) break;
-        read += n;
+        const { bytesRead } = await file.read(
+          buffer,
+          read,
+          length - read,
+          offset + read,
+        );
+        if (bytesRead === 0) break;
+        read += bytesRead;
       }
       return buffer.subarray(0, read);
     } finally {
-      file.close();
+      await file.close();
     }
   }
 
@@ -83,25 +93,25 @@ export class HostFileBackend implements FileBackend {
     bytes: Uint8Array,
     options: { private?: boolean; append?: boolean } = {},
   ): Promise<void> {
-    await runtime.mkdir(parentOf(path), { recursive: true });
+    await fsp.mkdir(parentOf(path), { recursive: true });
     const append = options.append === true;
-    const file = await runtime.open(path, {
-      write: true,
-      create: true,
-      ...(append
-        ? { append: true }
-        : {
-            truncate: true,
-            ...(options.private === true ? { mode: 0o600 } : {}),
-          }),
-    });
+    const file = await fsp.open(
+      path,
+      append ? "a" : "w",
+      append || options.private !== true ? undefined : 0o600,
+    );
     try {
       let written = 0;
       while (written < bytes.length) {
-        written += await file.write(bytes.subarray(written));
+        const { bytesWritten } = await file.write(
+          bytes,
+          written,
+          bytes.length - written,
+        );
+        written += bytesWritten;
       }
     } finally {
-      file.close();
+      await file.close();
     }
   }
 
@@ -110,8 +120,8 @@ export class HostFileBackend implements FileBackend {
     text: string,
     options: { private?: boolean } = {},
   ): Promise<void> {
-    await runtime.mkdir(parentOf(path), { recursive: true });
-    await runtime.writeTextFile(
+    await fsp.mkdir(parentOf(path), { recursive: true });
+    await fsp.writeFile(
       path,
       text,
       options.private === true ? { mode: 0o600 } : {},
@@ -121,7 +131,7 @@ export class HostFileBackend implements FileBackend {
   async removeFile(path: string): Promise<void> {
     // Pruning is best effort: a missing file means another prune (or the
     // model) got there first, which is the outcome the caller wanted.
-    await runtime.remove(path).catch(() => {});
+    await fsp.rm(path).catch(() => {});
   }
 
   async readRanges(
@@ -170,11 +180,11 @@ export class HostFileBackend implements FileBackend {
 
   async listDir(path: string): Promise<BackendDirEntry[]> {
     const entries: BackendDirEntry[] = [];
-    for await (const entry of runtime.readDir(path)) {
+    for (const entry of await fsp.readdir(path, { withFileTypes: true })) {
       entries.push({
         name: entry.name,
-        isDirectory: entry.isDirectory,
-        isSymlink: entry.isSymlink,
+        isDirectory: entry.isDirectory(),
+        isSymlink: entry.isSymbolicLink(),
       });
     }
     return entries;
@@ -185,34 +195,26 @@ export class HostFileBackend implements FileBackend {
  * and a trailing `\r` (CRLF files) are stripped, so the model always sees
  * LF-style lines. Stops early when the consumer breaks. */
 async function* readLines(path: string): AsyncGenerator<[number, string]> {
-  const file = await runtime.open(path, { read: true });
   const decoder = new TextDecoder();
-  const buffer = new Uint8Array(64 * 1024);
   let lineNo = 1;
   let carry = "";
-  try {
-    while (true) {
-      const n = await file.read(buffer);
-      if (n === null) break;
-      carry += decoder.decode(buffer.subarray(0, n), { stream: true });
-      // A single line can exceed the output budget by far (minified
-      // files); keep only its tail so a line-ranged read never buffers
-      // the whole file in memory.
-      if (carry.length > MAX_TOOL_OUTPUT) carry = carry.slice(-MAX_TOOL_OUTPUT);
-      let start = 0;
-      for (let i = 0; i < carry.length; i++) {
-        if (carry[i] === "\n") {
-          yield [lineNo++, stripTrailingCR(carry.slice(start, i))];
-          start = i + 1;
-        }
+  for await (const chunk of createReadStream(path)) {
+    carry += decoder.decode(chunk, { stream: true });
+    // A single line can exceed the output budget by far (minified files);
+    // keep only its tail so a line-ranged read never buffers the whole file
+    // in memory.
+    if (carry.length > MAX_TOOL_OUTPUT) carry = carry.slice(-MAX_TOOL_OUTPUT);
+    let start = 0;
+    for (let i = 0; i < carry.length; i++) {
+      if (carry[i] === "\n") {
+        yield [lineNo++, stripTrailingCR(carry.slice(start, i))];
+        start = i + 1;
       }
-      carry = carry.slice(start);
     }
-    const tail = carry + decoder.decode();
-    if (tail.length > 0) yield [lineNo, stripTrailingCR(tail)];
-  } finally {
-    file.close();
+    carry = carry.slice(start);
   }
+  const tail = carry + decoder.decode();
+  if (tail.length > 0) yield [lineNo, stripTrailingCR(tail)];
 }
 
 /** Parent directory of an absolute path, without a `node:path` round trip

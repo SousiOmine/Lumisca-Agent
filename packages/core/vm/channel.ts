@@ -1,4 +1,4 @@
-import { type ChildProcess, runtime } from "../runtime/runtime.ts";
+import { spawnProcess } from "../process.ts";
 
 /**
  * An interactive `podman exec`: the program inside the machine keeps both
@@ -59,14 +59,13 @@ export async function openVmChannel(
   command: readonly string[],
   options: VmChannelOptions,
 ): Promise<VmChannel> {
-  let child: ChildProcess;
+  let child: Bun.Subprocess;
   try {
-    child = new runtime.Command(command[0]!, {
-      args: command.slice(1),
-      stdin: "piped",
-      stdout: "piped",
-      stderr: "piped",
-    }).spawn();
+    child = spawnProcess([command[0]!, ...command.slice(1)], {
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
   } catch (error) {
     throw new Error(`Could not start the program in the machine: ${error}`);
   }
@@ -172,8 +171,8 @@ export async function openVmChannel(
   const timer = setTimeout(stop, options.timeoutMs);
   options.signal?.addEventListener("abort", stop, { once: true });
 
-  void child.status.then((status) => {
-    exitCode = status.code;
+  void child.exited.then((code) => {
+    exitCode = code;
     clearTimeout(timer);
     if (killTimer !== undefined) clearTimeout(killTimer);
     options.signal?.removeEventListener("abort", stop);
@@ -184,14 +183,13 @@ export async function openVmChannel(
     setTimeout(endStream, 1_000);
   });
 
-  let writer: WritableStreamDefaultWriter<Uint8Array> | undefined;
   const encoder = new TextEncoder();
 
   return {
     async write(line: string): Promise<void> {
-      writer ??= child.stdin.getWriter();
       try {
-        await writer.write(encoder.encode(`${line}\n`));
+        await child.stdin.write(encoder.encode(`${line}\n`));
+        await child.stdin.flush();
       } catch {
         // The program is gone; the caller learns that from read() ending.
       }

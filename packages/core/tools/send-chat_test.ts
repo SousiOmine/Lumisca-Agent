@@ -1,5 +1,7 @@
 import { test } from "bun:test";
-import { join } from "node:path";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join, join as pathJoin } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { SessionAttachmentStore } from "../session/attachments.ts";
 import { type ChatMessage, MAX_ATTACHMENTS_PER_CALL } from "../shared/mod.ts";
@@ -21,17 +23,17 @@ async function fixture(
   at: (name: string) => string;
   cleanup: () => Promise<void>;
 }> {
-  const root = await Deno.makeTempDir({ prefix: "lumisca-send-chat-" });
-  const storeRoot = await Deno.makeTempDir({
-    prefix: "lumisca-send-chat-store-",
-  });
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-send-chat-"));
+  const storeRoot = await fsp.mkdtemp(
+    pathJoin(osTmpdir(), "lumisca-send-chat-store-"),
+  );
   const backend = new HostFileBackend(new Sandbox([root]));
   const store = new SessionAttachmentStore(storeRoot);
   for (const [path, data] of Object.entries(files)) {
     if (typeof data === "string") {
-      await Deno.writeTextFile(join(root, path), data);
+      await fsp.writeFile(join(root, path), data);
     } else {
-      await Deno.writeFile(join(root, path), data);
+      await fsp.writeFile(join(root, path), data);
     }
   }
   return {
@@ -41,8 +43,8 @@ async function fixture(
     storeRoot,
     at: (name) => join(root, name),
     cleanup: async () => {
-      await Deno.remove(root, { recursive: true });
-      await Deno.remove(storeRoot, { recursive: true });
+      await fsp.rm(root, { recursive: true });
+      await fsp.rm(storeRoot, { recursive: true });
     },
   };
 }

@@ -1,5 +1,4 @@
 import { test } from "bun:test";
-import "../packages/core/runtime/runtime.ts";
 import { assertEquals, assertThrows } from "@std/assert";
 import {
   parseReleaseAssets,

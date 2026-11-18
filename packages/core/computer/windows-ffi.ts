@@ -1,12 +1,10 @@
 /**
- * The FFI surface the Windows computer host needs, on `bun:ffi`.
+ * The FFI surface the Windows computer host needs, on \`bun:ffi\`.
  *
- * The host was written against `Deno.dlopen`: symbol tables of
- * `{ parameters, result }`, pointer values, `UnsafeCallback` and
- * `UnsafePointerView`. This module keeps that shape — and Deno's type
- * mapping, so the Win32 declarations stay readable — while the calls go to
- * Bun's FFI, whose symbol tables are `{ args, returns }` with `FFIType`
- * numbers and whose pointers are plain numbers.
+ * The host declares Win32 functions as symbol tables: a name, the argument
+ * types and the return type. Bun's own tables use \`{ args, returns }\` with
+ * \`FFIType\` numbers and plain-number pointers; this module maps the readable
+ * type names once, so the declarations in windows.ts stay legible.
  *
  * Nothing here runs off Windows: the module may be imported anywhere, and a
  * library opens only when the host is created.
@@ -23,7 +21,7 @@ import {
   toArrayBuffer,
 } from "bun:ffi";
 
-/** Deno's native type names, mapped to Bun's FFI types. */
+/** Readable native type names, mapped to Bun's FFI types. */
 const FFI_TYPES = {
   void: FFIType.void,
   bool: FFIType.bool,
@@ -46,8 +44,7 @@ const FFI_TYPES = {
 
 export type NativeType = keyof typeof FFI_TYPES;
 
-/** Bun's FFI passes pointers as numbers (`null` for a null pointer, which
- * Deno spells the same way). */
+/** Bun's FFI passes pointers as numbers (\`null\` for a null pointer). */
 export type PointerValue = number | null;
 
 type ToNative<T extends NativeType> = T extends "pointer"
@@ -59,56 +56,56 @@ type ToNative<T extends NativeType> = T extends "pointer"
       : T extends "u64" | "i64" | "usize" | "isize"
         ? bigint
         : T extends "void"
-          ? // `undefined` rather than `void`: a function returning undefined
+          ? // \`undefined\` rather than \`void\`: a function returning undefined
             // is assignable where a void-returning one is expected, and the
             // type is not in a return position here.
             undefined
           : number;
 
-export interface ForeignFunction {
-  readonly parameters: readonly NativeType[];
-  readonly result: NativeType;
+export interface FfiFunction {
+  readonly args: readonly NativeType[];
+  readonly returns: NativeType;
 }
 
-export type ForeignLibraryInterface = Record<string, ForeignFunction>;
+export type FfiLibrary = Record<string, FfiFunction>;
 
 type NativeArgs<P extends readonly NativeType[]> = {
   [K in keyof P]: P[K] extends NativeType ? ToNative<P[K]> : P[K];
 };
 
-type StaticForeignSymbol<F extends ForeignFunction> = (
-  ...args: NativeArgs<F["parameters"]>
-) => ToNative<F["result"]>;
+type StaticForeignSymbol<F extends FfiFunction> = (
+  ...args: NativeArgs<F["args"]>
+) => ToNative<F["returns"]>;
 
-export interface DynamicLibrary<S extends ForeignLibraryInterface> {
+export interface NativeLibrary<S extends FfiLibrary> {
   readonly symbols: { readonly [K in keyof S]: StaticForeignSymbol<S[K]> };
   close(): void;
 }
 
-/** `Deno.dlopen`: open a library and adapt each Deno-style symbol entry. */
-export function dlopen<S extends ForeignLibraryInterface>(
+/** Open a library and adapt each readable symbol entry to Bun's table. */
+export function dlopen<S extends FfiLibrary>(
   path: string,
   symbols: S,
-): DynamicLibrary<S> {
+): NativeLibrary<S> {
   const table: Record<string, { args: number[]; returns: number }> = {};
   for (const [name, symbol] of Object.entries(symbols)) {
     table[name] = {
-      args: symbol.parameters.map((type) => FFI_TYPES[type]),
-      returns: FFI_TYPES[symbol.result],
+      args: symbol.args.map((type) => FFI_TYPES[type]),
+      returns: FFI_TYPES[symbol.returns],
     };
   }
-  return bunDlopen(path, table) as unknown as DynamicLibrary<S>;
+  return bunDlopen(path, table) as unknown as NativeLibrary<S>;
 }
 
-/** `Deno.UnsafePointer`. */
-export const UnsafePointer = {
-  create: (value: bigint | number): PointerValue => Number(value),
-  value: (pointer: NonNullable<PointerValue>): bigint => BigInt(pointer),
+/** A pointer as a value the host can compare and print. */
+export const Pointer = {
+  from: (value: bigint | number): PointerValue => Number(value),
+  toBigInt: (pointer: NonNullable<PointerValue>): bigint => BigInt(pointer),
   equals: (a: PointerValue, b: PointerValue): boolean => a === b,
 };
 
-/** `Deno.UnsafePointerView`: read C memory through a pointer. */
-export class UnsafePointerView {
+/** Read C memory through a pointer. */
+export class PointerView {
   constructor(private readonly pointer: NonNullable<PointerValue>) {}
 
   #view(offset: number, size: number): DataView {
@@ -128,19 +125,19 @@ export class UnsafePointerView {
   }
 }
 
-/** `Deno.UnsafeCallback`: a JS function the native side can call. The
- * callback must be closed by its owner (`close()`), which the host does after
- * the enumeration it was passed to returns. */
-export class UnsafeCallback {
+/** A JS function the native side can call. The callback must be closed by
+ * its owner (\`close()\`), which the host does after the enumeration it was
+ * passed to returns. */
+export class NativeCallback {
   readonly callback: JSCallback;
 
   constructor(
-    definition: ForeignFunction,
+    definition: FfiFunction,
     fn: (...args: PointerValue[]) => number,
   ) {
     this.callback = new JSCallback(fn as (...args: never[]) => number, {
-      args: definition.parameters.map((type) => FFI_TYPES[type]),
-      returns: FFI_TYPES[definition.result],
+      args: definition.args.map((type) => FFI_TYPES[type]),
+      returns: FFI_TYPES[definition.returns],
     });
   }
 

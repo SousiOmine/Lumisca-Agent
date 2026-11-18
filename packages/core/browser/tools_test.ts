@@ -1,4 +1,7 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join as pathJoin } from "node:path";
 import { assert, assertEquals, assertMatch } from "@std/assert";
 import { base64ToBytes, bytesToBase64 } from "../base64.ts";
 import type { Workspace } from "../domain/workspace.ts";
@@ -477,7 +480,9 @@ test("browser_close is forwarded and backend.close is called", async () => {
 });
 
 test("browser tools are never preloaded — they live in the registry", async () => {
-  const root = await Deno.makeTempDir({ prefix: "lumisca-browser-tools-" });
+  const root = await fsp.mkdtemp(
+    pathJoin(osTmpdir(), "lumisca-browser-tools-"),
+  );
   try {
     const workspace: Workspace = {
       id: "w1",

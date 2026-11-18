@@ -1,12 +1,15 @@
 import { test } from "bun:test";
+import * as fsSync from "node:fs";
 import { realpathSync } from "node:fs";
-import { basename, join } from "node:path";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { basename, join, join as pathJoin } from "node:path";
 import { assertEquals } from "@std/assert";
 import { Sandbox } from "./mod.ts";
 import { removeDirRetry } from "./test-utils.ts";
 
 function tempDir(prefix: string): Promise<string> {
-  return Deno.makeTempDir({ prefix });
+  return fsp.mkdtemp(pathJoin(osTmpdir(), prefix));
 }
 
 function real(p: string): string {
@@ -17,8 +20,8 @@ test("sandbox resolves absolute paths inside the workspace", async () => {
   const root = await tempDir("lumisca-sb-");
   const sandbox = new Sandbox([root]);
   const file = join(root, "sub", "file.txt");
-  await Deno.mkdir(join(root, "sub"), { recursive: true });
-  await Deno.writeTextFile(file, "x");
+  await fsp.mkdir(join(root, "sub"), { recursive: true });
+  await fsp.writeFile(file, "x");
 
   const r1 = await sandbox.resolve(file);
   assertEquals(r1.ok, true);
@@ -27,15 +30,15 @@ test("sandbox resolves absolute paths inside the workspace", async () => {
   const r3 = await sandbox.resolve(join(root, "sub"));
   assertEquals(r3.ok, true);
 
-  await Deno.remove(root, { recursive: true });
+  await fsp.rm(root, { recursive: true });
 });
 
 test("sandbox resolves workspace-folder-relative paths", async () => {
   const root = await tempDir("lumisca-sb-");
   const sandbox = new Sandbox([root]);
   const file = join(root, "sub", "file.txt");
-  await Deno.mkdir(join(root, "sub"), { recursive: true });
-  await Deno.writeTextFile(file, "x");
+  await fsp.mkdir(join(root, "sub"), { recursive: true });
+  await fsp.writeFile(file, "x");
 
   // The first segment must name the workspace folder.
   const r1 = await sandbox.resolve(`${basename(root)}/sub/file.txt`);
@@ -47,7 +50,7 @@ test("sandbox resolves workspace-folder-relative paths", async () => {
   assertEquals(r2.ok, true);
   if (r2.ok) assertEquals(r2.path, real(root));
 
-  await Deno.remove(root, { recursive: true });
+  await fsp.rm(root, { recursive: true });
 });
 
 test("sandbox resolves each folder of a multi-folder workspace by name", async () => {
@@ -56,10 +59,10 @@ test("sandbox resolves each folder of a multi-folder workspace by name", async (
   const nitro = await tempDir("lumisca-nitro-");
   try {
     const sandbox = new Sandbox([aaa, star, nitro]);
-    await Deno.writeTextFile(join(aaa, "README.md"), "aaa");
-    await Deno.mkdir(join(star, "Assets"), { recursive: true });
-    await Deno.writeTextFile(join(star, "Assets", "icon.png"), "png");
-    await Deno.writeTextFile(join(nitro, "notes.txt"), "notes");
+    await fsp.writeFile(join(aaa, "README.md"), "aaa");
+    await fsp.mkdir(join(star, "Assets"), { recursive: true });
+    await fsp.writeFile(join(star, "Assets", "icon.png"), "png");
+    await fsp.writeFile(join(nitro, "notes.txt"), "notes");
 
     const r1 = await sandbox.resolve(`${basename(aaa)}/README.md`);
     assertEquals(r1.ok, true);
@@ -73,9 +76,9 @@ test("sandbox resolves each folder of a multi-folder workspace by name", async (
     const r3 = await sandbox.resolve(join(nitro, "notes.txt"));
     assertEquals(r3.ok, true);
   } finally {
-    await Deno.remove(aaa, { recursive: true });
-    await Deno.remove(star, { recursive: true });
-    await Deno.remove(nitro, { recursive: true });
+    await fsp.rm(aaa, { recursive: true });
+    await fsp.rm(star, { recursive: true });
+    await fsp.rm(nitro, { recursive: true });
   }
 });
 
@@ -84,13 +87,16 @@ test("sandbox matches folder names case-insensitively on Windows", async () => {
   try {
     const sandbox = new Sandbox([root]);
     const r = await sandbox.resolve(`${basename(root).toUpperCase()}/file.txt`);
-    if (Deno.build.os === "windows") {
+    if (
+      (process.platform === "win32" ? "windows" : process.platform) ===
+      "windows"
+    ) {
       assertEquals(r.ok, true);
     } else {
       assertEquals(r.ok, false);
     }
   } finally {
-    await Deno.remove(root, { recursive: true });
+    await fsp.rm(root, { recursive: true });
   }
 });
 
@@ -106,8 +112,8 @@ test("sandbox roots are sorted by path regardless of registration order", async 
     const sandbox = new Sandbox([z, a]);
     assertEquals(sandbox.roots, expected);
   } finally {
-    await Deno.remove(a, { recursive: true });
-    await Deno.remove(z, { recursive: true });
+    await fsp.rm(a, { recursive: true });
+    await fsp.rm(z, { recursive: true });
   }
 });
 
@@ -125,8 +131,8 @@ test("sandbox rejects paths outside the workspace", async () => {
   const r3 = await sandbox.resolve(join(root, "..", "..", ".."));
   assertEquals(r3.ok, false);
 
-  await Deno.remove(root, { recursive: true });
-  await Deno.remove(outside, { recursive: true });
+  await fsp.rm(root, { recursive: true });
+  await fsp.rm(outside, { recursive: true });
 });
 
 test("sandbox rejects paths without a workspace folder name", async () => {
@@ -137,15 +143,15 @@ test("sandbox rejects paths without a workspace folder name", async () => {
   assertEquals(r.ok, false);
   if (!r.ok) assertEquals(r.reason.includes("Unknown workspace folder"), true);
 
-  await Deno.remove(root, { recursive: true });
+  await fsp.rm(root, { recursive: true });
 });
 
 test("sandbox rejects an ambiguous folder name", async () => {
-  const parent = await Deno.makeTempDir({ prefix: "lumisca-amb-" });
+  const parent = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-amb-"));
   const one = join(parent, "same");
   const two = join(parent, "other", "same");
-  await Deno.mkdir(one);
-  await Deno.mkdir(join(parent, "other"), { recursive: true });
+  await fsp.mkdir(one);
+  await fsp.mkdir(join(parent, "other"), { recursive: true });
   try {
     const sandbox = new Sandbox([one, two]);
     const r = await sandbox.resolve("same/file.txt");
@@ -165,7 +171,7 @@ test("sandbox allows writing to not-yet-existing files inside the workspace", as
   assertEquals(r.ok, true);
   if (r.ok) assertEquals(r.path, join(real(root), "new", "file.txt"));
 
-  await Deno.remove(root, { recursive: true });
+  await fsp.rm(root, { recursive: true });
 });
 
 test("sandbox resolves deep new paths in full (no truncation)", async () => {
@@ -187,18 +193,18 @@ test("sandbox resolves deep new paths in full (no truncation)", async () => {
 
   // A write through that path must land on the full target (after the
   // parents are created, mirroring what write does).
-  await Deno.mkdir(join(real(root), "a", "b", "c"), { recursive: true });
-  await Deno.writeTextFile(r.ok ? r.path : "", "content");
+  await fsp.mkdir(join(real(root), "a", "b", "c"), { recursive: true });
+  await fsp.writeFile(r.ok ? r.path : "", "content");
   assertEquals(
-    await Deno.readTextFile(join(real(root), "a", "b", "c", "file.txt")),
+    await fsp.readFile(join(real(root), "a", "b", "c", "file.txt"), "utf8"),
     "content",
   );
   // The intermediate directories must stay directories (no stray file).
-  const aStat = Deno.statSync(join(real(root), "a"));
-  assertEquals(aStat.isDirectory, true);
-  assertEquals(aStat.isFile, false);
+  const aStat = fsSync.statSync(join(real(root), "a"));
+  assertEquals(aStat.isDirectory(), true);
+  assertEquals(aStat.isFile(), false);
 
-  await Deno.remove(root, { recursive: true });
+  await fsp.rm(root, { recursive: true });
 });
 
 test("sandbox resolves new files via folder-relative paths", async () => {
@@ -211,7 +217,7 @@ test("sandbox resolves new files via folder-relative paths", async () => {
     assertEquals(r.path, join(real(root), "new", "deep", "file.txt"));
   }
 
-  await Deno.remove(root, { recursive: true });
+  await fsp.rm(root, { recursive: true });
 });
 
 test("sandbox rejects workspace folders that do not exist", async () => {
@@ -225,7 +231,7 @@ test("sandbox: an extra root is reachable by absolute path, not by name", async 
   // a repository could have.
   const sharedParent = await tempDir("lumisca-shared-");
   const shared = join(sharedParent, "skills");
-  await Deno.mkdir(join(shared, "release-notes"), { recursive: true });
+  await fsp.mkdir(join(shared, "release-notes"), { recursive: true });
   try {
     const sandbox = new Sandbox([root], { extraRoots: [shared] });
     // `roots` still means the workspace folders only: the first one is where
@@ -251,8 +257,8 @@ test("sandbox: an extra root is reachable by absolute path, not by name", async 
     );
     assertEquals(outside.ok, false);
   } finally {
-    await Deno.remove(root, { recursive: true });
-    await Deno.remove(sharedParent, { recursive: true });
+    await fsp.rm(root, { recursive: true });
+    await fsp.rm(sharedParent, { recursive: true });
   }
 });
 
@@ -262,7 +268,7 @@ test("sandbox: a workspace folder named like the extra root stays unambiguous", 
   // workspace folder (the extra root never takes part in name matching).
   const parent = await tempDir("lumisca-sb-");
   const workspaceSkills = join(parent, "skills");
-  await Deno.mkdir(join(workspaceSkills, "mine"), { recursive: true });
+  await fsp.mkdir(join(workspaceSkills, "mine"), { recursive: true });
   const sharedParent = await tempDir("lumisca-shared-");
   const shared = join(sharedParent, "skills");
   try {
@@ -273,7 +279,7 @@ test("sandbox: a workspace folder named like the extra root stays unambiguous", 
       assertEquals(rel.path, join(real(workspaceSkills), "mine", "SKILL.md"));
     }
   } finally {
-    await Deno.remove(parent, { recursive: true });
-    await Deno.remove(sharedParent, { recursive: true });
+    await fsp.rm(parent, { recursive: true });
+    await fsp.rm(sharedParent, { recursive: true });
   }
 });

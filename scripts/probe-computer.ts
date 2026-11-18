@@ -20,6 +20,8 @@
  *   bun run probe:computer --key "ctrl+shift+s"
  */
 
+import * as fsSync from "node:fs";
+import * as fsp from "node:fs/promises";
 import { createComputerHost } from "../packages/core/computer/host.ts";
 import {
   DEFAULT_MAX_DIMENSION,
@@ -27,7 +29,7 @@ import {
 } from "../packages/core/computer/image.ts";
 import type { RestoreTokenStore } from "../packages/core/computer/portal/types.ts";
 import type { ComputerAction } from "../packages/core/computer/types.ts";
-import { exit, runtime } from "../packages/core/runtime/runtime.ts";
+import { exit } from "../packages/core/process.ts";
 
 const IMAGE_FILE = "probe-computer.png";
 /** The screen-sharing permission (the portal's restore token) is kept here
@@ -39,7 +41,7 @@ const TOKEN_FILE = ".lumisca-cache/probe-session-token";
 const tokenStore: RestoreTokenStore = {
   load: () => {
     try {
-      const token = runtime.readTextFileSync(TOKEN_FILE).trim();
+      const token = fsSync.readFileSync(TOKEN_FILE, "utf8").trim();
       return token.length > 0 ? token : undefined;
     } catch {
       return undefined;
@@ -47,8 +49,8 @@ const tokenStore: RestoreTokenStore = {
   },
   save: (token) => {
     try {
-      runtime.mkdirSync(".lumisca-cache", { recursive: true });
-      runtime.writeTextFileSync(TOKEN_FILE, token);
+      fsSync.mkdirSync(".lumisca-cache", { recursive: true });
+      fsSync.writeFileSync(TOKEN_FILE, token);
     } catch {
       // A probe that cannot remember the permission still works; it just
       // asks again next time.
@@ -85,7 +87,7 @@ function point(value: string, flag: string): { x: number; y: number } {
   return { x, y };
 }
 
-const args = runtime.args;
+const args = process.argv.slice(2);
 let requested: { kind: string; value: string } | undefined;
 for (let i = 0; i < args.length; i++) {
   const flag = args[i]!;
@@ -129,7 +131,7 @@ try {
   const started = Date.now();
   const raw = await host.host.capture(primary.bounds);
   const encoded = encodeCapture(raw, DEFAULT_MAX_DIMENSION);
-  await runtime.writeFile(IMAGE_FILE, encoded.png);
+  await fsp.writeFile(IMAGE_FILE, encoded.png);
   console.log(
     `captured ${raw.screen.width}×${raw.screen.height} screen units as ` +
       `${raw.width}×${raw.height} pixels in ${Date.now() - started}ms`,

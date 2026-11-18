@@ -1,4 +1,5 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
 import { join } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { MAX_VISUAL_SVG_BYTES } from "../shared/mod.ts";
@@ -26,7 +27,7 @@ test("put names the asset and resolve finds it", async () => {
     const found = await store.resolve("s1", name);
     assertEquals(found?.mimeType, "image/png");
     assertEquals(
-      (await Deno.readFile(found!.path)).byteLength,
+      (await fsp.readFile(found!.path)).byteLength,
       MINI_PNG.byteLength,
     );
   });
@@ -81,7 +82,7 @@ test("resolve refuses anything that is not an asset name", async () => {
     const name = await store.put("s1", MINI_PNG, ".png");
     // A file the store did not name is not reachable through it, even when
     // it sits in the session's own directory.
-    await Deno.writeTextFile(join(root, "s1", "notes.txt"), "secret");
+    await fsp.writeFile(join(root, "s1", "notes.txt"), "secret");
     for (const requested of [
       "../notes.txt",
       "s1/../notes.txt",
@@ -123,7 +124,7 @@ test("nothing is created until a session publishes", async () => {
     await store.deleteSession("s1");
     let exists = true;
     try {
-      await Deno.stat(join(root, "s1"));
+      await fsp.stat(join(root, "s1"));
     } catch {
       exists = false;
     }

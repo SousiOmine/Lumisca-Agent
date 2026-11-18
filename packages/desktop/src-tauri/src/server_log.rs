@@ -77,7 +77,7 @@ impl ServerLog {
 
     /// The recent output as plain text (oldest first), for the UI's
     /// copy-paste. Identical to the on-disk log: each line carries its
-    /// timestamp and stream, so stderr lines (where Deno prints uncaught
+    /// timestamp and stream, so stderr lines (where the server prints uncaught
     /// errors) and the shell's own notes stand out.
     pub(crate) fn tail_text(&self) -> String {
         let lines = self.lines.lock_recover();

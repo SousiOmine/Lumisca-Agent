@@ -27,7 +27,7 @@ import {
   rasterExtensionOfMimeType,
 } from "@lumisca/core/shared";
 import { Hono } from "hono";
-import { upgradeWebSocket } from "hono/deno";
+import { upgradeWebSocket } from "../websocket.ts";
 import { conversationRoutes } from "./conversation.ts";
 import {
   type PromptBody,

@@ -28,7 +28,7 @@ function bareHostname(host: string): string {
     : trimmed;
 }
 
-/** True when the hostname denotes this machine through loopback, in either
+/** True when the hostname buntes this machine through loopback, in either
  * spelling (`::1` / `[::1]`, `localhost`, `127.0.0.1`). */
 export function isLoopbackHost(host: string): boolean {
   return LOOPBACK_HOSTS.has(bareHostname(host));

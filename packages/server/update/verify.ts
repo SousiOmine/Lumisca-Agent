@@ -11,13 +11,13 @@
  * signature made with another key can never be mistaken for a valid one.
  *
  * The digest is the only reason this module needs a crypto dependency:
- * Deno's WebCrypto has Ed25519 but no BLAKE2b (measured — `@noble/hashes`
+ * Bun's WebCrypto has Ed25519 but no BLAKE2b (measured — `@noble/hashes`
  * is used for the digest alone, and the signature check itself is
  * WebCrypto).
  */
 
+import * as fsp from "node:fs/promises";
 import { blake2b } from "@noble/hashes/blake2.js";
-import { runtime } from "../../core/runtime/runtime.ts";
 
 /**
  * Public key of the release signing key, in the base64 form
@@ -163,16 +163,16 @@ export async function hashFileBlake2b512(
   path: string,
 ): Promise<Uint8Array<ArrayBuffer>> {
   const hasher = blake2b.create({ dkLen: 64 });
-  const file = await runtime.open(path, { read: true });
+  const file = await fsp.open(path, "r");
   try {
     const buffer = new Uint8Array(HASH_CHUNK_BYTES);
     for (;;) {
-      const read = await file.read(buffer);
-      if (read === null) break;
-      hasher.update(buffer.subarray(0, read));
+      const { bytesRead } = await file.read(buffer, 0, buffer.length, null);
+      if (bytesRead === 0) break;
+      hasher.update(buffer.subarray(0, bytesRead));
     }
   } finally {
-    file.close();
+    await file.close();
   }
   // noble's digest carries the ArrayBufferLike flavor; WebCrypto's
   // BufferSource arguments need the plain one.

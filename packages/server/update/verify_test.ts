@@ -1,4 +1,7 @@
 import { test } from "bun:test";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join as pathJoin } from "node:path";
 import { removeDirRetry } from "@lumisca/core/test-utils";
 import { blake2b } from "@noble/hashes/blake2.js";
 import { assertEquals, assertRejects } from "@std/assert";
@@ -13,9 +16,9 @@ import {
 } from "./verify.ts";
 
 async function tempFile(content: Uint8Array | string): Promise<string> {
-  const dir = await Deno.makeTempDir({ prefix: "lumisca-verify-" });
+  const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-verify-"));
   const path = `${dir}/package.bin`;
-  await Deno.writeFile(
+  await fsp.writeFile(
     path,
     typeof content === "string" ? new TextEncoder().encode(content) : content,
   );
@@ -26,8 +29,9 @@ test("the compiled-in release key mirrors tauri.conf.json", async () => {
   // A rotated desktop key must not leave the server updater verifying
   // against the old one: both files carry the same minisign public key.
   const config = JSON.parse(
-    await Deno.readTextFile(
+    await fsp.readFile(
       new URL("../../desktop/src-tauri/tauri.conf.json", import.meta.url),
+      "utf8",
     ),
   ) as { plugins?: { updater?: { pubkey?: string } } };
   const desktopKey = config.plugins?.updater?.pubkey;
@@ -44,7 +48,7 @@ test("a signature over the archive digest verifies", async () => {
     const signature = await keys.sign(file);
     await verifyFileSignature({ file, signature, publicKey: keys.publicKey });
     // The same signature must not verify a different payload.
-    await Deno.writeFile(file, new TextEncoder().encode("hello lumisca!"));
+    await fsp.writeFile(file, new TextEncoder().encode("hello lumisca!"));
     await assertRejects(
       () => verifyFileSignature({ file, signature, publicKey: keys.publicKey }),
       SignatureError,
@@ -81,9 +85,9 @@ test("a tampered archive is rejected", async () => {
   try {
     const signature = await keys.sign(file);
     // A single flipped byte must fail: the digest no longer matches.
-    const bytes = await Deno.readFile(file);
+    const bytes = await fsp.readFile(file);
     bytes[0] = bytes[0]! ^ 0x01;
-    await Deno.writeFile(file, bytes);
+    await fsp.writeFile(file, bytes);
     await assertRejects(
       () => verifyFileSignature({ file, signature, publicKey: keys.publicKey }),
       SignatureError,
@@ -219,7 +223,7 @@ test("a recorded tauri signature verifies", async () => {
       signature: RECORDED.signature,
       publicKey: RECORDED.publicKey,
     });
-    await Deno.writeFile(file, new TextEncoder().encode("tampered payload"));
+    await fsp.writeFile(file, new TextEncoder().encode("tampered payload"));
     await assertRejects(
       () =>
         verifyFileSignature({

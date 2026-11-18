@@ -1,5 +1,8 @@
 import { test } from "bun:test";
-import { basename, join } from "node:path";
+import * as fsSync from "node:fs";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { basename, join, join as pathJoin } from "node:path";
 import { assert, assertEquals } from "@std/assert";
 import { removeDirRetry } from "../test-utils.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
@@ -33,7 +36,7 @@ interface Workspace {
 }
 
 function workspace(): Workspace {
-  const root = Deno.makeTempDirSync({ prefix: "lumisca-spill-" });
+  const root = fsSync.mkdtempSync(pathJoin(osTmpdir(), "lumisca-spill-"));
   const files = new HostFileBackend(new Sandbox([root]));
   const dir = join(root, ".lumisca-tool-output");
   return { spiller: new OutputSpiller(files, dir), dir, root, files };
@@ -64,7 +67,11 @@ test("older spills are dropped once the bound is reached", async () => {
       assert(path !== undefined, `spill ${i} was not written`);
       names.push(basename(path));
     }
-    const kept = new Set(Deno.readDirSync(dir).map((entry) => entry.name));
+    const kept = new Set(
+      fsSync
+        .readdirSync(dir, { withFileTypes: true })
+        .map((entry) => entry.name),
+    );
     assertEquals(kept.size, MAX_SPILL_FILES);
     // The newest survive and the oldest are gone: a spill is only useful
     // while it is the most recent output.
@@ -91,7 +98,10 @@ test("clear deletes every spill this instance wrote", async () => {
     assert(theirPath !== undefined);
 
     await mine.spiller.clear();
-    assertEquals([...Deno.readDirSync(mine.dir)].length, 0);
+    assertEquals(
+      [...fsSync.readdirSync(mine.dir, { withFileTypes: true })].length,
+      0,
+    );
     assertEquals(await theirs.files.readText(theirPath), "theirs\n");
   } finally {
     await removeDirRetry(mine.root);
@@ -112,7 +122,7 @@ test("an existing file at the target name is not overwritten", async () => {
     // a backslash, and the name is all that is wanted.
     const tag = basename(first).split("-")[0]!;
     const next = join(dir, `${tag}-2-stdout.txt`);
-    await Deno.writeTextFile(next, "someone else\n");
+    await fsp.writeFile(next, "someone else\n");
     assertEquals(await spiller.save("stdout", "second\n"), undefined);
     assertEquals(await files.readText(next), "someone else\n");
   } finally {
@@ -121,10 +131,10 @@ test("an existing file at the target name is not overwritten", async () => {
 });
 
 test("an unwritable spill directory is undefined, not an exception", async () => {
-  const root = Deno.makeTempDirSync({ prefix: "lumisca-spill-" });
+  const root = fsSync.mkdtempSync(pathJoin(osTmpdir(), "lumisca-spill-"));
   try {
     const blocked = join(root, "blocked.txt");
-    await Deno.writeTextFile(blocked, "x");
+    await fsp.writeFile(blocked, "x");
     const files = new HostFileBackend(new Sandbox([root]));
     const spiller = new OutputSpiller(files, join(blocked, "spill"));
     // The tool's result must survive a failed spill, so the failure is a

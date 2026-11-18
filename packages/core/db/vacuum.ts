@@ -22,11 +22,11 @@
  */
 
 import { Database } from "bun:sqlite";
+import * as fsp from "node:fs/promises";
 import { rename, rm, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";
-import { runtime } from "../runtime/runtime.ts";
 import { closeDatabase } from "./close.ts";
 
 const log = createLogger("vacuum");
@@ -65,7 +65,7 @@ export async function vacuumOnStartup(dbPath: string): Promise<void> {
   const marker = vacuumMarkerPath(dbPath);
   let due: number;
   try {
-    due = Number((await runtime.readTextFile(marker)).trim());
+    due = Number((await fsp.readFile(marker, "utf8")).trim());
   } catch {
     // No marker: nothing was requested (the ordinary case).
     return;

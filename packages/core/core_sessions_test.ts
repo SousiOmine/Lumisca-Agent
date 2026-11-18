@@ -1,6 +1,9 @@
 import { Database } from "bun:sqlite";
 import { test } from "bun:test";
-import { join } from "node:path";
+import * as fsSync from "node:fs";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join, join as pathJoin } from "node:path";
 import {
   fauxAssistantMessage,
   fauxProvider,
@@ -22,7 +25,6 @@ import type {
 } from "./mod.ts";
 import { LumiscaCore, LumiscaDb, VISUALS_DIR_NAME } from "./mod.ts";
 import { LANGUAGE_KEY, TOOL_SEARCH, TOOL_SKILL } from "./shared/mod.ts";
-
 import {
   MINI_PNG,
   makeRealTempDir,
@@ -124,7 +126,7 @@ async function openFileBackedCore(
   const faux = fauxProvider();
   core.models.models.setProvider(faux.provider);
   const workspaceDir = join(dir, "repo");
-  await Deno.mkdir(workspaceDir, { recursive: true });
+  await fsp.mkdir(workspaceDir, { recursive: true });
   const ws = await core.createWorkspace("ws", [workspaceDir]);
   const session = await core.createSession({
     workspaceId: ws.id,
@@ -637,7 +639,7 @@ test("rewind with an unknown timestamp throws not_found", async () => {
 
 test("credentials are guarded on every settings surface", async () => {
   // File-backed settings so "nothing was stored" can be verified at rest.
-  const dir = await Deno.makeTempDir({ prefix: "lumisca-settings-" });
+  const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-settings-"));
   const core = LumiscaCore.open(
     join(dir, "test.db"),
     join(dir, "settings.jsonc"),
@@ -659,7 +661,7 @@ test("credentials are guarded on every settings surface", async () => {
 
     // The credential survives (the refused operations were no-ops).
     const stored = JSON.parse(
-      Deno.readTextFileSync(join(dir, "settings.jsonc")),
+      fsSync.readFileSync(join(dir, "settings.jsonc"), "utf8"),
     ) as Record<string, unknown>;
     assertEquals(stored["api_key:anthropic"], {
       key: "sk-test",
@@ -672,7 +674,7 @@ test("credentials are guarded on every settings surface", async () => {
 });
 
 test("database migration stamps user_version and is idempotent", async () => {
-  const dir = await Deno.makeTempDir({ prefix: "lumisca-migrate-" });
+  const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-migrate-"));
   const path = join(dir, "test.db");
 
   const db1 = LumiscaDb.open(path);
@@ -696,7 +698,7 @@ test("database migration stamps user_version and is idempotent", async () => {
 });
 
 test("migration drops the legacy settings table", async () => {
-  const dir = await Deno.makeTempDir({ prefix: "lumisca-migrate-" });
+  const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-migrate-"));
   const path = join(dir, "legacy.db");
 
   // A database created before settings moved to the settings file still
@@ -1303,13 +1305,13 @@ test("a file-backed core keeps the visuals beside its database", async () => {
   const { core } = await openFileBackedCore(dir);
   try {
     const name = "9f3c2a1b4d5e.png";
-    await Deno.mkdir(visualDir(dir, "s1"), { recursive: true });
-    await Deno.writeFile(join(visualDir(dir, "s1"), name), MINI_PNG);
+    await fsp.mkdir(visualDir(dir, "s1"), { recursive: true });
+    await fsp.writeFile(join(visualDir(dir, "s1"), name), MINI_PNG);
 
     const found = await core.resolveSessionVisual("s1", name);
     assertEquals(found?.mimeType, "image/png");
     assertEquals(
-      (await Deno.readFile(found!.path)).byteLength,
+      (await fsp.readFile(found!.path)).byteLength,
       MINI_PNG.byteLength,
     );
     // A database and its assets travel together: the root is the directory
@@ -1332,8 +1334,8 @@ test("deleting a session drops its visuals", async () => {
   const dir = await makeRealTempDir("lumisca-visuals-core-");
   const { core, sessionId } = await openFileBackedCore(dir);
   try {
-    await Deno.mkdir(visualDir(dir, sessionId), { recursive: true });
-    await Deno.writeFile(
+    await fsp.mkdir(visualDir(dir, sessionId), { recursive: true });
+    await fsp.writeFile(
       join(visualDir(dir, sessionId), "9f3c2a1b4d5e.png"),
       MINI_PNG,
     );

@@ -1,4 +1,8 @@
 import { test } from "bun:test";
+import * as fsSync from "node:fs";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join as pathJoin } from "node:path";
 import { withTempDir } from "@lumisca/core/test-utils";
 import { assertEquals, assertRejects } from "@std/assert";
 import type { ReleaseManifest } from "./release.ts";
@@ -47,9 +51,9 @@ async function packageFixture(
     { name: "lumisca-server-linux-x64/assets.json", content: "{}" },
   ]);
   const keys = await createSigningKeys();
-  const path = await Deno.makeTempFile({ prefix: "lumisca-stage-" });
+  const path = pathJoin(osTmpdir(), `lumisca-stage-${crypto.randomUUID()}`);
   try {
-    await Deno.writeFile(path, archive);
+    await fsp.writeFile(path, archive);
     const signature = await keys.sign(path);
     return {
       manifest: {
@@ -64,13 +68,17 @@ async function packageFixture(
       publicKey: keys.publicKey,
     };
   } finally {
-    await Deno.remove(path).catch(() => {});
+    await fsp.rm(path).catch(() => {});
   }
 }
 
 function stagingEntries(installDir: string): string[] {
   try {
-    return [...Deno.readDirSync(`${installDir}/${STAGING}`)]
+    return [
+      ...fsSync.readdirSync(`${installDir}/${STAGING}`, {
+        withFileTypes: true,
+      }),
+    ]
       .map((entry) => entry.name)
       .sort();
   } catch {
@@ -101,7 +109,7 @@ test("stageUpdate records the verified package and its metadata", async () => {
     assertEquals(read?.version, "0.7.8");
     assertEquals(read?.archivePath, staged.archivePath);
     assertEquals(
-      (await Deno.readFile(staged.archivePath)).length,
+      (await fsp.readFile(staged.archivePath)).length,
       archive.length,
     );
 
@@ -224,15 +232,12 @@ test("applied markers round-trip and ignore malformed files", async () => {
     await writeAppliedUpdate(installDir, "0.7.8");
     assertEquals(readAppliedUpdate(installDir)?.version, "0.7.8");
 
-    await Deno.writeTextFile(
-      `${installDir}/${STAGING}/applied.json`,
-      "{ not json",
-    );
+    await fsp.writeFile(`${installDir}/${STAGING}/applied.json`, "{ not json");
     assertEquals(readAppliedUpdate(installDir), undefined);
 
     // A staged marker without its archive (or without valid fields) means
     // "nothing staged", not a crash.
-    await Deno.writeTextFile(
+    await fsp.writeFile(
       `${installDir}/${STAGING}/staged.json`,
       JSON.stringify({ version: "0.7.8" }),
     );

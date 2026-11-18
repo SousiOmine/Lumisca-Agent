@@ -1,4 +1,6 @@
 import { test } from "bun:test";
+import * as fsSync from "node:fs";
+import * as fsp from "node:fs/promises";
 import { assert, assertEquals } from "@std/assert";
 import { messages } from "./shared/i18n/messages.ts";
 
@@ -55,8 +57,8 @@ async function* textFiles(
   dir: URL = ROOT,
   prefix = "",
 ): AsyncGenerator<SourceFile> {
-  for await (const entry of Deno.readDir(dir)) {
-    if (entry.isDirectory) {
+  for (const entry of await fsp.readdir(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
       if (SKIP_DIRS.has(entry.name) || entry.name.startsWith(".tmp-")) {
         continue;
       }
@@ -111,11 +113,31 @@ async function sourceTexts(): Promise<Map<string, string>> {
   if (textCache !== undefined) return textCache;
   const texts = new Map<string, string>();
   for (const file of await allSources()) {
-    texts.set(file.path, await Deno.readTextFile(file.url));
+    texts.set(file.path, await fsp.readFile(file.url, "utf8"));
   }
   textCache = texts;
   return texts;
 }
+
+test("the runtime is Bun only: no Deno API or shim is left", async () => {
+  // The runtime seam was removed with the migration; a reintroduced
+  // `Deno` global, type package or Hono adapter would make the app depend on
+  // a runtime it does not ship. This test file is the one exception: the
+  // pattern below spells the forbidden names.
+  const forbidden = /\bDeno\b|runtime\/runtime\.ts|@types\/deno|hono\/deno/;
+  const offenders: string[] = [];
+  for await (const file of textFiles()) {
+    if (file.path === "packages/core/repo_hygiene_test.ts") continue;
+    // Build output copied into the desktop bundle (gitignored): its contents
+    // follow the source above, so a stale copy is not a source finding.
+    if (file.path.startsWith("packages/desktop/src-tauri/resources/")) {
+      continue;
+    }
+    const text = await fsp.readFile(file.url, "utf8");
+    if (forbidden.test(text)) offenders.push(file.path);
+  }
+  assertEquals(offenders, []);
+});
 
 test("sources carry no mojibake from a legacy code page", async () => {
   const texts = await sourceTexts();
@@ -140,8 +162,9 @@ test("sources carry no mojibake from a legacy code page", async () => {
  * the release manifest and the binary itself (`--version`).
  */
 test("a packaged install directory carries no version", async () => {
-  const workflow = await Deno.readTextFile(
+  const workflow = await fsp.readFile(
     new URL(".github/workflows/release.yml", ROOT),
+    "utf8",
   );
   // The packaging steps name the directory the archive unpacks to: `DIR=` in
   // the Linux step, `$dir =` in the Windows one. The count is not pinned
@@ -183,8 +206,9 @@ test("a packaged install directory carries no version", async () => {
  */
 test("the desktop window lets the page handle file drops", async () => {
   const config = JSON.parse(
-    await Deno.readTextFile(
+    await fsp.readFile(
       new URL("packages/desktop/src-tauri/tauri.conf.json", ROOT),
+      "utf8",
     ),
   ) as {
     app?: { windows?: Array<{ label?: string; dragDropEnabled?: boolean }> };
@@ -398,7 +422,7 @@ test("the design documents only name files that exist", async () => {
 function fileExistsAt(root: string, ref: string): boolean {
   const prefix = root === "" ? "" : `${root}/`;
   try {
-    Deno.statSync(new URL(`${prefix}${ref}`, ROOT));
+    fsSync.statSync(new URL(`${prefix}${ref}`, ROOT));
     return true;
   } catch {
     return false;

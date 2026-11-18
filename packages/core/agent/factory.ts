@@ -26,7 +26,6 @@ import {
 import { McpManager } from "../mcp/manager.ts";
 import { createInstructionsProvider } from "../memory/instructions.ts";
 import { createPdfTools, PDF_TOOL_NAMES } from "../pdf/tools.ts";
-import { runtime } from "../runtime/runtime.ts";
 import { createShareProvider } from "../share/context.ts";
 import { mountedBackends } from "../share/mounted-backends.ts";
 import { canonicalJson } from "../shared/digest.ts";
@@ -366,7 +365,7 @@ export class AgentFactory {
     const attachment = new McpAttachment(
       new McpManager(
         merged.config,
-        workspace.folders[0] ?? runtime.cwd(),
+        workspace.folders[0] ?? process.cwd(),
         this.deps.mcpOAuth,
       ),
       merged.config,
@@ -830,7 +829,7 @@ export class AgentFactory {
       createExecuteTool({
         catalog,
         runtime: codeRuntime,
-        cwd: where.stella?.cwd ?? runtime.cwd(),
+        cwd: where.stella?.cwd ?? process.cwd(),
         safety: this.deps.commandSafety,
       }),
     ];
@@ -1003,7 +1002,7 @@ export class AgentFactory {
     const attachment = new McpAttachment(
       new McpManager(
         merged.config,
-        workspace.folders[0] ?? runtime.cwd(),
+        workspace.folders[0] ?? process.cwd(),
         this.deps.mcpOAuth,
       ),
       merged.config,

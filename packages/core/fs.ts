@@ -2,13 +2,13 @@
  * Filesystem and type-guard helpers shared by memory, plugins, skills,
  * models discovery and the settings/catalog stores.
  *
- * Backend-only: this module touches `runtime.*` and `node:path`, so it lives
+ * Backend-only: this module touches `node:fs` and `node:path`, so it lives
  * outside `shared/` (which is bundled into the browser client and must stay
  * runtime-dependency free).
  */
 
+import * as fsSync from "node:fs";
 import { dirname, join } from "node:path";
-import { runtime } from "./runtime/runtime.ts";
 
 // ---- type guards -----------------------------------------------------------
 
@@ -22,7 +22,7 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 /** Read a file if it exists; returns `undefined` on any filesystem error. */
 export function readIfExists(path: string): string | undefined {
   try {
-    return runtime.readTextFileSync(path);
+    return fsSync.readFileSync(path, "utf8");
   } catch {
     return undefined;
   }
@@ -32,7 +32,7 @@ export function readIfExists(path: string): string | undefined {
  * sub-path (e.g. `.agents/skills` or `.agents/plugins`).
  * Returns an empty array when the home directory cannot be determined. */
 export function resolveGlobalDirs(subPath: string): string[] {
-  const home = runtime.env.get("USERPROFILE") ?? runtime.env.get("HOME");
+  const home = process.env["USERPROFILE"] ?? process.env["HOME"];
   if (home === undefined || home === "") return [];
   return [join(home, subPath)];
 }
@@ -48,14 +48,14 @@ export function atomicWriteTextFileSync(
   text: string,
   options: { mode?: number } = {},
 ): void {
-  runtime.mkdirSync(dirname(path), { recursive: true });
+  fsSync.mkdirSync(dirname(path), { recursive: true });
   const tmp = `${path}.tmp`;
   try {
-    runtime.writeTextFileSync(tmp, text, options);
-    runtime.renameSync(tmp, path);
+    fsSync.writeFileSync(tmp, text, options);
+    fsSync.renameSync(tmp, path);
   } finally {
     try {
-      runtime.removeSync(tmp);
+      fsSync.rmSync(tmp);
     } catch {
       // Already renamed into place.
     }

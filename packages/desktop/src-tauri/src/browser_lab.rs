@@ -1,5 +1,5 @@
 //! Browser lab: the Desktop's debug WebView, exposed to the agent running
-//! in the local (Deno) server as an authenticated loopback RPC endpoint.
+//! in the local (Bun) server as an authenticated loopback RPC endpoint.
 //!
 //! Lifecycle:
 //! - setup() of lib.rs starts the lab **once per app run**: binds
@@ -87,7 +87,7 @@ struct LabCore {
     /// the background); RPC close() resets it.
     visible: Mutex<bool>,
     /// The agent-chosen viewport in CSS pixels, set by every open() (the
-    /// Deno tools always send explicit values; the protocol default is
+    /// server always sends explicit values; the protocol default is
     /// 800×600). The window is sized (and zoomed) to reproduce it, and the
     /// screenshot clips to it.
     viewport: Mutex<Option<(u32, u32)>>,
@@ -142,7 +142,7 @@ impl BrowserLab {
         })
     }
 
-    /// The caller (server.rs) embeds these into the Deno child's
+    /// The caller (server.rs) embeds these into the server child's
     /// environment: the endpoint URL and the token.
     pub fn endpoint(&self) -> (String, String) {
         let port = self.rpc.as_ref().map(|r| r.port).unwrap_or(0);
@@ -189,7 +189,7 @@ impl LabHandler {
             .get("url")
             .and_then(Value::as_str)
             .ok_or_else(|| RpcError::invalid("open には url が必要です"))?;
-        // Host-side policy enforcement (the Deno tools validate first).
+        // Host-side policy enforcement (the server validates first).
         policy::check(url).map_err(RpcError::invalid)?;
 
         let visible = params

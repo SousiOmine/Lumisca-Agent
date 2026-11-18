@@ -1,6 +1,6 @@
+import * as fsSync from "node:fs";
 import { join, normalize, sep } from "node:path";
 import { errorMessage } from "../errors.ts";
-import { runtime } from "../runtime/runtime.ts";
 import type { McpServerConfig } from "../shared/mcp-config.ts";
 import { isWithinRealpath } from "../workspace/path-util.ts";
 
@@ -35,14 +35,14 @@ export interface PluginMcpResult {
  * $XDG_DATA_HOME (or %LOCALAPPDATA% on Windows, else
  * ~/.local/share)/lumisca-agent/plugin-data. */
 export function resolvePluginDataRoot(): string {
-  const home = runtime.env.get("USERPROFILE") ?? runtime.env.get("HOME");
-  const xdg = runtime.env.get("XDG_DATA_HOME");
-  const localAppData = runtime.env.get("LOCALAPPDATA");
+  const home = process.env["USERPROFILE"] ?? process.env["HOME"];
+  const xdg = process.env["XDG_DATA_HOME"];
+  const localAppData = process.env["LOCALAPPDATA"];
   const base =
     xdg ??
     localAppData ??
     (home !== undefined ? join(home, ".local", "share") : undefined);
-  if (base === undefined) return join(runtime.cwd(), ".lumisca-plugin-data");
+  if (base === undefined) return join(process.cwd(), ".lumisca-plugin-data");
   return join(base, "lumisca-agent", "plugin-data");
 }
 
@@ -159,7 +159,7 @@ export function parsePluginMcp(
   if (needsPluginData) {
     // Dedicated writable PLUGIN_DATA dir, created before launch and kept
     // across plugin updates (keyed by plugin name only).
-    runtime.mkdirSync(pluginData, { recursive: true });
+    fsSync.mkdirSync(pluginData, { recursive: true });
   }
   return { servers, warnings };
 }

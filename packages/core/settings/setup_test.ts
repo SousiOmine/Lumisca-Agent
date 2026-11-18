@@ -1,5 +1,8 @@
 import { test } from "bun:test";
-import { join } from "node:path";
+import * as fsSync from "node:fs";
+import * as fsp from "node:fs/promises";
+import { tmpdir as osTmpdir } from "node:os";
+import { join, join as pathJoin } from "node:path";
 import { assertEquals } from "@std/assert";
 import { LumiscaCore } from "../core.ts";
 import { removeDirRetry } from "../test-utils.ts";
@@ -16,7 +19,7 @@ import {
  * through the code under test. */
 function markerExists(path: string): boolean {
   try {
-    Deno.statSync(path);
+    fsSync.statSync(path);
     return true;
   } catch {
     return false;
@@ -41,7 +44,7 @@ test("the setup marker lives beside the settings file", () => {
 });
 
 test("a missing marker means the setup is not done", async () => {
-  const dir = await Deno.makeTempDir({ prefix: "lumisca-setup-" });
+  const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-setup-"));
   try {
     // The directory itself may not exist yet: the wizard can be finished
     // before any setting was written.
@@ -57,13 +60,13 @@ test("a missing marker means the setup is not done", async () => {
 });
 
 test("deleting the marker asks for the setup again", async () => {
-  const dir = await Deno.makeTempDir({ prefix: "lumisca-setup-" });
+  const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-setup-"));
   const marker = setupMarkerPath(dir);
   try {
     markSetupComplete(dir);
     assertEquals(readSetupState(dir), { completed: true });
 
-    Deno.removeSync(marker);
+    fsSync.rmSync(marker);
     assertEquals(readSetupState(dir), { completed: false });
     // Writing it twice is harmless (finishing the wizard from two windows).
     markSetupComplete(dir);
@@ -87,7 +90,7 @@ test("a core without a settings file owes no setup", async () => {
 });
 
 test("core: the marker is read per call, not fixed at startup", async () => {
-  const dir = await Deno.makeTempDir({ prefix: "lumisca-setup-" });
+  const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-setup-"));
   const core = LumiscaCore.open(
     join(dir, "lumisca.db"),
     join(dir, "settings.jsonc"),
@@ -102,7 +105,7 @@ test("core: the marker is read per call, not fixed at startup", async () => {
 
     // The documented way to ask for the wizard again: delete the file. The
     // same process must see it, without a restart.
-    Deno.removeSync(marker);
+    fsSync.rmSync(marker);
     assertEquals(core.getSetup(), { completed: false });
   } finally {
     await core.close();

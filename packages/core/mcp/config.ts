@@ -1,5 +1,5 @@
+import * as fsSync from "node:fs";
 import { isAbsolute, join } from "node:path";
-import { runtime } from "../runtime/runtime.ts";
 import type { McpServerConfig } from "../shared/mcp-config.ts";
 import { parseJsonOrThrow, serializeMcpServers } from "../shared/mod.ts";
 import type { McpServerStatus } from "./status.ts";
@@ -50,7 +50,7 @@ export const MCP_TEST_SOURCE = "MCP test config";
 export function expandEnv(value: string): string {
   return value.replace(
     /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g,
-    (match, name: string) => runtime.env.get(name) ?? match,
+    (match, name: string) => process.env[name] ?? match,
   );
 }
 
@@ -148,7 +148,7 @@ export function loadMcpConfig(workspaceRoot: string): McpConfig {
   const filePath = join(workspaceRoot, MCP_CONFIG_FILE);
   let text: string;
   try {
-    text = runtime.readTextFileSync(filePath);
+    text = fsSync.readFileSync(filePath, "utf8");
   } catch {
     return { servers: [], filePath };
   }

@@ -1,3 +1,4 @@
+import * as fsp from "node:fs/promises";
 import { join, parse, relative, sep } from "node:path";
 import { isDirectory } from "@lumisca/core";
 import type {
@@ -7,7 +8,7 @@ import type {
   FsPlaceKind,
 } from "@lumisca/core/shared";
 import { Hono } from "hono";
-import { runtime } from "../../core/runtime/runtime.ts";
+import { OS } from "../../core/platform.ts";
 import { AppError, requireNonEmptyString } from "./util.ts";
 
 /** The picker's wire shapes (FsPlace, FsEntry, FsBreadcrumb, FsBrowse) and
@@ -60,7 +61,7 @@ export async function readUserDirs(
   const dirs = new Map<string, string | null>();
   let text: string;
   try {
-    text = await runtime.readTextFile(file);
+    text = await fsp.readFile(file, "utf8");
   } catch {
     // No file (macOS, Windows, a machine without a desktop session):
     // nothing is declared here, and the English names take over.
@@ -93,7 +94,7 @@ function userDirsFile(env: (key: string) => string | undefined): string {
  * testable. */
 export function placeCandidates(
   env: (key: string) => string | undefined,
-  os: string = runtime.build.os,
+  os: string = OS,
   userDirs: (key: string) => string | null | undefined = () => undefined,
 ): PlaceCandidate[] {
   const home = env("USERPROFILE") || env("HOME") || "";
@@ -173,8 +174,8 @@ export function fsRoutes(): Hono {
   /** The places the sidebar lists: the user folders that exist on the
    * machine serving this request, then its filesystem roots. */
   app.get("/fs/places", async (c) => {
-    const env = (key: string) => runtime.env.get(key);
-    const os = runtime.build.os;
+    const env = (key: string) => process.env[key];
+    const os = OS;
     // Only Linux keeps its user folders in the XDG config file.
     const userDirs =
       os === "linux"
@@ -189,14 +190,14 @@ export function fsRoutes(): Hono {
       throw new AppError(`not a directory: ${path}`, 400);
     }
     const entries: FsEntry[] = [];
-    for await (const entry of runtime.readDir(path)) {
+    for (const entry of await fsp.readdir(path, { withFileTypes: true })) {
       const entryPath = join(path, entry.name);
       // A dirent describes the link itself, so a symlinked folder would read
       // as a file (and could never be picked as a workspace folder): resolve
       // the links only, one stat each.
       const dir =
-        entry.isDirectory ||
-        (entry.isSymlink && (await isDirectory(entryPath)));
+        entry.isDirectory() ||
+        (entry.isSymbolicLink() && (await isDirectory(entryPath)));
       entries.push({
         name: entry.name,
         path: entryPath,
