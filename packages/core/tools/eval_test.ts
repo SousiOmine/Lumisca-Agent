@@ -335,6 +335,7 @@ test("eval: reset stops the timers its snippets scheduled", async () => {
   const tool = makeEval();
   const dir = fsSync.mkdtempSync(pathJoin(osTmpdir(), "lumisca-eval-"));
   const marker = join(dir, "ticks.txt");
+  const ticks = (): number => Number(fsSync.readFileSync(marker, "utf8"));
   try {
     await tool.execute(
       "1",
@@ -349,16 +350,19 @@ test("eval: reset stops the timers its snippets scheduled", async () => {
       undefined,
     );
     await new Promise((resolve) => setTimeout(resolve, 80));
-    const before = Number(fsSync.readFileSync(marker, "utf8"));
-    assert(before > 0, "the interval must have run before the reset");
+    assert(ticks() > 0, "the interval must have run before the reset");
 
     // reset throws the sandbox (and the closure the interval captured)
     // away; the timer itself must go with it, or it keeps running in the
     // server process for the rest of the session.
     await tool.execute("2", { code: "'reset'", reset: true }, undefined);
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    const after = Number(fsSync.readFileSync(marker, "utf8"));
-    assertEquals(after, before, "the interval kept running after reset");
+    // Bun.write is asynchronous, so a tick that fired while the reset was
+    // on its way can land after it. What reset promises is that the count
+    // stops moving, so it is sampled twice once the straggler has landed.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const settled = ticks();
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    assertEquals(ticks(), settled, "the interval kept running after reset");
   } finally {
     tool.dispose?.();
     await removeDirRetry(dir);
