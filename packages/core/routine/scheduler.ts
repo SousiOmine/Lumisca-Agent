@@ -32,6 +32,12 @@
  * while a run is queued. The one exception is the one-off described above:
  * its slot is emptied (and the row switched off) BEFORE its run starts, so
  * "switched off" is what a one-off looks like while it runs.
+ *
+ * It also never runs anything for an agent the user has switched off. That
+ * is the agent's state, not the routine's: a due occurrence is spent without
+ * a run, a queued one is recorded as skipped, and a watch's check is not made
+ * (it would cost a process inside the machine for a conversation that cannot
+ * open). The user's own on/off switches on the rows are left as they are.
  */
 
 import { CoreError, errorMessage } from "../errors.ts";
@@ -74,12 +80,20 @@ const DEFAULT_QUEUE_MAX_WAIT_MS = 60 * 60_000;
 const QUEUE_GAVE_UP_DETAIL =
   "The conversation stayed busy for an hour, so this run was skipped";
 
+/** What a run records when its agent is switched off. */
+const AGENT_DISABLED_DETAIL = "The agent is disabled";
+
 /** The seam the scheduler needs from the session layer: start a run in an
  * agent's conversation and know whether one is already running. Kept narrow
  * so the scheduler can be tested without a core. */
 export interface RoutineRunner {
   /** Whether the agent's conversation is running (or about to). */
   isRunning(agentId: string): boolean;
+  /** Whether the agent is switched on. A disabled agent has no conversation
+   * to run in — it is read-only — so its routines wait instead of building
+   * one behind the user's back. A routine's own on/off switch is a different
+   * fact: this one names the agent the routine belongs to. */
+  isAgentEnabled(agentId: string): boolean;
   /** Start a run with `prompt` in the agent's conversation. Resolves when
    * the run finished; rejects when it could not start (no conversation).
    * `trigger` is set when a check started this run, so the run knows what
@@ -205,6 +219,23 @@ export function createRoutineScheduler(
     const at = now();
     const due = repo.due(at);
     for (const routine of due) {
+      // A disabled agent's routines do not fire, and this is where they are
+      // stopped before anything is read from the machine: a check would cost
+      // a process inside the container for a conversation that cannot open.
+      // The occurrence is spent rather than kept, so enabling the agent does
+      // not release a pile of past runs. A one-off has no next slot: its row
+      // stays, and it fires once the agent is back on.
+      if (!runner.isAgentEnabled(routine.agentId)) {
+        if (routine.schedule.kind === "once") continue;
+        try {
+          repo.update(routine.id, {
+            nextRunAt: nextRunAt(routine.schedule, at),
+          });
+        } catch {
+          // The row vanished between the query and here; nothing to skip.
+        }
+        continue;
+      }
       // A one-off has no next slot to advance to, so emptying it IS the
       // advance: without it the row stays due for as long as the run lasts
       // and fires again on the next tick. Switching it off in the same write
@@ -326,6 +357,13 @@ export function createRoutineScheduler(
     // Already waiting: this occurrence is one too many, and the next is
     // scheduled anyway.
     if (queued.has(id)) return;
+    // The agent was switched off after this run was queued, or the user
+    // pressed "run now" on a disabled agent. Saying so on the row is what
+    // keeps a silent no-op from looking like a run that did nothing.
+    if (!runner.isAgentEnabled(routine.agentId)) {
+      recordNote(id, "skipped", AGENT_DISABLED_DETAIL);
+      return;
+    }
     queued.set(id, now());
     let started = false;
     try {

@@ -149,6 +149,14 @@ export class StellaMachineService {
         "not_found",
       );
     }
+    // A disabled agent has nothing to open: building it would undo the
+    // release that disabling performed (see LumiscaCore.releaseStellaAgent),
+    // and its conversation is served from the store instead (see
+    // readStellaConversationFromStore). This guard is what keeps a routine or
+    // a second client from rebuilding it behind the user's back.
+    if (agent.disabledAt !== null) {
+      throw new CoreError(`Agent ${agent.id} is disabled`, "conflict");
+    }
     // An already-open conversation usually needs none of the preparation
     // below. Its agent is in the pool, and the skill catalog and working
     // folder are what opening it created. The one thing that can have changed
@@ -269,8 +277,17 @@ export class StellaMachineService {
    * it starts the desktop, so the reader sees the same empty desktop the
    * agent is about to work in. */
   async stellaVncPort(agentId: string): Promise<number | null> {
-    if (this.deps.agents.get(agentId) === undefined) return null;
+    const agent = this.deps.agents.get(agentId);
+    // A disabled agent has no screen to show, and asking the machine for one
+    // would start the desktop this state exists to release.
+    if (agent === undefined || agent.disabledAt !== null) return null;
     return await this.deps.machine.vncPortFor(agentId);
+  }
+
+  /** Stop one agent's desktop and give its slot back (see
+   * StellaMachine.releaseDesktop). Called when the agent is disabled. */
+  async releaseDesktop(agentId: string): Promise<void> {
+    await this.deps.machine.releaseDesktop(agentId);
   }
 
   /**

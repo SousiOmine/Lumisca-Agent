@@ -74,6 +74,13 @@ export interface StellaAgent extends StellaAgentSummaryBase {
    * not the user's message, so nothing else in the transcript can tell
    * "never set up" from "set up and said nothing". */
   onboardedAt: number | null;
+  /** When the user switched this agent off, or null while it is on. A
+   * disabled agent is read-only: its conversation is served from the store,
+   * but it is never built, its desktop is given back, and its routines do
+   * not fire (see LumiscaCore.updateStellaAgent and routine/scheduler.ts).
+   * Kept apart from `role` and `name` because it is the one field that
+   * changes what the app DOES with the agent rather than how it reads. */
+  disabledAt: number | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -120,6 +127,11 @@ export interface AgentRepo {
    * here, so the tool and every other caller share one rule. An empty string
    * clears it. */
   writeIdentity(id: string, content: string): void;
+  /** Switch the agent off (`at` is when) or back on (`null`). The row is all
+   * this writes: closing the conversation, giving the desktop back and
+   * stopping the routines are the core's calls, because this repository
+   * cannot see any of them. An unknown id fails loudly. */
+  setDisabled(id: string, at: number | null): void;
   delete(id: string): void;
   /** The most recently used agent, or undefined when there is none (first
    * run). The sidebar and the conversation pick it by default. */
@@ -146,6 +158,7 @@ interface AgentRow {
   model_provider?: string | null;
   model_id?: string | null;
   onboarded_at?: number | null;
+  disabled_at?: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -164,6 +177,7 @@ function toAgent(row: AgentRow): StellaAgent {
         ? { provider: row.model_provider, modelId: row.model_id }
         : null,
     onboardedAt: row.onboarded_at ?? null,
+    disabledAt: row.disabled_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -294,6 +308,9 @@ export function createAgentRepo(db: LumiscaDb): AgentRepo {
   const clearOnboardedStmt = db.db.prepare(
     "UPDATE stella_agents SET onboarded_at = NULL WHERE id = ?",
   );
+  const setDisabledStmt = db.db.prepare(
+    "UPDATE stella_agents SET disabled_at = ? WHERE id = ?",
+  );
   const latestStmt = db.db.prepare(
     "SELECT * FROM stella_agents " +
       "ORDER BY updated_at DESC, created_at DESC, rowid DESC LIMIT 1",
@@ -322,6 +339,7 @@ export function createAgentRepo(db: LumiscaDb): AgentRepo {
         icon: "",
         model: null,
         onboardedAt: null,
+        disabledAt: null,
         createdAt: now,
         updatedAt: now,
       };
@@ -375,6 +393,13 @@ export function createAgentRepo(db: LumiscaDb): AgentRepo {
       // The row is what the provider reads, so a write for an agent that no
       // longer exists fails instead of quietly doing nothing.
       const result = writeIdentityStmt.run(text, Date.now(), id);
+      if (Number(result.changes) === 0) {
+        throw new CoreError(`Agent not found: ${id}`, "not_found");
+      }
+    },
+
+    setDisabled(id: string, at: number | null): void {
+      const result = setDisabledStmt.run(at, id);
       if (Number(result.changes) === 0) {
         throw new CoreError(`Agent not found: ${id}`, "not_found");
       }

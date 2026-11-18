@@ -50,6 +50,7 @@ Deno.test("stellaStateOf: a snapshot becomes the conversation", () => {
     shares: [],
     error: "last failure",
     agentName: "Aide",
+    disabled: false,
     sessionId: "s1",
     model: { provider: "faux", modelId: "model" },
     thinkingLevel,
@@ -70,9 +71,35 @@ Deno.test("stellaStateOf: a snapshot becomes the conversation", () => {
     shares: [],
     error: "last failure",
     agentName: "Aide",
+    disabled: false,
     model: { provider: "faux", modelId: "model" },
     thinking: { level: "high", levels: ["off", "low", "high"] },
   });
+});
+
+Deno.test("stellaStateOf: a disabled conversation is read-only", () => {
+  // The flag is the client's whole answer to "may I send here": a snapshot
+  // that carried the entries but not this would draw a composer the server
+  // refuses.
+  const next = stellaStateOf({
+    entries: [],
+    older: null,
+    running: false,
+    questions: [],
+    handover: null,
+    envRequest: null,
+    shareRequest: null,
+    shares: [],
+    agentName: "Aide",
+    disabled: true,
+    sessionId: null,
+    model: null,
+    rev: 0,
+  });
+  assertEquals(next.disabled, true);
+  // No session row exists for a disabled agent that was never opened, so
+  // there is no model to show either.
+  assertEquals(next.model, null);
 });
 
 Deno.test("stella: an env request is state a reconnect can still answer", () => {
@@ -167,6 +194,7 @@ Deno.test("stellaStateOf: a model without thinking levels shows no rail", () => 
     handover: null,
     envRequest: null,
     agentName: "Aide",
+    disabled: false,
     sessionId: "s1",
     model: { provider: "faux", modelId: "model" },
     rev: 1,
@@ -307,6 +335,7 @@ Deno.test("stellaStateOf: a re-read snapshot merges into paged history", () => {
       handover: null,
       envRequest: null,
       agentName: "Aide",
+      disabled: false,
       sessionId: "s1",
       model: { provider: "faux", modelId: "model" },
       rev: 9,
@@ -341,6 +370,7 @@ Deno.test("stellaStateOf: an empty window keeps the conversation it holds", () =
       handover: null,
       envRequest: null,
       agentName: "Aide",
+      disabled: false,
       sessionId: "s1",
       model: { provider: "faux", modelId: "model" },
       rev: 9,
@@ -367,6 +397,7 @@ Deno.test("stellaStateOf: a window that shares nothing replaces the state", () =
       handover: null,
       envRequest: null,
       agentName: "Aide",
+      disabled: false,
       sessionId: "s1",
       model: { provider: "faux", modelId: "model" },
       rev: 9,
@@ -551,6 +582,7 @@ Deno.test("stella: a snapshot is the finished conversation, so it draws no live 
     handover: null,
     envRequest: null,
     agentName: "Aide",
+    disabled: false,
     sessionId: "s1",
     model: { provider: "faux", modelId: "model" },
     rev: 3,

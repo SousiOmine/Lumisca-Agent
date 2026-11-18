@@ -388,6 +388,14 @@ export const MIGRATIONS: ReadonlyArray<(db: Database) => void> = [
         ON sessions(agent_id) WHERE agent_id IS NOT NULL;
     `);
   },
+  // When the user switched this agent off, or NULL while it is on. A
+  // timestamp rather than a flag because "off since Tuesday" is a fact the
+  // row can answer later, and NULL is the on state — which every existing row
+  // is in — so nothing has to be backfilled.
+  //
+  // A disabled agent is not a hidden one: its conversation stays readable
+  // from the store, but nothing about it is built (see stella/agents.ts).
+  (db) => addColumnIfMissing(db, "stella_agents", "disabled_at", "INTEGER"),
 ];
 
 /** The `user_version` a fully migrated database carries: one per migration

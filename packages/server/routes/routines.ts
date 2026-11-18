@@ -14,7 +14,7 @@
 import type { Routine, StellaAgent } from "@lumisca/core";
 import type { RoutineView } from "@lumisca/core/shared";
 import { Hono } from "hono";
-import { notFound, parseBody, requireBoolean } from "./util.ts";
+import { AppError, notFound, parseBody, requireBoolean } from "./util.ts";
 
 export interface RoutineApi {
   listRoutinesOf(agentId: string): Routine[];
@@ -108,10 +108,19 @@ export function routineRoutes(core: RoutineApi): Hono {
   });
 
   /** Run it now. Deliberately not awaited: a run is a whole turn, and the
-   * settings list must not hold a request open for it. */
+   * settings list must not hold a request open for it.
+   *
+   * A disabled agent's routine is refused before it is queued: there is no
+   * conversation to run in, and the scheduler would record a skip the user
+   * did not ask for. This is an answer to the button, so it is a 409 rather
+   * than a row note. */
   app.post("/routines/:id/run", (c) => {
     const id = c.req.param("id");
     const agentId = agentOf(id);
+    const agent = core.listStellaAgents().find((item) => item.id === agentId);
+    if (agent !== undefined && agent.disabledAt !== null) {
+      throw new AppError(`Agent ${agentId} is disabled`, 409);
+    }
     void core.runRoutineNow(id).catch(() => {
       // The failure is recorded on the routine's row and shown by the list.
     });

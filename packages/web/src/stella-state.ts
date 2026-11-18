@@ -66,6 +66,9 @@ export interface StellaConversationState {
   error?: string;
   /** The agent's name: the conversation's title. */
   agentName: string;
+  /** The agent is switched off, so the conversation is read-only: no
+   * composer, no screen, no rewind, and no event stream to keep open. */
+  disabled: boolean;
   /** The model the conversation runs on (the session row's choice), shown in
    * the composer's model line. Null before the first snapshot arrives. */
   model: { provider: string; modelId: string } | null;
@@ -117,6 +120,7 @@ export function stellaStateOf(
     shares: snapshot.shares,
     ...(snapshot.error !== undefined ? { error: snapshot.error } : {}),
     agentName: snapshot.agentName,
+    disabled: snapshot.disabled,
     model: snapshot.model,
     thinking: {
       level: snapshot.thinkingLevel ?? "off",
@@ -398,6 +402,7 @@ export function emptyStellaState(agentName: string): StellaConversationState {
     entries: [],
     older: null,
     running: false,
+    disabled: false,
     liveCard: null,
     questions: [],
     handover: null,

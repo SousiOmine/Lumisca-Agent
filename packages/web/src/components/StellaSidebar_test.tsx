@@ -21,6 +21,7 @@ function agent(
     name: id === "a1" ? "Aide" : id,
     icon: "",
     model: null,
+    disabledAt: null,
     createdAt: 0,
     updatedAt: 0,
     preview,
@@ -51,6 +52,7 @@ function render(
       onChanged={() => {}}
       onAgentChanged={() => {}}
       onNewAgent={() => {}}
+      onSetEnabled={() => Promise.resolve()}
       loading={loading}
     />,
   );
@@ -149,6 +151,25 @@ Deno.test("StellaSidebar: the row itself is what opens its menu", () => {
   // menu on the row.
   assertStringIncludes(source, 'event.key === "ContextMenu"');
   assertStringIncludes(source, 'event.key === "F10"');
+});
+
+Deno.test("StellaSidebar: disabled agents sit under their own fold", () => {
+  const off = { ...agent("a2"), name: "Aide off", disabledAt: AT };
+  const html = render([agent("a1"), off]);
+  // The fold names what it holds, with the count beside the label, and it is
+  // closed until the reader opens it.
+  assertStringIncludes(html, "無効化されたエージェント");
+  assertStringIncludes(html, "stella-agent-group");
+  assertStringIncludes(html, 'data-open="false"');
+  // The row is drawn, dimmed: switching an agent off does not hide the way
+  // back into its history.
+  assert(/class="stella-agent[^"]* disabled"/.test(html), html);
+  // The two rows are not in the same list: the enabled one is a child of the
+  // nav, the disabled one of the fold's body.
+  const active = html.indexOf("Aide");
+  const fold = html.indexOf("stella-agent-group");
+  const offRow = html.indexOf("Aide off");
+  assert(active < fold && fold < offRow, html);
 });
 
 Deno.test("StellaSidebar: the empty list is not shown while it is being read", () => {

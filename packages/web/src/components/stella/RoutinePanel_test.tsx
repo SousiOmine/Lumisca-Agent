@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
 import type { RoutineView } from "../../types.ts";
@@ -25,10 +25,11 @@ function routine(overrides: Partial<RoutineView> = {}): RoutineView {
   };
 }
 
-function html(routines: RoutineView[]): string {
+function html(routines: RoutineView[], agentDisabled = false): string {
   return renderToString(
     createElement(RoutinePanel, {
       routines,
+      agentDisabled,
       loading: false,
       error: null,
       onRefresh: () => {},
@@ -61,4 +62,21 @@ Deno.test("a short request is a paragraph, not a disclosure", () => {
   const page = html([routine()]);
   assertStringIncludes(page, 'class="routine-prompt"');
   assertEquals(page.includes('role="button"'), false);
+});
+
+Deno.test("a disabled agent's routines say they do not run", () => {
+  // The list is not hidden: the reader may still be deciding what to keep.
+  // What it says is that nothing here fires until the agent is switched on,
+  // so a "next 8:30" line is not read as a promise.
+  const off = html([routine()], true);
+  assertStringIncludes(off, "無効化されているため");
+  // The run button is drawn disabled: the server answers 409 for it, and a
+  // button that only fails after the press is the worse way to say so.
+  const button = off.match(/<button[^>]*>[^<]*<svg[\s\S]*?今すぐ実行/);
+  assert(button !== null, "the run button is missing");
+  assertStringIncludes(button[0], "disabled");
+
+  // An enabled agent keeps the list as it was.
+  const on = html([routine()], false);
+  assertEquals(on.includes("無効化されているため"), false);
 });

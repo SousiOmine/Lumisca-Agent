@@ -301,14 +301,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ name, role }),
     }),
-  /** Change an agent's name, its picture, its model and/or that model's
-   * thinking strength, in one request: the edit dialog saves them together.
+  /** Change an agent's name, its picture, its model, that model's thinking
+   * strength and/or whether it is switched on, in one request: the edit
+   * dialog saves the first four together, and the row's menu flips `enabled`.
    * An omitted field is left alone, `icon: null` returns the agent to its
    * initial, `icon: { data, mimeType }` sets a new picture (`data` is base64,
    * with or without its data-URL header), `model: null` returns the agent to
-   * the app's default model, `model: { provider, modelId }` sets its own, and
+   * the app's default model, `model: { provider, modelId }` sets its own,
    * `thinkingLevel: { provider, modelId, level }` stores the level for that
-   * model (the level belongs to the model, not the agent). Answers the
+   * model (the level belongs to the model, not the agent), and `enabled`
+   * switches the agent off (`false`) or back on (`true`). Answers the
    * updated agent, so the client needs no second read. */
   updateStellaAgent: (
     id: string,
@@ -321,6 +323,7 @@ export const api = {
         modelId: string;
         level: ThinkingLevel;
       };
+      enabled?: boolean;
     },
   ) =>
     request<StellaAgent>(`/api/stella/agents/${encodeURIComponent(id)}`, {

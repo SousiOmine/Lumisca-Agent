@@ -301,6 +301,75 @@
   font-weight: 600;
 }
 
+/* Agents the user switched off: still readable, and visibly set aside. The
+ * dimming is the row's, not the fold's, so one row opened from the menu keeps
+ * the same weight as its neighbours. */
+.stella-agent.disabled .stella-agent-name {
+  opacity: 0.6;
+}
+
+/* The fold those rows live under. It is a footer of the list, not a row of
+ * it: a hairline above it says where the working agents end, and the label
+ * is smaller than a name so it cannot be mistaken for one. */
+.stella-agent-group {
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+.stella-agent-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 8px;
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: var(--type-11-5);
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+}
+
+.stella-agent-group-toggle:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.stella-agent-group-chevron {
+  display: grid;
+  place-items: center;
+  flex: none;
+  transition: transform var(--lum-dur-fast) var(--lum-ease-out);
+}
+
+.stella-agent-group-toggle[aria-expanded="true"] .stella-agent-group-chevron {
+  transform: rotate(90deg);
+}
+
+.stella-agent-group-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stella-agent-group-count {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+.stella-agent-group-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
 /* --- stella: an agent's routines ----------------------------------------- */
 
 .routine-panel {
@@ -905,6 +974,35 @@
 .stella-loading {
   color: var(--text-dim);
   font-size: var(--type-13);
+}
+
+/* The composer's place while the agent is switched off. The field is gone
+ * rather than disabled: an input that accepts text and a button that refuses
+ * it is a promise the screen does not keep. What stays is the one action a
+ * disabled agent can still take — being switched back on. */
+.stella-disabled-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.stella-disabled-text {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--type-12-5);
+  color: var(--text-dim);
+}
+
+/* The reason the enable button refused. It takes the row's full width under
+ * the notice, because it belongs to the action rather than to the sentence. */
+.stella-disabled-note .error-text {
+  flex-basis: 100%;
 }
 
 /* --- stella: the information panel's lent folders ------------------------ */

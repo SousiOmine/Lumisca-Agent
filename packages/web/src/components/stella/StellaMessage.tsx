@@ -71,10 +71,12 @@ export function StellaMessage({
   /** Where the files a prompt brought in are read back from (the machine,
    * through the conversation's upload route). */
   uploadBase: string;
-  /** Rewind from this entry onward (its timestamp names it). */
-  onRewind: (timestamp: number, text: string) => void;
-  /** Send a card's answer as the user's next message. */
-  onSend: (text: string) => void;
+  /** Rewind from this entry onward (its timestamp names it). Omitted in a
+   * read-only conversation: the control is not drawn. */
+  onRewind?: (timestamp: number, text: string) => void;
+  /** Send a card's answer as the user's next message. Omitted for the same
+   * reason: the card's controls are drawn inert. */
+  onSend?: (text: string) => void;
 }) {
   const locale = useLocale();
   /** The time under the bubble: the clock alone, because the day is the
@@ -122,7 +124,7 @@ function UserBubble({
   uploadBase,
 }: {
   entry: StellaEntry;
-  onRewind: (timestamp: number, text: string) => void;
+  onRewind?: (timestamp: number, text: string) => void;
   time: ComponentChildren;
   uploadBase: string;
 }) {
@@ -141,14 +143,16 @@ function UserBubble({
         </div>
       </div>
       <div className="msg-meta">
-        <button
-          type="button"
-          className="msg-action-btn"
-          aria-label={t("chat.message.rewind")}
-          onClick={() => onRewind(entry.timestamp, entry.text)}
-        >
-          <IconArrowBackUp size={16} stroke={1.5} />
-        </button>
+        {onRewind !== undefined && (
+          <button
+            type="button"
+            className="msg-action-btn"
+            aria-label={t("chat.message.rewind")}
+            onClick={() => onRewind(entry.timestamp, entry.text)}
+          >
+            <IconArrowBackUp size={16} stroke={1.5} />
+          </button>
+        )}
         {entry.text && <MessageCopyButton text={entry.text} />}
         {time}
       </div>
@@ -174,7 +178,7 @@ function AgentBubble({
   entering: boolean;
   visualBase: string;
   attachBase: string;
-  onSend: (text: string) => void;
+  onSend?: (text: string) => void;
   time: ComponentChildren;
 }) {
   return (

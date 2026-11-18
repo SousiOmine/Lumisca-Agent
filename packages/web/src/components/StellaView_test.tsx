@@ -20,6 +20,7 @@ const agent: StellaAgentSummary = {
   name: "Aide",
   icon: "",
   model: null,
+  disabledAt: null,
   createdAt: 0,
   updatedAt: 0,
   preview: null,
@@ -67,6 +68,7 @@ function render(
       onFilesChange: () => {},
       onPrompt: () => {},
       onAbort: () => {},
+      onEnableAgent: () => Promise.resolve(),
       onRewind: () => Promise.resolve(),
       onModelChange: () => Promise.resolve(),
       onThinkingLevelChange: () => {},
@@ -332,4 +334,18 @@ Deno.test("StellaView: no lent folder leaves the composer alone", () => {
   const html = render();
   assertEquals(html.includes("share-notice"), false);
   assertEquals(html.includes("input-composer sharing"), false);
+});
+
+Deno.test("StellaView: a disabled conversation has no composer", () => {
+  // A disabled agent keeps its history readable and nothing else: the field
+  // is gone rather than disabled (an input that accepts text and a button
+  // that refuses it promises something the screen cannot keep), and the way
+  // back is the one action left.
+  const html = render({ conversation: { disabled: true } });
+  assertStringIncludes(html, "このエージェントは無効化されています");
+  assertStringIncludes(html, "有効化");
+  assertEquals(html.includes("input-composer"), false);
+  // No screen either: its desktop was given back when the agent was switched
+  // off, and the toggle would start the one that release exists for.
+  assertEquals(html.includes("stella-pane"), false);
 });

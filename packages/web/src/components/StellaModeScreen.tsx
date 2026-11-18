@@ -93,6 +93,7 @@ export function StellaModeScreen({
         onChanged={stella.reloadAgents}
         onAgentChanged={onAgentChanged}
         onNewAgent={onNewAgent}
+        onSetEnabled={stella.setAgentEnabled}
       />
       <StellaView
         agent={agent}
@@ -113,6 +114,7 @@ export function StellaModeScreen({
           stella.prompt(text, promptImages, promptFiles)
         }
         onAbort={() => stella.abort()}
+        onEnableAgent={(id) => stella.setAgentEnabled(id, true)}
         onRewind={(timestamp) => stella.rewind(timestamp)}
         onLoadOlder={stella.loadOlder}
         loadingOlder={stella.loadingOlder}

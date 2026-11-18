@@ -54,13 +54,42 @@ export class SessionTranscript {
     query: WindowQuery,
   ): WindowPage<StellaEntry> | undefined {
     if (this.deps.pool.get(id) === undefined) return undefined;
-    // Project first, page over the projection: a page must count what the
-    // conversation shows, not what the model's history holds (most of a
-    // stella transcript is tool traffic nobody sees). `rows:
-    // "conversation"` is what makes the page a count of those entries —
-    // without it a page of 40 filled up on tool rows during a run and
-    // projected to nothing.
-    const page = readTranscriptPage(this.deps.messages, id, query, {
+    const page = this.stellaPage(id, query);
+    if ((query.older ?? null) !== null) return page;
+    // The prompt of a run in flight is not written yet; a conversation read
+    // mid-run must still show it (see unpersistedTail).
+    const tail = conversationEntriesOf(this.unpersistedTail(id));
+    return tail.length === 0
+      ? page
+      : { items: page.items.concat(tail), older: page.older };
+  }
+
+  /** One window of a conversation that is NOT open, read from the store
+   * alone.
+   *
+   * A disabled agent's conversation is the case: it is served read-only, so
+   * no agent exists to ask for the rows a run has not written — and, because
+   * disabling aborts the run, there are none. Everything else is the same
+   * projection and the same paging as the open read, so a client cannot tell
+   * which one answered it.
+   */
+  readStellaConversationFromStore(
+    id: string,
+    query: WindowQuery,
+  ): WindowPage<StellaEntry> {
+    return this.stellaPage(id, query);
+  }
+
+  /** The stored page of a conversation, before the live tail.
+   *
+   * Project first, page over the projection: a page must count what the
+   * conversation shows, not what the model's history holds (most of a
+   * stella transcript is tool traffic nobody sees). `rows: "conversation"`
+   * is what makes the page a count of those entries — without it a page of
+   * 40 filled up on tool rows during a run and projected to nothing.
+   */
+  private stellaPage(id: string, query: WindowQuery): WindowPage<StellaEntry> {
+    return readTranscriptPage(this.deps.messages, id, query, {
       startsWindow: () => true,
       rows: "conversation",
       project: (row) => {
@@ -70,13 +99,6 @@ export class SessionTranscript {
           : { item: entry, cursor: stellaEntryCursorOf(entry) };
       },
     });
-    if ((query.older ?? null) !== null) return page;
-    // The prompt of a run in flight is not written yet; a conversation read
-    // mid-run must still show it (see unpersistedTail).
-    const tail = conversationEntriesOf(this.unpersistedTail(id));
-    return tail.length === 0
-      ? page
-      : { items: page.items.concat(tail), older: page.older };
   }
 
   /** The session's context usage over the WHOLE transcript. */

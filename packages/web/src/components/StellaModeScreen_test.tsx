@@ -19,6 +19,7 @@ const agent: StellaAgentSummary = {
   name: "Aide",
   icon: "",
   model: null,
+  disabledAt: null,
   createdAt: 0,
   updatedAt: 0,
   preview: null,
@@ -46,6 +47,7 @@ function hook(overrides: Partial<StellaHook>): StellaHook {
     loading: false,
     reloadAgents: () => {},
     applyAgent: () => {},
+    setAgentEnabled: () => Promise.resolve(),
     ...overrides,
   };
 }

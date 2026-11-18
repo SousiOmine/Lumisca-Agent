@@ -317,6 +317,16 @@ export const chat = {
   /** The row menu's way into the agent's schedule. Routines belong to one
    * agent, so they open from its row rather than from the app's settings. */
   "chat.stella.agents.routines": { ja: "ルーチン", en: "Routines" },
+  /** The row menu's switch. Off is a state of the agent, not of a session:
+   * a disabled agent keeps its history readable and does nothing else. */
+  "chat.stella.agents.disable": { ja: "無効化", en: "Disable" },
+  "chat.stella.agents.enable": { ja: "有効化", en: "Enable" },
+  /** The fold at the bottom of the list. The count sits beside it, so the
+   * label stays a name and not a sentence. */
+  "chat.stella.agents.disabledGroup": {
+    ja: "無効化されたエージェント",
+    en: "Disabled agents",
+  },
   "chat.stella.agents.routinesTitle": {
     ja: "「{name}」のルーチン",
     en: 'Routines of "{name}"',
@@ -378,6 +388,13 @@ export const chat = {
   "chat.stella.conversationError": {
     ja: "会話を開けませんでした: {error}",
     en: "Could not open the conversation: {error}",
+  },
+  /** The composer's place on a disabled agent's conversation. It says what
+   * still works and what does not, because a screen with no field and a
+   * button would otherwise read as a bug. */
+  "chat.stella.disabledNotice": {
+    ja: "このエージェントは無効化されています。会話は読めますが、新しいメッセージは送れません。",
+    en: "This agent is disabled. Its conversation can be read, but no new messages can be sent.",
   },
   "chat.stella.placeholder": {
     ja: "メッセージを入力…",

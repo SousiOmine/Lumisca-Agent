@@ -128,6 +128,11 @@ export type StellaHook = {
    * re-read could land, and the App treats an address naming an agent it
    * cannot find as a conversation that is gone (see withAgentRow). */
   applyAgent: (agent: StellaAgent) => void;
+  /** Switch an agent off or back on, and take the row the server answered.
+   * Both the row's menu and the conversation's read-only notice call this,
+   * so the two cannot disagree about whether the agent is on. Rejects when
+   * the server refused; the caller shows why. */
+  setAgentEnabled: (id: string, enabled: boolean) => Promise<void>;
 };
 
 export function useStella(
@@ -182,6 +187,16 @@ export function useStella(
   const applyAgent = useCallback((agent: StellaAgent) => {
     setAgents((current) => withAgentRow(current, agent));
   }, []);
+
+  const setAgentEnabled = useCallback(
+    async (id: string, enabled: boolean): Promise<void> => {
+      // The answer carries the row: the list moves it under the fold, and
+      // the open conversation's effect re-runs because its agent's state
+      // changed (see the open effect's dependencies).
+      applyAgent(await api.updateStellaAgent(id, { enabled }));
+    },
+    [applyAgent],
+  );
 
   // The agent list: read when stella becomes the mode, after a change, and on
   // the refresh timer below. Nothing here picks a conversation — the address
@@ -253,9 +268,18 @@ export function useStella(
     );
   }, [enabled, activeAgentId, conversationAgentId, conversation]);
 
+  // Whether the agent the address names is switched off, as the list knows
+  // it. Read as a boolean because it is a dependency of the open effect: the
+  // conversation must be re-read when the switch flips, and a row that merely
+  // refreshed its preview must not reopen anything.
+  const activeAgent = agents.find((agent) => agent.id === activeAgentId);
+  const activeAgentDisabled =
+    activeAgent !== undefined && activeAgent.disabledAt !== null;
+
   // Open the active agent's conversation. The server starts the machine on
   // this call, so a first run waits here (minutes) — `loading` is what the
-  // view shows during it.
+  // view shows during it. A disabled agent's open is read-only and starts
+  // nothing, which is why flipping the switch has to re-run it.
   //
   // No "already opening" guard: the effect's dependencies are the agent and
   // the mode, so it runs once per selection, and the server's open is
@@ -294,14 +318,26 @@ export function useStella(
     return () => {
       disposed = true;
     };
-  }, [enabled, activeAgentId, t]);
+  }, [enabled, activeAgentId, activeAgentDisabled, t]);
+
+  // A read-only conversation has no events to receive: its agent is switched
+  // off, so nothing can be running. Opening the socket anyway left it silent
+  // for as long as the tab stayed open.
+  const conversationReadOnly = conversation?.disabled === true;
 
   // The conversation's event stream. One socket per open conversation; a
   // drop re-reads the snapshot (the events are never replayed) and
   // reconnects with backoff. Revision probes cover the frames that were
   // emitted while the socket looked open.
   useEffect(() => {
-    if (!enabled || activeAgentId === null || conversation === null) return;
+    if (
+      !enabled ||
+      activeAgentId === null ||
+      conversation === null ||
+      conversationReadOnly
+    ) {
+      return;
+    }
     let closed = false;
     /** Whether a run was under way when the last event arrived. A duplicate
      * `agent_end` (the same run's end seen twice) must not notify twice, and
@@ -438,10 +474,10 @@ export function useStella(
     };
     // `conversation === null` gates the first connection: there is no
     // stream before there is a conversation. Re-running on every state
-    // change would reconnect per message, so only the agent and the "has an
-    // open conversation" flag are dependencies.
+    // change would reconnect per message, so only the agent, the "has an
+    // open conversation" flag and "is it read-only" are dependencies.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, activeAgentId, conversation !== null]);
+  }, [enabled, activeAgentId, conversation !== null, conversationReadOnly]);
 
   // The address moved to another conversation (or back to the list): drop
   // the previous one's state. The conversation itself stays on the server, so
@@ -678,5 +714,6 @@ export function useStella(
     loading,
     reloadAgents,
     applyAgent,
+    setAgentEnabled,
   };
 }

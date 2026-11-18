@@ -51,6 +51,7 @@ export function AgentRoutinesDialog({
           </div>
           <RoutinePanel
             routines={routines.routines}
+            agentDisabled={agent.disabledAt !== null}
             loading={routines.loading}
             error={routines.error}
             onRefresh={routines.refresh}

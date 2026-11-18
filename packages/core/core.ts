@@ -791,7 +791,19 @@ export class LumiscaCore {
         const agent = this.pool.get(session.id);
         return agent !== undefined && agent.isStreaming;
       },
+      isAgentEnabled: (agentId) => {
+        const agent = this.stellaAgents.get(agentId);
+        return agent !== undefined && agent.disabledAt === null;
+      },
       run: async (agentId, prompt, routine, trigger) => {
+        const owner = this.stellaAgents.get(agentId);
+        if (owner === undefined || owner.disabledAt !== null) {
+          // The agent was switched off after this run was queued. Opening
+          // its conversation would undo the release the disable performed
+          // (see openSession), so the run is refused rather than run into a
+          // conversation the user cannot see.
+          throw new CoreError(`Agent ${agentId} is disabled`, "conflict");
+        }
         const session = this.sessions.getByAgent(agentId);
         if (session === undefined) {
           // The agent exists but its conversation was never opened, or it
@@ -1254,6 +1266,13 @@ export class LumiscaCore {
    * Afterwards the conversation row follows the choice (see
    * applyStellaAgentModel). An agent whose conversation does not exist yet
    * simply opens on it later (see StellaMachineService.getOrCreateStellaSession).
+   *
+   * `enabled` switches the agent off or back on. Switching it off is more
+   * than a row write: its conversation is closed, which aborts a run in
+   * flight and stops its background commands and MCP servers, and its
+   * desktop is given back so another conversation can use the slot. The row
+   * is written FIRST, so the next open reads "disabled" and builds nothing
+   * while those two are being torn down.
    */
   async updateStellaAgent(
     id: string,
@@ -1262,6 +1281,7 @@ export class LumiscaCore {
       icon?: { bytes: Uint8Array; extension: string } | null;
       model?: { provider: string; modelId: string } | null;
       thinkingLevel?: { provider: string; modelId: string; level: string };
+      enabled?: boolean;
     },
   ): Promise<StellaAgent> {
     const agent = this.stellaAgents.get(id);
@@ -1307,7 +1327,9 @@ export class LumiscaCore {
       ...(patch.name === undefined ? {} : { name: patch.name }),
       icon: patch.icon,
       ...(model === undefined ? {} : { model }),
+      ...(patch.enabled === undefined ? {} : { enabled: patch.enabled }),
     });
+    if (patch.enabled === false) await this.releaseStellaAgent(id);
     if (model !== undefined) await this.applyStellaAgentModel(id, model);
     // Through the same setter the model settings use, so open conversations
     // on that model pick the level up for their next run.
@@ -1359,6 +1381,31 @@ export class LumiscaCore {
       wanted.provider,
       wanted.modelId,
     );
+  }
+
+  /**
+   * Give back everything a disabled agent was holding.
+   *
+   * Closing the conversation is what aborts a run in flight: `SessionAgent.
+   * close()` aborts, and the pool drops the agent with its background
+   * commands and MCP servers. The desktop goes separately because it belongs
+   * to the machine, not to the session, and a slot held by an agent nobody
+   * can open is the one resource this state exists to free.
+   *
+   * The abort is issued before the screen goes. A tool call already inside
+   * the machine may still fail when its display disappears, which is the
+   * right answer for a run that is being discarded: it must not keep working
+   * in the background of an agent nobody can open. The desktop is released
+   * even when closing fails, because the row already says "disabled" and the
+   * next open would not give it back either.
+   */
+  private async releaseStellaAgent(agentId: string): Promise<void> {
+    const session = this.sessions.getByAgent(agentId);
+    try {
+      if (session !== undefined) await this.closeSession(session.id);
+    } finally {
+      await this.services.stellaMachines.releaseDesktop(agentId);
+    }
   }
 
   resolveStellaAgentIcon(
@@ -1418,7 +1465,8 @@ export class LumiscaCore {
    */
   startStellaOnboarding(agentId: string): boolean {
     const agent = this.services.stellaAgents.getStellaAgent(agentId);
-    if (agent === undefined || agent.onboardedAt !== null) return false;
+    if (agent === undefined || agent.disabledAt !== null) return false;
+    if (agent.onboardedAt !== null) return false;
     const session = this.sessions.getByAgent(agentId);
     if (session === undefined) return false;
     const open = this.services.sessions.getAgent(session.id);
@@ -1715,7 +1763,23 @@ export class LumiscaCore {
     return this.services.sessions.resolveSessionAttachment(sessionId, name);
   }
 
+  /** Open a session, unless it is a stella conversation whose agent is
+   * disabled.
+   *
+   * A disabled agent has nothing to open into: building its agent would undo
+   * the release the disable performed, and its conversation is served from
+   * the store instead (see readStellaConversationFromStore). Refusing here
+   * is what keeps every path that opens a session — a rewind, a routine that
+   * was already queued — from rebuilding it.
+   */
   openSession(id: string): SessionInfo {
+    const session = this.sessions.get(id);
+    if (session?.agentId !== undefined) {
+      const agent = this.stellaAgents.get(session.agentId);
+      if (agent !== undefined && agent.disabledAt !== null) {
+        throw new CoreError(`Agent ${agent.id} is disabled`, "conflict");
+      }
+    }
     return this.services.sessions.openSession(id);
   }
 
@@ -1787,6 +1851,15 @@ export class LumiscaCore {
     query: WindowQuery,
   ): WindowPage<StellaEntry> | undefined {
     return this.services.sessions.readStellaConversation(id, query);
+  }
+
+  /** One window of a conversation that is not open, read from the store
+   * alone. A disabled agent's conversation is the only such case. */
+  readStellaConversationFromStore(
+    id: string,
+    query: WindowQuery,
+  ): WindowPage<StellaEntry> {
+    return this.services.sessions.readStellaConversationFromStore(id, query);
   }
 
   /** Put a prompt's attached files into the machine. */

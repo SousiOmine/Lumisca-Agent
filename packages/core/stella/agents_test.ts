@@ -187,6 +187,29 @@ Deno.test("agents: rename and delete", () => {
   }
 });
 
+Deno.test("agents: switching an agent off is a column of its own", () => {
+  const { db, repo } = setup();
+  try {
+    const agent = repo.create({ name: "Aide", role: "r" });
+    // On is the state every row starts in, and it is NULL rather than a
+    // timestamp, so nothing has to be backfilled for agents that predate it.
+    assertEquals(agent.disabledAt, null);
+
+    repo.setDisabled(agent.id, 1_700_000_000_000);
+    assertEquals(repo.get(agent.id)?.disabledAt, 1_700_000_000_000);
+    // Switching it off is not talking to it: the sidebar's order is when the
+    // conversation last spoke, and this changed no words.
+    assertEquals(repo.get(agent.id)?.updatedAt, agent.updatedAt);
+
+    repo.setDisabled(agent.id, null);
+    assertEquals(repo.get(agent.id)?.disabledAt, null);
+    // A row that is gone fails loudly instead of writing nothing.
+    assertThrows(() => repo.setDisabled("gone", 1), Error, "not found");
+  } finally {
+    db.close();
+  }
+});
+
 Deno.test("agents: the identity is the agent's own text, kept apart from the role", () => {
   const { db, repo } = setup();
   try {

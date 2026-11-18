@@ -1,7 +1,10 @@
 import type { Translator } from "@lumisca/core/shared";
 import { errorMessage } from "@lumisca/core/shared";
 import {
+  IconChevronRight,
   IconPencil,
+  IconPlayerPause,
+  IconPlayerPlay,
   IconPlus,
   IconRepeat,
   IconTrash,
@@ -43,6 +46,10 @@ interface StellaSidebarProps {
    * at wide widths, the title bar at phone widths), so the dialog itself is
    * the App's, not this component's. */
   onNewAgent: () => void;
+  /** Switch an agent off or back on. Owned above this list because the
+   * conversation's read-only notice flips the same switch, and the two must
+   * take the row the server answered (see hooks/useStella). */
+  onSetEnabled: (id: string, enabled: boolean) => Promise<void>;
 }
 
 /** Where a row's menu is drawn, in viewport coordinates from the LEFT and
@@ -116,13 +123,19 @@ function previewTextOf(preview: StellaPreview, t: Translator): string {
  * without this dialog ever opening.
  *
  * A row's menu holds what can be done TO an agent — edit its name, picture and
- * model, see its routines, delete it — apart from what the row itself does,
- * which is open the conversation. Routines are
+ * model, see its routines, switch it off or on, delete it — apart from what
+ * the row itself does, which is open the conversation. Routines are
  * here rather than in the settings dialog because they belong to one agent,
  * and this is where the reader names that agent without opening anything.
  * Deleting is not on the row: an always-visible × on every row reads as
  * "something to delete here", and it put a destructive control one stray
  * click from the thing the list exists for.
+ *
+ * A switched-off agent is not hidden: its conversation stays readable, so
+ * its row moves under a fold at the bottom of the list — the agents the user
+ * put away, kept out of the way but still one click from their history. The
+ * fold is closed until the reader opens it; switching off the conversation
+ * on screen opens it once, so the row does not appear to vanish.
  */
 export function StellaSidebar({
   agents,
@@ -132,6 +145,7 @@ export function StellaSidebar({
   onChanged,
   onAgentChanged,
   onNewAgent,
+  onSetEnabled,
 }: StellaSidebarProps) {
   const t = useT();
   const locale = useLocale();
@@ -151,6 +165,9 @@ export function StellaSidebar({
     null,
   );
   const [error, setError] = useState<string | null>(null);
+  /** Whether the fold of disabled agents is open. Closed by default: they
+   * are the agents the user put away. */
+  const [showDisabled, setShowDisabled] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   /** The press a fingertip is holding, while it is still a candidate for the
    * long press: whose row it is, where it went down, and the timer. */
@@ -231,6 +248,29 @@ export function StellaSidebar({
     }
   };
 
+  /** Flip one agent's on/off state. The failure is shown where the reader is
+   * looking (the list's own error line): the menu is gone by then. */
+  const setEnabled = async (agent: StellaAgentSummary, enabled: boolean) => {
+    setMenu(null);
+    try {
+      await onSetEnabled(agent.id, enabled);
+    } catch (failure) {
+      setError(errorMessage(failure));
+    }
+  };
+
+  // The two lists the sidebar draws. A disabled agent is not hidden: its
+  // conversation stays readable, so its row stays in the list, under a fold
+  // at the bottom that says why nothing runs there.
+  const active = agents.filter((agent) => agent.disabledAt === null);
+  const disabled = agents.filter((agent) => agent.disabledAt !== null);
+  const activeIsDisabled = disabled.some((agent) => agent.id === activeId);
+  useEffect(() => {
+    // Switching off the conversation on screen would hide its row in a fold
+    // nobody opened. Opening is one-way: the reader closes it themselves.
+    if (activeIsDisabled) setShowDisabled(true);
+  }, [activeIsDisabled]);
+
   /** Open a row's menu along the row itself. This is where a keyboard's menu
    * key lands (Shift+F10 too): it has no pointer of its own, and the row's
    * left edge under the name is the place the reader is looking at. */
@@ -302,6 +342,86 @@ export function StellaSidebar({
     event.stopPropagation();
   };
 
+  /** One row, drawn by both lists. The fold's rows are the same rows: an
+   * agent does not become a different kind of thing because it is switched
+   * off, and the menu it opens is the same one (the on/off item reads the
+   * row's own state). */
+  const rowOf = (agent: StellaAgentSummary) => (
+    <div
+      key={agent.id}
+      className={`stella-agent${agent.id === activeId ? " active" : ""}${agent.disabledAt !== null ? " disabled" : ""}`}
+      data-enter={entering.has(agent.id) || undefined}
+      onContextMenu={(event) => openMenuAt(agent, event)}
+      onPointerDown={(event) => startPress(agent, event)}
+      onPointerMove={movePress}
+      onPointerUp={endPress}
+      onPointerCancel={endPress}
+      onPointerLeave={endPress}
+      onClickCapture={swallowPressClick}
+      onKeyDown={(event) => {
+        // The browser's own context-menu keys. The menu is a popover
+        // now, not a button on the row, so this is how a keyboard
+        // reaches it.
+        if (
+          event.key === "ContextMenu" ||
+          (event.shiftKey && event.key === "F10")
+        ) {
+          event.preventDefault();
+          openMenuOnRow(agent, event.currentTarget);
+        }
+      }}
+    >
+      {/* The picture is part of the row's name button, not a control of
+          its own: the row's one action is "open this conversation", and
+          what the agent is called or looks like belongs to the ⋮ menu
+          beside it — not to a list the eye scans. */}
+      <button
+        type="button"
+        className="stella-agent-name"
+        onClick={() => onSelect(agent.id)}
+      >
+        <AgentAvatar
+          agentId={agent.id}
+          name={agent.name}
+          icon={agent.icon}
+          size={40}
+        />
+        <span className="stella-agent-text">
+          {/* The two facts a message app puts in a row: who, and when
+           * that conversation last said something. The time sits at
+           * the far edge of the name's line — scanned down the list,
+           * the column of times is what tells the reader which
+           * conversation is current, and it is the time of the
+           * MESSAGE, not of the last visit (a list that says "3分前"
+           * about something said last week is about the reader, not
+           * the conversation). */}
+          <span className="stella-agent-head">
+            <span className="stella-agent-label">{agent.name}</span>
+            {agent.preview !== null && (
+              <time
+                className="stella-agent-time"
+                dateTime={new Date(agent.preview.at).toISOString()}
+              >
+                {formatRelativeTime(agent.preview.at, locale)}
+              </time>
+            )}
+          </span>
+          {/* What was said last. It stays while the agent works: a
+           * row that replaced the message with "working" took away
+           * the one thing the reader was looking at. A fresh agent
+           * has said nothing, so its row is one line, exactly like a
+           * message app's row for someone you have not talked to
+           * yet. */}
+          {agent.preview !== null && (
+            <span className="stella-agent-meta">
+              {previewTextOf(agent.preview, t)}
+            </span>
+          )}
+        </span>
+      </button>
+    </div>
+  );
+
   return (
     <aside className="stella-sidebar">
       {/* The list's one control, on the row above the list — the same row the
@@ -333,81 +453,36 @@ export function StellaSidebar({
             {t("chat.stella.agents.empty")}
           </p>
         )}
-        {agents.map((agent) => (
-          <div
-            key={agent.id}
-            className={`stella-agent${agent.id === activeId ? " active" : ""}`}
-            data-enter={entering.has(agent.id) || undefined}
-            onContextMenu={(event) => openMenuAt(agent, event)}
-            onPointerDown={(event) => startPress(agent, event)}
-            onPointerMove={movePress}
-            onPointerUp={endPress}
-            onPointerCancel={endPress}
-            onPointerLeave={endPress}
-            onClickCapture={swallowPressClick}
-            onKeyDown={(event) => {
-              // The browser's own context-menu keys. The menu is a popover
-              // now, not a button on the row, so this is how a keyboard
-              // reaches it.
-              if (
-                event.key === "ContextMenu" ||
-                (event.shiftKey && event.key === "F10")
-              ) {
-                event.preventDefault();
-                openMenuOnRow(agent, event.currentTarget);
-              }
-            }}
-          >
-            {/* The picture is part of the row's name button, not a control of
-                its own: the row's one action is "open this conversation", and
-                what the agent is called or looks like belongs to the ⋮ menu
-                beside it — not to a list the eye scans. */}
+        {active.map(rowOf)}
+        {disabled.length > 0 && (
+          <section className="stella-agent-group">
             <button
               type="button"
-              className="stella-agent-name"
-              onClick={() => onSelect(agent.id)}
+              className="stella-agent-group-toggle"
+              aria-expanded={showDisabled}
+              aria-controls="stella-disabled-agents"
+              onClick={() => setShowDisabled((open) => !open)}
             >
-              <AgentAvatar
-                agentId={agent.id}
-                name={agent.name}
-                icon={agent.icon}
-                size={40}
-              />
-              <span className="stella-agent-text">
-                {/* The two facts a message app puts in a row: who, and when
-                 * that conversation last said something. The time sits at
-                 * the far edge of the name's line — scanned down the list,
-                 * the column of times is what tells the reader which
-                 * conversation is current, and it is the time of the
-                 * MESSAGE, not of the last visit (a list that says "3分前"
-                 * about something said last week is about the reader, not
-                 * the conversation). */}
-                <span className="stella-agent-head">
-                  <span className="stella-agent-label">{agent.name}</span>
-                  {agent.preview !== null && (
-                    <time
-                      className="stella-agent-time"
-                      dateTime={new Date(agent.preview.at).toISOString()}
-                    >
-                      {formatRelativeTime(agent.preview.at, locale)}
-                    </time>
-                  )}
-                </span>
-                {/* What was said last. It stays while the agent works: a
-                 * row that replaced the message with "working" took away
-                 * the one thing the reader was looking at. A fresh agent
-                 * has said nothing, so its row is one line, exactly like a
-                 * message app's row for someone you have not talked to
-                 * yet. */}
-                {agent.preview !== null && (
-                  <span className="stella-agent-meta">
-                    {previewTextOf(agent.preview, t)}
-                  </span>
-                )}
+              <span className="stella-agent-group-chevron" aria-hidden="true">
+                <IconChevronRight size={14} />
+              </span>
+              <span className="stella-agent-group-label">
+                {t("chat.stella.agents.disabledGroup")}
+              </span>
+              <span className="stella-agent-group-count">
+                {disabled.length}
               </span>
             </button>
-          </div>
-        ))}
+            <div className="collapse" data-open={showDisabled}>
+              <div
+                className="collapse-inner stella-agent-group-rows"
+                id="stella-disabled-agents"
+              >
+                {disabled.map(rowOf)}
+              </div>
+            </div>
+          </section>
+        )}
       </nav>
       {menu !== null && (
         <div
@@ -447,6 +522,30 @@ export function StellaSidebar({
           >
             <IconRepeat size={14} />
             <span>{t("chat.stella.agents.routines")}</span>
+          </button>
+          {/* The one item that changes what the agent DOES rather than what
+           * it is called. Its label follows the row: a disabled agent is the
+           * one that offers "enable". */}
+          <button
+            type="button"
+            className="app-menu-item"
+            role="menuitem"
+            onClick={() =>
+              void setEnabled(menu.agent, menu.agent.disabledAt !== null)
+            }
+          >
+            {menu.agent.disabledAt !== null ? (
+              <IconPlayerPlay size={14} />
+            ) : (
+              <IconPlayerPause size={14} />
+            )}
+            <span>
+              {t(
+                menu.agent.disabledAt !== null
+                  ? "chat.stella.agents.enable"
+                  : "chat.stella.agents.disable",
+              )}
+            </span>
           </button>
           <button
             type="button"

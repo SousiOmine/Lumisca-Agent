@@ -151,6 +151,14 @@ export class SessionService {
     return this.transcript.readStellaConversation(id, query);
   }
 
+  /** One window of a conversation that is not open (a disabled agent's). */
+  readStellaConversationFromStore(
+    id: string,
+    query: WindowQuery,
+  ): WindowPage<StellaEntry> {
+    return this.transcript.readStellaConversationFromStore(id, query);
+  }
+
   getSessionUsage(id: string): ContextUsageSummary {
     return this.transcript.getSessionUsage(id);
   }

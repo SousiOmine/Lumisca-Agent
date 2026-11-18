@@ -23,8 +23,9 @@ export function CardView({
   streaming = false,
 }: {
   markup: string;
-  /** Send the card's answer as the user's next message. */
-  onSend: (text: string) => void;
+  /** Send the card's answer as the user's next message. Omitted in a
+   * read-only conversation: the controls are drawn inert. */
+  onSend?: (text: string) => void;
   /** The markup is still being written: draw the blocks that have closed. A
    * card with nothing readable yet draws nothing — the "could not be
    * displayed" note is for a card that is FINISHED and wrong, and mid-stream

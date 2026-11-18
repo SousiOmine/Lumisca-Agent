@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertRejects } from "@std/assert";
+import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { NO_RESPONSE } from "./agent/silent-reply.ts";
 import {
   type FauxOptions,
@@ -2278,6 +2278,91 @@ Deno.test("stella routines: a run after a restart still has its skill catalog", 
       assertEquals(catalog.title.startsWith("Skills (none"), false);
       assert(catalog.body.includes("<available_skills>"), catalog.body);
     }
+  } finally {
+    await core.close();
+  }
+});
+
+/** A machine that records which desktop slots it was asked to stop. */
+function recordingVm(stopped: number[]): VmManager {
+  return {
+    status: () => Promise.resolve(RUNNING),
+    start: () => Promise.resolve(RUNNING),
+    stop: () => Promise.resolve(),
+    vncPort: () => Promise.resolve(RUNNING.vncPort),
+    startDesktop: () => Promise.resolve(),
+    stopDesktop: (slot) => {
+      stopped.push(slot);
+      return Promise.resolve();
+    },
+  };
+}
+
+Deno.test("stella disabled: switching an agent off releases what it held", async () => {
+  const stopped: number[] = [];
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting(
+    [faux.provider],
+    () => ({}),
+    recordingRunner(),
+  );
+  try {
+    core.models.models.setProvider(faux.provider);
+    await core.setProviderApiKey(faux.provider.id, "faux-key");
+    // The machine is the same stub, with the stop recorded: what a disable
+    // does to the slot is the fact under test.
+    core.setStellaVm(recordingVm(stopped));
+
+    const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
+    const session = await core.getOrCreateStellaSession(agent.id);
+    assert(core.getAgent(session.id) !== undefined);
+    // The screen pane asks for the port; that is what claims a desktop slot.
+    assertEquals(await core.stellaVncPort(agent.id), RUNNING.vncPort);
+
+    // One turn, so the store has something the disabled view must still
+    // serve.
+    faux.setResponses([fauxAssistantMessage("Noted.")]);
+    await promptSession(core, session.id, "The code word is pelican.");
+
+    const updated = await core.updateStellaAgent(agent.id, { enabled: false });
+    assertEquals(updated.disabledAt !== null, true);
+    // The conversation is closed (a run in flight would have been aborted),
+    // and its desktop slot went back.
+    assertEquals(core.getAgent(session.id), undefined);
+    assertEquals(stopped, [0]);
+
+    // Nothing may build it again: not the open endpoint, not a session open
+    // (which is how a rewind and a routine reach it), and no setup turn.
+    await assertRejects(
+      () => core.getOrCreateStellaSession(agent.id),
+      CoreError,
+      "disabled",
+    );
+    assertThrows(() => core.openSession(session.id), CoreError, "disabled");
+    assertEquals(core.startStellaOnboarding(agent.id), false);
+    // Its screen is not offered either: asking would start the desktop this
+    // state exists to release.
+    assertEquals(await core.stellaVncPort(agent.id), null);
+
+    // Its history is still there to read, straight from the store.
+    const page = core.readStellaConversationFromStore(session.id, {});
+    assert(
+      page.items.some((entry) => entry.text.includes("pelican")),
+      JSON.stringify(page.items),
+    );
+    assert(
+      page.items.some((entry) => entry.text.includes("Noted.")),
+      JSON.stringify(page.items),
+    );
+
+    // Switching it back on does not open it eagerly; the next open does.
+    const enabled = await core.updateStellaAgent(agent.id, { enabled: true });
+    assertEquals(enabled.disabledAt, null);
+    assertEquals(
+      (await core.getOrCreateStellaSession(agent.id)).id,
+      session.id,
+    );
+    assert(core.getAgent(session.id) !== undefined);
   } finally {
     await core.close();
   }

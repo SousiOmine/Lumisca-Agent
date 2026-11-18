@@ -291,6 +291,10 @@ export interface StellaAgentSummaryBase {
    * only read a client has before a conversation is opened, and choosing the
    * model must not require opening one. */
   model: { provider: string; modelId: string } | null;
+  /** When the user switched this agent off, or null while it is on. The
+   * sidebar lists a disabled agent under its own fold at the bottom of the
+   * list, and the conversation draws it read-only. */
+  disabledAt: number | null;
   /** When the user last talked to it (the "most recently used" order). */
   updatedAt: number;
   /** When the agent was created: the last tie-break of the row order, so two

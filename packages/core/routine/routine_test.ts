@@ -43,6 +43,8 @@ function runner(
     busy?: boolean;
     failure?: string | null;
     check?: Awaited<ReturnType<RoutineRunner["check"]>>;
+    /** Whether the routine's agent is switched on (the default). */
+    agentEnabled?: boolean;
   } = {},
 ): RoutineRunner & {
   started: string[];
@@ -66,6 +68,7 @@ function runner(
       busy = value;
     },
     isRunning: () => busy,
+    isAgentEnabled: () => options.agentEnabled !== false,
     run: async (agentId, prompt, routine) => {
       started.push(`${agentId}:${routine.name}:${prompt}`);
       await new Promise<void>((resolve) => {
@@ -699,6 +702,7 @@ function promptRunner(
     started,
     checks,
     isRunning: () => false,
+    isAgentEnabled: () => true,
     run: (agentId, prompt, routine) => {
       started.push(`${agentId}:${routine.name}:${prompt}`);
       return Promise.resolve({ failure: null });
@@ -984,6 +988,7 @@ Deno.test("scheduler: a busy conversation keeps ONE waiting run, not six", async
     const started: string[] = [];
     const fake: RoutineRunner = {
       isRunning: () => busy,
+      isAgentEnabled: () => true,
       run: () => {
         started.push("run");
         return Promise.resolve({ failure: null });
@@ -1037,6 +1042,7 @@ Deno.test("scheduler: a wait that lasts too long gives up without recording a ru
     routines.update(created.id, { nextRunAt: clock - 1_000 });
     const busyRunner: RoutineRunner = {
       isRunning: () => true,
+      isAgentEnabled: () => true,
       run: () => Promise.reject(new Error("must not run")),
       stop: () => {},
       check: () =>
@@ -1085,6 +1091,7 @@ Deno.test("scheduler: stopping a waiting run records it without a run time", asy
     routines.update(created.id, { nextRunAt: Date.now() - 1_000 });
     const busyRunner: RoutineRunner = {
       isRunning: () => true,
+      isAgentEnabled: () => true,
       run: () => Promise.reject(new Error("must not run")),
       stop: () => {},
       check: () =>
@@ -1244,5 +1251,85 @@ Deno.test("routine tools: an mcp watch without a lookup cannot be saved", async 
     );
   } finally {
     close();
+  }
+});
+
+Deno.test("routine scheduler: a disabled agent's routine is skipped, not run", async () => {
+  const { repo: routines, close } = repo();
+  const fake = runner({ agentEnabled: false });
+  try {
+    const created = routines.create({
+      agentId: AGENT,
+      name: "Check",
+      prompt: "check it",
+      schedule: { kind: "every", minutes: 30 },
+    });
+    routines.update(created.id, { nextRunAt: Date.now() - 1_000 });
+
+    const now = Date.now();
+    const scheduler = createRoutineScheduler({
+      repo: routines,
+      runner: fake,
+      now: () => now,
+      tickMs: 10_000,
+      catchUpDelayMs: 5,
+    });
+    scheduler.start();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    // Nothing ran, and the occurrence was spent: enabling the agent later
+    // must not release a pile of past runs.
+    assertEquals(fake.started.length, 0);
+    const advanced = routines.get(created.id)!;
+    assertEquals(advanced.nextRunAt! > now, true);
+    assertEquals(advanced.enabled, true);
+
+    // The row's own reason is not touched: the routine was not at fault.
+    assertEquals(advanced.lastStatus, null);
+  } finally {
+    close();
+  }
+});
+
+Deno.test("routine scheduler: a run already queued when the agent is switched off is skipped", async () => {
+  const { repo: routines } = repo();
+  let enabled = true;
+  // A runner that was told to run, then found the agent switched off: the
+  // scheduler asks again at the entry of run(), which is the seam a queued
+  // occurrence crosses after the user disabled the agent.
+  const started: string[] = [];
+  const fake: RoutineRunner = {
+    isRunning: () => false,
+    isAgentEnabled: () => enabled,
+    run: (agentId, prompt, routine) => {
+      started.push(`${agentId}:${routine.name}:${prompt}`);
+      return Promise.resolve({ failure: null });
+    },
+    stop: () => {},
+    check: () => Promise.resolve({ kind: "same", state: null }),
+  };
+  const scheduler = createRoutineScheduler({
+    repo: routines,
+    runner: fake,
+    tickMs: 10_000,
+    catchUpDelayMs: 60_000,
+  });
+  try {
+    const created = routines.create({
+      agentId: AGENT,
+      name: "Later",
+      prompt: "p",
+      schedule: { kind: "every", minutes: 30 },
+    });
+    enabled = false;
+    await scheduler.runNow(created.id);
+    assertEquals(started.length, 0);
+    // Recorded as skipped, without a run time: the request never reached the
+    // agent, and the list must not say it ran.
+    const row = routines.get(created.id)!;
+    assertEquals(row.lastStatus, "skipped");
+    assertEquals(row.lastRunAt, null);
+  } finally {
+    scheduler.stop();
   }
 });

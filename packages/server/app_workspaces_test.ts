@@ -1051,6 +1051,60 @@ Deno.test("stella API: the first agent list creates the starter agent", async ()
   }
 });
 
+Deno.test("stella API: a disabled agent's conversation is served without a machine", async () => {
+  const { core, server, base } = await setup();
+  try {
+    const listed = await json(base, "/api/stella/agents");
+    const { agents } = (await listed.json()) as {
+      agents: Array<{ id: string }>;
+    };
+    const id = agents[0]!.id;
+
+    const off = await json(base, `/api/stella/agents/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ enabled: false }),
+    });
+    assertEquals(off.status, 200);
+    const disabled = (await off.json()) as { disabledAt: number | null };
+    assert(disabled.disabledAt !== null, JSON.stringify(disabled));
+
+    // This core has no machine, so OPENING an enabled conversation would
+    // answer 503. The read must not go that way: a disabled agent's history
+    // is served from the store, and nothing is built for it.
+    const conversation = await json(base, `/api/stella/conversations/${id}`);
+    assertEquals(conversation.status, 200);
+    const snapshot = (await conversation.json()) as {
+      disabled: boolean;
+      sessionId: string | null;
+      running: boolean;
+    };
+    assertEquals(snapshot.disabled, true);
+    // Never opened, so there is no session row to name: the row appears when
+    // the agent is switched on and opened.
+    assertEquals(snapshot.sessionId, null);
+    assertEquals(snapshot.running, false);
+
+    const sent = await json(base, `/api/stella/conversations/${id}/prompt`, {
+      method: "POST",
+      body: JSON.stringify({ text: "hello" }),
+    });
+    assertEquals(sent.status, 409);
+
+    // Switching it back on restores the ordinary path: opening asks for the
+    // machine this core does not have.
+    const on = await json(base, `/api/stella/agents/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ enabled: true }),
+    });
+    assertEquals(on.status, 200);
+    const opened = await json(base, `/api/stella/conversations/${id}`);
+    assertEquals(opened.status, 503);
+  } finally {
+    server.shutdown();
+    void core.close();
+  }
+});
+
 Deno.test("stella API: the conversation's stream carries only the conversation", async () => {
   // The stream is its own endpoint (`…/events`), not a filter of `/ws`: a
   // stella client learns nothing about tool progress, the panels or the

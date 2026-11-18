@@ -251,6 +251,10 @@ function RoutinePrompt({ children }: { children: string }) {
 export interface RoutinePanelProps {
   /** The routines of the agent this list is about. */
   routines: RoutineView[];
+  /** The agent is switched off, so nothing here can run: the list stays
+   * readable and the rows stay editable, but "run now" is refused by the
+   * same rule the server applies. */
+  agentDisabled: boolean;
   loading: boolean;
   error: string | null;
   onRefresh: () => void;
@@ -269,6 +273,7 @@ export interface RoutinePanelProps {
  */
 export function RoutinePanel({
   routines,
+  agentDisabled,
   loading,
   error,
   onRefresh,
@@ -329,6 +334,13 @@ export function RoutinePanel({
           <IconRefresh size={14} />
         </button>
       </div>
+      {/* Under the head rather than in it: the head is one row of small
+       * print and a reload, and this sentence is about the whole list. */}
+      {agentDisabled && (
+        <p className="settings-note" role="status">
+          {t("panels.routine.agentDisabled")}
+        </p>
+      )}
       {loading && <p className="settings-note">{t("common.loading")}</p>}
       {error !== null && (
         <p className="error-text" role="alert">
@@ -449,7 +461,12 @@ export function RoutinePanel({
                     <button
                       type="button"
                       className="btn"
-                      disabled={busy === routine.id}
+                      disabled={busy === routine.id || agentDisabled}
+                      title={
+                        agentDisabled
+                          ? t("panels.routine.agentDisabled")
+                          : undefined
+                      }
                       onClick={() => act(routine.id, () => onRun(routine.id))}
                     >
                       <IconPlayerPlay size={14} />

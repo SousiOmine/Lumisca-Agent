@@ -148,8 +148,14 @@ export const panels = {
   },
   "panels.routine.run": { ja: "今すぐ実行", en: "Run now" },
   "panels.routine.stop": { ja: "停止", en: "Stop" },
-  "panels.routine.enable": { ja: "有効にする", en: "Enable" },
-  "panels.routine.disable": { ja: "無効にする", en: "Disable" },
+  "panels.routine.enable": { ja: "有効化", en: "Enable" },
+  "panels.routine.disable": { ja: "無効化", en: "Disable" },
+  /** Shown above the list when the AGENT is switched off: its routines are
+   * readable and editable, but nothing fires until it is back on. */
+  "panels.routine.agentDisabled": {
+    ja: "このエージェントは無効化されているため、ルーチンは実行されません。",
+    en: "This agent is disabled, so its routines do not run.",
+  },
 
   // --- UI cards (the send_chat tool's card argument) -------------------------
   "panels.ui.invalid": {

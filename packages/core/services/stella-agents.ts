@@ -200,6 +200,11 @@ export class StellaAgentService {
    * pair to the agent's conversation needs the model catalog and the running
    * conversation, which this book does not have (see
    * LumiscaCore.updateStellaAgent, its only caller).
+   *
+   * `enabled` is `undefined` for "leave it", `false` to switch the agent off
+   * and `true` to switch it back on. Again only the ROW is written: closing
+   * the conversation, giving its desktop back and stopping its routines need
+   * the pool, the machine and the scheduler, which live above this service.
    */
   async updateStellaAgent(
     id: string,
@@ -207,6 +212,7 @@ export class StellaAgentService {
       name?: string;
       icon?: { bytes: Uint8Array; extension: string } | null;
       model?: { provider: string; modelId: string } | null;
+      enabled?: boolean;
     },
   ): Promise<StellaAgent> {
     const agent = this.deps.agents.get(id);
@@ -251,6 +257,19 @@ export class StellaAgentService {
       }
     } else if (name !== undefined || model !== undefined) {
       this.deps.agents.update(id, fields);
+    }
+
+    // On/off is a column of its own: it moves neither the name nor the
+    // picture, and it must not move `updated_at`, which orders the list by
+    // when the conversation last spoke. The first timestamp is kept when the
+    // agent is already off, so repeating the request does not restamp it.
+    if (patch.enabled !== undefined) {
+      const disabledAt = patch.enabled
+        ? null
+        : (agent.disabledAt ?? Date.now());
+      if (disabledAt !== agent.disabledAt) {
+        this.deps.agents.setDisabled(id, disabledAt);
+      }
     }
 
     const updated = this.deps.agents.get(id);

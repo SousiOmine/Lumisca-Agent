@@ -691,8 +691,14 @@ export function App({ initialData }: AppProps): ReactElement {
                   : undefined
               }
               onEditAgent={() => setEditingStellaAgent(true)}
+              // A disabled agent has no screen to show: its desktop was
+              // given back when it was switched off, and asking for it would
+              // start the one this state releases.
               onToggleScreen={
-                !stellaHandedOver && stellaAgentId !== null
+                !stellaHandedOver &&
+                stellaAgentId !== null &&
+                stellaAgent !== undefined &&
+                stellaAgent.disabledAt === null
                   ? () => setStellaScreenOpen((open) => !open)
                   : undefined
               }

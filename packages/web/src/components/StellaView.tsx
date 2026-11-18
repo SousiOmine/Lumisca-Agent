@@ -1,3 +1,4 @@
+import { errorMessage } from "@lumisca/core/shared";
 import { IconFolderShare, IconSend } from "@tabler/icons-preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import {
@@ -69,6 +70,10 @@ interface StellaViewProps {
     files: PendingFile[],
   ) => void;
   onAbort: () => void;
+  /** Switch an agent back on. The conversation draws this beside the
+   * read-only notice in place of the composer: the row's menu is the other
+   * way in, and this is the one the reader is looking at. */
+  onEnableAgent: (agentId: string) => Promise<void>;
   /** Rewind from a message onward (the transcript's undo). */
   onRewind: (timestamp: number) => Promise<void>;
   /** Read the entries before the loaded window (the reader reached the top
@@ -130,6 +135,7 @@ export function StellaView({
   onFilesChange,
   onPrompt,
   onAbort,
+  onEnableAgent,
   onRewind,
   onLoadOlder,
   loadingOlder,
@@ -158,6 +164,14 @@ export function StellaView({
       ? conversation.shareRequest
       : null;
   const isRunning = conversation?.running === true;
+  /** The agent is switched off: the transcript is history, and everything
+   * that would make the agent DO something is gone from this screen. */
+  const disabled = conversation?.disabled === true;
+  /** The enable request in flight, and why it failed. Kept here rather than
+   * in the hook's conversation error, which replaces the transcript: a
+   * failed enable leaves the history the reader is looking at. */
+  const [enabling, setEnabling] = useState(false);
+  const [enableError, setEnableError] = useState<string | null>(null);
   // Lending a folder is a shell action (the folder is on the user's computer
   // and the picker is the shell's), so a browser tab does not offer it.
   const canShareFolder = inDesktopShell();
@@ -182,7 +196,7 @@ export function StellaView({
   const machineRunning = status?.state === "running";
   // The panel is the conversation's information, not only its screen: a lent
   // folder is worth opening it for while the machine is still starting.
-  const showScreen = screenOpen || handedOver;
+  const showScreen = !disabled && (screenOpen || handedOver);
   // The pane leaves the way it arrived: motion.ts plays its exit, so it has to
   // stay mounted for that. Without this the column vanished in one frame and
   // tore the conversation's width back out from under the eye.
@@ -263,8 +277,11 @@ export function StellaView({
             visualBase={visualBase}
             attachBase={attachBase}
             uploadBase={uploadBase}
-            onRewind={handleRewind}
-            onSend={(text) => onPrompt(text, [], [])}
+            // A disabled conversation is history: the rewind button would
+            // rewrite a transcript the server refuses to open, and a card's
+            // answer would be a message nobody can send.
+            onRewind={disabled ? undefined : handleRewind}
+            onSend={disabled ? undefined : (text) => onPrompt(text, [], [])}
             onProvideEnv={onProvideEnv}
             onDeclineEnv={onDeclineEnv}
             onPickShare={() => setShareDialogOpen(true)}
@@ -293,47 +310,89 @@ export function StellaView({
                 : t("chat.stella.share.active", { count: shares.length })}
             </p>
           )}
-          <Composer
-            value={input}
-            onChange={onInputChange}
-            placeholder={
-              agent === null
-                ? t("chat.stella.noAgent")
-                : t("chat.stella.placeholder")
-            }
-            // No model line here. A stella conversation is one ongoing
-            // chat, so its model belongs to the AGENT and is set once in the
-            // agent's edit dialog (AgentEditDialog) rather than chosen per
-            // message: a control the user changes rarely does not deserve a
-            // row of every screen. The escape from a retired model is there
-            // too.
-            model={conversation?.model ?? null}
-            onModelSelect={() => {}}
-            modelBar="none"
-            submitLabel={t("chat.composer.submit")}
-            submitIcon={IconSend}
-            submitIconOnly
-            // Nothing can be sent before the conversation exists (it is
-            // created once an agent is picked and the machine runs), so the
-            // button says so instead of accepting a prompt that goes nowhere.
-            submitDisabled={
-              (!input.trim() && images.length === 0 && files.length === 0) ||
-              conversation === null
-            }
-            onAbort={isRunning ? onAbort : undefined}
-            onSubmit={submit}
-            onOpenSettings={onOpenSettings}
-            images={images}
-            onImagesChange={onImagesChange}
-            files={files}
-            onFilesChange={onFilesChange}
-            onShareFolder={
-              canShareFolder && conversation !== null && sessionId !== null
-                ? () => setShareDialogOpen(true)
-                : undefined
-            }
-            sharing={shares.length > 0}
-          />
+          {disabled ? (
+            // The one thing a disabled agent can still do is be switched
+            // back on. The notice says why nothing here works, and the
+            // button is the way out of it without going back to the list.
+            <div className="stella-disabled-note">
+              <p className="stella-disabled-text">
+                {t("chat.stella.disabledNotice")}
+              </p>
+              {loading ? (
+                // The switch was flipped and the conversation is being
+                // opened (a cold machine takes minutes). The button is gone
+                // rather than pressable a second time for nothing.
+                <p className="stella-loading" role="status">
+                  {t("chat.stella.loading")}
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={enabling || agent === null}
+                  onClick={() => {
+                    if (agent === null) return;
+                    setEnabling(true);
+                    setEnableError(null);
+                    void onEnableAgent(agent.id)
+                      .catch((failure: unknown) =>
+                        setEnableError(errorMessage(failure)),
+                      )
+                      .finally(() => setEnabling(false));
+                  }}
+                >
+                  {t("chat.stella.agents.enable")}
+                </button>
+              )}
+              {enableError !== null && (
+                <p className="error-text" role="alert">
+                  {enableError}
+                </p>
+              )}
+            </div>
+          ) : (
+            <Composer
+              value={input}
+              onChange={onInputChange}
+              placeholder={
+                agent === null
+                  ? t("chat.stella.noAgent")
+                  : t("chat.stella.placeholder")
+              }
+              // No model line here. A stella conversation is one ongoing
+              // chat, so its model belongs to the AGENT and is set once in the
+              // agent's edit dialog (AgentEditDialog) rather than chosen per
+              // message: a control the user changes rarely does not deserve a
+              // row of every screen. The escape from a retired model is there
+              // too.
+              model={conversation?.model ?? null}
+              onModelSelect={() => {}}
+              modelBar="none"
+              submitLabel={t("chat.composer.submit")}
+              submitIcon={IconSend}
+              submitIconOnly
+              // Nothing can be sent before the conversation exists (it is
+              // created once an agent is picked and the machine runs), so the
+              // button says so instead of accepting a prompt that goes nowhere.
+              submitDisabled={
+                (!input.trim() && images.length === 0 && files.length === 0) ||
+                conversation === null
+              }
+              onAbort={isRunning ? onAbort : undefined}
+              onSubmit={submit}
+              onOpenSettings={onOpenSettings}
+              images={images}
+              onImagesChange={onImagesChange}
+              files={files}
+              onFilesChange={onFilesChange}
+              onShareFolder={
+                canShareFolder && conversation !== null && sessionId !== null
+                  ? () => setShareDialogOpen(true)
+                  : undefined
+              }
+              sharing={shares.length > 0}
+            />
+          )}
         </div>
       </div>
       {pane.mounted && (

@@ -56,10 +56,13 @@ export function StellaTranscript({
    * conversation's upload route (their bytes live there, not in the
    * transcript). */
   uploadBase: string;
-  /** Rewind from an entry onward (the entry's timestamp names it). */
-  onRewind: (timestamp: number, text: string) => void;
-  /** Send a card's answer as the user's next message. */
-  onSend: (text: string) => void;
+  /** Rewind from an entry onward (the entry's timestamp names it). Omitted
+   * for a read-only conversation (a disabled agent's): there is no
+   * transcript to rewrite, so the control is not drawn. */
+  onRewind?: (timestamp: number, text: string) => void;
+  /** Send a card's answer as the user's next message. Omitted for the same
+   * reason: the card is history, and its choices are drawn inert. */
+  onSend?: (text: string) => void;
   /** The user entered the value `vm_env` asked for. The card that asks is
    * drawn here rather than over the window: the request is a turn of the
    * conversation (see EnvRequestCard). */

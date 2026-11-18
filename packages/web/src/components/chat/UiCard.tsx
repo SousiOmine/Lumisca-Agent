@@ -34,8 +34,11 @@ export function UiCard({
   onSend,
 }: {
   view: UiResolvedView;
-  /** Send the card's answer as the user's next message. */
-  onSend: (text: string) => void;
+  /** Send the card's answer as the user's next message. Omitted when the
+   * conversation cannot take a message (a disabled agent's history): the
+   * choice and form controls are then drawn inert rather than accepting an
+   * answer nobody would receive. */
+  onSend?: (text: string) => void;
 }) {
   return (
     <section className="ui-card">
@@ -73,7 +76,7 @@ function BlockView({
   onSend,
 }: {
   block: UiResolvedBlock;
-  onSend: (text: string) => void;
+  onSend?: (text: string) => void;
 }) {
   switch (block.type) {
     case "text":
@@ -115,7 +118,7 @@ function LayoutBlock({
     | UiStackBlock<UiResolvedBlock>
     | UiColumnsBlock<UiResolvedBlock>
     | UiGridBlock<UiResolvedBlock>;
-  onSend: (text: string) => void;
+  onSend?: (text: string) => void;
 }) {
   const className =
     block.type === "stack"
@@ -200,10 +203,13 @@ function ChoiceBlock({
   onSend,
 }: {
   block: UiChoiceBlock;
-  onSend: (text: string) => void;
+  onSend?: (text: string) => void;
 }) {
   const t = useT();
   const [selected, setSelected] = useState<number[]>([]);
+  // A card in a read-only conversation still draws its options, but picking
+  // one cannot send anything: the buttons are inert and keep their labels.
+  const canSend = onSend !== undefined;
 
   const toggle = (index: number) => {
     // A single choice sends on the click itself: making the user press
@@ -211,7 +217,7 @@ function ChoiceBlock({
     if (!block.multiple) {
       setSelected([index]);
       const message = choiceMessage(block, [index]);
-      if (message.length > 0) onSend(message);
+      if (message.length > 0) onSend?.(message);
       return;
     }
     setSelected((current) =>
@@ -235,6 +241,7 @@ function ChoiceBlock({
             role={block.multiple ? "checkbox" : "radio"}
             aria-checked={active}
             className={`ui-card-option${active ? " selected" : ""}`}
+            disabled={!canSend}
             onClick={() => toggle(index)}
           >
             <span className="ui-card-option-label">{option.label}</span>
@@ -248,10 +255,10 @@ function ChoiceBlock({
         <button
           type="button"
           className="btn primary ui-card-submit"
-          disabled={selected.length === 0}
+          disabled={!canSend || selected.length === 0}
           onClick={() => {
             const message = choiceMessage(block, selected);
-            if (message.length > 0) onSend(message);
+            if (message.length > 0) onSend?.(message);
           }}
         >
           {t("panels.ui.submit")}
@@ -300,8 +307,9 @@ function FormBlockView({
   onSend,
 }: {
   block: UiFormBlock;
-  onSend: (text: string) => void;
+  onSend?: (text: string) => void;
 }) {
+  const canSend = onSend !== undefined;
   const t = useT();
   const [values, setValues] = useState<Record<number, string | boolean>>({});
 
@@ -314,7 +322,7 @@ function FormBlockView({
       yes: t("panels.ui.yes"),
       no: t("panels.ui.no"),
     });
-    if (message.length > 0) onSend(message);
+    if (message.length > 0) onSend?.(message);
   };
 
   return (
@@ -330,7 +338,7 @@ function FormBlockView({
       <button
         type="button"
         className="btn primary ui-card-submit"
-        disabled={!formComplete(block, values)}
+        disabled={!canSend || !formComplete(block, values)}
         onClick={submit}
       >
         {block.submit ?? t("panels.ui.submit")}

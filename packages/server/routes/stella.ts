@@ -60,16 +60,19 @@ export interface StellaApi {
     name: string;
     role: string;
   }): Promise<StellaAgent>;
-  /** Change an agent's name, its picture, its model and/or that model's
-   * thinking strength, in one call: the sidebar's edit dialog saves them
-   * together, and a request that stored one but refused the other would leave
-   * the user with half of what they asked for. `icon` undefined → unchanged,
-   * null → back to the initial, `{ bytes, extension }` → a new picture;
-   * `model` undefined → unchanged, null → the app's default model, a pair →
-   * the model to run on (the core also moves the agent's existing
-   * conversation to it, now or as its current run ends); `thinkingLevel`
-   * undefined → unchanged, `{ provider, modelId, level }` → stores the level
-   * for that model (the level belongs to the model, so the request names it). */
+  /** Change an agent's name, its picture, its model, that model's thinking
+   * strength and/or whether it is switched on, in one call: the sidebar's
+   * edit dialog saves the first four together, and a request that stored one
+   * but refused the other would leave the user with half of what they asked
+   * for. `icon` undefined → unchanged, null → back to the initial,
+   * `{ bytes, extension }` → a new picture; `model` undefined → unchanged,
+   * null → the app's default model, a pair → the model to run on (the core
+   * also moves the agent's existing conversation to it, now or as its
+   * current run ends); `thinkingLevel` undefined → unchanged,
+   * `{ provider, modelId, level }` → stores the level for that model (the
+   * level belongs to the model, so the request names it); `enabled`
+   * undefined → unchanged, false → switch the agent off (closing its
+   * conversation and giving its desktop back), true → switch it on. */
   updateStellaAgent(
     id: string,
     patch: {
@@ -77,6 +80,7 @@ export interface StellaApi {
       icon?: { bytes: Uint8Array; extension: string } | null;
       model?: { provider: string; modelId: string } | null;
       thinkingLevel?: { provider: string; modelId: string; level: string };
+      enabled?: boolean;
     },
   ): Promise<StellaAgent>;
   deleteStellaAgent(id: string): Promise<void>;
@@ -109,6 +113,12 @@ export interface StellaApi {
     sessionId: string,
     query: WindowQuery,
   ): { items: StellaEntry[]; older: string | null } | undefined;
+  /** One window of a conversation that is not open, read from the store
+   * alone. A disabled agent's conversation is served this way. */
+  readStellaConversationFromStore(
+    sessionId: string,
+    query: WindowQuery,
+  ): { items: StellaEntry[]; older: string | null };
   /** The questions the run is waiting on (the ask tool). */
   getPendingQuestions(sessionId: string): StellaQuestion[];
   /** The screen hand-over the run is blocked on, or null. */
@@ -316,6 +326,20 @@ function parseModelPatch(
 }
 
 /**
+ * The on/off patch of an agent edit: absent means "leave it alone", and
+ * anything but a boolean is a 400. A body that says nothing is not the same
+ * request as one that says "on", and a typo in the field name must not read
+ * as silence.
+ */
+function parseEnabledPatch(value: unknown): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") {
+    throw new AppError("enabled (boolean) is required", 400);
+  }
+  return value;
+}
+
+/**
  * The thinking-strength patch of an agent edit: the level, and the model it
  * belongs to.
  *
@@ -426,32 +450,36 @@ export function stellaRoutes(core: StellaApi): Hono {
   });
 
   /** Change what an agent is called, what it looks like, which model its
-   * conversation runs on and how hard that model thinks.
+   * conversation runs on, how hard that model thinks, and whether it is
+   * switched on.
    *
-   * One route for all four because they are one act: the sidebar's edit
-   * dialog saves them together. The body names only what changed — an absent
-   * `name`, `icon`, `model` or `thinkingLevel` leaves that field alone,
-   * `"icon": null` returns the agent to its initial, `"model": null` returns
-   * it to the app's default model (`{provider, modelId}` sets one), and
-   * `thinkingLevel: {provider, modelId, level}` stores the level for that
-   * model. The picture is the
+   * One route because they are one act: the sidebar's edit dialog saves the
+   * first four together, and the row's menu flips `enabled`. The body names
+   * only what changed — an absent `name`, `icon`, `model`, `thinkingLevel`
+   * or `enabled` leaves that field alone, `"icon": null` returns the agent
+   * to its initial, `"model": null` returns it to the app's default model
+   * (`{provider, modelId}` sets one), `thinkingLevel: {provider, modelId,
+   * level}` stores the level for that model, `"enabled": false` switches the
+   * agent off and `"enabled": true` switches it back on. The picture is the
    * same shape a prompt's images take (`base64` + `mimeType`), and its
    * content type decides the stored format; the store then checks the bytes
    * really are that format, because a browser reports a type from the file's
    * name.
    *
    * What comes back is the updated agent: the client draws the new name,
-   * icon and model and needs no second read. Validation is the core's (an
-   * empty or taken name is a 400/409, an unknown agent, model or level a
-   * 404/400), so the route and the agent's own tools cannot disagree about
-   * what a valid choice is. A conversation with a run in flight is not
-   * refused: the model is stored and applied when that run ends. */
+   * icon, model and on/off state and needs no second read. Validation is the
+   * core's (an empty or taken name is a 400/409, an unknown agent, model or
+   * level a 404/400), so the route and the agent's own tools cannot disagree
+   * about what a valid choice is. A conversation with a run in flight is not
+   * refused: the model is stored and applied when that run ends, and
+   * switching the agent off aborts that run as it closes the conversation. */
   app.patch("/stella/agents/:id", async (c) => {
     const body = await parseBody<{
       name?: unknown;
       icon?: unknown;
       model?: unknown;
       thinkingLevel?: unknown;
+      enabled?: unknown;
     }>(c);
     const name =
       body?.name === undefined
@@ -460,12 +488,14 @@ export function stellaRoutes(core: StellaApi): Hono {
     const icon = parseIconPatch(body?.icon);
     const model = parseModelPatch(body?.model);
     const thinkingLevel = parseThinkingLevelPatch(body?.thinkingLevel);
+    const enabled = parseEnabledPatch(body?.enabled);
     return c.json(
       await core.updateStellaAgent(c.req.param("id"), {
         ...(name === undefined ? {} : { name }),
         icon,
         model,
         thinkingLevel,
+        ...(enabled === undefined ? {} : { enabled }),
       }),
     );
   });
@@ -492,6 +522,14 @@ export function stellaRoutes(core: StellaApi): Hono {
    * calling it again would only re-ask podman for an answer already known. */
   app.get("/stella/conversations/:agentId", async (c) => {
     const agentId = c.req.param("agentId");
+    const query = parseWindowQuery(c.req.url);
+    const agent = requireAgent(agentId);
+    // A disabled agent's conversation is read-only history: nothing is
+    // built, the machine is not started and no first turn is claimed. The
+    // entries come straight from the store (see readOnlySnapshot).
+    if (agent.disabledAt !== null) {
+      return c.json(readOnlySnapshot(agent, query));
+    }
     // A cold machine's failure is a CoreError("unavailable") — 503 through
     // the same mapping as every other route; an unknown agent is a
     // CoreError("not_found") — 404.
@@ -503,7 +541,7 @@ export function stellaRoutes(core: StellaApi): Hono {
     // is the setup turn — the only moment the app may speak before the user
     // does. It is claimed once, so a reload or a second client does not greet
     // anyone twice.
-    const snapshot = snapshotOf(session, agentId, parseWindowQuery(c.req.url));
+    const snapshot = snapshotOf(session, agentId, query);
     core.startStellaOnboarding(agentId);
     return c.json(snapshot);
   });
@@ -514,8 +552,15 @@ export function stellaRoutes(core: StellaApi): Hono {
    * (see snapshotOf). */
   app.get("/stella/conversations/:agentId/messages", (c) => {
     const agentId = c.req.param("agentId");
+    const query = parseWindowQuery(c.req.url);
+    const agent = requireAgent(agentId);
+    // A disabled conversation is re-read the same way it was opened: from
+    // the store, whether or not a session row exists yet.
+    if (agent.disabledAt !== null) {
+      return c.json(readOnlySnapshot(agent, query));
+    }
     const session = requireConversation(agentId);
-    return c.json(snapshotOf(session, agentId, parseWindowQuery(c.req.url)));
+    return c.json(snapshotOf(session, agentId, query));
   });
 
   /** The conversation's revision: how many events the server has emitted
@@ -538,7 +583,12 @@ export function stellaRoutes(core: StellaApi): Hono {
   app.post("/stella/conversations/:agentId/prompt", async (c) => {
     const body = await parseBody<PromptBody>(c);
     const { text, images, files } = parsePromptBody(body ?? {});
-    const session = requireConversation(c.req.param("agentId"));
+    const agentId = c.req.param("agentId");
+    // Refused BEFORE anything is written into the machine or started: a
+    // disabled agent has no run to send to, and `ensureStellaReady` below
+    // would bring the whole machine up for a message nobody can deliver.
+    requireEnabledAgent(agentId);
+    const session = requireConversation(agentId);
     // However this conversation was opened, the machine may have stopped
     // since. Every tool runs through `podman exec`, which refuses a stopped
     // container, so the wait belongs here: before the run starts, and before
@@ -690,13 +740,17 @@ export function stellaRoutes(core: StellaApi): Hono {
    * it while a hand-over is ending would fail a request that changed nothing.
    */
   app.get("/stella/conversations/:agentId/clipboard", async (c) => {
-    const session = requireConversation(c.req.param("agentId")!);
+    const agentId = c.req.param("agentId")!;
+    requireEnabledAgent(agentId);
+    const session = requireConversation(agentId);
     const text = await core.readStellaClipboard(session.id);
     return c.json({ text });
   });
 
   app.post("/stella/conversations/:agentId/clipboard", async (c) => {
-    const session = requireConversation(c.req.param("agentId")!);
+    const agentId = c.req.param("agentId")!;
+    requireEnabledAgent(agentId);
+    const session = requireConversation(agentId);
     if (core.getPendingHandover(session.id) === null) {
       throw new AppError("The screen is not handed over to the user", 409);
     }
@@ -724,6 +778,19 @@ export function stellaRoutes(core: StellaApi): Hono {
     "/stella/conversations/:agentId/events",
     upgradeWebSocket((c) => {
       const agentId = c.req.param("agentId");
+      // A disabled agent has no run and no event: a socket would sit silent
+      // for as long as the tab stays open. Closed at once, like a
+      // conversation that does not exist.
+      const agent =
+        agentId === undefined ? undefined : core.getStellaAgent(agentId);
+      if (agent !== undefined && agent.disabledAt !== null) {
+        return {
+          onOpen(_event, ws) {
+            ws.close(1013, "the agent is disabled");
+          },
+          onClose() {},
+        };
+      }
       const session =
         agentId === undefined ? undefined : core.findStellaSession(agentId);
       // A conversation is only streamed once it exists (the open endpoint
@@ -766,6 +833,68 @@ export function stellaRoutes(core: StellaApi): Hono {
       });
     }),
   );
+
+  /** The agent, or 404. */
+  function requireAgent(agentId: string): StellaAgent {
+    const agent = core.getStellaAgent(agentId);
+    if (agent === undefined) {
+      throw notFound("Agent", agentId);
+    }
+    return agent;
+  }
+
+  /** The agent, or 404 when it is gone, or 409 when it is switched off.
+   *
+   * Only the routes that would make the agent DO something call this: a
+   * prompt, and the clipboard, which is read through the machine. Reading
+   * the conversation does not, because a disabled agent's history is exactly
+   * what the user may still look at. */
+  function requireEnabledAgent(agentId: string): StellaAgent {
+    const agent = requireAgent(agentId);
+    if (agent.disabledAt !== null) {
+      throw new AppError(`Agent ${agentId} is disabled`, 409);
+    }
+    return agent;
+  }
+
+  /** The snapshot of a conversation nobody may open. Read from the store;
+   * every live field is empty by definition, because a disabled agent has no
+   * run, no hand-over and nothing waiting for an answer.
+   *
+   * A conversation that was never opened has no session row, so it is drawn
+   * as an empty history with no assets to address. The row is created when
+   * the agent is switched on and opened, not by a read: creating it here
+   * would need a model for a conversation nobody can send to.
+   */
+  function readOnlySnapshot(
+    agent: StellaAgent,
+    query: WindowQuery,
+  ): StellaConversationSnapshot {
+    const session = core.findStellaSession(agent.id);
+    const page =
+      session === undefined
+        ? { items: [], older: null }
+        : core.readStellaConversationFromStore(session.id, query);
+    return {
+      entries: page.items,
+      older: page.older,
+      running: false,
+      questions: [],
+      handover: null,
+      envRequest: null,
+      shareRequest: null,
+      shares: [],
+      agentName: agent.name,
+      disabled: true,
+      sessionId: session?.id ?? null,
+      model:
+        session === undefined
+          ? null
+          : { provider: session.modelProvider, modelId: session.modelId },
+      ...(session === undefined ? {} : core.getThinkingState(session.id)),
+      rev: session === undefined ? 0 : core.getSessionRevision(session.id),
+    };
+  }
 
   /** The agent's conversation, or 404. The conversation is created by the
    * open endpoint; every other call addresses one that exists.
@@ -816,6 +945,7 @@ export function stellaRoutes(core: StellaApi): Hono {
         ? { error: lastErrorOf(session.id) }
         : {}),
       agentName: core.getStellaAgent(agentId)?.name ?? session.name,
+      disabled: false,
       sessionId: session.id,
       // The model the conversation runs on. The client shows it in the
       // composer's model line, and switches from there; the conversation's

@@ -285,6 +285,28 @@ export class StellaMachine {
     return slot;
   }
 
+  /**
+   * Stop one agent's desktop and give its slot back.
+   *
+   * The user switched the agent off, so nothing may start its screen again:
+   * the entry is forgotten BEFORE the stop, which makes a screen opened at
+   * the same moment claim a different slot instead of one that is going
+   * away. A start still in flight is awaited first; one that failed needs no
+   * stop, and `desktopFor` has already forgotten its slot.
+   */
+  async releaseDesktop(agentId: string): Promise<void> {
+    const known = this.#desktops.get(agentId);
+    if (known === undefined) return;
+    this.#desktops.delete(agentId);
+    this.#slotUse.delete(known.slot);
+    try {
+      await known.started;
+    } catch {
+      return;
+    }
+    await this.#vm?.stopDesktop(known.slot);
+  }
+
   /** The host port of an agent's screen, starting its desktop when the
    * reader gets there before the agent does. */
   async vncPortFor(agentId: string): Promise<number | null> {

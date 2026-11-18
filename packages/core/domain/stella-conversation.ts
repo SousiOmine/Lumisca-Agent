@@ -157,15 +157,23 @@ export interface StellaConversationSnapshot {
   error?: string;
   /** The agent's name: the conversation's title. */
   agentName: string;
+  /** Whether the agent is switched off. A disabled conversation is
+   * read-only: its entries come from the store, nothing about it is running,
+   * and the client draws no composer, no screen and no rewind. */
+  disabled: boolean;
   /** Where the conversation's published images live (`visual:` references).
    * The client addresses the conversation by agent, so this id is the one
-   * thing it learns about the session — objects, not addressing. */
-  sessionId: string;
+   * thing it learns about the session — objects, not addressing.
+   *
+   * Null when the agent is disabled and its conversation was never opened:
+   * there is no session row to name, and nothing to read from one. */
+  sessionId: string | null;
   /** The model this conversation runs on, so the composer's model line shows
    * it and can switch it (POST `…/model`). The session row is the source of
    * truth; reading it here keeps a reopened conversation honest even when the
-   * app default has changed since. */
-  model: { provider: string; modelId: string };
+   * app default has changed since. Null for the case `sessionId` describes:
+   * no row exists, and a disabled conversation cannot be run on anything. */
+  model: { provider: string; modelId: string } | null;
   /** The thinking level the conversation's model runs at, and the levels it
    * supports. The composer's model line shows a strength control beside the
    * model when there is more than one level, the same as code mode's: a
