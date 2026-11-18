@@ -72,6 +72,7 @@ export type { FolderShare, ShareHostInfo } from "./domain/share.ts";
 export type {
   StellaConversationSnapshot,
   StellaEntry,
+  StellaEntryIdentity,
   StellaEnvRequest,
   StellaEvent,
   StellaHandover,

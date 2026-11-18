@@ -71,6 +71,21 @@ export interface StellaEntry {
   timestamp: number;
 }
 
+/** How a client matches an entry to the transcript messages a rewind removed:
+ * the role the entry is drawn as and the message's timestamp.
+ *
+ * A message is not what the conversation draws. A `send_chat` result is an
+ * assistant entry, a narration message before a tool call is nothing at all,
+ * and a routine's prompt is a user entry whether it arrived as a user or a
+ * mode message — so the server maps the transcript's identities to this pair
+ * where the projection knows the rule (agent/stella-stream.ts). The pair is
+ * coarser than an entry's own key, which separates entries that share a
+ * millisecond by what they said. */
+export interface StellaEntryIdentity {
+  role: StellaEntry["role"];
+  timestamp: number;
+}
+
 /** A pending ask (the `ask` tool): the questions the run is blocked on. */
 export type StellaQuestion = AskTurn;
 
@@ -232,4 +247,13 @@ export type StellaEvent =
   /** The folders lent to this conversation from the user's own computer
    * changed. The whole list travels, so the client replaces it. */
   | { type: "shares"; shares: FolderShare[] }
+  /** The conversation was rewound from a message onward: these entries were
+   * deleted, and so was everything after them.
+   *
+   * Named rather than described as a cut, because the entries are what a
+   * client holds: it drops exactly these and never has to decide where the
+   * boundary was. A re-read cannot carry the same fact — merging a window
+   * only adds — so this event is the only way a deleted turn leaves a screen
+   * that is already showing it. */
+  | { type: "truncated"; removed: StellaEntryIdentity[] }
   | { type: "error"; message: string };

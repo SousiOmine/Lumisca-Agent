@@ -371,6 +371,41 @@ test("stellaEventsOf: a failure reaches the conversation", () => {
   );
 });
 
+test("stellaEventsOf: a rewind says which entries went", () => {
+  // The messages a rewind deleted are transcript rows; the conversation draws
+  // entries, and the two role sets are not the same (see stellaEntryOf). A
+  // mode message is the user's entry and a tool result the agent's, while a
+  // context publication, a notification and a checkpoint are never drawn —
+  // naming them would widen what a client drops.
+  assertEquals(
+    stellaEventsOf({
+      type: "messages_truncated",
+      sessionId: "s",
+      removed: [
+        { role: "user", timestamp: 5 },
+        { role: "assistant", timestamp: 6 },
+        { role: "toolResult", timestamp: 6, toolCallId: "t1" },
+        { role: "mode", timestamp: 7 },
+        { role: "context", timestamp: 8, provider: "date" },
+        { role: "notification", timestamp: 9 },
+        { role: "checkpoint", timestamp: 10 },
+      ],
+    }),
+    [
+      {
+        type: "truncated",
+        removed: [
+          { role: "user", timestamp: 5 },
+          // The assistant message and the tool result of the same millisecond
+          // name one entry, so the pair appears once.
+          { role: "assistant", timestamp: 6 },
+          { role: "user", timestamp: 7 },
+        ],
+      },
+    ],
+  );
+});
+
 test("stellaEventsOf: an ask and a hand-over are the run's own state", () => {
   assertEquals(
     stellaEventsOf({

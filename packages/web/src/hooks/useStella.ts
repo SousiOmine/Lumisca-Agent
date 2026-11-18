@@ -21,6 +21,7 @@ import {
   prependOlderEntries,
   type StellaConversationState,
   stellaStateOf,
+  truncateFrom,
 } from "../stella-state.ts";
 import type {
   PendingFile,
@@ -613,6 +614,17 @@ export function useStella(
   const rewind = useCallback(
     async (timestamp: number) => {
       await stellaApi.rewind(requireAgent(), timestamp);
+      // The truncation also arrives as the conversation's own `truncated`
+      // event. Applying the answer here as well makes the view right the
+      // moment the request settles — even while the socket is between
+      // connections — and the event that follows finds nothing left to drop.
+      // The button sits on a user's message, and that is where the server cut
+      // (the first user message with this timestamp, see the core's Rewinder).
+      setConversation((current) =>
+        current === null
+          ? current
+          : (truncateFrom(current, { role: "user", timestamp }) ?? current),
+      );
     },
     [requireAgent],
   );

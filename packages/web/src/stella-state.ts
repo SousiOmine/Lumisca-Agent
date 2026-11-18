@@ -8,6 +8,7 @@ import type {
   FolderShare,
   StellaConversationSnapshot,
   StellaEntry,
+  StellaEntryIdentity,
   StellaEnvRequest,
   StellaEvent,
   StellaHandover,
@@ -280,6 +281,8 @@ export function applyStellaEvent(
     }
     case "ui_end":
       return state.liveUi === null ? null : { ...state, liveUi: null };
+    case "truncated":
+      return truncateEntries(state, event.removed);
     case "entry": {
       const entries = upsertEntry(state.entries, event.entry);
       // A message arrives whole, so an unchanged list means nothing to
@@ -324,6 +327,93 @@ export function applyStellaEvent(
     case "error":
       return { ...state, error: event.message, liveUi: null };
   }
+}
+
+/**
+ * The conversation after a rewind, as the stream reports it: the entries it
+ * named are gone.
+ *
+ * A snapshot cannot express this — `stellaStateOf` merges append-only, so
+ * re-reading the conversation keeps the deleted tail — which is why the
+ * answer is a function of the event and not of a read. Returns null when
+ * nothing changed, so a memoized view keeps its state.
+ */
+export function truncateEntries(
+  state: StellaConversationState,
+  removed: readonly StellaEntryIdentity[],
+): StellaConversationState | null {
+  const keys = new Set(removed.map(identityKeyOf));
+  return withEntries(
+    state,
+    state.entries.filter((entry) => !keys.has(identityKeyOf(entry))),
+  );
+}
+
+/**
+ * The conversation after a rewind THIS window asked for: everything from the
+ * entry at `at` onward is gone.
+ *
+ * The answer to a rewind does not say what it deleted, and waiting for the
+ * stream's `truncated` event would leave the view unchanged while the socket
+ * is between connections. A rewind deletes a contiguous tail starting at the
+ * first user message with that timestamp (the core's Rewinder), so the cut
+ * alone says what to drop here: the entry drawn at that moment and every
+ * entry after it. Returns null when the entry is not loaded, which leaves the
+ * event to say what went.
+ */
+export function truncateFrom(
+  state: StellaConversationState,
+  at: StellaEntryIdentity,
+): StellaConversationState | null {
+  const key = identityKeyOf(at);
+  const cut = state.entries.findIndex((entry) => identityKeyOf(entry) === key);
+  return cut === -1 ? null : withEntries(state, state.entries.slice(0, cut));
+}
+
+/** What a shorter entry list means for the rest of the conversation.
+ *
+ * The cursor for the older window survives only while the entry it starts at
+ * survives, the same rule the code-mode reducer applies to a rewound
+ * transcript: the next read of the newest window restores one otherwise. The
+ * card being drawn belonged to the run the rewind ended; `agent_end` clears it
+ * too when that run was live. Returns null when nothing was dropped.
+ */
+function withEntries(
+  state: StellaConversationState,
+  entries: StellaEntry[],
+): StellaConversationState | null {
+  if (entries.length === state.entries.length) return null;
+  return {
+    ...state,
+    entries,
+    older: keepsFront(state.entries, entries) ? state.older : null,
+    liveUi: null,
+  };
+}
+
+/** The pair an entry and the event that removed it name the same thing by
+ * (see StellaEntryIdentity). */
+function identityKeyOf(item: {
+  role: StellaEntryIdentity["role"];
+  timestamp: number;
+}): string {
+  return `${item.role}:${item.timestamp}`;
+}
+
+/** Whether a filter kept the entry the cursor starts at: `older` names the
+ * window before the oldest loaded entry, so it stays true exactly while that
+ * entry survives. */
+function keepsFront(
+  before: readonly StellaEntry[],
+  after: readonly StellaEntry[],
+): boolean {
+  const front = before[0];
+  const next = after[0];
+  return (
+    front !== undefined &&
+    next !== undefined &&
+    entryKey(front) === entryKey(next)
+  );
 }
 
 function sameHandover(

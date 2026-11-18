@@ -1249,6 +1249,112 @@ test("stella API: the conversation's stream carries only the conversation", asyn
   }
 });
 
+test("stella API: a rewind reaches the conversation as its own event", async () => {
+  // A rewind deletes a tail, and a client merges the newest window into what
+  // it already holds — a merge only adds. Without a frame naming what went,
+  // the deleted turn stayed on screen until the conversation was reopened
+  // (see core's agent/stella-stream.ts).
+  const { core, faux, server, base } = await setup();
+  let socket: WebSocket | undefined;
+  try {
+    await core.setProviderApiKey(faux.provider.id, "faux-key");
+    core.setStellaVm({
+      status: () =>
+        Promise.resolve({ state: "running", vncPort: null, reason: "" }),
+      start: () =>
+        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
+      stop: () => Promise.resolve(),
+      vncPort: () => Promise.resolve(null),
+      startDesktop: () => Promise.resolve(),
+      stopDesktop: () => Promise.resolve(),
+    });
+    const agentRes = await json(base, "/api/stella/agents", {
+      method: "POST",
+      body: JSON.stringify({ name: "Aide", role: "Help with the work." }),
+    });
+    const agent = (await agentRes.json()) as { id: string };
+    const opened = await json(base, `/api/stella/conversations/${agent.id}`);
+    assertEquals(opened.status, 200);
+
+    // Set after the open: the conversation's own setup turn runs there.
+    faux.setResponses([fauxAssistantMessage("はい、承知しました。")]);
+
+    const events: Array<Record<string, unknown>> = [];
+    let ended: () => void = () => {};
+    let truncated: () => void = () => {};
+    const runEnded = new Promise<void>((resolve) => {
+      ended = resolve;
+    });
+    const truncationSeen = new Promise<void>((resolve) => {
+      truncated = resolve;
+    });
+    const ws = new WebSocket(
+      `ws://127.0.0.1:${server.addr.port}/api/stella/conversations/${agent.id}/events`,
+    );
+    socket = ws;
+    ws.onmessage = (e) => {
+      const event = JSON.parse(String(e.data)) as Record<string, unknown>;
+      // The heartbeat is transport-level (the client swallows it).
+      if (event.type === "heartbeat") return;
+      events.push(event);
+      if (event.type === "agent_end") ended();
+      if (event.type === "truncated") truncated();
+    };
+    await new Promise<void>((resolve, reject) => {
+      ws.onopen = () => resolve();
+      ws.onerror = () => reject(new Error("socket failed"));
+    });
+
+    const sent = await json(
+      base,
+      `/api/stella/conversations/${agent.id}/prompt`,
+      { method: "POST", body: JSON.stringify({ text: "こんにちは" }) },
+    );
+    assertEquals(sent.status, 200);
+    await runEnded;
+
+    type Entry = { role: string; text: string; timestamp: number };
+    const before = (await (
+      await json(base, `/api/stella/conversations/${agent.id}`)
+    ).json()) as { entries: Entry[] };
+    const prompt = before.entries.find((entry) => entry.text === "こんにちは");
+    const reply = before.entries.find(
+      (entry) => entry.text === "はい、承知しました。",
+    );
+    assertEquals(prompt?.role, "user");
+    assertEquals(reply?.role, "assistant");
+
+    const rewound = await json(
+      base,
+      `/api/stella/conversations/${agent.id}/rewind`,
+      {
+        method: "POST",
+        body: JSON.stringify({ timestamp: prompt!.timestamp }),
+      },
+    );
+    assertEquals(rewound.status, 200);
+    await truncationSeen;
+
+    const frame = events.find((event) => event.type === "truncated");
+    assertEquals(frame?.removed, [
+      { role: "user", timestamp: prompt!.timestamp },
+      { role: "assistant", timestamp: reply!.timestamp },
+    ]);
+    // A conversation's frame never names a session.
+    assertEquals("sessionId" in (frame ?? {}), false);
+
+    // And the rewind really deleted them: the next read is empty.
+    const after = (await (
+      await json(base, `/api/stella/conversations/${agent.id}`)
+    ).json()) as { entries: unknown[] };
+    assertEquals(after.entries, []);
+  } finally {
+    socket?.close();
+    server.shutdown();
+    await core.close();
+  }
+});
+
 test("stella API: a row carries what its conversation last said", async () => {
   const { core, faux, server, base } = await setup();
   try {

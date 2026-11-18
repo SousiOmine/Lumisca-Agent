@@ -35,9 +35,10 @@
  */
 import type { AgentMessage } from "../ai/message.ts";
 
-import type { ClientEvent } from "../domain/event.ts";
+import type { ClientEvent, MessageIdentity } from "../domain/event.ts";
 import type {
   StellaEntry,
+  StellaEntryIdentity,
   StellaEnvRequest,
   StellaEvent,
   StellaHandover,
@@ -230,6 +231,38 @@ export function stellaEntryCursorOf(entry: StellaEntry): string {
   ]);
 }
 
+/** The entries a rewind removed, as the conversation names them.
+ *
+ * This reads {@link stellaEntryOf}'s mapping backwards: `user` and `mode` are
+ * drawn as the user's entry, `assistant` and a tool result as the agent's, and
+ * every other role — a context publication, a notification, a compaction
+ * checkpoint — is not drawn at all, so naming it would only widen what a
+ * client drops.
+ *
+ * A `toolResult` is included whether or not it was `send_chat`: the identity
+ * carries no tool name, and a `send_chat` entry sits at its result's own
+ * timestamp (see stellaEntryOf) — leaving the role out would keep every
+ * message the agent sent from a rewound run on the screen. */
+function removedEntriesOf(
+  removed: readonly MessageIdentity[],
+): StellaEntryIdentity[] {
+  const entries = new Map<string, StellaEntryIdentity>();
+  for (const message of removed) {
+    const role =
+      message.role === "user" || message.role === "mode"
+        ? "user"
+        : message.role === "assistant" || message.role === "toolResult"
+          ? "assistant"
+          : null;
+    if (role === null) continue;
+    entries.set(`${role}:${message.timestamp}`, {
+      role,
+      timestamp: message.timestamp,
+    });
+  }
+  return [...entries.values()];
+}
+
 /** The conversation's view of a pending-question list. The shapes are the
  * same today; the named type keeps the conversation's contract from drifting
  * with the ask hub's. */
@@ -386,6 +419,13 @@ export function stellaEventsOf(event: ClientEvent): StellaEvent[] {
       ];
     case "ui_end":
       return [{ type: "ui_end" }];
+    case "messages_truncated":
+      // A rewind is the one way an entry LEAVES a conversation, and no
+      // snapshot can carry it: a client merges the newest window into what it
+      // holds, and merging only adds (see the web's stellaStateOf). Without
+      // this event the deleted turn stays on screen until the conversation is
+      // reopened.
+      return [{ type: "truncated", removed: removedEntriesOf(event.removed) }];
     case "session_error":
       return [{ type: "error", message: event.message }];
     default:

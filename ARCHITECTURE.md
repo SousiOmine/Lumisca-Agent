@@ -740,6 +740,11 @@ URLはシェルを介さず、プログラムの引数として1つだけ渡し�
   会話のページが数える行（`messages.ts` の `CONVERSATION_ROWS_SQL`）は、この射影がエントリにする行と同じ集合でなければなりません。
   片方だけ変えると、表示済みの発言がスナップショットで消えます。
 
+  巻き戻しも同じ境界を通ります。
+  サーバーは `messages_truncated` を会話の `truncated` イベントに射影し（`StellaEntryIdentity`）、画面は名指されたエントリを落とします（`stella-state.ts` の `truncateEntries`）。
+  スナップショットでは表せません。再取得のマージ（`stellaStateOf`）は足すだけで消さないため、巻き戻した発言が再取得のあとも残ります。
+  押した窓は `POST …/rewind` の応答でも末尾を落とします（`truncateFrom`）。切断点は押した発言の時刻で分かるので、ソケットが張り直し中のときも結果がその場で表示に反映されます。
+
   stella の会話には「作業中／作業完了」の見出しも、ツール行も、todo、タスク、バックグラウンドのパネルもありません。
   実行中は本文が流れ始めるまで点（`RunningIndicator`）だけで示します。
   `todo` ツール自体はあります（`createStellaTools`）。

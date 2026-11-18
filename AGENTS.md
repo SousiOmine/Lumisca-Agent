@@ -544,6 +544,11 @@ X サーバ、ウィンドウマネージャ、セッションバス、専用プ
   モデルが本文にUIを書いている間、`ui_delta` が届き、画面は `parseAppSpecPartial` で読めるところまで描きます。
   切り出しは `packages/core/agent/run-events.ts` の `TextUi`（stella は本文を流さないため。code mode は画面が本文から切り出します）、まとめは stella のイベントストリームの `delta` チャネルです。
   本文はターンの終わりに一度に届きます。
+- 巻き戻しは会話のイベントで届きます。
+  `messages_truncated` は `stellaEventsOf` が `truncated` に射影し、画面が名指されたエントリを落とします（`packages/web/src/stella-state.ts` の `truncateEntries`）。
+  押した窓は `POST …/rewind` の応答でも末尾を落とします（同じファイルの `truncateFrom`）。ソケットが張り直し中でも表示が変わるようにするためです。
+  会話を開き直すと直るのは、開くときだけスナップショットから状態を作り直すためです。
+  再取得のマージ（`stellaStateOf`）は足すだけで消せないので、再取得で直そうとしないでください。
 - モデルはエージェントごとです。
   選択はエージェントの編集ダイアログで行い、`PATCH /api/stella/agents/:id` の `model`（`null` は既定、省略は変更なし）で保存します。
   未設定ならアプリの既定モデル（設定 → モデル設定）を使います。

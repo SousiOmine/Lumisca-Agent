@@ -8,6 +8,7 @@ import {
   type StellaConversationState,
   stellaStateOf,
   transcriptEntries,
+  truncateFrom,
 } from "./stella-state.ts";
 import type { StellaEvent, ThinkingLevel } from "./types.ts";
 
@@ -249,6 +250,139 @@ test("applyStellaEvent: the run ends", () => {
   let current = state({ running: true });
   current = applyStellaEvent(current, { type: "agent_end" })!;
   assertEquals(current.running, false);
+});
+
+test("applyStellaEvent: a rewind drops the entries from that message on", () => {
+  // A rewind deletes a user message and everything after it. Merging a
+  // re-read window cannot express that — it only adds — so this event is the
+  // one thing that takes a deleted turn off a screen already showing it.
+  const before = state({
+    entries: [
+      entry("user", "一つ目", 1),
+      entry("assistant", "一つ目の返事", 2),
+      entry("user", "二つ目", 3),
+      entry("assistant", "二つ目の返事", 4),
+    ],
+    older: "cursor-1",
+  });
+  const after = applyStellaEvent(before, {
+    type: "truncated",
+    removed: [
+      { role: "user", timestamp: 3 },
+      { role: "assistant", timestamp: 4 },
+    ],
+  })!;
+  assertEquals(after.entries, [
+    entry("user", "一つ目", 1),
+    entry("assistant", "一つ目の返事", 2),
+  ]);
+  // The cursor names the window before the oldest loaded entry, and that
+  // entry survived.
+  assertEquals(after.older, "cursor-1");
+});
+
+test("applyStellaEvent: a rewind that takes the front drops the cursor", () => {
+  const before = state({
+    entries: [entry("user", "一つ目", 1), entry("assistant", "返事", 2)],
+    older: "cursor-1",
+  });
+  const after = applyStellaEvent(before, {
+    type: "truncated",
+    removed: [
+      { role: "user", timestamp: 1 },
+      { role: "assistant", timestamp: 2 },
+    ],
+  })!;
+  assertEquals(after.entries, []);
+  // Nothing is left to page back from; the next read of the newest window
+  // restores a cursor.
+  assertEquals(after.older, null);
+});
+
+test("applyStellaEvent: a rewind leaves the other role at the same millisecond", () => {
+  // The identity is the role drawn plus the millisecond. An agent's entry
+  // that the same millisecond put before the rewound prompt is not the
+  // prompt's.
+  const before = state({
+    entries: [entry("assistant", "返事", 5), entry("user", "次の依頼", 5)],
+  });
+  const after = applyStellaEvent(before, {
+    type: "truncated",
+    removed: [{ role: "user", timestamp: 5 }],
+  })!;
+  assertEquals(after.entries, [entry("assistant", "返事", 5)]);
+});
+
+test("applyStellaEvent: a rewind that names no entry changes nothing", () => {
+  const before = state({ entries: [entry("user", "一つ目", 1)] });
+  assertEquals(
+    applyStellaEvent(before, { type: "truncated", removed: [] }),
+    null,
+  );
+  // The messages a rewind deleted are not all entries (a tool result, a
+  // context publication): one that names no drawn entry leaves the view as
+  // it was.
+  assertEquals(
+    applyStellaEvent(before, {
+      type: "truncated",
+      removed: [{ role: "assistant", timestamp: 9 }],
+    }),
+    null,
+  );
+});
+
+test("applyStellaEvent: a rewind drops the card being written", () => {
+  // The card belonged to the run the rewind ended. Nothing else about the
+  // run is this event's to change: its own end event clears that.
+  const before = state({
+    entries: [entry("user", "依頼", 1)],
+    running: true,
+    liveUi: { toolCallId: "t1", json: '{"title":"作' },
+  });
+  const after = applyStellaEvent(before, {
+    type: "truncated",
+    removed: [{ role: "user", timestamp: 1 }],
+  })!;
+  assertEquals(after.liveUi, null);
+  assertEquals(after.entries, []);
+});
+
+test("truncateFrom: the answer to this window's own rewind drops the tail", () => {
+  // The answer to POST …/rewind names one message, but a rewind deletes
+  // everything after it too: keeping the tail would leave a reply whose
+  // question is gone, which is what a window with a dead socket would show.
+  const before = state({
+    entries: [
+      entry("user", "一つ目", 1),
+      entry("user", "二つ目", 2),
+      entry("assistant", "二つ目の返事", 3),
+    ],
+    older: "cursor-1",
+  });
+  const after = truncateFrom(before, { role: "user", timestamp: 2 })!;
+  assertEquals(after.entries, [entry("user", "一つ目", 1)]);
+  assertEquals(after.older, "cursor-1");
+  // The event that follows the answer finds nothing left to drop, and a
+  // second answer changes nothing either.
+  assertEquals(truncateFrom(after, { role: "user", timestamp: 2 }), null);
+  assertEquals(
+    truncateFrom(before, { role: "user", timestamp: 6 }),
+    null,
+    "an entry this window does not hold has nothing to cut",
+  );
+  // The pair is the role and the millisecond: an agent's entry the same
+  // millisecond put before the prompt is not the prompt.
+  const sameMillisecond = state({
+    entries: [
+      entry("user", "一つ目", 1),
+      entry("assistant", "返事", 2),
+      entry("user", "二つ目", 2),
+    ],
+  });
+  assertEquals(
+    truncateFrom(sameMillisecond, { role: "user", timestamp: 2 })?.entries,
+    [entry("user", "一つ目", 1), entry("assistant", "返事", 2)],
+  );
 });
 
 test("applyStellaEvent: the run state and its error", () => {
