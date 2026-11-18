@@ -503,18 +503,9 @@ class ShimCommand {
     };
   }
   async output() {
-    const result = spawnSync(this.#cmd, this.#args(), {
-      cwd: this.#options.cwd,
-      env: this.#options.env ?? process.env,
-      stdio: "pipe",
-    });
-    return {
-      code: result.status ?? 1,
-      success: result.status === 0,
-      signal: null,
-      stdout: new Uint8Array(result.stdout ?? []),
-      stderr: new Uint8Array(result.stderr ?? []),
-    };
+    // Same spawn path as `spawn()`: `clearEnv`, PATH resolution and the
+    // shim preload must not differ between the two ways of running a command.
+    return await this.spawn().output();
   }
 }
 

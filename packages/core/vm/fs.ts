@@ -94,24 +94,38 @@ export class VmFileBackend implements FileBackend {
     path: string,
     maxBytes: number,
   ): Promise<{ bytes: Uint8Array; size: number }> {
+    // The size comes from the same call: a second `stat` would double the
+    // execs of every read, and the tools need the whole size to say whether
+    // more of the file follows the head they just got.
+    //
     // base64: a read hands binary files (images) to the model as image
     // blocks, so the payload must not pass through a text decode.
-    const result = await this.#exec(["base64", "--wrap=0", "--", path], {
-      timeoutMs: FILE_TIMEOUT_MS,
-      maxOutput: Math.ceil(maxBytes / 3) * 4 + 8,
-      keep: "head",
-    });
+    const result = await this.#exec(
+      [
+        "sh",
+        "-c",
+        'size=$(stat -c %s -- "$1") || exit 1; printf "%s\n" "$size"; ' +
+          'head -c "$2" -- "$1" | base64 --wrap=0',
+        "sh",
+        path,
+        String(maxBytes),
+      ],
+      {
+        timeoutMs: FILE_TIMEOUT_MS,
+        maxOutput: Math.ceil(maxBytes / 3) * 4 + 64,
+        keep: "head",
+      },
+    );
     if (result.exitCode !== 0) {
       throw new Error(`Could not read ${path}: ${firstLine(result.stderr)}`);
     }
     if (result.truncated) {
-      throw new Error(
-        `${path} is larger than ${Math.floor(maxBytes / 1024)}KB; read it ` +
-          "with a line range instead",
-      );
+      throw new Error(`Could not read ${path}: output exceeded the limit`);
     }
-    const bytes = base64ToBytes(result.stdout.trim());
-    return { bytes, size: bytes.byteLength };
+    const newline = result.stdout.indexOf("\n");
+    const size = Number(result.stdout.slice(0, newline));
+    const bytes = base64ToBytes(result.stdout.slice(newline + 1).trim());
+    return { bytes, size };
   }
 
   async readBytes(

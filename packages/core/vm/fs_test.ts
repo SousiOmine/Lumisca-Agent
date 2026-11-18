@@ -112,24 +112,22 @@ Deno.test("vm fs: stat answers undefined for a missing path", async () => {
 });
 
 Deno.test("vm fs: readHead decodes base64 and reports the size", async () => {
-  // "hello" in base64.
-  const { run } = script([{ match: /^base64 --wrap=0/, stdout: "aGVsbG8=\n" }]);
+  // "hello" in base64, after the size line the same call prints.
+  const { run } = script([{ match: /^sh -c size=/, stdout: "5\naGVsbG8=\n" }]);
   const result = await backend(run).readHead("/home/agent/x.txt", 1024);
   assertEquals(new TextDecoder().decode(result.bytes), "hello");
   assertEquals(result.size, 5);
 });
 
-Deno.test("vm fs: an oversized read fails with the range hint", async () => {
+Deno.test("vm fs: a read longer than the head reports the whole size", async () => {
+  // "hello" is the head of a 1 MiB file: the caller must learn that 1 MiB
+  // follows, not an error and not "5 bytes total".
   const { run } = script([
-    { match: /^base64 --wrap=0/, stdout: "aGVsbG8=", truncated: true },
+    { match: /^sh -c size=/, stdout: "1048576\naGVsbG8=\n" },
   ]);
-  let message = "";
-  try {
-    await backend(run).readHead("/home/agent/big.bin", 1024 * 1024);
-  } catch (error) {
-    message = error instanceof Error ? error.message : String(error);
-  }
-  assert(message.includes("line range"), message);
+  const result = await backend(run).readHead("/home/agent/big.bin", 5);
+  assertEquals(new TextDecoder().decode(result.bytes), "hello");
+  assertEquals(result.size, 1024 * 1024);
 });
 
 Deno.test("vm fs: readBytes asks for one window by byte offset", async () => {
