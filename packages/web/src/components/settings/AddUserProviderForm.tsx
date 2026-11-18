@@ -1,11 +1,10 @@
 // The picker and the core's validation read one list (shared/providers.ts).
-import { ALLOWED_OPENAI_APIS } from "@lumisca/core/shared";
+import { ALLOWED_OPENAI_APIS, errorMessage } from "@lumisca/core/shared";
 import { IconCheck, IconPlus, IconTrash } from "@tabler/icons-preact";
 import { useEffect, useState } from "preact/hooks";
 import { api } from "../../api.ts";
 import { confirmAction } from "../../confirm.ts";
 import { useT } from "../../i18n.ts";
-import { errorText } from "../../providers.ts";
 import type { UserProviderSummary } from "../../types.ts";
 import { Field } from "../Field.tsx";
 import { SettingsSubHeader } from "./SettingsSubHeader.tsx";
@@ -288,7 +287,7 @@ export function AddUserProviderForm({
           : await api.updateUserProvider(id.trim(), input);
       onDone(result.id);
     } catch (e) {
-      setError(errorText(e));
+      setError(errorMessage(e));
     } finally {
       setSaving(false);
     }
@@ -320,7 +319,7 @@ export function AddUserProviderForm({
       onDeleted?.();
       onBack();
     } catch (e) {
-      setError(errorText(e));
+      setError(errorMessage(e));
     } finally {
       setDeleting(false);
     }

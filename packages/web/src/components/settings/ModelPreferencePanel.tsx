@@ -1,6 +1,7 @@
 import type { ModelPreference, ThinkingLevel } from "@lumisca/core/shared";
 import {
   DEFAULT_MODEL_KEY,
+  errorMessage,
   FAST_MODEL_KEY,
   IMAGE_MODEL_KEY,
   parseModelPreference,
@@ -9,11 +10,7 @@ import {
 import { IconChevronDown } from "@tabler/icons-preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { useT } from "../../i18n.ts";
-import {
-  errorText,
-  setModelThinkingLevel,
-  useProviderModels,
-} from "../../providers.ts";
+import { setModelThinkingLevel, useProviderModels } from "../../providers.ts";
 import { settingsStore, useSettings } from "../../settingsStore.ts";
 import { ModelPickerPopover } from "../ModelPickerPopover.tsx";
 import { ThinkingLevelSelect } from "../ThinkingLevelSelect.tsx";
@@ -183,7 +180,7 @@ export function ModelPreferencePanel({
       }));
       reloadModels();
     } catch (err) {
-      setSaveError(errorText(err));
+      setSaveError(errorMessage(err));
     } finally {
       setSavingLevel(false);
     }
@@ -204,7 +201,7 @@ export function ModelPreferencePanel({
       // must be the ones of the model that was just saved.
       reloadModels();
     } catch (e) {
-      setSaveError(errorText(e));
+      setSaveError(errorMessage(e));
     } finally {
       setSaving(null);
     }

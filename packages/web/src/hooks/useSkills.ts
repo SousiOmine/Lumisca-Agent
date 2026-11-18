@@ -1,4 +1,4 @@
-import { errorMessage as errorText } from "@lumisca/core/shared";
+import { errorMessage } from "@lumisca/core/shared";
 import { useState } from "preact/hooks";
 import { api, fed } from "../api.ts";
 import { peerRouted } from "../api-client.ts";
@@ -36,7 +36,7 @@ export function useSkills(
       } catch (failure) {
         if (!isStale()) {
           setSkills([]);
-          setError(errorText(failure));
+          setError(errorMessage(failure));
         }
       }
     },

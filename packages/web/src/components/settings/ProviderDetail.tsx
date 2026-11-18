@@ -1,4 +1,4 @@
-import { isLoopbackHost } from "@lumisca/core/shared";
+import { errorMessage, isLoopbackHost } from "@lumisca/core/shared";
 import {
   IconCheck,
   IconCircleDashed,
@@ -21,11 +21,7 @@ import { confirmAction } from "../../confirm.ts";
 import { useAsyncEffect } from "../../hooks/useAsync.ts";
 import { useSavedNotice } from "../../hooks/useSave.ts";
 import { useT } from "../../i18n.ts";
-import {
-  errorText,
-  useProviderModels,
-  useUserProviders,
-} from "../../providers.ts";
+import { useProviderModels, useUserProviders } from "../../providers.ts";
 import type {
   ProviderAuthType,
   ProviderLoginEvent,
@@ -89,7 +85,7 @@ export function ProviderDetail({
   useAsyncEffect(
     (isStale) => {
       load().catch((e) => {
-        if (!isStale()) setError(errorText(e));
+        if (!isStale()) setError(errorMessage(e));
       });
     },
     [providerId],
@@ -124,7 +120,7 @@ export function ProviderDetail({
         }
       } catch (e) {
         if (!cancelled) {
-          setError(errorText(e));
+          setError(errorMessage(e));
           setLoginFlow(undefined);
         }
       }
@@ -148,7 +144,7 @@ export function ProviderDetail({
       setError(loginFlow.snapshot?.error ?? t("settings.provider.loginFailed"));
     }
     setLoginFlow(undefined);
-    load().catch((e) => setError(errorText(e)));
+    load().catch((e) => setError(errorMessage(e)));
     reloadProviders();
   }, [loginFlow?.snapshot?.status]);
 
@@ -167,7 +163,7 @@ export function ProviderDetail({
       // the same reason).
       reloadProviders();
     } catch (e) {
-      setError(errorText(e));
+      setError(errorMessage(e));
     } finally {
       setSavingKey(false);
     }
@@ -181,7 +177,7 @@ export function ProviderDetail({
       const { sessionId } = await api.providerLogin(providerId, method);
       setLoginFlow({ sessionId, snapshot: undefined });
     } catch (e) {
-      setError(errorText(e));
+      setError(errorMessage(e));
     } finally {
       setLoginBusy(false);
     }
@@ -195,7 +191,7 @@ export function ProviderDetail({
       await api.providerLoginCancel(providerId, flow.sessionId);
       setNotice(t("settings.provider.loginCancelledNotice"));
     } catch (e) {
-      setError(errorText(e));
+      setError(errorMessage(e));
     }
   };
 
@@ -212,7 +208,7 @@ export function ProviderDetail({
       );
       setPromptValue("");
     } catch (e) {
-      setError(errorText(e));
+      setError(errorMessage(e));
     }
   };
 
@@ -225,7 +221,7 @@ export function ProviderDetail({
       await load();
       reloadProviders();
     } catch (e) {
-      setError(errorText(e));
+      setError(errorMessage(e));
     } finally {
       setLoginBusy(false);
     }
@@ -250,7 +246,7 @@ export function ProviderDetail({
       reloadProviders();
       onDone();
     } catch (e) {
-      setError(errorText(e));
+      setError(errorMessage(e));
       setRemoving(false);
     }
   };

@@ -1,6 +1,7 @@
 import type { CommandApproval } from "@lumisca/core/shared";
 import {
   COMMAND_SAFETY_ENABLED_KEY,
+  errorMessage,
   FAST_MODEL_KEY,
   parseModelPreference,
 } from "@lumisca/core/shared";
@@ -9,7 +10,6 @@ import { api } from "../../api.ts";
 import { useAsyncEffect } from "../../hooks/useAsync.ts";
 import { useSaveAction } from "../../hooks/useSave.ts";
 import { useT } from "../../i18n.ts";
-import { errorText } from "../../providers.ts";
 import { settingsStore, useSettings } from "../../settingsStore.ts";
 import { SettingRow, Toggle } from "../SettingRow.tsx";
 
@@ -26,7 +26,7 @@ export function CommandSafetyPanel() {
   const [enabled, setEnabled] = useState(false);
   const [fastModelSet, setFastModelSet] = useState(true);
   const [approvals, setApprovals] = useState<CommandApproval[]>([]);
-  const { saving, error, save, fail } = useSaveAction(errorText);
+  const { saving, error, save, fail } = useSaveAction(errorMessage);
 
   // The two loads are independent: fire both at once like before, with the
   // shared stale guard instead of a local flag.

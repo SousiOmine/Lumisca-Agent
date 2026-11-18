@@ -1,7 +1,7 @@
+import { errorMessage } from "@lumisca/core/shared";
 import { useState } from "preact/hooks";
 import { api } from "../../api.ts";
 import { useT } from "../../i18n.ts";
-import { errorText } from "../../providers.ts";
 import type {
   WebSearchProviderId,
   WebSearchSettingsView,
@@ -64,7 +64,7 @@ export function WebSearchProviderDialog({
     try {
       setChecked(await api.testWebSearchProvider({ id, apiKey: key }));
     } catch (e) {
-      setError(errorText(e));
+      setError(errorMessage(e));
     } finally {
       setBusy(null);
     }
@@ -81,7 +81,7 @@ export function WebSearchProviderDialog({
           : await api.updateWebSearchProvider(id, { apiKey: key });
       onDone(next);
     } catch (e) {
-      setError(errorText(e));
+      setError(errorMessage(e));
       setBusy(null);
     }
   };

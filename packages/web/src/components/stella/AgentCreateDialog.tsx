@@ -1,8 +1,8 @@
 import type { MessageKey } from "@lumisca/core/shared";
+import { errorMessage } from "@lumisca/core/shared";
 import { useState } from "preact/hooks";
 import { api } from "../../api.ts";
 import { useT } from "../../i18n.ts";
-import { errorText } from "../../providers.ts";
 import type { StellaAgent } from "../../types.ts";
 import { Field } from "../Field.tsx";
 import { Modal } from "../Modal.tsx";
@@ -91,7 +91,7 @@ export function AgentCreateDialog({
       // row, so nothing has to be re-read to know it exists.
       onCreated(agent);
     } catch (failure) {
-      setError(errorText(failure));
+      setError(errorMessage(failure));
     } finally {
       setBusy(false);
     }

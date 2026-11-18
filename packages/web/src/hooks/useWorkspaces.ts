@@ -1,8 +1,8 @@
+import { errorMessage } from "@lumisca/core/shared";
 import { useCallback, useState } from "preact/hooks";
 import { api } from "../api.ts";
 import { confirmAction } from "../confirm.ts";
 import { useT } from "../i18n.ts";
-import { errorText } from "../providers.ts";
 import type { InitialData, Workspace } from "../types.ts";
 import { useAsyncEffect } from "./useAsync.ts";
 
@@ -34,7 +34,7 @@ export function useWorkspaces(initialData?: InitialData) {
       setWorkspaces(list);
     } catch (error) {
       // A stale failure must not overwrite the newer list's verdict.
-      if (!isStale()) setLoadError(errorText(error));
+      if (!isStale()) setLoadError(errorMessage(error));
     } finally {
       // Loaded either way: a failure leaves an unusable list, but waiting
       // for it would block the draft screen's fallback forever.

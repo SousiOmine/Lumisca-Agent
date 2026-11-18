@@ -1,8 +1,8 @@
+import { errorMessage } from "@lumisca/core/shared";
 import { IconChevronRight, IconPlugConnected } from "@tabler/icons-preact";
 import { useMemo, useState } from "preact/hooks";
 import { useT } from "../../i18n.ts";
 import {
-  errorText,
   filterByQuery,
   setModelEnabled,
   useProviderModels,
@@ -56,7 +56,7 @@ export function ModelList() {
     try {
       await setModelEnabled(providerId, modelId, enabled);
     } catch (e) {
-      setSaveError(errorText(e));
+      setSaveError(errorMessage(e));
     }
   };
 

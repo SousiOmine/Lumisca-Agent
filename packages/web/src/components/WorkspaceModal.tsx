@@ -1,8 +1,8 @@
+import { errorMessage } from "@lumisca/core/shared";
 import { IconPlus, IconTrash } from "@tabler/icons-preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../api.ts";
 import { useT } from "../i18n.ts";
-import { errorText } from "../providers.ts";
 import { nativeFolderPickerAvailable, pickFolder } from "../shell.ts";
 import type { Workspace } from "../types.ts";
 import { FolderBrowser } from "./FolderBrowser.tsx";
@@ -67,7 +67,7 @@ export function WorkspaceModal({
       const path = await pickFolder();
       if (path) addFolder(path);
     } catch (e) {
-      setError(errorText(e));
+      setError(errorMessage(e));
     } finally {
       setPicking(false);
     }
@@ -101,7 +101,7 @@ export function WorkspaceModal({
       onSaved(ws);
       closeRef.current();
     } catch (e) {
-      setError(errorText(e));
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -115,7 +115,7 @@ export function WorkspaceModal({
       await onDelete(workspace);
       closeRef.current();
     } catch (e) {
-      setError(errorText(e));
+      setError(errorMessage(e));
       setBusy(false);
     }
   };

@@ -1,3 +1,4 @@
+import { errorMessage } from "@lumisca/core/shared";
 import {
   IconChevronDown,
   IconPlus,
@@ -13,7 +14,6 @@ import {
 } from "../connections.ts";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { useT } from "../i18n.ts";
-import { errorText } from "../providers.ts";
 import { type ShellState, shellCall, shellState } from "../shell.ts";
 import type { ConnectionEntry } from "../types.ts";
 
@@ -75,7 +75,7 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
         if (!stale) setState(shell);
       })
       .catch((failure: unknown) => {
-        if (!stale) setError(errorText(failure));
+        if (!stale) setError(errorMessage(failure));
       });
     return () => {
       stale = true;
@@ -117,7 +117,7 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
       },
       (failure) => {
         setBusy(null);
-        setError(errorText(failure));
+        setError(errorMessage(failure));
       },
     );
   };

@@ -1,9 +1,9 @@
+import { errorMessage } from "@lumisca/core/shared";
 import { IconPlus, IconTrash } from "@tabler/icons-preact";
 import { useEffect, useState } from "preact/hooks";
 import { api } from "../../api.ts";
 import { confirmAction } from "../../confirm.ts";
 import { useT } from "../../i18n.ts";
-import { errorText } from "../../providers.ts";
 import type { WebSearchSettingsView } from "../../types.ts";
 import { ProviderRow } from "./ProviderRow.tsx";
 import { SettingsSection } from "./SettingsSection.tsx";
@@ -46,7 +46,7 @@ export function WebSearchPanel() {
       setView(await api.getWebSearchSettings());
       setError(null);
     } catch (e) {
-      setError(errorText(e));
+      setError(errorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -67,7 +67,7 @@ export function WebSearchPanel() {
       setError(null);
       return true;
     } catch (e) {
-      setError(errorText(e));
+      setError(errorMessage(e));
       return false;
     } finally {
       setBusy(null);

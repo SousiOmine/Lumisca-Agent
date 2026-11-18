@@ -1,6 +1,6 @@
+import { errorMessage } from "@lumisca/core/shared";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../api.ts";
-import { errorText } from "../providers.ts";
 import type { RoutineView } from "../types.ts";
 
 /**
@@ -42,7 +42,7 @@ export function useRoutines(agentId: string | null): {
         setError(null);
       } catch (failure) {
         if (generation.current !== seq) return;
-        setError(errorText(failure));
+        setError(errorMessage(failure));
       } finally {
         if (generation.current === seq) setLoading(false);
       }

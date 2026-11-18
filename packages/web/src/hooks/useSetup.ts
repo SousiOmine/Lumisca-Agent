@@ -1,7 +1,7 @@
 import type { SetupState } from "@lumisca/core/shared";
+import { errorMessage } from "@lumisca/core/shared";
 import { useCallback, useState } from "preact/hooks";
 import { api } from "../api.ts";
-import { errorText } from "../providers.ts";
 
 /** The first-run setup's state, and the one action it has.
  *
@@ -36,7 +36,7 @@ export function useSetup(initial?: SetupState): {
     try {
       setState(await api.completeSetup());
     } catch (failure) {
-      setError(errorText(failure));
+      setError(errorMessage(failure));
     } finally {
       setBusy(false);
     }

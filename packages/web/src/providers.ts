@@ -1,4 +1,3 @@
-import { errorMessage as errorText } from "@lumisca/core/shared";
 import { useSyncExternalStore } from "preact/compat";
 import { useCallback } from "preact/hooks";
 import { api, modelApi } from "./api.ts";
@@ -196,4 +195,3 @@ export function filterByQuery<T extends { id: string; name?: string }>(
 
 /** Human-readable error string, used across every async UI surface (the
  * canonical helper lives in the core). */
-export { errorText };

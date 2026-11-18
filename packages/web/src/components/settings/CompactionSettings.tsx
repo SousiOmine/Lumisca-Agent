@@ -2,13 +2,13 @@ import {
   COMPACTION_DEFAULT_RESERVE_PERCENT,
   COMPACTION_ENABLED_KEY,
   COMPACTION_RESERVE_PERCENT_KEY,
+  errorMessage,
   parsePercentSetting,
   STELLA_KEEP_FULL_LOG_KEY,
 } from "@lumisca/core/shared";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { useDebouncedWrite, useSavedNotice } from "../../hooks/useSave.ts";
 import { useT } from "../../i18n.ts";
-import { errorText } from "../../providers.ts";
 import { useSettings } from "../../settingsStore.ts";
 import { SettingRow, Toggle } from "../SettingRow.tsx";
 import { SettingsSection } from "./SettingsSection.tsx";
@@ -84,7 +84,7 @@ export function CompactionSettings() {
       flashSaved();
     } catch (e) {
       restore();
-      setError(t("settings.compaction.saveFailed", { error: errorText(e) }));
+      setError(t("settings.compaction.saveFailed", { error: errorMessage(e) }));
     } finally {
       setSaving(false);
     }

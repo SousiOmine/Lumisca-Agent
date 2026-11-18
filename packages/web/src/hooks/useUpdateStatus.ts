@@ -1,4 +1,4 @@
-import { errorMessage as errorText } from "@lumisca/core/shared";
+import { errorMessage } from "@lumisca/core/shared";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { ApiError } from "../api-client.ts";
 import {
@@ -116,7 +116,7 @@ export function useUpdateStatus(active: boolean): UpdateControls {
           // Bridge unreachable or the shell refused: keep the last status
           // but say why it may be stale, then retry on the next interval.
           if (cancelled) return;
-          setError(errorText(failure));
+          setError(errorMessage(failure));
         }
       } else {
         // No shell: the page may be served by a packaged server, whose own
@@ -138,7 +138,7 @@ export function useUpdateStatus(active: boolean): UpdateControls {
           // usually a restart, and the state it reported a moment ago is
           // still the best one to show. Only the reason is new.
           setFailure(classifyUpdateFailure(failure));
-          setError(errorText(failure));
+          setError(errorMessage(failure));
         }
       }
       if (cancelled) return;
@@ -174,7 +174,7 @@ export function useUpdateStatus(active: boolean): UpdateControls {
     } catch (failure) {
       // The poll loop keeps the displayed state in sync; the message is
       // for the user, not for the console.
-      setError(errorText(failure));
+      setError(errorMessage(failure));
       return undefined;
     }
   };

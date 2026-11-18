@@ -1,9 +1,10 @@
+import { errorMessage } from "@lumisca/core/shared";
 import { IconPlus } from "@tabler/icons-preact";
 import { useState } from "preact/hooks";
 import { api } from "../../api.ts";
 import { useAsyncData } from "../../hooks/useAsync.ts";
 import { useT } from "../../i18n.ts";
-import { errorText, useProviderModels } from "../../providers.ts";
+import { useProviderModels } from "../../providers.ts";
 import { ProviderRow } from "./ProviderRow.tsx";
 import { SettingsSection } from "./SettingsSection.tsx";
 
@@ -35,7 +36,7 @@ function CatalogStatusRow({ onRefreshed }: { onRefreshed: () => void }) {
       if (fresh.error) setError(fresh.error);
       onRefreshed();
     } catch (e) {
-      setError(errorText(e));
+      setError(errorMessage(e));
     } finally {
       setRefreshing(false);
     }

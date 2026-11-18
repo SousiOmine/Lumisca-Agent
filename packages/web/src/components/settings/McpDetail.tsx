@@ -1,4 +1,4 @@
-import { serializeMcpServers } from "@lumisca/core/shared";
+import { errorMessage, serializeMcpServers } from "@lumisca/core/shared";
 import {
   IconCheck,
   IconCopy,
@@ -10,7 +10,6 @@ import { useState } from "preact/hooks";
 import { api } from "../../api.ts";
 import { useMcpSignIn } from "../../hooks/useMcpSignIn.ts";
 import { useT } from "../../i18n.ts";
-import { errorText } from "../../providers.ts";
 import type { McpServerInfo, McpTestTool } from "../../types.ts";
 import { Field } from "../Field.tsx";
 import { mcpDraftKey } from "./mcpDraft.ts";
@@ -171,7 +170,7 @@ export function McpDetail({
     } catch (e) {
       // Reaching our own server failed (it restarted mid-test); report it
       // like a probe failure.
-      setTest({ key, status: "error", tools: [], error: errorText(e) });
+      setTest({ key, status: "error", tools: [], error: errorMessage(e) });
       setPassed(false);
     }
   };

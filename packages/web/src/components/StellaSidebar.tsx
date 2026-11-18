@@ -1,4 +1,5 @@
 import type { Translator } from "@lumisca/core/shared";
+import { errorMessage } from "@lumisca/core/shared";
 import {
   IconPencil,
   IconPlus,
@@ -12,7 +13,6 @@ import { useArrivals } from "../hooks/useArrivals.ts";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { useCompactViewport } from "../hooks/useMediaQuery.ts";
 import { useLocale, useT } from "../i18n.ts";
-import { errorText } from "../providers.ts";
 import type {
   StellaAgent,
   StellaAgentSummary,
@@ -227,7 +227,7 @@ export function StellaSidebar({
       await api.deleteStellaAgent(agent.id);
       onChanged();
     } catch (failure) {
-      setError(errorText(failure));
+      setError(errorMessage(failure));
     }
   };
 

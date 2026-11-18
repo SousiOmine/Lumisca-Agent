@@ -1,8 +1,7 @@
-import { COMPUTER_USE_ENABLED_KEY } from "@lumisca/core/shared";
+import { COMPUTER_USE_ENABLED_KEY, errorMessage } from "@lumisca/core/shared";
 import { useEffect, useState } from "preact/hooks";
 import { useSaveAction } from "../../hooks/useSave.ts";
 import { useT } from "../../i18n.ts";
-import { errorText } from "../../providers.ts";
 import { settingsStore, useSettings } from "../../settingsStore.ts";
 import { SettingRow, Toggle } from "../SettingRow.tsx";
 
@@ -22,7 +21,7 @@ export function ComputerUsePanel() {
   const settings = useSettings();
   const loaded = settings.loaded;
   const [enabled, setEnabled] = useState(false);
-  const { saving, error, save } = useSaveAction(errorText);
+  const { saving, error, save } = useSaveAction(errorMessage);
 
   useEffect(() => {
     if (!loaded) return;

@@ -1,9 +1,12 @@
-import { DEFAULT_MODEL_KEY, parseModelPreference } from "@lumisca/core/shared";
+import {
+  DEFAULT_MODEL_KEY,
+  errorMessage,
+  parseModelPreference,
+} from "@lumisca/core/shared";
 import { useRef, useState } from "preact/hooks";
 import { api } from "../../api.ts";
 import { useT } from "../../i18n.ts";
 import {
-  errorText,
   rememberModelThinkingLevel,
   useProviderModels,
 } from "../../providers.ts";
@@ -143,7 +146,7 @@ export function AgentEditDialog({
         mimeType: file.type,
       });
     } catch (failure) {
-      setError(errorText(failure));
+      setError(errorMessage(failure));
     }
   };
 
@@ -192,7 +195,7 @@ export function AgentEditDialog({
       onChanged(updated);
       closeRef.current();
     } catch (failure) {
-      setError(errorText(failure));
+      setError(errorMessage(failure));
     } finally {
       setBusy(false);
     }

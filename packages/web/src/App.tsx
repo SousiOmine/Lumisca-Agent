@@ -1,4 +1,5 @@
 import type { AppMode } from "@lumisca/core/shared";
+import { errorMessage } from "@lumisca/core/shared";
 import { IconPlus } from "@tabler/icons-preact";
 import type { ReactElement } from "preact/compat";
 import {
@@ -44,7 +45,6 @@ import { useUpdateStatus } from "./hooks/useUpdateStatus.ts";
 import { useWorkspaces } from "./hooks/useWorkspaces.ts";
 import { useT } from "./i18n.ts";
 import { isNotifyEnabled, setNotifyEnabled } from "./notify.ts";
-import { errorText } from "./providers.ts";
 import type { UrlState } from "./route.ts";
 import { inDesktopShell, quit, shellPlatform } from "./shell.ts";
 import { closeTargets, DRAFT_TAB } from "./tabs.ts";
@@ -521,7 +521,7 @@ export function App({ initialData }: AppProps): ReactElement {
         setRefusedStella(null);
         replaceUrl(modeTop(next));
       } catch (failure) {
-        setRefusedStella(errorText(failure));
+        setRefusedStella(errorMessage(failure));
       }
     },
     [appMode.choose, mode, replaceUrl],

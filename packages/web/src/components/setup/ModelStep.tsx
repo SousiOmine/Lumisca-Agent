@@ -1,9 +1,13 @@
-import { DEFAULT_MODEL_KEY, parseModelPreference } from "@lumisca/core/shared";
+import {
+  DEFAULT_MODEL_KEY,
+  errorMessage,
+  parseModelPreference,
+} from "@lumisca/core/shared";
 import { IconChevronDown } from "@tabler/icons-preact";
 import { useRef, useState } from "preact/hooks";
 import { rememberDefaultModel } from "../../defaultModel.ts";
 import { useT } from "../../i18n.ts";
-import { errorText, useProviderModels } from "../../providers.ts";
+import { useProviderModels } from "../../providers.ts";
 import { useSetting } from "../../settingsStore.ts";
 import { ModelPickerPopover } from "../ModelPickerPopover.tsx";
 import { SettingRow } from "../SettingRow.tsx";
@@ -40,7 +44,7 @@ export function ModelStep() {
     // picked value through the settings store, and a failed write is said
     // rather than silently leaving the old model in place.
     void rememberDefaultModel(provider, modelId).catch((failure) =>
-      setError(errorText(failure)),
+      setError(errorMessage(failure)),
     );
   };
 

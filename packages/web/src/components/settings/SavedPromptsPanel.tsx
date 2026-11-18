@@ -1,3 +1,4 @@
+import { errorMessage } from "@lumisca/core/shared";
 import {
   IconCheck,
   IconEdit,
@@ -10,7 +11,6 @@ import { api } from "../../api.ts";
 import { confirmAction } from "../../confirm.ts";
 import { useSavedPrompts } from "../../hooks/useSavedPrompts.ts";
 import { useT } from "../../i18n.ts";
-import { errorText } from "../../providers.ts";
 import type { SavedPrompt } from "../../types.ts";
 import { Field } from "../Field.tsx";
 import { SettingsSection } from "./SettingsSection.tsx";
@@ -62,7 +62,7 @@ export function SavedPromptsPanel() {
       // list change together (see hooks/useSavedPrompts.ts).
       reload();
     } catch (failure) {
-      setActionError(errorText(failure));
+      setActionError(errorMessage(failure));
     }
   };
 
@@ -193,7 +193,7 @@ function PromptForm({
         prompt: trimmedPrompt,
       });
     } catch (failure) {
-      setError(errorText(failure));
+      setError(errorMessage(failure));
     } finally {
       setSaving(false);
     }

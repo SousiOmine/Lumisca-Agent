@@ -1,4 +1,4 @@
-import { serializeMcpServers } from "@lumisca/core/shared";
+import { errorMessage, serializeMcpServers } from "@lumisca/core/shared";
 import {
   IconAlertTriangle,
   IconCheck,
@@ -17,7 +17,6 @@ import { api } from "../../api.ts";
 import { confirmAction } from "../../confirm.ts";
 import { useMcpSignIn } from "../../hooks/useMcpSignIn.ts";
 import { useT } from "../../i18n.ts";
-import { errorText } from "../../providers.ts";
 import type { McpInfo, McpServerInfo } from "../../types.ts";
 import { McpDetail } from "./McpDetail.tsx";
 import { mcpConfigFields } from "./mcpDraft.ts";
@@ -50,7 +49,7 @@ export function McpList() {
       setConfig(info);
       setBaseline(info);
     } catch (e) {
-      setError(errorText(e));
+      setError(errorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -84,7 +83,7 @@ export function McpList() {
       setBaseline(info);
       return true;
     } catch (e) {
-      setError(errorText(e));
+      setError(errorMessage(e));
       return false;
     }
   };

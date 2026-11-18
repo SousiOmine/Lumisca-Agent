@@ -1,8 +1,7 @@
-import { serializeMcpServers } from "@lumisca/core/shared";
+import { errorMessage, serializeMcpServers } from "@lumisca/core/shared";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../api.ts";
 import { useT } from "../i18n.ts";
-import { errorText } from "../providers.ts";
 import type { McpAuthSnapshot, McpServerInfo } from "../types.ts";
 import { useSavedNotice } from "./useSave.ts";
 
@@ -83,7 +82,7 @@ export function useMcpSignIn(onDone: () => void): McpSignIn {
         snapshot = await api.getMcpAuth(sessionId);
       } catch (e) {
         if (cancelled) return;
-        setError(errorText(e));
+        setError(errorMessage(e));
         finish();
         return;
       }
@@ -122,7 +121,7 @@ export function useMcpSignIn(onDone: () => void): McpSignIn {
       finish();
       reportSettled(snapshot);
     } catch (e) {
-      setError(errorText(e));
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -135,7 +134,7 @@ export function useMcpSignIn(onDone: () => void): McpSignIn {
     try {
       await api.cancelMcpAuth(id);
     } catch (e) {
-      setError(errorText(e));
+      setError(errorMessage(e));
     }
   };
 
@@ -145,7 +144,7 @@ export function useMcpSignIn(onDone: () => void): McpSignIn {
       await navigator.clipboard.writeText(authorizationUrl);
       flashCopied();
     } catch (e) {
-      setError(errorText(e));
+      setError(errorMessage(e));
     }
   };
 

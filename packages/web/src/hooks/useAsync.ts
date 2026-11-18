@@ -1,4 +1,4 @@
-import { errorMessage as errorText } from "@lumisca/core/shared";
+import { errorMessage } from "@lumisca/core/shared";
 import { useEffect, useRef, useState } from "preact/hooks";
 
 /** Stale probe passed to async effects: true once the effect was cleaned
@@ -62,7 +62,7 @@ export interface AsyncData<T> {
 export function useAsyncData<T>(
   read: (isStale: IsStale) => Promise<T>,
   deps: readonly unknown[],
-  formatError: (error: unknown) => string = errorText,
+  formatError: (error: unknown) => string = errorMessage,
 ): AsyncData<T> {
   const [data, setData] = useState<T | undefined>(undefined);
   const [loading, setLoading] = useState(true);

@@ -1,4 +1,4 @@
-import { errorMessage as errorText } from "@lumisca/core/shared";
+import { errorMessage } from "@lumisca/core/shared";
 import { useCallback, useRef, useState } from "preact/hooks";
 import { settingsStore } from "../settingsStore.ts";
 
@@ -61,7 +61,7 @@ export function usePreference<T extends string>(options: {
       // what every other screen reads, so a value picked here must land there
       // too (a panel open beside this one would otherwise keep the old value).
       settingsStore.set(key, next).catch((failure) => {
-        setError(errorText(failure));
+        setError(errorMessage(failure));
         if (chosen.current !== next) return; // a newer choice superseded this
         chosen.current = previous;
         setValue(previous);

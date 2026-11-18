@@ -1,4 +1,5 @@
 import type { Translator } from "@lumisca/core/shared";
+import { errorMessage } from "@lumisca/core/shared";
 import {
   type Icon,
   IconArrowUp,
@@ -18,7 +19,6 @@ import { api } from "../api.ts";
 import { useAsyncEffect } from "../hooks/useAsync.ts";
 import { useTouchInput } from "../hooks/useMediaQuery.ts";
 import { useT } from "../i18n.ts";
-import { errorText } from "../providers.ts";
 import type { FsBrowse, FsEntry, FsPlace, FsPlaceKind } from "../types.ts";
 import { BackHeader } from "./BackHeader.tsx";
 
@@ -176,7 +176,7 @@ export function FolderBrowser({
     } catch (e) {
       // The folder that failed never becomes the open one: the panes keep
       // showing the folder the user was in (address bar included).
-      if (id === visit.current) setError(errorText(e));
+      if (id === visit.current) setError(errorMessage(e));
     } finally {
       if (id === visit.current) setLoading(false);
     }
@@ -193,7 +193,7 @@ export function FolderBrowser({
       const start = list.find((place) => place.kind === "home") ?? list[0];
       if (start) void openFolder(start.path);
     } catch (e) {
-      if (!isStale()) setError(errorText(e));
+      if (!isStale()) setError(errorMessage(e));
     }
   }, []);
 

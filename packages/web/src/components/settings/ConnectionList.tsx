@@ -1,3 +1,4 @@
+import { errorMessage } from "@lumisca/core/shared";
 import { IconChevronDown, IconPlus, IconTrash } from "@tabler/icons-preact";
 import type { CSSProperties } from "preact/compat";
 import { useEffect, useState } from "preact/hooks";
@@ -12,7 +13,6 @@ import {
   withUrl,
 } from "../../connections.ts";
 import { useT } from "../../i18n.ts";
-import { errorText } from "../../providers.ts";
 import {
   type ShellState,
   shellAvailable,
@@ -83,7 +83,7 @@ export function ConnectionList() {
     try {
       await fn();
     } catch (e) {
-      setError(errorText(e));
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -191,7 +191,7 @@ export function ConnectionList() {
     } catch (e) {
       return {
         ok: false,
-        text: errorText(e),
+        text: errorMessage(e),
       };
     }
   };
@@ -332,7 +332,7 @@ function ServerCard({
     } catch (e) {
       setResult({
         ok: false,
-        text: errorText(e),
+        text: errorMessage(e),
       });
     } finally {
       setTesting(false);

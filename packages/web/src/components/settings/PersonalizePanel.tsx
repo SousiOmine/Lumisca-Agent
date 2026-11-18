@@ -1,8 +1,8 @@
+import { errorMessage } from "@lumisca/core/shared";
 import { useEffect, useState } from "preact/hooks";
 import { api } from "../../api.ts";
 import { useDebouncedWrite, useSavedNotice } from "../../hooks/useSave.ts";
 import { useT } from "../../i18n.ts";
-import { errorText } from "../../providers.ts";
 
 /**
  * Settings → カスタマイズ: the machine-level AGENTS.md, which lives next to
@@ -30,7 +30,7 @@ export function PersonalizePanel() {
     api
       .getPersonalization()
       .then((info) => setContent(info.content))
-      .catch((failure) => setError(errorText(failure)))
+      .catch((failure) => setError(errorMessage(failure)))
       .finally(() => setLoading(false));
   }, []);
 
@@ -45,7 +45,7 @@ export function PersonalizePanel() {
       flashSaved();
     } catch (failure) {
       setSaving(false);
-      setError(errorText(failure));
+      setError(errorMessage(failure));
     }
   };
   const pendingWrite = useDebouncedWrite((value: string) => persist(value));
