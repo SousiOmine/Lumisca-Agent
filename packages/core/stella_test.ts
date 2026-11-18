@@ -8,12 +8,12 @@ import {
   fauxText,
   fauxToolCall,
 } from "./ai/faux.ts";
+import { PRUNED_MARKER } from "./ai/pruned.ts";
 import type { StreamFn } from "./ai/types.ts";
 import { LumiscaCore } from "./core.ts";
 import type { StellaEntry } from "./domain/stella-conversation.ts";
 import { CoreError } from "./errors.ts";
 import { SessionAttachmentStore } from "./session/attachments.ts";
-import { PRUNED_MARKER } from "./session/prune.ts";
 import type { WindowPage } from "./session/transcript-window.ts";
 import {
   DEFAULT_MODEL_KEY,

@@ -5,11 +5,8 @@ import type {
   NotificationMessage,
 } from "@lumisca/core";
 import { assert, assertEquals } from "@std/assert";
-import {
-  notificationMessage,
-  notificationText,
-  toLlmMessages,
-} from "./notification.ts";
+import { notificationText, toLlmMessages } from "./llm-view.ts";
+import { notificationMessage } from "./notification.ts";
 
 function notification(
   overrides: Partial<NotificationMessage> = {},

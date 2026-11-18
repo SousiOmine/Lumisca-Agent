@@ -1,4 +1,4 @@
-import { isPruned, isPrunedText, PRUNED_MARKER } from "../ai/pruned.ts";
+import { isPruned } from "../ai/pruned.ts";
 import type {
   AgentMessage,
   AssistantMessage,
