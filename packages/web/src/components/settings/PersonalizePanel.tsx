@@ -1,6 +1,7 @@
 import { errorMessage } from "@lumisca/core/shared";
 import { useEffect, useState } from "preact/hooks";
 import { api } from "../../api.ts";
+import { formatBytes } from "../../format-bytes.ts";
 import { useDebouncedWrite, useSavedNotice } from "../../hooks/useSave.ts";
 import { useT } from "../../i18n.ts";
 
@@ -57,6 +58,10 @@ export function PersonalizePanel() {
     pendingWrite.schedule(value);
   };
 
+  /** Bytes rather than characters: the file is what a session reads, and a
+   * pasted transcript costs several bytes per Japanese character. */
+  const bytes = new TextEncoder().encode(content).length;
+
   return (
     <div className="settings-pane settings-fill">
       <textarea
@@ -75,6 +80,7 @@ export function PersonalizePanel() {
         </p>
       )}
       <div className="settings-actions">
+        <span className="settings-note">{formatBytes(bytes)}</span>
         {saving && <span className="settings-note">{t("common.saving")}</span>}
         {!saving && saved && (
           <span className="settings-saved" role="status">
