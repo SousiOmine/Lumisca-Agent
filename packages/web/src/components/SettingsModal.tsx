@@ -1,12 +1,15 @@
+import type { MessageKey } from "@lumisca/core/shared";
 import {
+  IconBell,
   IconBookmark,
   IconCpu,
+  IconDeviceDesktop,
   IconFlask,
+  IconInfoCircle,
+  IconNetwork,
   IconPalette,
   IconPlugConnected,
   IconPointer,
-  IconServer,
-  IconSettings,
   IconShield,
   IconUser,
   IconWorld,
@@ -14,33 +17,39 @@ import {
 } from "@tabler/icons-preact";
 import type { ReactNode } from "preact/compat";
 import { useEffect, useState } from "preact/hooks";
+import { useConnectionSwitch } from "../hooks/useConnectionSwitch.ts";
 import { COMPACT_QUERY, useMediaQuery } from "../hooks/useMediaQuery.ts";
 import type { PushControls } from "../hooks/usePush.ts";
 import type { UpdateControls } from "../hooks/useUpdateStatus.ts";
 import { useT } from "../i18n.ts";
 import { reloadCatalog, useUserProviders } from "../providers.ts";
+import { inDesktopShell } from "../shell.ts";
 import type { Locale, ThemeSetting } from "../types.ts";
 import { Modal } from "./Modal.tsx";
 import { AddProviderFlow } from "./settings/AddProviderFlow.tsx";
 import { AddUserProviderForm } from "./settings/AddUserProviderForm.tsx";
 import { AppearancePanel } from "./settings/AppearancePanel.tsx";
+import { AppPanel } from "./settings/AppPanel.tsx";
 import { CommandSafetyPanel } from "./settings/CommandSafetyPanel.tsx";
 import { ComputerUsePanel } from "./settings/ComputerUsePanel.tsx";
 import { ConnectionList } from "./settings/ConnectionList.tsx";
 import {
-  navGroups,
+  ownerGroups,
+  ownerLabelKey,
   type SettingsCategory,
   type SettingsNavEntry,
-  scopeLabelKey,
+  visibleCategories,
 } from "./settings/categories.ts";
 import { ExperimentalPanel } from "./settings/ExperimentalPanel.tsx";
-import { GeneralPanel } from "./settings/GeneralPanel.tsx";
 import { McpList } from "./settings/McpList.tsx";
 import { ModelsPage } from "./settings/ModelsPage.tsx";
+import { NotificationsPanel } from "./settings/NotificationsPanel.tsx";
+import { OverviewPanel } from "./settings/OverviewPanel.tsx";
 import { PersonalizePanel } from "./settings/PersonalizePanel.tsx";
 import { ProviderDetail } from "./settings/ProviderDetail.tsx";
 import { ProviderList } from "./settings/ProviderList.tsx";
 import { SavedPromptsPanel } from "./settings/SavedPromptsPanel.tsx";
+import { ServerCard } from "./settings/ServerCard.tsx";
 import { SettingsPage } from "./settings/SettingsPage.tsx";
 import { WebSearchPanel } from "./settings/WebSearchPanel.tsx";
 
@@ -52,7 +61,7 @@ interface SettingsModalProps {
   themeError: string | null;
   onThemeChange: (theme: ThemeSetting) => void;
   /** The app language and the persist failure of the last change (shown in
-   * the general panel). */
+   * the server overview). */
   language: Locale;
   languageError: string | null;
   onLanguageChange: (language: Locale) => void;
@@ -92,8 +101,10 @@ interface PanelContext {
 
 interface SettingsCategoryEntry extends SettingsNavEntry {
   icon: ReactNode;
-  /** The page's body. Its title and description are the entry's labels, and
-   * a screen pushed from inside it draws its own bar (SubHeader). */
+  /** One sentence at the top of the page: what its values act on. */
+  scopeKey: MessageKey;
+  /** The page's body. Its title and scope are the entry's labels, and a
+   * screen pushed from inside it draws its own bar (SubHeader). */
   render: (panels: PanelContext) => ReactNode;
 }
 
@@ -107,23 +118,22 @@ type ProvidersView =
   | { kind: "editUser"; providerId: string };
 
 /**
- * The navigation table, in reading order. Both modes draw this whole table:
- * what a category acts on differs by mode, but which pages exist does not, so
- * the entries are grouped by that and the groups are named (navGroups).
+ * The navigation table, in reading order: this device's pages, then the
+ * server's. The owner is the first level because it is the question the
+ * dialog could not answer (see categories.ts).
  *
  * Each entry carries its page: navigation and body used to be two separate
- * lists (a `SettingsCategory` union, this array, and an eleven-branch
- * `category === "…" && <Panel/>` ladder), so adding a category meant editing
- * three places and a forgotten one was not a type error. One table cannot
- * drift from itself.
+ * lists, so adding a category meant editing three places and a forgotten one
+ * was not a type error. One table cannot drift from itself.
  *
- * Two entries act on code mode's machinery. They are shown in both modes
- * anyway, because hiding a page hid what it does rather than the page:
+ * Two entries act on code mode's machinery and carry `modeOnly`. They are
+ * shown in both modes anyway, because hiding a page hid what it does rather
+ * than the page:
  *
  * - `/prompt` is code mode's: only code mode's composers carry the slash menu
  *   (stella's conversation has one box and no commands), so the prompt list
  *   there is a list nothing recalls.
- * - Computer use drives THIS machine's screen; a stella session is given the
+ * - Computer use drives the server's screen; a stella session is given the
  *   virtual machine's own screen tools instead (agent/factory.ts).
  *
  * Nothing here belongs to one agent. Routines schedule requests on one
@@ -132,12 +142,50 @@ type ProvidersView =
  */
 const CATEGORIES: readonly SettingsCategoryEntry[] = [
   {
-    id: "general",
-    scope: "common",
-    labelKey: "settings.nav.general",
-    icon: <IconSettings size={18} />,
+    id: "notifications",
+    owner: "device",
+    labelKey: "settings.nav.notifications",
+    scopeKey: "settings.scope.device.notifications",
+    icon: <IconBell size={18} />,
     render: ({ props }) => (
-      <GeneralPanel
+      <NotificationsPanel
+        source={props.update.source}
+        notifyEnabled={props.notifyEnabled}
+        onNotifyEnabledChange={props.onNotifyEnabledChange}
+        push={props.push}
+      />
+    ),
+  },
+  {
+    id: "app",
+    owner: "device",
+    deviceOnly: true,
+    labelKey: "settings.nav.app",
+    scopeKey: "settings.scope.device.app",
+    icon: <IconDeviceDesktop size={18} />,
+    render: ({ props }) => (
+      <AppPanel
+        status={props.update.status}
+        source={props.update.source}
+        bridgeError={props.update.error}
+        failure={props.update.failure}
+        onSetAuto={props.update.setAuto}
+        onSetAutoRestart={props.update.setAutoRestart}
+        onCheck={props.update.check}
+        onDownload={props.update.download}
+        onInstall={props.update.install}
+        onRestart={props.update.restart}
+      />
+    ),
+  },
+  {
+    id: "overview",
+    owner: "server",
+    labelKey: "settings.nav.overview",
+    scopeKey: "settings.scope.server.overview",
+    icon: <IconInfoCircle size={18} />,
+    render: ({ props }) => (
+      <OverviewPanel
         status={props.update.status}
         source={props.update.source}
         bridgeError={props.update.error}
@@ -151,16 +199,14 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
         onDownload={props.update.download}
         onInstall={props.update.install}
         onRestart={props.update.restart}
-        notifyEnabled={props.notifyEnabled}
-        onNotifyEnabledChange={props.onNotifyEnabledChange}
-        push={props.push}
       />
     ),
   },
   {
     id: "appearance",
-    scope: "common",
+    owner: "server",
     labelKey: "settings.nav.appearance",
+    scopeKey: "settings.scope.server.appearance",
     icon: <IconPalette size={18} />,
     render: ({ props }) => (
       <AppearancePanel
@@ -172,8 +218,9 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
   },
   {
     id: "providers",
-    scope: "common",
+    owner: "server",
     labelKey: "settings.nav.providers",
+    scopeKey: "settings.scope.server.providers",
     icon: <IconPlugConnected size={18} />,
     render: ({ providersView, setProvidersView, userProviders }) => {
       switch (providersView.kind) {
@@ -272,8 +319,9 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
   },
   {
     id: "models",
-    scope: "common",
+    owner: "server",
     labelKey: "settings.nav.models",
+    scopeKey: "settings.scope.server.models",
     icon: <IconCpu size={18} />,
     render: ({ openCategory }) => (
       <ModelsPage onOpenProviders={() => openCategory("providers")} />
@@ -281,54 +329,63 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
   },
   {
     id: "mcp",
-    scope: "common",
+    owner: "server",
     labelKey: "settings.nav.mcp",
-    icon: <IconServer size={18} />,
+    scopeKey: "settings.scope.server.mcp",
+    icon: <IconNetwork size={18} />,
     render: () => <McpList />,
   },
   {
     id: "personalize",
-    scope: "common",
+    owner: "server",
     labelKey: "settings.nav.personalize",
+    scopeKey: "settings.scope.server.personalize",
     icon: <IconUser size={18} />,
     render: () => <PersonalizePanel />,
   },
   {
-    id: "servers",
-    scope: "common",
-    labelKey: "settings.nav.servers",
-    icon: <IconWorld size={18} />,
-    render: () => <ConnectionList />,
-  },
-  {
-    id: "security",
-    scope: "common",
-    labelKey: "settings.nav.security",
-    icon: <IconShield size={18} />,
-    // The command check guards every bash / eval call, so both modes have it.
-    // Computer use is the other half of "what may the agent do", but it is
-    // code mode's alone and has its own page: one page never mixes the two
-    // scopes, so nothing on it is dead in either mode.
-    render: () => <CommandSafetyPanel />,
-  },
-  {
-    id: "computerUse",
-    scope: "code",
-    labelKey: "settings.nav.computerUse",
-    icon: <IconPointer size={18} />,
-    render: () => <ComputerUsePanel />,
-  },
-  {
     id: "prompts",
-    scope: "code",
+    owner: "server",
+    modeOnly: true,
     labelKey: "settings.nav.prompts",
+    scopeKey: "settings.scope.server.prompts",
     icon: <IconBookmark size={18} />,
     render: () => <SavedPromptsPanel />,
   },
   {
+    id: "security",
+    owner: "server",
+    labelKey: "settings.nav.security",
+    scopeKey: "settings.scope.server.security",
+    icon: <IconShield size={18} />,
+    // The command check guards every bash / eval call, so both modes have it.
+    // Computer use is the other half of "what may the agent do", but it is
+    // code mode's alone and has its own page: one page never mixes the two
+    // modes, so nothing on it is dead in either one.
+    render: () => <CommandSafetyPanel />,
+  },
+  {
+    id: "computerUse",
+    owner: "server",
+    modeOnly: true,
+    labelKey: "settings.nav.computerUse",
+    scopeKey: "settings.scope.server.computerUse",
+    icon: <IconPointer size={18} />,
+    render: () => <ComputerUsePanel />,
+  },
+  {
+    id: "peers",
+    owner: "server",
+    labelKey: "settings.nav.peers",
+    scopeKey: "settings.scope.server.peers",
+    icon: <IconWorld size={18} />,
+    render: () => <ConnectionList />,
+  },
+  {
     id: "experimental",
-    scope: "common",
+    owner: "server",
     labelKey: "settings.nav.experimental",
+    scopeKey: "settings.scope.server.experimental",
     icon: <IconFlask size={18} />,
     // The scripting tool call reaches both modes' sessions, so the page is
     // shared rather than one mode's. It sits last: nothing a reader relies on
@@ -338,23 +395,18 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
 ];
 
 /**
- * The settings dialog: a navigation of categories on the left, one page on the
- * right.
+ * The settings dialog: a navigation of two owners on the left, one page on
+ * the right.
  *
- * Three decisions shape it.
+ * The first level is the owner, because that is the question a flat list
+ * could not answer: theme, language and the updater lived on the same pages
+ * while belonging to different machines (see categories.ts). The server's
+ * group is headed by a card with its name, address and switch, so "whose
+ * settings are these" is read before the first row.
  *
- * Every category is in the list in both modes, grouped by what its values act
- * on and named at each group's head. Hiding the other mode's pages hid the
- * page rather than its effect: a reader in stella mode could not learn that
- * 画面操作 existed without switching modes first.
- *
- * A category is a page: its title stays at the top while the body scrolls
- * (SettingsPage). A long category used to scroll its own title away, and
- * nothing on screen said which category the reader was in.
- *
- * Narrow windows get one screen at a time — the category list, then the picked
- * page with a back button. The horizontal strip of ten labels this replaces
- * clipped every label.
+ * A category is a page: its title, owner, mode and scope sentence stay at the
+ * top while the body scrolls (SettingsPage). Narrow windows get one screen at
+ * a time — the navigation, then the page with a back button.
  */
 export function SettingsModal({
   theme,
@@ -374,22 +426,26 @@ export function SettingsModal({
 }: SettingsModalProps) {
   const t = useT();
   const stepped = useMediaQuery(COMPACT_QUERY);
+  const desktop = inDesktopShell();
+  const connection = useConnectionSwitch();
+  const entries = visibleCategories(CATEGORIES, desktop);
+  const groups = ownerGroups(entries);
   /** The page being shown. Without one in the address this is the dialog's
-   * own: 一般 beside the navigation, the first screen of the list. The
+   * own: 概要 beside the navigation, the first screen of the list. The
    * reader's clicks move it, and move the address with it (openCategory). */
-  const [shown, setShown] = useState<SettingsCategory>(category ?? "general");
+  const [shown, setShown] = useState<SettingsCategory>(category ?? "overview");
   const [providersView, setProvidersView] = useState<ProvidersView>({
     kind: "list",
   });
   const userProviders = useUserProviders();
-  const groups = navGroups(CATEGORIES);
-  const entry = CATEGORIES.find((candidate) => candidate.id === shown);
+  const entry =
+    entries.find((candidate) => candidate.id === shown) ??
+    entries.find((candidate) => candidate.id === "overview") ??
+    entries[0]!;
   // Which of the two screens the narrow layout is showing. On a wide window
   // both fit, so this is always the page. On a narrow one it is the address's
   // answer: a page named means the page, no page named means the list that
-  // leads to one. The dialog does not remember it, because it is not the
-  // dialog's to remember — the back button, the browser's back and a link into
-  // a category all have to land on the same screen.
+  // leads to one.
   const view = stepped && category === null ? "list" : "page";
 
   // The address is the page: a link, a back or a forward moves it, and this
@@ -436,6 +492,11 @@ export function SettingsModal({
     userProviders,
   };
 
+  const ownerLabel =
+    entry.owner === "server"
+      ? connection.currentLabel()
+      : t(ownerLabelKey("device"));
+
   return (
     <Modal
       width="min(940px, calc(100vw - 48px))"
@@ -461,13 +522,20 @@ export function SettingsModal({
           <div className="settings-body" data-view={view}>
             <nav className="settings-nav" aria-label={t("common.settings")}>
               {groups.map((group) => (
-                <div key={group.scope} className="settings-nav-group">
-                  <h3 className="settings-nav-heading">
-                    {t(scopeLabelKey(group.scope))}
-                  </h3>
+                <div key={group.owner} className="settings-nav-group">
+                  {group.owner === "server" ? (
+                    <ServerCard
+                      connection={connection}
+                      onManage={() => openCategory("peers")}
+                    />
+                  ) : (
+                    <h3 className="settings-nav-heading">
+                      {t(ownerLabelKey(group.owner))}
+                    </h3>
+                  )}
                   {group.entries.map((navEntry) => {
                     const item = navEntry as SettingsCategoryEntry;
-                    const active = shown === navEntry.id;
+                    const active = entry.id === navEntry.id;
                     return (
                       <button
                         type="button"
@@ -491,10 +559,13 @@ export function SettingsModal({
 
             <div className="settings-content">
               <SettingsPage
-                title={t(entry?.labelKey ?? "common.settings")}
+                title={t(entry.labelKey)}
+                ownerLabel={ownerLabel}
+                modeOnly={entry.modeOnly === true}
+                scope={t(entry.scopeKey)}
                 onBack={stepped ? onBackToList : undefined}
               >
-                {entry?.render(panels)}
+                {entry.render(panels)}
               </SettingsPage>
             </div>
           </div>

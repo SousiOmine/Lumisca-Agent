@@ -97,7 +97,7 @@ test("route: settings hang under the screen they cover", () => {
   assertEquals(urlOf(onSession), "/code/s/s-1/settings/providers");
   roundTrip(onSession);
   roundTrip(withSettings({ kind: "stella", agentId: null }, "models"));
-  roundTrip(withSettings({ kind: "code", tabKey: null }, "general"));
+  roundTrip(withSettings({ kind: "code", tabKey: null }, "overview"));
 });
 
 test("route: a settings address without a category opens the dialog", () => {
@@ -161,7 +161,7 @@ test("route: a category the dialog does not have leaves the dialog open", () => 
   );
   // Nothing after the category is a path this app has.
   assertEquals(
-    parseUrl("/code/settings/general/extra"),
+    parseUrl("/code/settings/overview/extra"),
     at({ kind: "code", tabKey: null }),
   );
 });
@@ -169,7 +169,7 @@ test("route: a category the dialog does not have leaves the dialog open", () => 
 test("route: settings on the start address are not settings", () => {
   // There is no mode, so no category set to name: the start address is the
   // screen.
-  assertEquals(parseUrl("/settings/general"), at({ kind: "start" }));
+  assertEquals(parseUrl("/settings/overview"), at({ kind: "start" }));
 });
 
 test("route: trailing slashes and doubled slashes are the same path", () => {

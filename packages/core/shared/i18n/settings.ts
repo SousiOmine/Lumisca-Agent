@@ -11,12 +11,15 @@ import type { LocalizedText } from "./types.ts";
  */
 export const settings = {
   // --- dialog chrome (SettingsModal) ----------------------------------------
-  /** The navigation's first group: preferences that act on both modes. */
-  "settings.nav.common": { ja: "共通", en: "Shared" },
-  "settings.nav.general": { ja: "一般", en: "General" },
+  /** The two owners: where a value lives. */
+  "settings.owner.device": { ja: "この端末", en: "This device" },
+  "settings.owner.server": { ja: "サーバー", en: "Server" },
+  "settings.nav.notifications": { ja: "通知", en: "Notifications" },
+  "settings.nav.app": { ja: "アプリ", en: "App" },
+  "settings.nav.overview": { ja: "概要", en: "Overview" },
   "settings.nav.appearance": { ja: "外観", en: "Appearance" },
   "settings.nav.personalize": { ja: "カスタマイズ", en: "Personalization" },
-  "settings.nav.servers": { ja: "接続先サーバー", en: "Servers" },
+  "settings.nav.peers": { ja: "接続先サーバー", en: "Servers" },
   "settings.nav.providers": { ja: "プロバイダー", en: "Providers" },
   "settings.nav.models": { ja: "モデル設定", en: "Models" },
   "settings.nav.mcp": { ja: "MCPサーバー", en: "MCP servers" },
@@ -24,6 +27,76 @@ export const settings = {
   "settings.nav.computerUse": { ja: "画面操作", en: "Screen control" },
   "settings.nav.security": { ja: "セキュリティ", en: "Security" },
   "settings.nav.experimental": { ja: "実験的機能", en: "Experimental" },
+  /** The badge on a page whose values only code mode's sessions use. */
+  "settings.scope.codeOnly": {
+    ja: "Lumisca codeのみ",
+    en: "Lumisca code only",
+  },
+  /** One sentence at the top of a page: what its values act on. */
+  "settings.scope.device.notifications": {
+    ja: "この端末で受け取る通知を決めます。",
+    en: "Chooses the notifications this device receives.",
+  },
+  "settings.scope.device.app": {
+    ja: "この端末のデスクトップアプリを更新します。",
+    en: "Updates the desktop app on this device.",
+  },
+  "settings.scope.server.overview": {
+    ja: "このサーバーのプログラムと、すべての会話に適用されます。",
+    en: "Applies to this server's program and all of its conversations.",
+  },
+  "settings.scope.server.appearance": {
+    ja: "このサーバーに保存され、この端末の表示に使います。",
+    en: "Stored on this server and used for this device's display.",
+  },
+  "settings.scope.server.providers": {
+    ja: "このサーバーのすべての会話が使うプロバイダーです。",
+    en: "Providers every conversation on this server uses.",
+  },
+  "settings.scope.server.models": {
+    ja: "このサーバーのすべての会話が使うモデルです。",
+    en: "Models every conversation on this server uses.",
+  },
+  "settings.scope.server.mcp": {
+    ja: "このサーバーのすべての会話が使うMCPサーバーです。",
+    en: "MCP servers every conversation on this server uses.",
+  },
+  "settings.scope.server.personalize": {
+    ja: "このサーバーのすべての会話が読む指示です。",
+    en: "Instructions every conversation on this server reads.",
+  },
+  "settings.scope.server.prompts": {
+    ja: "Lumisca codeの入力欄から呼び出します。",
+    en: "Recalled from Lumisca code's composer.",
+  },
+  "settings.scope.server.security": {
+    ja: "このサーバーで動くコマンドの確認を決めます。",
+    en: "Decides the check on commands this server runs.",
+  },
+  "settings.scope.server.computerUse": {
+    ja: "このサーバーが動いているマシンの画面を操作します。",
+    en: "Drives the screen of the machine this server runs on.",
+  },
+  "settings.scope.server.peers": {
+    ja: "このサーバーが連携しているサーバーです。表示するサーバーの切り替えもここから行います。",
+    en: "Servers this server federates with. The switch for the displayed server is here too.",
+  },
+  "settings.scope.server.experimental": {
+    ja: "このサーバーのすべての会話に適用される試験中の機能です。",
+    en: "Features under test that affect every conversation on this server.",
+  },
+  /** The current server, as the settings navigation's heading. */
+  "settings.serverCard.viewing": { ja: "表示中", en: "Viewing" },
+  "settings.notifications.none": {
+    ja: "この端末で使える通知はありません。",
+    en: "No notification channels are available on this device.",
+  },
+  "settings.serverCard.browser": {
+    ja: "このページの配信元",
+    en: "Serving this page",
+  },
+  "settings.serverCard.switch": { ja: "切り替え", en: "Switch" },
+  "settings.serverCard.manage": { ja: "接続先を管理", en: "Manage servers" },
   // --- appearance panel -----------------------------------------------------
   "settings.appearance.theme.label": { ja: "テーマ設定", en: "Theme" },
   "settings.appearance.theme.light": { ja: "ライト", en: "Light" },
@@ -40,6 +113,10 @@ export const settings = {
   // `settings.language.*` keys below are read by the general panel (the
   // language is a general preference, not a settings category of its own).
   "settings.language.label": { ja: "言語", en: "Language" },
+  "settings.language.description": {
+    ja: "新しい会話の回答に使います。画面の表示言語も切り替わります。",
+    en: "Used for new conversations' answers. Also changes the screen language.",
+  },
   "settings.language.option.ja": { ja: "日本語", en: "Japanese" },
   "settings.language.option.en": { ja: "English", en: "English" },
   "settings.language.saveFailed": {
@@ -49,6 +126,15 @@ export const settings = {
 
   // --- general panel --------------------------------------------------------
   "settings.general.serverAddress": { ja: "接続先", en: "Server" },
+  /** The server overview when the desktop shell owns the running program. */
+  "settings.overview.managedByApp": {
+    ja: "このサーバーはデスクトップアプリが管理しています。更新は「アプリ」で行います。",
+    en: "The desktop app manages this server. Updates are on the App page.",
+  },
+  "settings.app.noShell": {
+    ja: "デスクトップアプリの更新を読み込めませんでした。",
+    en: "Could not read the desktop app's updater.",
+  },
   "settings.general.updateNoUpdater": {
     ja: "このサーバーには更新機能がありません。開発実行か、デスクトップアプリが管理するサーバーです。",
     en: "This server has no updater. It is a development run, or a server the desktop app manages.",

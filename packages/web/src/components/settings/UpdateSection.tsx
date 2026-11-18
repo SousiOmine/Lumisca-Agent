@@ -1,17 +1,13 @@
-import { LOCALES, type MessageKey } from "@lumisca/core/shared";
 import type { ReactNode } from "preact/compat";
-import type { PushControls } from "../../hooks/usePush.ts";
 import type {
   UpdateFailureKind,
   UpdateSource,
 } from "../../hooks/useUpdateStatus.ts";
 import { useT } from "../../i18n.ts";
 import type { UpdateStatus } from "../../shell.ts";
-import type { Locale } from "../../types.ts";
-import { Select } from "../Select.tsx";
 import { SettingRow, Toggle } from "../SettingRow.tsx";
 
-interface GeneralPanelProps {
+interface UpdateSectionProps {
   /** null = no updater reachable (a browser against a development server). */
   status: UpdateStatus | null;
   /** Which updater answered ("shell" = the desktop app the user launched,
@@ -21,66 +17,12 @@ interface GeneralPanelProps {
   bridgeError: string | null;
   /** Why the server's updater could not be read, when that is what failed. */
   failure: UpdateFailureKind | null;
-  /** The app language and the persist failure of the last change. */
-  language: Locale;
-  languageError: string | null;
-  onLanguageChange: (language: Locale) => void;
   onSetAuto: (enabled: boolean) => void;
   onSetAutoRestart: (enabled: boolean) => void;
   onCheck: () => void;
   onDownload: () => void;
   onInstall: () => void;
   onRestart: () => void;
-  /** Background agent-event notifications (desktop only). */
-  notifyEnabled: boolean;
-  onNotifyEnabledChange: (enabled: boolean) => void;
-  /** PWA notifications of the same events (Web Push), for this device. */
-  push: PushControls;
-}
-
-/** Selector labels in each language's own name where it differs: a reader
- * looking for their language finds it without knowing the current one. Also
- * read by the first-run setup, which asks the same question (see
- * components/setup/WelcomeStep.tsx). */
-export const LANGUAGE_OPTION_KEYS: Record<Locale, MessageKey> = {
-  ja: "settings.language.option.ja",
-  en: "settings.language.option.en",
-};
-
-/** The app language, a general preference like the notification toggle.
- * The choice applies to the UI immediately and to the system prompt of
- * sessions created after it (the server reads the same setting); sessions
- * already started keep the language they began in. */
-function LanguageItem({
-  language,
-  error,
-  onLanguageChange,
-}: {
-  language: Locale;
-  error: string | null;
-  onLanguageChange: (language: Locale) => void;
-}) {
-  const t = useT();
-  return (
-    <>
-      <SettingRow label={t("settings.language.label")}>
-        <Select
-          label={t("settings.language.label")}
-          value={language}
-          options={LOCALES.map((locale) => ({
-            value: locale,
-            label: t(LANGUAGE_OPTION_KEYS[locale]),
-          }))}
-          onChange={onLanguageChange}
-        />
-      </SettingRow>
-      {error && (
-        <p className="error-text" role="alert">
-          {t("settings.language.saveFailed", { error })}
-        </p>
-      )}
-    </>
-  );
 }
 
 function formatBytes(bytes: number | null): string {
@@ -89,127 +31,38 @@ function formatBytes(bytes: number | null): string {
   return `${mb >= 10 ? mb.toFixed(0) : mb.toFixed(1)} MB`;
 }
 
-/** The same events, delivered to an installed PWA through the browser's push
- * service. A separate row from the desktop toggle because it is a separate
- * channel to a separate device: the desktop shell notifies the window the app
- * runs in, this one notifies every phone and laptop the app was installed on.
+/**
+ * The updater of one program: the desktop app or the server.
  *
- * The row disappears where the channel cannot exist (an insecure origin, the
- * desktop shell's loopback page, a browser without the Push API): a row that
- * can only say "not here" is a switch the reader cannot use and a reason they
- * did not ask for. Where the channel exists but was refused, it stays and
- * says why, because that one the reader can fix. */
-function PushNotificationsItem({ push }: { push: PushControls }) {
-  const t = useT();
-  if (push.state === "unsupported") return null;
-  return (
-    <>
-      <SettingRow
-        label={t("settings.general.pushNotifications")}
-        description={t("settings.general.pushNotificationsDesc")}
-      >
-        <Toggle
-          checked={push.state === "on"}
-          disabled={push.state === "busy" || push.state === "denied"}
-          onChange={push.toggle}
-          label={t("settings.general.pushNotifications")}
-        />
-      </SettingRow>
-      {push.state === "denied" && (
-        <p className="settings-note" role="alert">
-          {t("settings.general.pushDenied")}
-        </p>
-      )}
-      {push.state === "on" && (
-        <div className="update-status-row">
-          <span className="update-status-text">
-            {push.tested ? t("settings.general.pushTestSent") : ""}
-          </span>
-          <div className="update-actions">
-            <button type="button" className="btn small" onClick={push.sendTest}>
-              {t("settings.general.pushTest")}
-            </button>
-          </div>
-        </div>
-      )}
-      {push.error !== null && (
-        <p className="error-text" role="alert">
-          {t("settings.general.pushFailed", { error: push.error })}
-        </p>
-      )}
-    </>
-  );
-}
-
-/** Settings → General: the app preferences (language, notifications) and
- * the auto-update controls.
+ * The same status shape answers for both, and the two used to share a page.
+ * That page was the clearest case of the settings dialog's missing owner: the
+ * toggle it showed wrote to whichever program had answered, so the same row
+ * changed the app on a desktop launch and the server on a browser visit. The
+ * owner is now the page around this section: the device's app page or the
+ * server's overview, never both.
  *
- * The update state comes from whichever updater owns the running app: the
- * desktop shell (its own bundle, so installing restarts the app) or, for a
- * packaged standalone server opened in a browser, the server itself (which
- * replaces its files and takes effect at the next start). Same panel, one
- * difference: the server offers an explicit restart. */
-export function GeneralPanel({
+ * The section itself is one object at the top of the page: the version, the
+ * check beside it, what the check found, and the controls that decide how an
+ * update is applied. Splitting those across a page made an available update
+ * read apart from the number it replaces.
+ */
+export function UpdateSection({
   status,
   source,
   bridgeError,
   failure,
-  language,
-  languageError,
-  onLanguageChange,
   onSetAuto,
   onSetAutoRestart,
   onCheck,
   onDownload,
   onInstall,
   onRestart,
-  notifyEnabled,
-  onNotifyEnabledChange,
-  push,
-}: GeneralPanelProps) {
+}: UpdateSectionProps) {
   const t = useT();
-
-  // The app preferences: the language and the notification channels. None of
-  // them is about updating, so they stay above the update controls and are
-  // shown whether or not an updater answered.
-  const preferences = (
-    <>
-      <LanguageItem
-        language={language}
-        error={languageError}
-        onLanguageChange={onLanguageChange}
-      />
-      {source === "shell" && (
-        <SettingRow label={t("settings.general.bgNotification")}>
-          <Toggle
-            checked={notifyEnabled}
-            onChange={onNotifyEnabledChange}
-            label={t("settings.general.bgNotification")}
-          />
-        </SettingRow>
-      )}
-      <PushNotificationsItem push={push} />
-    </>
-  );
-
-  // Which server this page is talking to. An installed app cannot show its
-  // address, and "the update is unavailable" is otherwise indistinguishable
-  // from "you are looking at a different installation than you think".
-  const host = globalThis.location?.host ?? "";
-  const addressItem =
-    host === "" ? null : (
-      <div className="update-item">
-        <div className="update-info">
-          <span className="update-label">
-            {t("settings.general.serverAddress")}
-          </span>
-          <span className="update-desc">{host}</span>
-        </div>
-      </div>
-    );
+  const server = source === "server";
 
   // Why there are no controls. Each reason is a different problem with a
-  // different answer, so the panel says which one it is instead of one
+  // different answer, so the section says which one it is instead of one
   // sentence for all of them; before a first answer arrives it says that it
   // is asking, rather than claiming there is no updater.
   const unavailableNote =
@@ -228,23 +81,16 @@ export function GeneralPanel({
               : t("settings.general.shellUnreachable") + bridgeError;
 
   if (status === null) {
-    return (
-      <div className="settings-pane">
-        {preferences}
-        {addressItem}
-        <p className="settings-note">{unavailableNote}</p>
-      </div>
-    );
+    return <p className="settings-note">{unavailableNote}</p>;
   }
 
-  const server = source === "server";
   const supported = status.supported !== false;
   const percent =
     status.progress == null ? null : Math.round(status.progress * 100);
   const restartPending = server && status.restartPending === true;
   const canRestart = restartPending && status.restartMode !== "none";
   // Replacing the files takes seconds and moves nothing else in the status:
-  // without this the panel looks frozen after the install click.
+  // without this the section looks frozen after the install click.
   const installing = status.installing === true;
   // A check is asked for by the version row; the updater answers one request
   // at a time, so the button is out while one is already in flight.
@@ -337,9 +183,7 @@ export function GeneralPanel({
   );
 
   return (
-    <div className="settings-pane">
-      {preferences}
-
+    <>
       {/* The version, the check for another one, and what that check found:
           one object at the right edge, so an available update is read with
           the number it replaces instead of a row further down the page. */}
@@ -386,8 +230,6 @@ export function GeneralPanel({
           {t("settings.general.autoRestartDisabled")}
         </p>
       )}
-
-      {addressItem}
 
       {supported && (
         <>
@@ -437,6 +279,6 @@ export function GeneralPanel({
           {unavailableNote}
         </div>
       )}
-    </div>
+    </>
   );
 }

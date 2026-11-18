@@ -1,20 +1,14 @@
-import { errorMessage } from "@lumisca/core/shared";
 import {
   IconChevronDown,
   IconPlus,
   IconServer,
   IconSettings,
 } from "@tabler/icons-preact";
-import { useEffect, useRef, useState } from "preact/hooks";
-import {
-  connectionLabel,
-  displayedConnectionId,
-  serverLabel,
-  useConnections,
-} from "../connections.ts";
+import { useRef, useState } from "preact/hooks";
+import { connectionLabel } from "../connections.ts";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
+import { useConnectionSwitch } from "../hooks/useConnectionSwitch.ts";
 import { useT } from "../i18n.ts";
-import { type ShellState, shellCall, shellState } from "../shell.ts";
 import type { ConnectionEntry } from "../types.ts";
 
 interface ConnectionPickerProps {
@@ -38,88 +32,24 @@ interface ConnectionPickerProps {
  * switch with, so the title bar does not render and this control is not
  * shown.
  *
- * The registry comes from the shared store (`connections.ts`), so a save in
- * the settings dialog reaches this popover without a re-fetch. The shell's
- * answer is read once: it is fixed for the lifetime of the page — switching
- * servers navigates the window and loads a new page — so it is not polled
- * here; the title bar polls it and hands it over through `state` when it
- * changes.
- *
- * The displayed name is the shell's: the registry of a REMOTE page is that
- * server's registry, which usually has no entry for itself, so matching the
- * display against this list cannot name it. The shell remembers the name of
- * the entry the window was switched to and reports it with the state.
- *
- * The popover is drawn by the app rather than by the platform (`<select>`
- * would be): it lists a switchable choice of whole servers with their
- * address, marks the current one, and ends with the two ways into the
- * registry, which a native list cannot carry.
+ * The state and the switch are shared with the settings dialog's server card
+ * (hooks/useConnectionSwitch): one copy of the shell read and the registry
+ * lookup, so the two surfaces cannot name the same server differently.
  */
 export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  const [state, setState] = useState<ShellState | null>(null);
-  const { entries: servers } = useConnections();
-  const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
-
   useClickOutside(rootRef, () => setOpen(false), open);
-
-  /** The displayed server, as the shell reports it. */
-  useEffect(() => {
-    let stale = false;
-    shellState
-      .read()
-      .then((shell) => {
-        if (!stale) setState(shell);
-      })
-      .catch((failure: unknown) => {
-        if (!stale) setError(errorMessage(failure));
-      });
-    return () => {
-      stale = true;
-    };
-  }, []);
-
-  const selected =
-    state === null ? null : displayedConnectionId(servers, state);
-
-  /** The current server's label: the name the shell was switched with, or —
-   * for a server this page's registry knows nothing about — its origin. */
-  const currentLabel = (): string => {
-    if (state === null) return t("common.loading");
-    if (state.mode === "local") return t("chrome.connections.local");
-    const entry = servers.find((s) => s.id === selected);
-    if (entry !== undefined) return connectionLabel(entry);
-    return serverLabel(state.name, state.url);
-  };
+  const connection = useConnectionSwitch();
+  const current = connection.currentLabel();
 
   const connect = (target: ConnectionEntry | "local") => {
-    setBusy(target === "local" ? "" : target.id);
-    setError(null);
-    const switching =
-      target === "local"
-        ? shellCall("connect-local")
-        : // The shell owns the navigation: passing the URL through the bridge
-          // keeps the token out of this page's own history. The name travels
-          // with it because the page that loads next cannot look it up: a
-          // remote page's registry is that server's own.
-          shellCall("connect-remote", {
-            url: target.url.trim(),
-            token: target.token,
-            name: connectionLabel(target),
-          });
-    void switching.then(
-      () => {
-        setBusy(null);
-        setOpen(false);
-      },
-      (failure) => {
-        setBusy(null);
-        setError(errorMessage(failure));
-      },
-    );
+    // A failed switch keeps the list open with its error: closing it would
+    // look like the window had moved while the page stayed.
+    void connection.connect(target).then((switched) => {
+      if (switched) setOpen(false);
+    });
   };
 
   return (
@@ -130,10 +60,10 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
         onClick={() => setOpen((value) => !value)}
         aria-haspopup="menu"
         aria-expanded={open}
-        title={t("chrome.connections.current", { name: currentLabel() })}
+        title={t("chrome.connections.current", { name: current })}
       >
         <IconServer size={14} />
-        <span className="connection-picker-label">{currentLabel()}</span>
+        <span className="connection-picker-label">{current}</span>
         <span className={`connection-picker-chevron${open ? " open" : ""}`}>
           <IconChevronDown size={13} />
         </span>
@@ -144,11 +74,11 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
           <button
             type="button"
             role="menuitemradio"
-            aria-checked={state?.mode === "local"}
+            aria-checked={connection.state?.mode === "local"}
             className={`connection-option${
-              state?.mode === "local" ? " selected" : ""
+              connection.state?.mode === "local" ? " selected" : ""
             }`}
-            disabled={busy !== null}
+            disabled={connection.busy !== null}
             onClick={() => connect("local")}
           >
             <IconServer size={14} />
@@ -157,24 +87,21 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
             </span>
           </button>
 
-          {servers === null && (
-            <p className="connection-picker-note">{t("common.loading")}</p>
-          )}
-          {servers !== null && servers.length === 0 && (
+          {connection.entries.length === 0 && (
             <p className="connection-picker-note">
               {t("chrome.connections.empty")}
             </p>
           )}
-          {servers?.map((server) => (
+          {connection.entries.map((server) => (
             <button
               key={server.id}
               type="button"
               role="menuitemradio"
-              aria-checked={selected === server.id}
+              aria-checked={connection.currentId === server.id}
               className={`connection-option${
-                selected === server.id ? " selected" : ""
+                connection.currentId === server.id ? " selected" : ""
               }`}
-              disabled={busy !== null}
+              disabled={connection.busy !== null}
               title={server.url}
               onClick={() => connect(server)}
             >
@@ -185,13 +112,14 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
             </button>
           ))}
 
-          {error !== null && (
+          {connection.error !== null && (
             <p className="error-text connection-picker-note" role="alert">
-              {error}
+              {connection.error}
             </p>
           )}
 
           <div className="connection-picker-sep" />
+
           <button
             type="button"
             role="menuitem"

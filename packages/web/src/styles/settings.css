@@ -1400,3 +1400,211 @@ button.provider-row-body:hover .provider-row-chevron {
     padding: 10px 10px;
   }
 }
+
+/* ---- owners and the server card ----------------------------------------- */
+
+.settings-nav-group + .settings-nav-group {
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.settings-server-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.settings-server-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-dim);
+}
+
+.settings-server-card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.settings-server-card-name {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: var(--type-13);
+  font-weight: 600;
+}
+
+.settings-server-card-address {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-11-5);
+  color: var(--text-faint);
+}
+
+/* The browser's card has no address to show: the host is the name, and this
+ * line says what the host is. It wraps instead of being cut, because the
+ * sentence is the card's whole point there. */
+.settings-server-card-note {
+  font-size: var(--type-11-5);
+  line-height: 1.35;
+  color: var(--text-faint);
+}
+
+.settings-server-card-badge {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  color: var(--text-dim);
+  font-size: var(--type-10);
+  line-height: 1.6;
+}
+
+.settings-server-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-server-card-switch,
+.settings-server-card-manage {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border-radius: var(--radius-sm);
+  font-size: var(--type-11-5);
+  color: var(--text-dim);
+}
+
+.settings-server-card-switch:hover,
+.settings-server-card-manage:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.settings-server-card-chevron {
+  display: grid;
+  place-items: center;
+  transition: transform var(--lum-dur-fast) var(--lum-ease-in-out);
+}
+
+.settings-server-card-chevron.open {
+  transform: rotate(180deg);
+}
+
+.settings-server-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.settings-server-choice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 7px;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  font-size: var(--type-12);
+  color: var(--text-dim);
+}
+
+.settings-server-choice:hover:not(:disabled) {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.settings-server-choice:disabled {
+  opacity: 0.55;
+}
+
+.settings-server-choice-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-server-choice-url {
+  margin-left: auto;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-10);
+  color: var(--text-faint);
+}
+
+.settings-server-choice-empty {
+  margin: 0;
+  padding: 4px 7px;
+  font-size: var(--type-11-5);
+  color: var(--text-faint);
+}
+
+/* The page header carries the owner beside the title: on a phone the
+ * navigation is a separate screen, so the card that names the server is not
+ * on screen with the page. */
+.settings-page-headtext {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.settings-page-titlerow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* The title hugs its text so the badges sit beside it, not at the far edge. */
+.settings-page-titlerow h2 {
+  flex: 0 1 auto;
+}
+
+.settings-owner-badge,
+.settings-mode-badge {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  font-size: var(--type-10-5);
+  font-weight: 500;
+  line-height: 1.7;
+  white-space: nowrap;
+}
+
+.settings-owner-badge {
+  background: var(--accent-soft);
+  color: var(--text-dim);
+}
+
+.settings-mode-badge {
+  border: 1px solid var(--border-strong);
+  color: var(--text-faint);
+}
+
+.settings-page-scope {
+  margin: 0;
+  font-size: var(--type-12);
+  color: var(--text-dim);
+}

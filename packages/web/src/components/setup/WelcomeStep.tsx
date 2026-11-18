@@ -4,7 +4,7 @@ import type { Locale, ThemeSetting } from "../../types.ts";
 import { Select } from "../Select.tsx";
 import { SettingRow } from "../SettingRow.tsx";
 import { THEME_OPTIONS } from "../settings/AppearancePanel.tsx";
-import { LANGUAGE_OPTION_KEYS } from "../settings/GeneralPanel.tsx";
+import { LANGUAGE_OPTION_KEYS } from "../settings/language-options.ts";
 
 export interface WelcomeStepProps {
   theme: ThemeSetting;

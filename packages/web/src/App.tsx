@@ -448,7 +448,7 @@ export function App({ initialData }: AppProps): ReactElement {
     [openSettingsAt],
   );
   const openServers = useCallback(
-    () => openSettingsAt("servers"),
+    () => openSettingsAt("peers"),
     [openSettingsAt],
   );
   /** Close the dialog. Modal calls this once, after its exit has run, so the

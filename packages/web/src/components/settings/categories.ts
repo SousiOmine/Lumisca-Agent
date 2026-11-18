@@ -1,108 +1,120 @@
 import type { MessageKey } from "@lumisca/core/shared";
 
 /**
- * The settings dialog's navigation model: which categories exist, and what
- * each one's values act on.
+ * The settings dialog's navigation model.
  *
- * Everything the dialog holds is a setting of this installation — the same
- * for every conversation and for every agent. Something that belongs to ONE
- * agent is not a category here: routines are that agent's, so they open from
- * the agent's own row in the stella list (StellaSidebar), and an agent's name,
- * picture and model open from the same menu's editor. A settings dialog that
- * also changed one agent's machinery made "the app's settings" two different
- * things depending on which conversation happened to be open.
+ * Every page belongs to one owner: this device, or the server that served the
+ * page. The owner is the first level of the navigation because it is the
+ * question the dialog could not answer. A value's home is where it is stored,
+ * and a page that mixed the two made "my setting" mean two different
+ * machines: 一般 held this device's notification toggle, the server's
+ * language, and an updater that changed hands with the way the app was
+ * launched.
  *
- * Both modes show every category: hiding a page hid the page, never the
- * effect, and a reader in stella mode could not learn that 画面操作 existed
- * without switching modes first. What a reader does need to see is which
- * pages act on which mode's sessions — computer use drives this machine for
- * code mode's sessions, a saved prompt is recalled by code mode's composer —
- * so the navigation groups the entries by that and names each group.
+ * The mode is a property of a page (`modeOnly`), not a group. A reader in
+ * either mode can find every page, and a page that only acts on code mode's
+ * sessions says so with a badge instead of hiding behind a heading.
  *
- * The categories also stay apart by subject: one page never held both a
- * mode's own setting and a shared one (the old セキュリティ carried the
- * command check next to computer use, so half of that page did nothing after
- * a mode switch with nothing on screen saying which half).
- *
- * Everything here is data and pure functions: the entries' screens live in
- * SettingsModal (they need the dialog's props), while the grouping can be
- * reasoned about — and tested — without a DOM.
+ * Nothing here belongs to one agent. Routines, names, pictures and models
+ * open from the agent's own row in the stella list; a dialog that also
+ * changed one agent's machinery made "the app's settings" depend on which
+ * conversation happened to be open.
  */
 
-/** Every category of the dialog, in reading order.
- *
- * The list is a value as well as a type: a category id is part of a URL
- * (route.ts), and parsing one back needs to ask whether it names a category.
- * Deriving the union from the array keeps the two from drifting — a category
- * added to the type but not the array would be unreachable by URL. */
+/** Every category of the dialog, in reading order. A category id is part of
+ * a URL (route.ts), so the list is a value as well as a type: parsing one
+ * back asks whether it names a category, and deriving the union from the
+ * array keeps the two from drifting. */
 export const SETTINGS_CATEGORIES = [
-  "general",
+  "notifications",
+  "app",
+  "overview",
   "appearance",
   "providers",
   "models",
   "mcp",
   "personalize",
-  "servers",
+  "prompts",
   "security",
   "computerUse",
-  "prompts",
+  "peers",
   "experimental",
 ] as const;
 
 export type SettingsCategory = (typeof SETTINGS_CATEGORIES)[number];
 
 /** Whether `value` names a category: the question a URL's path segment asks,
- * where the answer may be anything a reader (or a typo) put there. */
+ * where the answer may be anything a reader, or a typo, put there. */
 export function isSettingsCategory(value: string): value is SettingsCategory {
   return (SETTINGS_CATEGORIES as readonly string[]).includes(value);
 }
 
-/** What a category's values act on: the whole app, or exactly one mode's
- * sessions. Nothing here acts on one agent — that is not this dialog's
- * subject (see the module comment). */
-export type SettingsScope = "common" | "code";
+/** Where a page's values are stored, and who decides them.
+ *
+ * "device" is the window in front of the reader: its notifications and, in
+ * the desktop shell, its app. "server" is the machine that runs the agents:
+ * the same values for every conversation it serves.
+ */
+export type SettingsOwner = "device" | "server";
 
-/** One navigation entry: its identity, what its values act on, and its label
- * (a catalogue key, so the navigation follows the app language). */
+/** One navigation entry: its identity, its owner, and its label (a catalogue
+ * key, so the navigation follows the app language). */
 export interface SettingsNavEntry {
   id: SettingsCategory;
-  scope: SettingsScope;
+  owner: SettingsOwner;
+  /** Only code mode's sessions use the values on this page. */
+  modeOnly?: boolean;
+  /** The page exists only when the desktop shell serves it. */
+  deviceOnly?: boolean;
   /** The navigation label. */
   labelKey: MessageKey;
 }
 
-/** The entries of one group of the navigation. */
-export interface SettingsNavGroup {
-  scope: SettingsScope;
-  entries: readonly SettingsNavEntry[];
+/** The entries of one owner. */
+export interface SettingsNavGroup<
+  T extends SettingsNavEntry = SettingsNavEntry,
+> {
+  owner: SettingsOwner;
+  entries: readonly T[];
 }
 
 /**
- * The navigation's groups, in reading order: what the whole app shares, then
- * what only code mode's sessions use. A group with no entry is dropped, so a
- * missing one costs no heading.
+ * The navigation's groups, in reading order: this device, then the server.
  *
- * There is no mode parameter: both modes draw every group (see the module
- * comment). The order inside a group is the caller's — the table in
- * SettingsModal is the reading order of the dialog, and sorting would put
- * 一般 somewhere in the middle of it.
+ * A group with no entry is dropped, so a missing owner costs no heading.
+ * There is no mode parameter: both modes draw every page (see the module
+ * comment). The order inside a group is the caller's; sorting would put 概要
+ * somewhere in the middle of the server's pages.
  */
-export function navGroups(
-  entries: readonly SettingsNavEntry[],
-): SettingsNavGroup[] {
-  const scopes: readonly SettingsScope[] = ["common", "code"];
-  return scopes
-    .map((scope) => ({
-      scope,
-      entries: entries.filter((entry) => entry.scope === scope),
+export function ownerGroups<T extends SettingsNavEntry>(
+  entries: readonly T[],
+): SettingsNavGroup<T>[] {
+  const owners: readonly SettingsOwner[] = ["device", "server"];
+  return owners
+    .map((owner) => ({
+      owner,
+      entries: entries.filter((entry) => entry.owner === owner),
     }))
     .filter((group) => group.entries.length > 0);
 }
 
-/** The catalogue key heading a group: the shared one, or the mode whose
- * sessions the group's pages act on. */
-export function scopeLabelKey(scope: SettingsScope): MessageKey {
-  return scope === "common"
-    ? "settings.nav.common"
-    : "chat.modeSelect.code.title";
+/** The label of an owner. The server group draws its own card with the
+ * server's name; this label is the page badge and the card's fallback. */
+export function ownerLabelKey(owner: SettingsOwner): MessageKey {
+  return owner === "device" ? "settings.owner.device" : "settings.owner.server";
+}
+
+/**
+ * The entries a client can show.
+ *
+ * Only the desktop shell has an app to update and a bridge that can update
+ * it, so the device's app page is absent in a plain browser. Hiding a page
+ * for a missing capability is not the same as hiding one mode's pages: the
+ * reader can do nothing with a switch whose object does not exist here.
+ */
+export function visibleCategories<T extends SettingsNavEntry>(
+  entries: readonly T[],
+  desktop: boolean,
+): readonly T[] {
+  return entries.filter((entry) => desktop || entry.deviceOnly !== true);
 }

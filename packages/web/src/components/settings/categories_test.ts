@@ -2,63 +2,53 @@ import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import {
   isSettingsCategory,
-  navGroups,
+  ownerGroups,
+  ownerLabelKey,
   SETTINGS_CATEGORIES,
   type SettingsNavEntry,
-  scopeLabelKey,
+  visibleCategories,
 } from "./categories.ts";
 
-/** A minimal entry (the model only needs identity, scope and a label). */
+/** A minimal entry (the model only needs identity, owner and a label). */
 function entry(
   id: SettingsNavEntry["id"],
-  scope: SettingsNavEntry["scope"],
+  owner: SettingsNavEntry["owner"],
+  extra: Partial<SettingsNavEntry> = {},
 ): SettingsNavEntry {
-  return { id, scope, labelKey: "common.settings" };
+  return { id, owner, labelKey: "common.settings", ...extra };
 }
 
-test("navGroups groups the entries by what they act on", () => {
-  // Both modes draw every group, so the groups are the effect, not the mode
-  // on screen: the shared pages first, then the ones only code mode's
-  // sessions use. Nothing in the dialog belongs to one agent, so there is no
-  // third group (see categories.ts).
+test("ownerGroups groups the entries by where their values live", () => {
+  // The device comes first: it is the window the reader is looking through.
+  // The order inside a group stays the caller's, because the table is the
+  // reading order of the dialog.
   const entries = [
-    entry("general", "common"),
-    entry("computerUse", "code"),
-    entry("appearance", "common"),
+    entry("overview", "server"),
+    entry("notifications", "device"),
+    entry("providers", "server"),
+    entry("app", "device"),
   ];
 
   assertEquals(
-    navGroups(entries).map((group) => group.scope),
-    ["common", "code"],
+    ownerGroups(entries).map((group) => group.owner),
+    ["device", "server"],
   );
   assertEquals(
-    navGroups(entries).flatMap((group) => group.entries.map((item) => item.id)),
-    ["general", "appearance", "computerUse"],
+    ownerGroups(entries).flatMap((group) =>
+      group.entries.map((item) => item.id),
+    ),
+    ["notifications", "app", "overview", "providers"],
   );
 });
 
-test("navGroups keeps the caller's order inside a group", () => {
-  // Reading order is the table's, not the alphabet's: sorting would put 一般
-  // somewhere in the middle of the shared group.
-  const entries = [
-    entry("general", "common"),
-    entry("appearance", "common"),
-    entry("providers", "common"),
-  ];
-  assertEquals(
-    navGroups(entries)[0]!.entries.map((item) => item.id),
-    ["general", "appearance", "providers"],
-  );
-});
-
-test("navGroups drops an empty group", () => {
+test("ownerGroups drops an empty owner", () => {
   // A group with no entry gets no heading rather than an empty one.
-  const shared = [entry("general", "common")];
+  const serverOnly = [entry("overview", "server")];
   assertEquals(
-    navGroups(shared).map((group) => group.scope),
-    ["common"],
+    ownerGroups(serverOnly).map((group) => group.owner),
+    ["server"],
   );
-  assertEquals(navGroups([]), []);
+  assertEquals(ownerGroups([]), []);
 });
 
 test("every category is named once, in the table's order", () => {
@@ -70,24 +60,45 @@ test("every category is named once, in the table's order", () => {
   assertEquals(
     [...SETTINGS_CATEGORIES],
     [
-      "general",
+      "notifications",
+      "app",
+      "overview",
       "appearance",
       "providers",
       "models",
       "mcp",
       "personalize",
-      "servers",
+      "prompts",
       "security",
       "computerUse",
-      "prompts",
+      "peers",
       "experimental",
     ],
   );
 });
 
-test("scopeLabelKey names the group", () => {
-  assertEquals(scopeLabelKey("common"), "settings.nav.common");
-  assertEquals(scopeLabelKey("code"), "chat.modeSelect.code.title");
+test("visibleCategories drops the desktop app's page in a browser", () => {
+  // The app page names an updater this client does not have. The rest are
+  // shown whatever the client: a missing page hid the page, never its effect.
+  const entries = [
+    entry("notifications", "device"),
+    entry("app", "device", { deviceOnly: true }),
+    entry("overview", "server"),
+  ];
+
+  assertEquals(
+    visibleCategories(entries, true).map((item) => item.id),
+    ["notifications", "app", "overview"],
+  );
+  assertEquals(
+    visibleCategories(entries, false).map((item) => item.id),
+    ["notifications", "overview"],
+  );
+});
+
+test("ownerLabelKey names the owner", () => {
+  assertEquals(ownerLabelKey("device"), "settings.owner.device");
+  assertEquals(ownerLabelKey("server"), "settings.owner.server");
 });
 
 test("isSettingsCategory accepts the table and refuses anything else", () => {
@@ -96,7 +107,14 @@ test("isSettingsCategory accepts the table and refuses anything else", () => {
   for (const id of SETTINGS_CATEGORIES) {
     assertEquals(isSettingsCategory(id), true, id);
   }
-  for (const other of ["", "General", "general ", "Providers", "nope"]) {
+  for (const other of [
+    "",
+    "General",
+    "general ",
+    "general",
+    "servers",
+    "nope",
+  ]) {
     assertEquals(isSettingsCategory(other), false, other);
   }
 });
