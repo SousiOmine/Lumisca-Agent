@@ -15,6 +15,7 @@
 import { Agent } from "./../ai/agent.ts";
 import { WORK_COMPACTION_STYLE } from "../ai/compaction-style.ts";
 import { ContextCompactor } from "../ai/context-compaction.ts";
+import { toLlmMessages } from "../ai/llm-view.ts";
 import type {
   AgentEvent,
   AgentMessage,
@@ -23,7 +24,6 @@ import type {
   Model,
   StreamFn,
 } from "../ai/types.ts";
-import { toLlmMessages } from "../domain/notification.ts";
 import type { ThinkingLevel } from "../shared/mod.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 

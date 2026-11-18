@@ -13,7 +13,6 @@ import { LumiscaCore } from "./core.ts";
 import type { StellaEntry } from "./domain/stella-conversation.ts";
 import { CoreError } from "./errors.ts";
 import { SessionAttachmentStore } from "./session/attachments.ts";
-import { createHistorySearchTool } from "./session/history.ts";
 import { PRUNED_MARKER } from "./session/prune.ts";
 import type { WindowPage } from "./session/transcript-window.ts";
 import {
@@ -24,6 +23,7 @@ import { DEFAULT_AGENT_NAME } from "./stella/agents.ts";
 import { STELLA_ONBOARDING_PROMPT } from "./stella/onboarding.ts";
 import { MINI_PNG, promptSession, withTempDir } from "./test-utils.ts";
 import { BackgroundProcessManager } from "./tools/background.ts";
+import { createHistorySearchTool } from "./tools/history.ts";
 import { TaskHub } from "./tools/task-hub.ts";
 import { TodoHub } from "./tools/todo.ts";
 import { createStellaTools, hostBackends } from "./tools/toolsets.ts";

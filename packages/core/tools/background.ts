@@ -1,6 +1,6 @@
+import type { NotificationPayload } from "../ai/notification.ts";
 import type { NotificationStatus } from "../ai/types.ts";
 import type { ClientEvent } from "../domain/event.ts";
-import type { NotificationPayload } from "../domain/notification.ts";
 import { CoreError } from "../errors.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
 import {

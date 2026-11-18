@@ -23,9 +23,9 @@
 
 import type { CompactionStyle } from "../ai/compaction-style.ts";
 import type { AgentMessage } from "../ai/types.ts";
-import { stellaEntryText } from "../session/history.ts";
 import { formatLocalDateTime } from "../shared/misc.ts";
 import { TOOL_SEND_CHAT } from "../shared/tool-names.ts";
+import { stellaEntryText } from "../tools/history.ts";
 import { stellaEntryOf } from "./stella-stream.ts";
 
 /** Output cap of the record. The prompt asks for at most 30 short lines;

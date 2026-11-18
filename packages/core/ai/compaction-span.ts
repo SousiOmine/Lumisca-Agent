@@ -8,7 +8,7 @@
  * that question can be read, and tested, without a model in sight.
  */
 
-import { toLlmMessages } from "../domain/notification.ts";
+import { toLlmMessages } from "../ai/llm-view.ts";
 import { createLogger } from "../log.ts";
 import {
   estimateMessageTokens,

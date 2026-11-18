@@ -15,7 +15,7 @@
  * reason, so a cache-read drop can be explained afterwards.
  */
 import { assert, assertEquals } from "@std/assert";
-import { toLlmMessages } from "../domain/notification.ts";
+import { toLlmMessages } from "../ai/llm-view.ts";
 import { fakeModel } from "../test-utils.ts";
 import { Agent } from "./agent.ts";
 import { createAssistantMessageEventStream } from "./event-stream.ts";

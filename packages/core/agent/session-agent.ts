@@ -6,6 +6,9 @@ import {
 } from "../ai/context-compaction.ts";
 import type { ContextProvider } from "../ai/context-providers.ts";
 import { contextMessage } from "../ai/context-providers.ts";
+import { toLlmMessages } from "../ai/llm-view.ts";
+import type { NotificationPayload } from "../ai/notification.ts";
+import { notificationMessage } from "../ai/notification.ts";
 import type {
   AgentEvent,
   AgentMessage,
@@ -22,8 +25,6 @@ import type {
 import type { ClientEvent } from "../domain/event.ts";
 import type { ModePrompt } from "../domain/mode-message.ts";
 import { buildModeMessage } from "../domain/mode-message.ts";
-import type { NotificationPayload } from "../domain/notification.ts";
-import { notificationMessage, toLlmMessages } from "../domain/notification.ts";
 import { errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";

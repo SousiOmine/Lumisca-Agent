@@ -41,10 +41,3 @@ export function buildModeMessage(
     timestamp,
   };
 }
-
-/** The agent-visible text of a mode message: the full prompt. Images
- * attached to the prompt are sent alongside it as content blocks of their
- * own (see toLlmMessages). */
-export function modeFullPromptText(message: ModeMessage): string {
-  return message.fullPrompt;
-}

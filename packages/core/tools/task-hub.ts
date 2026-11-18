@@ -2,6 +2,8 @@ import { createSubagentAgent } from "../agent/subagent-runner.ts";
 import type { Agent } from "../ai/agent.ts";
 import { contextMessage } from "../ai/context-providers.ts";
 import { isRetryableRateLimit } from "../ai/llm-retry.ts";
+import type { NotificationPayload } from "../ai/notification.ts";
+import { notificationMessage } from "../ai/notification.ts";
 import {
   MAX_RATE_LIMIT_RETRIES,
   rateLimitRetryDelayMs,
@@ -22,8 +24,6 @@ import type {
   StreamFn,
 } from "../ai/types.ts";
 import type { ClientEvent } from "../domain/event.ts";
-import type { NotificationPayload } from "../domain/notification.ts";
-import { notificationMessage } from "../domain/notification.ts";
 import { CoreError, errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";

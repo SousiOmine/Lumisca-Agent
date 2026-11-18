@@ -7,7 +7,6 @@ import { CoreError, errorMessage } from "../errors.ts";
 import type { RoutineRepo } from "../routine/repo.ts";
 import type { RoutineScheduler } from "../routine/scheduler.ts";
 import { createRoutineTools } from "../routine/tools.ts";
-import { createHistorySearchTool } from "../session/history.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import { modelViewOf } from "../session/model-view.ts";
 import type { SessionRepo } from "../session/repo.ts";
@@ -22,6 +21,7 @@ import {
 } from "../stella/identity.ts";
 import { StellaSkillCache } from "../stella/skill-cache.ts";
 import { createAgentCreateTool } from "../stella/tools.ts";
+import { createHistorySearchTool } from "../tools/history.ts";
 import { createVmAskUserTool } from "../vm/ask-user.ts";
 import type { StellaAvailability } from "../vm/availability.ts";
 import type { VmClipboard } from "../vm/clipboard.ts";
@@ -440,7 +440,7 @@ export class StellaMachineService {
       // The history of THIS conversation: each stella agent has its own
       // transcript, so the tool is built per open around the session's rows.
       // It searches the conversation's ENTRIES, not the transcript: what the
-      // user sees is what the agent can search (see session/history.ts), and
+      // user sees is what the agent can search (see tools/history.ts), and
       // the projection is the same one the conversation endpoints serve.
       historyTool: createHistorySearchTool({
         entries: (window) =>

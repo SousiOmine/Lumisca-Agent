@@ -17,7 +17,7 @@
  * comfortably span one from the very first request.
  */
 import { assert } from "@std/assert";
-import { toLlmMessages } from "../domain/notification.ts";
+import { toLlmMessages } from "../ai/llm-view.ts";
 import { Agent } from "./agent.ts";
 import { languageModelFor } from "./lang-model.ts";
 import { createStreamFn } from "./stream.ts";

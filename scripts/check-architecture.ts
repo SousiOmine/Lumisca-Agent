@@ -148,8 +148,53 @@ function checkBrowserEntries(): string[] {
   return problems;
 }
 
+/**
+ * The layering rules the plan added:
+ * - `ai` is the model boundary and must not read `domain` or `session` at
+ *   runtime (types are fine: they are erased);
+ * - `session` is storage and must not read `tools`.
+ *
+ * The cycles check cannot see these because both directions are one-way.
+ */
+function checkLayers(): string[] {
+  const problems: string[] = [];
+  const rules: Array<{ dir: string; forbidden: string[] }> = [
+    {
+      dir: "packages/core/ai",
+      forbidden: ["packages/core/domain", "packages/core/session"],
+    },
+    { dir: "packages/core/session", forbidden: ["packages/core/tools"] },
+  ];
+  for (const file of sources()) {
+    const rel = relative(ROOT, file.path);
+    const rule = rules.find((r) => rel.startsWith(r.dir + "/"));
+    if (rule === undefined) continue;
+    for (const match of file.text.matchAll(
+      /import\s+(type\s+)?\{([^}]*)\}\s*from\s*"([^"]+)"/g,
+    )) {
+      const target = resolveSpecifier(file.path, match[3]!);
+      if (target === undefined) continue;
+      const targetRel = relative(ROOT, target);
+      if (!rule.forbidden.some((f) => targetRel.startsWith(f + "/"))) continue;
+      const declarationIsTypeOnly =
+        match[1] !== undefined ||
+        match[2]!
+          .split(",")
+          .map((n) => n.trim())
+          .filter(Boolean)
+          .every((n) => n.startsWith("type "));
+      if (declarationIsTypeOnly) continue;
+      problems.push(
+        `${rel} imports ${targetRel} at runtime (${rule.dir.split("/").pop()} may only take its types)`,
+      );
+    }
+  }
+  return problems;
+}
+
 const cycles = findCycles();
 const aliasProblems = checkBrowserEntries();
+const layerProblems = checkLayers();
 let failed = false;
 
 if (cycles.length > 0) {
@@ -168,5 +213,11 @@ if (aliasProblems.length > 0) {
   for (const problem of aliasProblems) console.error("  " + problem);
 }
 
+if (layerProblems.length > 0) {
+  failed = true;
+  console.error("layer violations:");
+  for (const problem of layerProblems) console.error("  " + problem);
+}
+
 if (failed) process.exit(1);
-console.log("architecture: import graph acyclic, browser entries in sync");
+console.log("architecture: acyclic, browser entries in sync, layers intact");

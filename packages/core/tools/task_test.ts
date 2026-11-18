@@ -8,10 +8,10 @@ import {
   fauxToolCall,
 } from "@lumisca/core";
 import { assert, assertEquals, assertRejects } from "@std/assert";
+import type { NotificationPayload } from "../ai/notification.ts";
 import { createBrowserTools } from "../browser/tools.ts";
 import type { BrowserBackend } from "../browser/types.ts";
 import type { ClientEvent } from "../domain/event.ts";
-import type { NotificationPayload } from "../domain/notification.ts";
 import type { Workspace } from "../domain/workspace.ts";
 import { McpAttachment } from "../mcp/attachment.ts";
 import { parseMcpConfig } from "../mcp/config.ts";

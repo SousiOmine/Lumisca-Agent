@@ -1,3 +1,4 @@
+import { isPruned, isPrunedText, PRUNED_MARKER } from "../ai/pruned.ts";
 import type {
   AgentMessage,
   AssistantMessage,
@@ -18,7 +19,7 @@ import { TOOL_SEND_CHAT } from "../shared/tool-names.ts";
  * the model sees the checkpoint onward (see ai/context-compaction.ts), a
  * client never receives any of it (see agent/stella-stream.ts), and
  * `history_search` searches the conversation's entries, which are the user's
- * words and the agent's words (see session/history.ts).
+ * words and the agent's words (see tools/history.ts).
  *
  * Cheap to drop, but not free: these rows are the only record of what the
  * model was sent and what it produced, and a row that loses its payload
@@ -72,41 +73,6 @@ export const PRUNED_TOOL_RESULT =
 export const PRUNED_CONTEXT =
   "[pruned] This context publication was dropped when this part of the " +
   "conversation was condensed.";
-
-/** How a marker is recognised without a schema column: every one starts with
- * this token. */
-export const PRUNED_MARKER = "[pruned]";
-
-/** Whether a text block is one of this module's markers. */
-export function isPrunedText(text: string): boolean {
-  return text.startsWith(PRUNED_MARKER);
-}
-
-/** Whether a message was already reduced. */
-export function isPruned(message: AgentMessage): boolean {
-  switch (message.role) {
-    case "assistant":
-      // A reduced turn holds no calls (they became one text marker).
-      return (
-        !message.content.some((block) => block.type === "toolCall") &&
-        message.content.some(
-          (block) => block.type === "text" && isPrunedText(block.text),
-        )
-      );
-    case "toolResult":
-      return (
-        message.content.length > 0 &&
-        message.content.every(
-          (block) => block.type === "text" && isPrunedText(block.text),
-        )
-      );
-    case "context":
-    case "notification":
-      return isPrunedText(message.body);
-    default:
-      return false;
-  }
-}
 
 /** The result of reducing one message. */
 export interface PruneResult {

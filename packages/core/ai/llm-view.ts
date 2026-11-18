@@ -1,63 +1,45 @@
+/**
+ * The transcript as the model reads it.
+ *
+ * This is the default `convertToLlm` for every session and sub-agent:
+ *
+ * - notification and context messages become user messages carrying their
+ *   text;
+ * - compaction checkpoints become user messages carrying the checkpoint;
+ * - mode messages become user messages carrying the FULL prompt, followed by
+ *   the images attached to it;
+ * - a reduced row (see session/prune.ts) is skipped whole, so a dropped tool
+ *   call never leaves its result behind (providers reject an unanswered
+ *   call, and the reverse);
+ * - everything else passes the standard role filter.
+ *
+ * It lives in `ai/` because it is part of the model boundary, not a domain
+ * rule: `ai` used to import it from `domain`, which made the dependency run
+ * backwards.
+ */
+import { isPruned } from "./pruned.ts";
 import type {
   AgentMessage,
   Message,
   ModeMessage,
   NotificationMessage,
-} from "../ai/types.ts";
-import { isPruned } from "../session/prune.ts";
-import { modeFullPromptText } from "./mode-message.ts";
-
-/** What the generators (background / task) produce; the session agent
- * stamps role, timestamp and `steered` when injecting — only the delivery
- * site knows whether the notification joins the run that is already
- * active. */
-export type NotificationPayload = Omit<
-  NotificationMessage,
-  "role" | "timestamp" | "steered"
->;
-
-/** Stamp a notification payload as a transcript message. The delivery site
- * owns `steered` (only it knows whether the message joined a running turn),
- * and the timestamp is assigned here so every producer agrees. The session
- * agent re-stamps the message it injects, so a notification lands after the
- * message that preceded it (see SessionAgent.stamp). */
-export function notificationMessage(
-  payload: NotificationPayload,
-  steered?: boolean,
-): NotificationMessage {
-  return {
-    role: "notification",
-    ...payload,
-    ...(steered === true ? { steered } : {}),
-    timestamp: Date.now(),
-  };
-}
+} from "./types.ts";
 
 /** The agent-visible text of a notification: the title (its "[...]" head)
  * followed by the body on the next line when present. */
 export function notificationText(
-  notification: NotificationMessage | NotificationPayload,
+  notification:
+    | NotificationMessage
+    | Omit<NotificationMessage, "role" | "timestamp" | "steered">,
 ): string {
   return notification.body.length > 0
     ? `${notification.title}\n${notification.body}`
     : notification.title;
 }
 
-/** Convert agent messages to LLM messages: notification and context
- * messages become user messages (carrying notificationText / the context
- * body), compaction checkpoints become user messages carrying the checkpoint
- * text, mode messages become user messages carrying the full prompt text
- * (so the LLM sees the full mode prompt) followed by the images attached
- * to it, everything else passes the standard role filter (the same one pi
- * applies by default). */
 export function toLlmMessages(messages: AgentMessage[]): Message[] {
   const out: Message[] = [];
   for (const message of messages) {
-    // A reduced row (see session/prune.ts) is a marker, not a turn: it is
-    // skipped whole so a dropped tool call never leaves its result behind
-    // (providers reject an unanswered call, and the reverse). An assistant
-    // turn that lost every block to the reduction has nothing to send
-    // either, which is the same rule this check applies.
     if (isPruned(message)) continue;
     if (message.role === "notification") {
       out.push({
@@ -80,7 +62,7 @@ export function toLlmMessages(messages: AgentMessage[]): Message[] {
       out.push({
         role: "user",
         content: [
-          { type: "text", text: modeFullPromptText(modeMsg) },
+          { type: "text", text: modeMsg.fullPrompt },
           ...modeMsg.images,
         ],
         timestamp: message.timestamp,
@@ -97,8 +79,7 @@ export function toLlmMessages(messages: AgentMessage[]): Message[] {
         out.push(message);
       } else {
         // `modelContent` replaces the TEXT, not the message: a prompt that
-        // carried pictures keeps them, so what the model sees is the words it
-        // was written for followed by the same images.
+        // carried pictures keeps them.
         const images = Array.isArray(message.content)
           ? message.content.filter((block) => block.type === "image")
           : [];

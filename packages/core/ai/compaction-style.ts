@@ -7,7 +7,7 @@
  * the tool output that explains a failure. A stella conversation's history
  * is the conversation itself: what the user and the agent said, while the
  * tool traffic stays on the machine and the conversation can be searched
- * (see session/history.ts). The mechanism is the same; only the text, the
+ * (see tools/history.ts). The mechanism is the same; only the text, the
  * instruction and the checkpoint's preamble differ.
  */
 
