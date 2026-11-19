@@ -909,10 +909,11 @@ export const settings = {
   },
 
   // --- computer use panel ----------------------------------------------------
-  /** The switch's own label, the same name as the settings nav. */
+  /** The switch's own label: the page heading already names the feature, so
+   * this says what turning it on allows. */
   "settings.computerUse.title": {
-    ja: "画面操作",
-    en: "Screen control",
+    ja: "画面の操作を許可",
+    en: "Allow screen control",
   },
   "settings.computerUse.description": {
     ja: "エージェントが画面を撮影し、クリックや入力を行います。",
