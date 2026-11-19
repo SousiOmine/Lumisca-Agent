@@ -6,7 +6,11 @@ edition = "2021"
 
 [lib]
 name = "lumisca_desktop_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+# The bin is the only consumer: src/main.rs calls `run()`. The template's
+# staticlib/cdylib targets exist for `tauri android|ios`; a desktop build adds
+# a codegen and link pass per artifact and leaves a 289 MB `.a` nothing reads.
+# The rlib alone cut the final phase from 122 s to 106 s on a 4-core machine.
+crate-type = ["rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -137,6 +141,11 @@ libc = "0.2"
 
 [profile.release]
 codegen-units = 1
-lto = true
+# Thin, not fat: the shell is a WebView host whose own code is window and I/O
+# plumbing. In the v0.11.9 release the last crate plus its fat-LTO link took
+# 121-160 s on the three runners. Thin LTO built the same tree cold in 189 s
+# against 285 s and grew the binary from 11.0 MB to 13.0 MB, which is noise
+# beside the ~190 MB server it embeds.
+lto = "thin"
 opt-level = "s"
 strip = true

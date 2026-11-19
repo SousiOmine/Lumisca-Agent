@@ -123,13 +123,18 @@ jobs:
       - name: Install npm dependencies
         run: npm install --no-audit --no-fund
 
+      # tauri build compiles and links; it runs neither clippy nor rustfmt, and
+      # a component is downloaded again every time stable moves.
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
 
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: packages/desktop/src-tauri
+      # No cargo cache step. Its key carries the job name, so no run on master
+      # ever writes the entry this job would read, and the entry a tag run
+      # saves lands under `refs/heads/refs/tags/<tag>`, which only that same
+      # tag can read. On v0.11.7-v0.11.10 every job logged `No cache found`
+      # after saving 350-460 MB, and the unreadable entries held 5.4 GB of the
+      # repository's 10 GB cache budget — evicting the ci.yml caches that do
+      # hit. Shortening the build (see `[profile.release]` in
+      # packages/desktop/src-tauri/Cargo.toml) is worth more than caching it.
 
       - name: Install Linux system dependencies (webkit2gtk)
         if: runner.os == 'Linux'
