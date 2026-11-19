@@ -3,6 +3,10 @@ import type { ModelInfo } from "../shared/providers.ts";
 
 export interface SessionInfo {
   id: string;
+  /** The session's main agent: the row its transcript belongs to (see
+   * session/agents.ts). Read from the agent rows, never stored on the
+   * session — a second column could disagree with the row it names. */
+  mainAgentId: string;
   workspaceId: string;
   name: string;
   modelProvider: string;
@@ -35,11 +39,11 @@ export interface SessionInfo {
    * session list; it exists so one ongoing conversation per agent can reuse
    * the message store, compaction and rewind.
    *
-   * Derived from `agentId` when a row is read: belonging to an agent IS being
-   * a stella conversation, so there is no stored flag that could disagree
-   * with the link. */
+   * Derived from `personaId` when a row is read: belonging to a persona IS
+   * being a stella conversation, so there is no stored flag that could
+   * disagree with the link. */
   stella?: boolean;
-  /** The stella agent whose conversation this is (absent for every other
+  /** The stella persona whose conversation this is (absent for every other
    * session). */
-  agentId?: string;
+  personaId?: string;
 }

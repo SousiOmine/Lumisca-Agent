@@ -3,7 +3,7 @@ import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { LumiscaDb } from "../db/mod.ts";
 import { CoreError } from "../errors.ts";
 import { toolText } from "../test-utils.ts";
-import { createAgentRepo, MAX_AGENT_IDENTITY_CHARS } from "./agents.ts";
+import { createStellaAgentRepo, MAX_AGENT_IDENTITY_CHARS } from "./agents.ts";
 import {
   createIdentityProvider,
   createIdentityTool,
@@ -300,7 +300,7 @@ test("identity provider: a rebased session republishes only what it lost", () =>
 test("identity: the repo target reads and writes the agent's row", async () => {
   const db = LumiscaDb.openInMemory();
   try {
-    const repo = createAgentRepo(db);
+    const repo = createStellaAgentRepo(db);
     const agent = repo.create({ name: "Aide", role: "Keep notes." });
     const target: IdentityTarget = {
       read: () => repo.get(agent.id)?.identity ?? "",

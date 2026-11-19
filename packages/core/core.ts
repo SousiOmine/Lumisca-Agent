@@ -64,6 +64,7 @@ import { ComputerUseService } from "./services/computer.ts";
 import { ModelService } from "./services/models.ts";
 import type { DefaultModel, SessionService } from "./services/sessions.ts";
 import { WorkspaceService } from "./services/workspaces.ts";
+import { type AgentRepo, createAgentRepo } from "./session/agents.ts";
 import {
   ATTACHMENTS_DIR_NAME,
   SessionAttachmentStore,
@@ -135,10 +136,10 @@ import type {
 import type { StellaStatus } from "./shared/wire.ts";
 import type { SkillInfo } from "./skills/discover.ts";
 import {
-  type AgentRepo,
-  createAgentRepo,
+  createStellaAgentRepo,
   normalizeAgentModel,
   type StellaAgent,
+  type StellaAgentRepo,
 } from "./stella/agents.ts";
 import { AGENT_ICONS_DIR_NAME, AgentIconStore } from "./stella/icons.ts";
 import { STELLA_ONBOARDING_PROMPT } from "./stella/onboarding.ts";
@@ -216,7 +217,10 @@ export class LumiscaCore {
   private readonly savedPrompts: SavedPromptsService;
   private readonly push: PushSubscriptions;
   private readonly sessions: SessionRepo;
-  private readonly stellaAgents: AgentRepo;
+  /** The sessions' agents: each session's main row and its sub-agents (see
+   * session/agents.ts). */
+  private readonly agents: AgentRepo;
+  private readonly stellaAgents: StellaAgentRepo;
   /** Routines (scheduled requests) and the scheduler that fires them. The
    * scheduler is created here so tests can drive it with a short tick; the
    * server starts and stops it (see package.json tasks / server/mod.ts). */
@@ -304,7 +308,9 @@ export class LumiscaCore {
       personalization?: PersonalizationService;
       savedPrompts?: SavedPromptsService;
       sessions?: SessionRepo;
-      stellaAgents?: AgentRepo;
+      /** The sessions' agents (default: the SQLite table). */
+      agents?: AgentRepo;
+      stellaAgents?: StellaAgentRepo;
       routines?: RoutineRepo;
       /** Tick of the routine scheduler (tests shorten it so a scheduled run
        * fires without waiting half a minute). */
@@ -377,7 +383,8 @@ export class LumiscaCore {
       overrides.savedPrompts ?? new SavedPromptsService(this.settings);
     this.push = new PushSubscriptions(this.settings);
     this.sessions = overrides.sessions ?? createSessionRepo(db);
-    this.stellaAgents = overrides.stellaAgents ?? createAgentRepo(db);
+    this.agents = overrides.agents ?? createAgentRepo(db);
+    this.stellaAgents = overrides.stellaAgents ?? createStellaAgentRepo(db);
     this.routines = overrides.routines ?? createRoutineRepo(db);
     this.routineScheduler = createRoutineScheduler({
       repo: this.routines,
@@ -480,6 +487,7 @@ export class LumiscaCore {
           this.sessions.updateSystemPrompt(id, systemPrompt),
         streamFn,
         messageRepo: this.messages,
+        agents: this.agents,
         requestShapeRepo: this.requestShapes,
         codeStore: this.codeStore,
         commandSafety: this.commandSafety,
@@ -503,7 +511,7 @@ export class LumiscaCore {
         shares: () => this.shareHub,
         shareRequests: this.shareRequests,
         stellaAgentPersona: (session) => {
-          const agentId = session.agentId;
+          const agentId = session.personaId;
           if (agentId === undefined) return undefined;
           const agent = this.stellaAgents.get(agentId);
           return agent === undefined
@@ -806,7 +814,7 @@ export class LumiscaCore {
   private routineRunner(): RoutineRunner {
     return {
       isRunning: (agentId) => {
-        const session = this.sessions.getByAgent(agentId);
+        const session = this.sessions.getByPersona(agentId);
         if (session === undefined) return false;
         const agent = this.pool.get(session.id);
         return agent !== undefined && agent.isStreaming;
@@ -824,7 +832,7 @@ export class LumiscaCore {
           // conversation the user cannot see.
           throw new CoreError(`Agent ${agentId} is disabled`, "conflict");
         }
-        const session = this.sessions.getByAgent(agentId);
+        const session = this.sessions.getByPersona(agentId);
         if (session === undefined) {
           // The agent exists but its conversation was never opened, or it
           // was deleted while the run was queued: opening it here would
@@ -847,8 +855,8 @@ export class LumiscaCore {
           // conversation is told it has no skills. Nothing read them again
           // while the conversation stayed open, so after a server restart
           // the routine-only conversations kept running without a catalog.
-          if (session.agentId !== undefined) {
-            await this.ensureStellaSkills(session.agentId);
+          if (session.personaId !== undefined) {
+            await this.ensureStellaSkills(session.personaId);
           }
         }
         await this.openSession(session.id);
@@ -860,7 +868,7 @@ export class LumiscaCore {
         });
       },
       stop: (agentId, routineId) => {
-        const session = this.sessions.getByAgent(agentId);
+        const session = this.sessions.getByPersona(agentId);
         if (session === undefined) return;
         const agent = this.pool.get(session.id);
         if (agent === undefined) return;
@@ -871,7 +879,7 @@ export class LumiscaCore {
         agent.abort();
       },
       check: async (routine) => {
-        const session = this.sessions.getByAgent(routine.agentId);
+        const session = this.sessions.getByPersona(routine.agentId);
         if (session === undefined) {
           return {
             kind: "unsupported",
@@ -1395,7 +1403,7 @@ export class LumiscaCore {
     agentId: string,
     model: { provider: string; modelId: string } | null,
   ): Promise<void> {
-    const session = this.sessions.getByAgent(agentId);
+    const session = this.sessions.getByPersona(agentId);
     if (session === undefined) return;
     let wanted = model;
     if (wanted === null) {
@@ -1438,7 +1446,7 @@ export class LumiscaCore {
    * next open would not give it back either.
    */
   private async releaseStellaAgent(agentId: string): Promise<void> {
-    const session = this.sessions.getByAgent(agentId);
+    const session = this.sessions.getByPersona(agentId);
     try {
       if (session !== undefined) await this.closeSession(session.id);
     } finally {
@@ -1505,7 +1513,7 @@ export class LumiscaCore {
     const agent = this.services.stellaAgents.getStellaAgent(agentId);
     if (agent === undefined || agent.disabledAt !== null) return false;
     if (agent.onboardedAt !== null) return false;
-    const session = this.sessions.getByAgent(agentId);
+    const session = this.sessions.getByPersona(agentId);
     if (session === undefined) return false;
     const open = this.services.sessions.getAgent(session.id);
     if (open === undefined || open.isStreaming) return false;
@@ -1812,8 +1820,8 @@ export class LumiscaCore {
    */
   openSession(id: string): SessionInfo {
     const session = this.sessions.get(id);
-    if (session?.agentId !== undefined) {
-      const agent = this.stellaAgents.get(session.agentId);
+    if (session?.personaId !== undefined) {
+      const agent = this.stellaAgents.get(session.personaId);
       if (agent !== undefined && agent.disabledAt !== null) {
         throw new CoreError(`Agent ${agent.id} is disabled`, "conflict");
       }
@@ -2328,7 +2336,7 @@ export class LumiscaCore {
         ? this.stellaAgents.latest()
         : this.stellaAgents.get(agentId);
     if (agent === undefined || agent.model !== null) return;
-    const session = this.sessions.getByAgent(agent.id);
+    const session = this.sessions.getByPersona(agent.id);
     if (session === undefined) return;
     const preferred = await this.explicitDefaultModel();
     if (preferred === undefined) return;

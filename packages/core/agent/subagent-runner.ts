@@ -44,9 +44,9 @@ export interface SubagentAgentInit {
 /** A built sub-agent agent, plus the pieces the hub has to hold on to. */
 export interface SubagentAgent {
   agent: Agent;
-  /** Condenses the sub-agent's history between steps (memory only: nothing
-   * is persisted and no client watches it, so the checkpoint is spliced
-   * straight into the in-memory transcript). */
+  /** Condenses the sub-agent's history between steps. The checkpoint is
+   * written to the store through the caller's `insert` hook before the
+   * in-memory transcript moves, exactly like the main agent's. */
   compactor: ContextCompactor;
 }
 
@@ -62,6 +62,11 @@ export function createSubagentAgent(
   hooks: {
     /** The sub-agent's history compaction, called between steps. */
     beforeStep: (signal: AbortSignal) => Promise<void>;
+    /** Write the checkpoint row for a message about to be inserted at view
+     * position `index`. Called BEFORE the in-memory splice: a failed write
+     * throws and leaves the transcript exactly as it was (durable first,
+     * the rule the main agent's TranscriptStore follows too). */
+    insert: (index: number, message: AgentMessage) => void;
     /** The compaction tuning read from the settings store. */
     compactionPolicy?: () => CompactionPolicyInput;
   },
@@ -93,10 +98,10 @@ export function createSubagentAgent(
     ...(hooks.compactionPolicy !== undefined
       ? { policy: hooks.compactionPolicy }
       : {}),
-    // Memory only: a sub-agent's transcript is never persisted and no client
-    // watches it, so the checkpoint is spliced straight into the in-memory
-    // transcript the agent loop reads.
+    // The row lands first (the host's ledger), then the view the loop reads
+    // moves with it; a failed write throws out of here with both untouched.
     insert: (index, message) => {
+      hooks.insert(index, message);
       agent.state.messages.splice(index, 0, message);
     },
   });

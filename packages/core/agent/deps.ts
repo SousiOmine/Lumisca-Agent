@@ -12,6 +12,7 @@ import type { McpConfig } from "../mcp/config.ts";
 import type { McpAdmin } from "../mcp/manage-tools.ts";
 import type { McpOAuthStore } from "../mcp/oauth.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
+import type { AgentRepo } from "../session/agents.ts";
 import type { SessionAttachmentStore } from "../session/attachments.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import type { RequestShapeRepo } from "../session/request-shapes.ts";
@@ -72,6 +73,9 @@ export interface ModelResolver {
 /** Session persistence the agent factory needs (repos + prompt snapshot). */
 export interface SessionPersistence {
   messageRepo: MessageRepo;
+  /** The session's agents: the main one, whose row is written with the
+   * session, and the sub-agents the task hub spawns. */
+  agents: AgentRepo;
   /** The session's request-shape record: the first request of a session and
    * every request whose head changed or whose history was rewritten — the
    * events that cost the provider's prompt cache (see

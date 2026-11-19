@@ -580,6 +580,10 @@ X サーバ、ウィンドウマネージャ、セッションバス、専用プ
   サーバープロセス内で JavaScript を実行するため、VM の外へ出る経路になります。
   VM 内でコードを動かすときは `bash` から `node` を使います。
   サブエージェントにも渡しません（`SubagentRuntime.eval` が `false`）。
+- サブエージェントの履歴も `messages` に書きます（`agent_id` はサブエージェントの行です）。
+  セッションの会話は `SessionInfo.mainAgentId` で読み、`messages.session_id` はありません。
+  `sessions` を生の SQL で作るときは、同じトランザクションで `agents` の main 行も入れてください（外部キーで落ちます）。
+  実行中に落ちたサブエージェントは、次にセッションを開いたときに `aborted` になります（`TaskHub.restore`）。
 - サブエージェントのスキル: `skill` ツールが読むカタログはセッションが渡します（`SubagentRuntime.skills`）。
   stella はマシン内のカタログ（`stella.skills()`）から、サブエージェントが持たないツールを教える組み込みを落としたもの、code mode はワークスペースのディスカバリです。
   開始時に `<available_skills>` 一覧も context メッセージとして 1 件渡します（`packages/core/tools/task-hub.ts` の `spawn`）。

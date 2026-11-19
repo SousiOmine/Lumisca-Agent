@@ -36,20 +36,20 @@ const MAX_PREVIEW_CANDIDATES = 64;
 /**
  * The newest thing a conversation shows, or null when it has said nothing.
  *
- * `sessionId` is the conversation's session row; a conversation that does not
- * exist yet has no id and no preview.
+ * `mainAgentId` is the agent row the conversation's transcript belongs to; a
+ * conversation that does not exist yet has no agent and no preview.
  */
 export function latestPreview(
   messages: MessageRepo,
-  sessionId: string | undefined,
+  mainAgentId: string | undefined,
 ): StellaPreview | null {
-  if (sessionId === undefined) return null;
+  if (mainAgentId === undefined) return null;
   for (
     let limit = PREVIEW_CANDIDATES;
     limit <= MAX_PREVIEW_CANDIDATES;
     limit *= 2
   ) {
-    const rows = messages.newestConversationRows(sessionId, limit);
+    const rows = messages.newestConversationRows(mainAgentId, limit);
     for (const row of rows) {
       const entry = stellaEntryOf(row.message);
       if (entry === null) continue;

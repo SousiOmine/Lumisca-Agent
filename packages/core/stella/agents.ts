@@ -99,7 +99,7 @@ export const DEFAULT_AGENT_NAME = "Agent";
  * every run after that, so it stays a short note rather than a document. */
 export const MAX_AGENT_IDENTITY_CHARS = 4_000;
 
-export interface AgentRepo {
+export interface StellaAgentRepo {
   list(): StellaAgent[];
   get(id: string): StellaAgent | undefined;
   create(input: { name: string; role: string; id?: string }): StellaAgent;
@@ -264,7 +264,7 @@ export function normalizeAgentModel(
   return { provider, modelId };
 }
 
-export function createAgentRepo(db: LumiscaDb): AgentRepo {
+export function createStellaAgentRepo(db: LumiscaDb): StellaAgentRepo {
   const listStmt = db.db.prepare(
     // `created_at` then `rowid` make the order total: two agents created in
     // the same millisecond would otherwise come back in whatever order
@@ -284,7 +284,7 @@ export function createAgentRepo(db: LumiscaDb): AgentRepo {
     // One statement for all three: they travel together from the edit
     // dialog, and a rename that landed while the picture failed would leave
     // the user with half of what they asked for. `updated_at` is
-    // deliberately absent — see AgentRepo.update.
+    // deliberately absent — see StellaAgentRepo.update.
     "UPDATE stella_agents SET name = ?, icon = ?, model_provider = ?, " +
       "model_id = ? WHERE id = ?",
   );

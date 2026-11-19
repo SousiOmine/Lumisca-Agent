@@ -6,15 +6,15 @@
  * conversation, reopening one, rebuilding a store, and the facade's run
  * setup). The base index is the part that is easy to get wrong: a window
  * read from the store starts after everything the transcript holds, so the
- * difference between the session's row count and the window's length is the
+ * difference between the agent's row count and the window's length is the
  * only correct answer.
  */
 import type { AgentMessage } from "../ai/message.ts";
 
 /** The store operations this view needs. `MessageRepo` satisfies it. */
 export interface ModelViewRepo {
-  listModelView(sessionId: string): { message: AgentMessage }[];
-  count(sessionId: string, rows: "all"): number;
+  listModelView(agentId: string): { message: AgentMessage }[];
+  count(agentId: string, rows: "all"): number;
 }
 
 export interface ModelView {
@@ -23,10 +23,10 @@ export interface ModelView {
   baseIndex: number;
 }
 
-export function modelViewOf(repo: ModelViewRepo, sessionId: string): ModelView {
-  const rows = repo.listModelView(sessionId);
+export function modelViewOf(repo: ModelViewRepo, agentId: string): ModelView {
+  const rows = repo.listModelView(agentId);
   return {
     messages: rows.map((row) => row.message),
-    baseIndex: repo.count(sessionId, "all") - rows.length,
+    baseIndex: repo.count(agentId, "all") - rows.length,
   };
 }

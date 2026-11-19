@@ -17,20 +17,29 @@ function sampleMessage(): AgentMessage {
   } as AgentMessage;
 }
 
-/** Create workspace + session rows so the messages FK constraint is
- * satisfied. */
+/** Create the workspace, the session row and the agent row the messages FK
+ * needs. The key the tests use is the AGENT id: a message belongs to an
+ * agent, and a session starts with one main agent. */
 function createSession(db: LumiscaDb, id: string): void {
   db.db
     .prepare(
-      "INSERT INTO workspaces (id, name, created_at) VALUES ('ws1', 'test', 0)",
+      "INSERT OR IGNORE INTO workspaces (id, name, created_at) " +
+        "VALUES ('ws1', 'test', 0)",
     )
     .run();
   db.db
     .prepare(
-      `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
-     VALUES (?, 'ws1', 'test', 'faux', 'model', 0, 0)`,
+      "INSERT INTO sessions " +
+        "(id, workspace_id, name, model_provider, model_id, created_at, updated_at) " +
+        "VALUES (?, 'ws1', 'test', 'faux', 'model', 0, 0)",
     )
-    .run(id);
+    .run("session-" + id);
+  db.db
+    .prepare(
+      "INSERT INTO agents (id, session_id, parent_id, kind, depth, created_at) " +
+        "VALUES (?, ?, NULL, 'main', 0, 0)",
+    )
+    .run(id, "session-" + id);
 }
 
 test("messages: append/list round-trips through the versioned envelope", () => {
@@ -83,7 +92,7 @@ test("messages: legacy rows (raw AgentMessage JSON) still decode", () => {
     const message = sampleMessage();
     db.db
       .prepare(
-        "INSERT INTO messages (id, session_id, role, content, timestamp) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO messages (id, agent_id, role, content, timestamp) VALUES (?, ?, ?, ?, ?)",
       )
       .run(
         "legacy-1",
@@ -120,7 +129,7 @@ test("messages: mode rows written before the images field decode as imageless", 
       timestamp: 1700000000000,
     };
     const insert = db.db.prepare(
-      "INSERT INTO messages (id, session_id, role, content, timestamp) VALUES (?, ?, ?, ?, ?)",
+      "INSERT INTO messages (id, agent_id, role, content, timestamp) VALUES (?, ?, ?, ?, ?)",
     );
     insert.run(
       "v1-1",
@@ -186,7 +195,7 @@ test("messages: deleteFrom removes a positional suffix", () => {
       [100, 100],
     );
 
-    // Cutting at 0 empties the session.
+    // Cutting at 0 empties the agent's transcript.
     repo.deleteFrom("s1", 0);
     assertEquals(repo.list("s1").length, 0);
 
@@ -199,13 +208,8 @@ test("messages: deleteFrom removes a positional suffix", () => {
     repo.deleteFrom("s1", 10);
     assertEquals(repo.list("s1"), [kept]);
 
-    // Other sessions are unaffected.
-    db.db
-      .prepare(
-        `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
-       VALUES ('s2', 'ws1', 'test', 'faux', 'model', 0, 0)`,
-      )
-      .run();
+    // Other agents are unaffected.
+    createSession(db, "s2");
     const other = repo.append("s2", {
       role: "user",
       content: [{ type: "text", text: "keep" }],
@@ -302,19 +306,14 @@ test("messages: insertAt appends at or past the last row", () => {
   }
 });
 
-test("messages: insertAt leaves other sessions untouched", () => {
+test("messages: insertAt leaves other agents untouched", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
-    db.db
-      .prepare(
-        `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
-       VALUES ('s2', 'ws1', 'test', 'faux', 'model', 0, 0)`,
-      )
-      .run();
+    createSession(db, "s2");
     const repo = createMessageRepo(db);
-    // Interleaved rows of two sessions share the rowid space: the rewrite
-    // must not move (or drop) the other session's rows.
+    // Interleaved rows of two agents share the rowid space: the rewrite
+    // must not move (or drop) the other agent's rows.
     repo.append("s1", sampleMessage());
     const other = repo.append("s2", sampleMessage());
     repo.append("s1", sampleMessage());
@@ -491,16 +490,11 @@ test("messages: listWindow pages backwards, oldest first", () => {
   }
 });
 
-test("messages: listWindow never reads another session's rows", () => {
+test("messages: listWindow never reads another agent's rows", () => {
   const db = LumiscaDb.openInMemory();
   try {
     createSession(db, "s1");
-    db.db
-      .prepare(
-        `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
-       VALUES ('s2', 'ws1', 'test', 'faux', 'model', 0, 0)`,
-      )
-      .run();
+    createSession(db, "s2");
     const repo = createMessageRepo(db);
     repo.append("s1", {
       role: "user",
@@ -704,13 +698,8 @@ test("messages: newestConversationRows reads only what a conversation shows", ()
     // The limit bounds the read (it is a payload bound, not a scan).
     assertEquals(repo.newestConversationRows("s1", 2).length, 2);
 
-    // Another session's rows never appear.
-    db.db
-      .prepare(
-        `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
-       VALUES ('s2', 'ws1', 'test', 'faux', 'model', 0, 0)`,
-      )
-      .run();
+    // Another agent's rows never appear.
+    createSession(db, "s2");
     repo.append("s2", {
       role: "user",
       content: [{ type: "text", text: "other" }],
@@ -761,7 +750,7 @@ test("messages: newestConversationRows also reads pre-stamped rows", () => {
       timestamp: 120,
     };
     const insert = db.db.prepare(
-      "INSERT INTO messages (id, session_id, role, content, timestamp) " +
+      "INSERT INTO messages (id, agent_id, role, content, timestamp) " +
         "VALUES (?, ?, ?, ?, ?)",
     );
     for (const [id, message] of [
@@ -811,19 +800,19 @@ function assistantWith(
  * envelope around a message the repo would now write differently. */
 function insertStored(
   db: LumiscaDb,
-  sessionId: string,
+  agentId: string,
   id: string,
   message: AgentMessage,
   version = 2,
 ): void {
   db.db
     .prepare(
-      "INSERT INTO messages (id, session_id, role, content, timestamp) " +
+      "INSERT INTO messages (id, agent_id, role, content, timestamp) " +
         "VALUES (?, ?, ?, ?, ?)",
     )
     .run(
       id,
-      sessionId,
+      agentId,
       message.role,
       JSON.stringify({ v: version, message }),
       (message as { timestamp?: number }).timestamp ?? 0,

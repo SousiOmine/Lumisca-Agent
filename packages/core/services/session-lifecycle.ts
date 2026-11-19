@@ -132,7 +132,7 @@ export class SessionLifecycle {
    * first open. The client addresses a conversation by agent (stella has no
    * session concept), so this is the lookup that needs no session id. */
   findStellaSession(agentId: string): SessionInfo | undefined {
-    const session = this.deps.sessions.getByAgent(agentId);
+    const session = this.deps.sessions.getByPersona(agentId);
     return session === undefined ? undefined : this.deps.decorate(session);
   }
 
@@ -144,7 +144,9 @@ export class SessionLifecycle {
     }
     if (!this.deps.pool.get(id)) {
       const workspace = this.deps.requireWorkspace(session.workspaceId);
-      const view = modelViewOf(this.deps.messages, id);
+      // The transcript belongs to the session's main agent, not to the
+      // session row (see session/agents.ts).
+      const view = modelViewOf(this.deps.messages, session.mainAgentId);
       this.deps.pool.open(session, workspace, view.messages, view.baseIndex);
     }
     return this.deps.decorate(session);

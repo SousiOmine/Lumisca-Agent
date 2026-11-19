@@ -6,7 +6,8 @@ import { LumiscaDb } from "../db/mod.ts";
 import { createMessageRepo } from "../session/messages.ts";
 import { latestPreview } from "./previews.ts";
 
-/** A workspace + session row, so the messages' foreign keys are satisfied. */
+/** The workspace, session and agent rows the messages' foreign keys need.
+ * The key the tests use is the AGENT id: a message belongs to an agent. */
 function createSession(db: LumiscaDb, id: string): void {
   db.db
     .prepare(
@@ -15,10 +16,17 @@ function createSession(db: LumiscaDb, id: string): void {
     .run();
   db.db
     .prepare(
-      `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
-     VALUES (?, 'ws1', 'test', 'faux', 'model', 0, 0)`,
+      "INSERT INTO sessions " +
+        "(id, workspace_id, name, model_provider, model_id, created_at, updated_at) " +
+        "VALUES (?, 'ws1', 'test', 'faux', 'model', 0, 0)",
     )
-    .run(id);
+    .run("session-" + id);
+  db.db
+    .prepare(
+      "INSERT INTO agents (id, session_id, parent_id, kind, depth, created_at) " +
+        "VALUES (?, ?, NULL, 'main', 0, 0)",
+    )
+    .run(id, "session-" + id);
 }
 
 function userMessage(

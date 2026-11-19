@@ -1,4 +1,5 @@
 import { createSubagentAgent } from "../agent/subagent-runner.ts";
+import { TranscriptStore } from "../agent/transcript.ts";
 import type { Agent } from "../ai/agent.ts";
 import type { AgentEvent } from "../ai/agent-types.ts";
 
@@ -28,6 +29,8 @@ import type { McpAttachment } from "../mcp/attachment.ts";
 import { withOnDemandToolsNote } from "../mcp/context.ts";
 import { addToolsToAgent, registryToolPair } from "../mcp/tools.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
+import type { AgentRepo } from "../session/agents.ts";
+import type { MessageRepo } from "../session/messages.ts";
 import { createShareProvider, shareSeedMessages } from "../share/context.ts";
 import type { ShareHub } from "../share/hub.ts";
 import type {
@@ -53,7 +56,11 @@ import {
   subagentSystemPrompt,
 } from "./subagent-format.ts";
 import type { Subagent } from "./subagent-registry.ts";
-import { type SubagentHub, SubagentRegistry } from "./subagent-registry.ts";
+import {
+  MAX_FINISHED_SUBAGENTS,
+  type SubagentHub,
+  SubagentRegistry,
+} from "./subagent-registry.ts";
 import {
   createSendMessageTool,
   createTaskOutputTool,
@@ -161,9 +168,19 @@ export interface ParentDelivery {
 }
 
 export interface TaskHubOptions {
-  /** The parent (main) session this hub's agents belong to. Its id is also
-   * the parent agent's id. */
+  /** The session this hub's agents belong to. It is what the events and the
+   * store's session column address. */
   sessionId: string;
+  /** The session's main agent (see session/agents.ts). It is the parent of
+   * the sub-agents spawned at depth 1 and the id send_message resolves
+   * "parent" to; the session id is not an agent id. */
+  mainAgentId: string;
+  /** The session's agents: the sub-agent rows are written and settled here,
+   * and a session's settled ones are restored from it when the hub is built. */
+  agents: AgentRepo;
+  /** The message store: each sub-agent's transcript is written through a
+   * TranscriptStore over its own agent id. */
+  messages: MessageRepo;
   /** Resolves the runtime a new sub-agent gets (the fast model with its
    * stored thinking level when configured, otherwise the session model).
    * Called at spawn time, so model/workspace/thinking-level changes apply
@@ -189,11 +206,11 @@ export interface TaskHubOptions {
 }
 
 /**
- * Owns the sub-agent tasks of one session: spawns ephemeral agents (in
- * memory only — nothing is persisted), relays their live responses as
- * `task_delta` events, delivers their completion as notifications, and
- * routes agent-to-agent messages (mesh: any agent can reach any other in
- * the session's tree).
+ * Owns the sub-agent tasks of one session: spawns agents whose rows and
+ * transcripts go to the store (session/agents.ts), relays their live
+ * responses as `task_delta` events, delivers their completion as
+ * notifications, and routes agent-to-agent messages (mesh: any agent can
+ * reach any other in the session's tree).
  *
  * The lifecycle is bound to the session (owned by the session pool), not to
  * one agent: sub-agents run independently of the agent run — aborting a run
@@ -208,11 +225,14 @@ export type TaskHubImplementsToolsSeam = TaskHub extends SubagentHub
 
 export class TaskHub {
   private readonly subagents: SubagentRegistry;
-  private counter = 0;
   private parentDelivery: ParentDelivery | null = null;
   private closed = false;
 
   private readonly sessionId: string;
+  /** The session's main agent (see TaskHubOptions.mainAgentId). */
+  private readonly mainAgentId: string;
+  private readonly agents: AgentRepo;
+  private readonly messages: MessageRepo;
   private resolveRuntime: () => SubagentRuntime;
   private readonly streamFn: StreamFn;
   private readonly safety: CommandSafety | undefined;
@@ -250,7 +270,10 @@ export class TaskHub {
 
   constructor(options: TaskHubOptions) {
     this.sessionId = options.sessionId;
-    this.subagents = new SubagentRegistry(options.sessionId);
+    this.mainAgentId = options.mainAgentId;
+    this.agents = options.agents;
+    this.messages = options.messages;
+    this.subagents = new SubagentRegistry(options.mainAgentId);
     this.resolveRuntime = options.resolveRuntime;
     this.streamFn = options.streamFn;
     this.safety = options.safety;
@@ -258,6 +281,48 @@ export class TaskHub {
     this.compactionPolicy = options.compactionPolicy;
     this.backoffSleep = options.backoffSleep ?? sleepAbortable;
     this.emit = options.emit;
+    this.restore();
+  }
+
+  /** Bring the session's settled sub-agents back into the roster.
+   *
+   * A row still marked running belongs to a process that is gone: this hub
+   * is built once per open, and nothing of this session can be running in a
+   * process that is only now building it. Settling those rows here is what
+   * keeps the list honest — a task that can never finish must not offer
+   * itself as running.
+   *
+   * Only the newest MAX_FINISHED_SUBAGENTS are loaded, the same bound the
+   * roster keeps in memory; the store keeps every row for the read that
+   * resumes one. */
+  private restore(): void {
+    this.agents.abortRunning(this.sessionId, Date.now());
+    const records = this.agents.listSubagents(
+      this.sessionId,
+      MAX_FINISHED_SUBAGENTS,
+    );
+    for (const record of records) {
+      this.subagents.add({
+        id: record.id,
+        parentId: record.parentAgentId,
+        type: record.type,
+        depth: record.depth,
+        description: record.description,
+        status: record.status,
+        agent: null,
+        compactor: null,
+        transcript: null,
+        startedAt: record.startedAt,
+        ...(record.finishedAt !== undefined
+          ? { finishedAt: record.finishedAt }
+          : {}),
+        tail: "",
+        resultText: record.resultText,
+        unsubscribe: () => {},
+        waiters: new Set(),
+        abort: new AbortController(),
+      });
+    }
   }
 
   /** Replace the runtime resolver (called on every session open/rebuild so
@@ -359,7 +424,7 @@ export class TaskHub {
 
   /** The task-family tools of the parent (main) agent. */
   parentTools(): Tool[] {
-    return this.agentTools(this.sessionId, 0, true);
+    return this.agentTools(this.mainAgentId, 0, true);
   }
 
   /** The task-family tools of one sub-agent. `canDelegate` gates the task
@@ -404,7 +469,7 @@ export class TaskHub {
         "unavailable",
       );
     }
-    const id = `agent_${++this.counter}`;
+    const id = this.agents.nextSubagentId();
     const depth = parentDepth + 1;
     const canDelegate = type === "general" && depth < MAX_SUBAGENT_DEPTH;
     const runtime = this.resolveRuntime();
@@ -429,7 +494,7 @@ export class TaskHub {
     const basePrompt = subagentSystemPrompt(id, parentId, type, this.language);
     const systemPrompt =
       searchable.length > 0 ? withOnDemandToolsNote(basePrompt) : basePrompt;
-    // A sub-agent's transcript is memory-only and nothing republishes its
+    // A sub-agent has no context providers and nothing republishes its
     // context, so the skill catalog is seeded once, at spawn, in the same
     // shape the main agent publishes. Without it the `skill` tool points at
     // a listing the sub-agent never received.
@@ -444,6 +509,10 @@ export class TaskHub {
       grants: () => this.sharesHub?.grantsFor(this.sessionId) ?? [],
     });
     messages.push(...shareSeedMessages(shares, Date.now()));
+    // The transcript is written through the same ledger the main agent uses,
+    // over this agent's own id: a checkpoint inserted into the middle of the
+    // view lands at the same position in the store.
+    const transcript = new TranscriptStore(id, this.messages);
     // The agent is built by the agent layer (agent/subagent-runner.ts): this
     // hub owns the delegation protocol, not how an agent is assembled.
     const { agent, compactor } = createSubagentAgent(
@@ -458,11 +527,26 @@ export class TaskHub {
       },
       {
         beforeStep: (signal) => this.compactBeforeStep(id, signal),
+        insert: (index, message) => transcript.insertAt(index, message),
         ...(this.compactionPolicy !== undefined
           ? { compactionPolicy: this.compactionPolicy }
           : {}),
       },
     );
+    // The row lands before the run starts: a process that dies mid-run still
+    // leaves the task behind, and the next open settles it as aborted. The
+    // agent built above has no listener and has been sent nothing, so a
+    // failed write leaves nothing running.
+    const startedAt = Date.now();
+    this.agents.createSubagent({
+      id,
+      sessionId: this.sessionId,
+      parentAgentId: parentId,
+      type,
+      depth,
+      description,
+      startedAt,
+    });
     const abort = new AbortController();
     const sub: Subagent = {
       id,
@@ -473,7 +557,8 @@ export class TaskHub {
       status: "running",
       agent,
       compactor,
-      startedAt: Date.now(),
+      transcript,
+      startedAt,
       tail: "",
       resultText: "",
       unsubscribe: agent.subscribe((event) => this.handleEvent(sub, event)),
@@ -505,9 +590,10 @@ export class TaskHub {
     const sub = this.subagents.get(agentId);
     if (this.closed || signal.aborted || sub === undefined) return;
     const agent = sub.agent;
-    if (agent === null) return;
+    const compactor = sub.compactor;
+    if (agent === null || compactor === null) return;
     try {
-      await sub.compactor.compactIfNeeded(agent.state.messages);
+      await compactor.compactIfNeeded(agent.state.messages);
     } catch (error) {
       // A failed compaction must not kill the sub-agent: the request goes
       // out with the history it had.
@@ -569,9 +655,15 @@ export class TaskHub {
         if (rateLimitAttempt >= MAX_RATE_LIMIT_RETRIES) break;
         rateLimitAttempt++;
         // Drop the failed error turn so the continuation re-uses the prompt.
+        // The store follows it: that turn's row was written when it ended,
+        // and a ledger left ahead of the array would never write the answer
+        // that replaces it.
         const messages = sub.agent.state.messages;
         if (messages.length > 0 && messages.at(-1)!.role === "assistant") {
-          sub.agent.state.messages = messages.slice(0, -1);
+          const kept = messages.slice(0, -1);
+          sub.agent.state.messages = kept;
+          const transcript = sub.transcript;
+          if (transcript !== null) transcript.forgetFrom(kept, kept.length);
         }
         nextPrompt = undefined;
         if (
@@ -671,7 +763,7 @@ export class TaskHub {
   }
 
   private parentOf(agentId: string): string | undefined {
-    if (agentId === this.sessionId) return undefined;
+    if (agentId === this.mainAgentId) return undefined;
     return this.subagents.get(agentId)?.parentId;
   }
 
@@ -690,7 +782,7 @@ export class TaskHub {
       body: message,
       status: "neutral",
     };
-    if (targetId === this.sessionId) {
+    if (targetId === this.mainAgentId) {
       if (this.parentDelivery === null || !this.parentDelivery.isActive()) {
         throw new CoreError("The main agent is not active", "unavailable");
       }
@@ -713,7 +805,7 @@ export class TaskHub {
    * run while idle); a finished or aborted sub-agent can no longer act, so
    * the message is dropped. */
   private notify(parentId: string, payload: NotificationPayload): void {
-    if (parentId === this.sessionId) {
+    if (parentId === this.mainAgentId) {
       if (this.parentDelivery?.isActive()) {
         this.parentDelivery.deliver(payload);
       }
@@ -726,7 +818,34 @@ export class TaskHub {
     }
   }
 
+  /** Write the messages this sub-agent has appended since the last write.
+   *
+   * A failed write is logged, not thrown: the agent's event guard swallows
+   * whatever a listener throws, and the ledger is left where it was, so the
+   * next message_end writes the tail again. */
+  private persistTranscript(sub: Subagent): void {
+    const agent = sub.agent;
+    const transcript = sub.transcript;
+    if (agent === null || transcript === null) return;
+    try {
+      transcript.persist(agent.state.messages);
+    } catch (error) {
+      log.warn(
+        `sub-agent ${sub.id}: persisting its transcript failed: ${errorMessage(
+          error,
+        )}`,
+      );
+    }
+  }
+
   private handleEvent(sub: Subagent, event: AgentEvent): void {
+    // A finished message is a row. Writing it here (rather than diffing the
+    // transcript later) keeps the store in the order the loop produced it,
+    // even when a compaction splice moved a checkpoint into the middle.
+    if (event.type === "message_end") {
+      this.persistTranscript(sub);
+      return;
+    }
     if (event.type !== "message_update") return;
     const inner = event.assistantMessageEvent;
     if (inner.type !== "text_delta") return;
@@ -752,11 +871,24 @@ export class TaskHub {
     sub.status = status;
     sub.finishedAt = Date.now();
     sub.resultText = lastAssistantText(sub.agent!.state.messages);
+    // The tail of the run may hold messages no event announced (a steered
+    // notification the loop appended), so the last write happens here,
+    // before the agent is released.
+    this.persistTranscript(sub);
     sub.unsubscribe();
-    // The agent's message history is no longer needed: release it so a
-    // long session's finished tasks cannot pin unbounded memory. Only the
-    // snapshot fields (kept below) stay queryable.
+    // The message history is no longer needed: its rows are in the store, so
+    // the memory can go. Only the snapshot fields (kept below) stay
+    // queryable.
     sub.agent = null;
+    try {
+      this.agents.settle(sub.id, status, sub.finishedAt, sub.resultText);
+    } catch (error) {
+      // finalize also runs from close(), where there is no caller to fail:
+      // log the one row that did not land instead of aborting the teardown.
+      log.warn(
+        `sub-agent ${sub.id}: settling its row failed: ${errorMessage(error)}`,
+      );
+    }
     const parentWaiting = [...sub.waiters].some(
       (waiter) => waiter.callerId === sub.parentId,
     );

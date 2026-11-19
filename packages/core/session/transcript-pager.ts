@@ -13,7 +13,7 @@ import {
 /**
  * Reading a transcript window STRAIGHT FROM THE STORE.
  *
- * A session agent holds only the model's view in memory (the newest
+ * A main agent holds only the model's view in memory (the newest
  * compaction checkpoint onward). The conversation the user reads can be far
  * longer, and loading all of it to answer one page is what made a long
  * conversation slow to open. A page is therefore queried, not sliced: the
@@ -88,7 +88,7 @@ export interface PageRules<T> {
 
 export function readTranscriptPage<T>(
   repo: MessageRepo,
-  sessionId: string,
+  agentId: string,
   query: WindowQuery,
   rules: PageRules<T>,
 ): TranscriptPage<T> {
@@ -101,18 +101,18 @@ export function readTranscriptPage<T>(
   const older = query.older ?? null;
   // Every position here is in `rows`' scope, so a page counts what the client
   // draws (see TranscriptRows).
-  const total = repo.count(sessionId, rows);
+  const total = repo.count(agentId, rows);
   const end =
     older === null
       ? total
-      : positionOfCursor(repo, sessionId, older, rules.project, rows);
+      : positionOfCursor(repo, agentId, older, rules.project, rows);
 
   // One contiguous read of the transcript's rows from position `at` up to
   // (not including) `until`. The read that reaches the transcript's end has
   // no row after it to bound by (an OFFSET at the end matches nothing), so it
   // is the store's own "newest" query.
   const readRows = (at: number, until: number) =>
-    repo.listWindow(sessionId, {
+    repo.listWindow(agentId, {
       beforeIndex: until === total ? null : until,
       limit: until - at,
       rows,
@@ -202,13 +202,13 @@ function turnStartAtOrBefore(
  * row the client DRAWS, and `rows` is what the positions count. */
 function positionOfCursor<T>(
   repo: MessageRepo,
-  sessionId: string,
+  agentId: string,
   cursor: string,
   project: (row: StoredMessage) => { item: T; cursor: string } | undefined,
   rows: TranscriptRows,
 ): number {
   const position = repo.positionOf(
-    sessionId,
+    agentId,
     (row) => project(row)?.cursor === cursor,
     rows,
   );

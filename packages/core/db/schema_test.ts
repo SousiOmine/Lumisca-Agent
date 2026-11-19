@@ -35,7 +35,7 @@ test("migrate creates the scripting tool call's store", () => {
   }
 });
 
-test("migrate adds the session workspace index", () => {
+test("migrate adds the workspace and transcript indexes", () => {
   const db = LumiscaDb.openInMemory();
   try {
     const rows = db.db
@@ -44,7 +44,8 @@ test("migrate adds the session workspace index", () => {
     const names = rows.map((row) => row.name);
     // listByWorkspace filters on workspace_id on every session list.
     assertEquals(names.includes("idx_sessions_workspace"), true);
-    assertEquals(names.includes("idx_messages_session"), true);
+    assertEquals(names.includes("idx_messages_agent"), true);
+    assertEquals(names.includes("idx_agents_main"), true);
   } finally {
     db.close();
   }
@@ -56,8 +57,8 @@ test("migrate adds the session workspace index", () => {
 const PRE_USAGE_FIX_VERSION = 7;
 
 /** Store assistant rows with the given `usage` objects (the envelope the
- * message repo writes). The workspace/session rows satisfy the foreign
- * keys. */
+ * message repo writes). The workspace, session and agent rows satisfy the
+ * foreign keys. */
 function insertAssistantRows(
   db: LumiscaDb,
   usages: Array<Record<string, number>>,
@@ -66,9 +67,11 @@ function insertAssistantRows(
     INSERT INTO workspaces (id, name, created_at, chat) VALUES ('w', 'w', 0, 0);
     INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
       VALUES ('s', 'w', 's', 'opencode-go', 'm', 0, 0);
+    INSERT INTO agents (id, session_id, parent_id, kind, depth, created_at)
+      VALUES ('a', 's', NULL, 'main', 0, 0);
   `);
   const stmt = db.db.prepare(
-    "INSERT INTO messages (id, session_id, role, content, timestamp) VALUES (?, 's', 'assistant', ?, 0)",
+    "INSERT INTO messages (id, agent_id, role, content, timestamp) VALUES (?, 'a', 'assistant', ?, 0)",
   );
   usages.forEach((usage, index) => {
     stmt.run(
@@ -323,8 +326,8 @@ test("migrate rebuilds sessions: one column per fact, children kept", () => {
 
     // A conversation that belongs to an agent has no name of its own.
     const names = db
-      .prepare("SELECT id, name, agent_id FROM sessions ORDER BY id")
-      .all() as Array<{ id: string; name: string; agent_id: string | null }>;
+      .prepare("SELECT id, name, persona_id FROM sessions ORDER BY id")
+      .all() as Array<{ id: string; name: string; persona_id: string | null }>;
     assertEquals(names.find((row) => row.id === "conv")?.name, "");
     assertEquals(names.find((row) => row.id === "plain")?.name, "Build failed");
 
@@ -344,7 +347,7 @@ test("migrate rebuilds sessions: one column per fact, children kept", () => {
       true,
     );
     for (const row of names) {
-      assertEquals(row.agent_id === null, row.id === "plain");
+      assertEquals(row.persona_id === null, row.id === "plain");
     }
 
     // The rebuild drops the old table; every child row is still there.
@@ -365,13 +368,56 @@ test("migrate rebuilds sessions: one column per fact, children kept", () => {
     try {
       db.exec(
         "INSERT INTO sessions (id, workspace_id, name, model_provider, " +
-          "model_id, created_at, updated_at, agent_id) " +
+          "model_id, created_at, updated_at, persona_id) " +
           "VALUES ('bad', 'w', '', 'faux', 'm', 0, 0, 'gone')",
       );
     } catch {
       refused = true;
     }
     assertEquals(refused, true);
+  } finally {
+    db.close();
+  }
+});
+
+test("migrate moves every message to its session's main agent", () => {
+  const db = new Database(":memory:");
+  try {
+    // A database one migration short of this one: messages still belong to
+    // the session, as the build before this change wrote them.
+    applyMigrations(db, MIGRATIONS.slice(0, MIGRATIONS.length - 1));
+    db.exec(`
+      INSERT INTO workspaces (id, name, created_at, chat)
+        VALUES ('w', 'W', 0, 0);
+      INSERT INTO sessions
+        (id, workspace_id, name, model_provider, model_id, created_at,
+         updated_at, agent_id)
+        VALUES
+          ('s1', 'w', 'one', 'faux', 'm', 0, 0, NULL),
+          ('s2', 'w', 'two', 'faux', 'm', 0, 0, NULL);
+    `);
+    insertMessages(db, "s1", ["a1", "a2"]);
+    insertMessages(db, "s2", ["b1"]);
+
+    applyMigrations(db, MIGRATIONS);
+
+    // Every row names a main agent of its own session, and nothing was lost.
+    const rows = db
+      .prepare(
+        "SELECT m.id AS id, a.session_id AS session_id, a.kind AS kind " +
+          "FROM messages m JOIN agents a ON a.id = m.agent_id ORDER BY m.rowid",
+      )
+      .all() as Array<{ id: string; session_id: string; kind: string }>;
+    assertEquals(rows, [
+      { id: "a1", session_id: "s1", kind: "main" },
+      { id: "a2", session_id: "s1", kind: "main" },
+      { id: "b1", session_id: "s2", kind: "main" },
+    ]);
+    // One main agent per session, and no more.
+    const agents = db
+      .prepare("SELECT COUNT(*) AS n FROM agents WHERE kind = 'main'")
+      .get() as { n: number };
+    assertEquals(Number(agents.n), 2);
   } finally {
     db.close();
   }

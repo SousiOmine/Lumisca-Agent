@@ -13,7 +13,7 @@ import type { SessionRepo } from "../session/repo.ts";
 import type { Locale } from "../shared/mod.ts";
 import type { StellaStatus } from "../shared/wire.ts";
 import type { SkillDef } from "../skills/discover.ts";
-import type { AgentRepo } from "../stella/agents.ts";
+import type { StellaAgentRepo } from "../stella/agents.ts";
 import type { IdentityTarget } from "../stella/identity.ts";
 import {
   createIdentityProvider,
@@ -68,7 +68,7 @@ export class StellaMachineService {
   constructor(
     private readonly deps: {
       machine: StellaMachine;
-      agents: AgentRepo;
+      agents: StellaAgentRepo;
       sessions: SessionRepo;
       messages: MessageRepo;
       pool: SessionPool;
@@ -103,7 +103,7 @@ export class StellaMachineService {
     // user is answering all keep their run going. It asks this before it
     // evicts a slot.
     this.deps.machine.setBusyCheck((agentId) => {
-      const session = this.deps.sessions.getByAgent(agentId);
+      const session = this.deps.sessions.getByPersona(agentId);
       if (session === undefined) return false;
       return this.deps.pool.get(session.id)?.isStreaming === true;
     });
@@ -164,7 +164,7 @@ export class StellaMachineService {
     // at nothing for a while), so that is asked — cheaply, from the status
     // read the client is already polling (see isRunning) — and everything
     // else is skipped when it answers.
-    const existing = this.deps.sessions.getByAgent(agent.id);
+    const existing = this.deps.sessions.getByPersona(agent.id);
     if (
       existing !== undefined &&
       this.deps.pool.get(existing.id) !== undefined
@@ -193,7 +193,7 @@ export class StellaMachineService {
     ]);
     this.deps.agents.touch(agent.id);
     if (existing !== undefined) {
-      const view = modelViewOf(this.deps.messages, existing.id);
+      const view = modelViewOf(this.deps.messages, existing.mainAgentId);
       this.deps.pool.open(
         existing,
         this.deps.requireWorkspace(existing.workspaceId),
@@ -220,7 +220,7 @@ export class StellaMachineService {
       name: "",
       modelProvider: model.provider,
       modelId: model.modelId,
-      agentId: agent.id,
+      personaId: agent.id,
     });
     this.deps.pool.open(session, workspace, []);
     const decorated = this.deps.decorateSession(
@@ -330,7 +330,7 @@ export class StellaMachineService {
         "not_found",
       );
     }
-    const agentId = session.agentId;
+    const agentId = session.personaId;
     if (agentId === undefined) {
       throw new CoreError(
         "The stella session has no agent: its screen has no clipboard",
@@ -369,7 +369,7 @@ export class StellaMachineService {
     // session always has one (the conversation is created FOR an agent). A
     // session without one would have nowhere to keep the text, so it fails
     // here rather than opening with an identity that is silently lost.
-    const agentId = session.agentId;
+    const agentId = session.personaId;
     if (agentId === undefined) {
       throw new CoreError(
         "The stella session has no agent: its identity has nowhere to live",
@@ -455,7 +455,7 @@ export class StellaMachineService {
       routineTools: createRoutineTools({
         repo: this.deps.routineRepo,
         scheduler: this.deps.routineScheduler,
-        agentId: session.agentId ?? "",
+        agentId: session.personaId ?? "",
         watchable: (server, tool) => this.deps.watchableTool(server, tool),
       }),
       // The tool goes through the same entry point as the API, so the
@@ -475,7 +475,7 @@ export class StellaMachineService {
         entries: (window) =>
           conversationEntriesOf(
             this.deps.messages
-              .listBetween(session.id, window)
+              .listBetween(session.mainAgentId, window)
               .map((row) => row.message),
           ),
       }),

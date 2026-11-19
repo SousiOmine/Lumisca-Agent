@@ -6,7 +6,7 @@ import { modelViewOf } from "../session/model-view.ts";
 import { messageIdentityOf } from "../session/transcript-window.ts";
 
 /**
- * The persisted part of a session's transcript, and where it sits in the
+ * The persisted part of an agent's transcript, and where it sits in the
  * whole one.
  *
  * The agent holds the MODEL's view in memory: the newest compaction
@@ -29,9 +29,9 @@ export class TranscriptStore {
   private count: number;
 
   constructor(
-    private readonly sessionId: string,
+    private readonly agentId: string,
     private readonly repo: MessageRepo,
-    /** Messages the view already had when the session opened (they were
+    /** Messages the view already had when the agent opened (they were
      * loaded from the table, so their rows exist). */
     initialCount = 0,
     /** The view's first message is this position in the whole transcript.
@@ -66,7 +66,7 @@ export class TranscriptStore {
       this.count = messages.length;
     }
     for (let i = this.count; i < messages.length; i++) {
-      this.repo.append(this.sessionId, messages[i]!);
+      this.repo.append(this.agentId, messages[i]!);
     }
     this.count = messages.length;
   }
@@ -82,7 +82,7 @@ export class TranscriptStore {
    * grows with it. */
   insertAt(index: number, message: AgentMessage): void {
     const persistedBefore = this.count;
-    this.repo.insertAt(this.sessionId, this.base + index, message);
+    this.repo.insertAt(this.agentId, this.base + index, message);
     this.count = persistedBefore + 1;
   }
 
@@ -93,7 +93,7 @@ export class TranscriptStore {
    * handled by the caller re-reading it). */
   forgetFrom(messages: readonly AgentMessage[], cut: number): void {
     this.count = messages.length;
-    this.repo.deleteFrom(this.sessionId, this.base + cut);
+    this.repo.deleteFrom(this.agentId, this.base + cut);
   }
 
   /** Re-anchor after the view was replaced wholesale (a rewind that reached
@@ -108,7 +108,7 @@ export class TranscriptStore {
    * older than the view the agent holds: the store is what knows where. */
   positionOf(match: (message: AgentMessage) => boolean): number | undefined {
     return this.repo.positionOf(
-      this.sessionId,
+      this.agentId,
       (row) => match(row.message),
       "all",
     );
@@ -118,10 +118,10 @@ export class TranscriptStore {
    * their identities (what a client needs to drop them from its view). */
   truncateFrom(index: number): MessageIdentity[] {
     const removed = this.repo
-      .list(this.sessionId)
+      .list(this.agentId)
       .slice(index)
       .map((row) => messageIdentityOf(row.message));
-    this.repo.deleteFrom(this.sessionId, index);
+    this.repo.deleteFrom(this.agentId, index);
     this.count = Math.min(this.count, Math.max(0, index - this.base));
     return removed;
   }
@@ -129,7 +129,7 @@ export class TranscriptStore {
   /** Re-read the model's view from the store (after a rewind that reached
    * behind it) and re-anchor this store to it. */
   reload(): AgentMessage[] {
-    const view = modelViewOf(this.repo, this.sessionId);
+    const view = modelViewOf(this.repo, this.agentId);
     this.base = view.baseIndex;
     this.count = view.messages.length;
     return view.messages;
@@ -138,6 +138,6 @@ export class TranscriptStore {
   /** Reduce the rows behind the newest checkpoint (see session/prune.ts) and
    * report what that freed. */
   pruneCondensed(): { changed: number; freedBytes: number } {
-    return this.repo.pruneCondensed(this.sessionId);
+    return this.repo.pruneCondensed(this.agentId);
   }
 }

@@ -6,6 +6,7 @@ import {
 import type { AgentMessage } from "../ai/message.ts";
 
 import type { StellaEntry } from "../domain/stella-conversation.ts";
+import { CoreError } from "../errors.ts";
 import { readTranscriptPage } from "../session/transcript-pager.ts";
 import {
   messageCursorOf,
@@ -17,7 +18,7 @@ import type { ContextUsageSummary } from "../shared/context-usage.ts";
 import { summarizeContextUsage } from "../shared/context-usage.ts";
 import type { SessionServiceDeps } from "./session-deps.ts";
 
-type Deps = Pick<SessionServiceDeps, "messages" | "pool">;
+type Deps = Pick<SessionServiceDeps, "messages" | "pool" | "sessions">;
 
 /**
  * Reading a session's history: one window at a time from the store, plus the
@@ -36,8 +37,9 @@ export class SessionTranscript {
     id: string,
     query: WindowQuery,
   ): WindowPage<AgentMessage> | undefined {
-    if (this.deps.pool.get(id) === undefined) return undefined;
-    const page = readTranscriptPage(this.deps.messages, id, query, {
+    const agent = this.deps.pool.get(id);
+    if (agent === undefined) return undefined;
+    const page = readTranscriptPage(this.deps.messages, agent.agentId, query, {
       startsWindow: (message) => startsTranscriptTurn(message),
       rows: "all",
       project: (row) => ({
@@ -53,8 +55,9 @@ export class SessionTranscript {
     id: string,
     query: WindowQuery,
   ): WindowPage<StellaEntry> | undefined {
-    if (this.deps.pool.get(id) === undefined) return undefined;
-    const page = this.stellaPage(id, query);
+    const agent = this.deps.pool.get(id);
+    if (agent === undefined) return undefined;
+    const page = this.stellaPage(agent.agentId, query);
     if ((query.older ?? null) !== null) return page;
     // The prompt of a run in flight is not written yet; a conversation read
     // mid-run must still show it (see unpersistedTail).
@@ -77,7 +80,7 @@ export class SessionTranscript {
     id: string,
     query: WindowQuery,
   ): WindowPage<StellaEntry> {
-    return this.stellaPage(id, query);
+    return this.stellaPage(this.mainAgentIdOf(id), query);
   }
 
   /** The stored page of a conversation, before the live tail.
@@ -88,8 +91,11 @@ export class SessionTranscript {
    * is what makes the page a count of those entries — without it a page of
    * 40 filled up on tool rows during a run and projected to nothing.
    */
-  private stellaPage(id: string, query: WindowQuery): WindowPage<StellaEntry> {
-    return readTranscriptPage(this.deps.messages, id, query, {
+  private stellaPage(
+    agentId: string,
+    query: WindowQuery,
+  ): WindowPage<StellaEntry> {
+    return readTranscriptPage(this.deps.messages, agentId, query, {
       startsWindow: () => true,
       rows: "conversation",
       project: (row) => {
@@ -103,7 +109,20 @@ export class SessionTranscript {
 
   /** The session's context usage over the WHOLE transcript. */
   getSessionUsage(id: string): ContextUsageSummary {
-    return summarizeContextUsage(this.deps.messages.usageRows(id));
+    return summarizeContextUsage(
+      this.deps.messages.usageRows(this.mainAgentIdOf(id)),
+    );
+  }
+
+  /** The agent a session's transcript belongs to. Read from the session row
+   * rather than from an open agent: a disabled conversation is served from
+   * the store, with nothing open. */
+  private mainAgentIdOf(id: string): string {
+    const session = this.deps.sessions.get(id);
+    if (session === undefined) {
+      throw new CoreError(`Session not found: ${id}`, "not_found");
+    }
+    return session.mainAgentId;
   }
 
   /** Append the rows a run has appended but not yet written. */

@@ -9,7 +9,7 @@ import { CoreError } from "../errors.ts";
 import { HostFileBackend } from "../tools/host/files.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 import {
-  createAgentRepo,
+  createStellaAgentRepo,
   DEFAULT_AGENT_NAME,
   MAX_AGENT_IDENTITY_CHARS,
   MAX_AGENT_NAME_CHARS,
@@ -30,7 +30,7 @@ import { createAgentCreateTool } from "./tools.ts";
 
 function setup() {
   const db = LumiscaDb.openInMemory();
-  const repo = createAgentRepo(db);
+  const repo = createStellaAgentRepo(db);
   return { db, repo };
 }
 

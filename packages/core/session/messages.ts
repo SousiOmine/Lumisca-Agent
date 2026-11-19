@@ -6,7 +6,7 @@ import { reduceMessage } from "./prune.ts";
 
 export interface StoredMessage {
   id: string;
-  sessionId: string;
+  agentId: string;
   role: string;
   message: AgentMessage;
   timestamp: number;
@@ -20,7 +20,7 @@ export interface MessageWindow {
 }
 
 /**
- * Which of a session's rows a transcript position counts.
+ * Which of an agent's rows a transcript position counts.
  *
  * A page is a count of SCREEN units, and the two surfaces' units are the
  * same rows only in code mode. A stella conversation draws what the
@@ -92,19 +92,19 @@ export const CONVERSATION_ROWS_SQL = `
         )`;
 
 export interface MessageRepo {
-  append(sessionId: string, message: AgentMessage): StoredMessage;
-  list(sessionId: string): StoredMessage[];
-  listMessages(sessionId: string): AgentMessage[];
-  /** The session's messages whose timestamp lies in `window`, in transcript
-   * order. Backed by the `(session_id, timestamp)` index, so a search reads
+  append(agentId: string, message: AgentMessage): StoredMessage;
+  list(agentId: string): StoredMessage[];
+  listMessages(agentId: string): AgentMessage[];
+  /** The agent's messages whose timestamp lies in `window`, in transcript
+   * order. Backed by the `(agent_id, timestamp)` index, so a search reads
    * only the rows of the period it asks about. */
-  listBetween(sessionId: string, window: MessageWindow): StoredMessage[];
+  listBetween(agentId: string, window: MessageWindow): StoredMessage[];
   /** The part of the transcript the model is shown: the newest compaction
    * checkpoint and everything after it, in transcript order. A conversation
-   * that was never compacted is returned whole. This is what a session agent
-   * loads when a conversation is opened — the model's view, not the
+   * that was never compacted is returned whole. This is what an agent loads
+   * when its conversation is opened — the model's view, not the
    * conversation's whole history (see session/transcript-window.ts). */
-  listModelView(sessionId: string): StoredMessage[];
+  listModelView(agentId: string): StoredMessage[];
   /** One window of the conversation as a client draws it: up to `limit`
    * rows of `rows`' scope ending just before `beforeIndex` (a 0-based
    * position in that same scope), or the newest window when it is `null`.
@@ -117,7 +117,7 @@ export interface MessageRepo {
    * passes `"conversation"`, so a page of 40 counts 40 entries rather than
    * 40 rows of tool traffic nobody sees. */
   listWindow(
-    sessionId: string,
+    agentId: string,
     query: {
       beforeIndex: number | null;
       limit: number;
@@ -130,7 +130,7 @@ export interface MessageRepo {
    * where it is. The scope must be the one the page was read with, because
    * it is what the positions count. */
   positionOf(
-    sessionId: string,
+    agentId: string,
     match: (row: StoredMessage) => boolean,
     rows: TranscriptRows,
   ): number | undefined;
@@ -146,39 +146,38 @@ export interface MessageRepo {
    *
    * `limit` bounds how many candidates a caller reads; a caller looking for
    * the newest entry retries with a larger limit rather than scanning the
-   * session. */
-  newestConversationRows(sessionId: string, limit: number): StoredMessage[];
-  /** How many rows the session holds in `rows`' scope (a page's end is the
+   * agent. */
+  newestConversationRows(agentId: string, limit: number): StoredMessage[];
+  /** How many rows the agent holds in `rows`' scope (a page's end is the
    * count of what the page counts). */
-  count(sessionId: string, rows: TranscriptRows): number;
+  count(agentId: string, rows: TranscriptRows): number;
   /** The `usage` of every assistant row that reported one, in transcript
    * order — the input of the context meter. Read from the store rather than
    * from memory because the agent holds only the model's view, while the
    * meter describes the whole conversation. */
-  usageRows(sessionId: string): ContextUsageMessageLike[];
+  usageRows(agentId: string): ContextUsageMessageLike[];
   /** Replace the payload of every row before the newest checkpoint, keeping
    * its identity and position (see session/prune.ts). Returns how many rows
    * changed and the bytes their payloads held, which is what a caller needs
    * to decide whether the file is worth rewriting (db/vacuum.ts). Idempotent:
    * a row already reduced is left alone. */
-  pruneCondensed(sessionId: string): { changed: number; freedBytes: number };
+  pruneCondensed(agentId: string): { changed: number; freedBytes: number };
   /** Delete every row at or after `index` (a 0-based transcript position;
    * rows are inserted in transcript order, so rowid == position). Used by
    * the rewind feature: positional (not timestamp-based) so messages that
    * share a millisecond with the rewind boundary are handled exactly. */
-  deleteFrom(sessionId: string, index: number): void;
+  deleteFrom(agentId: string, index: number): void;
   /** Insert `message` at the 0-based transcript position `index`, pushing
    * the rows at and after it one position later. Used by the context
    * compaction, which inserts its checkpoint at the cut and keeps every
    * message around it. An `index` at or past the last row appends. The
-   * rewrite runs in one transaction: a failure leaves the session's rows
+   * rewrite runs in one transaction: a failure leaves the agent's rows
    * exactly as they were. */
   insertAt(
-    sessionId: string,
+    agentId: string,
     index: number,
     message: AgentMessage,
   ): StoredMessage;
-  deleteBySession(sessionId: string): void;
 }
 
 /** Version of the stored message envelope. Bump when the AgentMessage
@@ -279,31 +278,30 @@ function dropDuplicateThinking(message: AgentMessage): AgentMessage {
 
 export function createMessageRepo(db: LumiscaDb): MessageRepo {
   const insertStmt = db.db.prepare(`
-    INSERT INTO messages (id, session_id, role, content, timestamp)
+    INSERT INTO messages (id, agent_id, role, content, timestamp)
     VALUES (?, ?, ?, ?, ?)
   `);
   const listStmt = db.db.prepare(
-    "SELECT * FROM messages WHERE session_id = ? ORDER BY rowid",
+    "SELECT * FROM messages WHERE agent_id = ? ORDER BY rowid",
   );
   // One statement per bounded/unbounded combination: SQLite cannot compare
   // against a NULL bound, so an absent side is its own query rather than a
   // runtime rewrite of the SQL text.
   const listBetweenStmt = db.db.prepare(`
     SELECT * FROM messages
-    WHERE session_id = ? AND timestamp >= ? AND timestamp <= ?
+    WHERE agent_id = ? AND timestamp >= ? AND timestamp <= ?
     ORDER BY rowid
   `);
   const listSinceStmt = db.db.prepare(`
     SELECT * FROM messages
-    WHERE session_id = ? AND timestamp >= ?
+    WHERE agent_id = ? AND timestamp >= ?
     ORDER BY rowid
   `);
   const listUntilStmt = db.db.prepare(`
     SELECT * FROM messages
-    WHERE session_id = ? AND timestamp <= ?
+    WHERE agent_id = ? AND timestamp <= ?
     ORDER BY rowid
   `);
-  const deleteStmt = db.db.prepare("DELETE FROM messages WHERE session_id = ?");
   // The stored payload length of one row: what the row held before a prune
   // replaced it (see pruneCondensed).
   const contentLengthStmt = db.db.prepare(
@@ -318,13 +316,13 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
   // The model's view: the newest compaction checkpoint and everything after
   // it. The partial index (schema.ts) makes finding that checkpoint cheap
   // however long the conversation is; without it every open scanned the
-  // session's rows to the end.
+  // agent's rows to the end.
   const modelViewStmt = db.db.prepare(`
     SELECT * FROM messages
-    WHERE session_id = ?1
+    WHERE agent_id = ?1
       AND rowid >= COALESCE(
         (SELECT rowid FROM messages
-         WHERE session_id = ?1 AND role = 'checkpoint'
+         WHERE agent_id = ?1 AND role = 'checkpoint'
          ORDER BY rowid DESC LIMIT 1),
         -1
       )
@@ -349,11 +347,11 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
     db.db.prepare(`
       SELECT * FROM (
         SELECT rowid AS rid, * FROM messages
-        WHERE session_id = ?1
+        WHERE agent_id = ?1
           AND ${scope}
           AND rowid < (
             SELECT rowid FROM messages
-            WHERE session_id = ?1
+            WHERE agent_id = ?1
               AND ${scope}
             ORDER BY rowid
             LIMIT 1 OFFSET ?3
@@ -365,7 +363,7 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
     db.db.prepare(`
       SELECT * FROM (
         SELECT rowid AS rid, * FROM messages
-        WHERE session_id = ?1
+        WHERE agent_id = ?1
           AND ${scope}
         ORDER BY rowid DESC LIMIT ?2
       ) ORDER BY rid
@@ -381,16 +379,16 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
   // positionOf).
   const conversationRowsStmt = db.db.prepare(`
     SELECT * FROM messages
-    WHERE session_id = ? AND ${CONVERSATION_ROWS_SQL}
+    WHERE agent_id = ? AND ${CONVERSATION_ROWS_SQL}
     ORDER BY rowid
   `);
   // The newest rows that could be a conversation entry, newest first (see
   // newestConversationRows). The filter is CONVERSATION_ROWS_SQL — the same
   // one a conversation's page counts by — so the scan stays inside the
-  // session's index range however long the transcript is.
+  // agent's index range however long the transcript is.
   const newestEntryRowsStmt = db.db.prepare(`
     SELECT * FROM messages
-    WHERE session_id = ?1
+    WHERE agent_id = ?1
       AND ${CONVERSATION_ROWS_SQL}
     ORDER BY rowid DESC
     LIMIT ?2
@@ -400,10 +398,10 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
   // the last row matches nothing — nothing persisted to delete).
   const deleteFromStmt = db.db.prepare(`
     DELETE FROM messages
-    WHERE session_id = ?
+    WHERE agent_id = ?
       AND rowid >= (
         SELECT rowid FROM messages
-        WHERE session_id = ?
+        WHERE agent_id = ?
         ORDER BY rowid
         LIMIT 1 OFFSET ?
       )
@@ -411,30 +409,28 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
 
   function toStored(row: {
     id: string;
-    session_id: string;
+    agent_id: string;
     role: string;
     content: string;
     timestamp: number;
   }): StoredMessage {
     return {
       id: row.id,
-      sessionId: row.session_id,
+      agentId: row.agent_id,
       role: row.role,
       message: decodeStoredMessage(row.content),
       timestamp: row.timestamp,
     };
   }
 
-  const list = (sessionId: string): StoredMessage[] => {
-    const rows = listStmt.all(sessionId) as Array<
-      Parameters<typeof toStored>[0]
-    >;
+  const list = (agentId: string): StoredMessage[] => {
+    const rows = listStmt.all(agentId) as Array<Parameters<typeof toStored>[0]>;
     return rows.map(toStored);
   };
 
   /** The rows of a conversation (see TranscriptRows): what it can draw. */
-  const conversationRows = (sessionId: string): StoredMessage[] => {
-    const rows = conversationRowsStmt.all(sessionId) as Array<
+  const conversationRows = (agentId: string): StoredMessage[] => {
+    const rows = conversationRowsStmt.all(agentId) as Array<
       Parameters<typeof toStored>[0]
     >;
     return rows.map(toStored);
@@ -443,53 +439,53 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
   /** Write one row and return its stored form. `id` is reused when an
    * existing row is rewritten (insertAt), so a message keeps its identity. */
   const insertRow = (
-    sessionId: string,
+    agentId: string,
     message: AgentMessage,
     id = crypto.randomUUID(),
   ): StoredMessage => {
     const timestamp = timestampOf(message);
     insertStmt.run(
       id,
-      sessionId,
+      agentId,
       message.role,
       encodeStoredMessage(message),
       timestamp,
     );
-    return { id, sessionId, role: message.role, message, timestamp };
+    return { id, agentId, role: message.role, message, timestamp };
   };
 
   return {
-    append(sessionId, message): StoredMessage {
-      return insertRow(sessionId, message);
+    append(agentId, message): StoredMessage {
+      return insertRow(agentId, message);
     },
 
     list,
 
-    listMessages(sessionId: string): AgentMessage[] {
-      return list(sessionId).map((m) => m.message);
+    listMessages(agentId: string): AgentMessage[] {
+      return list(agentId).map((m) => m.message);
     },
 
-    listBetween(sessionId: string, window): StoredMessage[] {
+    listBetween(agentId: string, window): StoredMessage[] {
       const rows = (
         window.from === null
           ? window.to === null
-            ? listStmt.all(sessionId)
-            : listUntilStmt.all(sessionId, window.to)
+            ? listStmt.all(agentId)
+            : listUntilStmt.all(agentId, window.to)
           : window.to === null
-            ? listSinceStmt.all(sessionId, window.from)
-            : listBetweenStmt.all(sessionId, window.from, window.to)
+            ? listSinceStmt.all(agentId, window.from)
+            : listBetweenStmt.all(agentId, window.from, window.to)
       ) as Array<Parameters<typeof toStored>[0]>;
       return rows.map(toStored);
     },
 
-    listModelView(sessionId: string): StoredMessage[] {
-      const rows = modelViewStmt.all(sessionId) as Array<
+    listModelView(agentId: string): StoredMessage[] {
+      const rows = modelViewStmt.all(agentId) as Array<
         Parameters<typeof toStored>[0]
       >;
       return rows.map(toStored);
     },
 
-    listWindow(sessionId, query): StoredMessage[] {
+    listWindow(agentId, query): StoredMessage[] {
       // `beforeIndex` is a position in the SAME scope the page is read in: a
       // conversation's positions count the rows it draws (see
       // TranscriptRows), so its page ends at an entry.
@@ -503,24 +499,24 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
             : windowAllStmt;
       const rows = (
         query.beforeIndex === null
-          ? statement.all(sessionId, query.limit)
-          : statement.all(sessionId, query.limit, query.beforeIndex)
+          ? statement.all(agentId, query.limit)
+          : statement.all(agentId, query.limit, query.beforeIndex)
       ) as Array<Parameters<typeof toStored>[0]>;
       return rows.map(toStored);
     },
 
-    newestConversationRows(sessionId, limit): StoredMessage[] {
-      const rows = newestEntryRowsStmt.all(sessionId, limit) as Array<
+    newestConversationRows(agentId, limit): StoredMessage[] {
+      const rows = newestEntryRowsStmt.all(agentId, limit) as Array<
         Parameters<typeof toStored>[0]
       >;
       return rows.map(toStored);
     },
 
-    positionOf(sessionId, match, rows): number | undefined {
+    positionOf(agentId, match, rows): number | undefined {
       // The rows are decoded because the cursor is an identity, not a
       // column: it names role + timestamp (+ tool call id), which only the
       // message itself carries. Called once per page (a client that reaches
-      // the top), so the decode of the session's rows is acceptable; the
+      // the top), so the decode of the agent's rows is acceptable; the
       // alternative would be a cursor column the store does not have.
       //
       // A positional read is in the same scope as the page that named it: a
@@ -529,31 +525,31 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
       // came from. The scope is the SQL filter, so one definition answers
       // both (see CONVERSATION_ROWS_SQL).
       const scoped =
-        rows === "conversation" ? conversationRows(sessionId) : list(sessionId);
+        rows === "conversation" ? conversationRows(agentId) : list(agentId);
       for (let index = 0; index < scoped.length; index++) {
         if (match(scoped[index]!)) return index;
       }
       return undefined;
     },
 
-    count(sessionId, rows): number {
+    count(agentId, rows): number {
       const row = (
         rows === "conversation"
           ? db.db.prepare(`
           SELECT COUNT(*) AS n FROM messages
-          WHERE session_id = ? AND ${CONVERSATION_ROWS_SQL}
+          WHERE agent_id = ? AND ${CONVERSATION_ROWS_SQL}
         `)
           : db.db.prepare(
-              "SELECT COUNT(*) AS n FROM messages WHERE session_id = ?",
+              "SELECT COUNT(*) AS n FROM messages WHERE agent_id = ?",
             )
-      ).get(sessionId) as { n: number };
+      ).get(agentId) as { n: number };
       return Number(row.n);
     },
 
-    usageRows(sessionId): ContextUsageMessageLike[] {
+    usageRows(agentId): ContextUsageMessageLike[] {
       // The usage object is pulled out of the stored JSON by SQLite, so a
       // long conversation does not pay for decoding every row's content just
-      // to read four numbers (and its images, on a session with screenshots,
+      // to read four numbers (and its images, on an agent with screenshots,
       // would otherwise be materialized on every snapshot).
       const rows = db.db
         .prepare(`
@@ -562,10 +558,10 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
           json_extract(content, '$.message.usage.cacheRead') AS cacheRead,
           json_extract(content, '$.message.usage.cacheWrite') AS cacheWrite
         FROM messages
-        WHERE session_id = ? AND role = 'assistant'
+        WHERE agent_id = ? AND role = 'assistant'
         ORDER BY rowid
       `)
-        .all(sessionId) as Array<{
+        .all(agentId) as Array<{
         input: number | null;
         cacheRead: number | null;
         cacheWrite: number | null;
@@ -580,26 +576,26 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
       }));
     },
 
-    deleteFrom(sessionId: string, index: number): void {
-      deleteFromStmt.run(sessionId, sessionId, index);
+    deleteFrom(agentId: string, index: number): void {
+      deleteFromStmt.run(agentId, agentId, index);
     },
 
     insertAt(
-      sessionId: string,
+      agentId: string,
       index: number,
       message: AgentMessage,
     ): StoredMessage {
-      const rows = listStmt.all(sessionId) as Array<
+      const rows = listStmt.all(agentId) as Array<
         Parameters<typeof toStored>[0]
       >;
       const suffix = rows.slice(index);
-      // SQLite rowids are shared by every session, so shifting them by one
-      // could collide with another session's row. Rewriting the session's
+      // SQLite rowids are shared by every agent, so shifting them by one
+      // could collide with another agent's row. Rewriting the agent's
       // own suffix (delete, insert the new row, re-insert the suffix with
       // its original id/content/timestamp) is collision-free and restores
       // the "rowid order == transcript order" invariant the positional
       // operations rely on. An index past the last row appends.
-      return insertAtInTransaction(sessionId, index, suffix, message);
+      return insertAtInTransaction(agentId, index, suffix, message);
     },
 
     /** Reduce every row before the newest checkpoint that has not been
@@ -615,12 +611,12 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
      * The byte count is what lets the caller notice that the FILE is now
      * mostly free pages and worth rewriting (see db/vacuum.ts): SQLite
      * reuses freed pages but never shrinks on its own. */
-    pruneCondensed(sessionId): { changed: number; freedBytes: number } {
+    pruneCondensed(agentId): { changed: number; freedBytes: number } {
       const contentLength = (id: string): number => {
         const row = contentLengthStmt.get(id) as { n: number } | undefined;
         return Number(row?.n ?? 0);
       };
-      const rows = list(sessionId);
+      const rows = list(agentId);
       let cut = 0;
       for (let i = rows.length - 1; i >= 0; i--) {
         if (rows[i]!.role === "checkpoint") {
@@ -642,25 +638,21 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
       }
       return { changed, freedBytes: Math.max(0, freedBytes) };
     },
-
-    deleteBySession(sessionId: string): void {
-      deleteStmt.run(sessionId);
-    },
   };
 
   /** The insertAt body: the suffix rewrite runs in one transaction, so a
-   * failure leaves the session's rows exactly as they were. */
+   * failure leaves the agent's rows exactly as they were. */
   function insertAtInTransaction(
-    sessionId: string,
+    agentId: string,
     index: number,
     suffix: Array<Parameters<typeof toStored>[0]>,
     message: AgentMessage,
   ): StoredMessage {
     const write = (): StoredMessage => {
-      if (suffix.length > 0) deleteFromStmt.run(sessionId, sessionId, index);
-      const stored = insertRow(sessionId, message);
+      if (suffix.length > 0) deleteFromStmt.run(agentId, agentId, index);
+      const stored = insertRow(agentId, message);
       for (const row of suffix) {
-        insertStmt.run(row.id, sessionId, row.role, row.content, row.timestamp);
+        insertStmt.run(row.id, agentId, row.role, row.content, row.timestamp);
       }
       return stored;
     };

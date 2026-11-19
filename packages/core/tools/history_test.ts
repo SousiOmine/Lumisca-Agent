@@ -32,10 +32,17 @@ function setup() {
     .run();
   db.db
     .prepare(
-      `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
-     VALUES (?, 'ws', 't', 'faux', 'model', 0, 0)`,
+      "INSERT INTO sessions " +
+        "(id, workspace_id, name, model_provider, model_id, created_at, updated_at) " +
+        "VALUES ('session-1', 'ws', 't', 'faux', 'model', 0, 0)",
     )
-    .run("s1");
+    .run();
+  db.db
+    .prepare(
+      "INSERT INTO agents (id, session_id, parent_id, kind, depth, created_at) " +
+        "VALUES ('s1', 'session-1', NULL, 'main', 0, 0)",
+    )
+    .run();
   const repo = createMessageRepo(db);
   const tool = createHistorySearchTool({
     entries: (window) =>

@@ -21,6 +21,9 @@ import { McpAttachment } from "../mcp/attachment.ts";
 import { parseMcpConfig } from "../mcp/config.ts";
 import { McpManager } from "../mcp/manager.ts";
 import { CoreError, LumiscaCore } from "../mod.ts";
+import { createAgentRepo } from "../session/agents.ts";
+import { createMessageRepo } from "../session/messages.ts";
+import { contentText } from "../shared/content.ts";
 import {
   type ThinkingLevel,
   TOOL_BROWSER_OPEN,
@@ -75,8 +78,21 @@ function makeHub(
   const model = core.models.getModel(faux.provider.id, faux.getModel().id)!;
   const events: ClientEvent[] = [];
   const root = fsSync.mkdtempSync(pathJoin(osTmpdir(), "lumisca-task-"));
+  // The hub writes its sub-agents to the store: the session row their rows
+  // point at, and the main agent they hang under, have to exist.
+  core.db.db.exec(
+    "INSERT INTO workspaces (id, name, created_at) VALUES ('w', 'w', 0);" +
+      "INSERT INTO sessions " +
+      "(id, workspace_id, name, model_provider, model_id, created_at, updated_at) " +
+      "VALUES ('session-1', 'w', 's', 'faux', 'model', 0, 0);" +
+      "INSERT INTO agents (id, session_id, parent_id, kind, depth, created_at) " +
+      "VALUES ('main-1', 'session-1', NULL, 'main', 0, 0)",
+  );
   const hub = new TaskHub({
     sessionId: "session-1",
+    mainAgentId: "main-1",
+    agents: createAgentRepo(core.db),
+    messages: createMessageRepo(core.db),
     resolveRuntime: () => ({
       backends: hostBackends(makeWorkspace(root)),
       model,
@@ -107,8 +123,21 @@ function makeScriptedHub(
   const streamFn = core.models.models.streamFn();
   const events: ClientEvent[] = [];
   const root = fsSync.mkdtempSync(pathJoin(osTmpdir(), "lumisca-task-"));
+  // The hub writes its sub-agents to the store: the session row their rows
+  // point at, and the main agent they hang under, have to exist.
+  core.db.db.exec(
+    "INSERT INTO workspaces (id, name, created_at) VALUES ('w', 'w', 0);" +
+      "INSERT INTO sessions " +
+      "(id, workspace_id, name, model_provider, model_id, created_at, updated_at) " +
+      "VALUES ('session-1', 'w', 's', 'faux', 'model', 0, 0);" +
+      "INSERT INTO agents (id, session_id, parent_id, kind, depth, created_at) " +
+      "VALUES ('main-1', 'session-1', NULL, 'main', 0, 0)",
+  );
   const hub = new TaskHub({
     sessionId: "session-1",
+    mainAgentId: "main-1",
+    agents: createAgentRepo(core.db),
+    messages: createMessageRepo(core.db),
     resolveRuntime: () => ({
       backends: hostBackends(makeWorkspace(root)),
       model,
@@ -190,18 +219,26 @@ function rateLimitThenOk(): StreamFn {
       delta: "done",
       partial: fauxAssistantMessage("done"),
     });
-    stream.end(fauxAssistantMessage("done"));
+    // The agent reads the final message from the done event; `end` only
+    // closes the stream.
+    stream.push({ type: "done", message: fauxAssistantMessage("done") });
+    stream.end();
     return stream;
   };
 }
 
 test("sub-agent retries a rate-limited turn then succeeds", async () => {
-  const { hub, events } = makeHub(rateLimitThenOk(), instantSleep);
-  hub.spawn("session-1", 0, "general", "desc", "prompt");
+  const { hub, events, core } = makeHub(rateLimitThenOk(), instantSleep);
+  const info = hub.spawn("main-1", 0, "general", "desc", "prompt");
   await waitFor(() => hub.list()[0]?.status === "finished", "task finish");
   assertEquals(hub.list()[0]?.status, "finished");
   const end = events.find((e) => e.type === "task_end");
   assertEquals(end?.status, "finished");
+
+  // The store holds the answer, not the error turn the retry dropped.
+  const stored = createMessageRepo(core.db).listMessages(info.agentId);
+  assertEquals(stored.filter((m) => m.role === "assistant").length, 1);
+  assertEquals(contentText(stored.at(-1)!.content), "done");
 });
 
 /** A stream function that drops its first call mid-response (after partial
@@ -245,7 +282,7 @@ function interruptedThenOk(): { streamFn: StreamFn; requests: unknown[][] } {
 test("sub-agent continues after a transport cut instead of dying", async () => {
   const { streamFn, requests } = interruptedThenOk();
   const { hub } = makeHub(streamFn, instantSleep);
-  hub.spawn("session-1", 0, "explore", "desc", "prompt");
+  hub.spawn("main-1", 0, "explore", "desc", "prompt");
   await waitFor(() => hub.list()[0]?.status === "finished", "task finish");
   assertEquals(hub.list()[0]?.status, "finished");
   // The retry kept the partial answer and asked the model to resume.
@@ -270,7 +307,7 @@ test("a permanent sub-agent failure is not retried", async () => {
     return stream;
   };
   const { hub } = makeHub(streamFn);
-  hub.spawn("session-1", 0, "explore", "desc", "prompt");
+  hub.spawn("main-1", 0, "explore", "desc", "prompt");
   await waitFor(() => hub.list()[0]?.status === "failed", "task failure");
   assertEquals(hub.list()[0]?.status, "failed");
   assertEquals(calls, 1);
@@ -299,7 +336,7 @@ test("a failed sub-agent's notification keeps its partial output", async () => {
     deliver: (payload) =>
       delivered.push({ title: payload.title, body: payload.body }),
   });
-  hub.spawn("session-1", 0, "explore", "desc", "prompt");
+  hub.spawn("main-1", 0, "explore", "desc", "prompt");
   await waitFor(() => hub.list()[0]?.status === "failed", "task failure");
   await waitFor(() => delivered.length > 0, "notification");
   assertEquals(delivered[0]!.title.includes("failed"), true);
@@ -335,9 +372,9 @@ function messageText(message: unknown): string {
 test("spawn returns a running snapshot immediately and emits task_start", () => {
   const { events, hub } = makeHub();
   try {
-    const info = hub.spawn("session-1", 0, "explore", "調査", "Do research");
+    const info = hub.spawn("main-1", 0, "explore", "調査", "Do research");
     assertEquals(info.agentId, "agent_1");
-    assertEquals(info.parentAgentId, "session-1");
+    assertEquals(info.parentAgentId, "main-1");
     assertEquals(info.subagentType, "explore");
     assertEquals(info.status, "running");
     assert(info.startedAt > 0, "startedAt missing");
@@ -369,9 +406,9 @@ test("the sub-agent runtime is resolved at spawn time", () => {
         skills: () => [],
       };
     });
-    hub.spawn("session-1", 0, "explore", "調査", "Do research");
+    hub.spawn("main-1", 0, "explore", "調査", "Do research");
     level = "high";
-    hub.spawn("session-1", 0, "explore", "調査2", "Do research");
+    hub.spawn("main-1", 0, "explore", "調査2", "Do research");
     assertEquals(resolutions, 2);
     assertEquals(events.filter((e) => e.type === "task_start").length, 2);
   } finally {
@@ -383,11 +420,11 @@ test("the per-session concurrency limit is enforced", () => {
   const { hub } = makeHub();
   try {
     for (let i = 0; i < MAX_SUBAGENTS; i++) {
-      hub.spawn("session-1", 0, "explore", `job ${i}`, "work");
+      hub.spawn("main-1", 0, "explore", `job ${i}`, "work");
     }
     let message = "";
     try {
-      hub.spawn("session-1", 0, "explore", "one too many", "work");
+      hub.spawn("main-1", 0, "explore", "one too many", "work");
     } catch (error) {
       message = error instanceof Error ? error.message : String(error);
     }
@@ -399,10 +436,10 @@ test("the per-session concurrency limit is enforced", () => {
 
 test("close aborts every running sub-agent and settles waiters", async () => {
   const { events, hub } = makeHub();
-  const info = hub.spawn("session-1", 0, "explore", "調査", "Do research");
+  const info = hub.spawn("main-1", 0, "explore", "調査", "Do research");
   // A waiter registered before the close receives the aborted snapshot
   // instead of hanging.
-  const waited = hub.wait(info.agentId, "session-1", 300);
+  const waited = hub.wait(info.agentId, "main-1", 300);
   hub.close();
   const snapshot = await waited;
   assertEquals(snapshot.status, "aborted");
@@ -420,24 +457,24 @@ test("send_message rejects unknown, finished, and parentless targets", async () 
   const { faux, hub } = makeScriptedHub();
   try {
     assertThrowsCoreError(
-      () => hub.sendMessage("session-1", "agent_9", "hi", "hello"),
-      "Unknown agent: agent_9. Known agents: session-1",
+      () => hub.sendMessage("main-1", "agent_9", "hi", "hello"),
+      "Unknown agent: agent_9. Known agents: main-1",
       "not_found",
     );
 
     // The main agent has no parent to address.
     assertThrowsCoreError(
-      () => hub.sendMessage("session-1", "parent", "hi", "hello"),
+      () => hub.sendMessage("main-1", "parent", "hi", "hello"),
       "The main agent has no parent",
       "invalid",
     );
 
     // A finished sub-agent no longer accepts messages.
     faux.setResponses([fauxAssistantMessage("done")]);
-    const info = hub.spawn("session-1", 0, "explore", "調査", "Do research");
+    const info = hub.spawn("main-1", 0, "explore", "調査", "Do research");
     await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
     assertThrowsCoreError(
-      () => hub.sendMessage("session-1", info.agentId, "hi", "hello"),
+      () => hub.sendMessage("main-1", info.agentId, "hi", "hello"),
       "Agent is not active: agent_1 (finished)",
       "unavailable",
     );
@@ -454,7 +491,7 @@ test("send_message delivers to the parent and to a running sub-agent", () => {
     deliver: (payload) => received.push(payload),
   });
   try {
-    const info = hub.spawn("session-1", 0, "general", "調査", "Do research");
+    const info = hub.spawn("main-1", 0, "general", "調査", "Do research");
 
     // Sub-agent → parent (the "parent" alias resolves to the main agent).
     const toParent = hub.sendMessage(
@@ -463,7 +500,7 @@ test("send_message delivers to the parent and to a running sub-agent", () => {
       "need input",
       "Which file?",
     );
-    assertEquals(toParent.deliveredTo, "session-1");
+    assertEquals(toParent.deliveredTo, "main-1");
     assertEquals(received, [
       {
         kind: "message",
@@ -475,7 +512,7 @@ test("send_message delivers to the parent and to a running sub-agent", () => {
 
     // Main agent → running sub-agent: steered into its loop.
     const toSub = hub.sendMessage(
-      "session-1",
+      "main-1",
       info.agentId,
       "hint",
       "Look at src/",
@@ -491,9 +528,9 @@ test("send_message delivers to the parent and to a running sub-agent", () => {
 test("wait returns the current state on timeout", async () => {
   const { hub } = makeHub();
   try {
-    const info = hub.spawn("session-1", 0, "explore", "調査", "Do research");
+    const info = hub.spawn("main-1", 0, "explore", "調査", "Do research");
     const before = Date.now();
-    const snapshot = await hub.wait(info.agentId, "session-1", 0.3);
+    const snapshot = await hub.wait(info.agentId, "main-1", 0.3);
     assert(Date.now() - before >= 250, "wait did not honor the timeout");
     assertEquals(snapshot.status, "running");
   } finally {
@@ -504,20 +541,20 @@ test("wait returns the current state on timeout", async () => {
 test("wait rejects when the caller's run aborts", async () => {
   const { hub } = makeHub();
   try {
-    const info = hub.spawn("session-1", 0, "explore", "調査", "Do research");
+    const info = hub.spawn("main-1", 0, "explore", "調査", "Do research");
 
     // An already-aborted signal settles immediately.
     const aborted = new AbortController();
     aborted.abort();
     await assertRejects(
-      () => hub.wait(info.agentId, "session-1", 30, aborted.signal),
+      () => hub.wait(info.agentId, "main-1", 30, aborted.signal),
       CoreError,
       "Cancelled while waiting for agent_1",
     );
 
     // An abort mid-wait settles the pending wait.
     const controller = new AbortController();
-    const waiting = hub.wait(info.agentId, "session-1", 30, controller.signal);
+    const waiting = hub.wait(info.agentId, "main-1", 30, controller.signal);
     setTimeout(() => controller.abort(), 50);
     await assertRejects(
       () => waiting,
@@ -533,9 +570,9 @@ test("wait on a finished task resolves immediately with the result", async () =>
   const { faux, hub } = makeScriptedHub();
   try {
     faux.setResponses([fauxAssistantMessage("Answer: 42")]);
-    const info = hub.spawn("session-1", 0, "general", "調査", "Do research");
+    const info = hub.spawn("main-1", 0, "general", "調査", "Do research");
     await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
-    const snapshot = await hub.wait(info.agentId, "session-1", 30);
+    const snapshot = await hub.wait(info.agentId, "main-1", 30);
     assertEquals(snapshot.status, "finished");
     assert(snapshot.text.includes("Answer: 42"), snapshot.text);
   } finally {
@@ -564,7 +601,7 @@ test("a general sub-agent can delegate once more, but not beyond the depth limit
       fauxAssistantMessage("All done."),
       fauxAssistantMessage("Received the deep answer."),
     ]);
-    hub.spawn("session-1", 0, "general", "調査", "Do research");
+    hub.spawn("main-1", 0, "general", "調査", "Do research");
     await waitFor(() => hub.list().length === 2, "grandchild spawn");
     await waitFor(
       () => hub.list().every((t) => t.status === "finished"),
@@ -593,7 +630,7 @@ test("a depth-2 agent has no task tool: the call fails instead of spawning", asy
       ]),
       fauxAssistantMessage("Delegation failed."),
     ]);
-    hub.spawn("session-1", 1, "general", "調査", "Do research");
+    hub.spawn("main-1", 1, "general", "調査", "Do research");
     await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
     assertEquals(hub.list().length, 1, "a grandchild was spawned");
     const snapshot = hub.list()[0]!;
@@ -617,7 +654,7 @@ test("an explore sub-agent has no task tool", async () => {
       ]),
       fauxAssistantMessage("Delegation failed."),
     ]);
-    hub.spawn("session-1", 0, "explore", "調査", "Do research");
+    hub.spawn("main-1", 0, "explore", "調査", "Do research");
     await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
     assertEquals(hub.list().length, 1, "a sub-agent was spawned");
   } finally {
@@ -630,7 +667,7 @@ test("an explore sub-agent has no task tool", async () => {
 test("the task tool rejects an unknown subagent type", () => {
   const { hub } = makeHub();
   try {
-    const tool = createTaskTool(hub, "session-1", 0);
+    const tool = createTaskTool(hub, "main-1", 0);
     assertThrowsCoreError(
       () =>
         tool.execute(
@@ -653,7 +690,7 @@ test("the task tool rejects an unknown subagent type", () => {
 test("the task_output tool validates timeout_sec and unknown ids", async () => {
   const { hub } = makeHub();
   try {
-    const tool = createTaskOutputTool(hub, "session-1");
+    const tool = createTaskOutputTool(hub, "main-1");
 
     await assertRejects(
       () =>
@@ -664,7 +701,7 @@ test("the task_output tool validates timeout_sec and unknown ids", async () => {
     await assertRejects(
       () => tool.execute("2", { agent_id: "agent_9" }, undefined),
       CoreError,
-      "Unknown agent: agent_9. Known agents: session-1",
+      "Unknown agent: agent_9. Known agents: main-1",
     );
   } finally {
     hub.close();
@@ -679,7 +716,7 @@ test("the send_message tool reports the delivery target", () => {
     deliver: (payload) => received.push(payload),
   });
   try {
-    hub.spawn("session-1", 0, "explore", "調査", "Do research");
+    hub.spawn("main-1", 0, "explore", "調査", "Do research");
     const tool = createSendMessageTool(hub, "agent_1");
     const result = tool.execute(
       "1",
@@ -691,7 +728,7 @@ test("the send_message tool reports the delivery target", () => {
       undefined,
     );
     return result.then((r) => {
-      assertEquals(r.details.to, "session-1");
+      assertEquals(r.details.to, "main-1");
       assertEquals(received[0], {
         kind: "message",
         title: "[Message from agent_1 (question)]",
@@ -895,6 +932,176 @@ test("sub-agents survive a session rebuild and remain listed", async () => {
   }
 });
 
+test("a task survives closing and reopening the session", async () => {
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider]);
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-task-reopen-"));
+  try {
+    const ws = await core.createWorkspace("ws", [root]);
+    const session = await core.createSession({
+      workspaceId: ws.id,
+      modelProvider: faux.provider.id,
+      modelId: faux.getModel().id,
+    });
+    faux.setResponses([
+      fauxAssistantMessage([
+        fauxText("Delegating."),
+        fauxToolCall("task", {
+          subagent_type: "explore",
+          description: "調査",
+          prompt: "Find the answer",
+        }),
+      ]),
+      fauxAssistantMessage("Answer: 42"),
+      fauxAssistantMessage("Launched."),
+    ]);
+    await promptSession(core, session.id, "Start research in the background");
+    await waitFor(
+      () => core.getTasks(session.id).some((t) => t.status === "finished"),
+      "the task to finish",
+    );
+
+    // Closing drops the hub; reopening builds a new one over the store. The
+    // task must still be there, with the report it produced.
+    await core.closeSession(session.id);
+    await core.openSession(session.id);
+    const tasks = core.getTasks(session.id);
+    assertEquals(tasks.length, 1);
+    assertEquals(tasks[0]!.agentId, "agent_1");
+    assertEquals(tasks[0]!.status, "finished");
+    assertEquals(tasks[0]!.text, "Answer: 42");
+  } finally {
+    core.close();
+    await removeDirRetry(root);
+  }
+});
+
+// --- the store: what a sub-agent leaves behind -------------------------------------
+
+test("a finished sub-agent's row and transcript are persisted", async () => {
+  const { faux, hub, core } = makeScriptedHub();
+  faux.setResponses([fauxAssistantMessage("Answer: 42")]);
+  try {
+    const info = hub.spawn("main-1", 0, "explore", "調査", "Find the answer");
+    await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
+
+    // The row says what the task was, who asked and how it ended.
+    const [row] = createAgentRepo(core.db).listSubagents("session-1", 10);
+    assertEquals(row?.id, info.agentId);
+    assertEquals(row?.parentAgentId, "main-1");
+    assertEquals(row?.status, "finished");
+    assertEquals(row?.resultText, "Answer: 42");
+
+    // The transcript holds the prompt and the reply, prompt first.
+    const stored = createMessageRepo(core.db).listMessages(info.agentId);
+    const lines = stored.map(
+      (message) => message.role + ":" + contentText(message.content),
+    );
+    assert(lines.includes("user:Find the answer"), JSON.stringify(lines));
+    assert(lines.includes("assistant:Answer: 42"), JSON.stringify(lines));
+    assert(
+      lines.indexOf("user:Find the answer") <
+        lines.indexOf("assistant:Answer: 42"),
+      JSON.stringify(lines),
+    );
+  } finally {
+    hub.close();
+  }
+});
+
+test("a hub built again restores the session's sub-agents", async () => {
+  const { faux, hub, core } = makeScriptedHub();
+  faux.setResponses([fauxAssistantMessage("Answer: 42")]);
+  try {
+    const info = hub.spawn("main-1", 0, "explore", "調査", "Find the answer");
+    await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
+
+    // A fresh hub over the same store is what a restarted process sees: it
+    // never watched the run, and must still answer for it.
+    const restoredHub = new TaskHub({
+      sessionId: "session-1",
+      mainAgentId: "main-1",
+      agents: createAgentRepo(core.db),
+      messages: createMessageRepo(core.db),
+      resolveRuntime: () => ({
+        backends: hostBackends(makeWorkspace(osTmpdir())),
+        model: core.models.getModel(faux.provider.id, faux.getModel().id)!,
+        thinkingLevel: "off",
+        eval: true,
+        skills: () => [],
+      }),
+      streamFn: hangingStream,
+      emit: () => {},
+    });
+    try {
+      const [restored] = restoredHub.list();
+      assertEquals(restored?.agentId, info.agentId);
+      assertEquals(restored?.description, "調査");
+      assertEquals(restored?.status, "finished");
+      assertEquals(restored?.text, "Answer: 42");
+
+      const tool = createTaskOutputTool(restoredHub, "main-1");
+      const output = await tool.execute(
+        "1",
+        { agent_id: info.agentId },
+        undefined,
+      );
+      const text = (output.content[0] as { text: string }).text;
+      assert(text.includes("Answer: 42"), text);
+
+      // The numbering continues from the rows instead of reusing an id.
+      const next = restoredHub.spawn("main-1", 0, "explore", "次", "work");
+      assertEquals(next.agentId, "agent_2");
+    } finally {
+      restoredHub.close();
+    }
+  } finally {
+    hub.close();
+  }
+});
+
+test("a run the process died in restores as aborted", () => {
+  const { hub, core } = makeScriptedHub();
+  try {
+    // What a process killed mid-run leaves: the row, still marked running.
+    createAgentRepo(core.db).createSubagent({
+      id: "agent_7",
+      sessionId: "session-1",
+      parentAgentId: "main-1",
+      type: "explore",
+      depth: 1,
+      description: "落ちた実行",
+      startedAt: 1,
+    });
+
+    const restoredHub = new TaskHub({
+      sessionId: "session-1",
+      mainAgentId: "main-1",
+      agents: createAgentRepo(core.db),
+      messages: createMessageRepo(core.db),
+      resolveRuntime: () => {
+        throw new Error("no sub-agent run in this test");
+      },
+      streamFn: hangingStream,
+      emit: () => {},
+    });
+    try {
+      const [task] = restoredHub.list();
+      assertEquals(task?.agentId, "agent_7");
+      assertEquals(task?.status, "aborted");
+      // The row is settled too: a later open reads the same answer instead
+      // of offering a task that can never finish.
+      const [row] = createAgentRepo(core.db).listSubagents("session-1", 10);
+      assertEquals(row?.status, "aborted");
+      assert(row?.finishedAt !== undefined, "the row needs a finish time");
+    } finally {
+      restoredHub.close();
+    }
+  } finally {
+    hub.close();
+  }
+});
+
 // --- sub-agents and MCP tools ----------------------------------------------------
 
 /** A minimal streamable-HTTP MCP server exposing one `ping` tool (mirrors
@@ -1026,7 +1233,7 @@ test("general sub-agents discover and call the session's MCP tools", async () =>
       },
     ]);
     hub.spawn(
-      "session-1",
+      "main-1",
       0,
       "general",
       "MCP呼び出し",
@@ -1068,7 +1275,7 @@ test("general sub-agents do not preload browser tools — only the pair is attac
       },
     ]);
     hub.spawn(
-      "session-1",
+      "main-1",
       0,
       "general",
       "ブラウザ調査",
@@ -1112,7 +1319,7 @@ test("general sub-agents discover and call the session's browser tools", async (
       },
     ]);
     hub.spawn(
-      "session-1",
+      "main-1",
       0,
       "general",
       "ブラウザ操作",
@@ -1155,7 +1362,7 @@ test("explore sub-agents have no MCP tools", async () => {
       },
     ]);
     hub.spawn(
-      "session-1",
+      "main-1",
       0,
       "explore",
       "MCP調査",
@@ -1190,7 +1397,7 @@ test("a stella sub-agent has no eval: it runs in the server process", async () =
         return fauxAssistantMessage("No eval here.");
       },
     ]);
-    hub.spawn("session-1", 0, "general", "eval 確認", "Evaluate 1 + 1");
+    hub.spawn("main-1", 0, "general", "eval 確認", "Evaluate 1 + 1");
     await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
     assertEquals(hub.list()[0]!.text, "No eval here.");
   } finally {
@@ -1213,7 +1420,7 @@ test("a code-mode sub-agent keeps eval", async () => {
         return fauxAssistantMessage("Evaluated.");
       },
     ]);
-    hub.spawn("session-1", 0, "general", "eval 実行", "Evaluate 1 + 1");
+    hub.spawn("main-1", 0, "general", "eval 実行", "Evaluate 1 + 1");
     await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
     assertEquals(hub.list()[0]!.text, "Evaluated.");
   } finally {
@@ -1240,7 +1447,7 @@ test("a sub-agent's skill tool reads the catalog the runtime supplies", async ()
         return fauxAssistantMessage("Loaded vm-notes.");
       },
     ]);
-    hub.spawn("session-1", 0, "general", "スキル確認", "Load vm-notes");
+    hub.spawn("main-1", 0, "general", "スキル確認", "Load vm-notes");
     await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
     assertEquals(hub.list()[0]!.text, "Loaded vm-notes.");
   } finally {
@@ -1263,7 +1470,7 @@ test("a sub-agent starts with the skill catalog listing", async () => {
         return fauxAssistantMessage("Catalog seen.");
       },
     ]);
-    hub.spawn("session-1", 0, "explore", "一覧確認", "List your skills");
+    hub.spawn("main-1", 0, "explore", "一覧確認", "List your skills");
     await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
     assertEquals(hub.list()[0]!.text, "Catalog seen.");
   } finally {
@@ -1316,13 +1523,7 @@ test("a sub-agent's tool_search never finds a stella agent's own tools", async (
         return fauxAssistantMessage("Only shared tools.");
       },
     ]);
-    hub.spawn(
-      "session-1",
-      0,
-      "general",
-      "列挙",
-      "List every tool you can find",
-    );
+    hub.spawn("main-1", 0, "general", "列挙", "List every tool you can find");
     await waitFor(() => hub.list()[0]!.status === "finished", "task finish");
     assertEquals(hub.list()[0]!.text, "Only shared tools.");
   } finally {
@@ -1379,7 +1580,7 @@ test("a config change redirects a running general sub-agent to the new registry"
       },
     ]);
     hub.spawn(
-      "session-1",
+      "main-1",
       0,
       "general",
       "MCP呼び出し",

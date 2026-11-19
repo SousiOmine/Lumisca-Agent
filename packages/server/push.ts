@@ -280,9 +280,9 @@ export function createPushNotifier({
   const nameOf = (sessionId: string): string => {
     const session = core.getSession(sessionId);
     const agent =
-      session?.agentId === undefined
+      session?.personaId === undefined
         ? undefined
-        : core.getStellaAgent(session.agentId);
+        : core.getStellaAgent(session.personaId);
     return notificationName(session, agent, core.getLanguage());
   };
 

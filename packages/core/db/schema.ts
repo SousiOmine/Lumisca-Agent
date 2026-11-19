@@ -412,6 +412,127 @@ export const MIGRATIONS: ReadonlyArray<(db: Database) => void> = [
         "PRIMARY KEY (session_id, key)" +
         ")",
     ),
+  // The message store's owner moved from the session to the agent.
+  //
+  // A session was the only thing that could hold a transcript, so a
+  // sub-agent had nowhere to write one: its history lived in memory and died
+  // with the run. One row per agent gives the main agent and its sub-agents
+  // the same store, pager, compaction and prune; a second message table for
+  // sub-agents would duplicate all four and still could not show their work.
+  //
+  // The main agent row is found by its session, not by an id copied from
+  // one: it is the row with kind = 'main', and the partial unique index makes
+  // "one main agent per session" a database fact instead of a convention
+  // every caller has to remember. A transcript is read through that row,
+  // never through the session id.
+  //
+  // sessions.agent_id moves to persona_id in the same migration. It never
+  // pointed at an agent: it points at a stella persona (stella_agents), and
+  // two columns named agent_id addressing different tables is a trap a
+  // reader cannot see.
+  //
+  // messages is rebuilt rather than altered: its foreign key has to be
+  // retargeted at agents, which SQLite cannot do in place. The copy is an
+  // inner join on the session id, so the row count is checked before and
+  // after; an orphan, which the old foreign key made impossible, would
+  // otherwise vanish without a word.
+  (db) => {
+    const columnsOf = (table: string): string[] =>
+      (
+        db.prepare("PRAGMA table_info(" + table + ")").all() as Array<{
+          name: string;
+        }>
+      ).map((column) => column.name);
+
+    // Every step is guarded by the shape it produces, not by the version
+    // stamp alone: a database this build already brought here (a replayed
+    // migration, or a build that made the change without stamping it) must
+    // come out the same instead of having its main agents duplicated or a
+    // column renamed twice.
+    if (columnsOf("sessions").includes("agent_id")) {
+      db.exec("ALTER TABLE sessions RENAME COLUMN agent_id TO persona_id");
+      db.exec("DROP INDEX IF EXISTS idx_sessions_agent");
+      db.exec(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_persona " +
+          "ON sessions(persona_id) WHERE persona_id IS NOT NULL",
+      );
+    }
+    db.exec(
+      "CREATE TABLE IF NOT EXISTS agents (" +
+        "id TEXT PRIMARY KEY, " +
+        "session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE, " +
+        "parent_id TEXT REFERENCES agents(id) ON DELETE CASCADE, " +
+        "kind TEXT NOT NULL, " +
+        "type TEXT, " +
+        "depth INTEGER NOT NULL DEFAULT 0, " +
+        "description TEXT, " +
+        "status TEXT, " +
+        "started_at INTEGER, " +
+        "finished_at INTEGER, " +
+        "result_text TEXT NOT NULL DEFAULT '', " +
+        "created_at INTEGER NOT NULL" +
+        ")",
+    );
+    db.exec(
+      "CREATE INDEX IF NOT EXISTS idx_agents_session ON agents(session_id)",
+    );
+    db.exec(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_main " +
+        "ON agents(session_id) WHERE kind = 'main'",
+    );
+    // A main agent's id is opaque, like every other id here: nothing derives
+    // it from the session, because a row whose id copies another table's id
+    // is a second answer to "which agent is this".
+    db.exec(
+      "INSERT INTO agents (id, session_id, parent_id, kind, depth, created_at) " +
+        "SELECT lower(hex(randomblob(16))), s.id, NULL, 'main', 0, s.created_at " +
+        "FROM sessions s WHERE NOT EXISTS (" +
+        "SELECT 1 FROM agents a " +
+        "WHERE a.session_id = s.id AND a.kind = 'main'" +
+        ")",
+    );
+    // A session that already belongs to an agent needs no second rebuild:
+    // the rename above may have run again, but the rows are where they go.
+    if (columnsOf("messages").includes("agent_id")) return;
+    const countRows = (table: string): number => {
+      const row = db.prepare("SELECT COUNT(*) AS n FROM " + table).get() as {
+        n: number;
+      };
+      return Number(row.n);
+    };
+    const before = countRows("messages");
+    db.exec(
+      "CREATE TABLE messages_rebuilt (" +
+        "id TEXT PRIMARY KEY, " +
+        "agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE, " +
+        "role TEXT NOT NULL, " +
+        "content TEXT NOT NULL, " +
+        "timestamp INTEGER NOT NULL" +
+        ")",
+    );
+    db.exec(
+      "INSERT INTO messages_rebuilt (id, agent_id, role, content, timestamp) " +
+        "SELECT m.id, a.id, m.role, m.content, m.timestamp " +
+        "FROM messages m JOIN agents a ON a.session_id = m.session_id",
+    );
+    const after = countRows("messages_rebuilt");
+    if (before !== after) {
+      throw new Error(
+        "message migration dropped rows: " +
+          before +
+          " before, " +
+          after +
+          " after",
+      );
+    }
+    db.exec("DROP TABLE messages");
+    db.exec("ALTER TABLE messages_rebuilt RENAME TO messages");
+    db.exec("CREATE INDEX idx_messages_agent ON messages(agent_id, timestamp)");
+    db.exec(
+      "CREATE INDEX idx_messages_checkpoint " +
+        "ON messages(agent_id) WHERE role = 'checkpoint'",
+    );
+  },
 ];
 
 /** The `user_version` a fully migrated database carries: one per migration

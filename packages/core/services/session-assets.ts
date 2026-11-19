@@ -55,7 +55,7 @@ export class SessionAssets {
     if (session === undefined) {
       throw new CoreError(`Session not found: ${id}`, "not_found");
     }
-    if (session.stella !== true || session.agentId === undefined) {
+    if (session.stella !== true || session.personaId === undefined) {
       throw new CoreError(
         "Attached files can only be sent to a stella conversation: this " +
           "session's tools work on the user's own folders, so there is " +
@@ -70,7 +70,7 @@ export class SessionAssets {
         "unavailable",
       );
     }
-    return await saveUploads(uploads, { exec, agentId: session.agentId });
+    return await saveUploads(uploads, { exec, agentId: session.personaId });
   }
 
   /** Read one file a prompt brought back out of the machine. */

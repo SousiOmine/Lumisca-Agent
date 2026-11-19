@@ -86,6 +86,11 @@ function withTrailingPart(
 
 export interface SessionAgentOptions {
   sessionId: string;
+  /** The agent whose transcript this session persists (see
+   * session/agents.ts): the session's main agent. Events address the SESSION
+   * — a client opens and reads a session — so this id reaches only the
+   * message store. */
+  agentId: string;
   systemPrompt: string;
   model: Model<Api>;
   tools: Tool[];
@@ -216,6 +221,8 @@ export interface SessionAgentOptions {
  */
 export class SessionAgent {
   readonly sessionId: string;
+  /** The transcript this agent owns (see SessionAgentOptions.agentId). */
+  readonly agentId: string;
   readonly agent: Agent;
   /** The rows this session owns in the messages table, and how many leading
    * transcript messages they cover (see transcript.ts). */
@@ -309,8 +316,9 @@ export class SessionAgent {
 
   constructor(options: SessionAgentOptions) {
     this.sessionId = options.sessionId;
+    this.agentId = options.agentId;
     this.transcript = new TranscriptStore(
-      options.sessionId,
+      options.agentId,
       options.messageRepo,
       options.messages?.length ?? 0,
       options.baseIndex ?? 0,

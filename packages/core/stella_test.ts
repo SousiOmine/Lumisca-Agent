@@ -15,9 +15,12 @@ import {
 import { PRUNED_MARKER } from "./ai/pruned.ts";
 import type { StreamFn } from "./ai/transport.ts";
 import { LumiscaCore } from "./core.ts";
+import { LumiscaDb } from "./db/mod.ts";
 import type { StellaEntry } from "./domain/stella-conversation.ts";
 import { CoreError } from "./errors.ts";
+import { createAgentRepo } from "./session/agents.ts";
 import { SessionAttachmentStore } from "./session/attachments.ts";
+import { createMessageRepo } from "./session/messages.ts";
 import type { WindowPage } from "./session/transcript-window.ts";
 import {
   DEFAULT_MODEL_KEY,
@@ -261,8 +264,8 @@ test("stella conversation: each agent has its own", async () => {
     // Two agents, two conversations. A shared row would make them one person
     // with a split personality.
     assert(a.id !== b.id, `${a.id} == ${b.id}`);
-    assertEquals(a.agentId, first.id);
-    assertEquals(b.agentId, second.id);
+    assertEquals(a.personaId, first.id);
+    assertEquals(b.personaId, second.id);
     // Re-asking for the same agent returns the same conversation.
     assertEquals((await core.getOrCreateStellaSession(first.id)).id, a.id);
     // Neither appears in the session list.
@@ -860,6 +863,7 @@ test("stella tool set: eval is absent, the screen tools present", () => {
 test("stella tool set: the conversation's tools are preloaded", () => {
   // Built the way the factory builds it (tools/toolsets.ts), not copied by
   // hand — the hand-written list this replaced had already drifted once.
+  const db = LumiscaDb.openInMemory();
   const screen: VmScreen = {
     screenshot: () => Promise.resolve(new Uint8Array()),
     move: () => Promise.resolve(),
@@ -890,6 +894,11 @@ test("stella tool set: the conversation's tools are preloaded", () => {
     background: new BackgroundProcessManager(),
     task: new TaskHub({
       sessionId: "s1",
+      mainAgentId: "s1-main",
+      // Nothing spawns in this test; the hub still restores and settles
+      // the session rows when it is built, so it needs a store.
+      agents: createAgentRepo(db),
+      messages: createMessageRepo(db),
       resolveRuntime: () => {
         throw new Error("no sub-agent run in this test");
       },
@@ -2021,7 +2030,10 @@ async function recordTwoTurns(
 /** How many of the session's stored payloads hold a prune marker. */
 function prunedRows(core: LumiscaCore, sessionId: string): number {
   const rows = core.db.db
-    .prepare("SELECT content FROM messages WHERE session_id = ?")
+    .prepare(
+      "SELECT content FROM messages WHERE agent_id = (" +
+        "SELECT id FROM agents WHERE session_id = ? AND kind = 'main')",
+    )
     .all(sessionId) as { content: string }[];
   return rows.filter((row) => row.content.includes(PRUNED_MARKER)).length;
 }
@@ -2030,7 +2042,9 @@ function prunedRows(core: LumiscaCore, sessionId: string): number {
 function toolResultRows(core: LumiscaCore, sessionId: string): number {
   const row = core.db.db
     .prepare(
-      "SELECT COUNT(*) AS n FROM messages WHERE session_id = ? AND role = 'toolResult'",
+      "SELECT COUNT(*) AS n FROM messages WHERE role = 'toolResult' AND " +
+        "agent_id = (" +
+        "SELECT id FROM agents WHERE session_id = ? AND kind = 'main')",
     )
     .get(sessionId) as { n: number };
   return Number(row.n);

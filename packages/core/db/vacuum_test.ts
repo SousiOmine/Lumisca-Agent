@@ -185,8 +185,14 @@ test("vacuum: a real database keeps its schema version, indexes and rows", async
       .run();
     original.db
       .prepare(
-        `INSERT INTO messages (id, session_id, role, content, timestamp)
-       VALUES ('m1', 's1', 'user', '{}', 1)`,
+        "INSERT INTO agents (id, session_id, parent_id, kind, depth, created_at) " +
+          "VALUES ('a1', 's1', NULL, 'main', 0, 0)",
+      )
+      .run();
+    original.db
+      .prepare(
+        `INSERT INTO messages (id, agent_id, role, content, timestamp)
+       VALUES ('m1', 'a1', 'user', '{}', 1)`,
       )
       .run();
     const version = (

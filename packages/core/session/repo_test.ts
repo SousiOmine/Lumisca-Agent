@@ -1,7 +1,7 @@
 import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { LumiscaDb } from "../db/mod.ts";
-import { createAgentRepo } from "../stella/agents.ts";
+import { createStellaAgentRepo } from "../stella/agents.ts";
 import { createWorkspaceRepo } from "../workspace/repo.ts";
 import { createSessionRepo } from "./repo.ts";
 
@@ -16,7 +16,7 @@ test("session repo: a stella conversation is named by its agent", () => {
   const db = LumiscaDb.openInMemory();
   try {
     const workspace = createWorkspaceRepo(db).create("W", []);
-    const agents = createAgentRepo(db);
+    const agents = createStellaAgentRepo(db);
     const agent = agents.create({ name: "Aide", role: "" });
     const sessions = createSessionRepo(db);
     const session = sessions.create({
@@ -25,7 +25,7 @@ test("session repo: a stella conversation is named by its agent", () => {
       modelProvider: "faux",
       modelId: "faux",
       stella: true,
-      agentId: agent.id,
+      personaId: agent.id,
     });
 
     // `create` answers with a read, so what a caller gets back is what every
@@ -34,7 +34,7 @@ test("session repo: a stella conversation is named by its agent", () => {
 
     agents.update(agent.id, { name: "Aide 2" });
     assertEquals(sessions.get(session.id)?.name, "Aide 2");
-    assertEquals(sessions.getByAgent(agent.id)?.name, "Aide 2");
+    assertEquals(sessions.getByPersona(agent.id)?.name, "Aide 2");
 
     // The row keeps no copy that could disagree with the agent.
     const row = db.db
@@ -52,7 +52,7 @@ test("session repo: only an agent's conversation borrows its name", () => {
   const db = LumiscaDb.openInMemory();
   try {
     const workspace = createWorkspaceRepo(db).create("W", []);
-    const agents = createAgentRepo(db);
+    const agents = createStellaAgentRepo(db);
     const agent = agents.create({ name: "Aide", role: "" });
     const sessions = createSessionRepo(db);
     const conversation = sessions.create({
@@ -61,7 +61,7 @@ test("session repo: only an agent's conversation borrows its name", () => {
       modelProvider: "faux",
       modelId: "faux",
       stella: true,
-      agentId: agent.id,
+      personaId: agent.id,
     });
     const ordinary = sessions.create({
       workspaceId: workspace.id,
@@ -76,7 +76,7 @@ test("session repo: only an agent's conversation borrows its name", () => {
       [ordinary.id],
     );
     assertEquals(sessions.get(conversation.id)?.stella, true);
-    assertEquals(sessions.get(conversation.id)?.agentId, agent.id);
+    assertEquals(sessions.get(conversation.id)?.personaId, agent.id);
     assertEquals(sessions.get(ordinary.id)?.stella, undefined);
   } finally {
     db.close();

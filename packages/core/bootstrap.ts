@@ -18,7 +18,7 @@ import type { MessageRepo } from "./session/messages.ts";
 import type { SessionRepo } from "./session/repo.ts";
 import type { SessionVisualStore } from "./session/visuals.ts";
 import type { Locale } from "./shared/mod.ts";
-import type { AgentRepo } from "./stella/agents.ts";
+import type { StellaAgentRepo } from "./stella/agents.ts";
 import type { AgentIconStore } from "./stella/icons.ts";
 import type { EnvRequestRegistry } from "./vm/env-request.ts";
 import type { HandoverRegistry } from "./vm/handover-registry.ts";
@@ -45,7 +45,7 @@ export interface CoreServices {
  */
 export interface CoreServicesDeps {
   machine: StellaMachine;
-  agents: AgentRepo;
+  agents: StellaAgentRepo;
   sessions: SessionRepo;
   messages: MessageRepo;
   pool: SessionPool;

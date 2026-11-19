@@ -89,6 +89,7 @@ function makeAgent(
 ): SessionAgent {
   return new SessionAgent({
     sessionId: "s1",
+    agentId: "a1",
     systemPrompt: "You are a test agent.",
     model:
       extra.model ?? ({ id: "test", name: "test" } as unknown as Model<Api>),
@@ -965,6 +966,7 @@ test("compaction keeps the transcript and the stored rows in step", async () => 
   };
   const agent = new SessionAgent({
     sessionId: "s1",
+    agentId: "a1",
     systemPrompt: "You are a test agent.",
     model: smallWindowModel(),
     tools: [bigTool],
@@ -1121,6 +1123,7 @@ test("compactNow condenses on demand and reports the outcome", async () => {
   ];
   const agent = new SessionAgent({
     sessionId: "s1",
+    agentId: "a1",
     systemPrompt: "You are a test agent.",
     model: smallWindowModel(),
     tools: [bigTool],
@@ -1252,6 +1255,7 @@ test("a compaction republishes the context its checkpoint left behind", async ()
   ];
   const agent = new SessionAgent({
     sessionId: "s1",
+    agentId: "a1",
     systemPrompt: "You are a test agent.",
     model: smallWindowModel(),
     tools: [bigTool],

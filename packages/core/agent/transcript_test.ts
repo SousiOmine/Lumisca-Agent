@@ -6,7 +6,7 @@ import { LumiscaDb } from "../db/mod.ts";
 import { createMessageRepo, type MessageRepo } from "../session/messages.ts";
 import { TranscriptStore } from "./transcript.ts";
 
-/** A session whose store holds `count` user prompts, 1 ms apart. */
+/** An agent whose store holds `count` user prompts, 1 ms apart. */
 function setup(count: number): { db: LumiscaDb; repo: MessageRepo } {
   const db = LumiscaDb.openInMemory();
   db.db
@@ -16,8 +16,15 @@ function setup(count: number): { db: LumiscaDb; repo: MessageRepo } {
     .run();
   db.db
     .prepare(
-      `INSERT INTO sessions (id, workspace_id, name, model_provider, model_id, created_at, updated_at)
-     VALUES ('s1', 'ws', 't', 'faux', 'model', 0, 0)`,
+      "INSERT INTO sessions " +
+        "(id, workspace_id, name, model_provider, model_id, created_at, updated_at) " +
+        "VALUES ('session-1', 'ws', 't', 'faux', 'model', 0, 0)",
+    )
+    .run();
+  db.db
+    .prepare(
+      "INSERT INTO agents (id, session_id, parent_id, kind, depth, created_at) " +
+        "VALUES ('s1', 'session-1', NULL, 'main', 0, 0)",
     )
     .run();
   const repo = createMessageRepo(db);

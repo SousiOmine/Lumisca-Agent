@@ -1,16 +1,20 @@
+import type { TranscriptStore } from "../agent/transcript.ts";
 import type { Agent } from "../ai/agent.ts";
 import type { ContextCompactor } from "../ai/context-compaction.ts";
 import { CoreError } from "../errors.ts";
 import type { SubagentStatus, SubagentType, TaskInfo } from "../shared/mod.ts";
 
 /** Settled sub-agents kept queryable (task_output / resync) per session;
- * older entries are dropped so a long session's metadata stays bounded. */
-const MAX_FINISHED_SUBAGENTS = 100;
+ * older entries are dropped so a long session's metadata stays bounded. The
+ * store keeps every row: this bound is about what the roster holds in
+ * memory, and the same number limits what a session restores. */
+export const MAX_FINISHED_SUBAGENTS = 100;
 
-/** One live sub-agent and its runtime state. `agent` is released (set to
- * null) once the run settles — only the lightweight snapshot fields stay
- * queryable — so finished sub-agents cannot pin their message history in
- * memory for the rest of the session. */
+/** One sub-agent and its runtime state. `agent` is released (set to null)
+ * once the run settles — only the lightweight snapshot fields stay queryable
+ * — so finished sub-agents cannot pin their message history in memory for the
+ * rest of the session. The transcript itself is already in the store (see
+ * session/agents.ts), which is what makes a settled one readable later. */
 export interface Subagent {
   id: string;
   parentId: string;
@@ -21,8 +25,12 @@ export interface Subagent {
   agent: Agent | null;
   /** Condenses this sub-agent's history when a request would exceed its
    * model's window (see compactBeforeStep). Per sub-agent so the
-   * measurement anchor tracks its own turns. */
-  compactor: ContextCompactor;
+   * measurement anchor tracks its own turns; null for a row restored from
+   * the store, which has no run behind it yet. */
+  compactor: ContextCompactor | null;
+  /** Where this agent's messages are written. Null for a restored row: its
+   * transcript is already there, and nothing of this process runs it. */
+  transcript: TranscriptStore | null;
   startedAt: number;
   finishedAt?: number;
   /** Tail of the current response (bounded; reported while running). */
@@ -46,22 +54,22 @@ export interface Waiter {
 }
 
 /**
- * The roster of one session's sub-agents: the spawned agents (in memory
- * only — nothing is persisted), id resolution, the snapshots task_output
- * and the resync endpoint read, blocking waits on a running agent, and the
- * eviction of settled entries so a long session's metadata stays bounded.
- * The lifecycle stays with the owner (the hub): this roster only holds the
- * agents it was handed.
+ * The roster of one session's sub-agents: the agents this process spawned or
+ * restored from the store, id resolution, the snapshots task_output and the
+ * resync endpoint read, blocking waits on a running agent, and the eviction
+ * of settled entries so a long session's metadata stays bounded. The
+ * lifecycle stays with the owner (the hub): this roster only holds the
+ * agents it was handed, and the store (session/agents.ts) holds their rows.
  */
 export class SubagentRegistry {
   private readonly subs = new Map<string, Subagent>();
 
-  /** The session the registered agents belong to. Its id is also the
-   * parent agent's id, so it heads the list of known ids. */
-  private readonly sessionId: string;
+  /** The session's main agent: the parent of everything spawned at depth 1,
+   * so it heads the list of known ids. */
+  private readonly mainAgentId: string;
 
-  constructor(sessionId: string) {
-    this.sessionId = sessionId;
+  constructor(mainAgentId: string) {
+    this.mainAgentId = mainAgentId;
   }
 
   /** Register a spawned sub-agent under its id. */
@@ -117,7 +125,7 @@ export class SubagentRegistry {
   }
 
   private knownIds(): string {
-    return [this.sessionId, ...this.subs.keys()].join(", ");
+    return [this.mainAgentId, ...this.subs.keys()].join(", ");
   }
 
   /** Register a blocking wait on a sub-agent. Resolves when the agent

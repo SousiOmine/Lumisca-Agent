@@ -242,6 +242,7 @@ export class AgentFactory {
     );
     const agent = new SessionAgentImpl({
       sessionId: session.id,
+      agentId: session.mainAgentId,
       systemPrompt,
       model,
       tools,
@@ -674,6 +675,9 @@ export class AgentFactory {
       if (tasks === undefined) {
         tasks = new TaskHub({
           sessionId: session.id,
+          mainAgentId: session.mainAgentId,
+          agents: this.deps.agents,
+          messages: this.deps.messageRepo,
           resolveRuntime: runtimeResolver,
           streamFn: this.deps.streamFn,
           safety: this.deps.commandSafety,
@@ -873,7 +877,7 @@ export class AgentFactory {
       session.stella === true
         ? (this.deps.stellaAgentPersona?.(session) ?? {
             role: "",
-            id: session.agentId ?? "",
+            id: session.personaId ?? "",
           })
         : undefined,
     );

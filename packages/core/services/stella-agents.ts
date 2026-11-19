@@ -4,7 +4,7 @@ import type { MessageRepo } from "../session/messages.ts";
 import type { SessionRepo } from "../session/repo.ts";
 import type { Locale, StellaAgentSummary } from "../shared/mod.ts";
 import { translate } from "../shared/mod.ts";
-import type { AgentRepo, StellaAgent } from "../stella/agents.ts";
+import type { StellaAgent, StellaAgentRepo } from "../stella/agents.ts";
 import { DEFAULT_AGENT_NAME, normalizeAgentName } from "../stella/agents.ts";
 import type { AgentIconStore } from "../stella/icons.ts";
 import { latestPreview } from "../stella/previews.ts";
@@ -26,7 +26,7 @@ import { latestPreview } from "../stella/previews.ts";
 export class StellaAgentService {
   constructor(
     private readonly deps: {
-      agents: AgentRepo;
+      agents: StellaAgentRepo;
       icons: AgentIconStore;
       sessions: SessionRepo;
       messages: MessageRepo;
@@ -63,7 +63,7 @@ export class StellaAgentService {
       ...agent,
       preview: latestPreview(
         this.deps.messages,
-        this.deps.sessions.getByAgent(agent.id)?.id,
+        this.deps.sessions.getByPersona(agent.id)?.mainAgentId,
       ),
     }));
   }
@@ -102,7 +102,7 @@ export class StellaAgentService {
   }
 
   /** Claim the right to start this agent's setup turn (see
-   * AgentRepo.markOnboarded): true for exactly one caller. */
+   * StellaAgentRepo.markOnboarded): true for exactly one caller. */
   markOnboarded(id: string): boolean {
     return this.deps.agents.markOnboarded(id);
   }
@@ -180,7 +180,7 @@ export class StellaAgentService {
    * The name is validated FIRST — before a single byte is written — so a
    * taken or empty name costs nothing. Neither change touches `updated_at`:
    * it orders the sidebar by "who was talked to last", and editing an agent
-   * is not talking to it (see AgentRepo.update).
+   * is not talking to it (see StellaAgentRepo.update).
    *
    * `icon` is:
    * - `undefined` → leave the picture alone;
@@ -231,7 +231,7 @@ export class StellaAgentService {
     // Back to the initial: the row stops naming the file, then the file goes.
     // Nothing else in this patch can fail after that. The row is written even
     // when the agent had no picture, because the same patch may carry a name
-    // or a model (a no-op write is skipped by AgentRepo.update).
+    // or a model (a no-op write is skipped by StellaAgentRepo.update).
     if (patch.icon === null) {
       this.deps.agents.update(id, { ...fields, icon: "" });
       await this.deps.icons.remove(id, agent.icon);
@@ -300,7 +300,7 @@ export class StellaAgentService {
    * invisible in every list while still holding its messages.
    */
   async deleteStellaAgent(id: string): Promise<void> {
-    const session = this.deps.sessions.getByAgent(id);
+    const session = this.deps.sessions.getByPersona(id);
     if (session !== undefined) await this.deps.deleteSession(session.id);
     this.deps.agents.delete(id);
     // The picture belongs to the agent: once the row is gone nothing can
