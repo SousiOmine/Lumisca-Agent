@@ -243,9 +243,9 @@ npm outdated                                                   # packages/deskto
   呼び出し側の `preferredSide` は希望で、収まらなければ反対側へ開き、どちらにも収まらなければ切り取らずに高さを切ってスクロールさせます（`.modal` は `overflow-y: auto` なので、ダイアログの中ではダイアログの縁が一覧を切ります）。
 - 設定の行は面を塗りません。
   `SettingRow` や `.setting-card` / `.provider-row` は下線で区切った行です。
-- ツールの構成を変えるトグルは `SessionPool.applyToolSetChange` を通します（Scripting tool call、askツール）。
+- ツールの構成やシステムプロンプトを変えるトグルは `SessionPool.applyAgentBuildChange` を通します（Scripting tool call、askツール、生成UIのプロンプト）。
   待機中のセッションはその場で再構築し、実行中のセッションは run が終わってから再構築します（`SessionLifecycle.deferRebuild`）。
-  ツールの定義は送信済みのリクエストに入っているため、実行中に差し替えると run の行が二重になります。
+  ツールの定義とプロンプトは送信済みのリクエストに入っているため、実行中に差し替えると run の行が二重になります。
   能力のフラグだけを変える computer use とは、そこが違います。
 - 能力のトグルは実行中のセッションにも効きます（computer use など）。
   設定への保存は実行中のセッションがあっても必ず行います（`SessionPool.applyCapabilityChange`）。
@@ -1043,7 +1043,7 @@ https（`tailscale serve` など）で開いた端末から、ページを PWA �
   中から呼ぶ `bash` は今までどおり毎回判定されます。
 - サブエージェントは従来のツールのままです。
   `task` は目録から呼べますが、子は普通のツールで走ります。
-- トグルは `LumiscaCore.setCodeExecutionEnabled` → `SessionPool.applyToolSetChange` を通します。
+- トグルは `LumiscaCore.setCodeExecutionEnabled` → `SessionPool.applyAgentBuildChange` を通します。
   待機中のセッションはその場で再構築し、実行中のセッションは run が終わってから再構築します（`SessionLifecycle.deferRebuild`）。
   ツールの定義は送信済みのリクエストに入っているためです。
 - 確認: `bun test packages/core/tools packages/core/code-execution packages/core/vm/channel_test.ts packages/core/core_code_execution_test.ts packages/core/agent/code-execution-context_test.ts`。

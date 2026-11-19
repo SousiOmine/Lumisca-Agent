@@ -558,6 +558,41 @@ test("ask tool: the toggle removes it from an open session", async () => {
   }
 });
 
+test("app UI guide: the switch moves it from the skill into the prompt", async () => {
+  const { core, providerId, modelId } = setup();
+  const { ws, root } = await makeWorkspace(core);
+  try {
+    const session = await core.createSession({
+      workspaceId: ws.id,
+      modelProvider: providerId,
+      modelId,
+    });
+    const prompt = () => core.getAgent(session.id)!.agent.state.systemPrompt;
+
+    // Off by default: the guide stays on demand, and the prompt only points
+    // at the skill.
+    assertEquals(core.isAppUiInSystemPrompt(), false);
+    assertEquals(prompt().includes("## Components"), false);
+    assert(prompt().includes("load the `app-ui` skill"));
+
+    // The open, idle session is rebuilt, and the whole guide is now part of
+    // what the model is sent.
+    core.setAppUiInSystemPrompt(true);
+    assertEquals(core.isAppUiInSystemPrompt(), true);
+    assert(prompt().includes("## Components"), prompt().slice(-1000));
+    assert(prompt().includes("Use an app card when the reader must DO"));
+    assertEquals(prompt().includes("load the `app-ui` skill"), false);
+
+    core.setAppUiInSystemPrompt(false);
+    assertEquals(core.isAppUiInSystemPrompt(), false);
+    assertEquals(prompt().includes("## Components"), false);
+    assert(prompt().includes("load the `app-ui` skill"));
+  } finally {
+    await core.close();
+    await removeDirRetry(root);
+  }
+});
+
 test("todo tool records the whole plan and replaces it on the next call", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);

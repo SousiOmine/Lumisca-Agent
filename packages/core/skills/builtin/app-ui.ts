@@ -4,12 +4,15 @@ import type { SkillDef } from "../discover.ts";
 /**
  * The built-in "app-ui" skill: the JSON grammar of an app card.
  *
- * The grammar is large and most replies do not use it, so it is a skill
- * rather than part of the system prompt. `UI_HELP` in every prompt says
- * that a `ui` fence exists and names this skill; loading it is what teaches
- * the spec, the component catalog and the actions. The body is generated
- * from the same catalog the parser and the renderer use, so a component
- * added there appears here without a second list to forget.
+ * The grammar is large and most replies do not use it, so by default it is
+ * a skill rather than part of the system prompt. The experimental switch
+ * puts the same body into every main system prompt instead (see
+ * LumiscaCore.setAppUiInSystemPrompt); the skill stays listed either way.
+ * The card paragraph in every prompt says that a `ui` fence exists, and
+ * either names this skill or carries the body itself.
+ * The body is generated from the same catalog the parser and the renderer
+ * use, so a component added there appears here without a second list to
+ * forget.
  *
  * Available in every mode: an app card is part of a reply, and code mode,
  * chat and stella all have replies. Sub-agents do not receive it: their

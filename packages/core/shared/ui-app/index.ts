@@ -21,7 +21,7 @@ export {
   type UiAppProp,
   type UiAppPropKind,
 } from "./catalog.ts";
-export { appHelp, UI_HELP } from "./help.ts";
+export { appHelp, UI_HELP, UI_HELP_INLINE } from "./help.ts";
 export { UI_APP_LIMITS } from "./limits.ts";
 export {
   applyAction,

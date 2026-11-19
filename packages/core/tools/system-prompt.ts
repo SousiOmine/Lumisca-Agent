@@ -1,5 +1,11 @@
 import type { Workspace } from "../domain/workspace.ts";
-import { UI_HELP } from "../shared/ui-app/help.ts";
+import { appHelp, UI_HELP, UI_HELP_INLINE } from "../shared/ui-app/help.ts";
+
+/** The card section of a prompt: the pointer alone, or the pointer and the
+ * whole guide when the experimental switch puts it in the prompt. */
+function appUiSection(inPrompt: boolean): string {
+  return inPrompt ? `${UI_HELP_INLINE}\n\n${appHelp()}` : UI_HELP;
+}
 
 /** The machine's home, the folder its agents work in, and the account the
  * tools run as.
@@ -23,16 +29,25 @@ const VM_USER = "agent";
  * a simplification: a session re-derives its prompt on every open and
  * rewrites it only when the string differs (see
  * AgentFactory.ensureSystemPrompt), which needs unchanged inputs to produce
- * an identical string.
+ * an identical string. The one install-wide switch that does reach here is
+ * `appUiGuide`: moving it rebuilds the open sessions, so it is fixed for the
+ * life of an agent like the tool set is.
  */
-export function buildSystemPrompt(workspace: Workspace): string {
+export function buildSystemPrompt(
+  workspace: Workspace,
+  options: {
+    /** Put the whole app-card guide in the prompt instead of pointing at
+     * the `app-ui` skill (the experimental switch). */
+    appUiGuide?: boolean;
+  } = {},
+): string {
   const folders = workspace.folders.map((f) => `- ${f}`).join("\n");
   return `You are Lumisca, a coding agent that works inside a workspace.
 
 The workspace contains these folders (file access is restricted to them):
 ${folders}
 
-${UI_HELP}
+${appUiSection(options.appUiGuide === true)}
 `;
 }
 
@@ -73,6 +88,9 @@ export function buildStellaSystemPrompt(
      * bash start there). Omitted → the machine's home, which is what a
      * conversation without an agent's folder gets. */
     workdir?: string;
+    /** Put the whole app-card guide in the prompt instead of pointing at
+     * the `app-ui` skill (the experimental switch). */
+    appUiGuide?: boolean;
   } = {},
 ): string {
   // The persona, when the session has one. Written first because it is the
@@ -112,7 +130,7 @@ call carried it.
 A run with nothing to report replies with exactly NO_RESPONSE.
 send_chat carries what a reply cannot: a file, or a progress note.
 
-${UI_HELP}
+${appUiSection(options.appUiGuide === true)}
 `;
 }
 
@@ -122,11 +140,17 @@ ${UI_HELP}
  * ask / todo / skills / MCP. The prompt names no tool, so it does not vary
  * with the set.
  */
-export function buildChatSystemPrompt(): string {
+export function buildChatSystemPrompt(
+  options: {
+    /** Put the whole app-card guide in the prompt instead of pointing at
+     * the `app-ui` skill (the experimental switch). */
+    appUiGuide?: boolean;
+  } = {},
+): string {
   return `You are Lumisca, a helpful AI assistant. You have no file, shell or
 sub-agent tools: you cannot read, write or run anything. Images can be
 attached to prompts.
 
-${UI_HELP}
+${appUiSection(options.appUiGuide === true)}
 `;
 }

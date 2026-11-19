@@ -1,11 +1,12 @@
 /**
  * The app card as the MODEL reads it.
  *
- * This is the body of the `app-ui` skill, not part of the system prompt:
- * the grammar is large, and a session pays for it only when the model is
- * about to write an app card. The catalog below is the same object the
- * parser and the renderer use, so a component added there appears here
- * without a second list to forget.
+ * This is the body of the `app-ui` skill, and the experimental switch can
+ * put it in every main system prompt instead (see
+ * LumiscaCore.setAppUiInSystemPrompt). The grammar is large, so by default a
+ * session pays for it only when the model is about to write an app card. The
+ * catalog below is the same object the parser and the renderer use, so a
+ * component added there appears here without a second list to forget.
  */
 import {
   UI_APP_COMPONENTS,
@@ -14,16 +15,32 @@ import {
 } from "./catalog.ts";
 import { UI_APP_LIMITS } from "./limits.ts";
 
+/** The card paragraph both placements share: only the middle sentence says
+ * where the grammar lives. */
+function uiHelp(middle: string): string {
+  return [
+    "A UI card is written into your reply, not sent by a tool call: put it in a fenced code block whose info string is `ui`, on its own lines, and the app draws the card where the block sits.",
+    middle,
+    "The rest of the reply is ordinary markdown, so words may come before and after the card.",
+  ].join(" ");
+}
+
 /** The short pointer in every prompt whose reply a person reads.
  *
  * The full grammar is the `app-ui` skill: a session pays for it only when
  * it is about to write an app card. This sentence is what tells the model
  * that the block exists and which skill teaches it. */
-export const UI_HELP: string = [
-  "A UI card is written into your reply, not sent by a tool call: put it in a fenced code block whose info string is `ui`, on its own lines, and the app draws the card where the block sits.",
+export const UI_HELP: string = uiHelp(
   "The block holds one JSON spec; load the `app-ui` skill for the spec, components and actions.",
-  "The rest of the reply is ordinary markdown, so words may come before and after the card.",
-].join(" ");
+);
+
+/** The pointer used when the guide travels in the same prompt (the
+ * experimental switch): the same paragraph, except that it points at the
+ * text below rather than at a skill. The skill stays available, so a prompt
+ * elsewhere that says "load the app-ui skill" still works. */
+export const UI_HELP_INLINE: string = uiHelp(
+  "The block holds one JSON spec; the spec, components and actions are described below.",
+);
 
 /** The skill's SKILL.md body. */
 export function appHelp(): string {

@@ -52,8 +52,8 @@ type Deps = Pick<
  * together.
  */
 export class SessionLifecycle {
-  /** Sessions whose model or tool-set change arrived while a run was in
-   * flight: their agent is rebuilt as that run ends (see
+  /** Sessions whose model, prompt or tool-set change arrived while a run
+   * was in flight: their agent is rebuilt as that run ends (see
    * releasePendingRebuild). */
   private readonly pendingRebuilds = new Set<string>();
 
@@ -220,16 +220,17 @@ export class SessionLifecycle {
    * Rebuild a session's agent as soon as its run ends.
    *
    * Used by a change that cannot be applied to a live agent without
-   * replacing it: the tool set the model was given (the scripting tool call
-   * on or off). The replacement would duplicate the rows of the run in flight, so
-   * it waits for the end of that run (see releasePendingRebuild). */
+   * replacing it: the system prompt or the tool set the model was given (the
+   * app-card switch, the scripting tool call). The replacement would
+   * duplicate the rows of the run in flight, so it waits for the end of that
+   * run (see releasePendingRebuild). */
   deferRebuild(id: string): void {
     this.pendingRebuilds.add(id);
   }
 
   /**
-   * The run of `id` has ended: rebuild its agent if a model or tool-set
-   * change waited for it.
+   * The run of `id` has ended: rebuild its agent if a model, prompt or
+   * tool-set change waited for it.
    *
    * Deferred by a microtask because the caller is the `agent_end` event, which
    * the running agent emits from its own teardown; rebuilding closes that

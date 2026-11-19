@@ -1035,6 +1035,21 @@ export const settings = {
     ja: "変更に失敗しました: {error}",
     en: "Failed to change: {error}",
   },
+  /** The switch that moves the app-card guide into the system prompt. The
+   * description states the cost, because every request then carries the
+   * guide. */
+  "settings.experimental.appUiPrompt.title": {
+    ja: "生成UIのプロンプト処理を強化",
+    en: "Stronger generated UI prompts",
+  },
+  "settings.experimental.appUiPrompt.description": {
+    ja: "生成UIの説明を既定で読み込むことで、生成UIの使用を促進します。トークン使用量が増加します。",
+    en: "Loading the generated UI guide into every prompt encourages the model to use generated UI. Token usage increases.",
+  },
+  "settings.experimental.appUiPrompt.operationFailed": {
+    ja: "変更に失敗しました: {error}",
+    en: "Failed to change: {error}",
+  },
   "settings.mcp.toolCount": { ja: "{count}個のツール", en: "{count} tools" },
   "settings.provider.oauth": { ja: "OAuth連携", en: "OAuth" },
   /** Section heading of the AI providers inside the プロバイダー category

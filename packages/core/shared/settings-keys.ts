@@ -96,6 +96,24 @@ export function askToolEnabled(
   return read(ASK_TOOL_ENABLED_KEY) !== "0";
 }
 
+/** Settings-table key for the experimental app-card guide switch. "1" puts
+ * the whole guide (`appHelp`) into every system prompt instead of leaving it
+ * in the on-demand `app-ui` skill; unset (or any other value) keeps the
+ * skill. Default off: the guide is large and only replies that draw a card
+ * use it, so an installation opts in to paying for it on every request. The
+ * switch changes what an agent is built with, so it reaches the open
+ * sessions (see LumiscaCore.setAppUiInSystemPrompt). */
+export const APP_UI_IN_SYSTEM_PROMPT_KEY = "app_ui_in_system_prompt";
+
+/** Whether the app-card guide travels in every system prompt. Follows the
+ * "1"-is-on convention of the other flags; anything else, unset included,
+ * is off. */
+export function appUiInSystemPrompt(
+  read: (key: string) => string | undefined,
+): boolean {
+  return read(APP_UI_IN_SYSTEM_PROMPT_KEY) === "1";
+}
+
 /** Settings-table key for the Wayland screen-sharing permission (the
  * portal's restore token). Machine state, not a secret: the token only lets
  * the portal skip its consent dialog for this user's own session, and it is

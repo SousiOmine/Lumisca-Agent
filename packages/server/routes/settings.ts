@@ -1,4 +1,5 @@
 import {
+  APP_UI_IN_SYSTEM_PROMPT_KEY,
   ASK_TOOL_ENABLED_KEY,
   CODE_EXECUTION_ENABLED_KEY,
   COMPUTER_USE_ENABLED_KEY,
@@ -35,6 +36,10 @@ export interface SettingsApi {
    * tool set every session is built with changes, so the core rebuilds the
    * open sessions (a running one when its run ends). */
   setAskToolEnabled(enabled: boolean): void;
+  /** Put the app-card guide in every system prompt or back in the on-demand
+   * skill. Also a rebuild: the prompt is fixed for the life of an agent, so
+   * the open sessions follow (a running one when its run ends). */
+  setAppUiInSystemPrompt(enabled: boolean): void;
   getPersonalization(): { path: string; content: string };
   setPersonalization(content: string): void;
   /** The recorded approvals of the fast-model safety check. Entries carry a
@@ -88,6 +93,12 @@ export function settingRoutes(core: SettingsApi): Hono {
       // The same rule as the scripting tool call: the tool set changes, so
       // the toggle goes through the core rather than the generic write.
       core.setAskToolEnabled(value === "1");
+      return c.json({ ok: true });
+    }
+    if (key === APP_UI_IN_SYSTEM_PROMPT_KEY) {
+      // The prompt changes, and a prompt is fixed for the life of an agent:
+      // the core rebuilds the open sessions instead of only storing the flag.
+      core.setAppUiInSystemPrompt(value === "1");
       return c.json({ ok: true });
     }
     core.setUserSetting(key, value);

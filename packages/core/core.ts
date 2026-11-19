@@ -116,7 +116,9 @@ import type {
   WebSearchTestView,
 } from "./shared/mod.ts";
 import {
+  APP_UI_IN_SYSTEM_PROMPT_KEY,
   ASK_TOOL_ENABLED_KEY,
+  appUiInSystemPrompt,
   askToolEnabled,
   CODE_EXECUTION_ENABLED_KEY,
   CONNECTIONS_KEY,
@@ -976,7 +978,7 @@ export class LumiscaCore {
    * once, and a running one is rebuilt when its run ends (its request
    * already carried the old tool set). */
   setCodeExecutionEnabled(enabled: boolean): void {
-    this.pool.applyToolSetChange(
+    this.pool.applyAgentBuildChange(
       this.services.sessions.listEverySession(),
       () => this.settings.set(CODE_EXECUTION_ENABLED_KEY, enabled ? "1" : ""),
       (id) => this.services.sessions.deferRebuild(id),
@@ -995,9 +997,29 @@ export class LumiscaCore {
    * old tool set). A run blocked on an ask keeps its pending question
    * answerable until then. */
   setAskToolEnabled(enabled: boolean): void {
-    this.pool.applyToolSetChange(
+    this.pool.applyAgentBuildChange(
       this.services.sessions.listEverySession(),
       () => this.settings.set(ASK_TOOL_ENABLED_KEY, enabled ? "1" : "0"),
+      (id) => this.services.sessions.deferRebuild(id),
+    );
+  }
+
+  /** Whether the app-card guide travels in every system prompt (the
+   * experimental switch). Unset counts as off, so the guide stays in the
+   * on-demand `app-ui` skill. */
+  isAppUiInSystemPrompt(): boolean {
+    return appUiInSystemPrompt((key) => this.settings.get(key));
+  }
+
+  /** Put the app-card guide in every system prompt or back in the
+   * on-demand skill. The prompt is fixed for the life of an agent, so every
+   * open session follows: an idle one is rebuilt at once, and a running one
+   * is rebuilt when its run ends (its request already carried the old
+   * prompt). */
+  setAppUiInSystemPrompt(enabled: boolean): void {
+    this.pool.applyAgentBuildChange(
+      this.services.sessions.listEverySession(),
+      () => this.settings.set(APP_UI_IN_SYSTEM_PROMPT_KEY, enabled ? "1" : ""),
       (id) => this.services.sessions.deferRebuild(id),
     );
   }
@@ -2243,22 +2265,27 @@ export class LumiscaCore {
     // because both can change while the session lives. That is also what
     // keeps this string stable across opens — which is what lets
     // ensureSystemPrompt compare it against the stored value.
+    // The app-card guide is the one exception, and only because moving it
+    // rebuilds the open sessions (setAppUiInSystemPrompt): it is fixed for
+    // the life of an agent like the tool set is.
+    const appUiGuide = this.isAppUiInSystemPrompt();
     // stella's conversation row shares the folder-less chat workspace, but
     // its prompt is the machine's: a chat prompt would tell it it cannot
     // run anything, which is the opposite of what it can do.
     if (stella !== false) {
       return buildStellaSystemPrompt(
         stella === true
-          ? {}
+          ? { appUiGuide }
           : {
               agent: { role: stella.role },
               workdir: vmAgentDir(stella.id),
+              appUiGuide,
             },
       );
     }
     return workspace.chat
-      ? buildChatSystemPrompt()
-      : buildSystemPrompt(workspace);
+      ? buildChatSystemPrompt({ appUiGuide })
+      : buildSystemPrompt(workspace, { appUiGuide });
   }
 
   /** Resolve the model for a new session: explicit choice, else the

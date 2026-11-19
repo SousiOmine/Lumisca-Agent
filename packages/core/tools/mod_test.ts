@@ -13,7 +13,7 @@ import {
   TOOL_TODO,
   TOOL_WRITE,
 } from "../shared/tool-names.ts";
-import { UI_HELP } from "../shared/ui-app/help.ts";
+import { UI_HELP, UI_HELP_INLINE } from "../shared/ui-app/help.ts";
 import {
   buildChatSystemPrompt,
   buildStellaSystemPrompt,
@@ -157,6 +157,22 @@ test("every prompt whose reply a person reads teaches the card grammar", () => {
     // The fence is what makes a block a card; a prompt that named the tags
     // but not the fence would still produce plain markdown.
     assert(prompt.includes("fenced code block"), prompt.slice(0, 200));
+  }
+});
+
+test("the app UI switch carries the whole guide in every prompt", () => {
+  // The switch moves the guide out of the skill tool and into the text the
+  // model already has: the pointer must stop sending it to a skill, or the
+  // session pays for the guide twice and may still load the skill.
+  for (const prompt of [
+    buildSystemPrompt(workspace, { appUiGuide: true }),
+    buildChatSystemPrompt({ appUiGuide: true }),
+    buildStellaSystemPrompt({ appUiGuide: true }),
+  ]) {
+    assert(prompt.includes(UI_HELP_INLINE), "the inline pointer is missing");
+    assert(prompt.includes("# App cards"), "the guide heading is missing");
+    assert(prompt.includes("## Components"), "the catalog is missing");
+    assertEquals(prompt.includes("load the `app-ui` skill"), false);
   }
 });
 

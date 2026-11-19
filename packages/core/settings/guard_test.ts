@@ -4,6 +4,7 @@ import { CoreError } from "../errors.ts";
 import { MCP_OAUTH_KEY_PREFIX } from "../mcp/oauth.ts";
 import { APP_MCP_SETTINGS_KEY, CONNECTIONS_KEY } from "../shared/mod.ts";
 import {
+  APP_UI_IN_SYSTEM_PROMPT_KEY,
   ASK_TOOL_ENABLED_KEY,
   CODE_EXECUTION_ENABLED_KEY,
   COMPACTION_ENABLED_KEY,
@@ -82,7 +83,11 @@ test("the compaction rows of the settings dialog are writable", () => {
 
 test("the experimental rows of the settings dialog are writable", () => {
   // Same surface, same failure mode (see the model and compaction rows).
-  for (const key of [CODE_EXECUTION_ENABLED_KEY, ASK_TOOL_ENABLED_KEY]) {
+  for (const key of [
+    CODE_EXECUTION_ENABLED_KEY,
+    ASK_TOOL_ENABLED_KEY,
+    APP_UI_IN_SYSTEM_PROMPT_KEY,
+  ]) {
     assertMutableKey(key);
   }
 });

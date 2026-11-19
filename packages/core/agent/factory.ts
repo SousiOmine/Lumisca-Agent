@@ -168,7 +168,7 @@ interface SessionWhere {
   /** Whether the model is given `execute` instead of its tool set (see
    * applyCodeExecution). A value, not a getter: the tool set is fixed for
    * the life of an agent, and the pool rebuilds the open sessions when the
-   * toggle changes (see SessionPool.applyToolSetChange). */
+   * toggle changes (see SessionPool.applyAgentBuildChange). */
   codeExecution: boolean;
   /** Whether the model is offered the ask tool. A value for the same
    * reason: the tool set is fixed for the life of an agent, and the pool
@@ -854,14 +854,16 @@ export class AgentFactory {
 
   /**
    * The session's system prompt, re-derived from what the prompt is a
-   * function of: the mode, the workspace folders, and a stella agent's role
-   * and working folder. Persisted, but not frozen: a stored value that no
-   * longer matches what this build generates is replaced.
+   * function of: the mode, the workspace folders, a stella agent's role and
+   * working folder, and the experimental app-card switch. Persisted, but not
+   * frozen: a stored value that no longer matches what this build generates
+   * is replaced.
    *
    * Re-deriving on every open is what makes a folder edit and a prompt
    * change in a new release reach a session that already exists. The
-   * generation is deterministic in those inputs — no date, no model, no
-   * setting — so a session nothing happened to regenerates the same string
+   * generation is deterministic in those inputs — no date, no model, and no
+   * setting but the app-card switch (whose change rebuilds the open
+   * sessions) — so a session nothing happened to regenerates the same string
    * and pays nothing: the write and the cache break happen only when the
    * prompt actually differs.
    *

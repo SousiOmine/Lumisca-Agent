@@ -89,9 +89,10 @@ export interface SessionPersistence {
   renameSession(id: string, name: string): void;
   /** Full generated system prompt for a workspace, re-derived every time a
    * session is opened (a stored value that differs is replaced). What it is
-   * a function of is the mode, the workspace folders and a stella agent's
-   * role — nothing that changes while a session lives, so an unchanged
-   * session regenerates the same string. */
+   * a function of is the mode, the workspace folders, a stella agent's role
+   * and the experimental app-card switch — nothing that changes while a
+   * session lives (moving the switch rebuilds the open sessions), so an
+   * unchanged session regenerates the same string. */
   buildGeneratedPrompt(
     workspace: Workspace,
     /** A stella agent's persona (its prompt is the machine's, plus the role
@@ -148,7 +149,7 @@ export interface AgentRuntime {
   /** Whether the user turned the scripting tool call on (see
    * CODE_EXECUTION_ENABLED_KEY). Read once per open: it decides the whole
    * tool set of the agent, so the pool rebuilds the open sessions when the
-   * toggle changes (see SessionPool.applyToolSetChange). */
+   * toggle changes (see SessionPool.applyAgentBuildChange). */
   isCodeExecutionEnabled(): boolean;
   /** Whether the model is offered the ask tool (see ASK_TOOL_ENABLED_KEY).
    * Read once per open for the same reason: it is part of the tool set, and

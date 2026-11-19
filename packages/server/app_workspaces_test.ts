@@ -8,7 +8,11 @@ import {
   fauxToolCall,
   type StreamRequest,
 } from "@lumisca/core";
-import { COMMAND_SAFETY_APPROVALS_KEY, TOOL_ASK } from "@lumisca/core/shared";
+import {
+  APP_UI_IN_SYSTEM_PROMPT_KEY,
+  COMMAND_SAFETY_APPROVALS_KEY,
+  TOOL_ASK,
+} from "@lumisca/core/shared";
 import {
   MINI_PNG,
   promptSession,
@@ -787,6 +791,67 @@ test("the ask tool toggle goes through the tool-set path", async () => {
       await fetch(`${base}/api/settings`)
     ).json()) as Record<string, string>;
     assertEquals(settings["ask_tool_enabled"], "1");
+  } finally {
+    server.shutdown();
+    await core.close();
+    await removeDirRetry(root);
+  }
+});
+
+test("the app UI prompt toggle goes through the prompt path", async () => {
+  const { core, faux, server, base } = await setup();
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-srv-"));
+  try {
+    const ws = await (
+      await json(base, "/api/workspaces", {
+        method: "POST",
+        body: JSON.stringify({ name: "ws", folders: [root] }),
+      })
+    ).json();
+    const session = await (
+      await json(base, "/api/sessions", {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: ws.id,
+          modelProvider: faux.provider.id,
+          modelId: faux.getModel().id,
+        }),
+      })
+    ).json();
+    const prompt = () => core.getAgent(session.id)!.agent.state.systemPrompt;
+    assertEquals(prompt().includes("## Components"), false);
+
+    // A plain settings write would store the flag and leave every open
+    // conversation on its old prompt; the prompt is what proves the toggle
+    // reached setAppUiInSystemPrompt.
+    const enable = await json(
+      base,
+      `/api/settings/${APP_UI_IN_SYSTEM_PROMPT_KEY}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ value: "1" }),
+      },
+    );
+    assertEquals(enable.status, 200);
+    assertEquals(core.isAppUiInSystemPrompt(), true);
+    assert(prompt().includes("## Components"), prompt().slice(-1000));
+
+    const disable = await json(
+      base,
+      `/api/settings/${APP_UI_IN_SYSTEM_PROMPT_KEY}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ value: "" }),
+      },
+    );
+    assertEquals(disable.status, 200);
+    assertEquals(core.isAppUiInSystemPrompt(), false);
+    assertEquals(prompt().includes("## Components"), false);
+
+    const settings = (await (
+      await fetch(`${base}/api/settings`)
+    ).json()) as Record<string, string>;
+    assertEquals(settings[APP_UI_IN_SYSTEM_PROMPT_KEY], "");
   } finally {
     server.shutdown();
     await core.close();

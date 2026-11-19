@@ -1,5 +1,7 @@
 import {
+  APP_UI_IN_SYSTEM_PROMPT_KEY,
   ASK_TOOL_ENABLED_KEY,
+  appUiInSystemPrompt,
   askToolEnabled,
   CODE_EXECUTION_ENABLED_KEY,
   errorMessage,
@@ -18,13 +20,13 @@ import { SettingsSection } from "./SettingsSection.tsx";
  * the rest of the dialog, and the note at its top says what that means for
  * a feature on it: it may change or disappear.
  *
- * Both switches change the tool set the model is given, so the server
- * rebuilds the open sessions when either moves: a session that is waiting
- * follows at once, and one in the middle of a run follows when that run
- * ends. The run already sent its tool set, and replacing the agent under it
- * would duplicate the rows of the turn in flight. The comment on
- * `setCodeExecutionEnabled` in core.ts is the same rule, and the ask switch
- * follows it too (see `setAskToolEnabled`). */
+ * The switches change what the agent is built from — its tool set, or the
+ * prompt it starts with — so the server rebuilds the open sessions when one
+ * moves: a session that is waiting follows at once, and one in the middle of
+ * a run follows when that run ends. The run already sent its tools and
+ * prompt, and replacing the agent under it would duplicate the rows of the
+ * turn in flight. The comment on `setCodeExecutionEnabled` in core.ts is the
+ * same rule; the ask and app-UI switches follow it too. */
 export function ExperimentalPanel() {
   const t = useT();
   const settings = useSettings();
@@ -33,13 +35,16 @@ export function ExperimentalPanel() {
   // The switch says "disable" while the stored key says "enabled": the
   // inversion stays here, and the value written is always "1" or "0".
   const [askDisabled, setAskDisabled] = useState(false);
+  const [appUiInPrompt, setAppUiInPrompt] = useState(false);
   const codeSave = useSaveAction(errorMessage);
   const askSave = useSaveAction(errorMessage);
+  const appUiSave = useSaveAction(errorMessage);
 
   useEffect(() => {
     if (!loaded) return;
     setCodeExecution(settings.values[CODE_EXECUTION_ENABLED_KEY] === "1");
     setAskDisabled(!askToolEnabled((key) => settings.values[key]));
+    setAppUiInPrompt(appUiInSystemPrompt((key) => settings.values[key]));
   }, [loaded, settings.values]);
 
   const setCodeExecutionValue = (next: boolean) => {
@@ -57,6 +62,15 @@ export function ExperimentalPanel() {
     void askSave.save(
       () => settingsStore.set(ASK_TOOL_ENABLED_KEY, next ? "0" : "1"),
       () => setAskDisabled(previous),
+    );
+  };
+
+  const setAppUiInPromptValue = (next: boolean) => {
+    const previous = appUiInPrompt;
+    setAppUiInPrompt(next); // optimistic
+    void appUiSave.save(
+      () => settingsStore.set(APP_UI_IN_SYSTEM_PROMPT_KEY, next ? "1" : ""),
+      () => setAppUiInPrompt(previous),
     );
   };
 
@@ -100,6 +114,26 @@ export function ExperimentalPanel() {
         <div className="error-text">
           {t("settings.experimental.askTool.operationFailed", {
             error: askSave.error,
+          })}
+        </div>
+      )}
+
+      <SettingRow
+        label={t("settings.experimental.appUiPrompt.title")}
+        description={t("settings.experimental.appUiPrompt.description")}
+      >
+        <Toggle
+          checked={appUiInPrompt}
+          disabled={appUiSave.saving || !loaded}
+          onChange={setAppUiInPromptValue}
+          label={t("settings.experimental.appUiPrompt.title")}
+        />
+      </SettingRow>
+
+      {appUiSave.error && (
+        <div className="error-text">
+          {t("settings.experimental.appUiPrompt.operationFailed", {
+            error: appUiSave.error,
           })}
         </div>
       )}
