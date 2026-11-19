@@ -435,4 +435,22 @@
   .ctx-meter {
     padding: 8px;
   }
+
+  /* The usage card hangs from the meter's right edge. On a phone that edge
+   * sits about 73px from the window's right edge (the icon buttons and the
+   * composer's padding), so a 300px card ran off the left of the screen and
+   * the chat pane's overflow cut it. At this width the card hangs from the
+   * capsule instead (composer.css makes it the containing block): its right
+   * edge settles on the composer's inner edge, and the room on its left is
+   * the whole capsule. It floats above the capsule, so the field it would
+   * otherwise cover stays readable. */
+  .ctx-wrap {
+    position: static;
+  }
+
+  /* A window narrower than the card shrinks it instead of pushing its left
+   * edge out of the pane. */
+  .ctx-popover {
+    max-width: 100%;
+  }
 }

@@ -1163,6 +1163,62 @@ test("the model picker's panel is capped by the room it measured", () => {
     });
 });
 
+test("the context usage card clears a phone's edge", async () => {
+  // The card is 300px wide and hangs from the meter's right edge. On a phone
+  // that edge sits about 73px from the window's right edge (the two icon
+  // buttons and the composer's padding), so the card's left part landed
+  // outside the screen and the chat pane's `overflow: hidden` cut it.
+  //
+  // Below the phone breakpoint the capsule is the card's containing block
+  // instead: its right edge settles on the composer's inner edge, and the
+  // capsule's room caps a window narrower than the card. The two rules are
+  // split across two sheets because each moves its own element — the
+  // composer (composer.css) and the card (model-picker.css).
+  const models = cssRules(
+    await fsp.readFile(
+      new URL("./styles/model-picker.css", import.meta.url),
+      "utf8",
+    ),
+  );
+  const phone = (rules: CssRule[], selector: string): CssRule[] =>
+    rules.filter(
+      (rule) =>
+        rule.selector === selector &&
+        rule.media?.includes("max-width: 600px") === true,
+    );
+  const declares = (rules: CssRule[], declaration: RegExp): boolean =>
+    rules.some((rule) => declaration.test(rule.body));
+  const wrap = phone(models, ".ctx-wrap");
+  assertEquals(wrap.length > 0, true, ".ctx-wrap needs a phone rule");
+  assertEquals(
+    declares(wrap, /position:\s*static/),
+    true,
+    "the card must stop hanging from the meter on a phone",
+  );
+  const card = phone(models, ".ctx-popover");
+  assertEquals(card.length > 0, true, ".ctx-popover needs a phone rule");
+  assertEquals(
+    declares(card, /max-width:\s*100%/),
+    true,
+    "a window narrower than the card must shrink it, not cut its left edge",
+  );
+  const composer = phone(
+    cssRules(
+      await fsp.readFile(
+        new URL("./styles/composer.css", import.meta.url),
+        "utf8",
+      ),
+    ),
+    ".input-composer",
+  );
+  assertEquals(composer.length > 0, true, ".input-composer needs a phone rule");
+  assertEquals(
+    declares(composer, /position:\s*relative/),
+    true,
+    "the capsule is what the card is placed against on a phone",
+  );
+});
+
 /** The canvas colour a theme's block declares (`--bg`), or undefined when
  * the block or the token is missing. */
 function canvasColor(css: string, theme: "dark" | "light"): string | undefined {

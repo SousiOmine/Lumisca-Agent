@@ -690,7 +690,11 @@
  * The field takes 16px for the same reason it does on a touch device, and
  * the capsule gains the padding the larger field and buttons need. */
 @media (max-width: 600px) {
+  /* The context usage card is placed against this capsule on a phone
+   * (model-picker.css moves it there): hanging from the meter it was wider
+   * than the room to the left of that control. */
   .input-composer {
+    position: relative;
     padding: 12px 14px 10px;
   }
 
