@@ -159,8 +159,8 @@ export const chrome = {
   // The server serves a newer client than this page loaded. An installed app
   // (no address bar, no reload of its own) otherwise keeps the old bundle.
   "chrome.build.stale": {
-    ja: "この画面は古い版のままです。再読み込みすると新しい版になります。",
-    en: "This screen is running an older version. Reload to get the new one.",
+    ja: "新しいバージョンのクライアントを適用するために、ページを再読み込みしてください。",
+    en: "Reload the page to apply the new version of the client.",
   },
   "chrome.build.reload": { ja: "再読み込み", en: "Reload" },
 

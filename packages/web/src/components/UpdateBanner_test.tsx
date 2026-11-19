@@ -114,7 +114,7 @@ test("a replaced client bundle offers the reload and outranks the install", () =
   // not be dismissible: it is the only way to finish the update there.
   const html = banner({}, true);
   assertStringIncludes(html, "再読み込み");
-  assertStringIncludes(html, "古い版");
+  assertStringIncludes(html, "新しいバージョンのクライアント");
   assertEquals(html.includes("今すぐインストール"), false);
   assertEquals(html.includes("閉じる"), false);
 });
