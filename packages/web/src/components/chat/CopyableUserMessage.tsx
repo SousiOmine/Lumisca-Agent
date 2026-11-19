@@ -1,6 +1,10 @@
+import { toDataUrl } from "@lumisca/core/shared";
 import { IconArrowBackUp } from "@tabler/icons-preact";
 import { useT } from "../../i18n.ts";
-import { ContentImages } from "../ContentImages.tsx";
+import {
+  type AttachmentView,
+  MessageAttachments,
+} from "./MessageAttachments.tsx";
 import { MessageCopyButton } from "./MessageCopyButton.tsx";
 import type { UserMessageImage } from "./types.ts";
 
@@ -32,15 +36,26 @@ export function CopyableUserMessage({
   ) => void;
 }) {
   const t = useT();
+  // A code-mode prompt's pictures are content blocks carried by the message:
+  // their data URL is both the thumbnail and the original. They are mapped
+  // onto the same block a stella prompt's files use, so both modes draw a
+  // user's attachments the same way.
+  const attachmentItems: AttachmentView[] = images.map((image, index) => ({
+    key: String(index),
+    kind: "image",
+    src: toDataUrl(image.mimeType, image.data),
+  }));
 
   return (
     <div className="msg-user-wrap">
-      <div className="msg user">
-        <div className="msg-body">
-          {images.length > 0 && <ContentImages images={images} />}
-          {text && <p className="msg-user-text">{text}</p>}
+      {text && (
+        <div className="msg user">
+          <div className="msg-body">
+            <p className="msg-user-text">{text}</p>
+          </div>
         </div>
-      </div>
+      )}
+      {images.length > 0 && <MessageAttachments items={attachmentItems} />}
       <div className="msg-user-actions">
         <button
           type="button"

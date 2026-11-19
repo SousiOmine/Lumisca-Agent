@@ -4,8 +4,9 @@ import { useT } from "../i18n.ts";
 import { Lightbox } from "./Lightbox.tsx";
 
 /** Render image content blocks (base64 `data`) as thumbnails that open
- * enlarged when clicked. Shared by user messages and tool results in both
- * modes.
+ * enlarged when clicked. Used by tool results: a user message's pictures are
+ * drawn by the shared attachment block instead, because they are part of
+ * what the reader sent.
  *
  * The thumbnail is the block's own bytes: these are the images a message
  * carries, not a published asset with a route of its own, so there is nothing

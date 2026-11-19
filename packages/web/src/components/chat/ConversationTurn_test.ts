@@ -635,7 +635,8 @@ test("ConversationTurn: a mode prompt renders the images attached to it", () => 
       onCardSend: () => {},
     }),
   );
-  assertStringIncludes(html, 'class="msg-images"');
+  assertStringIncludes(html, 'class="msg-attachments"');
+  assertStringIncludes(html, "msg-attachment-images");
   assertStringIncludes(html, "data:image/png;base64,QUJD");
   // The short text and the mode badge keep describing the prompt.
   assertStringIncludes(html, "履歴機能を追加して");

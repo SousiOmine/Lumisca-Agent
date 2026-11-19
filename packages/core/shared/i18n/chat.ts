@@ -208,6 +208,13 @@ export const chat = {
     ja: "ダウンロードできませんでした",
     en: "Could not download",
   },
+  /** A file an agent handed over is no longer in the session's store. The
+   * prompt files' own sentence is different because those live in the
+   * machine (chat.stella.fileGone). */
+  "chat.attach.gone": {
+    ja: "このファイルはもうありません",
+    en: "This file is no longer available",
+  },
 
   // --- the modes' names ---------------------------------------------------
   // The reader meets the modes by their product names, not by the names this
