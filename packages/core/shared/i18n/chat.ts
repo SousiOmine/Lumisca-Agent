@@ -215,6 +215,12 @@ export const chat = {
     ja: "このファイルはもうありません",
     en: "This file is no longer available",
   },
+  /** A code-mode prompt's picture is carried by the message itself, so a
+   * failed decode is a broken image, not a deleted file. */
+  "chat.attach.imageFailed": {
+    ja: "この画像は表示できません",
+    en: "This image cannot be displayed",
+  },
 
   // --- the modes' names ---------------------------------------------------
   // The reader meets the modes by their product names, not by the names this

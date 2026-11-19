@@ -55,7 +55,12 @@ export function CopyableUserMessage({
           </div>
         </div>
       )}
-      {images.length > 0 && <MessageAttachments items={attachmentItems} />}
+      {images.length > 0 && (
+        <MessageAttachments
+          items={attachmentItems}
+          missingText={t("chat.attach.imageFailed")}
+        />
+      )}
       <div className="msg-user-actions">
         <button
           type="button"
