@@ -4,6 +4,7 @@ import { useSaveAction } from "../../hooks/useSave.ts";
 import { useT } from "../../i18n.ts";
 import { settingsStore, useSettings } from "../../settingsStore.ts";
 import { SettingRow, Toggle } from "../SettingRow.tsx";
+import { SettingsSection } from "./SettingsSection.tsx";
 
 /** Settings → セキュリティ: computer use — the agent captures this machine's
  * screen and drives its mouse and keyboard. The feature is opt-in, because
@@ -38,7 +39,10 @@ export function ComputerUsePanel() {
   };
 
   return (
-    <div className="settings-pane">
+    <SettingsSection
+      title={t("settings.security.computerUse")}
+      description={t("settings.scope.codeOnly")}
+    >
       <SettingRow
         label={t("settings.computerUse.title")}
         description={
@@ -58,6 +62,6 @@ export function ComputerUsePanel() {
           {t("settings.computerUse.operationFailed", { error })}
         </div>
       )}
-    </div>
+    </SettingsSection>
   );
 }

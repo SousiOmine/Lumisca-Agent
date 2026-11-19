@@ -24,7 +24,6 @@ export const settings = {
   "settings.nav.models": { ja: "モデル設定", en: "Models" },
   "settings.nav.mcp": { ja: "MCPサーバー", en: "MCP servers" },
   "settings.nav.prompts": { ja: "保存済みプロンプト", en: "Saved prompts" },
-  "settings.nav.computerUse": { ja: "画面操作", en: "Screen control" },
   "settings.nav.security": { ja: "セキュリティ", en: "Security" },
   "settings.nav.experimental": { ja: "実験的機能", en: "Experimental" },
   /** The one line under a page title whose values only code mode's sessions
@@ -809,6 +808,11 @@ export const settings = {
   "settings.security.title": {
     ja: "コマンド安全チェック",
     en: "Command safety check",
+  },
+  /** The second section of the security page: computer use. */
+  "settings.security.computerUse": {
+    ja: "画面操作",
+    en: "Screen control",
   },
   "settings.security.description": {
     ja: "危険なコマンドは実行を止めます。承認したコマンドは次回から自動で実行します。",

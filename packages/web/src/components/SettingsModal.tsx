@@ -320,17 +320,14 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     owner: "server",
     labelKey: "settings.nav.security",
     // The command check guards every bash / eval call, so both modes have it.
-    // Computer use is the other half of "what may the agent do", but it is
-    // code mode's alone and has its own page: one page never mixes the two
-    // modes, so nothing on it is dead in either one.
-    render: () => <CommandSafetyPanel />,
-  },
-  {
-    id: "computerUse",
-    owner: "server",
-    modeOnly: true,
-    labelKey: "settings.nav.computerUse",
-    render: () => <ComputerUsePanel />,
+    // Computer use is the other half of "what may the agent do": one page, one
+    // question, with the code-only scope said under its own heading.
+    render: () => (
+      <>
+        <CommandSafetyPanel />
+        <ComputerUsePanel />
+      </>
+    ),
   },
   {
     id: "peers",
