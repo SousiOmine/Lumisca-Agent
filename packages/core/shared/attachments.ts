@@ -167,7 +167,10 @@ export function formatAttachmentSize(bytes: number): string {
   const units = ["KB", "MB", "GB"] as const;
   let value = bytes / 1024;
   let unit = 0;
-  while (value >= 10 && unit < units.length - 1) {
+  // Step up only when the value no longer fits the unit. The old condition
+  // was `>= 10`, which turned 52 KB into 0 MB: it divided before asking
+  // whether the next unit was needed, and 0.05 MB rounded to zero.
+  while (value >= 1024 && unit < units.length - 1) {
     value /= 1024;
     unit++;
   }
