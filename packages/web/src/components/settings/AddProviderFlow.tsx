@@ -39,10 +39,15 @@ export function AddProviderFlow({
       />
       <div className="model-list" style={{ maxHeight: 360 }}>
         {visible.map((p) => (
-          <div key={p.id} className="model-item" onClick={() => onSelect(p.id)}>
+          <button
+            key={p.id}
+            type="button"
+            className="model-item"
+            onClick={() => onSelect(p.id)}
+          >
             <span className="model-id">{p.name}</span>
             <span className="model-meta">{p.id}</span>
-          </div>
+          </button>
         ))}
         {visible.length === 0 && (
           <div className="faint-box">{t("settings.provider.noMatch")}</div>

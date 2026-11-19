@@ -181,10 +181,14 @@
   width: 100%;
   gap: 8px;
   padding: 6px 8px;
+  border: 0;
   border-radius: var(--radius-sm);
-  cursor: pointer;
+  background: none;
+  color: inherit;
+  font-family: inherit;
   font-size: var(--type-12-5);
   text-align: left;
+  cursor: pointer;
 }
 
 .model-item input[type="checkbox"] {

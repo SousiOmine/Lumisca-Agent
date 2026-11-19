@@ -1,5 +1,6 @@
 import { toDataUrl } from "@lumisca/core/shared";
 import { useState } from "preact/hooks";
+import { useT } from "../i18n.ts";
 import { Lightbox } from "./Lightbox.tsx";
 
 /** Render image content blocks (base64 `data`) as thumbnails that open
@@ -16,21 +17,25 @@ export function ContentImages({
 }: {
   images: Array<{ type: "image"; data: string; mimeType: string }>;
 }) {
+  const t = useT();
   const [open, setOpen] = useState<number | null>(null);
   const sources = images.map((image) => toDataUrl(image.mimeType, image.data));
   return (
     <>
       <div className="msg-images">
         {sources.map((src, index) => (
-          <img
+          // A picture in a message is there to be looked at, so the button
+          // opens it whole (see Lightbox). The button is the control, not the
+          // image: it is reachable by keyboard and carries the name.
+          <button
             key={index}
-            className="msg-image"
-            src={src}
-            alt=""
-            // A picture in a message is there to be looked at, so clicking it
-            // opens it whole (see Lightbox).
+            type="button"
+            className="msg-image-button"
+            aria-label={t("common.imagePreview")}
             onClick={() => setOpen(index)}
-          />
+          >
+            <img className="msg-image" src={src} alt="" />
+          </button>
         ))}
       </div>
       {/* Rendered even when closed: the overlay stays up while it shrinks
