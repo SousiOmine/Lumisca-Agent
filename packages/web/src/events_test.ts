@@ -669,6 +669,57 @@ test("events: question is shown and cleared by tool_end", () => {
   assertEquals(v.pendingQuestions.length, 0);
 });
 
+test("events: question_end closes the card before the tool call ends", () => {
+  let v = view();
+  v = applyEvent(
+    {
+      type: "question",
+      sessionId: "s1",
+      toolCallId: "t1",
+      questions: [QUESTION],
+    },
+    v,
+  )!;
+  // An ask nested in an `execute` program: its id is the outer call's plus a
+  // suffix, and no tool_end ever names it.
+  v = applyEvent(
+    {
+      type: "question",
+      sessionId: "s1",
+      toolCallId: "t1.1",
+      questions: [{ ...QUESTION, id: "q2" }],
+    },
+    v,
+  )!;
+  assertEquals(v.pendingQuestions.length, 2);
+
+  // The answer went out while the tool call keeps running: only that card
+  // closes, and it closes now.
+  v = applyEvent(
+    { type: "question_end", sessionId: "s1", toolCallId: "t1.1" },
+    v,
+  )!;
+  assertEquals(
+    v.pendingQuestions.map((q) => q.toolCallId),
+    ["t1"],
+  );
+
+  // A second delivery, or a card a resync already dropped, changes nothing.
+  assertEquals(
+    applyEvent(
+      { type: "question_end", sessionId: "s1", toolCallId: "t1.1" },
+      v,
+    ),
+    v,
+  );
+
+  // Another session's answer is not this view's.
+  assertEquals(
+    applyEvent({ type: "question_end", sessionId: "s2", toolCallId: "t1" }, v),
+    null,
+  );
+});
+
 const TODOS: TodoPhase[] = [
   {
     id: "p1",

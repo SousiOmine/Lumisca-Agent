@@ -122,6 +122,12 @@ export type ClientEvent =
       toolCallId: string;
       questions: AskQuestion[];
     }
+  /** The answer to a `question` was taken, so the card can go now. Clients
+   * must not wait for the tool call to end: in the scripting tool call the
+   * ask is a nested call of `execute`, and nested calls emit no `tool_end`
+   * — the card would otherwise stay up until the whole run ends, which reads
+   * as "the answer did nothing". The tool call itself keeps running. */
+  | { type: "question_end"; sessionId: string; toolCallId: string }
   /** The todo plan of a session changed (the todo tool): the full plan is
    * carried so clients can replace their view idempotently (resync-safe).
    * Emitted on every mutation (plan / update / clear). */

@@ -41,6 +41,13 @@ test("ask emits a question event and resolves with the answers", async () => {
     "Answers from the user:\n- Which language?: Rust",
   );
   assertEquals(result.details, { answers: [{ id: "q1", values: ["Rust"] }] });
+
+  // The card closes on the answer, not on the tool call's end: an ask nested
+  // in an `execute` program has no `tool_end` of its own.
+  const end = events[1] as Extract<ClientEvent, { type: "question_end" }>;
+  assertEquals(end.type, "question_end");
+  assertEquals(end.sessionId, "session-1");
+  assertEquals(end.toolCallId, TOOL_CALL_ID);
 });
 
 test("pendingQuestions lists the asks that are still waiting", async () => {
@@ -120,7 +127,7 @@ test("answer rejects for an unknown tool call id", () => {
 });
 
 test("answer rejects for unknown question ids", async () => {
-  const { hub } = makeHub();
+  const { hub, events } = makeHub();
   const tool = createAskTool(hub);
   const promise = tool.execute(
     TOOL_CALL_ID,
@@ -140,7 +147,12 @@ test("answer rejects for unknown question ids", async () => {
     "Unknown question id: q2",
     "invalid",
   );
-  // A rejected validation must not consume the pending ask.
+  // A rejected validation must not consume the pending ask, and must not
+  // tell clients the card closed.
+  assertEquals(
+    events.map((event) => event.type),
+    ["question"],
+  );
   hub.answer(TOOL_CALL_ID, [{ id: "q1", values: ["Rust"] }]);
   await promise;
 });

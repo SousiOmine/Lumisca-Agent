@@ -137,6 +137,17 @@ function withoutToolCalls(
     : liveTools;
 }
 
+/** The view with one ask closed. The same view when it was not showing (a
+ * resync may already have dropped it, or the card may have been replaced). */
+function withoutQuestion(view: SessionView, toolCallId: string): SessionView {
+  const pendingQuestions = view.pendingQuestions.filter(
+    (q) => q.toolCallId !== toolCallId,
+  );
+  return pendingQuestions.length === view.pendingQuestions.length
+    ? view
+    : { ...view, pendingQuestions };
+}
+
 /** Whether `message` belongs before the newest message the view holds. A
  * timestamp comparison is what the transcript's order is: messages are
  * stamped when they are created, and the view always holds the last one. */
@@ -246,13 +257,13 @@ export function applyEvent(
       const runningTools = new Map(view.runningTools);
       runningTools.delete(event.toolCallId);
       // The ask tool resolved (answered or failed): its questions are gone.
-      const pendingQuestions = view.pendingQuestions.filter(
-        (q) => q.toolCallId !== event.toolCallId,
-      );
-      return pendingQuestions.length === view.pendingQuestions.length
-        ? { ...view, runningTools }
-        : { ...view, runningTools, pendingQuestions };
+      return { ...withoutQuestion(view, event.toolCallId), runningTools };
     }
+    case "question_end":
+      // The answer went out. A nested ask has no `tool_end` of its own (the
+      // scripting tool call runs it inside `execute`), so this is the only
+      // signal that the card can close.
+      return withoutQuestion(view, event.toolCallId);
     case "question": {
       // The agent asked the user a question; show it above the composer.
       // Dedup by tool call id: a resync could re-deliver the event.

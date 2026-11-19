@@ -119,6 +119,10 @@ export class AskHub {
     }
     this.pending.delete(toolCallId);
     pending.resolve(answers);
+    // The answer settles the card, not the tool call: a nested ask (called
+    // from an `execute` program) never gets a `tool_end`, so a client that
+    // waited for one would keep showing the questions for the rest of the run.
+    this.emit({ type: "question_end", sessionId: this.sessionId, toolCallId });
   }
 
   /** Reject every pending ask. Called when the run ends or the session

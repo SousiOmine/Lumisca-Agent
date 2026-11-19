@@ -411,6 +411,10 @@ URL が「いまどの画面か」の唯一の答えです。
   `SessionView.liveTools` が `tool_start` で行を足し、その呼び出しを含むメッセージの `message_end` で消します（`components/Transcript.tsx` がストリーミング本文の直下に描きます）。
   消し忘れると行が二重に出ます。
   faux プロバイダだけは順序が逆（メッセージが先、`executeTools` が後）なので、読み込み済みの履歴に同じ id があるときは足しません。
+- ask のカードは `question_end` で閉じます。
+  答えを受け取った時点で質問は解消しており、ツール呼び出しの終わりを待ちません。
+  Scripting tool callでは`ask`が`execute`の入れ子で走り、入れ子の呼び出しは`tool_start` / `tool_end`を出さないためです（`packages/core/tools/ask.ts`、`packages/web/src/events/reducer.ts`）。
+  待つとカードは実行全体が終わるまで「送信中…」のまま残ります。
 
 ### リモート接続での応答
 

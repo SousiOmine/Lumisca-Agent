@@ -188,8 +188,8 @@ export interface SessionView {
   liveTools: ToolCallBlock[];
   runningTools: Map<string, string>; // toolCallId -> toolName
   /** Questions the agent asked (ask tool) that are still waiting for the
-   * user's answers; rendered above the composer, cleared when the tool
-   * call resolves or the run ends. */
+   * user's answers; rendered above the composer, cleared by `question_end`
+   * (the answer went out) or by the run ending. */
   pendingQuestions: PendingQuestion[];
   /** The session's todo plan (todo tool), shown in the progress panel.
    * Replaced wholesale by every `todo` event. */
