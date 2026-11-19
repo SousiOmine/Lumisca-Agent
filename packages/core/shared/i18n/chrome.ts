@@ -136,7 +136,7 @@ export const chrome = {
     ja: "インストールするとアプリが再起動します。",
     en: "Installing will restart the app.",
   },
-  "chrome.update.restartNow": { ja: "今すぐ再起動", en: "Restart now" },
+  "chrome.update.restartNow": { ja: "再起動", en: "Restart" },
   "chrome.update.installing": {
     ja: "v{version}をインストールしています…",
     en: "Installing v{version}…",
@@ -146,8 +146,8 @@ export const chrome = {
     en: "Installing…",
   },
   "chrome.update.installNow": {
-    ja: "今すぐインストール",
-    en: "Install now",
+    ja: "インストール",
+    en: "Install",
   },
   "chrome.update.dismiss": { ja: "閉じる", en: "Dismiss" },
 
@@ -312,8 +312,8 @@ export const chrome = {
     en: "Select folder",
   },
   "chrome.workspaceModal.description": {
-    ja: "関連する複数のフォルダーをまとめて、ワークスペースを作成します。AIによるファイルの読み書きやコマンド実行は、指定したフォルダー内に限定されます。",
-    en: "Group related folders into a workspace. AI file read/write and command execution are restricted to the specified folders.",
+    ja: "複数のフォルダーをまとめて、ワークスペースを作ります。AIは選んだフォルダーの中だけで読み書きとコマンド実行を行います。",
+    en: "Group folders into a workspace. The AI reads, writes and runs commands only inside the chosen folders.",
   },
   "chrome.workspaceModal.removeFolder": {
     ja: "削除",

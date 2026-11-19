@@ -177,18 +177,15 @@ test("StellaSidebar: disabled agents sit under their own fold", () => {
 
 test("StellaSidebar: the empty list is not shown while it is being read", () => {
   // An empty list and a list still on its way look the same on screen, and
-  // the empty state's advice ("create one") is wrong for half of them: the
-  // wait is said instead until the read settles.
+  // the empty state is wrong for half of them: the wait is said instead
+  // until the read settles.
   const waiting = render([], true);
   assertStringIncludes(waiting, "読み込み中");
-  assertEquals(
-    waiting.includes("登録されているエージェントがありません"),
-    false,
-  );
+  assertEquals(waiting.includes("エージェントがいません"), false);
 
-  // Settled with nothing: the empty state (and its advice) is now the truth.
+  // Settled with nothing: the empty state is now the truth.
   const empty = render([], false);
-  assertStringIncludes(empty, "登録されているエージェントがありません");
+  assertStringIncludes(empty, "エージェントがいません");
   assertEquals(empty.includes("読み込み中"), false);
 
   // A list with rows is drawn as rows whether a read is in flight or not: a
@@ -202,10 +199,7 @@ test("StellaSidebar: the create dialog asks for the job, and names it later", as
   // agent should do; how it works is asked by the agent itself, in the
   // conversation (see stella/onboarding.ts).
   const { translate } = await import("@lumisca/core/shared");
-  assertStringIncludes(
-    translate("ja", "chat.stella.agents.role"),
-    "してほしい",
-  );
+  assertEquals(translate("ja", "chat.stella.agents.role"), "役割");
   // A name can be decided later, and the field says so.
   assertStringIncludes(translate("ja", "chat.stella.agents.nameHint"), "自動");
   // The examples are sentences the user can edit in the same field — not

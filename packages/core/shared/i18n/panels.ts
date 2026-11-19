@@ -34,8 +34,8 @@ export const panels = {
     en: "Working (elapsed: {time})",
   },
   "panels.activity.completed": {
-    ja: "作業完了（所要時間: {time}）",
-    en: "Completed ({time})",
+    ja: "作業完了",
+    en: "Completed",
   },
 
   // --- context usage -------------------------------------------------------
@@ -55,10 +55,6 @@ export const panels = {
 
   // --- question (ask tool) -------------------------------------------------
   // --- routines (scheduled requests) ----------------------------------------
-  "panels.routine.description": {
-    ja: "設定したスケジュールに従って、このエージェントの会話で依頼を実行します。作成や変更は会話内でエージェントに依頼してください。",
-    en: "Runs requests in this agent's conversation on the schedule shown. Ask the agent in the conversation to create or change one.",
-  },
   "panels.routine.empty": {
     ja: "登録されたルーチンはありません。「毎朝8時にデプロイを確認して」のようにエージェントに依頼すると作成できます。",
     en: 'None yet. Ask the agent for one ("check the deploy every morning at 8").',

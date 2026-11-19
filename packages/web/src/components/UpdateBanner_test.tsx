@@ -61,7 +61,7 @@ function banner(
 
 test("a downloaded package offers the install", () => {
   const html = banner();
-  assertStringIncludes(html, "今すぐインストール");
+  assertStringIncludes(html, "インストール</button>");
   assertStringIncludes(html, "v0.11.0");
 });
 
@@ -74,7 +74,7 @@ test("installing hides the button and says what is happening", () => {
   assertStringIncludes(html, "インストール中…");
   assertStringIncludes(html, "spin");
   assertStringIncludes(html, "disabled");
-  assertEquals(html.includes("今すぐインストール"), false);
+  assertEquals(html.includes("インストール</button>"), false);
 });
 
 test("an applied update offers the restart, not the install", () => {
@@ -85,8 +85,8 @@ test("an applied update offers the restart, not the install", () => {
       appliedVersion: "0.11.0",
     }),
   });
-  assertStringIncludes(html, "今すぐ再起動");
-  assertEquals(html.includes("今すぐインストール"), false);
+  assertStringIncludes(html, "再起動</button>");
+  assertEquals(html.includes("インストール</button>"), false);
 });
 
 test("a restart the operator has to do offers no button", () => {
@@ -99,7 +99,7 @@ test("a restart the operator has to do offers no button", () => {
     }),
   });
   assertStringIncludes(html, "次回の起動時に適用されます");
-  assertEquals(html.includes("今すぐ再起動"), false);
+  assertEquals(html.includes("再起動</button>"), false);
 });
 
 test("nothing to install renders nothing", () => {
@@ -115,6 +115,6 @@ test("a replaced client bundle offers the reload and outranks the install", () =
   const html = banner({}, true);
   assertStringIncludes(html, "再読み込み");
   assertStringIncludes(html, "新しいバージョンのクライアント");
-  assertEquals(html.includes("今すぐインストール"), false);
+  assertEquals(html.includes("インストール</button>"), false);
   assertEquals(html.includes("閉じる"), false);
 });

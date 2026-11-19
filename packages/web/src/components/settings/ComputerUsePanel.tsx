@@ -44,7 +44,6 @@ export function ComputerUsePanel() {
         description={
           loaded ? t("settings.computerUse.description") : t("common.loading")
         }
-        title={t("settings.computerUse.tooltip")}
       >
         <Toggle
           checked={enabled}

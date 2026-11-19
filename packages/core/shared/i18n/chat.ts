@@ -65,16 +65,6 @@ export const chat = {
     en: "Insert a saved prompt template",
   },
 
-  // --- chat view -----------------------------------------------------------
-  "chat.empty.workspace": {
-    ja: "作業内容を入力してください。ワークスペース内のファイル操作やコマンド実行をAIが自律的に進めます。",
-    en: "Enter a task. The AI will autonomously operate files and run commands in your workspace.",
-  },
-  "chat.empty.chat": {
-    ja: "メッセージを入力してください。フォルダー連携を行わないシンプルなチャットです。",
-    en: "Enter a message. This is a simple chat without folder collaboration.",
-  },
-
   // --- composer ------------------------------------------------------------
   "chat.composer.placeholder": {
     ja: "メッセージを入力…",
@@ -220,10 +210,6 @@ export const chat = {
   "chat.modeSelect.code.title": { ja: "Lumisca code", en: "Lumisca code" },
   "chat.modeSelect.stella.title": { ja: "Lumisca", en: "Lumisca" },
 
-  "chat.stella.empty": {
-    ja: "依頼を入力してください。エージェントは仮想マシンの中で作業します。",
-    en: "Enter a request. The agent works inside its virtual machine.",
-  },
   "chat.stella.noAgent": {
     ja: "左の一覧からエージェントを選んでください",
     en: "Pick an agent on the left",
@@ -271,12 +257,8 @@ export const chat = {
    * It becomes the agent's role (its system prompt); how it works is asked
    * by the agent itself, in the conversation (see stella/onboarding.ts). */
   "chat.stella.agents.role": {
-    ja: "どんなことをしてほしいですか？",
-    en: "What should it do for you?",
-  },
-  "chat.stella.agents.roleHint": {
-    ja: "例）毎朝の予定と未読メールをまとめて、返信が必要なものだけ知らせてください",
-    en: "e.g. Summarize my morning schedule and unread mail, and tell me only what needs a reply",
+    ja: "役割",
+    en: "Role",
   },
   /** The examples under the wish field. A click writes the sentence into the
    * field: the preset IS the role, and the user can edit it first. */
@@ -373,8 +355,8 @@ export const chat = {
     en: "Its whole conversation is deleted too. This cannot be undone.",
   },
   "chat.stella.agents.empty": {
-    ja: "登録されているエージェントがありません。「新しいエージェント」から作成してください。",
-    en: "No agent yet. Create one.",
+    ja: "エージェントがいません。",
+    en: "No agent yet.",
   },
   /** The starter agent the server creates on a fresh installation, so the
    * sidebar is never empty (LumiscaCore.ensureStellaAgent). The role is the
@@ -439,10 +421,6 @@ export const chat = {
   "chat.stella.machine.hideScreen": {
     ja: "情報を隠す",
     en: "Hide info",
-  },
-  "chat.stella.machine.screenEmpty": {
-    ja: "マシンが起動すると、ここに画面が表示されます。",
-    en: "The machine's screen appears here once it runs.",
   },
   "chat.stella.machine.screenConnecting": {
     ja: "画面に接続しています…",

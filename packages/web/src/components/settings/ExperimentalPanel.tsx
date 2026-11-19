@@ -93,7 +93,7 @@ export function ExperimentalPanel() {
   };
 
   return (
-    <SettingsSection description={t("settings.experimental.description")}>
+    <SettingsSection>
       <SettingRow
         label={t("settings.experimental.codeMode.title")}
         description={t("settings.experimental.codeMode.description")}
@@ -121,7 +121,6 @@ export function ExperimentalPanel() {
             ? t("settings.experimental.codeExecution.description")
             : t("common.loading")
         }
-        title={t("settings.experimental.codeExecution.tooltip")}
       >
         <Toggle
           checked={codeExecution}

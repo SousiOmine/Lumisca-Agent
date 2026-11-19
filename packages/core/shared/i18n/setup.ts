@@ -44,8 +44,8 @@ export const setup = {
 
   // --- step 1: welcome ------------------------------------------------------
   "setup.welcome.title": {
-    ja: "Lumiscaにようこそ！",
-    en: "Welcome to Lumisca!",
+    ja: "言語とテーマ",
+    en: "Language and theme",
   },
 
   // --- step 2: provider -----------------------------------------------------

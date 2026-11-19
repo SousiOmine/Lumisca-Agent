@@ -775,11 +775,6 @@ export function StellaPane({
             )}
           </div>
         )}
-        {!running && !asleep && (
-          <p className="stella-pane-note">
-            {t("chat.stella.machine.screenEmpty")}
-          </p>
-        )}
         {running && state === "connecting" && (
           <p className="stella-pane-note">
             {t("chat.stella.machine.screenConnecting")}

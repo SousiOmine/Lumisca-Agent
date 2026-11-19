@@ -126,8 +126,8 @@ export const common = {
     en: "A token is required",
   },
   "common.tokenRequired.why": {
-    ja: "このサーバーはトークン認証が有効です。ブラウザにトークンが保存されていない、または保存されたトークンが一致しないため、このページを表示できません。",
-    en: "This server requires a token. The page is not shown because the browser has no token stored, or the stored one does not match.",
+    ja: "トークンが必要です。保存されたトークンが見つからないか、一致しません。",
+    en: "A token is required. The browser has no stored token, or the stored one does not match.",
   },
   "common.tokenRequired.how": {
     ja: "次の形式のURLを一度だけ開いてください。2回目以降はトークン無しのURLで開けます。",
@@ -195,11 +195,10 @@ export const common = {
    * out (see ai/retry-policy.ts). Without this the turn just stopped,
    * which reads as the agent ignoring the prompt. */
   "session.vacantResponse": {
-    ja: "モデルの応答が空でした。本文もツール呼び出しもありません。{count}回まで自動で再試行しましたが回復しませんでした。もう一度送信してください。",
+    ja: "モデルの応答が空でした。{count}回再試行しましたが回復しませんでした。もう一度送信してください。",
     en:
-      "The model answered with neither text nor a tool call. Retried " +
-      "automatically {count} times without recovering. Send the message " +
-      "again to continue.",
+      "The model's response was empty. Retried automatically {count} times " +
+      "without recovering. Send the message again to continue.",
   },
   /** Why a run ended on a rate-limit/error budget that had been retried. */
   "session.retryExhausted": {

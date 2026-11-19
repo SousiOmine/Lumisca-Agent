@@ -164,7 +164,8 @@ export function Transcript({
             {t("chat.history.loadingOlder")}
           </p>
         )}
-        {messages.length === 0 &&
+        {empty !== undefined &&
+          messages.length === 0 &&
           streamingText.length === 0 &&
           liveTools.length === 0 && (
             <div className="chat-empty">

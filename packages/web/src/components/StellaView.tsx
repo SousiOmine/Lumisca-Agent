@@ -255,9 +255,11 @@ export function StellaView({
         ) : conversation === null ? (
           <div className="chat-scroll">
             <div className="chat-column">
-              <p className="stella-loading" role="status">
-                {loading ? t("chat.stella.loading") : t("chat.stella.empty")}
-              </p>
+              {loading && (
+                <p className="stella-loading" role="status">
+                  {t("chat.stella.loading")}
+                </p>
+              )}
               {/* The first-run build is the one wait this mode cannot
                * hide. It lives here rather than in the title bar: it is
                * a sentence, and the title bar is one line of a name. */}

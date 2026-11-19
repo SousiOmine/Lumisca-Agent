@@ -47,7 +47,7 @@ export function AgentActivity({
   const time = formatElapsed(elapsed);
   const label = running
     ? t("panels.activity.working", { time })
-    : t("panels.activity.completed", { time });
+    : t("panels.activity.completed");
 
   return (
     <button

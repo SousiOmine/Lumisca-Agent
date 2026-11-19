@@ -134,8 +134,8 @@ export const settings = {
     en: "Auto-restart on apply",
   },
   "settings.general.autoRestartDesc": {
-    ja: "常時稼働サーバー向けの設定です。無効にした場合は次回起動時に反映されます。再起動すると実行中のセッションは停止します。",
-    en: "For always-on servers. When disabled, changes take effect on the next start. Restarting stops running sessions.",
+    ja: "変更は次回の起動から反映されます。再起動すると実行中のセッションは停止します。",
+    en: "Changes take effect on the next start. Restarting stops running sessions.",
   },
   "settings.general.downloading": { ja: "ダウンロード中", en: "Downloading" },
   "settings.general.checkForUpdate": {
@@ -177,8 +177,8 @@ export const settings = {
     en: "PWA notifications",
   },
   "settings.general.pushNotificationsDesc": {
-    ja: "インストールしたPWAに、実行完了・質問・エラーをOSの通知で届けます。アプリを閉じていても届きます。iPhone / iPadではホーム画面に追加したPWAでだけ使えます。",
-    en: "Deliver completion, question and error alerts to the installed PWA through your OS, even with the app closed. On iPhone / iPad this works only in a PWA added to the home screen.",
+    ja: "アプリを閉じていても、実行完了・質問・エラーをOSの通知で届けます。iPhoneとiPadでは、ホーム画面に追加したPWAだけで届きます。",
+    en: "Deliver completion, question and error alerts through your OS even with the app closed. On iPhone and iPad this works only in a PWA added to the home screen.",
   },
   "settings.general.pushDenied": {
     ja: "このサイトの通知がブラウザでブロックされています。ブラウザのサイト設定から許可してください。",
@@ -216,8 +216,8 @@ export const settings = {
     en: "Could not load prompts: {error}",
   },
   "settings.prompts.empty": {
-    ja: "まだ登録されていません。「追加」から、よく使う指示を登録できます。",
-    en: 'None yet. Use "Add" above to register a request you repeat.',
+    ja: "まだ登録されていません。",
+    en: "None yet.",
   },
   "settings.prompts.deleteConfirm": {
     ja: "プロンプト「{name}」を削除しますか？",
@@ -274,8 +274,8 @@ export const settings = {
     en: "Could not refresh: {error}",
   },
   "settings.provider.noProviders": {
-    ja: "登録されたプロバイダーがありません。「追加」ボタンから設定してください。",
-    en: 'No providers registered. Use the "Add" button to set one up.',
+    ja: "プロバイダーがありません。",
+    en: "No providers registered.",
   },
   "settings.provider.configured": { ja: "設定済み", en: "Configured" },
   "settings.provider.notConfigured": { ja: "未設定", en: "Not configured" },
@@ -525,25 +525,21 @@ export const settings = {
     ja: "既定のモデル",
     en: "Default model",
   },
-  "settings.model.defaultModelDesc": {
-    ja: "新しい会話を始めるときに選ばれるモデル。",
-    en: "The model chosen when a new conversation starts.",
-  },
   "settings.model.fastModel": {
     ja: "サブタスクで使用するモデル",
     en: "Model for sub-tasks",
   },
   "settings.model.fastModelDesc": {
-    ja: "タスク本体とは別に、要約やサブタスクなどの補助処理に使う高速・低コストなモデル。",
-    en: "A fast, low-cost model for auxiliary work such as summaries and sub-tasks, separate from the main task.",
+    ja: "要約や補助処理に使う低コストなモデル。",
+    en: "A low-cost model for summaries and other auxiliary work.",
   },
   "settings.model.imageAnalysisModel": {
     ja: "画像分析モデル",
     en: "Image analysis model",
   },
   "settings.model.imageAnalysisModelDesc": {
-    ja: "メインモデルが画像認識に未対応の場合に、代替として画像の解析・読み取りを担当するモデル。",
-    en: "The model that analyzes and reads images when the main model cannot.",
+    ja: "メインモデルが画像を読めないときに使うモデル。",
+    en: "The model used when the main model cannot read images.",
   },
   /** The disclosure on the models page: the auxiliary model rows and the
    * compaction tuning, named for what it holds. */
@@ -604,8 +600,8 @@ export const settings = {
     en: 'Delete MCP server "{name}"?',
   },
   "settings.mcp.noServers": {
-    ja: "MCPサーバーが登録されていません。「サーバーを追加」から設定してください。",
-    en: 'No MCP servers registered. Use "Add server" above to set one up.',
+    ja: "MCPサーバーがありません。",
+    en: "No MCP servers registered.",
   },
   "settings.mcp.notStarted": { ja: "未起動", en: "Not started" },
   "settings.mcp.enabled": { ja: "有効", en: "Enabled" },
@@ -788,8 +784,8 @@ export const settings = {
     en: "The URL must start with http:// or https://",
   },
   "settings.connection.urlHint": {
-    ja: "接続先サーバーのURLを入力してください。http:// かhttps:// で始まるもの。",
-    en: "Enter the server URL, starting with http:// or https://.",
+    ja: "http://かhttps://で始まるURL。",
+    en: "A URL starting with http:// or https://.",
   },
   "settings.connection.unnamed": { ja: "（無名）", en: "(unnamed)" },
   /** The row of a registry entry is the way into its fields: the first opens
@@ -815,16 +811,12 @@ export const settings = {
     en: "Command safety check",
   },
   "settings.security.description": {
-    ja: "コマンドを実行する前に、危険な操作が含まれていないか安全性を自動で確認します。",
-    en: "Automatically checks commands for dangerous operations before execution.",
-  },
-  "settings.security.tooltip": {
-    ja: "コマンド実行前に安全性を自動で検証します。一度承認されたコマンドは次回以降そのまま実行され、危険と判定されたコマンドは実行がブロックされます。",
-    en: "Automatically verifies the safety of commands before execution. Approved commands run automatically next time, while dangerous commands are blocked.",
+    ja: "危険なコマンドは実行を止めます。承認したコマンドは次回から自動で実行します。",
+    en: "Dangerous commands are stopped. Approved commands run automatically from then on.",
   },
   "settings.security.fastModelMissing": {
-    ja: "サブタスクで使用するモデルが未設定です。有効にするには「モデル設定」で「サブタスクで使用するモデル」を指定してください。",
-    en: 'No model for sub-tasks is configured. Set "Model for sub-tasks" in "Models" to enable this.',
+    ja: "サブタスクにはモデルが必要です。「モデル設定」で選んでください。",
+    en: 'Sub-tasks need a model. Choose one in "Models".',
   },
   "settings.security.approvedCommands": {
     ja: "承認済みコマンド",
@@ -900,8 +892,8 @@ export const settings = {
   "settings.webSearch.form.check": { ja: "接続を確認", en: "Check" },
   "settings.webSearch.form.checking": { ja: "確認中…", en: "Checking…" },
   "settings.webSearch.form.checked": {
-    ja: "検索に成功しました。{count}件見つかりました。追加できます。",
-    en: "Search worked. {count} result(s) found. You can add it now.",
+    ja: "接続を確認しました。{count}件見つかりました。",
+    en: "The connection works. {count} result(s) found.",
   },
   "settings.webSearch.form.failed": {
     ja: "検索に失敗しました: {detail}",
@@ -917,31 +909,20 @@ export const settings = {
   },
 
   // --- computer use panel ----------------------------------------------------
-  /** The switch's own label. The page above it already names the feature,
-   * so this says what the switch does rather than repeating the title. */
+  /** The switch's own label, the same name as the settings nav. */
   "settings.computerUse.title": {
-    ja: "このマシンの画面を操作させる",
-    en: "Let the agent use this machine's screen",
+    ja: "画面操作",
+    en: "Screen control",
   },
   "settings.computerUse.description": {
-    ja: "エージェントが画面を見て操作できるようにします。",
-    en: "Lets the agent see and control the screen.",
-  },
-  "settings.computerUse.tooltip": {
-    ja: "Computer Use: エージェントが実画面を撮影し、クリックや入力を行います。既定は無効です。",
-    en: "Computer use: the agent captures the real screen and clicks or types on it. Disabled by default.",
+    ja: "エージェントが画面を撮影し、クリックや入力を行います。",
+    en: "The agent captures the screen and clicks or types on it.",
   },
   "settings.computerUse.operationFailed": {
     ja: "変更に失敗しました: {error}",
     en: "Failed to change: {error}",
   },
   // --- experimental panel ----------------------------------------------------
-  /** The page's own note, above its rows. It is the one thing a reader must
-   * know before flipping anything here. */
-  "settings.experimental.description": {
-    ja: "試験中の機能です。予告なく変わるか、無くなる場合があります。",
-    en: "Features under test. They may change or disappear without notice.",
-  },
   /** The switch that opens code mode. Its name is the mode's display name
    * ("Lumisca code"), not the internal word "stella" or the implementation
    * term "code mode". */
@@ -950,8 +931,8 @@ export const settings = {
     en: "Enable Lumisca code",
   },
   "settings.experimental.codeMode.description": {
-    ja: "Lumisca codeを開けるようにします。無効の間はメニューに切り替えが現れず、Lumisca codeの画面はLumiscaへ戻ります。既定は無効です。",
-    en: "Makes Lumisca code available. While off, the menu has no switch to it and its screens return to Lumisca. Off by default.",
+    ja: "Lumisca codeを開けるようにします。無効の間は切り替えが現れず、画面はLumiscaへ戻ります。",
+    en: "Makes Lumisca code available. While off, the switch is hidden and its screens return to Lumisca.",
   },
   "settings.experimental.codeMode.operationFailed": {
     ja: "変更に失敗しました: {error}",
@@ -964,19 +945,14 @@ export const settings = {
     en: "Scripting tool call",
   },
   "settings.experimental.codeExecution.description": {
-    ja: "モデルに渡すツールを1つにまとめ、ファイルやシェル、MCPのツールを短いスクリプトから呼ばせます。初期ツールの型はプロンプトに載せ、残りは検索で見つけます。",
-    en: "Gives the model one tool and lets a short script call files, the shell and MCP tools. Initial tools are declared in the prompt; the rest are found by search.",
-  },
-  "settings.experimental.codeExecution.tooltip": {
-    ja: "Scripting tool call: モデルがJavaScriptを書き、その中からツールを呼びます。既定は無効です。",
-    en: "Scripting tool call: the model writes JavaScript and calls tools from it. Disabled by default.",
+    ja: "モデルが短いスクリプトを書き、その中からファイルやシェル、MCPのツールを呼びます。",
+    en: "The model writes a short script and calls file, shell and MCP tools from it.",
   },
   "settings.experimental.codeExecution.operationFailed": {
     ja: "変更に失敗しました: {error}",
     en: "Failed to change: {error}",
   },
-  /** The switch that turns the ask tool off. A label only: the page note
-   * above already says what a switch on this page means. */
+  /** The switch that turns the ask tool off. */
   "settings.experimental.askTool.title": {
     ja: "askツールを無効化",
     en: "Disable the ask tool",
@@ -989,12 +965,12 @@ export const settings = {
    * description states the cost, because every request then carries the
    * guide. */
   "settings.experimental.appUiPrompt.title": {
-    ja: "生成UIのプロンプト処理を強化",
-    en: "Stronger generated UI prompts",
+    ja: "生成UIの説明を常に含める",
+    en: "Always include the generated UI guide",
   },
   "settings.experimental.appUiPrompt.description": {
-    ja: "生成UIの説明を既定で読み込むことで、生成UIの使用を促進します。トークン使用量が増加します。",
-    en: "Loading the generated UI guide into every prompt encourages the model to use generated UI. Token usage increases.",
+    ja: "トークン使用量が増えます。",
+    en: "Token usage goes up.",
   },
   "settings.experimental.appUiPrompt.operationFailed": {
     ja: "変更に失敗しました: {error}",

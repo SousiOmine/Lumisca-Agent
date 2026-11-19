@@ -75,7 +75,6 @@ export function CommandSafetyPanel() {
       <SettingRow
         label={t("settings.security.title")}
         description={t("settings.security.description")}
-        title={t("settings.security.tooltip")}
       >
         <Toggle
           checked={enabled}

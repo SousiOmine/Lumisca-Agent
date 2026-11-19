@@ -34,7 +34,7 @@ test("the desktop setup opens on the connection screen, with no step count", () 
 
 test("a browser setup starts on the local walk", () => {
   const html = render(false);
-  assertStringIncludes(html, "Lumiscaにようこそ！");
+  assertStringIncludes(html, "言語とテーマ");
   assertStringIncludes(html, "ステップ1 / 4");
   assertEquals(html.includes("サーバーに接続"), false);
 });

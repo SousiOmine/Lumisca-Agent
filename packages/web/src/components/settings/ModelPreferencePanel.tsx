@@ -19,7 +19,7 @@ import { SettingsSection } from "./SettingsSection.tsx";
 interface ModelPrefRow {
   key: string;
   label: string;
-  description: string;
+  description?: string;
   /** Restrict the picker to models that accept image input. */
   imageOnly?: boolean;
   /** Offer the model's thinking-strength slider in the picker. */
@@ -76,7 +76,6 @@ export function ModelPreferencePanel({
       {
         key: DEFAULT_MODEL_KEY,
         label: t("settings.model.defaultModel"),
-        description: t("settings.model.defaultModelDesc"),
         thinking: true,
       },
       {
@@ -217,7 +216,9 @@ export function ModelPreferencePanel({
           <div key={row.key} className="model-pref-item">
             <div className="model-pref-info">
               <span className="model-pref-label">{row.label}</span>
-              <span className="model-pref-desc">{row.description}</span>
+              {row.description !== undefined && (
+                <span className="model-pref-desc">{row.description}</span>
+              )}
             </div>
             {/* The pair IS the control: it reads as the row's value and
               opens the picker, so the row needs no separate edit button. */}

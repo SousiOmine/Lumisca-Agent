@@ -323,7 +323,6 @@ export function RoutinePanel({
   return (
     <div className="routine-panel">
       <div className="routine-head">
-        <p className="settings-note">{t("panels.routine.description")}</p>
         <button
           type="button"
           className="btn"

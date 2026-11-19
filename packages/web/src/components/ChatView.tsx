@@ -390,13 +390,6 @@ export function ChatView({
         onRewind={handleRewind}
         onCardSend={handleCardSend}
         active={active}
-        empty={
-          view.info.chat ? (
-            <p>{t("chat.empty.chat")}</p>
-          ) : (
-            <p>{t("chat.empty.workspace")}</p>
-          )
-        }
       />
       <div className="input-area">
         <div className="progress-panels">

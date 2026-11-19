@@ -104,7 +104,6 @@ export function AgentCreateDialog({
         <textarea
           value={role}
           rows={4}
-          placeholder={t("chat.stella.agents.roleHint")}
           onInput={(event) => setRole(event.currentTarget.value)}
           autoFocus
         />

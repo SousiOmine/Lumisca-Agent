@@ -283,9 +283,11 @@ test("StellaView: opening a conversation shows the wait, not an empty pane", () 
   const waiting = render({ conversation: null, loading: true });
   assertStringIncludes(waiting, "stella-loading");
   assertStringIncludes(waiting, "読み込んでいます");
-  // Once nothing is in flight the same spot carries the empty state's hint.
+  // Once nothing is in flight the spot carries no sentence: the composer
+  // stays disabled until the conversation exists.
   const idle = render({ conversation: null, loading: false });
-  assertStringIncludes(idle, "依頼を入力してください");
+  assertEquals(idle.includes("stella-loading"), false);
+  assertEquals(idle.includes("依頼を入力してください"), false);
 });
 
 /** A folder lent from the user's own computer (core/domain/share.ts). The
