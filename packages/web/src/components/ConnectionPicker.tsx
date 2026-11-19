@@ -1,9 +1,4 @@
-import {
-  IconChevronDown,
-  IconPlus,
-  IconServer,
-  IconSettings,
-} from "@tabler/icons-preact";
+import { IconChevronDown, IconServer } from "@tabler/icons-preact";
 import { useRef, useState } from "preact/hooks";
 import { connectionLabel } from "../connections.ts";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
@@ -129,23 +124,8 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
               onManage();
             }}
           >
-            <IconSettings size={14} />
             <span className="connection-option-name">
               {t("chrome.connections.manage")}
-            </span>
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="connection-option manage"
-            onClick={() => {
-              setOpen(false);
-              onManage();
-            }}
-          >
-            <IconPlus size={14} />
-            <span className="connection-option-name">
-              {t("chrome.connections.add")}
             </span>
           </button>
         </div>

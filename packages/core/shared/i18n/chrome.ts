@@ -34,10 +34,6 @@ export const chrome = {
     ja: "接続先を管理",
     en: "Manage servers",
   },
-  "chrome.connections.add": {
-    ja: "サーバーを追加",
-    en: "Add a server",
-  },
 
   // --- tab bar -------------------------------------------------------------
   "chrome.tabBar.label": { ja: "セッションタブ", en: "Session tabs" },
