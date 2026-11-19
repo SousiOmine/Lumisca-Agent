@@ -45,11 +45,14 @@ export type TranscriptRows = "all" | "conversation";
  * `TranscriptRows: "conversation"`. It names what `agent/stella-stream.ts`
  * projects to an entry: a prompt (`user`; `mode` is code-mode-only but
  * projected the same way), the agent's reply (an assistant message that did
- * not end in a tool call) and the result of a successful `send_chat`.
+ * not end in a tool call), the result of a successful `send_chat`, and a
+ * successful `execute` that carried messages a program sent with
+ * `send_chat` (see tools/execute.ts — under the scripting tool call that is
+ * the only way an agent speaks).
  *
  * An assistant row qualifies unless its `stopReason` is `"toolUse"`: a turn
  * that stopped to call a tool is the agent narrating its way to the next
- * step, and the projection drops it (see stellaEntryOf). The filter and the
+ * step, and the projection drops it (see stellaEntriesOf). The filter and the
  * projection must agree on which assistant rows can be shown. They did not:
  * the projection made the agent's final text a conversation entry while this
  * filter still selected only prompts and `send_chat` results, so a reply was
@@ -88,6 +91,24 @@ export const CONVERSATION_ROWS_SQL = `
               json_extract(content, '$.isError'),
               0
             ) = 0
+          )
+          OR (
+            role = 'toolResult'
+            AND COALESCE(
+              json_extract(content, '$.message.toolName'),
+              json_extract(content, '$.toolName')
+            ) = 'execute'
+            AND COALESCE(
+              json_extract(content, '$.message.isError'),
+              json_extract(content, '$.isError'),
+              0
+            ) = 0
+            AND json_array_length(
+              COALESCE(
+                json_extract(content, '$.message.details.sent'),
+                json_extract(content, '$.details.sent')
+              )
+            ) > 0
           )
         )`;
 

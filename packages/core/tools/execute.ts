@@ -7,7 +7,15 @@ import type {
 } from "../code-execution/types.ts";
 import { errorMessage } from "../errors.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
-import { TOOL_EXECUTE } from "../shared/mod.ts";
+import {
+  type AttachmentRef,
+  attachmentsOfDetails,
+  type ChatMessage,
+  chatMessageOfDetails,
+  TOOL_CHAT_ATTACH,
+  TOOL_EXECUTE,
+  TOOL_SEND_CHAT,
+} from "../shared/mod.ts";
 import type { ToolCatalog } from "./catalog.ts";
 import { composeScriptResult } from "./js-sandbox.ts";
 import { safetyBlockResult } from "./safety.ts";
@@ -139,6 +147,15 @@ export function createExecuteTool(
       const calls: CallRecord[] = [];
       const images: CodeToolImage[] = [];
       let textChars = 0;
+      // What the program sent the user, kept for the transcript: a nested
+      // `send_chat` / `chat_attach` writes its words and files into its own
+      // result's `details`, and this result is the only row the store keeps
+      // of the program. Without carrying them here the message would reach
+      // the user nowhere: the conversation projects a tool result's details
+      // (agent/stella-stream.ts), and the code-mode transcript draws the
+      // attachments of one (web's ConversationTurn).
+      const sent: ChatMessage[] = [];
+      const attached: AttachmentRef[] = [];
 
       const call: CodeToolCall = async (name, args) => {
         if (calls.length >= MAX_CALLS) {
@@ -174,6 +191,12 @@ export function createExecuteTool(
           const returned = imagesOf(result.content);
           for (const image of returned) {
             if (images.length < MAX_FORWARDED_IMAGES) images.push(image);
+          }
+          if (name === TOOL_SEND_CHAT) {
+            const message = chatMessageOfDetails(result.details);
+            if (message !== undefined) sent.push(message);
+          } else if (name === TOOL_CHAT_ATTACH) {
+            attached.push(...attachmentsOfDetails(result.details));
           }
           calls.push({ name, ms: Date.now() - startedAt, ok: true });
           return { text, images: returned };
@@ -224,6 +247,8 @@ export function createExecuteTool(
             ms: entry.ms,
             ok: entry.ok,
           })),
+          ...(sent.length === 0 ? {} : { sent }),
+          ...(attached.length === 0 ? {} : { attachments: attached }),
           ...(failure === undefined ? {} : { error: true }),
           ...(storeFailure === undefined ? {} : { storeError: true }),
         },

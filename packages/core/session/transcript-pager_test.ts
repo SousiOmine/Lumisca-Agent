@@ -53,10 +53,9 @@ function setup(count: number): { db: LumiscaDb; repo: MessageRepo } {
 const RULES: PageRules<number> = {
   rows: "all",
   startsWindow: (message: AgentMessage) => startsTranscriptTurn(message),
-  project: (row: StoredMessage) => ({
-    item: row.timestamp,
-    cursor: messageCursor(row.message),
-  }),
+  project: (row: StoredMessage) => [
+    { item: row.timestamp, cursor: messageCursor(row.message) },
+  ],
 };
 
 /** Append one assistant turn whose only content is a tool call. */
@@ -263,11 +262,8 @@ test("transcript pager: a dropped row still marks the page's turn", () => {
       startsWindow: () => true,
       project: (row) =>
         row.role === "toolResult"
-          ? undefined
-          : {
-              item: row.timestamp,
-              cursor: messageCursor(row.message),
-            },
+          ? []
+          : [{ item: row.timestamp, cursor: messageCursor(row.message) }],
     };
     const page = readTranscriptPage(repo, "s1", { limit: 2 }, dropped);
     // The page is the last two rows; the dropped result is not drawn, but the
@@ -282,6 +278,41 @@ test("transcript pager: a dropped row still marks the page's turn", () => {
       dropped,
     );
     assertEquals(older.items, [1]);
+  } finally {
+    db.close();
+  }
+});
+
+test("transcript pager: a row can project to several items", () => {
+  // A stella row can carry more than one message (a program's `send_chat`
+  // calls; see agent/stella-stream.ts). A page counts rows but returns
+  // items, and the way back is anchored on the FIRST item of the page's first
+  // row: a cursor naming the second would make the next read skip the first,
+  // because both live in the same row.
+  const { db, repo } = setup(3);
+  try {
+    const rules: PageRules<number> = {
+      rows: "all",
+      startsWindow: () => true,
+      project: (row) =>
+        row.timestamp === 3
+          ? [
+              { item: 30, cursor: `${messageCursor(row.message)}#0` },
+              { item: 31, cursor: `${messageCursor(row.message)}#1` },
+            ]
+          : [{ item: row.timestamp, cursor: messageCursor(row.message) }],
+    };
+    const page = readTranscriptPage(repo, "s1", { limit: 1 }, rules);
+    assertEquals(page.items, [30, 31]);
+    assert(page.older !== null);
+    assert(page.older.endsWith("#0"), page.older);
+    const older = readTranscriptPage(
+      repo,
+      "s1",
+      { limit: 2, older: page.older! },
+      rules,
+    );
+    assertEquals(older.items, [1, 2]);
   } finally {
     db.close();
   }

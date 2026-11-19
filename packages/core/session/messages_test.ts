@@ -675,6 +675,34 @@ test("messages: newestConversationRows reads only what a conversation shows", ()
       isError: true,
       timestamp: 140,
     } as AgentMessage);
+    // Under the scripting tool call the message is inside the program's own
+    // result (see tools/execute.ts): a program that sent something is a
+    // conversation row, one that only read files is not.
+    repo.append("s1", {
+      role: "toolResult",
+      toolCallId: "call-4",
+      toolName: "execute",
+      content: [{ type: "text", text: "[result]\nSent 1 file." }],
+      details: {
+        timeoutMs: 120_000,
+        calls: [{ name: "send_chat", ms: 1, ok: true }],
+        sent: [{ text: "送ります。", attachments: [] }],
+      },
+      isError: false,
+      timestamp: 132,
+    } as AgentMessage);
+    repo.append("s1", {
+      role: "toolResult",
+      toolCallId: "call-5",
+      toolName: "execute",
+      content: [{ type: "text", text: "[result]\nok" }],
+      details: {
+        timeoutMs: 120_000,
+        calls: [{ name: "read", ms: 1, ok: true }],
+      },
+      isError: false,
+      timestamp: 134,
+    } as AgentMessage);
     repo.append("s1", {
       role: "user",
       content: [{ type: "text", text: "ありがとう" }],
@@ -689,6 +717,7 @@ test("messages: newestConversationRows reads only what a conversation shows", ()
       rows.map((row) => [row.role, row.timestamp]),
       [
         ["user", 150],
+        ["toolResult", 132],
         ["toolResult", 130],
         ["assistant", 110],
         ["user", 100],
@@ -705,7 +734,7 @@ test("messages: newestConversationRows reads only what a conversation shows", ()
       content: [{ type: "text", text: "other" }],
       timestamp: 900,
     } as AgentMessage);
-    assertEquals(repo.newestConversationRows("s1", 10).length, 4);
+    assertEquals(repo.newestConversationRows("s1", 10).length, 5);
   } finally {
     db.close();
   }

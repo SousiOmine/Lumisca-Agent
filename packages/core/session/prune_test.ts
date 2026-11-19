@@ -165,6 +165,24 @@ test("prune: what the agent sent is part of the conversation", () => {
   // checkpoint has replaced the call that carried the same text.
   assertEquals(reduceMessage(message).changed, false);
   assertEquals(reduceMessage(message).message, message);
+
+  // The same message sent from inside a program (the scripting tool call)
+  // lives in the program's own result: pruning that row would drop what the
+  // user was told, and the conversation would come back empty after a
+  // reload.
+  const program = toolResult({
+    toolName: "execute",
+    content: [
+      { type: "text", text: "[result]\nSent the message to the user." },
+    ],
+    details: {
+      timeoutMs: 120_000,
+      calls: [{ name: "send_chat", ms: 3, ok: true }],
+      sent: [{ text: "report.pdf を添付しました。", attachments: [] }],
+    },
+  });
+  assertEquals(reduceMessage(program).changed, false);
+  assertEquals(reduceMessage(program).message, program);
 });
 
 test("prune: context publications and notifications become markers", () => {

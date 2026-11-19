@@ -69,11 +69,14 @@ export interface TranscriptPage<T> {
 /** How one surface's transcript is read: what counts as a page unit, and
  * what a page is projected to. */
 export interface PageRules<T> {
-  /** Project one row for the client, with the cursor that names it. A row
-   * the projection drops returns undefined; it still occupies its turn's
-   * extent, so it counts for the boundary but is not returned — and it can
-   * never be a cursor, because a client never holds it. */
-  project(row: StoredMessage): { item: T; cursor: string } | undefined;
+  /** Project one row for the client, with the cursor that names each item.
+   * A row the projection drops returns an empty list; it still occupies its
+   * turn's extent, so it counts for the boundary but is not returned — and it
+   * can never be a cursor, because a client never holds it.
+   *
+   * A row may project to several items: a stella row can carry more than one
+   * message (a program's `send_chat` calls; see agent/stella-stream.ts). */
+  project(row: StoredMessage): ReadonlyArray<{ item: T; cursor: string }>;
   /** Whether the row begins a screen unit. */
   startsWindow(message: AgentMessage): boolean;
   /** Which rows a page counts (see MessageRepo.listWindow and
@@ -160,10 +163,10 @@ function projectPage<T>(
   const items: T[] = [];
   let firstCursor: string | undefined;
   for (const row of page) {
-    const projected = rules.project(row);
-    if (projected === undefined) continue;
-    if (firstCursor === undefined) firstCursor = projected.cursor;
-    items.push(projected.item);
+    for (const projected of rules.project(row)) {
+      if (firstCursor === undefined) firstCursor = projected.cursor;
+      items.push(projected.item);
+    }
   }
   return { items, firstCursor };
 }
@@ -204,12 +207,12 @@ function positionOfCursor<T>(
   repo: MessageRepo,
   agentId: string,
   cursor: string,
-  project: (row: StoredMessage) => { item: T; cursor: string } | undefined,
+  project: (row: StoredMessage) => ReadonlyArray<{ item: T; cursor: string }>,
   rows: TranscriptRows,
 ): number {
   const position = repo.positionOf(
     agentId,
-    (row) => project(row)?.cursor === cursor,
+    (row) => project(row).some((projected) => projected.cursor === cursor),
     rows,
   );
   if (position === undefined) {

@@ -142,6 +142,58 @@ test("execute: a program returns its value and its calls' results", async () => 
   assert(text.includes("[calls]\nread ×1"), text);
 });
 
+test("execute: what a program sent is carried for the conversation", async () => {
+  // The program's result is the only row the store keeps of its calls, so the
+  // details the UI reads from a `send_chat` (the words and files) and a
+  // `chat_attach` (the files) have to travel with it. Without them a stella
+  // agent's file reached the user nowhere (see agent/stella-stream.ts), and a
+  // code-mode attachment drew no card.
+  const attachments = [
+    {
+      name: "9f3c2a1b4d5e.pdf",
+      displayName: "order.pdf",
+      size: 12,
+      inline: false,
+    },
+  ];
+  const sendChat: Tool = {
+    name: "send_chat",
+    label: "Send Chat",
+    description: "send",
+    parameters: object({}),
+    async execute(): Promise<ToolResult> {
+      return {
+        content: [
+          { type: "text", text: "Sent the message and 1 file to the user." },
+        ],
+        details: { text: "注文票です。", attachments },
+      };
+    },
+  };
+  const attach: Tool = {
+    name: "chat_attach",
+    label: "Chat Attach",
+    description: "attach",
+    parameters: object({}),
+    async execute(): Promise<ToolResult> {
+      return {
+        content: [{ type: "text", text: "Sent 1 file to the user." }],
+        details: { attachments },
+      };
+    },
+  };
+  const tool = makeExecute({ tools: [sendChat, attach] });
+  const result = await tool.execute(
+    "call-1",
+    {
+      code: "await tools.send_chat({}); await tools.chat_attach({}); return 'ok';",
+    },
+    undefined,
+  );
+  assertEquals(result.details["sent"], [{ text: "注文票です。", attachments }]);
+  assertEquals(result.details["attachments"], attachments);
+});
+
 test("execute: a syntax error shows the line and the caret", async () => {
   const tool = makeExecute({});
   const result = await tool.execute(

@@ -1,3 +1,4 @@
+import { stellaEntriesOf } from "../agent/stella-stream.ts";
 import type {
   AgentMessage,
   AssistantMessage,
@@ -6,8 +7,6 @@ import type {
   ToolResultMessage,
 } from "../ai/message.ts";
 import { isPruned } from "../ai/pruned.ts";
-
-import { TOOL_SEND_CHAT } from "../shared/tool-names.ts";
 
 /**
  * Dropping what a condensed conversation no longer needs — when the user
@@ -35,7 +34,9 @@ import { TOOL_SEND_CHAT } from "../shared/tool-names.ts";
  *
  * - `user` and `mode` messages, whole. They are the person's words, and the
  *   pictures attached to them.
- * - the `send_chat` result: it carries what the conversation shows of the
+ * - the result that carries a message the agent sent — a `send_chat` of
+ *   its own, or the program's result under the scripting tool call (see
+ *   agent/stella-stream.ts): it holds what the conversation shows of the
  *   agent beside its reply (the words it sent, the card, the files), and a
  *   client redraws a message from the row after a reload. It is ALSO the
  *   agent's record of what it said once the checkpoint has replaced the call
@@ -147,11 +148,11 @@ function reduceAssistant(message: AssistantMessage): PruneResult {
 }
 
 function reduceToolResult(message: ToolResultMessage): PruneResult {
-  if (message.toolName === TOOL_SEND_CHAT && !message.isError) {
-    // What the agent said to the user: a client redraws the message from
-    // this row after a reload, `history_search` reads it back once the
-    // checkpoint has replaced the call that carried the same words, and the
-    // attachments are the files the user was handed.
+  // Asked of the projection rather than by tool name: a message can be sent
+  // by a `send_chat` of the agent's own or from inside a program (the
+  // scripting tool call carries it in the program's result), and both are the
+  // conversation's record of what the user was told.
+  if (!message.isError && stellaEntriesOf(message).length > 0) {
     return { message, changed: false };
   }
   if (isPruned(message)) return { message, changed: false };

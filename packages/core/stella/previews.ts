@@ -1,4 +1,4 @@
-import { stellaEntryOf } from "../agent/stella-stream.ts";
+import { stellaEntriesOf } from "../agent/stella-stream.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import { previewOf, type StellaPreview } from "../shared/stella-preview.ts";
 
@@ -10,7 +10,7 @@ import { previewOf, type StellaPreview } from "../shared/stella-preview.ts";
  * open. A conversation that was never opened has no rows and nothing to say.
  *
  * What the row may say is the conversation's own projection
- * ({@link stellaEntryOf}), so the list cannot show something the conversation
+ * ({@link stellaEntriesOf}), so the list cannot show something the conversation
  * would not: the agent's working notes, tool traffic and context publications
  * are not entries, and neither is an empty `send_chat` row. The store query
  * returns CANDIDATES ({@link MessageRepo.newestConversationRows}) — because
@@ -51,14 +51,17 @@ export function latestPreview(
   ) {
     const rows = messages.newestConversationRows(mainAgentId, limit);
     for (const row of rows) {
-      const entry = stellaEntryOf(row.message);
-      if (entry === null) continue;
-      const preview = previewOf(entry);
-      // `previewOf` returns null for the entries the conversation does not
-      // draw (a routine's prompt) and for one with nothing to show, so the
-      // search continues past both: the answer is the newest entry the
-      // conversation would actually show.
-      if (preview !== null) return preview;
+      // A row can carry several messages (a program's `send_chat` calls; see
+      // stella-stream.ts), and the newest of them is the last one it sent.
+      const entries = stellaEntriesOf(row.message);
+      for (let at = entries.length - 1; at >= 0; at--) {
+        const preview = previewOf(entries[at]!);
+        // `previewOf` returns null for the entries the conversation does not
+        // draw (a routine's prompt) and for one with nothing to show, so the
+        // search continues past both: the answer is the newest entry the
+        // conversation would actually show.
+        if (preview !== null) return preview;
+      }
     }
     // The query answered fewer rows than it was allowed: that is the whole
     // candidate set, so a larger limit would read the same rows again.

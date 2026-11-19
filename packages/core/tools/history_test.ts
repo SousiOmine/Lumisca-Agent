@@ -1,6 +1,6 @@
 import { test } from "bun:test";
 import { assert, assertEquals, assertThrows } from "@std/assert";
-import { stellaEntryOf } from "../agent/stella-stream.ts";
+import { stellaEntriesOf } from "../agent/stella-stream.ts";
 import type { AgentMessage } from "../ai/message.ts";
 
 import { LumiscaDb } from "../db/mod.ts";
@@ -15,10 +15,7 @@ import { createHistorySearchTool, MAX_HISTORY_LIMIT } from "./history.ts";
  * it (the tool's only input). */
 function entriesOf(messages: readonly AgentMessage[]): StellaEntry[] {
   const entries: StellaEntry[] = [];
-  for (const message of messages) {
-    const entry = stellaEntryOf(message);
-    if (entry !== null) entries.push(entry);
-  }
+  for (const message of messages) entries.push(...stellaEntriesOf(message));
   return entries;
 }
 

@@ -9,7 +9,7 @@
  * with history_search, by word or by date, and the tool traffic is stored
  * separately in the transcript (which the user may reduce; see
  * session/prune.ts). So the summary is built from the same projection the
- * conversation and the search use (stellaEntryOf), rewritten in full each
+ * conversation and the search use (stellaEntriesOf), rewritten in full each
  * time, and capped small.
  *
  * One thing the conversation does not show still matters to the record: that
@@ -18,7 +18,7 @@
  * of tool calls adds one `[tools]` line where the run sits — names and counts
  * only, never arguments or output (see toolsLine). It is an extra part of the
  * serialization, not part of the projection: what the conversation shows is
- * still stellaEntryOf's answer alone.
+ * still the projection's answer alone.
  */
 
 import type { CompactionStyle } from "../ai/compaction-style.ts";
@@ -27,7 +27,7 @@ import type { AgentMessage } from "../ai/message.ts";
 import { formatLocalDateTime } from "../shared/misc.ts";
 import { TOOL_SEND_CHAT } from "../shared/tool-names.ts";
 import { stellaEntryText } from "../tools/history.ts";
-import { stellaEntryOf } from "./stella-stream.ts";
+import { stellaEntriesOf } from "./stella-stream.ts";
 
 /** Output cap of the record. The prompt asks for at most 30 short lines;
  * this is the backstop, not the target. */
@@ -71,24 +71,26 @@ export const STELLA_CHECKPOINT_PREAMBLE =
   "the record as the current state and continue from the messages that " +
   "follow without acknowledging it.";
 
-/** One transcript message as a record part, or undefined when the message is
- * not part of the conversation (tool traffic, context, notifications, the
- * checkpoint itself — the previous record travels in `<previous-record>`). */
-function recordPart(message: AgentMessage): string | undefined {
-  const entry = stellaEntryOf(message);
-  if (entry === null) return undefined;
-  // A routine's run is the user's side of the conversation but not their
-  // words. Without the name the record would say the user asked for the
-  // routine's request, which is a fact about them that never happened.
-  const who =
-    entry.role === "user"
-      ? entry.routine === undefined
-        ? "User"
-        : `User (routine "${entry.routine}")`
-      : "Assistant";
-  return `[${formatLocalDateTime(entry.timestamp)}] ${who}\n${stellaEntryText(
-    entry,
-  )}`;
+/** One transcript message as record parts: none when the message is not part
+ * of the conversation (tool traffic, context, notifications, the checkpoint
+ * itself — the previous record travels in `<previous-record>`), one for an
+ * ordinary message, and one per message when a program sent several (see
+ * stella-stream.ts). */
+function recordPartsOf(message: AgentMessage): string[] {
+  return stellaEntriesOf(message).map((entry) => {
+    // A routine's run is the user's side of the conversation but not their
+    // words. Without the name the record would say the user asked for the
+    // routine's request, which is a fact about them that never happened.
+    const who =
+      entry.role === "user"
+        ? entry.routine === undefined
+          ? "User"
+          : `User (routine "${entry.routine}")`
+        : "Assistant";
+    return `[${formatLocalDateTime(entry.timestamp)}] ${who}\n${stellaEntryText(
+      entry,
+    )}`;
+  });
 }
 
 /** Tools whose calls are the conversation itself: a `send_chat` result is
@@ -167,10 +169,10 @@ function recordParts(head: readonly AgentMessage[]): string[] {
     pending = new Map();
   };
   for (const message of head) {
-    const part = recordPart(message);
-    if (part !== undefined) {
+    const conversational = recordPartsOf(message);
+    if (conversational.length > 0) {
       flush();
-      parts.push(part);
+      parts.push(...conversational);
     }
     countTools(message, pending);
   }

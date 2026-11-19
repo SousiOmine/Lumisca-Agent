@@ -8,7 +8,7 @@
  * the end of a run that said nothing would then repeat an old message.
  *
  * Which messages count is not decided here. The projection that decides what
- * the conversation shows ({@link stellaEntryOf}) is the rule the user already
+ * the conversation shows ({@link stellaEntriesOf}) is the rule the user already
  * sees, so a notification can never offer text the conversation hid: a
  * `NO_RESPONSE` turn (the agent chose silence), the narration before a tool
  * call ("checking the file"), the context messages steering the model. What
@@ -17,7 +17,7 @@
  */
 import type { AgentMessage } from "../ai/message.ts";
 
-import { stellaEntryOf } from "./stella-stream.ts";
+import { stellaEntriesOf } from "./stella-stream.ts";
 
 /** Longest reply a client is handed. A notification shows a line or two and
  * the transcript has the whole answer, so this is sized for reading, not for
@@ -31,10 +31,13 @@ export class RunReply {
    * answer does not always come last: a run can close with a tool call whose
    * message is model-only, so the previous reply stands. */
   observe(message: AgentMessage): void {
-    const entry = stellaEntryOf(message);
-    if (entry === null || entry.role !== "assistant") return;
-    const text = entry.text.trim();
-    if (text.length > 0) this.text = text;
+    // One row can carry several messages (a program's `send_chat` calls; see
+    // stella-stream.ts), so the last one it said is the reply, not the first.
+    for (const entry of stellaEntriesOf(message)) {
+      if (entry.role !== "assistant") continue;
+      const text = entry.text.trim();
+      if (text.length > 0) this.text = text;
+    }
   }
 
   /** Forget what was said: a run's reply belongs to that run only. */

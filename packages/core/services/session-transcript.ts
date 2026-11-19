@@ -1,7 +1,7 @@
 import {
   conversationEntriesOf,
+  stellaEntriesOf,
   stellaEntryCursorOf,
-  stellaEntryOf,
 } from "../agent/stella-stream.ts";
 import type { AgentMessage } from "../ai/message.ts";
 
@@ -42,10 +42,9 @@ export class SessionTranscript {
     const page = readTranscriptPage(this.deps.messages, agent.agentId, query, {
       startsWindow: (message) => startsTranscriptTurn(message),
       rows: "all",
-      project: (row) => ({
-        item: row.message,
-        cursor: messageCursorOf(row.message),
-      }),
+      project: (row) => [
+        { item: row.message, cursor: messageCursorOf(row.message) },
+      ],
     });
     return (query.older ?? null) === null ? this.withLiveTail(id, page) : page;
   }
@@ -98,12 +97,11 @@ export class SessionTranscript {
     return readTranscriptPage(this.deps.messages, agentId, query, {
       startsWindow: () => true,
       rows: "conversation",
-      project: (row) => {
-        const entry = stellaEntryOf(row.message);
-        return entry === null
-          ? undefined
-          : { item: entry, cursor: stellaEntryCursorOf(entry) };
-      },
+      project: (row) =>
+        stellaEntriesOf(row.message).map((entry) => ({
+          item: entry,
+          cursor: stellaEntryCursorOf(entry),
+        })),
     });
   }
 

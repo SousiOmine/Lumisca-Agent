@@ -2,13 +2,21 @@ import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { fauxAssistantMessage, fauxToolCall } from "../ai/faux.ts";
 import type { AgentMessage } from "../ai/message.ts";
-
+import type { StellaEntry } from "../domain/stella-conversation.ts";
+import type { ChatMessage } from "../shared/chat-message.ts";
 import { NO_RESPONSE } from "./silent-reply.ts";
 import {
+  stellaEntriesOf,
   stellaEntryCursorOf,
-  stellaEntryOf,
   stellaEventsOf,
 } from "./stella-stream.ts";
+
+/** The one entry a message projects to, for the cases that are one message.
+ * The plural is the API (see stellaEntriesOf); a test that expects several
+ * reads it directly. */
+function stellaEntryOf(message: AgentMessage): StellaEntry | null {
+  return stellaEntriesOf(message)[0] ?? null;
+}
 
 function user(text: string, timestamp = 1): AgentMessage {
   return {
@@ -213,6 +221,83 @@ test("stellaEntryOf: the files an agent sent travel with its message", () => {
   });
 });
 
+/** An `execute` result carrying the messages a program sent with
+ * `send_chat` (the shape tools/execute.ts writes when the scripting tool
+ * call is on). */
+function programSent(
+  sent: readonly ChatMessage[],
+  timestamp = 20,
+): AgentMessage {
+  return {
+    role: "toolResult",
+    toolCallId: "t2",
+    toolName: "execute",
+    content: [{ type: "text", text: "[result]\nok" }],
+    details: {
+      timeoutMs: 120_000,
+      calls: [{ name: "send_chat", ms: 3, ok: true }],
+      sent,
+    },
+    isError: false,
+    timestamp,
+  } as AgentMessage;
+}
+
+test("stellaEntriesOf: a program's send_chat is the conversation's message", () => {
+  // The scripting tool call gives the model one tool (`execute`), so a stella
+  // agent speaks from inside a program and the message travels in that
+  // result's `details.sent`. Without this projection the file reached the
+  // user nowhere: the tool answered "Sent 1 file", the bytes were stored, and
+  // the conversation showed only the run's final text.
+  const attachments = [
+    {
+      name: "9f3c2a1b4d5e.pdf",
+      displayName: "order.pdf",
+      size: 4096,
+      inline: false,
+    },
+  ];
+  const entries = stellaEntriesOf(
+    programSent(
+      [
+        { text: "確認します。", attachments: [] },
+        { text: "1件送ります。", attachments },
+      ],
+      21,
+    ),
+  );
+  assertEquals(
+    entries.map((entry) => [entry.role, entry.text, entry.attachments]),
+    [
+      ["assistant", "確認します。", []],
+      ["assistant", "1件送ります。", attachments],
+    ],
+  );
+  // One program is one step: the messages share its timestamp, and their
+  // words and files are what tell them apart (see the web's entryKey).
+  assertEquals(
+    entries.map((entry) => entry.timestamp),
+    [21, 21],
+  );
+  assert(entries[0]!.text !== entries[1]!.text);
+});
+
+test("stellaEntriesOf: a program that sent nothing is not a message", () => {
+  assertEquals(stellaEntriesOf(programSent([])), []);
+  assertEquals(
+    stellaEntriesOf(programSent([{ text: "", attachments: [] }], 22)),
+    [],
+  );
+  // A failed program sent nothing: it is the model's record of a failure.
+  assertEquals(
+    stellaEntriesOf({
+      ...programSent([{ text: "x", attachments: [] }]),
+      isError: true,
+    } as AgentMessage),
+    [],
+  );
+});
+
 test("stellaEntryOf: a failed or empty send_chat shows nothing", () => {
   const details = {
     text: "送れませんでした",
@@ -339,6 +424,17 @@ test("stellaEventsOf: a message becomes an entry, twice over", () => {
   assertEquals(
     stellaEventsOf({ type: "message_end", sessionId: "s", message }),
     expected,
+  );
+});
+
+test("stellaEventsOf: a program's messages arrive as entries", () => {
+  // The live stream must draw what a reload draws: a program's `send_chat`
+  // arrives on the `execute` result's own `message_end` (see
+  // tools/execute.ts), not on a row of its own.
+  const message = programSent([{ text: "送ります。", attachments: [] }], 30);
+  assertEquals(
+    stellaEventsOf({ type: "message_end", sessionId: "s", message }),
+    [{ type: "entry", entry: stellaEntryOf(message)! }],
   );
 });
 

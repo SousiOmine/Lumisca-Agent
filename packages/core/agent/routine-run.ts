@@ -2,8 +2,8 @@ import type { AgentMessage } from "../ai/message.ts";
 
 import type { MessageIdentity } from "../domain/event.ts";
 import { contentText } from "../shared/content.ts";
-import { TOOL_SEND_CHAT } from "../shared/mod.ts";
 import { assistantTextVerdict } from "./silent-reply.ts";
+import { stellaEntriesOf } from "./stella-stream.ts";
 
 /** The text of a message's content blocks, joined (what the conversation
  * shows for it). */
@@ -90,9 +90,12 @@ export class RoutineRun {
         continue;
       }
       if (message.role === "toolResult") {
-        // A send_chat that went out is the routine speaking, whatever the
-        // assistant's own text says.
-        if (message.toolName === TOOL_SEND_CHAT && !message.isError) {
+        // A message that went out is the routine speaking, whatever the
+        // assistant's own text says — a `send_chat` of its own, or one sent
+        // from inside a program under the scripting tool call (the program's
+        // result carries it; see stella-stream.ts). Asking the projection
+        // keeps this rule the same one the conversation draws by.
+        if (!message.isError && stellaEntriesOf(message).length > 0) {
           return false;
         }
         continue;

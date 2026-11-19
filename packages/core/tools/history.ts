@@ -30,7 +30,7 @@ import { requireIntegerInRange } from "../tools/validate.ts";
  * **What it searches is what the conversation shows**, and that is the whole
  * rule: the user's messages and the agent's replies (its text, and what it
  * sent with `send_chat`: cards and files). The entries are exactly the ones
- * a client draws (see agent/stella-stream.ts's `stellaEntryOf`).
+ * a client draws (see agent/stella-stream.ts's `stellaEntriesOf`).
  *
  * Tool calls, tool results, context publications, notifications and
  * checkpoints are the model's machinery — the conversation does not show

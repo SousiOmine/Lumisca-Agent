@@ -1871,6 +1871,46 @@ test("runRoutine: a reporting run stays", async () => {
   assertEquals(messages[1]?.role, "assistant");
 });
 
+test("runRoutine: a message a program sent keeps the run", async () => {
+  // Under the scripting tool call the routine speaks from inside `execute`,
+  // and the program's result carries the message (see tools/execute.ts).
+  // Reading only `send_chat` rows would call this run silent and delete what
+  // the user was told.
+  const program: Tool = {
+    name: "execute",
+    label: "Execute",
+    description: "Program",
+    parameters: object({}),
+    execute: () =>
+      Promise.resolve({
+        content: [
+          { type: "text", text: "[result]\nSent the message to the user." },
+        ],
+        details: {
+          timeoutMs: 1,
+          calls: [],
+          sent: [{ text: "異常なし", attachments: [] }],
+        },
+      }),
+  };
+  const agent = makeAgent(
+    streamSequence([
+      fauxAssistantMessage([fauxToolCall("execute", {})]),
+      fauxAssistantMessage(NO_RESPONSE),
+    ]),
+    [program],
+  );
+  await agent.runRoutine("check the deploy", { id: "r1", name: "check" });
+
+  // The prompt, the call, its result and the sentinel row stay: the run
+  // said something (the sentinel is hidden by the projection, not deleted).
+  assertEquals(agent.messages.length, 4);
+  assertEquals(
+    agent.messages.map((message) => message.role),
+    ["user", "assistant", "toolResult", "assistant"],
+  );
+});
+
 test("runRoutine: a run that narrates through tools and then stays silent leaves no row", async () => {
   const agent = makeAgent(
     streamSequence([
