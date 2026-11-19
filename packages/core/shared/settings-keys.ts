@@ -79,6 +79,23 @@ export function codeExecutionEnabled(
   return read(CODE_EXECUTION_ENABLED_KEY) === "1";
 }
 
+/** Settings-table key for the ask tool, an experimental switch: the agent
+ * can ask the user a question and block the run until it is answered.
+ * "0" disables the tool; unset, "1" or anything else leaves it on. The flag
+ * decides the tool set of an agent, so changing it reaches the open
+ * sessions (see LumiscaCore.setAskToolEnabled). Default on because the
+ * switch exists to try the app WITHOUT the tool, not to enable a new one. */
+export const ASK_TOOL_ENABLED_KEY = "ask_tool_enabled";
+
+/** Whether the ask tool is offered. Unset counts as on: only an explicit
+ * "0" turns it off (the same default-on convention as
+ * {@link stellaKeepsFullLog}). */
+export function askToolEnabled(
+  read: (key: string) => string | undefined,
+): boolean {
+  return read(ASK_TOOL_ENABLED_KEY) !== "0";
+}
+
 /** Settings-table key for the Wayland screen-sharing permission (the
  * portal's restore token). Machine state, not a secret: the token only lets
  * the portal skip its consent dialog for this user's own session, and it is

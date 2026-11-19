@@ -1025,6 +1025,16 @@ export const settings = {
     ja: "変更に失敗しました: {error}",
     en: "Failed to change: {error}",
   },
+  /** The switch that turns the ask tool off. A label only: the page note
+   * above already says what a switch on this page means. */
+  "settings.experimental.askTool.title": {
+    ja: "askツールを無効化",
+    en: "Disable the ask tool",
+  },
+  "settings.experimental.askTool.operationFailed": {
+    ja: "変更に失敗しました: {error}",
+    en: "Failed to change: {error}",
+  },
   "settings.mcp.toolCount": { ja: "{count}個のツール", en: "{count} tools" },
   "settings.provider.oauth": { ja: "OAuth連携", en: "OAuth" },
   /** Section heading of the AI providers inside the プロバイダー category

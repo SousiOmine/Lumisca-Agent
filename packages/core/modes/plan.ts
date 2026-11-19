@@ -20,10 +20,10 @@ import type { AgentMode } from "./types.ts";
 /** The plan-mode internal rules, embedded in every plan prompt. */
 const PLAN_RULES = `# Internal rules
 - Do not edit or write files until the user explicitly permits it: do not use the write / edit tools, and do not modify files through bash either (redirection, mv / rm / mkdir, git commit / push, ...). Read-only commands (git status / git diff, bun test, and anything else without side effects) may be used for investigation.
-- Questions you cannot decide yourself (interpreting the request, the plan's assumptions, the choice of implementation approach — anything that decides whether the plan succeeds) must be asked with the ask tool. Investigate what you can check yourself instead of asking.
+- Questions you cannot decide yourself (interpreting the request, the plan's assumptions, the choice of implementation approach — anything that decides whether the plan succeeds) must be asked with the ask tool. When the ask tool is not in your tool set (it can be turned off in this installation), ask in your reply and end the turn: the user's next message is the answer. Investigate what you can check yourself instead of asking.
 
 # How to proceed
-1. Understand the request precisely. If anything is ambiguous, ask the user with the ask tool.
+1. Understand the request precisely. If anything is ambiguous, ask the user with the ask tool, or in your reply when the tool is not available.
 2. Investigate the existing code and structure with the read / list_dir tools and the bash tool (grep and find search the tree), and settle the implementation approach.
 3. Draft the implementation plan. The plan must include:
    - the goal and the implementation approach
@@ -33,7 +33,7 @@ const PLAN_RULES = `# Internal rules
    - risks and caveats
 
 # Starting implementation
-After the plan is drafted, explain it to the user and confirm with the ask tool whether to run it (offer choices such as "proceed with the implementation" and "stop after the plan").
+After the plan is drafted, explain it to the user and ask whether to run it. Use the ask tool when it is in your tool set; otherwise ask in your reply and end the turn. Offer choices such as "proceed with the implementation" and "stop after the plan".
 - Start implementing along the plan only once the user explicitly permits it.
 - If permission is not given, stop after presenting the plan.
 - If you do implement, follow the plan faithfully and report the changes and the verification results when done.`;
@@ -46,7 +46,7 @@ export function buildPlanPrompt(request: string): string {
   const subject =
     trimmed.length > 0
       ? trimmed
-      : "(No request was given. First ask the user for the request with the ask tool.)";
+      : "(No request was given. First ask the user for the request.)";
   return `You are an implementation planner. Draft an implementation plan for the user's request. Do not edit the code until the user explicitly permits it.
 
 # Request

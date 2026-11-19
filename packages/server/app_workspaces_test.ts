@@ -8,7 +8,7 @@ import {
   fauxToolCall,
   type StreamRequest,
 } from "@lumisca/core";
-import { COMMAND_SAFETY_APPROVALS_KEY } from "@lumisca/core/shared";
+import { COMMAND_SAFETY_APPROVALS_KEY, TOOL_ASK } from "@lumisca/core/shared";
 import {
   MINI_PNG,
   promptSession,
@@ -736,6 +736,61 @@ test("the scripting tool call toggle goes through the tool-set path", async () =
   } finally {
     server.shutdown();
     core.close();
+  }
+});
+
+test("the ask tool toggle goes through the tool-set path", async () => {
+  const { core, faux, server, base } = await setup();
+  const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-srv-"));
+  try {
+    const ws = await (
+      await json(base, "/api/workspaces", {
+        method: "POST",
+        body: JSON.stringify({ name: "ws", folders: [root] }),
+      })
+    ).json();
+    const session = await (
+      await json(base, "/api/sessions", {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: ws.id,
+          modelProvider: faux.provider.id,
+          modelId: faux.getModel().id,
+        }),
+      })
+    ).json();
+    const names = () =>
+      core.getAgent(session.id)!.agent.state.tools.map((tool) => tool.name);
+
+    // A plain settings write would store the flag and leave every open
+    // conversation on its old tool set; the open session's tools are what
+    // prove the toggle reached setAskToolEnabled.
+    assert(names().includes(TOOL_ASK), names().join(","));
+
+    const disable = await json(base, "/api/settings/ask_tool_enabled", {
+      method: "PUT",
+      body: JSON.stringify({ value: "0" }),
+    });
+    assertEquals(disable.status, 200);
+    assertEquals(core.isAskToolEnabled(), false);
+    assertEquals(names().includes(TOOL_ASK), false);
+
+    const enable = await json(base, "/api/settings/ask_tool_enabled", {
+      method: "PUT",
+      body: JSON.stringify({ value: "1" }),
+    });
+    assertEquals(enable.status, 200);
+    assertEquals(core.isAskToolEnabled(), true);
+    assert(names().includes(TOOL_ASK), names().join(","));
+
+    const settings = (await (
+      await fetch(`${base}/api/settings`)
+    ).json()) as Record<string, string>;
+    assertEquals(settings["ask_tool_enabled"], "1");
+  } finally {
+    server.shutdown();
+    await core.close();
+    await removeDirRetry(root);
   }
 });
 

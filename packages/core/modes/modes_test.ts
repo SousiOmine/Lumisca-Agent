@@ -116,8 +116,10 @@ test("plan prompt: embeds the request and the internal rules", () => {
   assertEquals(prompt.includes("explicitly permits"), true);
   assertEquals(prompt.includes("Do not edit or write files"), true);
   assertEquals(prompt.includes("write / edit tools"), true);
-  // Undecidable questions go to the ask tool.
+  // Undecidable questions go to the ask tool, or to the reply when the
+  // experimental switch took the tool away.
   assertEquals(prompt.includes("ask tool"), true);
+  assertEquals(prompt.includes("not in your tool set"), true);
   // Permission is asked at the end, and implementation follows only on
   // explicit approval.
   assertEquals(prompt.includes("whether to run it"), true);

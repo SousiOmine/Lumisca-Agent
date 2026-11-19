@@ -116,6 +116,8 @@ import type {
   WebSearchTestView,
 } from "./shared/mod.ts";
 import {
+  ASK_TOOL_ENABLED_KEY,
+  askToolEnabled,
   CODE_EXECUTION_ENABLED_KEY,
   CONNECTIONS_KEY,
   codeExecutionEnabled,
@@ -471,6 +473,7 @@ export class LumiscaCore {
         getCompactionPolicy: () => this.getCompactionPolicy(),
         getStellaKeepFullLog: () => this.getStellaKeepFullLog(),
         isCodeExecutionEnabled: () => this.isCodeExecutionEnabled(),
+        isAskToolEnabled: () => this.isAskToolEnabled(),
         recordFreedBytes: (bytes) => {
           this.freedBytes += bytes;
         },
@@ -976,6 +979,25 @@ export class LumiscaCore {
     this.pool.applyToolSetChange(
       this.services.sessions.listEverySession(),
       () => this.settings.set(CODE_EXECUTION_ENABLED_KEY, enabled ? "1" : ""),
+      (id) => this.services.sessions.deferRebuild(id),
+    );
+  }
+
+  /** Whether the model is offered the ask tool (the experimental toggle).
+   * Unset counts as on; only "0" turns it off. */
+  isAskToolEnabled(): boolean {
+    return askToolEnabled((key) => this.settings.get(key));
+  }
+
+  /** Turn the ask tool on or off. The flag decides the tool set of an agent,
+   * so every open session follows: an idle one is rebuilt at once, and a
+   * running one is rebuilt when its run ends (its request already carried the
+   * old tool set). A run blocked on an ask keeps its pending question
+   * answerable until then. */
+  setAskToolEnabled(enabled: boolean): void {
+    this.pool.applyToolSetChange(
+      this.services.sessions.listEverySession(),
+      () => this.settings.set(ASK_TOOL_ENABLED_KEY, enabled ? "1" : "0"),
       (id) => this.services.sessions.deferRebuild(id),
     );
   }

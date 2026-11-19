@@ -1,4 +1,5 @@
 import {
+  ASK_TOOL_ENABLED_KEY,
   CODE_EXECUTION_ENABLED_KEY,
   COMPUTER_USE_ENABLED_KEY,
   type CommandApproval,
@@ -30,6 +31,10 @@ export interface SettingsApi {
    * rebuilds
    * the open sessions (a running one when its run ends). */
   setCodeExecutionEnabled(enabled: boolean): void;
+  /** Enable or disable the ask tool. Not a plain setting write either: the
+   * tool set every session is built with changes, so the core rebuilds the
+   * open sessions (a running one when its run ends). */
+  setAskToolEnabled(enabled: boolean): void;
   getPersonalization(): { path: string; content: string };
   setPersonalization(content: string): void;
   /** The recorded approvals of the fast-model safety check. Entries carry a
@@ -77,6 +82,12 @@ export function settingRoutes(core: SettingsApi): Hono {
       // contract), so a plain write would leave every open conversation on
       // the old tool set until it was reopened.
       core.setCodeExecutionEnabled(value === "1");
+      return c.json({ ok: true });
+    }
+    if (key === ASK_TOOL_ENABLED_KEY) {
+      // The same rule as the scripting tool call: the tool set changes, so
+      // the toggle goes through the core rather than the generic write.
+      core.setAskToolEnabled(value === "1");
       return c.json({ ok: true });
     }
     core.setUserSetting(key, value);

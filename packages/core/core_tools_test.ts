@@ -18,6 +18,7 @@ import type {
   Rect,
 } from "./mod.ts";
 import {
+  TOOL_ASK,
   TOOL_BROWSER_OPEN,
   TOOL_CALL,
   TOOL_COMPUTER_SCREENSHOT,
@@ -528,6 +529,33 @@ test("ask tool blocks the run until the user answers, then continues", async () 
 
   unsubscribe();
   core.close();
+});
+
+test("ask tool: the toggle removes it from an open session", async () => {
+  const { core, providerId, modelId } = setup();
+  const { ws, root } = await makeWorkspace(core);
+  try {
+    const session = await core.createSession({
+      workspaceId: ws.id,
+      modelProvider: providerId,
+      modelId,
+    });
+    const names = () =>
+      core.getAgent(session.id)!.agent.state.tools.map((tool) => tool.name);
+
+    assertEquals(core.isAskToolEnabled(), true);
+    assert(names().includes(TOOL_ASK), names().join(","));
+
+    core.setAskToolEnabled(false);
+    assertEquals(core.isAskToolEnabled(), false);
+    assertEquals(names().includes(TOOL_ASK), false);
+
+    core.setAskToolEnabled(true);
+    assert(names().includes(TOOL_ASK), names().join(","));
+  } finally {
+    await core.close();
+    await removeDirRetry(root);
+  }
 });
 
 test("todo tool records the whole plan and replaces it on the next call", async () => {

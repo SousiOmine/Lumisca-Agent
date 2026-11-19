@@ -170,6 +170,10 @@ interface SessionWhere {
    * the life of an agent, and the pool rebuilds the open sessions when the
    * toggle changes (see SessionPool.applyToolSetChange). */
   codeExecution: boolean;
+  /** Whether the model is offered the ask tool. A value for the same
+   * reason: the tool set is fixed for the life of an agent, and the pool
+   * rebuilds the open sessions when the toggle changes. */
+  askTool: boolean;
   /** The user's web-search provider, when one is configured. */
   webSearch: SearchProvider | undefined;
   /** The app-level MCP config this agent may change, or undefined when the
@@ -453,6 +457,7 @@ export class AgentFactory {
       // Read once per open: the answer decides the whole tool set of this
       // agent, which cannot change under a run.
       codeExecution: this.deps.isCodeExecutionEnabled(),
+      askTool: this.deps.isAskToolEnabled(),
       // The user's web-search provider. Resolved once per open (the tools
       // hold it, so a rebuild picks up a changed default) and undefined when
       // the user has not configured one; the tools are then simply absent.
@@ -751,7 +756,7 @@ export class AgentFactory {
     }
     if (chat) {
       return createChatTools({
-        ask: hubs.ask,
+        ask: where.askTool ? hubs.ask : undefined,
         todo: hubs.todo,
         safety: this.deps.commandSafety,
         browserAvailable,
@@ -770,7 +775,7 @@ export class AgentFactory {
     }
     return createCodingTools(workspace, {
       background: hubs.background,
-      ask: hubs.ask,
+      ask: where.askTool ? hubs.ask : undefined,
       todo: hubs.todo,
       task: hubs.tasks,
       safety: this.deps.commandSafety,

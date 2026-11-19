@@ -150,6 +150,10 @@ export interface AgentRuntime {
    * tool set of the agent, so the pool rebuilds the open sessions when the
    * toggle changes (see SessionPool.applyToolSetChange). */
   isCodeExecutionEnabled(): boolean;
+  /** Whether the model is offered the ask tool (see ASK_TOOL_ENABLED_KEY).
+   * Read once per open for the same reason: it is part of the tool set, and
+   * the pool rebuilds the open sessions when the toggle changes. */
+  isAskToolEnabled(): boolean;
   /** The user's web-search provider, or undefined when none is configured:
    * a session that cannot search is never given `web_search` / `web_fetch`.
    * A getter so a provider configured after the pool was built reaches new

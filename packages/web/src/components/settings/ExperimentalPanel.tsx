@@ -1,4 +1,9 @@
-import { CODE_EXECUTION_ENABLED_KEY, errorMessage } from "@lumisca/core/shared";
+import {
+  ASK_TOOL_ENABLED_KEY,
+  askToolEnabled,
+  CODE_EXECUTION_ENABLED_KEY,
+  errorMessage,
+} from "@lumisca/core/shared";
 import { useEffect, useState } from "preact/compat";
 import { useSaveAction } from "../../hooks/useSave.ts";
 import { useT } from "../../i18n.ts";
@@ -13,30 +18,45 @@ import { SettingsSection } from "./SettingsSection.tsx";
  * the rest of the dialog, and the note at its top says what that means for
  * a feature on it: it may change or disappear.
  *
- * The scripting tool call replaces the tools the model is given, so the server
- * rebuilds the open sessions when the switch moves: a session that is
- * waiting follows at once, and one in the middle of a run follows when that
- * run ends. The run already sent its tool set, and replacing the agent under
- * it would duplicate the rows of the turn in flight. The comment on
- * `setCodeExecutionEnabled` in core.ts is the same rule. */
+ * Both switches change the tool set the model is given, so the server
+ * rebuilds the open sessions when either moves: a session that is waiting
+ * follows at once, and one in the middle of a run follows when that run
+ * ends. The run already sent its tool set, and replacing the agent under it
+ * would duplicate the rows of the turn in flight. The comment on
+ * `setCodeExecutionEnabled` in core.ts is the same rule, and the ask switch
+ * follows it too (see `setAskToolEnabled`). */
 export function ExperimentalPanel() {
   const t = useT();
   const settings = useSettings();
   const loaded = settings.loaded;
-  const [enabled, setEnabled] = useState(false);
-  const { saving, error, save } = useSaveAction(errorMessage);
+  const [codeExecution, setCodeExecution] = useState(false);
+  // The switch says "disable" while the stored key says "enabled": the
+  // inversion stays here, and the value written is always "1" or "0".
+  const [askDisabled, setAskDisabled] = useState(false);
+  const codeSave = useSaveAction(errorMessage);
+  const askSave = useSaveAction(errorMessage);
 
   useEffect(() => {
     if (!loaded) return;
-    setEnabled(settings.values[CODE_EXECUTION_ENABLED_KEY] === "1");
+    setCodeExecution(settings.values[CODE_EXECUTION_ENABLED_KEY] === "1");
+    setAskDisabled(!askToolEnabled((key) => settings.values[key]));
   }, [loaded, settings.values]);
 
-  const setEnabledValue = (next: boolean) => {
-    const previous = enabled;
-    setEnabled(next); // optimistic
-    void save(
+  const setCodeExecutionValue = (next: boolean) => {
+    const previous = codeExecution;
+    setCodeExecution(next); // optimistic
+    void codeSave.save(
       () => settingsStore.set(CODE_EXECUTION_ENABLED_KEY, next ? "1" : ""),
-      () => setEnabled(previous),
+      () => setCodeExecution(previous),
+    );
+  };
+
+  const setAskDisabledValue = (next: boolean) => {
+    const previous = askDisabled;
+    setAskDisabled(next); // optimistic
+    void askSave.save(
+      () => settingsStore.set(ASK_TOOL_ENABLED_KEY, next ? "0" : "1"),
+      () => setAskDisabled(previous),
     );
   };
 
@@ -52,16 +72,35 @@ export function ExperimentalPanel() {
         title={t("settings.experimental.codeExecution.tooltip")}
       >
         <Toggle
-          checked={enabled}
-          disabled={saving || !loaded}
-          onChange={setEnabledValue}
+          checked={codeExecution}
+          disabled={codeSave.saving || !loaded}
+          onChange={setCodeExecutionValue}
           label={t("settings.experimental.codeExecution.title")}
         />
       </SettingRow>
 
-      {error && (
+      {codeSave.error && (
         <div className="error-text">
-          {t("settings.experimental.codeExecution.operationFailed", { error })}
+          {t("settings.experimental.codeExecution.operationFailed", {
+            error: codeSave.error,
+          })}
+        </div>
+      )}
+
+      <SettingRow label={t("settings.experimental.askTool.title")}>
+        <Toggle
+          checked={askDisabled}
+          disabled={askSave.saving || !loaded}
+          onChange={setAskDisabledValue}
+          label={t("settings.experimental.askTool.title")}
+        />
+      </SettingRow>
+
+      {askSave.error && (
+        <div className="error-text">
+          {t("settings.experimental.askTool.operationFailed", {
+            error: askSave.error,
+          })}
         </div>
       )}
     </SettingsSection>
