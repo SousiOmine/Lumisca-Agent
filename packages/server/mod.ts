@@ -2,7 +2,7 @@ import * as fsSync from "node:fs";
 import { dirname } from "node:path";
 import {
   createComputerHost,
-  createVmManager,
+  createVmHost,
   HttpBrowserBackend,
   LumiscaCore,
   refreshCatalogInBackground,
@@ -201,7 +201,7 @@ export async function main(): Promise<void> {
         }
       },
     );
-    core.setStellaVm(createVmManager({ containerDir }));
+    core.setStellaVm(createVmHost({ containerDir }));
     console.log(`stella mode: コンテナ定義 ${containerDir}`);
   }
 

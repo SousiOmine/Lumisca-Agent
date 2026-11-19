@@ -16,6 +16,7 @@ import type { ImageContent } from "./ai/message.ts";
 
 import { LumiscaCore } from "./core.ts";
 import { CoreError, isAddrInUseError } from "./errors.ts";
+import type { VmHost, VmManager, VmStatus } from "./vm/container.ts";
 
 /**
  * An in-memory core with the faux provider, and the ids a test needs to
@@ -279,4 +280,103 @@ export function fakeModel(
   extra: Record<string, unknown> = {},
 ): Model<Api> {
   return { id, name: id, ...extra } as unknown as Model<Api>;
+}
+/**
+ * A stella machine host backed by no podman.
+ *
+ * Every agent gets a machine that answers from the test's script: it starts
+ * (moving to `running`), stops, and reports a screen port. `starts` and
+ * `stops` record what the code under test asked for, in the order it asked.
+ *
+ * The machines are separate containers, so there is one state per agent id:
+ * a test that stops one agent's machine must not change what another agent's
+ * `status` answers.
+ */
+export function fakeStellaHost(
+  options: {
+    /** The state every machine starts in. Defaults to running. */
+    status?: VmStatus;
+    /** The state a machine reports, when the test changes it mid-test (a
+     * machine stopped from outside). Takes precedence over `status`. */
+    statusFor?: (agentId: string) => VmStatus;
+    /** Called when an agent's machine is started. The default moves it to
+     * running. */
+    start?: (agentId: string) => Promise<VmStatus> | VmStatus;
+    stop?: (agentId: string) => Promise<void> | void;
+    /** The screen port every machine reports. */
+    vncPort?: number | null;
+  } = {},
+): VmHost & { starts: string[]; stops: string[] } {
+  const initial: VmStatus = options.status ?? {
+    state: "running",
+    vncPort: 49153,
+    reason: "",
+  };
+  const states = new Map<string, VmStatus>();
+  const managers = new Map<string, VmManager>();
+  const starts: string[] = [];
+  const stops: string[] = [];
+  const port = options.vncPort === undefined ? 49152 : options.vncPort;
+
+  const managerFor = (agentId: string): VmManager => {
+    const known = managers.get(agentId);
+    if (known !== undefined) return known;
+    const manager: VmManager = {
+      status: () =>
+        Promise.resolve(
+          options.statusFor !== undefined
+            ? options.statusFor(agentId)
+            : (states.get(agentId) ?? initial),
+        ),
+      start: async () => {
+        starts.push(agentId);
+        const next =
+          options.start === undefined
+            ? { ...initial, state: "running" as const }
+            : await options.start(agentId);
+        states.set(agentId, next);
+        return next;
+      },
+      stop: async () => {
+        stops.push(agentId);
+        if (options.stop !== undefined) await options.stop(agentId);
+        states.set(agentId, { state: "stopped", vncPort: null, reason: "" });
+      },
+      remove: async () => {
+        stops.push(agentId);
+        states.delete(agentId);
+      },
+      vncPort: () => Promise.resolve(port),
+      startDesktop: () => Promise.resolve(),
+      stopDesktop: () => Promise.resolve(),
+    };
+    managers.set(agentId, manager);
+    return manager;
+  };
+
+  return {
+    status: () =>
+      Promise.resolve(
+        initial.state === "podman_missing" ||
+          initial.state === "podman_unusable" ||
+          initial.state === "image_missing" ||
+          initial.state === "image_stale"
+          ? { state: initial.state, reason: initial.reason }
+          : { state: "ready", reason: "" },
+      ),
+    ensureImage: () => Promise.resolve(),
+    machine: managerFor,
+    stopAll: async () => {
+      for (const agentId of managers.keys()) {
+        if ((states.get(agentId) ?? initial).state === "running") {
+          stops.push(agentId);
+          states.set(agentId, { state: "stopped", vncPort: null, reason: "" });
+        }
+      }
+    },
+    retireLegacy: () => Promise.resolve(),
+    building: false,
+    starts,
+    stops,
+  };
 }

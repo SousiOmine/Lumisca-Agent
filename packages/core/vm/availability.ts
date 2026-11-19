@@ -9,17 +9,20 @@
  * no fallback path to take: it renders the reason.
  */
 import type { StellaAvailability } from "../shared/wire.ts";
-import type { VmStatus } from "./container.ts";
+import type { VmHostState, VmState } from "./container.ts";
 
 // Importers of the verdict's type reach it through this module (the one that
 // decides it) and through `@lumisca/core/shared` (the web bundle); both name
 // the definition in shared/wire.ts.
 export type { StellaAvailability };
 
-/** Turn the machine's status into the availability verdict. Only the
- * prerequisites are judged here — whether the image has been built yet is
- * not a reason to hide the mode: starting the machine builds it. */
-export function stellaAvailability(status: VmStatus): StellaAvailability {
+/** Turn a host's or a machine's status into the availability verdict. Only
+ * the prerequisites are judged here — whether the image has been built yet is
+ * not a reason to hide the mode: starting a machine builds it. */
+export function stellaAvailability(status: {
+  state: VmState | VmHostState;
+  reason: string;
+}): StellaAvailability {
   switch (status.state) {
     case "podman_missing":
       return {
@@ -48,6 +51,7 @@ export function stellaAvailability(status: VmStatus): StellaAvailability {
     case "container_missing":
     case "stopped":
     case "running":
+    case "ready":
       return { available: true };
   }
 }

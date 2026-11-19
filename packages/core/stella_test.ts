@@ -28,14 +28,19 @@ import {
 } from "./shared/settings-keys.ts";
 import { DEFAULT_AGENT_NAME } from "./stella/agents.ts";
 import { STELLA_ONBOARDING_PROMPT } from "./stella/onboarding.ts";
-import { MINI_PNG, promptSession, withTempDir } from "./test-utils.ts";
+import {
+  fakeStellaHost,
+  MINI_PNG,
+  promptSession,
+  withTempDir,
+} from "./test-utils.ts";
 import { BackgroundProcessManager } from "./tools/background.ts";
 import { createHistorySearchTool } from "./tools/history.ts";
 import { TaskHub } from "./tools/task-hub.ts";
 import { TodoHub } from "./tools/todo.ts";
 import { createStellaTools, hostBackends } from "./tools/toolsets.ts";
 import { AGENT_MEMORY_FILE, vmMemoryPath } from "./vm/agent-memory.ts";
-import type { VmManager, VmStatus } from "./vm/container.ts";
+import type { VmHost, VmStatus } from "./vm/container.ts";
 import { vmAgentDir } from "./vm/contract.ts";
 import type { VmScreen } from "./vm/screen.ts";
 import { createVmTools } from "./vm/tools.ts";
@@ -64,19 +69,13 @@ async function stellaCore(status: VmStatus): Promise<LumiscaCore> {
   );
   core.models.models.setProvider(faux.provider);
   await core.setProviderApiKey(faux.provider.id, "faux-key");
-  core.setStellaVm(fakeVm(status));
+  core.setStellaVm(fakeVmHost(status));
   return core;
 }
 
-function fakeVm(status: VmStatus): VmManager {
-  return {
-    status: () => Promise.resolve(status),
-    start: () => Promise.resolve({ ...status, state: "running" as const }),
-    stop: () => Promise.resolve(),
-    vncPort: () => Promise.resolve(status.vncPort),
-    startDesktop: () => Promise.resolve(),
-    stopDesktop: () => Promise.resolve(),
-  };
+/** A host whose machines are scripted (see fakeStellaHost). */
+function fakeVmHost(status: VmStatus): VmHost {
+  return fakeStellaHost({ status, vncPort: status.vncPort });
 }
 
 const RUNNING: VmStatus = { state: "running", vncPort: 49153, reason: "" };
@@ -197,7 +196,7 @@ test("stella agents: creating one prepares its folder and memory file", async ()
   const core = LumiscaCore.forTesting([faux.provider], () => ({}), runner);
   core.models.models.setProvider(faux.provider);
   await core.setProviderApiKey(faux.provider.id, "faux-key");
-  core.setStellaVm(fakeVm(RUNNING));
+  core.setStellaVm(fakeVmHost(RUNNING));
   try {
     const agent = await core.createStellaAgent({ name: "Keeper", role: "r" });
     const memory = runner.calls.filter((command) =>
@@ -227,7 +226,7 @@ test("stella agents: a stopped machine prepares the folder at the first open", a
   const core = LumiscaCore.forTesting([faux.provider], () => ({}), runner);
   core.models.models.setProvider(faux.provider);
   await core.setProviderApiKey(faux.provider.id, "faux-key");
-  core.setStellaVm(fakeVm({ state: "stopped", vncPort: null, reason: "" }));
+  core.setStellaVm(fakeVmHost({ state: "stopped", vncPort: null, reason: "" }));
   try {
     await core.createStellaAgent({ name: "Later", role: "r" });
     assertEquals(runner.calls, []);
@@ -365,7 +364,7 @@ async function twoModelStellaCore(): Promise<LumiscaCore> {
   const core = LumiscaCore.forTesting([faux.provider]);
   core.models.models.setProvider(faux.provider);
   await core.setProviderApiKey(faux.provider.id, "faux-key");
-  core.setStellaVm(fakeVm(RUNNING));
+  core.setStellaVm(fakeVmHost(RUNNING));
   return core;
 }
 
@@ -948,7 +947,7 @@ async function stellaConversation(name: string, options: FauxOptions = {}) {
   );
   core.models.models.setProvider(faux.provider);
   await core.setProviderApiKey(faux.provider.id, "faux-key");
-  core.setStellaVm(fakeVm(RUNNING));
+  core.setStellaVm(fakeVmHost(RUNNING));
   const agent = await core.createStellaAgent({ name, role: "r" });
   const session = await core.getOrCreateStellaSession(agent.id);
   return { faux, core, agent, session };
@@ -1669,7 +1668,7 @@ test("stella conversation: a skill in the machine reaches the published catalog"
   );
   core.models.models.setProvider(faux.provider);
   await core.setProviderApiKey(faux.provider.id, "faux-key");
-  core.setStellaVm(fakeVm(RUNNING));
+  core.setStellaVm(fakeVmHost(RUNNING));
   try {
     const agent = await core.createStellaAgent({
       name: "Keeper",
@@ -1720,7 +1719,7 @@ test("stella conversation: a sub-agent loads a skill from the machine", async ()
   );
   core.models.models.setProvider(faux.provider);
   await core.setProviderApiKey(faux.provider.id, "faux-key");
-  core.setStellaVm(fakeVm(RUNNING));
+  core.setStellaVm(fakeVmHost(RUNNING));
   try {
     const agent = await core.createStellaAgent({
       name: "Keeper",
@@ -1818,7 +1817,7 @@ test("stella conversation: two agents do not share their own skills", async () =
   });
   core.models.models.setProvider(faux.provider);
   await core.setProviderApiKey(faux.provider.id, "faux-key");
-  core.setStellaVm(fakeVm(RUNNING));
+  core.setStellaVm(fakeVmHost(RUNNING));
   try {
     const first = await core.createStellaAgent({ name: "First", role: "One." });
     const second = await core.createStellaAgent({
@@ -2211,18 +2210,16 @@ test("stella routines: a run brings a stopped machine back", async () => {
   await core.setProviderApiKey(faux.provider.id, "faux-key");
   let state: VmStatus = RUNNING;
   let starts = 0;
-  core.setStellaVm({
-    status: () => Promise.resolve(state),
-    start: () => {
-      starts += 1;
-      state = RUNNING;
-      return Promise.resolve(state);
-    },
-    stop: () => Promise.resolve(),
-    vncPort: () => Promise.resolve(state.vncPort),
-    startDesktop: () => Promise.resolve(),
-    stopDesktop: () => Promise.resolve(),
-  });
+  core.setStellaVm(
+    fakeStellaHost({
+      statusFor: () => state,
+      start: () => {
+        starts += 1;
+        state = RUNNING;
+        return state;
+      },
+    }),
+  );
   try {
     const agent = await core.createStellaAgent({
       name: "Watcher",
@@ -2260,7 +2257,7 @@ test("stella routines: a run after a restart still has its skill catalog", async
   );
   core.models.models.setProvider(faux.provider);
   await core.setProviderApiKey(faux.provider.id, "faux-key");
-  core.setStellaVm(fakeVm(RUNNING));
+  core.setStellaVm(fakeVmHost(RUNNING));
   try {
     const agent = await core.createStellaAgent({
       name: "Watcher",
@@ -2280,7 +2277,7 @@ test("stella routines: a run after a restart still has its skill catalog", async
 
     // What a restart looks like from here: the machine is attached again and
     // the cached catalogs are gone, while the conversation stays as it was.
-    core.setStellaVm(fakeVm(RUNNING));
+    core.setStellaVm(fakeVmHost(RUNNING));
     faux.setResponses([fauxAssistantMessage("checked again")]);
     await core.runRoutineNow(routine.id);
 
@@ -2300,23 +2297,18 @@ test("stella routines: a run after a restart still has its skill catalog", async
   }
 });
 
-/** A machine that records which desktop slots it was asked to stop. */
-function recordingVm(stopped: number[]): VmManager {
-  return {
-    status: () => Promise.resolve(RUNNING),
-    start: () => Promise.resolve(RUNNING),
-    stop: () => Promise.resolve(),
-    vncPort: () => Promise.resolve(RUNNING.vncPort),
-    startDesktop: () => Promise.resolve(),
-    stopDesktop: (slot) => {
-      stopped.push(slot);
-      return Promise.resolve();
+/** A host that records which agents' machines it was asked to stop. */
+function recordingVm(stopped: string[]): VmHost {
+  return fakeStellaHost({
+    vncPort: RUNNING.vncPort,
+    stop: (agentId) => {
+      stopped.push(agentId);
     },
-  };
+  });
 }
 
 test("stella disabled: switching an agent off releases what it held", async () => {
-  const stopped: number[] = [];
+  const stopped: string[] = [];
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting(
     [faux.provider],
@@ -2346,7 +2338,7 @@ test("stella disabled: switching an agent off releases what it held", async () =
     // The conversation is closed (a run in flight would have been aborted),
     // and its desktop slot went back.
     assertEquals(core.getAgent(session.id), undefined);
-    assertEquals(stopped, [0]);
+    assertEquals(stopped, [agent.id]);
 
     // Nothing may build it again: not the open endpoint, not a session open
     // (which is how a rewind and a routine reach it), and no setup turn.

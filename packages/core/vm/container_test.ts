@@ -7,18 +7,20 @@ import { stellaAvailability } from "./availability.ts";
 import type { VmCommandResult, VmCommandRunner } from "./command.ts";
 import {
   containerFilesDigest,
-  createVmManager,
+  createVmHost,
   type VmProgress,
   type VmStatus,
 } from "./container.ts";
 import {
   VM_A11Y_HELPER,
-  VM_CONTAINER_NAME,
+  VM_AGENT_LABEL,
   VM_DBUS_ADDRESS,
-  VM_DESKTOP_SLOTS,
+  VM_DBUS_SOCKET,
   VM_DISPLAY,
   VM_HOME_VOLUME,
   VM_IMAGE_DIGEST_LABEL,
+  VM_LEGACY_CONTAINER_NAME,
+  VM_MANAGED_LABEL,
   VM_MEMORY_LIMIT_BYTES,
   VM_MEMORY_SWAP_BYTES,
   VM_PIDS_LIMIT,
@@ -29,8 +31,8 @@ import {
   VM_VNC_PORT,
   VM_VNC_RFB_PORT,
   VM_WORKDIR,
-  vmBusSocketOf,
-  vmDisplayOf,
+  vmCacheHomeOf,
+  vmContainerName,
 } from "./contract.ts";
 
 /**
@@ -40,6 +42,29 @@ import {
  * (built, created, stopped, drifted contract, rebuilt image) without a podman
  * daemon, a multi-minute image build and a real X server on CI.
  */
+
+/** The agent every test's machine belongs to. */
+const AGENT = "agent-a";
+
+/** One agent's machine. Every test here drives one machine; the host it comes
+ * from is what owns podman and the image. */
+function machineOf(options: {
+  containerDir: string;
+  run?: VmCommandRunner;
+  onProgress?: (progress: VmProgress) => void;
+}) {
+  return createVmHost(options).machine(AGENT);
+}
+
+/** A host, for the tests that need the shared side (retiring the old
+ * container, stopping every machine). */
+function hostOf(options: {
+  containerDir: string;
+  run?: VmCommandRunner;
+  onProgress?: (progress: VmProgress) => void;
+}) {
+  return createVmHost(options);
+}
 
 interface Script {
   /** Exit code per command prefix (matched against the joined argv). A `once`
@@ -86,6 +111,12 @@ function makeRunner(script: Script): {
       }
       return Promise.resolve({ ...ok(), ...answer.result });
     }
+    // The one container every script would otherwise claim to have: the
+    // single machine the per-agent ones replaced. It is gone on a machine
+    // running this version, and a test that wants it states it first.
+    if (joined === "podman container exists lumisca-stella") {
+      return Promise.resolve(fail("no such container"));
+    }
     return Promise.resolve({ ...ok(), ...script.fallback });
   };
   return { run, calls };
@@ -114,10 +145,9 @@ async function currentDigest(dir: string): Promise<string> {
  * are in place. A probe that cannot run leaves its own line out, so tests
  * change one line to state one drift. */
 const DESKTOP_CONTRACT =
-  `slots=${VM_DESKTOP_SLOTS} display=${vmDisplayOf(0)} ` +
   `screen=${VM_SCREEN_WIDTH}x${VM_SCREEN_HEIGHT} vnc=${VM_VNC_RFB_PORT} ` +
   `websockify=${VM_VNC_PORT} profile=${VM_PROFILE_ROOT} ` +
-  `bus=${vmBusSocketOf(0)}`;
+  `bus=${VM_DBUS_SOCKET} cache=${vmCacheHomeOf(AGENT)}`;
 
 const CONTRACT_OK =
   `env=${VM_DISPLAY}|${VM_UID}|${VM_WORKDIR}\n` +
@@ -149,6 +179,9 @@ function containerFacts(
     memory?: string;
     memorySwap?: string;
     pidsLimit?: string;
+    /** The agent label the container was created with. "" states a container
+     * that this application did not make. */
+    agent?: string;
   } = {},
 ): string {
   const ports =
@@ -167,7 +200,8 @@ function containerFacts(
     `${options.startedAt ?? "2026-01-01T00:00:00Z"}\t${JSON.stringify(ports)}` +
     `\t${options.memory ?? String(VM_MEMORY_LIMIT_BYTES)}` +
     `\t${options.memorySwap ?? String(VM_MEMORY_SWAP_BYTES)}` +
-    `\t${options.pidsLimit ?? String(VM_PIDS_LIMIT)}\n`
+    `\t${options.pidsLimit ?? String(VM_PIDS_LIMIT)}` +
+    `\t${JSON.stringify({ [VM_AGENT_LABEL]: options.agent ?? AGENT })}\n`
   );
 }
 
@@ -212,7 +246,7 @@ test("status: podman missing is reported with its reason", async () => {
     ],
   });
   try {
-    const manager = createVmManager({ containerDir: dir, run });
+    const manager = machineOf({ containerDir: dir, run });
     const status = await manager.status();
     assertEquals(status.state, "podman_missing");
     assertEquals(status.vncPort, null);
@@ -236,7 +270,7 @@ test("status: image_missing / container_missing / stopped", async () => {
           { match: /^podman image exists/, result: fail("", 1) },
         ],
       });
-      const manager = createVmManager({ containerDir: dir, run });
+      const manager = machineOf({ containerDir: dir, run });
       assertEquals((await manager.status()).state, "image_missing");
     }
     {
@@ -248,7 +282,7 @@ test("status: image_missing / container_missing / stopped", async () => {
           { match: /^podman container inspect/, result: fail("no such") },
         ],
       });
-      const manager = createVmManager({ containerDir: dir, run });
+      const manager = machineOf({ containerDir: dir, run });
       assertEquals((await manager.status()).state, "container_missing");
     }
     {
@@ -263,7 +297,7 @@ test("status: image_missing / container_missing / stopped", async () => {
           },
         ],
       });
-      const manager = createVmManager({ containerDir: dir, run });
+      const manager = machineOf({ containerDir: dir, run });
       const status = await manager.status();
       assertEquals(status.state, "stopped");
       assertEquals(status.reason, "");
@@ -278,7 +312,7 @@ test("status: a running machine reports its VNC port", async () => {
   const digest = await currentDigest(dir);
   const { run } = makeRunner(runningMachine(digest));
   try {
-    const manager = createVmManager({ containerDir: dir, run });
+    const manager = machineOf({ containerDir: dir, run });
     const status = await manager.status();
     assertEquals(status.state, "running");
     assertEquals(status.vncPort, 49153);
@@ -309,7 +343,7 @@ test("status: a drifted contract is reported as stopped with the reason", async 
     ],
   });
   try {
-    const manager = createVmManager({ containerDir: dir, run });
+    const manager = machineOf({ containerDir: dir, run });
     const status = await manager.status();
     assertEquals(status.state, "stopped");
     assert(
@@ -321,27 +355,27 @@ test("status: a drifted contract is reported as stopped with the reason", async 
   }
 });
 
-test("status: desktops numbered otherwise than the server expects are refused", async () => {
+test("status: a desktop that disagrees with the server's values is refused", async () => {
   const dir = await containerDir();
   const digest = await currentDigest(dir);
-  // The helper and the server both write the numbering down; a machine built
+  // The helper and the server both write the values down; a machine built
   // from a helper that disagrees would put the pane on a port nothing
   // listens on, so it is refused at start-up.
   const { run } = makeRunner({
     answers: [
       {
         match: /printf .*DISPLAY/,
-        result: ok(CONTRACT_OK.replace("display=:100", "display=:99")),
+        result: ok(CONTRACT_OK.replace(VM_DBUS_SOCKET, "/tmp/other.sock")),
       },
       ...runningMachine(digest).answers,
     ],
   });
   try {
-    const manager = createVmManager({ containerDir: dir, run });
+    const manager = machineOf({ containerDir: dir, run });
     const status = await manager.status();
     assertEquals(status.state, "stopped");
     assert(
-      status.reason.includes("display=:99"),
+      status.reason.includes("/tmp/other.sock"),
       `reason must name the drift: ${status.reason}`,
     );
   } finally {
@@ -367,7 +401,7 @@ test("status: a machine without passwordless sudo is refused", async () => {
     ],
   });
   try {
-    const manager = createVmManager({ containerDir: dir, run });
+    const manager = machineOf({ containerDir: dir, run });
     const status = await manager.status();
     // Not offered: a shell that stops at a password prompt has no answer
     // inside this conversation, so the machine must not pretend to work.
@@ -401,7 +435,7 @@ test("status: a machine whose screen is not up is refused", async () => {
     ],
   });
   try {
-    const manager = createVmManager({ containerDir: dir, run });
+    const manager = machineOf({ containerDir: dir, run });
     const status = await manager.status();
     assertEquals(status.state, "stopped");
     assert(
@@ -436,7 +470,7 @@ test("status: a machine without the accessibility bus is refused", async () => {
     ],
   });
   try {
-    const status = await createVmManager({ containerDir: dir, run }).status();
+    const status = await machineOf({ containerDir: dir, run }).status();
     assertEquals(status.state, "stopped");
     assert(
       status.reason.includes("/run/user/1000/bus"),
@@ -468,7 +502,7 @@ test("status: a machine with accessibility off is refused", async () => {
     ],
   });
   try {
-    const status = await createVmManager({ containerDir: dir, run }).status();
+    const status = await machineOf({ containerDir: dir, run }).status();
     assertEquals(status.state, "stopped");
     assert(
       status.reason.includes("toolkit-accessibility"),
@@ -501,7 +535,7 @@ test("status: a machine whose accessibility helper is missing is refused", async
     ],
   });
   try {
-    const status = await createVmManager({ containerDir: dir, run }).status();
+    const status = await machineOf({ containerDir: dir, run }).status();
     assertEquals(status.state, "stopped");
     assert(
       status.reason.includes("accessibility helper did not run"),
@@ -521,7 +555,7 @@ test("status: the accessibility helper is probed with a request that finds nothi
   const { run, calls } = makeRunner(runningMachine(digest));
   try {
     assertEquals(
-      (await createVmManager({ containerDir: dir, run }).status()).state,
+      (await machineOf({ containerDir: dir, run }).status()).state,
       "running",
     );
     const probe = calls.find((call) => call.join(" ").includes("printf"));
@@ -538,7 +572,7 @@ test("status: an image built from older container files is stale", async () => {
   const dir = await containerDir();
   const { run } = makeRunner(runningMachine("a-digest-from-some-other-build"));
   try {
-    const manager = createVmManager({ containerDir: dir, run });
+    const manager = machineOf({ containerDir: dir, run });
     const status = await manager.status();
     assertEquals(status.state, "image_stale");
   } finally {
@@ -558,11 +592,11 @@ test("status: an image without a digest label counts as stale", async () => {
     ],
   });
   try {
-    const manager = createVmManager({ containerDir: dir, run });
+    const manager = machineOf({ containerDir: dir, run });
     assertEquals((await manager.status()).state, "image_stale");
     // Sanity: with the label present the same script is a current image.
     const { run: labelled } = makeRunner(runningMachine(digest));
-    const status = await createVmManager({
+    const status = await machineOf({
       containerDir: dir,
       run: labelled,
     }).status();
@@ -618,7 +652,7 @@ test("status: the answer is cached, and fresh bypasses the cache", async () => {
   const digest = await currentDigest(dir);
   const { run, calls } = makeRunner(runningMachine(digest));
   try {
-    const manager = createVmManager({ containerDir: dir, run });
+    const manager = machineOf({ containerDir: dir, run });
     await manager.status();
     const afterFirst = calls.length;
     await manager.status();
@@ -651,7 +685,7 @@ test("start: a missing image is built, created, started and verified", async () 
     ],
   });
   try {
-    const manager = createVmManager({
+    const manager = machineOf({
       containerDir: dir,
       run,
       onProgress: (p) => progress.push(p),
@@ -698,7 +732,7 @@ test("start: a running machine is left alone", async () => {
   const digest = await currentDigest(dir);
   const { run, calls } = makeRunner(runningMachine(digest));
   try {
-    const manager = createVmManager({ containerDir: dir, run });
+    const manager = machineOf({ containerDir: dir, run });
     const status = await manager.start();
     assertEquals(status.state, "running");
     const joined = calls.map((c) => c.join(" "));
@@ -723,7 +757,7 @@ test("start: a missing image definition fails with its path", async () => {
         { match: /^podman image exists/, result: fail("", 1) },
       ],
     });
-    const manager = createVmManager({ containerDir: root, run });
+    const manager = machineOf({ containerDir: root, run });
     await assertRejects(
       () => manager.start(),
       Error,
@@ -767,7 +801,7 @@ test("start: a broken container is recreated on the same home volume", async () 
     ],
   });
   try {
-    const manager = createVmManager({ containerDir: dir, run });
+    const manager = machineOf({ containerDir: dir, run });
     await assertRejects(() => manager.start(), Error);
     const joined = calls.map((c) => c.join(" "));
     assertEquals(
@@ -836,7 +870,7 @@ test("start: a machine created without its ceilings is replaced", async () => {
     ],
   });
   try {
-    const manager = createVmManager({ containerDir: dir, run });
+    const manager = machineOf({ containerDir: dir, run });
     const status = await manager.start();
     assertEquals(status.state, "running");
     const joined = calls.map((c) => c.join(" "));
@@ -892,7 +926,7 @@ test("start: a stale image is rebuilt from the container files", async () => {
     ],
   });
   try {
-    const manager = createVmManager({ containerDir: dir, run });
+    const manager = machineOf({ containerDir: dir, run });
     // The script keeps answering with the old label, so the machine never
     // becomes current: the start must fail rather than claim success.
     await assertRejects(() => manager.start(), Error);
@@ -944,7 +978,7 @@ test("start: an image with no container yet needs no home to carry", async () =>
     ],
   });
   try {
-    const manager = createVmManager({ containerDir: dir, run });
+    const manager = machineOf({ containerDir: dir, run });
     await manager.start();
     const joined = calls.map((c) => c.join(" "));
     assertEquals(
@@ -957,32 +991,33 @@ test("start: an image with no container yet needs no home to carry", async () =>
   }
 });
 
-test("stop: a stopped or absent machine is not an error", async () => {
+test("stop: stopping an absent machine is not an error", async () => {
   const dir = await containerDir();
   const digest = await currentDigest(dir);
   try {
     {
+      // Stopping is idempotent, and the manager does not spend a status read
+      // before it: podman answers "no such container" and the sleep is over.
       const { run, calls } = makeRunner({
         answers: [
-          { match: /^podman --version/, result: ok("4.9.3\n") },
-          { match: /^podman image exists/, result: fail("", 1) },
+          { match: /^podman stop/, result: fail("no such container", 125) },
         ],
       });
-      const manager = createVmManager({ containerDir: dir, run });
+      const manager = machineOf({ containerDir: dir, run });
       await manager.stop();
       assertEquals(
         calls.some((c) => c.join(" ").startsWith("podman stop")),
-        false,
+        true,
       );
     }
     {
       const { run, calls } = makeRunner({
         answers: [
-          { match: /^podman stop/, result: ok(`${VM_CONTAINER_NAME}\n`) },
+          { match: /^podman stop/, result: ok(`${vmContainerName(AGENT)}\n`) },
           ...runningMachine(digest).answers,
         ],
       });
-      const manager = createVmManager({ containerDir: dir, run });
+      const manager = machineOf({ containerDir: dir, run });
       await manager.stop();
       assertEquals(
         calls.some((c) => c.join(" ").startsWith("podman stop")),
@@ -1007,7 +1042,7 @@ test("status: the VNC port is null when the machine publishes none", async () =>
     ],
   });
   try {
-    const manager = createVmManager({ containerDir: dir, run });
+    const manager = machineOf({ containerDir: dir, run });
     const status: VmStatus = await manager.status();
     assertEquals(status.vncPort, null);
     assertEquals(await manager.vncPort(), null);
@@ -1026,7 +1061,7 @@ test("status: the contract is proven once per container instance", async () => {
   const digest = await currentDigest(dir);
   try {
     const { run, calls } = makeRunner(runningMachine(digest));
-    const manager = createVmManager({ containerDir: dir, run });
+    const manager = machineOf({ containerDir: dir, run });
     assertEquals((await manager.status({ fresh: true })).state, "running");
     const probes = () =>
       calls.filter((call) => call.join(" ").includes("printf")).length;
@@ -1046,7 +1081,7 @@ test("status: the contract is proven once per container instance", async () => {
     );
     assertEquals(
       (
-        await createVmManager({
+        await machineOf({
           containerDir: dir,
           run: restarted.run,
         }).status()
@@ -1082,7 +1117,7 @@ test("status: a machine that is still booting is not remembered as broken", asyn
         ...runningMachine(digest).answers,
       ],
     });
-    const manager = createVmManager({ containerDir: dir, run });
+    const manager = machineOf({ containerDir: dir, run });
     const first = await manager.status({ fresh: true });
     assertEquals(first.state, "stopped");
     const second = await manager.status({ fresh: true });
@@ -1102,7 +1137,7 @@ test("status: a second fresh read does not ask about the image again", async () 
   try {
     const script = runningMachine(digest);
     const { run, calls } = makeRunner(script);
-    const manager = createVmManager({ containerDir: dir, run });
+    const manager = machineOf({ containerDir: dir, run });
     assertEquals((await manager.status({ fresh: true })).state, "running");
     const afterFirst = calls.filter((call) =>
       call.join(" ").startsWith("podman image exists"),
@@ -1126,7 +1161,7 @@ test("status: concurrent reads share one round of podman calls", async () => {
   const digest = await currentDigest(dir);
   try {
     const { run, calls } = makeRunner(runningMachine(digest));
-    const manager = createVmManager({ containerDir: dir, run });
+    const manager = machineOf({ containerDir: dir, run });
     const [a, b] = await Promise.all([
       manager.status({ fresh: true }),
       manager.status({ fresh: true }),
@@ -1162,7 +1197,7 @@ test("status: podman that cannot start a container is not offered", async () => 
         },
       ]),
     );
-    const manager = createVmManager({ containerDir: dir, run });
+    const manager = machineOf({ containerDir: dir, run });
     const status = await manager.status({ fresh: true });
     assertEquals(status.state, "podman_unusable");
     assert(
@@ -1183,7 +1218,7 @@ test("status: podman that cannot start a container is not offered", async () => 
   }
 });
 
-test("the home volume is mounted on every container the machine makes", async () => {
+test("the machine is created for its agent, on the shared home and inside its ceilings", async () => {
   // The reason the volume exists: a container is replaced (a release rebuilds
   // it) and can be removed by anything, and the files the agent wrote must
   // not go with it. A container created WITHOUT the mount would start on an
@@ -1211,15 +1246,32 @@ test("the home volume is mounted on every container the machine makes", async ()
     ],
   });
   try {
-    const manager = createVmManager({ containerDir: dir, run });
+    const manager = machineOf({ containerDir: dir, run });
     await manager.start();
     const create = calls
       .map((c) => c.join(" "))
       .find((c) => c.startsWith("podman create "));
     assert(create !== undefined, "the machine must be created");
+    // One container per agent, named after it, carrying the label that says
+    // whose it is: two agents must never be handed the same machine.
+    assert(
+      create!.includes(`--name ${vmContainerName(AGENT)}`),
+      `the machine must be named after its agent: ${create}`,
+    );
+    assert(
+      create!.includes(`--label ${VM_MANAGED_LABEL}`) &&
+        create!.includes(`--label ${VM_AGENT_LABEL}=${AGENT}`),
+      `the machine must say it is ours and whose: ${create}`,
+    );
     assert(
       create!.includes(`--volume ${VM_HOME_VOLUME}:${VM_WORKDIR}`),
       `the home must be on its volume: ${create}`,
+    );
+    // The cache AT-SPI keys by DISPLAY must be per agent: every machine runs
+    // `:99`, and the home is shared.
+    assert(
+      create!.includes(`--env XDG_CACHE_HOME=${vmCacheHomeOf(AGENT)}`),
+      `the machine's cache must be its own: ${create}`,
     );
     // A named volume, not a host path: the machine's isolation rests on
     // nothing of the host being reachable from inside.
@@ -1228,9 +1280,15 @@ test("the home volume is mounted on every container the machine makes", async ()
         !create!.includes(VM_WORKDIR + ":"),
       `nothing of the host may be mounted: ${create}`,
     );
+    // One screen per machine, published on the host's loopback with a port
+    // the creation assigns.
+    assert(
+      create!.includes(`--publish 127.0.0.1::${VM_VNC_PORT}`),
+      `one screen bridge per machine: ${create}`,
+    );
     // A machine that died on its own is brought back by podman, not by
     // whoever happens to open a conversation next. `unless-stopped` keeps
-    // the app's explicit `podman stop` final.
+    // the app's explicit `podman stop` (idle sleep, shutdown) final.
     assert(
       create!.includes("--restart unless-stopped"),
       `the machine must restart after a crash: ${create}`,
@@ -1249,100 +1307,148 @@ test("the home volume is mounted on every container the machine makes", async ()
   }
 });
 
-test("an install older than the volume has its home moved onto it", async () => {
-  // The container from before the volume keeps its home in its own writable
-  // layer. Replacing it without moving the files would start the machine on
-  // an empty volume and delete the old container — the files would be gone
-  // with no error to show for it.
+test("a container that belongs to another agent is replaced, not driven", async () => {
+  // The label is the only proof that the container named after an agent is
+  // that agent's. A hand-made or reused container would otherwise be handed
+  // to a conversation as its machine, with somebody else's files and browser
+  // in it.
   const dir = await containerDir();
-  const { run, calls } = makeRunner({
-    answers: [
-      { match: /^podman --version/, result: ok("4.9.3\n") },
-      { match: /^podman image exists/, result: ok() },
-      // An older build: the container files changed under the image.
-      { match: /^podman image inspect/, result: ok("older-digest\n") },
-      { match: /^podman container exists/, result: ok() },
-      // The old container's home is in its own layer, not on a volume.
+  const digest = await currentDigest(dir);
+  const { run, calls } = makeRunner(
+    runningMachine(digest, [
       {
-        match: /^podman container inspect --format \{\{range .Mounts\}\}/,
-        result: ok(`${VM_WORKDIR}=bind\n`),
+        match: /^podman container inspect/,
+        result: ok(containerFacts({ agent: "somebody-else" })),
+        once: true,
       },
-      { match: /^podman container inspect/, result: ok(containerFacts()) },
-      { match: /^podman stop/, result: ok() },
-      { match: /^podman cp /, result: ok() },
-      { match: /^podman rm/, result: ok() },
-      { match: /^podman build/, result: ok("built\n") },
-      { match: /^podman create /, result: ok("abc123\n") },
-      { match: /^podman start/, result: ok() },
-      { match: /printf .*DISPLAY/, result: ok(CONTRACT_OK) },
-      {
-        match: /xdotool getdisplaygeometry/,
-        result: ok(`${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n`),
-      },
-    ],
-  });
+    ]),
+  );
   try {
-    const manager = createVmManager({ containerDir: dir, run });
-    await assertRejects(() => manager.start(), Error);
+    // `start` reads the container first; the foreign label is what it meets,
+    // so the container is replaced before anything runs inside it.
+    const manager = machineOf({ containerDir: dir, run });
+    await manager.start();
     const joined = calls.map((c) => c.join(" "));
-    // The files are read out of the OLD container before it is removed...
-    const copyOut = joined.findIndex((c) =>
-      c.startsWith(`podman cp ${VM_CONTAINER_NAME}:${VM_WORKDIR}`),
-    );
-    const removed = joined.findIndex((c) => c.startsWith("podman rm"));
-    const created = joined.findIndex((c) => c.startsWith("podman create "));
-    const copyIn = joined.findIndex(
-      (c) =>
-        c.startsWith("podman cp ") &&
-        c.endsWith(`${VM_CONTAINER_NAME}:${VM_WORKDIR}/`),
-    );
-    assert(copyOut !== -1, `the home must be read out: ${joined.join("\n")}`);
     assert(
-      removed > copyOut,
-      "the old container must keep the files until read",
+      joined.some((c) => c.startsWith("podman rm --force")),
+      `the foreign container must be replaced: ${joined.join("\n")}`,
     );
-    assert(created > removed, "the replacement comes after the removal");
-    assert(copyIn > created, "the files go into the volume-backed container");
   } finally {
     await fsp.rm(dir, { recursive: true });
   }
 });
 
-test("a container already on the volume is not migrated again", async () => {
-  // Every start after the first would otherwise copy the home through a
-  // temporary directory, on every release, forever.
+test("an install older than the volume has its home moved onto it", async () => {
+  // The container from before the volume keeps its home in its own writable
+  // layer. Retiring it without moving the files would leave the files in a
+  // container that no longer exists — gone with no error to show for it.
+  const dir = await containerDir();
+  const digest = await currentDigest(dir);
+  const { run, calls } = makeRunner({
+    answers: [
+      { match: /^podman --version/, result: ok("4.9.3\n") },
+      { match: /^podman image exists/, result: ok() },
+      { match: /^podman image inspect/, result: ok(`${digest}\n`) },
+      { match: /^podman container exists/, result: ok() },
+      // The old container's home is in its own layer, not on a volume.
+      {
+        match: /^podman container inspect --format \{\{range .Mounts\}\}/,
+        result: ok(`${VM_WORKDIR}=bind `),
+      },
+      { match: /^podman stop/, result: ok() },
+      { match: /^podman cp /, result: ok() },
+      { match: /^podman rm/, result: ok() },
+      { match: /^podman run --rm --userns/, result: ok() },
+    ],
+  });
+  try {
+    await hostOf({ containerDir: dir, run }).retireLegacy();
+    const joined = calls.map((c) => c.join(" "));
+    // The files are read out of the OLD container before it is removed...
+    const copyOut = joined.findIndex((c) =>
+      c.startsWith(`podman cp ${VM_LEGACY_CONTAINER_NAME}:${VM_WORKDIR}`),
+    );
+    const copyIn = joined.findIndex((c) =>
+      c.startsWith("podman run --rm --userns"),
+    );
+    const removed = joined.findIndex((c) => c.startsWith("podman rm"));
+    assert(copyOut !== -1, `the home must be read out: ${joined.join("\n")}`);
+    assert(copyIn > copyOut, "the files go into the shared volume");
+    assert(removed > copyIn, "the old container is removed last");
+    assert(
+      joined[copyIn]!.includes(`--volume ${VM_HOME_VOLUME}:${VM_WORKDIR}`),
+      `the copy must land on the shared volume: ${joined[copyIn]}`,
+    );
+  } finally {
+    await fsp.rm(dir, { recursive: true });
+  }
+});
+
+test("a legacy container already on the volume is only stopped and removed", async () => {
+  // Its home is already where the new machines read from, so copying would
+  // duplicate the files on every start of the application.
   const dir = await containerDir();
   const { run, calls } = makeRunner({
     answers: [
       { match: /^podman --version/, result: ok("4.9.3\n") },
       { match: /^podman image exists/, result: ok() },
-      { match: /^podman image inspect/, result: ok("older-digest\n") },
       { match: /^podman container exists/, result: ok() },
       {
         match: /^podman container inspect --format \{\{range .Mounts\}\}/,
-        result: ok(`${VM_WORKDIR}=volume\n`),
+        result: ok(`${VM_WORKDIR}=volume `),
       },
-      { match: /^podman container inspect/, result: ok(containerFacts()) },
       { match: /^podman stop/, result: ok() },
       { match: /^podman rm/, result: ok() },
-      { match: /^podman build/, result: ok("built\n") },
-      { match: /^podman create /, result: ok("abc123\n") },
-      { match: /^podman start/, result: ok() },
-      { match: /printf .*DISPLAY/, result: ok(CONTRACT_OK) },
-      {
-        match: /xdotool getdisplaygeometry/,
-        result: ok(`${VM_SCREEN_WIDTH} ${VM_SCREEN_HEIGHT}\n`),
-      },
     ],
   });
   try {
-    const manager = createVmManager({ containerDir: dir, run });
-    await assertRejects(() => manager.start(), Error);
+    await hostOf({ containerDir: dir, run }).retireLegacy();
     const joined = calls.map((c) => c.join(" "));
     assertEquals(
       joined.filter((c) => c.startsWith("podman cp")).length,
       0,
       `an already-migrated machine must not copy: ${joined.join("\n")}`,
+    );
+    assertEquals(
+      joined.filter((c) => c.startsWith("podman run --rm --userns")).length,
+      0,
+      "nothing must be moved",
+    );
+    assert(
+      joined.some((c) => c.startsWith("podman rm --force")),
+      `the old container must go: ${joined.join("\n")}`,
+    );
+  } finally {
+    await fsp.rm(dir, { recursive: true });
+  }
+});
+
+test("stopAll stops the machines this host saw, and asks podman nothing else", async () => {
+  // A machine nobody opened in this process may belong to another
+  // installation using the same podman, so shutdown stops what it knows and
+  // leaves the rest alone.
+  const dir = await containerDir();
+  const digest = await currentDigest(dir);
+  const { run, calls } = makeRunner(
+    runningMachine(digest, [
+      {
+        match: /^podman container inspect/,
+        result: ok(containerFacts({ status: "stopped" })),
+      },
+    ]),
+  );
+  try {
+    const host = hostOf({ containerDir: dir, run });
+    await host.machine("agent-a").status();
+    await host.machine("agent-b").status();
+    await host.stopAll();
+    const joined = calls.map((c) => c.join(" "));
+    const stops = joined.filter((c) => c.startsWith("podman stop"));
+    assertEquals(stops.length, 2, joined.join("\n"));
+    assertEquals(
+      joined.some((c) => c.includes("--filter")),
+      false,
+      `nothing may be listed by label: ${joined.join("\n")}`,
     );
   } finally {
     await fsp.rm(dir, { recursive: true });

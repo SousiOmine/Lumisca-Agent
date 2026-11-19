@@ -33,7 +33,7 @@ import {
   TOOL_SEND_CHAT,
   TOOL_VM_ASK_USER,
 } from "../packages/core/shared/mod.ts";
-import { createVmManager } from "../packages/core/vm/container.ts";
+import { createVmHost } from "../packages/core/vm/container.ts";
 import { startServer } from "../packages/server/app.ts";
 import { DEFAULT_PORT } from "../packages/server/default-port.ts";
 import { repoRoot } from "./lib.ts";
@@ -192,7 +192,7 @@ const core = LumiscaCore.forTesting([faux.provider]);
 // machine, stella mode reports itself unavailable and the selection screen
 // says so — which is itself worth seeing in the demo.
 core.setStellaVm(
-  createVmManager({
+  createVmHost({
     containerDir: new URL("../packages/core/vm/container/", import.meta.url)
       .pathname,
   }),

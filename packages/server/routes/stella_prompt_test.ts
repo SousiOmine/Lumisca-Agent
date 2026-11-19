@@ -59,6 +59,12 @@ function fakeCore(received: Received): StellaApi {
       received.order.push("ready");
       return Promise.resolve();
     },
+    // The catalog is read after the wake: a sleeping machine is not read, so
+    // a run that woke one would start without its skills.
+    ensureStellaSkills: () => {
+      received.order.push("skills");
+      return Promise.resolve();
+    },
     savePromptUploads: (
       _sessionId: string,
       uploads: readonly { name: string; bytes: Uint8Array }[],
@@ -143,7 +149,7 @@ test("stella prompt: the machine is made ready before the run", async () => {
     }),
   });
   assertEquals(response.status, 200);
-  assertEquals(received.order, ["ready", "upload", "prompt"]);
+  assertEquals(received.order, ["ready", "skills", "upload", "prompt"]);
 });
 
 test("stella prompt: an image with no text is a prompt", async () => {

@@ -454,25 +454,26 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
   `podman --version` が通っても起動できるとは限らないので、素のイメージを 1 回起動して確かめ（`VM_PROBE_IMAGE`）、失敗すれば `podman_unusable` として提示を断ります。
 - イメージ: `packages/core/vm/container/Containerfile` から初回起動時にビルドします。
   配布物では `scripts/build-server.ts` が `stella-container/` をバイナリの隣へ同梱し、`packages/server/paths.ts` が場所を解決します。
-  定義のダイジェストを `lumisca.container-digest` ラベルに焼き、ずれていればイメージを作り直します（`/home/agent` は `podman cp` で退避して戻します）。
+  定義のダイジェストを `lumisca.container-digest` ラベルに焼き、ずれていればイメージを作り直します。ホームはボリュームにあるので、コンテナの置き換えでファイルは失われません。
 - 契約値: 画面サイズ（1280x800）、マシン自身の DISPLAY、uid/gid、作業ディレクトリ、パスワード無し `sudo` は `packages/core/vm/contract.ts` と Containerfile / entry.sh の両方にあります。
   起動時に実コンテナと突き合わせ（`sudo -n true` を含む）、ずれていれば起動を失敗させます。
-  デスクトップの値（スロット数、表示番号、ポート、プロファイルの置き場、バスの名前）は `container/desktop.sh contract` が 1 行で答え、同じ `podman exec` の中で `contract.ts` の値と突き合わせます。
+  デスクトップの値（画面サイズ、ポート、プロファイルの置き場、バスとキャッシュの場所）は `container/desktop.sh contract` が 1 行で答え、同じ `podman exec` の中で `contract.ts` の値と突き合わせます。
 - 落ちたマシンは podman が戻します。
   `podman create` に `--restart=unless-stopped` を渡します。
-  マシンは会話を開くときにしか起動されないので、自前で死んだコンテナは止まったままになり、全ツールが `container state improper` を返していました。
-  `podman stop` は手動停止として扱われるため、アプリの終了（`LumiscaCore.close()`）で止めたマシンは戻りません。
-  送信とルーチン実行は起動を確かめてから走ります（`ensureStellaReady`）。
+  マシンは使われたときにしか起動されないので、自前で死んだコンテナは止まったままになり、全ツールが `container state improper` を返していました。
+  `podman stop` は手動停止として扱われるため、スリープやアプリの終了（`LumiscaCore.close()`）で止めたマシンは戻りません。
+  送信とルーチン実行は起動を確かめてから走ります（`ensureStellaReady(agentId)`）。
 - 資源の上限はコンテナの cgroup です。
-  `podman create` に `--memory`、`--memory-swap`（同じ値。つまりスワップ無し）、`--pids-limit` を渡し、値は `contract.ts` の `VM_MEMORY_LIMIT_BYTES` / `VM_MEMORY_SWAP_BYTES` / `VM_PIDS_LIMIT` にあります。
+  `podman create` に `--memory`（3 GiB）、`--memory-swap`（同じ値。つまりスワップ無し）、`--pids-limit` を渡し、値は `contract.ts` の `VM_MEMORY_LIMIT_BYTES` / `VM_MEMORY_SWAP_BYTES` / `VM_PIDS_LIMIT` にあります。
+  3 GiB は 1 枚のデスクトップとビルド 1 回が根拠です。何台起きるかは固定の上限ではなく、アイドルスリープが抑えます。
   この 3 つは `podman container inspect` の `HostConfig` で照合し（`limitsMismatch`）、足りないコンテナは `stopped` と理由を返して `start()` に作り直させます。
   ホームはボリュームにあるので、作り直しでエージェントのファイルは失われません。
   上限は「暴走をホストではなくマシンの中で終わらせる」ためのものです。値を上げるとホストの OOM killer が無関係なプロセスを選ぶ側に戻ります。
 - 本番のマシンに触るテストは、明示したときだけです。
-  `packages/core/stella_live_test.ts` は利用者の `lumisca-stella` をそのまま使います。
+  `packages/core/stella_live_test.ts` はテストが作ったエージェントのコンテナだけを使い、利用者の会話のマシンには触れません。
   `LUMISCA_STELLA_LIVE=1` が無ければ状態も読まずに skip し、`core.close()` の前に `setStellaVm(undefined)` で切り離します。
   `close()` は持っているマシンを止めるためです。
-  `scripts/probe-stella.ts` も同じ理由で切り離してから閉じます。
+  `scripts/probe-stella.ts` も同じ理由で切り離してから閉じ、`--start --agent <id>` を渡したときだけそのエージェントのマシンを起こします。
   `bun run test` に含まれるので、ここを緩めるとテストを回しただけで利用中のマシンが落ちます。
 - 権限: `agent` は `sudo` を使えます。
   コンテナの外へは出られず（ホストをマウントせず、uid 0 は `--userns keep-id` で写像）、既定を root にしないのは Chromium のサンドボックスを使うためです。
@@ -482,50 +483,43 @@ podman コンテナを仮想マシンとして与え、その中だけでエー�
   深くすると、その版より前にインストールされたサーバーが更新を適用できません。
   `archive.ts` の `MAX_PACKAGE_DEPTH` を上げるのは、旧版の更新を諦めるときだけにしてください。
 
-### デスクトップ（エージェントごと）
+### マシンとデスクトップ（エージェントごと）
 
-会話（エージェント）ごとに 1 つのデスクトップを持ちます。
-X サーバ、ウィンドウマネージャ、セッションバス、専用プロファイルのブラウザ、VNC の橋で 1 組です（`container/desktop.sh`、`vm/machine.ts`）。
+エージェントごとに 1 つのコンテナを持ちます。
+名前は `lumisca-stella-<agentId>` で、ラベル `lumisca.stella=1` と `lumisca.stella.agent=<agentId>` が付きます。
+X サーバ（`:99`）、ウィンドウマネージャ、セッションバス、専用プロファイルのブラウザ、VNC の橋で 1 組です（`container/desktop.sh`、`vm/container.ts`、`vm/machine.ts`）。
 
-- 枠は 6 つで、表示は `:100` からです。
-  `VM_DESKTOP_SLOTS` = 6 で、X は `:100`〜`:105`（`vmDisplayOf`）、RFB は 5900 番台、websockify は 6080 番台です。
-  容器は 6080-6085 を範囲で公開します（`VM_VNC_PORT_RANGE`）。
-  `:99` はマシン自身の画面で、契約検査の対象と、デスクトップを持たないコマンドの `DISPLAY` です。
-  `bash` から GUI を起こすとそこに出て、どの会話にも映りません。
-  枠の数はメモリで決めています（Chromium 1 つ約 220 MB + Xvfb と openbox で約 35 MB。6 枠すべて起動して約 1.5 GB、4 枠で 1.0 GB を実測）。
-- 空きが無ければ、実行中でない会話の枠を明け渡します。
-  最後に使った枠から順に、`isStreaming` でない会話のデスクトップを止めて譲ります。
-  すべての会話が実行中なら**奪わずに待ちます**（`VM_DESKTOP_WAIT_MS` = 30 秒、250 ms ごとに空きを確かめる）。
-  待ち切れなければツールは「すべてのデスクトップが使用中」と返し、エージェントは後でやり直せます。
-  判定は `StellaMachine.setBusyCheck` に渡す getter（`sessions.getByAgent` → `pool.get(...).isStreaming`）で、実行中の run の画面を落とすとその run の途中で画面が消えるためです。
-- 起こすのは、画面を使ったときです。
-  画面のツール、意味の層、`vm_launch`、クリップボードだけが `StellaMachine.execFor` の継ぎ目（そのスロットの `DISPLAY` と `DBUS_SESSION_BUS_ADDRESS`）を使い、最初の 1 回で `desktop.sh start` を呼びます。
-  ファイル、シェル、バックグラウンド実行は素の継ぎ目です（`ls` のたびにブラウザを起こさないため）。
-  この分離は事故を減らすためのもので、境界ではありません（コンテナ内のプロセスは `DISPLAY` を名指しすればどの画面にも繋がります）。
-- 枠は 1 エージェントのものです。
-  `machine.ts` は枠を `await` の前に同期的に予約します（同時に使い始めた 2 人が同じ枠を取りません）。
-  コンテナ側も `desktop.sh` が持ち主を `$STATE_DIR/<slot>/agent` に書き、違うエージェントの `start` はブラウザと橋を落としてから始めます。
-  サーバーが記憶を失っても（再起動）、他人のブラウザには入りません。
-- 再起動すると枠の記憶を捨てます。
-  `podman stop` は中のプロセスを全部落とすので、`ensureReady`（コンテナを起こしたとき）、`stop()`、`set()` が `#desktops` を捨てます。
-  コンテナ側では `entry.sh` の先頭の `desktop.sh reset` が前回の pid ファイルと X のロックを消します（どちらも `/tmp` に残り、pid は再利用され、ロックは Xvfb の起動を止めるためです）。
+- 枠はありません。
+  1 コンテナ 1 デスクトップなので、`:100` 以降の表示番号も、枠の予約も、追い出しも、順番待ちもありません。
+  `:99` がそのままエージェントの画面です。`bash` から起こした GUI も同じ画面に出ます。
+- デスクトップは最初の画面利用で起動します。
+  画面のツール、意味の層、`vm_launch`、クリップボードが `StellaMachine.screenExec` を通り、`desktop.sh start <agentId>` を 1 回呼びます。
+  ファイル、シェル、バックグラウンド実行は `exec` で、コンテナを起こすだけでブラウザは起こしません（`ls` のたびにブラウザを起動しないためです）。
+- アイドルスリープ: 5 分使われなければ `podman stop` で止めます（`VM_IDLE_SLEEP_MS`。30 秒ごとに `reapIdle` が見回します）。
+  最終利用は exec、プロンプト、画面の接続、パネルへの入力で更新します。
+  実行中の run、バックグラウンドコマンドが動いている会話、exec が進行中のエージェントは止めません（`setBusyCheck`）。
+  止めたコンテナは `podman start` で起こし、`entry.sh` が画面とバスを立て直します。前回の pid ファイルと X のロックは `entry.sh` の先頭の `desktop.sh reset` が捨てます（どちらも `/tmp` に残り、pid は再利用され、ロックは Xvfb の起動を止めるためです）。
   `alive` は `kill -0` ではなく `/proc/<pid>/cmdline` で確かめます（ゾンビと再利用に成功してしまうためです）。
-- プロファイルとログイン: `$HOME/.config/chromium/<agent id>` がエージェントの同一性です（`VM_PROFILE_ROOT`）。
-  枠を明け渡して起こし直してもログインは続きます。
-  この変更より前の共有プロファイル（`~/.config/chromium` 直下）は移行しません。
-- バスも枠ごとです。
-  `desktop.sh` が `session-<slot>.sock` を立て、`execFor` がそのアドレスを積みます。
-  AT-SPI のレジストリはセッションバス単位で、さらに at-spi 自身のバスは `DISPLAY` から名付けられる（`~/.cache/at-spi/bus_100`）ので、**デスクトップのバスはその `DISPLAY` で起こします**。
-  共有すると `vm_find` が他のエージェントの窓を読めてしまいます。
-  ref のスナップショットも `a11y.py` が表示ごとのディレクトリに分けます。
-- 起動は待ち合わせてから返します。
-  `desktop.sh start` は X の応答と websockify の待ち受けを確かめ、上がらなければ非 0 で終わります。
-  ペインはポートを得た瞬間に繋ぐためです。
-- ペインは会話のエージェントの画面です。
-  `GET /api/stella/screen` は `?agent=<id>` を取り、そのエージェントの枠のホストポートへ中継します。
-  ペインが繋ぐかどうかは「マシンが動いているか」だけで決めます（ポートはサーバーが解決します）。
-  中継はデスクトップの起動に失敗したら 1011 で閉じます。
-  ハンドラの Promise は待たれないので、投げるとペインが「接続中」で止まります。
+- 会話を開いてもマシンは起動しません。
+  `getOrCreateStellaSession` はイメージの用意（`ensureStellaImage`）だけを行い、コンテナは最初のプロンプトかツール呼び出しが起こします（`ensureReady(agentId)`、`exec(agentId)`）。
+  スキル一覧はマシンが起きている間だけ読みます。プロンプトの経路は起床の後に `ensureStellaSkills` を呼びます。
+  起床は `ensureReady` が `status({ fresh: true })` で確かめてから行います。外から止められたマシンを「動いている」と覚えたままツールを走らせないためです。
+- ペインは状態を見て繋ぎます。
+  `GET /api/stella/agents/:id/machine` が `{ state, starting, reason }` を返し、`components/StellaView.tsx` が開いている会話の分だけ 3 秒ごとに読みます。
+  `stopped` は休止中です。パネルは「休止中」と「起こす」を出し、`POST .../wake` で起こします。
+  パネル上の押下・キー・ホイール・タッチは 10 秒に 1 回まで `POST .../touch` を送ります。開いたまま操作が無ければ眠ります。
+- ホームは共有です。
+  全コンテナが `lumisca-stella-home` を `/home/agent` に載せます。ファイル、シェルの設定、`vm_env` の値、スキルは全エージェントで共有されます。
+  作業フォルダ（`agents/<id>`）、ブラウザのプロファイル（`~/.config/chromium/<id>`）、キャッシュ（`~/.cache/agents/<id>`）だけがエージェントごとです。
+  `XDG_CACHE_HOME` はコンテナ作成時に渡します。at-spi はバスのソケットを `DISPLAY`（全マシンで `:99`）からキャッシュの下に作るので、共有したままだと別エージェントのアクセシビリティツリーに繋がります。
+  `vm_env` の保存キューは 1 本です。`env.json` は共有の 1 ファイルなので、エージェントごとに持つと同時更新で値を失います。
+- 既存の単一コンテナは、最初のマシンを起こすときに退職します（`VmHost.retireLegacy`、`VmManager.start` から呼びます）。
+  ホームがボリューム上にあればそのまま `podman rm` します。ボリュームより前の形なら、一時コンテナでファイルをボリュームへ写してから消します。
+  ホストを取り付けた時点では消しません。状態を読むだけのアプリ、パッケージのスモークテスト、スクリプトが、動いているインストールのマシンを止めてしまうためです。
+- 終了時に止めるのは、そのプロセスが見たマシンだけです（`StellaMachine.stopAll` → `VmHost.stopAll`）。
+  ラベルで全コンテナを列挙すると、同じ podman を使う別のインストールのマシンまで止めます。落ちたサーバーが残したマシンは、次にそのエージェントが使われたときに引き取られます（コンテナ名がエージェント ID なので、区別するものはありません）。
+- 同じ podman を使う 2 つ目のサーバー（開発サーバーとデスクトップアプリなど）は、同じエージェント ID のコンテナを取り合います。
+  単一コンテナだった頃と同じ制約です。古い版のアプリと新しい版のサーバーが同時に動くと、最初にマシンを起こした側が古い単一コンテナを退職させます。
 
 ### 会話
 
@@ -595,6 +589,8 @@ X サーバ、ウィンドウマネージャ、セッションバス、専用プ
   VM の画面ツールはサブエージェントに渡しません。
 - スキル一覧のキャッシュはプロセスが持ちます。
   会話を開くときに読み（`primeStellaSkills`）、空なら run の開始時にも読み直します（`StellaMachine.ensureSkills`）。
+  読むのはマシンが起きているときだけです。眠っているマシンを起こしてまで読むと、会話を開いただけでブラウザが 1 つ起きてしまいます。
+  プロンプトの経路は起床の後に `ensureStellaSkills` を呼びます。
   ルーチンは `getOrCreateStellaSession` を通らずに `openSession` で開くので、ここを外すとサーバー再起動後の会話がスキル無しのまま走ります。
 - レジストリの分離: セッションは `main` と `subagent` の 2 つを持ちます（`packages/core/tools/registries.ts`）。
   MCP、browser-lab、computer、`pdf_read_pages` は両方に入り、`identity` / `agent_create` / `routine_*` は main だけです。
@@ -692,8 +688,8 @@ X サーバ、ウィンドウマネージャ、セッションバス、専用プ
 
 - 用意するのは 2 か所です。
   作成時（`LumiscaCore.createStellaAgent` → `StellaMachineService.prepareAgentFolder`）と、会話を開くとき（`getOrCreateStellaSession`）です。
-  作成時にマシンが止まっていれば何もしません。
-  エージェントの作成がコンテナの起動を要求してはいけないためです。
+  マシンが止まっていればどちらも何もしません。
+  エージェントの作成や会話を開くことが、コンテナの起動を要求してはいけないためです。
 - `[ -e ]` ガードを外さないでください。
   開くたびに走るので、無条件に `: >` すると記憶が毎回消えます。
   コマンドは `packages/core/vm/agent-memory.ts` の 1 箇所だけで、`stella_live_test.ts` が「開き直しても消えない」を固定しています。
@@ -725,8 +721,8 @@ X サーバ、ウィンドウマネージャ、セッションバス、専用プ
   `entry.sh` がアプリの起動前に `gsettings set org.gnome.desktop.interface toolkit-accessibility true` を実行します。
   GTK アプリはこの値を起動時に 1 度だけ読み、後から変えてもバスに出ません。
   Chromium には `--force-renderer-accessibility` を付けます。
-  - 契約値は `contract.ts` の `VM_DBUS_ADDRESS`（マシン自身のバス）/ `VM_A11Y_GSETTINGS_KEY` / `VM_A11Y_HELPER` で、`verifyImageContract` が 1 回の `podman exec` で検査し、欠ければ起動を落とします。
-    デスクトップは `vmBusAddressOf(slot)` の自分のバスを使います。
+  - 契約値は `contract.ts` の `VM_DBUS_ADDRESS`（マシンのバス）/ `VM_A11Y_GSETTINGS_KEY` / `VM_A11Y_HELPER` で、`verifyContract` が 1 回の `podman exec` で検査し、欠ければ起動を落とします。
+    バスはコンテナごとに 1 本です。デスクトップも `podman exec` も同じアドレスを使います。
     `containerFilesDigest` はサブディレクトリも含めます。
   - スクロールは X11 のホイールボタン（4 上、5 下、6 左、7 右）で、正の値で 5 を送ります（`VM_SCROLL_NOTCH` = 100、上限 20）。
 - 受け渡し: 人が必要な手順は `vm_ask_user` で待ちます（`packages/core/vm/handover.ts`）。
@@ -738,8 +734,8 @@ X サーバ、ウィンドウマネージャ、セッションバス、専用プ
   受け渡し中は、この PC と画面のあいだで文字が往復します。
   x11vnc の cut text は ISO 8859-1 で Extended Clipboard にも対応していないため、日本語は `?` になります。
   文字は `GET/POST /api/stella/conversations/:agentId/clipboard` でサーバーを通り、VM の中では `xclip` が CLIPBOARD 選択を読み書きします（`packages/core/vm/clipboard.ts`）。
-  `xclip` はその会話のエージェントの画面（`execFor`）で動きます。
-  選択はディスプレイのもので、マシンの `:99` に書いてもどの会話にも出ません。
+  `xclip` はその会話のエージェントの画面（`screenExec(agentId)`）で動きます。
+  選択はディスプレイのもので、そのエージェントの `:99` が持ちます。
   noVNC に残るのは、選択が変わったことを知らせる `clipboard` イベント（本文はラテン 1 の代役なので使わない）と、`Ctrl+V`（`Cmd+V` / `Ctrl+Shift+V`）を画面へ送る `sendKey` だけです。
   - 書き込みだけが受け渡しを要求します。
     `POST` は `getPendingHandover` を確かめ、実行中の画面のクリップボードを変えません。

@@ -137,7 +137,7 @@ import type {
   PushSubscriptionKeys,
   PushSubscriptionRecord,
 } from "./shared/push.ts";
-import type { StellaStatus } from "./shared/wire.ts";
+import type { StellaMachineStatus, StellaStatus } from "./shared/wire.ts";
 import type { SkillInfo } from "./skills/discover.ts";
 import {
   createStellaAgentRepo,
@@ -157,7 +157,7 @@ import {
 import type { StellaAvailability } from "./vm/availability.ts";
 import type { VmChannelRunner } from "./vm/channel.ts";
 import type { VmCommandBytesRunner, VmCommandRunner } from "./vm/command.ts";
-import type { VmManager } from "./vm/container.ts";
+import type { VmHost } from "./vm/container.ts";
 import { vmAgentDir } from "./vm/contract.ts";
 import type { PendingEnvRequest } from "./vm/env-request.ts";
 import { EnvRequestRegistry } from "./vm/env-request.ts";
@@ -728,11 +728,13 @@ export class LumiscaCore {
       ...this.shareRequests.sessionIds(),
     ]);
     for (const sessionId of forgotten) this.forgetSession(sessionId);
-    // The machine is this application's; leaving it running would keep a
-    // container (and a memory-hungry desktop inside it) alive after the app
-    // that owns it is gone. A stop that fails is logged by the server's
-    // shutdown path, not swallowed here.
-    await this.stella.stop();
+    // The machines this process used are this application's; leaving one
+    // running would keep a container (and the browser inside it) alive after
+    // the app that owns it is gone. A machine this process never touched is
+    // left alone: another installation on the same podman may be using it.
+    // A stop that fails is logged by the server's shutdown path, not
+    // swallowed here.
+    await this.stella.stopAll();
     this.db.close();
     // Ran out of rows to keep: the file is now mostly free pages, which
     // SQLite reuses but never hands back. The rewrite itself waits for the
@@ -853,16 +855,24 @@ export class LumiscaCore {
         // every tool with podman's "container state improper" until the user
         // happened to open the conversation again.
         if (session.stella === true) {
-          await this.ensureStellaReady();
+          const agentId = session.personaId;
+          if (agentId === undefined) {
+            throw new CoreError(
+              "The stella session has no agent: its machine cannot be woken",
+              "invalid",
+            );
+          }
+          await this.ensureStellaReady(agentId);
           // Opening a conversation is what primes its skill catalog, and a
           // routine opens one with the synchronous `openSession`: without
           // this read the run builds its agent from an empty cache and the
           // conversation is told it has no skills. Nothing read them again
           // while the conversation stayed open, so after a server restart
           // the routine-only conversations kept running without a catalog.
-          if (session.personaId !== undefined) {
-            await this.ensureStellaSkills(session.personaId);
-          }
+          // The same read is needed after idle sleep woke the machine: the
+          // catalog is only read while the machine is up (see
+          // StellaMachine.ensureSkills).
+          await this.ensureStellaSkills(agentId);
         }
         await this.openSession(session.id);
         const agent = this.pool.require(session.id);
@@ -1478,23 +1488,23 @@ export class LumiscaCore {
    *
    * Closing the conversation is what aborts a run in flight: `SessionAgent.
    * close()` aborts, and the pool drops the agent with its background
-   * commands and MCP servers. The desktop goes separately because it belongs
-   * to the machine, not to the session, and a slot held by an agent nobody
-   * can open is the one resource this state exists to free.
+   * commands and MCP servers. The machine goes separately because it belongs
+   * to the agent, not to the session, and a container kept awake for an agent
+   * nobody can open is the one resource this state exists to free.
    *
-   * The abort is issued before the screen goes. A tool call already inside
-   * the machine may still fail when its display disappears, which is the
-   * right answer for a run that is being discarded: it must not keep working
-   * in the background of an agent nobody can open. The desktop is released
-   * even when closing fails, because the row already says "disabled" and the
-   * next open would not give it back either.
+   * The abort is issued before the machine stops. A tool call already inside
+   * it may still fail when the container goes, which is the right answer for
+   * a run that is being discarded: it must not keep working in the background
+   * of an agent nobody can open. The machine is stopped even when closing
+   * fails, because the row already says "disabled" and the next open would
+   * not give it back either.
    */
   private async releaseStellaAgent(agentId: string): Promise<void> {
     const session = this.sessions.getByPersona(agentId);
     try {
       if (session !== undefined) await this.closeSession(session.id);
     } finally {
-      await this.services.stellaMachines.releaseDesktop(agentId);
+      await this.services.stellaMachines.stopAgentMachine(agentId);
     }
   }
 
@@ -1505,20 +1515,23 @@ export class LumiscaCore {
     return this.services.stellaAgents.resolveStellaAgentIcon(id, name);
   }
 
-  deleteStellaAgent(id: string): Promise<void> {
-    return this.services.stellaAgents.deleteStellaAgent(id);
+  async deleteStellaAgent(id: string): Promise<void> {
+    await this.services.stellaAgents.deleteStellaAgent(id);
+    // The conversation is gone, so nothing can open the machine again: the
+    // container goes too. Its files stay on the shared home volume.
+    await this.services.stellaMachines.removeAgentMachine(id);
   }
 
   // --- the stella machine (delegated to StellaMachineService) --------------------
 
   /** Attach the stella machine (the server does this at start-up, once it
    * has resolved where the container files live). Detach with undefined. */
-  setStellaVm(vm: VmManager | undefined): void {
-    this.services.stellaMachines.setStellaVm(vm);
+  setStellaVm(host: VmHost | undefined): void {
+    this.services.stellaMachines.setStellaVm(host);
   }
 
-  /** The machine, when one is attached. */
-  getStellaVm(): VmManager | undefined {
+  /** The machines' host, when one is attached. */
+  getStellaVm(): VmHost | undefined {
     return this.services.stellaMachines.getStellaVm();
   }
 
@@ -1579,8 +1592,25 @@ export class LumiscaCore {
     return true;
   }
 
-  ensureStellaReady(): Promise<void> {
-    return this.services.stellaMachines.ensureStellaReady();
+  /** Wake one agent's machine (the prompt path, a routine, a wake button). */
+  ensureStellaReady(agentId: string): Promise<void> {
+    return this.services.stellaMachines.ensureStellaReady(agentId);
+  }
+
+  /** One agent's machine, as the screen pane draws it. */
+  getStellaAgentStatus(agentId: string): Promise<StellaMachineStatus> {
+    return this.services.stellaMachines.stellaAgentStatus(agentId);
+  }
+
+  /** Wake one agent's machine without a prompt. */
+  wakeStellaAgent(agentId: string): Promise<void> {
+    return this.services.stellaMachines.wakeStellaAgent(agentId);
+  }
+
+  /** Note that the user is driving one agent's screen, which keeps its
+   * machine awake. */
+  touchStellaAgent(agentId: string): void {
+    this.services.stellaMachines.touchStellaAgent(agentId);
   }
 
   isStellaStarting(): boolean {

@@ -63,7 +63,7 @@ export class SessionAssets {
         "invalid",
       );
     }
-    const exec = this.deps.stella.exec();
+    const exec = this.deps.stella.exec(session.personaId);
     if (exec === undefined) {
       throw new CoreError(
         "The machine is not available, so the files cannot be put in it",
@@ -78,8 +78,8 @@ export class SessionAssets {
     agentId: string,
     ref: string,
   ): Promise<{ bytes: Uint8Array; mimeType: string } | undefined> {
-    const exec = this.deps.stella.exec();
-    const execBytes = this.deps.stella.execBytes();
+    const exec = this.deps.stella.exec(agentId);
+    const execBytes = this.deps.stella.execBytes(agentId);
     if (exec === undefined || execBytes === undefined) {
       throw new CoreError(
         "The machine is not available, so the file cannot be read",

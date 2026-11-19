@@ -87,6 +87,7 @@ export type {
   FsPlace,
   FsPlaceKind,
   PeerStatus,
+  StellaMachineStatus,
   StellaStatus,
 } from "@lumisca/core/shared";
 

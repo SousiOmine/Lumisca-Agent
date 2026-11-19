@@ -1,5 +1,3 @@
-import { CoreError } from "../errors.ts";
-import { sleep } from "../shared/misc.ts";
 import type { StellaStatus } from "../shared/wire.ts";
 import { builtinSkills } from "../skills/builtin/mod.ts";
 import type { SkillDef } from "../skills/discover.ts";
@@ -13,7 +11,8 @@ import type {
   VmChannelOpener,
   VmExec,
   VmExecBytes,
-  VmManager,
+  VmHost,
+  VmStatus,
 } from "./container.ts";
 import {
   createVmChannel,
@@ -21,19 +20,12 @@ import {
   createVmExecBytes,
 } from "./container.ts";
 import {
-  VM_DESKTOP_SLOTS,
-  VM_DESKTOP_WAIT_MS,
+  VM_IDLE_SLEEP_MS,
+  VM_REAP_INTERVAL_MS,
   VM_SKILLS_DIR,
-  vmBusAddressOf,
-  vmDisplayOf,
+  vmContainerName,
 } from "./contract.ts";
 import { discoverVmSkills } from "./skills.ts";
-
-/** The pause between attempts at a slot nobody will give up yet. The wait is
- * rare (every desktop must belong to a conversation that is still working)
- * and each attempt is a handful of session lookups, so a quarter second is
- * cheap and short enough that a freed slot is not visibly idle. */
-const DESKTOP_POLL_MS = 250;
 
 /** How long a failed skill catalog read waits before it is asked again.
  *
@@ -45,25 +37,39 @@ const DESKTOP_POLL_MS = 250;
  * finds the skills. */
 const SKILL_READ_RETRY_MS = 30_000;
 
-/** Everything the stella machine holds between calls: the manager, the exec
- * seams built over it, the cached availability verdict and the skill catalog.
- * Kept out of LumiscaCore because none of it depends on sessions — the core
- * only asks this for a runtime when it opens a stella session. */
+/** Everything the stella machines hold between calls: the host, one manager
+ * per agent, the cached availability verdict and the skill catalogs.
+ *
+ * The machines are separate containers, so everything that used to be one
+ * machine's state — which agent's desktop is up, when a machine was last used,
+ * what is running in it — is keyed by agent id. Kept out of LumiscaCore
+ * because none of it depends on sessions — the core only asks this for a
+ * runtime when it opens a stella session. */
 export class StellaMachine {
-  #vm: VmManager | undefined;
+  #host: VmHost | undefined;
   /** The availability verdict, cached until the next status read. */
   #verdict: StellaAvailability | undefined;
-  /** The exec seams of the attached machine, rebuilt whenever the machine is
-   * replaced (never carried across a detach, so a removed machine cannot be
-   * reached through a stale reference). */
-  #seams:
-    | {
-        vm: VmManager;
-        exec: VmExec;
-        execBytes: VmExecBytes;
-        channel: VmChannelOpener;
-      }
-    | undefined;
+  /** Whether an agent's machine is known to be running. Undefined means "not
+   * asked since this process started"; false means it was stopped (by idle
+   * sleep, by a disable, or by a read that found it down). */
+  #running = new Map<string, boolean>();
+  /** When each agent's machine was last used, for the idle check. */
+  #lastUse = new Map<string, number>();
+  /** Commands in flight per agent: a machine with one is never stopped. */
+  #active = new Map<string, number>();
+  /** The start in flight per agent, shared by callers that race on a sleeping
+   * machine. */
+  #starting = new Map<string, Promise<void>>();
+  /** The stop in flight per agent: a wake waits for it instead of starting a
+   * container that is on its way out. */
+  #stopping = new Map<string, Promise<void>>();
+  /** One operation queue per agent, so a start and a stop never interleave. */
+  #queues = new Map<string, Promise<unknown>>();
+  /** The agents whose desktop this server started since the container came
+   * up. Cleared whenever the container is stopped or started. */
+  #desktops = new Set<string>();
+  /** The desktop start in flight per agent. */
+  #desktopStarts = new Map<string, Promise<void>>();
   /** The skill catalogs, one per stella agent (keyed by agent id), refreshed
    * before each open. A catalog is per agent because an agent's own skills
    * live in its folder: only the machine-wide folder is shared. */
@@ -74,18 +80,16 @@ export class StellaMachine {
   #skillReads = new Map<string, Promise<void>>();
   /** When each agent's last read failed (see SKILL_READ_RETRY_MS). */
   #skillRetries = new Map<string, number>();
-  /** The in-flight start, shared by callers that race on a cold machine. */
-  #starting: Promise<void> | undefined;
-  /** Which desktop slot each agent owns, and the start in flight for it. */
-  #desktops = new Map<string, { slot: number; started: Promise<void> }>();
-  /** When each slot was last used, for choosing one to evict. */
-  #slotUse = new Map<number, number>();
   /** Whether an agent's conversation is working right now, supplied by the
-   * service that owns the sessions (the machine cannot see them). A slot
-   * whose conversation is working is never taken from it. */
+   * service that owns the sessions (the machine cannot see them). A machine
+   * whose conversation is working is never stopped. */
   #busy: ((agentId: string) => boolean) | undefined;
-  /** How long `desktopFor` waits for a slot (VM_DESKTOP_WAIT_MS). */
-  #desktopWaitMs: number;
+  /** The idle reaper, started when a host is attached. */
+  #reaper: ReturnType<typeof setInterval> | undefined;
+  #idleMs: number;
+  #reapIntervalMs: number;
+  #now: () => number;
+  #timer: boolean;
 
   constructor(
     private readonly globalSkillDirs: string[] | undefined,
@@ -96,53 +100,68 @@ export class StellaMachine {
           openChannel?: VmChannelRunner;
         }
       | undefined,
-    /** Test seam: shorten the wait so a test can reach its end. */
-    options: { desktopWaitMs?: number } = {},
+    /** Test seam: the idle window, the clock and the reaper can be shortened
+     * or driven by hand so a test reaches its end without waiting. */
+    options: {
+      idleMs?: number;
+      now?: () => number;
+      reapIntervalMs?: number;
+      timer?: boolean;
+    } = {},
   ) {
-    this.#desktopWaitMs = options.desktopWaitMs ?? VM_DESKTOP_WAIT_MS;
+    this.#idleMs = options.idleMs ?? VM_IDLE_SLEEP_MS;
+    this.#reapIntervalMs = options.reapIntervalMs ?? VM_REAP_INTERVAL_MS;
+    this.#now = options.now ?? Date.now;
+    this.#timer = options.timer ?? true;
   }
 
   /** Supply the answer to "is this agent's conversation working?", which the
-   * machine needs before it takes a desktop away from its agent. Called once
-   * by the service that owns the sessions. */
+   * machine needs before it stops a machine. Called once by the service that
+   * owns the sessions. */
   setBusyCheck(check: (agentId: string) => boolean): void {
     this.#busy = check;
   }
 
-  /** Attach (or detach, with undefined) the machine. */
-  set(vm: VmManager | undefined): void {
-    this.#vm = vm;
-    // A new machine invalidates both the cached verdict (an image may have
-    // been built since, or podman removed) and the exec seams.
+  /** Attach (or detach, with undefined) the host every machine shares. */
+  set(host: VmHost | undefined): void {
+    this.#stopReaper();
+    this.#host = host;
+    // A new host invalidates the cached verdict (an image may have been built
+    // since, or podman removed), every machine state, and the skill catalogs
+    // (a different installation has different files).
     this.#verdict = undefined;
-    this.#seams = undefined;
+    this.#running.clear();
+    this.#lastUse.clear();
+    this.#active.clear();
+    this.#starting.clear();
+    this.#stopping.clear();
+    this.#queues.clear();
+    this.#desktops.clear();
+    this.#desktopStarts.clear();
     this.#skills.clear();
     this.#skillReads.clear();
     this.#skillRetries.clear();
-    // The slots belonged to the machine that just went away: a different
-    // container has no desktop running.
-    this.#desktops.clear();
-    this.#slotUse.clear();
+    if (host !== undefined) this.#startReaper();
   }
 
-  get(): VmManager | undefined {
-    return this.#vm;
+  get(): VmHost | undefined {
+    return this.#host;
   }
 
   /** Whether stella mode can run here, with the reason when it cannot. Read
-   * from the machine's actual state, so installing podman or building the
-   * image takes effect without a restart. */
+   * from the host's actual state, so installing podman or building the image
+   * takes effect without a restart. */
   async availability(): Promise<StellaAvailability> {
-    const vm = this.#vm;
+    const host = this.#host;
     const verdict =
-      vm === undefined
+      host === undefined
         ? {
             available: false as const,
             reason:
               "stella mode is not available: the virtual machine is not set up " +
               "for this installation",
           }
-        : stellaAvailability(await vm.status());
+        : stellaAvailability(await host.status());
     this.#verdict = verdict;
     return verdict;
   }
@@ -152,343 +171,301 @@ export class StellaMachine {
     return this.#verdict;
   }
 
+  /** Whether an image build is in flight (the one wait a first run shows). */
+  get building(): boolean {
+    return this.#host?.building ?? false;
+  }
+
+  /** Whether one agent's machine is being started right now. */
+  isStarting(agentId: string): boolean {
+    return this.#starting.has(agentId);
+  }
+
+  /** Build the image when it is missing or stale, without starting any
+   * machine. Opening a conversation does this so the first prompt does not
+   * wait minutes for a build; it deliberately does not start a container. */
+  async ensureImage(): Promise<void> {
+    const host = this.require();
+    await host.ensureImage();
+    this.#verdict = undefined;
+  }
+
   /**
-   * Make sure the machine is up, starting it (and building its image on a
-   * first run) when it is not.
+   * Make sure one agent's machine is up, starting it when it is not.
    *
-   * Idempotent and safe to call concurrently: two prompts racing on a cold
-   * machine share one start (the promise is memoized until it settles).
+   * The path a prompt and a routine take, and the one place that ASKS rather
+   * than trusts: a machine may have been stopped from outside (a crash, a
+   * `podman stop` by hand) while this process believed it was running, and
+   * every tool would then answer podman's "container state improper" for the
+   * rest of the run. One fresh read per prompt is what that costs.
+   *
+   * Idempotent and safe to call concurrently: callers racing on a sleeping
+   * machine share one start.
    */
-  async ensureReady(): Promise<void> {
-    const vm = this.require();
-    // One read answers both questions. The availability check and the
-    // running check used to be two `vm.status` calls, and the second one
-    // (`fresh`) is never cached — on a host where the server is reached over
-    // a phone, every redundant `podman` call is a second the user waits
-    // before the conversation appears.
-    const status = await vm.status({ fresh: true });
-    const availability = stellaAvailability(status);
-    if (!availability.available) {
-      throw new Error(availability.reason);
+  async ensureReady(agentId: string): Promise<void> {
+    const host = this.require();
+    const status = await host.machine(agentId).status({ fresh: true });
+    const wasRunning = status.state === "running";
+    this.#running.set(agentId, wasRunning);
+    await this.#ensureAwake(agentId);
+    if (!wasRunning) {
+      // The machine just came up: its working folder does not exist yet, and
+      // a run's first `bash` would fail on the missing workdir. Done here
+      // rather than on every prompt because a wake is the only moment it can
+      // be missing.
+      await this.ensureAgentFolder(agentId);
     }
-    if (this.#starting !== undefined) {
-      await this.#starting;
-      return;
-    }
-    if (status.state === "running") {
-      this.#verdict = { available: true };
-      return;
-    }
-    const starting = (async () => {
-      this.#verdict = undefined;
-      try {
-        await vm.start();
-        // The machine was down: every desktop that was running died with it,
-        // and the slot each agent held no longer names a display.
-        this.#desktops.clear();
-        this.#slotUse.clear();
-      } finally {
-        this.#starting = undefined;
-        this.#verdict = undefined;
-      }
-    })();
-    this.#starting = starting;
-    await starting;
+    this.touch(agentId);
   }
 
-  /** Whether a start is in flight (the status endpoint reports it so a
-   * waiting client can say "starting" instead of showing a stale state). */
-  get starting(): boolean {
-    return this.#starting !== undefined;
-  }
-
-  /** Whether the machine is up, as the status read the client already polls
-   * saw it: no `fresh` bypass, so a read made within the cache window is
+  /** Whether an agent's machine is up, as the last read the client already
+   * polls saw: no `fresh` bypass, so a read made within the cache window is
    * free.
    *
-   * This is the cheap question opening an already-open conversation asks —
-   * "is the machine still there?" — not the expensive one (`ensureReady`,
-   * which decides whether it must be built or started). A container stopped
-   * by hand is therefore noticed and brought back up, without every
-   * selection paying for a fresh round of `podman` calls. */
-  async isRunning(): Promise<boolean> {
-    const vm = this.#vm;
-    if (vm === undefined) return false;
-    return (await vm.status()).state === "running";
+   * This is the cheap question opening a conversation asks — "is this
+   * machine still there?" — not the expensive one (`ensureReady`, which
+   * starts it). Opening a conversation must not wake a sleeping machine: a
+   * user browsing the sidebar would pay a browser for every row they looked
+   * at. */
+  async isRunning(agentId: string): Promise<boolean> {
+    const host = this.#host;
+    if (host === undefined) return false;
+    const known = this.#running.get(agentId);
+    if (known !== undefined) return known;
+    const status = await host.machine(agentId).status();
+    const running = status.state === "running";
+    this.#running.set(agentId, running);
+    if (running) this.touch(agentId);
+    return running;
   }
 
-  /** The machine's state, as the status endpoint reports it. */
+  /** One agent's machine, as the status endpoint reports it. */
+  async machineStatus(agentId: string): Promise<VmStatus | undefined> {
+    const host = this.#host;
+    if (host === undefined) return undefined;
+    const status = await host.machine(agentId).status();
+    this.#running.set(agentId, status.state === "running");
+    return status;
+  }
+
+  /** The machine's state for the status endpoint: the installation-level
+   * availability, and whether something is being prepared. */
   async status(): Promise<StellaStatus> {
-    const vm = this.#vm;
-    if (vm === undefined) {
+    const host = this.#host;
+    if (host === undefined) {
       const availability = await this.availability();
       return {
         availability,
-        state: "unavailable",
-        vncPort: null,
-        reason: availability.available ? "" : availability.reason,
         starting: false,
+        reason: availability.available ? "" : availability.reason,
       };
     }
-    const status = await vm.status({ fresh: true });
-    const availability = stellaAvailability(status);
+    const shared = await host.status({ fresh: true });
+    const availability = stellaAvailability(shared);
     this.#verdict = availability;
     return {
       availability,
-      state: status.state,
-      vncPort: status.vncPort,
-      reason: status.reason,
-      starting: this.starting,
+      // The installation-level wait: the image being built. A machine being
+      // started is that agent's own state (`machineStatus`), which the
+      // conversation polls.
+      starting: this.building,
+      reason: shared.reason,
     };
   }
 
-  /** Stop the machine (`podman stop`). Called on shutdown only. */
-  async stop(): Promise<void> {
-    await this.#vm?.stop();
-    this.#verdict = undefined;
-    // The container and everything in it is gone, desktops included.
-    this.#desktops.clear();
-    this.#slotUse.clear();
+  /** Stop every machine (`podman stop`), by label. Called on shutdown
+   * only. */
+  async stopAll(): Promise<void> {
+    this.#stopReaper();
+    try {
+      await this.#host?.stopAll();
+    } finally {
+      this.#verdict = undefined;
+      this.#running.clear();
+      this.#lastUse.clear();
+      this.#desktops.clear();
+      this.#desktopStarts.clear();
+    }
   }
 
-  /**
-   * The slot an agent's desktop runs on, starting it if this is the agent's
-   * first use. Idempotent: concurrent callers share one start.
-   *
-   * A slot is the agent's for as long as its desktop runs. When all
-   * VM_DESKTOP_SLOTS are taken, a desktop whose conversation is NOT working
-   * gives way (the one nobody has touched for longest): its browser and
-   * bridge stop, and its agent's next call starts a new desktop (the profile
-   * keeps the logins). A conversation that is still working keeps its screen;
-   * the caller waits for a slot to become free instead, up to
-   * VM_DESKTOP_WAIT_MS.
-   */
-  async desktopFor(agentId: string): Promise<number> {
-    const vm = this.require();
-    const known = this.#desktops.get(agentId);
-    if (known !== undefined) {
-      this.#slotUse.set(known.slot, Date.now());
-      await known.started;
-      return known.slot;
-    }
-    // The claim and the entry that records it are one synchronous stretch,
-    // before anything is awaited: two conversations that start at the same
-    // moment would otherwise both read the same free slot and one of them
-    // would end up in the other's browser.
-    const deadline = Date.now() + this.#desktopWaitMs;
-    let claim = this.#claimSlot();
-    while (claim === null) {
-      if (Date.now() >= deadline) {
-        throw new CoreError(
-          `All ${VM_DESKTOP_SLOTS} desktops are in use by conversations that ` +
-            "are still working. Try again when one of them has finished.",
-          "conflict",
-        );
-      }
-      await sleep(DESKTOP_POLL_MS);
-      claim = this.#claimSlot();
-    }
-    const { slot, evicted } = claim;
-    const started = (async () => {
-      if (evicted) await vm.stopDesktop(slot);
-      await vm.startDesktop(slot, agentId);
-    })();
-    this.#desktops.set(agentId, { slot, started });
-    this.#slotUse.set(slot, Date.now());
-    try {
-      await started;
-    } catch (failure) {
-      // A failed start must not leave the slot looking taken.
+  /** Stop one agent's machine now (the agent was switched off). The caller
+   * has already ended the conversation's run, so nothing may keep working in
+   * a machine nobody can open. */
+  async release(agentId: string): Promise<void> {
+    const host = this.#host;
+    if (host === undefined) return;
+    await this.#enqueue(agentId, async () => {
+      this.#running.set(agentId, false);
       this.#desktops.delete(agentId);
-      this.#slotUse.delete(slot);
-      throw failure;
-    }
-    return slot;
+      this.#desktopStarts.delete(agentId);
+      await host.machine(agentId).stop();
+      this.#lastUse.delete(agentId);
+    }).catch(() => {
+      // A machine that could not be stopped is not worth failing the disable
+      // for: the row already says "disabled" and nothing will start it again.
+      this.#running.delete(agentId);
+    });
   }
 
-  /**
-   * Stop one agent's desktop and give its slot back.
+  /** Remove one agent's container (the agent was deleted). Its home stays on
+   * the shared volume. */
+  async remove(agentId: string): Promise<void> {
+    const host = this.#host;
+    if (host === undefined) return;
+    await this.#enqueue(agentId, async () => {
+      await host.machine(agentId).remove();
+    });
+    this.#forget(agentId);
+  }
+
+  /** Note that an agent's machine was used. The idle clock starts here. */
+  touch(agentId: string): void {
+    this.#lastUse.set(agentId, this.#now());
+  }
+
+  /** Stop every machine whose agent has not used it for the idle window.
    *
-   * The user switched the agent off, so nothing may start its screen again:
-   * the entry is forgotten BEFORE the stop, which makes a screen opened at
-   * the same moment claim a different slot instead of one that is going
-   * away. A start still in flight is awaited first; one that failed needs no
-   * stop, and `desktopFor` has already forgotten its slot.
-   */
-  async releaseDesktop(agentId: string): Promise<void> {
-    const known = this.#desktops.get(agentId);
-    if (known === undefined) return;
-    this.#desktops.delete(agentId);
-    this.#slotUse.delete(known.slot);
-    try {
-      await known.started;
-    } catch {
-      return;
+   * A machine whose conversation is working, whose exec is in flight, or
+   * whose background command is still running is left alone: stopping it
+   * would kill the work the agent is in the middle of. Called on a timer and
+   * from the tests directly. */
+  async reapIdle(): Promise<void> {
+    if (this.#host === undefined) return;
+    const now = this.#now();
+    for (const [agentId, running] of [...this.#running]) {
+      if (!running) continue;
+      if (now - (this.#lastUse.get(agentId) ?? 0) < this.#idleMs) continue;
+      try {
+        await this.#sleep(agentId);
+      } catch {
+        // The state is unknown now: the next call asks podman instead of
+        // trusting a machine that refused to stop.
+        this.#running.delete(agentId);
+      }
     }
-    await this.#vm?.stopDesktop(known.slot);
   }
 
-  /** The host port of an agent's screen, starting its desktop when the
-   * reader gets there before the agent does. */
+  /** The host port of an agent's screen, waking the machine and starting its
+   * desktop when the reader gets there before the agent does. */
   async vncPortFor(agentId: string): Promise<number | null> {
-    const vm = this.#vm;
-    if (vm === undefined) return null;
-    const slot = await this.desktopFor(agentId);
-    return await vm.vncPort(slot);
-  }
-
-  /** A free slot, or the one held by an idle conversation (the least recently
-   * used one), claimed for the caller. Synchronous on purpose (see
-   * `desktopFor`): by the time it returns, no other caller may see the slot
-   * as free. Null when every slot belongs to a conversation that is still
-   * working. */
-  #claimSlot(): { slot: number; evicted: boolean } | null {
-    const taken = new Map<number, string>();
-    for (const [agent, desktop] of this.#desktops) {
-      taken.set(desktop.slot, agent);
-    }
-    for (let slot = 0; slot < VM_DESKTOP_SLOTS; slot++) {
-      if (!taken.has(slot)) return { slot, evicted: false };
-    }
-    let candidate: { slot: number; agent: string } | undefined;
-    for (const [slot, agent] of taken) {
-      if (this.#isBusy(agent)) continue;
-      if (
-        candidate === undefined ||
-        (this.#slotUse.get(slot) ?? 0) <
-          (this.#slotUse.get(candidate.slot) ?? 0)
-      ) {
-        candidate = { slot, agent };
-      }
-    }
-    if (candidate === undefined) return null;
-    this.#desktops.delete(candidate.agent);
-    this.#slotUse.delete(candidate.slot);
-    return { slot: candidate.slot, evicted: true };
-  }
-
-  /** Whether an agent's conversation is working. The check is required: a
-   * machine that guessed "nobody is working" would take a screen from under
-   * a run. */
-  #isBusy(agentId: string): boolean {
-    const check = this.#busy;
-    if (check === undefined) {
-      throw new Error(
-        "The stella machine cannot tell whether a conversation is working: " +
-          "setBusyCheck was not called",
-      );
-    }
-    return check(agentId);
+    const host = this.#host;
+    if (host === undefined) return null;
+    this.touch(agentId);
+    await this.#ensureAwake(agentId);
+    await this.#ensureDesktop(agentId);
+    return await host.machine(agentId).vncPort();
   }
 
   /**
-   * One agent's exec seam: every call carries that desktop's `DISPLAY` and
-   * session bus, and starts the desktop first when the agent has not used its
-   * screen yet.
+   * One agent's exec seam: every call wakes the machine first.
    *
-   * The screen tools, the semantic tools, `vm_launch` and the clipboard take
-   * this seam, so they all land on the same desktop and on its own
-   * accessibility tree. Files, the shell and a background command keep the
-   * machine's seam: starting a browser under `ls` would be a desktop for
-   * nothing. A GUI program is therefore started with `vm_launch`; one started
-   * from `bash` opens on the machine's own display, which no conversation
-   * shows.
+   * The file tools, the shell, a background command and the skill reads take
+   * this seam. The screen tools take {@link screenExec}, which also starts the
+   * desktop. Both carry the container's own `DISPLAY` and session bus, which
+   * `podman exec` inherits from the container.
    */
-  execFor(agentId: string): VmExec | undefined {
-    const base = this.exec();
+  exec(agentId: string): VmExec | undefined {
+    const base = this.#execSeam(agentId);
     if (base === undefined) return undefined;
     return async (command, exec) => {
-      const slot = await this.desktopFor(agentId);
-      return base(command, {
-        ...exec,
-        env: {
-          ...exec.env,
-          DISPLAY: vmDisplayOf(slot),
-          DBUS_SESSION_BUS_ADDRESS: vmBusAddressOf(slot),
-        },
-      });
-    };
-  }
-
-  /** The byte variant of {@link execFor} (a screen capture). */
-  execBytesFor(agentId: string): VmExecBytes | undefined {
-    const base = this.execBytes();
-    if (base === undefined) return undefined;
-    return async (command, exec) => {
-      const slot = await this.desktopFor(agentId);
-      return base(command, {
-        ...exec,
-        env: {
-          ...exec.env,
-          DISPLAY: vmDisplayOf(slot),
-          DBUS_SESSION_BUS_ADDRESS: vmBusAddressOf(slot),
-        },
-      });
-    };
-  }
-
-  /** The exec seam of the attached machine, or undefined without one. */
-  exec(): VmExec | undefined {
-    return this.#seamCache()?.exec;
-  }
-
-  execBytes(): VmExecBytes | undefined {
-    return this.#seamCache()?.execBytes;
-  }
-
-  /** The interactive seam of the attached machine (the scripting tool call), or
-   * undefined without one. */
-  channel(): VmChannelOpener | undefined {
-    return this.#seamCache()?.channel;
-  }
-
-  #seamCache():
-    | {
-        vm: VmManager;
-        exec: VmExec;
-        execBytes: VmExecBytes;
-        channel: VmChannelOpener;
+      this.#enter(agentId);
+      try {
+        this.touch(agentId);
+        await this.#ensureAwake(agentId);
+        return await base(command, exec);
+      } finally {
+        this.#leave(agentId);
       }
-    | undefined {
-    const vm = this.#vm;
-    if (vm === undefined) return undefined;
-    if (this.#seams?.vm !== vm) {
-      this.#seams = {
-        vm,
-        exec: createVmExec({ run: this.run?.run ?? runVmCommand }),
-        execBytes: createVmExecBytes({
-          runBytes: this.run?.runBytes ?? runVmCommandBytes,
-        }),
-        channel: createVmChannel({
-          open: this.run?.openChannel ?? openVmChannel,
-        }),
-      };
-    }
-    return this.#seams;
+    };
+  }
+
+  /** The byte variant of {@link exec} (a screen capture). */
+  execBytes(agentId: string): VmExecBytes | undefined {
+    const base = this.#execBytesSeam(agentId);
+    if (base === undefined) return undefined;
+    return async (command, exec) => {
+      this.#enter(agentId);
+      try {
+        this.touch(agentId);
+        await this.#ensureAwake(agentId);
+        return await base(command, exec);
+      } finally {
+        this.#leave(agentId);
+      }
+    };
+  }
+
+  /** The screen seam: wakes the machine and starts its desktop first. */
+  screenExec(agentId: string): VmExec | undefined {
+    const base = this.#execSeam(agentId);
+    if (base === undefined) return undefined;
+    return async (command, exec) => {
+      this.#enter(agentId);
+      try {
+        this.touch(agentId);
+        await this.#ensureAwake(agentId);
+        await this.#ensureDesktop(agentId);
+        return await base(command, exec);
+      } finally {
+        this.#leave(agentId);
+      }
+    };
+  }
+
+  /** The byte variant of {@link screenExec}. */
+  screenExecBytes(agentId: string): VmExecBytes | undefined {
+    const base = this.#execBytesSeam(agentId);
+    if (base === undefined) return undefined;
+    return async (command, exec) => {
+      this.#enter(agentId);
+      try {
+        this.touch(agentId);
+        await this.#ensureAwake(agentId);
+        await this.#ensureDesktop(agentId);
+        return await base(command, exec);
+      } finally {
+        this.#leave(agentId);
+      }
+    };
+  }
+
+  /** The interactive seam of one machine (the scripting tool call). */
+  channel(agentId: string): VmChannelOpener | undefined {
+    const seam = this.#seams(agentId);
+    if (seam === undefined) return undefined;
+    return async (command, exec) => {
+      this.#enter(agentId);
+      try {
+        this.touch(agentId);
+        await this.#ensureAwake(agentId);
+        return await seam.channel(command, exec);
+      } finally {
+        this.#leave(agentId);
+      }
+    };
   }
 
   /** The machine, or an error saying there is none. */
-  require(): VmManager {
-    if (this.#vm === undefined) {
+  require(): VmHost {
+    if (this.#host === undefined) {
       throw new Error(
         "stella mode is not available: the virtual machine is not set up for " +
           "this installation",
       );
     }
-    return this.#vm;
+    return this.#host;
   }
 
   /** Create the agent's working folder inside the machine and leave an empty
    * MEMORY.md in it (idempotent: an existing file is never emptied). */
   async ensureAgentFolder(agentId: string): Promise<void> {
-    const exec = this.exec();
+    const exec = this.exec(agentId);
     if (exec === undefined) return;
     await ensureAgentMemory(exec, agentId);
   }
 
   /** Re-read one agent's skill catalog: the agent's own skills, the
-   * machine's shared folder, and the user's global and built-in set.
-   * Awaited before a stella session opens. */
+   * machine-wide folder, and the user's global and built-in set. */
   async refreshSkills(agentId: string): Promise<void> {
     this.#skills.set(agentId, await this.#readSkills(agentId));
     this.#skillRetries.delete(agentId);
@@ -503,6 +480,10 @@ export class StellaMachine {
    * being empty. That distinction is what lets a run wait for this without
    * paying for a `podman exec` on every turn.
    *
+   * A sleeping machine is not woken for this: opening a conversation must
+   * not start a container (see `isRunning`), and the first prompt reads the
+   * catalog after it wakes the machine (`ensureStellaSkills`).
+   *
    * The failure case is deliberately soft. A read that throws leaves the
    * catalog as it was and stops being retried for SKILL_READ_RETRY_MS: a
    * conversation whose machine is restarting should run without skills, not
@@ -510,9 +491,8 @@ export class StellaMachine {
    */
   async ensureSkills(agentId: string): Promise<void> {
     if ((this.#skills.get(agentId)?.length ?? 0) > 0) return;
-    // Without a machine there is nothing to read: storing the empty result
-    // would only make every later call start the same fruitless read.
-    if (this.#vm === undefined) return;
+    if (this.#host === undefined) return;
+    if (this.#running.get(agentId) !== true) return;
     const pending = this.#skillReads.get(agentId);
     if (pending !== undefined) {
       await pending;
@@ -532,19 +512,181 @@ export class StellaMachine {
   }
 
   /** One agent's catalog as last read (the factory builds tools
-   * synchronously). Empty until the agent's first read, and a cold cache
-   * starts one: a run that found nothing here would tell its agent that no
-   * skills exist, and nothing would read them again until the conversation
-   * was reopened (a routine run after a server restart did exactly that). */
+   * synchronously). Empty until the agent's first read, and a cold cache on a
+   * running machine starts one: a run that found nothing here would tell its
+   * agent that no skills exist, and nothing would read them again until the
+   * conversation was reopened (a routine run after a server restart did
+   * exactly that). */
   skills(agentId: string): SkillDef[] {
     const known = this.#skills.get(agentId);
     if (known !== undefined && known.length > 0) return known;
-    void this.ensureSkills(agentId);
+    if (this.#running.get(agentId) === true) void this.ensureSkills(agentId);
     return known ?? [];
   }
 
+  /** Wake one agent's machine without waiting for a tool call (the pane's
+   * "wake" button). */
+  async wake(agentId: string): Promise<void> {
+    await this.ensureReady(agentId);
+  }
+
+  // --- internals ---------------------------------------------------------
+
+  #startReaper(): void {
+    if (!this.#timer) return;
+    const timer = setInterval(() => {
+      void this.reapIdle().catch(() => {
+        // The reaper is housekeeping: a failed pass leaves the machines as
+        // they were and the next pass tries again.
+      });
+    }, this.#reapIntervalMs);
+    timer.unref?.();
+    this.#reaper = timer;
+  }
+
+  #stopReaper(): void {
+    if (this.#reaper === undefined) return;
+    clearInterval(this.#reaper);
+    this.#reaper = undefined;
+  }
+
+  #enter(agentId: string): void {
+    this.#active.set(agentId, (this.#active.get(agentId) ?? 0) + 1);
+  }
+
+  #leave(agentId: string): void {
+    const left = (this.#active.get(agentId) ?? 0) - 1;
+    if (left <= 0) this.#active.delete(agentId);
+    else this.#active.set(agentId, left);
+  }
+
+  #enqueue<T>(agentId: string, fn: () => Promise<T>): Promise<T> {
+    const previous = this.#queues.get(agentId) ?? Promise.resolve();
+    const next = previous.then(fn, fn);
+    this.#queues.set(
+      agentId,
+      next.then(
+        () => {},
+        () => {},
+      ),
+    );
+    return next;
+  }
+
+  async #ensureAwake(agentId: string): Promise<void> {
+    const stopping = this.#stopping.get(agentId);
+    if (stopping !== undefined) await stopping.catch(() => {});
+    if (this.#running.get(agentId) === true) return;
+    const starting = this.#starting.get(agentId);
+    if (starting !== undefined) {
+      await starting;
+      return;
+    }
+    const start = this.#enqueue(agentId, async () => {
+      if (this.#running.get(agentId) === true) return;
+      const host = this.require();
+      await host.machine(agentId).start();
+      this.#running.set(agentId, true);
+      this.#desktops.delete(agentId);
+      this.#desktopStarts.delete(agentId);
+      this.touch(agentId);
+    }).finally(() => {
+      this.#starting.delete(agentId);
+    });
+    this.#starting.set(agentId, start);
+    await start;
+  }
+
+  async #sleep(agentId: string): Promise<void> {
+    if (this.#active.get(agentId) !== undefined) return;
+    if (this.#busy?.(agentId) === true) return;
+    const stop = this.#enqueue(agentId, async () => {
+      if (this.#active.get(agentId) !== undefined) return;
+      if (this.#busy?.(agentId) === true) return;
+      const host = this.require();
+      this.#running.set(agentId, false);
+      this.#desktops.delete(agentId);
+      this.#desktopStarts.delete(agentId);
+      await host.machine(agentId).stop();
+      this.#lastUse.delete(agentId);
+    });
+    this.#stopping.set(agentId, stop);
+    try {
+      await stop;
+    } finally {
+      this.#stopping.delete(agentId);
+    }
+  }
+
+  async #ensureDesktop(agentId: string): Promise<void> {
+    if (this.#desktops.has(agentId)) return;
+    const pending = this.#desktopStarts.get(agentId);
+    if (pending !== undefined) {
+      await pending;
+      return;
+    }
+    const start = this.require()
+      .machine(agentId)
+      .startDesktop()
+      .then(() => {
+        this.#desktops.add(agentId);
+      })
+      .finally(() => {
+        this.#desktopStarts.delete(agentId);
+      });
+    this.#desktopStarts.set(agentId, start);
+    await start;
+  }
+
+  #forget(agentId: string): void {
+    this.#running.delete(agentId);
+    this.#lastUse.delete(agentId);
+    this.#active.delete(agentId);
+    this.#starting.delete(agentId);
+    this.#stopping.delete(agentId);
+    this.#queues.delete(agentId);
+    this.#desktops.delete(agentId);
+    this.#desktopStarts.delete(agentId);
+    this.#skills.delete(agentId);
+    this.#skillReads.delete(agentId);
+    this.#skillRetries.delete(agentId);
+  }
+
+  #seams(agentId: string):
+    | {
+        exec: VmExec;
+        execBytes: VmExecBytes;
+        channel: VmChannelOpener;
+      }
+    | undefined {
+    const host = this.#host;
+    if (host === undefined) return undefined;
+    const containerName = vmContainerName(agentId);
+    return {
+      exec: createVmExec({ run: this.run?.run ?? runVmCommand, containerName }),
+      execBytes: createVmExecBytes({
+        runBytes: this.run?.runBytes ?? runVmCommandBytes,
+        containerName,
+      }),
+      channel: createVmChannel({
+        open: this.run?.openChannel ?? openVmChannel,
+        containerName,
+      }),
+    };
+  }
+
+  #execSeam(agentId: string): VmExec | undefined {
+    return this.#host === undefined ? undefined : this.#seams(agentId)!.exec;
+  }
+
+  #execBytesSeam(agentId: string): VmExecBytes | undefined {
+    return this.#host === undefined
+      ? undefined
+      : this.#seams(agentId)!.execBytes;
+  }
+
   #readSkills(agentId: string): Promise<SkillDef[]> {
-    const exec = this.exec();
+    const exec = this.#execSeam(agentId);
     if (exec === undefined) return Promise.resolve([]);
     return discoverVmSkills({
       exec,
@@ -564,7 +706,7 @@ export class StellaMachine {
         // its main registry).
         mcpAdmin: true,
         // The machine has file tools, so the agent can write skills: its own
-        // in its working folder, shared ones in the machine-wide folder.
+        // in its working folder, shared ones in the home's shared folder.
         skillAuthoring: { sharedDir: VM_SKILLS_DIR },
       }),
       ...(this.globalSkillDirs !== undefined

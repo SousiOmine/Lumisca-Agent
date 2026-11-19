@@ -11,7 +11,7 @@ import type { MessageRepo } from "../session/messages.ts";
 import { modelViewOf } from "../session/model-view.ts";
 import type { SessionRepo } from "../session/repo.ts";
 import type { Locale } from "../shared/mod.ts";
-import type { StellaStatus } from "../shared/wire.ts";
+import type { StellaMachineStatus, StellaStatus } from "../shared/wire.ts";
 import type { SkillDef } from "../skills/discover.ts";
 import type { StellaAgentRepo } from "../stella/agents.ts";
 import type { IdentityTarget } from "../stella/identity.ts";
@@ -26,7 +26,7 @@ import { createVmAskUserTool } from "../vm/ask-user.ts";
 import type { StellaAvailability } from "../vm/availability.ts";
 import type { VmClipboard } from "../vm/clipboard.ts";
 import { createVmClipboard } from "../vm/clipboard.ts";
-import type { VmExec, VmManager } from "../vm/container.ts";
+import type { VmExec, VmHost } from "../vm/container.ts";
 import { vmAgentDir } from "../vm/contract.ts";
 import type { EnvRequestRegistry } from "../vm/env-request.ts";
 import { requireEnvValue, VmEnvStore } from "../vm/env-store.ts";
@@ -60,10 +60,12 @@ import { createVmTools } from "../vm/tools.ts";
 export class StellaMachineService {
   /** The catalog of each agent, as last read (see StellaSkillCache). */
   private readonly skills = new StellaSkillCache();
-  /** The machine's variable store, kept across sessions so its write queue
-   * serializes two dialogs answered at once (see VmEnvStore). Rebuilt when a
-   * different machine is attached: the exec seam of the old one is gone. */
-  private envStoreOf: { exec: VmExec; store: VmEnvStore } | undefined;
+  /** The machines' variable store, kept across sessions so its write queue
+   * serializes two dialogs answered at once (see VmEnvStore). One store for
+   * every agent: they share the home volume, so `env.json` is one file and
+   * two queues would lose an update. Rebuilt when a different host is
+   * attached. */
+  private envStoreOf: { host: VmHost; store: VmEnvStore } | undefined;
 
   constructor(
     private readonly deps: {
@@ -98,28 +100,32 @@ export class StellaMachineService {
       }): Promise<import("../stella/agents.ts").StellaAgent>;
     },
   ) {
-    // The machine cannot see the conversations, and must not take a desktop
-    // away from one that is working: a prompt, a routine, or a hand-over the
-    // user is answering all keep their run going. It asks this before it
-    // evicts a slot.
+    // The machine cannot see the conversations, and must not stop a machine
+    // somebody is working in: a prompt, a routine, a hand-over the user is
+    // answering, or a background command that keeps running after its tool
+    // call returned all keep their machine awake. It asks this before it
+    // stops one for being idle.
     this.deps.machine.setBusyCheck((agentId) => {
       const session = this.deps.sessions.getByPersona(agentId);
       if (session === undefined) return false;
-      return this.deps.pool.get(session.id)?.isStreaming === true;
+      if (this.deps.pool.get(session.id)?.isStreaming === true) return true;
+      return this.deps.pool
+        .getBackground(session.id)
+        .some((command) => command.state === "running");
     });
   }
 
   // --- the stella machine --------------------------------------------------
 
-  /** Attach the stella machine (the server does this at start-up, once it
+  /** Attach the machines' host (the server does this at start-up, once it
    * has resolved where the container files live). Detach with undefined. */
-  setStellaVm(vm: VmManager | undefined): void {
-    this.deps.machine.set(vm);
+  setStellaVm(host: VmHost | undefined): void {
+    this.deps.machine.set(host);
     this.envStoreOf = undefined;
   }
 
-  /** The machine, when one is attached. */
-  getStellaVm(): VmManager | undefined {
+  /** The host, when one is attached. */
+  getStellaVm(): VmHost | undefined {
     return this.deps.machine.get();
   }
 
@@ -157,40 +163,39 @@ export class StellaMachineService {
     if (agent.disabledAt !== null) {
       throw new CoreError(`Agent ${agent.id} is disabled`, "conflict");
     }
-    // An already-open conversation usually needs none of the preparation
-    // below. Its agent is in the pool, and the skill catalog and working
-    // folder are what opening it created. The one thing that can have changed
-    // is the machine itself (stopped by hand, or the app that owns it looked
-    // at nothing for a while), so that is asked — cheaply, from the status
-    // read the client is already polling (see isRunning) — and everything
-    // else is skipped when it answers.
+    // An already-open conversation needs none of the preparation below: its
+    // agent is in the pool, and the skill catalog and working folder are
+    // what opening it created. Opening never asks whether the machine is up
+    // — a machine that went to sleep is woken by the first prompt or tool
+    // call, not by the act of looking at the conversation — so this returns
+    // without a `podman` call.
     const existing = this.deps.sessions.getByPersona(agent.id);
     if (
       existing !== undefined &&
       this.deps.pool.get(existing.id) !== undefined
     ) {
-      if (await this.deps.machine.isRunning()) {
-        this.deps.agents.touch(agent.id);
-        return this.deps.decorateSession(
-          this.deps.sessions.get(existing.id) ?? existing,
-        );
-      }
+      this.deps.agents.touch(agent.id);
+      return this.deps.decorateSession(
+        this.deps.sessions.get(existing.id) ?? existing,
+      );
     }
-    // The machine must be running before an agent is built on it: without one
-    // the factory refuses (never a stella agent with host tools). Every
-    // caller that wants a conversation wants the machine, so this starts it
-    // rather than making the client ask.
-    await this.ensureStellaReady();
-    // The two steps that follow run together because neither depends on the
-    // other and both cross into the container (`podman exec`): the skill
-    // catalog the factory cannot await (it builds the tools synchronously)
-    // and the agent's working folder, which bash cannot start in when it does
-    // not exist (`podman exec --workdir`). In sequence they were two round
-    // trips the user waited for.
-    await Promise.all([
-      this.primeStellaSkills(agent.id),
-      this.deps.machine.ensureAgentFolder(agent.id),
-    ]);
+    // Opening a conversation prepares the IMAGE, never a container. The
+    // machines sleep when nobody uses them, and a user browsing the sidebar
+    // would otherwise pay a browser for every row they looked at. The first
+    // prompt or tool call wakes the machine (see StellaMachine.exec).
+    await this.ensureStellaImage();
+    // The two steps below cross into the container (`podman exec`), so they
+    // run only when its machine is already up: the skill catalog the factory
+    // cannot await (it builds the tools synchronously) and the agent's
+    // working folder, which bash cannot start in when it does not exist. A
+    // sleeping machine has neither yet, and the first prompt reads the
+    // catalog after it wakes (see ensureStellaSkills).
+    if (await this.deps.machine.isRunning(agent.id)) {
+      await Promise.all([
+        this.primeStellaSkills(agent.id),
+        this.deps.machine.ensureAgentFolder(agent.id),
+      ]);
+    }
     this.deps.agents.touch(agent.id);
     if (existing !== undefined) {
       const view = modelViewOf(this.deps.messages, existing.mainAgentId);
@@ -231,22 +236,22 @@ export class StellaMachineService {
   }
 
   /**
-   * Make sure the machine is up, starting it (and building its image on a
-   * first run) when it is not.
+   * Make sure one agent's machine is up, starting it (and building its image
+   * on a first run) when it is not.
    *
-   * There is no "start the machine" step in the product any more: a user who
-   * chose stella mode asked for a machine, not for a container to babysit, so
-   * every path that needs one calls this and the machine appears. The one
-   * thing that cannot be automated is the wait: a first run builds a Debian
-   * image with Chromium in it, which takes minutes, and the caller reports
-   * that through the progress callback rather than freezing.
+   * There is no "start the machine" step in the product: a user who chose
+   * stella mode asked for a machine, not for a container to babysit, so every
+   * path that needs one calls this and it appears. The one thing that cannot
+   * be automated is the wait: a first run builds a Debian image with Chromium
+   * in it, which takes minutes, and the caller reports that through the
+   * progress callback rather than freezing.
    *
-   * Idempotent and safe to call concurrently: two prompts racing on a cold
-   * machine share one start (the promise is memoized until it settles).
+   * Idempotent and safe to call concurrently: two prompts racing on a
+   * sleeping machine share one start.
    */
-  async ensureStellaReady(): Promise<void> {
+  async ensureStellaReady(agentId: string): Promise<void> {
     try {
-      await this.deps.machine.ensureReady();
+      await this.deps.machine.ensureReady(agentId);
     } catch (error) {
       // The machine's reasons are user-facing (an image to build, podman
       // missing); classify them as unavailable, not as a server fault.
@@ -254,22 +259,79 @@ export class StellaMachineService {
     }
   }
 
-  /** Whether a machine start is in flight (the status endpoint reports it so
-   * a waiting client can say "starting" instead of showing a stale state). */
+  /** Build the image when it is missing or stale, without starting a
+   * container. Opening a conversation does this so its first prompt does not
+   * wait minutes for a build. */
+  async ensureStellaImage(): Promise<void> {
+    try {
+      await this.deps.machine.ensureImage();
+    } catch (error) {
+      throw new CoreError(errorMessage(error), "unavailable");
+    }
+  }
+
+  /** Whether the installation's image is being built (the status endpoint
+   * reports it so a waiting client can say "preparing" instead of showing a
+   * stale state). */
   isStellaStarting(): boolean {
-    return this.deps.machine.starting;
+    return this.deps.machine.building;
   }
 
   /**
-   * The machine's state.
+   * What the installation can do for stella mode.
    *
    * stella's UI shows no machine controls, so this is not a dashboard: it
    * exists for the client to know (a) whether the mode is offerable at all
-   * and (b) whether the screen pane can connect. `starting` carries the
-   * first-run build, which is the one wait the user does see.
+   * and (b) whether the image is being prepared. Each agent's machine has its
+   * own state (`stellaAgentStatus`), because the machines sleep and wake
+   * independently.
    */
   async getStellaStatus(): Promise<StellaStatus> {
     return await this.deps.machine.status();
+  }
+
+  /** One agent's machine, as the screen pane draws it. */
+  async stellaAgentStatus(agentId: string): Promise<StellaMachineStatus> {
+    const agent = this.deps.agents.get(agentId);
+    if (agent === undefined) {
+      throw new CoreError(`Agent not found: ${agentId}`, "not_found");
+    }
+    if (agent.disabledAt !== null) {
+      // A disabled agent has no machine to show and asking would start it.
+      return { state: "stopped", starting: false, reason: "" };
+    }
+    const status = await this.deps.machine.machineStatus(agentId);
+    if (status === undefined) {
+      return {
+        state: "podman_missing",
+        starting: false,
+        reason: "the virtual machine is not set up for this installation",
+      };
+    }
+    return {
+      state: status.state,
+      starting: this.deps.machine.isStarting(agentId),
+      reason: status.reason,
+    };
+  }
+
+  /** Wake one agent's machine without waiting for a prompt (the pane's wake
+   * button). */
+  async wakeStellaAgent(agentId: string): Promise<void> {
+    const agent = this.deps.agents.get(agentId);
+    if (agent === undefined) {
+      throw new CoreError(`Agent not found: ${agentId}`, "not_found");
+    }
+    if (agent.disabledAt !== null) {
+      throw new CoreError(`Agent ${agentId} is disabled`, "conflict");
+    }
+    await this.ensureStellaReady(agentId);
+  }
+
+  /** Note that the user is driving one agent's screen, which keeps its
+   * machine awake (see VM_IDLE_SLEEP_MS). */
+  touchStellaAgent(agentId: string): void {
+    this.deps.machine.touch(agentId);
   }
 
   /** The host port of one agent's screen, or null when there is no such
@@ -284,10 +346,17 @@ export class StellaMachineService {
     return await this.deps.machine.vncPortFor(agentId);
   }
 
-  /** Stop one agent's desktop and give its slot back (see
-   * StellaMachine.releaseDesktop). Called when the agent is disabled. */
-  async releaseDesktop(agentId: string): Promise<void> {
-    await this.deps.machine.releaseDesktop(agentId);
+  /** Stop one agent's machine (see StellaMachine.release). Called when the
+   * agent is disabled: nothing may keep working in a machine nobody can
+   * open. */
+  async stopAgentMachine(agentId: string): Promise<void> {
+    await this.deps.machine.release(agentId);
+  }
+
+  /** Remove one agent's container after the agent is deleted. Its files stay
+   * on the shared home volume. */
+  async removeAgentMachine(agentId: string): Promise<void> {
+    await this.deps.machine.remove(agentId);
   }
 
   /**
@@ -296,12 +365,12 @@ export class StellaMachineService {
    *
    * Called as the agent is created, so the file the system prompt promises is
    * there before the agent's first turn. Creating an agent does not START the
-   * machine: a container that is not running is brought up by the first
-   * conversation (see getOrCreateStellaSession), and that path prepares the
-   * folder too, so a stopped machine only moves the work to that moment.
+   * machine: a machine that is not running is woken by the first prompt or
+   * tool call, and opening the conversation prepares the folder when it is
+   * already up, so a sleeping machine only moves the work to that moment.
    */
   async prepareAgentFolder(agentId: string): Promise<void> {
-    if (!(await this.deps.machine.isRunning())) return;
+    if (!(await this.deps.machine.isRunning(agentId))) return;
     await this.deps.machine.ensureAgentFolder(agentId);
   }
 
@@ -337,7 +406,7 @@ export class StellaMachineService {
         "invalid",
       );
     }
-    const exec = this.deps.machine.execFor(agentId);
+    const exec = this.deps.machine.screenExec(agentId);
     if (exec === undefined) {
       throw new CoreError(
         "stella mode is not available: the virtual machine is not set up for this installation",
@@ -362,9 +431,6 @@ export class StellaMachineService {
    * other session (the factory asks per open). */
   stellaRuntimeFor(session: SessionInfo): StellaRuntime | undefined {
     if (session.stella !== true) return undefined;
-    const baseExec = this.deps.machine.exec();
-    const baseExecBytes = this.deps.machine.execBytes();
-    if (baseExec === undefined || baseExecBytes === undefined) return undefined;
     // The identity belongs to the AGENT row, not to the session, and a stella
     // session always has one (the conversation is created FOR an agent). A
     // session without one would have nowhere to keep the text, so it fails
@@ -376,20 +442,18 @@ export class StellaMachineService {
         "invalid",
       );
     }
-    // The agent's own desktop. Only the tools that work on the screen get
-    // this seam: they carry the desktop's DISPLAY and start it on first use,
-    // so a conversation that never looks at a screen never pays for a
-    // browser. Files, the shell and a background command use the machine's
-    // seam — they are not screen work, and starting an X server under `ls`
-    // would be a browser for nothing. A program is started with `vm_launch`,
-    // which is on this seam.
-    const exec = baseExec;
-    // Both build on the seam read above (`exec()` returned it a line ago), so
-    // neither can be missing. If the machine were gone in between, opening
-    // the session on the machine's own display would be exactly the mixing
-    // this seam exists to prevent, so it fails here instead.
-    const screenExec = this.deps.machine.execFor(agentId);
-    const screenExecBytes = this.deps.machine.execBytesFor(agentId);
+    const exec = this.deps.machine.exec(agentId);
+    const execBytes = this.deps.machine.execBytes(agentId);
+    if (exec === undefined || execBytes === undefined) return undefined;
+    // The agent's own machine and desktop. Only the tools that work on the
+    // screen get the screen seam: it starts the desktop on first use, so a
+    // conversation that never looks at a screen never pays for a browser.
+    // Files, the shell and a background command use the machine's seam —
+    // they are not screen work, and starting a browser under `ls` would be
+    // one for nothing. A program is started with `vm_launch`, which is on
+    // the screen seam.
+    const screenExec = this.deps.machine.screenExec(agentId);
+    const screenExecBytes = this.deps.machine.screenExecBytes(agentId);
     if (screenExec === undefined || screenExecBytes === undefined) {
       throw new CoreError(
         "The machine went away while the conversation was opening",
@@ -413,7 +477,7 @@ export class StellaMachineService {
     // The scripting tool call's channel: the program runs under the machine's
     // own node and asks the server for each tool call (see
     // code-execution/vm.ts).
-    const channel = this.deps.machine.channel();
+    const channel = this.deps.machine.channel(agentId);
     if (channel === undefined) {
       throw new CoreError(
         "The machine went away while the conversation was opening",
@@ -487,11 +551,24 @@ export class StellaMachineService {
     };
   }
 
-  /** The variable store of the attached machine. */
+  /** The variable store of the attached machines.
+   *
+   * One store, not one per agent: every machine mounts the same home, so
+   * `env.json` is a single file and two write queues would lose an update
+   * that arrives at the same moment. The seam is whichever agent's was
+   * available first; writing through it wakes that machine, which is the
+   * same work the dialogs' own machines would do. */
   private envStore(exec: VmExec): VmEnvStore {
-    if (this.envStoreOf?.exec === exec) return this.envStoreOf.store;
+    const host = this.deps.machine.get();
+    if (host === undefined) {
+      throw new CoreError(
+        "stella mode is not available: the virtual machine is not set up for this installation",
+        "unavailable",
+      );
+    }
+    if (this.envStoreOf?.host === host) return this.envStoreOf.store;
     const store = new VmEnvStore(exec);
-    this.envStoreOf = { exec, store };
+    this.envStoreOf = { host, store };
     return store;
   }
 
@@ -528,7 +605,15 @@ export class StellaMachineService {
       );
     }
     const value = requireEnvValue(rawValue);
-    const exec = this.deps.machine.exec();
+    const session = this.deps.sessions.get(sessionId);
+    const agentId = session?.personaId;
+    if (agentId === undefined) {
+      throw new CoreError(
+        "The stella session has no agent: its variables have nowhere to live",
+        "invalid",
+      );
+    }
+    const exec = this.deps.machine.exec(agentId);
     if (exec === undefined) {
       throw new CoreError("The stella machine is not running", "unavailable");
     }

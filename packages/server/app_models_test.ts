@@ -4,7 +4,7 @@ import * as fsp from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
 import { join, join as pathJoin } from "node:path";
 import { fauxAssistantMessage, fauxToolCall, LumiscaCore } from "@lumisca/core";
-import { removeDirRetry } from "@lumisca/core/test-utils";
+import { fakeStellaHost, removeDirRetry } from "@lumisca/core/test-utils";
 import { assertEquals } from "@std/assert";
 import { startServer } from "./app.ts";
 import { json, setup } from "./test-utils.ts";
@@ -290,16 +290,12 @@ test("stella API: the conversation carries the conversation, never the model's c
   const { core, faux, server, base } = await setup();
   try {
     await core.setProviderApiKey(faux.provider.id, "faux-key");
-    core.setStellaVm({
-      status: () =>
-        Promise.resolve({ state: "stopped", vncPort: null, reason: "" }),
-      start: () =>
-        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
-      stop: () => Promise.resolve(),
-      vncPort: () => Promise.resolve(null),
-      startDesktop: () => Promise.resolve(),
-      stopDesktop: () => Promise.resolve(),
-    });
+    core.setStellaVm(
+      fakeStellaHost({
+        vncPort: null,
+        status: { state: "stopped", vncPort: null, reason: "" },
+      }),
+    );
     const created = await json(base, "/api/stella/conversations", {
       method: "POST",
       body: JSON.stringify({ name: "Aide", role: "Help with the work." }),

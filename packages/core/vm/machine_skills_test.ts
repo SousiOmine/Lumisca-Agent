@@ -1,7 +1,7 @@
 import { test } from "bun:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import type { VmCommandBytesRunner, VmCommandRunner } from "./command.ts";
-import type { VmManager, VmStatus } from "./container.ts";
+import type { VmHost, VmHostStatus, VmManager, VmStatus } from "./container.ts";
 import { StellaMachine } from "./machine.ts";
 
 /**
@@ -18,16 +18,38 @@ import { StellaMachine } from "./machine.ts";
  */
 
 const RUNNING: VmStatus = { state: "running", vncPort: 49153, reason: "" };
+const STOPPED: VmStatus = { state: "stopped", vncPort: null, reason: "" };
 
-/** The manager the machine holds; nothing here starts desktops. */
-function fakeManager(): VmManager {
-  return {
-    status: () => Promise.resolve(RUNNING),
-    start: () => Promise.resolve(RUNNING),
-    stop: () => Promise.resolve(),
+/** The host and its one machine; nothing here starts desktops. The machine
+ * starts running so a test that wants a read only has to wake it. */
+function fakeHost(): VmHost {
+  let running = false;
+  const manager: VmManager = {
+    status: () => Promise.resolve(running ? RUNNING : STOPPED),
+    start: () => {
+      running = true;
+      return Promise.resolve(RUNNING);
+    },
+    stop: () => {
+      running = false;
+      return Promise.resolve();
+    },
+    remove: () => {
+      running = false;
+      return Promise.resolve();
+    },
     vncPort: () => Promise.resolve(RUNNING.vncPort),
     startDesktop: () => Promise.resolve(),
     stopDesktop: () => Promise.resolve(),
+  };
+  return {
+    status: (): Promise<VmHostStatus> =>
+      Promise.resolve({ state: "ready", reason: "" }),
+    ensureImage: () => Promise.resolve(),
+    machine: () => manager,
+    stopAll: () => Promise.resolve(),
+    retireLegacy: () => Promise.resolve(),
+    building: false,
   };
 }
 
@@ -80,9 +102,10 @@ function skillRunner(): {
         timedOut: false,
       }),
     calls,
-    // Every listing is one `podman exec` over `sh -c`; a skill read by name
-    // would be another, and this catalog has not been read by name.
-    listings: () => calls.length,
+    // Every listing is one `podman exec` that reads a `SKILL.md`; the wake
+    // also creates the working folder, which is not a listing.
+    listings: () =>
+      calls.filter((call) => call.join(" ").includes("SKILL.md")).length,
     failure,
   };
 }
@@ -105,7 +128,10 @@ async function settled(check: () => boolean): Promise<void> {
 test("a cold catalog reads itself instead of staying empty", async () => {
   const runner = skillRunner();
   const stella = machineWith(runner);
-  stella.set(fakeManager());
+  stella.set(fakeHost());
+  // A sleeping machine is not read (opening a conversation must not wake
+  // it); the catalog is read once the machine is up.
+  await stella.ensureReady("agent-1");
 
   // The factory builds the catalog's users synchronously, so the first ask
   // after a restart is answered from an empty cache.
@@ -124,7 +150,8 @@ test("a cold catalog reads itself instead of staying empty", async () => {
 test("a run and the skill tool asking together share one read", async () => {
   const runner = skillRunner();
   const stella = machineWith(runner);
-  stella.set(fakeManager());
+  stella.set(fakeHost());
+  await stella.ensureReady("agent-1");
 
   // Both callers see the empty cache before anything settles: the read is
   // the same one.
@@ -151,7 +178,8 @@ test("without a machine nothing is read and nothing is promised", async () => {
 test("a failed read does not fail the run and is not retried at once", async () => {
   const runner = skillRunner();
   const stella = machineWith(runner);
-  stella.set(fakeManager());
+  stella.set(fakeHost());
+  await stella.ensureReady("agent-1");
   runner.failure.value = new Error("container state improper");
 
   // A conversation whose machine is restarting runs without skills; it must

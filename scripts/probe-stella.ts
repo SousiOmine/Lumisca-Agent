@@ -1,6 +1,6 @@
 /**
- * Manual probe: is stella mode usable on this machine, and does it behave the
- * way the UI assumes?
+ * Manual probe: is stella mode usable on this machine, and does one agent's
+ * machine behave the way the UI assumes?
  *
  * stella mode needs podman and a container image that takes minutes to build
  * the first time, so this is not part of the automated suite. It answers, in
@@ -8,32 +8,35 @@
  *
  *   1. what the server reports (`GET /api/stella/status`) before anything is
  *      started — the mode must be offered or refused, with a reason;
- *   2. whether the machine starts (image build included), and what its screen
- *      reports (`podman exec … xdotool getdisplaygeometry`);
+ *   2. whether one agent's machine starts (image build included), what its
+ *      screen reports (`podman exec … xdotool getdisplaygeometry`) and
+ *      whether the desktop answers;
  *   3. whether the machine stops again.
  *
  * Run from the repository root:
- *   bun run scripts/probe-stella.ts [--start] [--no-stop]
+ *   bun run scripts/probe-stella.ts [--start --agent <id>] [--no-stop]
  *
  * Without `--start` nothing is built or started: only the read-only questions
- * (1) are asked, which is what a normal `bun run dev` user wants.
+ * (1) are asked, which is what a normal `bun run dev` user wants. `--start`
+ * names the agent whose machine is poked, because the machines are one per
+ * agent and the script must not pick one on its own.
  */
 
 import * as fsSync from "node:fs";
 import { LumiscaCore } from "../packages/core/mod.ts";
 import { exit, runProcess } from "../packages/core/process.ts";
 import { runVmCommand } from "../packages/core/vm/command.ts";
-import {
-  createVmExec,
-  createVmManager,
-} from "../packages/core/vm/container.ts";
-import { VM_CONTAINER_NAME, VM_DISPLAY } from "../packages/core/vm/contract.ts";
+import { createVmExec, createVmHost } from "../packages/core/vm/container.ts";
+import { VM_DISPLAY, vmContainerName } from "../packages/core/vm/contract.ts";
 import { createVmSemanticTools } from "../packages/core/vm/semantic.ts";
 import { stellaContainerDir } from "../packages/server/paths.ts";
 import { repoRoot } from "./lib.ts";
 
-const start = process.argv.slice(2).includes("--start");
-const noStop = process.argv.slice(2).includes("--no-stop");
+const args = process.argv.slice(2);
+const start = args.includes("--start");
+const noStop = args.includes("--no-stop");
+const agentAt = args.indexOf("--agent");
+const agentId = agentAt === -1 ? undefined : args[agentAt + 1];
 
 function log(message: string): void {
   console.log(message);
@@ -48,15 +51,14 @@ const containerDir = stellaContainerDir(repoRoot, process.execPath, (path) => {
 });
 log(`container files: ${containerDir}`);
 
-const vm = createVmManager({ containerDir });
+const host = createVmHost({ containerDir });
 
-// 1. What does the machine say about itself?
-const status = await vm.status({ fresh: true });
+// 1. What do the installation's prerequisites say?
+const status = await host.status({ fresh: true });
 log(`state: ${status.state}`);
 if (status.reason !== "") log(`reason: ${status.reason}`);
-if (status.vncPort !== null) log(`VNC port: ${status.vncPort}`);
 
-if (status.state === "podman_missing") {
+if (status.state === "podman_missing" || status.state === "podman_unusable") {
   log("\nstella mode is NOT available on this machine (see the reason).");
   exit(1);
 }
@@ -65,13 +67,13 @@ log("\nstella mode is available on this machine.");
 // 2. The verdict a real client reads before it offers the mode.
 const core = LumiscaCore.forTesting();
 try {
-  core.setStellaVm(vm);
+  core.setStellaVm(host);
   const availability = await core.getStellaAvailability();
   log(`availability: ${JSON.stringify(availability)}`);
 } finally {
-  // Detached first: `close()` stops the machine it holds, and this script
-  // shares the application's container. Stopping it is the explicit step at
-  // the end (`--start` without `--no-stop`), never a side effect of asking a
+  // Detached first: `close()` stops the machines it holds, and this script
+  // shares the application's containers. Stopping is the explicit step at the
+  // end (`--start` without `--no-stop`), never a side effect of asking a
   // question about availability.
   core.setStellaVm(undefined);
   void core.close();
@@ -81,13 +83,27 @@ if (!start) {
   log("\n(--start not given: nothing was built or started)");
   exit(0);
 }
+if (agentId === undefined) {
+  log(
+    "\n(--start needs --agent <id>: the machines are one per agent, and this " +
+      "script does not pick one)",
+  );
+  exit(1);
+}
+
+const name = vmContainerName(agentId);
+const vm = host.machine(agentId);
 
 // 3. Start the machine (a first run builds the image: minutes).
-log("\nstarting the machine…");
+log(`\nstarting ${name}…`);
 const started = await vm.start();
 log(`started: ${started.state} (VNC port ${started.vncPort})`);
 
-const exec = createVmExec({ run: runVmCommand });
+// The desktop is what a conversation's screen tools reach: the browser must
+// exist before the semantic probe asks for its window.
+await vm.startDesktop();
+
+const exec = createVmExec({ run: runVmCommand, containerName: name });
 const probe = await exec(
   ["sh", "-c", 'printf "%s|%s|%s" "$DISPLAY" "$(id -u)" "$(pwd)"'],
   {
@@ -114,7 +130,7 @@ const shot = await runProcess([
   "exec",
   "--workdir",
   "/home/agent",
-  VM_CONTAINER_NAME,
+  name,
   "scrot",
   "--pointer",
   "--overwrite",
@@ -154,5 +170,5 @@ if (!noStop) {
   log("\nmachine stopped.");
 } else {
   log("\n(--no-stop: the machine is left running)");
-  log(`  screen: podman port ${VM_CONTAINER_NAME} 6080`);
+  log(`  screen: podman port ${name} 6080`);
 }

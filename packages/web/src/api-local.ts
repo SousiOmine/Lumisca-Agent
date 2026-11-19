@@ -34,6 +34,7 @@ import type {
   SkillInfo,
   StellaAgent,
   StellaAgentSummary,
+  StellaMachineStatus,
   StellaStatus,
   TaskInfo,
   ThinkingLevel,
@@ -283,10 +284,27 @@ export const api = {
 
   // --- stella mode -------------------------------------------------------
 
-  /** What this server can do for stella mode, and how its machine is doing.
-   * The chosen mode is the client's own (hooks/useAppMode.ts), so it is not
-   * read here. */
+  /** What this server can do for stella mode. The chosen mode is the
+   * client's own (hooks/useAppMode.ts), so it is not read here. */
   getStellaStatus: () => request<StellaStatus>("/api/stella/status"),
+  /** One agent's machine: running, asleep, or being started. */
+  getStellaAgentStatus: (agentId: string) =>
+    request<StellaMachineStatus>(
+      `/api/stella/agents/${encodeURIComponent(agentId)}/machine`,
+    ),
+  /** Wake one agent's machine without sending a prompt. */
+  wakeStellaAgent: (agentId: string) =>
+    request<{ ok: true }>(
+      `/api/stella/agents/${encodeURIComponent(agentId)}/wake`,
+      { method: "POST" },
+    ),
+  /** The user did something on the machine's screen: its machine may stay
+   * awake (see VM_IDLE_SLEEP_MS). */
+  touchStellaAgent: (agentId: string) =>
+    request<{ ok: true }>(
+      `/api/stella/agents/${encodeURIComponent(agentId)}/touch`,
+      { method: "POST" },
+    ),
   /** The sidebar's rows of stella mode — each agent with what its
    * conversation last said. The server answers in its "most recently used"
    * order; the client orders the rows by when each conversation last spoke

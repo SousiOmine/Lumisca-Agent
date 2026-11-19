@@ -6,6 +6,7 @@ import {
   sessionVisualBase,
   stellaUploadBase,
 } from "../api-client.ts";
+import { useAgentMachine } from "../hooks/useAgentMachine.ts";
 import { useReducedMotion } from "../hooks/useMediaQuery.ts";
 import { usePresence } from "../hooks/usePresence.ts";
 import { useT } from "../i18n.ts";
@@ -193,7 +194,18 @@ export function StellaView({
   // run, so that one case overrides the user's choice — and taking the screen
   // back afterwards leaves the panel as the user last wanted it.
   const handedOver = handover !== null;
-  const machineRunning = status?.state === "running";
+  // The conversation's OWN machine. The machines are one per agent and sleep
+  // when nobody uses them, so its state is polled here rather than taken from
+  // the installation-wide status.
+  const agentMachine = useAgentMachine(agent?.id ?? null, !disabled);
+  // A machine that is neither running nor asleep is broken or being
+  // prepared; the sentence it gives is worth showing.
+  const machineProblem =
+    agentMachine.machine !== null &&
+    agentMachine.machine.state !== "running" &&
+    agentMachine.machine.state !== "stopped"
+      ? agentMachine.machine.reason
+      : "";
   // The panel is the conversation's information, not only its screen: a lent
   // folder is worth opening it for while the machine is still starting.
   const showScreen = !disabled && (screenOpen || handedOver);
@@ -257,13 +269,17 @@ export function StellaView({
               {/* A failure explains why nothing works, so it must be
                * visible even while the conversation is empty. */}
               {status !== null &&
-                status.state !== "running" &&
-                !status.starting &&
+                !status.availability.available &&
                 status.reason !== "" && (
                   <p className="error-text" role="alert">
                     {status.reason}
                   </p>
                 )}
+              {machineProblem !== "" && (
+                <p className="error-text" role="alert">
+                  {machineProblem}
+                </p>
+              )}
             </div>
           </div>
         ) : (
@@ -397,7 +413,11 @@ export function StellaView({
       </div>
       {pane.mounted && (
         <StellaPane
-          running={machineRunning}
+          machine={agentMachine.machine}
+          waking={agentMachine.waking}
+          wakeError={agentMachine.error}
+          onWake={() => void agentMachine.wake()}
+          onActivity={agentMachine.touch}
           shares={shares}
           agentId={agent?.id ?? null}
           handover={

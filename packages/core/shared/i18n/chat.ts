@@ -448,6 +448,15 @@ export const chat = {
     ja: "画面に接続しています…",
     en: "Connecting to the screen…",
   },
+  /** The machine was stopped because nobody used it (see VM_IDLE_SLEEP_MS).
+   * The pane says so instead of drawing the disconnect as a failure; the
+   * button beside it brings the machine back. */
+  "chat.stella.machine.asleep": {
+    ja: "しばらく使われていないため、マシンは休止しています。",
+    en: "The machine is asleep because it has not been used for a while.",
+  },
+  "chat.stella.machine.wake": { ja: "起こす", en: "Wake" },
+  "chat.stella.machine.waking": { ja: "起動しています…", en: "Waking…" },
   /** The right-hand panel's name for assistive technology. The panel carries
    * no visible title: its two sections (the screen and the lent folders) name
    * themselves. */

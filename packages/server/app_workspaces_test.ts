@@ -14,6 +14,7 @@ import {
   TOOL_ASK,
 } from "@lumisca/core/shared";
 import {
+  fakeStellaHost,
   MINI_PNG,
   promptSession,
   removeDirRetry,
@@ -1158,10 +1159,11 @@ test("stella API: the status reports the availability and the machine", async ()
     assertEquals(status.status, 200);
     const body = (await status.json()) as {
       availability: { available: boolean; reason?: string };
-      state: string;
+      starting: boolean;
+      reason: string;
     };
     assertEquals(body.availability.available, false);
-    assertEquals(body.state, "unavailable");
+    assertEquals(body.starting, false);
     assert(
       body.availability.available === false &&
         body.availability.reason?.includes("not set up"),
@@ -1272,16 +1274,7 @@ test("stella API: the conversation's stream carries only the conversation", asyn
   const { core, faux, server, base } = await setup();
   try {
     await core.setProviderApiKey(faux.provider.id, "faux-key");
-    core.setStellaVm({
-      status: () =>
-        Promise.resolve({ state: "running", vncPort: null, reason: "" }),
-      start: () =>
-        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
-      stop: () => Promise.resolve(),
-      vncPort: () => Promise.resolve(null),
-      startDesktop: () => Promise.resolve(),
-      stopDesktop: () => Promise.resolve(),
-    });
+    core.setStellaVm(fakeStellaHost({ vncPort: null }));
     const agentRes = await json(base, "/api/stella/agents", {
       method: "POST",
       body: JSON.stringify({ name: "Aide", role: "Help with the work." }),
@@ -1378,16 +1371,7 @@ test("stella API: a rewind reaches the conversation as its own event", async () 
   let socket: WebSocket | undefined;
   try {
     await core.setProviderApiKey(faux.provider.id, "faux-key");
-    core.setStellaVm({
-      status: () =>
-        Promise.resolve({ state: "running", vncPort: null, reason: "" }),
-      start: () =>
-        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
-      stop: () => Promise.resolve(),
-      vncPort: () => Promise.resolve(null),
-      startDesktop: () => Promise.resolve(),
-      stopDesktop: () => Promise.resolve(),
-    });
+    core.setStellaVm(fakeStellaHost({ vncPort: null }));
     const agentRes = await json(base, "/api/stella/agents", {
       method: "POST",
       body: JSON.stringify({ name: "Aide", role: "Help with the work." }),
@@ -1479,16 +1463,7 @@ test("stella API: a row carries what its conversation last said", async () => {
   const { core, faux, server, base } = await setup();
   try {
     await core.setProviderApiKey(faux.provider.id, "faux-key");
-    core.setStellaVm({
-      status: () =>
-        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
-      start: () =>
-        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
-      stop: () => Promise.resolve(),
-      vncPort: () => Promise.resolve(1),
-      startDesktop: () => Promise.resolve(),
-      stopDesktop: () => Promise.resolve(),
-    });
+    core.setStellaVm(fakeStellaHost({ vncPort: 1 }));
 
     // A conversation that has not been opened says nothing: the row is one
     // line, and the client has no time to show.
@@ -1537,16 +1512,7 @@ test("stella API: agents are listed, renamed and deleted with their conversation
   const { core, faux, server, base } = await setup();
   try {
     await core.setProviderApiKey(faux.provider.id, "faux-key");
-    core.setStellaVm({
-      status: () =>
-        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
-      start: () =>
-        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
-      stop: () => Promise.resolve(),
-      vncPort: () => Promise.resolve(1),
-      startDesktop: () => Promise.resolve(),
-      stopDesktop: () => Promise.resolve(),
-    });
+    core.setStellaVm(fakeStellaHost({ vncPort: 1 }));
 
     // The first read creates the starter agent (a fresh stella mode must
     // have someone to talk to), so the list is never empty.
@@ -1606,16 +1572,7 @@ test("stella API: an agent's name and icon are saved together and served", async
   const { core, faux, server, base } = await setup();
   try {
     await core.setProviderApiKey(faux.provider.id, "faux-key");
-    core.setStellaVm({
-      status: () =>
-        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
-      start: () =>
-        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
-      stop: () => Promise.resolve(),
-      vncPort: () => Promise.resolve(1),
-      startDesktop: () => Promise.resolve(),
-      stopDesktop: () => Promise.resolve(),
-    });
+    core.setStellaVm(fakeStellaHost({ vncPort: 1 }));
 
     const created = await json(base, "/api/stella/agents", {
       method: "POST",
@@ -1731,16 +1688,7 @@ test("stella API: a refused name or picture changes nothing", async () => {
   const { core, faux, server, base } = await setup();
   try {
     await core.setProviderApiKey(faux.provider.id, "faux-key");
-    core.setStellaVm({
-      status: () =>
-        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
-      start: () =>
-        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
-      stop: () => Promise.resolve(),
-      vncPort: () => Promise.resolve(1),
-      startDesktop: () => Promise.resolve(),
-      stopDesktop: () => Promise.resolve(),
-    });
+    core.setStellaVm(fakeStellaHost({ vncPort: 1 }));
     const created = await json(base, "/api/stella/agents", {
       method: "POST",
       body: JSON.stringify({ name: "Aide", role: "Help." }),
@@ -1812,16 +1760,7 @@ test("stella API: an icon patch is refused with the reason it failed", async () 
   const { core, faux, server, base } = await setup();
   try {
     await core.setProviderApiKey(faux.provider.id, "faux-key");
-    core.setStellaVm({
-      status: () =>
-        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
-      start: () =>
-        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
-      stop: () => Promise.resolve(),
-      vncPort: () => Promise.resolve(1),
-      startDesktop: () => Promise.resolve(),
-      stopDesktop: () => Promise.resolve(),
-    });
+    core.setStellaVm(fakeStellaHost({ vncPort: 1 }));
     const created = await json(base, "/api/stella/agents", {
       method: "POST",
       body: JSON.stringify({ name: "Aide", role: "Help." }),
@@ -1895,16 +1834,7 @@ test("stella API: an icon URL answers only for a name that agent has", async () 
   const { core, faux, server, base } = await setup();
   try {
     await core.setProviderApiKey(faux.provider.id, "faux-key");
-    core.setStellaVm({
-      status: () =>
-        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
-      start: () =>
-        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
-      stop: () => Promise.resolve(),
-      vncPort: () => Promise.resolve(1),
-      startDesktop: () => Promise.resolve(),
-      stopDesktop: () => Promise.resolve(),
-    });
+    core.setStellaVm(fakeStellaHost({ vncPort: 1 }));
     const first = (await (
       await json(base, "/api/stella/agents", {
         method: "POST",

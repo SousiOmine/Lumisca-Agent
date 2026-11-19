@@ -87,7 +87,7 @@ export type StellaAvailability =
   | { available: true }
   | { available: false; reason: string };
 
-/** What one client reads about stella mode's machine
+/** What one client reads about stella mode as a whole
  * (`GET /api/stella/status`). The CHOSEN mode is deliberately not part of it:
  * that belongs to each client (see app-mode.ts), so a window switching modes
  * never drags a browser showing the same server along with it. */
@@ -95,16 +95,28 @@ export interface StellaStatus {
   /** Whether stella can run on the server this client talks to, with the
    * reason when it cannot. */
   availability: StellaAvailability;
-  /** The machine's state (`running`, `stopped`, `image_missing`, ...). */
-  state: string;
-  /** The loopback port the screen is relayed on, null when the machine has
-   * no screen to show (not running, or starting). */
-  vncPort: number | null;
-  /** Why the machine is in this state, when it has something to say. */
-  reason: string;
-  /** True while the machine is being prepared (a first run builds the image,
-   * which takes minutes — the one wait the UI shows). */
+  /** True while the installation is being prepared: a first run builds the
+   * image, which takes minutes, and a machine is being started. The one wait
+   * the UI shows. */
   starting: boolean;
+  /** Why the installation is in this state, when it has something to say. */
+  reason: string;
+}
+
+/** What one client reads about one agent's machine
+ * (`GET /api/stella/agents/:agentId/machine`).
+ *
+ * Each agent has its own container, and it may be asleep while its neighbours
+ * work: the state is what the screen pane draws ("running", "asleep",
+ * "starting") and what makes a wake button appear. */
+export interface StellaMachineStatus {
+  /** `running`, `stopped` (asleep), `container_missing`, `image_missing`,
+   * `image_stale`, `podman_missing`, `podman_unusable`. */
+  state: string;
+  /** True while this machine is being started. */
+  starting: boolean;
+  /** Why it is in this state, when the state has something to say. */
+  reason: string;
 }
 
 // --- a code-mode session's snapshot (server/routes/sessions.ts ↔ web) --------

@@ -26,7 +26,11 @@ import {
   type PasteChord,
   pasteChordOf,
 } from "../stella-clipboard.ts";
-import type { FolderShare, StellaHandover } from "../types.ts";
+import type {
+  FolderShare,
+  StellaHandover,
+  StellaMachineStatus,
+} from "../types.ts";
 import { ShareList } from "./stella/ShareList.tsx";
 
 /**
@@ -110,10 +114,18 @@ function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 interface StellaPaneProps {
-  /** The machine is running. Which desktop the picture comes from is the
-   * server's business: the relay resolves the conversation's agent to its own
-   * screen. */
-  running: boolean;
+  /** The conversation's machine: running, asleep (`stopped`) or being
+   * started. Which screen the picture comes from is the server's business:
+   * the relay resolves the conversation's agent to its own machine. */
+  machine: StellaMachineStatus | null;
+  /** A wake was asked for and has not finished. */
+  waking: boolean;
+  /** Why the wake failed, when it did. */
+  wakeError: string | null;
+  /** Wake the machine (the "wake" button under the asleep note). */
+  onWake: () => void;
+  /** The user did something on the screen: keep the machine awake. */
+  onActivity: () => void;
   /** The folders lent from this computer to this conversation. They are drawn
    * above the screen: what the agent can reach is a fact about the run, and
    * the way to take it back has to be where the loan is named. */
@@ -164,7 +176,11 @@ function waitForSize(element: HTMLElement, timeoutMs: number): Promise<void> {
 }
 
 export function StellaPane({
-  running,
+  machine,
+  waking,
+  wakeError,
+  onWake,
+  onActivity,
   shares,
   agentId,
   handover,
@@ -175,6 +191,11 @@ export function StellaPane({
 }: StellaPaneProps) {
   const t = useT();
   const locale = useLocale();
+  // A running machine is the only one with a screen to show. `stopped` is the
+  // idle sleep: the picture is gone, and the pane says so instead of leaving a
+  // frozen one.
+  const running = machine?.state === "running";
+  const asleep = machine?.state === "stopped";
   const hostRef = useRef<HTMLDivElement>(null);
   const paneRef = useRef<HTMLElement>(null);
   const reduceMotion = useReducedMotion();
@@ -568,6 +589,29 @@ export function StellaPane({
     };
   }, [running, agentId, t]);
 
+  // Driving the screen is use: a press, a key, a wheel notch or a touch
+  // reports the agent's machine as used, which keeps its idle clock fresh
+  // (see useAgentMachine). Pointer MOVES are not reported — noVNC also sends
+  // framebuffer requests continuously, so counting traffic would keep a pane
+  // nobody is looking at awake forever.
+  useEffect(() => {
+    const host = hostRef.current;
+    if (host === null || !running) return;
+    const report = () => onActivity();
+    const events = ["pointerdown", "keydown", "wheel", "touchstart"];
+    for (const name of events) host.addEventListener(name, report, true);
+    return () => {
+      for (const name of events) host.removeEventListener(name, report, true);
+    };
+  }, [running, onActivity]);
+
+  // A machine that went to sleep closes the relay, which looks like a failed
+  // connection. The pane says "asleep" instead, so the failure text must not
+  // outlive the running state.
+  useEffect(() => {
+    if (!running) setError(null);
+  }, [running]);
+
   // The view-only flag follows the hand-over: the agent owns the pointer
   // while it works, the user owns it while the run waits for them. Applied
   // to the live client (no reconnect: the picture and the handshake stay).
@@ -709,7 +753,29 @@ export function StellaPane({
         {t("chat.stella.machine.screen")}
       </h3>
       <div className="stella-pane-body">
-        {!running && (
+        {!running && asleep && (
+          <div className="stella-pane-asleep">
+            <p className="stella-pane-note">
+              {t("chat.stella.machine.asleep")}
+            </p>
+            <button
+              type="button"
+              className="btn"
+              onClick={onWake}
+              disabled={waking}
+            >
+              {waking
+                ? t("chat.stella.machine.waking")
+                : t("chat.stella.machine.wake")}
+            </button>
+            {wakeError !== null && (
+              <p className="error-text" role="alert">
+                {wakeError}
+              </p>
+            )}
+          </div>
+        )}
+        {!running && !asleep && (
           <p className="stella-pane-note">
             {t("chat.stella.machine.screenEmpty")}
           </p>

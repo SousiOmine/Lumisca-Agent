@@ -1,12 +1,12 @@
-import type { VmManager } from "../vm/container.ts";
+import type { VmHost } from "../vm/container.ts";
 
 /** How long a stella skill catalog stays usable for opening a conversation. */
 export const STELLA_SKILLS_TTL_MS = 30_000;
 
 interface Entry {
-  /** The machine that answered the last read: a replaced machine has a
-   * replaced catalog, so its entry is not reused. */
-  machine: VmManager | undefined;
+  /** The host that answered the last read: a replaced host has a replaced
+   * catalog, so its entry is not reused. */
+  machine: VmHost | undefined;
   /** When the last read finished (0 = never). */
   at: number;
   /** The read in flight, shared by concurrent opens of the same agent. */
@@ -34,7 +34,7 @@ export class StellaSkillCache {
   /** Read one agent's catalog now and remember when, for which machine. */
   async refresh(
     agentId: string,
-    machine: VmManager | undefined,
+    machine: VmHost | undefined,
     read: () => Promise<void>,
   ): Promise<void> {
     await read();
@@ -46,7 +46,7 @@ export class StellaSkillCache {
    * one starts (and is shared by everyone waiting). */
   async prime(
     agentId: string,
-    machine: VmManager | undefined,
+    machine: VmHost | undefined,
     read: () => Promise<void>,
   ): Promise<void> {
     let entry = this.entries.get(agentId);

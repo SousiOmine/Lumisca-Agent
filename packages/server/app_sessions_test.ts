@@ -9,7 +9,11 @@ import {
   LumiscaCore,
   type TodoPhase,
 } from "@lumisca/core";
-import { noisyPng, removeDirRetry } from "@lumisca/core/test-utils";
+import {
+  fakeStellaHost,
+  noisyPng,
+  removeDirRetry,
+} from "@lumisca/core/test-utils";
 import { assert, assertEquals } from "@std/assert";
 import { bytesToBase64 } from "../core/base64.ts";
 import { disposeServer, startServer } from "./app.ts";
@@ -841,16 +845,12 @@ test("stella API: the conversation is opened by agent and never listed as a sess
     await core.setProviderApiKey(faux.provider.id, "faux-key");
     // Attach a machine that reports itself available; the conversation only
     // needs the manager to exist (its tools are exercised elsewhere).
-    core.setStellaVm({
-      status: () =>
-        Promise.resolve({ state: "stopped", vncPort: null, reason: "" }),
-      start: () =>
-        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
-      stop: () => Promise.resolve(),
-      vncPort: () => Promise.resolve(null),
-      startDesktop: () => Promise.resolve(),
-      stopDesktop: () => Promise.resolve(),
-    });
+    core.setStellaVm(
+      fakeStellaHost({
+        vncPort: null,
+        status: { state: "stopped", vncPort: null, reason: "" },
+      }),
+    );
     // An agent must exist first: stella's conversation belongs to one.
     const created = await json(base, "/api/stella/agents", {
       method: "POST",

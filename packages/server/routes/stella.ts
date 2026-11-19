@@ -16,7 +16,7 @@ import type {
 } from "@lumisca/core";
 import { base64ToBytes, stellaEventsOf } from "@lumisca/core";
 import type {
-  StellaAvailability,
+  StellaMachineStatus,
   StellaStatus,
   ThinkingLevel,
 } from "@lumisca/core/shared";
@@ -84,25 +84,30 @@ export interface StellaApi {
     },
   ): Promise<StellaAgent>;
   deleteStellaAgent(id: string): Promise<void>;
-  getStellaStatus(): Promise<{
-    availability: StellaAvailability;
-    state: string;
-    vncPort: number | null;
-    reason: string;
-    starting: boolean;
-  }>;
-  /** The conversation, created on first use. This is also what brings the
-   * machine up: a conversation lives inside it. */
+  getStellaStatus(): Promise<StellaStatus>;
+  /** One agent's machine, as the screen pane draws it. */
+  getStellaAgentStatus(agentId: string): Promise<StellaMachineStatus>;
+  /** Wake one agent's machine without a prompt (the pane's wake button). */
+  wakeStellaAgent(agentId: string): Promise<void>;
+  /** Note that the user is driving one agent's screen, which keeps its
+   * machine awake. */
+  touchStellaAgent(agentId: string): void;
+  /** The conversation, created on first use. Opening it prepares the image
+   * but does not start a container: the first prompt wakes the machine. */
   getOrCreateStellaSession(agentId?: string): Promise<SessionInfo>;
   /** Start the setup turn of an agent that has not been set up yet, once
    * (see LumiscaCore.startStellaOnboarding). False when there is nothing to
    * start — already set up, no open conversation, or a run in flight. */
   startStellaOnboarding(agentId: string): boolean;
-  /** Make sure the machine is up, starting it when it is not. Sending is not
-   * opening: an already-open conversation never reaches the endpoint above
-   * again, so a machine that died since would answer every tool with podman's
-   * "container state improper" until the client happened to reload. */
-  ensureStellaReady(): Promise<void>;
+  /** Make sure one agent's machine is up, starting it when it is not.
+   * Sending is not opening: an already-open conversation never reaches the
+   * endpoint above again, and the machine may have been slept since, so the
+   * first prompt of a wake has to bring it up. */
+  ensureStellaReady(agentId: string): Promise<void>;
+  /** Make one agent's skill catalog current enough to run (see
+   * StellaMachine.ensureSkills). Needed after a wake: a sleeping machine is
+   * not read, so its catalog is empty until this. */
+  ensureStellaSkills(agentId: string): Promise<void>;
   /** The conversation a stella agent already has, or undefined. The client
    * addresses the conversation by agent, never by session id. */
   findStellaSession(agentId: string): SessionInfo | undefined;
@@ -405,6 +410,34 @@ export function stellaRoutes(core: StellaApi): Hono {
     return c.json(status);
   });
 
+  /** One agent's machine: whether it is running, asleep or being started.
+   * The client polls this for the conversation it has open, so the screen
+   * pane can say "asleep" instead of failing to connect, and offer to wake
+   * it. */
+  app.get("/stella/agents/:id/machine", async (c) => {
+    const status: StellaMachineStatus = await core.getStellaAgentStatus(
+      c.req.param("id"),
+    );
+    return c.json(status);
+  });
+
+  /** Wake one agent's machine without sending a prompt (the pane's "wake"
+   * button). */
+  app.post("/stella/agents/:id/wake", async (c) => {
+    await core.wakeStellaAgent(c.req.param("id"));
+    return c.json({ ok: true });
+  });
+
+  /** The user did something on the machine's screen. The idle clock starts
+   * here, so driving the screen keeps it awake; a pane left open with nobody
+   * at it does not. */
+  app.post("/stella/agents/:id/touch", (c) => {
+    const agentId = c.req.param("id");
+    requireEnabledAgent(agentId);
+    core.touchStellaAgent(agentId);
+    return c.json({ ok: true });
+  });
+
   // --- agents (the agent of each conversation) -----------------------------
 
   /** The sidebar's rows.
@@ -589,11 +622,15 @@ export function stellaRoutes(core: StellaApi): Hono {
     // would bring the whole machine up for a message nobody can deliver.
     requireEnabledAgent(agentId);
     const session = requireConversation(agentId);
-    // However this conversation was opened, the machine may have stopped
-    // since. Every tool runs through `podman exec`, which refuses a stopped
-    // container, so the wait belongs here: before the run starts, and before
-    // the uploads below are written into the machine.
-    await core.ensureStellaReady();
+    // However this conversation was opened, its machine may be asleep: the
+    // server stops one nobody has used for a while, and every tool runs
+    // through `podman exec`, which refuses a stopped container. The wait
+    // belongs here — before the run starts and before the uploads below are
+    // written into the machine — and the skill catalog is read after the
+    // wake, because a sleeping machine is not read (see
+    // StellaMachine.ensureSkills).
+    await core.ensureStellaReady(agentId);
+    await core.ensureStellaSkills(agentId);
     // Pictures and files take one path: both are written into the machine and
     // the model is told their paths. A picture kept as a byte block in the
     // message would put it in the database for the life of the conversation,

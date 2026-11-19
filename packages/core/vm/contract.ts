@@ -47,14 +47,11 @@ export const VM_ENV_DIR = `${VM_WORKDIR}/.lumisca-env`;
 export const VM_ENV_JSON = `${VM_ENV_DIR}/env.json`;
 export const VM_ENV_SH = `${VM_ENV_DIR}/env.sh`;
 
-/** The virtual X display the container boots on its own (`entry.sh`).
+/** The virtual X display every container boots on (`entry.sh`).
  *
- * No agent works here: the desktops are `vmDisplayOf(slot)`, one display
- * above. This one is the machine's screen — the contract proves it is up and
- * sized as expected — and it is what `DISPLAY` names for a process that is
- * not on a desktop, such as a command the agent runs through `bash`. A
- * program started there by hand is on no conversation's screen rather than on
- * somebody else's. */
+ * One container serves one conversation, so this display is both the machine's
+ * screen and the agent's desktop: the contract proves it is up and sized as
+ * expected, and `DISPLAY` names it for every process inside. */
 export const VM_DISPLAY = ":99";
 
 /** The screen size Xvfb is created with. Fixed, because the agent reads
@@ -63,57 +60,13 @@ export const VM_DISPLAY = ":99";
 export const VM_SCREEN_WIDTH = 1280;
 export const VM_SCREEN_HEIGHT = 800;
 
-/** Where noVNC's websockify listens inside the container, for the first
- * desktop; the others follow it (see `vmWebsockifyPortOf`). */
+/** Where noVNC's websockify listens inside the container. Published on the
+ * host's loopback with an assigned host port, one per container. */
 export const VM_VNC_PORT = 6080;
 
-/** Where x11vnc listens inside the container, for the first desktop; the
- * others follow it. The host reaches it only through websockify. */
+/** Where x11vnc listens inside the container. The host reaches it only
+ * through websockify. */
 export const VM_VNC_RFB_PORT = 5900;
-
-/** How many desktops one machine runs at once.
- *
- * Each is a separate X server, window manager, session bus, browser and
- * profile, so an agent's windows, pointer, logins and accessibility tree are
- * its own. Everything the machine offers — the screen tools, the semantic
- * tools, `vm_launch`, the clipboard — follows the conversation's `DISPLAY`
- * and bus (see container/desktop.sh and vm/machine.ts). The shell is not
- * desktop work and keeps the machine's own display (see VM_DISPLAY).
- *
- * Six, from the memory one desktop costs: an idle Chromium (about 220 MB
- * proportional set size with its renderers) plus an Xvfb and an openbox (about
- * 35 MB) per slot. Six running desktops are about 1.5 GB inside the machine;
- * four measured 1.0 GB. A conversation that needs a seventh slot waits for
- * one to be free rather than evicting somebody who is still working (see
- * `StellaMachine.desktopFor` and VM_DESKTOP_WAIT_MS). */
-export const VM_DESKTOP_SLOTS = 6;
-
-/** How long a conversation waits for a desktop when every slot belongs to a
- * conversation that is still working.
- *
- * A slot frees when another run ends, which is seconds to minutes away; a tool
- * call that sits longer than this is worse than one that says "every desktop
- * is in use" and lets the agent try again, and the screen pane's WebSocket
- * handshake is held for the same time. */
-export const VM_DESKTOP_WAIT_MS = 30_000;
-
-/** The X display of one desktop slot: `:100` for the first, then `:101`,
- * `:102`, `:103`. One above the machine's own display, so nothing that starts
- * on `DISPLAY` without naming a desktop lands on an agent's screen. */
-export function vmDisplayOf(slot: number): string {
-  return `:${100 + slot}`;
-}
-
-/** The websockify port a slot's desktop listens on inside the container. */
-export function vmWebsockifyPortOf(slot: number): number {
-  return VM_VNC_PORT + slot;
-}
-
-/** The container ports the machine publishes for its desktops, as one podman
- * `--publish` range (the host port of each is assigned at creation). */
-export const VM_VNC_PORT_RANGE = `${VM_VNC_PORT}-${
-  VM_VNC_PORT + VM_DESKTOP_SLOTS - 1
-}`;
 
 /** The program that starts and stops one desktop inside the machine
  * (container/desktop.sh). */
@@ -137,22 +90,37 @@ export const VM_GID = 1000;
  * uid (see `verifyImageContract`, which proves the rule works). */
 export const VM_USER = "agent";
 
-/** Container and image names. Distinct from any name the user's other
- * containers use, and stable so a restart reuses the same machine. */
-export const VM_CONTAINER_NAME = "lumisca-stella";
+/** Container and image names.
+ *
+ * One container per stella agent, named after it: a restarted server finds
+ * the machine it left, and two agents never share one. The image is one per
+ * installation, because every machine runs the same definition. Distinct from
+ * any name the user's other containers use. */
+const VM_CONTAINER_PREFIX = "lumisca-stella-";
+
 export const VM_IMAGE_NAME = "lumisca-stella";
 
-/** The memory the machine may use, in bytes.
+/** The name of one agent's machine. */
+export function vmContainerName(agentId: string): string {
+  return `${VM_CONTAINER_PREFIX}${agentId}`;
+}
+
+/** The container the per-agent machines replaced. Only its name is kept: the
+ * start-up pass removes it once, and its home lives on VM_HOME_VOLUME, which
+ * the new machines keep using. */
+export const VM_LEGACY_CONTAINER_NAME = "lumisca-stella";
+
+/** The memory one machine may use, in bytes.
  *
  * The ceiling is what keeps a runaway browser or a build from taking the
  * host down with it: past it the OOM killer ends a process INSIDE the
  * machine, where the agent sees the failure and can retry, instead of
- * choosing a victim among the host's own programs. 4 GiB is what the machine
- * already costs (six desktops are about 1.5 GB, see VM_DESKTOP_SLOTS) plus
- * room for one build inside it, which is the heaviest thing a conversation
- * does there; it leaves the host about the other half of 8 GB, the smallest
- * machine this runs on. */
-export const VM_MEMORY_LIMIT_BYTES = 4 * 1024 ** 3;
+ * choosing a victim among the host's own programs. One machine now runs one
+ * desktop (about 250 MB) plus room for one build inside it, which is the
+ * heaviest thing a conversation does there; 3 GiB is that plus slack. The
+ * total of the running machines is bounded by idle sleep (VM_IDLE_SLEEP_MS),
+ * not by a fixed count. */
+export const VM_MEMORY_LIMIT_BYTES = 3 * 1024 ** 3;
 
 /** Swap the machine may use: the same as its memory limit, which means none.
  *
@@ -195,12 +163,39 @@ export const VM_PROBE_IMAGE = "docker.io/library/debian:bookworm-slim";
  * container's uid 1000 owns what it writes there, because the volume is
  * created with the same userns mapping the container runs with.
  *
+ * Every agent's container mounts this same volume. The machines are separate
+ * processes and separate desktops, but the home is one: one agent's files,
+ * its shell configuration and its `vm_env` values are the next agent's, the
+ * way they were when one container served everyone. The paths that cannot be
+ * shared are per agent by construction — the working folder
+ * (`vmAgentDir`), the browser profile (`VM_PROFILE_ROOT`), the cache
+ * (`vmCacheHomeOf`) — and each machine writes only its own.
+ *
  * No setting for the name, for the same reason as every other value here. */
 export const VM_HOME_VOLUME = "lumisca-stella-home";
 
+/** The per-agent cache directory inside the shared home.
+ *
+ * The home is shared, but a cache keyed by the display is not: AT-SPI names
+ * its bus socket after `DISPLAY` (`<XDG_CACHE_HOME>/at-spi/bus_99`), and
+ * every container runs `:99`. Left in the shared home, the second machine
+ * would find the first machine's socket and attach to its accessibility tree
+ * — the mixing the separate containers exist to prevent. The container is
+ * created with `XDG_CACHE_HOME` set to this path, so Chromium's cache is per
+ * agent too. */
+export function vmCacheHomeOf(agentId: string): string {
+  return `${VM_WORKDIR}/.cache/agents/${agentId}`;
+}
+
 /** Label marking containers this application created, so it can tell its own
- * machine from a same-named one a user made by hand. */
+ * machines from a same-named one a user made by hand. */
 export const VM_MANAGED_LABEL = "lumisca.stella=1";
+
+/** Label naming the agent whose machine a container is. Read back with the
+ * container's facts and compared with the agent that was asked for, so a
+ * container renamed or reused by hand is replaced instead of being driven as
+ * somebody else's machine. */
+export const VM_AGENT_LABEL = "lumisca.stella.agent";
 
 /** Label the built image carries, recording which version of the container
  * files (the Containerfile and the files it copies from the same directory)
@@ -236,10 +231,14 @@ export function vmAgentSkillsDir(agentId: string): string {
   return `${vmAgentDir(agentId)}/.agents/skills`;
 }
 
-/** The session bus `entry.sh` starts, at a fixed path: the machine's own bus,
- * the one the image's `DBUS_SESSION_BUS_ADDRESS` names and a command run
- * without a desktop reaches. The desktops have one each (see
- * `vmBusSocketOf`).
+/** The session bus `entry.sh` starts, at a fixed path.
+ *
+ * Every container starts its own, and that one bus is the machine's: the
+ * desktop's applications and the server's `podman exec` reach the same
+ * address. An AT-SPI registry lives on the session bus, so two agents sharing
+ * one would let one agent's semantic tools (`vm_find` and the rest) read and
+ * press the other's windows — which is why the machines are separate
+ * containers rather than desktops of one.
  *
  * Fixed because the server enters the machine with `podman exec`, which
  * inherits nothing from the container's first process: an autolaunched bus
@@ -250,21 +249,6 @@ export function vmAgentSkillsDir(agentId: string): string {
 export const VM_DBUS_DIR = "/tmp/lumisca-dbus";
 export const VM_DBUS_SOCKET = `${VM_DBUS_DIR}/session.sock`;
 export const VM_DBUS_ADDRESS = `unix:path=${VM_DBUS_SOCKET}`;
-
-/** The socket of one desktop's session bus.
- *
- * Every desktop starts its own. An AT-SPI registry lives on the session bus,
- * so a shared one would let one agent's semantic tools (`vm_find` and the
- * rest) read and press another agent's windows — the failure the separate
- * displays exist to prevent. */
-export function vmBusSocketOf(slot: number): string {
-  return `${VM_DBUS_DIR}/session-${slot}.sock`;
-}
-
-/** That bus's address, in the form an environment variable carries it. */
-export function vmBusAddressOf(slot: number): string {
-  return `unix:path=${vmBusSocketOf(slot)}`;
-}
 
 /** The gsettings key that makes a GTK application load its ATK bridge. *
  * `entry.sh` sets it before anything else starts, because an app reads it once
@@ -305,6 +289,23 @@ export const VM_STOP_TIMEOUT_MS = 60_000;
  * endpoint ask repeatedly while a client watches, and every answer is a
  * `podman` process; callers that just changed the state bypass the cache. */
 export const VM_STATUS_CACHE_MS = 1_000;
+
+/** How long a machine may sit unused before the server stops it.
+ *
+ * A stopped container costs no memory: its processes are gone and podman
+ * keeps only the definition, the writable layer and the shared home volume.
+ * Waking one is a `podman start` plus the screen, seconds rather than the
+ * minutes a first image build takes. Five minutes is long enough that an
+ * ordinary pause between prompts does not pay for a wake, and short enough
+ * that a conversation the user walked away from stops holding a browser. */
+export const VM_IDLE_SLEEP_MS = 5 * 60_000;
+
+/** How often the server looks for machines to stop.
+ *
+ * The check is a few map reads and one `podman stop` per machine that is
+ * actually idle; 30 seconds bounds how long an abandoned machine keeps its
+ * memory after the idle window, without a timer per machine. */
+export const VM_REAP_INTERVAL_MS = 30_000;
 
 /** How long a PASSED contract check is reused for one container instance.
  *

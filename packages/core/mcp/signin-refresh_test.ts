@@ -26,6 +26,7 @@ import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { fauxProvider } from "../ai/faux.ts";
 import { LumiscaCore } from "../core.ts";
+import { fakeStellaHost } from "../test-utils.ts";
 import { startFakeAuthServer, startFakeMcpServer } from "./fake-http.ts";
 import type { McpServerStatus } from "./manager.ts";
 
@@ -67,19 +68,7 @@ test("E2E: a stella conversation reaches an MCP server after signing in", async 
   const core = LumiscaCore.forTesting([faux.provider]);
   core.models.models.setProvider(faux.provider);
   await core.setProviderApiKey(faux.provider.id, "k");
-  core.setStellaVm({
-    status: () =>
-      Promise.resolve({
-        state: "running" as never,
-        vncPort: 49153,
-        reason: "",
-      }),
-    start: () => Promise.resolve(),
-    stop: () => Promise.resolve(),
-    vncPort: () => Promise.resolve(49153),
-    startDesktop: () => Promise.resolve(),
-    stopDesktop: () => Promise.resolve(),
-  } as never);
+  core.setStellaVm(fakeStellaHost({ vncPort: 49153 }));
   try {
     const agent = await core.createStellaAgent({ name: "Aide", role: "help" });
     const session = await core.getOrCreateStellaSession(agent.id);

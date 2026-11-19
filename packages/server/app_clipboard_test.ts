@@ -1,5 +1,6 @@
 import { test } from "bun:test";
 import { fauxAssistantMessage, fauxProvider, LumiscaCore } from "@lumisca/core";
+import { fakeStellaHost } from "@lumisca/core/test-utils";
 import { assertEquals } from "@std/assert";
 import { startServer } from "./app.ts";
 import { json } from "./test-utils.ts";
@@ -55,16 +56,7 @@ test("stella clipboard: the machine's text crosses the server, in UTF-8", async 
   const base = `http://127.0.0.1:${server.addr.port}`;
   try {
     await core.setProviderApiKey(faux.provider.id, "faux-key");
-    core.setStellaVm({
-      status: () =>
-        Promise.resolve({ state: "running", vncPort: null, reason: "" }),
-      start: () =>
-        Promise.resolve({ state: "running", vncPort: 1, reason: "" }),
-      stop: () => Promise.resolve(),
-      vncPort: () => Promise.resolve(null),
-      startDesktop: () => Promise.resolve(),
-      stopDesktop: () => Promise.resolve(),
-    });
+    core.setStellaVm(fakeStellaHost({ vncPort: null }));
     const created = await json(base, "/api/stella/agents", {
       method: "POST",
       body: JSON.stringify({ name: "Aide", role: "Help with the work." }),

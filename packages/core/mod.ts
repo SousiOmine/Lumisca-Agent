@@ -122,7 +122,7 @@ export { HostCommandRunner } from "./tools/host/command-runner.ts";
 export { HostFileBackend } from "./tools/host/files.ts";
 export { getShell } from "./tools/host/shell.ts";
 export type { StellaAvailability } from "./vm/availability.ts";
-export { createVmManager } from "./vm/container.ts";
+export { createVmHost } from "./vm/container.ts";
 export { VM_CONTAINER_DIR_NAME } from "./vm/contract.ts";
 export {
   isDirectory,

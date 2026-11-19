@@ -6,24 +6,25 @@ import type { AgentMessage } from "./ai/message.ts";
 import { LumiscaCore } from "./core.ts";
 import { runProcess } from "./process.ts";
 import { promptSession } from "./test-utils.ts";
-import { createVmManager } from "./vm/container.ts";
-import { VM_WORKDIR, vmAgentDir } from "./vm/contract.ts";
+import { createVmHost } from "./vm/container.ts";
+import { VM_WORKDIR, vmAgentDir, vmContainerName } from "./vm/contract.ts";
 
 /**
  * The stella conversation, end to end inside a real container.
  *
  * Unlike the other stella tests (which script the machine), this one builds
- * nothing and starts nothing: it runs only where the image already exists and
- * podman answers, and it SKIPS otherwise. When it does run, it is the check
- * that cannot be faked — a tool call from the model really does execute inside
- * the machine, and the file it writes is really there afterwards.
+ * nothing: it runs only where the image already exists and podman answers, and
+ * it SKIPS otherwise. When it does run, it is the check that cannot be faked —
+ * a tool call from the model really does execute inside the machine, and the
+ * file it writes is really there afterwards.
  *
- * It drives the SAME container the application uses (`lumisca-stella`), so it
- * runs only when asked for by name: an ordinary `bun run test` used to find
- * the container running whenever the user had stella open — which is exactly
- * when it ran, and then stopped the user's machine when it finished. The
- * environment variable is the consent; without it not even a status query
- * touches podman.
+ * It drives the SAME machines the application uses (one container per agent),
+ * so it runs only when asked for by name: an ordinary `bun run test` used to
+ * find the container running whenever the user had stella open — which is
+ * exactly when it ran, and then stopped the user's machine when it finished.
+ * The environment variable is the consent; without it not even a status query
+ * touches podman. Every test makes its own agent, so its container is its own
+ * and the user's conversations are never touched.
  *
  * Run explicitly:
  *   LUMISCA_STELLA_LIVE=1 bun test packages/core/stella_live_test.ts
@@ -33,20 +34,20 @@ const containerDir = new URL("./vm/container/", import.meta.url).pathname;
 
 const live = process.env["LUMISCA_STELLA_LIVE"] === "1";
 
-/** Whether this host can run the machine at all (podman plus a built image).
- * Read without side effects: a status query only. */
+/** Whether this host can run a machine at all (podman plus an image built from
+ * the files on disk). Read without side effects: no container is created. */
 async function machineReady(): Promise<boolean> {
   if (!live) return false;
-  const vm = createVmManager({ containerDir });
-  const status = await vm.status({ fresh: true });
-  return status.state === "running";
+  const host = createVmHost({ containerDir });
+  const status = await host.status({ fresh: true });
+  return status.state === "ready";
 }
 
-/** Close the test's core without ending the machine.
+/** Close the test's core without ending the machines.
  *
- * `LumiscaCore.close()` stops the machine it was given, and the machine here
- * belongs to the application — a test that drives it must leave it exactly as
- * it found it. Detaching first makes `stop()` a no-op. */
+ * `LumiscaCore.close()` stops the machines it was given, and the machines
+ * here are the test's — a test that drives them must leave the user's own
+ * alone. Detaching first makes `stopAll()` a no-op. */
 async function closeTestCore(core: LumiscaCore): Promise<void> {
   core.setStellaVm(undefined);
   await core.close();
@@ -55,12 +56,12 @@ async function closeTestCore(core: LumiscaCore): Promise<void> {
 test.skipIf(!(await machineReady()))(
   "stella live: a tool call runs inside the machine",
   async () => {
-    const vm = createVmManager({ containerDir });
+    const host = createVmHost({ containerDir });
     const faux = fauxProvider();
     const core = LumiscaCore.forTesting([faux.provider]);
     try {
       await core.setProviderApiKey(faux.provider.id, "faux-key");
-      core.setStellaVm(vm);
+      core.setStellaVm(host);
       await core.getStellaAvailability();
 
       // A fresh core has no counterpart yet: stella has no default agent
@@ -95,25 +96,8 @@ test.skipIf(!(await machineReady()))(
       // the assertions below see the transcript the run produced.
       await promptSession(core, session.id, "write the file");
 
-      const exists = await runProcess([
-        "podman",
-        "exec",
-        "--workdir",
-        VM_WORKDIR,
-        "lumisca-stella",
-        "cat",
-        target,
-      ]);
-      assert(
-        exists.success,
-        `the file is not in the machine: ${new TextDecoder().decode(
-          exists.stderr,
-        )}`,
-      );
-      assertEquals(
-        new TextDecoder().decode(exists.stdout),
-        "written from inside the machine\n",
-      );
+      const exists = await runInMachine(counterpart.id, ["cat", target]);
+      assertEquals(exists, "written from inside the machine\n");
 
       // Nowhere on this host did it appear.
       let onHost = true;
@@ -144,12 +128,12 @@ test.skipIf(!(await machineReady()))(
 test.skipIf(!(await machineReady()))(
   "stella live: history_search reads a turn back from the machine's conversation",
   async () => {
-    const vm = createVmManager({ containerDir });
+    const host = createVmHost({ containerDir });
     const faux = fauxProvider();
     const core = LumiscaCore.forTesting([faux.provider]);
     try {
       await core.setProviderApiKey(faux.provider.id, "faux-key");
-      core.setStellaVm(vm);
+      core.setStellaVm(host);
       await core.getStellaAvailability();
 
       const counterpart = await core.createStellaAgent({
@@ -199,17 +183,19 @@ test.skipIf(!(await machineReady()))(
 test.skipIf(!(await machineReady()))(
   "stella live: the working folder is per agent and the others stay reachable",
   async () => {
-    const vm = createVmManager({ containerDir });
+    const host = createVmHost({ containerDir });
     const faux = fauxProvider();
     const core = LumiscaCore.forTesting([faux.provider]);
+    let created: string | undefined;
     try {
       await core.setProviderApiKey(faux.provider.id, "faux-key");
-      core.setStellaVm(vm);
+      core.setStellaVm(host);
       await core.getStellaAvailability();
       const agent = await core.createStellaAgent({
         name: "Live Worker",
         role: "Writes files where it is asked to.",
       });
+      created = agent.id;
       const session = await core.getOrCreateStellaSession(agent.id);
       const open = core.getAgent(session.id);
       assert(open !== undefined, "the agent must be open");
@@ -234,7 +220,10 @@ test.skipIf(!(await machineReady()))(
       ]);
       await promptSession(core, session.id, "write a relative file");
 
-      const read = await runInMachine(["cat", `${workdir}/relative.txt`]);
+      const read = await runInMachine(agent.id, [
+        "cat",
+        `${workdir}/relative.txt`,
+      ]);
       assertEquals(read, "from the working folder\n");
 
       const bashResult = open.messages.find(
@@ -251,11 +240,17 @@ test.skipIf(!(await machineReady()))(
       assert(bashText.includes(workdir), bashText);
 
       // The root is the machine's home, not the working folder: an absolute
-      // path into another agent's folder is reachable (Terasuma's rule — the
-      // folder is a default place, not a wall).
+      // path into another agent's folder is reachable inside this machine
+      // (Terasuma's rule — the folder is a default place, not a wall). The
+      // machines share the home volume, so that folder is the same one the
+      // other agent sees.
       const other = `/home/agent/agents/live-other`;
-      await runInMachine(["mkdir", "-p", other]);
-      await runInMachine(["sh", "-c", `printf 'other' > ${other}/f.txt`]);
+      await runInMachine(agent.id, ["mkdir", "-p", other]);
+      await runInMachine(agent.id, [
+        "sh",
+        "-c",
+        `printf 'other' > ${other}/f.txt`,
+      ]);
       faux.setResponses([
         fauxAssistantMessage(
           [fauxToolCall("read", { path: `${other}/f.txt` })],
@@ -282,38 +277,39 @@ test.skipIf(!(await machineReady()))(
       assert(readText.includes("other"), readText);
       assert(!readText.includes("outside the workspace"), readText);
     } finally {
-      await runInMachine(["rm", "-rf", "/home/agent/agents/live-other"]).catch(
-        () => {},
-      );
+      if (created !== undefined) {
+        await runInMachine(created, [
+          "rm",
+          "-rf",
+          "/home/agent/agents/live-other",
+        ]).catch(() => {});
+      }
       await closeTestCore(core);
     }
   },
 );
 
 test.skipIf(!(await machineReady()))(
-  "stella live: MEMORY.md is there from creation and survives reopening",
+  "stella live: MEMORY.md is prepared when the conversation opens and survives reopening",
   async () => {
-    const vm = createVmManager({ containerDir });
+    const host = createVmHost({ containerDir });
     const faux = fauxProvider();
     const core = LumiscaCore.forTesting([faux.provider]);
     try {
       await core.setProviderApiKey(faux.provider.id, "faux-key");
-      core.setStellaVm(vm);
+      core.setStellaVm(host);
       await core.getStellaAvailability();
-      // Creating an agent does not start the machine, so the machine is up
-      // first — this is the case where creation prepares the folder.
-      await core.ensureStellaReady();
-
       const agent = await core.createStellaAgent({
         name: "Live Memory",
         role: "Keeps notes for later runs.",
       });
-      // Made with the agent, before it has ever spoken.
+      // Opening the conversation wakes the machine (nothing else has), and
+      // the open prepares the folder and MEMORY.md with it.
+      const session = await core.getOrCreateStellaSession(agent.id);
       const path = `${vmAgentDir(agent.id)}/MEMORY.md`;
-      assertEquals(await runInMachine(["cat", path]), "");
+      assertEquals(await runInMachine(agent.id, ["cat", path]), "");
 
       // The agent writes to it the way it is told to: the file tools.
-      const session = await core.getOrCreateStellaSession(agent.id);
       faux.setResponses([
         fauxAssistantMessage(
           [
@@ -328,7 +324,7 @@ test.skipIf(!(await machineReady()))(
       ]);
       await promptSession(core, session.id, "remember that");
       assertEquals(
-        await runInMachine(["cat", path]),
+        await runInMachine(agent.id, ["cat", path]),
         "- the user writes in Japanese\n",
       );
 
@@ -337,7 +333,7 @@ test.skipIf(!(await machineReady()))(
       core.closeSession(session.id);
       await core.getOrCreateStellaSession(agent.id);
       assertEquals(
-        await runInMachine(["cat", path]),
+        await runInMachine(agent.id, ["cat", path]),
         "- the user writes in Japanese\n",
       );
     } finally {
@@ -346,14 +342,17 @@ test.skipIf(!(await machineReady()))(
   },
 );
 
-/** Run a command in the machine for an assertion outside the core. */
-async function runInMachine(args: string[]): Promise<string> {
+/** Run a command in one agent's machine for an assertion outside the core. */
+async function runInMachine(
+  agentId: string,
+  args: readonly string[],
+): Promise<string> {
   const result = await runProcess([
     "podman",
     "exec",
     "--workdir",
     VM_WORKDIR,
-    "lumisca-stella",
+    vmContainerName(agentId),
     ...args,
   ]);
   if (!result.success) {
