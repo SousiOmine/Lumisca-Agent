@@ -153,6 +153,21 @@ export function parseUrl(pathname: string): UrlState {
   return { route, settings: settingsOf(route, segments.slice(consumed)) };
 }
 
+/**
+ * The route this installation can show.
+ *
+ * Code mode is an experimental switch (settings → 実験的機能). While it is
+ * off, a `/code` address is stella's top: the gate applies to the route the
+ * app DRAWS, not only to the address, so the redirect that replaces the URL
+ * cannot open a session on its way there. The settings dialog is not part of
+ * this answer: it belongs to the installation, and it stays open on the
+ * screen that replaces the one it covered.
+ */
+export function availableRoute(route: AppRoute, codeMode: boolean): AppRoute {
+  if (codeMode || route.kind !== "code") return route;
+  return { kind: "stella", agentId: null };
+}
+
 /** The settings part of a path, given what the route did not consume. */
 function settingsOf(route: AppRoute, trailing: string[]): SettingsRoute | null {
   // The start address names no mode, so settings have no screen to sit on:

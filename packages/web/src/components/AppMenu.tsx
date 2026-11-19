@@ -9,6 +9,7 @@ import {
   IconSparkles,
 } from "@tabler/icons-preact";
 import { useRef, useState } from "preact/hooks";
+import { useCodeModeEnabled } from "../codeMode.ts";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { useT } from "../i18n.ts";
 
@@ -34,25 +35,36 @@ export type AppMenuEntry =
  * The switch entry names the OTHER mode and does it in one press. It used to
  * say "switch mode" and open a chooser, which made the reader read two cards
  * to say what the menu could have said in one line.
+ *
+ * With code mode switched off (settings → 実験的機能), stella's menu has no
+ * switch at all: the destination is a mode the app would replace with stella
+ * on arrival, and an entry that undoes itself is not a control.
  */
 export function menuEntries(options: {
   mode: AppMode;
   isDesktop: boolean;
+  /** Whether this installation offers code mode. */
+  codeMode: boolean;
 }): AppMenuEntry[] {
-  return [
-    ...(options.mode === "code"
-      ? [
-          { kind: "newTab" } as const,
-          { kind: "history" } as const,
-          { kind: "separator" } as const,
-        ]
-      : []),
-    { kind: "switchMode", to: options.mode === "code" ? "stella" : "code" },
-    { kind: "settings" },
-    ...(options.isDesktop
-      ? [{ kind: "separator" } as const, { kind: "quit" } as const]
-      : []),
-  ];
+  const entries: AppMenuEntry[] = [];
+  if (options.mode === "code") {
+    entries.push(
+      { kind: "newTab" },
+      { kind: "history" },
+      { kind: "separator" },
+    );
+  }
+  if (options.mode === "code" || options.codeMode) {
+    entries.push({
+      kind: "switchMode",
+      to: options.mode === "code" ? "stella" : "code",
+    });
+  }
+  entries.push({ kind: "settings" });
+  if (options.isDesktop) {
+    entries.push({ kind: "separator" }, { kind: "quit" });
+  }
+  return entries;
 }
 
 interface AppMenuProps {
@@ -91,6 +103,7 @@ export function AppMenu({
   buttonClass = "icon-btn",
 }: AppMenuProps) {
   const t = useT();
+  const codeMode = useCodeModeEnabled();
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
@@ -128,7 +141,7 @@ export function AppMenu({
             right: globalThis.innerWidth - pos.x,
           }}
         >
-          {menuEntries({ mode, isDesktop }).map((entry) => {
+          {menuEntries({ mode, isDesktop, codeMode }).map((entry) => {
             switch (entry.kind) {
               case "separator":
                 return <div className="app-menu-sep" role="separator" />;

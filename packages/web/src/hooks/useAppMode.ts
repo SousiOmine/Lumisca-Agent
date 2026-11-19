@@ -11,25 +11,32 @@ import { NEVER, useVisibleInterval } from "./useVisibleInterval.ts";
 const MODE_KEY = "lumisca.appMode";
 
 /** The mode a client that has never chosen starts in: the main one. The app
- * opens as Lumisca; the other mode is one press away in the app menu, not a
- * gate in front of the first screen. */
+ * opens as Lumisca; code mode is one press away in the app menu once the
+ * experimental switch has enabled it, not a gate in front of the first
+ * screen. */
 export const MAIN_MODE: AppMode = "stella";
 
 /**
  * The mode a bare `/` resolves to, given what this client stored (null when
- * it has never chosen).
+ * it has never chosen) and whether this installation offers code mode.
  *
  * Pure so the rule can be read and tested without a browser: a stored value
  * this version does not know (an older spelling, a hand-edited entry) is the
  * same as no choice, and answers the main mode rather than an error screen.
+ * A stored code mode while the installation has switched it off is the same
+ * as no choice too: `/` must land on a screen the reader can use, and the
+ * mode they left behind is not one this app may show.
  */
-export function startModeOf(stored: string | null): AppMode {
-  return isAppMode(stored) ? stored : MAIN_MODE;
+export function startModeOf(stored: string | null, codeMode: boolean): AppMode {
+  return isAppMode(stored) && (stored !== "code" || codeMode)
+    ? stored
+    : MAIN_MODE;
 }
 
 /**
  * The mode a bare `/` resolves to: the one this client showed last, or the
- * main mode when it has never chosen.
+ * main mode when it has never chosen, or when the stored mode is code and
+ * the installation has switched code mode off.
  *
  * The stored value is not what the app SHOWS — the URL is (route.ts) — but
  * what the address every launch starts from means. `/` is what the desktop
@@ -39,8 +46,8 @@ export function startModeOf(stored: string | null): AppMode {
  * force anyway). A first launch has nothing stored: it starts in Lumisca,
  * because that mode is the app's main surface.
  */
-export function startMode(): AppMode {
-  return startModeOf(localStorage.getItem(MODE_KEY));
+export function startMode(codeMode: boolean): AppMode {
+  return startModeOf(localStorage.getItem(MODE_KEY), codeMode);
 }
 
 /** Remember the mode this client is showing, for the next bare `/`. */

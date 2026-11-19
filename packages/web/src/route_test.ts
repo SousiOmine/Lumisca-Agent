@@ -10,7 +10,7 @@
 import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { SETTINGS_CATEGORIES } from "./components/settings/categories.ts";
-import { parseUrl, type UrlState, urlOf } from "./route.ts";
+import { availableRoute, parseUrl, type UrlState, urlOf } from "./route.ts";
 import { tabKey } from "./tabs.ts";
 
 /** A state with the settings dialog closed. */
@@ -65,6 +65,25 @@ test("route: a peer id with the tab key's separator survives", () => {
   const key = tabKey("peer:with%odd", "s-1");
   const state = at({ kind: "code", tabKey: key });
   roundTrip(state);
+});
+
+test("route: code mode's addresses are stella's top while it is off", () => {
+  // Code mode is an experimental switch (settings → 実験的機能), off by
+  // default. The gate has to apply to what the app DRAWS, not only to the
+  // address it replaces afterwards: opening the session named by a bookmarked
+  // `/code/s/<id>` on the way to the redirect would be an access.
+  for (const path of ["/code", "/code/s/s-1", "/code/p/peer-1/s/s-1"]) {
+    const { route } = parseUrl(path);
+    assertEquals(availableRoute(route, false), {
+      kind: "stella",
+      agentId: null,
+    });
+    assertEquals(availableRoute(route, true), route);
+  }
+  // Everything else is unaffected by the switch.
+  const stella = parseUrl("/stella/a/a-1").route;
+  assertEquals(availableRoute(stella, false), stella);
+  assertEquals(availableRoute({ kind: "start" }, false), { kind: "start" });
 });
 
 test("route: a session id is not split into a peer", () => {

@@ -79,6 +79,24 @@ export function codeExecutionEnabled(
   return read(CODE_EXECUTION_ENABLED_KEY) === "1";
 }
 
+/** Settings-table key for code mode's UI: the app menu offers the switch and
+ * `/code` addresses open only while this is "1". Unset (or any other value)
+ * = off, so a new installation starts in stella mode alone.
+ *
+ * The flag gates the CLIENT's surfaces, not the server's API: a session
+ * created through `POST /api/sessions` still runs, because the experiment is
+ * about what the app offers a reader, not about removing a capability from
+ * the server. */
+export const CODE_MODE_ENABLED_KEY = "code_mode_enabled";
+
+/** Whether code mode is offered. Follows the "1"-is-on convention of the
+ * other flags; anything else, unset included, is off. */
+export function codeModeEnabled(
+  read: (key: string) => string | undefined,
+): boolean {
+  return read(CODE_MODE_ENABLED_KEY) === "1";
+}
+
 /** Settings-table key for the ask tool, an experimental switch: the agent
  * can ask the user a question and block the run until it is answered.
  * "0" disables the tool; unset, "1" or anything else leaves it on. The flag

@@ -7,6 +7,7 @@ import {
   APP_UI_IN_SYSTEM_PROMPT_KEY,
   ASK_TOOL_ENABLED_KEY,
   CODE_EXECUTION_ENABLED_KEY,
+  CODE_MODE_ENABLED_KEY,
   COMPACTION_ENABLED_KEY,
   COMPACTION_RESERVE_PERCENT_KEY,
   DEFAULT_MODEL_KEY,
@@ -85,6 +86,7 @@ test("the experimental rows of the settings dialog are writable", () => {
   // Same surface, same failure mode (see the model and compaction rows).
   for (const key of [
     CODE_EXECUTION_ENABLED_KEY,
+    CODE_MODE_ENABLED_KEY,
     ASK_TOOL_ENABLED_KEY,
     APP_UI_IN_SYSTEM_PROMPT_KEY,
   ]) {

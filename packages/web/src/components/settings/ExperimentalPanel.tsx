@@ -7,6 +7,7 @@ import {
   errorMessage,
 } from "@lumisca/core/shared";
 import { useEffect, useState } from "preact/compat";
+import { setCodeModeEnabled, useCodeModeEnabled } from "../../codeMode.ts";
 import { useSaveAction } from "../../hooks/useSave.ts";
 import { useT } from "../../i18n.ts";
 import { settingsStore, useSettings } from "../../settingsStore.ts";
@@ -20,13 +21,18 @@ import { SettingsSection } from "./SettingsSection.tsx";
  * the rest of the dialog, and the note at its top says what that means for
  * a feature on it: it may change or disappear.
  *
- * The switches change what the agent is built from — its tool set, or the
- * prompt it starts with — so the server rebuilds the open sessions when one
- * moves: a session that is waiting follows at once, and one in the middle of
- * a run follows when that run ends. The run already sent its tools and
- * prompt, and replacing the agent under it would duplicate the rows of the
- * turn in flight. The comment on `setCodeExecutionEnabled` in core.ts is the
- * same rule; the ask and app-UI switches follow it too. */
+ * The tool and prompt switches change what the agent is built from, so the
+ * server rebuilds the open sessions when one moves: a session that is
+ * waiting follows at once, and one in the middle of a run follows when that
+ * run ends. The run already sent its tools and prompt, and replacing the
+ * agent under it would duplicate the rows of the turn in flight. The comment
+ * on `setCodeExecutionEnabled` in core.ts is the same rule; the ask and
+ * app-UI switches follow it too.
+ *
+ * The code mode switch is the exception: it changes what the app OFFERS (the
+ * menu's switch, the addresses that are screens), not how an agent is built,
+ * so no session is rebuilt and the client applies it at once
+ * (packages/web/src/codeMode.ts). */
 export function ExperimentalPanel() {
   const t = useT();
   const settings = useSettings();
@@ -36,7 +42,13 @@ export function ExperimentalPanel() {
   // inversion stays here, and the value written is always "1" or "0".
   const [askDisabled, setAskDisabled] = useState(false);
   const [appUiInPrompt, setAppUiInPrompt] = useState(false);
+  // Code mode's switch is not read from the dialog's settings snapshot: the
+  // answer has to exist before the first render (a bookmarked `/code` is
+  // redirected on the way), so the server sends it with the page and this
+  // store keeps it current (codeMode.ts).
+  const codeMode = useCodeModeEnabled();
   const codeSave = useSaveAction(errorMessage);
+  const codeModeSave = useSaveAction(errorMessage);
   const askSave = useSaveAction(errorMessage);
   const appUiSave = useSaveAction(errorMessage);
 
@@ -46,6 +58,12 @@ export function ExperimentalPanel() {
     setAskDisabled(!askToolEnabled((key) => settings.values[key]));
     setAppUiInPrompt(appUiInSystemPrompt((key) => settings.values[key]));
   }, [loaded, settings.values]);
+
+  const setCodeModeValue = (next: boolean) => {
+    // Optimistic inside setCodeModeEnabled: the switch moves now, and a
+    // rejected write restores it (the error line below says why).
+    void codeModeSave.save(() => setCodeModeEnabled(next));
+  };
 
   const setCodeExecutionValue = (next: boolean) => {
     const previous = codeExecution;
@@ -76,6 +94,26 @@ export function ExperimentalPanel() {
 
   return (
     <SettingsSection description={t("settings.experimental.description")}>
+      <SettingRow
+        label={t("settings.experimental.codeMode.title")}
+        description={t("settings.experimental.codeMode.description")}
+      >
+        <Toggle
+          checked={codeMode}
+          disabled={codeModeSave.saving || !loaded}
+          onChange={setCodeModeValue}
+          label={t("settings.experimental.codeMode.title")}
+        />
+      </SettingRow>
+
+      {codeModeSave.error && (
+        <div className="error-text">
+          {t("settings.experimental.codeMode.operationFailed", {
+            error: codeModeSave.error,
+          })}
+        </div>
+      )}
+
       <SettingRow
         label={t("settings.experimental.codeExecution.title")}
         description={

@@ -1,6 +1,10 @@
 import { afterAll, test } from "bun:test";
 import { fauxProvider, LumiscaCore } from "@lumisca/core";
-import { LANGUAGE_KEY, THEME_COLORS } from "@lumisca/core/shared";
+import {
+  CODE_MODE_ENABLED_KEY,
+  LANGUAGE_KEY,
+  THEME_COLORS,
+} from "@lumisca/core/shared";
 import { assert, assertEquals } from "@std/assert";
 import { createApp, startServer } from "./app.ts";
 
@@ -77,6 +81,21 @@ test("unknown static assets return 404, not the HTML shell", async () => {
   assertEquals((await fetch(`${base}/assets/constructor`)).status, 404);
 });
 
+test("initial data carries the code mode switch", async () => {
+  // The client decides before its first render whether a `/code` address is
+  // a screen, so the answer travels with the page rather than waiting for the
+  // settings read. The switch is off by default and reaches the next request
+  // when it moves.
+  const { base, core } = readOnlyServer();
+  core.setSetting(CODE_MODE_ENABLED_KEY, "1");
+  try {
+    const text = await (await fetch(`${base}/assets/initial-data.js`)).text();
+    assertEquals(text.includes('"codeModeEnabled":true'), true);
+  } finally {
+    core.setSetting(CODE_MODE_ENABLED_KEY, "");
+  }
+});
+
 test("server serves the app shell", async () => {
   const { base } = readOnlyServer();
   // The language is resolved per request; the header pins it so the test
@@ -109,6 +128,9 @@ test("server serves the app shell", async () => {
   const dataText = await dataScript.text();
   assertEquals(dataText.includes("window.__INITIAL_DATA__"), true);
   assertEquals(dataText.includes('"language":"ja"'), true);
+  // Code mode is an experimental switch and off by default: the page has to
+  // know before its first render whether a `/code` address is a screen.
+  assertEquals(dataText.includes('"codeModeEnabled":false'), true);
 
   // SPA fallback renders the same shell.
   const fallback = await fetch(`${base}/some/route`);

@@ -10,7 +10,7 @@ import {
   THEME_KEY,
   type ThemeSetting,
 } from "@lumisca/core";
-import type { InitialData } from "@lumisca/core/shared";
+import { codeModeEnabled, type InitialData } from "@lumisca/core/shared";
 import type { Context, Hono } from "hono";
 import {
   appFileHeaders,
@@ -67,6 +67,9 @@ export function registerPages(
     // every client for the first-run setup at its next page load (see
     // core/settings/setup.ts).
     setup: core.getSetup(),
+    // Read per request like the rest: the switch in settings must reach the
+    // next page load, and the client needs it before its first render.
+    codeModeEnabled: codeModeEnabled((key) => core.getSetting(key)),
   });
 
   /** Render the app shell for one request (also the SPA fallback). */

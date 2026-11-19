@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "preact/hooks";
+import { useCodeModeEnabled } from "./codeMode.ts";
 import { AppDialogs } from "./components/AppDialogs.tsx";
 import { AppMenu } from "./components/AppMenu.tsx";
 import { MacosTitleBarDrag } from "./components/MacosTitleBarDrag.tsx";
@@ -45,7 +46,7 @@ import { useUpdateStatus } from "./hooks/useUpdateStatus.ts";
 import { useWorkspaces } from "./hooks/useWorkspaces.ts";
 import { useT } from "./i18n.ts";
 import { isNotifyEnabled, setNotifyEnabled } from "./notify.ts";
-import type { UrlState } from "./route.ts";
+import { availableRoute, type UrlState } from "./route.ts";
 import { inDesktopShell, quit, shellPlatform } from "./shell.ts";
 import { closeTargets, DRAFT_TAB } from "./tabs.ts";
 import type { InitialData } from "./types.ts";
@@ -90,6 +91,12 @@ export function App({ initialData }: AppProps): ReactElement {
   const router = useRoute();
   const url = router.state;
   const { push: pushUrl, replace: replaceUrl } = router;
+  // Code mode is an experimental switch (settings → 実験的機能). While it is
+  // off, a `/code` address is not a screen: the route the app DRAWS is
+  // stella's top, so the session the address names is never opened on the
+  // way to the redirect below.
+  const codeMode = useCodeModeEnabled();
+  const route = availableRoute(url.route, codeMode);
   const {
     theme,
     setTheme,
@@ -113,14 +120,12 @@ export function App({ initialData }: AppProps): ReactElement {
   //
   // Memoized on the route kind: the store is a `localStorage` read, and the
   // App re-renders on every streamed event of a conversation.
-  const resolved = useMemo(startMode, [url.route.kind]);
+  const resolved = useMemo(() => startMode(codeMode), [route.kind, codeMode]);
   // The setup screen shows no mode; it resolves `/` the same way the start
   // address does, so the hooks below keep one shape (and the wizard's own
   // "start" lands on the mode the reader would have opened).
   const mode: AppMode =
-    url.route.kind === "start" || url.route.kind === "setup"
-      ? resolved
-      : url.route.kind;
+    route.kind === "start" || route.kind === "setup" ? resolved : route.kind;
   // The resolution is a REPLACE: `/` is not a place to come back to, and a
   // back from a mode's top must leave the app rather than bounce off the
   // address it never meant to show. While the setup is unfinished, `/` is
@@ -141,6 +146,16 @@ export function App({ initialData }: AppProps): ReactElement {
     if (url.route.kind !== "setup" || setup.pending) return;
     replaceUrl(modeTop(mode));
   }, [url.route.kind, mode, replaceUrl, setup.pending]);
+  // Code mode is off: an address that names it is replaced by stella's top.
+  // The settings dialog stays open — the reader may be looking at the very
+  // switch that turned it off — so only the screen underneath changes.
+  useEffect(() => {
+    if (url.route.kind !== "code" || codeMode) return;
+    replaceUrl({
+      route: { kind: "stella", agentId: null },
+      settings: url.settings,
+    });
+  }, [codeMode, url.route.kind, url.settings, replaceUrl]);
 
   // macOS overlays the native title bar on the page, so the page's chrome
   // has to start below it (see `.app.macos` in styles/chrome.css). The
@@ -165,7 +180,9 @@ export function App({ initialData }: AppProps): ReactElement {
   // on code mode's top, with the reason on screen. A switch made from the
   // menu never gets there — `choose` refuses before the address changes —
   // so the reason it leaves on screen is cleared here once the machine can
-  // run.
+  // run. With code mode switched off there is nowhere to fall back to: the
+  // reason stays on stella's screen, where the settings dialog is still one
+  // press away.
   useEffect(() => {
     if (machineStatus === null) return;
     if (machineStatus.availability.available) {
@@ -176,8 +193,15 @@ export function App({ initialData }: AppProps): ReactElement {
     }
     if (mode !== "stella") return;
     setRefusedStella(machineStatus.availability.reason);
-    replaceUrl(codeUrl(null));
-  }, [mode, machineStatus, replaceUrl]);
+    if (codeMode) {
+      // The settings dialog stays open if it was: the reader may be on the
+      // page that offers the switch this fallback depends on.
+      replaceUrl({
+        route: { kind: "code", tabKey: null },
+        settings: url.settings,
+      });
+    }
+  }, [codeMode, mode, machineStatus, replaceUrl, url.settings]);
   // Showing a mode is what this client remembers for the next bare `/` —
   // whether it was chosen here or arrived at through an address. The mode is
   // remembered only once the server has accepted it: a refused stella would
@@ -215,8 +239,7 @@ export function App({ initialData }: AppProps): ReactElement {
 
   // --- code mode: the tab the address names --------------------------------
   /** The session the address names, or null for the new-session screen. */
-  const activeTab: string | null =
-    url.route.kind === "code" ? url.route.tabKey : null;
+  const activeTab: string | null = route.kind === "code" ? route.tabKey : null;
   const goToTab = useCallback(
     (key: string | null) => pushUrl(codeUrl(key)),
     [pushUrl],
@@ -548,7 +571,7 @@ export function App({ initialData }: AppProps): ReactElement {
   // so it never enters the tab views above.
   const stellaActive = mode === "stella";
   /** The conversation the address names, or null for the agent list. */
-  const stellaAgentId = url.route.kind === "stella" ? url.route.agentId : null;
+  const stellaAgentId = route.kind === "stella" ? route.agentId : null;
   const stella = useStella(stellaActive, stellaAgentId);
   // Back to the list. A pop, not a push: the list is the screen the reader
   // came from, so the back button and the browser's back are the same move —

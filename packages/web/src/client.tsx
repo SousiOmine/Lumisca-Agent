@@ -2,6 +2,7 @@ import { DEFAULT_LOCALE } from "@lumisca/core/shared";
 import { Component } from "preact";
 import { createRoot } from "preact/compat/client";
 import { App } from "./App.tsx";
+import { initCodeMode } from "./codeMode.ts";
 import { installFileDropGuard } from "./drop-guard.ts";
 import { initLocale, t } from "./i18n.ts";
 import { registerServiceWorker } from "./pwa.ts";
@@ -25,6 +26,11 @@ if (location.search.includes("token=")) {
 // reads it from the store, and the server already resolved it (the stored
 // setting, else the browser's Accept-Language — see server/app.ts).
 initLocale(globalThis.__INITIAL_DATA__?.language ?? DEFAULT_LOCALE);
+
+// Whether code mode is offered must be known before the first render too:
+// a bookmarked `/code` has to be redirected without opening its session
+// first, and the app menu must not offer a switch the app will undo.
+initCodeMode(globalThis.__INITIAL_DATA__?.codeModeEnabled === true);
 
 // Register the PWA's service worker where it belongs (https, outside the
 // desktop shell). Fire and forget: the registration is asynchronous, adds

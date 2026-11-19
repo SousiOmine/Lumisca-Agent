@@ -6,40 +6,47 @@
  * conversation view — controls that cannot do what they say. Code mode keeps
  * them; everything that belongs to the app (the switch, settings, quit) is in
  * both. The switch names the mode it leads to, so one press is the whole
- * interaction.
+ * interaction — and it is absent while code mode is switched off, because
+ * the app would replace that mode with stella on arrival.
  */
 import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { menuEntries } from "./AppMenu.tsx";
 
 test("AppMenu: code mode offers the tab actions", () => {
-  assertEquals(menuEntries({ mode: "code", isDesktop: false }), [
-    { kind: "newTab" },
-    { kind: "history" },
-    { kind: "separator" },
-    { kind: "switchMode", to: "stella" },
-    { kind: "settings" },
-  ]);
+  assertEquals(
+    menuEntries({ mode: "code", isDesktop: false, codeMode: true }),
+    [
+      { kind: "newTab" },
+      { kind: "history" },
+      { kind: "separator" },
+      { kind: "switchMode", to: "stella" },
+      { kind: "settings" },
+    ],
+  );
 });
 
 test("AppMenu: stella mode drops the tab actions", () => {
   // Regression: the same menu was drawn in stella mode, so "new tab" opened
   // code mode's empty draft from inside a conversation.
-  assertEquals(menuEntries({ mode: "stella", isDesktop: false }), [
-    { kind: "switchMode", to: "code" },
-    { kind: "settings" },
-  ]);
+  assertEquals(
+    menuEntries({ mode: "stella", isDesktop: false, codeMode: true }),
+    [{ kind: "switchMode", to: "code" }, { kind: "settings" }],
+  );
   // The desktop-only quit entry is not resurrected by dropping the tabs.
-  assertEquals(menuEntries({ mode: "stella", isDesktop: true }), [
-    { kind: "switchMode", to: "code" },
-    { kind: "settings" },
-    { kind: "separator" },
-    { kind: "quit" },
-  ]);
+  assertEquals(
+    menuEntries({ mode: "stella", isDesktop: true, codeMode: true }),
+    [
+      { kind: "switchMode", to: "code" },
+      { kind: "settings" },
+      { kind: "separator" },
+      { kind: "quit" },
+    ],
+  );
 });
 
 test("AppMenu: the desktop menu keeps quit in code mode", () => {
-  assertEquals(menuEntries({ mode: "code", isDesktop: true }), [
+  assertEquals(menuEntries({ mode: "code", isDesktop: true, codeMode: true }), [
     { kind: "newTab" },
     { kind: "history" },
     { kind: "separator" },
@@ -48,6 +55,19 @@ test("AppMenu: the desktop menu keeps quit in code mode", () => {
     { kind: "separator" },
     { kind: "quit" },
   ]);
+});
+
+test("AppMenu: stella mode has no switch while code mode is off", () => {
+  // The mode is an experimental switch, off by default: an entry to it would
+  // move the address to a mode the app immediately leaves.
+  assertEquals(
+    menuEntries({ mode: "stella", isDesktop: false, codeMode: false }),
+    [{ kind: "settings" }],
+  );
+  assertEquals(
+    menuEntries({ mode: "stella", isDesktop: true, codeMode: false }),
+    [{ kind: "settings" }, { kind: "separator" }, { kind: "quit" }],
+  );
 });
 
 test("AppMenu: the switch never names the mode the reader is in", () => {
@@ -55,9 +75,11 @@ test("AppMenu: the switch never names the mode the reader is in", () => {
   // Now the entry itself is the whole choice: offering the current mode would
   // be an entry that does nothing.
   for (const mode of ["code", "stella"] as const) {
-    const [entry] = menuEntries({ mode, isDesktop: false }).filter(
-      (candidate) => candidate.kind === "switchMode",
-    );
+    const [entry] = menuEntries({
+      mode,
+      isDesktop: false,
+      codeMode: true,
+    }).filter((candidate) => candidate.kind === "switchMode");
     assertEquals(entry, {
       kind: "switchMode",
       to: mode === "code" ? "stella" : "code",

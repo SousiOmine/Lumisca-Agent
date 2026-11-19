@@ -195,6 +195,11 @@ export interface InitialData {
    * server that predates the field, and from a page served without initial
    * data: then the wizard is not owed (there is no answer to show it for). */
   setup?: SetupState;
+  /** Whether this installation offers code mode (the experimental switch in
+   * settings). The client decides before its first render whether a `/code`
+   * address is a screen, so the answer travels with the page rather than
+   * waiting for the settings read. */
+  codeModeEnabled: boolean;
 }
 
 // ---- async ----------------------------------------------------------------

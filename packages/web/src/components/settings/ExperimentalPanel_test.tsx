@@ -8,6 +8,14 @@ function html(): string {
   return renderToString(createElement(ExperimentalPanel, {}));
 }
 
+test("the code mode row says what the switch gates", () => {
+  const panel = html();
+  assertStringIncludes(panel, "Lumisca codeを有効化");
+  assertStringIncludes(panel, "Lumisca codeを開けるようにします。");
+  // The switch's accessible name is the row label, so the two cannot drift.
+  assertStringIncludes(panel, 'aria-label="Lumisca codeを有効化"');
+});
+
 test("the app UI prompt row says what it does and what it costs", () => {
   const panel = html();
   assertStringIncludes(panel, "生成UIのプロンプト処理を強化");

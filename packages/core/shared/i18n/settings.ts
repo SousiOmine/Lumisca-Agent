@@ -942,6 +942,21 @@ export const settings = {
     ja: "試験中の機能です。予告なく変わるか、無くなる場合があります。",
     en: "Features under test. They may change or disappear without notice.",
   },
+  /** The switch that opens code mode. Its name is the mode's display name
+   * ("Lumisca code"), not the internal word "stella" or the implementation
+   * term "code mode". */
+  "settings.experimental.codeMode.title": {
+    ja: "Lumisca codeを有効化",
+    en: "Enable Lumisca code",
+  },
+  "settings.experimental.codeMode.description": {
+    ja: "Lumisca codeを開けるようにします。無効の間はメニューに切り替えが現れず、Lumisca codeの画面はLumiscaへ戻ります。既定は無効です。",
+    en: "Makes Lumisca code available. While off, the menu has no switch to it and its screens return to Lumisca. Off by default.",
+  },
+  "settings.experimental.codeMode.operationFailed": {
+    ja: "変更に失敗しました: {error}",
+    en: "Failed to change: {error}",
+  },
   /** The switch that turns the scripting tool call feature on: the model gets
    * one tool and calls every other tool from inside a short script. */
   "settings.experimental.codeExecution.title": {
