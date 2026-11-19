@@ -13,3 +13,18 @@ Webサーバー、およびデスクトップアプリとして動作します�
 - Enterで送信されない
 
 しか思いつきませんでした。今後増える可能性大
+
+## Linuxサーバーに常駐させる
+
+一般ユーザーで次を実行します。rootでは実行しません。
+
+```
+curl -fsSLO https://raw.githubusercontent.com/SousiOmine/Lumisca-Agent/master/install-server.sh
+bash install-server.sh
+```
+
+既定では`127.0.0.1:8000`で待ち受け、systemdのユーザーユニットとしてマシン起動時に自動で立ち上がります。接続先のURLとトークンは最後に表示されます。
+
+`--port`、`--host`、`--dir`、`--version`で変えられます。`--help`で一覧を出します。`--host`にループバック以外を指定するときは`--allowed-hosts`も指定します。
+
+インストール先は既定で`~/.local/share/lumisca`です。状態は`lumisca-server service status`、停止と削除は`lumisca-server service uninstall`で行います。
