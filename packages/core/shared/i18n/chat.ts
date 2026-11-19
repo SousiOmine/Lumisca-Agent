@@ -200,6 +200,14 @@ export const chat = {
 
   // --- attachments (files the agent sends to the user) --------------------
   "chat.attach.download": { ja: "ダウンロード", en: "Download" },
+  /** The card's own check failed before the browser could save anything.
+   * "Gone" is a different sentence (chat.stella.fileGone): this one says the
+   * attempt did not reach the file, so the card stays and can be tried
+   * again. */
+  "chat.attach.downloadFailed": {
+    ja: "ダウンロードできませんでした",
+    en: "Could not download",
+  },
 
   // --- the modes' names ---------------------------------------------------
   // The reader meets the modes by their product names, not by the names this

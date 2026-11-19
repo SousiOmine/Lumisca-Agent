@@ -315,7 +315,7 @@ test("StellaTranscript: the agent's time starts at its words' edge", () => {
   assertStringIncludes(html, 'class="msg-meta"');
 });
 
-test("StellaTranscript: a prompt's pictures are drawn in the bubble", () => {
+test("StellaTranscript: a prompt's pictures are drawn outside the bubble", () => {
   const html = render({
     entries: [
       {
@@ -336,10 +336,48 @@ test("StellaTranscript: a prompt's pictures are drawn in the bubble", () => {
       },
     ],
   });
-  // An image-only prompt would otherwise render as an empty capsule, and the
-  // picture is read back from the machine rather than carried in the entry.
-  assertStringIncludes(html, "msg-images");
+  // An image-only prompt draws no capsule at all: the picture is the
+  // message. It is read back from the machine rather than carried in the
+  // entry, so the tile's src is the upload route's preview.
+  assertStringIncludes(html, "msg-attachments");
+  assertStringIncludes(html, "msg-attachment-images");
+  assertEquals(html.includes('class="msg user"'), false);
   assertStringIncludes(html, "/upload?ref=uploads%2F1-ab%2F01-image-1.png");
+});
+
+test("StellaTranscript: a prompt's files are cards under the text", () => {
+  const html = render({
+    entries: [
+      {
+        role: "user",
+        text: "ログを見て",
+        segments: [{ type: "text", text: "ログを見て" }],
+        attachments: [],
+        files: [
+          {
+            name: "build.log",
+            path: "/home/agent/agents/a1/uploads/1-ab/01-build.log",
+            size: 2048,
+            ref: "uploads/1-ab/01-build.log",
+            image: false,
+          },
+        ],
+        timestamp: 1,
+      },
+    ],
+  });
+  // The words stay in the capsule and the file is a card after it.
+  assertStringIncludes(html, 'class="msg user"');
+  assertStringIncludes(html, "msg-attachment-files");
+  assertStringIncludes(html, "build.log");
+  assertStringIncludes(html, "2 KB");
+  assertStringIncludes(html, 'download="build.log"');
+  assertStringIncludes(html, "preview=0");
+  assertEquals(
+    html.indexOf("ログを見て") < html.indexOf("msg-attachments"),
+    true,
+    html,
+  );
 });
 
 test("StellaTranscript: a conversation with nothing said yet says so", () => {

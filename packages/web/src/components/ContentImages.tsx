@@ -11,7 +11,7 @@ import { Lightbox } from "./Lightbox.tsx";
  * carries, not a published asset with a route of its own, so there is nothing
  * to downscale on the server (they were already capped when the message was
  * made). A bigger conversation's pictures are the ones served from a store,
- * and those arrive as URLs (see PromptFiles, VisualImages). */
+ * and those arrive as URLs (see PromptAttachments, VisualImages). */
 export function ContentImages({
   images,
 }: {

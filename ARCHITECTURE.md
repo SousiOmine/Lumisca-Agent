@@ -1285,7 +1285,7 @@ Web UI では `const t = useT();` で文言を取得します。
   得られるのは好みの差だけです。
 - `preact/compat` は `preact/hooks` へ移しません。
   96 ファイルが `preact/compat` を使い、`createPortal`、`useId`、`memo` に依存しています。
-  `preact/hooks` を使っていたのは `PromptFiles.tsx` の 1 ファイルだけだったので、移す方向はその 1 ファイルを `preact/compat` に揃えることでした（揃えました）。
+  `preact/hooks` を使っていたのは `PromptAttachments.tsx` の 1 ファイルだけだったので、移す方向はその 1 ファイルを `preact/compat` に揃えることでした（揃えました）。
 - `@preact/signals` は入れません。
   共有値は `store.ts` の `createStore` / `createResourceStore` で足ります。
   非同期読み込みの重複排除、楽観更新の巻き戻し、差分通知が 1 か所に収まったので、フレームワークを増やす理由がありません。

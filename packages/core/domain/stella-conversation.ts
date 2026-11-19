@@ -52,11 +52,11 @@ export interface StellaEntry {
    * model's history. Empty for a message that sent none. */
   attachments: AttachmentRef[];
   /** Files and pictures the user attached to the prompt (a drop or a
-   * paste). They are the message's content, so they are drawn inside the
-   * bubble at the point the user sent them. The bytes live in the machine,
-   * not here: a client asks for one by `ref` (see the prompt-upload route)
-   * and draws what comes back, or says the file is gone when the machine no
-   * longer has it. Empty for the agent's entries. */
+   * paste). They are the message's content, so they are drawn under its
+   * text as a block of their own, outside the capsule. The bytes live in the
+   * machine, not here: a client asks for one by `ref` (see the
+   * prompt-upload route) and draws what comes back, or says the file is gone
+   * when the machine no longer has it. Empty for the agent's entries. */
   files: PromptFileRef[];
   /** The routine whose run asked this (its name), when the user did not
    * type the message. Its text is the routine's standing instruction — the

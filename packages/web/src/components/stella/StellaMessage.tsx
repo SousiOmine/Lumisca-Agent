@@ -7,7 +7,7 @@ import { AttachmentCard } from "../chat/AttachmentCard.tsx";
 import { MessageCopyButton } from "../chat/MessageCopyButton.tsx";
 import { SegmentView } from "../chat/SegmentView.tsx";
 import { AgentAvatar } from "./AgentAvatar.tsx";
-import { PromptFiles } from "./PromptFiles.tsx";
+import { PromptAttachments } from "./PromptAttachments.tsx";
 
 /**
  * The agent a conversation's messages are drawn with: enough to name it and
@@ -113,9 +113,13 @@ export function StellaMessage({
   );
 }
 
-/** The reader's own message: the shared capsule, with the time under it.
- * The rewind and copy actions live in the same row and appear on hover (and
- * always on a touch screen, see chat.css). */
+/** The reader's own message: the shared capsule, then its attachments, then
+ * the time. The rewind and copy actions live in the same row and appear on
+ * hover (and always on a touch screen, see chat.css).
+ *
+ * The attachments are siblings of the capsule rather than its contents: the
+ * words are one object and the files are another, the way a message app
+ * draws them. A prompt that carried only files draws no capsule at all. */
 function UserBubble({
   entry,
   onRewind,
@@ -130,19 +134,24 @@ function UserBubble({
   const t = useT();
   return (
     <div className="msg-user-wrap">
-      <div className="msg user">
-        <div className="msg-body">
-          {entry.text && <p className="msg-user-text">{entry.text}</p>}
-          {/* The pictures and files the user attached are part of what they
-              said, so they sit inside the bubble, under its text. Their bytes
-              are read back from the machine, which is where they live. */}
-          {entry.files.length > 0 && (
-            <PromptFiles files={entry.files} base={uploadBase} />
-          )}
+      {entry.text && (
+        <div className="msg user">
+          <div className="msg-body">
+            <p className="msg-user-text">{entry.text}</p>
+          </div>
         </div>
-      </div>
+      )}
+      {/* A prompt's pictures and files are what came with the words, so they
+          are a block of their own under the capsule, not a list inside it.
+          Their bytes are read back from the machine, where they live. */}
+      {entry.files.length > 0 && (
+        <PromptAttachments files={entry.files} base={uploadBase} />
+      )}
       <div className="msg-meta">
-        {onRewind !== undefined && (
+        {/* An attachment-only prompt has no words to restore. Its files live
+            in the machine and cannot be put back into the composer, so the
+            control would open an empty field. */}
+        {entry.text && onRewind !== undefined && (
           <button
             type="button"
             className="msg-action-btn"

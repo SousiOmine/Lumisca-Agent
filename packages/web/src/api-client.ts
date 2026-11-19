@@ -224,7 +224,7 @@ export function stellaAgentIconUrl(agentId: string, name: string): string {
 
 /** Where a prompt's own files are read back from: the conversation's upload
  * route, which reads them out of the machine. `ref` is appended by the
- * caller as a query parameter (see PromptFiles). */
+ * caller as a query parameter (see PromptAttachments). */
 export function stellaUploadBase(agentId: string): string {
   return `/api/stella/conversations/${encodeURIComponent(agentId)}/upload`;
 }
