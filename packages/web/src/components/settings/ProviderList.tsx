@@ -109,7 +109,7 @@ export function ProviderList({
   return (
     <SettingsSection
       title={t("settings.provider.aiTitle")}
-      description={t("settings.provider.aiDescription")}
+      divided
       action={
         <button type="button" className="btn" onClick={onAdd}>
           <IconPlus size={14} />

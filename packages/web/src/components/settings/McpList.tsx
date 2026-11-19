@@ -61,7 +61,7 @@ export function McpList() {
 
   /** Sign-in of a saved server (its status says the grant is missing or no
    * longer accepted); the list reloads once the browser came back, so the
-   * badge shows what the session sees now. */
+   * status shows what the session sees now. */
   const signIn = useMcpSignIn(() => {
     void load();
   });

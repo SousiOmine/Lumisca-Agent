@@ -4,7 +4,7 @@ import { useT } from "../../i18n.ts";
 
 /**
  * The bar of a screen pushed from inside a category: back on the left, the
- * entry's name, then whatever the screen puts on the right (its state badge).
+ * entry's name, then whatever the screen puts on the right (its state).
  *
  * These screens used to draw a `modal-header`, which is a DIALOG's title row
  * (`h2`, the dialog's own spacing) — inside a page that now has a header of
@@ -20,7 +20,7 @@ export function SettingsSubHeader({
   onBack: () => void;
   /** The entry this screen is about (a provider's name, a server's). */
   title: ReactNode;
-  /** The right end: a state badge, a done button. */
+  /** The right end: a state, a done button. */
   children?: ReactNode;
 }) {
   const t = useT();

@@ -31,12 +31,11 @@ interface OverviewPanelProps {
  * Settings → 概要: which server this page is served by, what it runs, and the
  * one value that reaches both the server and the screen.
  *
- * The address is not decoration. An installed app cannot show its own
- * address, and "the updater is unavailable" is otherwise indistinguishable
- * from "you are looking at a different installation than you think". The
- * language is here because the server reads it when a session starts; the
- * sentence under the row says that it also changes the screen, which is the
- * coupling this page has to admit rather than hide.
+ * The language is here because the server reads it when a session starts;
+ * the sentence under the row says that it also changes the screen, which is
+ * the
+ * coupling this page has to admit rather than hide. The server's address is
+ * in the navigation heading, not here: one fact, one place.
  *
  * The updater is the server's own. When the desktop shell answers instead,
  * the app owns the running program and the update lives on the device's app
@@ -59,21 +58,9 @@ export function OverviewPanel({
   onRestart,
 }: OverviewPanelProps) {
   const t = useT();
-  const host = globalThis.location?.host ?? "";
 
   return (
     <div className="settings-pane">
-      {host !== "" && (
-        <div className="update-item">
-          <div className="update-info">
-            <span className="update-label">
-              {t("settings.general.serverAddress")}
-            </span>
-            <span className="update-desc">{host}</span>
-          </div>
-        </div>
-      )}
-
       <SettingRow
         label={t("settings.language.label")}
         description={t("settings.language.description")}

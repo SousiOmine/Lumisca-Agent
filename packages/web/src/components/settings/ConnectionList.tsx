@@ -1,6 +1,5 @@
 import { errorMessage } from "@lumisca/core/shared";
 import { IconChevronDown, IconPlus, IconTrash } from "@tabler/icons-preact";
-import type { CSSProperties } from "preact/compat";
 import { useEffect, useState } from "preact/hooks";
 import { confirmAction } from "../../confirm.ts";
 import {
@@ -21,15 +20,6 @@ import {
 } from "../../shell.ts";
 import type { ConnectionEntry } from "../../types.ts";
 import { Field } from "../Field.tsx";
-
-const ACTIVE_TAG: CSSProperties = {
-  fontSize: 11,
-  padding: "2px 8px",
-  borderRadius: "var(--radius-pill)",
-  background: "var(--accent-soft)",
-  color: "var(--text-dim)",
-  marginLeft: 8,
-};
 
 /** Settings → 接続先サーバー. This list is the federation peer registry:
  * it lives in THIS server's database and is shared by web and desktop
@@ -229,7 +219,7 @@ export function ConnectionList() {
                 <span style={{ fontWeight: 600 }}>
                   {t("settings.connection.localServer")}
                   {state?.mode === "local" && (
-                    <span style={ACTIVE_TAG}>
+                    <span className="connection-active">
                       {t("settings.connection.activeTag")}
                     </span>
                   )}

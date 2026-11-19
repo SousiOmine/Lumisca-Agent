@@ -27,66 +27,12 @@ export const settings = {
   "settings.nav.computerUse": { ja: "画面操作", en: "Screen control" },
   "settings.nav.security": { ja: "セキュリティ", en: "Security" },
   "settings.nav.experimental": { ja: "実験的機能", en: "Experimental" },
-  /** The badge on a page whose values only code mode's sessions use. */
+  /** The one line under a page title whose values only code mode's sessions
+   * use. Every other page's owner is read from the navigation group. */
   "settings.scope.codeOnly": {
-    ja: "Lumisca codeのみ",
-    en: "Lumisca code only",
+    ja: "Lumisca codeの会話でのみ使います。",
+    en: "Only Lumisca code's conversations use these values.",
   },
-  /** One sentence at the top of a page: what its values act on. */
-  "settings.scope.device.notifications": {
-    ja: "この端末で受け取る通知を決めます。",
-    en: "Chooses the notifications this device receives.",
-  },
-  "settings.scope.device.app": {
-    ja: "この端末のデスクトップアプリを更新します。",
-    en: "Updates the desktop app on this device.",
-  },
-  "settings.scope.server.overview": {
-    ja: "このサーバーのプログラムと、すべての会話に適用されます。",
-    en: "Applies to this server's program and all of its conversations.",
-  },
-  "settings.scope.server.appearance": {
-    ja: "このサーバーに保存され、この端末の表示に使います。",
-    en: "Stored on this server and used for this device's display.",
-  },
-  "settings.scope.server.providers": {
-    ja: "このサーバーのすべての会話が使うプロバイダーです。",
-    en: "Providers every conversation on this server uses.",
-  },
-  "settings.scope.server.models": {
-    ja: "このサーバーのすべての会話が使うモデルです。",
-    en: "Models every conversation on this server uses.",
-  },
-  "settings.scope.server.mcp": {
-    ja: "このサーバーのすべての会話が使うMCPサーバーです。",
-    en: "MCP servers every conversation on this server uses.",
-  },
-  "settings.scope.server.personalize": {
-    ja: "このサーバーのすべての会話が読む指示です。",
-    en: "Instructions every conversation on this server reads.",
-  },
-  "settings.scope.server.prompts": {
-    ja: "Lumisca codeの入力欄から呼び出します。",
-    en: "Recalled from Lumisca code's composer.",
-  },
-  "settings.scope.server.security": {
-    ja: "このサーバーで動くコマンドの確認を決めます。",
-    en: "Decides the check on commands this server runs.",
-  },
-  "settings.scope.server.computerUse": {
-    ja: "このサーバーが動いているマシンの画面を操作します。",
-    en: "Drives the screen of the machine this server runs on.",
-  },
-  "settings.scope.server.peers": {
-    ja: "このサーバーが連携しているサーバーです。表示するサーバーの切り替えもここから行います。",
-    en: "Servers this server federates with. The switch for the displayed server is here too.",
-  },
-  "settings.scope.server.experimental": {
-    ja: "このサーバーのすべての会話に適用される試験中の機能です。",
-    en: "Features under test that affect every conversation on this server.",
-  },
-  /** The current server, as the settings navigation's heading. */
-  "settings.serverCard.viewing": { ja: "表示中", en: "Viewing" },
   "settings.notifications.none": {
     ja: "この端末で使える通知はありません。",
     en: "No notification channels are available on this device.",
@@ -95,8 +41,6 @@ export const settings = {
     ja: "このページの配信元",
     en: "Serving this page",
   },
-  "settings.serverCard.switch": { ja: "切り替え", en: "Switch" },
-  "settings.serverCard.manage": { ja: "接続先を管理", en: "Manage servers" },
   // --- appearance panel -----------------------------------------------------
   "settings.appearance.theme.label": { ja: "テーマ設定", en: "Theme" },
   "settings.appearance.theme.light": { ja: "ライト", en: "Light" },
@@ -125,7 +69,6 @@ export const settings = {
   },
 
   // --- general panel --------------------------------------------------------
-  "settings.general.serverAddress": { ja: "接続先", en: "Server" },
   /** The server overview when the desktop shell owns the running program. */
   "settings.overview.managedByApp": {
     ja: "このサーバーはデスクトップアプリが管理しています。更新は「アプリ」で行います。",
@@ -333,13 +276,6 @@ export const settings = {
   "settings.provider.noProviders": {
     ja: "登録されたプロバイダーがありません。「追加」ボタンから設定してください。",
     en: 'No providers registered. Use the "Add" button to set one up.',
-  },
-  /** One-line explanation under the AI provider heading, mirroring the
-   * search section's own description: the two sections are one list of
-   * services, so each says what it is for and nothing else. */
-  "settings.provider.aiDescription": {
-    ja: "エージェントが応答の生成に使用するAIプロバイダーです。",
-    en: "The AI providers the agent uses to generate replies.",
   },
   "settings.provider.configured": { ja: "設定済み", en: "Configured" },
   "settings.provider.notConfigured": { ja: "未設定", en: "Not configured" },
@@ -609,9 +545,12 @@ export const settings = {
     ja: "メインモデルが画像認識に未対応の場合に、代替として画像の解析・読み取りを担当するモデル。",
     en: "The model that analyzes and reads images when the main model cannot.",
   },
-  /** The disclosure on the models page that holds everything besides the
-   * default model: the auxiliary model rows and the compaction tuning. */
-  "settings.model.details": { ja: "詳細", en: "Details" },
+  /** The disclosure on the models page: the auxiliary model rows and the
+   * compaction tuning, named for what it holds. */
+  "settings.model.more": {
+    ja: "補助モデルと圧縮",
+    en: "Auxiliary models and compaction",
+  },
   // --- context compaction ---------------------------------------------------
   /** Heading of the compaction group in the settings dialog's model
    * section. */
@@ -909,13 +848,9 @@ export const settings = {
   /** A section heading under the プロバイダー category (not a category of its
    * own: the nav key `settings.nav.providers` names the category). */
   "settings.webSearch.title": { ja: "Web検索", en: "Web search" },
-  "settings.webSearch.description": {
-    ja: "エージェントがWeb検索やページの閲覧に使用する検索プロバイダーを設定します。",
-    en: "Configure the search provider used by the agent for web searches and fetching pages.",
-  },
   "settings.webSearch.empty": {
-    ja: "検索プロバイダーが登録されていません。",
-    en: "No search provider is configured yet.",
+    ja: "検索プロバイダーが登録されていません。「追加」から登録します。",
+    en: 'No search provider is configured yet. Use "Add" above.',
   },
   "settings.webSearch.makeDefault": { ja: "既定にする", en: "Make default" },
   "settings.webSearch.defaultBadge": { ja: "既定", en: "Default" },

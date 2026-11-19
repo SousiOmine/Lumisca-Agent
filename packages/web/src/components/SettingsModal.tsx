@@ -1,20 +1,4 @@
-import type { MessageKey } from "@lumisca/core/shared";
-import {
-  IconBell,
-  IconBookmark,
-  IconCpu,
-  IconDeviceDesktop,
-  IconFlask,
-  IconInfoCircle,
-  IconNetwork,
-  IconPalette,
-  IconPlugConnected,
-  IconPointer,
-  IconShield,
-  IconUser,
-  IconWorld,
-  IconX,
-} from "@tabler/icons-preact";
+import { IconX } from "@tabler/icons-preact";
 import type { ReactNode } from "preact/compat";
 import { useEffect, useState } from "preact/hooks";
 import { useConnectionSwitch } from "../hooks/useConnectionSwitch.ts";
@@ -49,7 +33,7 @@ import { PersonalizePanel } from "./settings/PersonalizePanel.tsx";
 import { ProviderDetail } from "./settings/ProviderDetail.tsx";
 import { ProviderList } from "./settings/ProviderList.tsx";
 import { SavedPromptsPanel } from "./settings/SavedPromptsPanel.tsx";
-import { ServerCard } from "./settings/ServerCard.tsx";
+import { ServerHeading } from "./settings/ServerHeading.tsx";
 import { SettingsPage } from "./settings/SettingsPage.tsx";
 import { WebSearchPanel } from "./settings/WebSearchPanel.tsx";
 
@@ -100,11 +84,8 @@ interface PanelContext {
 }
 
 interface SettingsCategoryEntry extends SettingsNavEntry {
-  icon: ReactNode;
-  /** One sentence at the top of the page: what its values act on. */
-  scopeKey: MessageKey;
-  /** The page's body. Its title and scope are the entry's labels, and a
-   * screen pushed from inside it draws its own bar (SubHeader). */
+  /** The page's body. The entry's label is the page title; a screen pushed
+   * from inside the page draws its own bar (SubHeader). */
   render: (panels: PanelContext) => ReactNode;
 }
 
@@ -145,8 +126,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     id: "notifications",
     owner: "device",
     labelKey: "settings.nav.notifications",
-    scopeKey: "settings.scope.device.notifications",
-    icon: <IconBell size={18} />,
     render: ({ props }) => (
       <NotificationsPanel
         source={props.update.source}
@@ -161,8 +140,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     owner: "device",
     deviceOnly: true,
     labelKey: "settings.nav.app",
-    scopeKey: "settings.scope.device.app",
-    icon: <IconDeviceDesktop size={18} />,
     render: ({ props }) => (
       <AppPanel
         status={props.update.status}
@@ -182,8 +159,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     id: "overview",
     owner: "server",
     labelKey: "settings.nav.overview",
-    scopeKey: "settings.scope.server.overview",
-    icon: <IconInfoCircle size={18} />,
     render: ({ props }) => (
       <OverviewPanel
         status={props.update.status}
@@ -206,8 +181,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     id: "appearance",
     owner: "server",
     labelKey: "settings.nav.appearance",
-    scopeKey: "settings.scope.server.appearance",
-    icon: <IconPalette size={18} />,
     render: ({ props }) => (
       <AppearancePanel
         theme={props.theme}
@@ -220,8 +193,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     id: "providers",
     owner: "server",
     labelKey: "settings.nav.providers",
-    scopeKey: "settings.scope.server.providers",
-    icon: <IconPlugConnected size={18} />,
     render: ({ providersView, setProvidersView, userProviders }) => {
       switch (providersView.kind) {
         case "list":
@@ -321,8 +292,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     id: "models",
     owner: "server",
     labelKey: "settings.nav.models",
-    scopeKey: "settings.scope.server.models",
-    icon: <IconCpu size={18} />,
     render: ({ openCategory }) => (
       <ModelsPage onOpenProviders={() => openCategory("providers")} />
     ),
@@ -331,16 +300,12 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     id: "mcp",
     owner: "server",
     labelKey: "settings.nav.mcp",
-    scopeKey: "settings.scope.server.mcp",
-    icon: <IconNetwork size={18} />,
     render: () => <McpList />,
   },
   {
     id: "personalize",
     owner: "server",
     labelKey: "settings.nav.personalize",
-    scopeKey: "settings.scope.server.personalize",
-    icon: <IconUser size={18} />,
     render: () => <PersonalizePanel />,
   },
   {
@@ -348,16 +313,12 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     owner: "server",
     modeOnly: true,
     labelKey: "settings.nav.prompts",
-    scopeKey: "settings.scope.server.prompts",
-    icon: <IconBookmark size={18} />,
     render: () => <SavedPromptsPanel />,
   },
   {
     id: "security",
     owner: "server",
     labelKey: "settings.nav.security",
-    scopeKey: "settings.scope.server.security",
-    icon: <IconShield size={18} />,
     // The command check guards every bash / eval call, so both modes have it.
     // Computer use is the other half of "what may the agent do", but it is
     // code mode's alone and has its own page: one page never mixes the two
@@ -369,24 +330,18 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     owner: "server",
     modeOnly: true,
     labelKey: "settings.nav.computerUse",
-    scopeKey: "settings.scope.server.computerUse",
-    icon: <IconPointer size={18} />,
     render: () => <ComputerUsePanel />,
   },
   {
     id: "peers",
     owner: "server",
     labelKey: "settings.nav.peers",
-    scopeKey: "settings.scope.server.peers",
-    icon: <IconWorld size={18} />,
     render: () => <ConnectionList />,
   },
   {
     id: "experimental",
     owner: "server",
     labelKey: "settings.nav.experimental",
-    scopeKey: "settings.scope.server.experimental",
-    icon: <IconFlask size={18} />,
     // The scripting tool call reaches both modes' sessions, so the page is
     // shared rather than one mode's. It sits last: nothing a reader relies on
     // is below it.
@@ -401,12 +356,13 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
  * The first level is the owner, because that is the question a flat list
  * could not answer: theme, language and the updater lived on the same pages
  * while belonging to different machines (see categories.ts). The server's
- * group is headed by a card with its name, address and switch, so "whose
- * settings are these" is read before the first row.
+ * group is headed by its name and address, so "whose settings are these" is
+ * read before the first row.
  *
- * A category is a page: its title, owner, mode and scope sentence stay at the
- * top while the body scrolls (SettingsPage). Narrow windows get one screen at
- * a time — the navigation, then the page with a back button.
+ * A category is a page: its title stays at the top while the body scrolls
+ * (SettingsPage). A page that only code mode's sessions use says so in one
+ * line under the title. Narrow windows get one screen at a time — the
+ * navigation, then the page with a back button.
  */
 export function SettingsModal({
   theme,
@@ -492,11 +448,6 @@ export function SettingsModal({
     userProviders,
   };
 
-  const ownerLabel =
-    entry.owner === "server"
-      ? connection.currentLabel()
-      : t(ownerLabelKey("device"));
-
   return (
     <Modal
       width="min(940px, calc(100vw - 48px))"
@@ -510,7 +461,7 @@ export function SettingsModal({
             <h2>{t("common.settings")}</h2>
             <button
               type="button"
-              className="btn push"
+              className="icon-btn push"
               onClick={() => close()}
               title={t("common.close")}
               aria-label={t("common.close")}
@@ -524,17 +475,13 @@ export function SettingsModal({
               {groups.map((group) => (
                 <div key={group.owner} className="settings-nav-group">
                   {group.owner === "server" ? (
-                    <ServerCard
-                      connection={connection}
-                      onManage={() => openCategory("peers")}
-                    />
+                    <ServerHeading connection={connection} />
                   ) : (
                     <h3 className="settings-nav-heading">
                       {t(ownerLabelKey(group.owner))}
                     </h3>
                   )}
                   {group.entries.map((navEntry) => {
-                    const item = navEntry as SettingsCategoryEntry;
                     const active = entry.id === navEntry.id;
                     return (
                       <button
@@ -546,7 +493,6 @@ export function SettingsModal({
                         aria-current={active ? "page" : undefined}
                         onClick={() => openCategory(navEntry.id)}
                       >
-                        {item.icon}
                         <span className="settings-nav-label">
                           {t(navEntry.labelKey)}
                         </span>
@@ -560,9 +506,7 @@ export function SettingsModal({
             <div className="settings-content">
               <SettingsPage
                 title={t(entry.labelKey)}
-                ownerLabel={ownerLabel}
                 modeOnly={entry.modeOnly === true}
-                scope={t(entry.scopeKey)}
                 onBack={stepped ? onBackToList : undefined}
               >
                 {entry.render(panels)}

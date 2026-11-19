@@ -10,8 +10,9 @@ import { SettingsDisclosure } from "./SettingsDisclosure.tsx";
  * The two rows a reader comes for come first — the model new conversations
  * start with, then the list of models a session may switch to. Everything
  * else (a model for sub-tasks, one for images, the compaction tuning) is a
- * fine point, so it sits behind one "詳細" at the foot of the page: shown all
- * at once, the two that matter read as two among nine.
+ * fine point, so it sits behind one row at the foot of the page, named for
+ * what it holds: shown all at once, the two that matter read as two among
+ * nine.
  */
 export function ModelsPage({
   onOpenProviders,
@@ -23,7 +24,7 @@ export function ModelsPage({
     <>
       <ModelPreferencePanel onOpenProviders={onOpenProviders} />
       <ModelList />
-      <SettingsDisclosure label={t("settings.model.details")}>
+      <SettingsDisclosure label={t("settings.model.more")}>
         <ModelPreferencePanel
           onOpenProviders={onOpenProviders}
           scope="others"

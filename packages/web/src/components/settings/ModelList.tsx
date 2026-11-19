@@ -1,5 +1,5 @@
 import { errorMessage } from "@lumisca/core/shared";
-import { IconChevronRight, IconPlugConnected } from "@tabler/icons-preact";
+import { IconChevronRight } from "@tabler/icons-preact";
 import { useMemo, useState } from "preact/hooks";
 import { useT } from "../../i18n.ts";
 import {
@@ -119,7 +119,6 @@ export function ModelList() {
                     isExpanded ? " expanded" : ""
                   }`}
                 />
-                <IconPlugConnected size={14} className="model-group-icon" />
                 <span className="model-group-name">{pm.providerName}</span>
                 <span className="model-group-count">
                   {enabledCount}/{pm.models.length}

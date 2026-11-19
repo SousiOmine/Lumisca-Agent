@@ -6,7 +6,7 @@ import type { ReactNode } from "preact/compat";
  * status on the right, and the action that opens it.
  *
  * Both provider lists are the same hand-built row three times over — a
- * button whose padding, badge position and trailing chevron drifted apart.
+ * button whose padding, status position and trailing chevron drifted apart.
  * Sharing it is what makes the two sections of the プロバイダー category
  * read as one list of services with different keys.
  */

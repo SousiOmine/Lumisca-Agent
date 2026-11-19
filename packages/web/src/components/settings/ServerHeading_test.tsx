@@ -4,7 +4,7 @@ import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
 import type { ConnectionSwitch } from "../../hooks/useConnectionSwitch.ts";
 import type { ShellState } from "../../shell.ts";
-import { ServerCard } from "./ServerCard.tsx";
+import { ServerHeading } from "./ServerHeading.tsx";
 
 function connection(
   overrides: Partial<ConnectionSwitch> = {},
@@ -22,52 +22,41 @@ function connection(
   };
 }
 
-function card(overrides: Partial<ConnectionSwitch> = {}): string {
+function heading(overrides: Partial<ConnectionSwitch> = {}): string {
   return renderToString(
-    createElement(ServerCard, {
+    createElement(ServerHeading, {
       connection: connection(overrides),
-      onManage: () => {},
     }),
   );
 }
 
-test("a browser's card names the server and says it cannot switch", () => {
-  // The address bar is the switch in a browser; a control here would do
-  // nothing, and the reader still has to know whose settings these are.
-  const html = card();
+test("a browser's heading names the server", () => {
+  // The address bar is the switch in a browser; the heading still says whose
+  // settings these are.
+  const html = heading();
   assertStringIncludes(html, "127.0.0.1:8123");
   assertStringIncludes(html, "このページの配信元");
-  assertStringIncludes(html, "表示中");
+  assertEquals(html.includes("表示中"), false);
   assertEquals(html.includes("切り替え"), false);
-  assertEquals(html.includes("接続先を管理"), false);
 });
 
-test("the shell's card names the server and offers the switch", () => {
+test("the shell's heading shows the address without the query token", () => {
   const state: ShellState = {
     mode: "remote",
     url: "http://192.168.1.5:7777/?token=secret",
     name: "Lumisca",
     maximized: false,
   };
-  const html = card({
+  const html = heading({
     desktop: true,
     state,
     currentLabel: () => "Lumisca",
-    entries: [
-      {
-        id: "work",
-        name: "Work",
-        url: "http://10.0.0.2:8000",
-        token: "t",
-      },
-    ],
   });
   assertStringIncludes(html, "Lumisca");
   // The host, not the page URL: the query carries the auth token.
   assertStringIncludes(html, "192.168.1.5:7777");
   assertEquals(html.includes("secret"), false);
-  assertStringIncludes(html, "切り替え");
-  assertStringIncludes(html, "接続先を管理");
+  assertEquals(html.includes("切り替え"), false);
 });
 
 test("a local window shows the loopback address, not its name twice", () => {
@@ -77,7 +66,7 @@ test("a local window shows the loopback address, not its name twice", () => {
     name: null,
     maximized: false,
   };
-  const html = card({
+  const html = heading({
     desktop: true,
     state,
     currentLabel: () => "このPC",
@@ -86,7 +75,7 @@ test("a local window shows the loopback address, not its name twice", () => {
   assertStringIncludes(html, "127.0.0.1:8000");
   // A remote without a recorded name would otherwise draw the same host as
   // its name and as its address.
-  const unnamed = card({
+  const unnamed = heading({
     desktop: true,
     state: {
       mode: "remote",
@@ -96,5 +85,5 @@ test("a local window shows the loopback address, not its name twice", () => {
     },
     currentLabel: () => "10.0.0.2:8000",
   });
-  assertEquals(unnamed.includes('class="settings-server-card-address"'), false);
+  assertEquals(unnamed.includes('class="settings-server-address"'), false);
 });

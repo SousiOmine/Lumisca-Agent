@@ -27,19 +27,13 @@
 }
 
 /* A row of a settings list (MCP servers, server connections, the local
- * server, search providers). Shared so these lists cannot drift apart, and
- * separated by the same hairline as `.update-item`: a settings panel is one
- * column of rows, whether a row carries a switch or opens a detail view. */
+ * server, search providers). Rows are spaced, not framed: a long inventory
+ * asks for hairlines (`.settings-list.divided`), a short list does not. */
 .setting-card {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 2px;
-  border-bottom: 1px solid var(--border);
-}
-
-.setting-card:first-of-type {
-  border-top: 1px solid var(--border);
+  padding: 9px 0;
 }
 
 /* A card whose body stacks (a summary row, then the fields it opens). The
@@ -91,10 +85,24 @@
 
 /* ---- settings --------------------------------------------------------------- */
 
+/* Settings is a form, not a chat surface: fields and buttons use the small
+ * radius steps while the dialog keeps the app's large one. The capsule stays
+ * on the toggle, which is the only control read as a switch. */
+.modal-settings .btn {
+  border-radius: var(--radius-xs);
+}
+
+.modal-settings input,
+.modal-settings textarea,
+.modal-settings select,
+.modal-settings .select-trigger {
+  border-radius: var(--radius-xs);
+}
+
 .settings-note {
   margin: 0;
-  font-size: var(--type-12);
-  color: var(--text-faint);
+  font-size: var(--type-12-5);
+  color: var(--text-dim);
 }
 
 /* The device-code shown during an OAuth login (ChatGPT etc.). */
@@ -152,8 +160,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 2px;
-  border-bottom: 1px solid var(--border);
+  padding: 6px 0;
 }
 
 .approval-body {
@@ -230,20 +237,13 @@
   color: var(--ok);
 }
 
-/* saved prompts cards */
+/* saved prompts: one entry of the list, separated by spacing */
 .saved-prompt-card {
-  border-bottom: 1px solid var(--border);
-  padding: 10px 2px;
+  padding: 9px 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-
-.saved-prompt-card:first-of-type {
-  border-top: 1px solid var(--border);
-}
-
-/* Saved prompts are separated by the shared hairline above. */
 
 .saved-prompt-header {
   display: flex;
@@ -253,11 +253,8 @@
 
 .saved-prompt-id {
   font-family: var(--mono);
-  font-size: var(--type-12);
-  color: var(--text-dim);
-  padding: 1px 8px;
-  background: var(--accent-soft);
-  border-radius: var(--radius-pill);
+  font-size: var(--type-11-5);
+  color: var(--text-faint);
 }
 
 .saved-prompt-label {
@@ -334,12 +331,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 2px;
-  border-bottom: 1px solid var(--border);
-}
-
-.model-pref-item:first-of-type {
-  border-top: 1px solid var(--border);
+  padding: 10px 0;
 }
 
 .model-pref-info {
@@ -352,11 +344,11 @@
 
 .model-pref-label {
   font-size: var(--type-13);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .model-pref-desc {
-  font-size: var(--type-12);
+  font-size: var(--type-12-5);
   color: var(--text-faint);
 }
 
@@ -375,7 +367,7 @@
   color: var(--text);
   background: var(--input-bg);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-xs);
   text-align: left;
 }
 
@@ -453,17 +445,17 @@
   min-height: 0;
 }
 
-/* The navigation. Its groups are the answer to "why is this preference not
- * in the other mode": the shared entries, then the current mode's own under
- * a heading that names it. */
+/* The navigation's groups answer whose values these are: this device, then
+ * the server that served the page. The server group is headed by its name
+ * and address. */
 .settings-nav {
-  width: 216px;
+  width: 190px;
   flex: none;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 18px;
   overflow-y: auto;
-  padding-right: 10px;
+  padding-right: 12px;
   border-right: 1px solid var(--border);
 }
 
@@ -474,37 +466,39 @@
 }
 
 .settings-nav-heading {
-  margin: 0 0 4px;
-  padding: 0 12px;
-  font-size: var(--type-11);
+  margin: 0 0 6px;
+  padding: 0 10px;
+  font-size: var(--type-11-5);
   font-weight: 600;
-  letter-spacing: 0.04em;
   color: var(--text-faint);
 }
 
 .settings-nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
+  gap: 8px;
+  padding: 6px 10px;
   text-align: left;
   font-size: var(--type-13);
   color: var(--text-dim);
   transition:
     background var(--lum-dur-fast) var(--lum-ease-out),
-    color var(--lum-dur-fast) var(--lum-ease-out);
+    color var(--lum-dur-fast) var(--lum-ease-out),
+    box-shadow var(--lum-dur-fast) var(--lum-ease-out);
 }
 
 .settings-nav-item:hover {
-  background: var(--surface-2);
+  background: var(--accent-soft);
   color: var(--text);
 }
 
+/* The selected page: a rule at the left edge, not a filled capsule. The
+ * list is an index, and a capsule makes every entry look like a button. */
 .settings-nav-item.active {
-  background: var(--surface-3);
+  background: none;
+  box-shadow: inset 2px 0 0 var(--accent);
   color: var(--text);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .settings-nav-label {
@@ -543,9 +537,9 @@
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 0 2px 12px;
+  padding: 0 0 10px;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .settings-page-back {
@@ -571,8 +565,9 @@
   flex: 1;
   min-width: 0;
   margin: 0;
-  font-size: var(--type-16);
+  font-size: var(--type-20);
   font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .settings-page-body {
@@ -581,11 +576,10 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 20px;
   overflow-y: auto;
   scrollbar-gutter: stable;
-  /* Room for a row's focus ring and the last row's hairline, which an
-   * exactly-fitting body would clip. */
+  /* Room for a row's focus ring, which an exactly-fitting body would clip. */
   padding-bottom: 4px;
 }
 
@@ -648,15 +642,18 @@
 /* ---- provider sections (AI / web search) --------------------------------- */
 
 /* The category's two sections are the same shape: a heading with its add
- * button, a one-line explanation, then the rows. See SettingsSection.tsx. */
+ * button, an optional explanation, then the rows. See SettingsSection.tsx. */
 .settings-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
+/* Sections are blocks, not a stack of cards: one rule and room above it. */
 .settings-section + .settings-section {
-  margin-top: 18px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
 }
 
 /* The head of a section: its heading, and the section's own action at the
@@ -669,12 +666,12 @@
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
-  min-height: 30px;
+  min-height: 28px;
 }
 
 .settings-section-head h3 {
   margin: 0;
-  font-size: var(--type-14);
+  font-size: var(--type-15);
   font-weight: 600;
   flex: 1;
   min-width: 0;
@@ -685,27 +682,30 @@
   flex-direction: column;
 }
 
-/* A settings page's "詳細": one row that opens the rest of the page (see
- * SettingsDisclosure). Drawn as a row of the same column — label on the
- * left, hairline over and under — so it reads as the last item of what is
- * shown rather than as a button placed among the settings. */
-.settings-disclosure {
-  margin-top: 18px;
+/* A long inventory: one hairline between rows, none above the first or below
+ * the last. Short preference lists stay undivided. */
+.settings-list.divided > .update-item + .update-item,
+.settings-list.divided > .setting-card + .setting-card,
+.settings-list.divided > .provider-row + .provider-row,
+.settings-list.divided > .model-pref-item + .model-pref-item,
+.settings-list.divided > .saved-prompt-card + .saved-prompt-card {
+  border-top: 1px solid var(--border);
 }
 
+/* A settings page's disclosure: a text row that opens the rest of the page
+ * (see SettingsDisclosure). No rule above or below; the label names what it
+ * holds, so the row does not need a frame to be found. */
 .settings-disclosure-toggle {
   display: flex;
   align-items: center;
   gap: 6px;
   width: 100%;
-  padding: 11px 2px;
+  padding: 8px 0;
   border: 0;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
   background: none;
   color: var(--text-dim);
   font-size: var(--type-13);
-  font-weight: 600;
+  font-weight: 500;
   text-align: left;
   cursor: pointer;
   transition: color var(--lum-dur-fast) var(--lum-ease-out);
@@ -728,7 +728,7 @@
  * (`.settings-section + .settings-section`); the gap under the toggle is on
  * this wrapper because the body itself has no height while closed. */
 .settings-disclosure-body {
-  padding-top: 16px;
+  padding-top: 14px;
 }
 
 /* One provider: its name, its state, and the way into its detail. The body
@@ -737,12 +737,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 4px 2px;
-  border-bottom: 1px solid var(--border);
-}
-
-.provider-row:first-of-type {
-  border-top: 1px solid var(--border);
+  padding: 0;
 }
 
 .provider-row-body {
@@ -751,9 +746,9 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 0;
+  padding: 9px 0;
   text-align: left;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
 }
 
 button.provider-row-body:hover {
@@ -783,15 +778,16 @@ button.provider-row-body:hover .provider-row-chevron {
   color: var(--text-dim);
 }
 
-/* The current entry of a list (the default search provider): the same
- * capsule the connection list marks its active server with. */
-.provider-row-badge {
-  padding: 0 7px;
-  border-radius: var(--radius-pill);
-  background: var(--accent-soft);
-  color: var(--text-dim);
-  font-size: var(--type-10-5);
-  line-height: 17px;
+/* The current entry of a list (the default search provider): a word, not a
+ * capsule. Its separator keeps the status after it readable. */
+.provider-row-default {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.provider-row-default::after {
+  content: " · ";
+  color: var(--text-faint);
 }
 
 .provider-row-status:empty {
@@ -813,7 +809,15 @@ button.provider-row-body:hover .provider-row-chevron {
   align-items: center;
 }
 
-/* status badge shared by provider detail/list and the MCP list */
+/* The active server's name: a word after it, not a capsule. */
+.connection-active {
+  margin-left: 8px;
+  font-size: var(--type-11-5);
+  font-weight: 400;
+  color: var(--text-faint);
+}
+
+/* status shared by provider detail/list and the MCP list */
 .provider-state {
   display: inline-flex;
   align-items: center;
@@ -848,13 +852,13 @@ button.provider-row-body:hover .provider-row-chevron {
 .model-groups {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
 }
 
-.model-group {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
+.model-group + .model-group {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
 }
 
 .model-group-header {
@@ -862,16 +866,16 @@ button.provider-row-body:hover .provider-row-chevron {
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 10px 12px;
-  background: var(--surface-2);
+  padding: 8px 0;
+  background: none;
   font-size: var(--type-13);
   font-weight: 500;
   text-align: left;
-  transition: background var(--lum-dur-fast) var(--lum-ease-out);
+  transition: color var(--lum-dur-fast) var(--lum-ease-out);
 }
 
 .model-group-header:hover {
-  background: var(--surface-3);
+  color: var(--text);
 }
 
 .model-group-chevron {
@@ -882,11 +886,6 @@ button.provider-row-body:hover .provider-row-chevron {
 
 .model-group-chevron.expanded {
   transform: rotate(90deg);
-}
-
-.model-group-icon {
-  flex: none;
-  color: var(--text-dim);
 }
 
 .model-group-name {
@@ -907,9 +906,12 @@ button.provider-row-body:hover .provider-row-chevron {
 .model-toggle-item {
   display: flex;
   align-items: center;
-  padding: 8px 12px 8px 36px;
-  border-top: 1px solid var(--border);
+  padding: 8px 0 8px 22px;
   font-size: var(--type-13);
+}
+
+.model-toggle-item + .model-toggle-item {
+  border-top: 1px solid var(--border);
 }
 
 .model-toggle-name {
@@ -978,20 +980,14 @@ button.provider-row-body:hover .provider-row-chevron {
 /* ---- general settings (app info / auto-update) ---------------------------- */
 
 /* A settings row: label and description on the left, the control on the
- * right. Rows are separated by a hairline, not framed as cards — a column of
- * filled boxes turns the panel into a set of tiles, and the fill dims the
- * text it is supposed to present. The surface behind them (the dialog) is
- * already the raised face, so a row needs no face of its own. */
+ * right. Rows are spaced, not framed: the dialog is the face, and a short
+ * page reads as one form rather than a table. Long inventories opt into
+ * hairlines (`.settings-list.divided`). */
 .update-item {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 2px;
-  border-bottom: 1px solid var(--border);
-}
-
-.update-item:first-of-type {
-  border-top: 1px solid var(--border);
+  padding: 9px 0;
 }
 
 .update-info {
@@ -1004,11 +1000,11 @@ button.provider-row-body:hover .provider-row-chevron {
 
 .update-label {
   font-size: var(--type-13);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .update-desc {
-  font-size: var(--type-12);
+  font-size: var(--type-12-5);
   color: var(--text-faint);
 }
 
@@ -1187,7 +1183,15 @@ button.provider-row-body:hover .provider-row-chevron {
   }
 
   .settings-nav-item {
-    padding: 12px;
+    padding: 10px;
+  }
+
+  /* The two ways out of a full-screen settings screen: the dialog's close
+   * and a page's back arrow. Both were smaller than a fingertip. */
+  .settings-header .icon-btn,
+  .settings-page-back {
+    width: 40px;
+    height: 40px;
   }
 
   .field textarea {
@@ -1379,11 +1383,11 @@ button.provider-row-body:hover .provider-row-chevron {
   }
 
   .setting-card {
-    padding: 12px 2px;
+    padding: 10px 0;
   }
 
   .settings-nav-item {
-    padding: 12px;
+    padding: 10px;
     font-size: var(--type-13);
   }
 
@@ -1401,7 +1405,7 @@ button.provider-row-body:hover .provider-row-chevron {
   }
 }
 
-/* ---- owners and the server card ----------------------------------------- */
+/* ---- owners and the server heading -------------------------------------- */
 
 .settings-nav-group + .settings-nav-group {
   margin-top: 10px;
@@ -1409,26 +1413,15 @@ button.provider-row-body:hover .provider-row-chevron {
   border-top: 1px solid var(--border);
 }
 
-.settings-server-card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 0 0 8px;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface-2);
-}
-
-.settings-server-card-head {
+/* The server group's heading: its name and address. Switching the displayed
+ * server is the title bar's job, so this is text, not a control. */
+.settings-server-head {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  min-width: 0;
-  color: var(--text-dim);
+  padding: 2px 10px 8px;
 }
 
-.settings-server-card-text {
+.settings-server-headtext {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -1436,7 +1429,7 @@ button.provider-row-body:hover .provider-row-chevron {
   flex: 1;
 }
 
-.settings-server-card-name {
+.settings-server-name {
   margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1446,165 +1439,35 @@ button.provider-row-body:hover .provider-row-chevron {
   font-weight: 600;
 }
 
-.settings-server-card-address {
+.settings-server-address {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-family: var(--mono);
   font-size: var(--type-11-5);
   color: var(--text-faint);
 }
 
-/* The browser's card has no address to show: the host is the name, and this
- * line says what the host is. It wraps instead of being cut, because the
- * sentence is the card's whole point there. */
-.settings-server-card-note {
+/* The browser's heading has no second address to show: the host is the name,
+ * and this line says what the host is. */
+.settings-server-note {
   font-size: var(--type-11-5);
   line-height: 1.35;
   color: var(--text-faint);
 }
 
-.settings-server-card-badge {
-  flex: none;
-  padding: 1px 7px;
-  border-radius: var(--radius-pill);
-  background: var(--surface-3);
-  color: var(--text-dim);
-  font-size: var(--type-10);
-  line-height: 1.6;
-}
-
-.settings-server-card-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.settings-server-card-switch,
-.settings-server-card-manage {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 7px;
-  border-radius: var(--radius-sm);
-  font-size: var(--type-11-5);
-  color: var(--text-dim);
-}
-
-.settings-server-card-switch:hover,
-.settings-server-card-manage:hover {
-  background: var(--surface-3);
-  color: var(--text);
-}
-
-.settings-server-card-chevron {
-  display: grid;
-  place-items: center;
-  transition: transform var(--lum-dur-fast) var(--lum-ease-in-out);
-}
-
-.settings-server-card-chevron.open {
-  transform: rotate(180deg);
-}
-
-.settings-server-choices {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-top: 6px;
-  border-top: 1px solid var(--border);
-}
-
-.settings-server-choice {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 5px 7px;
-  border-radius: var(--radius-sm);
-  text-align: left;
-  font-size: var(--type-12);
-  color: var(--text-dim);
-}
-
-.settings-server-choice:hover:not(:disabled) {
-  background: var(--surface-3);
-  color: var(--text);
-}
-
-.settings-server-choice:disabled {
-  opacity: 0.55;
-}
-
-.settings-server-choice-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.settings-server-choice-url {
-  margin-left: auto;
-  max-width: 45%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--type-10);
-  color: var(--text-faint);
-}
-
-.settings-server-choice-empty {
-  margin: 0;
-  padding: 4px 7px;
-  font-size: var(--type-11-5);
-  color: var(--text-faint);
-}
-
-/* The page header carries the owner beside the title: on a phone the
- * navigation is a separate screen, so the card that names the server is not
- * on screen with the page. */
+/* The page header carries the title and, for a code-only page, one note.
+ * The owner is read from the navigation group above the page. */
 .settings-page-headtext {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 
-.settings-page-titlerow {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  min-width: 0;
-}
-
-/* The title hugs its text so the badges sit beside it, not at the far edge. */
-.settings-page-titlerow h2 {
-  flex: 0 1 auto;
-}
-
-.settings-owner-badge,
-.settings-mode-badge {
-  flex: none;
-  padding: 1px 8px;
-  border-radius: var(--radius-pill);
-  font-size: var(--type-10-5);
-  font-weight: 500;
-  line-height: 1.7;
-  white-space: nowrap;
-}
-
-.settings-owner-badge {
-  background: var(--accent-soft);
-  color: var(--text-dim);
-}
-
-.settings-mode-badge {
-  border: 1px solid var(--border-strong);
-  color: var(--text-faint);
-}
-
-.settings-page-scope {
+.settings-page-note {
   margin: 0;
-  font-size: var(--type-12);
+  font-size: var(--type-12-5);
   color: var(--text-dim);
 }

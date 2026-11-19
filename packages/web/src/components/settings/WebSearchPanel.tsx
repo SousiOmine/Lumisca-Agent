@@ -100,7 +100,7 @@ export function WebSearchPanel() {
   return (
     <SettingsSection
       title={t("settings.webSearch.title")}
-      description={t("settings.webSearch.description")}
+      divided
       action={
         <button
           type="button"
@@ -140,7 +140,7 @@ export function WebSearchPanel() {
             status={
               <>
                 {provider.isDefault && (
-                  <span className="provider-row-badge">
+                  <span className="provider-row-default">
                     {t("settings.webSearch.defaultBadge")}
                   </span>
                 )}

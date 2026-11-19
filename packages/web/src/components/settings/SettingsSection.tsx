@@ -17,6 +17,7 @@ export function SettingsSection({
   title,
   description,
   action,
+  divided = false,
   children,
 }: {
   /** Group heading; omitted when the page holds a single list. */
@@ -24,6 +25,9 @@ export function SettingsSection({
   description?: ReactNode;
   /** The section's own action (typically "add"), at the heading's right. */
   action?: ReactNode;
+  /** A long inventory: rows are separated by a hairline. Short preference
+   * lists read better with spacing alone. */
+  divided?: boolean;
   children: ReactNode;
 }) {
   const head = title !== undefined || action !== undefined;
@@ -38,7 +42,9 @@ export function SettingsSection({
       {description !== undefined && (
         <p className="settings-note">{description}</p>
       )}
-      <div className="settings-list">{children}</div>
+      <div className={`settings-list${divided ? " divided" : ""}`}>
+        {children}
+      </div>
     </section>
   );
 }

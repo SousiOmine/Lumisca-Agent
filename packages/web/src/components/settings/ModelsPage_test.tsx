@@ -21,7 +21,7 @@ test("the models page shows the two things it is for", () => {
   assertStringIncludes(page, "利用するモデル");
 });
 
-test("everything else waits behind one 詳細, closed", () => {
+test("everything else waits behind one named row, closed", () => {
   // Shown together, the rows that matter read as two among nine. The two
   // come first and the disclosure is last, so what a reader came for is in
   // the first screen and the tuning is below it.
@@ -30,13 +30,13 @@ test("everything else waits behind one 詳細, closed", () => {
   assertEquals(disclosure > at(page, "既定のモデル"), true);
   assertStringIncludes(page, 'aria-expanded="false"');
   assertStringIncludes(page, 'data-open="false"');
-  const label = at(page, ">詳細<");
+  const label = at(page, ">補助モデルと圧縮<");
   const list = at(page, "利用するモデル");
   const fast = at(page, "サブタスクで使用するモデル");
   const image = at(page, "画像分析モデル");
   const compaction = at(page, "コンテキスト圧縮");
   assertEquals(disclosure < label, true);
-  // 既定のモデル → 利用するモデル → 詳細 (and what it holds).
+  // 既定のモデル → 利用するモデル → 補助モデルと圧縮 (and what it holds).
   assertEquals(at(page, "既定のモデル") < list && list < disclosure, true);
   assertEquals(label < fast && fast < image && image < compaction, true);
 });
