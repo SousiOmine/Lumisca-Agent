@@ -199,8 +199,10 @@ export function StellaPane({
   const hostRef = useRef<HTMLDivElement>(null);
   const paneRef = useRef<HTMLElement>(null);
   const reduceMotion = useReducedMotion();
-  // On a phone the pane is the whole screen (stella.css), so it arrives from
-  // the bottom edge like a sheet; a desktop column slides in from the right.
+  // The pane arrives from the right at every width: its toggle draws a right
+  // sidebar, so a sheet rising from the bottom edge read as a different
+  // surface. A phone's pane is the whole screen (stella.css) and travels its
+  // own width; a desktop column only needs the hint of a direction.
   const narrow = useNarrowViewport();
 
   // Arrive. Only opacity and transform move: the pane's BOX never changes
@@ -212,7 +214,7 @@ export function StellaPane({
   useLayoutEffect(() => {
     const element = paneRef.current;
     if (element === null || reduceMotion) return;
-    const start = narrow ? "translateY(100%)" : "translateX(16px)";
+    const start = narrow ? "translateX(100%)" : "translateX(16px)";
     // Hide it before the first paint: `play` reaches the library through an
     // import, so the animation cannot start in this tick, and without this the
     // pane would paint at its final place and then jump back to the start.
@@ -224,7 +226,7 @@ export function StellaPane({
       {
         opacity: [0, 1],
         transform: narrow
-          ? ["translateY(100%)", "translateY(0%)"]
+          ? ["translateX(100%)", "translateX(0%)"]
           : ["translateX(16px)", "translateX(0px)"],
       },
       {
@@ -263,7 +265,7 @@ export function StellaPane({
       {
         opacity: [1, 0],
         transform: narrow
-          ? ["translateY(0%)", "translateY(100%)"]
+          ? ["translateX(0%)", "translateX(100%)"]
           : ["translateX(0px)", "translateX(16px)"],
       },
       {
