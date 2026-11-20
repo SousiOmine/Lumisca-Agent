@@ -208,8 +208,5 @@ function assertDescription(description: string): void {
     description.includes("answer every one"),
     `the description must cover several requests: ${description}`,
   );
-  assert(
-    description.includes("final reply answers the rest"),
-    description,
-  );
+  assert(description.includes("final reply answers the rest"), description);
 }
