@@ -1,5 +1,6 @@
 import { test } from "bun:test";
 import * as fsp from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { assert, assertEquals } from "@std/assert";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "./ai/faux.ts";
 import type { AgentMessage } from "./ai/message.ts";
@@ -30,7 +31,7 @@ import { VM_WORKDIR, vmAgentDir, vmContainerName } from "./vm/contract.ts";
  *   LUMISCA_STELLA_LIVE=1 bun test packages/core/stella_live_test.ts
  */
 
-const containerDir = new URL("./vm/container/", import.meta.url).pathname;
+const containerDir = fileURLToPath(new URL("./vm/container/", import.meta.url));
 
 const live = process.env["LUMISCA_STELLA_LIVE"] === "1";
 

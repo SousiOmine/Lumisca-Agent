@@ -3,13 +3,14 @@ import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 
 /** The bootstrap is Linux-only, because the service it installs is a systemd
  * user unit. The tests run it with a fake curl and a fake archive, so no
  * network or systemd is involved. */
 const linux = process.platform === "linux";
-const SCRIPT = new URL("../install-server.sh", import.meta.url).pathname;
+const SCRIPT = fileURLToPath(new URL("../install-server.sh", import.meta.url));
 
 function run(args: string[], env: Record<string, string> = {}) {
   return spawnSync("bash", [SCRIPT, ...args], {
