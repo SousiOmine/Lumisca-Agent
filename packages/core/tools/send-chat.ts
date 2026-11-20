@@ -91,7 +91,7 @@ export type SendChatTarget = ChatAttachTarget;
 const DESCRIPTION = [
   "Send the user a note BEFORE starting work that will take more than a moment — reading many files, a build, tests, a search, or anything you expect to run for a while — saying what you are about to do and what you are looking for.",
   "Until you do, the conversation shows only a timer and tool names: the user cannot see your plan, cannot tell progress from a hang, and cannot correct your direction before you have spent the time.",
-  "Send another when the picture changes (what you found, that the approach is wrong, that the work is longer than you said). Your reply at the end is still the answer.",
+  "Send another when the picture changes (what you found, that the approach is wrong, that the work is longer than you said), or to answer a request you finish before your final reply. When several requests arrived while you were working, answer every one: this call carries the ones you finish early, and your final reply answers the rest.",
   "One call is one message: the words (text) and files (paths), in any combination; at least one of the two is required. A UI card is not a separate argument — write it into the text.",
   "A run with nothing to report replies with exactly NO_RESPONSE (see the system prompt).",
 ].join(" ");

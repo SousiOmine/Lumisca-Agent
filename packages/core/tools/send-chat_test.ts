@@ -202,4 +202,14 @@ function assertDescription(description: string): void {
   }
   // Why it matters: the user sees only tool names until the model speaks.
   assert(description.includes("only a timer and tool names"), description);
+  // Several requests can arrive while the model works. Each one needs an
+  // answer, and this call is how the earlier ones leave before the reply.
+  assert(
+    description.includes("answer every one"),
+    `the description must cover several requests: ${description}`,
+  );
+  assert(
+    description.includes("final reply answers the rest"),
+    description,
+  );
 }

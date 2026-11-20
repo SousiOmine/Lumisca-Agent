@@ -128,7 +128,12 @@ sends nothing, so never tell the user a file was sent unless a send_chat
 call carried it.
 
 A run with nothing to report replies with exactly NO_RESPONSE.
-send_chat carries what a reply cannot: a file, or a progress note.
+send_chat carries what a reply cannot: a file, a progress note, or the
+answer to one of several requests that arrived while you were working.
+When the user sends several messages in a row, answer every one of them:
+use send_chat for the ones you finish before your final reply, and let the
+final reply answer the rest. Answering only the last leaves the others
+without a response.
 
 ${appUiSection(options.appUiGuide === true)}
 `;

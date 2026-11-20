@@ -2159,6 +2159,10 @@ test("stella prompt: the reply is the message, silence is asked for", async () =
   assert(prompt.includes("replies with exactly NO_RESPONSE"), prompt);
   // …and the tool is described as the second channel, not the first.
   assert(prompt.includes("send_chat carries what a reply cannot"), prompt);
+  // Several requests in one run each get an answer: earlier ones through
+  // send_chat, the rest in the final reply.
+  assert(prompt.includes("answer every one of them"), prompt);
+  assert(prompt.includes("final reply answer the rest"), prompt);
 });
 
 test("stella prompt: text beside a tool call is not delivered", async () => {
