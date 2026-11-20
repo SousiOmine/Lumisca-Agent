@@ -1341,6 +1341,45 @@ test("the enlarged picture fits the window in either direction", async () => {
   assertEquals(image.get("max-height"), "100%");
 });
 
+test("a single picture's frame takes the picture's ratio", async () => {
+  // Regression: the single-picture button was as wide as its column, so a
+  // portrait picture sat in a 320px frame with bands of surface-2 on both
+  // sides. A fit-content button closes the border on the picture's own edge;
+  // the reader's message keeps that edge at the right, an agent's at the
+  // left.
+  const chat = await fsp.readFile(
+    new URL("./styles/chat.css", import.meta.url),
+    "utf8",
+  );
+  const rules = cssRules(chat);
+  const button = declarations(
+    rules,
+    ".msg-attachment-images.single .msg-attachment-image-button",
+  );
+  assertEquals(button.get("width"), "fit-content");
+  assertEquals(button.get("max-width"), "100%");
+  assertEquals(
+    button.get("margin-left"),
+    "auto",
+    "the reader's picture keeps the message's right edge",
+  );
+  assertEquals(
+    declarations(
+      rules,
+      ".msg-attachments.agent .msg-attachment-image-button",
+    ).get("margin-left"),
+    "0",
+    "an agent's picture keeps the reply's left edge",
+  );
+  const image = declarations(
+    rules,
+    ".msg-attachment-images.single .msg-attachment-image-button img",
+  );
+  assertEquals(image.get("width"), "auto");
+  assertEquals(image.get("max-height"), "240px");
+  assertEquals(image.get("aspect-ratio"), "auto");
+});
+
 test("the answer's copy control is drawn without a hover", async () => {
   // Regression: the control existed — stella's answer carries one under its
   // clock — but nothing drew it. `.msg-action-btn` is held at `opacity: 0`
