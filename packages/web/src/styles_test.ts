@@ -1322,6 +1322,25 @@ test("the code-mode sheet is the window's paper, with one edge of canvas", async
   assertEquals(sheet.get("box-shadow"), "none");
 });
 
+test("the enlarged picture fits the window in either direction", async () => {
+  // Regression: the overlay was a grid with one implicit `auto` row. The row
+  // grew to the picture's intrinsic height, so `max-height: 100%` on the
+  // picture resolved against an indefinite size, and a tall screenshot was
+  // clipped by `overflow: hidden` with no scrollbar to reach the rest. The
+  // explicit fractions give the picture a definite box to shrink into.
+  const chat = await fsp.readFile(
+    new URL("./styles/chat.css", import.meta.url),
+    "utf8",
+  );
+  const rules = cssRules(chat);
+  const overlay = declarations(rules, ".lightbox");
+  assertEquals(overlay.get("grid-template-columns"), "minmax(0, 1fr)");
+  assertEquals(overlay.get("grid-template-rows"), "minmax(0, 1fr)");
+  const image = declarations(rules, ".lightbox-image");
+  assertEquals(image.get("max-width"), "100%");
+  assertEquals(image.get("max-height"), "100%");
+});
+
 test("the answer's copy control is drawn without a hover", async () => {
   // Regression: the control existed — stella's answer carries one under its
   // clock — but nothing drew it. `.msg-action-btn` is held at `opacity: 0`

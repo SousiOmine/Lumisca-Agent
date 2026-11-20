@@ -270,6 +270,13 @@
   inset: 0;
   z-index: 100;
   display: grid;
+  /* One explicit fraction per axis, so the picture's `max-height: 100%` has a
+   * definite row to resolve against. With the implicit `auto` row the row
+   * grows to the picture's intrinsic height, the percentage resolves against
+   * an indefinite size, and a tall picture is clipped by `overflow: hidden`
+   * with no way to scroll to the rest. */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   place-items: center;
   padding: 24px;
   background: rgb(0 0 0 / 82%);
