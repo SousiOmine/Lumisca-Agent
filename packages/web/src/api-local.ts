@@ -16,7 +16,6 @@ import type {
   AskAnswer,
   BackgroundCommandInfo,
   CatalogStatus,
-  ConnectionEntry,
   FsBrowse,
   FsPlace,
   McpAuthSnapshot,
@@ -595,15 +594,6 @@ export const api = {
     request<WebSearchTestView>("/api/web-search/test", {
       method: "POST",
       body: JSON.stringify(form),
-    }),
-
-  /** Server-side connection registry (the federated peer list). */
-  getConnections: () =>
-    request<{ connections: ConnectionEntry[] }>("/api/connections"),
-  putConnections: (connections: ConnectionEntry[]) =>
-    request<{ ok: boolean }>("/api/connections", {
-      method: "PUT",
-      body: JSON.stringify({ connections }),
     }),
 
   /** The session-scoped endpoints (`getSession`, `prompt`, …), from the

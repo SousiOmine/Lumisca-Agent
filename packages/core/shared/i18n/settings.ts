@@ -20,7 +20,6 @@ export const settings = {
   "settings.nav.appearance": { ja: "外観", en: "Appearance" },
   "settings.nav.personalize": { ja: "カスタマイズ", en: "Personalization" },
   "settings.nav.connections": { ja: "接続先サーバー", en: "Servers" },
-  "settings.nav.peers": { ja: "連携先サーバー", en: "Peer servers" },
   "settings.nav.providers": { ja: "プロバイダー", en: "Providers" },
   "settings.nav.models": { ja: "モデル設定", en: "Models" },
   "settings.nav.mcp": { ja: "MCPサーバー", en: "MCP servers" },
@@ -797,20 +796,6 @@ export const settings = {
   "settings.connection.persistedNote": {
     ja: "次回の起動時もこの接続先を使います。",
     en: "This server is used on the next launch too.",
-  },
-
-  // --- the server's federation peers ----------------------------------------
-  "settings.peers.note": {
-    ja: "このサーバーが会話を集める連携先です。認証トークンはこのサーバーが連携先へ接続するときに使います。",
-    en: "Servers whose sessions this server collects. The token is how this server reaches each peer.",
-  },
-  "settings.peers.empty": {
-    ja: "連携先はありません。",
-    en: "No peer servers.",
-  },
-  "settings.peers.add": {
-    ja: "連携先を追加",
-    en: "Add peer server",
   },
 
   // --- command safety panel --------------------------------------------------

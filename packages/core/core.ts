@@ -1176,8 +1176,9 @@ export class LumiscaCore {
     this.commandSafety.clearApprovals();
   }
 
-  // --- server connection registry (web clients) ---------------------------
-  // Shared by web clients so they can switch servers from the settings UI.
+  // --- federation peers ---------------------------------------------------
+  // Read by FederationClient. The desktop app's own server list lives in the
+  // shell, not here; no client route exposes this one.
 
   getConnections(): ConnectionEntry[] {
     return parseConnections(this.settings.get(CONNECTIONS_KEY));
@@ -1187,9 +1188,9 @@ export class LumiscaCore {
     this.settings.set(CONNECTIONS_KEY, JSON.stringify(entries));
   }
 
-  /** Non-protected settings only; credentials, MCP config, connection
-   * registry and the command-safety approvals record are never exposed
-   * through the generic settings surface (each has its own API). */
+  /** Non-protected settings only; credentials, MCP config, the federation
+   * peer registry and the command-safety approvals record are never exposed
+   * through the generic settings surface. */
   listSettings(): Map<string, string> {
     return filterExposedSettings(this.settings.list());
   }

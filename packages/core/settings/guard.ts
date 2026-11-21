@@ -31,10 +31,9 @@ import { CREDENTIAL_KEY_PREFIX } from "./credentials.ts";
 /** The protected-key category of a settings key, or undefined when the
  * key is safe to expose through the generic settings surface. Credentials
  * have their own API (/providers/:id/api-key), the app MCP config its own
- * (/api/mcp), and the connection registry its own (/api/connections);
- * touching any of them through the generic settings surface would bypass
- * those APIs. Single source of truth for both the read/write guard and
- * the listSettings filter. */
+ * (/api/mcp), and the connection registry holds federation tokens with no
+ * client API at all. Single source of truth for both the read/write guard
+ * and the listSettings filter. */
 export function protectedKeyReason(key: string): string | undefined {
   if (key.startsWith(CREDENTIAL_KEY_PREFIX)) {
     return "credentials cannot be accessed through this endpoint";
@@ -102,11 +101,12 @@ export function filterExposedSettings(
  *
  * Entries with their own dedicated surface are absent on purpose: credentials
  * (`api_key:*`), the MCP OAuth grants, the web-search configuration, the MCP
- * config, the connection registry and the command-safety approvals are
- * written through their own routes/services, which validate their payloads.
- * Per-model enablement and thinking level are absent too: they are written by
- * the model layer through /providers/:id/models/:modelId, which knows the
- * provider/model pair. */
+ * config and the command-safety approvals are written through their own
+ * routes/services, which validate their payloads. The connection registry is
+ * absent because it holds federation tokens and has no client route. Per-model
+ * enablement and thinking level are absent too: they are written by the model
+ * layer through /providers/:id/models/:modelId, which knows the provider/model
+ * pair. */
 const MUTABLE_KEYS: ReadonlySet<string> = new Set([
   THEME_KEY,
   LANGUAGE_KEY,

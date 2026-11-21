@@ -29,7 +29,6 @@ import { McpList } from "./settings/McpList.tsx";
 import { ModelsPage } from "./settings/ModelsPage.tsx";
 import { NotificationsPanel } from "./settings/NotificationsPanel.tsx";
 import { OverviewPanel } from "./settings/OverviewPanel.tsx";
-import { PeersPanel } from "./settings/PeersPanel.tsx";
 import { PersonalizePanel } from "./settings/PersonalizePanel.tsx";
 import { ProviderDetail } from "./settings/ProviderDetail.tsx";
 import { ProviderList } from "./settings/ProviderList.tsx";
@@ -336,12 +335,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
         <ComputerUsePanel />
       </>
     ),
-  },
-  {
-    id: "peers",
-    owner: "server",
-    labelKey: "settings.nav.peers",
-    render: () => <PeersPanel />,
   },
   {
     id: "experimental",

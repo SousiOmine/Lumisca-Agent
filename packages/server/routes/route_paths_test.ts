@@ -154,7 +154,6 @@ async function registrationsIn(
 test("no route module registers the same method and path twice", async () => {
   const files = [
     "attachments.ts",
-    "connections.ts",
     "conversation.ts",
     "mcp.ts",
     "providers.ts",

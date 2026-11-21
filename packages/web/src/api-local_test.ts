@@ -509,24 +509,6 @@ const SETTINGS_CASES: Case[] = [
     path: "/api/settings/saved-prompts/p%201",
     call: () => api.deleteSavedPrompt("p 1"),
   },
-  {
-    name: "getConnections",
-    method: "GET",
-    path: "/api/connections",
-    call: () => api.getConnections(),
-  },
-  {
-    name: "putConnections",
-    method: "PUT",
-    path: "/api/connections",
-    call: () =>
-      api.putConnections([
-        { id: "peer-1", name: "Peer", url: "http://peer:8000", token: "t" },
-      ]),
-    body:
-      '{"connections":[{"id":"peer-1","name":"Peer",' +
-      '"url":"http://peer:8000","token":"t"}]}',
-  },
 ];
 
 test("api-local: workspace, skill and filesystem calls", () =>
@@ -536,7 +518,7 @@ test("api-local: session calls", () => assertCases(SESSION_CASES));
 
 test("api-local: provider and model calls", () => assertCases(PROVIDER_CASES));
 
-test("api-local: settings, MCP, personalization and connections", () =>
+test("api-local: settings, MCP and personalization", () =>
   assertCases(SETTINGS_CASES));
 
 test("api-local: the page token rides on every request", async () => {

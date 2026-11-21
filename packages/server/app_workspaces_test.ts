@@ -944,58 +944,17 @@ test("command safety approvals API lists, deletes and clears", async () => {
   }
 });
 
-test("connections API: registry roundtrip, validation and protection", async () => {
+test("the server exposes no connection registry API", async () => {
   const { core, server, base } = await setup();
   try {
-    // Starts empty.
-    const empty = await fetch(`${base}/api/connections`);
-    assertEquals(empty.status, 200);
-    assertEquals((await empty.json()).connections.length, 0);
-
-    // PUT the whole registry.
-    const entries = [
-      { id: "srv-1", name: "自宅", url: "http://100.64.0.5:8000", token: "t1" },
-      {
-        id: "srv-2",
-        name: "作業PC",
-        url: "http://192.168.1.20:8000",
-        token: "",
-      },
-    ];
-    const put = await json(base, "/api/connections", {
-      method: "PUT",
-      body: JSON.stringify({ connections: entries }),
-    });
-    assertEquals(put.status, 200);
-
-    const got = await fetch(`${base}/api/connections`);
-    const body = (await got.json()) as { connections: typeof entries };
-    assertEquals(body.connections.length, 2);
-    assertEquals(body.connections[1]?.name, "作業PC");
-
-    // Malformed bodies are rejected, not persisted.
-    const bad = await json(base, "/api/connections", {
-      method: "PUT",
-      body: JSON.stringify({ connections: [{ id: "x", name: 42 }] }),
-    });
-    assertEquals(bad.status, 400);
-    const after = await fetch(`${base}/api/connections`);
-    assertEquals((await after.json()).connections.length, 2);
-
-    // The registry holds tokens: it must not leak via generic settings,
-    // and the generic settings API refuses to touch it.
-    const settings = await fetch(`${base}/api/settings`);
-    const values = Object.values(
-      (await settings.json()) as Record<string, string>,
-    );
-    assertEquals(
-      values.some((v) => v.includes("srv-1")),
-      false,
-    );
-    assertEquals(
-      values.some((v) => v.includes("t1")),
-      false,
-    );
+    // The window's server list belongs to the desktop app; a server must not
+    // offer another place to add one.
+    for (const method of ["GET", "PUT"]) {
+      const res = await fetch(`${base}/api/connections`, { method });
+      assertEquals(res.status, 404);
+    }
+    // The federation peer rows still live in settings and hold tokens, so
+    // the generic settings surface must not edit them.
     const forbidden = await json(base, "/api/settings/connections", {
       method: "PUT",
       body: JSON.stringify({ value: "x" }),

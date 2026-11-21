@@ -9,7 +9,6 @@ import { FederationClient } from "./federation.ts";
 import { initialDataFor, languageForRequest, registerPages } from "./pages.ts";
 import { createPushNotifier } from "./push.ts";
 import { attachmentRoutes } from "./routes/attachments.ts";
-import { connectionRoutes } from "./routes/connections.ts";
 import { federationRoutes } from "./routes/federation.ts";
 import { fsRoutes } from "./routes/fs.ts";
 import { mcpRoutes } from "./routes/mcp.ts";
@@ -273,10 +272,6 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   // The first-run setup's state: a file beside the settings file, so this
   // server answers for one installation (and every client of it).
   app.route("/api", setupRoutes(core));
-  app.route(
-    "/api",
-    connectionRoutes(core, () => fed.restart()),
-  );
   app.route(
     "/api",
     notifyRoutes({
