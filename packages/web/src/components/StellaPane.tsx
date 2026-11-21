@@ -15,7 +15,7 @@ import {
   useRef,
   useState,
 } from "preact/hooks";
-import { token } from "../api-client.ts";
+import { pageToken } from "../api-client.ts";
 import { stellaApi } from "../api-stella.ts";
 import { formatClockTime } from "../format.ts";
 import { useNarrowViewport, useReducedMotion } from "../hooks/useMediaQuery.ts";
@@ -517,6 +517,7 @@ export function StellaPane({
         // set headers on a WebSocket handshake.
         const protocol = location.protocol === "https:" ? "wss:" : "ws:";
         const query = new URLSearchParams();
+        const token = pageToken();
         if (token !== undefined) query.set("token", token);
         // The pane is one conversation's desktop. Without the agent the
         // relay has no desktop to show.

@@ -6,7 +6,7 @@
  * lives in `TitleBar_test.tsx` and these two here — one file cannot be both
  * a macOS window and a browser page.
  */
-import { test } from "bun:test";
+import { afterAll, test } from "bun:test";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -59,4 +59,10 @@ test("TitleBar: macOS still carries the picker and the app menu", () => {
   const html = render();
   assertStringIncludes(html, "connection-picker");
   assertStringIncludes(html, "titlebar-controls");
+});
+
+afterAll(() => {
+  delete (globalThis as unknown as Record<string, unknown>).__LUMISCA_BRIDGE__;
+  delete (globalThis as unknown as Record<string, unknown>)
+    .__LUMISCA_PLATFORM__;
 });

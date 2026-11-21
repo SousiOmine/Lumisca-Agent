@@ -67,9 +67,14 @@ export const settingsStore = {
     }
   },
 
-  /** Reset the store (tests). */
+  /** Clear the values but keep the store read (tests). */
   reset(): void {
     store.commit({ values: {} });
+  },
+
+  /** Return to the unread state (tests that exercise the first read). */
+  resetUnread(): void {
+    store.reset();
   },
 };
 

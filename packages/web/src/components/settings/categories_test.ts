@@ -62,6 +62,7 @@ test("every category is named once, in the table's order", () => {
     [
       "notifications",
       "app",
+      "connections",
       "overview",
       "appearance",
       "providers",

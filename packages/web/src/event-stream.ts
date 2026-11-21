@@ -1,5 +1,5 @@
 import { WS_HEARTBEAT_TYPE } from "@lumisca/core/shared";
-import { token } from "./api-client.ts";
+import { pageToken } from "./api-client.ts";
 import {
   createHeartbeatWatchdog,
   type HeartbeatWatchdog,
@@ -37,6 +37,7 @@ export function openEventStream<T>(
 ): () => void {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   // Browsers cannot set WS headers, so an enabled token travels in the URL.
+  const token = pageToken();
   const suffix = token ? `?token=${encodeURIComponent(token)}` : "";
   const ws = new WebSocket(
     `${proto}//${location.host}${options.path}${suffix}`,

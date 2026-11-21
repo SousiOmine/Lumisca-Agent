@@ -1,30 +1,39 @@
-import { api } from "./api.ts";
+import { inDesktopShell, shellCall } from "./shell.ts";
 import { createResourceStore, useStore } from "./store.ts";
 import type { ConnectionEntry } from "./types.ts";
 
 /**
- * The connection registry (`GET /api/connections`), as one shared store.
+ * The servers this window can display, as one shared store.
  *
- * Two surfaces need the same list: the settings dialog that edits it and the
- * title bar's picker that switches to it. They used to tell each other to
- * re-read through a `CustomEvent` on `globalThis` — an event is not a value,
- * so each kept its own copy and the picker showed the previous list until its
- * fetch returned.
+ * Two surfaces need the same list: the settings page that edits it and the
+ * title bar's picker that switches to it. The list itself is the shell's
+ * (`connections/list` over the desktop bridge), not the displayed server's:
+ * a page served by a remote machine has no business knowing which other
+ * machines this computer may connect to. In a plain browser there is no
+ * shell and no list — the address bar is the answer.
  */
 
 interface ConnectionsValue {
-  /** The registry entries, in the server's order. */
+  /** The shell's rows, in the order the settings page wrote them. */
   entries: ConnectionEntry[];
 }
 
 const store = createResourceStore<ConnectionsValue, string>({
   initial: { entries: [] },
-  load: async () => ({ entries: (await api.getConnections()).connections }),
+  load: async () => ({
+    entries: inDesktopShell()
+      ? (
+          await shellCall<{ connections: ConnectionEntry[] }>(
+            "connections/list",
+          )
+        ).connections
+      : [],
+  }),
   same: (a, b) => sameEntries(a.entries, b.entries),
 });
 
-/** Two registries are the same when every entry matches field by field: a
- * read that returns the stored list unchanged must not re-render. */
+/** Two lists are the same when every row matches field by field: a read
+ * that returns the stored list unchanged must not re-render. */
 function sameEntries(
   a: readonly ConnectionEntry[],
   b: readonly ConnectionEntry[],
@@ -43,18 +52,32 @@ function sameEntries(
   });
 }
 
-/** Replace the whole registry and reflect the server's answer. The server
- * stores the list it was given, so the write's own list is what every screen
- * should show — reading it back would be a second round trip for the same
- * bytes, and a failed write must not leave the store claiming it succeeded. */
-export async function putConnections(
-  next: readonly ConnectionEntry[],
-): Promise<void> {
-  await api.putConnections([...next]);
-  store.commit({ entries: [...next] });
+/** Store one row in the shell and reflect it here. A save replaces the row
+ * with the same id, so both surfaces see the new name or address at once. */
+export async function saveConnection(entry: ConnectionEntry): Promise<void> {
+  await shellCall("connections/save", {
+    id: entry.id,
+    name: entry.name,
+    url: entry.url.trim(),
+    token: entry.token,
+  });
+  const entries = store.get().entries;
+  const next = entries.some((existing) => existing.id === entry.id)
+    ? entries.map((existing) =>
+        existing.id === entry.id ? { ...entry } : existing,
+      )
+    : [...entries, { ...entry }];
+  store.commit({ entries: next });
 }
 
-/** The registry for a component (re-renders when it changes). */
+/** Remove one row from the shell. The shell refuses to remove the row the
+ * window is showing, so the error reaches the caller's error line. */
+export async function deleteConnection(id: string): Promise<void> {
+  await shellCall("connections/delete", { id });
+  store.commit({ entries: store.get().entries.filter((e) => e.id !== id) });
+}
+
+/** The list for a component (re-renders when it changes). */
 export function useConnections(): {
   entries: ConnectionEntry[];
   loaded: boolean;
@@ -71,21 +94,14 @@ export function useConnections(): {
 }
 
 /**
- * The connection registry, as the UI reads it: which server a registry entry
- * points at, what to call it, and which entry is the one being displayed.
+ * The connection list, as the UI reads it: what to call a row, and which row
+ * the window is showing.
  *
- * The registry itself lives in the server's database (`GET /api/connections`)
- * and is shared by every client; the shell decides which of them the window
- * actually shows (`state` from the desktop bridge). Both the settings list and
- * the title bar's picker need the same three answers, so they are pure
- * functions here rather than two spellings of the same rules.
+ * The displayed row is named by id, not by matching URLs. The shell records
+ * the id when it switches, so renaming a server or editing its address does
+ * not lose which row is current, and two rows that point at the same origin
+ * cannot confuse it.
  */
-
-/** The page URL to open for a connection (`?token=` — the page is
- * token-guarded in production mode). */
-export function pageUrl(url: string, token: string): string {
-  return `${url.replace(/\/+$/, "")}/?token=${encodeURIComponent(token)}`;
-}
 
 /** Whether the URL field holds something a connection can be made to: the
  * desktop shell accepts http:// (a LAN/Tailscale address served directly)
@@ -96,99 +112,49 @@ export function isSupportedUrl(url: string): boolean {
   return /^https?:\/\//i.test(url.trim());
 }
 
-/** The origin a URL points at (`scheme://host[:port]`), or the input itself
- * when it is not a URL this app can connect to. Two spellings of one server
- * (`https://host/`, `https://host/?token=…`) reduce to the same string, which
- * is what makes "which registry entry is showing" answerable. */
-export function originOf(url: string): string {
-  const bare = url.trim();
-  try {
-    const origin = new URL(bare).origin;
-    // Text that only *looks* like a URL (`homeserver:8000`) parses with the
-    // scheme "homeserver" and the opaque origin "null": it names no server
-    // this app can address, so it keeps its own spelling.
-    return origin === "null" ? bare.replace(/\/+$/, "") : origin;
-  } catch {
-    return bare.replace(/\/+$/, "");
-  }
-}
-
-/** What the desktop bridge reports about the displayed server (`state`). */
-export interface DisplayedServer {
-  mode: "local" | "remote";
-  /** Page URL of the remote server, or null. */
-  url: string | null;
-}
-
-/**
- * The registry entry the window is showing, or `""` for the local server.
- *
- * `null` means "no entry matches": the window shows a remote server that is
- * not in this registry (the registry lives in whatever server is displayed,
- * so a stale or edited list is an ordinary state). The caller shows the
- * server's origin instead of pretending one of the rows is it.
- */
-export function displayedConnectionId(
-  connections: readonly ConnectionEntry[],
-  displayed: DisplayedServer | null,
-): string | null {
-  if (displayed === null) return null;
-  if (displayed.mode === "local") return "";
-  const page = displayed.url;
-  if (page === null || page.trim() === "") return null;
-  const origin = originOf(page);
-  const match = connections.find((entry) => originOf(entry.url) === origin);
-  return match === undefined ? null : match.id;
-}
-
-/** What to call a registry entry: the name the user typed, the host they
- * recognise, then the id. An entry with no name and no parsable URL still has
- * to be selectable as *something*. */
+/** What to call a row: the name the user typed, the host they recognise,
+ * then the id. An entry with no name and no parsable URL still has to be
+ * selectable as *something*. */
 export function connectionLabel(entry: ConnectionEntry): string {
   const name = entry.name.trim();
   if (name !== "") return name;
-  const url = entry.url.trim();
-  if (url === "") return entry.id;
+  return hostLabel(entry.url) || entry.id;
+}
+
+/** The host of a server URL, the part of an address a person recognises.
+ * The URL is never shown: it carries the auth token in its query. */
+export function hostLabel(url: string | null | undefined): string {
+  const trimmed = (url ?? "").trim();
+  if (trimmed === "") return "";
   try {
-    const { host } = new URL(url);
-    return host === "" ? url : host;
+    const { host } = new URL(trimmed);
+    return host === "" ? trimmed : host;
   } catch {
-    return url;
+    return trimmed;
   }
 }
 
-/**
- * What to call the server the window is showing.
- *
- * The name comes from the shell: a remote page's own registry is that
- * server's registry, so it usually does not contain an entry for itself and
- * matching the display against the list (`displayedConnectionId`) finds
- * nothing. The shell remembers the name of the entry the window was switched
- * with, which is the only place that knows it.
- *
- * Without a recorded name the URL's origin step in (`connectionLabel`). The
- * page URL is never shown: it carries the auth token in its query.
- */
-export function serverLabel(
-  name: string | null | undefined,
-  url: string | null | undefined,
+/** What to call the server the window is showing: the row named by the
+ * shell's `connectionId`, then the URL's host when the row was removed
+ * while it was still displayed. */
+export function displayedLabel(
+  entries: readonly ConnectionEntry[],
+  connectionId: string | null,
+  url: string | null,
 ): string {
-  const trimmed = (name ?? "").trim();
-  if (trimmed !== "") return trimmed;
-  return connectionLabel({ id: "", name: "", url: url ?? "", token: "" });
+  if (connectionId === null) return "";
+  const entry = entries.find((candidate) => candidate.id === connectionId);
+  return entry === undefined ? hostLabel(url) : connectionLabel(entry);
 }
 
-/**
- * The name to fill in for a server whose name field is still empty, from the
- * URL being typed: its host (with the port when one is spelled out), the part
- * of an address a person recognises. `null` while the URL is not yet
- * something to connect to — the name field stays empty instead of collecting
- * a fragment of a half-typed address.
+/** The name to fill in for a server whose name field is still empty, from
+ * the URL being typed: its host (with the port when one is spelled out).
+ * `null` while the URL is not yet something to connect to — the name field
+ * stays empty instead of collecting a fragment of a half-typed address.
  *
  * The caller keeps applying this on every keystroke until the name is edited
- * by hand, so an address typed one character at a time ends up with its final
- * host rather than the first one that parsed.
- */
+ * by hand, so an address typed one character at a time ends up with its
+ * final host rather than the first one that parsed. */
 export function suggestConnectionName(url: string): string | null {
   if (!isSupportedUrl(url)) return null;
   try {
@@ -200,16 +166,16 @@ export function suggestConnectionName(url: string): string | null {
 }
 
 /**
- * Apply a URL typed into a registry entry, deriving the name from it while
- * the name is still the address's own.
+ * Apply a URL typed into a row, deriving the name from it while the name is
+ * still the address's own.
  *
  * The address is the required field and the name the optional one, so the
  * ordinary order is address first; a list of nameless rows, and a title bar
  * with nothing to call the current server, is what the derivation avoids. A
  * name the user typed is never overwritten. A name derived from the previous
  * address keeps following it — otherwise the first fragment that parsed
- * (`https://h` → `h`) would count as typed and stick, and an address entered
- * one character at a time would end with the wrong host.
+ * (`https://h` → `h`) would count as typed and stick, and an address
+ * entered one character at a time would end with the wrong host.
  */
 export function withUrl(entry: ConnectionEntry, url: string): ConnectionEntry {
   const name = entry.name.trim();
@@ -222,28 +188,4 @@ export function withUrl(entry: ConnectionEntry, url: string): ConnectionEntry {
         ...entry,
         url,
       };
-}
-
-/**
- * `entries` with the row for `entry`'s server replaced, or `entry` appended.
- *
- * The first-run setup writes the server it is about to switch to, so the
- * reader can come back to it from the title bar's picker. A second row for
- * the same origin would make "which entry is displayed"
- * (`displayedConnectionId`) name the first one and hide the other, so the
- * existing row is replaced; its id is kept because that is what the row is
- * addressed by elsewhere.
- */
-export function upsertConnection(
-  entries: readonly ConnectionEntry[],
-  entry: ConnectionEntry,
-): ConnectionEntry[] {
-  const origin = originOf(entry.url);
-  const index = entries.findIndex(
-    (existing) => originOf(existing.url) === origin,
-  );
-  if (index === -1) return [...entries, entry];
-  return entries.map((existing, at) =>
-    at === index ? { ...entry, id: existing.id } : existing,
-  );
 }

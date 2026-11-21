@@ -1,4 +1,4 @@
-import { test } from "bun:test";
+import { afterAll, test } from "bun:test";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import {
   intercept,
@@ -724,4 +724,8 @@ test("peerRoutes: the same path is written once for both machines", async () => 
   }
   assertEquals(seen[0], "GET /api/providers/p%2F1/models");
   assertEquals(seen[1], "GET /api/fed/peer%201/providers/p%2F1/models");
+});
+
+afterAll(() => {
+  delete globalThis.__LUMISCA_TOKEN__;
 });

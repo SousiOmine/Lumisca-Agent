@@ -61,6 +61,9 @@ const preference = (provider: string, modelId: string) =>
 // First on purpose: the shared store starts unread, which is the state the
 // new-session screen is in when it is the first screen a page shows.
 test("rememberDefaultModel reads the settings before its first write", async () => {
+  // The store is shared by the whole page; another file in the same run may
+  // have loaded it. The state this test is about is "not read yet".
+  settingsStore.resetUnread();
   const sent = await withFetch(
     (request) => (request.method === "GET" ? table({ theme: "dark" })() : ok()),
     () => rememberDefaultModel("anthropic", "claude-sonnet-4-5"),

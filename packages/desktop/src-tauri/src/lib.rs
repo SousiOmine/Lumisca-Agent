@@ -76,13 +76,18 @@ pub(crate) struct AppState {
     /// The spawned local server's captured output (in-memory tail +
     /// on-disk log), for crash diagnosis from the UI.
     server_log: Mutex<server_log::ServerLog>,
-    /// The last remote server the user switched to — the "current display"
-    /// reported by the bridge state, name included (the page cannot name
-    /// itself: a remote page's registry is that server's own).
-    last_remote: Mutex<Option<settings::SavedConnection>>,
+    /// The servers this window can display. The list belongs to the shell:
+    /// the page that edits it may be served by one of those servers, and a
+    /// list kept there would change with the display.
+    connections: Mutex<Vec<settings::SavedConnection>>,
+    /// The connection the window is actually showing (None: the local
+    /// server). This is a snapshot taken when the switch happened; editing
+    /// the row afterwards changes the stored entry, not the live display.
+    displayed: Mutex<Option<settings::SavedConnection>>,
     /// The connection `settings.json` holds for the next launch. Kept here
     /// so the splash's 150 ms poll of `state` never reads the file, and so
-    /// the display and the persisted choice are written together.
+    /// the display and the persisted choice are written together. A failed
+    /// startup restore leaves this set while `displayed` stays None.
     remembered: Mutex<Option<settings::SavedConnection>>,
     /// Bumped whenever the display is switched by hand (connect-local /
     /// connect-remote). A startup restore that finishes after a manual
@@ -148,11 +153,19 @@ pub fn run() {
                     None
                 }
             };
+            let remembered = prefs.current.as_deref().and_then(|id| {
+                prefs
+                    .connections
+                    .iter()
+                    .find(|connection| connection.id == id)
+                    .cloned()
+            });
             app.manage(AppState {
                 local: Mutex::new(None),
                 server_log: Mutex::new(server_log::ServerLog::new(&handle)),
-                last_remote: Mutex::new(None),
-                remembered: Mutex::new(prefs.last_remote),
+                connections: Mutex::new(prefs.connections),
+                displayed: Mutex::new(None),
+                remembered: Mutex::new(remembered),
                 connect_epoch: Mutex::new(0),
                 update: Mutex::new(update::UpdateState::new(prefs.auto_update)),
                 pending: Mutex::new(None),

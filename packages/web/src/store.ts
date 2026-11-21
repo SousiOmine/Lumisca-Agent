@@ -85,6 +85,9 @@ export interface ResourceStore<T, E> extends Store<T & ResourceStatus<E>> {
    * at once. Writes are counted: a read in flight when the change was
    * applied is discarded. */
   commit(next: T): void;
+  /** Return to the unread initial state (tests). A read in flight is
+   * discarded, so it cannot repopulate the store after the reset. */
+  reset(): void;
 }
 
 export interface ResourceOptions<T, E> {
@@ -199,6 +202,18 @@ export function createResourceStore<T, E = string>(
     commit(next) {
       writes++;
       publish({ ...next, loading: false, loaded: true, error: null });
+    },
+    reset() {
+      reads++;
+      writes++;
+      reading = false;
+      value = {
+        ...options.initial,
+        loading: false,
+        loaded: false,
+        error: null,
+      };
+      notify();
     },
   };
   return store;

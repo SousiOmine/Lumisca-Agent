@@ -1,4 +1,4 @@
-import { test } from "bun:test";
+import { afterAll, test } from "bun:test";
 import { assert, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -60,4 +60,8 @@ test("ShareRequestCard: the agent's reason is what the card leads with", () => {
   assert(!pickButton(html).includes("disabled"), pickButton(html));
   // The wait has a deadline the reader can see.
   assertStringIncludes(html, "まで");
+});
+
+afterAll(() => {
+  delete (globalThis as unknown as Record<string, unknown>).__LUMISCA_BRIDGE__;
 });

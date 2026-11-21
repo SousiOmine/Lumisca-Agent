@@ -8,7 +8,7 @@
  * macOS case — which branches the other way — lives in its own file
  * (`TitleBarMacos_test.tsx`): one module graph cannot be both windows.
  */
-import { test } from "bun:test";
+import { afterAll, test } from "bun:test";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -96,4 +96,10 @@ test("TitleBar: the connection picker is drawn", async () => {
   const html = await render();
   assertStringIncludes(html, "connection-picker");
   assertEquals(buttonTag(html, "最小化") === "", false);
+});
+
+afterAll(() => {
+  delete (globalThis as unknown as Record<string, unknown>).__LUMISCA_BRIDGE__;
+  delete (globalThis as unknown as Record<string, unknown>)
+    .__LUMISCA_PLATFORM__;
 });

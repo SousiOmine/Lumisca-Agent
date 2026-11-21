@@ -8,7 +8,7 @@
  * top would see "the desktop shell is not available" for the rest of the
  * run.
  */
-import { test } from "bun:test";
+import { afterAll, test } from "bun:test";
 import { assertEquals } from "@std/assert";
 
 /** The bridge origin the page would have in a desktop window. */
@@ -92,4 +92,8 @@ test("shellState: a failed read is not cached", async () => {
     globalThis.fetch = original;
     shellState.reset();
   }
+});
+
+afterAll(() => {
+  delete (globalThis as unknown as Record<string, unknown>).__LUMISCA_BRIDGE__;
 });

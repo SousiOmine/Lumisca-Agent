@@ -19,7 +19,8 @@ export const settings = {
   "settings.nav.overview": { ja: "概要", en: "Overview" },
   "settings.nav.appearance": { ja: "外観", en: "Appearance" },
   "settings.nav.personalize": { ja: "カスタマイズ", en: "Personalization" },
-  "settings.nav.peers": { ja: "接続先サーバー", en: "Servers" },
+  "settings.nav.connections": { ja: "接続先サーバー", en: "Servers" },
+  "settings.nav.peers": { ja: "連携先サーバー", en: "Peer servers" },
   "settings.nav.providers": { ja: "プロバイダー", en: "Providers" },
   "settings.nav.models": { ja: "モデル設定", en: "Models" },
   "settings.nav.mcp": { ja: "MCPサーバー", en: "MCP servers" },
@@ -729,7 +730,13 @@ export const settings = {
     en: "Copied",
   },
 
-  // --- connection list -------------------------------------------------------
+  // --- the device's server list ---------------------------------------------
+  /** The page's first line: the list is the window's, not the displayed
+   * server's. */
+  "settings.connection.deviceNote": {
+    ja: "この一覧はこのPCだけのものです。",
+    en: "This list belongs to this PC.",
+  },
   "settings.connection.test": { ja: "テスト", en: "Test" },
   "settings.connection.currentDisplay": {
     ja: "表示中のサーバー:",
@@ -738,10 +745,6 @@ export const settings = {
   "settings.connection.localServer": {
     ja: "ローカルサーバー",
     en: "Local server",
-  },
-  "settings.connection.thisServer": {
-    ja: "このサーバー（{origin}）",
-    en: "This server ({origin})",
   },
   "settings.connection.localServerDesc": {
     ja: "このPCで稼働しているサーバーに接続します",
@@ -752,14 +755,6 @@ export const settings = {
   "settings.connection.deleteConfirm": {
     ja: "このサーバーを削除しますか？",
     en: "Delete this server?",
-  },
-  "settings.connection.testSuccess": {
-    ja: "サーバーへの接続に成功しました",
-    en: "Connection succeeded",
-  },
-  "settings.connection.unreachable": {
-    ja: "サーバーに到達できません: {url}",
-    en: "Cannot reach server: {url}",
   },
   "settings.connection.testOk": { ja: "接続OK", en: "Connection OK" },
   /** The address field of a connection. The setup's connection screen uses
@@ -802,6 +797,20 @@ export const settings = {
   "settings.connection.persistedNote": {
     ja: "次回の起動時もこの接続先を使います。",
     en: "This server is used on the next launch too.",
+  },
+
+  // --- the server's federation peers ----------------------------------------
+  "settings.peers.note": {
+    ja: "このサーバーが会話を集める連携先です。認証トークンはこのサーバーが連携先へ接続するときに使います。",
+    en: "Servers whose sessions this server collects. The token is how this server reaches each peer.",
+  },
+  "settings.peers.empty": {
+    ja: "連携先はありません。",
+    en: "No peer servers.",
+  },
+  "settings.peers.add": {
+    ja: "連携先を追加",
+    en: "Add peer server",
   },
 
   // --- command safety panel --------------------------------------------------

@@ -28,6 +28,7 @@ import type { MessageKey } from "@lumisca/core/shared";
 export const SETTINGS_CATEGORIES = [
   "notifications",
   "app",
+  "connections",
   "overview",
   "appearance",
   "providers",

@@ -1,72 +1,53 @@
 import { errorMessage } from "@lumisca/core/shared";
 import { IconChevronDown, IconPlus, IconTrash } from "@tabler/icons-preact";
-import { useEffect, useState } from "preact/hooks";
+import { useState } from "preact/hooks";
 import { confirmAction } from "../../confirm.ts";
 import {
   connectionLabel,
+  deleteConnection,
   isSupportedUrl,
-  pageUrl,
-  putConnections,
-  serverLabel,
+  saveConnection,
   useConnections,
   withUrl,
 } from "../../connections.ts";
+import { useConnectionSwitch } from "../../hooks/useConnectionSwitch.ts";
 import { useT } from "../../i18n.ts";
-import {
-  type ShellState,
-  shellAvailable,
-  shellCall,
-  shellState,
-} from "../../shell.ts";
+import { shellCall } from "../../shell.ts";
 import type { ConnectionEntry } from "../../types.ts";
 import { Field } from "../Field.tsx";
 
-/** Settings → 接続先サーバー. This list is the federation peer registry:
- * it lives in THIS server's database and is shared by web and desktop
- * clients alike. The desktop shell bridge only handles the local server
- * and UI switching; everything else goes through the same API.
+/** Settings → 接続先サーバー, on the device's side.
  *
- * Each entry is a collapsed row (its name, the address, and the actions that
- * switch the window to it) that expands into the fields. Saving folds it
+ * This list belongs to the window: it is stored in the shell's settings and
+ * restored on the next launch, and it is the same list whichever server the
+ * page is served by. A list kept on the server would change with the
+ * display, which is the bug this page exists to prevent. The browser has no
+ * such list — the address bar is the way to another server there — so the
+ * page is desktop-only.
+ *
+ * Each entry is a collapsed row (its name, the address, and the action that
+ * switches the window to it) that expands into the fields. Saving folds it
  * back: the fields are a form, and a form that stays open after it is
  * submitted reads as "nothing happened". A server just added opens expanded
  * — it has no name to show yet, so a collapsed row would be an empty one. */
-export function ConnectionList() {
+export function ConnectionsPanel() {
   const t = useT();
-  /** null = probing the shell bridge. */
-  const [desktop, setDesktop] = useState<boolean | null>(null);
-  const [state, setState] = useState<ShellState | null>(null);
-  // The stored registry lives in a shared store (the title bar's picker reads
-  // the same one). This panel edits a DRAFT of it: a row's fields are local
-  // until Save, and an added-but-never-saved row must not appear in the
-  // picker. Save writes the draft through the store, so both surfaces see
-  // the result at once.
-  const { entries: stored } = useConnections();
+  const connection = useConnectionSwitch();
+  const { entries: stored, loaded, error: loadError } = useConnections();
+  // A row's fields are local until Save; an added-but-never-saved row must
+  // not appear in the picker. Save writes the row through the bridge, so
+  // both surfaces see the result at once.
   const [draft, setDraft] = useState<readonly ConnectionEntry[] | null>(null);
   const servers = draft ?? stored;
-  /** Edit the draft (starting from the stored registry on the first edit). */
-  const setServers = (
-    update: (current: readonly ConnectionEntry[]) => readonly ConnectionEntry[],
-  ) => setDraft(update(draft ?? stored));
   /** Ids whose fields are open. Everything else shows its summary row. */
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    void (async () => {
-      const ok = await shellAvailable();
-      setDesktop(ok);
-      if (ok) {
-        shellState
-          .read()
-          .then(setState)
-          .catch(() => {});
-      }
-    })();
-  }, []);
+  const setServers = (
+    update: (current: readonly ConnectionEntry[]) => readonly ConnectionEntry[],
+  ) => setDraft(update(draft ?? stored));
 
-  /** Run an action; errors land in the top-level error line. */
   const run = async (fn: () => Promise<void>): Promise<void> => {
     setError(null);
     setBusy(true);
@@ -79,7 +60,6 @@ export function ConnectionList() {
     }
   };
 
-  /** Open or close one entry's fields. */
   const setExpandedId = (id: string, open: boolean) =>
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -90,37 +70,23 @@ export function ConnectionList() {
 
   const connectLocal = () =>
     run(async () => {
-      await shellCall("connect-local");
-      // success navigates the whole app to the local server
+      await connection.connect("local");
     });
 
   const connect = (server: ConnectionEntry) =>
     run(async () => {
-      const url = server.url.trim();
-      if (!isSupportedUrl(url)) {
+      if (!isSupportedUrl(server.url.trim())) {
         throw new Error(t("settings.connection.badUrl"));
       }
-      if (desktop) {
-        // The shell switches the whole WebView, remembering the entry's
-        // name: a remote page's registry is that server's own, so its
-        // title bar cannot look this name up again.
-        await shellCall("connect-remote", {
-          url,
-          token: server.token,
-          name: connectionLabel(server),
-        });
-      } else {
-        // Browser: navigating away IS the switch.
-        location.href = pageUrl(url, server.token);
-      }
+      await connection.connect(server);
     });
 
   const save = (server: ConnectionEntry) =>
     run(async () => {
-      const next = servers.some((s) => s.id === server.id)
-        ? servers.map((s) => (s.id === server.id ? server : s))
-        : [...servers, server];
-      await putConnections(next);
+      if (!isSupportedUrl(server.url.trim())) {
+        throw new Error(t("settings.connection.badUrl"));
+      }
+      await saveConnection(server);
       // Saved: the store now holds this list, so the panel edits it again
       // instead of a draft of it, and the fields fold back to the row they
       // describe.
@@ -131,8 +97,7 @@ export function ConnectionList() {
   const remove = (id: string) =>
     run(async () => {
       if (!confirmAction(t("settings.connection.deleteConfirm"))) return;
-      const next = servers.filter((s) => s.id !== id);
-      await putConnections(next);
+      await deleteConnection(id);
       setDraft(null);
       setExpandedId(id, false);
     });
@@ -149,139 +114,95 @@ export function ConnectionList() {
     setExpandedId(id, true);
   };
 
-  /** Browser-mode reachability probe: no-cors resolves when the server
-   * answers at all (token auth would answer 401), rejects on network
-   * failure. The shell bridge's test does the full token check. */
-  const probe = async (url: string) => {
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 5000);
-      await fetch(`${url.replace(/\/+$/, "")}/api/health`, {
-        mode: "no-cors",
-        signal: controller.signal,
-      });
-      clearTimeout(timer);
-      return {
-        ok: true,
-        text: t("settings.connection.testSuccess"),
-      };
-    } catch {
-      return {
-        ok: false,
-        text: t("settings.connection.unreachable", { url }),
-      };
-    }
-  };
-
-  /** Full token check through the shell bridge (desktop only). */
-  const bridgeTest = async (url: string, token: string) => {
+  /** Full token check through the shell bridge. The token is what the
+   * health probe needs; a no-cors probe would only prove the port answers. */
+  const probe = async (url: string, token: string) => {
     try {
       await shellCall("test", { url, token });
       return { ok: true, text: t("settings.connection.testOk") };
     } catch (e) {
-      return {
-        ok: false,
-        text: errorMessage(e),
-      };
+      return { ok: false, text: errorMessage(e) };
     }
   };
 
+  if (!loaded) {
+    return <p className="settings-note">{t("common.loading")}</p>;
+  }
+
   return (
-    <>
-      {desktop === null && (
-        <p className="settings-note">{t("common.loading")}</p>
+    <div className="stack-8">
+      <p className="settings-note">{t("settings.connection.deviceNote")}</p>
+      <p className="settings-note">
+        {t("settings.connection.currentDisplay")}{" "}
+        {connection.state?.mode === "local"
+          ? t("settings.connection.localServer")
+          : connection.currentLabel()}
+      </p>
+
+      {(error ?? loadError) !== null && (
+        <p className="error-text">{error ?? loadError}</p>
       )}
-      {desktop !== null && (
-        <div className="stack-8">
+
+      <div className="setting-card">
+        <div style={{ flex: 1 }}>
+          <span style={{ fontWeight: 600 }}>
+            {t("settings.connection.localServer")}
+            {connection.state?.mode === "local" && (
+              <span className="connection-active">
+                {t("settings.connection.activeTag")}
+              </span>
+            )}
+          </span>
           <p className="settings-note">
-            {desktop
-              ? state?.mode === "remote"
-                ? `${t("settings.connection.currentDisplay")} ${serverLabel(
-                    state.name,
-                    state.url,
-                  )}`
-                : `${t("settings.connection.currentDisplay")} ${t(
-                    "settings.connection.localServer",
-                  )}`
-              : `${t("settings.connection.currentDisplay")} ${t(
-                  "settings.connection.thisServer",
-                  {
-                    origin: location.origin,
-                  },
-                )}`}
+            {t("settings.connection.localServerDesc")}
           </p>
-
-          {error && <p className="error-text">{error}</p>}
-
-          {desktop && (
-            <div className="setting-card">
-              <div style={{ flex: 1 }}>
-                <span style={{ fontWeight: 600 }}>
-                  {t("settings.connection.localServer")}
-                  {state?.mode === "local" && (
-                    <span className="connection-active">
-                      {t("settings.connection.activeTag")}
-                    </span>
-                  )}
-                </span>
-                <p className="settings-note">
-                  {t("settings.connection.localServerDesc")}
-                </p>
-              </div>
-              <button
-                type="button"
-                className="btn primary"
-                disabled={busy || state?.mode === "local"}
-                onClick={connectLocal}
-              >
-                {t("settings.connection.view")}
-              </button>
-            </div>
-          )}
-
-          {servers.map((server) => (
-            <ServerCard
-              key={server.id}
-              server={server}
-              busy={busy}
-              expanded={expanded.has(server.id)}
-              onToggle={() =>
-                setExpandedId(server.id, !expanded.has(server.id))
-              }
-              onProbe={
-                desktop
-                  ? (url, token) => bridgeTest(url, token)
-                  : (url) => probe(url)
-              }
-              onChange={(patch) => update(server.id, patch)}
-              onConnect={() => connect(server)}
-              onSave={() => save(server)}
-              onDelete={() => remove(server.id)}
-            />
-          ))}
-
-          {desktop && (
-            <p className="settings-note">
-              {t("settings.connection.persistedNote")}
-            </p>
-          )}
-
-          <p className="settings-note">{t("settings.connection.urlHint")}</p>
-
-          <div>
-            <button type="button" className="btn" disabled={busy} onClick={add}>
-              <IconPlus size={14} /> {t("common.addServer")}
-            </button>
-          </div>
         </div>
-      )}
-    </>
+        <button
+          type="button"
+          className="btn primary"
+          disabled={
+            busy ||
+            connection.busy !== null ||
+            connection.state?.mode === "local"
+          }
+          onClick={connectLocal}
+        >
+          {t("settings.connection.view")}
+        </button>
+      </div>
+
+      {servers.map((server) => (
+        <ServerCard
+          key={server.id}
+          server={server}
+          busy={busy || connection.busy !== null}
+          current={connection.currentId === server.id}
+          expanded={expanded.has(server.id)}
+          onToggle={() => setExpandedId(server.id, !expanded.has(server.id))}
+          onProbe={probe}
+          onChange={(patch) => update(server.id, patch)}
+          onConnect={() => connect(server)}
+          onSave={() => save(server)}
+          onDelete={() => remove(server.id)}
+        />
+      ))}
+
+      <p className="settings-note">{t("settings.connection.persistedNote")}</p>
+      <p className="settings-note">{t("settings.connection.urlHint")}</p>
+
+      <div>
+        <button type="button" className="btn" disabled={busy} onClick={add}>
+          <IconPlus size={14} /> {t("common.addServer")}
+        </button>
+      </div>
+    </div>
   );
 }
 
 function ServerCard({
   server,
   busy,
+  current,
   expanded,
   onToggle,
   onProbe,
@@ -292,6 +213,7 @@ function ServerCard({
 }: {
   server: ConnectionEntry;
   busy: boolean;
+  current: boolean;
   expanded: boolean;
   onToggle: () => void;
   onProbe: (
@@ -320,10 +242,7 @@ function ServerCard({
     try {
       setResult(await onProbe(url, server.token));
     } catch (e) {
-      setResult({
-        ok: false,
-        text: errorMessage(e),
-      });
+      setResult({ ok: false, text: errorMessage(e) });
     } finally {
       setTesting(false);
     }
@@ -350,6 +269,11 @@ function ServerCard({
         >
           <span style={{ flex: 1, minWidth: 0 }}>
             <span style={{ fontWeight: 600 }}>{title}</span>
+            {current && (
+              <span className="connection-active">
+                {t("settings.connection.activeTag")}
+              </span>
+            )}
             {server.url.trim() !== "" && server.name.trim() !== "" && (
               <span
                 className="settings-note"
@@ -372,7 +296,7 @@ function ServerCard({
         <button
           type="button"
           className="btn primary setting-card-action"
-          disabled={busy || testing}
+          disabled={busy || testing || current}
           onClick={onConnect}
         >
           {t("settings.connection.view")}
@@ -433,7 +357,7 @@ function ServerCard({
             <button
               type="button"
               className="btn danger"
-              disabled={busy || testing}
+              disabled={busy || testing || current}
               onClick={onDelete}
               title={t("common.delete")}
               aria-label={t("common.delete")}

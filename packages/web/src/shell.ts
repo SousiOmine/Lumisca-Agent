@@ -19,11 +19,11 @@ import { request } from "./api-client.ts";
 export interface ShellState {
   mode: "local" | "remote";
   url: string | null;
-  /** Name of the registry entry the window was switched to (the shell
-   * remembered it beside the URL), or null when the switch was not made from
-   * the registry — a server reached from the startup screen has no name to
-   * show, and the picker falls back to the URL's host. */
-  name: string | null;
+  /** The connection row the window is showing (`null`: the local server).
+   * The row lives in the shell's own settings, and the page looks it up in
+   * the same list the settings screen edits, so the title bar follows a
+   * rename without the shell keeping a second copy of the name. */
+  connectionId: string | null;
   /** Whether the main window is maximized (custom title bar icon). */
   maximized: boolean;
 }
@@ -55,25 +55,31 @@ declare global {
     | undefined;
 }
 
-/** Bridge base URL, or undefined outside the desktop shell. */
-const BRIDGE = globalThis.__LUMISCA_BRIDGE__;
-
 /** The OS hosting the desktop window, or undefined in a plain browser. */
-export const shellPlatform = globalThis.__LUMISCA_PLATFORM__;
+export function shellPlatform(): ShellPlatform | undefined {
+  return globalThis.__LUMISCA_PLATFORM__;
+}
 
-/** Auth token of the currently connected server. The shell bridge only
- * answers requests carrying it as `key`, so only the page served by that
- * server can drive the bridge. */
-const key = globalThis.__LUMISCA_TOKEN__;
+/** Where the shell's bridge is, read at use time. The globals are set by the
+ * shell before the page's bundle runs, but reading them here keeps a test
+ * that installs them after another test's import from depending on file
+ * order. */
+function bridgeOrigin(): string | undefined {
+  return globalThis.__LUMISCA_BRIDGE__;
+}
 
 /** Tauri's IPC `invoke`, or undefined in a plain browser. */
-const invoke = globalThis.__TAURI_INTERNALS__?.invoke;
+function ipcInvoke():
+  | (<T>(command: string, args?: Record<string, unknown>) => Promise<T>)
+  | undefined {
+  return globalThis.__TAURI_INTERNALS__?.invoke;
+}
 
 /** Whether this page runs in the desktop shell's window (the shell injected
  * a bridge origin or Tauri's IPC). False in a plain browser and in the
  * browser lab; the value is fixed at page load. */
 export function inDesktopShell(): boolean {
-  return BRIDGE !== undefined || invoke !== undefined;
+  return bridgeOrigin() !== undefined || ipcInvoke() !== undefined;
 }
 
 /** Run one action over Tauri's IPC (`bridge::shell_action`). This is the
@@ -83,6 +89,8 @@ async function invokeShell<T>(
   action: string,
   params: Record<string, string>,
 ): Promise<T> {
+  const key = globalThis.__LUMISCA_TOKEN__;
+  const invoke = ipcInvoke();
   const args = key === undefined ? params : { ...params, key };
   try {
     return await invoke!<T>("shell_action", { action, params: args });
@@ -103,7 +111,9 @@ export async function shellCall<T>(
   action: string,
   params: Record<string, string> = {},
 ): Promise<T> {
-  if (BRIDGE === undefined) {
+  const bridge = bridgeOrigin();
+  const invoke = ipcInvoke();
+  if (bridge === undefined) {
     // Desktop shell without a bridge origin (unexpected, but IPC still
     // knows the way); a plain browser has neither, so callers (the title
     // bar, the update controls) read the rejection as "desktop-only".
@@ -111,10 +121,11 @@ export async function shellCall<T>(
     throw new Error("the desktop shell is not available");
   }
   const query = new URLSearchParams(params);
+  const key = globalThis.__LUMISCA_TOKEN__;
   if (key) query.set("key", key);
   let res: Response;
   try {
-    res = await fetch(`${BRIDGE}/${action}?${query}`);
+    res = await fetch(`${bridge}/${action}?${query}`);
   } catch (error) {
     // WebKit refuses an HTTPS page's fetch to the loopback bridge as mixed
     // content, even though 127.0.0.1 is loopback. A remote server is
@@ -138,7 +149,7 @@ export async function shellCall<T>(
 /** Whether the desktop shell's bridge is reachable (false in browsers).
  * Bounded by a timeout so a slow answer does not stall the UI. */
 export function shellAvailable(): Promise<boolean> {
-  if (BRIDGE === undefined && invoke === undefined) {
+  if (bridgeOrigin() === undefined && ipcInvoke() === undefined) {
     return Promise.resolve(false);
   }
   return withTimeout(
@@ -155,7 +166,7 @@ export function shellAvailable(): Promise<boolean> {
  * AND display the local server (only then are picked paths on the machine
  * owning the workspaces; against a remote server they would be wrong). */
 export function nativeFolderPickerAvailable(): Promise<boolean> {
-  if (BRIDGE === undefined && invoke === undefined) {
+  if (bridgeOrigin() === undefined && ipcInvoke() === undefined) {
     return Promise.resolve(false);
   }
   return withTimeout(

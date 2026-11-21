@@ -106,7 +106,7 @@ pub(crate) struct LocalServerStatus {
 /// across polls.
 pub(crate) fn local_server_status(app: &AppHandle) -> LocalServerStatus {
     let state = app.state::<AppState>();
-    let mode = if state.last_remote.lock_recover().is_some() {
+    let mode = if state.displayed.lock_recover().is_some() {
         "remote"
     } else {
         "local"
@@ -729,7 +729,7 @@ pub(crate) fn start_local_server_async(app: &AppHandle) {
                 // starting wins: don't yank the window back to local.
                 let remote = inside
                     .state::<AppState>()
-                    .last_remote
+                    .displayed
                     .lock_recover()
                     .is_some();
                 if !remote {

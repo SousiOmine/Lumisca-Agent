@@ -131,14 +131,79 @@ fn current_epoch(app: &AppHandle) -> u64 {
     epoch
 }
 
+/// The entries the window can display, in the order the settings page wrote
+/// them.
+pub(crate) fn list_connections(app: &AppHandle) -> Vec<SavedConnection> {
+    app.state::<AppState>().connections.lock_recover().clone()
+}
+
+/// Add a row, or replace the row with the same id. The URL is validated and
+/// normalized to its origin before it is stored, so a pasted page URL does
+/// not keep its token-bearing query.
+pub(crate) fn save_connection(app: &AppHandle, conn: SavedConnection) -> Result<(), String> {
+    let target = parse_remote_url(&conn.url)?;
+    let saved = normalized(&conn, &target);
+    settings::save_connection(app, &saved)?;
+    let state = app.state::<AppState>();
+    let mut connections = state.connections.lock_recover();
+    match connections.iter_mut().find(|entry| entry.id == saved.id) {
+        Some(existing) => *existing = saved,
+        None => connections.push(saved),
+    }
+    Ok(())
+}
+
+/// Remove a row. The displayed server cannot be removed: the window would
+/// keep showing a server its own list no longer names, and the next launch
+/// would silently start locally instead.
+pub(crate) fn delete_connection(app: &AppHandle, id: &str) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    if state
+        .displayed
+        .lock_recover()
+        .as_ref()
+        .is_some_and(|conn| conn.id == id)
+    {
+        return Err("表示中のサーバーは削除できません".to_string());
+    }
+    settings::delete_connection(app, id)?;
+    state
+        .connections
+        .lock_recover()
+        .retain(|conn| conn.id != id);
+    let mut remembered = state.remembered.lock_recover();
+    if remembered.as_ref().is_some_and(|conn| conn.id == id) {
+        *remembered = None;
+    }
+    Ok(())
+}
+
+/// Switch the window to one row of the list. The row is looked up here
+/// instead of being passed in by the page: the page may be served by a
+/// remote server and must not name an arbitrary address to connect to.
+pub(crate) fn connect_remote(app: &AppHandle, id: &str) -> Result<String, String> {
+    let conn = {
+        let state = app.state::<AppState>();
+        let found = state
+            .connections
+            .lock_recover()
+            .iter()
+            .find(|conn| conn.id == id)
+            .cloned();
+        found
+    }
+    .ok_or_else(|| "接続先が見つかりません".to_string())?;
+    bump_epoch(app);
+    connect_entry(app, &conn)
+}
+
 /// Probe `conn` and, when it answers, make it the displayed server and
 /// remember it for the next launch.
 ///
 /// The write to `settings.json` comes before the navigation: when it
 /// fails, the window stays where it is and the caller reports why, instead
 /// of switching to a server the next launch will not return to.
-pub(crate) fn connect_remote(app: &AppHandle, conn: &SavedConnection) -> Result<String, String> {
-    bump_epoch(app);
+fn connect_entry(app: &AppHandle, conn: &SavedConnection) -> Result<String, String> {
     let target = parse_remote_url(&conn.url)?;
     if let Err(failure) = health_check(
         target.scheme,
@@ -149,21 +214,21 @@ pub(crate) fn connect_remote(app: &AppHandle, conn: &SavedConnection) -> Result<
     ) {
         return Err(connect_failure(&conn.url, failure));
     }
-    // The base URL is what the probe and the window use; the stored token
-    // may carry surrounding whitespace from the input field, and an empty
-    // name is no name (the title bar falls back to the URL's host).
-    let saved = SavedConnection {
-        url: target.base,
-        token: conn.token.trim().to_string(),
-        name: conn
-            .name
-            .as_deref()
-            .map(str::trim)
-            .filter(|name| !name.is_empty())
-            .map(str::to_string),
-    };
+    let saved = normalized(conn, &target);
     remember(app, Some(saved.clone()))?;
     display_remote(app, &saved)
+}
+
+/// The row as it is stored: the origin, the token without the input field's
+/// surrounding whitespace, and the name without its surrounding whitespace.
+/// An empty name stays empty; the page falls back to the host.
+fn normalized(conn: &SavedConnection, target: &RemoteTarget) -> SavedConnection {
+    SavedConnection {
+        id: conn.id.clone(),
+        url: target.base.clone(),
+        token: conn.token.trim().to_string(),
+        name: conn.name.trim().to_string(),
+    }
 }
 
 /// Retry the server the shell remembered (the splash's 再試行 button).
@@ -171,7 +236,10 @@ pub(crate) fn connect_saved(app: &AppHandle) -> Result<String, String> {
     let state = app.state::<AppState>();
     let saved = state.remembered.lock_recover().clone();
     match saved {
-        Some(conn) => connect_remote(app, &conn),
+        Some(conn) => {
+            bump_epoch(app);
+            connect_entry(app, &conn)
+        }
         None => Err("保持している接続先がありません".to_string()),
     }
 }
@@ -193,7 +261,7 @@ pub(crate) fn test_remote(url: &str, token: &str) -> Result<(), String> {
 /// `settings.json`'s connection field, so the in-memory copy the splash
 /// reads and the file cannot disagree.
 fn remember(app: &AppHandle, conn: Option<SavedConnection>) -> Result<(), String> {
-    settings::set_remembered(app, conn.as_ref())?;
+    settings::set_current(app, conn.as_ref().map(|conn| conn.id.as_str()))?;
     let state = app.state::<AppState>();
     *state.remembered.lock_recover() = conn;
     Ok(())
@@ -205,7 +273,7 @@ fn display_remote(app: &AppHandle, conn: &SavedConnection) -> Result<String, Str
     // ends every loan instead of carrying a folder the user never lent there.
     crate::share::revoke_all(app);
     let page = page_url(&conn.url, &conn.token);
-    *app.state::<AppState>().last_remote.lock_recover() = Some(conn.clone());
+    *app.state::<AppState>().displayed.lock_recover() = Some(conn.clone());
     navigate_main(app, &page)?;
     Ok(page)
 }
@@ -251,7 +319,7 @@ pub(crate) fn display_local(app: &AppHandle, url: &str) -> Result<String, String
     // window was showing.
     crate::share::revoke_all(app);
     remember(app, None)?;
-    *app.state::<AppState>().last_remote.lock_recover() = None;
+    *app.state::<AppState>().displayed.lock_recover() = None;
     navigate_main(app, url)?;
     // A restore that was abandoned in favour of the local server leaves
     // "connecting" behind otherwise, and the splash would keep waiting

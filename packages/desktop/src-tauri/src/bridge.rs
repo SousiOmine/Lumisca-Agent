@@ -4,8 +4,10 @@
 //! call Tauri commands. It drives the shell through the loopback listener in
 //! [`crate::bridge_server`], which forwards to [`handle_shell_action`]: one
 //! action per request, named in the path (`/shell/<action>`), parameters in
-//! the query string. The bridge only manages the local server and UI
-//! switching; the peer registry lives in the server's own database.
+//! the query string. The bridge manages the window: its server list, which
+//! server it displays, the local child process, updates and folder loans.
+//! The servers this window federates with are the displayed server's own
+//! (see `/api/connections`) and are not reachable from here.
 //!
 //! Every request must carry `key` = the auth token of the CURRENTLY
 //! DISPLAYED server — a value only the page served by that server knows, so
@@ -33,12 +35,11 @@ struct ConnectionState {
     mode: String,
     /// Page URL of the current display, if known.
     url: Option<String>,
-    /// What to call the displayed server (the name of the registry entry it
-    /// was switched with), or null when there is none to show: the local
-    /// server, or a remote reached without a name of its own. The page
-    /// cannot answer this — a remote page's registry is that server's own,
-    /// which usually has no entry for itself.
-    name: Option<String>,
+    /// The id of the connection row the window is showing, or null for the
+    /// local server. The page looks the row up in the same list it edits,
+    /// so the displayed name follows a rename without the shell keeping a
+    /// second copy of it.
+    connection_id: Option<String>,
     /// What the shell is doing with the connection: "starting" (local
     /// server booting), "connecting" (probing the remembered remote
     /// server), "ready", "error" (local start failed),
@@ -66,7 +67,7 @@ struct ConnectionState {
 fn current_connection_token(app: &AppHandle) -> Option<String> {
     let state = app.state::<AppState>();
     let remote = state
-        .last_remote
+        .displayed
         .lock_recover()
         .as_ref()
         .map(|conn| conn.token.clone());
@@ -194,20 +195,15 @@ pub(crate) fn handle_shell_action(
         "state" => {
             let state = app.state::<AppState>();
             let startup = state.startup.lock_recover();
-            let mode = if state.last_remote.lock_recover().is_some() {
-                "remote"
-            } else {
-                "local"
-            };
-            let remote = state.last_remote.lock_recover().clone();
-            let url = if mode == "remote" {
-                remote.as_ref().map(|conn| page_url(&conn.url, &conn.token))
-            } else {
-                state
+            let remote = state.displayed.lock_recover().clone();
+            let mode = if remote.is_some() { "remote" } else { "local" };
+            let url = match &remote {
+                Some(conn) => Some(page_url(&conn.url, &conn.token)),
+                None => state
                     .local
                     .lock_recover()
                     .as_ref()
-                    .map(|l| crate::server::Endpoint::loopback(l.port, &l.token).page_url())
+                    .map(|l| crate::server::Endpoint::loopback(l.port, &l.token).page_url()),
             };
             let maximized = app
                 .get_webview_window("main")
@@ -217,11 +213,11 @@ pub(crate) fn handle_shell_action(
             // is read from memory rather than from the settings file on
             // every poll.
             let saved = state.remembered.lock_recover().is_some();
-            let name = remote.as_ref().and_then(|conn| conn.name.clone());
+            let connection_id = remote.as_ref().map(|conn| conn.id.clone());
             let state = ConnectionState {
                 mode: mode.to_string(),
                 url,
-                name,
+                connection_id,
                 status: startup.status.clone(),
                 error: startup.error.clone(),
                 saved,
@@ -229,22 +225,46 @@ pub(crate) fn handle_shell_action(
             };
             bridge_json(StatusCode::OK, serde_json::to_value(state).unwrap())
         }
+        // --- the servers this window can display -------------------------
+        //
+        // The list belongs to the shell, not to the displayed server. A page
+        // served by a remote server must not know, or change, which other
+        // servers this computer connects to.
+        "connections/list" => bridge_json(
+            StatusCode::OK,
+            serde_json::json!({ "connections": connection::list_connections(app) }),
+        ),
+        "connections/save" => {
+            let (Some(id), Some(url)) = (get("id"), get("url")) else {
+                return bridge_error(StatusCode::BAD_REQUEST, "id and url required");
+            };
+            let conn = SavedConnection {
+                id,
+                url,
+                token: get("token").unwrap_or_default(),
+                name: get("name").unwrap_or_default(),
+            };
+            match connection::save_connection(app, conn) {
+                Ok(()) => bridge_json(StatusCode::OK, serde_json::json!({ "ok": true })),
+                Err(e) => bridge_error(StatusCode::BAD_REQUEST, &e),
+            }
+        }
+        "connections/delete" => {
+            let Some(id) = get("id") else {
+                return bridge_error(StatusCode::BAD_REQUEST, "id required");
+            };
+            match connection::delete_connection(app, &id) {
+                Ok(()) => bridge_json(StatusCode::OK, serde_json::json!({ "ok": true })),
+                Err(e) => bridge_error(StatusCode::BAD_REQUEST, &e),
+            }
+        }
         // Both switches remember the choice in `settings.json`, so the next
         // launch returns to the server the window was showing.
         "connect-remote" => {
-            let (url, token) = match (get("url"), get("token")) {
-                (Some(url), token) => (url, token.unwrap_or_default()),
-                _ => return bridge_error(StatusCode::BAD_REQUEST, "url required"),
+            let Some(id) = get("id") else {
+                return bridge_error(StatusCode::BAD_REQUEST, "id required");
             };
-            // `name` is the registry entry's label (its name, or the host of
-            // a nameless entry). It is kept with the connection so the title
-            // bar can name the server after the page is loaded.
-            let conn = SavedConnection {
-                url,
-                token,
-                name: get("name"),
-            };
-            match connection::connect_remote(app, &conn) {
+            match connection::connect_remote(app, &id) {
                 Ok(page) => bridge_json(
                     StatusCode::OK,
                     serde_json::json!({ "ok": true, "url": page }),

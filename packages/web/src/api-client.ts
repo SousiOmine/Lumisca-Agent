@@ -11,8 +11,15 @@ declare global {
 
 /** Optional per-instance token (embedded in the page by the server).
  * Attached to every request; browsers cannot set WebSocket headers, so the
- * WS URL carries it as a query parameter instead. */
-export const token = globalThis.__LUMISCA_TOKEN__;
+ * WS URL carries it as a query parameter instead.
+ *
+ * Read at use time rather than captured when this module loads. The token is
+ * a page-level global set before the app bundle runs, but a test that sets it
+ * after another test's import must still see it; capturing it made the
+ * module's behaviour depend on file order. */
+export function pageToken(): string | undefined {
+  return globalThis.__LUMISCA_TOKEN__;
+}
 
 /**
  * Why a request failed, as the UI has to say it.
@@ -97,6 +104,7 @@ export class TimeoutError extends ApiError {
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   headers.set("content-type", "application/json");
+  const token = pageToken();
   if (token) headers.set("x-lumisca-token", token);
   // A caller that brings its own signal keeps it: the timeout is combined
   // with it rather than replacing it (a screen that unmounts cancels too).

@@ -4,7 +4,7 @@
  * left the browser — a drop or a paste worked in code mode and silently did
  * nothing here.
  */
-import { test } from "bun:test";
+import { afterAll, test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { record } from "./api-test-utils.ts";
 
@@ -62,4 +62,8 @@ test("stella prompt: an image with no text is still a body", async () => {
 test("stella prompt: the token rides every request", async () => {
   const sent = await record(() => stellaApi.prompt("a1", "x"));
   assertEquals(sent.headers.get("x-lumisca-token"), "test-token");
+});
+
+afterAll(() => {
+  delete globalThis.__LUMISCA_TOKEN__;
 });

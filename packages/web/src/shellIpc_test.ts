@@ -5,7 +5,7 @@
  * when it loads, so this file sets the globals first and imports the module
  * dynamically (the same reason as shellState_test.ts).
  */
-import { test } from "bun:test";
+import { afterAll, test } from "bun:test";
 import { assertEquals } from "@std/assert";
 
 const globals = globalThis as unknown as Record<string, unknown>;
@@ -125,4 +125,10 @@ test("shellCall: without IPC the transport failure surfaces", async () => {
   } finally {
     globals.__TAURI_INTERNALS__ = withIpc;
   }
+});
+
+afterAll(() => {
+  delete (globalThis as unknown as Record<string, unknown>).__LUMISCA_BRIDGE__;
+  delete (globalThis as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
+  delete globalThis.__LUMISCA_TOKEN__;
 });

@@ -152,7 +152,7 @@ impl ShareLender {
 /// server exists (the splash page has no conversation to lend to).
 pub(crate) fn displayed_endpoint(app: &AppHandle) -> Option<(String, String)> {
     let state = app.state::<AppState>();
-    if let Some(remote) = state.last_remote.lock_recover().clone() {
+    if let Some(remote) = state.displayed.lock_recover().clone() {
         return Some((remote.url, remote.token));
     }
     let local = state.local.lock_recover();

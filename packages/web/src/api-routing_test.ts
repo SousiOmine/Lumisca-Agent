@@ -1,4 +1,4 @@
-import { test } from "bun:test";
+import { afterAll, test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import {
   assertRequest,
@@ -487,4 +487,8 @@ test("api-routing: a hidden page does not judge, and judges on return", async ()
     assertEquals(closes, 1);
     close();
   });
+});
+
+afterAll(() => {
+  delete globalThis.__LUMISCA_TOKEN__;
 });

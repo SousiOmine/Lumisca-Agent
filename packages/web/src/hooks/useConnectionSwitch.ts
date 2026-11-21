@@ -1,11 +1,6 @@
 import { errorMessage } from "@lumisca/core/shared";
 import { useCallback, useEffect, useState } from "preact/hooks";
-import {
-  connectionLabel,
-  displayedConnectionId,
-  serverLabel,
-  useConnections,
-} from "../connections.ts";
+import { displayedLabel, useConnections } from "../connections.ts";
 import { useT } from "../i18n.ts";
 import {
   inDesktopShell,
@@ -21,13 +16,14 @@ export interface ConnectionSwitch {
   desktop: boolean;
   /** The shell's answer, or null while it is being read (and in a browser). */
   state: ShellState | null;
-  /** The registry entries the picker offers. */
+  /** The rows the picker offers. Empty in a plain browser: the list belongs
+   * to the shell, and a page served by a remote server does not have one. */
   entries: ConnectionEntry[];
-  /** The entry being switched to ("" for the local server), or null. */
+  /** The row being switched to ("" for the local server), or null. */
   busy: string | null;
   error: string | null;
-  /** The displayed registry entry, "" for the local server, null for a
-   * server the page's registry does not contain. */
+  /** The displayed row's id, or null for the local server. The shell
+   * records it when it switches; there is no URL matching left to do. */
   currentId: string | null;
   /** What to call the displayed server. */
   currentLabel: () => string;
@@ -46,9 +42,9 @@ export interface ConnectionSwitch {
  * list navigated from the page and the title bar asked the shell, so one of
  * the two could show a name the other could not.
  *
- * The name is the shell's, not the registry's: a remote page's registry is
- * that server's own, which usually has no entry for itself. The shell
- * remembers the name it was switched with and reports it in `state`.
+ * The list and the current row are both the shell's. A remote page's own
+ * server is just the machine that served the page; it is not where the
+ * window keeps the list of other servers it may show.
  */
 export function useConnectionSwitch(): ConnectionSwitch {
   const t = useT();
@@ -74,7 +70,7 @@ export function useConnectionSwitch(): ConnectionSwitch {
     };
   }, [desktop]);
 
-  const currentId = displayedConnectionId(entries, state);
+  const currentId = state?.connectionId ?? null;
 
   const currentLabel = useCallback((): string => {
     // A browser has no bridge: the address bar is the answer, and its host is
@@ -82,9 +78,8 @@ export function useConnectionSwitch(): ConnectionSwitch {
     if (!desktop) return globalThis.location?.host ?? "";
     if (state === null) return t("common.loading");
     if (state.mode === "local") return t("chrome.connections.local");
-    const entry = entries.find((server) => server.id === currentId);
-    if (entry !== undefined) return connectionLabel(entry);
-    return serverLabel(state.name, state.url);
+    const label = displayedLabel(entries, currentId, state.url);
+    return label === "" ? t("common.loading") : label;
   }, [desktop, state, entries, currentId, t]);
 
   const connect = useCallback(
@@ -95,13 +90,9 @@ export function useConnectionSwitch(): ConnectionSwitch {
         if (target === "local") {
           await shellCall("connect-local");
         } else {
-          // The name travels with the switch because the page that loads next
-          // cannot look it up: a remote page's registry is that server's own.
-          await shellCall("connect-remote", {
-            url: target.url.trim(),
-            token: target.token,
-            name: connectionLabel(target),
-          });
+          // The shell looks the row up in its own list: a page served by a
+          // remote server must not name an arbitrary address here.
+          await shellCall("connect-remote", { id: target.id });
         }
         return true;
       } catch (failure) {

@@ -10,27 +10,28 @@ use tauri::AppHandle;
 
 use crate::LockRecover;
 
-/// A remote server this shell displays, by URL + token. Persisted so the
-/// next launch returns to it instead of the local server.
+/// A server this window can display, by URL + token. Persisted so the next
+/// launch can return to it instead of always starting the local server.
+///
+/// The list of these belongs to the window, not to whichever server the
+/// window happens to show: a page served by a remote server has no business
+/// knowing which other servers this computer may connect to.
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq, Debug)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SavedConnection {
+    /// Stable identity of the row. The displayed connection is recorded by
+    /// this id, so renaming a server or changing its address does not lose
+    /// which row the window is on.
+    pub(crate) id: String,
     /// The server's origin (`scheme://host[:port]`): the page is always
     /// served at the root, so a path or query from the pasted URL is not
     /// part of the connection.
     pub(crate) url: String,
     pub(crate) token: String,
-    /// What to call this server in the title bar: the name of the registry
-    /// entry it was chosen from, or its host when that entry has none.
-    ///
-    /// The shell keeps it because the page cannot: a remote page's
-    /// connection registry is that server's own, which usually has no entry
-    /// for itself, so the displayed server cannot be looked up in the list
-    /// the window shows. Absent for a connection made from the startup
-    /// screen before this field existed — the picker falls back to the URL's
-    /// host.
+    /// What to call this server in the title bar. Empty when the row has no
+    /// name yet; the page falls back to the URL's host.
     #[serde(default)]
-    pub(crate) name: Option<String>,
+    pub(crate) name: String,
 }
 
 /// Shell preferences.
@@ -38,12 +39,14 @@ pub(crate) struct SavedConnection {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DesktopSettings {
     pub(crate) auto_update: bool,
-    /// The server the window showed when the app last quit; `None` means
-    /// the local server. Absent from a file written before this choice was
-    /// remembered — a missing field must not discard the auto-update
-    /// choice stored beside it.
+    /// The servers this window can display. Owned by the shell because the
+    /// page that edits it may be served by any one of the remote servers in
+    /// it; a list stored on one of them would change with the display.
     #[serde(default)]
-    pub(crate) last_remote: Option<SavedConnection>,
+    pub(crate) connections: Vec<SavedConnection>,
+    /// The entry the window shows; `None` means the local server.
+    #[serde(default)]
+    pub(crate) current: Option<String>,
     /// Folders this shell's picker returned, as paths the user consented to
     /// lend. `share/grant` accepts only these (or a folder already lent):
     /// the page can name any path, and a remote page must not be able to
@@ -56,14 +59,15 @@ impl Default for DesktopSettings {
     fn default() -> Self {
         Self {
             auto_update: true,
-            last_remote: None,
+            connections: Vec::new(),
+            current: None,
             approved_share_folders: Vec::new(),
         }
     }
 }
 
 /// Serializes the read-modify-write updates: the auto-update toggle and the
-/// remembered connection are changed from different threads, and a plain
+/// connection list are changed from different threads, and a plain
 /// load → save would drop whichever change landed in between.
 static UPDATE_LOCK: Mutex<()> = Mutex::new(());
 
@@ -88,13 +92,35 @@ pub(crate) fn update(
     save_to(&path(app), &settings)
 }
 
-/// Set the server to restore on the next launch (`None`: the local one).
-pub(crate) fn set_remembered(
-    app: &AppHandle,
-    conn: Option<&SavedConnection>,
-) -> Result<(), String> {
+/// Add `conn` to the list, or replace the entry with the same id.
+pub(crate) fn save_connection(app: &AppHandle, conn: &SavedConnection) -> Result<(), String> {
     update(app, |settings| {
-        settings.last_remote = conn.cloned();
+        match settings
+            .connections
+            .iter_mut()
+            .find(|existing| existing.id == conn.id)
+        {
+            Some(existing) => *existing = conn.clone(),
+            None => settings.connections.push(conn.clone()),
+        }
+    })
+}
+
+/// Remove one entry. Deleting the entry the window currently shows is
+/// refused by the caller before this runs.
+pub(crate) fn delete_connection(app: &AppHandle, id: &str) -> Result<(), String> {
+    update(app, |settings| {
+        settings.connections.retain(|conn| conn.id != id);
+        if settings.current.as_deref() == Some(id) {
+            settings.current = None;
+        }
+    })
+}
+
+/// Record which entry the window shows (`None`: the local server).
+pub(crate) fn set_current(app: &AppHandle, id: Option<&str>) -> Result<(), String> {
+    update(app, |settings| {
+        settings.current = id.map(str::to_string);
     })
 }
 
@@ -136,18 +162,20 @@ mod tests {
         }
     }
 
-    const REMOTE: &str = r#"{"url":"https://host.tailnet.ts.net","token":"abc"}"#;
+    const REMOTE: &str = r#"{"id":"home","url":"https://host.tailnet.ts.net","token":"abc"}"#;
 
     #[test]
     fn saved_connection_round_trips() {
         let file = TempFile::new("round-trip");
         let settings = DesktopSettings {
             auto_update: false,
-            last_remote: Some(SavedConnection {
+            connections: vec![SavedConnection {
+                id: "home".into(),
                 url: "https://host.tailnet.ts.net".into(),
                 token: "abc".into(),
-                name: Some("自宅".into()),
-            }),
+                name: "自宅".into(),
+            }],
+            current: Some("home".into()),
             approved_share_folders: vec!["/home/user/proj".into()],
         };
         save_to(&file.0, &settings).unwrap();
@@ -155,47 +183,12 @@ mod tests {
     }
 
     #[test]
-    fn a_file_without_a_remembered_connection_keeps_the_auto_update_choice() {
-        let file = TempFile::new("legacy");
-        // Written by a shell that did not remember the connection yet.
-        std::fs::write(&file.0, r#"{"autoUpdate":false}"#).unwrap();
-        assert_eq!(
-            load_from(&file.0),
-            DesktopSettings {
-                auto_update: false,
-                last_remote: None,
-                approved_share_folders: Vec::new(),
-            }
-        );
-    }
-
-    /// A file written before the name was remembered still loads: the
-    /// title bar falls back to the URL's host, and the token beside it must
-    /// not be lost.
-    #[test]
-    fn a_connection_without_a_name_keeps_the_rest() {
-        let file = TempFile::new("nameless");
-        std::fs::write(
-            &file.0,
-            format!(r#"{{"autoUpdate":true,"lastRemote":{REMOTE}}}"#),
-        )
-        .unwrap();
-        assert_eq!(
-            load_from(&file.0).last_remote,
-            Some(SavedConnection {
-                url: "https://host.tailnet.ts.net".into(),
-                token: "abc".into(),
-                name: None,
-            })
-        );
-    }
-
-    #[test]
     fn a_missing_file_is_the_defaults() {
         let file = TempFile::new("missing");
         assert_eq!(load_from(&file.0), DesktopSettings::default());
         assert!(DesktopSettings::default().auto_update);
-        assert!(DesktopSettings::default().last_remote.is_none());
+        assert!(DesktopSettings::default().connections.is_empty());
+        assert!(DesktopSettings::default().current.is_none());
     }
 
     /// The default `derive` spelling is what the shell itself writes, so
@@ -205,16 +198,12 @@ mod tests {
         let file = TempFile::new("spelling");
         std::fs::write(
             &file.0,
-            format!(r#"{{"autoUpdate":true,"lastRemote":{REMOTE}}}"#),
+            format!(r#"{{"autoUpdate":true,"connections":[{REMOTE}],"current":"home"}}"#),
         )
         .unwrap();
-        assert_eq!(
-            load_from(&file.0).last_remote,
-            Some(SavedConnection {
-                url: "https://host.tailnet.ts.net".into(),
-                token: "abc".into(),
-                name: None,
-            })
-        );
+        let settings = load_from(&file.0);
+        assert_eq!(settings.current.as_deref(), Some("home"));
+        assert_eq!(settings.connections.len(), 1);
+        assert_eq!(settings.connections[0].id, "home");
     }
 }

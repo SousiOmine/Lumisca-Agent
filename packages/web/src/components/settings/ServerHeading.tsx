@@ -1,4 +1,4 @@
-import { serverLabel } from "../../connections.ts";
+import { hostLabel } from "../../connections.ts";
 import type { ConnectionSwitch } from "../../hooks/useConnectionSwitch.ts";
 import { useT } from "../../i18n.ts";
 
@@ -20,10 +20,10 @@ export function ServerHeading({
 }) {
   const t = useT();
   const label = connection.currentLabel();
-  // The page URL carries the auth token in its query; serverLabel keeps the
+  // The page URL carries the auth token in its query; hostLabel keeps the
   // host and drops the rest, which is the part a reader recognises.
   const address = connection.state?.url
-    ? serverLabel(null, connection.state.url)
+    ? hostLabel(connection.state.url)
     : null;
 
   return (

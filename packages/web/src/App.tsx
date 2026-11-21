@@ -161,7 +161,7 @@ export function App({ initialData }: AppProps): ReactElement {
   // has to start below it (see `.app.macos` in styles/chrome.css). The
   // platform is the shell's answer, injected with the bridge origin: a
   // remote server is displayed in the same window.
-  const macos = shellPlatform === "macos";
+  const macos = shellPlatform() === "macos";
   const appClass = macos ? "app macos" : "app";
   // Whether this page runs inside the desktop shell's window. The title bar
   // is drawn from this, not from an answer of the bridge: a window whose
@@ -471,7 +471,7 @@ export function App({ initialData }: AppProps): ReactElement {
     [openSettingsAt],
   );
   const openServers = useCallback(
-    () => openSettingsAt("peers"),
+    () => openSettingsAt("connections"),
     [openSettingsAt],
   );
   /** Close the dialog. Modal calls this once, after its exit has run, so the

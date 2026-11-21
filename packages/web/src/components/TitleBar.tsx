@@ -101,7 +101,7 @@ export function TitleBar({
   // build's, not an answer of the bridge — see `inDesktopShell`.
   if (!inDesktopShell()) return <>{children}</>;
 
-  const nativeControls = shellPlatform === "macos";
+  const nativeControls = shellPlatform() === "macos";
   // Until the bridge answers, the window is drawn restored; the answer only
   // swaps the glyph.
   const maximized = state?.maximized === true;

@@ -2,21 +2,17 @@ import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import {
   connectionLabel,
-  type DisplayedServer,
-  displayedConnectionId,
-  originOf,
-  pageUrl,
-  serverLabel,
+  displayedLabel,
+  hostLabel,
+  isSupportedUrl,
   suggestConnectionName,
-  upsertConnection,
   withUrl,
 } from "./connections.ts";
 
 /**
- * The connection registry's reading rules, shared by the settings list and
- * the title bar's picker. The desktop bridge is not available under Bun, so
- * these cover the pure part: which entry is the one being shown, and what to
- * call it.
+ * The connection list's reading rules, shared by the settings page and the
+ * title bar's picker. The list itself is the shell's; these cover the pure
+ * part: what to call a row and which row the window is showing.
  */
 
 const entry = (id: string, name: string, url: string) => ({
@@ -26,65 +22,13 @@ const entry = (id: string, name: string, url: string) => ({
   token: "t",
 });
 
-test("pageUrl keeps the token in the query and drops trailing slashes", () => {
-  assertEquals(
-    pageUrl("https://host.tailnet.ts.net/", "abc"),
-    "https://host.tailnet.ts.net/?token=abc",
-  );
-  // A token with characters the query would otherwise split on.
-  assertEquals(
-    pageUrl("http://100.64.0.5:8000", "a b&c"),
-    "http://100.64.0.5:8000/?token=a%20b%26c",
-  );
-});
-
-test("originOf reduces the spellings of one server to one string", () => {
-  assertEquals(
-    originOf("https://host.tailnet.ts.net/"),
-    "https://host.tailnet.ts.net",
-  );
-  assertEquals(
-    originOf("https://host.tailnet.ts.net/?token=abc"),
-    "https://host.tailnet.ts.net",
-  );
-  // Free text (no scheme) keeps its own spelling rather than throwing.
-  assertEquals(originOf("homeserver:8000"), "homeserver:8000");
-});
-
-test("displayedConnectionId names the local server with an empty id", () => {
-  const connections = [entry("a", "Home", "https://home.example")];
-  const local: DisplayedServer = { mode: "local", url: null };
-  assertEquals(displayedConnectionId(connections, local), "");
-});
-
-test("displayedConnectionId matches a remote by origin, not by name", () => {
-  const connections = [
-    entry("a", "Home", "https://home.example"),
-    entry("b", "Tailnet", "http://100.64.0.5:8000"),
-  ];
-  // The page URL carries a token and a slash the stored origin does not.
-  const remote: DisplayedServer = {
-    mode: "remote",
-    url: pageUrl("https://home.example", "tok"),
-  };
-  assertEquals(displayedConnectionId(connections, remote), "a");
-});
-
-test("displayedConnectionId: a server the registry does not know is null", () => {
-  const connections = [entry("a", "Home", "https://home.example")];
-  const stranger: DisplayedServer = {
-    mode: "remote",
-    url: "https://elsewhere.example/",
-  };
-  // Not "the first row": the picker shows the server's own origin instead of
-  // claiming one of the entries is it.
-  assertEquals(displayedConnectionId(connections, stranger), null);
-  assertEquals(
-    displayedConnectionId(connections, { mode: "remote", url: null }),
-    null,
-  );
-  // No shell state yet (a plain browser, or the first read): nothing shown.
-  assertEquals(displayedConnectionId(connections, null), null);
+test("isSupportedUrl accepts only the two transports the shell speaks", () => {
+  assertEquals(isSupportedUrl("https://host.tailnet.ts.net"), true);
+  assertEquals(isSupportedUrl("http://100.64.0.5:8000"), true);
+  assertEquals(isSupportedUrl("  https://host  "), true);
+  assertEquals(isSupportedUrl("ftp://host"), false);
+  assertEquals(isSupportedUrl("host:8000"), false);
+  assertEquals(isSupportedUrl(""), false);
 });
 
 test("connectionLabel prefers the name, then the host, then the id", () => {
@@ -105,18 +49,27 @@ test("connectionLabel prefers the name, then the host, then the id", () => {
   assertEquals(connectionLabel(entry("id", "", "  ")), "id");
 });
 
-test("serverLabel prefers the shell's name, then the URL's host", () => {
-  // The name the shell was switched with: the only place that knows it,
-  // because a remote page's registry is that server's own.
-  assertEquals(serverLabel("自宅", "https://home.example/?token=abc"), "自宅");
-  assertEquals(serverLabel("  自宅  ", null), "自宅");
-  // No recorded name (a server reached from the startup screen): never the
-  // page URL, which carries the auth token — its host identifies it.
+test("hostLabel keeps the host and drops the token-bearing query", () => {
+  assertEquals(hostLabel("https://home.example/?token=secret"), "home.example");
+  assertEquals(hostLabel("https://home.example:8443"), "home.example:8443");
+  assertEquals(hostLabel("https://[::1]:8443"), "[::1]:8443");
+  assertEquals(hostLabel(""), "");
+  assertEquals(hostLabel(null), "");
+});
+
+test("displayedLabel names the row the shell recorded, not a matching URL", () => {
+  const entries = [
+    entry("a", "Home", "https://home.example"),
+    entry("b", "Tailnet", "http://100.64.0.5:8000"),
+  ];
+  assertEquals(displayedLabel(entries, "b", null), "Tailnet");
+  // A row removed while it was displayed falls back to the address's host;
+  // the page URL itself carries the auth token, so it is never the label.
   assertEquals(
-    serverLabel(null, "https://home.example:8443/?token=secret"),
-    "home.example:8443",
+    displayedLabel(entries, "gone", "https://elsewhere.example/?token=x"),
+    "elsewhere.example",
   );
-  assertEquals(serverLabel(undefined, undefined), "");
+  assertEquals(displayedLabel(entries, null, null), "");
 });
 
 test("suggestConnectionName reads the host of a URL being typed", () => {
@@ -127,7 +80,7 @@ test("suggestConnectionName reads the host of a URL being typed", () => {
   );
   assertEquals(suggestConnectionName("https://[::1]:8443"), "[::1]:8443");
   // Nothing to name until the address is one this app can connect to: a
-  // half-typed hosts must not become the server's name.
+  // half-typed host must not become the server's name.
   assertEquals(suggestConnectionName(""), null);
   assertEquals(suggestConnectionName("home.example"), null);
   assertEquals(suggestConnectionName("https://"), null);
@@ -162,34 +115,4 @@ test("withUrl derives the name from the address, until one is typed", () => {
     withUrl(entry("id", "", "https://a.example"), "https://b.example").name,
     "b.example",
   );
-});
-
-test("upsertConnection replaces the row for the same server and keeps its id", () => {
-  const connections = [
-    entry("a", "Home", "https://home.example"),
-    entry("b", "Tailnet", "http://100.64.0.5:8000"),
-  ];
-  // The same server spelled with a trailing slash and a page token is the
-  // same row, not a second one. The first row's id survives: the title bar
-  // addresses the displayed entry by it.
-  const next = upsertConnection(connections, {
-    id: "new",
-    name: "自宅",
-    url: pageUrl("https://home.example/", "tok"),
-    token: "t2",
-  });
-  assertEquals(next.length, 2);
-  assertEquals(next[0], {
-    id: "a",
-    name: "自宅",
-    url: pageUrl("https://home.example/", "tok"),
-    token: "t2",
-  });
-  assertEquals(next[1], connections[1]);
-});
-
-test("upsertConnection appends a server the registry does not know", () => {
-  const connections = [entry("a", "Home", "https://home.example")];
-  const added = entry("b", "Tailnet", "http://100.64.0.5:8000");
-  assertEquals(upsertConnection(connections, added), [connections[0], added]);
 });

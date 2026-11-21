@@ -1,13 +1,7 @@
 import { errorMessage } from "@lumisca/core/shared";
 import { useState } from "preact/hooks";
 import { api } from "../../api.ts";
-import {
-  connectionLabel,
-  isSupportedUrl,
-  putConnections,
-  upsertConnection,
-  withUrl,
-} from "../../connections.ts";
+import { isSupportedUrl, saveConnection, withUrl } from "../../connections.ts";
 import { useT } from "../../i18n.ts";
 import { shellCall } from "../../shell.ts";
 import { Field } from "../Field.tsx";
@@ -58,8 +52,7 @@ export function ServerStep({ onUseLocal }: ServerStepProps) {
     try {
       await shellCall("test", { url: target, token });
       try {
-        const { connections } = await api.getConnections();
-        await putConnections(upsertConnection(connections, entry));
+        await saveConnection(entry);
       } catch (failure) {
         throw new Error(
           t("setup.server.saveFailed", { error: errorMessage(failure) }),
@@ -73,12 +66,9 @@ export function ServerStep({ onUseLocal }: ServerStepProps) {
         );
       }
       // The shell probes once more, remembers the server for the next
-      // launch, and navigates the window to it.
-      await shellCall("connect-remote", {
-        url: target,
-        token,
-        name: connectionLabel(entry),
-      });
+      // launch, and navigates the window to it. The row is already saved:
+      // the shell connects by id, not by an address passed from the page.
+      await shellCall("connect-remote", { id: entry.id });
     } catch (failure) {
       setError(errorMessage(failure));
       setBusy(false);

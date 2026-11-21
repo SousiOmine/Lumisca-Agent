@@ -16,7 +16,7 @@ import { AppearancePanel } from "./settings/AppearancePanel.tsx";
 import { AppPanel } from "./settings/AppPanel.tsx";
 import { CommandSafetyPanel } from "./settings/CommandSafetyPanel.tsx";
 import { ComputerUsePanel } from "./settings/ComputerUsePanel.tsx";
-import { ConnectionList } from "./settings/ConnectionList.tsx";
+import { ConnectionsPanel } from "./settings/ConnectionsPanel.tsx";
 import {
   ownerGroups,
   ownerLabelKey,
@@ -29,6 +29,7 @@ import { McpList } from "./settings/McpList.tsx";
 import { ModelsPage } from "./settings/ModelsPage.tsx";
 import { NotificationsPanel } from "./settings/NotificationsPanel.tsx";
 import { OverviewPanel } from "./settings/OverviewPanel.tsx";
+import { PeersPanel } from "./settings/PeersPanel.tsx";
 import { PersonalizePanel } from "./settings/PersonalizePanel.tsx";
 import { ProviderDetail } from "./settings/ProviderDetail.tsx";
 import { ProviderList } from "./settings/ProviderList.tsx";
@@ -154,6 +155,13 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
         onRestart={props.update.restart}
       />
     ),
+  },
+  {
+    id: "connections",
+    owner: "device",
+    deviceOnly: true,
+    labelKey: "settings.nav.connections",
+    render: () => <ConnectionsPanel />,
   },
   {
     id: "overview",
@@ -333,7 +341,7 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     id: "peers",
     owner: "server",
     labelKey: "settings.nav.peers",
-    render: () => <ConnectionList />,
+    render: () => <PeersPanel />,
   },
   {
     id: "experimental",

@@ -14,12 +14,12 @@ interface ConnectionPickerProps {
 /**
  * Which server this window shows, and how to show another one.
  *
- * The registry lives in the server's database and is shared, but *which* of
- * the entries the window displays is the shell's state: it survives
- * navigation (the page is reloaded onto the chosen server) and a restart.
- * Without this control the answer is only inside settings → 接続先サーバー,
- * one dialog deeper than the question — a page served by a remote machine
- * looks exactly like the local one.
+ * The list belongs to the window (the shell's settings), and *which* entry
+ * is displayed is the shell's state: it survives navigation (the page is
+ * reloaded onto the chosen server) and a restart. Without this control the
+ * answer is only inside settings → 接続先サーバー, one dialog deeper than the
+ * question — a page served by a remote machine looks exactly like the local
+ * one.
  *
  * It lives in the desktop title bar in the corner every desktop window keeps
  * its "where am I" affordance, beside the app menu. In a plain browser there
