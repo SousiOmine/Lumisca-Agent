@@ -162,12 +162,14 @@ export function App({ initialData }: AppProps): ReactElement {
   // platform is the shell's answer, injected with the bridge origin: a
   // remote server is displayed in the same window.
   const macos = shellPlatform() === "macos";
-  const appClass = macos ? "app macos" : "app";
   // Whether this page runs inside the desktop shell's window. The title bar
   // is drawn from this, not from an answer of the bridge: a window whose
   // controls vanished because one bridge call failed cannot be closed or
   // moved, which is the whole point of the controls.
   const desktop = inDesktopShell();
+  // The class says a title bar is part of the page: surfaces that can cover
+  // the window keep its drag strip clear (see .stella-pane.fullscreen).
+  const appClass = `${macos ? "app macos" : "app"}${desktop ? " desktop" : ""}`;
   // What this server can do for stella mode, and how its machine is doing.
   const appMode = useAppMode(mode);
   const machineStatus = appMode.status;

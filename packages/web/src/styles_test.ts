@@ -909,6 +909,25 @@ test("the machine's screen fills the window without reflowing it", async () => {
   );
 });
 
+test("full screen leaves the title bar to grab the window", async () => {
+  // The window is undecorated: the title bar is its drag strip and holds
+  // the minimize, maximize and close buttons. A full-screen pane that
+  // covered it left an app window that could not be moved or closed.
+  const css = await fsp.readFile(
+    new URL("./styles/stella.css", import.meta.url),
+    "utf8",
+  );
+  const rule = /\.app\.desktop \.stella-pane\.fullscreen \{([^}]*)\}/.exec(css);
+  assertEquals(rule !== null, true, "the desktop rule must exist");
+  assertEquals(
+    /top:\s*calc\(var\(--titlebar-inset\) \+ var\(--tab-height\)\)/.test(
+      rule![1]!,
+    ),
+    true,
+    "the pane must start below the title bar",
+  );
+});
+
 test("the columns trade width in one movement", async () => {
   // The pane widening and the conversation beside it narrowing are one
   // change; without the transition the transcript jumped a hundred pixels in

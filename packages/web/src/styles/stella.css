@@ -1129,6 +1129,15 @@
   animation: lum-fade var(--lum-dur-fast) var(--lum-ease-out);
 }
 
+/* Full screen covers the content area, not the window chrome. An
+ * undecorated window is grabbed by its title bar, and that strip also holds
+ * the controls that minimize, maximize and close the window; a pane over it
+ * left neither reachable. A plain browser draws no title bar, so there the
+ * pane still fills the viewport. */
+.app.desktop .stella-pane.fullscreen {
+  top: calc(var(--titlebar-inset) + var(--tab-height));
+}
+
 /* Full screen is for the picture: it takes every pixel the pane has rather
  * than keeping the ratio inside a black frame. */
 .stella-pane.fullscreen .stella-pane-body {
