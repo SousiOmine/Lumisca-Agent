@@ -1542,6 +1542,17 @@ export class LumiscaCore {
     return this.services.stellaMachines.stellaVncPort(agentId);
   }
 
+  /** A screen pane opened on one agent: its machine stays warm while the
+   * pane is open, even without tool traffic. */
+  stellaWatchScreen(agentId: string): void {
+    this.services.stellaMachines.watchStellaAgent(agentId);
+  }
+
+  /** The screen pane closed: the idle clock starts from now. */
+  stellaUnwatchScreen(agentId: string): void {
+    this.services.stellaMachines.unwatchStellaAgent(agentId);
+  }
+
   /** Whether stella mode can run here, with the reason when it cannot. */
   getStellaAvailability(): Promise<StellaAvailability> {
     return this.services.stellaMachines.getStellaAvailability();

@@ -2,7 +2,7 @@ import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import type { VmCommandBytesRunner, VmCommandRunner } from "./command.ts";
 import type { VmHost, VmHostStatus, VmManager, VmStatus } from "./container.ts";
-import { vmContainerName } from "./contract.ts";
+import { VM_WARM_FLOOR, vmContainerName } from "./contract.ts";
 import { StellaMachine } from "./machine.ts";
 
 /**
@@ -136,6 +136,8 @@ function machine(
     host?: VmHost;
     busy?: (agentId: string) => boolean;
     idleMs?: number;
+    /** Test seam: 0 exercises the idle path with one machine. */
+    warmFloor?: number;
     time?: ReturnType<typeof clock>;
     run?: VmCommandRunner;
   } = {},
@@ -157,6 +159,7 @@ function machine(
     },
     {
       idleMs: options.idleMs ?? 1_000,
+      warmFloor: options.warmFloor ?? VM_WARM_FLOOR,
       now: time.now,
       timer: false,
     },
@@ -207,7 +210,7 @@ test("callers racing on a sleeping machine share one wake", async () => {
 
 test("an idle machine is stopped, and its next call wakes it again", async () => {
   const time = clock();
-  const { stella, fake } = machine({ idleMs: 1_000, time });
+  const { stella, fake } = machine({ idleMs: 1_000, warmFloor: 0, time });
   const exec = stella.exec("agent-a")!;
   await exec(["true"], { timeoutMs: 1000 });
   time.advance(999);
@@ -222,10 +225,121 @@ test("an idle machine is stopped, and its next call wakes it again", async () =>
   assertEquals(fake.starts, ["agent-a", "agent-a"]);
 });
 
+test("four idle machines stay warm", async () => {
+  const time = clock();
+  const { stella, fake } = machine({ time });
+  for (const agentId of ["a", "b", "c", "d"]) {
+    await stella.ensureReady(agentId);
+  }
+  time.advance(60_000);
+  await stella.reapIdle();
+  assertEquals(fake.stops, []);
+});
+
+test("a fifth idle machine is paid for by the oldest one", async () => {
+  const time = clock();
+  const { stella, fake } = machine({ time });
+  for (const agentId of ["a", "b", "c", "d", "e"]) {
+    await stella.ensureReady(agentId);
+    time.advance(100);
+  }
+  time.advance(60_000);
+  await stella.reapIdle();
+  assertEquals(fake.stops, ["a"]);
+});
+
+test("six idle machines settle to four one stop at a time", async () => {
+  const time = clock();
+  const { stella, fake } = machine({ time });
+  for (const agentId of ["a", "b", "c", "d", "e", "f"]) {
+    await stella.ensureReady(agentId);
+    time.advance(100);
+  }
+  time.advance(60_000);
+  await stella.reapIdle();
+  assertEquals(fake.stops, ["a"]);
+  await stella.reapIdle();
+  assertEquals(fake.stops, ["a", "b"]);
+  await stella.reapIdle();
+  assertEquals(fake.stops, ["a", "b"]);
+});
+
+test("a busy oldest machine is skipped for the next oldest", async () => {
+  const time = clock();
+  const busy = new Set<string>(["a"]);
+  const { stella, fake } = machine({
+    busy: (agentId) => busy.has(agentId),
+    time,
+  });
+  for (const agentId of ["a", "b", "c", "d", "e"]) {
+    await stella.ensureReady(agentId);
+    time.advance(100);
+  }
+  time.advance(60_000);
+  await stella.reapIdle();
+  assertEquals(fake.stops, ["b"]);
+});
+
+test("a watched machine is never stopped", async () => {
+  const time = clock();
+  const { stella, fake } = machine({ time, warmFloor: 0 });
+  await stella.ensureReady("agent-a");
+  stella.watch("agent-a");
+  time.advance(60_000);
+  await stella.reapIdle();
+  assertEquals(fake.stops, []);
+
+  // Closing the pane restarts the idle clock: the machine gets the usual
+  // window, not an immediate stop.
+  stella.unwatch("agent-a");
+  time.advance(1_000);
+  await stella.reapIdle();
+  assertEquals(fake.stops, ["agent-a"]);
+});
+
+test("a sleeping machine closes its desktop before the container", async () => {
+  const time = clock();
+  const { stella, fake } = machine({ time, warmFloor: 0 });
+  await stella.ensureReady("agent-a");
+  time.advance(1_000);
+  await stella.reapIdle();
+  assertEquals(fake.desktopStops, 1);
+  assertEquals(fake.stops, ["agent-a"]);
+});
+
+test("reconcile adopts machines a previous process left running", async () => {
+  const time = clock();
+  const { stella, fake } = machine({ time, warmFloor: 0 });
+  fake.state.set("agent-a", RUNNING);
+
+  await stella.reconcile(["agent-a", "agent-b"]);
+  // A running machine is known without being started; a stopped one is
+  // remembered as stopped without asking again.
+  assertEquals(await stella.isRunning("agent-a"), true);
+  assertEquals(await stella.isRunning("agent-b"), false);
+  assertEquals(fake.starts, []);
+
+  time.advance(1_000);
+  await stella.reapIdle();
+  assertEquals(fake.stops, ["agent-a"]);
+});
+
+test("stopAll closes the desktop before stopping the machines", async () => {
+  const { stella, fake } = machine();
+  await stella.ensureReady("agent-a");
+  await stella.stopAll();
+  assertEquals(fake.desktopStops, 1);
+  assertEquals(fake.stops, ["agent-a"]);
+});
+
 test("a machine whose conversation is working is never stopped", async () => {
   const busy = new Set<string>(["agent-a"]);
   const time = clock();
-  const { stella, fake } = machine({ busy: (id) => busy.has(id), time });
+  const { stella, fake } = machine({
+    busy: (id) => busy.has(id),
+    warmFloor: 0,
+    time,
+  });
   await stella.ensureReady("agent-a");
   time.advance(60_000);
   await stella.reapIdle();
@@ -240,6 +354,7 @@ test("a command in flight keeps the machine awake", async () => {
   });
   const { stella, fake } = machine({
     time,
+    warmFloor: 0,
     run: async (command) => {
       // Only the command under test waits; the folder the wake creates must
       // not hold the start.
@@ -273,7 +388,7 @@ test("a command in flight keeps the machine awake", async () => {
 
 test("the idle clock is refreshed by use, not by the status poll", async () => {
   const time = clock();
-  const { stella, fake } = machine({ time });
+  const { stella, fake } = machine({ time, warmFloor: 0 });
   await stella.ensureReady("agent-a");
   time.advance(700);
   await stella.machineStatus("agent-a");
@@ -295,7 +410,7 @@ test("a screen call wakes the machine and starts the desktop once", async () => 
 
 test("a machine that slept starts its desktop again", async () => {
   const time = clock();
-  const { stella, fake } = machine({ time });
+  const { stella, fake } = machine({ time, warmFloor: 0 });
   await stella.screenExec("agent-a")!(["true"], { timeoutMs: 1000 });
   time.advance(60_000);
   await stella.reapIdle();

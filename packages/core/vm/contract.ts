@@ -290,6 +290,16 @@ export const VM_STOP_TIMEOUT_MS = 60_000;
  * `podman` process; callers that just changed the state bypass the cache. */
 export const VM_STATUS_CACHE_MS = 1_000;
 
+/** How many machines stay running while nobody uses them.
+ *
+ * Up to this many machines are kept warm: opening one of their conversations
+ * after a pause costs no container start and no browser restart. Only the
+ * machines above the floor are idle-stopped, one per reaper pass, so a burst
+ * of five or more conversations settles back to four rather than stopping
+ * every machine at once. Four warm machines can each use the 3 GiB ceiling;
+ * the floor is a trade of memory for a screen that is already there. */
+export const VM_WARM_FLOOR = 4;
+
 /** How long a machine may sit unused before the server stops it.
  *
  * A stopped container costs no memory: its processes are gone and podman
@@ -297,7 +307,8 @@ export const VM_STATUS_CACHE_MS = 1_000;
  * Waking one is a `podman start` plus the screen, seconds rather than the
  * minutes a first image build takes. Five minutes is long enough that an
  * ordinary pause between prompts does not pay for a wake, and short enough
- * that a conversation the user walked away from stops holding a browser. */
+ * that a conversation the user walked away from stops holding a browser.
+ * Machines at or below `VM_WARM_FLOOR` are never stopped for being idle. */
 export const VM_IDLE_SLEEP_MS = 5 * 60_000;
 
 /** How often the server looks for machines to stop.

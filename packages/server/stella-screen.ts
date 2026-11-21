@@ -23,6 +23,11 @@ export interface StellaScreenOptions {
    * agent or no machine. Read at connect time: the host ports are chosen when
    * the container is created, and a desktop starts on first use. */
   vncPort: (agentId: string | null) => Promise<number | null>;
+  /** The pane opened on this agent: its machine must not be stopped for
+   * being idle while somebody is looking at the screen. */
+  watch: (agentId: string) => void;
+  /** The pane closed: the idle clock starts from now. */
+  unwatch: (agentId: string) => void;
 }
 
 /** One relayed connection's state. */
@@ -44,6 +49,9 @@ export function stellaScreenRoute(options: StellaScreenOptions) {
     // it then gets no screen rather than somebody else's.
     const agentId = c.req.query("agent") ?? null;
     let data: ScreenSocketData | undefined;
+    /** Whether this connection told the machine it is being watched, so the
+     * close can always undo exactly one watch. */
+    let watching = false;
     return {
       async onOpen(_event, ws) {
         // The adapter does not await this handler (see `socket.onopen` in
@@ -61,6 +69,10 @@ export function stellaScreenRoute(options: StellaScreenOptions) {
         if (port === null) {
           ws.close(1013, "the machine is not running");
           return;
+        }
+        if (agentId !== null) {
+          options.watch(agentId);
+          watching = true;
         }
         data = { port, upstream: null, queue: [], closed: false };
         const upstream = new WebSocket(`ws://127.0.0.1:${port}/websockify`);
@@ -116,6 +128,10 @@ export function stellaScreenRoute(options: StellaScreenOptions) {
         }
       },
       onClose() {
+        if (watching && agentId !== null) {
+          watching = false;
+          options.unwatch(agentId);
+        }
         if (data === undefined) return;
         data.closed = true;
         try {

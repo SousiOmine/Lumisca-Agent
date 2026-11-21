@@ -360,6 +360,10 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
         if (agentId === null) return null;
         return await core.stellaVncPort(agentId);
       },
+      // The pane is the user looking at the desktop: keep the machine warm
+      // while it is open. A close restarts the idle clock from that moment.
+      watch: (agentId) => core.stellaWatchScreen(agentId),
+      unwatch: (agentId) => core.stellaUnwatchScreen(agentId),
     }),
   );
 

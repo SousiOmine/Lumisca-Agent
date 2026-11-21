@@ -119,6 +119,19 @@ export class StellaMachineService {
   setStellaVm(host: VmHost | undefined): void {
     this.deps.machine.set(host);
     this.envStoreOf = undefined;
+    if (host !== undefined) {
+      // A previous process may have left machines running. Adopt them in the
+      // background so the warm floor counts them and the reaper can settle
+      // them; opening a conversation must not wait for the scan.
+      const agentIds = this.deps.agents
+        .list()
+        .filter((agent) => agent.disabledAt === null)
+        .map((agent) => agent.id);
+      void this.deps.machine.reconcile(agentIds).catch(() => {
+        // Housekeeping: a failed read leaves the machine unknown, and the
+        // next open asks again.
+      });
+    }
   }
 
   /** The host, when one is attached. */
@@ -329,6 +342,17 @@ export class StellaMachineService {
    * machine awake (see VM_IDLE_SLEEP_MS). */
   touchStellaAgent(agentId: string): void {
     this.deps.machine.touch(agentId);
+  }
+
+  /** A screen pane opened on one agent: keep its machine warm while the pane
+   * is open, even when no tool has run in it. */
+  watchStellaAgent(agentId: string): void {
+    this.deps.machine.watch(agentId);
+  }
+
+  /** The screen pane closed: the idle clock starts from now. */
+  unwatchStellaAgent(agentId: string): void {
+    this.deps.machine.unwatch(agentId);
   }
 
   /** The host port of one agent's screen, or null when there is no such

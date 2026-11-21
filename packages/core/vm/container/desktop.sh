@@ -124,7 +124,10 @@ start)
   # The browser. Its own profile directory is what keeps one agent's logins
   # out of another's; `--force-renderer-accessibility` is what publishes the
   # PAGE's contents on the bus rather than only the window chrome (without it
-  # the web area is an empty frame to `vm_find`).
+  # the web area is an empty frame to `vm_find`). `--restore-last-session`
+  # brings the tabs back when the machine is stopped and started: the profile
+  # outlives the container, but Chromium does not reopen the last session
+  # without it.
   if ! alive "$STATE_DIR/chromium.pid" chromium; then
     rm -f "$PROFILE_ROOT/$agent/Singleton"* 2>/dev/null || true
     chromium \
@@ -133,6 +136,7 @@ start)
       --no-first-run \
       --no-default-browser-check \
       --hide-crash-restore-bubble \
+      --restore-last-session \
       --window-size=1280,800 \
       --window-position=0,0 \
       about:blank >/dev/null 2>&1 &
