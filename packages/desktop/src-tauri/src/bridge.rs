@@ -30,6 +30,7 @@ type BridgeReply = (StatusCode, Vec<u8>);
 /// Current display, shown by the settings UI. Also carries the local
 /// server startup progress for the splash page.
 #[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 struct ConnectionState {
     /// "local" | "remote"
     mode: String,
@@ -490,6 +491,27 @@ pub(crate) fn handle_shell_action(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The page reads `connectionId` (packages/web/src/shell.ts). The field
+    /// was named `connection_id` on the wire when the connection list moved
+    /// to the shell, so the title bar could not name a remote server and sat
+    /// on "読み込み中..." instead.
+    #[test]
+    fn connection_state_names_fields_in_camel_case() {
+        let state = ConnectionState {
+            mode: "remote".into(),
+            url: Some("http://127.0.0.1:8000".into()),
+            connection_id: Some("home".into()),
+            status: "ready".into(),
+            error: None,
+            saved: true,
+            maximized: false,
+        };
+        let json = serde_json::to_value(state).unwrap();
+        assert_eq!(json["connectionId"], "home");
+        assert_eq!(json["mode"], "remote");
+        assert!(json.get("connection_id").is_none());
+    }
 
     #[test]
     fn bridge_reply_success_is_the_json_body() {
