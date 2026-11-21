@@ -1782,3 +1782,28 @@ test("a routine's request folds to three lines", async () => {
     "an opened request must show all of its lines",
   );
 });
+
+test("a scrolling settings page keeps a field's focus ring whole", async () => {
+  // The page body and the setup body scroll, and a scroll container clips
+  // what leaves its padding box. The app's focus ring is 2px wide and sits
+  // 2px off the border, so a full-width field at the body's edge lost its
+  // left and right strokes. Four pixels of padding is that ring; the equal
+  // negative margin keeps the content on the page header's left edge.
+  for (const [file, selector] of [
+    ["./styles/settings.css", ".settings-page-body"],
+    ["./styles/setup.css", ".setup-body"],
+  ] as const) {
+    const css = await fsp.readFile(new URL(file, import.meta.url), "utf8");
+    const rule = declarations(cssRules(css), selector);
+    assertEquals(
+      rule.get("padding"),
+      "4px",
+      `${selector} must give the focus ring 4px on every side`,
+    );
+    assertEquals(
+      rule.get("margin"),
+      "-4px",
+      `${selector}'s negative margin must keep its content in place`,
+    );
+  }
+});

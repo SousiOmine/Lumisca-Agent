@@ -579,8 +579,13 @@
   gap: 20px;
   overflow-y: auto;
   scrollbar-gutter: stable;
-  /* Room for a row's focus ring, which an exactly-fitting body would clip. */
-  padding-bottom: 4px;
+  /* Room for a row's focus ring on every side. The body scrolls, and a scroll
+   * container clips what leaves its padding box: a full-width field's ring
+   * (2px wide, 2px off the border) lost its left and right strokes at the
+   * body's own edges. The equal negative margin keeps the content where it
+   * was, so the page head and the fields still share a left edge. */
+  padding: 4px;
+  margin: -4px;
 }
 
 /* A screen pushed from inside a category (a provider, an MCP server, a form):

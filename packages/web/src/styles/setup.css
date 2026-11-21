@@ -67,6 +67,10 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* The same room for a field's focus ring as the settings page body: this
+   * body scrolls too, and the setup's server fields fill its width. */
+  padding: 4px;
+  margin: -4px;
 }
 
 /* The step's own name: the screen's h1 is the wizard, this is what the reader
