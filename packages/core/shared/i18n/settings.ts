@@ -728,6 +728,11 @@ export const settings = {
     ja: "コピーしました",
     en: "Copied",
   },
+  /** The OS browser could not be started from the desktop shell. */
+  "settings.mcp.authOpenFailed": {
+    ja: "ブラウザを開けませんでした: {error}。認証URLをコピーして、ブラウザで開いてください。",
+    en: "Could not open the browser: {error}. Copy the sign-in URL and open it in your browser.",
+  },
 
   // --- the device's server list ---------------------------------------------
   /** The page's first line: the list is the window's, not the displayed

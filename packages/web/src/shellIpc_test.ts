@@ -25,7 +25,7 @@ globals.__TAURI_INTERNALS__ = {
   },
 };
 
-const { shellCall } = await import("./shell.ts");
+const { openExternal, shellCall } = await import("./shell.ts");
 
 /** Run `body` with `fetch` replaced, restoring it afterwards. */
 async function withFetch(
@@ -123,6 +123,51 @@ test("shellCall: without IPC the transport failure surfaces", async () => {
       },
     );
   } finally {
+    globals.__TAURI_INTERNALS__ = withIpc;
+  }
+});
+
+test("openExternal: the desktop shell hands the URL to the bridge", async () => {
+  invocations = [];
+  await openExternal("https://auth.example.com/authorize?state=st");
+  assertEquals(invocations, [
+    {
+      command: "shell_action",
+      args: {
+        action: "open-url",
+        params: {
+          key: "token",
+          url: "https://auth.example.com/authorize?state=st",
+        },
+      },
+    },
+  ]);
+});
+
+test("openExternal: a plain browser opens the tab itself", async () => {
+  // The MCP sign-in runs in both places: only the desktop shell needs the
+  // bridge (WebKit drops a script's window.open when no gesture is behind
+  // it). A browser page keeps its ordinary tab.
+  invocations = [];
+  const withBridge = globals.__LUMISCA_BRIDGE__;
+  const withIpc = globals.__TAURI_INTERNALS__;
+  globals.__LUMISCA_BRIDGE__ = undefined;
+  globals.__TAURI_INTERNALS__ = undefined;
+  const opened: unknown[][] = [];
+  const originalOpen = globalThis.open;
+  globalThis.open = (...args: unknown[]) => {
+    opened.push(args);
+    return null;
+  };
+  try {
+    await openExternal("https://example.com/sign-in");
+    assertEquals(opened, [
+      ["https://example.com/sign-in", "_blank", "noopener"],
+    ]);
+    assertEquals(invocations.length, 0, "a browser does not drive the shell");
+  } finally {
+    globalThis.open = originalOpen;
+    globals.__LUMISCA_BRIDGE__ = withBridge;
     globals.__TAURI_INTERNALS__ = withIpc;
   }
 });

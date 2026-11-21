@@ -2,6 +2,7 @@ import { errorMessage, serializeMcpServers } from "@lumisca/core/shared";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../api.ts";
 import { useT } from "../i18n.ts";
+import { openExternal } from "../shell.ts";
 import type { McpAuthSnapshot, McpServerInfo } from "../types.ts";
 import { useSavedNotice } from "./useSave.ts";
 
@@ -110,7 +111,15 @@ export function useMcpSignIn(onDone: () => void): McpSignIn {
       const snapshot = await api.startMcpAuth(serializeMcpServers([server]));
       if (snapshot.authorizationUrl !== undefined) {
         setAuthorizationUrl(snapshot.authorizationUrl);
-        globalThis.open(snapshot.authorizationUrl, "_blank", "noopener");
+        try {
+          await openExternal(snapshot.authorizationUrl);
+        } catch (e) {
+          // The URL stays on screen with its copy button: a browser that
+          // could not be started must not end the sign-in.
+          setError(
+            t("settings.mcp.authOpenFailed", { error: errorMessage(e) }),
+          );
+        }
       }
       if (snapshot.status === "waiting") {
         setSessionId(snapshot.sessionId);

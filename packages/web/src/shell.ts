@@ -107,6 +107,23 @@ async function invokeShell<T>(
   }
 }
 
+/** Open a URL with the OS browser.
+ *
+ * The desktop window has no tabs: a page it opened itself would leave the
+ * reader no way back, and WebKitGTK drops a script's `window.open` that does
+ * not follow a user gesture. The MCP sign-in only learns its authorization
+ * URL after the server answers, so in the desktop shell the URL goes to the
+ * bridge (`open-url`), which starts the OS handler itself. A page in a plain
+ * browser opens its own tab as before.
+ */
+export async function openExternal(url: string): Promise<void> {
+  if (inDesktopShell()) {
+    await shellCall("open-url", { url });
+    return;
+  }
+  globalThis.open(url, "_blank", "noopener");
+}
+
 export async function shellCall<T>(
   action: string,
   params: Record<string, string> = {},

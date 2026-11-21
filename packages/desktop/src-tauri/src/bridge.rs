@@ -340,6 +340,30 @@ pub(crate) fn handle_shell_action(
             ),
             Err(e) => bridge_error(StatusCode::INTERNAL_SERVER_ERROR, &e),
         },
+        // --- links the page cannot open itself ---------------------------
+        //
+        // A target=\"_blank\" click reaches the window's new-window
+        // handler, but a script's window.open after an awaited request is
+        // not a user gesture: WebKitGTK drops it before the handler runs.
+        // The MCP sign-in learns its authorization URL only after the
+        // server answers, so it asks the shell to hand the URL to the OS
+        // browser, where no popup rule applies.
+        "open-url" => {
+            let Some(raw) = get("url") else {
+                return bridge_error(StatusCode::BAD_REQUEST, "url required");
+            };
+            let url = match url::Url::parse(&raw) {
+                Ok(url) => url,
+                Err(_) => return bridge_error(StatusCode::BAD_REQUEST, "invalid url"),
+            };
+            if !crate::window::opens_externally(&url) {
+                return bridge_error(StatusCode::BAD_REQUEST, "url scheme is not allowed");
+            }
+            match crate::window::open_externally(&url) {
+                Ok(()) => bridge_json(StatusCode::OK, serde_json::json!({ "ok": true })),
+                Err(e) => bridge_error(StatusCode::BAD_GATEWAY, &e),
+            }
+        }
         // Reachability check for the settings UI, without switching.
         "test" => {
             let (url, token) = match (get("url"), get("token")) {
