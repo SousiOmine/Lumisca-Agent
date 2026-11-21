@@ -31,12 +31,14 @@ import { messageIdentityOf } from "../session/transcript-window.ts";
 import type { PendingShareRequest, ShareRequestHub } from "../share/request.ts";
 import type { AskAnswer, PromptFileRef, ThinkingLevel } from "../shared/mod.ts";
 import {
+  contentText,
   DEFAULT_LOCALE,
   type Locale,
   textWithFileNotice,
   translate,
 } from "../shared/mod.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
+import { firstAppCardProblem } from "../shared/ui-app/check.ts";
 import type { AskHub, PendingQuestion } from "../tools/ask.ts";
 import type {
   BackgroundCommandDone,
@@ -49,6 +51,10 @@ import type { Tool } from "../tools/schema.ts";
 import type { TaskHub } from "../tools/task-hub.ts";
 import type { EnvRequestHub, PendingEnvRequest } from "../vm/env-request.ts";
 import type { HandoverHub, PendingHandover } from "../vm/handover.ts";
+import {
+  appCardRetryNotification,
+  MAX_APP_CARD_RETRIES,
+} from "./app-card-repair.ts";
 import {
   CompactionController,
   type IdleCompaction,
@@ -273,6 +279,9 @@ export class SessionAgent {
   /** Owns the vacant-response / rate-limit retry state (budgets, parked
    * restarts, abort epochs). */
   private readonly retry: RetryManager;
+  /** Consecutive app card failures in the current exchange (see
+   * discardBrokenAppCard). */
+  private appCardRetries = 0;
   /** Condenses the history (see CompactionController). */
   private readonly compaction: CompactionController;
   private readonly renameSession: (name: string) => void;
@@ -540,6 +549,7 @@ export class SessionAgent {
    * vacant-response / rate-limit retry history. */
   private resetRetryState(): void {
     this.retry.reset();
+    this.appCardRetries = 0;
   }
 
   /**
@@ -1117,6 +1127,16 @@ export class SessionAgent {
       this.reply.reset();
     }
     if (event.type === "agent_end") this.interruptions.endRun();
+    // A reply whose app card does not parse never becomes a message: it is
+    // taken back before the reply is observed or persisted, and the model is
+    // asked to write it again.
+    if (
+      event.type === "message_end" &&
+      event.message.role === "assistant" &&
+      this.discardBrokenAppCard(event.message)
+    ) {
+      return;
+    }
     if (event.type === "message_end") this.reply.observe(event.message);
     // A routine's silent end is read from the view BEFORE runPrompt removes
     // the run (the removal happens after `prompt` resolves): the event says
@@ -1147,6 +1167,52 @@ export class SessionAgent {
       this.reply.reset();
       this.compaction.armIdle();
     }
+  }
+
+  /** A completed reply whose app card does not parse is not a reply: take
+   * it out of the transcript before it is persisted, tell the client to drop
+   * what it streamed, and ask the model to write it again. Returns true when
+   * the message was consumed.
+   *
+   * Only a text-only final turn can be taken back this way; a turn ending in
+   * a tool call is narration, and its tool results would follow it in the
+   * transcript. */
+  private discardBrokenAppCard(message: AssistantMessage): boolean {
+    if (message.stopReason !== "stop") return false;
+    const failure = firstAppCardProblem(contentText(message.content));
+    if (failure === null) {
+      this.appCardRetries = 0;
+      return false;
+    }
+    const messages = this.agent.state.messages;
+    if (messages.at(-1) !== message) return false;
+    messages.pop();
+    // The prompt and the turns before the failed reply still belong to the
+    // conversation; the reply itself must not get a row.
+    this.transcript.persist(messages);
+    if (this.uiFromText) this.textUi.end();
+    this.emit({ type: "message_discarded", sessionId: this.sessionId });
+    if (this.appCardRetries >= MAX_APP_CARD_RETRIES) {
+      this.emit({
+        type: "session_error",
+        sessionId: this.sessionId,
+        message: translate(this.language, "session.appCardFailed", {
+          problem: failure.problem,
+        }),
+      });
+      return true;
+    }
+    this.appCardRetries++;
+    const notification = appCardRetryNotification(
+      this.appCardRetries,
+      failure,
+      contentText(message.content),
+    );
+    this.agent.followUp({
+      ...notification,
+      timestamp: this.agent.nextTimestamp(),
+    });
+    return true;
   }
 
   /** Surface a model-stream failure to the user. An assistant message that

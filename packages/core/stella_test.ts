@@ -1278,7 +1278,15 @@ test("stella conversation: the agent's reply is what the store serves", async ()
 test("stella conversation: what send_chat sends is the conversation", async () => {
   const { faux, core, session } = await stellaConversation("Aide");
   try {
-    const json = '{"version":1}';
+    const json = JSON.stringify({
+      version: 1,
+      state: {},
+      root: "screen",
+      elements: {
+        screen: { type: "Screen", children: ["h"] },
+        h: { type: "Heading", props: { text: "Hi" } },
+      },
+    });
     faux.setResponses([
       fauxAssistantMessage(
         [

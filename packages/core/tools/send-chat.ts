@@ -33,6 +33,7 @@ import {
   MAX_ATTACHMENTS_PER_CALL,
   TOOL_SEND_CHAT,
 } from "../shared/mod.ts";
+import { firstAppCardProblem } from "../shared/ui-app/check.ts";
 import { attachFiles, type ChatAttachTarget } from "./attach.ts";
 import type { FileBackend } from "./file-backend.ts";
 import {
@@ -125,6 +126,16 @@ export function createSendChatTool(
       const paths = params.paths ?? [];
       if (text.length === 0 && paths.length === 0) {
         throw new CoreError("Send something: text or files.", "invalid");
+      }
+      const brokenCard = firstAppCardProblem(text);
+      if (brokenCard !== null) {
+        throw new CoreError(
+          `The app card in the message could not be displayed: ${brokenCard.problem}. ` +
+            "Nothing was sent. Rewrite the message with a valid `ui` card: " +
+            "version is 1, elements is a flat map, and every element named " +
+            "by root or children exists.",
+          "invalid",
+        );
       }
       const attachments: AttachmentRef[] =
         paths.length === 0

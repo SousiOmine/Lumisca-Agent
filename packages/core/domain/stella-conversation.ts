@@ -233,8 +233,8 @@ export type StellaEvent =
    * since the previous fragment of that card. */
   | { type: "ui_delta"; toolCallId: string; delta: string }
   /** The message that was being written ended without becoming one (a turn
-   * that stopped to call a tool is narration, not a reply): whatever card was
-   * being drawn goes. */
+   * that stopped to call a tool is narration, not a reply, and a reply whose
+   * card did not parse is discarded): whatever card was being drawn goes. */
   | { type: "ui_end" }
   /** The pending questions changed (asked, answered, or dropped). */
   | { type: "questions"; questions: StellaQuestion[] }

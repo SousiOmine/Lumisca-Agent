@@ -468,6 +468,9 @@ export function stellaEventsOf(event: ClientEvent): StellaEvent[] {
         },
       ];
     case "ui_end":
+    case "message_discarded":
+      // Both take back a card being drawn: a narration that became a tool
+      // call, or a reply the server discarded because the card did not parse.
       return [{ type: "ui_end" }];
     case "messages_truncated":
       // A rewind is the one way an entry LEAVES a conversation, and no

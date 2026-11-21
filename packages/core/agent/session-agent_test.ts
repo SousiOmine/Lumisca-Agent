@@ -29,6 +29,7 @@ import type {
   BackgroundProcessManager,
 } from "../tools/background.ts";
 import { object, type Tool } from "../tools/schema.ts";
+import { MAX_APP_CARD_RETRIES } from "./app-card-repair.ts";
 import { ROUTINE_SILENCE_GUIDANCE } from "./routine-guidance.ts";
 import type { SessionAgentOptions } from "./session-agent.ts";
 import { SessionAgent } from "./session-agent.ts";
@@ -141,6 +142,23 @@ function retryNotifications(messages: AgentMessage[]): NotificationMessage[] {
       m.role === "notification" && m.kind === "retry",
   );
 }
+
+/** A card that the parser refuses: `version` is not 1. */
+const INVALID_APP_CARD = '```ui\n{"version":2}\n```';
+
+/** A minimal card that the parser accepts. */
+const VALID_APP_CARD =
+  "```ui\n" +
+  JSON.stringify({
+    version: 1,
+    state: {},
+    root: "screen",
+    elements: {
+      screen: { type: "Screen", children: ["h"] },
+      h: { type: "Heading", props: { text: "Hi" } },
+    },
+  }) +
+  "\n```";
 
 /** Poll until `condition` holds (throws on timeout so a missed delivery
  * fails the test instead of hanging it). */
@@ -343,6 +361,63 @@ test("the retry counter resets between runs", async () => {
 
   assertEquals(retryNotifications(agent.messages).length, 4);
   assertEquals(agent.messages.at(-1)?.role, "assistant");
+});
+
+test("a reply whose app card does not parse is discarded and rewritten", async () => {
+  const events: ClientEvent[] = [];
+  const agent = makeAgent(
+    streamSequence([
+      fauxAssistantMessage(`カードです。\n\n${INVALID_APP_CARD}`),
+      fauxAssistantMessage(`直しました。\n\n${VALID_APP_CARD}`),
+    ]),
+    [],
+    (event) => events.push(event),
+  );
+  await agent.prompt("カードを出して");
+
+  const texts = textsOf(agent.messages);
+  assert(
+    texts.includes("カードを出して"),
+    "the prompt disappeared with the failed reply",
+  );
+  assertEquals(
+    texts.some((text) => text.includes('"version":2')),
+    false,
+    "the failed reply stayed in the transcript",
+  );
+  assert(texts.some((text) => text.includes("直しました")));
+
+  const notices = retryNotifications(agent.messages);
+  assertEquals(notices.length, 1);
+  assert(notices[0]!.body.includes("spec.version"));
+  assert(notices[0]!.body.includes('"version":2'));
+
+  const discarded = events.findIndex((e) => e.type === "message_discarded");
+  assert(discarded !== -1, "the client was not told to drop the reply");
+  assert(
+    events.slice(discarded + 1).some((e) => e.type === "message_start"),
+    "the retry never started after the discard",
+  );
+});
+
+test("an app card that keeps failing ends with an error, not the replies", async () => {
+  const events: ClientEvent[] = [];
+  const failed = Array.from({ length: MAX_APP_CARD_RETRIES + 1 }, () =>
+    fauxAssistantMessage(INVALID_APP_CARD),
+  );
+  const agent = makeAgent(streamSequence(failed), [], (event) =>
+    events.push(event),
+  );
+  await agent.prompt("カードを出して");
+
+  assertEquals(
+    textsOf(agent.messages).some((text) => text.includes('"version":2')),
+    false,
+  );
+  assertEquals(retryNotifications(agent.messages).length, MAX_APP_CARD_RETRIES);
+  const error = events.find((e) => e.type === "session_error");
+  assert(error !== undefined, "the failure never reached the user");
+  assert(error.message.includes("UI"));
 });
 
 test("a silent stream error restarts the run and recovers", async () => {

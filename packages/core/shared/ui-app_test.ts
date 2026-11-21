@@ -5,6 +5,7 @@ import {
   bindingOf,
   completeJson,
   createUiAppState,
+  firstAppCardProblem,
   parseAppSpec,
   parseAppSpecPartial,
   resolveCondition,
@@ -363,6 +364,29 @@ test("ui-app: partial JSON is completed for streaming", () => {
   });
   const partial = parseAppSpecPartial(full.slice(0, -2));
   assertEquals(partial.ok, true);
+});
+
+test("ui-app: the first unreadable card is reported with its source", () => {
+  const valid = JSON.stringify({
+    version: 1,
+    state: {},
+    root: "screen",
+    elements: {
+      screen: { type: "Screen", children: ["h"] },
+      h: { type: "Heading", props: { text: "Hi" } },
+    },
+  });
+  assertEquals(
+    firstAppCardProblem(`前です。\n\n\`\`\`ui\n${valid}\n\`\`\`\n\n後です。`),
+    null,
+  );
+
+  const broken = firstAppCardProblem(
+    '前です。\n\n```ui\n{"title":"x"}\n```\n\n後です。',
+  );
+  if (broken === null) throw new Error("the broken card was not reported");
+  assert(broken.problem.includes("spec.version"));
+  assert(broken.json.includes('"title":"x"'));
 });
 
 test("ui-app: state is immutable and resets to the spec", () => {

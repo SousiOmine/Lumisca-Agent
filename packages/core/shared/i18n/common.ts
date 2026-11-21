@@ -205,6 +205,12 @@ export const common = {
     ja: "自動再試行の上限{count}回に達したため停止しました: {message}",
     en: "Stopped after {count} automatic retries: {message}",
   },
+  /** Why a reply never appeared: its app card did not parse, every rewrite
+   * failed the same way, and the failed replies were discarded. */
+  "session.appCardFailed": {
+    ja: "UIの生成に失敗しました: {problem}",
+    en: "Could not generate the UI: {problem}",
+  },
 
   // --- desktop notifications (web/src/notify.ts) ----------------------------
   /** Name used for a session without a title in a notification. */

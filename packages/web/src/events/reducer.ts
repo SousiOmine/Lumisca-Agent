@@ -214,6 +214,15 @@ export function applyEvent(
         ...view,
         streamingText: (view.streamingText + event.delta).slice(-64 * 1024),
       };
+    case "message_discarded":
+      // The reply was not a reply: its app card did not parse, so the server
+      // took it back and asked the model to write it again. Only the live
+      // preview goes; the run itself is still going.
+      return {
+        ...view,
+        streamingText: "",
+        thinkingStartAt: undefined,
+      };
     case "message_end": {
       // The user message was already added on message_start; replace it
       // with the final copy (append when the start event was missed).

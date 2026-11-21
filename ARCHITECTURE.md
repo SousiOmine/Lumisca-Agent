@@ -437,8 +437,11 @@ UIはどちらの本文にも書けます。
   この設定はプロンプトの入力なので、切り替えると開いているセッションを再構築します（`LumiscaCore.setAppUiInSystemPrompt`）。
   サブエージェントにはスキルを出しません。
   その本文は画面ではなく、別のモデルへの報告だからです。
-- 崩れたUIは原文を見せます。
-  読めなかったUIは「このUIを表示できませんでした」と、解析の理由、畳んだJSONを出します（`packages/web/src/components/chat/AppCard.tsx`の`InvalidAppCard`）。
+- 崩れたUIは応答ごと捨てます。
+  返信のUIが`parseAppSpec`を通らない場合、`agent/session-agent.ts`はそのアシスタントメッセージを保存しません。
+  `message_discarded`で画面の書きかけを消し、解析の理由と捨てた本文を付けた再生成の通知をモデルへ返します。
+  再試行は2回までで、超えたら`session_error`に理由を出します。
+  `send_chat`の本文も`shared/ui-app/check.ts`で同じ検査を通り、読めないカードは送信せずにツールエラーとしてモデルへ返します。
 - 書きかけのUIは読めるところまで描きます。
   code modeは本文がそのまま届くので、画面が`splitChatText`で書きかけのフェンスを切り出し、`parseAppSpecPartial`で閉じたJSONまで描きます。
   stellaは本文を流さないので、`agent/run-events.ts`の`TextUi`が本文の断片から切り出し、`ui_delta`として1断片ずつ配ります。

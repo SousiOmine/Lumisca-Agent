@@ -33,6 +33,12 @@ export type ClientEvent =
   | { type: "message_start"; sessionId: string; message: AgentMessage }
   | { type: "message_delta"; sessionId: string; delta: string }
   | { type: "message_end"; sessionId: string; message: AgentMessage }
+  /** The assistant message that was streaming is not a reply: its app card
+   * did not parse, so the server took it back before persisting it and asks
+   * the model to write it again (see agent/app-card-repair.ts). Clients drop
+   * the streaming text and the card drawn from `ui_delta`; the run keeps
+   * going. */
+  | { type: "message_discarded"; sessionId: string }
   | {
       type: "tool_start";
       sessionId: string;

@@ -179,6 +179,25 @@ test("events: assistant stream accumulates deltas and clears on start", () => {
   assertEquals(v.streamingText, "");
 });
 
+test("events: a discarded reply clears the streaming preview", () => {
+  let v = view();
+  v = applyEvent(
+    {
+      type: "message_start",
+      sessionId: "s1",
+      message: message("assistant", 100),
+    },
+    v,
+  )!;
+  v = applyEvent(
+    { type: "message_delta", sessionId: "s1", delta: "壊れた" },
+    v,
+  )!;
+  v = applyEvent({ type: "message_discarded", sessionId: "s1" }, v)!;
+  assertEquals(v.streamingText, "");
+  assertEquals(v.messages, []);
+});
+
 test("events: tool start/end track running tools", () => {
   let v = view();
   v = applyEvent(

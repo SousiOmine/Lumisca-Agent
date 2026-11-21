@@ -548,6 +548,7 @@ X サーバ（`:99`）、ウィンドウマネージャ、セッションバス�
   本文はそのまま返信になり、`send_chat` がファイルと途中経過を添えます（`packages/core/tools/send-chat.ts`）。
   UIは本文に ` ```ui ` のフェンスでJSONを書きます（ツール呼び出しは不要）。
   仕様とカタログは `shared/ui-app/`、文法は組み込みスキル `app-ui` が教えます（`shared/chat-ui/segments.ts` が本文を分けます）。
+  読めないカードは保存も送信もせず、解析の理由をモデルへ返して書き直させます。
   黙るターンは `NO_RESPONSE` だけを書きます（`packages/core/agent/silent-reply.ts`）。
   `text` と `paths` は 1 回で 1 つのメッセージになり、少なくとも 1 つ必要です。
 - UIだけは書きながら出ます。

@@ -121,6 +121,42 @@ test("send_chat: files are sent with the message", async () => {
   }
 });
 
+test("send_chat: an app card that does not parse is refused", async () => {
+  const test = await fixture();
+  try {
+    const error = await assertRejects(() =>
+      test.tool.execute("t", {
+        text: '前です。\n\n```ui\n{"title":"x"}\n```',
+      }),
+    );
+    assert(String(error).includes("spec.version"), String(error));
+    assert(String(error).includes("Nothing was sent"), String(error));
+  } finally {
+    await test.cleanup();
+  }
+});
+
+test("send_chat: a valid app card is sent", async () => {
+  const test = await fixture();
+  try {
+    const spec = {
+      version: 1,
+      state: {},
+      root: "screen",
+      elements: {
+        screen: { type: "Screen", children: ["h"] },
+        h: { type: "Heading", props: { text: "Hi" } },
+      },
+    };
+    const result = await test.tool.execute("t", {
+      text: `\`\`\`ui\n${JSON.stringify(spec)}\n\`\`\``,
+    });
+    assert(sent(result).text.includes('"version":1'));
+  } finally {
+    await test.cleanup();
+  }
+});
+
 test("send_chat: a call that sends nothing is refused", async () => {
   const test = await fixture();
   try {

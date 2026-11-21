@@ -409,6 +409,10 @@ test("stellaEventsOf: the run's own events pass through", () => {
     stellaEventsOf({ type: "message_delta", sessionId: "s", delta: "あ" }),
     [],
   );
+  // A reply discarded for a broken card takes back the card it was drawing.
+  assertEquals(stellaEventsOf({ type: "message_discarded", sessionId: "s" }), [
+    { type: "ui_end" },
+  ]);
 });
 
 test("stellaEventsOf: a message becomes an entry, twice over", () => {

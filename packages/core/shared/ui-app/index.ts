@@ -21,6 +21,10 @@ export {
   type UiAppProp,
   type UiAppPropKind,
 } from "./catalog.ts";
+export {
+  type AppCardProblem,
+  firstAppCardProblem,
+} from "./check.ts";
 export { appHelp, UI_HELP, UI_HELP_INLINE } from "./help.ts";
 export { UI_APP_LIMITS } from "./limits.ts";
 export {
