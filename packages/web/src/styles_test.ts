@@ -928,6 +928,59 @@ test("full screen leaves the title bar to grab the window", async () => {
   );
 });
 
+test("a square phone can scroll the machine's pane", async () => {
+  // A square phone is shorter than the hand-over's text and the picture
+  // together. The pane's base rule keeps `overflow: hidden` (it is a
+  // floating column elsewhere), and on the fixed phone sheet that clip left
+  // the bottom of the picture unreachable. The pane therefore scrolls there,
+  // the header sticks so the close button stays in reach, and the loans take
+  // their own height instead of collapsing to zero under the overflowing
+  // content.
+  const css = await fsp.readFile(
+    new URL("./styles/stella.css", import.meta.url),
+    "utf8",
+  );
+  const phone = (selector: string) =>
+    cssRules(css)
+      .filter(
+        (rule) =>
+          rule.media?.includes("max-width: 600px") === true &&
+          rule.selector === selector,
+      )
+      .pop();
+  const pane = phone(".stella-pane");
+  assertEquals(pane !== undefined, true, "the pane needs a phone rule");
+  assertEquals(
+    /overflow-y:\s*auto/.test(pane!.body),
+    true,
+    "the pane must scroll on a phone",
+  );
+  assertEquals(
+    /overscroll-behavior:\s*contain/.test(pane!.body),
+    true,
+    "scrolling the pane must not reach the page behind it",
+  );
+  const header = phone(".stella-pane-header");
+  assertEquals(header !== undefined, true, "the header needs a phone rule");
+  assertEquals(
+    /position:\s*sticky/.test(header!.body),
+    true,
+    "the close button must stay reachable while the pane scrolls",
+  );
+  assertEquals(
+    /top:\s*0/.test(header!.body),
+    true,
+    "the header sticks to the top of the pane",
+  );
+  const shares = phone(".stella-shares");
+  assertEquals(shares !== undefined, true, "the loans need a phone rule");
+  assertEquals(
+    /flex:\s*none/.test(shares!.body),
+    true,
+    "the loans must keep their height under the overflowing content",
+  );
+});
+
 test("the columns trade width in one movement", async () => {
   // The pane widening and the conversation beside it narrowing are one
   // change; without the transition the transcript jumped a hundred pixels in

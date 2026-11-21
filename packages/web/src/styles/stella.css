@@ -1572,11 +1572,22 @@
     max-height: none;
     border: none;
     border-radius: 0;
+    /* A square phone is not tall enough for the hand-over's text and the
+     * picture at once. Elsewhere the pane is a floating column that clips
+     * its overflow; on this fixed sheet that clip left the bottom of both
+     * unreachable. The pane becomes the scroll container, and the header
+     * stays at the top so the close button never scrolls out of reach. */
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .stella-pane-header {
     /* The close button is the way out; it is a fingertip target and it is
      * not under a notch or a gesture bar. */
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--surface);
     padding: max(6px, env(safe-area-inset-top)) 8px 6px 12px;
   }
 
@@ -1593,7 +1604,12 @@
     aspect-ratio: 1280 / 800;
   }
 
+  /* The pane scrolls here, so the loans take their own height instead of
+   * the leftover one: as a shrinkable flex item under content taller than
+   * the screen they collapsed to nothing, and the folders could not be
+   * reached even by scrolling. */
   .stella-shares {
+    flex: none;
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
