@@ -174,6 +174,21 @@ test("stella agents: the starter agent exists once and is the default", async ()
   }
 });
 
+test("stella agents: the starter agent starts with the app's icon", async () => {
+  const core = await stellaCore(RUNNING);
+  try {
+    core.setStarterAgentIcon(async () => MINI_PNG);
+    const starter = await core.ensureStellaAgent();
+    // The row names a file the store generated; the store is what proves the
+    // bytes are an icon, so ask it for the content type the route will serve.
+    assert(starter.icon.endsWith(".png"), starter.icon);
+    const icon = await core.resolveStellaAgentIcon(starter.id, starter.icon);
+    assertEquals(icon?.mimeType, "image/png");
+  } finally {
+    await core.close();
+  }
+});
+
 test("stella agents: a user's own agent is never replaced by the starter", async () => {
   const core = await stellaCore(RUNNING);
   try {

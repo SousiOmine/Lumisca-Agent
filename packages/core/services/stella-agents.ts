@@ -87,13 +87,29 @@ export class StellaAgentService {
    * prevent). The check is the list itself, so nothing has to be remembered
    * separately.
    */
-  ensureStellaAgent(): StellaAgent {
+  async ensureStellaAgent(
+    loadIcon?: () => Promise<Uint8Array | undefined>,
+  ): Promise<StellaAgent> {
     const existing = this.deps.agents.latest();
     if (existing !== undefined) return existing;
-    return this.deps.agents.create({
+    const starter = this.deps.agents.create({
       name: translate(this.deps.language(), "chat.stella.agents.starterName"),
       role: translate(this.deps.language(), "chat.stella.agents.starterRole"),
     });
+    if (loadIcon === undefined) return starter;
+    try {
+      const bytes = await loadIcon();
+      if (bytes === undefined) return starter;
+      // The store generates the file name; the row keeps it. A failure here
+      // must not stop the first conversation from existing, so the agent
+      // keeps its initial and the build's missing icon is reported once.
+      const name = await this.deps.icons.put(starter.id, bytes, ".png");
+      this.deps.agents.update(starter.id, { icon: name });
+      return this.deps.agents.get(starter.id) ?? starter;
+    } catch (error) {
+      console.warn("starter agent icon could not be stored:", error);
+      return starter;
+    }
   }
 
   /** One agent by id, or undefined when it does not exist. */

@@ -113,6 +113,10 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
     join(repoRoot, ".lumisca-cache"),
     options.assetsFile,
   );
+  // The first agent is created with the app's own picture, not an initial.
+  // Read through the server's asset manifest, so a packaged server carries
+  // the same image the PWA installs with.
+  core.setStarterAgentIcon(() => assets.getPwaIcon("icon-192.png"));
 
   // Federated peers (the server-side connection registry): the hub proxies
   // their workspaces/sessions and relays their events, tagged with the

@@ -251,6 +251,10 @@ export class LumiscaCore {
    * like the two stores above; written when a user uploads a picture and read
    * by the icon route. */
   private readonly agentIcons: AgentIconStore;
+  /** Where a first-run agent's picture comes from: the app's own icon. The
+   * server sets this once it knows its assets; a direct core in a test may
+   * leave it unset. */
+  private starterAgentIcon: (() => Promise<Uint8Array | undefined>) | undefined;
   /** The database file, when this core has one (see requestVacuumIfWorthwhile). */
   private readonly dbPath: string | undefined;
   /** The directory the settings file lives in, when this core has a settings
@@ -1311,9 +1315,20 @@ export class LumiscaCore {
    */
   async ensureStellaAgent(): Promise<StellaAgent> {
     const before = this.services.stellaAgents.listStellaAgents().length;
-    const agent = this.services.stellaAgents.ensureStellaAgent();
+    const agent = await this.services.stellaAgents.ensureStellaAgent(
+      this.starterAgentIcon,
+    );
     if (before === 0) await this.prepareStellaAgentFolder(agent.id);
     return agent;
+  }
+
+  /** The picture a first-run agent starts with. The server passes its own
+   * PWA icon, so the starter agent looks like the app that created it
+   * instead of an initial. */
+  setStarterAgentIcon(
+    source: (() => Promise<Uint8Array | undefined>) | undefined,
+  ): void {
+    this.starterAgentIcon = source;
   }
 
   getStellaAgent(id: string): StellaAgent | undefined {

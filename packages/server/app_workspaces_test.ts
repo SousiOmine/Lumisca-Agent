@@ -1518,9 +1518,12 @@ test("stella API: agents are listed, renamed and deleted with their conversation
     // have someone to talk to), so the list is never empty.
     const initial = await json(base, "/api/stella/agents");
     const starter = (await initial.json()) as {
-      agents: Array<{ id: string; name: string }>;
+      agents: Array<{ id: string; name: string; icon: string }>;
     };
     assertEquals(starter.agents.length, 1);
+    // The first agent is created with the app's own picture, not an initial:
+    // the settings screen and the sidebar show the same face as the app.
+    assert(starter.agents[0]!.icon.endsWith(".png"), starter.agents[0]!.icon);
 
     const created = await json(base, "/api/stella/agents", {
       method: "POST",
