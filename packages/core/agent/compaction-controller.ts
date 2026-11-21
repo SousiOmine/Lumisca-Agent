@@ -49,6 +49,10 @@ export interface CompactionHost {
   insertHistory(index: number, message: AgentMessage): void;
   /** Publish the context updates that a compaction re-anchored. */
   publishContexts(): void;
+  /** Re-derive the system prompt now that the history behind it changed. The
+   * prompt is the request's cached prefix, so a compaction — which replaces
+   * that history anyway — is the one safe point to refresh what it carries. */
+  refreshPrompt(): void;
   /** A checkpoint landed: tell clients and drop the summarized payloads. */
   onCompacted(index: number, message: CheckpointMessage): void;
 }
@@ -108,7 +112,7 @@ export class CompactionController {
         this.host.messages(),
         { force: true },
       );
-      if (result !== null) this.republishContextsAfter(result);
+      if (result !== null) this.afterCompaction(result);
       return result;
     } catch (error) {
       log.warn(
@@ -129,7 +133,7 @@ export class CompactionController {
     if (this.host.isClosed() || signal.aborted) return;
     try {
       const result = await this.compactor.compactIfNeeded(this.host.messages());
-      if (result !== null) this.republishContextsAfter(result);
+      if (result !== null) this.afterCompaction(result);
     } catch (error) {
       log.warn(
         `session ${this.host.sessionId}: compaction failed: ${errorMessage(
@@ -155,7 +159,7 @@ export class CompactionController {
     const result = await this.compactor.compactNow(this.host.messages(), {
       instructions,
     });
-    if (result !== null) this.republishContextsAfter(result);
+    if (result !== null) this.afterCompaction(result);
     return result ?? undefined;
   }
 
@@ -218,7 +222,7 @@ export class CompactionController {
           this.host.messages().length === length &&
           this.host.messages().at(-1)?.timestamp === newest,
       });
-      if (result !== null) this.republishContextsAfter(result);
+      if (result !== null) this.afterCompaction(result);
     } catch (error) {
       log.warn(
         `session ${this.host.sessionId}: idle compaction failed: ${errorMessage(
@@ -228,10 +232,13 @@ export class CompactionController {
     }
   }
 
-  /** After a compaction: publish the context updates that the re-anchoring
+  /** After a compaction: re-derive the prompt (a stella identity written
+   * since generation belongs there, and the history change already cost the
+   * cached prefix), then publish the context updates that the re-anchoring
    * queued. Only a compaction that summarized a context publication can
    * queue one. */
-  private republishContextsAfter(result: CompactionResult): void {
+  private afterCompaction(result: CompactionResult): void {
+    this.host.refreshPrompt();
     const lostProvider = result.summarized.some(
       (message) => message.role === "context",
     );

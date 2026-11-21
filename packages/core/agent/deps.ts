@@ -89,17 +89,18 @@ export interface SessionPersistence {
   renameSession(id: string, name: string): void;
   /** Full generated system prompt for a workspace, re-derived every time a
    * session is opened (a stored value that differs is replaced). What it is
-   * a function of is the mode, the workspace folders, a stella agent's role
-   * and the experimental app-card switch — nothing that changes while a
-   * session lives (moving the switch rebuilds the open sessions), so an
-   * unchanged session regenerates the same string. */
+   * a function of is the mode, the workspace folders a stella agent's role
+   * and identity, and the experimental app-card switch — nothing that
+   * changes while a session lives (moving the switch rebuilds the open
+   * sessions), so an unchanged session regenerates the same string. */
   buildGeneratedPrompt(
     workspace: Workspace,
     /** A stella agent's persona (its prompt is the machine's, plus the role
-     * it works from), or undefined for every other session. `id` is what
-     * names the session's working folder. The name is deliberately absent: it
-     * is the label the user can change, and the model does not need it. */
-    stella?: { role: string; id: string },
+     * and identity it works from), or undefined for every other session.
+     * `id` is what names the session's working folder. The name is
+     * deliberately absent: it is the label the user can change, and the model
+     * does not need it. */
+    stella?: { role: string; identity: string; id: string },
   ): string;
   /** Store the session's current system prompt (see
    * AgentFactory.ensureSystemPrompt: written only when it changed). */
@@ -181,13 +182,14 @@ export interface AgentRuntime {
    * `share_disconnect`). Omitted → a stella session gets neither tool (a pool
    * built by hand without a share channel). */
   shareRequests?: ShareRequestRegistry;
-  /** The persona of a stella session: the role its agent works from, which
-   * is what makes one conversation different from another (see
-   * stella/agents.ts). The agent's NAME is not part of it: it is a label the
-   * user can change at any time, and the prompt is a snapshot. */
+  /** The persona of a stella session: the role its agent works from and the
+   * identity it wrote about itself, which are what make one conversation
+   * different from another (see stella/agents.ts and stella/identity.ts). The
+   * agent's NAME is not part of it: it is a label the user can change at any
+   * time, and the prompt is a snapshot. */
   stellaAgentPersona?: (
     session: SessionInfo,
-  ) => { role: string; id: string } | undefined;
+  ) => { role: string; identity: string; id: string } | undefined;
   /** Global skills directory override (default ~/.agents/skills).
    * LumiscaCore.forTesting passes an empty list, so a test's skill catalog
    * is built from its own fixture only. */

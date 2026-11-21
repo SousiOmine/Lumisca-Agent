@@ -18,7 +18,7 @@
  * - tool calls and their results, except the `send_chat` result that carries
  *   what the agent sent;
  * - everything that exists to steer the model — the date, the skill catalog,
- *   the identity, the on-demand-tools note (all `context` messages);
+ *   the on-demand-tools note (all `context` messages);
  * - everything that records HOW the work went — notifications and compaction
  *   checkpoints.
  *

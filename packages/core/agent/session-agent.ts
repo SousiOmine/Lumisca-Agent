@@ -185,6 +185,12 @@ export interface SessionAgentOptions {
    * ai/compaction-style.ts). stella sessions use the conversation record
    * (agent/stella-compaction.ts); every other session the work log. */
   compactionStyle: CompactionStyle;
+  /** Re-derive the session's system prompt and return it. Called after a
+   * compaction, the one point where the history behind the prompt is
+   * replaced anyway; everywhere else the prompt stays fixed because it is
+   * the prefix the provider caches. Omitted → the prompt stays as built (a
+   * hand-built agent in a test). */
+  refreshSystemPrompt?: () => string;
   /** The rule that condenses this conversation while it sits idle (see
    * compactAfterIdle). Omitted → the history is condensed only when a
    * request would approach the window. stella's conversations are the ones
@@ -416,6 +422,10 @@ export class SessionAgent {
         isClosed: () => this.closed,
         insertHistory: (index, message) => this.insertHistory(index, message),
         publishContexts: () => this.contexts.publish(),
+        refreshPrompt: () => {
+          if (options.refreshSystemPrompt === undefined) return;
+          this.agent.state.systemPrompt = options.refreshSystemPrompt();
+        },
         onCompacted: (index, message) =>
           this.announceCheckpoint(index, message),
       },

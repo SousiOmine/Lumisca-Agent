@@ -1509,24 +1509,15 @@ test("stella conversation: history_search never reads another agent's rows", asy
   }
 });
 
-/** The identity context messages of a session, in transcript order. */
-function identityMessages(core: LumiscaCore, sessionId: string) {
-  const agent = core.getAgent(sessionId)!;
-  return agent.messages.filter(
-    (message) => message.role === "context" && message.provider === "identity",
-  );
-}
-
-test("stella conversation: the identity a write produces reaches the next run", async () => {
+test("stella conversation: identity is written into the prompt at generation", async () => {
   const { faux, core, agent, session } = await stellaConversation("Scribe");
   try {
-    // Nothing is published before the agent writes one: a first turn must
-    // not open with an empty identity block.
-    assertEquals(identityMessages(core, session.id), []);
+    // A session that never wrote an identity opens without one.
+    const opened = core.getAgent(session.id)!.agent.state.systemPrompt;
+    assertEquals(opened.includes("<identity>"), false);
 
-    // The agent writes about itself in one turn. The tool is discoverable
-    // (main registry), so the turn finds it first and then calls it —
-    // exactly the path a real agent takes.
+    // The agent writes about itself in one turn, through the same discoverable
+    // path a real agent takes.
     faux.setResponses([
       fauxAssistantMessage(
         [fauxToolCall("tool_search", { query: "identity" })],
@@ -1547,32 +1538,59 @@ test("stella conversation: the identity a write produces reaches the next run", 
       fauxAssistantMessage("Wrote it."),
     ]);
     await promptSession(core, session.id, "Write down what your job is.");
-    // The text is stored on the agent row, not in the transcript yet: the
-    // run that wrote it already had its context.
     assertEquals(
       core.listStellaAgents().find((a) => a.id === agent.id)?.identity,
       "I keep the project's notes and know where things are.",
     );
-    assertEquals(identityMessages(core, session.id), []);
 
-    // ...and the text is in the transcript before the next run's first
-    // request. It arrives as a context message, so the snapshotted system
-    // prompt is never rewritten (the cache keeps serving its head).
-    faux.setResponses([fauxAssistantMessage("Noted.")]);
-    await promptSession(core, session.id, "What do you do?");
+    // The prompt is the request's cached prefix, so the run that wrote the
+    // text keeps the prompt it was given; a write never rewrites it.
+    assertEquals(core.getAgent(session.id)!.agent.state.systemPrompt, opened);
 
-    const published = identityMessages(core, session.id);
-    assertEquals(published.length, 1);
-    const message = published[0]!;
-    if (message.role !== "context") throw new Error("unreachable");
-    assert(message.body.includes("I keep the project's notes"), message.body);
-    // The prompt still carries the role the USER wrote, unchanged: the
-    // identity is context, not a prompt edit.
-    assertEquals(
+    // Reopening generates the prompt again, which is where the text enters.
+    core.closeSession(session.id);
+    core.openSession(session.id);
+    const reopened = core.getAgent(session.id)!.agent.state.systemPrompt;
+    assert(reopened.includes("<identity>"), reopened);
+    assert(reopened.includes("I keep the project's notes"), reopened);
+  } finally {
+    await core.close();
+  }
+});
+
+test("stella conversation: a compaction regenerates the prompt", async () => {
+  const { faux, core, agent, session } = await stellaConversation("Scribe", {
+    models: [{ id: "faux", contextWindow: 4_000 }],
+  });
+  try {
+    // The prompt was generated before the agent wrote anything.
+    const before = core.getAgent(session.id)!.agent.state.systemPrompt;
+    assertEquals(before.includes("I keep the project's notes"), false);
+
+    // The stored row changes while the prompt is fixed.
+    core.db.db
+      .prepare("UPDATE stella_agents SET identity = ? WHERE id = ?")
+      .run("I keep the project's notes.", agent.id);
+
+    await recordTwoTurns(faux, core, session.id);
+    // No compaction yet: the live prompt is still the one it opened with.
+    assertEquals(core.getAgent(session.id)!.agent.state.systemPrompt, before);
+
+    // A compaction replaces the history behind the prompt. The prompt is
+    // re-derived then, so the identity arrives at the point the cached
+    // prefix is lost anyway.
+    faux.setResponses([fauxAssistantMessage("## Now\n- kept the record")]);
+    assert(
+      (await core.compactSession(session.id)) !== undefined,
+      "the history was not condensed",
+    );
+    const after = core.getAgent(session.id)!.agent.state.systemPrompt;
+    assert(after.includes("I keep the project's notes"), after);
+    assert(
       (core.getSession(session.id)?.systemPrompt ?? "").includes(
         "I keep the project's notes",
       ),
-      false,
+      "the regenerated prompt was not stored",
     );
   } finally {
     await core.close();
@@ -1603,13 +1621,14 @@ test("stella conversation: each agent's identity is its own", async () => {
     ]);
     await promptSession(core, sessionA.id, "Who are you?");
 
-    // The other counterpart has written nothing, so its transcript gains no
-    // identity message and its agent row stays empty.
+    // The other counterpart has written nothing: its own row stays empty,
+    // and a prompt generated for it carries no identity.
     faux.setResponses([fauxAssistantMessage("hello")]);
     await promptSession(core, sessionB.id, "Who are you?");
-    assertEquals(identityMessages(core, sessionB.id), []);
     const stored = core.listStellaAgents().find((a) => a.id === second.id);
     assertEquals(stored?.identity, "");
+    const prompt = core.getAgent(sessionB.id)!.agent.state.systemPrompt;
+    assertEquals(prompt.includes("<identity>"), false);
   } finally {
     await core.close();
   }

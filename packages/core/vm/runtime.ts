@@ -8,7 +8,6 @@
  * all.
  */
 
-import type { ContextProvider } from "../ai/context-providers.ts";
 import type { SkillDef } from "../skills/discover.ts";
 import type { BackgroundSpawner } from "../tools/background-backend.ts";
 import type { CommandRunner } from "../tools/command-backend.ts";
@@ -74,8 +73,4 @@ export interface StellaRuntime {
    * itself (the persona the agent writes, separate from the role the user
    * gave it at creation). */
   identityTool: Tool;
-  /** The identity's context provider: publishes what the agent wrote as a
-   * durable transcript message, so a write reaches the next run without
-   * touching the snapshotted system prompt (see stella/identity.ts). */
-  identityProvider: ContextProvider;
 }

@@ -90,9 +90,9 @@ test("builtinSkills advertises the stella-only skills for a stella session", asy
   // The one thing the tool's own description cannot carry: what to keep out
   // of the text.
   assert(identityGuide.includes("Secrets"));
-  // And when a write lands (the next run), so the model does not assume it
-  // failed.
-  assert(identityGuide.includes("next run"));
+  // And when a write lands (the next compaction or reopen), so the model
+  // does not assume it failed.
+  assert(identityGuide.includes("next compaction or reopen"));
 
   // The routine guide is what makes the discoverable routine tools findable
   // at all: it must name the search path and every schedule shape the tools

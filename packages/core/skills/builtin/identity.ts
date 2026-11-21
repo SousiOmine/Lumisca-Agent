@@ -7,10 +7,10 @@ import type { SkillDef } from "../discover.ts";
  * The tool is discoverable rather than preloaded (see tools/registries.ts and
  * agent/factory.ts) because it belongs to this conversation's own agent — a
  * sub-agent must not rewrite the identity of the agent that started it. Its
- * contract (two actions, a character cap, "a write reaches the next run") is
- * in the tool's own description; what this skill adds is the judgement the
- * description cannot carry: what belongs in an identity, and what must never
- * be written into one.
+ * contract (three actions, a character cap, "a write enters the prompt at
+ * the next compaction or open") is in the tool's own description; what this
+ * skill adds is the judgement the description cannot carry: what belongs in
+ * an identity, and what must never be written into one.
  *
  * A code-mode session must not advertise it (BuiltinContext.stella).
  */
@@ -34,8 +34,8 @@ that one stays as they wrote it.
   consider done.
 
 Keep it under 4,000 characters. Short and specific beats long and vague: it
-is read at the start of every future turn, so a paragraph of platitudes
-costs attention and says nothing.
+is part of the system prompt that every turn of the conversation carries, so
+a paragraph of platitudes costs attention and says nothing.
 
 ## What does not belong in it
 
@@ -55,9 +55,10 @@ costs attention and says nothing.
    you know anything.
 4. Update it when what you know changes. An empty content clears it.
 
-A write does not change what you see in the current run: it reaches your
-context when the next run starts. Use { action: "read" } to confirm what is
-stored instead of assuming the text above changed.
+A write does not change the system prompt of the current conversation. The
+stored text enters it on the next compaction or reopen. Use
+{ action: "read" } to confirm what is stored instead of assuming the text
+above changed.
 `;
 
 /** Build the built-in identity skill definition. Content is embedded (no

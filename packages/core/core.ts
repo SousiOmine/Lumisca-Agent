@@ -482,7 +482,9 @@ export class LumiscaCore {
         buildGeneratedPrompt: (workspace, stella) =>
           this.buildGeneratedPrompt(
             workspace,
-            stella === undefined ? false : { role: stella.role, id: stella.id },
+            stella === undefined
+              ? false
+              : { role: stella.role, identity: stella.identity, id: stella.id },
           ),
         personalInstructions: () => {
           const personal = this.personalization.get();
@@ -521,7 +523,7 @@ export class LumiscaCore {
           const agent = this.stellaAgents.get(agentId);
           return agent === undefined
             ? undefined
-            : { role: agent.role, id: agentId };
+            : { role: agent.role, identity: agent.identity, id: agentId };
         },
         globalSkillDirs: this.globalSkillDirs,
         appSkillDirs: this.appSkillDirs,
@@ -2282,13 +2284,16 @@ export class LumiscaCore {
    * context messages (see ai/context-providers), so an edit reaches a
    * session that is already open.
    *
-   * Everything that varies while a session lives is outside this function
-   * for the same reason: a session open can re-derive the prompt and
-   * compare it against the stored one only if unchanged inputs give an
-   * identical string. */
+   * The identity of a stella agent is included even though it can change
+   * while the session lives: the prompt keeps the text it was generated
+   * with, and a compaction regenerates it (see
+   * SessionAgentOptions.refreshSystemPrompt). Everything else that varies
+   * while a session lives is outside this function for the same reason: a
+   * session open can re-derive the prompt and compare it against the stored
+   * one only if unchanged inputs give an identical string. */
   private buildGeneratedPrompt(
     workspace: Workspace,
-    stella: boolean | { role: string; id: string } = false,
+    stella: boolean | { role: string; identity: string; id: string } = false,
   ): string {
     // Neither the language nor the model is read here: both are published as
     // context messages (agent/language-context.ts, agent/model-context.ts),
@@ -2307,7 +2312,7 @@ export class LumiscaCore {
         stella === true
           ? { appUiGuide }
           : {
-              agent: { role: stella.role },
+              agent: { role: stella.role, identity: stella.identity },
               workdir: vmAgentDir(stella.id),
               appUiGuide,
             },

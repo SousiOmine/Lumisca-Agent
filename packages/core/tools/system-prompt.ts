@@ -82,8 +82,15 @@ export function buildStellaSystemPrompt(
      * already replaced) or force a rewrite — which costs the provider's
      * cached prefix on every rename. The model is a helpful assistant; who
      * it is to the USER is the label on the row, not something it needs to
-     * know. */
-    agent?: { role: string };
+     * know.
+     *
+     * The identity is the text the agent wrote about itself. It is read when
+     * the prompt is generated and fixed from then on: a write does not touch
+     * the live prompt, because the prompt is the prefix the provider caches.
+     * A compaction regenerates the prompt (see AgentFactory.ensureSystemPrompt
+     * and SessionAgentOptions.refreshSystemPrompt), and that is where a later
+     * identity reaches the model. */
+    agent?: { role: string; identity?: string };
     /** The session's working folder inside the machine (relative paths and
      * bash start there). Omitted → the machine's home, which is what a
      * conversation without an agent's folder gets. */
@@ -99,7 +106,21 @@ export function buildStellaSystemPrompt(
   // without a role gets the opening line alone.
   const workdir = options.workdir ?? VM_WORKDIR;
   const role = options.agent?.role ?? "";
-  const persona = `You are a helpful assistant.${role === "" ? "" : ` ${role}`}
+  const identity = options.agent?.identity ?? "";
+  const identitySection =
+    identity === ""
+      ? ""
+      : `
+
+Your identity: the text you wrote about yourself with the identity tool. It
+is your standing description of who you are and what you know, and it is
+separate from the role the user gave you at creation — that one stays as
+they wrote it.
+
+<identity>
+${identity}
+</identity>`;
+  const persona = `You are a helpful assistant.${role === "" ? "" : ` ${role}`}${identitySection}
 
 `;
   return `${persona}You work inside a Linux desktop that belongs to this conversation:

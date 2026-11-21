@@ -95,8 +95,9 @@ export const MAX_AGENT_ROLE_CHARS = 20_000;
  * cannot be empty — but choosing it is not a decision worth blocking the
  * user on: an agent can be made first and named later, or never. */
 export const DEFAULT_AGENT_NAME = "Agent";
-/** The longest identity. It is republished whenever it changes and read on
- * every run after that, so it stays a short note rather than a document. */
+/** The longest identity. It is read when the system prompt is generated and
+ * carried by every request of that prompt, so it stays a short note rather
+ * than a document. */
 export const MAX_AGENT_IDENTITY_CHARS = 4_000;
 
 export interface StellaAgentRepo {

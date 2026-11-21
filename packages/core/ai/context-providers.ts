@@ -12,9 +12,10 @@ import type { ContextMessage } from "./message.ts";
  * `PromptContext`: the same reason its AssembledContext is materialized as a
  * user-role snapshot instead of prompt text.
  *
- * The system prompt therefore stays a stable, session-independent document
- * (identity and environment), while the per-session data arrives as history
- * the model can be told to re-read.
+ * The system prompt therefore stays stable for the life of a session — the
+ * role and identity of its agent, and the machine's environment — while data
+ * the session must react to mid-conversation arrives as history the model
+ * can be told to re-read.
  */
 
 /** One message a provider wants published. */

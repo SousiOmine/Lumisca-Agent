@@ -315,6 +315,12 @@ export class AgentFactory {
           : WORK_COMPACTION_STYLE,
       ...(where.stella !== undefined
         ? {
+            // The prompt carries the identity the agent wrote. It stays
+            // fixed while the session lives (a rewrite would cost the
+            // provider's cached head), and a compaction regenerates it —
+            // the point where the history behind it was replaced anyway.
+            refreshSystemPrompt: () =>
+              this.ensureSystemPrompt(session, workspace, code.sdk),
             idleCompaction: STELLA_IDLE_COMPACTION,
             // A stella conversation is the only one whose transcript outlives
             // every window it crosses, so it is the only one that may drop
@@ -855,9 +861,16 @@ export class AgentFactory {
   /**
    * The session's system prompt, re-derived from what the prompt is a
    * function of: the mode, the workspace folders, a stella agent's role and
-   * working folder, and the experimental app-card switch. Persisted, but not
-   * frozen: a stored value that no longer matches what this build generates
-   * is replaced.
+   * identity, its working folder, and the experimental app-card switch.
+   * Persisted, but not frozen: a stored value that no longer matches what
+   * this build generates is replaced.
+   *
+   * The identity is read here rather than delivered as a context message, so
+   * it is fixed when the prompt is generated. Re-deriving the prompt again
+   * while the session lives would change the request's first tokens; the one
+   * caller that may do it is a compaction (see
+   * SessionAgentOptions.refreshSystemPrompt), which has just replaced the
+   * history behind the prompt anyway.
    *
    * Re-deriving on every open is what makes a folder edit and a prompt
    * change in a new release reach a session that already exists. The
@@ -884,6 +897,7 @@ export class AgentFactory {
       session.stella === true
         ? (this.deps.stellaAgentPersona?.(session) ?? {
             role: "",
+            identity: "",
             id: session.personaId ?? "",
           })
         : undefined,
@@ -894,16 +908,20 @@ export class AgentFactory {
         : base + "\n\n" + codeExecutionPrompt(codeSdk);
     if (generated !== session.systemPrompt) {
       this.deps.updateSystemPrompt(session.id, generated);
+      // Keep the in-memory row in step: a compaction re-derives the prompt
+      // through this same check, and comparing against the value the
+      // session was opened with would rewrite the stored row every time.
+      session.systemPrompt = generated;
     }
     return generated;
   }
 
   /**
    * The dynamic contexts (skill catalog, workspace instructions, the date,
-   * the on-demand-tools note, a stella agent's identity). Published as
-   * transcript messages when they change, so an edit reaches an open session
-   * while the prompt above stays stable — the request's first tokens are
-   * what the provider's prompt cache serves.
+   * the on-demand-tools note). Published as transcript messages when they
+   * change, so an edit reaches an open session while the prompt above stays
+   * stable — the request's first tokens are what the provider's prompt cache
+   * serves.
    */
   private buildContextProviders(
     session: SessionInfo,
@@ -946,9 +964,6 @@ export class AgentFactory {
         folders: workspace.folders,
         personal: this.deps.personalInstructions,
       }),
-      // The identity is a stella agent's own text about itself; a session
-      // without one (every other session) has nothing to publish.
-      ...(stella !== undefined ? [stella.identityProvider] : []),
       // The folders lent from the user's own computer: a temporary addition to
       // what this session can reach, so it is published rather than written
       // into the prompt, and withdrawn the same way. A chat session has no

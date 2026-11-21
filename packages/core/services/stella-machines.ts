@@ -15,10 +15,7 @@ import type { StellaMachineStatus, StellaStatus } from "../shared/wire.ts";
 import type { SkillDef } from "../skills/discover.ts";
 import type { StellaAgentRepo } from "../stella/agents.ts";
 import type { IdentityTarget } from "../stella/identity.ts";
-import {
-  createIdentityProvider,
-  createIdentityTool,
-} from "../stella/identity.ts";
+import { createIdentityTool } from "../stella/identity.ts";
 import { StellaSkillCache } from "../stella/skill-cache.ts";
 import { createAgentCreateTool } from "../stella/tools.ts";
 import { createHistorySearchTool } from "../tools/history.ts";
@@ -543,11 +540,10 @@ export class StellaMachineService {
               .map((row) => row.message),
           ),
       }),
-      // The identity belongs to this agent: the tool writes it, and the
-      // provider publishes what was written as a context message, so the
-      // snapshotted system prompt never has to change.
+      // The identity belongs to this agent: the tool reads and writes it,
+      // and the system prompt carries the written text from the next
+      // generation (see AgentFactory.ensureSystemPrompt).
       identityTool: createIdentityTool(identity),
-      identityProvider: createIdentityProvider(identity),
     };
   }
 
