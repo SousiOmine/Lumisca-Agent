@@ -118,8 +118,9 @@ export const VM_LEGACY_CONTAINER_NAME = "lumisca-stella";
  * choosing a victim among the host's own programs. One machine now runs one
  * desktop (about 250 MB) plus room for one build inside it, which is the
  * heaviest thing a conversation does there; 3 GiB is that plus slack. The
- * total of the running machines is bounded by idle sleep (VM_IDLE_SLEEP_MS),
- * not by a fixed count. */
+ * total of the running machines is bounded by the warm floor and idle sleep:
+ * up to VM_WARM_FLOOR stay warm, and the machines above it stop after
+ * VM_IDLE_SLEEP_MS. */
 export const VM_MEMORY_LIMIT_BYTES = 3 * 1024 ** 3;
 
 /** Swap the machine may use: the same as its memory limit, which means none.
