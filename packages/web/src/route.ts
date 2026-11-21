@@ -15,8 +15,8 @@ import { splitTabKey, tabKey } from "./tabs.ts";
  *   /code                      code mode's new-session screen
  *   /code/s/<sessionId>        one session of this server
  *   /code/p/<peerId>/s/<id>    one session of a federated peer
- *   /stella                    stella mode's agent list
- *   /stella/a/<agentId>        one conversation
+ *   /agents                    stella mode's agent list
+ *   /agents/<agentId>          one conversation
  *   …/settings                 the settings dialog, first page
  *   …/settings/<category>      the settings dialog, one category
  *
@@ -100,8 +100,8 @@ function routePath(route: AppRoute): string {
     }
     case "stella":
       return route.agentId === null
-        ? "/stella"
-        : `/stella/a/${encodeURIComponent(route.agentId)}`;
+        ? "/agents"
+        : `/agents/${encodeURIComponent(route.agentId)}`;
   }
 }
 
@@ -114,7 +114,7 @@ function routePath(route: AppRoute): string {
  * screen the reader can use. The app has no "not found" page to send them to,
  * and a rendered error would be one they cannot leave.
  *
- * Under `/code` and `/stella`, a malformed session or agent path is that
+ * Under `/code` and `/agents`, a malformed session or agent path is that
  * mode's top rather than the start address: the reader was already in the
  * mode, and a missing id does not unmake that.
  */
@@ -138,12 +138,14 @@ export function parseUrl(pathname: string): UrlState {
       route = { kind: "code", tabKey: tabKey(third, fifth) };
       consumed = 5;
     }
-  } else if (first === "stella") {
+  } else if (first === "agents") {
     route = { kind: "stella", agentId: null };
     consumed = 1;
-    if (second === "a" && isId(third)) {
-      route = { kind: "stella", agentId: third };
-      consumed = 3;
+    // `settings` belongs to the dialog that sits over the list (see
+    // settingsOf); every other segment names an agent.
+    if (second !== undefined && second !== "settings" && isId(second)) {
+      route = { kind: "stella", agentId: second };
+      consumed = 2;
     }
   } else if (first === "setup") {
     route = { kind: "setup" };

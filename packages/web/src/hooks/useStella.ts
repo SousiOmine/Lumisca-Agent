@@ -56,7 +56,7 @@ const AGENT_LIST_REFRESH_MS = 30_000;
  * pure reducer in stella-state.ts.
  *
  * WHICH conversation is open is not this hook's to decide: the address names
- * the agent (`/stella/a/<id>`), and choosing another is a navigation the App
+ * the agent (`/agents/<id>`), and choosing another is a navigation the App
  * makes. The hook reads the conversation the address names and drops it when
  * the address moves on.
  *

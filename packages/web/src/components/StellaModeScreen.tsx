@@ -50,7 +50,7 @@ export interface StellaModeScreenProps {
    * opens the same one at phone widths). */
   onNewAgent: () => void;
   /** Open an agent's conversation. A navigation: the address names the
-   * conversation (`/stella/a/<id>`), which is what makes a conversation
+   * conversation (`/agents/<id>`), which is what makes a conversation
    * reloadable and linkable. The way back to the list is the title bar's
    * (StellaTitleBarHeader.onBack), which the App draws. */
   onSelectAgent: (id: string) => void;

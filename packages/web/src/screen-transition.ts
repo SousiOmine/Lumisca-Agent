@@ -5,8 +5,8 @@ import type { UrlState } from "./route.ts";
  * Which address moves are a screen transition, and how one is played.
  *
  * Two screens of this app are a hierarchy the reader walks into and back out
- * of: stella's agent list and one conversation (`/stella` and
- * `/stella/a/<id>`), and the settings dialog's category list and one category
+ * of: stella's agent list and one conversation (`/agents` and
+ * `/agents/<id>`), and the settings dialog's category list and one category
  * (`…/settings` and `…/settings/<category>`). On a phone those are two
  * screens, not two columns, and nothing about the swap said which way the
  * reader had gone — the previous screen was gone before the next was drawn.
@@ -50,7 +50,7 @@ export function screenMove(
   return stellaMove(previous, next, layout) ?? settingsMove(previous, next);
 }
 
-/** `/stella` ⇄ `/stella/a/<id>`, with no dialog over either: a dialog covers
+/** `/agents` ⇄ `/agents/<id>`, with no dialog over either: a dialog covers
  * the screen it was opened from, so opening or closing one is not a move
  * between the two screens underneath it. */
 function stellaMove(

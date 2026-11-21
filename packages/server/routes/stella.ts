@@ -449,7 +449,7 @@ export function stellaRoutes(core: StellaApi): Hono {
    * has open.
    *
    * Which conversation a client opens is the client's address, not this
-   * list's answer: `/stella/a/<id>` names it, and the app stores the last
+   * list's answer: `/agents/<id>` names it, and the app stores the last
    * mode a bare `/` resolves to. A `defaultAgentId` here said the same thing a
    * second time — and said it for every client, which the mode's own choice
    * deliberately does not (see shared/app-mode.ts).

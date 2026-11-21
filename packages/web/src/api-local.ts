@@ -308,7 +308,7 @@ export const api = {
    * conversation last said. The server answers in its "most recently used"
    * order; the client orders the rows by when each conversation last spoke
    * (see compareAgentRows). Which conversation is open comes from the
-   * address (`/stella/a/<id>`), not from this list. */
+   * address (`/agents/<id>`), not from this list. */
   getStellaAgents: () =>
     request<{
       agents: StellaAgentSummary[];

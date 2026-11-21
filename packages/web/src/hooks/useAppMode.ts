@@ -65,7 +65,7 @@ export function rememberMode(mode: AppMode): void {
  * What the server can do for stella mode, and the one refusal a mode choice
  * has to make.
  *
- * The mode itself belongs to the URL (route.ts): `/code` and `/stella` say
+ * The mode itself belongs to the URL (route.ts): `/code` and `/agents` say
  * which mode this page shows, so this hook takes the mode it was given
  * rather than owning it. What stays here is the SERVER's half — whether a
  * machine can run at all, and how it is doing — polled while stella is the

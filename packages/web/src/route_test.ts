@@ -36,7 +36,7 @@ function roundTrip(state: UrlState): void {
 test("route: a mode's top is one segment", () => {
   for (const [route, path] of [
     [{ kind: "code", tabKey: null }, "/code"],
-    [{ kind: "stella", agentId: null }, "/stella"],
+    [{ kind: "stella", agentId: null }, "/agents"],
   ] as const) {
     assertEquals(urlOf(at(route)), path);
     roundTrip(at(route));
@@ -81,7 +81,7 @@ test("route: code mode's addresses are stella's top while it is off", () => {
     assertEquals(availableRoute(route, true), route);
   }
   // Everything else is unaffected by the switch.
-  const stella = parseUrl("/stella/a/a-1").route;
+  const stella = parseUrl("/agents/a-1").route;
   assertEquals(availableRoute(stella, false), stella);
   assertEquals(availableRoute({ kind: "start" }, false), { kind: "start" });
 });
@@ -104,7 +104,7 @@ test("route: an encoded id decodes once", () => {
 
 test("route: a conversation carries its agent", () => {
   const state = at({ kind: "stella", agentId: "a-1" });
-  assertEquals(urlOf(state), "/stella/a/a-1");
+  assertEquals(urlOf(state), "/agents/a-1");
   roundTrip(state);
 });
 
@@ -166,9 +166,19 @@ test("route: a malformed path inside a mode is that mode's top", () => {
   for (const path of ["/code/s", "/code/p/peer-1", "/code/p/s-1", "/code/x"]) {
     assertEquals(parseUrl(path), at({ kind: "code", tabKey: null }), path);
   }
-  for (const path of ["/stella/a", "/stella/x"]) {
-    assertEquals(parseUrl(path), at({ kind: "stella", agentId: null }), path);
-  }
+});
+
+test("route: settings over the agent list do not name an agent", () => {
+  // The dialog hangs under the screen it covers, and `settings` is the one
+  // segment there that is not an agent id.
+  assertEquals(
+    parseUrl("/agents/settings/providers"),
+    withSettings({ kind: "stella", agentId: null }, "providers"),
+  );
+  assertEquals(
+    parseUrl("/agents/a-1/settings"),
+    withSettings({ kind: "stella", agentId: "a-1" }, null),
+  );
 });
 
 test("route: a category the dialog does not have leaves the dialog open", () => {

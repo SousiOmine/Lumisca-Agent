@@ -296,7 +296,7 @@ npm outdated                                                   # packages/deskto
   `hooks/useSetup.ts` がそれを state にし、完了の記録はその答えを採用します。
   フィールドの無いページ（古いサーバー、初期データ無し）はウィザードを出しません。
 - 置き換えるのは `/` だけです。
-  `/code` や `/stella` を直接開けばウィザードを通りません（ブックマークや共有リンクを塞がないためです）。
+  `/code` や `/agents` を直接開けばウィザードを通りません（ブックマークや共有リンクを塞がないためです）。
   `/setup` に居て完了済みなら `/` へ戻します。
 - 既存インストールの移行はしません。
   マーカーの無い環境は、すでに使っていても一度だけウィザードが出ます。
@@ -330,8 +330,8 @@ URL が「いまどの画面か」の唯一の答えです。
 | code mode のトップ（新規セッション） | `/code` |
 | このサーバーのセッション | `/code/s/<sessionId>` |
 | ピアのセッション | `/code/p/<peerId>/s/<sessionId>` |
-| stella のエージェント一覧 | `/stella` |
-| stella の会話 | `/stella/a/<agentId>` |
+| stella のエージェント一覧 | `/agents` |
+| stella の会話 | `/agents/<agentId>` |
 | 設定 | `<画面>/settings` / `<画面>/settings/<category>` |
 
 - `route.ts` は純粋関数だけです。
@@ -342,10 +342,10 @@ URL が「いまどの画面か」の唯一の答えです。
   モードを持たない `/settings` は、戻る先を答えられません。
   閉じると開いた画面へ戻ります（`history.back()`。履歴が無ければ `replace`）。
 - `/` は解決先です。
-  デスクトップシェルとインストールした PWA が開く URL なので、`localStorage` の `lumisca.appMode` に解決し、`replace` で `/code` か `/stella` に置き換えます。
-  未選択ならメインモードの `/stella` です。
+  デスクトップシェルとインストールした PWA が開く URL なので、`localStorage` の `lumisca.appMode` に解決し、`replace` で `/code` か `/agents` に置き換えます。
+  未選択ならメインモードの `/agents` です。
 - URL はモードを決めます。
-  `/stella` を開けば保存値が code でも stella になります。
+  `/agents` を開けば保存値が code でも stella になります。
   stella を使えないサーバーでは理由を出して `/code` に倒し、その stella は保存しません。
 - 戻るで画面が戻ります。
   タブ切り替え、セッションを開く、設定の開閉、設定カテゴリの変更がそれぞれ履歴になります。
@@ -374,7 +374,7 @@ URL が「いまどの画面か」の唯一の答えです。
   要求ごとの状態は、要求が決着したら成功でも失敗でも戻してください。
   戻し忘れると、次に「+」で開いた新規セッション画面の送信ボタンが押せないままになります（送信フラグは `packages/web/src/draftStart.ts` が決着時に戻します）。
 - エージェントを選んでいない間は会話パネルを描きません。
-  `/stella` は一覧だけの画面です。
+  `/agents` は一覧だけの画面です。
   一覧はウィンドウの中央に立ち、`StellaModeScreen` の `data-screen`（**選択だけで決まり、幅では変わりません**）を読んだ `.stella-shell[data-screen="list"] .stella { display: none }` が会話シートを出しません。
   空の会話パネル（「依頼を入力してください」と無効な送信ボタン）は、同じことを 3 度言うだけでした。
   エージェントを選ぶと一覧が左端へすべり、会話シートが右から入ります（`stella.css` の `left` の遷移と `lum-enter-right`）。
@@ -534,7 +534,7 @@ X サーバ（`:99`）、ウィンドウマネージャ、セッションバス�
   `GET /api/stella/agents` の初回読み出しでスターターを作ります（`LumiscaCore.ensureStellaAgent`）。
   全員を削除しても次の読み出しで戻ります。
   応答は `{ agents }` だけで、どの会話を開くかは返しません。
-  それは URL（`/stella/a/<id>`）が答えます。
+  それは URL（`/agents/<id>`）が答えます。
 - 初回の設定はアプリが始めます。
   新しいエージェントの会話は、開いたときに `stella_agents.onboarded_at` を CAS で取った 1 回だけセットアップのターンを始めます（`packages/core/stella/onboarding.ts`、`LumiscaCore.startStellaOnboarding`）。
   何を聞くかはモデルが `role` から決め、アプリは枠（1 メッセージ 1 問、カード、上限 5 問、スキップ肢、`identity` に書く、完了カード）だけを渡します。
