@@ -6,6 +6,7 @@
 #   bash install-server.sh
 #
 # 既定では 127.0.0.1:8000 で待ち受け、マシン起動時に自動で立ち上がる。
+# podman が無ければ sudo でインストールしてから配置する。
 set -euo pipefail
 
 REPOSITORY="SousiOmine/Lumisca-Agent"
@@ -38,6 +39,9 @@ Linux サーバーに Lumisca を入れて常駐させます。
   --no-service            配置だけ行い、systemd には触れない。
   -h, --help              このヘルプ。
 
+podman が無い場合は、sudo でお使いのパッケージマネージャーから
+インストールしてから配置します。
+
 root では実行しないでください。エージェントはシェルを実行するので、
 サーバーはそれを所有する一般ユーザーで動かします。
 EOF
@@ -50,6 +54,36 @@ die() {
 
 require_value() {
   [ "$#" -ge 2 ] || die "$1 には値が必要です"
+}
+
+# stella mode runs the agent inside a podman container, so a server without
+# podman cannot offer its main mode. The script itself runs as a normal user;
+# package installation is the only step that goes through sudo.
+install_podman() {
+  if command -v podman >/dev/null 2>&1; then
+    return 0
+  fi
+  printf 'podman が見つかりません。インストールします。\n'
+  command -v sudo >/dev/null 2>&1 ||
+    die "podman をインストールするには sudo が必要です。podman を入れてから再実行してください"
+  if command -v apt-get >/dev/null 2>&1; then
+    sudo apt-get update || die "パッケージ一覧を更新できませんでした"
+    sudo apt-get install -y podman || die "podman をインストールできませんでした"
+  elif command -v dnf >/dev/null 2>&1; then
+    sudo dnf install -y podman || die "podman をインストールできませんでした"
+  elif command -v yum >/dev/null 2>&1; then
+    sudo yum install -y podman || die "podman をインストールできませんでした"
+  elif command -v pacman >/dev/null 2>&1; then
+    sudo pacman -S --needed --noconfirm podman ||
+      die "podman をインストールできませんでした"
+  elif command -v zypper >/dev/null 2>&1; then
+    sudo zypper --non-interactive install podman ||
+      die "podman をインストールできませんでした"
+  else
+    die "podman を自動でインストールできません。お使いのパッケージマネージャーで podman を入れてから再実行してください"
+  fi
+  command -v podman >/dev/null 2>&1 ||
+    die "podman をインストールしましたが PATH から見つかりません。新しいシェルで再実行してください"
 }
 
 while [ "$#" -gt 0 ]; do
@@ -130,6 +164,8 @@ if [ -n "$VERSION" ]; then
 else
   MANIFEST_URL="https://github.com/$REPOSITORY/releases/latest/download/latest-server-$TARGET.json"
 fi
+
+install_podman
 
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/lumisca-install.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT

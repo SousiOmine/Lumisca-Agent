@@ -130,6 +130,7 @@ push の前にも `git fetch` して `git log --oneline HEAD..origin/master` を
 
 パッケージ済みサーバーは systemd のユーザーユニットとして常駐できます（`packages/server/systemd/`）。
 任意のコマンドを実行できるため、root ではなく一般ユーザーで動かします。
+`install-server.sh` は podman が無い場合、apt-get、dnf、yum、pacman、zypper の順に探し、sudo でインストールしてから配置します。
 
 - `./lumisca-server service config`: 設定内容を確認
 - `./lumisca-server service install`: 登録と起動
