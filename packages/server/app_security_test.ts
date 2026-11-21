@@ -58,6 +58,61 @@ test("cors only allows same-origin and the tauri webview origin", async () => {
   }
 });
 
+test("the desktop shell's preflight reaches the token-guarded API", async () => {
+  const { core, server, base } = setup(undefined, { token: "secret" });
+  try {
+    // A preflight never carries the token: the guard must let it through to
+    // the CORS middleware, or every cross-origin call of the bundled UI is
+    // refused before the request is sent.
+    const preflight = await fetch(`${base}/api/initial-data`, {
+      method: "OPTIONS",
+      headers: {
+        Origin: "tauri://localhost",
+        "Access-Control-Request-Method": "GET",
+        "Access-Control-Request-Headers": "x-lumisca-token,content-type",
+      },
+    });
+    assertEquals(preflight.status, 204);
+    assertEquals(
+      preflight.headers.get("access-control-allow-origin"),
+      "tauri://localhost",
+    );
+    assert(
+      preflight.headers
+        .get("access-control-allow-headers")
+        ?.includes("x-lumisca-token") === true,
+      "the preflight must allow the token header",
+    );
+
+    // The development frontend is served by Tauri's own loopback server.
+    const devPreflight = await fetch(`${base}/api/initial-data`, {
+      method: "OPTIONS",
+      headers: {
+        Origin: "http://127.0.0.1:1430",
+        "Access-Control-Request-Method": "GET",
+        "Access-Control-Request-Headers": "x-lumisca-token",
+      },
+    });
+    assertEquals(
+      devPreflight.headers.get("access-control-allow-origin"),
+      "http://127.0.0.1:1430",
+    );
+
+    const initial = await fetch(`${base}/api/initial-data`, {
+      headers: {
+        Origin: "tauri://localhost",
+        "x-lumisca-token": "secret",
+      },
+    });
+    assertEquals(initial.status, 200);
+    const body = (await initial.json()) as { language?: string };
+    assert(typeof body.language === "string");
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
 test("websocket rejects cross-port origins", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);

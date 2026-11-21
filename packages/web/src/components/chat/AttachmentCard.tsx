@@ -1,4 +1,5 @@
 import type { AttachmentRef } from "@lumisca/core/shared";
+import { withToken } from "../../api-client.ts";
 import {
   type AttachmentView,
   MessageAttachments,
@@ -26,15 +27,15 @@ export function AttachmentCard({
           key: attachment.name,
           kind: "image",
           name: attachment.displayName,
-          src: `${base}${attachment.name}`,
-          fullSrc: `${base}${attachment.name}?preview=0`,
+          src: withToken(`${base}${attachment.name}`),
+          fullSrc: withToken(`${base}${attachment.name}?preview=0`),
         }
       : {
           key: attachment.name,
           kind: "file",
           name: attachment.displayName,
           size: attachment.size,
-          href: `${base}${attachment.name}`,
+          href: withToken(`${base}${attachment.name}`),
           downloadName: attachment.displayName,
         },
   );

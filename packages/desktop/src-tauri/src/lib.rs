@@ -41,8 +41,8 @@ impl<T> LockRecover<T> for Mutex<T> {
 }
 
 /// Result slot of the background local-server startup: the thread fills it
-/// with the page URL once the server answers `/api/health`.
-type StartupTask = Arc<Mutex<Option<Result<String, String>>>>;
+/// with the local server's endpoint once the server answers `/api/health`.
+type StartupTask = Arc<Mutex<Option<Result<server::Endpoint, String>>>>;
 
 /// Local server startup progress, surfaced to the splash page.
 #[derive(serde::Serialize, Clone)]

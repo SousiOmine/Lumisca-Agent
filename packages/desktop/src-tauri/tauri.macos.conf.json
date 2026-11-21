@@ -13,7 +13,8 @@
         "create": false,
         "decorations": true,
         "titleBarStyle": "Overlay",
-        "hiddenTitle": true
+        "hiddenTitle": true,
+        "url": "splash.html"
       }
     ]
   },

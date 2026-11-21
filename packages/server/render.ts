@@ -112,6 +112,33 @@ ${shellHeadTags({
 </html>`;
 }
 
+/** The document of the desktop shell's bundled UI.
+ *
+ * Tauri serves it from the app's own origin, so there is no manifest or PWA
+ * icon here: those are the server-installed app's surface. The client bundle
+ * asks the server named in the launch URL for its initial data, and the
+ * theme is applied before the first render (packages/web/src/desktop.ts);
+ * the static value below is the dark theme the window paints before that.
+ */
+export function renderDesktopDocument(): string {
+  return `<!doctype html>
+<html lang="ja" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="${THEME_COLORS.dark}" />
+    <title>Lumisca</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/assets/app.js"></script>
+  </body>
+</html>
+`;
+}
+
 /** Escape the characters that would otherwise be parsed as markup. The only
  * catalogue messages that need it are the URL examples (they contain the
  * placeholders in angle brackets). */

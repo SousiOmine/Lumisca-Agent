@@ -6,7 +6,7 @@ import { websocket } from "hono/bun";
 import { compress } from "hono/compress";
 import { Assets } from "./assets.ts";
 import { FederationClient } from "./federation.ts";
-import { languageForRequest, registerPages } from "./pages.ts";
+import { initialDataFor, languageForRequest, registerPages } from "./pages.ts";
 import { createPushNotifier } from "./push.ts";
 import { attachmentRoutes } from "./routes/attachments.ts";
 import { connectionRoutes } from "./routes/connections.ts";
@@ -207,6 +207,14 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
     c.json({
       buildId: await assets.buildId().catch(() => undefined),
     }),
+  );
+
+  /** The initial data of a client that is not served by this server: the
+   * desktop shell bundles the UI and boots it against this API, so the same
+   * object the page's bootstrap script carries (see pages.ts) is answered
+   * here as JSON. Guarded like every other API route. */
+  app.get("/api/initial-data", async (c) =>
+    c.json(await initialDataFor(core, assets, c)),
   );
 
   // --- page and static assets ----------------------------------------------

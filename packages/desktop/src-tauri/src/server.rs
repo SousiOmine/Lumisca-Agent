@@ -15,7 +15,7 @@ use tauri::{AppHandle, Manager};
 
 pub(crate) use crate::health::{health_check, host_label, HealthFailure, Scheme};
 use crate::server_log;
-use crate::window::navigate_main;
+use crate::window::navigate_app;
 use crate::{AppState, LockRecover, StartupStatus, StartupTask};
 
 #[cfg(windows)]
@@ -527,10 +527,10 @@ pub(crate) fn stop_local_server(app: &AppHandle, reason: &str) {
     }
 }
 
-/// Start the local server (or reuse the running one) and return the page
-/// URL. Retries on fresh ports when the health check fails (port taken by
-/// another process, bind race).
-pub(crate) fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
+/// Start the local server (or reuse the running one) and return its
+/// endpoint. Retries on fresh ports when the health check fails (port taken
+/// by another process, bind race).
+pub(crate) fn ensure_local_server(app: &AppHandle) -> Result<Endpoint, String> {
     let state = app.state::<AppState>();
     // Reuse the stored server only if it is actually alive: a crashed
     // process would otherwise leave the WebView stuck on an unreachable
@@ -551,7 +551,7 @@ pub(crate) fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
         )
         .is_ok()
         {
-            return Ok(Endpoint::loopback(port, &token).page_url());
+            return Ok(Endpoint::loopback(port, &token));
         }
         // A missed health check does NOT mean a dead process: a server that
         // is busy inside a long synchronous step (a large database write, a
@@ -578,7 +578,7 @@ pub(crate) fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
             )
             .is_ok()
             {
-                return Ok(Endpoint::loopback(port, &token).page_url());
+                return Ok(Endpoint::loopback(port, &token));
             }
             server_log::note(
                 app,
@@ -654,7 +654,7 @@ pub(crate) fn ensure_local_server(app: &AppHandle) -> Result<String, String> {
         port,
         token: token.clone(),
     });
-    Ok(Endpoint::loopback(port, &token).page_url())
+    Ok(Endpoint::loopback(port, &token))
 }
 
 /// Startup failure message: the generic "did not become ready" plus the
@@ -678,8 +678,9 @@ fn last_log_lines(text: &str, n: usize) -> String {
 
 /// Restart the local server after a mid-session death (crash or hang): drop
 /// the dead child and run the normal start path. The caller navigates to
-/// the returned page URL. Reported through the bridge (`server/restart`)
-/// so the UI can offer "再起動" on its connection-lost banner.
+/// the bundled UI with the returned page URL, and the bridge action
+/// `server/restart` lets the UI offer "再起動" on its connection-lost
+/// banner.
 pub(crate) fn restart_local_server(app: &AppHandle) -> Result<String, String> {
     server_log::note(app, "Restart requested from the page banner.");
     if let Some(mut stale) = app.state::<AppState>().local.lock_recover().take() {
@@ -696,9 +697,8 @@ pub(crate) fn restart_local_server(app: &AppHandle) -> Result<String, String> {
     // The restart is explicitly about the local server, so the window
     // comes back to it — and the next launch starts locally instead of
     // restoring the remote server.
-    let url = ensure_local_server(app)?;
-    crate::connection::display_local(app, &url)?;
-    Ok(url)
+    let endpoint = ensure_local_server(app)?;
+    crate::connection::display_local(app, &endpoint)
 }
 
 /// Start the local server in the background and navigate the main window
@@ -721,7 +721,7 @@ pub(crate) fn start_local_server_async(app: &AppHandle) {
             *state.startup_task.lock_recover() = None;
             *state.startup.lock_recover() = StartupStatus::new(status, error);
         }
-        if let Ok(url) = result {
+        if let Ok(endpoint) = result {
             let handle = handle.clone();
             let inside = handle.clone();
             let _ = handle.run_on_main_thread(move || {
@@ -733,7 +733,7 @@ pub(crate) fn start_local_server_async(app: &AppHandle) {
                     .lock_recover()
                     .is_some();
                 if !remote {
-                    let _ = navigate_main(&inside, &url);
+                    let _ = navigate_app(&inside, &endpoint);
                 }
             });
         }

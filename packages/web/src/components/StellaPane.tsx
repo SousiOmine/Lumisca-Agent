@@ -15,7 +15,7 @@ import {
   useRef,
   useState,
 } from "preact/hooks";
-import { pageToken } from "../api-client.ts";
+import { wsUrl } from "../api-client.ts";
 import { stellaApi } from "../api-stella.ts";
 import { formatClockTime } from "../format.ts";
 import { useNarrowViewport, useReducedMotion } from "../hooks/useMediaQuery.ts";
@@ -512,20 +512,17 @@ export function StellaPane({
           default: RfbConstructor;
         };
         if (disposed) return;
-        // The relay is same-origin: the server owns the VNC port and forwards
-        // it. The token rides as a query parameter because a browser cannot
-        // set headers on a WebSocket handshake.
-        const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+        // The relay is on the API origin: the server owns the VNC port and
+        // forwards it. `wsUrl` names the origin and carries the token, which a
+        // browser cannot put in a handshake header.
         const query = new URLSearchParams();
-        const token = pageToken();
-        if (token !== undefined) query.set("token", token);
         // The pane is one conversation's desktop. Without the agent the
         // relay has no desktop to show.
         if (agentId !== null) query.set("agent", agentId);
         const search = query.toString();
-        const url = `${protocol}//${location.host}/api/stella/screen${
-          search === "" ? "" : `?${search}`
-        }`;
+        const url = wsUrl(
+          `/api/stella/screen${search === "" ? "" : `?${search}`}`,
+        );
         const rfb = new RFB(host, url);
         client = rfb;
         clientRef.current = rfb;

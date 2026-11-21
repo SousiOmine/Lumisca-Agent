@@ -53,5 +53,7 @@ export const MarkdownBlock = memo(function MarkdownBlock({
 function openFullSize(src: string): string {
   const url = new URL(src, globalThis.location.href);
   url.searchParams.set("preview", "0");
-  return url.pathname + url.search;
+  // The address may name another origin (the desktop shell's bundled UI
+  // reads a remote server): keep it, and the token already in the query.
+  return url.toString();
 }

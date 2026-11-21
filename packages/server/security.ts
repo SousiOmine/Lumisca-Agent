@@ -83,10 +83,18 @@ function unguardedPath(path: string): boolean {
   );
 }
 
-/** Origins allowed to read cross-origin responses (the Tauri WebView). */
+/** Origins allowed to read cross-origin responses (the Tauri WebView).
+ *
+ * `tauri://localhost` is the bundled UI's origin on macOS and Linux,
+ * `http://tauri.localhost` on Windows. In development Tauri serves the same
+ * frontend directory from its own loopback dev server on port 1430, so that
+ * origin has to read the API too; without it every request of `tauri dev`
+ * fails before its answer is looked at. */
 const ALLOWED_ORIGINS = new Set([
   "tauri://localhost",
   "http://tauri.localhost",
+  "http://127.0.0.1:1430",
+  "http://localhost:1430",
 ]);
 
 /** Whether `origin` (a browser's Origin header) names the server this
@@ -195,6 +203,15 @@ export function installSecurityMiddleware(
   if (options.token) {
     const token = options.token;
     app.use("*", async (c, next) => {
+      // A CORS preflight never carries credentials (the browser is asking
+      // what it may send before sending it). The guard must let it through
+      // so the CORS middleware below can answer: otherwise every
+      // cross-origin API request from the desktop shell's bundled UI fails
+      // before it starts.
+      if (c.req.method === "OPTIONS") {
+        await next();
+        return;
+      }
       if (!unguardedPath(c.req.path)) {
         const cookieName = tokenCookieName(c.req.header("host"));
         const remembered = getCookie(c, cookieName);

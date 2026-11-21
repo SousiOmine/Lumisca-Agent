@@ -37,18 +37,42 @@ pub(crate) fn focus_window_for_drag(window: &tauri::WebviewWindow) {
     }
 }
 
-/// Navigate the main window to a URL (local server page or remote server
-/// page).
-pub(crate) fn navigate_main(app: &AppHandle, url: &str) -> Result<(), String> {
-    let parsed = url
-        .parse::<url::Url>()
-        .map_err(|e| format!("URL が不正です: {e}"))?;
-    if let Some(window) = app.get_webview_window("main") {
-        window
-            .navigate(parsed)
-            .map_err(|e| format!("画面遷移に失敗しました: {e}"))?;
+/// Navigate the main window to the bundled UI for one server.
+///
+/// The UI is part of the app (Tauri serves it from the frontend directory),
+/// not a page the server sent: the window stays on the app's own origin and
+/// reaches the server through `window.__LUMISCA_API__`. The server's origin
+/// and token travel in the launch URL, which the page adopts and drops
+/// before its first render (see packages/web/src/desktop.ts).
+///
+/// The origin is read from the window itself instead of being spelled here:
+/// Tauri addresses the bundle as `tauri://localhost` on macOS and Linux and
+/// `http://tauri.localhost` on Windows, and the window is already on that
+/// origin (the splash page) whenever this runs.
+pub(crate) fn navigate_app(
+    app: &AppHandle,
+    endpoint: &crate::server::Endpoint,
+) -> Result<String, String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "メインウインドウがありません".to_string())?;
+    let mut url = window
+        .url()
+        .map_err(|e| format!("現在のURLを読めません: {e}"))?;
+    url.set_path("/index.html");
+    url.set_query(None);
+    url.set_fragment(None);
+    {
+        let mut query = url.query_pairs_mut();
+        query.append_pair("api", endpoint.base.trim_end_matches('/'));
+        if !endpoint.token.is_empty() {
+            query.append_pair("token", &endpoint.token);
+        }
     }
-    Ok(())
+    window
+        .navigate(url.clone())
+        .map_err(|e| format!("画面遷移に失敗しました: {e}"))?;
+    Ok(url.to_string())
 }
 
 /// Whether a URL the page asked to open belongs outside the app window.

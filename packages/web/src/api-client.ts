@@ -1,12 +1,72 @@
 import { stripDataUrlHeader } from "@lumisca/core/shared";
 import type { ModePrompt, PendingFile, PendingImage } from "./types.ts";
 
-/** The server serves both the UI and the API on the same origin. */
-const API_BASE = "";
-
 declare global {
   /** Embedded by the server when LUMISCA_TOKEN auth is enabled. */
   var __LUMISCA_TOKEN__: string | undefined;
+  /** Origin of the server this page talks to. Set only by the desktop
+   * shell's bundled UI, which is served from `tauri://localhost` and must
+   * address the API on another origin. Unset in a page the server served:
+   * the API is then on the page's own origin, and paths stay relative. */
+  var __LUMISCA_API__: string | undefined;
+}
+
+/** Origin of the API, without a trailing slash. Empty means the page's own
+ * origin (the server serves both the UI and the API). Read at use time: a
+ * test that installs the global after this module loads must still see it. */
+export function apiBase(): string {
+  const base = globalThis.__LUMISCA_API__;
+  return base === undefined || base === "" ? "" : base.replace(/\/+$/, "");
+}
+
+/** One API path as an absolute URL when the UI is bundled, or as it is when
+ * the server served this page. */
+export function apiUrl(path: string): string {
+  return `${apiBase()}${path}`;
+}
+
+/** A server URL for a request the browser makes itself (`<img>`, `<a download>`,
+ * a WebSocket): those cannot carry the token header, so the token rides as
+ * the query parameter the server's guard also accepts. A URL that already
+ * names a token is left alone. */
+export function withToken(url: string): string {
+  const isAbsolute = /^[a-z][a-z0-9+.-]*:/i.test(url);
+  const base = apiBase();
+  const target = isAbsolute ? url : apiUrl(url);
+  const token = pageToken();
+  if (token === undefined || token === "") {
+    // A page the server served keeps its relative URLs: they are what the
+    // page's own markup checks against (see MarkdownBlock's visual base).
+    return base === "" && !isAbsolute ? url : target;
+  }
+  const parsed = new URL(
+    target,
+    globalThis.location?.href ?? "http://localhost/",
+  );
+  if (!parsed.searchParams.has("token")) {
+    parsed.searchParams.set("token", token);
+  }
+  return base === "" && !isAbsolute
+    ? `${parsed.pathname}${parsed.search}`
+    : parsed.toString();
+}
+
+/** A WebSocket URL for `path`: the API origin in the desktop shell, the
+ * page's own origin when the server served this page. Browsers cannot set a
+ * header on a handshake, so the token travels in the query string. */
+export function wsUrl(path: string): string {
+  const origin = globalThis.location;
+  const base =
+    apiBase() === ""
+      ? origin === undefined
+        ? "http://localhost"
+        : `${origin.protocol}//${origin.host}`
+      : apiBase();
+  const url = new URL(path, `${base}/`);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  const token = pageToken();
+  if (token !== undefined && token !== "") url.searchParams.set("token", token);
+  return url.toString();
 }
 
 /** Optional per-instance token (embedded in the page by the server).
@@ -122,7 +182,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
       : AbortSignal.any([init.signal, deadline.signal]);
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}${path}`, { ...init, headers, signal });
+    res = await fetch(apiUrl(path), { ...init, headers, signal });
   } catch (error) {
     // A timeout is not an outage the desktop can restart its way out of any
     // differently from a refused connection, so the monitor is told either
@@ -202,9 +262,11 @@ export function sessionPath(sessionId: string, suffix = ""): string {
  * the same shape as every other federated call. */
 export function sessionVisualBase(peerId: string, sessionId: string): string {
   const path = `${sessionPath(sessionId, "/visual/")}`;
-  return peerId === ""
-    ? `/api${path}`
-    : `/api/fed/${encodeURIComponent(peerId)}${path}`;
+  return apiUrl(
+    peerId === ""
+      ? `/api${path}`
+      : `/api/fed/${encodeURIComponent(peerId)}${path}`,
+  );
 }
 
 /** URL base of a session's attachments (the files `chat_attach` sent, always
@@ -215,9 +277,11 @@ export function sessionAttachmentBase(
   sessionId: string,
 ): string {
   const path = `${sessionPath(sessionId, "/attachment/")}`;
-  return peerId === ""
-    ? `/api${path}`
-    : `/api/fed/${encodeURIComponent(peerId)}${path}`;
+  return apiUrl(
+    peerId === ""
+      ? `/api${path}`
+      : `/api/fed/${encodeURIComponent(peerId)}${path}`,
+  );
 }
 
 /** URL of one stella agent's icon (always the local server: stella is a mode
@@ -225,16 +289,22 @@ export function sessionAttachmentBase(
  * store generated, which is why the icon changes URL when the picture
  * changes — the response is cached forever. */
 export function stellaAgentIconUrl(agentId: string, name: string): string {
-  return `/api/stella/agents/${encodeURIComponent(agentId)}/icon/${encodeURIComponent(
-    name,
-  )}`;
+  return withToken(
+    apiUrl(
+      `/api/stella/agents/${encodeURIComponent(agentId)}/icon/${encodeURIComponent(
+        name,
+      )}`,
+    ),
+  );
 }
 
 /** Where a prompt's own files are read back from: the conversation's upload
  * route, which reads them out of the machine. `ref` is appended by the
  * caller as a query parameter (see PromptAttachments). */
 export function stellaUploadBase(agentId: string): string {
-  return `/api/stella/conversations/${encodeURIComponent(agentId)}/upload`;
+  return apiUrl(
+    `/api/stella/conversations/${encodeURIComponent(agentId)}/upload`,
+  );
 }
 
 /** Bind one API call to a peer or this server: `local` runs against this

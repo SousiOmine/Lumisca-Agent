@@ -46,20 +46,22 @@ export function languageForRequest(core: LumiscaCore, c: Context): Locale {
   ]);
 }
 
-/** Register the page, the bootstrap script and the static assets. Error
- * policy differs from the API on purpose: an asset failure answers plain text
- * (a browser shows it directly; a JSON body would be a blob). */
-export function registerPages(
-  app: Hono,
+/** Everything a freshly loaded client needs before its first render.
+ *
+ * The page's bootstrap script carries it as `window.__INITIAL_DATA__`; the
+ * bundled desktop UI fetches the same object from `/api/initial-data` (it is
+ * not served by this server and has no bootstrap script of its own). One
+ * function for both, so a field added here reaches both clients. */
+export async function initialDataFor(
   core: LumiscaCore,
   assets: Assets,
-  options: { token?: string },
-): { renderPage: (c: Context) => Promise<Response> } {
-  const initialData = async (language: Locale): Promise<InitialData> => ({
+  c: Context,
+): Promise<InitialData> {
+  return {
     workspaces: core.listWorkspaces(),
     theme: themeOf(core),
-    language,
-    // The build this page was served with: `/api/health` reports the one the
+    language: languageForRequest(core, c),
+    // The build this page was served with: `/api/build` reports the one the
     // server serves now, and the difference is how an installed PWA (no
     // address bar, no reload) learns that its bundle has been replaced.
     buildId: await assets.buildId(),
@@ -70,8 +72,18 @@ export function registerPages(
     // Read per request like the rest: the switch in settings must reach the
     // next page load, and the client needs it before its first render.
     codeModeEnabled: codeModeEnabled((key) => core.getSetting(key)),
-  });
+  };
+}
 
+/** Register the page, the bootstrap script and the static assets. Error
+ * policy differs from the API on purpose: an asset failure answers plain text
+ * (a browser shows it directly; a JSON body would be a blob). */
+export function registerPages(
+  app: Hono,
+  core: LumiscaCore,
+  assets: Assets,
+  options: { token?: string },
+): { renderPage: (c: Context) => Promise<Response> } {
   /** Render the app shell for one request (also the SPA fallback). */
   const renderPage = async (c: Context): Promise<Response> => {
     const css = await assets.getCss();
@@ -106,7 +118,7 @@ export function registerPages(
   app.get("/assets/initial-data.js", async (c) => {
     // `<` is escaped so the JSON can never close the script tag.
     const safeData = JSON.stringify(
-      await initialData(languageForRequest(core, c)),
+      await initialDataFor(core, assets, c),
     ).replace(/</g, "\\u003c");
     const tokenLine = options.token
       ? `\nwindow.__LUMISCA_TOKEN__ = ${JSON.stringify(options.token)};`

@@ -13,10 +13,10 @@ use std::time::Duration;
 use tauri::{AppHandle, Manager};
 
 use crate::server::{
-    ensure_local_server, health_check, host_label, page_url, HealthFailure, Scheme,
+    ensure_local_server, health_check, host_label, Endpoint, HealthFailure, Scheme,
 };
 use crate::settings::{self, SavedConnection};
-use crate::window::navigate_main;
+use crate::window::navigate_app;
 use crate::{AppState, LockRecover};
 
 /// Health-probe budget when the user connects by hand: long enough for a
@@ -272,9 +272,12 @@ fn display_remote(app: &AppHandle, conn: &SavedConnection) -> Result<String, Str
     // A loan names one conversation on one server: showing another server
     // ends every loan instead of carrying a folder the user never lent there.
     crate::share::revoke_all(app);
-    let page = page_url(&conn.url, &conn.token);
+    let endpoint = Endpoint {
+        base: conn.url.clone(),
+        token: conn.token.clone(),
+    };
     *app.state::<AppState>().displayed.lock_recover() = Some(conn.clone());
-    navigate_main(app, &page)?;
+    let page = navigate_app(app, &endpoint)?;
     Ok(page)
 }
 
@@ -289,7 +292,7 @@ pub(crate) fn connect_local(app: &AppHandle) -> Result<String, String> {
         let deadline = std::time::Instant::now() + CONNECT_LOCAL_WAIT_TIMEOUT;
         loop {
             if let Some(result) = shared.lock_recover().clone() {
-                return result.and_then(|url| display_local(app, &url));
+                return result.and_then(|endpoint| display_local(app, &endpoint));
             }
             if std::time::Instant::now() >= deadline {
                 // The background startup never completed (e.g. its thread
@@ -305,8 +308,8 @@ pub(crate) fn connect_local(app: &AppHandle) -> Result<String, String> {
             std::thread::sleep(Duration::from_millis(50));
         }
     }
-    let url = ensure_local_server(app)?;
-    display_local(app, &url)
+    let endpoint = ensure_local_server(app)?;
+    display_local(app, &endpoint)
 }
 
 /// Point the window at the local server. The local choice also replaces
@@ -314,18 +317,18 @@ pub(crate) fn connect_local(app: &AppHandle) -> Result<String, String> {
 /// failed write keeps the window where it is rather than switching to a
 /// display the next launch will not restore. Also used by the server-down
 /// banner's restart, which is explicitly about the local server.
-pub(crate) fn display_local(app: &AppHandle, url: &str) -> Result<String, String> {
+pub(crate) fn display_local(app: &AppHandle, endpoint: &Endpoint) -> Result<String, String> {
     // Same rule as display_remote: the loans belonged to the server the
     // window was showing.
     crate::share::revoke_all(app);
     remember(app, None)?;
     *app.state::<AppState>().displayed.lock_recover() = None;
-    navigate_main(app, url)?;
+    let page = navigate_app(app, endpoint)?;
     // A restore that was abandoned in favour of the local server leaves
     // "connecting" behind otherwise, and the splash would keep waiting
     // after a failed navigation.
     set_startup(app, "ready", None);
-    Ok(url.to_string())
+    Ok(page)
 }
 
 /// Startup: display the remembered remote server, or start the local one

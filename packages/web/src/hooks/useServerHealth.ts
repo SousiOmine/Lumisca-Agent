@@ -1,6 +1,6 @@
 import { errorMessage } from "@lumisca/core/shared";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
-import { onServerFailure, pageToken } from "../api-client.ts";
+import { onServerFailure, withToken } from "../api-client.ts";
 import { type LocalServerStatus, serverApi } from "../shell.ts";
 
 /** How often the shell is asked about the local server while the page is
@@ -123,11 +123,9 @@ export function useServerHealth(active: boolean): ServerHealth {
           // — the banner clears after consecutive successes even if the
           // shell state lags a restart.
           try {
-            const token = pageToken();
-            const url = token
-              ? `/api/health?token=${encodeURIComponent(token)}`
-              : "/api/health";
-            const res = await fetch(url, { cache: "no-store" });
+            const res = await fetch(withToken("/api/health"), {
+              cache: "no-store",
+            });
             if (cancelled) return;
             if (res.ok) {
               setHealthyRounds((r) => Math.min(r + 1, RECOVER_ROUNDS));

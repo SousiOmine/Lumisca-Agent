@@ -1,4 +1,5 @@
 import type { PromptFileRef } from "@lumisca/core/shared";
+import { withToken } from "../../api-client.ts";
 import { useT } from "../../i18n.ts";
 import {
   type AttachmentView,
@@ -27,7 +28,9 @@ export function PromptAttachments({
   /** One file's URL. `preview` is the downscaled copy the grid draws; the
    * original is what a click opens and what a card downloads. */
   const srcOf = (file: PromptFileRef, preview: boolean) =>
-    `${base}?ref=${encodeURIComponent(file.ref)}${preview ? "" : "&preview=0"}`;
+    withToken(
+      `${base}?ref=${encodeURIComponent(file.ref)}${preview ? "" : "&preview=0"}`,
+    );
 
   const items: AttachmentView[] = files.map((file) =>
     file.image

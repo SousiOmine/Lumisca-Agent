@@ -4,6 +4,7 @@ import {
   type Translator,
 } from "@lumisca/core/shared";
 import { Marked, type RendererObject, type Tokens } from "marked";
+import { withToken } from "./api-client.ts";
 
 function escapeHtml(text: string): string {
   return text
@@ -71,7 +72,9 @@ function rendererFor(options: MarkdownOptions): RendererObject {
       // (the route produces one when the picture is big); the click opens the
       // original through the lightbox, which asks for `preview=0`.
       const href =
-        name === undefined ? safeImageHref(token.href) : `${visualBase}${name}`;
+        name === undefined
+          ? safeImageHref(token.href)
+          : withToken(`${visualBase}${name}`);
       if (!href) return "";
       return `<img src="${escapeHtml(href)}" alt="${escapeHtml(
         token.text,

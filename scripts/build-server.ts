@@ -37,6 +37,7 @@ import {
   ASSETS_FILE_NAME,
   ICU_DATA_FILE_NAME,
 } from "../packages/server/layout.ts";
+import { renderDesktopDocument } from "../packages/server/render.ts";
 import { binaryName, repoRoot, reportUsage } from "./lib.ts";
 
 /** The entry both distributions compile: the desktop shell bundles the
@@ -49,12 +50,15 @@ interface Options {
   outDir: string;
   /** False with `--no-compile`: assets + placeholder only. */
   compile: boolean;
+  /** Absolute directory the desktop shell's bundled UI is written to
+   * (`--frontend`), or undefined for a server-only build. */
+  frontendDir?: string;
 }
 
 function usage(message?: string): never {
   reportUsage(
     "build-server",
-    "bun run scripts/build-server.ts [--out <dir>] [--no-compile]",
+    "bun run scripts/build-server.ts [--out <dir>] [--no-compile] [--frontend <dir>]",
     message,
   );
 }
@@ -68,10 +72,18 @@ function defaultOutDir(): string {
 
 function parseArgs(args: readonly string[]): Options {
   let out: string | undefined;
+  let frontend: string | undefined;
   let compile = true;
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === "--out") {
+    if (arg === "--frontend") {
+      const value = args[i + 1];
+      if (value === undefined || value.startsWith("--")) {
+        usage("--frontend needs a directory");
+      }
+      frontend = value;
+      i++;
+    } else if (arg === "--out") {
       const value = args[i + 1];
       if (value === undefined || value.startsWith("--")) {
         usage("--out needs a directory");
@@ -94,7 +106,17 @@ function parseArgs(args: readonly string[]): Options {
       : isAbsolute(out)
         ? out
         : resolve(process.cwd(), out);
-  return { outDir, compile };
+  const frontendDir =
+    frontend === undefined
+      ? undefined
+      : isAbsolute(frontend)
+        ? frontend
+        : resolve(process.cwd(), frontend);
+  return {
+    outDir,
+    compile,
+    ...(frontendDir === undefined ? {} : { frontendDir }),
+  };
 }
 
 async function exists(path: string): Promise<boolean> {
@@ -104,6 +126,34 @@ async function exists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** Write the same client build into the desktop shell's frontend directory
+ * (`--frontend`). Tauri serves that directory from the app's own origin, so
+ * the desktop window shows this bundle and asks the selected server only
+ * for API data. One bundle function feeds both distributions, so the two
+ * cannot drift.
+ *
+ * The assets directory is replaced, not merged: a chunk a previous build
+ * wrote and this one no longer emits must not stay in the package. The
+ * splash files beside it (splash.html, splash.js) are the shell's own and
+ * are left alone. */
+async function stageDesktopFrontend(
+  frontendDir: string,
+  manifest: {
+    client: Record<string, { body: string }>;
+    "styles.css": string;
+  },
+): Promise<void> {
+  const assets = join(frontendDir, "assets");
+  await fsp.rm(assets, { recursive: true, force: true });
+  await fsp.mkdir(assets, { recursive: true });
+  for (const [name, file] of Object.entries(manifest.client)) {
+    await fsp.writeFile(join(assets, name), file.body);
+  }
+  await fsp.writeFile(join(assets, "styles.css"), manifest["styles.css"]);
+  await fsp.writeFile(join(frontendDir, "index.html"), renderDesktopDocument());
+  console.log(`Desktop UI: ${frontendDir}`);
 }
 
 /** Compile the server entry into `outputPath`. The stored binary must be
@@ -234,6 +284,9 @@ console.log(
   `Assets: ${assetsFile} (${clientBytes} bytes of JS: ` +
     `${Object.keys(manifest.client).join(", ")})`,
 );
+if (options.frontendDir !== undefined) {
+  await stageDesktopFrontend(options.frontendDir, manifest);
+}
 
 // 2. Stage Skia's ICU data file (Windows only; removed elsewhere), and the
 //    stella machine's container files (used by `podman build` at runtime).
