@@ -231,13 +231,13 @@ export function checkLayers(files: readonly Source[], root = ROOT): string[] {
     { dir: "packages/core/session", forbidden: ["packages/core/tools"] },
   ];
   for (const file of files) {
-    const rel = relative(root, file.path);
+    const rel = relative(root, file.path).replaceAll("\\", "/");
     const rule = rules.find((r) => rel.startsWith(r.dir + "/"));
     if (rule === undefined) continue;
     for (const specifier of runtimeSpecifiers(file.text, file.path)) {
       const target = resolveSpecifier(file.path, specifier);
       if (target === undefined) continue;
-      const targetRel = relative(root, target);
+      const targetRel = relative(root, target).replaceAll("\\", "/");
       if (!rule.forbidden.some((f) => targetRel.startsWith(f + "/"))) continue;
       problems.push(
         `${rel} imports ${targetRel} at runtime (${rule.dir.split("/").pop()} may only take its types)`,
