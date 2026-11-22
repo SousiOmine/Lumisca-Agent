@@ -28,10 +28,10 @@ const VM_USER = "agent";
  * tool set, not the reply language (both are context messages). That is not
  * a simplification: a session re-derives its prompt on every open and
  * rewrites it only when the string differs (see
- * AgentFactory.ensureSystemPrompt), which needs unchanged inputs to produce
- * an identical string. The one install-wide switch that does reach here is
- * `appUiGuide`: moving it rebuilds the open sessions, so it is fixed for the
- * life of an agent like the tool set is.
+ * session-prompt.ts's ensureSystemPrompt), which needs unchanged inputs to
+ * produce an identical string. The one install-wide switch that does reach
+ * here is `appUiGuide`: moving it rebuilds the open sessions, so it is fixed
+ * for the life of an agent like the tool set is.
  */
 export function buildSystemPrompt(
   workspace: Workspace,
@@ -77,7 +77,7 @@ export function buildStellaSystemPrompt(
      * The agent's NAME is deliberately not here: it labels a sidebar row and
      * a header, and the user can change it at any time. The prompt is
      * re-derived on every open and rewritten only when it differs (see
-     * AgentFactory.ensureSystemPrompt), so a name in it would either freeze
+     * session-prompt.ts's ensureSystemPrompt), so a name in it would either freeze
      * the old one (the agent introducing itself under a name the user
      * already replaced) or force a rewrite — which costs the provider's
      * cached prefix on every rename. The model is a helpful assistant; who
@@ -87,7 +87,7 @@ export function buildStellaSystemPrompt(
      * The identity is the text the agent wrote about itself. It is read when
      * the prompt is generated and fixed from then on: a write does not touch
      * the live prompt, because the prompt is the prefix the provider caches.
-     * A compaction regenerates the prompt (see AgentFactory.ensureSystemPrompt
+     * A compaction regenerates the prompt (see session-prompt.ts's ensureSystemPrompt
      * and SessionAgentOptions.refreshSystemPrompt), and that is where a later
      * identity reaches the model. */
     agent?: { role: string; identity?: string };

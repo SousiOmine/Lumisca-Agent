@@ -228,7 +228,7 @@ export class SessionPool {
    *
    * The distinction from applyChange is only possible because these tools
    * live in the session's registry rather than in the agent's own tool set
-   * (see AgentFactory.seedDiscoverableTools): the run keeps the tools it
+   * (see agent/session-tools.ts): the run keeps the tools it
    * started with, and what it can find through tool_search follows. */
   applyCapabilityChange(sessions: SessionInfo[], mutate: () => void): void {
     this.applyAndFollow(sessions, mutate, (session, resources) =>

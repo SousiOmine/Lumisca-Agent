@@ -59,7 +59,7 @@ test("the system prompt carries no guidelines at all", () => {
 
 test("buildSystemPrompt: nothing that varies with the session is in it", () => {
   // The prompt is re-derived on every open and compared against the stored
-  // value (see AgentFactory.ensureSystemPrompt), so it may only carry what
+  // value (see session-prompt.ts's ensureSystemPrompt), so it may only carry what
   // describes where the session works. The language is a setting and the
   // tool set changes with the extras: both travel as context messages.
   const prompt = buildSystemPrompt(workspace);

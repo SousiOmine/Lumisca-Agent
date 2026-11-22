@@ -618,7 +618,7 @@ X サーバ（`:99`）、ウィンドウマネージャ、セッションバス�
 実装は `packages/core/share/`（名前空間の合成、ハブ、context）と `packages/server/share-host.ts`（貸し手のプロセス）にあります。
 
 - 合成は `mountedBackends` の 1 か所です。
-  `AgentFactory.resolveWhere` がここを通します。
+  `agent/session-location.ts` の `resolveSessionWhere` がここを通します。
   ツール側に「貸出フォルダか」を書かないでください（`read` から `send_chat` まで同じ backend を通ります）。
 - `roots[0]` は必ずセッション自身の根です（`MountedFiles`）。
   切り詰め出力の退避先（`OutputSpiller`）がそこを見ており、貸出フォルダへ書くと、貸し手が消えたあとに読めなくなります。
@@ -854,7 +854,7 @@ API キーやトークンは、ツールの引数にも戻り値にも会話に�
 - `role` は編集できません。
   作成時のシステムプロンプトに入っており、後から変えても既存の会話に届きません。
   名前もプロンプトには入りません（`packages/core/agent/system-prompt.ts`）。
-  プロンプト自体はセッションを開くたびに導出し直され、保存値と違えば書き換わるので（`packages/core/agent/factory.ts` の `ensureSystemPrompt`）、新しい版でプロンプトを変えれば既存の会話にも届きます。
+  プロンプト自体はセッションを開くたびに導出し直され、保存値と違えば書き換わるので（`packages/core/agent/session-prompt.ts` の `ensureSystemPrompt`）、新しい版でプロンプトを変えれば既存の会話にも届きます。
 - アイコン: 保存先は DB 隣の `.lumisca-agent-icons/<agent id>/` です（`packages/core/stella/icons.ts`）。
   未設定なら名前の頭文字を `agent id` から導いた色の上に描きます（`packages/core/shared/agent-avatar.ts`）。
   PNG / JPEG / GIF / WebP / BMP の 512 KiB までで、SVG は置けません。

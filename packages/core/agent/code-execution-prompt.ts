@@ -4,10 +4,10 @@
  * It belongs in the system prompt rather than a context message because the
  * preloaded tool set it declares is fixed for the life of an agent: the pool
  * rebuilds the agent when the set changes (the mode toggle, a model or
- * workspace change), and ensureSystemPrompt rewrites the stored prompt with
- * the new declarations. The discoverable registry is the part that changes
- * while a session lives, and it stays out of the declarations; tool_search
- * reads it live.
+ * workspace change), and session-prompt.ts's ensureSystemPrompt rewrites the
+ * stored prompt with the new declarations. The discoverable registry is the
+ * part that changes while a session lives, and it stays out of the
+ * declarations; tool_search reads it live.
  */
 export function codeExecutionPrompt(sdk: string): string {
   return [

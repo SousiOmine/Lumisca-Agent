@@ -103,7 +103,7 @@ export interface SessionPersistence {
     stella?: { role: string; identity: string; id: string },
   ): string;
   /** Store the session's current system prompt (see
-   * AgentFactory.ensureSystemPrompt: written only when it changed). */
+   * agent/session-prompt.ts's ensureSystemPrompt: written only when it changed). */
   updateSystemPrompt(id: string, systemPrompt: string): void;
   /** The machine-level AGENTS.md (path + current content), or undefined
    * when none is configured: published as dynamic context together with

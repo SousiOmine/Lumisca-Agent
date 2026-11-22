@@ -1,95 +1,44 @@
 import { Agent } from "../ai/agent.ts";
-import type { AgentEvent, RequestShape } from "../ai/agent-types.ts";
+import type { RequestShape } from "../ai/agent-types.ts";
 import type { Model } from "../ai/catalog.ts";
 import type { CompactionStyle } from "../ai/compaction-style.ts";
-import {
-  type CompactionResult,
-  contextStart,
-} from "../ai/context-compaction.ts";
+import type { CompactionResult } from "../ai/context-compaction.ts";
 import type { ContextProvider } from "../ai/context-providers.ts";
-import { toLlmMessages } from "../ai/llm-view.ts";
-import type { NotificationPayload } from "../ai/notification.ts";
-import { notificationMessage } from "../ai/notification.ts";
 import type { StreamFn } from "../ai/transport.ts";
 import type { ClientEvent } from "../domain/event.ts";
-import type {
-  AgentMessage,
-  AssistantMessage,
-  CheckpointMessage,
-  ImageContent,
-  Message,
-  TextContent,
-} from "../domain/message.ts";
+import type { AgentMessage, ImageContent } from "../domain/message.ts";
 import type { ModePrompt } from "../domain/mode-message.ts";
-import { buildModeMessage } from "../domain/mode-message.ts";
 import type { Api } from "../domain/model.ts";
-import { errorMessage } from "../errors.ts";
-import { createLogger } from "../log.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
 import type { McpServerStatus } from "../mcp/manager.ts";
 import type { Tool } from "../ports/tool.ts";
 import type { MessageRepo } from "../session/messages.ts";
-import { messageIdentityOf } from "../session/transcript-window.ts";
 import type { PendingShareRequest, ShareRequestHub } from "../share/request.ts";
 import type { AskAnswer, PromptFileRef, ThinkingLevel } from "../shared/mod.ts";
-import {
-  contentText,
-  DEFAULT_LOCALE,
-  type Locale,
-  textWithFileNotice,
-  translate,
-} from "../shared/mod.ts";
+import { DEFAULT_LOCALE, type Locale } from "../shared/mod.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
-import { firstAppCardProblem } from "../shared/ui-app/check.ts";
 import type { AskHub, PendingQuestion } from "../tools/ask.ts";
-import type {
-  BackgroundCommandDone,
-  BackgroundProcessManager,
-} from "../tools/background.ts";
-import { formatBackgroundNotification } from "../tools/background.ts";
+import type { BackgroundProcessManager } from "../tools/background.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
 import type { SessionToolRegistries } from "../tools/registries.ts";
 import type { TaskHub } from "../tools/task-hub.ts";
 import type { EnvRequestHub, PendingEnvRequest } from "../vm/env-request.ts";
 import type { HandoverHub, PendingHandover } from "../vm/handover.ts";
-import {
-  appCardRetryNotification,
-  MAX_APP_CARD_RETRIES,
-} from "./app-card-repair.ts";
-import {
-  CompactionController,
-  type IdleCompaction,
-} from "./compaction-controller.ts";
+import type { IdleCompaction } from "./compaction-controller.ts";
 import { ContextPublisher } from "./context-publisher.ts";
 import { ImageAnalyzer } from "./image-analysis.ts";
 import { InterruptionHub } from "./interruption-hub.ts";
 import { McpAttachmentHost } from "./mcp-host.ts";
 import { RetryManager } from "./retry-manager.ts";
 import { Rewinder } from "./rewinder.ts";
-import { ROUTINE_SILENCE_GUIDANCE } from "./routine-guidance.ts";
-import { type RoutineDropHost, RoutineRun } from "./routine-run.ts";
-import { TextUi, translateRunEvent } from "./run-events.ts";
-import { RunReply } from "./run-reply.ts";
+import { SessionCompaction } from "./session-compaction.ts";
+import { SessionEvents } from "./session-events.ts";
+import { SessionLlmView } from "./session-llm-view.ts";
+import { SessionRuns } from "./session-runs.ts";
+import { SessionTurn } from "./session-turn.ts";
 import { TitleGenerator } from "./title-generation.ts";
 import { TitleScheduler } from "./title-scheduler.ts";
 import { TranscriptStore } from "./transcript.ts";
-
-/** Module logger (debug-gated): title-generation misses and other
- * best-effort failures land here instead of vanishing silently. */
-const log = createLogger("session-agent");
-
-/** `text` with `part` after it, separated by a blank line; undefined when
- * there is nothing to append (so a message without a model-only part keeps
- * `modelContent` unset and its content is its identity). */
-function withTrailingPart(
-  text: string,
-  part: string | undefined,
-): string | undefined {
-  if (part === undefined || part.length === 0) {
-    return text.length === 0 ? undefined : text;
-  }
-  return text.length === 0 ? part : `${text}\n\n${part}`;
-}
 
 export interface SessionAgentOptions {
   sessionId: string;
@@ -227,10 +176,15 @@ export interface SessionAgentOptions {
    * the prompt cache; omitted → nothing is observed. */
   onRequestShape?: (shape: RequestShape) => void;
 }
-
 /**
  * One live agent session: wraps the Agent, forwards UI events,
  * and persists new messages to the database as they complete.
+ *
+ * The session owns the state a run needs — the transcript store, the retry
+ * budgets, the rewind, the MCP attachment, the interruptions — and hands each
+ * concern that has its own rules to a coordinator: SessionRuns starts (and
+ * retries) runs, SessionEvents publishes them, SessionCompaction condenses the
+ * history behind them.
  */
 export class SessionAgent {
   readonly sessionId: string;
@@ -240,17 +194,9 @@ export class SessionAgent {
   /** The rows this session owns in the messages table, and how many leading
    * transcript messages they cover (see transcript.ts). */
   private readonly transcript: TranscriptStore;
-  /** The card being written into a reply, for a stream whose client never
-   * receives the text (see SessionAgentOptions.uiFromText). */
-  private readonly textUi = new TextUi();
-  private readonly uiFromText: boolean;
-  /** What this run last said to the user, for the `agent_end` notification
-   * (see RunReply). */
-  private readonly reply = new RunReply();
   /** The tool names this session was built with (see the `toolNames`
    * accessor). */
   private readonly toolNamesOfSession: string[];
-  private readonly onEvent: (event: ClientEvent) => void;
   /** The session's MCP attachment: its servers gate the first prompt, and
    * its tools land in the session's shared registry once discovery finished. */
   private mcp: McpAttachmentHost;
@@ -261,9 +207,9 @@ export class SessionAgent {
    * before building the agent; MCP discovery merges its tools in
    * afterwards. This agent searches `main` only. */
   private readonly toolRegistry: SessionToolRegistries | null;
-  /** Interprets images for a text-only main model (null when the main
-   * model sees images or no analysis model is configured). */
-  private readonly imageAnalyzer: ImageAnalyzer | null;
+  /** The transcript as the model reads it (checkpoint view, notification
+   * messages, image analysis — see SessionLlmView). */
+  private readonly llmView: SessionLlmView;
   /** Generates the session title from the first user message (null when
    * no fast model is configured). */
   private readonly titleScheduler: TitleScheduler;
@@ -280,11 +226,8 @@ export class SessionAgent {
   /** Owns the vacant-response / rate-limit retry state (budgets, parked
    * restarts, abort epochs). */
   private readonly retry: RetryManager;
-  /** Consecutive app card failures in the current exchange (see
-   * discardBrokenAppCard). */
-  private appCardRetries = 0;
-  /** Condenses the history (see CompactionController). */
-  private readonly compaction: CompactionController;
+  /** Condenses the history (see SessionCompaction). */
+  private readonly compaction: SessionCompaction;
   private readonly renameSession: (name: string) => void;
   /** The ask questions and the screen hand-over: both are released when the
    * run ends (see InterruptionHub). */
@@ -303,29 +246,16 @@ export class SessionAgent {
   /** Set by close(): completion notifications of killed background
    * commands must not reach the discarded agent. */
   private closed = false;
-  /** The routine in flight and the removal of a silent one. */
-  private readonly routineRuns = new RoutineRun();
-  private readonly routineHost: RoutineDropHost = {
-    messages: () => this.agent.state.messages,
-    baseIndex: () => this.transcript.baseIndex,
-    forgetFrom: (messages, from) => this.transcript.forgetFrom(messages, from),
-    truncateFrom: (position) => this.transcript.truncateFrom(position),
-    rebaseContexts: (messages) => this.contexts.rebase(messages),
-    emitTruncated: (removed) =>
-      this.emit({
-        type: "messages_truncated",
-        sessionId: this.sessionId,
-        removed,
-      }),
-  };
-  /** The idle-compaction rule of this conversation (see
-   * CompactionController); null → the idle path is off. */
-  get idleCompaction(): IdleCompaction | null {
-    return this.compaction.idle;
-  }
+  /** The prompt paths (see SessionRuns). */
+  private readonly runs: SessionRuns;
+  /** What a turn boundary decides: the app-card take-back, the retry
+   * classification and the restart chain (see SessionTurn). */
+  private readonly turn: SessionTurn;
+  /** The publication of the agent's events (see SessionEvents). */
+  private readonly events: SessionEvents;
 
   /** Whether rows behind a checkpoint lose their payload (see
-   * SessionAgentOptions.shouldPruneCondensed and session/prune.ts). */
+   * SessionAgentOptions.shouldPruneCondensed). */
   private readonly shouldPruneCondensed: () => boolean;
   /** What a prune freed in the store (see SessionAgentOptions.onFreedBytes). */
   private readonly onFreedBytes: ((bytes: number) => void) | undefined;
@@ -340,8 +270,6 @@ export class SessionAgent {
       options.baseIndex ?? 0,
     );
     this.toolRegistry = options.toolRegistry ?? null;
-    this.uiFromText = options.uiFromText === true;
-    this.onEvent = options.onEvent;
     this.renameSession = options.renameSession;
     this.interruptions = new InterruptionHub(
       options.askHub,
@@ -352,11 +280,12 @@ export class SessionAgent {
 
     // A vision-capable main model passes images through as-is; only a
     // text-only model with an analysis model configured needs rewriting.
-    this.imageAnalyzer =
+    this.llmView = new SessionLlmView(
       options.imageAnalysisModel !== undefined &&
-      !(options.model.input ?? []).includes("image")
+        !(options.model.input ?? []).includes("image")
         ? new ImageAnalyzer(options.imageAnalysisModel, options.streamFn)
-        : null;
+        : null,
+    );
     const titleGenerator =
       options.fastModel !== undefined && options.titleGeneration !== false
         ? new TitleGenerator(options.fastModel, options.streamFn)
@@ -374,12 +303,12 @@ export class SessionAgent {
       this.backgroundManager === null
         ? null
         : this.backgroundManager.onExit((done) => {
-            this.notifyBackgroundCommand(done);
+            this.runs.notifyBackgroundCommand(done);
           });
     this.taskHub = options.taskHub ?? null;
     this.taskHub?.setParentDelivery({
       isActive: () => !this.closed,
-      deliver: (payload) => this.injectNotification(payload),
+      deliver: (payload) => this.runs.injectNotification(payload),
     });
 
     this.toolNamesOfSession = options.tools.map((tool) => tool.name);
@@ -393,7 +322,7 @@ export class SessionAgent {
       },
       streamFn: options.streamFn,
       sessionId: options.sessionId,
-      convertToLlm: (messages) => this.convertToLlm(messages),
+      convertToLlm: (messages) => this.llmView.convert(messages),
       beforeStep: (signal) => this.compaction.beforeStep(signal),
       ...(options.onRequestShape !== undefined
         ? { onRequest: options.onRequestShape }
@@ -407,7 +336,7 @@ export class SessionAgent {
       abort: () => this.abort(),
       rebaseContexts: (messages) => this.contexts.rebase(messages),
       emit: (event) =>
-        this.emit({
+        this.events.emit({
           type: event.type,
           sessionId: this.sessionId,
           removed: event.removed,
@@ -419,79 +348,109 @@ export class SessionAgent {
       () => this.closed,
       options.codeExecution === true,
     );
-    // Condense the history before a request would exceed the model's window
-    // (see context-compaction.ts). The compactor reads the live prompt and
-    // tools, so a mid-session model or tool change is reflected without
-    // rebuilding it; the checkpoint is inserted at the cut and the model's
-    // view starts there (nothing is deleted).
-    this.compaction = new CompactionController(
+    this.compaction = new SessionCompaction(
       {
         sessionId: this.sessionId,
         messages: () => this.agent.state.messages,
-        isStreaming: () => this.isStreaming,
-        isClosed: () => this.closed,
-        insertHistory: (index, message) => this.insertHistory(index, message),
+        systemPrompt: () => this.agent.state.systemPrompt,
+        tools: () => this.agent.state.tools,
+        transcript: this.transcript,
+        rebaseContexts: (messages) => this.contexts.rebase(messages),
         publishContexts: () => this.contexts.publish(),
-        refreshPrompt: () => {
-          if (options.refreshSystemPrompt === undefined) return;
-          this.agent.state.systemPrompt = options.refreshSystemPrompt();
+        emit: (event) => this.events.emit(event),
+        setSystemPrompt: (prompt) => {
+          this.agent.state.systemPrompt = prompt;
         },
-        onCompacted: (index, message) =>
-          this.announceCheckpoint(index, message),
+        shouldPruneCondensed: () => this.shouldPruneCondensed(),
+        freedBytes: (bytes) => this.onFreedBytes?.(bytes),
+        isClosed: () => this.closed,
+        isStreaming: () => this.isStreaming,
       },
       {
         model: options.model,
-        systemPrompt: () => this.agent.state.systemPrompt,
-        tools: () => this.agent.state.tools,
         streamFn: options.streamFn,
         style: options.compactionStyle,
         language: this.language,
         policy: options.compactionPolicy,
         idle: options.idleCompaction ?? null,
+        refreshSystemPrompt: options.refreshSystemPrompt,
       },
     );
+    this.shouldPruneCondensed = options.shouldPruneCondensed ?? (() => false);
+    this.onFreedBytes = options.onFreedBytes;
     this.contexts = new ContextPublisher(options.contextProviders ?? [], {
       append: (message) => this.agent.appendMessage(message),
-      announce: (message) => this.announceMessage(message),
+      announce: (message) => this.events.announce(message),
       nextTimestamp: () => this.agent.nextTimestamp(),
       isClosed: () => this.closed,
     });
-    this.shouldPruneCondensed = options.shouldPruneCondensed ?? (() => false);
-    this.onFreedBytes = options.onFreedBytes;
+    this.turn = new SessionTurn({
+      sessionId: this.sessionId,
+      agent: this.agent,
+      transcript: this.transcript,
+      retry: this.retry,
+      compaction: this.compaction,
+      language: this.language,
+      isClosed: () => this.closed,
+      emit: (event) => this.events.emit(event),
+      endTextUi: () => this.events.endTextUi(),
+    });
+    this.runs = new SessionRuns({
+      sessionId: this.sessionId,
+      agent: this.agent,
+      transcript: this.transcript,
+      rewinder: this.rewinder,
+      retry: this.retry,
+      titleScheduler: this.titleScheduler,
+      mcp: this.mcp,
+      turn: this.turn,
+      publishContexts: () => this.contexts.publish(),
+      rebaseContexts: (messages) => this.contexts.rebase(messages),
+      isClosed: () => this.closed,
+      isStreaming: () => this.isStreaming,
+      emit: (event) => this.events.emit(event),
+      announce: (message) => this.events.announce(message),
+    });
+    this.events = new SessionEvents(
+      {
+        sessionId: this.sessionId,
+        agent: this.agent,
+        transcript: this.transcript,
+        compaction: {
+          armIdle: () => this.compaction.armIdle(),
+          disarmIdle: () => this.compaction.disarmIdle(),
+        },
+        interruptions: { endRun: () => this.interruptions.endRun() },
+        runs: {
+          discardBrokenAppCard: (message) =>
+            this.turn.discardBrokenAppCard(message),
+          routineSaidNothing: (messages) =>
+            this.runs.routineSaidNothing(messages),
+          reportModelError: (message) => this.turn.reportModelError(message),
+          turnEnded: (message) => this.turn.turnEnded(message),
+        },
+        isClosed: () => this.closed,
+      },
+      options.onEvent,
+      options.uiFromText === true,
+    );
     // Reopening a conversation is the repair point for a process that died
     // between a checkpoint's insertion and its prune: the store is asked to
     // reduce what is behind the checkpoint, and a row already reduced is
     // left alone.
-    this.pruneCondensedRows();
+    this.compaction.pruneCondensedRows();
     this.contexts.rebase(this.agent.state.messages);
-    this.agent.subscribe((event) => this.handleEvent(event));
+    this.events.listen();
     // A conversation reopened after a long silence is condensed right away
     // (the gap started before this process opened it); otherwise the timer
     // is armed for the first run's end.
     this.compaction.armIdle();
   }
 
-  /** Drop the payload of every row behind the newest checkpoint (see
-   * session/prune.ts), when this session keeps only what its conversation
-   * shows. Best effort: a failed write leaves the rows as they were, and the
-   * next compaction or open tries again.
-   *
-   * The bytes it freed are reported, so the pool can note that the database
-   * FILE is now mostly free pages: SQLite reuses them but never shrinks, and
-   * the rewrite happens at the next start, before any request (see
-   * db/vacuum.ts). */
-  private pruneCondensedRows(): void {
-    if (this.closed || !this.shouldPruneCondensed()) return;
-    try {
-      const result = this.transcript.pruneCondensed();
-      if (result.freedBytes > 0) this.onFreedBytes?.(result.freedBytes);
-    } catch (error) {
-      log.warn(
-        `session ${this.sessionId}: pruning condensed rows failed: ${errorMessage(
-          error,
-        )}`,
-      );
-    }
+  /** The idle-compaction rule of this conversation (see
+   * CompactionController); null → the idle path is off. */
+  get idleCompaction(): IdleCompaction | null {
+    return this.compaction.idle;
   }
 
   get isStreaming(): boolean {
@@ -533,220 +492,27 @@ export class SessionAgent {
     this.agent.state.thinkingLevel = level;
   }
 
-  /** Run a prompt to completion. `images` are attached to the user message
-   * (base64, passed through to vision-capable models; pi omits them for
-   * text-only models). Waits for MCP tools to attach first (they spawn
-   * server processes asynchronously). Failures are reported via the
-   * `session_error` event, never through the returned promise — the
-   * fire-and-forget HTTP path listens on events instead, so awaiting here
-   * only means "the run finished". */
+  /** Run a prompt to completion (see SessionRuns.prompt). */
   async prompt(text: string, images?: ImageContent[]): Promise<void> {
-    await this.runPrompt(text, images, { firstMessageText: text });
+    await this.runs.prompt(text, images);
   }
 
-  /** Reset the retry state for a fresh exchange. A user prompt, a
-   * notification that starts its own run start a fresh exchange: they do
-   * not inherit the previous run's
-   * vacant-response / rate-limit retry history. */
-  private resetRetryState(): void {
-    this.retry.reset();
-    this.appCardRetries = 0;
-  }
-
-  /**
-   * The ONE way an exchange starts from a message the user (or a routine)
-   * supplied. Every prompt path is a thin wrapper over this:
-   *
-   * - `prompt` (awaited, no title/routine extras),
-   * - `runRoutine` (carries the routine's name and returns its failure),
-   * - `deliverPrompt` (a fire-and-forget prompt, possibly a mode prompt).
-   *
-   * The three used to repeat the same "wait for MCP → publish contexts →
-   * announce → reset retries → prompt → resume parked restarts" sequence,
-   * so a change to any step (the context publish a notification-driven run
-   * was missing) had to be made three times.
-   *
-   * `message` is already built and announced by callers that had to decide
-   * its shape before the wait (see promptWhileRunning); everything else is
-   * done here.
-   */
-  private async runPrompt(
-    text: string,
-    images: ImageContent[] | undefined,
-    options: {
-      /** The routine whose run this is (stamped so its stop button only
-       * interrupts its own run). */
-      routine?: { id: string; name: string };
-      /** A mode prompt: stored as a ModeMessage. */
-      mode?: ModePrompt;
-      /** Called before the first LLM request (title generation). */
-      firstMessageText?: string;
-      /** A message the caller already built AND announced (promptWhileRunning
-       * had to decide its `steered` stamp before waiting on a rewind). The
-       * run then does not rebuild or re-announce it. */
-      announced?: AgentMessage;
-      /** Files the user attached to this prompt (already in the machine). */
-      files?: PromptFileRef[];
-      /** Text only the MODEL reads, after the prompt (see
-       * `buildUserMessage`'s `modelOnly`). */
-      modelOnly?: string;
-    } = {},
-  ): Promise<{ failure: string | null }> {
-    if (!this.mcp.done) await this.mcp.waitReady();
-    // Skipped entirely when no rewind runs, so a fire-and-forget delivery
-    // reaches the agent in the caller's task (no microtask window in which
-    // waitForIdle could report the run finished).
-    if (this.rewinder.busy) await this.rewinder.settle();
-    if (this.closed) return { failure: null };
-    if (options.firstMessageText !== undefined) {
-      this.titleScheduler.maybeGenerate(options.firstMessageText);
-    }
-    // The delivery fact the announcement carries must describe the delivery
-    // below: a prompt delivered while a run is active is queued into that
-    // run by the agent loop instead of starting one of its own.
-    const steered = this.joinsActiveRun();
-    // The contexts are published FIRST: they are the run's preamble, so they
-    // must precede the prompt in the transcript (and, with the timestamp,
-    // in time — see Agent.nextTimestamp).
-    this.contexts.publish();
-    const message =
-      options.announced ??
-      (options.mode !== undefined
-        ? buildModeMessage(
-            options.mode,
-            text,
-            images ?? [],
-            this.agent.nextTimestamp(),
-            steered,
-          )
-        : this.buildUserMessage(
-            text,
-            images,
-            steered,
-            options.routine?.name,
-            options.files,
-            options.modelOnly,
-          ));
-    if (options.announced === undefined) this.announceMessage(message);
-    this.resetRetryState();
-    // Where the routine's own prompt will sit: the view's length now, since
-    // `prompt` appends it and everything the run produces follows it. A
-    // silent routine's run is removed from there (see below), and its end
-    // is what that removal is decided from (see RoutineRun).
-    const promptIndex =
-      options.routine === undefined
-        ? undefined
-        : this.agent.state.messages.length;
-    if (options.routine !== undefined && promptIndex !== undefined) {
-      this.routineRuns.begin(options.routine.id, promptIndex);
-    }
-    let failure: string | null = null;
-    // The run stays "in flight" until its restart chain is done: a retried
-    // turn emits an `agent_end` of its own, and only a run still in flight
-    // can tell it to stay quiet (see RoutineRun).
-    try {
-      try {
-        await this.agent.prompt(message);
-      } catch (error) {
-        failure = errorMessage(error);
-        this.emit({
-          type: "session_error",
-          sessionId: this.sessionId,
-          message: failure,
-        });
-      }
-      await this.resumeAfterErrorRun();
-    } finally {
-      this.routineRuns.end();
-    }
-    // A routine that found nothing to report must leave the conversation
-    // exactly as it found it. The model says so with the silence sentinel
-    // (silent-reply.ts), which the projection already refuses to draw — but
-    // the ROW would still be there, and every later turn would pay for it:
-    // the routine's prompt, and an assistant reply whose whole content is
-    // "NO_RESPONSE". Silence is therefore spelled as an absence, not as a
-    // hidden message. Nothing is removed when the run failed or wrote
-    // anything else. Read AFTER the restart chain: a run that died empty is
-    // retried before it can count as silent.
-    if (
-      options.routine !== undefined &&
-      failure === null &&
-      promptIndex !== undefined &&
-      this.routineRuns.wasSilent(this.agent.state.messages, promptIndex)
-    ) {
-      this.routineRuns.drop(this.routineHost, promptIndex);
-    }
-    return { failure };
-  }
-
-  /**
-   * Run a routine's prompt to completion and report how it went.
-   *
-   * A routine's run is awaited by the scheduler (it needs the outcome to
-   * record it) and it carries the routine's name on the message, which is how
-   * the run is told apart from the same words typed. The conversation itself
-   * does not draw the prompt — its text is the routine's standing
-   * instruction — so the name reaches the user through the
-   * agent list instead. The failure is ALSO returned, not only emitted:
-   * the run's failure belongs on the routine's row (the settings list shows
-   * it), while the transcript keeps its own error row from the normal path.
-   *
-   * The silence guidance goes in `modelOnly`: it tells the model that this
-   * run may end without saying anything (see routine-guidance.ts), and it is
-   * never drawn: neither that sentence nor the prompt it qualifies is part of
-   * the conversation.
-   */
+  /** Run a routine's prompt to completion and report how it went (see
+   * SessionRuns.runRoutine: what a routine's prompt carries, and why). */
   async runRoutine(
     text: string,
     routine: { id: string; name: string },
   ): Promise<{ failure: string | null }> {
-    return await this.runPrompt(text, undefined, {
-      routine,
-      modelOnly: ROUTINE_SILENCE_GUIDANCE,
-    });
+    return await this.runs.runRoutine(text, routine);
   }
 
-  /** Whether the run whose prompt sits at `from` said nothing: every message
-   * after it that carries prose is the silence sentinel, and no `send_chat`
-   * went out. Read from the view the run produced, so a run that narrated
-   * its way through tools and then stayed silent still counts — its
-   * narration is tool-call traffic, which the conversation does not show
-   * either.
-   *
-   * The prompt at `from` is the user row this run was asked with, and it is
-   * skipped: it is what is about to be removed, not something the run said.
-   * Prose after it means the routine reported something, and an error row
-   * means it failed: both leave the run in the transcript. */
+  /** The routine whose run is in flight, or null. */
   runningRoutineId(): string | null {
-    return this.routineRuns.runningId();
+    return this.runs.runningRoutineId();
   }
 
-  /** Send a user prompt even while a run is active (fire-and-forget; the
-   * web UI path). An active run steers the message in at the next turn
-   * boundary — the same mechanism background-command notifications use —
-   * so it is processed after the current turn (tool executions included)
-   * completes; an idle agent starts a fresh run.
-   *
-   * Two states never take a steer, because the message would be dropped
-   * instead of queued for a later turn (see deliverPrompt): a run that is
-   * unwinding from an abort (the rewind button, the stop button) and an
-   * in-flight rewind, whose truncation would delete the message again.
-   *
-   * The message is announced immediately (synthetic message_start/end
-   * events) so clients render it right away. When the loop drains it, it
-   * re-emits the same events for the same message (identical role +
-   * timestamp), which the UI dedups, and the transcript store saves it
-   * exactly once at that point.
-   *
-   * A message that joins the active run carries `steered`: the UI keeps it
-   * inside that run's turn instead of starting one of its own, because a
-   * turn that did not start a run must not end the running one (see web's
-   * buildTurns — the same stamp a notification carries).
-   *
-   * When `mode` is provided, a ModeMessage is stored in the transcript
-   * instead of a regular user message: the UI renders the short text +
-   * mode badge, while the LLM receives the full prompt (via
-   * toLlmMessages). Attached `images` ride along either way. */
+  /** Send a user prompt even while a run is active: an active run takes it
+   * as a steer at the next turn boundary (see SessionRuns.promptWhileRunning). */
   promptWhileRunning(
     text: string,
     images?: ImageContent[],
@@ -755,225 +521,13 @@ export class SessionAgent {
     files?: PromptFileRef[],
     modelOnly?: string,
   ): void {
-    // The first prompt of a session names it, whichever path delivered it.
-    this.titleScheduler.maybeGenerate(mode ? mode.shortText : text);
-    // Decided before the message is built: the stamp must describe the
-    // delivery below, and the condition is the one deliverPrompt re-checks.
-    const steered = this.joinsActiveRun();
-    // Same order as runPrompt: the preamble, then the prompt it introduces.
-    this.contexts.publish();
-    const message = mode
-      ? buildModeMessage(
-          mode,
-          text,
-          images ?? [],
-          this.agent.nextTimestamp(),
-          steered,
-        )
-      : this.buildUserMessage(text, images, steered, routine, files, modelOnly);
-    this.announceMessage(message);
-    void this.deliverPrompt(message, mode);
+    this.runs.promptWhileRunning(text, images, mode, routine, files, modelOnly);
   }
 
-  /**
-   * Start stella's setup turn: a prompt only the MODEL reads.
-   *
-   * The visible text is empty on purpose. The conversation must show the
-   * agent's greeting and its questions, not the app's instruction to write
-   * them (see stella/onboarding.ts); an empty prompt that attached nothing is
-   * not a conversation entry (agent/stella-stream.ts drops it), while the
-   * model is sent `modelContent` in its place. This is the only caller: a
-   * user's prompt always carries text or an attachment.
-   */
+  /** Start stella's setup turn: a prompt only the MODEL reads (see
+   * SessionRuns.startOnboarding). */
   startOnboarding(instruction: string): void {
-    this.promptWhileRunning(
-      "",
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      instruction,
-    );
-  }
-
-  /** Whether a message delivered right now joins the run that is already
-   * active (steer) instead of starting its own run. The condition lives
-   * here so the delivery and the `steered` stamp a message carries
-   * (notifications — see injectNotification — and prompts — see
-   * promptWhileRunning) can never disagree: a run that is unwinding from an
-   * abort drops its queues, and a rewind is about to abort the run, so
-   * neither takes a steer (see deliverPrompt). */
-  private joinsActiveRun(): boolean {
-    return !this.rewinder.busy && this.isStreaming && !this.agent.isAborting;
-  }
-
-  /** Deliver an announced prompt to the agent loop: a healthy run takes it
-   * as a steer (next turn boundary); otherwise it gets its own run — after
-   * an in-flight rewind finished, so its messages are not truncated away
-   * and the dying run cannot swallow the steer. Always resolves: the run
-   * reports its own progress and failures through events. */
-  private async deliverPrompt(
-    message: AgentMessage,
-    mode?: ModePrompt,
-  ): Promise<void> {
-    try {
-      // A rewind in flight is about to abort the run: wait for it (runPrompt
-      // does the same before its own run), so this message is not truncated
-      // away with the messages the rewind removes.
-      if (this.rewinder.busy) await this.rewinder.settle();
-      if (this.closed) return;
-      if (this.joinsActiveRun()) {
-        this.agent.steer(message);
-        return;
-      }
-      // The text is only used when runPrompt builds the message; here the
-      // caller already did (its `steered` stamp had to be decided earlier).
-      await this.runPrompt("", undefined, {
-        announced: message,
-        ...(mode !== undefined ? { mode } : {}),
-      });
-    } catch (error) {
-      // runPrompt reports its own failures; this guard only exists so a
-      // fire-and-forget delivery can never become an unhandled rejection.
-      this.emit({
-        type: "session_error",
-        sessionId: this.sessionId,
-        message: errorMessage(error),
-      });
-    }
-  }
-
-  /** Build a user message from text + optional images (single home for the
-   * content assembly every prompt path shares). `steered` marks a prompt
-   * delivered into the run that was already active (see
-   * UserMessage.steered). */
-  private buildUserMessage(
-    text: string,
-    images?: ImageContent[],
-    steered?: boolean,
-    routine?: string,
-    files?: PromptFileRef[],
-    /** Text only the MODEL reads, appended after the visible text (and after
-     * the file notice). Undefined → nothing is added. See
-     * `UserMessage.modelContent`. */
-    modelOnly?: string,
-  ): AgentMessage {
-    const content: Array<TextContent | ImageContent> = [{ type: "text", text }];
-    if (images !== undefined && images.length > 0) content.push(...images);
-    // The files already sit in the machine; this record is what the
-    // conversation draws under the bubble. Their paths are addressed to the
-    // MODEL, so they travel as `modelContent` and never reach the screen: the
-    // user wrote a sentence, and the sentence is what they should see.
-    //
-    // A routine's silence guidance belongs there for the same reason: it is
-    // addressed to the model, and a bubble that told the user "if there is
-    // nothing to report, stay silent" is prose about the run rather than the
-    // run's instruction.
-    const modelContent = withTrailingPart(
-      textWithFileNotice(text, files ?? []),
-      modelOnly,
-    );
-    return {
-      role: "user",
-      content,
-      ...(modelContent !== undefined ? { modelContent } : {}),
-      ...(steered === true ? { steered } : {}),
-      ...(routine !== undefined && routine !== "" ? { routine } : {}),
-      ...(files !== undefined && files.length > 0 ? { files } : {}),
-      timestamp: this.agent.nextTimestamp(),
-    };
-  }
-
-  /** Announce a message to clients (synthetic message_start/end so it
-   * renders immediately). */
-  private announceMessage(message: AgentMessage): void {
-    this.emit({ type: "message_start", sessionId: this.sessionId, message });
-    this.emit({ type: "message_end", sessionId: this.sessionId, message });
-  }
-
-  /** A background command finished: inject its completion notification
-   * into the agent loop so the agent can react (see injectNotification).
-   *
-   * Commands killed via async_bash_kill are not notified: the tool's own
-   * result already reports the kill, so a notification would be
-   * redundant. Natural exits and timeouts are silent without a
-   * notification, so they are always injected. */
-  private notifyBackgroundCommand(done: BackgroundCommandDone): void {
-    if (done.reason === "killed") return;
-    this.injectNotification(formatBackgroundNotification(done));
-  }
-
-  /** Inject a notification message into the agent loop (background
-   * command completions, sub-agent task completions, agent messages).
-   * While streaming, the message is steered in at the next turn boundary;
-   * while idle, a new run starts. The system prompt teaches the agent that
-   * notification prefixes ("[Background command ...]", "[Task ...]",
-   * "[Message from ...]") mark system notifications, not user input.
-   *
-   * The delivery decision is stamped on the message (`steered`): the UI
-   * keeps a steered notification inside the run's turn instead of starting
-   * a new one, so a notification arriving mid-run never collapses the
-   * running turn's work log (see web's buildTurns). */
-  private injectNotification(payload: NotificationPayload): void {
-    if (this.closed) return;
-    // Re-stamped: a payload is built when the producer noticed it, but it is
-    // appended to the transcript now, so it must follow the message before it
-    // (see Agent.nextTimestamp). `steered` is this site's decision, not the
-    // producer's.
-    const message: AgentMessage = {
-      ...notificationMessage(payload, this.joinsActiveRun()),
-      timestamp: this.agent.nextTimestamp(),
-    };
-    // Announce the notification to clients (the agent appends it to the
-    // transcript without re-emitting — see Agent.append).
-    this.emit({ type: "message_start", sessionId: this.sessionId, message });
-    this.emit({ type: "message_end", sessionId: this.sessionId, message });
-    // Same delivery contract as a user prompt: a notification that starts
-    // its own run begins a fresh exchange and waits for MCP attachment
-    // inside runPrompt; a steer joins the current run.
-    void this.deliverPrompt(message);
-  }
-
-  /** Convert the transcript for the LLM: the model's view starts at the
-   * newest compaction checkpoint (everything before it stays in the
-   * transcript, the database and the UI but is not sent — see
-   * ai/context-compaction.ts), notification messages become user
-   * messages carrying their title + body (the prefix contract the system
-   * prompt teaches), then image blocks are replaced by their analysis text
-   * when the main model cannot see images. */
-  private convertToLlm(
-    messages: AgentMessage[],
-  ): Message[] | Promise<Message[]> {
-    const start = contextStart(messages);
-    const mapped = toLlmMessages(
-      start === 0 ? messages : messages.slice(start),
-    );
-    return this.imageAnalyzer === null
-      ? mapped
-      : this.convertWithAnalysis(mapped);
-  }
-
-  /** Replace image blocks with their analysis text (the transcript itself
-   * is never mutated, so the UI and the database keep the original
-   * images). Called with the output of toLlmMessages, so every message is
-   * already LLM-compatible. */
-  private async convertWithAnalysis(messages: Message[]): Promise<Message[]> {
-    const out: Message[] = [];
-    for (const message of messages) {
-      const content = message.content;
-      if (
-        typeof content === "string" ||
-        !content.some((block) => block.type === "image")
-      ) {
-        out.push(message);
-        continue;
-      }
-      const analyzed = await this.imageAnalyzer!.analyzeContent(
-        content as Array<TextContent | ImageContent>,
-      );
-      out.push({ ...message, content: analyzed } as Message);
-    }
-    return out;
+    this.runs.startOnboarding(instruction);
   }
 
   abort(): void {
@@ -1027,30 +581,9 @@ export class SessionAgent {
     return this.interruptions.pendingQuestions();
   }
 
-  /** Undo the transcript from a user message (or a mode message — a
-   * slash-command prompt like plan/review; both are user-prompt-shaped
-   * and carry the rewind action in the UI) onward: the message itself
-   * and everything after it are removed from memory and the database,
-   * and clients are told to drop them too. The user can then re-send a
-   * corrected prompt (the rewound text is restored to the composer).
-   *
-   * While a run is active it is aborted first and the drain is awaited, so
-   * the run's artifacts (e.g. the assistant message an aborted turn leaves
-   * behind) are part of the removed suffix rather than left dangling. The
-   * steering/follow-up queues are cleared as well: queued prompts were
-   * already announced to clients (synthetic message events) but are not in
-   * the transcript yet, so they must not resurface on the next run.
-   *
-   * Prompts that arrive while the rewind runs (a user re-sending right
-   * after clicking the button) wait for it — see deliverPrompt — so they
-   * cannot be swallowed by the dying run or truncated away with it.
-   *
-   * Truncation is positional (the target's exact index), matching the
-   * database row order, so messages sharing a millisecond with the target
-   * are handled exactly. A timestamp newer than every user/mode message is
-   * treated as a queued steer (it sits at the very end, so only the
-   * aborted run's artifacts follow it); any other unknown timestamp
-   * throws not_found. */
+  /** Undo the transcript from a user message onward, aborting the run first
+   * (see Rewinder.rewind: the cut, the queues and the notice are there).
+   * Prompts that arrive while the rewind runs wait for it. */
   async rewind(timestamp: number): Promise<void> {
     await this.rewinder.rewind(timestamp);
   }
@@ -1102,257 +635,10 @@ export class SessionAgent {
     await this.agent.waitForIdle();
   }
 
-  private emit(event: ClientEvent): void {
-    // A closed session has no surface: closing it aborts the run, and an
-    // `agent_end` published from here would arrive after the tab that closed
-    // it is gone — as a notification about a run nobody is watching.
-    if (this.closed) return;
-    try {
-      this.onEvent(event);
-    } catch {
-      // Event sink failures must not break the agent loop.
-    }
-  }
-
-  private handleEvent(event: AgentEvent): void {
-    // The two ends of a run have a step around the events: an idle
-    // compaction must not splice a checkpoint into a run that is working,
-    // and the gap since the newest LLM call starts when the run ends.
-    if (event.type === "agent_start") {
-      this.compaction.disarmIdle();
-      // A reply belongs to the run that said it: `agent_end` carries what
-      // this run last told the user, and a stale one would put an answer the
-      // user already read in a notification. `agent_end` consumes it (at the
-      // end of this method), so an end that closes no run — a session's abort
-      // — says nothing.
-      this.reply.reset();
-    }
-    if (event.type === "agent_end") this.interruptions.endRun();
-    // A reply whose app card does not parse never becomes a message: it is
-    // taken back before the reply is observed or persisted, and the model is
-    // asked to write it again.
-    if (
-      event.type === "message_end" &&
-      event.message.role === "assistant" &&
-      this.discardBrokenAppCard(event.message)
-    ) {
-      return;
-    }
-    if (event.type === "message_end") this.reply.observe(event.message);
-    // A routine's silent end is read from the view BEFORE runPrompt removes
-    // the run (the removal happens after `prompt` resolves): the event says
-    // so, and the notifiers skip it. A silent routine is the one run that is
-    // entirely absent from the conversation, so a "finished" toast would be
-    // the only thing it ever told the user.
-    const quietRoutine =
-      event.type === "agent_end" &&
-      this.routineRuns.saidNothingSoFar(this.agent.state.messages);
-    const translated = translateRunEvent(
-      event,
-      this.sessionId,
-      this.uiFromText ? this.textUi : undefined,
-      event.type === "agent_end" ? this.reply.gist() : undefined,
-      quietRoutine,
-    );
-    for (const published of translated.events) this.emit(published);
-    if (translated.modelError !== undefined) {
-      this.reportModelError(translated.modelError);
-    }
-    if (translated.persist === true) {
-      this.transcript.persist(this.agent.state.messages);
-    }
-    if (translated.turnEnded !== undefined) {
-      this.handleTurnEnd(translated.turnEnded);
-    }
-    if (event.type === "agent_end") {
-      this.reply.reset();
-      this.compaction.armIdle();
-    }
-  }
-
-  /** A completed reply whose app card does not parse is not a reply: take
-   * it out of the transcript before it is persisted, tell the client to drop
-   * what it streamed, and ask the model to write it again. Returns true when
-   * the message was consumed.
-   *
-   * Only a text-only final turn can be taken back this way; a turn ending in
-   * a tool call is narration, and its tool results would follow it in the
-   * transcript. */
-  private discardBrokenAppCard(message: AssistantMessage): boolean {
-    if (message.stopReason !== "stop") return false;
-    const failure = firstAppCardProblem(contentText(message.content));
-    if (failure === null) {
-      this.appCardRetries = 0;
-      return false;
-    }
-    const messages = this.agent.state.messages;
-    if (messages.at(-1) !== message) return false;
-    messages.pop();
-    // The prompt and the turns before the failed reply still belong to the
-    // conversation; the reply itself must not get a row.
-    this.transcript.persist(messages);
-    if (this.uiFromText) this.textUi.end();
-    this.emit({ type: "message_discarded", sessionId: this.sessionId });
-    if (this.appCardRetries >= MAX_APP_CARD_RETRIES) {
-      this.emit({
-        type: "session_error",
-        sessionId: this.sessionId,
-        message: translate(this.language, "session.appCardFailed", {
-          problem: failure.problem,
-        }),
-      });
-      return true;
-    }
-    this.appCardRetries++;
-    const notification = appCardRetryNotification(
-      this.appCardRetries,
-      failure,
-      contentText(message.content),
-    );
-    this.agent.followUp({
-      ...notification,
-      timestamp: this.agent.nextTimestamp(),
-    });
-    return true;
-  }
-
-  /** Surface a model-stream failure to the user. An assistant message that
-   * ended with stopReason "error" carries the provider's error text, but
-   * the web UI does not render it from the message itself: the empty
-   * content leaves a silent run. The retry mechanism is
-   * unaffected: a transient failure still parks its retry (handleTurnEnd),
-   * and the error banner clears when the restarted run starts
-   * (agent_start). */
-  private reportModelError(message: AgentMessage): void {
-    if (message.role !== "assistant") return;
-    const assistant = message as AssistantMessage;
-    if (assistant.stopReason !== "error") return;
-    const text = assistant.errorMessage?.trim();
-    this.emit({
-      type: "session_error",
-      sessionId: this.sessionId,
-      message: text ? text : "The model returned an error",
-    });
-  }
-
-  /** Retry an outputless assistant response. Classification lives in
-   * RetryManager; the agent only executes the decision (an in-run vacant
-   * retry via followUp, a parked restart consumed by resumeAfterErrorRun).
-   * Permanent failures surface immediately — they can never recover. A
-   * transient failure that cut a response off *after* it produced output
-   * also parks a restart, which asks the model to continue from where it
-   * stopped instead of repeating the answer.
-   *
-   * An "exhausted" decision ends the run empty: the retries are spent and
-   * the turn produced nothing, so the user is told (a run that stops
-   * without text, a tool call or an error reads as the agent ignoring the
-   * prompt). */
-  private handleTurnEnd(message: AgentMessage): void {
-    const decision = this.retry.classify(message, this.closed);
-    if (decision.action === "followUp") {
-      this.agent.followUp(decision.notification);
-    }
-    if (decision.action === "exhausted") {
-      this.emit({
-        type: "session_error",
-        sessionId: this.sessionId,
-        message:
-          decision.message === undefined
-            ? translate(this.language, "session.vacantResponse", {
-                count: decision.count,
-              })
-            : translate(this.language, "session.retryExhausted", {
-                count: decision.count,
-                message: decision.message,
-              }),
-      });
-    }
-    // "park" decisions are consumed by resumeAfterErrorRun once the dead
-    // run settles; "none" needs nothing.
-    if (
-      message.role === "assistant" &&
-      (message as AssistantMessage).stopReason === "error"
-    ) {
-      // A run that dies leaves a trace: the desktop shell captures the
-      // server's output for copy-paste, and these failures used to be
-      // invisible outside the transcript. A recoverable failure (a restart
-      // is parked) stays at debug so a retry storm cannot flood the log.
-      const text =
-        (message as AssistantMessage).errorMessage ?? "unknown error";
-      const line = `session ${this.sessionId}: model call failed: ${text}`;
-      if (decision.action === "park") log.debug(`${line} (retrying)`);
-      else log.warn(line);
-    }
-  }
-
-  /** Restart a run that a silent-error turn killed: the parked retry
-   * notification becomes the next prompt once the dead run has fully
-   * settled, so every run caller — prompt() (an awaited run) and the
-   * fire-and-forget deliveries (web prompts, injected notifications) —
-   * holds off reporting completion until the restart chain has finished.
-   *
-   * A restart parked by a context overflow condenses the history first: the
-   * request that was rejected cannot be re-sent unchanged, so the forced
-   * compaction (threshold and retention bypassed) runs here — after the dead
-   * run settled, before the restart's first request. When nothing could be
-   * freed the restart is dropped and the provider's own error stands, rather
-   * than paying for a request that will be rejected again. */
-  private async resumeAfterErrorRun(): Promise<void> {
-    if (this.retry.hasPendingOverflow) {
-      const result = await this.compaction.compactForOverflow();
-      if (result === null) {
-        this.retry.clearPendingRestart();
-        return;
-      }
-    }
-    await this.retry.resumeOnce(this.agent, this.closed);
-  }
-
-  /** Condense the history as far as one balanced span allows (the overflow
-   * recovery path). Returns null when nothing could be replaced — a failed
-   * summarization or no safe span — which is the signal that the retry
-   * cannot help. */
   /** Condense the history on demand (the manual `/compact` path). Resolves
    * with what was summarized, or undefined when no safe span existed or the
    * summarization failed — the transcript is then unchanged either way. */
   compactNow(instructions?: string): Promise<CompactionResult | undefined> {
     return this.compaction.compactNow(instructions);
-  }
-
-  /** A checkpoint landed: tell clients (anchored by identity) and drop the
-   * summarized payloads. The idle path appends its checkpoint after the last
-   * message, so there is nothing to anchor the row to — and no client of that
-   * path draws checkpoints (stella's stream drops them; the next snapshot
-   * carries the row). */
-  private announceCheckpoint(index: number, message: CheckpointMessage): void {
-    const before = this.agent.state.messages[index + 1];
-    if (before !== undefined) {
-      this.emit({
-        type: "messages_checkpoint",
-        sessionId: this.sessionId,
-        before: messageIdentityOf(before),
-        message,
-      });
-    }
-    // The span the checkpoint just summarized is no longer read by anyone
-    // (the model starts at the checkpoint, and a client never receives tool
-    // traffic at all), so its payload is dropped now — while the conversation
-    // is being condensed anyway.
-    this.pruneCondensedRows();
-  }
-
-  /** Insert `message` at `index`: the row first (a failed write leaves
-   * memory untouched, so the two can never diverge), then the in-memory
-   * transcript and the clients. Used by the context compactor through its
-   * `insert` callback; the persisted-row bookkeeping lives in the
-   * {@link TranscriptStore}. */
-  private insertHistory(index: number, message: AgentMessage): void {
-    this.transcript.insertAt(index, message);
-    this.agent.state.messages.splice(index, 0, message);
-    // The insertion may have moved the model's view past the context
-    // publications the older messages carried: re-anchor so a provider
-    // whose snapshot is no longer visible publishes it again before the
-    // next request (the caller publishes what the re-anchoring queued).
-    this.contexts.rebase(this.agent.state.messages);
   }
 }

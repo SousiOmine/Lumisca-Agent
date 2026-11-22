@@ -3,7 +3,7 @@
  *
  * Not the system prompt: a loan lasts minutes and the prompt is a stable
  * document whose first tokens the provider caches (see
- * agent/factory.ts `ensureSystemPrompt`). Not a tool description either — the
+ * agent/session-prompt.ts `ensureSystemPrompt`). Not a tool description either — the
  * file tools are the same tools whether a folder was lent or not, and a
  * description cannot say "right now these two folders exist".
  *

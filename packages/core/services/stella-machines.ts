@@ -559,7 +559,7 @@ export class StellaMachineService {
       }),
       // The identity belongs to this agent: the tool reads and writes it,
       // and the system prompt carries the written text from the next
-      // generation (see AgentFactory.ensureSystemPrompt).
+      // generation (see session-prompt.ts's ensureSystemPrompt).
       identityTool: createIdentityTool(identity),
     };
   }
