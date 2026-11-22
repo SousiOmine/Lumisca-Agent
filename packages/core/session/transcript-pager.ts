@@ -214,6 +214,7 @@ function positionOfCursor<T>(
     agentId,
     (row) => project(row).some((projected) => projected.cursor === cursor),
     rows,
+    cursorTimestamp(cursor),
   );
   if (position === undefined) {
     throw new CoreError(
@@ -222,6 +223,21 @@ function positionOfCursor<T>(
     );
   }
   return position;
+}
+
+/** The timestamp a cursor names (its second field, see identityCursor).
+ * A cursor is opaque, but every cursor this app writes is a JSON array whose
+ * second element is the message's timestamp; an older or foreign string
+ * falls back to undefined, and the store then scans. */
+function cursorTimestamp(cursor: string): number | undefined {
+  try {
+    const parsed: unknown = JSON.parse(cursor);
+    return Array.isArray(parsed) && typeof parsed[1] === "number"
+      ? parsed[1]
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** The page size a query asks for, bounded and positive. */

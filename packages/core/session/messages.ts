@@ -154,6 +154,11 @@ export interface MessageRepo {
     agentId: string,
     match: (row: StoredMessage) => boolean,
     rows: TranscriptRows,
+    /** The message's timestamp, when the caller knows it: a scroll then
+     * reads the rows around that instant instead of decoding the whole
+     * conversation. Callers with only an opaque identity fall back to the
+     * full scan. */
+    nearTimestamp?: number,
   ): number | undefined;
   /** The newest rows that could be something the conversation SHOWS, newest
    * first, at most `limit`.
@@ -403,6 +408,13 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
     WHERE agent_id = ? AND ${CONVERSATION_ROWS_SQL}
     ORDER BY rowid
   `);
+  const countConversationStmt = db.db.prepare(`
+    SELECT COUNT(*) AS n FROM messages
+    WHERE agent_id = ? AND ${CONVERSATION_ROWS_SQL}
+  `);
+  const countAllStmt = db.db.prepare(
+    "SELECT COUNT(*) AS n FROM messages WHERE agent_id = ?",
+  );
   // The newest rows that could be a conversation entry, newest first (see
   // newestConversationRows). The filter is CONVERSATION_ROWS_SQL — the same
   // one a conversation's page counts by — so the scan stays inside the
@@ -533,18 +545,50 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
       return rows.map(toStored);
     },
 
-    positionOf(agentId, match, rows): number | undefined {
-      // The rows are decoded because the cursor is an identity, not a
-      // column: it names role + timestamp (+ tool call id), which only the
-      // message itself carries. Called once per page (a client that reaches
-      // the top), so the decode of the agent's rows is acceptable; the
-      // alternative would be a cursor column the store does not have.
+    positionOf(agentId, match, rows, nearTimestamp): number | undefined {
+      // The cursor is an identity (role + timestamp + tool call id), not a
+      // column, so the store decodes candidates to compare. A page request
+      // knows the cursor's timestamp (the cursor's second field), which lets
+      // it read only the rows around that instant: an up-scroll used to
+      // decode the whole conversation, and the WebSocket events shared that
+      // thread. The window widens until the match is inside it; a caller
+      // without a timestamp keeps the old full scan.
       //
-      // A positional read is in the same scope as the page that named it: a
-      // conversation's positions count only the rows it draws, so resolving a
-      // cursor against every row would land somewhere else than the page it
-      // came from. The scope is the SQL filter, so one definition answers
-      // both (see CONVERSATION_ROWS_SQL).
+      // Positions are in the page's own scope (see CONVERSATION_ROWS_SQL):
+      // the index counts the rows before the match in that scope, not every
+      // message in the store.
+      const scope = rows === "conversation" ? CONVERSATION_ROWS_SQL : "1 = 1";
+      if (nearTimestamp !== undefined) {
+        let radius = 1_000;
+        while (radius <= 86_400_000) {
+          const candidates = db.db
+            .prepare(
+              `SELECT * FROM messages
+               WHERE agent_id = ? AND timestamp BETWEEN ? AND ?
+                 AND ${scope}
+               ORDER BY rowid`,
+            )
+            .all(
+              agentId,
+              nearTimestamp - radius,
+              nearTimestamp + radius,
+            ) as Array<Parameters<typeof toStored>[0]>;
+          for (const candidate of candidates) {
+            const row = toStored(candidate);
+            if (!match(row)) continue;
+            const before = db.db
+              .prepare(
+                `SELECT COUNT(*) AS n FROM messages
+                 WHERE agent_id = ?
+                   AND rowid < (SELECT rowid FROM messages WHERE id = ?)
+                   AND ${scope}`,
+              )
+              .get(agentId, candidate.id) as { n: number };
+            return Number(before.n);
+          }
+          radius *= 10;
+        }
+      }
       const scoped =
         rows === "conversation" ? conversationRows(agentId) : list(agentId);
       for (let index = 0; index < scoped.length; index++) {
@@ -554,16 +598,9 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
     },
 
     count(agentId, rows): number {
-      const row = (
-        rows === "conversation"
-          ? db.db.prepare(`
-          SELECT COUNT(*) AS n FROM messages
-          WHERE agent_id = ? AND ${CONVERSATION_ROWS_SQL}
-        `)
-          : db.db.prepare(
-              "SELECT COUNT(*) AS n FROM messages WHERE agent_id = ?",
-            )
-      ).get(agentId) as { n: number };
+      const statement =
+        rows === "conversation" ? countConversationStmt : countAllStmt;
+      const row = statement.get(agentId) as { n: number };
       return Number(row.n);
     },
 
