@@ -1,7 +1,6 @@
-import { errorMessage } from "@lumisca/core/shared";
+import { errorMessage, formatBytes } from "@lumisca/core/shared";
 import { useEffect, useState } from "preact/hooks";
 import { api } from "../../api.ts";
-import { formatBytes } from "../../format-bytes.ts";
 import { useDebouncedWrite, useSavedNotice } from "../../hooks/useSave.ts";
 import { useT } from "../../i18n.ts";
 

@@ -12,7 +12,7 @@
  */
 
 import { concatBytes } from "../bytes.ts";
-import { errorMessage } from "../shared/misc.ts";
+import { errorMessage, withRequestTimeout } from "../shared/misc.ts";
 import { MAX_DIRECT_FETCH_BYTES, MAX_DIRECT_FETCH_CHARS } from "./constants.ts";
 import { WebSearchError } from "./errors.ts";
 import { htmlToText, pageTitle } from "./html.ts";
@@ -34,11 +34,7 @@ export async function fetchDirect(
   request: FetchRequest,
 ): Promise<FetchResponse> {
   let url = httpUrl(request.url);
-  const timeout = AbortSignal.timeout(DIRECT_TIMEOUT_MS);
-  const signal =
-    request.signal === undefined
-      ? timeout
-      : AbortSignal.any([request.signal, timeout]);
+  const signal = withRequestTimeout(DIRECT_TIMEOUT_MS, request.signal);
 
   let response: Response;
   let redirects = 0;
@@ -52,7 +48,7 @@ export async function fetchDirect(
         signal,
       });
     } catch (error) {
-      if (timeout.aborted) {
+      if (signal.aborted) {
         throw new WebSearchError(
           "unavailable",
           `The page did not respond in time (${url})`,

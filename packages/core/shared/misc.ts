@@ -289,3 +289,14 @@ export function withTimeoutError<T>(
     if (timer !== undefined) clearTimeout(timer);
   });
 }
+
+/** The caller's abort signal combined with a per-request deadline. One
+ * rule for every outbound request: the five hand-written copies differed only
+ * in which side won when both fired. */
+export function withRequestTimeout(
+  timeoutMs: number,
+  signal?: AbortSignal,
+): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  return signal === undefined ? timeout : AbortSignal.any([signal, timeout]);
+}

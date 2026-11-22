@@ -11,6 +11,7 @@
 import { concatBytes } from "../bytes.ts";
 import { errorMessage } from "../errors.ts";
 import { spawnProcess } from "../process.ts";
+import { withRequestTimeout } from "../shared/misc.ts";
 
 /** The result of one command, already decoded and capped. */
 export interface VmCommandResult {
@@ -72,11 +73,7 @@ export async function runVmCommand(
   command: readonly string[],
   options: VmCommandOptions,
 ): Promise<VmCommandResult> {
-  const timeout = AbortSignal.timeout(options.timeoutMs);
-  const signal =
-    options.signal === undefined
-      ? timeout
-      : AbortSignal.any([options.signal, timeout]);
+  const signal = withRequestTimeout(options.timeoutMs, options.signal);
   let child: Bun.Subprocess;
   try {
     child = spawnProcess([command[0]!, ...command.slice(1)], {
@@ -112,7 +109,7 @@ export async function runVmCommand(
     stdout: stdout.text,
     stderr: stderr.text,
     truncated: stdout.truncated || stderr.truncated,
-    timedOut: timeout.aborted && !(options.signal?.aborted ?? false),
+    timedOut: signal.aborted && !(options.signal?.aborted ?? false),
   };
 }
 
@@ -121,11 +118,7 @@ export async function runVmCommandBytes(
   command: readonly string[],
   options: VmCommandOptions,
 ): Promise<VmCommandBytesResult> {
-  const timeout = AbortSignal.timeout(options.timeoutMs);
-  const signal =
-    options.signal === undefined
-      ? timeout
-      : AbortSignal.any([options.signal, timeout]);
+  const signal = withRequestTimeout(options.timeoutMs, options.signal);
   let child: Bun.Subprocess;
   try {
     child = spawnProcess([command[0]!, ...command.slice(1)], {
@@ -159,7 +152,7 @@ export async function runVmCommandBytes(
     stdout: stdout.bytes,
     stderr: stderr.text,
     truncated: stdout.truncated || stderr.truncated,
-    timedOut: timeout.aborted && !(options.signal?.aborted ?? false),
+    timedOut: signal.aborted && !(options.signal?.aborted ?? false),
   };
 }
 

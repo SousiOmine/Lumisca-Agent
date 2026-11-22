@@ -42,6 +42,7 @@
 export * from "./agent-avatar.ts";
 export * from "./app-mode.ts";
 export * from "./attachments.ts";
+export * from "./bytes-format.ts";
 export * from "./chat-message.ts";
 export * from "./chat-ui/index.ts";
 export * from "./content.ts";
@@ -65,6 +66,7 @@ export * from "./stella-preview.ts";
 export * from "./theme-colors.ts";
 export * from "./token-estimate.ts";
 export * from "./tool-names.ts";
+export * from "./truncate.ts";
 export * from "./ui-app/index.ts";
 export * from "./visual.ts";
 export * from "./watch-path.ts";

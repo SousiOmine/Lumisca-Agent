@@ -8,6 +8,7 @@ import { errorMessage, isNotFoundError } from "../errors.ts";
 import { atomicWriteTextFileSync, isRecord } from "../fs.ts";
 import { createLogger } from "../log.ts";
 import type { SettingsRepo } from "../settings/repo.ts";
+import { withRequestTimeout } from "../shared/misc.ts";
 import type { CatalogSourceKind, CatalogStatus } from "../shared/providers.ts";
 
 export type { CatalogSourceKind, CatalogStatus };
@@ -69,11 +70,7 @@ export async function fetchLiveCatalog(
   const timeoutMs = options.timeoutMs ?? LIVE_CATALOG_TIMEOUT_MS;
   const base = options.baseUrl ?? MODELS_DEV_BASE_URL;
   const url = base.endsWith("/") ? `${base}api.json` : `${base}/api.json`;
-  const signal =
-    options.signal ??
-    (typeof AbortSignal.timeout === "function"
-      ? AbortSignal.timeout(timeoutMs)
-      : undefined);
+  const signal = withRequestTimeout(timeoutMs, options.signal);
   let res: Response;
   try {
     res = await fetchFn(url, signal !== undefined ? { signal } : undefined);

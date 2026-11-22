@@ -16,6 +16,7 @@
  * route serves.
  */
 
+import { formatBytes } from "./bytes-format.ts";
 import { RASTER_IMAGE_MIME_BY_EXTENSION } from "./mime.ts";
 
 /** Most files one call may send (`chat_attach`, or `send_chat`'s `paths`). A
@@ -163,19 +164,7 @@ export function attachmentsOfDetails(details: unknown): AttachmentRef[] {
  * decimal below 10 of a unit and none above, so a column of sizes stays
  * readable. Pure, so the card and its tests share one answer. */
 export function formatAttachmentSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const units = ["KB", "MB", "GB"] as const;
-  let value = bytes / 1024;
-  let unit = 0;
-  // Step up only when the value no longer fits the unit. The old condition
-  // was `>= 10`, which turned 52 KB into 0 MB: it divided before asking
-  // whether the next unit was needed, and 0.05 MB rounded to zero.
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit++;
-  }
-  const shown = value >= 10 ? Math.round(value) : Math.round(value * 10) / 10;
-  return `${shown} ${units[unit]}`;
+  return formatBytes(bytes);
 }
 
 /** One file the user attached to a prompt: what the client shows under the

@@ -1,3 +1,4 @@
+import { formatBytes } from "@lumisca/core/shared";
 import type { ReactNode } from "preact/compat";
 import type {
   UpdateFailureKind,
@@ -23,12 +24,6 @@ interface UpdateSectionProps {
   onDownload: () => void;
   onInstall: () => void;
   onRestart: () => void;
-}
-
-function formatBytes(bytes: number | null): string {
-  if (bytes == null) return "";
-  const mb = bytes / (1024 * 1024);
-  return `${mb >= 10 ? mb.toFixed(0) : mb.toFixed(1)} MB`;
 }
 
 /**
@@ -168,8 +163,9 @@ export function UpdateSection({
         />
       </div>
       <span className="update-status-text">
-        {t("settings.general.downloading")} {formatBytes(status.downloaded)}
-        {status.total ? ` / ${formatBytes(status.total)}` : ""}
+        {t("settings.general.downloading")}{" "}
+        {formatBytes(status.downloaded ?? 0, "MB")}
+        {status.total ? ` / ${formatBytes(status.total, "MB")}` : ""}
       </span>
       {percent !== null && <span className="update-percent">{percent}%</span>}
     </>

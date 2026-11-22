@@ -244,7 +244,7 @@ test("a fetched page is cut to maxChars and says how much was left out", async (
     maxChars: 2_000,
   });
   assert(page.text.startsWith("x".repeat(2_000)));
-  assert(page.text.includes("[3000 characters omitted]"));
+  assert(page.text.includes("[... 3000 more characters truncated]"));
 });
 
 test("an HTTP error becomes a typed failure", async () => {

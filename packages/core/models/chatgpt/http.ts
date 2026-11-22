@@ -3,6 +3,7 @@
 
 /** HTTP client the ChatGPT flows use; injectable so tests never touch the
  * network. */
+import { withRequestTimeout } from "../../shared/misc.ts";
 export type FetchLike = (
   input: string | URL | Request,
   init?: RequestInit,
@@ -21,6 +22,5 @@ export function truncateBody(text: string): string {
 /** The caller's abort signal plus a per-request bound. Without it a stalled
  * request would hold a run (or a login flow) until something else gives up. */
 export function requestSignal(signal?: AbortSignal): AbortSignal {
-  const timeout = AbortSignal.timeout(CHATGPT_REQUEST_TIMEOUT_MS);
-  return signal === undefined ? timeout : AbortSignal.any([signal, timeout]);
+  return withRequestTimeout(CHATGPT_REQUEST_TIMEOUT_MS, signal);
 }

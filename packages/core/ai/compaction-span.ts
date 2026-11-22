@@ -15,6 +15,7 @@ import {
   estimateMessageTokens,
   estimateTextTokens,
 } from "../shared/token-estimate.ts";
+import { truncateText } from "../shared/truncate.ts";
 import { CONTEXT_SAFETY_TOKENS } from "./budget.ts";
 import type { CompactionBudgets } from "./compaction-policy.ts";
 
@@ -72,12 +73,7 @@ function contentText(content: string | readonly unknown[]): string {
 /** Truncate a tool result for the serialized conversation (pi's
  * truncateForSummary). */
 function truncateForSummary(text: string, maxChars: number): string {
-  if (text.length <= maxChars) return text;
-  const truncated = text.length - maxChars;
-  return `${text.slice(
-    0,
-    maxChars,
-  )}\n\n[... ${truncated} more characters truncated]`;
+  return truncateText(text, maxChars);
 }
 
 /** Serialize one LLM message into the `[Role]: text` shape pi uses. */

@@ -7,7 +7,7 @@
  * its URL, headers, body and how to read the answer — nothing else.
  */
 
-import { errorMessage } from "../shared/misc.ts";
+import { errorMessage, withRequestTimeout } from "../shared/misc.ts";
 import { MAX_ERROR_DETAIL_CHARS } from "./constants.ts";
 import { WebSearchError } from "./errors.ts";
 import type { FetchLike } from "./types.ts";
@@ -56,10 +56,7 @@ async function send(
   options: JsonRequestOptions,
 ): Promise<Response> {
   const timeout = AbortSignal.timeout(options.timeoutMs);
-  const signal =
-    options.signal === undefined
-      ? timeout
-      : AbortSignal.any([options.signal, timeout]);
+  const signal = withRequestTimeout(options.timeoutMs, options.signal);
 
   try {
     return await fetchImpl(url, { ...init, signal });

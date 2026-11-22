@@ -7,6 +7,7 @@
  * `fetchPage`: the direct fetch stands in.
  */
 
+import { truncateText } from "../../shared/truncate.ts";
 import { DEFAULT_FETCH_CHARS, MAX_FETCH_CHARS } from "../constants.ts";
 import { fetchDirect } from "../direct-fetch.ts";
 import type {
@@ -106,7 +107,5 @@ function clampChars(value: number): number {
 /** Keep the head of a page and say how much was left out: the beginning of
  * a page is what a reader (and the model) needs first. */
 function cutText(text: string, maxChars: number): string {
-  if (text.length <= maxChars) return text;
-  const omitted = text.length - maxChars;
-  return `${text.slice(0, maxChars)}\n\n[${omitted} characters omitted]`;
+  return truncateText(text, maxChars);
 }
