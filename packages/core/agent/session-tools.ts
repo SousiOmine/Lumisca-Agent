@@ -60,6 +60,7 @@ import { createShareTransferTools } from "../tools/share-transfer.ts";
 import type { SessionPoolDeps } from "./deps.ts";
 import type { SessionHubs } from "./session-hubs.ts";
 import type { SessionWhere } from "./session-location.ts";
+import { skillCatalogDirs } from "./skill-catalog.ts";
 
 /** Names of the routine tools (discoverable through tool_search): removed
  * from every session that is not stella's, added back when it is. */
@@ -148,14 +149,7 @@ export function buildSessionTools(
       computerAvailable: where.computerAvailable,
       mcpAdmin: where.mcpAdmin !== undefined,
       webSearch: where.webSearch,
-      // A chat session has no file tools: no skill-authoring guide, but
-      // the shared and global skills are still loadable.
-      ...(deps.appSkillDirs !== undefined
-        ? { appSkillDirs: deps.appSkillDirs }
-        : {}),
-      ...(deps.globalSkillDirs !== undefined
-        ? { globalSkillDirs: deps.globalSkillDirs }
-        : {}),
+      ...skillCatalogDirs(deps),
     });
   }
   return createCodingTools(workspace, {
@@ -171,12 +165,7 @@ export function buildSessionTools(
     visuals: { store: deps.visuals, sessionId: session.id },
     backends,
     webSearch: where.webSearch,
-    ...(deps.appSkillDirs !== undefined
-      ? { appSkillDirs: deps.appSkillDirs }
-      : {}),
-    ...(deps.globalSkillDirs !== undefined
-      ? { globalSkillDirs: deps.globalSkillDirs }
-      : {}),
+    ...skillCatalogDirs(deps),
   });
 }
 
