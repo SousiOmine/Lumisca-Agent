@@ -57,7 +57,11 @@ on:
   workflow_dispatch:
 
 jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
   create-release:
+    needs: ci
     # Single writer for the draft Release — eliminates the parallel
     # get-or-create race between matrix jobs.
     runs-on: ubuntu-latest
@@ -121,7 +125,7 @@ jobs:
           cache-dependency-path: packages/desktop/package-lock.json
 
       - name: Install npm dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       # tauri build compiles and links; it runs neither clippy nor rustfmt, and
       # a component is downloaded again every time stable moves.
@@ -321,7 +325,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          npx --yes @tauri-apps/cli@2 signer sign "$ARCHIVE"
+          ./packages/desktop/node_modules/.bin/tauri signer sign "$ARCHIVE"
           ls -l "$ARCHIVE.sig"
 
       # Verify the real artifact with the updater's own implementation

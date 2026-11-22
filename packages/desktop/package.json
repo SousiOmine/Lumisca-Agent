@@ -9,6 +9,6 @@
     "build:server:dev": "bun run ../../scripts/build-server.ts --out src-tauri/resources/server --frontend src-tauri/frontend --no-compile"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2"
+    "@tauri-apps/cli": "2.12.4"
   }
 }

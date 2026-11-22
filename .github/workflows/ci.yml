@@ -7,6 +7,9 @@ on:
     # and direct pushes went unverified).
     branches: [master]
   pull_request:
+  # The release workflow calls this file, so a tag cannot build an artifact
+  # from a commit the checks would reject.
+  workflow_call:
 
 # A newer run supersedes the older one: the commit it was checking can no
 # longer be the tip, and the whole matrix costs ~5 minutes. Nothing is
