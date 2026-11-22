@@ -1,0 +1,14 @@
+{
+  "name": "@lumisca/core",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./mod.ts",
+    "./bytes": "./bytes.ts",
+    "./browser-entries": "./browser-entries.ts",
+    "./modes": "./modes/mod.ts",
+    "./shared": "./shared/mod.ts",
+    "./skills/slash": "./skills/slash.ts",
+    "./test-utils": "./test-utils.ts"
+  }
+}
