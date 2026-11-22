@@ -260,24 +260,17 @@ export class StellaMachineService {
    * sleeping machine share one start.
    */
   async ensureStellaReady(agentId: string): Promise<void> {
-    try {
-      await this.deps.machine.ensureReady(agentId);
-    } catch (error) {
-      // The machine's reasons are user-facing (an image to build, podman
-      // missing); classify them as unavailable, not as a server fault.
-      throw new CoreError(errorMessage(error), "unavailable");
-    }
+    // The machine classifies its own failures (podman missing, image build
+    // failed) as unavailable; re-wrapping them here turned a classified
+    // failure into a 500 and dropped the original kind.
+    await this.deps.machine.ensureReady(agentId);
   }
 
   /** Build the image when it is missing or stale, without starting a
    * container. Opening a conversation does this so its first prompt does not
    * wait minutes for a build. */
   async ensureStellaImage(): Promise<void> {
-    try {
-      await this.deps.machine.ensureImage();
-    } catch (error) {
-      throw new CoreError(errorMessage(error), "unavailable");
-    }
+    await this.deps.machine.ensureImage();
   }
 
   /** Whether the installation's image is being built (the status endpoint

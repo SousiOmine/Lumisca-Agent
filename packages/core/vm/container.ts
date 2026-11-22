@@ -20,7 +20,7 @@ import * as fsp from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { concatBytes } from "../bytes.ts";
-import { errorMessage } from "../errors.ts";
+import { CoreError, errorMessage } from "../errors.ts";
 import { firstLine } from "../lines.ts";
 import { createLogger } from "../log.ts";
 import { sleep } from "../shared/misc.ts";
@@ -563,8 +563,9 @@ export function createVmHost(options: VmHostOptions): VmHost {
 
   async function buildImage(): Promise<void> {
     if (!existsSync(containerfilePath)) {
-      throw new Error(
+      throw new CoreError(
         `The machine's image definition is missing: ${containerfilePath}`,
+        "unavailable",
       );
     }
     const digest = await containerDigest();
@@ -586,7 +587,10 @@ export function createVmHost(options: VmHostOptions): VmHost {
       { timeoutMs: VM_BUILD_TIMEOUT_MS, maxOutput: VM_TEXT_OUTPUT_LIMIT },
     );
     if (result.exitCode !== 0) {
-      throw new Error(`Could not build the machine's image: ${detail(result)}`);
+      throw new CoreError(
+        `Could not build the machine's image: ${detail(result)}`,
+        "unavailable",
+      );
     }
     // The image the label belonged to is gone: the next read must ask again
     // rather than compare against the build that was just replaced.
@@ -601,7 +605,7 @@ export function createVmHost(options: VmHostOptions): VmHost {
     switch (state.state) {
       case "podman_missing":
       case "podman_unusable":
-        throw new Error(state.reason);
+        throw new CoreError(state.reason, "unavailable");
       case "image_missing":
       case "image_stale": {
         const build = buildImage().finally(() => {
@@ -883,7 +887,10 @@ export function createVmHost(options: VmHostOptions): VmHost {
       timeoutMs: VM_REMOVE_TIMEOUT_MS,
     });
     if (removed.exitCode !== 0) {
-      throw new Error(`Could not replace the machine: ${detail(removed)}`);
+      throw new CoreError(
+        `Could not replace the machine: ${detail(removed)}`,
+        "unavailable",
+      );
     }
   }
 
@@ -950,7 +957,10 @@ export function createVmHost(options: VmHostOptions): VmHost {
       { timeoutMs: VM_RUN_TIMEOUT_MS, maxOutput: VM_TEXT_OUTPUT_LIMIT },
     );
     if (result.exitCode !== 0) {
-      throw new Error(`Could not create the machine: ${detail(result)}`);
+      throw new CoreError(
+        `Could not create the machine: ${detail(result)}`,
+        "unavailable",
+      );
     }
   }
 
@@ -975,7 +985,10 @@ export function createVmHost(options: VmHostOptions): VmHost {
       maxOutput: VM_TEXT_OUTPUT_LIMIT,
     });
     if (result.exitCode !== 0) {
-      throw new Error(`Could not start the machine: ${detail(result)}`);
+      throw new CoreError(
+        `Could not start the machine: ${detail(result)}`,
+        "unavailable",
+      );
     }
   }
 
@@ -992,10 +1005,11 @@ export function createVmHost(options: VmHostOptions): VmHost {
       );
       if (probe.exitCode === 0) return;
       if (Date.now() >= deadline) {
-        throw new Error(
+        throw new CoreError(
           `The machine started but its screen did not come up: ${firstLine(
             probe.stderr,
           )}`,
+          "unavailable",
         );
       }
       await sleep(300);
@@ -1040,9 +1054,10 @@ export function createVmHost(options: VmHostOptions): VmHost {
         { timeoutMs: VM_COPY_TIMEOUT_MS, maxOutput: VM_TEXT_OUTPUT_LIMIT },
       );
       if (copyOut.exitCode !== 0) {
-        throw new Error(
+        throw new CoreError(
           `Could not read the old machine's files to move them onto its new ` +
             `home: ${detail(copyOut)}`,
+          "unavailable",
         );
       }
       const moved_in = await run(
@@ -1063,9 +1078,10 @@ export function createVmHost(options: VmHostOptions): VmHost {
         { timeoutMs: VM_COPY_TIMEOUT_MS, maxOutput: VM_TEXT_OUTPUT_LIMIT },
       );
       if (moved_in.exitCode !== 0) {
-        throw new Error(
+        throw new CoreError(
           `The old machine's files were read but could not be put back ` +
             `(they are kept in ${saved}): ${detail(moved_in)}`,
+          "unavailable",
         );
       }
       moved = true;
@@ -1232,7 +1248,7 @@ export function createVmHost(options: VmHostOptions): VmHost {
         switch (before.state) {
           case "podman_missing":
           case "podman_unusable":
-            throw new Error(before.reason);
+            throw new CoreError(before.reason, "unavailable");
           case "running":
             return before;
           case "image_missing":
@@ -1264,10 +1280,11 @@ export function createVmHost(options: VmHostOptions): VmHost {
         machineCached = null;
         const after = await status(true);
         if (after.state !== "running") {
-          throw new Error(
+          throw new CoreError(
             after.reason !== ""
               ? after.reason
               : `the machine is not running (state: ${after.state})`,
+            "unavailable",
           );
         }
         return after;
@@ -1306,8 +1323,9 @@ export function createVmHost(options: VmHostOptions): VmHost {
           { timeoutMs: VM_DESKTOP_TIMEOUT_MS, maxOutput: VM_TEXT_OUTPUT_LIMIT },
         );
         if (result.exitCode !== 0) {
-          throw new Error(
+          throw new CoreError(
             `Could not start the agent's desktop: ${detail(result)}`,
+            "unavailable",
           );
         }
       },

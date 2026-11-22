@@ -1,3 +1,4 @@
+import { CoreError } from "../errors.ts";
 import type { StellaStatus } from "../shared/wire.ts";
 import { builtinSkills } from "../skills/builtin/mod.ts";
 import type { SkillDef } from "../skills/discover.ts";
@@ -575,9 +576,10 @@ export class StellaMachine {
   /** The machine, or an error saying there is none. */
   require(): VmHost {
     if (this.#host === undefined) {
-      throw new Error(
+      throw new CoreError(
         "stella mode is not available: the virtual machine is not set up for " +
           "this installation",
+        "unavailable",
       );
     }
     return this.#host;
