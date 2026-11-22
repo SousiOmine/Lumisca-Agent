@@ -149,8 +149,13 @@ export function sameServerAuthority(
   }
 }
 
-/** Whether `origin` may read this server's responses. */
-function isAllowedOrigin(origin: string, host: string | undefined): boolean {
+/** Whether `origin` may read this server's responses, and may open a
+ * WebSocket handshake. Exported so the upgrade wrapper applies exactly this
+ * rule to every socket, including ones added later. */
+export function isAllowedOrigin(
+  origin: string,
+  host: string | undefined,
+): boolean {
   if (ALLOWED_ORIGINS.has(origin)) return true;
   return sameServerAuthority(origin, host);
 }
@@ -248,27 +253,8 @@ export function installSecurityMiddleware(
   app.use("/api/*", corsHandler);
   app.use("/ws", corsHandler);
 
-  // Browsers send an Origin on WebSocket handshakes; CORS does not apply to
-  // WS, so without this check any website could open ws://127.0.0.1:<port>/ws
-  // and read every agent event. Non-browser clients (no Origin) are allowed —
-  // they are already gated by the loopback-only Host check above. What the
-  // origin has to match is the host (see isAllowedOrigin): a page behind a
-  // TLS front end is same-host over https, not a foreign origin.
-  //
-  // `/api/share/host` is the same kind of socket (a desktop app lending
-  // folders, see server/routes/share.ts). Its clients are not browsers and
-  // send no Origin either; the rule is stated once for both so neither can
-  // be left as the one socket a foreign page may open.
-  for (const path of ["/ws", "/api/share/host"]) {
-    app.use(path, async (c, next) => {
-      const origin = c.req.header("origin");
-      if (
-        origin !== undefined &&
-        !isAllowedOrigin(origin, c.req.header("host"))
-      ) {
-        return c.text("Forbidden: cross-origin WebSocket", 403);
-      }
-      await next();
-    });
-  }
+  // The WebSocket Origin check lives in the upgrade wrapper (websocket.ts),
+  // so it covers every socket route by construction rather than by a list
+  // of paths that a new socket can be forgotten from. See isAllowedOrigin
+  // for the rule and the TLS front-end rationale.
 }

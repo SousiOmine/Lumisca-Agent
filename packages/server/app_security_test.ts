@@ -113,6 +113,46 @@ test("the desktop shell's preflight reaches the token-guarded API", async () => 
   }
 });
 
+test("every websocket path rejects a foreign origin", async () => {
+  const faux = fauxProvider();
+  const core = LumiscaCore.forTesting([faux.provider]);
+  const app = createApp(core);
+  // The four sockets a page can open. A new socket is covered by the same
+  // upgrade wrapper, so this list is a regression check, not the mechanism.
+  const paths = [
+    "/ws",
+    "/api/share/host",
+    "/api/stella/screen?agent=a",
+    "/api/stella/conversations/a/events",
+  ];
+  try {
+    for (const path of paths) {
+      const foreign = await app.fetch(
+        new Request(`http://127.0.0.1:8000${path}`, {
+          headers: {
+            host: "127.0.0.1:8000",
+            origin: "https://evil.example.com",
+            upgrade: "websocket",
+          },
+        }),
+      );
+      assertEquals(foreign.status, 403, `${path} must reject a foreign origin`);
+
+      // No Origin: a non-browser client. It must not be refused here (the
+      // upgrade itself cannot complete without a server, but the guard must
+      // let it through).
+      const native = await app.fetch(
+        new Request(`http://127.0.0.1:8000${path}`, {
+          headers: { host: "127.0.0.1:8000", upgrade: "websocket" },
+        }),
+      );
+      assert(native.status !== 403, `${path} must allow a client without Origin`);
+    }
+  } finally {
+    core.close();
+  }
+});
+
 test("websocket rejects cross-port origins", async () => {
   const faux = fauxProvider();
   const core = LumiscaCore.forTesting([faux.provider]);
