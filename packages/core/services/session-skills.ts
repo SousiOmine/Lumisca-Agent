@@ -1,6 +1,6 @@
+import { catalogSkills } from "../agent/skill-catalog.ts";
 import type { SkillInfo } from "../skills/discover.ts";
 import { skillInfo } from "../skills/discover.ts";
-import { sessionSkills } from "../tools/toolsets.ts";
 import type { SessionServiceDeps } from "./session-deps.ts";
 
 type Deps = Pick<
@@ -32,7 +32,7 @@ export class SessionSkills {
       workspaceId === undefined
         ? []
         : this.deps.requireWorkspace(workspaceId).folders;
-    return sessionSkills(folders, {
+    return catalogSkills(this.deps, folders, {
       browserAvailable: this.deps.browserAvailable(),
       computerAvailable: this.deps.computerAvailable(),
       // The palette lists what this workspace's main agent can load.
@@ -43,12 +43,6 @@ export class SessionSkills {
       // A workspace session is a coding session (it has the file tools the
       // guide teaches); the folder-less chat subset does not.
       skillAuthoring: workspaceId !== undefined,
-      ...(this.deps.appSkillDirs !== undefined
-        ? { appSkillDirs: this.deps.appSkillDirs }
-        : {}),
-      ...(this.deps.globalSkillDirs !== undefined
-        ? { globalDirs: this.deps.globalSkillDirs }
-        : {}),
     }).map(skillInfo);
   }
 

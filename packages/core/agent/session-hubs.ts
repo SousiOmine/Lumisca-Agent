@@ -13,11 +13,13 @@ import type { SessionInfo } from "../domain/session.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
 import { AskHub } from "../tools/ask.ts";
 import { BackgroundProcessManager } from "../tools/background.ts";
+import type { SessionToolRegistries } from "../tools/registries.ts";
 import { TaskHub } from "../tools/task-hub.ts";
 import { TodoHub } from "../tools/todo.ts";
-import { sessionSkills, subagentSkills } from "../tools/toolsets.ts";
+import { subagentSkills } from "../tools/toolsets.ts";
 import type { SessionPoolDeps, SessionResources } from "./deps.ts";
 import type { SessionWhere } from "./session-location.ts";
+import { catalogSkills } from "./skill-catalog.ts";
 
 /** The per-session hubs one open agent is wired to. All but the ask hub
  * survive an agent rebuild (they live in SessionResources). */
@@ -40,6 +42,7 @@ export function buildSessionHubs(
   where: SessionWhere,
   resources: SessionResources,
   mcp: McpAttachment,
+  registries: SessionToolRegistries,
 ): SessionHubs {
   // Commands die with the session (pool close/delete/closeAll → killAll),
   // not with the agent. A chat-only session never builds it (no
@@ -95,15 +98,9 @@ export function buildSessionHubs(
                 computerAvailable: where.computerAvailable(),
               })
           : () =>
-              sessionSkills(workspace.folders, {
+              catalogSkills(deps, workspace.folders, {
                 browserAvailable: where.browserAvailable,
                 computerAvailable: where.computerAvailable(),
-                ...(deps.appSkillDirs !== undefined
-                  ? { appSkillDirs: deps.appSkillDirs }
-                  : {}),
-                ...(deps.globalSkillDirs !== undefined
-                  ? { globalDirs: deps.globalSkillDirs }
-                  : {}),
               });
       // `eval` runs in the server process, so a stella session's
       // sub-agents must not have it (its tools all run inside the
@@ -152,7 +149,7 @@ export function buildSessionHubs(
     // re-read on every open. The skill catalog and the capability gates
     // travel with the runtime resolver instead: they are what the runtime
     // (the machine or this workspace) answers for.
-    tasks.setMcp(mcp, resources.registries!.subagent);
+    tasks.setMcp(mcp, registries.subagent);
     tasks.setWebSearch(where.webSearch);
     tasks.setShares(deps.shares?.());
     tasks.setLanguage(deps.getLanguage());

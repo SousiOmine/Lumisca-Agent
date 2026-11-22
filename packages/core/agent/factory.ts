@@ -75,17 +75,23 @@ export class AgentFactory {
       session.modelProvider,
       session.modelId,
     );
-    const mcp = ensureMcpAttachment(
+    const { attachment: mcp, registries } = ensureMcpAttachment(
       this.deps,
       session,
       workspace,
       resources,
       isCurrentAttachment,
     );
-    const registries = resources.registries!;
     const where = resolveSessionWhere(this.deps, session, workspace);
     seedDiscoverableTools(this.deps, where, registries, session.id);
-    const hubs = buildSessionHubs(this.deps, session, where, resources, mcp);
+    const hubs = buildSessionHubs(
+      this.deps,
+      session,
+      where,
+      resources,
+      mcp,
+      registries,
+    );
     const code = applyCodeExecution(
       this.deps,
       buildSessionTools(this.deps, session, workspace, where, hubs),

@@ -13,6 +13,31 @@ import type { SessionAgent } from "./session-agent.ts";
 
 export type { SessionPoolDeps, SessionResources } from "./deps.ts";
 
+/** What the open sessions do with a configuration change (see
+ * SessionPool.applyChange). */
+export type ChangePolicy = "reject" | "defer" | "inPlace";
+
+/** Which in-place path a streaming session takes with a change it may not be
+ * rebuilt for (policy `inPlace`). Each one brings the session onto the new
+ * value without replacing its agent: the run keeps the tools it started
+ * with, and what it can discover follows. */
+export type InPlaceChange =
+  /** Reseed the discoverable tools (a capability toggle). */
+  | "tools"
+  /** Reconnect the MCP servers against the current config. */
+  | "mcp"
+  /** Reconnect them because the credentials changed, not the config (a
+   * sign-in). */
+  | "mcp-credentials";
+
+/** The hooks a change needs beyond its mutation and policy. */
+export interface ChangeOptions {
+  /** Where the caller's deferred rebuild happens (policy `defer`). */
+  defer?(id: string): void;
+  /** Which in-place path a streaming session takes (policy `inPlace`). */
+  inPlace?: InPlaceChange;
+}
+
 /**
  * Owns the live session agents: lifecycle (open / close / delete) and the
  * streaming guards behind configuration changes. Agent construction lives
@@ -178,62 +203,93 @@ export class SessionPool {
     this.open(session, workspace, messages, baseIndex);
   }
 
-  /** Refuse configuration changes while any listed session is streaming,
-   * apply the mutation, then rebuild every affected agent. The streaming
-   * checks and the mutation run in the same synchronous turn (no awaits in
-   * between), so a prompt cannot start mid-apply. */
-  applyChange(sessions: SessionInfo[], mutate: () => void): void {
-    for (const session of sessions) {
-      this.assertNotStreaming(session.id);
-    }
-    this.applyAndFollow(sessions, mutate);
-  }
-
-  /** The one loop behind every configuration change: apply the mutation,
-   * then let each open session follow it. A streaming session is handled by
-   * the caller's policy; an idle one is rebuilt. A session that is not open
-   * picks the new value up when it is opened.
+  /** Apply one configuration change to the listed sessions.
    *
-   * The mutation runs unconditionally here: a caller that must refuse while
-   * a session streams checks that before calling (see applyChange). */
-  private applyAndFollow(
+   * `mutate` stores the change; `policy` says what the open sessions do with
+   * it. The streaming checks and the mutation run in the same synchronous
+   * turn (no awaits in between), so a prompt cannot start mid-apply. A
+   * session that is not open picks the new value up when it is opened, and
+   * needs nothing here.
+   *
+   * - `reject` refuses the whole change while any listed session streams: the
+   *   setting is part of a request that is already on its way, so storing it
+   *   would describe a run that is not the one in flight (a workspace folder
+   *   edit). Nothing is stored unless every session can follow.
+   * - `defer` stores the change unconditionally — it is the user's edit, and
+   *   refusing to store it because some session happens to be running would
+   *   lose that edit — then rebuilds the idle sessions at once and leaves a
+   *   streaming one to the caller's `defer` (its prompt and tool set are part
+   *   of the request it already sent, and replacing its agent would duplicate
+   *   the rows of the run in flight).
+   * - `inPlace` also stores unconditionally, and brings a streaming session
+   *   onto the new value without replacing its agent (see `inPlace`).
+   */
+  applyChange(
     sessions: SessionInfo[],
     mutate: () => void,
-    onStreaming?: (session: SessionInfo, resources: SessionResources) => void,
-    onIdle?: (session: SessionInfo, resources: SessionResources) => void,
+    policy: ChangePolicy,
+    options: ChangeOptions = {},
   ): void {
+    if (policy === "reject") {
+      for (const session of sessions) {
+        this.assertNotStreaming(session.id);
+      }
+    }
     mutate();
     for (const session of sessions) {
       const resources = this.sessions.get(session.id);
       if (resources?.agent === undefined) continue;
-      if (resources.agent.isStreaming && onStreaming !== undefined) {
-        onStreaming(session, resources);
+      if (resources.agent.isStreaming) {
+        this.followStreaming(session, resources, policy, options);
         continue;
       }
-      if (onIdle !== undefined) {
-        onIdle(session, resources);
-        continue;
-      }
-      this.rebuild(session);
+      this.followIdle(session, resources, options);
     }
   }
 
-  /** Apply a capability change (which tools a session is offered) to the
-   * listed sessions. The mutation runs unconditionally — it is the user's
-   * edit, and refusing to store it because some session happens to be
-   * running would lose that edit — and the sessions follow it: an idle one
-   * is rebuilt, a streaming one keeps its agent (replacing it would
-   * duplicate the rows of the run in flight, see rebuild) and has its
-   * discoverable tools reseeded in place instead.
-   *
-   * The distinction from applyChange is only possible because these tools
-   * live in the session's registry rather than in the agent's own tool set
-   * (see agent/session-tools.ts): the run keeps the tools it
-   * started with, and what it can find through tool_search follows. */
-  applyCapabilityChange(sessions: SessionInfo[], mutate: () => void): void {
-    this.applyAndFollow(sessions, mutate, (session, resources) =>
-      this.reseedInPlace(session, resources),
-    );
+  /** What an idle session does with a change: rebuild its agent, so the next
+   * run is built from the stored value. A sign-in changes no config, so the
+   * attachment it holds may be the one whose connection already failed; it is
+   * dropped here instead of reused by the rebuild. */
+  private followIdle(
+    session: SessionInfo,
+    resources: SessionResources,
+    options: ChangeOptions,
+  ): void {
+    if (options.inPlace !== "mcp-credentials") {
+      this.rebuild(session);
+      return;
+    }
+    const previous = resources.mcp;
+    resources.mcp = undefined;
+    resources.registries = undefined;
+    if (previous !== undefined) void previous.manager.close();
+    this.rebuild(session);
+  }
+
+  /** What a streaming session does with a change it may not rebuild for. */
+  private followStreaming(
+    session: SessionInfo,
+    resources: SessionResources,
+    policy: ChangePolicy,
+    options: ChangeOptions,
+  ): void {
+    if (policy === "reject") return; // unreachable: the guard ran first.
+    if (policy === "defer") {
+      options.defer?.(session.id);
+      return;
+    }
+    switch (options.inPlace) {
+      case "tools":
+        this.reseedInPlace(session, resources);
+        return;
+      case "mcp":
+        this.refreshMcpInPlace(session, resources);
+        return;
+      case "mcp-credentials":
+        this.refreshMcpInPlace(session, resources, { reloadCredentials: true });
+        return;
+    }
   }
 
   /** Reseed one streaming session's discoverable tools without touching its
@@ -259,35 +315,6 @@ export class SessionPool {
     }
   }
 
-  /** Apply a change to how the agent is built (the system prompt, the tool
-   * set). The mutation runs unconditionally, then every open session
-   * follows: an idle one is rebuilt at once, and a streaming one keeps its
-   * agent — its prompt and tool set are part of the request it already sent
-   * — and is rebuilt when the run ends, through `defer`. */
-  applyAgentBuildChange(
-    sessions: SessionInfo[],
-    mutate: () => void,
-    defer: (id: string) => void,
-  ): void {
-    this.applyAndFollow(sessions, mutate, (session) => defer(session.id));
-  }
-
-  /** Apply an MCP config change to the listed sessions. The mutation runs
-   * unconditionally: the config is the user's edit, and refusing to store it
-   * because some session happens to be running would lose that edit — the
-   * sessions follow the config, never the other way round. Every open
-   * session is then brought onto it in the same synchronous turn: an idle
-   * one is rebuilt (a fresh agent built from the new config), while a
-   * streaming one cannot be (replacing its agent would duplicate the rows of
-   * the run in flight, see rebuild) and has its MCP servers reconnected in
-   * place instead — its run keeps the tools it started with, and the tools
-   * it can discover follow the new config. */
-  applyMcpConfigChange(sessions: SessionInfo[], mutate: () => void): void {
-    this.applyAndFollow(sessions, mutate, (session, resources) =>
-      this.refreshMcpInPlace(session, resources),
-    );
-  }
-
   /** Hand one streaming session its current MCP config without touching its
    * agent (see AgentFactory.refreshMcp). `reloadCredentials` is for a
    * sign-in: the config did not change, only the tokens did. */
@@ -302,42 +329,6 @@ export class SessionPool {
       resources,
       (attachment) => this.sessions.get(session.id)?.mcp === attachment,
       options,
-    );
-  }
-
-  /** Rebuild the listed sessions' MCP attachments from scratch: a fresh
-   * manager reconnects every server and re-discovers its tools. Needed when
-   * what changed is not the config but the credentials — an interactive
-   * OAuth sign-in, which an attachment reused across agent rebuilds (and
-   * its already-failed connections) would never see.
-   *
-   * A streaming session cannot be rebuilt (see rebuild) and is passed over
-   * instead of failing the call: the user signs in from Settings while the
-   * conversation that needs the server is still working, so refusing the
-   * whole batch would leave that conversation on the attachment whose
-   * connections already failed, with no later event to retry it. It gets
-   * the grant in place through the same path a config edit uses
-   * (refreshMcpInPlace) — a new manager, a new discovery, the run's own tool
-   * set untouched — so the servers it can discover follow the sign-in
-   * without waiting for a rebuild that may never come. */
-  refreshMcp(sessions: SessionInfo[]): void {
-    this.applyAndFollow(
-      sessions,
-      () => {},
-      (session, resources) =>
-        this.refreshMcpInPlace(session, resources, {
-          reloadCredentials: true,
-        }),
-      (session, resources) => {
-        const previous = resources.mcp;
-        // Dropping the attachment makes the factory build a new one (with a
-        // fresh manager); the registries follow it, since a rebuild builds
-        // fresh tools.
-        resources.mcp = undefined;
-        resources.registries = undefined;
-        if (previous !== undefined) void previous.manager.close();
-        this.rebuild(session);
-      },
     );
   }
 }

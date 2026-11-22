@@ -1,6 +1,5 @@
 import type { SessionPool } from "../agent/pool.ts";
 import { conversationEntriesOf } from "../agent/stella-stream.ts";
-import type { ClientEvent } from "../domain/event.ts";
 import type { SessionInfo } from "../domain/session.ts";
 import type { Workspace } from "../domain/workspace.ts";
 import { CoreError, errorMessage } from "../errors.ts";
@@ -40,6 +39,7 @@ import {
   VmCommandRunner as VmCommandRunnerImpl,
 } from "../vm/shell.ts";
 import { createVmTools } from "../vm/tools.ts";
+import type { NewSession } from "./session-lifecycle.ts";
 
 /**
  * The stella machine and the conversations that run inside it.
@@ -82,8 +82,11 @@ export class StellaMachineService {
       /** Per-session `vm_env` request hubs; forgotten the same way. */
       envRequests: EnvRequestRegistry;
       decorateSession(session: SessionInfo): SessionInfo;
+      /** Create a session row, open its agent and announce it — the same
+       * path a user's session takes (see SessionLifecycle.createAndAnnounce),
+       * so `session_created` has one issuer. */
+      createAndAnnounce(input: NewSession): SessionInfo;
       deleteSession(id: string): Promise<void>;
-      emit(event: ClientEvent): void;
       language(): Locale;
       chatWorkspace(): Workspace;
       requireWorkspace(id: string): Workspace;
@@ -225,9 +228,8 @@ export class StellaMachineService {
     const model =
       agent.model ??
       (await this.deps.resolveDefaultModel(undefined, undefined));
-    const workspace = this.deps.chatWorkspace();
-    const session = this.deps.sessions.create({
-      workspaceId: workspace.id,
+    return this.deps.createAndAnnounce({
+      workspace: this.deps.chatWorkspace(),
       // No name of its own: a stella conversation is the agent talking, and
       // the agent's name is read on every read (see SessionRepo.toSession).
       // The column is NOT NULL, so it holds the empty string — the marker
@@ -237,12 +239,6 @@ export class StellaMachineService {
       modelId: model.modelId,
       personaId: agent.id,
     });
-    this.deps.pool.open(session, workspace, []);
-    const decorated = this.deps.decorateSession(
-      this.deps.sessions.get(session.id) ?? session,
-    );
-    this.deps.emit({ type: "session_created", session: decorated });
-    return decorated;
   }
 
   /**

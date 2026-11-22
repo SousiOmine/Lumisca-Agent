@@ -1,4 +1,5 @@
 import type { SessionInfo } from "../domain/session.ts";
+import type { Workspace } from "../domain/workspace.ts";
 import { CoreError } from "../errors.ts";
 import { modelViewOf } from "../session/model-view.ts";
 import { formatSessionName, type ThinkingLevel } from "../shared/mod.ts";
@@ -12,6 +13,19 @@ export interface DefaultModel {
   modelId: string;
   thinkingLevel: ThinkingLevel;
   thinkingLevels: ThinkingLevel[];
+}
+
+/** A session row to create, open and announce (see
+ * SessionLifecycle.createAndAnnounce). */
+export interface NewSession {
+  /** The workspace the row belongs to. */
+  workspace: Workspace;
+  /** The stored name (empty for a session whose name is its agent's). */
+  name: string;
+  modelProvider: string;
+  modelId: string;
+  /** The stella agent whose conversation this is, when it is one. */
+  personaId?: string;
 }
 
 /** What a new session is created from. */
@@ -88,21 +102,40 @@ export class SessionLifecycle {
       input.modelId,
     );
     // The system prompt is generated (and persisted) when the session is
-    // opened below: it depends on the tool set the session actually gets,
-    // which only the agent factory knows.
-    const session = this.deps.sessions.create({
-      workspaceId: workspace.id,
-      // The provisional name is replaced by the title generator right after
-      // the first message; it is stored, so it keeps the language it was
-      // created with.
+    // opened: it depends on the tool set the session actually gets, which
+    // only the agent factory knows. The provisional name is replaced by the
+    // title generator right after the first message; it is stored, so it
+    // keeps the language it was created with.
+    return this.createAndAnnounce({
+      workspace,
       name: input.name ?? formatSessionName(this.deps.language()),
       modelProvider: model.provider,
       modelId: model.modelId,
     });
-    this.deps.pool.open(session, workspace, []);
-    // The event carries the decorated session (chat flag etc.), the same
-    // shape every other SessionInfo consumer sees — never the raw row.
-    // Re-read it: opening generated and persisted the system prompt.
+  }
+
+  /**
+   * Create a session, open its agent, and announce it: the one place a
+   * session row comes into being.
+   *
+   * The two paths that create one (a user's session in a workspace, and a
+   * stella agent's conversation) differ only in the row they write and the
+   * workspace it belongs to — what follows is the same three steps, and a
+   * second copy of them would let one path announce a session the other
+   * opens differently. The announcement carries the DECORATED session (chat
+   * flag etc.), the same shape every other SessionInfo consumer sees, never
+   * the raw row: it is re-read because opening generated and persisted the
+   * system prompt.
+   */
+  createAndAnnounce(input: NewSession): SessionInfo {
+    const session = this.deps.sessions.create({
+      workspaceId: input.workspace.id,
+      name: input.name,
+      modelProvider: input.modelProvider,
+      modelId: input.modelId,
+      ...(input.personaId !== undefined ? { personaId: input.personaId } : {}),
+    });
+    this.deps.pool.open(session, input.workspace, []);
     const decorated = this.deps.decorate(
       this.deps.sessions.get(session.id) ?? session,
     );

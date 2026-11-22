@@ -21,13 +21,13 @@ import { createInstructionsProvider } from "../memory/instructions.ts";
 import { createShareProvider } from "../share/context.ts";
 import { createSkillCatalogProvider } from "../skills/catalog.ts";
 import type { SessionToolRegistries } from "../tools/registries.ts";
-import { sessionSkills } from "../tools/toolsets.ts";
 import { codeExecutionPrompt } from "./code-execution-prompt.ts";
 import { createDateProvider } from "./date-context.ts";
 import type { SessionPoolDeps } from "./deps.ts";
 import { createLanguageProvider } from "./language-context.ts";
 import { createModelProvider } from "./model-context.ts";
 import type { SessionWhere } from "./session-location.ts";
+import { catalogSkills } from "./skill-catalog.ts";
 
 /**
  * The session's system prompt, re-derived from what the prompt is a function
@@ -104,7 +104,7 @@ export function buildContextProviders(
         stella !== undefined
           ? () => stella.skills()
           : () =>
-              sessionSkills(workspace.folders, {
+              catalogSkills(deps, workspace.folders, {
                 browserAvailable,
                 computerAvailable: where.computerAvailable(),
                 // A chat session has no tool hub, so it cannot start one.
@@ -114,12 +114,6 @@ export function buildContextProviders(
                 mcpAdmin: where.mcpAdmin !== undefined,
                 // Only a session with file tools can write a skill.
                 skillAuthoring: !chat,
-                ...(deps.appSkillDirs !== undefined
-                  ? { appSkillDirs: deps.appSkillDirs }
-                  : {}),
-                ...(deps.globalSkillDirs !== undefined
-                  ? { globalDirs: deps.globalSkillDirs }
-                  : {}),
               }),
     }),
     createInstructionsProvider({

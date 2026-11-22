@@ -42,6 +42,15 @@ export function sameMcpConfig(a: McpConfig, b: McpConfig): boolean {
   return canonicalJson(a.servers) === canonicalJson(b.servers);
 }
 
+/** The session's shared MCP attachment together with the registries that
+ * hold its tools. The two travel as one answer because a rebuild replaces
+ * both: an attachment without the registries built for it would leave the
+ * config's tools unsearchable. */
+export interface SessionMcp {
+  attachment: McpAttachment;
+  registries: SessionToolRegistries;
+}
+
 /** The session's shared MCP attachment, created or kept.
  *
  * A rebuilt attachment also replaces the session's tool registries: they hold
@@ -52,18 +61,22 @@ export function ensureMcpAttachment(
   workspace: Workspace,
   resources: SessionResources,
   isCurrentAttachment: (attachment: McpAttachment) => boolean,
-): McpAttachment {
+): SessionMcp {
   const merged: MergedMcp = deps.loadMergedMcp(workspace);
   const existing = resources.mcp;
   if (existing !== undefined && sameMcpConfig(existing.config, merged.config)) {
-    return existing;
+    const registries = resources.registries;
+    if (registries !== undefined) {
+      return { attachment: existing, registries };
+    }
   }
   if (existing !== undefined) {
     log.debug(`session ${session.id}: MCP config changed, rebuilding`);
   }
   const attachment = spawnMcpAttachment(deps, workspace, merged.config);
+  const registries = new SessionToolRegistries();
   resources.mcp = attachment;
-  resources.registries = new SessionToolRegistries();
+  resources.registries = registries;
   if (existing !== undefined) void existing.manager.close();
   reportMcpProblems(
     deps,
@@ -73,7 +86,7 @@ export function ensureMcpAttachment(
     attachment,
     isCurrentAttachment,
   );
-  return attachment;
+  return { attachment, registries };
 }
 
 /** Replace a session's attachment with a fresh one for its current merged

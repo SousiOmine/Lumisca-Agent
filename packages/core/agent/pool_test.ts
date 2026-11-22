@@ -182,7 +182,7 @@ test("pool.closeAll tears down every open session", async () => {
   assertThrows(() => pool.require("s2"), CoreError);
 });
 
-test("pool.applyChange refuses while a session is streaming", () => {
+test("applyChange with policy reject refuses while a session is streaming", () => {
   const { pool, teardown } = makePool({ streaming: true });
   const session = sessionInfo("s1");
   pool.open(session, WORKSPACE, []);
@@ -190,9 +190,13 @@ test("pool.applyChange refuses while a session is streaming", () => {
   let mutated = false;
   const error = assertThrows(
     () =>
-      pool.applyChange([session], () => {
-        mutated = true;
-      }),
+      pool.applyChange(
+        [session],
+        () => {
+          mutated = true;
+        },
+        "reject",
+      ),
     CoreError,
   );
   assertEquals((error as CoreError).kind, "conflict");
@@ -201,40 +205,53 @@ test("pool.applyChange refuses while a session is streaming", () => {
   assertEquals(teardown.agentClosed, 0);
 });
 
-test("pool.applyChange mutates and rebuilds idle sessions", () => {
+test("applyChange with policy reject mutates and rebuilds idle sessions", () => {
   const { pool, teardown } = makePool();
   const session = sessionInfo("s1");
   pool.open(session, WORKSPACE, []);
 
   let mutated = false;
-  pool.applyChange([session], () => {
-    mutated = true;
-  });
+  pool.applyChange(
+    [session],
+    () => {
+      mutated = true;
+    },
+    "reject",
+  );
   assertEquals(mutated, true);
   // Rebuilding closes the previous agent exactly once.
   assertEquals(teardown.agentClosed, 1);
   assert(pool.get(session.id) !== undefined);
 });
 
-test("pool.applyChange with no open sessions only runs the mutation", () => {
+test("applyChange with no open sessions only runs the mutation", () => {
   const { pool, teardown } = makePool();
   let mutated = false;
-  pool.applyChange([sessionInfo("closed")], () => {
-    mutated = true;
-  });
+  pool.applyChange(
+    [sessionInfo("closed")],
+    () => {
+      mutated = true;
+    },
+    "reject",
+  );
   assertEquals(mutated, true);
   assertEquals(teardown.agentClosed, 0);
 });
 
-test("pool.applyCapabilityChange stores while a session streams", () => {
+test("applyChange with policy inPlace (tools) stores while a session streams", () => {
   const { pool, teardown } = makePool({ streaming: true });
   const session = sessionInfo("s1");
   pool.open(session, WORKSPACE, []);
 
   let mutated = false;
-  pool.applyCapabilityChange([session], () => {
-    mutated = true;
-  });
+  pool.applyChange(
+    [session],
+    () => {
+      mutated = true;
+    },
+    "inPlace",
+    { inPlace: "tools" },
+  );
   // The toggle is the user's edit: a running session must not cost them it...
   assertEquals(mutated, true);
   // ...and its agent is never replaced mid-run (that would duplicate the
@@ -243,36 +260,46 @@ test("pool.applyCapabilityChange stores while a session streams", () => {
   assertEquals(teardown.reseeded, 1);
 });
 
-test("pool.applyCapabilityChange rebuilds idle sessions", () => {
+test("applyChange with policy inPlace (tools) rebuilds idle sessions", () => {
   const { pool, teardown } = makePool();
   const session = sessionInfo("s1");
   pool.open(session, WORKSPACE, []);
 
-  pool.applyCapabilityChange([session], () => {});
+  pool.applyChange([session], () => {}, "inPlace", { inPlace: "tools" });
   assertEquals(teardown.agentClosed, 1);
   assertEquals(teardown.reseeded, 0);
 });
 
-test("pool.applyCapabilityChange with no open sessions only runs the mutation", () => {
+test("applyChange with policy inPlace (tools) and no open sessions only runs the mutation", () => {
   const { pool, teardown } = makePool();
   let mutated = false;
-  pool.applyCapabilityChange([sessionInfo("closed")], () => {
-    mutated = true;
-  });
+  pool.applyChange(
+    [sessionInfo("closed")],
+    () => {
+      mutated = true;
+    },
+    "inPlace",
+    { inPlace: "tools" },
+  );
   assertEquals(mutated, true);
   assertEquals(teardown.agentClosed, 0);
   assertEquals(teardown.reseeded, 0);
 });
 
-test("pool.applyMcpConfigChange stores while a session streams", () => {
+test("applyChange with policy inPlace (mcp) stores while a session streams", () => {
   const { pool, teardown } = makePool({ streaming: true });
   const session = sessionInfo("s1");
   pool.open(session, WORKSPACE, []);
 
   let mutated = false;
-  pool.applyMcpConfigChange([session], () => {
-    mutated = true;
-  });
+  pool.applyChange(
+    [session],
+    () => {
+      mutated = true;
+    },
+    "inPlace",
+    { inPlace: "mcp" },
+  );
   // The config is the user's edit: a running session must not cost them the
   // save...
   assertEquals(mutated, true);
@@ -282,33 +309,43 @@ test("pool.applyMcpConfigChange stores while a session streams", () => {
   assertEquals(teardown.mcpRefreshed, 1);
 });
 
-test("pool.applyMcpConfigChange rebuilds idle sessions", () => {
+test("applyChange with policy inPlace (mcp) rebuilds idle sessions", () => {
   const { pool, teardown } = makePool();
   const session = sessionInfo("s1");
   pool.open(session, WORKSPACE, []);
 
   let mutated = false;
-  pool.applyMcpConfigChange([session], () => {
-    mutated = true;
-  });
+  pool.applyChange(
+    [session],
+    () => {
+      mutated = true;
+    },
+    "inPlace",
+    { inPlace: "mcp" },
+  );
   assertEquals(mutated, true);
   // Nothing to lose here: the agent is rebuilt against the new config.
   assertEquals(teardown.agentClosed, 1);
   assertEquals(teardown.mcpRefreshed, 0);
 });
 
-test("pool.applyMcpConfigChange leaves closed sessions alone", () => {
+test("applyChange with policy inPlace (mcp) leaves closed sessions alone", () => {
   const { pool, teardown } = makePool();
   let mutated = false;
-  pool.applyMcpConfigChange([sessionInfo("closed")], () => {
-    mutated = true;
-  });
+  pool.applyChange(
+    [sessionInfo("closed")],
+    () => {
+      mutated = true;
+    },
+    "inPlace",
+    { inPlace: "mcp" },
+  );
   assertEquals(mutated, true);
   assertEquals(teardown.agentClosed, 0);
   assertEquals(teardown.mcpRefreshed, 0);
 });
 
-test("pool.refreshMcp reconnects a streaming session in place", () => {
+test("applyChange with policy inPlace (mcp-credentials) reconnects a streaming session in place", () => {
   // The user signs in from Settings while the conversation that needs the
   // server is still working. Refusing the whole batch would leave that
   // conversation on the attachment whose connection already got its 401,
@@ -317,7 +354,9 @@ test("pool.refreshMcp reconnects a streaming session in place", () => {
   const session = sessionInfo("s1");
   pool.open(session, WORKSPACE, []);
 
-  pool.refreshMcp([session]);
+  pool.applyChange([session], () => {}, "inPlace", {
+    inPlace: "mcp-credentials",
+  });
   assertEquals(teardown.agentClosed, 0, "a running agent is never replaced");
   assertEquals(teardown.mcpRefreshed, 1, "its servers are reconnected");
   // The config did not change — only the grant did — so the reconnect has to
@@ -326,17 +365,19 @@ test("pool.refreshMcp reconnects a streaming session in place", () => {
   assertEquals(teardown.mcpCredentials, 1);
 });
 
-test("pool.refreshMcp rebuilds an idle session", () => {
+test("applyChange with policy inPlace (mcp-credentials) rebuilds an idle session", () => {
   const { pool, teardown } = makePool();
   const session = sessionInfo("s1");
   pool.open(session, WORKSPACE, []);
 
-  pool.refreshMcp([session]);
+  pool.applyChange([session], () => {}, "inPlace", {
+    inPlace: "mcp-credentials",
+  });
   assertEquals(teardown.agentClosed, 1);
   assertEquals(teardown.mcpRefreshed, 0);
 });
 
-test("pool.refreshMcp reconnects the running ones and rebuilds the rest", () => {
+test("applyChange with policy inPlace (mcp-credentials) reconnects the running ones and rebuilds the rest", () => {
   // One sign-in touches every session that uses the server, and they are not
   // all in the same state: a refusal by one must not cost the others.
   const { pool, teardown } = makePool({ streaming: true });
@@ -346,8 +387,12 @@ test("pool.refreshMcp reconnects the running ones and rebuilds the rest", () => 
   const idlePool = makePool();
   idlePool.pool.open(sessionInfo("idle"), WORKSPACE, []);
   // Same batch, both pools observe their own session.
-  pool.refreshMcp([streaming]);
-  idlePool.pool.refreshMcp([sessionInfo("idle")]);
+  pool.applyChange([streaming], () => {}, "inPlace", {
+    inPlace: "mcp-credentials",
+  });
+  idlePool.pool.applyChange([sessionInfo("idle")], () => {}, "inPlace", {
+    inPlace: "mcp-credentials",
+  });
   assertEquals(teardown.agentClosed, 0);
   assertEquals(teardown.mcpRefreshed, 1);
   assertEquals(idlePool.teardown.agentClosed, 1);

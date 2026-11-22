@@ -78,11 +78,12 @@ export class Capabilities {
   }
 
   setCodeExecutionEnabled(enabled: boolean): void {
-    this.#deps.pool.applyAgentBuildChange(
+    this.#deps.pool.applyChange(
       this.#deps.sessions.listEverySession(),
       () =>
         this.#deps.settings.set(CODE_EXECUTION_ENABLED_KEY, enabled ? "1" : ""),
-      (id) => this.#deps.sessions.deferRebuild(id),
+      "defer",
+      { defer: (id) => this.#deps.sessions.deferRebuild(id) },
     );
   }
 
@@ -91,10 +92,11 @@ export class Capabilities {
   }
 
   setAskToolEnabled(enabled: boolean): void {
-    this.#deps.pool.applyAgentBuildChange(
+    this.#deps.pool.applyChange(
       this.#deps.sessions.listEverySession(),
       () => this.#deps.settings.set(ASK_TOOL_ENABLED_KEY, enabled ? "1" : "0"),
-      (id) => this.#deps.sessions.deferRebuild(id),
+      "defer",
+      { defer: (id) => this.#deps.sessions.deferRebuild(id) },
     );
   }
 
@@ -103,14 +105,15 @@ export class Capabilities {
   }
 
   setAppUiInSystemPrompt(enabled: boolean): void {
-    this.#deps.pool.applyAgentBuildChange(
+    this.#deps.pool.applyChange(
       this.#deps.sessions.listEverySession(),
       () =>
         this.#deps.settings.set(
           APP_UI_IN_SYSTEM_PROMPT_KEY,
           enabled ? "1" : "",
         ),
-      (id) => this.#deps.sessions.deferRebuild(id),
+      "defer",
+      { defer: (id) => this.#deps.sessions.deferRebuild(id) },
     );
   }
 }

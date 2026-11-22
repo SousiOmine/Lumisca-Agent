@@ -233,8 +233,8 @@ export function createCoreServices(deps: CoreServicesDeps): CoreServices {
     handovers: deps.handovers,
     envRequests: deps.envRequests,
     decorateSession: deps.decorateSession,
+    createAndAnnounce: (input) => sessions.createAndAnnounce(input),
     deleteSession,
-    emit: deps.emit,
     language: deps.language,
     chatWorkspace: deps.chatWorkspace,
     requireWorkspace: deps.requireWorkspace,
@@ -435,7 +435,9 @@ export function createCoreGraph(
     getSetting: (key) => graph.settings.get(key),
     setSetting: (key, value) => graph.settings.set(key, value),
     applyCapabilityChange: (mutate) =>
-      graph.pool.applyCapabilityChange(graph.sessions.list(), mutate),
+      graph.pool.applyChange(graph.sessions.list(), mutate, "inPlace", {
+        inPlace: "tools",
+      }),
   });
   graph.models =
     overrides.models ??
@@ -599,8 +601,11 @@ export function createCoreGraph(
         graph.pool.get(sessionId)?.getMcpStatus() ?? null,
       requireWorkspace: (id) => host.requireWorkspace(id),
       applyMcpConfigChange: (sessions, mutate) =>
-        graph.pool.applyMcpConfigChange(sessions, mutate),
-      refreshSessionMcp: (sessions) => graph.pool.refreshMcp(sessions),
+        graph.pool.applyChange(sessions, mutate, "inPlace", { inPlace: "mcp" }),
+      refreshSessionMcp: (sessions) =>
+        graph.pool.applyChange(sessions, () => {}, "inPlace", {
+          inPlace: "mcp-credentials",
+        }),
     });
   graph.modelService = new ModelService(
     graph.models,
@@ -617,7 +622,7 @@ export function createCoreGraph(
     new WorkspaceService(createWorkspaceRepo(db), {
       listSessions: (workspaceId) => graph.sessions.list(workspaceId),
       applyChange: (sessions, mutate) =>
-        graph.pool.applyChange(sessions, mutate),
+        graph.pool.applyChange(sessions, mutate, "reject"),
       // The core's own delete: deleting a workspace drops its sessions'
       // rows AND their visual assets, exactly like deleting a session
       // directly (the pool alone would leave the assets behind).
