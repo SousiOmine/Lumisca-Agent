@@ -22,6 +22,7 @@ import type { SessionServiceDeps } from "./session-deps.ts";
 import {
   type CreateSessionInput,
   type DefaultModel,
+  type NewSession,
   SessionLifecycle,
 } from "./session-lifecycle.ts";
 import { SessionRuns } from "./session-runs.ts";
@@ -29,7 +30,11 @@ import { SessionSkills } from "./session-skills.ts";
 import { SessionTranscript } from "./session-transcript.ts";
 
 export type { SessionServiceDeps } from "./session-deps.ts";
-export type { CreateSessionInput, DefaultModel } from "./session-lifecycle.ts";
+export type {
+  CreateSessionInput,
+  DefaultModel,
+  NewSession,
+} from "./session-lifecycle.ts";
 
 /**
  * The sessions an installation owns: one entry point over six collaborators.
@@ -73,6 +78,12 @@ export class SessionService {
 
   createSession(input: CreateSessionInput): Promise<SessionInfo> {
     return this.lifecycle.createSession(input);
+  }
+
+  /** Create a session row, open its agent and announce it (see
+   * SessionLifecycle.createAndAnnounce). */
+  createAndAnnounce(input: NewSession): SessionInfo {
+    return this.lifecycle.createAndAnnounce(input);
   }
 
   listSessions(workspaceId?: string): SessionInfo[] {
