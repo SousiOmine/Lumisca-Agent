@@ -21,7 +21,7 @@ import type {
   LineRange,
   RangeReadResult,
 } from "../ports/file-backend.ts";
-import { isWithinWith } from "../workspace/path-util.ts";
+import { isWithinPosix } from "../workspace/path-util.ts";
 import type { ResolvedPath } from "../workspace/sandbox.ts";
 import type { VmExec } from "./container.ts";
 import { VM_WORKDIR } from "./contract.ts";
@@ -330,14 +330,8 @@ export function resolveVmPath(
   const absolute = posix.isAbsolute(expanded)
     ? posix.normalize(expanded)
     : posix.resolve(cwd, expanded);
-  if (!isInside(VM_WORKDIR, absolute)) {
+  if (!isWithinPosix(VM_WORKDIR, absolute)) {
     return { ok: false, reason: `Path is outside the workspace: ${requested}` };
   }
   return { ok: true, path: absolute };
-}
-
-/** True when `path` is `root` itself or inside it. The VM's paths are
- * POSIX: they are compared without the host's case and separator rules. */
-function isInside(root: string, path: string): boolean {
-  return isWithinWith(root, path, { posix: true });
 }

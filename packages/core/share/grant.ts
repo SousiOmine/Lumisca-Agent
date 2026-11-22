@@ -13,7 +13,7 @@
  */
 import { posix } from "node:path";
 import type { FolderShare } from "../domain/share.ts";
-import { isWithinWith } from "../workspace/path-util.ts";
+import { isWithinPosix } from "../workspace/path-util.ts";
 
 /** The single root every lent folder hangs under. */
 export const SHARE_ROOT = "/lend";
@@ -76,11 +76,11 @@ export function isSharePath(path: string): boolean {
 /**
  * Whether `candidate` is `root` itself or inside it. POSIX comparison by
  * design: the namespace is `/lend/...` on every machine, whatever separators
- * the disk that holds the folder uses, so `workspace/path-util` (which folds
- * case on Windows) would be applying the server's rules to a stranger's path.
+ * the disk that holds the folder uses, so the host's own rules (which fold
+ * case on Windows) would be applying the server's to a stranger's path.
  */
 export function isWithinShare(root: string, candidate: string): boolean {
-  return isWithinWith(root, candidate, { posix: true });
+  return isWithinPosix(root, candidate);
 }
 
 /**
