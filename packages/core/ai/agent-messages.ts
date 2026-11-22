@@ -3,18 +3,11 @@
  * the stamp that keeps them in the order they were appended.
  *
  * Kept out of agent.ts (the run and its loop) because these are the shapes a
- * caller reads: a message the agent built, whether it succeeded or failed, and
- * the identity a client finds it by.
+ * caller reads: what a prompt becomes, and the identity a client finds it by.
+ * The assistant messages a run builds are in ai/message-factory.ts.
  */
 
-import type {
-  AgentMessage,
-  AssistantMessage,
-  ImageContent,
-  StopReason,
-} from "../domain/message.ts";
-import type { Api } from "../domain/model.ts";
-import type { Model } from "./catalog.ts";
+import type { AgentMessage, ImageContent } from "../domain/message.ts";
 
 /** The timestamp of the next message an agent appends. Strictly increasing,
  * so the transcript's order is also its timestamp order: the clients keep a
@@ -46,42 +39,4 @@ export function normalizeInput(
   ];
   if (images !== undefined && images.length > 0) content.push(...images);
   return { role: "user", content, timestamp: Date.now() } as AgentMessage;
-}
-
-/** The assistant message a turn is announced with before its stream emits
- * anything (see AgentEvent's `message_start`): empty, and pending until the
- * transport fills it in. */
-export function placeholderAssistant(model: Model<Api>): AssistantMessage {
-  return {
-    role: "assistant",
-    content: [],
-    api: model.api,
-    provider: model.provider,
-    model: model.id,
-    usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    stopReason: "pending" as StopReason,
-    timestamp: Date.now(),
-  };
-}
-
-/** The assistant message of a turn that failed before it could answer: the
- * failure is the turn's record, so the transcript (and with it the DB, the UI
- * banner and the session log) says why it ended. */
-export function errorAssistant(
-  model: Model<Api>,
-  errorMessage: string,
-  errorRetryable = false,
-): AssistantMessage {
-  return {
-    role: "assistant",
-    content: [],
-    api: model.api,
-    provider: model.provider,
-    model: model.id,
-    usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    stopReason: "error",
-    errorMessage,
-    ...(errorRetryable ? { errorRetryable: true } : {}),
-    timestamp: Date.now(),
-  };
 }

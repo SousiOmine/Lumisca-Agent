@@ -45,6 +45,7 @@ import { contentText } from "../shared/mod.ts";
 import type { Model } from "./catalog.ts";
 import { describeFailedCall, failureText } from "./error-detail.ts";
 import { sessionHeadersFor } from "./lang-model.ts";
+import { pendingAssistant } from "./message-factory.ts";
 import {
   isRetryableRateLimitError,
   type RateLimitRetryOptions,
@@ -211,7 +212,7 @@ async function* runStream(
   if (sessionHeaders !== undefined) request.headers = sessionHeaders;
 
   const result = vercelStreamText(request as never);
-  yield { type: "start", partial: modelStartPartial(model) };
+  yield { type: "start", partial: pendingAssistant(model) };
   let text = "";
   let thinking = "";
   /** Tool name per call id: a delta part carries only the id, and the events
@@ -616,20 +617,6 @@ function mergeProviderOptions(
     merged[provider] = { ...(merged[provider] ?? {}), ...options };
   }
   return merged;
-}
-
-/** An empty placeholder assistant message for the stream's start event. */
-function modelStartPartial(model: Model<Api>): AssistantMessage {
-  return {
-    role: "assistant",
-    content: [],
-    api: model.api,
-    provider: model.provider,
-    model: model.id,
-    usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    stopReason: "pending",
-    timestamp: Date.now(),
-  };
 }
 
 /** Build the final AssistantMessage from a Vercel step result. */

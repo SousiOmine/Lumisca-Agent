@@ -3,7 +3,12 @@ import { errorMessage } from "../errors.ts";
 import { transpileToJs } from "../tools/js-sandbox.ts";
 import type { VmChannelOpener, VmExec } from "../vm/container.ts";
 import { shellQuote } from "../vm/quote.ts";
-import type { CodeStoreChanges } from "./store.ts";
+import {
+  CODE_STORE_MAX_KEY_CHARS,
+  CODE_STORE_MAX_TOTAL_BYTES,
+  CODE_STORE_MAX_VALUE_BYTES,
+  type CodeStoreChanges,
+} from "./store.ts";
 import {
   type CodeRunContext,
   type CodeRunOutcome,
@@ -312,6 +317,9 @@ function isStoreChanges(value: unknown): value is CodeStoreChanges {
  * stderr, which the channel keeps as the program's output.
  */
 const VM_PROGRAM_PRELUDE = `"use strict";
+const STORE_MAX_KEY_CHARS = ${CODE_STORE_MAX_KEY_CHARS};
+const STORE_MAX_VALUE_BYTES = ${CODE_STORE_MAX_VALUE_BYTES};
+const STORE_MAX_TOTAL_BYTES = ${CODE_STORE_MAX_TOTAL_BYTES};
 const readline = require("node:readline");
 const incoming = readline.createInterface({ input: process.stdin, terminal: false });
 const pending = new Map();
@@ -358,10 +366,10 @@ function jsonValue(value) {
 }
 const __storeChanged = new Set();
 let __storeBytes = 0;
-// Same bounds as the server-side store (store.ts).
+// The bounds are the server-side store's (store.ts), interpolated above.
 function storeKey(key) {
   if (typeof key !== "string" || key.length === 0) throw new Error("The store key must be a non-empty string.");
-  if (key.length > 256) throw new Error("The store key is longer than 256 characters.");
+  if (key.length > STORE_MAX_KEY_CHARS) throw new Error("The store key is longer than " + STORE_MAX_KEY_CHARS + " characters.");
   return key;
 }
 function store(key, value) {
@@ -381,10 +389,10 @@ function store(key, value) {
   }
   if (text === undefined) throw new Error("The store can hold only JSON values: functions and symbols are not JSON.");
   const bytes = Buffer.byteLength(text, "utf8");
-  if (bytes > 256 * 1024) throw new Error("The store value is larger than 262144 bytes.");
+  if (bytes > STORE_MAX_VALUE_BYTES) throw new Error("The store value is larger than " + STORE_MAX_VALUE_BYTES + " bytes.");
   const old = __store.get(name);
   const oldBytes = old === undefined ? 0 : Buffer.byteLength(JSON.stringify(old), "utf8");
-  if (__storeBytes - oldBytes + bytes > 1024 * 1024) throw new Error("The store would be larger than 1048576 bytes.");
+  if (__storeBytes - oldBytes + bytes > STORE_MAX_TOTAL_BYTES) throw new Error("The store would be larger than " + STORE_MAX_TOTAL_BYTES + " bytes.");
   __store.set(name, JSON.parse(text));
   __storeBytes += bytes - oldBytes;
   __storeChanged.add(name);

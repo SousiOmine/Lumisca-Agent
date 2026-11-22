@@ -15,9 +15,9 @@ import type {
   ToolResultMessage,
 } from "../domain/message.ts";
 import type { Api } from "../domain/model.ts";
-import { errorAssistant } from "./agent-messages.ts";
 import type { AgentEvent } from "./agent-types.ts";
 import type { Model } from "./catalog.ts";
+import { failedAssistant } from "./message-factory.ts";
 import type { StreamEvent } from "./transport.ts";
 
 /** What one turn produced. */
@@ -148,12 +148,12 @@ export class TurnStream {
     let final = this.final;
 
     if (this.errorMessage !== undefined) {
-      final = errorAssistant(model, this.errorMessage, this.errorRetryable);
+      final = failedAssistant(model, this.errorMessage, this.errorRetryable);
     } else if (final === undefined && this.candidate !== undefined) {
       // Test faux streams that only emit start(partial) + end.
       final = { ...this.candidate, timestamp: Date.now() };
     } else if (final === undefined) {
-      final = errorAssistant(model, "The model stream produced no response");
+      final = failedAssistant(model, "The model stream produced no response");
     }
 
     if (this.text.length > 0 && final.content.length === 0) {
