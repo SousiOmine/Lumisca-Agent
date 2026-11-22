@@ -1449,20 +1449,19 @@ export class LumiscaCore {
   /** The pending hand-over of a session (the resync snapshot carries it so a
    * client that reconnects while the run is blocked can take over). */
   getPendingHandover(sessionId: string): PendingHandover | null {
-    return this.pool.get(sessionId)?.getPendingHandover() ?? null;
+    return this.services.interruptions.getPendingHandover(sessionId);
   }
 
   /** The user finished at the screen: let the blocked run continue. */
   finishHandover(sessionId: string, note: string, toolCallId?: string): void {
-    const agent = this.pool.require(sessionId);
-    agent.finishHandover(note, toolCallId);
+    this.services.interruptions.finishHandover(sessionId, note, toolCallId);
   }
 
   /** The environment variable a session's run is waiting for (the resync
    * snapshot carries it so a client that reconnects while the run is blocked
    * can still answer the dialog). */
   getPendingEnvRequest(sessionId: string): PendingEnvRequest | null {
-    return this.pool.get(sessionId)?.getPendingEnvRequest() ?? null;
+    return this.services.interruptions.getPendingEnvRequest(sessionId);
   }
 
   // --- folders lent from the user's own computer (see share/hub.ts) ---------
@@ -1484,40 +1483,25 @@ export class LumiscaCore {
    * snapshot carries it so a client that reconnects while the run is blocked
    * can still answer the card). */
   getPendingShareRequest(sessionId: string): PendingShareRequest | null {
-    return this.pool.get(sessionId)?.getPendingShareRequest() ?? null;
+    return this.services.interruptions.getPendingShareRequest(sessionId);
   }
 
   /** The user lent a folder: let the blocked run continue. Throws
    * `not_found` when no lend request is waiting (the card outlived its run,
    * or another client already answered it). */
   finishShareLend(sessionId: string, toolCallId?: string): void {
-    const hub = this.shareRequests.get(sessionId);
-    if (hub === undefined) {
-      throw new CoreError("No folder is waiting to be lent", "not_found");
-    }
-    hub.finishLend(toolCallId);
+    this.services.interruptions.finishShareLend(sessionId, toolCallId);
   }
 
   /** The user pressed the button that declines: the run continues without a
    * folder. */
   declineShareRequest(sessionId: string, toolCallId?: string): void {
-    const hub = this.shareRequests.get(sessionId);
-    if (hub === undefined) {
-      throw new CoreError("No folder is waiting to be lent", "not_found");
-    }
-    hub.decline(toolCallId);
+    this.services.interruptions.declineShareRequest(sessionId, toolCallId);
   }
 
   /** The desktop app withdrew the loan: let the blocked run continue. */
   finishShareDisconnect(sessionId: string, toolCallId: string): void {
-    const hub = this.shareRequests.get(sessionId);
-    if (hub === undefined) {
-      throw new CoreError(
-        "No lent folder is waiting to be withdrawn",
-        "not_found",
-      );
-    }
-    hub.finishDisconnect(toolCallId);
+    this.services.interruptions.finishShareDisconnect(sessionId, toolCallId);
   }
 
   /** The desktop app could not withdraw the loan, and said why: the run
@@ -1527,14 +1511,11 @@ export class LumiscaCore {
     toolCallId: string,
     error: string,
   ): void {
-    const hub = this.shareRequests.get(sessionId);
-    if (hub === undefined) {
-      throw new CoreError(
-        "No lent folder is waiting to be withdrawn",
-        "not_found",
-      );
-    }
-    hub.failDisconnect(toolCallId, error);
+    this.services.interruptions.failShareDisconnect(
+      sessionId,
+      toolCallId,
+      error,
+    );
   }
 
   /** The user entered a value for the environment variable the run is

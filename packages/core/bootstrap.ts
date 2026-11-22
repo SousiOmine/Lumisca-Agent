@@ -34,6 +34,7 @@ import { CommandSafety } from "./safety/command-safety.ts";
 import { SavedPromptsService } from "./saved-prompts.ts";
 import { ComputerUseService } from "./services/computer.ts";
 import { ModelService } from "./services/models.ts";
+import { SessionInterruptions } from "./services/session-interruptions.ts";
 import { SessionService } from "./services/sessions.ts";
 import { StellaAgentService } from "./services/stella-agents.ts";
 import { StellaMachineService } from "./services/stella-machines.ts";
@@ -80,6 +81,8 @@ export interface CoreServices {
   readonly webSearch: WebSearchService;
   readonly mcp: McpService;
   readonly workspaces: WorkspaceService;
+  /** The dialogs a blocked run waits on: hand-over, env and folder loan. */
+  readonly interruptions: SessionInterruptions;
 }
 
 /**
@@ -101,6 +104,8 @@ export interface CoreServicesDeps {
   /** Per-session `vm_env` request hubs; the core's close path forgets
    * them. */
   envRequests: EnvRequestRegistry;
+  /** Per-session folder-loan request hubs. */
+  shareRequests: ShareRequestRegistry;
   icons: AgentIconStore;
   visuals: SessionVisualStore;
   attachments: SessionAttachmentStore;
@@ -167,6 +172,12 @@ export function createCoreServices(deps: CoreServicesDeps): CoreServices {
     appSkillDirs: deps.appSkillDirs,
     stellaSkills: (agentId) => deps.machine.skills(agentId),
   });
+  const interruptions = new SessionInterruptions({
+    pool: deps.pool,
+    handovers: deps.handovers,
+    envRequests: deps.envRequests,
+    shareRequests: deps.shareRequests,
+  });
   const deleteSession = (id: string) => sessions.deleteSession(id);
   const stellaAgents = new StellaAgentService({
     agents: deps.agents,
@@ -212,6 +223,7 @@ export function createCoreServices(deps: CoreServicesDeps): CoreServices {
     webSearch: deps.webSearch,
     mcp: deps.mcp,
     workspaces: deps.workspaces,
+    interruptions,
   };
 }
 
@@ -583,6 +595,7 @@ export function createCoreGraph(
     routineScheduler: graph.routineScheduler,
     handovers: graph.handovers,
     envRequests: graph.envRequests,
+    shareRequests: graph.shareRequests,
     icons: graph.agentIcons,
     visuals: graph.visuals,
     attachments: graph.attachments,
