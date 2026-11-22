@@ -142,9 +142,13 @@ export class McpAttachmentHost {
   ensureSearchTools(): void {
     if (this.codeExecution) return;
     if (this.registries === null || this.registries.main.isEmpty) return;
+    // Read once: the registry is this host's own, and the pair reads through
+    // the closure on every call.
+    const registries = this.registries;
+    if (registries === null) return;
     addToolsToAgent(
       this.agent,
-      registryToolPair(() => this.registries!.main),
+      registryToolPair(() => registries.main),
     );
   }
 }

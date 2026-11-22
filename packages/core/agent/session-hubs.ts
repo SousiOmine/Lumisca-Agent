@@ -13,6 +13,7 @@ import type { SessionInfo } from "../domain/session.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
 import { AskHub } from "../tools/ask.ts";
 import { BackgroundProcessManager } from "../tools/background.ts";
+import type { SessionToolRegistries } from "../tools/registries.ts";
 import { TaskHub } from "../tools/task-hub.ts";
 import { TodoHub } from "../tools/todo.ts";
 import { subagentSkills } from "../tools/toolsets.ts";
@@ -41,6 +42,7 @@ export function buildSessionHubs(
   where: SessionWhere,
   resources: SessionResources,
   mcp: McpAttachment,
+  registries: SessionToolRegistries,
 ): SessionHubs {
   // Commands die with the session (pool close/delete/closeAll → killAll),
   // not with the agent. A chat-only session never builds it (no
@@ -147,7 +149,7 @@ export function buildSessionHubs(
     // re-read on every open. The skill catalog and the capability gates
     // travel with the runtime resolver instead: they are what the runtime
     // (the machine or this workspace) answers for.
-    tasks.setMcp(mcp, resources.registries!.subagent);
+    tasks.setMcp(mcp, registries.subagent);
     tasks.setWebSearch(where.webSearch);
     tasks.setShares(deps.shares?.());
     tasks.setLanguage(deps.getLanguage());
