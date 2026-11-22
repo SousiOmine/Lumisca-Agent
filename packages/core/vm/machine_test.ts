@@ -4,6 +4,7 @@ import type { VmCommandBytesRunner, VmCommandRunner } from "./command.ts";
 import type { VmHost, VmHostStatus, VmManager, VmStatus } from "./container.ts";
 import { VM_WARM_FLOOR, vmContainerName } from "./contract.ts";
 import { StellaMachine } from "./machine.ts";
+import type { MachineRunners } from "./machine-seams.ts";
 
 /**
  * The machines of stella mode: one container per agent, woken on use and
@@ -449,4 +450,68 @@ test("a removed machine is forgotten and does not answer again", async () => {
   await stella.remove("agent-a");
   assertEquals(fake.stops, ["agent-a"]);
   assertEquals(await stella.isRunning("agent-a"), false);
+});
+
+/** The runners a skill-reading machine is built with: the exec seams record
+ * their argv, and an `exec` that lists the agent's own skill folder answers
+ * one skill (see vm/skills.ts). */
+function skillAnswering(runner: ReturnType<typeof recorder>): MachineRunners {
+  return {
+    run: async (command) => {
+      runner.calls.push([...command]);
+      const dir = command[command.length - 1] ?? "";
+      const stdout = dir.includes("/agents/")
+        ? "\n__SKILL__mine\n---\nname: mine\ndescription: written by the agent\n---\nBody.\n"
+        : "";
+      return {
+        stdout,
+        stderr: "",
+        exitCode: 0,
+        truncated: false,
+        timedOut: false,
+      };
+    },
+    runBytes: runner.runBytes,
+  };
+}
+
+test("stopping every machine forgets the skill catalog of each agent", async () => {
+  // The per-agent facts live in one record (see machine-state.ts). A stop
+  // must leave nothing behind that described what the container was doing:
+  // the desktop is gone and so is the catalog, which is why the next open
+  // reads it again instead of answering from a stopped machine.
+  const runner = recorder();
+  const fake = fakeHost();
+  const stella = new StellaMachine([], skillAnswering(runner), {
+    warmFloor: VM_WARM_FLOOR,
+    timer: false,
+  });
+  stella.set(fake.host);
+  await stella.ensureReady("agent-a");
+  await stella.ensureSkills("agent-a");
+  assertEquals(stella.skills("agent-a").length > 0, true);
+
+  await stella.stopAll();
+  assertEquals(stella.skills("agent-a"), []);
+});
+
+test("removing a machine forgets its desktop and its catalog at once", async () => {
+  const runner = recorder();
+  const fake = fakeHost();
+  const stella = new StellaMachine([], skillAnswering(runner), {
+    warmFloor: VM_WARM_FLOOR,
+    timer: false,
+  });
+  stella.set(fake.host);
+  await stella.ensureReady("agent-a");
+  await stella.screenExec("agent-a")!(["true"], { timeoutMs: 1000 });
+  await stella.ensureSkills("agent-a");
+  assertEquals(fake.desktops, ["agent-a"]);
+
+  await stella.remove("agent-a");
+  assertEquals(stella.skills("agent-a"), []);
+  // The desktop record went too: a machine removed and rebuilt starts its
+  // window manager rather than trusting a desktop that is gone.
+  await stella.screenExec("agent-a")!(["true"], { timeoutMs: 1000 });
+  assertEquals(fake.desktops, ["agent-a", "agent-a"]);
 });

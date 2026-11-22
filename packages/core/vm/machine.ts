@@ -21,6 +21,7 @@ import { IdleReaper } from "./machine-reaper.ts";
 import { AgentScreens } from "./machine-screen.ts";
 import { type MachineRunners, MachineSeams } from "./machine-seams.ts";
 import { AgentSkills } from "./machine-skills.ts";
+import { MachineStates } from "./machine-state.ts";
 
 /**
  * The stella machines: the host they share, what this process knows about each
@@ -50,6 +51,7 @@ export class StellaMachine {
   #idleMs: number;
   /** The number of machines kept running without use (see VM_WARM_FLOOR). */
   #warmFloor: number;
+  readonly #states: MachineStates;
   readonly #screens: AgentScreens;
   readonly #agents: AgentMachines;
   readonly #seams: MachineSeams;
@@ -76,10 +78,15 @@ export class StellaMachine {
     this.#idleMs = options.idleMs ?? VM_IDLE_SLEEP_MS;
     this.#warmFloor = options.warmFloor ?? VM_WARM_FLOOR;
     const now = options.now ?? Date.now;
+    // Every per-agent fact lives in one record, created and dropped in one
+    // place (see machine-state.ts), so stopping a machine cannot leave a
+    // second map behind.
+    this.#states = new MachineStates({ now });
     // The three read each other through callbacks, which is what lets the
     // mutual facts (a wake drops a desktop, a port ask wakes the machine) stay
     // with the state they are about rather than passing through this class.
     this.#screens = new AgentScreens({
+      states: this.#states,
       currentHost: () => this.#host,
       requireHost: () => this.require(),
       // A pane asking for the port is the user arriving at the screen: it
@@ -90,6 +97,7 @@ export class StellaMachine {
       },
     });
     this.#agents = new AgentMachines({
+      states: this.#states,
       currentHost: () => this.#host,
       requireHost: () => this.require(),
       // Read on every check rather than captured: the service that owns the
@@ -110,6 +118,7 @@ export class StellaMachine {
       },
     });
     this.#skills = new AgentSkills({
+      states: this.#states,
       globalSkillDirs,
       hasHost: () => this.#host !== undefined,
       isRunning: (agentId) => this.#agents.knownRunning(agentId),
@@ -139,9 +148,7 @@ export class StellaMachine {
     // since, or podman removed), every machine state, and the skill catalogs
     // (a different installation has different files).
     this.#verdict = undefined;
-    this.#agents.clear();
-    this.#screens.clear();
-    this.#skills.clear();
+    this.#states.dropAll();
     if (host !== undefined) this.#reaper.start();
   }
 
@@ -297,8 +304,7 @@ export class StellaMachine {
       }
     } finally {
       this.#verdict = undefined;
-      this.#agents.forgetStopped();
-      this.#screens.clear();
+      this.#states.dropStopped();
     }
   }
 
@@ -317,8 +323,9 @@ export class StellaMachine {
     const host = this.#host;
     if (host === undefined) return;
     await this.#agents.removeContainer(agentId, host);
-    this.#agents.forget(agentId);
-    this.#skills.forget(agentId);
+    // One record holds the container's, the desktop's and the catalog's
+    // facts, so removing the container forgets all three at once.
+    this.#states.drop(agentId);
   }
 
   /** Note that an agent's machine was used. The idle clock starts here. */
