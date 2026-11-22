@@ -41,10 +41,14 @@
  */
 
 import { CoreError, errorMessage } from "../errors.ts";
-import { sleep } from "../shared/misc.ts";
 import type { Routine } from "../shared/routine.ts";
 import { nextRunAt } from "../shared/routine.ts";
+import { RoutineExecutor, type RoutineTrigger } from "./executor.ts";
+import { RoutineQueue, type RoutineRunState } from "./queue.ts";
 import type { RoutineRepo, RoutineWatchResult } from "./repo.ts";
+
+export type { RoutineTrigger } from "./executor.ts";
+export type { RoutineRunState } from "./queue.ts";
 
 /** How often the scheduler looks for due routines. A minute's granularity
  * would be enough for the schedules it supports, but the tick also drives
@@ -57,31 +61,12 @@ const DEFAULT_TICK_MS = 30_000;
  * firing a routine into that crowd helps nobody. */
 const CATCH_UP_DELAY_MS = 60_000;
 
-/** How often a run waiting for a busy conversation asks again. */
-const SLOT_POLL_MS = 2_000;
-
 /** How long a check that cannot run at all waits before looking again. A
  * machine that is down answers the same thing every time, and every check
  * costs a process inside the container: repeating it at the routine's own
  * interval is work with a known answer. Fifteen minutes is longer than any
  * watch interval the user can pick (the floor is five). */
 const WATCH_RETRY_MS = 15 * 60_000;
-
-/** How long a run waits for its conversation to be free before giving up.
- * "Waited for, not skipped" must not turn into "piled up for ever": a
- * conversation blocked on a hand-over does not free itself until the user
- * comes back, while the routine's own interval keeps producing occurrences.
- * An hour is long enough that a normal run ends first, and short enough that
- * the result still describes what the user asked about. */
-const DEFAULT_QUEUE_MAX_WAIT_MS = 60 * 60_000;
-
-/** What a waiting run records when it is dropped. Stored as the routine's
- * detail, so the settings list says what happened instead of nothing. */
-const QUEUE_GAVE_UP_DETAIL =
-  "The conversation stayed busy for an hour, so this run was skipped";
-
-/** What a run records when its agent is switched off. */
-const AGENT_DISABLED_DETAIL = "The agent is disabled";
 
 /** The seam the scheduler needs from the session layer: start a run in an
  * agent's conversation and know whether one is already running. Kept narrow
@@ -127,17 +112,6 @@ export type WatchCheck =
   | { kind: "unsupported"; problem: string }
   | { kind: "error"; state?: unknown; problem: string };
 
-/** What a check saw when it fired (see WatchCheck.changed). The run is told
- * the count so it does not have to read the source again to find out how
- * much happened — and so a run that starts after the items were read
- * elsewhere (a user's own look at the mailbox) does not lose them. */
-export interface RoutineTrigger {
-  /** When the check fired (epoch ms). */
-  at: number;
-  /** How many items the observation had that the previous one did not. */
-  newItems: number;
-}
-
 /** How a started run ended. */
 export interface RoutineRunOutcome {
   /** Why it failed, or null when it completed. */
@@ -159,12 +133,6 @@ export interface RoutineSchedulerOptions {
   slotPollMs?: number;
   log?: (message: string) => void;
 }
-
-/** Where a routine's run is right now. `queued` is a run that is waiting for
- * the conversation and has produced nothing yet; the settings list draws it
- * differently from `running`, because a run that waits and never starts is
- * not something the user can see working. */
-export type RoutineRunState = "idle" | "queued" | "running";
 
 export interface RoutineScheduler {
   start(): void;
@@ -188,6 +156,10 @@ export interface RoutineScheduler {
   stop(id: string): void;
 }
 
+/** The report a fire-and-forget task gives when it fails: a routine that
+ * could not run is a row that says so, never an exception nobody saw. */
+export type RoutineReport = (message: string) => void;
+
 export function createRoutineScheduler(
   options: RoutineSchedulerOptions,
 ): RoutineScheduler {
@@ -195,27 +167,36 @@ export function createRoutineScheduler(
   const now = options.now ?? (() => Date.now());
   const tickMs = options.tickMs ?? DEFAULT_TICK_MS;
   const catchUpDelayMs = options.catchUpDelayMs ?? CATCH_UP_DELAY_MS;
-  const queueMaxWaitMs = options.queueMaxWaitMs ?? DEFAULT_QUEUE_MAX_WAIT_MS;
-  const slotPollMs = options.slotPollMs ?? SLOT_POLL_MS;
   const log = options.log ?? (() => {});
-
-  /** Routine id → how many of its runs are actually running (the wait is
-   * over and the agent was asked). */
-  const running = new Map<string, number>();
-  /** Routine id → when its ONE waiting run started waiting. The bound lives
-   * here rather than in the database: a queued run is this process's memory,
-   * like `running`. */
-  const queued = new Map<string, number>();
-  /** Routines whose in-flight run the user asked to stop. */
-  const stopped = new Set<string>();
-  /** Routines whose QUEUED run the user asked to stop (it never started). */
-  const cancelled = new Set<string>();
+  const queue = new RoutineQueue(now);
+  const executor = new RoutineExecutor({
+    repo,
+    runner,
+    queue,
+    now,
+    log,
+    ...(options.queueMaxWaitMs === undefined
+      ? {}
+      : { queueMaxWaitMs: options.queueMaxWaitMs }),
+    ...(options.slotPollMs === undefined
+      ? {}
+      : { slotPollMs: options.slotPollMs }),
+  });
 
   let tickTimer: ReturnType<typeof setInterval> | null = null;
   let firstTimer: ReturnType<typeof setTimeout> | null = null;
   /** A timer callback already queued when close() ran must not read the
    * database the core is about to close. */
   let closed = false;
+
+  /** Run one task without waiting for it, and report what it threw. Every
+   * run of a routine goes through this: the tick must not be blocked by a
+   * run, and a failure must reach the log rather than a dropped promise. */
+  function fire(task: Promise<void>, what: string): void {
+    void task.catch((error) => {
+      log(`routine ${what}: ${errorMessage(error)}`);
+    });
+  }
 
   /** One pass: start every due routine. Runs do not block the tick. */
   function tick(): void {
@@ -254,7 +235,7 @@ export function createRoutineScheduler(
         }
         const oneOff = repo.get(routine.id);
         if (oneOff === undefined) continue;
-        void run(oneOff);
+        fire(executor.run(oneOff), oneOff.id);
         continue;
       }
       // Advance first (see the module comment): the stored row must already
@@ -271,10 +252,10 @@ export function createRoutineScheduler(
       // happens only when the check says something changed. Advancing
       // next_run_at above is still right — it is when to look again.
       if (current.schedule.kind === "watch") {
-        void checkOnce(current);
+        fire(checkOnce(current), current.id);
         continue;
       }
-      void run(current);
+      fire(executor.run(current), current.id);
     }
   }
 
@@ -320,7 +301,7 @@ export function createRoutineScheduler(
     if (current === undefined) return;
     // The number belongs to THIS check's answer, not to the row: the row's
     // state is already the new baseline, so the count is only knowable here.
-    void run(
+    await executor.run(
       current,
       outcome.newItems === undefined
         ? undefined
@@ -338,152 +319,6 @@ export function createRoutineScheduler(
         `routine ${routine.id}: could not record the check (${errorMessage(
           error,
         )})`,
-      );
-    }
-  }
-
-  /** Start one run of `routine`, waiting for a free conversation.
-   *
-   * At most ONE run of a routine waits at a time: occurrences that come due
-   * while one is already waiting are dropped (their next run is already
-   * scheduled), because six occurrences of a five-minute routine released at
-   * once would start six runs of the same request. A wait that lasts longer
-   * than `queueMaxWaitMs` gives up instead of holding the slot for ever.
-   *
-   * A `once` routine is removed once this run ends (see the module comment). */
-  async function run(
-    routine: Routine,
-    trigger?: RoutineTrigger,
-  ): Promise<void> {
-    const id = routine.id;
-    // Read before the run: by the time this returns, the row may be gone.
-    const oneOff = routine.schedule.kind === "once";
-    // Already waiting: this occurrence is one too many, and the next is
-    // scheduled anyway.
-    if (queued.has(id)) return;
-    // The agent was switched off after this run was queued, or the user
-    // pressed "run now" on a disabled agent. Saying so on the row is what
-    // keeps a silent no-op from looking like a run that did nothing.
-    if (!runner.isAgentEnabled(routine.agentId)) {
-      recordNote(id, "skipped", AGENT_DISABLED_DETAIL);
-      return;
-    }
-    queued.set(id, now());
-    let started = false;
-    try {
-      // Wait for the conversation to be free. Never skip silently: a routine
-      // the user scheduled must not do nothing because they were typing (see
-      // the module comment) — it waits, and says so.
-      while (runner.isRunning(routine.agentId)) {
-        if (cancelled.delete(id)) {
-          recordNote(id, "stopped", "Stopped before it started");
-          return;
-        }
-        if (repo.get(id) === undefined) return;
-        if (now() - (queued.get(id) ?? now()) >= queueMaxWaitMs) {
-          recordNote(id, "skipped", QUEUE_GAVE_UP_DETAIL);
-          return;
-        }
-        await sleep(slotPollMs);
-      }
-      if (cancelled.delete(id)) {
-        recordNote(id, "stopped", "Stopped before it started");
-        return;
-      }
-      if (repo.get(id) === undefined) return;
-      started = true;
-      queued.delete(id);
-      running.set(id, (running.get(id) ?? 0) + 1);
-      const outcome = await runner.run(
-        routine.agentId,
-        routine.prompt,
-        {
-          id,
-          name: routine.name,
-        },
-        trigger,
-      );
-      const wasStopped = stopped.delete(id);
-      record(id, {
-        status: wasStopped
-          ? "stopped"
-          : outcome.failure === null
-            ? "ok"
-            : "error",
-        detail: wasStopped ? "Stopped by the user" : outcome.failure,
-      });
-    } catch (error) {
-      const wasStopped = stopped.delete(id);
-      const message = errorMessage(error);
-      record(id, {
-        status: wasStopped ? "stopped" : "error",
-        detail: wasStopped ? "Stopped by the user" : message,
-      });
-    } finally {
-      if (!started) stopped.delete(id);
-      queued.delete(id);
-      const left = (running.get(id) ?? 0) - 1;
-      if (left <= 0) running.delete(id);
-      else running.set(id, left);
-      // Only a run that STARTED consumes a one-off: a run that was stopped
-      // while waiting, or that gave up, never happened, and the row stays
-      // (with its reason) for the user to see or run.
-      if (started && oneOff) removeOneOff(id);
-    }
-  }
-
-  /** Drop a one-off whose run has ended. Called after the outcome was
-   * recorded, so a deletion that fails leaves a row that says what happened
-   * and has nothing left to fire. */
-  function removeOneOff(id: string): void {
-    try {
-      repo.delete(id);
-    } catch (error) {
-      log(
-        `routine ${id}: could not remove the one-off after its run (${errorMessage(
-          error,
-        )})`,
-      );
-    }
-  }
-
-  /** Record an outcome that is NOT a run: the prompt never reached the
-   * agent (it was stopped while waiting, or the wait gave up). `last_run_at`
-   * must not move for it — the settings list would then name a time at which
-   * nothing ran. */
-  function recordNote(
-    id: string,
-    status: "stopped" | "skipped",
-    detail: string,
-  ): void {
-    if (repo.get(id) === undefined) return;
-    try {
-      repo.recordNote(id, { status, detail });
-    } catch (error) {
-      log(
-        `routine ${id}: could not record the outcome (${errorMessage(error)})`,
-      );
-    }
-  }
-
-  /** Write the run's result, keeping the next run as the tick left it (a
-   * manual run did not move the schedule). */
-  function record(
-    id: string,
-    outcome: { status: "ok" | "error" | "stopped"; detail: string | null },
-  ): void {
-    const current = repo.get(id);
-    if (current === undefined) return;
-    try {
-      repo.recordRun(id, {
-        lastRunAt: now(),
-        lastStatus: outcome.status,
-        lastDetail: outcome.detail,
-        nextRunAt: current.enabled ? current.nextRunAt : null,
-      });
-    } catch (error) {
-      log(
-        `routine ${id}: could not record the result (${errorMessage(error)})`,
       );
     }
   }
@@ -521,35 +356,32 @@ export function createRoutineScheduler(
       }
       // The schedule is deliberately left alone: "run it now" is a look at
       // what it would do, not a rescheduling. A one-off is still used up by
-      // the run (see run()).
-      await run(routine);
+      // the run (see RoutineExecutor.run).
+      await executor.run(routine);
     },
 
     isRunning(id: string): boolean {
-      return (running.get(id) ?? 0) > 0 || queued.has(id);
+      return queue.isBusy(id);
     },
 
     isQueued(id: string): boolean {
-      return queued.has(id);
+      return queue.isQueued(id);
     },
 
     stateOf(id: string): RoutineRunState {
-      if ((running.get(id) ?? 0) > 0) return "running";
-      return queued.has(id) ? "queued" : "idle";
+      return queue.stateOf(id);
     },
 
     stop(id: string): void {
       const routine = repo.get(id);
       if (routine === undefined) return;
-      const waiting = queued.has(id);
-      const active = running.has(id);
-      if (!waiting && !active) return;
       // Waiting and running are two different facts. A waiting run is
       // cancelled before it starts; a running one is interrupted and records
       // itself as stopped when it ends. Marking a RUNNING routine as
       // cancelled would leave the mark behind and swallow its next run.
-      if (waiting) cancelled.add(id);
-      if (active) stopped.add(id);
+      const waiting = queue.cancelWaiting(id);
+      const active = queue.markRunningStopped(id);
+      if (!waiting && !active) return;
       // Only the run this routine started is stopped: the runner checks the
       // origin before interrupting anything (see RoutineRunner.stop).
       runner.stop(routine.agentId, id);
