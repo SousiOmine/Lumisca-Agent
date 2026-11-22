@@ -49,6 +49,9 @@ function hook(overrides: Partial<StellaHook>): StellaHook {
     reloadAgents: () => {},
     applyAgent: () => {},
     setAgentEnabled: () => Promise.resolve(),
+    uploadFile: () => ({ done: Promise.resolve(""), cancel: () => {} }),
+    lendShare: () => Promise.resolve(),
+    declineShare: () => Promise.resolve(),
     ...overrides,
   };
 }

@@ -195,6 +195,7 @@ function row(
     name: id,
     icon: "",
     model: null,
+    disabledAt: null,
     createdAt: 0,
     updatedAt: 0,
     preview: at === null ? null : { kind: "text", text: id, at },
@@ -274,6 +275,7 @@ test("withAgentRow: a created agent is in the list before it is opened", () => {
     name: "Aide",
     icon: "",
     model: null,
+    disabledAt: null,
     createdAt: 300,
     updatedAt: 300,
   });
@@ -295,6 +297,7 @@ test("withAgentRow: an edit keeps the row's line and does not double it", () => 
     name: "Renamed",
     icon: "",
     model: null,
+    disabledAt: null,
     createdAt: 0,
     updatedAt: 0,
   });

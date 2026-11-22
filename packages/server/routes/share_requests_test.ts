@@ -34,6 +34,7 @@ const AGENT: StellaAgent = {
 
 const SESSION = {
   id: "s1",
+  mainAgentId: "a1",
   workspaceId: "ws",
   name: "Aide",
   modelProvider: "faux",
@@ -41,7 +42,7 @@ const SESSION = {
   createdAt: 0,
   updatedAt: 0,
   stella: true,
-  agentId: "a1",
+  personaId: "a1",
 } as SessionInfo;
 
 const PENDING: StellaShareRequest = {
@@ -106,10 +107,10 @@ async function post(
       (error as { status?: number }).status ??
       (error as { kind?: string }).kind ??
       500;
-    return c.json(
-      { error: String(error) },
-      typeof status === "number" ? status : 500,
-    );
+    return new Response(JSON.stringify({ error: String(error) }), {
+      status: typeof status === "number" ? status : 500,
+      headers: { "content-type": "application/json" },
+    });
   });
   return await app.request(`http://localhost${path}`, {
     method: "POST",

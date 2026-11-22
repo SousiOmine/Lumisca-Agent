@@ -71,7 +71,7 @@ export function skillInfo(skill: SkillDef): SkillInfo {
 export interface DiscoverOptions {
   /** Global skills directories to scan instead of ~/.agents/skills.
    * Used by tests to avoid touching the real home directory. */
-  globalDirs?: string[];
+  globalDirs?: readonly string[];
   /** Skills contributed by discovered agent plugins. They slot in after
    * workspace skills and before the shared folder: a workspace skill
    * shadows a plugin skill of the same name, and a plugin skill shadows a
@@ -81,7 +81,7 @@ export interface DiscoverOptions {
    * They are scanned after plugin skills and before the user's global
    * folder: a project skill shadows a shared one, and a shared one shadows
    * a global one. Defaults to the resolved Lumisca skills folder. */
-  appDirs?: string[];
+  appDirs?: readonly string[];
   /** App-embedded skills (see skills/builtin). Appended after global
    * skills, so any user skill of the same name — workspace, plugin or
    * global — shadows a built-in one. Callers decide which built-ins apply
@@ -100,7 +100,7 @@ export interface DiscoverOptions {
  * the same name. Built-in skills (if given) are appended last — any user
  * skill shadows them. */
 export function discoverSkills(
-  folders: string[],
+  folders: readonly string[],
   options: DiscoverOptions = {},
 ): SkillDef[] {
   const byName = new Map<string, SkillDef>();
@@ -221,8 +221,8 @@ function scanSkillsDir(
   }
 }
 
-function resolveGlobalDirs(injected?: string[]): string[] {
-  if (injected !== undefined) return injected;
+function resolveGlobalDirs(injected?: readonly string[]): string[] {
+  if (injected !== undefined) return [...injected];
   return resolveGlobalDirsBase(AGENTS_SKILLS_DIR);
 }
 

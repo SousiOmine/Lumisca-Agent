@@ -1331,6 +1331,6 @@ test("routine scheduler: a run already queued when the agent is switched off is 
     assertEquals(row.lastStatus, "skipped");
     assertEquals(row.lastRunAt, null);
   } finally {
-    scheduler.stop();
+    scheduler.close();
   }
 });

@@ -71,7 +71,7 @@ test("shellCall: an HTTP error is not replayed over IPC", async () => {
       ),
     async () => {
       let message = "";
-      await shellCall("state").catch((error) => {
+      await shellCall("state").catch((error: unknown) => {
         message = error instanceof Error ? error.message : String(error);
       });
       assertEquals(message, "invalid key");
@@ -116,7 +116,7 @@ test("shellCall: without IPC the transport failure surfaces", async () => {
       () => Promise.reject(new TypeError("Load failed")),
       async () => {
         let message = "";
-        await shellCallWithoutIpc("state").catch((error) => {
+        await shellCallWithoutIpc("state").catch((error: unknown) => {
           message = error instanceof Error ? error.message : String(error);
         });
         assertEquals(message, "Load failed");

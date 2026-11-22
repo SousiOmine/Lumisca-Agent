@@ -59,6 +59,12 @@ jobs:
       - name: Type check
         run: bun run check
 
+      # Tests are not reachable from the four entry points, so `check` never
+      # read them; a fixture that fell behind the domain types compiled only
+      # because Bun erases types. This second project includes every test.
+      - name: Type check tests
+        run: bun run check:tests
+
       # Structural checks tsc cannot make: import cycles and the browser
       # entry list agreeing with tsconfig (#REFACTORING P0).
       - name: Architecture

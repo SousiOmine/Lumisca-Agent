@@ -18,6 +18,7 @@ import { DraftPane, SessionPane } from "./SessionPane.tsx";
 
 const INFO: SessionInfo = {
   id: "s1",
+  mainAgentId: "a1",
   workspaceId: "w1",
   name: "s",
   modelProvider: "p",

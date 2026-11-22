@@ -12,10 +12,14 @@ import { tmpdir as osTmpdir } from "node:os";
 import { join as pathJoin } from "node:path";
 import type { Api, Model } from "./ai/catalog.ts";
 import { fauxProvider } from "./ai/faux.ts";
-import type { ImageContent } from "./ai/message.ts";
-
+import type { AssistantMessage, ImageContent } from "./ai/message.ts";
 import { LumiscaCore } from "./core.ts";
+import type { ClientEvent } from "./domain/event.ts";
+import type { SessionInfo } from "./domain/session.ts";
 import { CoreError, isAddrInUseError } from "./errors.ts";
+import type { StoredMessage } from "./session/messages.ts";
+import type { StellaAgentSummary } from "./shared/stella-preview.ts";
+import type { StellaAgent } from "./stella/agents.ts";
 import type { VmHost, VmManager, VmStatus } from "./vm/container.ts";
 
 /**
@@ -39,6 +43,101 @@ export function setup(env?: () => Record<string, string>): {
     faux,
     providerId: faux.provider.id,
     modelId: faux.getModel().id,
+  };
+}
+
+/** The fixtures every test that needs a domain row shares.
+ *
+ * A test used to spell a whole `SessionInfo` by hand, and when a field was
+ * added the copies that were not edited stayed valid only because the test
+ * file was outside the type check (see P0-1). The builders return the real
+ * type, so a new required field breaks this file once and every test gets
+ * it.
+ */
+
+const FIXTURE_NOW = 1_700_000_000_000;
+
+export function sessionInfo(overrides: Partial<SessionInfo> = {}): SessionInfo {
+  return {
+    id: "session-1",
+    mainAgentId: "agent-1",
+    workspaceId: "workspace-1",
+    name: "Session",
+    modelProvider: "faux",
+    modelId: "faux-model",
+    createdAt: FIXTURE_NOW,
+    updatedAt: FIXTURE_NOW,
+    ...overrides,
+  };
+}
+
+export function stellaAgent(overrides: Partial<StellaAgent> = {}): StellaAgent {
+  return {
+    id: "stella-agent-1",
+    name: "Agent",
+    role: "Help with the task.",
+    identity: "",
+    icon: "",
+    model: null,
+    onboardedAt: null,
+    disabledAt: null,
+    createdAt: FIXTURE_NOW,
+    updatedAt: FIXTURE_NOW,
+    ...overrides,
+  };
+}
+
+export function stellaAgentSummary(
+  overrides: Partial<StellaAgentSummary> = {},
+): StellaAgentSummary {
+  return {
+    id: "stella-agent-1",
+    name: "Agent",
+    icon: "",
+    model: null,
+    disabledAt: null,
+    preview: null,
+    createdAt: FIXTURE_NOW,
+    updatedAt: FIXTURE_NOW,
+    ...overrides,
+  };
+}
+
+export function assistantMessage(
+  overrides: Partial<AssistantMessage> = {},
+): AssistantMessage {
+  return {
+    role: "assistant",
+    content: [],
+    api: "openai-completions",
+    provider: "faux",
+    model: "faux-model",
+    usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0 },
+    stopReason: "stop",
+    timestamp: FIXTURE_NOW,
+    ...overrides,
+  };
+}
+
+export function storedMessage(
+  overrides: Partial<StoredMessage> = {},
+): StoredMessage {
+  return {
+    id: "message-1",
+    agentId: "agent-1",
+    role: "user",
+    message: { role: "user", content: "hello", timestamp: FIXTURE_NOW },
+    timestamp: FIXTURE_NOW,
+    ...overrides,
+  };
+}
+
+export function clientEvent(
+  overrides: { sessionId?: string } = {},
+): Extract<ClientEvent, { type: "agent_start" }> {
+  return {
+    type: "agent_start",
+    sessionId: overrides.sessionId ?? "session-1",
   };
 }
 

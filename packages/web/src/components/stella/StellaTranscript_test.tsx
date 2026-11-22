@@ -25,6 +25,8 @@ function render(state: Partial<StellaConversationState>): string {
       onSend: () => {},
       onProvideEnv: () => Promise.resolve(),
       onDeclineEnv: () => Promise.resolve(),
+      onPickShare: () => Promise.resolve(),
+      onDeclineShare: () => Promise.resolve(),
       onLoadOlder: () => false,
       loadingOlder: false,
     }),

@@ -68,10 +68,10 @@ export function sessionSkills(
     /** Whether the session may write skills with its file tools (see the
      * skill-authoring guide). Omitted for a session without them. */
     skillAuthoring?: boolean;
-    globalDirs?: string[];
+    globalDirs?: readonly string[];
     /** The shared skills folders of this mode; default resolved from the
      * environment (see `appSkillDirs`). */
-    appSkillDirs?: string[];
+    appSkillDirs?: readonly string[];
   } = {},
 ): SkillDef[] {
   const plugins = discoverPlugins(folders);

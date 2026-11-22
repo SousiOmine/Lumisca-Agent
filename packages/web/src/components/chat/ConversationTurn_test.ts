@@ -17,6 +17,7 @@ import { buildTurns, ConversationTurn } from "./ConversationTurn.tsx";
  * draws. */
 const INFO = {
   id: "s1",
+  mainAgentId: "a1",
   workspaceId: "w1",
   name: "s",
   modelProvider: "p",
@@ -565,6 +566,7 @@ test("a view restored mid-run keeps its turn running", () => {
   // renders as the reported collapse (work log folded up under 作業完了).
   const info = {
     id: "s1",
+    mainAgentId: "a1",
     workspaceId: "w1",
     name: "s",
     modelProvider: "p",

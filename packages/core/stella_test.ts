@@ -12,6 +12,7 @@ import {
   fauxText,
   fauxToolCall,
 } from "./ai/faux.ts";
+import type { AgentMessage } from "./ai/message.ts";
 import { PRUNED_MARKER } from "./ai/pruned.ts";
 import type { StreamFn } from "./ai/transport.ts";
 import { LumiscaCore } from "./core.ts";
@@ -1731,7 +1732,7 @@ test("stella conversation: a skill in the machine reaches the published catalog"
     const published = core
       .getAgent(session.id)!
       .messages.find(
-        (message) =>
+        (message): message is Extract<AgentMessage, { role: "context" }> =>
           message.role === "context" && message.provider === "skills",
       );
     assert(published !== undefined, "the skill catalog must be published");
@@ -1904,7 +1905,7 @@ test("stella conversation: two agents do not share their own skills", async () =
     const published = core
       .getAgent(sessionA.id)!
       .messages.find(
-        (message) =>
+        (message): message is Extract<AgentMessage, { role: "context" }> =>
           message.role === "context" && message.provider === "skills",
       );
     assert(published !== undefined, "the skill catalog must be published");
@@ -2330,7 +2331,7 @@ test("stella routines: a run after a restart still has its skill catalog", async
     const catalogs = core
       .readTranscript(session.id, {})!
       .items.filter(
-        (message) =>
+        (message): message is Extract<AgentMessage, { role: "context" }> =>
           message.role === "context" && message.provider === "skills",
       );
     assert(catalogs.length > 0, "the run published no skill catalog");

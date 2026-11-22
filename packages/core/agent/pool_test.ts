@@ -52,6 +52,7 @@ const WORKSPACE: Workspace = {
 function sessionInfo(id: string): SessionInfo {
   return {
     id,
+    mainAgentId: `agent-${id}`,
     workspaceId: WORKSPACE.id,
     name: id,
     modelProvider: "faux",

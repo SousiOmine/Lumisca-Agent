@@ -100,7 +100,7 @@ function makeAgent(
     messageRepo: {
       append: (_sessionId, message) => ({
         id: "id",
-        sessionId: _sessionId,
+        agentId: _sessionId,
         role: message.role,
         message,
         timestamp: message.timestamp,
@@ -113,13 +113,12 @@ function makeAgent(
         void index;
         return {
           id: "id",
-          sessionId: _sessionId,
+          agentId: _sessionId,
           role: message.role,
           message,
           timestamp: message.timestamp,
         };
       },
-      deleteBySession: () => {},
       listModelView: () => [],
       listWindow: () => [],
       positionOf: () => undefined,
@@ -1008,7 +1007,7 @@ test("compaction keeps the transcript and the stored rows in step", async () => 
       rows.push(message);
       return {
         id: "id",
-        sessionId: _sessionId,
+        agentId: _sessionId,
         role: message.role,
         message,
         timestamp: (message as { timestamp: number }).timestamp,
@@ -1024,13 +1023,12 @@ test("compaction keeps the transcript and the stored rows in step", async () => 
       rows.splice(index, 0, message);
       return {
         id: "id",
-        sessionId: _sessionId,
+        agentId: _sessionId,
         role: message.role,
         message,
         timestamp: (message as { timestamp: number }).timestamp,
       };
     },
-    deleteBySession: () => {},
     listModelView: () => [],
     listWindow: () => [],
     positionOf: () => undefined,
@@ -1208,7 +1206,7 @@ test("compactNow condenses on demand and reports the outcome", async () => {
     messageRepo: {
       append: (_sessionId, message) => ({
         id: "id",
-        sessionId: _sessionId,
+        agentId: _sessionId,
         role: message.role,
         message,
         timestamp: (message as { timestamp: number }).timestamp,
@@ -1221,13 +1219,12 @@ test("compactNow condenses on demand and reports the outcome", async () => {
         void index;
         return {
           id: "id",
-          sessionId: _sessionId,
+          agentId: _sessionId,
           role: message.role,
           message,
           timestamp: message.timestamp,
         };
       },
-      deleteBySession: () => {},
       listModelView: () => [],
       listWindow: () => [],
       positionOf: () => undefined,
@@ -1340,7 +1337,7 @@ test("a compaction republishes the context its checkpoint left behind", async ()
     messageRepo: {
       append: (_sessionId, message) => ({
         id: "id",
-        sessionId: _sessionId,
+        agentId: _sessionId,
         role: message.role,
         message,
         timestamp: message.timestamp,
@@ -1353,13 +1350,12 @@ test("a compaction republishes the context its checkpoint left behind", async ()
         void index;
         return {
           id: "id",
-          sessionId: _sessionId,
+          agentId: _sessionId,
           role: message.role,
           message,
           timestamp: message.timestamp,
         };
       },
-      deleteBySession: () => {},
       listModelView: () => [],
       listWindow: () => [],
       positionOf: () => undefined,

@@ -28,7 +28,7 @@ function code(settings: UrlState["settings"]): UrlState {
 
 const closed = code(null);
 const list = code({ category: null });
-const general = code({ category: "general" });
+const general = code({ category: "overview" });
 const appearance = code({ category: "appearance" });
 
 test("history entry: a push is the app's and records how deep the dialog is", () => {

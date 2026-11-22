@@ -42,6 +42,8 @@ interface BunSubprocess {
   readonly stdout: ReadableStream<Uint8Array>;
   readonly stderr: ReadableStream<Uint8Array>;
   readonly exited: Promise<number>;
+  /** Resolves once the process is gone; the exit code is `exitCode`. */
+  readonly status: Promise<number>;
   kill(signal?: string | number): void;
   ref(): void;
   unref(): void;
@@ -88,6 +90,7 @@ declare const Bun: {
   version: string;
   isStandaloneExecutable: boolean;
   gc(force: boolean): void;
+  sleep(ms: number): Promise<void>;
   file(path: string): BunFile;
   write(
     destination: string | BunFile,

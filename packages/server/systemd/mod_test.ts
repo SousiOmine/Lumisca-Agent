@@ -420,6 +420,7 @@ test("install names every address a wildcard bind answers on", async () => {
         scopeid: 0,
         mac: "00:00:00:00:00:00",
         cidr: "192.168.1.5/24",
+        internal: false,
       },
       {
         name: "lo",
@@ -429,6 +430,7 @@ test("install names every address a wildcard bind answers on", async () => {
         scopeid: 0,
         mac: "00:00:00:00:00:00",
         cidr: "127.0.0.1/8",
+        internal: false,
       },
     ],
   });

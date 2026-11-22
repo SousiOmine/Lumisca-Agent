@@ -55,6 +55,7 @@ function view(overrides: Partial<SessionView> = {}): SessionView {
   return {
     info: {
       id: "s1",
+      mainAgentId: "a1",
       workspaceId: "w1",
       name: "s",
       modelProvider: "p",

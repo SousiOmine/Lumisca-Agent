@@ -42,6 +42,7 @@ const AGENT: StellaAgent = {
 
 const SESSION = {
   id: "s1",
+  mainAgentId: "a1",
   workspaceId: "ws",
   name: "Aide",
   modelProvider: "faux",
@@ -49,7 +50,7 @@ const SESSION = {
   createdAt: 0,
   updatedAt: 0,
   stella: true,
-  agentId: "a1",
+  personaId: "a1",
 } as SessionInfo;
 
 /** A core that answers only for the fixture agent, recording the calls. */

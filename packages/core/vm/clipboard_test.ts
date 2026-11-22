@@ -21,7 +21,10 @@ function exec(answer: (call: Call) => Partial<VmCommandResult>): {
   return {
     calls,
     run: (command: readonly string[], options: VmExecOptions) => {
-      const call = { argv: [...command], stdin: options.stdin };
+      const call = {
+        argv: [...command],
+        stdin: options.stdin instanceof Uint8Array ? options.stdin : undefined,
+      };
       calls.push(call);
       return Promise.resolve<VmCommandResult>({
         exitCode: 0,

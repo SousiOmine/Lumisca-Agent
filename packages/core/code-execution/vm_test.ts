@@ -14,7 +14,7 @@ import { createVmCodeRuntime } from "./vm.ts";
 function fakeExec(): { exec: VmExec; writes: string[] } {
   const writes: string[] = [];
   const exec: VmExec = (command, options: VmExecOptions) => {
-    if (options.stdin !== undefined) {
+    if (options.stdin instanceof Uint8Array) {
       writes.push(new TextDecoder().decode(options.stdin));
     }
     return Promise.resolve({

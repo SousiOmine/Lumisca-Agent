@@ -31,12 +31,13 @@ const AGENT: StellaAgent = {
 
 const SESSION = {
   id: "s1",
+  mainAgentId: "a1",
   workspaceId: "w1",
   name: "Aide",
   modelProvider: "faux",
   modelId: "faux-1",
   stella: true,
-  agentId: "a1",
+  personaId: "a1",
   createdAt: 0,
   updatedAt: 0,
 } as SessionInfo;

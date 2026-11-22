@@ -300,7 +300,7 @@ test("OAuth: a session's server without a grant reports needsAuth", async () => 
 test("OAuth: the store keeps one record per server", () => {
   const store = new McpOAuthStore(createInMemorySettingsRepo());
   store.update("https://a.example/mcp", () => ({
-    tokens: { access_token: "a-token" },
+    tokens: { access_token: "a-token", token_type: "Bearer" },
   }));
   store.update("https://a.example/mcp", (current) => ({
     ...current,

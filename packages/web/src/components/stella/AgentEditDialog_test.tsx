@@ -20,6 +20,7 @@ const agent: StellaAgentSummary = {
   name: "Aide",
   icon: "",
   model: null,
+  disabledAt: null,
   createdAt: 0,
   updatedAt: 0,
   preview: null,

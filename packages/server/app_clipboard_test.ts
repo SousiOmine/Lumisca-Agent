@@ -23,11 +23,16 @@ function clipboardMachine() {
   return {
     calls,
     text: () => stored,
-    run: (command: readonly string[], options: { stdin?: Uint8Array }) => {
+    run: (
+      command: readonly string[],
+      options: { stdin?: Uint8Array | AsyncIterable<Uint8Array> },
+    ) => {
       const argv = [...command];
-      calls.push({ argv, stdin: options.stdin });
-      if (argv.includes("-i") && options.stdin !== undefined) {
-        stored = new TextDecoder().decode(options.stdin);
+      const stdin =
+        options.stdin instanceof Uint8Array ? options.stdin : undefined;
+      calls.push({ argv, stdin });
+      if (argv.includes("-i") && stdin !== undefined) {
+        stored = new TextDecoder().decode(stdin);
       }
       return Promise.resolve({
         exitCode: 0,

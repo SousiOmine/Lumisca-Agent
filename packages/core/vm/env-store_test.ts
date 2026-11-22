@@ -47,7 +47,9 @@ function fakeMachine(initial: { json?: string } = {}): {
     }
     if (script.includes("cat >")) {
       const path = argv[5] ?? "";
-      const text = new TextDecoder().decode(options.stdin ?? new Uint8Array());
+      const stdin =
+        options.stdin instanceof Uint8Array ? options.stdin : new Uint8Array();
+      const text = new TextDecoder().decode(stdin);
       files.set(path, text);
       writes.push({ path, text });
       return Promise.resolve(result);

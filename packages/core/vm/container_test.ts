@@ -79,7 +79,10 @@ interface Script {
   fallback?: Partial<VmCommandResult>;
 }
 
-function ok(stdout = "", extra: Partial<VmCommandResult> = {}) {
+function ok(
+  stdout = "",
+  extra: Partial<VmCommandResult> = {},
+): VmCommandResult {
   return {
     exitCode: 0,
     stdout,
@@ -90,7 +93,7 @@ function ok(stdout = "", extra: Partial<VmCommandResult> = {}) {
   };
 }
 
-function fail(stderr: string, exitCode = 1): Partial<VmCommandResult> {
+function fail(stderr: string, exitCode = 1): VmCommandResult {
   return { exitCode, stdout: "", stderr, truncated: false, timedOut: false };
 }
 

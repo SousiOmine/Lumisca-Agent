@@ -34,13 +34,14 @@ function agent(overrides: Partial<StellaAgent> = {}): StellaAgent {
 function session(): SessionInfo {
   return {
     id: "s1",
+    mainAgentId: "a1",
     workspaceId: "w1",
     name: "Aide",
     modelProvider: "faux",
     modelId: "faux-1",
     thinkingLevel: "off",
     stella: true,
-    agentId: "a1",
+    personaId: "a1",
     createdAt: 0,
     updatedAt: 0,
   };

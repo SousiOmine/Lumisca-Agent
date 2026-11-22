@@ -423,7 +423,15 @@ test("fast model: first prompt auto-generates the session title", async () => {
   // the instruction: one user turn, no system prompt.
   assertEquals(captured.length, 2);
   assertEquals(captured[0]!.model, "fast");
-  const titleRequest = captured[0]!.messages[0]!.content[0]!.text;
+  const titleContent = captured[0]!.messages[0]!.content;
+  const titleBlock =
+    typeof titleContent === "string" ? titleContent : titleContent[0]!;
+  const titleRequest =
+    (typeof titleBlock === "string"
+      ? titleBlock
+      : titleBlock.type === "text"
+        ? titleBlock.text
+        : "") ?? "";
   assertEquals(titleRequest.includes("Please fix the login bug"), true);
   assertEquals(titleRequest.includes("<message>"), true);
   assertEquals(captured[0]!.systemPrompt, undefined);

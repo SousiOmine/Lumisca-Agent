@@ -44,7 +44,7 @@ test("the shell's heading shows the address without the query token", () => {
   const state: ShellState = {
     mode: "remote",
     url: "http://192.168.1.5:7777/?token=secret",
-    name: "Lumisca",
+    connectionId: "home",
     maximized: false,
   };
   const html = heading({
@@ -63,7 +63,7 @@ test("a local window shows the loopback address, not its name twice", () => {
   const state: ShellState = {
     mode: "local",
     url: "http://127.0.0.1:8000/?token=secret",
-    name: null,
+    connectionId: null,
     maximized: false,
   };
   const html = heading({
@@ -80,7 +80,7 @@ test("a local window shows the loopback address, not its name twice", () => {
     state: {
       mode: "remote",
       url: "http://10.0.0.2:8000/?token=secret",
-      name: null,
+      connectionId: null,
       maximized: false,
     },
     currentLabel: () => "10.0.0.2:8000",

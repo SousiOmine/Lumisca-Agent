@@ -62,7 +62,7 @@ test("screen transition: two columns are not two screens", () => {
   // beside the page, and the page is inside a dialog whose surface changes, so
   // the cross-fade is still the right answer at any width.
   const root = at({ kind: "stella", agentId: null }, { category: null });
-  const page = at({ kind: "stella", agentId: null }, { category: "general" });
+  const page = at({ kind: "stella", agentId: null }, { category: "overview" });
   assertEquals(move(root, page, columns), "push");
   assertEquals(move(page, root, columns), "back");
 });
@@ -74,7 +74,7 @@ test("screen transition: settings' list and a category", () => {
       : at({ kind: "code", tabKey: null }, { category: null });
   const page = (kind: UrlState["route"]["kind"]) =>
     kind === "stella"
-      ? at({ kind: "stella", agentId: null }, { category: "general" })
+      ? at({ kind: "stella", agentId: null }, { category: "overview" })
       : at({ kind: "code", tabKey: null }, { category: "appearance" });
 
   for (const kind of ["code", "stella"] as const) {
@@ -84,7 +84,7 @@ test("screen transition: settings' list and a category", () => {
   // Two categories: the same lateral case as two conversations.
   assertEquals(
     move(
-      at({ kind: "code", tabKey: null }, { category: "general" }),
+      at({ kind: "code", tabKey: null }, { category: "overview" }),
       at({ kind: "code", tabKey: null }, { category: "appearance" }),
     ),
     null,
@@ -107,7 +107,7 @@ test("screen transition: opening and closing the dialog is not a move", () => {
   assertEquals(
     move(
       talk("a1"),
-      at({ kind: "stella", agentId: null }, { category: "general" }),
+      at({ kind: "stella", agentId: null }, { category: "overview" }),
     ),
     null,
   );

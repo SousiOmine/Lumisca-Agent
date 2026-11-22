@@ -30,10 +30,8 @@ const agent: StellaAgentSummary = {
 function status(overrides: Partial<StellaStatus> = {}): StellaStatus {
   return {
     availability: { available: true },
-    state: "running",
-    vncPort: 6080,
-    reason: "",
     starting: false,
+    reason: "",
     ...overrides,
   };
 }
@@ -71,8 +69,7 @@ function render(
       onAbort: () => {},
       onEnableAgent: () => Promise.resolve(),
       onRewind: () => Promise.resolve(),
-      onModelChange: () => Promise.resolve(),
-      onThinkingLevelChange: () => {},
+      onUploadFile: () => ({ done: Promise.resolve(""), cancel: () => {} }),
       onLoadOlder: () => false,
       loadingOlder: false,
       onFinishHandover: () => Promise.resolve(),
@@ -101,7 +98,7 @@ test("StellaView: the pane is the conversation's information", () => {
   assertStringIncludes(
     render({
       screenOpen: true,
-      status: status({ state: "stopped", vncPort: null }),
+      status: status(),
     }),
     "stella-pane",
   );

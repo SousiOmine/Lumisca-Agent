@@ -238,7 +238,10 @@ test("sub-agent retries a rate-limited turn then succeeds", async () => {
   // The store holds the answer, not the error turn the retry dropped.
   const stored = createMessageRepo(core.db).listMessages(info.agentId);
   assertEquals(stored.filter((m) => m.role === "assistant").length, 1);
-  assertEquals(contentText(stored.at(-1)!.content), "done");
+  const lastStored = stored.at(-1)!;
+  if (lastStored.role !== "assistant")
+    throw new Error("the store must end with the reply");
+  assertEquals(contentText(lastStored.content), "done");
 });
 
 /** A stream function that drops its first call mid-response (after partial
@@ -995,7 +998,10 @@ test("a finished sub-agent's row and transcript are persisted", async () => {
     // The transcript holds the prompt and the reply, prompt first.
     const stored = createMessageRepo(core.db).listMessages(info.agentId);
     const lines = stored.map(
-      (message) => message.role + ":" + contentText(message.content),
+      (message) =>
+        message.role +
+        ":" +
+        ("content" in message ? contentText(message.content) : ""),
     );
     assert(lines.includes("user:Find the answer"), JSON.stringify(lines));
     assert(lines.includes("assistant:Answer: 42"), JSON.stringify(lines));

@@ -25,6 +25,7 @@ function row(
     key: options.peerId === undefined ? id : `${options.peerId}:${id}`,
     info: {
       id,
+      mainAgentId: `agent-${id}`,
       workspaceId: "ws",
       name: options.name ?? id,
       modelProvider: "faux",
