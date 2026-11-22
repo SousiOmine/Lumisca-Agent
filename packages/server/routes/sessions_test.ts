@@ -9,7 +9,7 @@ test("parsePromptBody passes text-only prompts through", () => {
   assertEquals(parsePromptBody({ text: "hello" }), {
     text: "hello",
     images: undefined,
-    files: undefined,
+    uploads: undefined,
     mode: undefined,
   });
 });
@@ -112,40 +112,53 @@ test("parsePromptBody rejects invalid bodies", () => {
   );
 });
 
-test("parsePromptBody decodes attached files", () => {
-  const { text, files } = parsePromptBody({
+test("parsePromptBody passes uploaded file ids through", () => {
+  const { text, uploads } = parsePromptBody({
     text: "このログを見て",
-    files: [{ name: "run.log", data: "aGVsbG8=" }],
+    uploads: ["0123456789abcdef", "fedcba9876543210"],
   });
   assertEquals(text, "このログを見て");
-  assertEquals(files?.length, 1);
-  assertEquals(files?.[0]?.name, "run.log");
-  assertEquals(new TextDecoder().decode(files?.[0]?.bytes), "hello");
+  assertEquals(uploads, ["0123456789abcdef", "fedcba9876543210"]);
 });
 
-test("parsePromptBody: a file alone is a prompt", () => {
-  const { text, files } = parsePromptBody({
-    files: [{ name: "shot.png", data: "aGVsbG8=" }],
+test("parsePromptBody: an uploaded file alone is a prompt", () => {
+  const { text, uploads } = parsePromptBody({
+    uploads: ["0123456789abcdef"],
   });
   assertEquals(text, "");
-  assertEquals(files?.length, 1);
+  assertEquals(uploads, ["0123456789abcdef"]);
 });
 
-test("parsePromptBody: a data-URL header is accepted and stripped", () => {
-  const { files } = parsePromptBody({
-    text: "x",
-    files: [{ name: "a.txt", data: "data:text/plain;base64,aGVsbG8=" }],
-  });
-  assertEquals(new TextDecoder().decode(files?.[0]?.bytes), "hello");
-});
-
-test("parsePromptBody: a malformed file is a 400, not a crash", () => {
+test("parsePromptBody: a malformed upload id is a 400, not a crash", () => {
   assertThrows(
-    () => parsePromptBody({ text: "x", files: [{ name: "a.txt" }] }),
+    () => parsePromptBody({ text: "x", uploads: [42] as unknown[] }),
     AppError,
   );
+  assertThrows(() => parsePromptBody({ text: "x", uploads: [""] }), AppError);
+});
+
+test("parsePromptBody refuses the old base64 files shape", () => {
+  const error = assertThrows(
+    () =>
+      parsePromptBody({
+        text: "x",
+        files: [{ name: "run.log", data: "aGVsbG8=" }],
+      }),
+    AppError,
+  );
+  assertEquals(
+    (error as AppError).message.includes("files are no longer accepted"),
+    true,
+  );
+});
+
+test("parsePromptBody: uploads are bounded like the files they name", () => {
   assertThrows(
-    () => parsePromptBody({ text: "x", files: [{ data: "aGVsbG8=" }] }),
+    () =>
+      parsePromptBody({
+        text: "x",
+        uploads: Array.from({ length: 9 }, (_, index) => `upload-${index}`),
+      }),
     AppError,
   );
 });

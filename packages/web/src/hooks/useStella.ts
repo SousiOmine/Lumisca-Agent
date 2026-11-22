@@ -2,11 +2,13 @@ import {
   errorMessage,
   mergeAgentRows,
   newestPreview,
+  PROMPT_UPLOAD_CHUNK_BYTES,
   withAgentPreview,
   withAgentRow,
 } from "@lumisca/core/shared";
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api } from "../api.ts";
+import { ApiError } from "../api-client.ts";
 import { connectStellaEvents, stellaApi } from "../api-stella.ts";
 import { describeError, useT } from "../i18n.ts";
 import {
@@ -15,6 +17,14 @@ import {
   maybeNotifyHandover,
   maybeNotifyShare,
 } from "../notify.ts";
+import {
+  cancelPromptUpload,
+  completePromptUpload,
+  createPromptUpload,
+  getPromptUpload,
+  putPromptUploadChunk,
+  sha256Hex,
+} from "../prompt-upload.ts";
 import { inDesktopShell, shellCall } from "../shell.ts";
 import {
   applyStellaEvent,
@@ -26,6 +36,8 @@ import {
 import type {
   PendingFile,
   PendingImage,
+  PromptUploader,
+  PromptUploadHandle,
   StellaAgent,
   StellaAgentSummary,
   StellaEvent,
@@ -90,6 +102,10 @@ export type StellaHook = {
     images?: PendingImage[],
     files?: PendingFile[],
   ) => Promise<void>;
+  /** Start one attached file's transfer to this conversation's agent. The
+   * composer calls it when the file is picked; the prompt then names the id
+   * the transfer resolves with. */
+  uploadFile: PromptUploader;
   abort: () => void;
   answer: (
     toolCallId: string,
@@ -588,6 +604,108 @@ export function useStella(
     [requireAgent, t],
   );
 
+  const uploadFile = useCallback<PromptUploader>(
+    (file, onProgress): PromptUploadHandle => {
+      const agentId = requireAgent();
+      const controller = new AbortController();
+      let uploadId: string | undefined;
+      const done = (async (): Promise<string> => {
+        const created = await createPromptUpload(
+          agentId,
+          file.name,
+          file.size,
+          controller.signal,
+        );
+        uploadId = created.id;
+        let offset = 0;
+        for (let position = 0; position < file.size; ) {
+          controller.signal.throwIfAborted();
+          const end = Math.min(position + PROMPT_UPLOAD_CHUNK_BYTES, file.size);
+          const bytes = new Uint8Array(
+            await file.slice(position, end).arrayBuffer(),
+          );
+          const hash = await sha256Hex(bytes);
+          let reported = offset;
+          const result = await putPromptUploadChunk(
+            agentId,
+            uploadId,
+            offset,
+            bytes,
+            hash,
+            (loaded) => {
+              const sent = offset + loaded;
+              if (sent - reported >= 1024 * 1024 || loaded === bytes.length) {
+                reported = sent;
+                onProgress({ uploaded: sent, status: "uploading" });
+              }
+            },
+            controller.signal,
+          );
+          offset = result.offset;
+          position = end;
+          onProgress({ uploaded: offset, status: "uploading" });
+        }
+        await completePromptUpload(agentId, uploadId, controller.signal);
+        onProgress({ uploaded: file.size, status: "copying" });
+        // The server's own copy timeout is 30 minutes; this one is longer so
+        // the server's message, not a client guess, is what the reader sees.
+        const deadline = Date.now() + 35 * 60_000;
+        for (;;) {
+          controller.signal.throwIfAborted();
+          const state = await getPromptUpload(
+            agentId,
+            uploadId,
+            controller.signal,
+          );
+          if (state.status === "completed") return uploadId;
+          if (state.status === "failed") {
+            // The server answered, so the failure is the server's to explain.
+            // Its sentence travels as the detail the UI appends to the
+            // localized line.
+            throw new ApiError(
+              state.error ?? t("chat.composer.attach.copyFailed"),
+              "http-5xx",
+              { detail: state.error ?? null },
+            );
+          }
+          if (Date.now() > deadline) {
+            throw new ApiError(
+              t("chat.composer.attach.copyFailed"),
+              "http-5xx",
+              { detail: "The machine did not finish the copy in 35 minutes" },
+            );
+          }
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+      })().catch((failure: unknown) => {
+        if (uploadId !== undefined) {
+          void cancelPromptUpload(agentId, uploadId).catch(() => {
+            // The store's retention sweeps what this could not remove.
+          });
+        }
+        // A transport abort is the composer's own cancel, not an outage. The
+        // hook uses the DOM's name to drop the chip instead of showing a
+        // network failure the reader did not have.
+        if (controller.signal.aborted) {
+          throw new DOMException("Aborted", "AbortError");
+        }
+        throw failure;
+      });
+      return {
+        done,
+        cancel() {
+          controller.abort();
+          if (uploadId !== undefined) {
+            void cancelPromptUpload(agentId, uploadId).catch(() => {
+              // The store's retention sweeps what this could not remove.
+            });
+          }
+        },
+      };
+    },
+    [requireAgent, t],
+  );
+
   const abort = useCallback(() => {
     const agentId = requireAgent();
     // Same rule as prompt: a refused abort is a fact about this run, said in
@@ -714,6 +832,7 @@ export function useStella(
     loadingOlder,
     sessionId,
     prompt,
+    uploadFile,
     abort,
     answer,
     rewind,

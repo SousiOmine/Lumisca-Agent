@@ -29,6 +29,7 @@ import {
 import { Hono } from "hono";
 import { upgradeWebSocket } from "../websocket.ts";
 import { conversationRoutes } from "./conversation.ts";
+import type { PromptUploadSink } from "./prompt-uploads.ts";
 import {
   type PromptBody,
   parsePromptBody,
@@ -173,9 +174,8 @@ export interface StellaApi {
     mode?: never,
     files?: PromptFileRef[],
   ): void;
-  /** Write a prompt's attached files into the machine (stella is the only
-   * surface that accepts them) and return where they are. */
-  savePromptUploads(
+  /** Put a prompt's attached pictures into the machine. */
+  savePromptImages(
     sessionId: string,
     uploads: readonly { name: string; bytes: Uint8Array }[],
   ): Promise<PromptFileRef[]>;
@@ -395,7 +395,10 @@ function imageName(index: number, mimeType: string): string {
   return `image-${index + 1}${extension}`;
 }
 
-export function stellaRoutes(core: StellaApi): Hono {
+export function stellaRoutes(
+  core: StellaApi,
+  promptUploads?: PromptUploadSink,
+): Hono {
   const app = new Hono();
 
   /** What this host can do, and how the machine is doing: the mode-selection
@@ -609,13 +612,12 @@ export function stellaRoutes(core: StellaApi): Hono {
    *
    * The body is parsed by code mode's own parser (`parsePromptBody`): a
    * conversation takes the same text + images shape, with the same bounds and
-   * the same "text may be empty when an image is attached" rule. One parser
-   * for the two prompt surfaces means an attachment cannot be accepted on one
-   * and silently dropped on the other — which is exactly what a second,
-   * narrower parser here had become. */
+   * the same "text may be empty when an image or an uploaded file is attached"
+   * rule. One parser for the two prompt surfaces means an attachment cannot be
+   * accepted on one and silently dropped on the other. */
   app.post("/stella/conversations/:agentId/prompt", async (c) => {
     const body = await parseBody<PromptBody>(c);
-    const { text, images, files } = parsePromptBody(body ?? {});
+    const { text, images, uploads } = parsePromptBody(body ?? {});
     const agentId = c.req.param("agentId");
     // Refused BEFORE anything is written into the machine or started: a
     // disabled agent has no run to send to, and `ensureStellaReady` below
@@ -625,34 +627,51 @@ export function stellaRoutes(core: StellaApi): Hono {
     // However this conversation was opened, its machine may be asleep: the
     // server stops one nobody has used for a while, and every tool runs
     // through `podman exec`, which refuses a stopped container. The wait
-    // belongs here — before the run starts and before the uploads below are
+    // belongs here — before the run starts and before the pictures below are
     // written into the machine — and the skill catalog is read after the
     // wake, because a sleeping machine is not read (see
     // StellaMachine.ensureSkills).
     await core.ensureStellaReady(agentId);
     await core.ensureStellaSkills(agentId);
-    // Pictures and files take one path: both are written into the machine and
-    // the model is told their paths. A picture kept as a byte block in the
-    // message would put it in the database for the life of the conversation,
-    // and a conversation lives for years (see ai/types.ts UserMessage.files).
-    // The copy written into the machine gets the same bound as a stored one
-    // (see preparePromptImages).
+    // Pictures and files take one path: both end up in the machine and the
+    // model is told their paths. A picture kept as a byte block in the message
+    // would put it in the database for the life of the conversation, and a
+    // conversation lives for years (see ai/types.ts UserMessage.files).
+    //
+    // Files arrived first: the browser uploaded them in chunks and the upload
+    // route copied each into the machine (see prompt-uploads.ts). This route
+    // only asks the store what those ids now name. Pictures still ride in the
+    // prompt body, bounded before they are written (prepareStoredImage).
+    let fileRefs: PromptFileRef[] = [];
+    if (uploads !== undefined) {
+      if (promptUploads === undefined) {
+        throw new AppError(
+          "This server has no upload store; update it and attach the files again",
+          409,
+        );
+      }
+      fileRefs = promptUploads.resolve(agentId, uploads);
+    }
     const bounded = await preparePromptImages(images);
-    const attachments = [
-      ...(files ?? []).map((file) => ({
-        name: file.name,
-        bytes: file.bytes,
-      })),
-      ...(bounded ?? []).map((image, index) => ({
-        name: imageName(index, image.mimeType),
-        bytes: base64ToBytes(image.data),
-      })),
-    ];
-    const saved =
-      attachments.length === 0
+    const imageRefs =
+      bounded === undefined
         ? undefined
-        : await core.savePromptUploads(session.id, attachments);
-    core.startPrompt(session.id, text, undefined, undefined, saved);
+        : await core.savePromptImages(
+            session.id,
+            bounded.map((image, index) => ({
+              name: imageName(index, image.mimeType),
+              bytes: base64ToBytes(image.data),
+            })),
+          );
+    const saved = [...fileRefs, ...(imageRefs ?? [])];
+    core.startPrompt(
+      session.id,
+      text,
+      undefined,
+      undefined,
+      saved.length === 0 ? undefined : saved,
+    );
+    if (uploads !== undefined) promptUploads?.release(uploads);
     return c.json({ ok: true });
   });
 

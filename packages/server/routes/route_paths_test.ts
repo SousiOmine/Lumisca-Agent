@@ -74,7 +74,7 @@ function fakeCore(seen: string[]): StellaApi {
     startPrompt: () => {
       seen.push("prompt");
     },
-    savePromptUploads: () => Promise.resolve([]),
+    savePromptImages: () => Promise.resolve([]),
     abort: () => {
       seen.push("abort");
     },

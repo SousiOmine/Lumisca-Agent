@@ -165,7 +165,7 @@ import type { PendingHandover } from "./vm/handover.ts";
 import { HandoverRegistry } from "./vm/handover-registry.ts";
 import { StellaMachine } from "./vm/machine.ts";
 import type { StellaRuntime } from "./vm/runtime.ts";
-import type { UploadFile } from "./vm/uploads.ts";
+import type { HostPromptFile, PromptImageFile } from "./vm/uploads.ts";
 import {
   createWebSearchSettingsStore,
   type FetchLike,
@@ -2011,12 +2011,21 @@ export class LumiscaCore {
     return this.services.sessions.readStellaConversationFromStore(id, query);
   }
 
-  /** Put a prompt's attached files into the machine. */
-  savePromptUploads(
+  /** Put a prompt's attached pictures into the machine. */
+  savePromptImages(
     id: string,
-    uploads: readonly UploadFile[],
+    uploads: readonly PromptImageFile[],
   ): Promise<PromptFileRef[]> {
-    return this.services.sessions.savePromptUploads(id, uploads);
+    return this.services.sessions.savePromptImages(id, uploads);
+  }
+
+  /** Copy one prompt file from this host into the machine. */
+  savePromptFile(
+    id: string,
+    file: HostPromptFile,
+    signal?: AbortSignal,
+  ): Promise<PromptFileRef> {
+    return this.services.sessions.savePromptFile(id, file, signal);
   }
 
   /** Read one file a prompt brought back out of the machine. */

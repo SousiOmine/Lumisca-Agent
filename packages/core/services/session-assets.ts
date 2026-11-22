@@ -2,11 +2,14 @@ import { extname } from "node:path";
 import { CoreError } from "../errors.ts";
 import type { PromptFileRef } from "../shared/mod.ts";
 import { RASTER_IMAGE_MIME_BY_EXTENSION } from "../shared/mod.ts";
+import type { VmExec } from "../vm/container.ts";
 import {
+  type HostPromptFile,
   MAX_PROMPT_IMAGE_BYTES,
+  type PromptImageFile,
   readUpload,
-  saveUploads,
-  type UploadFile,
+  savePromptFiles,
+  savePromptImages,
 } from "../vm/uploads.ts";
 import type { SessionServiceDeps } from "./session-deps.ts";
 
@@ -46,11 +49,33 @@ export class SessionAssets {
     return this.deps.attachments.resolve(sessionId, name);
   }
 
-  /** Put a prompt's attached files into the machine. */
-  async savePromptUploads(
+  /** Put a prompt's attached pictures into the machine. */
+  async savePromptImages(
     id: string,
-    uploads: readonly UploadFile[],
+    uploads: readonly PromptImageFile[],
   ): Promise<PromptFileRef[]> {
+    const { exec, agentId } = this.promptMachine(id);
+    return await savePromptImages(uploads, { exec, agentId });
+  }
+
+  /** Copy one prompt file from this host into the machine. */
+  async savePromptFile(
+    id: string,
+    file: HostPromptFile,
+    signal?: AbortSignal,
+  ): Promise<PromptFileRef> {
+    const { exec, agentId } = this.promptMachine(id);
+    const saved = await savePromptFiles([file], {
+      exec,
+      agentId,
+      ...(signal !== undefined ? { signal } : {}),
+    });
+    return saved[0]!;
+  }
+
+  /** The machine a prompt's attachments go into, or the sentence that says
+   * why this session has none. */
+  private promptMachine(id: string): { exec: VmExec; agentId: string } {
     const session = this.deps.sessions.get(id);
     if (session === undefined) {
       throw new CoreError(`Session not found: ${id}`, "not_found");
@@ -70,7 +95,7 @@ export class SessionAssets {
         "unavailable",
       );
     }
-    return await saveUploads(uploads, { exec, agentId: session.personaId });
+    return { exec, agentId: session.personaId };
   }
 
   /** Read one file a prompt brought back out of the machine. */

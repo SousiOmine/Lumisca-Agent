@@ -11,8 +11,8 @@
 import type { AskAnswer, ImageContent, ModePrompt } from "@lumisca/core";
 import { base64ToBytes } from "@lumisca/core";
 import {
-  MAX_PROMPT_FILE_BASE64_LENGTH,
   MAX_PROMPT_FILES,
+  MAX_PROMPT_IMAGE_BASE64_LENGTH,
   MAX_PROMPT_TEXT_LENGTH,
   stripDataUrlHeader,
 } from "@lumisca/core/shared";
@@ -34,16 +34,15 @@ function decodeBase64Payload(data: string, what: string): Uint8Array {
   }
 }
 
-/** One attached file as the browser sends it (the bytes base64-encoded, the
- * name the user knows it by). */
-interface PromptFileBody {
-  name?: unknown;
-  data?: unknown;
-}
-
 export interface PromptBody {
   text?: unknown;
   images?: unknown;
+  /** Ids of files the browser already uploaded (see routes/prompt-uploads.ts).
+   * The bytes are in the machine by the time the prompt names them. */
+  uploads?: unknown;
+  /** The old base64-in-the-body shape. Refused by name: a prompt that still
+   * carries it comes from a page that predates the upload route, and silently
+   * dropping its files would send a message without what the reader attached. */
   files?: unknown;
   mode?: unknown;
 }
@@ -89,7 +88,7 @@ export function parseAnswerBody(body: unknown): {
 export function parsePromptBody(body: PromptBody): {
   text: string;
   images?: ImageContent[];
-  files?: { name: string; bytes: Uint8Array }[];
+  uploads?: string[];
   mode?: ModePrompt;
 } {
   let mode: ModePrompt | undefined;
@@ -136,44 +135,45 @@ export function parsePromptBody(body: PromptBody): {
           400,
         );
       }
-      if (data.length > MAX_PROMPT_FILE_BASE64_LENGTH) {
+      if (data.length > MAX_PROMPT_IMAGE_BASE64_LENGTH) {
         throw new AppError("image exceeds the size limit (15MB binary)", 400);
       }
       images.push({ type: "image", data, mimeType });
     }
   }
-  // Files the user attached: written into the machine by the caller (this
-  // parser only owns the wire shape), so what is bounded here is what the
-  // transfer can carry — not what the machine will store.
-  const files: { name: string; bytes: Uint8Array }[] = [];
+  // Files the user attached: the browser uploads them in chunks before the
+  // prompt, so the body carries only the ids the server gave each transfer.
+  // What those ids resolve to is the upload store's business (see
+  // routes/prompt-uploads.ts), and the caller that owns it is the one that
+  // can tell a live id from one that expired.
   if (body.files !== undefined) {
-    if (!Array.isArray(body.files) || body.files.length > MAX_PROMPT_FILES) {
+    throw new AppError(
+      "files are no longer accepted in the prompt body; reload the page and attach them through the upload route",
+      400,
+    );
+  }
+  const uploads: string[] = [];
+  if (body.uploads !== undefined) {
+    if (
+      !Array.isArray(body.uploads) ||
+      body.uploads.length > MAX_PROMPT_FILES
+    ) {
       throw new AppError(
-        `files must be an array of at most ${MAX_PROMPT_FILES} items`,
+        `uploads must be an array of at most ${MAX_PROMPT_FILES} ids`,
         400,
       );
     }
-    for (const item of body.files as PromptFileBody[]) {
-      const { name, data } = item;
-      if (typeof data !== "string" || typeof name !== "string") {
-        throw new AppError(
-          "each file must have a `name` and a base64 `data` string",
-          400,
-        );
+    for (const id of body.uploads) {
+      if (typeof id !== "string" || id.length === 0) {
+        throw new AppError("each upload must be a non-empty id string", 400);
       }
-      if (data.length > MAX_PROMPT_FILE_BASE64_LENGTH) {
-        throw new AppError("file exceeds the size limit (15MB binary)", 400);
-      }
-      files.push({
-        name,
-        bytes: decodeBase64Payload(data, "file"),
-      });
+      uploads.push(id);
     }
   }
   const text = body.text === undefined ? "" : body.text;
   if (
     typeof text !== "string" ||
-    (text.length === 0 && images.length === 0 && files.length === 0)
+    (text.length === 0 && images.length === 0 && uploads.length === 0)
   ) {
     throw new AppError("text (string) is required", 400);
   }
@@ -188,7 +188,7 @@ export function parsePromptBody(body: PromptBody): {
   return {
     text,
     images: images.length > 0 ? images : undefined,
-    files: files.length > 0 ? files : undefined,
+    uploads: uploads.length > 0 ? uploads : undefined,
     mode,
   };
 }

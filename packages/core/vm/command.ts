@@ -42,8 +42,9 @@ export interface VmCommandOptions {
   /** Which end of the output to keep. Default "tail" (the end of a log is
    * what a caller needs); "head" for a listing whose beginning is the point. */
   keep?: "head" | "tail";
-  /** Data to write to the command's stdin. */
-  stdin?: Uint8Array;
+  /** Data to write to the command's stdin. A stream lets a file larger than
+   * memory travel to the machine without being read whole. */
+  stdin?: Uint8Array | AsyncIterable<Uint8Array>;
 }
 
 /** Runs one program with its arguments, no shell involved. Injected so the
@@ -166,12 +167,24 @@ export async function runVmCommandBytes(
  * makes the write fail; that is not an error (the exit code says why). */
 async function writeStdin(
   child: Bun.Subprocess,
-  stdin: Uint8Array,
+  stdin: Uint8Array | AsyncIterable<Uint8Array>,
 ): Promise<void> {
   try {
-    await child.stdin.write(stdin);
-  } catch {
-    // The command stopped reading; its exit code carries the reason.
+    if (stdin instanceof Uint8Array) {
+      await child.stdin.write(stdin);
+    } else {
+      for await (const chunk of stdin) {
+        await child.stdin.write(chunk);
+        // Without a flush the sink's own buffer grows with the file. The
+        // flush resolves once the write has reached the pipe.
+        await child.stdin.flush();
+      }
+    }
+  } catch (error) {
+    // The command stopped reading; its exit code carries the reason. Any
+    // other failure — a read error on the stream — is the caller's to know:
+    // swallowing it would report a truncated file as a copied one.
+    if (!isClosedPipe(error)) throw error;
   } finally {
     try {
       await child.stdin.end();
@@ -179,6 +192,20 @@ async function writeStdin(
       // Already closed by the process exiting.
     }
   }
+}
+
+/** Whether writing to a command's stdin failed because the command closed
+ * it first. */
+function isClosedPipe(error: unknown): boolean {
+  const code =
+    typeof error === "object" && error !== null
+      ? (error as { code?: unknown }).code
+      : undefined;
+  return (
+    code === "EPIPE" ||
+    code === "ERR_STREAM_DESTROYED" ||
+    code === "ERR_STREAM_WRITE_AFTER_END"
+  );
 }
 
 /** Read a pipe as text, keeping the requested end when it exceeds `limit`. */

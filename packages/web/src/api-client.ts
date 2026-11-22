@@ -407,8 +407,9 @@ export function tabCalls<T extends Record<string, SessionRoute>>(
  * message.
  *
  * Both prompt surfaces send this body (code mode's session prompt and
- * stella's conversation prompt), so an attachment cannot work on one and be
- * silently dropped on the other. */
+ * stella's conversation prompt). Pictures are shared by both; `uploads` are
+ * stella's alone, because only a conversation has a machine to copy a file
+ * into. */
 export function promptBody(
   text: string,
   images?: PendingImage[],
@@ -425,14 +426,18 @@ export function promptBody(
           })),
         }
       : {}),
-    // Files travel as bytes plus a name: the server writes them into the
-    // machine and tells the model where they are (see core's vm/uploads.ts).
+    // Files already travelled in chunks: the prompt names the transfers the
+    // upload route finished (see prompt-upload.ts and the server's
+    // prompt-uploads.ts). A file whose transfer has no id would be a prompt
+    // that silently lost an attachment, so it fails here instead.
     ...(files && files.length > 0
       ? {
-          files: files.map((file) => ({
-            name: file.name,
-            data: stripDataUrlHeader(file.data),
-          })),
+          uploads: files.map((file) => {
+            if (file.uploadId === undefined || file.status !== "done") {
+              throw new Error(`${file.name} has not finished uploading`);
+            }
+            return file.uploadId;
+          }),
         }
       : {}),
     ...(mode ? { mode } : {}),

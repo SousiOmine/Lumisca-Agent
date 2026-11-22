@@ -56,6 +56,7 @@ import type {
   ModelInfo,
   PendingFile,
   PendingImage,
+  PromptUploader,
   ThinkingLevel,
 } from "../types.ts";
 
@@ -128,6 +129,13 @@ interface ComposerProps {
    * useAttachments). */
   files?: PendingFile[];
   onFilesChange?: (files: PendingFile[]) => void;
+  /** Starts one non-image file's transfer. Required when `onFilesChange` is
+   * given: the composer holds the File handle, this function knows where the
+   * conversation's machine is. */
+  onUploadFile?: PromptUploader;
+  /** Which machine the files are for (a stella agent id). Changing it cancels
+   * the transfers and drops the chips; see useAttachments. */
+  fileTarget?: string;
   /** Offer "share a folder" in the plus menu. Only the desktop shell can
    * open a folder picker on this computer, so only it passes this. */
   onShareFolder?: () => void;
@@ -179,6 +187,8 @@ export function Composer({
   onImagesChange,
   files = [],
   onFilesChange,
+  onUploadFile,
+  fileTarget,
   onShareFolder,
   contextUsage,
   contextWarnRatio,
@@ -360,6 +370,8 @@ export function Composer({
     files,
     onImagesChange,
     onFilesChange,
+    ...(onUploadFile === undefined ? {} : { uploadFile: onUploadFile }),
+    ...(fileTarget === undefined ? {} : { fileTarget }),
     t,
   });
 
@@ -507,29 +519,47 @@ export function Composer({
       )}
       {files.length > 0 && (
         <div className="input-files">
-          {files.map((file, index) => (
-            <span
-              key={`${file.name}-${index}`}
-              className="input-file"
-              title={`${file.name} (${formatAttachmentSize(file.size)})`}
-            >
-              <IconFile size={13} stroke={1.5} />
-              <span className="input-file-name">{file.name}</span>
-              <span className="input-file-size">
-                {formatAttachmentSize(file.size)}
-              </span>
-              <button
-                type="button"
-                className="input-file-remove"
-                title={t("chat.composer.image.remove")}
-                onClick={() =>
-                  onFilesChange?.(files.filter((_, i) => i !== index))
+          {files.map((file) => {
+            const percent =
+              file.size === 0
+                ? 100
+                : Math.min(100, Math.round((file.uploaded / file.size) * 100));
+            return (
+              <span
+                key={file.id}
+                className={`input-file ${file.status}`}
+                title={
+                  file.error ??
+                  `${file.name} (${formatAttachmentSize(file.size)})`
                 }
               >
-                <IconX size={11} />
-              </button>
-            </span>
-          ))}
+                <IconFile size={13} stroke={1.5} />
+                <span className="input-file-name">{file.name}</span>
+                <span className="input-file-size">
+                  {file.status === "failed"
+                    ? t("chat.composer.attach.failed")
+                    : file.status === "copying"
+                      ? t("chat.composer.attach.copying")
+                      : file.status === "done"
+                        ? formatAttachmentSize(file.size)
+                        : `${percent}%`}
+                </span>
+                {file.status === "uploading" && (
+                  <span className="input-file-progress" aria-hidden="true">
+                    <span style={{ width: `${percent}%` }} />
+                  </span>
+                )}
+                <button
+                  type="button"
+                  className="input-file-remove"
+                  title={t("chat.composer.image.remove")}
+                  onClick={() => attachments.remove(file)}
+                >
+                  <IconX size={11} />
+                </button>
+              </span>
+            );
+          })}
         </div>
       )}
       {images.length > 0 && (

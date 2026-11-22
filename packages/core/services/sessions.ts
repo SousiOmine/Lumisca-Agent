@@ -16,7 +16,7 @@ import type {
 import type { SkillInfo } from "../skills/discover.ts";
 import type { PendingQuestion } from "../tools/ask.ts";
 import type { BackgroundCommandInfo } from "../tools/background.ts";
-import type { UploadFile } from "../vm/uploads.ts";
+import type { HostPromptFile, PromptImageFile } from "../vm/uploads.ts";
 import { SessionAssets } from "./session-assets.ts";
 import type { SessionServiceDeps } from "./session-deps.ts";
 import {
@@ -189,11 +189,19 @@ export class SessionService {
     return this.assets.resolveSessionAttachment(sessionId, name);
   }
 
-  savePromptUploads(
+  savePromptImages(
     id: string,
-    uploads: readonly UploadFile[],
+    uploads: readonly PromptImageFile[],
   ): Promise<PromptFileRef[]> {
-    return this.assets.savePromptUploads(id, uploads);
+    return this.assets.savePromptImages(id, uploads);
+  }
+
+  savePromptFile(
+    id: string,
+    file: HostPromptFile,
+    signal?: AbortSignal,
+  ): Promise<PromptFileRef> {
+    return this.assets.savePromptFile(id, file, signal);
   }
 
   resolvePromptUpload(

@@ -13,6 +13,7 @@ import { federationRoutes } from "./routes/federation.ts";
 import { fsRoutes } from "./routes/fs.ts";
 import { mcpRoutes } from "./routes/mcp.ts";
 import { notifyRoutes } from "./routes/notify.ts";
+import { PromptUploads, promptUploadRoutes } from "./routes/prompt-uploads.ts";
 import { providerRoutes } from "./routes/providers.ts";
 import { routineRoutes } from "./routes/routines.ts";
 import { sessionRoutes } from "./routes/sessions.ts";
@@ -87,6 +88,9 @@ export interface AppOptions {
   /** Transport of the PWA notifications (Web Push). Tests inject a fake push
    * service; production leaves it unset, which uses the process's `fetch`. */
   pushFetch?: typeof fetch;
+  /** Directory for files the browser is still uploading (defaults to
+   * `.lumisca-uploads` under the repository root). */
+  uploadDir?: string;
 }
 
 /** A started server: the address it bound and the way to stop it. */
@@ -112,6 +116,10 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
     join(repoRoot, ".lumisca-cache"),
     options.assetsFile,
   );
+  const promptUploads = new PromptUploads({
+    dir: options.uploadDir ?? join(repoRoot, ".lumisca-uploads"),
+    core,
+  });
   // The first agent is created with the app's own picture, not an initial.
   // Read through the server's asset manifest, so a packaged server carries
   // the same image the PWA installs with.
@@ -171,6 +179,7 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   appDisposers.set(app, () => {
     fed.close();
     push.dispose();
+    promptUploads.dispose();
     for (const dispose of routeDisposers) dispose();
   });
 
@@ -239,7 +248,10 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   // stella mode's own surface. It takes no delta-flush option: a
   // conversation has no streaming text (a message arrives when its turn
   // ends), so there is no batch to time.
-  app.route("/api", stellaRoutes(core));
+  app.route("/api", stellaRoutes(core, promptUploads));
+  // The chunks of a file the browser is attaching to a prompt: their own
+  // routes because the body is raw bytes, not the API's JSON.
+  app.route("/api", promptUploadRoutes(promptUploads));
   // An agent's picture and a prompt's uploaded file: raw bytes, same prefix.
   app.route("/api", stellaAssetRoutes(core));
   // Routines: the scheduled requests of a stella conversation. Addressed by

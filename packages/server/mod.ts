@@ -1,5 +1,5 @@
 import * as fsSync from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import {
   createComputerHost,
   createVmHost,
@@ -343,6 +343,7 @@ export async function main(): Promise<void> {
       server = startServer(core, port, {
         repoRoot,
         assetsFile,
+        uploadDir: join(dirname(dbPath), ".lumisca-uploads"),
         token,
         hostname: host,
         allowedHosts,

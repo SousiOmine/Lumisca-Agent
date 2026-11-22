@@ -15,6 +15,7 @@ import type { StellaConversationState } from "../stella-state.ts";
 import type {
   PendingFile,
   PendingImage,
+  PromptUploader,
   StellaAgentSummary,
   StellaStatus,
 } from "../types.ts";
@@ -65,6 +66,8 @@ interface StellaViewProps {
   /** Files to put in the machine (the conversation is the mode that has one). */
   files: PendingFile[];
   onFilesChange: (files: PendingFile[]) => void;
+  /** Starts one file's transfer to this conversation's agent. */
+  onUploadFile: PromptUploader;
   onPrompt: (
     text: string,
     images: PendingImage[],
@@ -134,6 +137,7 @@ export function StellaView({
   onImagesChange,
   files,
   onFilesChange,
+  onUploadFile,
   onPrompt,
   onAbort,
   onEnableAgent,
@@ -225,6 +229,9 @@ export function StellaView({
     ) {
       return;
     }
+    // A prompt names the server's id for each file, so sending before the
+    // last transfer is done would send a prompt without that attachment.
+    if (files.some((file) => file.status !== "done")) return;
     onPrompt(text, images, files);
     onInputChange("");
     onImagesChange([]);
@@ -394,7 +401,8 @@ export function StellaView({
               // button says so instead of accepting a prompt that goes nowhere.
               submitDisabled={
                 (!input.trim() && images.length === 0 && files.length === 0) ||
-                conversation === null
+                conversation === null ||
+                files.some((file) => file.status !== "done")
               }
               onAbort={isRunning ? onAbort : undefined}
               onSubmit={submit}
@@ -403,6 +411,8 @@ export function StellaView({
               onImagesChange={onImagesChange}
               files={files}
               onFilesChange={onFilesChange}
+              onUploadFile={onUploadFile}
+              fileTarget={agent?.id}
               onShareFolder={
                 canShareFolder && conversation !== null && sessionId !== null
                   ? () => setShareDialogOpen(true)

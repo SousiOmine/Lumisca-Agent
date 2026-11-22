@@ -1346,7 +1346,7 @@ export interface VmExecOptions {
   workdir?: string;
   timeoutMs: number;
   signal?: AbortSignal;
-  stdin?: Uint8Array;
+  stdin?: Uint8Array | AsyncIterable<Uint8Array>;
   maxOutput?: number;
   keep?: "head" | "tail";
   /** Environment variables for this call only (`podman exec --env`). */

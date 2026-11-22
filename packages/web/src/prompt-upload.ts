@@ -1,0 +1,171 @@
+/**
+ * Moving one prompt file from the browser into the server, in chunks.
+ *
+ * The file is never read whole. Each 8 MiB slice is hashed with SHA-256, sent
+ * with its expected hash, and only then does the server append it. The XHR is
+ * used for the one thing fetch still cannot report in every browser the app
+ * runs in: how much of the body has left the machine (upload.onprogress).
+ */
+
+import type { PromptFileRef } from "@lumisca/core/shared";
+import { ApiError, apiUrl, pageToken, request } from "./api-client.ts";
+
+export type PromptUploadStatus =
+  | "uploading"
+  | "copying"
+  | "completed"
+  | "failed";
+
+export interface PromptUploadState {
+  status: PromptUploadStatus;
+  size: number;
+  bytes: number;
+  saved?: PromptFileRef;
+  error?: string;
+}
+
+function uploadPath(agentId: string, uploadId?: string): string {
+  const base = `/api/stella/conversations/${encodeURIComponent(agentId)}/uploads`;
+  return uploadId === undefined
+    ? base
+    : `${base}/${encodeURIComponent(uploadId)}`;
+}
+
+/** The lowercase hex SHA-256 of one chunk. Web Crypto digests the 8 MiB
+ * slice without blocking the page for long, and the server compares the same
+ * digest before it writes the bytes. */
+export async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  // The DOM types insist on an ArrayBuffer-backed view; a plain Uint8Array
+  // from a Blob is one at runtime, and the cast keeps the 8 MiB chunk from
+  // being copied again just to satisfy the signature.
+  const digest = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", bytes as unknown as BufferSource),
+  );
+  return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/** Ask the server for a transfer. */
+export function createPromptUpload(
+  agentId: string,
+  name: string,
+  size: number,
+  signal?: AbortSignal,
+): Promise<{ id: string; offset: number }> {
+  return request<{ id: string; offset: number }>(uploadPath(agentId), {
+    method: "POST",
+    body: JSON.stringify({ name, size }),
+    ...(signal === undefined ? {} : { signal }),
+  });
+}
+
+/** Append one chunk. Resolves with the offset the server now has. */
+export function putPromptUploadChunk(
+  agentId: string,
+  uploadId: string,
+  offset: number,
+  bytes: Uint8Array,
+  chunkHash: string,
+  onProgress: (loaded: number) => void,
+  signal: AbortSignal,
+): Promise<{ offset: number }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(
+      "PUT",
+      apiUrl(`${uploadPath(agentId, uploadId)}?offset=${offset}`),
+    );
+    xhr.setRequestHeader("content-type", "application/octet-stream");
+    const token = pageToken();
+    if (token !== undefined && token !== "") {
+      xhr.setRequestHeader("x-lumisca-token", token);
+    }
+    xhr.setRequestHeader("x-chunk-sha256", chunkHash);
+    xhr.responseType = "text";
+
+    const abort = () => xhr.abort();
+    signal.addEventListener("abort", abort, { once: true });
+
+    const settle = (run: () => void) => {
+      signal.removeEventListener("abort", abort);
+      run();
+    };
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress(event.loaded);
+    };
+    xhr.onerror = () =>
+      settle(() => reject(new ApiError("Failed to fetch", "network")));
+    xhr.onabort = () =>
+      settle(() => reject(new DOMException("Aborted", "AbortError")));
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        settle(() => {
+          try {
+            resolve(JSON.parse(xhr.responseText) as { offset: number });
+          } catch (error) {
+            reject(
+              new ApiError(
+                error instanceof Error ? error.message : String(error),
+                "parse",
+                { status: xhr.status },
+              ),
+            );
+          }
+        });
+        return;
+      }
+      let detail: string | null = null;
+      try {
+        const body = JSON.parse(xhr.responseText) as { error?: unknown };
+        if (typeof body.error === "string") detail = body.error;
+      } catch {
+        // A proxy's HTML page is not the server's sentence.
+      }
+      settle(() =>
+        reject(
+          new ApiError(
+            detail ?? `Request failed: ${xhr.status}`,
+            xhr.status < 500 ? "http-4xx" : "http-5xx",
+            { status: xhr.status, detail },
+          ),
+        ),
+      );
+    };
+    xhr.send(bytes as unknown as XMLHttpRequestBodyInit);
+  });
+}
+
+/** Ask the server to copy the finished transfer into the machine. */
+export function completePromptUpload(
+  agentId: string,
+  uploadId: string,
+  signal?: AbortSignal,
+): Promise<{ status: PromptUploadStatus }> {
+  return request<{ status: PromptUploadStatus }>(
+    `${uploadPath(agentId, uploadId)}/complete`,
+    { method: "POST", ...(signal === undefined ? {} : { signal }) },
+  );
+}
+
+/** One read of the transfer's state, used while the machine copy runs. */
+export function getPromptUpload(
+  agentId: string,
+  uploadId: string,
+  signal?: AbortSignal,
+): Promise<PromptUploadState> {
+  return request<PromptUploadState>(uploadPath(agentId, uploadId), {
+    method: "GET",
+    ...(signal === undefined ? {} : { signal }),
+  });
+}
+
+/** Forget a transfer that will not be sent. Failure here is not the reader's
+ * problem: the store's own retention removes what is left behind. */
+export function cancelPromptUpload(
+  agentId: string,
+  uploadId: string,
+): Promise<void> {
+  return request<{ ok: true }>(uploadPath(agentId, uploadId), {
+    method: "DELETE",
+  }).then(() => undefined);
+}

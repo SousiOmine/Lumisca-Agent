@@ -107,16 +107,54 @@ export interface PendingImage {
   name?: string;
 }
 
+/** Where one attached file is in the upload it goes through before the
+ * prompt can name it. */
+export type PendingFileStatus = "uploading" | "copying" | "done" | "failed";
+
+/** What a running upload reports while it moves: bytes the server has taken,
+ * then the phase change once the file is entirely on the server. */
+export interface PromptUploadProgress {
+  uploaded: number;
+  status: "uploading" | "copying";
+}
+
+/** One running transfer, as the composer holds it. `done` resolves with the
+ * server's upload id once the file is inside the machine. */
+export interface PromptUploadHandle {
+  done: Promise<string>;
+  cancel(): void;
+}
+
+/** Start one file's transfer. Supplied by the stella view, which knows the
+ * conversation's agent; the composer only knows the file. */
+export type PromptUploader = (
+  file: File,
+  onProgress: (progress: PromptUploadProgress) => void,
+) => PromptUploadHandle;
+
 /** A file attached to a prompt that is not a picture (a log, an archive, a
- * document). It is not sent to the model as bytes: the server writes it into
- * the machine and tells the model its path (see core's vm/uploads.ts). */
+ * document). The browser keeps the File handle and sends it in chunks; the
+ * server copies it into the machine and the prompt names only the transfer
+ * id (see web's prompt-upload.ts and the server's prompt-uploads.ts). */
 export interface PendingFile {
+  /** Stable id of the chip while the file moves through the upload. */
+  id: string;
   /** The name to show and the name the machine stores it under. */
   name: string;
   /** Size in bytes (the chip shows it, and the server enforces the cap). */
   size: number;
-  /** The base64 payload, without the data-URL header. */
-  data: string;
+  /** The file itself. Its bytes are read one chunk at a time, never whole. */
+  file: File;
+  status: PendingFileStatus;
+  /** Bytes the server has acknowledged so far. */
+  uploaded: number;
+  /** The server's id for this transfer, once it has one. */
+  uploadId?: string;
+  /** The agent whose machine holds the finished file. A draft is shared
+   * between stella conversations, so this says which one the chip belongs to. */
+  agentId?: string;
+  /** Why the transfer failed, when it did. */
+  error?: string;
 }
 
 /** Initial data served by the server's bootstrap script (/assets/initial-data.js).

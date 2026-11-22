@@ -17,10 +17,24 @@ export function contentText(
  * exceed the API. */
 export const MAX_PROMPT_FILES = 8;
 
-/** Most base64 characters one attached file may carry (~15 MB of bytes).
+/** Most base64 characters one attached image may carry (~15 MB of bytes).
  * Bounds what a browser can sensibly send in one prompt; the LLM APIs impose
  * their own, smaller limits on images on top of it. */
-export const MAX_PROMPT_FILE_BASE64_LENGTH = 20 * 1024 * 1024;
+export const MAX_PROMPT_IMAGE_BASE64_LENGTH = 20 * 1024 * 1024;
+
+/** Largest file one prompt may attach, in bytes. Prompt files travel in
+ * chunks and then through the machine's own disk, so the wire body never
+ * holds the whole file; this bound is what the machine has to keep. */
+export const MAX_PROMPT_FILE_BYTES = 2 * 1024 * 1024 * 1024;
+
+/** Largest total of one prompt's attached files, in bytes. Four files at the
+ * single-file cap fit; a prompt that carried more would fill the machine's
+ * disk before its run started. */
+export const MAX_PROMPT_FILES_TOTAL_BYTES = 4 * 1024 * 1024 * 1024;
+
+/** Bytes one upload chunk carries. The browser reads and hashes one chunk at
+ * a time, so this is the client's peak memory for a file of any size. */
+export const PROMPT_UPLOAD_CHUNK_BYTES = 8 * 1024 * 1024;
 
 /** Most characters one prompt's text may carry. A bound, not a budget: it is
  * far above any prompt a person writes, and only stops a paste that would

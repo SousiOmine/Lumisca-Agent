@@ -110,6 +110,7 @@ export function StellaModeScreen({
         onImagesChange={onImagesChange}
         files={files}
         onFilesChange={onFilesChange}
+        onUploadFile={stella.uploadFile}
         onPrompt={(text, promptImages, promptFiles) =>
           stella.prompt(text, promptImages, promptFiles)
         }

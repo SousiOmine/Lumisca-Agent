@@ -120,6 +120,34 @@ export const chat = {
     ja: "「{name}」は添付できません。このモードで添付できるのは画像だけです。",
     en: '"{name}" cannot be attached: only pictures can be attached in this mode',
   },
+  /** A file is moving through the upload queue. The chip shows the percent;
+   * these two name the phases the percentage does not cover. */
+  "chat.composer.attach.copying": {
+    ja: "準備中",
+    en: "Preparing",
+  },
+  "chat.composer.attach.failed": {
+    ja: "失敗",
+    en: "Failed",
+  },
+  /** The transfer finished but the machine could not keep the file. The
+   * server's own reason travels as the detail. */
+  "chat.composer.attach.copyFailed": {
+    ja: "ファイルを機械に保存できませんでした",
+    en: "Could not store the file in the machine",
+  },
+  /** The composer was closed, or another conversation was opened, while a
+   * transfer was still running. Nothing resumes it, so the chip says so. */
+  "chat.composer.attach.interrupted": {
+    ja: "アップロードが中断されました。添付し直してください。",
+    en: "The upload was interrupted. Attach the file again.",
+  },
+  /** The composer was given a file but no way to transfer it: a wiring bug,
+   * said as a refusal rather than a chip that never moves. */
+  "chat.composer.attach.uploadUnavailable": {
+    ja: "この画面ではファイルを送信できません",
+    en: "This screen cannot send files",
+  },
   "chat.composer.mention.noMatch": {
     ja: "一致するファイルが見つかりません",
     en: "No matching files",

@@ -11,6 +11,7 @@ import type { PromptFileRef } from "@lumisca/core";
  * years (see ai/types.ts UserMessage.files).
  */
 import { assertEquals } from "@std/assert";
+import type { PromptUploadSink } from "./prompt-uploads.ts";
 import type { StellaApi } from "./stella.ts";
 import { stellaRoutes } from "./stella.ts";
 import { stellaApiStub } from "./test-stubs.ts";
@@ -65,7 +66,7 @@ function fakeCore(received: Received): StellaApi {
       received.order.push("skills");
       return Promise.resolve();
     },
-    savePromptUploads: (
+    savePromptImages: (
       _sessionId: string,
       uploads: readonly { name: string; bytes: Uint8Array }[],
     ) => {
@@ -100,7 +101,10 @@ function fakeCore(received: Received): StellaApi {
   });
 }
 
-function setup(): { app: ReturnType<typeof stellaRoutes>; received: Received } {
+function setup(uploads?: PromptUploadSink): {
+  app: ReturnType<typeof stellaRoutes>;
+  received: Received;
+} {
   const received: Received = {
     texts: [],
     images: [],
@@ -108,7 +112,10 @@ function setup(): { app: ReturnType<typeof stellaRoutes>; received: Received } {
     saved: [],
     order: [],
   };
-  const app = stellaRoutes(fakeCore(received));
+  const app =
+    uploads === undefined
+      ? stellaRoutes(fakeCore(received))
+      : stellaRoutes(fakeCore(received), uploads);
   // The same error table the app mounts (app.ts's onError): a route mounted
   // on its own would answer Hono's default 500 for an AppError.
   app.onError((error, c) => jsonError(c, error));
@@ -183,6 +190,45 @@ test("stella prompt: an unsupported picture type is refused by name", async () =
   assertEquals(response.status, 400);
 });
 
+test("stella prompt: uploaded files are resolved to their machine paths", async () => {
+  const released: string[][] = [];
+  const { app, received } = setup({
+    resolve: (_agentId, ids) =>
+      ids.map((id) => ({
+        name: `${id}.log`,
+        path: `/home/agent/agents/a1/uploads/2-cd/01-${id}.log`,
+        size: 10,
+        ref: `uploads/2-cd/01-${id}.log`,
+        image: false,
+      })),
+    release: (ids) => released.push([...ids]),
+  });
+  const response = await app.request("/stella/conversations/a1/prompt", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text: "このログを見て", uploads: ["u1"] }),
+  });
+  assertEquals(response.status, 200);
+  assertEquals(
+    received.saved.map((file) => file.ref),
+    ["uploads/2-cd/01-u1.log"],
+  );
+  // No picture took the byte path: the file was already in the machine.
+  assertEquals(received.uploads, []);
+  assertEquals(released, [["u1"]]);
+  assertEquals(received.order, ["ready", "skills", "prompt"]);
+});
+
+test("stella prompt: an upload id without a store is a 409", async () => {
+  const { app } = setup();
+  const response = await app.request("/stella/conversations/a1/prompt", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text: "x", uploads: ["u1"] }),
+  });
+  assertEquals(response.status, 409);
+});
+
 test("stella prompt: text alone needs no upload", async () => {
   const { app, received } = setup();
   const response = await app.request("/stella/conversations/a1/prompt", {
@@ -201,14 +247,22 @@ test("stella prompt: the file notice is for the model, not the screen", async ()
   // files is added to the message's modelContent (see session-agent's
   // buildUserMessage), so the conversation draws the sentence the user wrote
   // instead of a paragraph addressed to the model.
-  const { app, received } = setup();
+  const { app, received } = setup({
+    resolve: () => [
+      {
+        name: "run.log",
+        path: "/home/agent/agents/a1/uploads/1-ab/01-run.log",
+        size: 5,
+        ref: "uploads/1-ab/01-run.log",
+        image: false,
+      },
+    ],
+    release: () => {},
+  });
   const response = await app.request("/stella/conversations/a1/prompt", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      text: "このログを見て",
-      files: [{ name: "run.log", data: "aGVsbG8=" }],
-    }),
+    body: JSON.stringify({ text: "このログを見て", uploads: ["u1"] }),
   });
   assertEquals(response.status, 200);
   assertEquals(received.texts, ["このログを見て"]);

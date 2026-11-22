@@ -59,12 +59,6 @@ export interface SessionApi {
     mode?: ModePrompt,
     files?: PromptFileRef[],
   ): void;
-  /** Write a prompt's attached files into the machine and return where they
-   * are. Throws for a session that has nowhere to put them. */
-  savePromptUploads(
-    id: string,
-    uploads: readonly { name: string; bytes: Uint8Array }[],
-  ): Promise<PromptFileRef[]>;
   abort(id: string): void;
   rewind(id: string, timestamp: number): Promise<void>;
   /** Condense the session's older history into a checkpoint on demand (the
@@ -313,19 +307,19 @@ export function sessionRoutes(core: SessionApi): Hono {
 
   app.post("/sessions/:id/prompt", async (c) => {
     const body = await parseBody<PromptBody>(c);
-    const { text, images, files, mode } = parsePromptBody(body ?? {});
+    const { text, images, uploads, mode } = parsePromptBody(body ?? {});
     const id = c.req.param("id");
     requireSession(id);
+    if (uploads !== undefined) {
+      throw new AppError(
+        "uploads are only accepted in a stella conversation",
+        400,
+      );
+    }
     // The pictures live in the message, so they are bounded before the
     // message is built (see preparePromptImages).
     const bounded = await preparePromptImages(images);
-    // The uploads are written into the machine before the run starts, so a
-    // prompt whose file could not be stored never reaches the model; that is
-    // the one part of this call that is awaited. After it, the run is
-    // fire-and-forget: its progress arrives on the event stream.
-    const saved =
-      files === undefined ? undefined : await core.savePromptUploads(id, files);
-    core.startPrompt(id, text, bounded, mode, saved);
+    core.startPrompt(id, text, bounded, mode);
     return c.json({ ok: true });
   });
 

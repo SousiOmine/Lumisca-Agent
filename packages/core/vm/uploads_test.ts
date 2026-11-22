@@ -1,4 +1,7 @@
 import { test } from "bun:test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { assertEquals, assertRejects } from "@std/assert";
 import { CoreError } from "../errors.ts";
 import type { VmExec, VmExecBytes } from "./container.ts";
@@ -6,23 +9,65 @@ import {
   isUploadRef,
   MAX_PROMPT_IMAGE_BYTES,
   readUpload,
-  saveUploads,
+  savePromptFiles,
+  savePromptImages,
 } from "./uploads.ts";
 
 /** A machine that records what it was asked and answers from a map of
  * absolute paths. Only the two calls uploads.ts makes are modelled: writing
  * a file with `cat > path` on stdin, and `test -f`. */
 function fakeMachine(files = new Map<string, Uint8Array>()) {
-  const exec: VmExec = (command, options) => {
-    if (command[0] === "mkdir") return Promise.resolve(ok());
+  const exec: VmExec = async (command, options) => {
+    if (command[0] === "mkdir") return ok();
+    if (command[0] === "mv") {
+      const from = String(command[2]);
+      const to = String(command[3]);
+      const bytes = files.get(from);
+      if (bytes === undefined) return { ...ok(), exitCode: 1 };
+      files.set(to, bytes);
+      files.delete(from);
+      return ok();
+    }
+    if (command[0] === "df") {
+      return {
+        ...ok(),
+        stdout:
+          "Filesystem 1024-blocks Used Available Capacity Mounted on\n" +
+          "overlay 100 1 99999999 1% /\n",
+      };
+    }
     if (command[0] === "sh" && command[2] === 'cat > "$1"') {
       const path = String(command[4]);
-      files.set(path, options.stdin ?? new Uint8Array());
-      return Promise.resolve(ok());
+      const stdin = options.stdin;
+      let bytes: Uint8Array;
+      if (stdin === undefined) {
+        bytes = new Uint8Array();
+      } else if (stdin instanceof Uint8Array) {
+        bytes = stdin;
+      } else {
+        const chunks: Uint8Array[] = [];
+        for await (const chunk of stdin) chunks.push(chunk);
+        const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+        bytes = new Uint8Array(total);
+        let offset = 0;
+        for (const chunk of chunks) {
+          bytes.set(chunk, offset);
+          offset += chunk.length;
+        }
+      }
+      files.set(path, bytes);
+      return ok();
     }
     if (command[0] === "sh" && command[2] === 'test -f "$1"') {
       const path = String(command[4]);
       return Promise.resolve(files.has(path) ? ok() : { ...ok(), exitCode: 1 });
+    }
+    if (command[0] === "sh" && command[2] === 'test "$(wc -c < "$1")" = "$2"') {
+      const path = String(command[4]);
+      const expected = Number(command[5]);
+      return Promise.resolve(
+        files.get(path)?.length === expected ? ok() : { ...ok(), exitCode: 1 },
+      );
     }
     throw new Error(`unexpected command: ${command.join(" ")}`);
   };
@@ -75,7 +120,7 @@ function okBytes(stdout: Uint8Array = new Uint8Array()): {
 
 test("uploads: a file is written under the agent's folder and usable as a ref", async () => {
   const machine = fakeMachine();
-  const saved = await saveUploads(
+  const saved = await savePromptImages(
     [
       {
         name: "shot.png",
@@ -101,7 +146,7 @@ test("uploads: a file is written under the agent's folder and usable as a ref", 
 
 test("uploads: a document is not marked as a picture", async () => {
   const machine = fakeMachine();
-  const saved = await saveUploads(
+  const saved = await savePromptImages(
     [
       {
         name: "notes.txt",
@@ -129,7 +174,7 @@ test("uploads: only names this module generates are refs", () => {
 
 test("uploads: a file that exists is read back as bytes", async () => {
   const machine = fakeMachine();
-  const saved = await saveUploads(
+  const saved = await savePromptImages(
     [
       {
         name: "p.png",
@@ -183,9 +228,59 @@ test("uploads: a malformed ref never reaches the machine", async () => {
   assertEquals(touched, false);
 });
 
+test("uploads: a prompt file is copied from the host by its size", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "lumisca-prompt-file-"));
+  const host = join(dir, "run.log");
+  await writeFile(host, "hello from the host");
+  const machine = fakeMachine();
+  try {
+    const saved = await savePromptFiles(
+      [{ name: "run.log", path: host, size: 19 }],
+      {
+        exec: machine.exec,
+        agentId: "a1",
+        now: () => 1,
+        randomId: () => "aaaaaaaa",
+      },
+    );
+    assertEquals(saved[0]!.ref, "uploads/1-aaaaaaaa/01-run.log");
+    assertEquals(
+      new TextDecoder().decode(machine.files.get(saved[0]!.path)),
+      "hello from the host",
+    );
+    assertEquals(
+      [...machine.files.keys()].some((path) =>
+        path.includes(".lumisca-upload-staging"),
+      ),
+      false,
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("uploads: a host file that changed after the upload started is refused", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "lumisca-prompt-file-"));
+  const host = join(dir, "run.log");
+  await writeFile(host, "short");
+  const machine = fakeMachine();
+  try {
+    await assertRejects(
+      () =>
+        savePromptFiles([{ name: "run.log", path: host, size: 99 }], {
+          exec: machine.exec,
+          agentId: "a1",
+        }),
+      CoreError,
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("uploads: a file over the limit is an error, not 'gone'", async () => {
   const machine = fakeMachine();
-  const saved = await saveUploads(
+  const saved = await savePromptImages(
     [
       {
         name: "big.png",
