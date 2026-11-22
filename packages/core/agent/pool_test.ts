@@ -377,6 +377,57 @@ test("applyChange with policy inPlace (mcp-credentials) rebuilds an idle session
   assertEquals(teardown.mcpRefreshed, 0);
 });
 
+test("applyChange with policy defer stores the change and defers the streaming rebuild", () => {
+  // The system prompt and the tool set are part of the request a run already
+  // sent, so a running session keeps its agent until that run ends. Refusing
+  // the save would answer "no" to an edit that has nothing to do with the run.
+  const { pool, teardown } = makePool({ streaming: true });
+  const session = sessionInfo("s1");
+  pool.open(session, WORKSPACE, []);
+
+  let mutated = false;
+  const deferred: string[] = [];
+  pool.applyChange(
+    [session],
+    () => {
+      mutated = true;
+    },
+    "defer",
+    { defer: (id) => deferred.push(id) },
+  );
+  assertEquals(mutated, true);
+  assertEquals(deferred, [session.id]);
+  assertEquals(teardown.agentClosed, 0);
+});
+
+test("applyChange with policy defer rebuilds idle sessions without deferring", () => {
+  const { pool, teardown } = makePool();
+  const session = sessionInfo("s1");
+  pool.open(session, WORKSPACE, []);
+
+  const deferred: string[] = [];
+  pool.applyChange([session], () => {}, "defer", {
+    defer: (id) => deferred.push(id),
+  });
+  assertEquals(deferred, []);
+  assertEquals(teardown.agentClosed, 1);
+});
+
+test("applyChange with policy inPlace and no path fails loudly on a streaming session", () => {
+  // A policy that says "bring it in place" without naming the path is a
+  // caller bug: silently skipping the session would leave it on the old
+  // value with nothing left to retry it.
+  const { pool } = makePool({ streaming: true });
+  const session = sessionInfo("s1");
+  pool.open(session, WORKSPACE, []);
+
+  const error = assertThrows(
+    () => pool.applyChange([session], () => {}, "inPlace"),
+    CoreError,
+  );
+  assertEquals((error as CoreError).kind, "invalid");
+});
+
 test("applyChange with policy inPlace (mcp-credentials) reconnects the running ones and rebuilds the rest", () => {
   // One sign-in touches every session that uses the server, and they are not
   // all in the same state: a refusal by one must not cost the others.

@@ -239,11 +239,22 @@ export class SessionPool {
     for (const session of sessions) {
       const resources = this.sessions.get(session.id);
       if (resources?.agent === undefined) continue;
-      if (resources.agent.isStreaming) {
-        this.followStreaming(session, resources, policy, options);
+      if (!resources.agent.isStreaming) {
+        this.followIdle(session, resources, options);
         continue;
       }
-      this.followIdle(session, resources, options);
+      // A streaming session is never rebuilt (see rebuild). `reject` refused
+      // above; the guard runs again here so a write that got past it fails
+      // loudly instead of leaving the session behind.
+      if (policy === "reject") {
+        this.assertNotStreaming(session.id);
+        continue;
+      }
+      if (policy === "defer") {
+        options.defer?.(session.id);
+        continue;
+      }
+      this.applyInPlace(session, resources, options.inPlace);
     }
   }
 
@@ -267,19 +278,15 @@ export class SessionPool {
     this.rebuild(session);
   }
 
-  /** What a streaming session does with a change it may not rebuild for. */
-  private followStreaming(
+  /** What a streaming session does with a change it may not be rebuilt for:
+   * the path `options.inPlace` names, each of which leaves the agent (and the
+   * run it is executing) alone. */
+  private applyInPlace(
     session: SessionInfo,
     resources: SessionResources,
-    policy: ChangePolicy,
-    options: ChangeOptions,
+    inPlace: InPlaceChange | undefined,
   ): void {
-    if (policy === "reject") return; // unreachable: the guard ran first.
-    if (policy === "defer") {
-      options.defer?.(session.id);
-      return;
-    }
-    switch (options.inPlace) {
+    switch (inPlace) {
       case "tools":
         this.reseedInPlace(session, resources);
         return;
@@ -289,6 +296,11 @@ export class SessionPool {
       case "mcp-credentials":
         this.refreshMcpInPlace(session, resources, { reloadCredentials: true });
         return;
+      case undefined:
+        throw new CoreError(
+          `A change in place needs a path: ${session.id}`,
+          "invalid",
+        );
     }
   }
 
