@@ -530,3 +530,45 @@ test("the core's own modules form a DAG", async () => {
     "modules that depend on each other (join them, or add the missing seam)",
   );
 });
+
+/** Test-only packages must not be reachable from production code. A
+ * production install would then fail to resolve a module the server imports,
+ * and the failure would appear at release time rather than here. */
+test("production modules do not import devDependencies", () => {
+  const manifest = JSON.parse(
+    fsSync.readFileSync(new URL("package.json", ROOT), "utf8"),
+  ) as { devDependencies?: Record<string, string> };
+  const dev = Object.keys(manifest.devDependencies ?? {});
+  const problems: string[] = [];
+  const walk = (dir: URL): void => {
+    for (const entry of fsSync.readdirSync(dir, { withFileTypes: true })) {
+      if (SKIP_DIRS.has(entry.name)) continue;
+      const child = new URL(entry.name + (entry.isDirectory() ? "/" : ""), dir);
+      if (entry.isDirectory()) {
+        walk(child);
+        continue;
+      }
+      if (!/\.(ts|tsx)$/.test(entry.name)) continue;
+      if (entry.name.includes("_test.")) continue;
+      if (entry.name === "api-test-utils.ts") continue;
+      // Build configuration is not part of the shipped server.
+      if (entry.name === "vite.config.ts") continue;
+      const text = fsSync.readFileSync(child, "utf8");
+      for (const match of text.matchAll(
+        /(?:from\s+|import\s*\(\s*)"([^"]+)"/g,
+      )) {
+        const specifier = match[1]!;
+        const hit = dev.find(
+          (name) => specifier === name || specifier.startsWith(name + "/"),
+        );
+        if (hit !== undefined) {
+          problems.push(
+            `${entry.name} imports ${hit} (a devDependency) at ${child.pathname}`,
+          );
+        }
+      }
+    }
+  };
+  walk(new URL("packages/", ROOT));
+  assertEquals(problems, []);
+});
