@@ -25,8 +25,23 @@ import {
  * capability reseed fills the registry in place (see
  * SessionPool.applyCapabilityChange). The agent's own set never changes
  * without a rebuild.
+ *
+ * The merge is built once per state of the two sides, not once per lookup:
+ * one `execute` program may call tools fifty times, and merging a registry
+ * of MCP tools (with kilobyte-sized schemas) on every call is work nobody
+ * reads. A cached merge is reused while the registry's revision and the
+ * preloaded list (by identity, element by element) are unchanged.
  */
 export class ToolCatalog implements ToolSearchSource {
+  /** The last merge, with what it was built from. */
+  private cached:
+    | {
+        source: readonly Tool[];
+        revision: number;
+        byName: Map<string, Tool>;
+      }
+    | undefined;
+
   constructor(
     private readonly options: {
       /** The agent's preloaded tools: what the model used to see directly. */
@@ -43,21 +58,11 @@ export class ToolCatalog implements ToolSearchSource {
    * once, from the preloaded set: the agent's own definitions are the ones
    * the session was built to run. */
   list(): Tool[] {
-    const excluded = new Set(this.options.exclude ?? []);
-    const merged = new Map<string, Tool>();
-    for (const tool of this.options.tools()) {
-      if (excluded.has(tool.name)) continue;
-      merged.set(tool.name, tool);
-    }
-    for (const tool of this.options.registry().list()) {
-      if (excluded.has(tool.name) || merged.has(tool.name)) continue;
-      merged.set(tool.name, tool);
-    }
-    return [...merged.values()];
+    return [...this.index().values()];
   }
 
   get(name: string): Tool | undefined {
-    return this.list().find((tool) => tool.name === name);
+    return this.index().get(name);
   }
 
   search(query: string, limit: number): ToolSearchEntry[] {
@@ -90,4 +95,54 @@ export class ToolCatalog implements ToolSearchSource {
     }
     return await callTool(tool, toolCallId, args, signal);
   }
+
+  /** The merged tool index, rebuilt only when one of its two sources
+   * changed since the last call. */
+  private index(): Map<string, Tool> {
+    const source = this.options.tools();
+    const registry = this.options.registry();
+    const cached = this.cached;
+    if (
+      cached !== undefined &&
+      cached.revision === registry.revision &&
+      sameTools(cached.source, source)
+    ) {
+      return cached.byName;
+    }
+    const byName = mergeTools(source, registry, this.options.exclude ?? []);
+    this.cached = { source, revision: registry.revision, byName };
+    return byName;
+  }
+}
+
+/** The one merge: the preloaded set first, then the registry's tools that
+ * neither repeat a preloaded name nor are excluded. */
+function mergeTools(
+  tools: readonly Tool[],
+  registry: ToolRegistry,
+  exclude: readonly string[],
+): Map<string, Tool> {
+  const excluded = new Set(exclude);
+  const merged = new Map<string, Tool>();
+  for (const tool of tools) {
+    if (excluded.has(tool.name)) continue;
+    merged.set(tool.name, tool);
+  }
+  for (const tool of registry.list()) {
+    if (excluded.has(tool.name) || merged.has(tool.name)) continue;
+    merged.set(tool.name, tool);
+  }
+  return merged;
+}
+
+/** Whether two preloaded lists hold the same tools: the provider may build
+ * a fresh array per call (session-tools.ts does), so the items decide, not
+ * the array. */
+function sameTools(a: readonly Tool[], b: readonly Tool[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let index = 0; index < a.length; index++) {
+    if (a[index] !== b[index]) return false;
+  }
+  return true;
 }

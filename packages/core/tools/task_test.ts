@@ -204,22 +204,14 @@ function rateLimitThenOk(): StreamFn {
     if (calls++ < 1) {
       stream.push({
         type: "error",
-        reason: "error",
-        error: fauxAssistantMessage("", {
-          stopReason: "error",
-          errorMessage: "OpenAI API error (429): rate_limit_exceeded",
-        }),
+        errorMessage: "OpenAI API error (429): rate_limit_exceeded",
+        errorRetryable: true,
       });
       stream.end();
       return stream;
     }
     stream.push({ type: "start", partial: fauxAssistantMessage("") });
-    stream.push({
-      type: "text_delta",
-      contentIndex: 0,
-      delta: "done",
-      partial: fauxAssistantMessage("done"),
-    });
+    stream.push({ type: "text_delta", delta: "done" });
     // The agent reads the final message from the done event; `end` only
     // closes the stream.
     stream.push({ type: "done", message: fauxAssistantMessage("done") });
@@ -257,11 +249,7 @@ function interruptedThenOk(): { streamFn: StreamFn; requests: unknown[][] } {
     const stream = createAssistantMessageEventStream();
     if (calls++ < 1) {
       stream.push({ type: "start", partial: fauxAssistantMessage("") });
-      stream.push({
-        type: "text_delta",
-        delta: "partial report body",
-        partial: fauxAssistantMessage("partial report body"),
-      });
+      stream.push({ type: "text_delta", delta: "partial report body" });
       stream.push({
         type: "error",
         errorMessage: "Failed to process successful response",
@@ -272,11 +260,7 @@ function interruptedThenOk(): { streamFn: StreamFn; requests: unknown[][] } {
       return stream;
     }
     stream.push({ type: "start", partial: fauxAssistantMessage("") });
-    stream.push({
-      type: "text_delta",
-      delta: "continued report",
-      partial: fauxAssistantMessage("continued report"),
-    });
+    stream.push({ type: "text_delta", delta: "continued report" });
     stream.end(fauxAssistantMessage("partial report body continued report"));
     return stream;
   };
@@ -321,11 +305,7 @@ test("a failed sub-agent's notification keeps its partial output", async () => {
   const streamFn: StreamFn = () => {
     const stream = createAssistantMessageEventStream();
     stream.push({ type: "start", partial: fauxAssistantMessage("") });
-    stream.push({
-      type: "text_delta",
-      delta: "found the route table",
-      partial: fauxAssistantMessage("found the route table"),
-    });
+    stream.push({ type: "text_delta", delta: "found the route table" });
     stream.push({
       type: "error",
       errorMessage: "invalid api key",

@@ -180,6 +180,15 @@ export async function callTool(
 
 export class ToolRegistry implements ToolSearchSource {
   private readonly tools = new Map<string, Tool>();
+  /** Bumped by every mutation, so a reader that caches a merge of this
+   * registry with another set (see tools/catalog.ts) can tell a stale
+   * snapshot from a current one without copying the whole map. */
+  private version = 0;
+
+  /** How many times this registry has changed. Compared for equality only. */
+  get revision(): number {
+    return this.version;
+  }
 
   /** Replace the whole registry (MCP discovery finished / re-ran). */
   setTools(tools: Tool[]): void {
@@ -190,7 +199,9 @@ export class ToolRegistry implements ToolSearchSource {
   /** Add tools that are not already registered (idempotent). */
   addTools(tools: readonly Tool[]): void {
     for (const tool of tools) {
-      if (!this.tools.has(tool.name)) this.tools.set(tool.name, tool);
+      if (this.tools.has(tool.name)) continue;
+      this.tools.set(tool.name, tool);
+      this.version++;
     }
   }
 
@@ -201,7 +212,9 @@ export class ToolRegistry implements ToolSearchSource {
   removeTools(names: Iterable<string>): number {
     let removed = 0;
     for (const name of names) {
-      if (this.tools.delete(name)) removed++;
+      if (!this.tools.delete(name)) continue;
+      removed++;
+      this.version++;
     }
     return removed;
   }

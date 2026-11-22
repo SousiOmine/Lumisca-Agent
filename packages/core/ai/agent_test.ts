@@ -332,9 +332,7 @@ test("a steer during a tool loop is processed at the next turn boundary, not at 
       stream.push({ type: "start", partial: msg });
       stream.push({
         type: "text_delta",
-        contentIndex: 0,
         delta: "reaction to the interrupt",
-        partial: msg,
       });
       stream.end(msg);
     }

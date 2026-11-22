@@ -29,7 +29,6 @@ import { AgentEvents } from "./agent-events.ts";
 import {
   nextTranscriptTimestamp,
   normalizeInput,
-  placeholderAssistant,
 } from "./agent-messages.ts";
 import type { Turn } from "./agent-step.ts";
 import { TurnStream, toolCallsOf } from "./agent-step.ts";
@@ -42,6 +41,7 @@ import type {
   RequestShape,
 } from "./agent-types.ts";
 import type { Model, ModelThinkingLevel } from "./catalog.ts";
+import { pendingAssistant } from "./message-factory.ts";
 import { RepeatGuard } from "./repeat-guard.ts";
 import { RequestShapeRecorder } from "./request-shape.ts";
 import { healUnansweredToolCalls } from "./tool-call-healing.ts";
@@ -518,7 +518,7 @@ export class Agent {
     const model = this.state.model;
     this.events.emit({
       type: "message_start",
-      message: placeholderAssistant(model),
+      message: pendingAssistant(model),
     });
 
     const turnStream = new TurnStream(model, this.events);

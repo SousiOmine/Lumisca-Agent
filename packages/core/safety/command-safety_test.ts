@@ -50,9 +50,7 @@ function makeSafety(
     const stream = createAssistantMessageEventStream();
     stream.push({
       type: "text_delta",
-      contentIndex: 0,
       delta: options.reply ?? '{"safe": true, "reason": "fine"}',
-      partial: PARTIAL,
     });
     stream.end();
     return stream;

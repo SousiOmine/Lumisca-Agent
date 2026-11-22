@@ -11,12 +11,13 @@ import type { AgentTool } from "./agent-types.ts";
 import type { Model, ModelThinkingLevel } from "./catalog.ts";
 
 export type StreamEvent =
-  | { type: "start"; partial?: AssistantMessage; [k: string]: unknown }
-  | { type: "text_delta"; delta: string; [k: string]: unknown }
-  | { type: "thinking_delta"; delta: string; [k: string]: unknown }
+  | { type: "start"; partial?: AssistantMessage }
+  | { type: "text_delta"; delta: string }
+  | { type: "thinking_delta"; delta: string }
   | {
       type: "error";
-      errorMessage?: string;
+      /** The provider's failure, as the turn records it. */
+      errorMessage: string;
       /** Non-message detail of the failure (HTTP status, URL, body, cause
        * chain — see ai/error-detail.ts). The agent renders it beside the
        * message so a failure is diagnosable without debug logging. */
@@ -24,14 +25,12 @@ export type StreamEvent =
       /** The provider marked the failure retryable (APICallError.isRetryable).
        * The retry policy prefers this over matching the message text. */
       errorRetryable?: boolean;
-      [k: string]: unknown;
     }
   | {
       type: "toolcall_start";
       toolCallId: string;
       toolName: string;
       args: Record<string, unknown>;
-      [k: string]: unknown;
     }
   | {
       type: "toolcall_result";
@@ -48,22 +47,19 @@ export type StreamEvent =
        * when the result carried none. */
       details?: Record<string, unknown>;
       isError: boolean;
-      [k: string]: unknown;
     }
-  | { type: "done"; message: AssistantMessage; [k: string]: unknown };
+  | { type: "done"; message: AssistantMessage };
 
 /**
  * The stream one LLM turn yields: an async-iterable of assistant-message
  * events. Consumers (the agent runtime, `streamText`) only ever for-await
- * it, so the push/end surface is optional here — the real transport returns
- * a bare async generator. Producers that need to push events synchronously
- * use {@link PushableAssistantMessageEventStream} from event-stream.ts.
+ * it, so that is all this type offers — the real transport returns a bare
+ * async generator. Producing a stream by pushing events is a different
+ * job, with its own type ({@link PushableAssistantMessageEventStream} in
+ * event-stream.ts).
  */
 
-export type AssistantMessageEventStream = AsyncIterable<StreamEvent> & {
-  push?(event: StreamEvent): void;
-  end?(message?: AssistantMessage): void;
-};
+export type AssistantMessageEventStream = AsyncIterable<StreamEvent>;
 
 export interface StreamRequest {
   systemPrompt?: string;

@@ -18,19 +18,10 @@ function fakeStreamFn(outcomes: Array<{ fail?: string }>): StreamFn {
     const out = outcomes[i++] ?? {};
     const events = (async function* () {
       if (out.fail) {
-        yield {
-          type: "error",
-          reason: "error",
-          error: fauxAssistantMessage("", { errorMessage: out.fail }),
-        };
+        yield { type: "error", errorMessage: out.fail };
         return;
       }
-      yield {
-        type: "text_delta",
-        contentIndex: 0,
-        delta: "hi",
-        partial: fauxAssistantMessage(""),
-      };
+      yield { type: "text_delta", delta: "hi" };
     })();
     return events as unknown as AssistantMessageEventStream;
   };
