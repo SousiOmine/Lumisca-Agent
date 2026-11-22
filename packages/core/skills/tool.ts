@@ -1,4 +1,3 @@
-import { TOOL_SKILL } from "../shared/mod.ts";
 import {
   object,
   optional,
@@ -8,7 +7,8 @@ import {
   string,
   type Tool,
   type ToolResult,
-} from "../tools/schema.ts";
+} from "../ports/tool.ts";
+import { TOOL_SKILL } from "../shared/mod.ts";
 import {
   loadSkillContent,
   MAX_SKILL_FILE_BYTES,

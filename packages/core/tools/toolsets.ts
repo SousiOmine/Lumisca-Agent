@@ -1,4 +1,5 @@
 import type { Workspace } from "../domain/workspace.ts";
+import type { Tool } from "../ports/tool.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
 import type { SkillDef } from "../skills/discover.ts";
 import { createSkillTool } from "../skills/tool.ts";
@@ -9,7 +10,6 @@ import type { BackgroundProcessManager } from "./background.ts";
 import { createAsyncBashTools } from "./background.ts";
 import { createBashTool } from "./bash.ts";
 import { createEvalTool } from "./eval.ts";
-import type { Tool } from "./schema.ts";
 import { createSendChatTool, type SendChatTarget } from "./send-chat.ts";
 import type { TaskHub } from "./task-hub.ts";
 import { createTodoTool, type TodoHub } from "./todo.ts";

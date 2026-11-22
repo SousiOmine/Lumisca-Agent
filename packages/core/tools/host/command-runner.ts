@@ -4,7 +4,7 @@ import {
   MAX_RAW_COMMAND_OUTPUT,
   type RunOptions,
   type ShellRunResult,
-} from "../command-backend.ts";
+} from "../../ports/command-backend.ts";
 import { FINAL_FLUSH_GRACE_MS, KILL_WAIT_MS } from "../process-policy.ts";
 import { MAX_UTF8_BYTES_PER_CHAR, OutputTail } from "./output-tail.ts";
 import { killProcessTree } from "./process-tree.ts";

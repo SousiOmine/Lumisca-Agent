@@ -603,7 +603,7 @@ X サーバ（`:99`）、ウィンドウマネージャ、セッションバス�
 - レジストリの分離: セッションは `main` と `subagent` の 2 つを持ちます（`packages/core/tools/registries.ts`）。
   MCP、browser-lab、computer、`pdf_read_pages` は両方に入り、`identity` / `agent_create` / `routine_*` は main だけです。
 - パスの境界: 相対パスと `bash` の基点は `/home/agent/agents/<agent id>`、境界は `/home/agent` です（`packages/core/vm/fs.ts` の `resolveVmPath`）。
-  変えるときは `packages/core/tools/system-prompt.ts` も合わせてください。
+  変えるときは `packages/core/agent/system-prompt.ts` も合わせてください。
 - ファイルの送受信: ユーザーへは `send_chat` の `paths`（code mode は `chat_attach`）で送ります。
   上限は `attachFiles()` の 1 箇所で、1 件 4 MiB、1 回 10 件、合計 16 MiB、累計に上限はありません。
   ユーザーからの添付はマシンの中に書き（`packages/core/vm/uploads.ts`）、メッセージは参照と表示名、サイズだけを持ちます。
@@ -705,7 +705,7 @@ X サーバ（`:99`）、ウィンドウマネージャ、セッションバス�
   開くたびに走るので、無条件に `: >` すると記憶が毎回消えます。
   コマンドは `packages/core/vm/agent-memory.ts` の 1 箇所だけで、`stella_live_test.ts` が「開き直しても消えない」を固定しています。
 - 文面とファイル名は別々に持ちます。
-  文面は `packages/core/tools/system-prompt.ts`、名前は `AGENT_MEMORY_FILE` です。
+  文面は `packages/core/agent/system-prompt.ts`、名前は `AGENT_MEMORY_FILE` です。
   `vm/agent-memory_test.ts` が両者の一致を検査します。
 - 作成は非同期です。
   フォルダを触るため `createStellaAgent` / `ensureStellaAgent` は `Promise` を返します。
@@ -853,7 +853,7 @@ API キーやトークンは、ツールの引数にも戻り値にも会話に�
   古い会話は開くときに名前をエージェント名へ戻します（`getOrCreateStellaSession`）。
 - `role` は編集できません。
   作成時のシステムプロンプトに入っており、後から変えても既存の会話に届きません。
-  名前もプロンプトには入りません（`packages/core/tools/system-prompt.ts`）。
+  名前もプロンプトには入りません（`packages/core/agent/system-prompt.ts`）。
   プロンプト自体はセッションを開くたびに導出し直され、保存値と違えば書き換わるので（`packages/core/agent/factory.ts` の `ensureSystemPrompt`）、新しい版でプロンプトを変えれば既存の会話にも届きます。
 - アイコン: 保存先は DB 隣の `.lumisca-agent-icons/<agent id>/` です（`packages/core/stella/icons.ts`）。
   未設定なら名前の頭文字を `agent id` から導いた色の上に描きます（`packages/core/shared/agent-avatar.ts`）。

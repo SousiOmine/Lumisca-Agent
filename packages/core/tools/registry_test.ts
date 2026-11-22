@@ -1,14 +1,14 @@
 import { test } from "bun:test";
 import { assert, assertEquals, assertRejects } from "@std/assert";
-import { createToolCallTool } from "./call-tool.ts";
-import { MAX_SEARCH_DESCRIPTION_CHARS, ToolRegistry } from "./registry.ts";
 import {
   integer,
   object,
   string,
   type Tool,
   type ToolContentBlock,
-} from "./schema.ts";
+} from "../ports/tool.ts";
+import { createToolCallTool } from "./call-tool.ts";
+import { MAX_SEARCH_DESCRIPTION_CHARS, ToolRegistry } from "./registry.ts";
 import { createToolSearchTool } from "./search-tool.ts";
 
 function fakeTool(

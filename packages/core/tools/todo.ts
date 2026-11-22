@@ -1,7 +1,5 @@
 import type { ClientEvent } from "../domain/event.ts";
 import { CoreError } from "../errors.ts";
-import type { TodoPhase, TodoStatus } from "../shared/mod.ts";
-import { TOOL_TODO } from "../shared/mod.ts";
 import {
   array,
   object,
@@ -9,8 +7,10 @@ import {
   string,
   type Tool,
   type ToolResult,
-} from "./schema.ts";
-import { requireOneOf } from "./validate.ts";
+} from "../ports/tool.ts";
+import { requireOneOf } from "../ports/validate.ts";
+import type { TodoPhase, TodoStatus } from "../shared/mod.ts";
+import { TOOL_TODO } from "../shared/mod.ts";
 
 /** The statuses a task can take, in the order the tool accepts them. */
 const STATUSES: TodoStatus[] = [

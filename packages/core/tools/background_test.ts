@@ -12,6 +12,11 @@ import {
 import { assert, assertEquals } from "@std/assert";
 import type { ClientEvent } from "../domain/event.ts";
 import { LumiscaCore } from "../mod.ts";
+import type {
+  BackgroundProcess,
+  BackgroundSpawner,
+  BackgroundSpawnInput,
+} from "../ports/background-backend.ts";
 import { decodeUtf8 } from "../shared/mod.ts";
 import {
   promptSession,
@@ -28,11 +33,6 @@ import {
   formatBackgroundNotification,
   MAX_BACKGROUND_COMMANDS,
 } from "./background.ts";
-import type {
-  BackgroundProcess,
-  BackgroundSpawner,
-  BackgroundSpawnInput,
-} from "./background-backend.ts";
 import { trimIncompleteUtf8 } from "./decode.ts";
 import { HostFileBackend } from "./host/files.ts";
 

@@ -26,6 +26,15 @@
  * comment.
  */
 import { CoreError } from "../errors.ts";
+import type { FileBackend } from "../ports/file-backend.ts";
+import {
+  array,
+  object,
+  optional,
+  string,
+  type Tool,
+  type ToolResult,
+} from "../ports/tool.ts";
 import {
   type AttachmentRef,
   type ChatMessage,
@@ -35,15 +44,6 @@ import {
 } from "../shared/mod.ts";
 import { firstAppCardProblem } from "../shared/ui-app/check.ts";
 import { attachFiles, type ChatAttachTarget } from "./attach.ts";
-import type { FileBackend } from "./file-backend.ts";
-import {
-  array,
-  object,
-  optional,
-  string,
-  type Tool,
-  type ToolResult,
-} from "./schema.ts";
 
 const sendChatSchema = object({
   text: optional(

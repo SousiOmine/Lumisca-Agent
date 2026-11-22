@@ -12,7 +12,6 @@
  * runs until the user closes it must not hold the tool call open.
  */
 import { CoreError } from "../errors.ts";
-import { TOOL_VM_LAUNCH } from "../shared/mod.ts";
 import {
   integer,
   object,
@@ -20,7 +19,8 @@ import {
   string,
   type Tool,
   type ToolResult,
-} from "../tools/schema.ts";
+} from "../ports/tool.ts";
+import { TOOL_VM_LAUNCH } from "../shared/mod.ts";
 import {
   APPLICATION_DIRS,
   applicationFromDesktopFile,

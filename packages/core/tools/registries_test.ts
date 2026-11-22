@@ -1,8 +1,8 @@
 import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
+import { object, type Tool, type ToolContentBlock } from "../ports/tool.ts";
 import { createToolCallTool } from "./call-tool.ts";
 import { SessionToolRegistries } from "./registries.ts";
-import { object, type Tool, type ToolContentBlock } from "./schema.ts";
 import { createToolSearchTool } from "./search-tool.ts";
 
 /** The text of a tool result (the search tools answer in text only). */

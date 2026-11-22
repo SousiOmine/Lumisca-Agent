@@ -1,4 +1,4 @@
-import type { Tool } from "../tools/schema.ts";
+import type { Tool } from "../ports/tool.ts";
 import type { McpConfig } from "./config.ts";
 import type { McpManager } from "./manager.ts";
 import { createMcpTools } from "./tools.ts";

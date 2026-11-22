@@ -1,14 +1,14 @@
 import { createReadStream } from "node:fs";
 import * as fsp from "node:fs/promises";
 import { mergeRanges, stripTrailingCR } from "../../lines.ts";
-import type { ResolvedPath, Sandbox } from "../../workspace/sandbox.ts";
 import type {
   BackendDirEntry,
   BackendStat,
   FileBackend,
   LineRange,
   RangeReadResult,
-} from "../file-backend.ts";
+} from "../../ports/file-backend.ts";
+import type { ResolvedPath, Sandbox } from "../../workspace/sandbox.ts";
 import { MAX_TOOL_OUTPUT } from "../truncate.ts";
 
 /**

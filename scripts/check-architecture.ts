@@ -212,6 +212,19 @@ export function checkLayers(files: readonly Source[], root = ROOT): string[] {
       ],
     },
     {
+      dir: "packages/core/ports",
+      forbidden: [
+        "packages/core/ai",
+        "packages/core/tools",
+        "packages/core/vm",
+        "packages/core/session",
+      ],
+    },
+    {
+      dir: "packages/core/vm",
+      forbidden: ["packages/core/tools"],
+    },
+    {
       dir: "packages/core/ai",
       forbidden: ["packages/core/domain", "packages/core/session"],
     },

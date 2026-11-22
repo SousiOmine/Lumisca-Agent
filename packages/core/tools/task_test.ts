@@ -21,6 +21,7 @@ import { McpAttachment } from "../mcp/attachment.ts";
 import { parseMcpConfig } from "../mcp/config.ts";
 import { McpManager } from "../mcp/manager.ts";
 import { CoreError, LumiscaCore } from "../mod.ts";
+import { object, type Tool } from "../ports/tool.ts";
 import { createAgentRepo } from "../session/agents.ts";
 import { createMessageRepo } from "../session/messages.ts";
 import { contentText } from "../shared/content.ts";
@@ -34,7 +35,6 @@ import type { SkillDef } from "../skills/discover.ts";
 import { promptSession, removeDirRetry } from "../test-utils.ts";
 import { SessionToolRegistries } from "./registries.ts";
 import { ToolRegistry } from "./registry.ts";
-import { object, type Tool } from "./schema.ts";
 import {
   createSendMessageTool,
   createTaskOutputTool,

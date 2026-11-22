@@ -26,6 +26,7 @@ import {
 import { McpManager } from "../mcp/manager.ts";
 import { createInstructionsProvider } from "../memory/instructions.ts";
 import { createPdfTools, PDF_TOOL_NAMES } from "../pdf/tools.ts";
+import type { Tool } from "../ports/tool.ts";
 import { createShareProvider } from "../share/context.ts";
 import { mountedBackends } from "../share/mounted-backends.ts";
 import { canonicalJson } from "../shared/digest.ts";
@@ -56,7 +57,6 @@ import {
   createStellaTools,
 } from "../tools/mod.ts";
 import { SessionToolRegistries } from "../tools/registries.ts";
-import type { Tool } from "../tools/schema.ts";
 import { renderToolSdk } from "../tools/sdk.ts";
 import { createToolSearchTool } from "../tools/search-tool.ts";
 import { createShareRequestTools } from "../tools/share-request.ts";

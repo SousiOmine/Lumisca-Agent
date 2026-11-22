@@ -10,6 +10,7 @@
  * untrusted, and a truncated result says how much was dropped.
  */
 
+import { integer, object, optional, string, type Tool } from "../ports/tool.ts";
 import { errorMessage } from "../shared/misc.ts";
 import { TOOL_WEB_FETCH, TOOL_WEB_SEARCH } from "../shared/tool-names.ts";
 import {
@@ -25,7 +26,6 @@ import type {
   SearchProvider,
   SearchResponse,
 } from "../websearch/types.ts";
-import { integer, object, optional, string, type Tool } from "./schema.ts";
 
 /** Characters of one whole search listing. Each excerpt is short, but ten of
  * them add up; the cap keeps one search from eating the turn. */

@@ -28,7 +28,6 @@
  * find, act, and find again when the window has changed underneath.
  */
 import { CoreError } from "../errors.ts";
-import { TOOL_VM_DO, TOOL_VM_FIND, TOOL_VM_WAIT } from "../shared/mod.ts";
 import {
   integer,
   object,
@@ -36,8 +35,9 @@ import {
   string,
   type Tool,
   type ToolResult,
-} from "../tools/schema.ts";
-import { requireOneOf } from "../tools/validate.ts";
+} from "../ports/tool.ts";
+import { requireOneOf } from "../ports/validate.ts";
+import { TOOL_VM_DO, TOOL_VM_FIND, TOOL_VM_WAIT } from "../shared/mod.ts";
 import type { VmExec } from "./container.ts";
 import { VM_A11Y_HELPER } from "./contract.ts";
 

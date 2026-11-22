@@ -1,5 +1,5 @@
 import { CoreError } from "../errors.ts";
-import type { SchemaObject, ToolSchema } from "./schema.ts";
+import type { SchemaObject, ToolSchema } from "./tool.ts";
 
 /**
  * Runtime argument checks that a provider may ignore: bounds and enum

@@ -34,10 +34,10 @@
  * machine is down, and the run it starts waits for the machine itself.
  */
 import { createHash } from "node:crypto";
+import type { CommandRunner } from "../ports/command-backend.ts";
+import type { FileBackend } from "../ports/file-backend.ts";
 import type { WatchSource } from "../shared/routine.ts";
 import { resolveWatchPath, watchIdsFrom } from "../shared/watch-path.ts";
-import type { CommandRunner } from "../tools/command-backend.ts";
-import type { FileBackend } from "../tools/file-backend.ts";
 
 /** What one check observed. The shape is deliberately small and plain: it is
  * stored as JSON on the routine's row and compared on the next check. */

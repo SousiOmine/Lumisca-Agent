@@ -2,24 +2,11 @@ import type { NotificationPayload } from "../ai/notification.ts";
 import type { ClientEvent } from "../domain/event.ts";
 import type { NotificationStatus } from "../domain/message.ts";
 import { CoreError } from "../errors.ts";
-import type { CommandSafety } from "../safety/command-safety.ts";
-import {
-  TOOL_ASYNC_BASH,
-  TOOL_ASYNC_BASH_KILL,
-  TOOL_ASYNC_BASH_STATUS,
-} from "../shared/mod.ts";
-import { defaultCwdArguments, WORKDIR_DESCRIPTION } from "./arguments.ts";
 import type {
   BackgroundProcess,
   BackgroundSpawner,
-} from "./background-backend.ts";
-import { decodeOutput, detectOemLabel, trimIncompleteUtf8 } from "./decode.ts";
-import { formatDuration } from "./duration.ts";
-import type { FileBackend } from "./file-backend.ts";
-import { HostBackgroundSpawner } from "./host/background.ts";
-import { FINAL_FLUSH_GRACE_MS, KILL_SETTLE_WAIT_MS } from "./process-policy.ts";
-import { requireResolved } from "./resolve.ts";
-import { safetyBlockResult } from "./safety.ts";
+} from "../ports/background-backend.ts";
+import type { FileBackend } from "../ports/file-backend.ts";
 import {
   integer,
   object,
@@ -27,7 +14,20 @@ import {
   string,
   stringMap,
   type Tool,
-} from "./schema.ts";
+} from "../ports/tool.ts";
+import type { CommandSafety } from "../safety/command-safety.ts";
+import {
+  TOOL_ASYNC_BASH,
+  TOOL_ASYNC_BASH_KILL,
+  TOOL_ASYNC_BASH_STATUS,
+} from "../shared/mod.ts";
+import { defaultCwdArguments, WORKDIR_DESCRIPTION } from "./arguments.ts";
+import { decodeOutput, detectOemLabel, trimIncompleteUtf8 } from "./decode.ts";
+import { formatDuration } from "./duration.ts";
+import { HostBackgroundSpawner } from "./host/background.ts";
+import { FINAL_FLUSH_GRACE_MS, KILL_SETTLE_WAIT_MS } from "./process-policy.ts";
+import { requireResolved } from "./resolve.ts";
+import { safetyBlockResult } from "./safety.ts";
 import { MAX_TOOL_OUTPUT } from "./truncate.ts";
 
 /** Concurrent background commands per session. Bounds resource usage; the

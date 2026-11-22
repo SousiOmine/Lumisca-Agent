@@ -3,7 +3,7 @@
  * Kept beside base64.ts because it is plain text algebra with no owner.
  */
 
-import type { LineRange } from "./tools/file-backend.ts";
+import type { LineRange } from "./ports/file-backend.ts";
 
 /** Sort ranges by start and merge overlaps/adjacency. */
 export function mergeRanges(ranges: readonly LineRange[]): LineRange[] {

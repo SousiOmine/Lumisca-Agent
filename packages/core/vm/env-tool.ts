@@ -14,7 +14,6 @@
  * cannot put a request in front of the user.
  */
 import { CoreError } from "../errors.ts";
-import { TOOL_VM_ENV } from "../shared/mod.ts";
 import {
   object,
   type SchemaObject,
@@ -22,7 +21,8 @@ import {
   string,
   type Tool,
   type ToolResult,
-} from "../tools/schema.ts";
+} from "../ports/tool.ts";
+import { TOOL_VM_ENV } from "../shared/mod.ts";
 import { ENV_REQUEST_TIMEOUT_MS, type EnvRequestHub } from "./env-request.ts";
 import { requireEnvName, type VmEnvStore } from "./env-store.ts";
 

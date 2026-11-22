@@ -10,7 +10,7 @@ import {
   stringMap,
   type Tool,
   type ToolSchema,
-} from "./schema.ts";
+} from "../ports/tool.ts";
 import { MAX_TOOL_SDK_CHARS, renderToolSdk } from "./sdk.ts";
 
 function tool(name: string, description: string, parameters: ToolSchema): Tool {

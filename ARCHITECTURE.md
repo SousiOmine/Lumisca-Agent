@@ -219,7 +219,7 @@ stella のサブエージェントにも渡しません（`SubagentRuntime.eval`
 境界はマシンのホーム（`/home/agent`）で、作業フォルダではありません。
 ほかの相手のフォルダも絶対パスで読み書きできます。
 ホストのファイルはマウントしていないので、マシンの外は依然として届きません。
-システムプロンプトにもこの規則を書いています（`tools/system-prompt.ts`）。
+システムプロンプトにもこの規則を書いています（`agent/system-prompt.ts`）。
 
 ### 相手（agent）と identity
 
@@ -235,7 +235,7 @@ stella の会話は「どのセッションを開くか」ではなく「誰と�
 上限は `role` が 20,000 文字、`identity` が 4,000 文字です。
 
 **名前はプロンプトに入りません。**
-プロンプトは `You are a helpful assistant.` に `role` を続けたもので（`tools/system-prompt.ts` の `buildStellaSystemPrompt`）、名前はいつでも変えられる表示情報だからです。
+プロンプトは `You are a helpful assistant.` に `role` を続けたもので（`agent/system-prompt.ts` の `buildStellaSystemPrompt`）、名前はいつでも変えられる表示情報だからです。
 既存の会話のプロンプトは書き換えないので、名前を変える前からある会話では、モデルが旧名を名乗ることがあります。
 
 ### 初回の設定（セットアップターン）
@@ -275,7 +275,7 @@ stella の会話は「どのセッションを開くか」ではなく「誰と�
   コマンドは `[ -e ]` で存在を確かめてから作ります。
   開くたびに走るので、無条件の `: >` だと記憶が毎回空になります（`stella_live_test.ts` が固定）。
 - 名前は 2 か所にあります。
-  文面は `tools/system-prompt.ts`、ファイル名は `AGENT_MEMORY_FILE` です。
+  文面は `agent/system-prompt.ts`、ファイル名は `AGENT_MEMORY_FILE` です。
   片方だけ変えると存在しないファイルを名指しすることになるので、`vm/agent-memory_test.ts` が一致を検査します。
 - プロンプトが言うのは 3 つです。
   覚えておくべきことは頼まれなくても書くこと、前に書いたかもしれないので読むこと、長くなると探せなくなるので整理して不要な行は消すことです。
@@ -431,7 +431,7 @@ UIはどちらの本文にも書けます。
   会話が読み取り専用のときは、入力とボタンを無効にします。
 - 文法はスキルで教えます。
   全カタログは大きいので、`shared/ui-app/help.ts`の`appHelp`を組み込みスキル`app-ui`の本文にします。
-  既定ではシステムプロンプトに`UI_HELP`の1文だけを載せ、`app-ui`スキルを読ませます（`tools/system-prompt.ts`）。
+  既定ではシステムプロンプトに`UI_HELP`の1文だけを載せ、`app-ui`スキルを読ませます（`agent/system-prompt.ts`）。
   設定 → 実験的機能の「生成UIのプロンプト処理を強化」を入れると、`UI_HELP`の代わりに`UI_HELP_INLINE`と`appHelp`を同じプロンプトに載せます。
   カタログを毎回のリクエストに載せるので、トークン使用量が増えます。
   この設定はプロンプトの入力なので、切り替えると開いているセッションを再構築します（`LumiscaCore.setAppUiInSystemPrompt`）。

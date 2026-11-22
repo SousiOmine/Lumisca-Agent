@@ -14,7 +14,6 @@
  * in the transcript).
  */
 import { CoreError } from "../errors.ts";
-import { TOOL_VM_ASK_USER } from "../shared/mod.ts";
 import {
   object,
   optional,
@@ -24,7 +23,8 @@ import {
   string,
   type Tool,
   type ToolResult,
-} from "../tools/schema.ts";
+} from "../ports/tool.ts";
+import { TOOL_VM_ASK_USER } from "../shared/mod.ts";
 import { HANDOVER_TIMEOUT_MS, type HandoverHub } from "./handover.ts";
 
 /** Longest reason / instructions accepted. These are read by the user in a

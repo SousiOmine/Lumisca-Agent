@@ -16,17 +16,17 @@
  */
 
 import { firstLine } from "../lines.ts";
-import { sleep } from "../shared/misc.ts";
 import type {
   BackgroundProcess,
   BackgroundSpawner,
   BackgroundSpawnInput,
-} from "../tools/background-backend.ts";
+} from "../ports/background-backend.ts";
 import type {
   CommandRunner,
   RunOptions,
   ShellRunResult,
-} from "../tools/command-backend.ts";
+} from "../ports/command-backend.ts";
+import { sleep } from "../shared/misc.ts";
 import type { VmExec } from "./container.ts";
 import { VM_BG_DIR } from "./contract.ts";
 import { VM_ENV_SOURCE } from "./env-store.ts";

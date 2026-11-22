@@ -18,14 +18,6 @@ import { base64ToBytes, bytesToBase64 } from "../base64.ts";
 import { CoreError } from "../errors.ts";
 import { prepareStoredImage } from "../media/stored-image.ts";
 import {
-  TOOL_BROWSER_ACT,
-  TOOL_BROWSER_CLOSE,
-  TOOL_BROWSER_OBSERVE,
-  TOOL_BROWSER_OPEN,
-  TOOL_BROWSER_SCREENSHOT,
-  TOOL_BROWSER_WAIT,
-} from "../shared/mod.ts";
-import {
   boolean,
   integer,
   object,
@@ -33,13 +25,21 @@ import {
   string,
   type Tool,
   type ToolResult,
-} from "../tools/schema.ts";
-import { truncatedHeadNote, truncateHead } from "../tools/truncate.ts";
+} from "../ports/tool.ts";
 import {
   requireInteger,
   requireIntegerInRange,
   requireOneOf,
-} from "../tools/validate.ts";
+} from "../ports/validate.ts";
+import {
+  TOOL_BROWSER_ACT,
+  TOOL_BROWSER_CLOSE,
+  TOOL_BROWSER_OBSERVE,
+  TOOL_BROWSER_OPEN,
+  TOOL_BROWSER_SCREENSHOT,
+  TOOL_BROWSER_WAIT,
+} from "../shared/mod.ts";
+import { truncatedHeadNote, truncateHead } from "../tools/truncate.ts";
 import { requireAllowedUrl } from "./policy.ts";
 import {
   type BrowserAction,

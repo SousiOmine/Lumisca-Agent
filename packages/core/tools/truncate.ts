@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { FileBackend } from "./file-backend.ts";
+import type { FileBackend } from "../ports/file-backend.ts";
 
 export const MAX_TOOL_OUTPUT = 64 * 1024;
 /** How much of a file one whole-file `read` transfers (its head; the cut

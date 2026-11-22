@@ -7,7 +7,7 @@
  * workspace sandbox) or the stella session's virtual machine
  * (`VmFileBackend`, over `podman exec`). A tool never learns which.
  */
-import type { FileBackend } from "./file-backend.ts";
+import type { FileBackend } from "../ports/file-backend.ts";
 
 export interface FsToolContext {
   files: FileBackend;

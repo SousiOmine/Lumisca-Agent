@@ -1,14 +1,14 @@
 import { CoreError } from "../errors.ts";
-import { TOOL_AGENT_CREATE } from "../shared/mod.ts";
-import type { FileBackend } from "../tools/file-backend.ts";
-import { requireExistingFileWithSize } from "../tools/resolve.ts";
+import type { FileBackend } from "../ports/file-backend.ts";
 import {
   object,
   optional,
   string,
   type Tool,
   type ToolResult,
-} from "../tools/schema.ts";
+} from "../ports/tool.ts";
+import { TOOL_AGENT_CREATE } from "../shared/mod.ts";
+import { requireExistingFileWithSize } from "../tools/resolve.ts";
 import {
   MAX_AGENT_NAME_CHARS,
   MAX_AGENT_ROLE_CHARS,

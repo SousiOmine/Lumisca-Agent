@@ -10,7 +10,7 @@ export {
   buildChatSystemPrompt,
   buildStellaSystemPrompt,
   buildSystemPrompt,
-} from "./system-prompt.ts";
+} from "../agent/system-prompt.ts";
 export type { ToolBackends, ToolFactoryOptions } from "./toolsets.ts";
 export {
   createChatTools,

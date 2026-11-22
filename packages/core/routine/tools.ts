@@ -17,6 +17,14 @@
  */
 
 import { CoreError } from "../errors.ts";
+import {
+  integer,
+  object,
+  optional,
+  string,
+  type Tool,
+  type ToolResult,
+} from "../ports/tool.ts";
 import { formatLocalDateTime, parseLocalDateTime } from "../shared/misc.ts";
 import {
   MAX_EVERY_MINUTES,
@@ -34,14 +42,6 @@ import {
   TOOL_ROUTINE_RUN,
   TOOL_ROUTINE_UPDATE,
 } from "../shared/mod.ts";
-import {
-  integer,
-  object,
-  optional,
-  string,
-  type Tool,
-  type ToolResult,
-} from "../tools/schema.ts";
 import type { RoutineRepo } from "./repo.ts";
 import type { RoutineRunState, RoutineScheduler } from "./scheduler.ts";
 

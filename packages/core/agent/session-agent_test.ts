@@ -21,13 +21,13 @@ import { MAX_EMPTY_RESPONSE_RETRIES } from "../ai/retry-policy.ts";
 import type { StreamOptions } from "../ai/transport.ts";
 import type { ClientEvent } from "../domain/event.ts";
 import type { NotificationMessage } from "../domain/message.ts";
+import { object, type Tool } from "../ports/tool.ts";
 import { contentText } from "../shared/mod.ts";
 import { AskHub } from "../tools/ask.ts";
 import type {
   BackgroundCommandDone,
   BackgroundProcessManager,
 } from "../tools/background.ts";
-import { object, type Tool } from "../tools/schema.ts";
 import { MAX_APP_CARD_RETRIES } from "./app-card-repair.ts";
 import { ROUTINE_SILENCE_GUIDANCE } from "./routine-guidance.ts";
 import type { SessionAgentOptions } from "./session-agent.ts";

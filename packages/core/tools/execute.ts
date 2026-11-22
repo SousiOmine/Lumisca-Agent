@@ -6,6 +6,15 @@ import type {
   CodeToolImage,
 } from "../code-execution/types.ts";
 import { errorMessage } from "../errors.ts";
+import {
+  integer,
+  object,
+  optional,
+  string,
+  type Tool,
+  type ToolContentBlock,
+  type ToolResult,
+} from "../ports/tool.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
 import {
   type AttachmentRef,
@@ -19,15 +28,6 @@ import {
 import type { ToolCatalog } from "./catalog.ts";
 import { composeScriptResult } from "./js-sandbox.ts";
 import { safetyBlockResult } from "./safety.ts";
-import {
-  integer,
-  object,
-  optional,
-  string,
-  type Tool,
-  type ToolContentBlock,
-  type ToolResult,
-} from "./schema.ts";
 import { truncate, truncatedNote } from "./truncate.ts";
 
 const DEFAULT_TIMEOUT_MS = 120_000;

@@ -1,9 +1,9 @@
 import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { LumiscaDb } from "../db/mod.ts";
+import type { CommandRunner } from "../ports/command-backend.ts";
+import type { FileBackend } from "../ports/file-backend.ts";
 import type { RoutineSchedule } from "../shared/routine.ts";
-import type { CommandRunner } from "../tools/command-backend.ts";
-import type { FileBackend } from "../tools/file-backend.ts";
 import { checkRoutine } from "./check.ts";
 import type { RoutineRepo } from "./repo.ts";
 import { createRoutineRepo } from "./repo.ts";

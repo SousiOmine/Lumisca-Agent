@@ -17,13 +17,42 @@ export function toPosix(p: string): string {
   return p.replace(/\\/g, "/");
 }
 
-/** True when `candidate` is `root` itself or sits below it. Both paths are
- * canonical, so a plain normalized-prefix check suffices. */
-export function isWithin(root: string, candidate: string): boolean {
-  const r = normalizeCase(toPosix(root));
-  const c = normalizeCase(toPosix(candidate));
+/** How a boundary compares paths. The default is this machine's rules;
+ * a path that belongs to a container or a remote peer is POSIX and
+ * case-sensitive whatever the host is. */
+export interface WithinOptions {
+  /** Fold case (Windows' filesystem). */
+  caseInsensitive?: boolean;
+  /** Compare as POSIX: forward slashes only, no host normalization. */
+  posix?: boolean;
+}
+
+/** True when `candidate` is `root` itself or sits below it. The one prefix
+ * rule behind every containment check: the workspace sandbox, the VM's
+ * home, a lent folder's namespace and a skill directory differ only in
+ * which separators and case rules apply. */
+export function isWithinWith(
+  root: string,
+  candidate: string,
+  options: WithinOptions = {},
+): boolean {
+  const fold = (path: string): string => {
+    const normalized = options.posix === true ? path : toPosix(path);
+    return options.caseInsensitive === true
+      ? normalized.toLowerCase()
+      : normalized;
+  };
+  const r = fold(root);
+  const c = fold(candidate);
   if (c === r) return true;
   return c.startsWith(r.endsWith("/") ? r : `${r}/`);
+}
+
+/** True when `candidate` is `root` itself or sits below it, under this
+ * machine's case and separator rules. Both paths are canonical, so a plain
+ * normalized-prefix check suffices. */
+export function isWithin(root: string, candidate: string): boolean {
+  return isWithinWith(root, candidate, { caseInsensitive: OS === "windows" });
 }
 
 /** Filesystem-resolved containment: when both paths resolve, the real path

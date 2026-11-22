@@ -8,11 +8,11 @@
  * all.
  */
 
+import type { BackgroundSpawner } from "../ports/background-backend.ts";
+import type { CommandRunner } from "../ports/command-backend.ts";
+import type { FileBackend } from "../ports/file-backend.ts";
+import type { Tool } from "../ports/tool.ts";
 import type { SkillDef } from "../skills/discover.ts";
-import type { BackgroundSpawner } from "../tools/background-backend.ts";
-import type { CommandRunner } from "../tools/command-backend.ts";
-import type { FileBackend } from "../tools/file-backend.ts";
-import type { Tool } from "../tools/schema.ts";
 import type { VmChannelOpener, VmExec } from "./container.ts";
 import type { EnvRequestHub } from "./env-request.ts";
 import type { HandoverHub } from "./handover.ts";

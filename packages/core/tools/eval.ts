@@ -1,8 +1,4 @@
 import { errorMessage } from "../errors.ts";
-import type { CommandSafety } from "../safety/command-safety.ts";
-import { TOOL_EVAL } from "../shared/mod.ts";
-import { composeScriptResult, JsSandbox, transpileToJs } from "./js-sandbox.ts";
-import { safetyBlockResult } from "./safety.ts";
 import {
   boolean,
   integer,
@@ -11,7 +7,11 @@ import {
   string,
   type Tool,
   type ToolResult,
-} from "./schema.ts";
+} from "../ports/tool.ts";
+import type { CommandSafety } from "../safety/command-safety.ts";
+import { TOOL_EVAL } from "../shared/mod.ts";
+import { composeScriptResult, JsSandbox, transpileToJs } from "./js-sandbox.ts";
+import { safetyBlockResult } from "./safety.ts";
 import { truncate, truncatedNote } from "./truncate.ts";
 
 const DEFAULT_TIMEOUT_MS = 5000;

@@ -3,11 +3,11 @@ import * as fsp from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
 import { join, join as pathJoin } from "node:path";
 import { assert, assertEquals, assertRejects } from "@std/assert";
+import type { ToolResult } from "../ports/tool.ts";
 import { SessionAttachmentStore } from "../session/attachments.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 import { createChatAttachTool } from "./attach.ts";
 import { HostFileBackend } from "./host/files.ts";
-import type { ToolResult } from "./schema.ts";
 
 /** A tool over a temp workspace: `root` is the folder paths resolve in. */
 async function fixture(

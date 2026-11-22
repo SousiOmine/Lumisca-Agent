@@ -1,14 +1,14 @@
 import { test } from "bun:test";
 import { assertEquals, assertRejects } from "@std/assert";
-import { ToolCatalog } from "./catalog.ts";
-import { ToolRegistry } from "./registry.ts";
 import {
   object,
   optional,
   string,
   type Tool,
   type ToolResult,
-} from "./schema.ts";
+} from "../ports/tool.ts";
+import { ToolCatalog } from "./catalog.ts";
+import { ToolRegistry } from "./registry.ts";
 
 /** A tool that answers its own name, so a call's route is observable. */
 function fakeTool(

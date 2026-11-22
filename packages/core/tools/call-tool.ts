@@ -1,12 +1,12 @@
-import { TOOL_CALL } from "../shared/mod.ts";
-import type { ToolRegistryProvider } from "./registry.ts";
 import {
   object,
   optional,
   string,
   type Tool,
   type ToolResult,
-} from "./schema.ts";
+} from "../ports/tool.ts";
+import { TOOL_CALL } from "../shared/mod.ts";
+import type { ToolRegistryProvider } from "./registry.ts";
 
 const toolCallSchema = object({
   name: string(

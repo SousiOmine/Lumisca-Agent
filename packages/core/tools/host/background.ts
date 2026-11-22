@@ -4,7 +4,7 @@ import type {
   BackgroundProcess,
   BackgroundSpawner,
   BackgroundSpawnInput,
-} from "../background-backend.ts";
+} from "../../ports/background-backend.ts";
 import { killProcessTree } from "./process-tree.ts";
 import { spawnShell } from "./shell.ts";
 

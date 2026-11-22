@@ -1,6 +1,6 @@
+import type { ToolResult } from "../ports/tool.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
 import type { CommandSafetyKind } from "../shared/mod.ts";
-import type { ToolResult } from "./schema.ts";
 
 /** Options shaping the blocked result. The eval tool prepends "[error]" and
  * carries extra details; bash/async_bash use the defaults. */

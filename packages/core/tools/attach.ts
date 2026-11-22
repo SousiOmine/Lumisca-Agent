@@ -1,4 +1,12 @@
 import { CoreError } from "../errors.ts";
+import type { FileBackend } from "../ports/file-backend.ts";
+import {
+  array,
+  object,
+  string,
+  type Tool,
+  type ToolResult,
+} from "../ports/tool.ts";
 import type { SessionAttachmentStore } from "../session/attachments.ts";
 import {
   type AttachmentRef,
@@ -7,9 +15,7 @@ import {
   MAX_ATTACHMENTS_TOTAL_BYTES,
   TOOL_CHAT_ATTACH,
 } from "../shared/mod.ts";
-import type { FileBackend } from "./file-backend.ts";
 import { requireExistingFileWithSize } from "./resolve.ts";
-import { array, object, string, type Tool, type ToolResult } from "./schema.ts";
 
 const attachSchema = object({
   paths: array(

@@ -14,11 +14,12 @@
  * direction is told which tool it wanted instead of quietly getting the
  * reverse.
  */
+
+import type { FileBackend } from "../ports/file-backend.ts";
+import { object, string, type Tool, type ToolResult } from "../ports/tool.ts";
 import { isSharePath } from "../share/grant.ts";
 import { TOOL_SHARE_DOWNLOAD, TOOL_SHARE_UPLOAD } from "../shared/mod.ts";
-import type { FileBackend } from "./file-backend.ts";
 import { requireResolved } from "./resolve.ts";
-import { object, string, type Tool, type ToolResult } from "./schema.ts";
 
 /** Largest file one call moves. The conversation can already attach 16 MiB to
  * one message, so this is generous for the files people hand an agent (a

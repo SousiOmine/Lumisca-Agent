@@ -1,6 +1,6 @@
 import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
-import type { RunOptions, ShellRunResult } from "../tools/command-backend.ts";
+import type { RunOptions, ShellRunResult } from "../ports/command-backend.ts";
 import { shareRootOf } from "./grant.ts";
 import { MountedRunner } from "./mounted-runner.ts";
 import { answerOf, grantOf, RecordingTransport } from "./test-utils.ts";

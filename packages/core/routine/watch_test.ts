@@ -8,6 +8,8 @@ import * as fsp from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
 import { join as pathJoin } from "node:path";
 import { assert, assertEquals } from "@std/assert";
+import type { CommandRunner } from "../ports/command-backend.ts";
+import type { FileBackend } from "../ports/file-backend.ts";
 import {
   MIN_WATCH_MINUTES,
   nextRunAt,
@@ -15,8 +17,6 @@ import {
   type RoutineSchedule,
   scheduleProblem,
 } from "../shared/routine.ts";
-import type { CommandRunner } from "../tools/command-backend.ts";
-import type { FileBackend } from "../tools/file-backend.ts";
 import { HostCommandRunner } from "../tools/host/command-runner.ts";
 import { HostFileBackend } from "../tools/host/files.ts";
 import { machineWatchFetch, parseWatchState, runWatch } from "../vm/watch.ts";

@@ -20,14 +20,15 @@
  * prompt only after the conversation is compacted or reopened. The tool's
  * result says so, and its `read` action shows the stored text now.
  */
-import { TOOL_IDENTITY } from "../shared/mod.ts";
+
 import {
   object,
   optional,
   string,
   type Tool,
   type ToolResult,
-} from "../tools/schema.ts";
+} from "../ports/tool.ts";
+import { TOOL_IDENTITY } from "../shared/mod.ts";
 import { MAX_AGENT_IDENTITY_CHARS } from "./agents.ts";
 
 /** What the tool needs of the agent row. A seam, so the tool is testable

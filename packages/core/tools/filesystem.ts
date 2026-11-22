@@ -1,6 +1,8 @@
 import { extname } from "node:path";
 import { bytesToBase64 } from "../base64.ts";
 import { prepareStoredImage, type StoredImage } from "../media/stored-image.ts";
+import type { BackendDirEntry, LineRange } from "../ports/file-backend.ts";
+import { object, string, type Tool } from "../ports/tool.ts";
 import {
   decodeUtf8,
   diffLineCounts,
@@ -11,9 +13,7 @@ import {
   TOOL_WRITE,
 } from "../shared/mod.ts";
 import type { FsToolContext } from "./context.ts";
-import type { BackendDirEntry, LineRange } from "./file-backend.ts";
 import { requireExistingFile, requireResolved } from "./resolve.ts";
-import { object, string, type Tool } from "./schema.ts";
 import { DEFAULT_READ_LIMIT, truncate, truncatedNote } from "./truncate.ts";
 
 /** Largest image handed to the model as an image block; anything bigger

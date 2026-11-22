@@ -13,6 +13,7 @@
  */
 import { posix } from "node:path";
 import type { FolderShare } from "../domain/share.ts";
+import { isWithinWith } from "../workspace/path-util.ts";
 
 /** The single root every lent folder hangs under. */
 export const SHARE_ROOT = "/lend";
@@ -79,8 +80,7 @@ export function isSharePath(path: string): boolean {
  * case on Windows) would be applying the server's rules to a stranger's path.
  */
 export function isWithinShare(root: string, candidate: string): boolean {
-  if (candidate === root) return true;
-  return candidate.startsWith(root.endsWith("/") ? root : `${root}/`);
+  return isWithinWith(root, candidate, { posix: true });
 }
 
 /**

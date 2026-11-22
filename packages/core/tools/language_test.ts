@@ -1,12 +1,15 @@
 import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
+import {
+  buildChatSystemPrompt,
+  buildSystemPrompt,
+} from "../agent/system-prompt.ts";
 import type { Workspace } from "../domain/workspace.ts";
 import { DEFAULT_LOCALE } from "../shared/mod.ts";
 import { TOOL_READ, TOOL_TODO } from "../shared/tool-names.ts";
 import { UI_HELP } from "../shared/ui-app/help.ts";
 import { outputLanguageRule, outputLanguageSentence } from "./language.ts";
 import { subagentSystemPrompt } from "./subagent-format.ts";
-import { buildChatSystemPrompt, buildSystemPrompt } from "./system-prompt.ts";
 
 /** A folder-less workspace for prompt tests. */
 const workspace: Workspace = {

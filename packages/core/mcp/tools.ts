@@ -1,10 +1,10 @@
 import type { Agent } from "../ai/agent.ts";
+import type { Tool } from "../ports/tool.ts";
+import { object } from "../ports/tool.ts";
 import { asArgsRecord } from "../tools/arguments.ts";
 import { createToolCallTool } from "../tools/call-tool.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
 import type { ToolRegistry } from "../tools/registry.ts";
-import type { Tool } from "../tools/schema.ts";
-import { object } from "../tools/schema.ts";
 import { createToolSearchTool } from "../tools/search-tool.ts";
 import type { McpManager, McpToolDef } from "./manager.ts";
 

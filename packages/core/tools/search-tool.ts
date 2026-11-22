@@ -1,6 +1,6 @@
+import { integer, object, optional, string, type Tool } from "../ports/tool.ts";
 import { TOOL_SEARCH } from "../shared/mod.ts";
 import type { ToolSearchProvider } from "./registry.ts";
-import { integer, object, optional, string, type Tool } from "./schema.ts";
 
 const toolSearchSchema = object({
   query: optional(

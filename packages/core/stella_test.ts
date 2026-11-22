@@ -2196,7 +2196,7 @@ test("stella prompt: the reply is the message, silence is asked for", async () =
   // prompt used to carry: the agent's own text IS what the user reads, and a
   // run that wants to say nothing writes the sentinel. A forgotten decision
   // therefore produces a message rather than an unanswered question.
-  const { buildStellaSystemPrompt } = await import("./tools/system-prompt.ts");
+  const { buildStellaSystemPrompt } = await import("./agent/system-prompt.ts");
   const prompt = buildStellaSystemPrompt({ agent: { role: "調べもの" } });
   assert(prompt.includes("Your reply is the message"), prompt);
   assert(prompt.includes("replies with exactly NO_RESPONSE"), prompt);
@@ -2215,7 +2215,7 @@ test("stella prompt: text beside a tool call is not delivered", async () => {
   // when nothing had been sent. The rule the projection enforces has to be
   // in the prompt too, because the model cannot tell a dropped message from
   // a shown one any other way.
-  const { buildStellaSystemPrompt } = await import("./tools/system-prompt.ts");
+  const { buildStellaSystemPrompt } = await import("./agent/system-prompt.ts");
   const prompt = buildStellaSystemPrompt({ agent: { role: "調べもの" } });
   assert(prompt.includes("also calls a tool"), prompt);
   assert(prompt.includes("the user never sees it"), prompt);
@@ -2230,7 +2230,7 @@ test("stella prompt: MEMORY.md is where the agent keeps what it must remember", 
   // run may have written, and keep the file short enough to search. The
   // prompt is the only place a convention about a FILE can be stated — no
   // tool description of `read` or `write` can say "keep your own notes here".
-  const { buildStellaSystemPrompt } = await import("./tools/system-prompt.ts");
+  const { buildStellaSystemPrompt } = await import("./agent/system-prompt.ts");
   const prompt = buildStellaSystemPrompt({
     agent: { role: "調べもの" },
     workdir: "/home/agent/agents/a1",

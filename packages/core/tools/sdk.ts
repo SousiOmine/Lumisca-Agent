@@ -1,4 +1,4 @@
-import type { Tool, ToolSchema } from "./schema.ts";
+import type { Tool, ToolSchema } from "../ports/tool.ts";
 
 /**
  * The character budget for the initial-tool declarations. Twelve thousand

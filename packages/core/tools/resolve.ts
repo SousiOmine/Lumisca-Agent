@@ -1,5 +1,5 @@
 import { CoreError } from "../errors.ts";
-import type { FileBackend } from "./file-backend.ts";
+import type { FileBackend } from "../ports/file-backend.ts";
 
 /** Resolve a path against the file backend, returning the resolved path or
  * throwing its rejection reason. Shared by every tool that takes a path

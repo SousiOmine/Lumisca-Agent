@@ -1,8 +1,5 @@
 import type { StellaEntry } from "../domain/stella-conversation.ts";
 import { CoreError } from "../errors.ts";
-import type { MessageWindow } from "../session/messages.ts";
-import { formatLocalDateTime } from "../shared/misc.ts";
-import { TOOL_HISTORY_SEARCH } from "../shared/mod.ts";
 import {
   integer,
   object,
@@ -14,9 +11,12 @@ import {
   string,
   type Tool,
   type ToolResult,
-} from "../tools/schema.ts";
+} from "../ports/tool.ts";
+import { requireIntegerInRange } from "../ports/validate.ts";
+import type { MessageWindow } from "../session/messages.ts";
+import { formatLocalDateTime } from "../shared/misc.ts";
+import { TOOL_HISTORY_SEARCH } from "../shared/mod.ts";
 import { truncatedHeadNote, truncateHead } from "../tools/truncate.ts";
-import { requireIntegerInRange } from "../tools/validate.ts";
 
 /**
  * `history_search`: read back what was said earlier in this conversation.

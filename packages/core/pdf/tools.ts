@@ -24,9 +24,7 @@ import { bytesToBase64 } from "../base64.ts";
 import { errorMessage } from "../errors.ts";
 import { prepareStoredImage } from "../media/stored-image.ts";
 import { OS } from "../platform.ts";
-import { TOOL_PDF_READ_PAGES } from "../shared/mod.ts";
-import type { FileBackend } from "../tools/file-backend.ts";
-import { requireExistingFile } from "../tools/resolve.ts";
+import type { FileBackend } from "../ports/file-backend.ts";
 import {
   array,
   integer,
@@ -34,8 +32,10 @@ import {
   optional,
   string,
   type Tool,
-} from "../tools/schema.ts";
-import { requireIntegerInRange } from "../tools/validate.ts";
+} from "../ports/tool.ts";
+import { requireIntegerInRange } from "../ports/validate.ts";
+import { TOOL_PDF_READ_PAGES } from "../shared/mod.ts";
+import { requireExistingFile } from "../tools/resolve.ts";
 import { findCanvasIcuDataFile } from "./icu-data.ts";
 
 /** The tool names of the PDF family. The session pool removes the seeded

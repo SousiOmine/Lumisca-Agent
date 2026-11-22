@@ -27,6 +27,7 @@ import { createLogger } from "../log.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
 import { withOnDemandToolsNote } from "../mcp/context.ts";
 import { addToolsToAgent, registryToolPair } from "../mcp/tools.ts";
+import type { Tool } from "../ports/tool.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
 import type { AgentRepo } from "../session/agents.ts";
 import type { MessageRepo } from "../session/messages.ts";
@@ -48,7 +49,6 @@ import { createBashTool } from "./bash.ts";
 import { createEvalTool } from "./eval.ts";
 import { toAgentTool } from "./pi-adapter.ts";
 import type { ToolRegistry } from "./registry.ts";
-import type { Tool } from "./schema.ts";
 import {
   formatTaskCompletion,
   lastAssistantText,

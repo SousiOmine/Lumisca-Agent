@@ -1,6 +1,13 @@
 import { test } from "bun:test";
 import { assertEquals, assertRejects } from "@std/assert";
 import { base64ToBytes, bytesToBase64 } from "../base64.ts";
+import type {
+  BackendDirEntry,
+  BackendStat,
+  FileBackend,
+  LineRange,
+  RangeReadResult,
+} from "../ports/file-backend.ts";
 import { MountedFiles } from "../share/mounted-files.ts";
 import type {
   ShareCall,
@@ -10,13 +17,6 @@ import type {
 } from "../share/ops.ts";
 import { grantOf } from "../share/test-utils.ts";
 import { toolText } from "../test-utils.ts";
-import type {
-  BackendDirEntry,
-  BackendStat,
-  FileBackend,
-  LineRange,
-  RangeReadResult,
-} from "./file-backend.ts";
 import {
   createShareDownloadTool,
   createShareUploadTool,

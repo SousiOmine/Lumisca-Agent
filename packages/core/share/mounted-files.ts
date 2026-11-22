@@ -21,7 +21,7 @@ import type {
   FileBackend,
   LineRange,
   RangeReadResult,
-} from "../tools/file-backend.ts";
+} from "../ports/file-backend.ts";
 import type { ResolvedPath } from "../workspace/sandbox.ts";
 import type { FolderGrant } from "./grant.ts";
 import { grantOwning, isSharePath, SHARE_ROOT, shareRootOf } from "./grant.ts";

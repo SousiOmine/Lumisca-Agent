@@ -18,13 +18,13 @@ import type {
   ToolResultMessage,
 } from "../domain/message.ts";
 import type { Api } from "../domain/model.ts";
+import { object, string, type Tool } from "../ports/tool.ts";
 import { contentText } from "../shared/mod.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import { fakeModel, MINI_PNG, withTempDir } from "../test-utils.ts";
 import { createReadFileTool } from "../tools/filesystem.ts";
 import { HostFileBackend } from "../tools/host/files.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
-import { object, string, type Tool } from "../tools/schema.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 
 /** A policy that reserves nothing: these tests are about tool execution,

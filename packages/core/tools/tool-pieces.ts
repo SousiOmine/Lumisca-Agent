@@ -12,14 +12,15 @@
  */
 import type { Workspace } from "../domain/workspace.ts";
 import { discoverPlugins } from "../plugins/discover.ts";
+import type { CommandRunner } from "../ports/command-backend.ts";
+import type { FileBackend } from "../ports/file-backend.ts";
+import type { Tool } from "../ports/tool.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
 import { appSkillDirs as defaultAppSkillDirs } from "../settings/path.ts";
 import { builtinSkills } from "../skills/builtin/mod.ts";
 import { discoverSkills, type SkillDef } from "../skills/discover.ts";
 import { Sandbox } from "../workspace/sandbox.ts";
 import { createBashTool } from "./bash.ts";
-import type { CommandRunner } from "./command-backend.ts";
-import type { FileBackend } from "./file-backend.ts";
 import {
   createEditFileTool,
   createListDirTool,
@@ -28,7 +29,6 @@ import {
 } from "./filesystem.ts";
 import { HostCommandRunner } from "./host/command-runner.ts";
 import { HostFileBackend } from "./host/files.ts";
-import type { Tool } from "./schema.ts";
 
 /** Skills for a session, in precedence order: workspace `.agents/skills`,
  * then agent plugin skills (`skills/` of `.agents/plugins` plugins), then

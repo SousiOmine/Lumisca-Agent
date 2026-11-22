@@ -1,3 +1,4 @@
+import type { Tool, ToolResult } from "../ports/tool.ts";
 import {
   browseTools,
   callTool,
@@ -7,7 +8,6 @@ import {
   type ToolSearchEntry,
   type ToolSearchSource,
 } from "./registry.ts";
-import type { Tool, ToolResult } from "./schema.ts";
 
 /**
  * Everything one agent may call, as one list.

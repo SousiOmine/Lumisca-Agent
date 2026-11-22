@@ -1,7 +1,7 @@
 import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { CoreError } from "../errors.ts";
-import type { Tool } from "../tools/schema.ts";
+import type { Tool } from "../ports/tool.ts";
 import type { VmExec, VmExecOptions } from "./container.ts";
 import { createVmSemanticTools } from "./semantic.ts";
 

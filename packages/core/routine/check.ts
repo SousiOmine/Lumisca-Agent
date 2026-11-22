@@ -13,9 +13,10 @@
  * MCP tool is answered by the server process's own connection — the one the
  * agent calls through — so that check runs whether or not the machine is up.
  */
+
+import type { CommandRunner } from "../ports/command-backend.ts";
+import type { FileBackend } from "../ports/file-backend.ts";
 import type { Routine } from "../shared/routine.ts";
-import type { CommandRunner } from "../tools/command-backend.ts";
-import type { FileBackend } from "../tools/file-backend.ts";
 import { machineWatchFetch, parseWatchState, runWatch } from "../vm/watch.ts";
 import type { WatchCheck } from "./scheduler.ts";
 

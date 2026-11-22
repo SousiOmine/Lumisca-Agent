@@ -20,7 +20,8 @@ import type {
   FileBackend,
   LineRange,
   RangeReadResult,
-} from "../tools/file-backend.ts";
+} from "../ports/file-backend.ts";
+import { isWithinWith } from "../workspace/path-util.ts";
 import type { ResolvedPath } from "../workspace/sandbox.ts";
 import type { VmExec } from "./container.ts";
 import { VM_WORKDIR } from "./contract.ts";
@@ -335,10 +336,8 @@ export function resolveVmPath(
   return { ok: true, path: absolute };
 }
 
-/** True when `path` is `root` itself or inside it (both absolute and
- * normalized). */
+/** True when `path` is `root` itself or inside it. The VM's paths are
+ * POSIX: they are compared without the host's case and separator rules. */
 function isInside(root: string, path: string): boolean {
-  if (path === root) return true;
-  const prefix = root.endsWith("/") ? root : `${root}/`;
-  return path.startsWith(prefix);
+  return isWithinWith(root, path, { posix: true });
 }

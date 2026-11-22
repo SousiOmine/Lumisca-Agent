@@ -17,13 +17,13 @@
  */
 
 import type { ShareHostInfo } from "../domain/share.ts";
-import type { ShellRunResult } from "../tools/command-backend.ts";
+import type { ShellRunResult } from "../ports/command-backend.ts";
 import type {
   BackendDirEntry,
   BackendStat,
   LineRange,
   RangeReadResult,
-} from "../tools/file-backend.ts";
+} from "../ports/file-backend.ts";
 import type { FolderGrant } from "./grant.ts";
 
 /** Largest single read the wire carries. Bigger than any tool's own output

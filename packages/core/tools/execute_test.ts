@@ -6,18 +6,18 @@ import type {
   CodeStoreRepo,
   CodeStoreSession,
 } from "../code-execution/store.ts";
-import type { CommandSafety } from "../safety/command-safety.ts";
-import { toolText } from "../test-utils.ts";
-import { ToolCatalog } from "./catalog.ts";
-import { createExecuteTool } from "./execute.ts";
-import { ToolRegistry } from "./registry.ts";
 import {
   object,
   optional,
   string,
   type Tool,
   type ToolResult,
-} from "./schema.ts";
+} from "../ports/tool.ts";
+import type { CommandSafety } from "../safety/command-safety.ts";
+import { toolText } from "../test-utils.ts";
+import { ToolCatalog } from "./catalog.ts";
+import { createExecuteTool } from "./execute.ts";
+import { ToolRegistry } from "./registry.ts";
 import { createToolSearchTool } from "./search-tool.ts";
 
 function fakeTool(

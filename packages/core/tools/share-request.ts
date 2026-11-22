@@ -20,6 +20,14 @@
  */
 import { CoreError } from "../errors.ts";
 import {
+  object,
+  type SchemaObject,
+  type SchemaString,
+  string,
+  type Tool,
+  type ToolResult,
+} from "../ports/tool.ts";
+import {
   describeGrant,
   type FolderGrant,
   isShareName,
@@ -32,14 +40,6 @@ import {
   type ShareRequestOutcome,
 } from "../share/request.ts";
 import { TOOL_SHARE_DISCONNECT, TOOL_SHARE_REQUEST } from "../shared/mod.ts";
-import {
-  object,
-  type SchemaObject,
-  type SchemaString,
-  string,
-  type Tool,
-  type ToolResult,
-} from "../tools/schema.ts";
 
 /** Longest reason accepted for a request. It is a sentence the user reads in
  * a card, not a document; the limit is the hand-over's, so the two cards that

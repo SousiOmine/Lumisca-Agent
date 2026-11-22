@@ -27,6 +27,7 @@ import { errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
 import type { McpServerStatus } from "../mcp/manager.ts";
+import type { Tool } from "../ports/tool.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import { messageIdentityOf } from "../session/transcript-window.ts";
 import type { PendingShareRequest, ShareRequestHub } from "../share/request.ts";
@@ -48,7 +49,6 @@ import type {
 import { formatBackgroundNotification } from "../tools/background.ts";
 import { toAgentTool } from "../tools/pi-adapter.ts";
 import type { SessionToolRegistries } from "../tools/registries.ts";
-import type { Tool } from "../tools/schema.ts";
 import type { TaskHub } from "../tools/task-hub.ts";
 import type { EnvRequestHub, PendingEnvRequest } from "../vm/env-request.ts";
 import type { HandoverHub, PendingHandover } from "../vm/handover.ts";

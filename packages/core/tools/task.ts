@@ -1,9 +1,3 @@
-import type { SubagentType } from "../shared/mod.ts";
-import {
-  TOOL_SEND_MESSAGE,
-  TOOL_TASK,
-  TOOL_TASK_OUTPUT,
-} from "../shared/mod.ts";
 import {
   boolean,
   integer,
@@ -12,10 +6,16 @@ import {
   string,
   type Tool,
   type ToolResult,
-} from "./schema.ts";
+} from "../ports/tool.ts";
+import { requireIntegerInRange, requireOneOf } from "../ports/validate.ts";
+import type { SubagentType } from "../shared/mod.ts";
+import {
+  TOOL_SEND_MESSAGE,
+  TOOL_TASK,
+  TOOL_TASK_OUTPUT,
+} from "../shared/mod.ts";
 import { formatTaskOutput } from "./subagent-format.ts";
 import type { SubagentHub } from "./subagent-registry.ts";
-import { requireIntegerInRange, requireOneOf } from "./validate.ts";
 
 // --- tools -------------------------------------------------------------------
 

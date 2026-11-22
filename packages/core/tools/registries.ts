@@ -1,5 +1,5 @@
+import type { Tool } from "../ports/tool.ts";
 import { ToolRegistry } from "./registry.ts";
-import type { Tool } from "./schema.ts";
 
 /**
  * The two tool registries one session holds: the main agent's and its

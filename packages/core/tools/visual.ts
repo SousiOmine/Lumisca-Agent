@@ -1,4 +1,6 @@
 import { basename, extname } from "node:path";
+import type { FileBackend } from "../ports/file-backend.ts";
+import { object, optional, string, type Tool } from "../ports/tool.ts";
 import type { SessionVisualStore } from "../session/visuals.ts";
 import {
   isVisualExtension,
@@ -9,9 +11,7 @@ import {
   VISUAL_MIME_BY_EXTENSION,
   visualRef,
 } from "../shared/mod.ts";
-import type { FileBackend } from "./file-backend.ts";
 import { requireExistingFile } from "./resolve.ts";
-import { object, optional, string, type Tool } from "./schema.ts";
 
 const visualSchema = object({
   path: string(

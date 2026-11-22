@@ -1,7 +1,7 @@
 import type { AgentTool } from "../ai/agent-types.ts";
 
-import type { Infer, Tool, ToolSchema } from "./schema.ts";
-import { assertSchemaBounds } from "./validate.ts";
+import type { Infer, Tool, ToolSchema } from "../ports/tool.ts";
+import { assertSchemaBounds } from "../ports/validate.ts";
 
 /**
  * Convert a Lumisca tool into the agent runtime's AgentTool. `parameters`

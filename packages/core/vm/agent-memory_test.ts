@@ -1,6 +1,6 @@
 import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
-import { buildStellaSystemPrompt } from "../tools/system-prompt.ts";
+import { buildStellaSystemPrompt } from "../agent/system-prompt.ts";
 import {
   AGENT_MEMORY_FILE,
   ensureAgentMemory,

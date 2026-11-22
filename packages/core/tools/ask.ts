@@ -1,12 +1,6 @@
 import type { ClientEvent } from "../domain/event.ts";
 import { CoreError } from "../errors.ts";
 import {
-  type AskAnswer,
-  type AskQuestion,
-  type AskTurn,
-  TOOL_ASK,
-} from "../shared/mod.ts";
-import {
   array,
   boolean,
   integer,
@@ -15,8 +9,14 @@ import {
   string,
   type Tool,
   type ToolResult,
-} from "./schema.ts";
-import { requireStringValue } from "./validate.ts";
+} from "../ports/tool.ts";
+import { requireStringValue } from "../ports/validate.ts";
+import {
+  type AskAnswer,
+  type AskQuestion,
+  type AskTurn,
+  TOOL_ASK,
+} from "../shared/mod.ts";
 
 /** A pending ask: the questions shown to the user, with the resolvers that
  * the answer (or the session teardown) settles. */

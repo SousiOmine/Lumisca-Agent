@@ -1,10 +1,10 @@
 import { test } from "bun:test";
 import { assertEquals, assertThrows } from "@std/assert";
 import { CoreError } from "../errors.ts";
+import { integer, object, optional, string, type Tool } from "../ports/tool.ts";
+import { assertSchemaBounds } from "../ports/validate.ts";
 import { toAgentTool } from "./pi-adapter.ts";
 import { ToolRegistry } from "./registry.ts";
-import { integer, object, optional, string, type Tool } from "./schema.ts";
-import { assertSchemaBounds } from "./validate.ts";
 
 /** The `bash` schema as the model was told it, and the argument shapes it
  * actually sent (see the regression note in the required-argument test). */

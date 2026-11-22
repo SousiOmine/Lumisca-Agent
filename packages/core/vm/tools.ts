@@ -17,24 +17,24 @@ import { bytesToBase64 } from "../base64.ts";
 import { CoreError } from "../errors.ts";
 import { prepareStoredImage } from "../media/stored-image.ts";
 import {
-  abortError,
-  sleepAbortable,
-  TOOL_VM_ACT,
-  TOOL_VM_SCREENSHOT,
-} from "../shared/mod.ts";
-import {
   integer,
   object,
   optional,
   string,
   type Tool,
   type ToolResult,
-} from "../tools/schema.ts";
+} from "../ports/tool.ts";
 import {
   requireInteger,
   requireIntegerInRange,
   requireOneOf,
-} from "../tools/validate.ts";
+} from "../ports/validate.ts";
+import {
+  abortError,
+  sleepAbortable,
+  TOOL_VM_ACT,
+  TOOL_VM_SCREENSHOT,
+} from "../shared/mod.ts";
 
 /** A required integer argument: the schema marks it optional (the action
  * decides which coordinates apply), so the message names the action. */

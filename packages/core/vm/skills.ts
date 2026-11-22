@@ -23,6 +23,7 @@ import { posix } from "node:path";
 import type { SkillDef } from "../skills/discover.ts";
 import { discoverSkills, MAX_SKILL_FILE_BYTES } from "../skills/discover.ts";
 import { parseSkillFrontmatter } from "../skills/frontmatter.ts";
+import { isWithinWith } from "../workspace/path-util.ts";
 import type { VmExec } from "./container.ts";
 import { VM_SKILLS_DIR, vmAgentSkillsDir } from "./contract.ts";
 
@@ -182,8 +183,7 @@ function skillTarget(
     );
   }
   const target = posix.normalize(posix.join(skillDir, relativePath));
-  const prefix = skillDir.endsWith("/") ? skillDir : `${skillDir}/`;
-  if (target !== skillDir && !target.startsWith(prefix)) {
+  if (!isWithinWith(skillDir, target, { posix: true })) {
     throw new Error(
       `Path escapes the skill directory of "${name}": ${relativePath}`,
     );

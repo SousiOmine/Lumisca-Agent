@@ -1,14 +1,8 @@
-import type { CommandSafety } from "../safety/command-safety.ts";
-import { TOOL_BASH } from "../shared/mod.ts";
-import { defaultCwdArguments, WORKDIR_DESCRIPTION } from "./arguments.ts";
 import {
   type CommandRunner,
   MAX_RAW_COMMAND_OUTPUT,
-} from "./command-backend.ts";
-import { formatDuration } from "./duration.ts";
-import type { FileBackend } from "./file-backend.ts";
-import { requireResolved } from "./resolve.ts";
-import { safetyBlockResult } from "./safety.ts";
+} from "../ports/command-backend.ts";
+import type { FileBackend } from "../ports/file-backend.ts";
 import {
   integer,
   object,
@@ -16,7 +10,13 @@ import {
   string,
   stringMap,
   type Tool,
-} from "./schema.ts";
+} from "../ports/tool.ts";
+import type { CommandSafety } from "../safety/command-safety.ts";
+import { TOOL_BASH } from "../shared/mod.ts";
+import { defaultCwdArguments, WORKDIR_DESCRIPTION } from "./arguments.ts";
+import { formatDuration } from "./duration.ts";
+import { requireResolved } from "./resolve.ts";
+import { safetyBlockResult } from "./safety.ts";
 import {
   MAX_TOOL_OUTPUT,
   OutputSpiller,

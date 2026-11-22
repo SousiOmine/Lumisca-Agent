@@ -17,7 +17,7 @@ import type {
   CommandRunner,
   RunOptions,
   ShellRunResult,
-} from "../tools/command-backend.ts";
+} from "../ports/command-backend.ts";
 import type { FolderGrant } from "./grant.ts";
 import { grantOwning, relativeSegments, shareRootOf } from "./grant.ts";
 import type { ShareTransport } from "./ops.ts";

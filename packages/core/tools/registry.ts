@@ -1,6 +1,6 @@
-import type { Tool, ToolResult } from "./schema.ts";
+import type { Tool, ToolResult } from "../ports/tool.ts";
+import { assertSchemaBounds } from "../ports/validate.ts";
 import { truncatedHeadNote, truncateHead } from "./truncate.ts";
-import { assertSchemaBounds } from "./validate.ts";
 
 /**
  * Tools that are not preloaded into the LLM context, discoverable through

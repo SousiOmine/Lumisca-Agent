@@ -13,13 +13,6 @@
  * actually offers instead of promising names it guessed.
  */
 import { CoreError } from "../errors.ts";
-import type { McpServerConfig } from "../shared/mcp-config.ts";
-import { serializeMcpServers } from "../shared/mcp-config.ts";
-import {
-  TOOL_MCP_ADD,
-  TOOL_MCP_LIST,
-  TOOL_MCP_REMOVE,
-} from "../shared/tool-names.ts";
 import {
   array,
   boolean,
@@ -29,7 +22,14 @@ import {
   stringMap,
   type Tool,
   type ToolResult,
-} from "../tools/schema.ts";
+} from "../ports/tool.ts";
+import type { McpServerConfig } from "../shared/mcp-config.ts";
+import { serializeMcpServers } from "../shared/mcp-config.ts";
+import {
+  TOOL_MCP_ADD,
+  TOOL_MCP_LIST,
+  TOOL_MCP_REMOVE,
+} from "../shared/tool-names.ts";
 import type { McpInfo, McpServerInfo } from "./config.ts";
 import type { McpTestResult } from "./service.ts";
 

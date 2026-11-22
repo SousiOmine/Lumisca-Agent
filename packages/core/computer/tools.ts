@@ -25,23 +25,23 @@ import { bytesToBase64 } from "../base64.ts";
 import { CoreError } from "../errors.ts";
 import { prepareStoredImage } from "../media/stored-image.ts";
 import {
-  TOOL_COMPUTER_ACT,
-  TOOL_COMPUTER_LIST_WINDOWS,
-  TOOL_COMPUTER_SCREENSHOT,
-} from "../shared/mod.ts";
-import {
   integer,
   object,
   optional,
   string,
   type Tool,
   type ToolResult,
-} from "../tools/schema.ts";
+} from "../ports/tool.ts";
 import {
   requireInteger,
   requireIntegerInRange,
   requireOneOf,
-} from "../tools/validate.ts";
+} from "../ports/validate.ts";
+import {
+  TOOL_COMPUTER_ACT,
+  TOOL_COMPUTER_LIST_WINDOWS,
+  TOOL_COMPUTER_SCREENSHOT,
+} from "../shared/mod.ts";
 import {
   DEFAULT_MAX_DIMENSION,
   encodeCapture,
