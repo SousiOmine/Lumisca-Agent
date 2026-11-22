@@ -89,6 +89,30 @@ export const settings = {
     ja: "サーバーに接続できないため、更新状態を取得できませんでした。",
     en: "Could not read the update state: the server could not be reached.",
   },
+  "settings.update.error.check": {
+    ja: "更新の確認に失敗しました。{detail}。",
+    en: "Could not check for updates. {detail}",
+  },
+  "settings.update.error.download": {
+    ja: "更新のダウンロードに失敗しました。{detail}。",
+    en: "Could not download the update. {detail}",
+  },
+  "settings.update.error.apply": {
+    ja: "更新の適用に失敗しました。{detail}。",
+    en: "Could not apply the update. {detail}",
+  },
+  "settings.update.error.restart": {
+    ja: "再起動に失敗しました。{detail}。",
+    en: "Could not restart. {detail}",
+  },
+  "settings.update.error.restartDisabled": {
+    ja: "このサーバーは自動再起動が無効です。次回の起動で新しいバージョンが有効になります。",
+    en: "This server cannot restart itself. The new version takes effect at the next start.",
+  },
+  "settings.update.error.nothingToRestart": {
+    ja: "再起動して有効になる更新がありません。",
+    en: "No update is waiting for a restart.",
+  },
   "settings.general.updateReadFailed": {
     ja: "サーバーの更新状態を取得できませんでした: {error}",
     en: "Could not read the server's update state: {error}",

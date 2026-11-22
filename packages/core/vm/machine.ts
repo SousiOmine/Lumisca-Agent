@@ -158,9 +158,8 @@ export class StellaMachine {
       host === undefined
         ? {
             available: false as const,
-            reason:
-              "stella mode is not available: the virtual machine is not set up " +
-              "for this installation",
+            code: "vm_not_set_up" as const,
+            detail: "the virtual machine is not set up for this installation",
           }
         : stellaAvailability(await host.status());
     this.#verdict = verdict;
@@ -258,7 +257,7 @@ export class StellaMachine {
       return {
         availability,
         starting: false,
-        reason: availability.available ? "" : availability.reason,
+        reason: availability.available ? "" : availability.detail,
       };
     }
     const shared = await host.status({ fresh: true });

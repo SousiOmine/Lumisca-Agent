@@ -117,7 +117,7 @@ test("stella availability: no machine attached reports its own reason", async ()
       await core.services.stellaMachines.getStellaAvailability();
     assertEquals(availability.available, false);
     if (!availability.available) {
-      assert(availability.reason.includes("not set up"), availability.reason);
+      assertEquals(availability.code, "vm_not_set_up");
     }
     await assertRejects(
       () => core.internals.getOrCreateStellaSession(),
@@ -152,7 +152,8 @@ test("stella availability: podman missing is not", async () => {
       await core.services.stellaMachines.getStellaAvailability();
     assertEquals(availability.available, false);
     if (!availability.available) {
-      assert(availability.reason.includes("podman"), availability.reason);
+      assertEquals(availability.code, "podman_missing");
+      assert(availability.detail.includes("podman"), availability.detail);
     }
   } finally {
     await core.close();

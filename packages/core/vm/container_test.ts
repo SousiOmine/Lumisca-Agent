@@ -1212,10 +1212,8 @@ test("status: podman that cannot start a container is not offered", async () => 
     const verdict = stellaAvailability(status);
     assertEquals(verdict.available, false);
     assert(verdict.available === false, "the mode must be refused");
-    assert(
-      verdict.reason.includes("cannot start one"),
-      `verdict: ${verdict.reason}`,
-    );
+    assertEquals(verdict.code, "podman_unusable");
+    assert(verdict.detail.length > 0, `verdict detail: ${verdict.detail}`);
   } finally {
     await fsp.rm(dir, { recursive: true });
   }

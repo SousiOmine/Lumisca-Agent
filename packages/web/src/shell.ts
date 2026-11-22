@@ -233,7 +233,7 @@ export interface UpdateStatus {
    * the UI shows it as "installing…" with the action unavailable. */
   installing?: boolean;
   ready: boolean;
-  error: string | null;
+  error: { code: string; detail: string } | string | null;
   /** What the running process reports. After an update the files on disk are
    * newer: that is `appliedVersion` + `restartPending`. */
   currentVersion: string;

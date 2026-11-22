@@ -123,7 +123,7 @@ export function useAppMode(mode: AppMode | null): {
       const current = await api.getStellaStatus();
       setStatus(current);
       if (!current.availability.available) {
-        throw new Error(current.availability.reason);
+        throw new Error(current.availability.code);
       }
     }
   }, []);

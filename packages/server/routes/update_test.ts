@@ -35,7 +35,11 @@ function status(overrides: Partial<UpdateStatus> = {}): UpdateStatus {
 function fakeApi(): { api: UpdateApi; calls: string[] } {
   const calls: string[] = [];
   const api: UpdateApi = {
-    status: () => status({ error: calls.join(",") || null }),
+    status: () =>
+      status({
+        error:
+          calls.length > 0 ? { code: "check", detail: calls.join(",") } : null,
+      }),
     setAuto: (enabled) => {
       calls.push(`set-auto:${enabled}`);
       return status({ autoUpdate: enabled });

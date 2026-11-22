@@ -19,6 +19,7 @@ import {
   type Locale,
   type MessageKey,
   type MessageParams,
+  type StellaAvailability,
   type Translator,
   translate,
 } from "@lumisca/core/shared";
@@ -108,4 +109,21 @@ export function describeError(error: unknown, t: Translator): string {
 function applyDocumentLanguage(): void {
   if (typeof document === "undefined") return;
   document.documentElement.lang = store.get();
+}
+
+/** Why stella mode cannot run, as a sentence in the current language. The
+ * core sends a code and a technical detail; only the code is shown. */
+export function stellaUnavailableReason(
+  t: Translator,
+  availability: StellaAvailability,
+): string {
+  if (availability.available) return "";
+  switch (availability.code) {
+    case "podman_missing":
+      return t("chat.stella.unavailable.podmanMissing");
+    case "podman_unusable":
+      return t("chat.stella.unavailable.podmanUnusable");
+    case "vm_not_set_up":
+      return t("chat.stella.unavailable.vmNotSetUp");
+  }
 }

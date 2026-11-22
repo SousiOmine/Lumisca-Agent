@@ -1,4 +1,4 @@
-import { formatBytes } from "@lumisca/core/shared";
+import { formatBytes, type Translator } from "@lumisca/core/shared";
 import type { ReactNode } from "preact/compat";
 import type {
   UpdateFailureKind,
@@ -260,7 +260,9 @@ export function UpdateSection({
         </p>
       )}
 
-      {status.error && <div className="error-text">{status.error}</div>}
+      {status.error && (
+        <div className="error-text">{updateErrorText(t, status.error)}</div>
+      )}
       {/* A shell failure and a server failure are different sentences: the
           bridge's "cannot communicate with the desktop shell" would be
           wrong here, where the server itself is what did not answer. */}
@@ -277,4 +279,27 @@ export function UpdateSection({
       )}
     </>
   );
+}
+
+function updateErrorText(
+  t: Translator,
+  error: { code: string; detail: string } | string,
+): string {
+  if (typeof error === "string") return error;
+  switch (error.code) {
+    case "check":
+      return t("settings.update.error.check", { detail: error.detail });
+    case "download":
+      return t("settings.update.error.download", { detail: error.detail });
+    case "apply":
+      return t("settings.update.error.apply", { detail: error.detail });
+    case "restart":
+      return t("settings.update.error.restart", { detail: error.detail });
+    case "restart_disabled":
+      return t("settings.update.error.restartDisabled");
+    case "nothing_to_restart":
+      return t("settings.update.error.nothingToRestart");
+    default:
+      return error.detail;
+  }
 }

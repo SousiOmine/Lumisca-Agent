@@ -80,13 +80,19 @@ export interface PeerStatus {
 
 // --- stella's machine (server/routes/stella.ts ↔ web/hooks/useAppMode.ts) ----
 
-/** Whether stella mode can run at all on a machine. `reason` is a full
- * sentence shown to the user: which prerequisite is missing and what to do
- * about it. The verdict itself is decided by vm/availability.ts from the
- * machine's status; the TYPE lives here because the client renders it. */
+/** Whether stella mode can run at all on a machine.
+ *
+ * A refusal carries a code the client translates and a detail for
+ * diagnostics; the core never sends a finished sentence. The verdict itself
+ * is decided by vm/availability.ts from the machine's status; the TYPE lives
+ * here because the client renders it. */
 export type StellaAvailability =
   | { available: true }
-  | { available: false; reason: string };
+  | {
+      available: false;
+      code: "vm_not_set_up" | "podman_missing" | "podman_unusable";
+      detail: string;
+    };
 
 /** What one client reads about stella mode as a whole
  * (`GET /api/stella/status`). The CHOSEN mode is deliberately not part of it:

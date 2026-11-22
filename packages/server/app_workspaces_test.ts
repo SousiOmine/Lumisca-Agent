@@ -1129,7 +1129,11 @@ test("stella API: the status reports the availability and the machine", async ()
     const status = await json(base, "/api/stella/status");
     assertEquals(status.status, 200);
     const body = (await status.json()) as {
-      availability: { available: boolean; reason?: string };
+      availability: {
+        available: boolean;
+        code?: string;
+        detail?: string;
+      };
       starting: boolean;
       reason: string;
     };
@@ -1137,7 +1141,7 @@ test("stella API: the status reports the availability and the machine", async ()
     assertEquals(body.starting, false);
     assert(
       body.availability.available === false &&
-        body.availability.reason?.includes("not set up"),
+        body.availability.code === "vm_not_set_up",
       JSON.stringify(body),
     );
     // The chosen mode belongs to the CLIENT, so the server never reports

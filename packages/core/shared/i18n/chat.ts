@@ -302,6 +302,18 @@ export const chat = {
     ja: "Lumiscaモードはこのサーバーで使えません: {reason}",
     en: "Lumisca mode cannot run on this server: {reason}",
   },
+  "chat.stella.unavailable.podmanMissing": {
+    ja: "Lumiscaモードにはpodmanが必要です。podmanを入れてLumiscaを再起動するか、Lumisca codeを使ってください。",
+    en: "Lumisca mode needs podman. Install podman and restart Lumisca, or use Lumisca code.",
+  },
+  "chat.stella.unavailable.podmanUnusable": {
+    ja: "この環境ではコンテナを起動できません。Lumisca codeを使ってください。",
+    en: "This environment cannot start a container. Use Lumisca code.",
+  },
+  "chat.stella.unavailable.vmNotSetUp": {
+    ja: "Lumiscaモードの仮想マシンがこのインストールに設定されていません。",
+    en: "Lumisca mode's virtual machine is not set up for this installation.",
+  },
   "chat.stella.agents.new": { ja: "新しいエージェント", en: "New agent" },
   "chat.stella.agents.name": { ja: "名前", en: "Name" },
   /** Both fields are optional, and the form has to say so: a field that looks

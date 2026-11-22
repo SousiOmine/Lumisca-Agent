@@ -97,7 +97,22 @@ export interface UpdateStatus {
   restartPending: boolean;
   /** A restart is scheduled (the server is about to go away). */
   restarting: boolean;
-  error: string | null;
+  error: UpdateError | null;
+}
+
+export type UpdateErrorCode =
+  | "check"
+  | "download"
+  | "apply"
+  | "restart"
+  | "restart_disabled"
+  | "nothing_to_restart";
+
+/** A failed update step, as a code the UI translates plus the underlying
+ * detail. The core never hands the client a finished sentence. */
+export interface UpdateError {
+  code: UpdateErrorCode;
+  detail: string;
 }
 
 /** The slice of the settings store the updater needs. */
@@ -415,7 +430,7 @@ export class UpdateService {
         ready: false,
       });
     } catch (error) {
-      this.#fail(`更新の確認に失敗しました: ${errorMessage(error)}`);
+      this.#fail("check", errorMessage(error));
       return this.status();
     } finally {
       this.#busy = null;
@@ -462,7 +477,7 @@ export class UpdateService {
         latestVersion: staged.version,
       });
     } catch (error) {
-      this.#fail(`更新のダウンロードに失敗しました: ${errorMessage(error)}`);
+      this.#fail("download", errorMessage(error));
       return this.status();
     } finally {
       this.#busy = null;
@@ -506,7 +521,7 @@ export class UpdateService {
         restartPending: result.version !== this.#currentVersion,
       });
     } catch (error) {
-      this.#fail(`更新の適用に失敗しました: ${errorMessage(error)}`);
+      this.#fail("apply", errorMessage(error));
       return this.status();
     } finally {
       this.#busy = null;
@@ -531,14 +546,11 @@ export class UpdateService {
       return Promise.resolve(this.status());
     }
     if (this.#restartMode === "none") {
-      this.#fail(
-        "このサーバーは自動再起動が無効です (LUMISCA_UPDATE_RESTART=none)。" +
-          "次回の起動で新しいバージョンが有効になります。",
-      );
+      this.#fail("restart_disabled", "LUMISCA_UPDATE_RESTART=none");
       return Promise.resolve(this.status());
     }
     if (!this.#status.restartPending) {
-      this.#fail("再起動して有効になる更新がありません");
+      this.#fail("nothing_to_restart", "");
       return Promise.resolve(this.status());
     }
     this.#patch({ restarting: true, error: null });
@@ -579,7 +591,7 @@ export class UpdateService {
       (this.#options.exit ?? process.exit)(0);
     } catch (error) {
       this.#patch({ restarting: false });
-      this.#fail(`再起動に失敗しました: ${errorMessage(error)}`);
+      this.#fail("restart", errorMessage(error));
       // The shutdown is not reversible: the listener (and, past core.close(),
       // the database) are already released, so this process can never serve
       // again — and the UI cannot be told, because nothing is listening. A
@@ -600,7 +612,7 @@ export class UpdateService {
     this.#status = { ...this.#status, ...patch };
   }
 
-  #fail(message: string): void {
+  #fail(code: UpdateErrorCode, detail: string): void {
     this.#patch({
       checking: false,
       downloading: false,
@@ -609,7 +621,7 @@ export class UpdateService {
       // claim the install is in flight.
       installing: false,
       restarting: false,
-      error: message,
+      error: { code, detail },
     });
   }
 }

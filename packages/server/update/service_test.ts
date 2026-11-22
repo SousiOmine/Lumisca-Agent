@@ -258,7 +258,10 @@ test("a supervised installation is not restarted by the server", async () => {
 
     const status = await test.service.restart();
     assertEquals(status.restarting, false);
-    assertEquals(status.error?.includes("LUMISCA_UPDATE_RESTART=none"), true);
+    assertEquals(
+      status.error?.detail.includes("LUMISCA_UPDATE_RESTART=none"),
+      true,
+    );
     assertEquals(test.events, []);
     // The update itself is applied: only the restart is skipped.
     assertEquals(status.restartPending, true);
@@ -304,7 +307,7 @@ test("a failed check reports the reason and keeps the server usable", async () =
     const status = await failing.service.check();
     assertEquals(status.available, false);
     assertEquals(status.checking, false);
-    assertEquals(status.error?.includes("HTTP 503"), true);
+    assertEquals(status.error?.detail.includes("HTTP 503"), true);
 
     // A malformed manifest is refused with its reason, not with a crash.
     const broken = harness(dir, {
@@ -317,7 +320,7 @@ test("a failed check reports the reason and keeps the server usable", async () =
       },
     });
     const brokenStatus = await broken.service.check();
-    assertEquals(brokenStatus.error?.includes("更新マニフェスト"), true);
+    assertEquals(brokenStatus.error?.detail.includes("更新マニフェスト"), true);
     assertEquals(brokenStatus.checking, false);
   });
 });
@@ -426,7 +429,10 @@ test("a failed install clears the installing flag", async () => {
     // The returned status is built before apply()'s `finally` runs, so a
     // flag cleared there would still read "installing" here.
     assertEquals(status.installing, false);
-    assertEquals(status.error?.includes("バージョンが一致しません"), true);
+    assertEquals(
+      status.error?.detail.includes("バージョンが一致しません"),
+      true,
+    );
     assertEquals(status.applied, false);
     assertEquals(
       await fsp.readFile(join(dir, BINARY), "utf8"),
@@ -516,7 +522,10 @@ test("apply keeps the staged package when the version check fails", async () => 
     });
     const status = await test.service.apply();
     assertEquals(status.applied, false);
-    assertEquals(status.error?.includes("バージョンが一致しません"), true);
+    assertEquals(
+      status.error?.detail.includes("バージョンが一致しません"),
+      true,
+    );
     // The package is kept, so a retry does not re-download 100 MB…
     assertEquals(readStagedUpdate(dir)?.version, NEXT);
     assertEquals(await fsp.readFile(join(dir, BINARY), "utf8"), "binary-0.7.7");
@@ -552,7 +561,10 @@ test("a failed apply does not pin the installation to that package", async () =>
     assertEquals(downloaded.ready, true, "the package is verified and staged");
     const status = await failed.service.apply();
     assertEquals(status.applied, false);
-    assertEquals(status.error?.includes("バージョンが一致しません"), true);
+    assertEquals(
+      status.error?.detail.includes("バージョンが一致しません"),
+      true,
+    );
     assertEquals(status.ready, true, "the package is kept for a retry");
     assertEquals(readStagedUpdate(dir)?.version, NEXT);
 
@@ -698,7 +710,7 @@ test("a restart that cannot start its successor ends the process", async () => {
     assertEquals(test.exitCodes, [1]);
     assertEquals(test.events, ["shutdown", "exit"]);
     assertEquals(
-      test.service.status().error?.includes("アクセスが拒否されました"),
+      test.service.status().error?.detail.includes("アクセスが拒否されました"),
       true,
     );
   });

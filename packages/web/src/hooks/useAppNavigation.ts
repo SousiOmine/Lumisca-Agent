@@ -9,6 +9,7 @@ import {
 } from "preact/hooks";
 import { useCodeModeEnabled } from "../codeMode.ts";
 import type { SettingsCategory } from "../components/SettingsModal.tsx";
+import { stellaUnavailableReason, t as translate, useLocale } from "../i18n.ts";
 import {
   type AppRoute,
   availableRoute,
@@ -104,6 +105,7 @@ export function useAppNavigation({
    * wizard rather than a mode's top (hooks/useSetup). */
   setupPending: boolean;
 }): AppNavigation {
+  const locale = useLocale();
   // The address the app is showing. Every screen the app draws is read from
   // it, and every move writes it back.
   const router = useRoute();
@@ -186,7 +188,9 @@ export function useAppNavigation({
       return;
     }
     if (mode !== "stella") return;
-    setRefusedStella(machineStatus.availability.reason);
+    setRefusedStella(
+      stellaUnavailableReason(translate, machineStatus.availability),
+    );
     if (codeMode) {
       // The settings dialog stays open if it was: the reader may be on the
       // page that offers the switch this fallback depends on.
@@ -195,7 +199,7 @@ export function useAppNavigation({
         settings: url.settings,
       });
     }
-  }, [codeMode, mode, machineStatus, replaceUrl, url.settings]);
+  }, [codeMode, locale, mode, machineStatus, replaceUrl, url.settings]);
   // Showing a mode is what this client remembers for the next bare `/` —
   // whether it was chosen here or arrived at through an address. The mode is
   // remembered only once the server has accepted it: a refused stella would

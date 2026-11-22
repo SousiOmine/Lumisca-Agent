@@ -27,10 +27,8 @@ export function stellaAvailability(status: {
     case "podman_missing":
       return {
         available: false,
-        reason:
-          `stella mode needs podman, and it is not usable on this machine ` +
-          `(${status.reason}). Install podman (rootless) and restart Lumisca, ` +
-          "or use code mode.",
+        code: "podman_missing",
+        detail: status.reason,
       };
     case "podman_unusable":
       // podman answers, so the old check said "available" and the machine
@@ -39,12 +37,8 @@ export function stellaAvailability(status: {
       // host cannot run a container at all, and no setting changes that.
       return {
         available: false,
-        reason:
-          `stella mode runs the agent inside a container, and this host ` +
-          `cannot start one (${status.reason}). It is a limit of the ` +
-          "environment Lumisca is running in, not of its settings — a " +
-          "container nested in a sandbox without the privileges to nest one. " +
-          "Use code mode.",
+        code: "podman_unusable",
+        detail: status.reason,
       };
     case "image_missing":
     case "image_stale":
