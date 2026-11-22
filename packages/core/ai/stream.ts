@@ -197,13 +197,14 @@ async function* runStream(
       VercelStreamRequest["reasoning"]
     >;
   }
-  // Responses-API models whose ids the SDK does not recognize (non-OpenAI
-  // gateways such as OpenCode Go) would otherwise have their reasoning
-  // hint dropped silently — see reasoningForceOption. The ChatGPT backend
-  // needs its own request shape on top of that (see chatgptProviderOptions).
+  // Two model-driven overrides, both declared by the catalog (Model.compat)
+  // rather than branched on a provider id here: a Responses model the SDK
+  // does not recognize would drop the reasoning hint silently, and a backend
+  // that requires `instructions` needs its own request shape. See
+  // reasoningForceOption and instructionsOption.
   const providerOptions = mergeProviderOptions(
     reasoningForceOption(model, reasoning),
-    chatgptProviderOptions(model, context),
+    instructionsOption(model, context),
   );
   if (providerOptions !== undefined) request.providerOptions = providerOptions;
   // Conversation affinity: providers that require a stable per-conversation
@@ -555,43 +556,32 @@ export function reasoningForceOption(
 ): VercelProviderOptions | undefined {
   if (reasoning === undefined) return undefined;
   if (model.reasoning !== true) return undefined;
-  if (
-    model.api !== "openai-responses" &&
-    model.api !== "azure-openai-responses"
-  ) {
-    return undefined;
-  }
+  if (model.compat?.forceReasoning !== true) return undefined;
+  // The provider key is the API's own (the SDK reads its options under it),
+  // not a provider id: both Responses APIs are openai-shaped.
   const provider = model.api === "azure-openai-responses" ? "azure" : "openai";
   return { [provider]: { forceReasoning: true } };
 }
 
-/** Provider id of the ChatGPT subscription provider (see
- * models/chatgpt/provider.ts). Duplicated here for the same reason as
- * OPENCODE_GO_PROVIDER_ID: the transport stays independent of the
- * catalog. */
-const CHATGPT_PROVIDER_ID = "openai-codex";
-
-/** Instructions sent when a call has no system prompt. The ChatGPT backend
- * rejects a request without a top-level `instructions` value, and not every
- * auxiliary call carries a system prompt. */
-const CHATGPT_FALLBACK_INSTRUCTIONS = "You are a helpful assistant.";
-
 /**
- * Request shape the ChatGPT (Codex) backend requires.
+ * Request shape a backend requires when it declares
+ * {@link Model.compat.instructionsFallback}: a top-level `instructions`
+ * value instead of the system message in `input`, and no server-side
+ * conversation state.
  *
- * Its Responses endpoint is not the public one: it rejects a request whose
- * top-level `instructions` is missing, and it never stores conversation
- * state. The SDK sends a system message as an `input` item for reasoning
- * models, so the system prompt is moved into `instructions` and removed
- * from `input` (`systemMessageMode: "remove"`). `store: false` also makes
- * the SDK request the encrypted reasoning it needs to replay a turn without
- * server-side state. See models/chatgpt.
+ * The SDK sends a system message as an `input` item for reasoning models, so
+ * the system prompt is moved into `instructions` and removed from `input`
+ * (`systemMessageMode: "remove"`). `store: false` makes the SDK request the
+ * encrypted reasoning it needs to replay a turn without stored state. The
+ * ChatGPT (Codex) backend is the one that needs this (see
+ * models/chatgpt/request.ts); nothing here names it.
  */
-export function chatgptProviderOptions(
+export function instructionsOption(
   model: Model<Api>,
   context: { systemPrompt?: string },
 ): VercelProviderOptions | undefined {
-  if (model.provider !== CHATGPT_PROVIDER_ID) return undefined;
+  const fallback = model.compat?.instructionsFallback;
+  if (fallback === undefined) return undefined;
   return {
     openai: {
       store: false,
@@ -599,7 +589,7 @@ export function chatgptProviderOptions(
       instructions:
         context.systemPrompt !== undefined && context.systemPrompt.length > 0
           ? context.systemPrompt
-          : CHATGPT_FALLBACK_INSTRUCTIONS,
+          : fallback,
       ...(model.reasoning === true ? { forceReasoning: true } : {}),
     },
   };

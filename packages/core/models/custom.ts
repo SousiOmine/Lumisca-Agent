@@ -1,5 +1,11 @@
 import * as fsSync from "node:fs";
-import type { ApiKeyAuth, Credential, Model, Provider } from "../ai/catalog.ts";
+import type {
+  ApiKeyAuth,
+  Credential,
+  Model,
+  ModelCompat,
+  Provider,
+} from "../ai/catalog.ts";
 import type { Api } from "../domain/model.ts";
 import { errorMessage } from "../errors.ts";
 import { isRecord } from "../fs.ts";
@@ -209,6 +215,9 @@ export function buildModel(
     api: api as Api,
     provider: providerId,
     baseUrl,
+    ...(compatFor(api as Api) !== undefined
+      ? { compat: compatFor(api as Api) }
+      : {}),
     reasoning: definition.reasoning ?? false,
     input: definition.input ?? ["text"],
     cost: definition.cost ?? DEFAULT_COST,
@@ -223,6 +232,18 @@ export function buildModel(
       : {}),
     headers: providerCfg.headers,
   };
+}
+
+/** The request-shape deviations a declared api implies. A user-defined
+ * provider declares only an api, never a provider id the app could know, so
+ * the api is what carries the fact: a Responses-API model is a reasoning
+ * model to the SDK only when its id happens to look like one, and the hint
+ * would otherwise be dropped silently (see ai/stream.ts
+ * reasoningForceOption). */
+function compatFor(api: Api): ModelCompat | undefined {
+  return api === "openai-responses" || api === "azure-openai-responses"
+    ? { forceReasoning: true }
+    : undefined;
 }
 
 /** Build a Provider from resolved parts (shared by both sources and by the

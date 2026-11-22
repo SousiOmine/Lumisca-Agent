@@ -18,6 +18,7 @@ import { THINKING_LEVEL_ORDER } from "../../shared/providers.ts";
 import { CHATGPT_MODELS_KEY } from "../../shared/settings-keys.ts";
 import { type FetchLike, requestSignal, truncateBody } from "./http.ts";
 import { CHATGPT_API_BASE, CHATGPT_ORIGINATOR } from "./oauth.ts";
+import { CHATGPT_COMPAT } from "./request.ts";
 
 /** Provider id of the ChatGPT subscription provider. */
 export const CHATGPT_PROVIDER_ID = "openai-codex";
@@ -119,6 +120,9 @@ function toModel(entry: unknown): Model<Api> | undefined {
     // The Codex models accept images; the catalog does not publish a
     // modality list, so this is the one property Lumisca asserts for them.
     input: ["text", "image"],
+    // The backend's required request shape travels with the models, so the
+    // transport never has to know this provider exists (see request.ts).
+    compat: CHATGPT_COMPAT,
     ...(contextWindow !== undefined ? { contextWindow } : {}),
     ...(efforts.length > 0 ? { thinkingLevelMap: thinkingMap(efforts) } : {}),
   };

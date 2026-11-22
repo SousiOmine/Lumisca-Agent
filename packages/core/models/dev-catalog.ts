@@ -7,6 +7,7 @@ import type {
 import snapshot from "@opencode-ai/models/snapshot";
 import type {
   Model,
+  ModelCompat,
   ModelThinkingLevel,
   Provider,
   ThinkingLevelMap,
@@ -64,6 +65,14 @@ const NATIVE_AI_SDK = new Map<string, Api>([
   ["@ai-sdk/azure", "azure-openai-responses"],
   ["@ai-sdk/amazon-bedrock", "bedrock-converse-stream"],
 ]);
+
+/** The OpenCode gateway's provider ids (see DEV_PROVIDER_IDS): both serve
+ * their models through endpoints with the same limits (see compatOf). */
+const OPENCODE_GATEWAY_PROVIDER_ID = "opencode";
+const OPENCODE_GO_PROVIDER_ID = "opencode-go";
+
+/** The header OpenCode Go's managed inference requires on every request. */
+const OPENCODE_GO_SESSION_HEADER = "x-opencode-session";
 
 /** Base URLs for OpenAI-compatible providers whose models.dev entry does not
  * publish an `api` (they are served by native @ai-sdk packages that hardcode
@@ -212,10 +221,11 @@ function toLumiscaModel(
           cacheWrite: (m.cost as { cache_write?: number }).cache_write ?? 0,
         }
       : undefined;
+  const api = apiFor(providerId, providerNpm, m);
   return {
     id: m.id,
     name: m.name,
-    api: apiFor(providerId, providerNpm, m),
+    api,
     provider: providerId,
     baseUrl: m.provider?.api ?? providerBaseUrl,
     reasoning: m.reasoning,
@@ -226,11 +236,49 @@ function toLumiscaModel(
     maxTokens: m.limit?.output,
     headers: m.provider?.headers,
     thinkingLevelMap: thinkingLevelMapFor(m.reasoning_options),
-    ...(typeof m.interleaved === "object" &&
-    m.interleaved.field === "reasoning_content"
-      ? { compat: { requiresReasoningContentOnAssistantMessages: true } }
+    ...(compatOf(providerId, api, m) !== undefined
+      ? { compat: compatOf(providerId, api, m) }
       : {}),
   };
+}
+
+/** The request-shape deviations a models.dev entry implies, as the transport
+ * reads them (see ai/catalog.ts ModelCompat). Everything here is a property
+ * of the endpoint the entry names, declared beside the catalog that knows it
+ * rather than branched on inside `ai/`. */
+function compatOf(
+  providerId: string,
+  api: Api,
+  m: DevModel,
+): ModelCompat | undefined {
+  const compat: ModelCompat = {};
+  // The SDK classifies a model as reasoning from its id alone, so a
+  // Responses-API model on any other gateway is classified as non-reasoning
+  // and its effort hint would be dropped silently. The app's catalog knows
+  // better, so it says so (see ai/stream.ts reasoningForceOption).
+  if (api === "openai-responses" || api === "azure-openai-responses") {
+    compat.forceReasoning = true;
+  }
+  if (
+    typeof m.interleaved === "object" &&
+    m.interleaved.field === "reasoning_content"
+  ) {
+    compat.requiresReasoningContentOnAssistantMessages = true;
+  }
+  // The OpenCode gateway (Zen and Go) forwards tool messages to its upstream
+  // over gRPC, which carries text parts only: a multi-part tool content is
+  // rejected with a 400. Its models take their images in a user message
+  // instead (see ai/lang-model.ts toolResultTakesImages).
+  if (providerId === OPENCODE_GATEWAY_PROVIDER_ID || providerId === OPENCODE_GO_PROVIDER_ID) {
+    compat.toolResultCarriesImages = false;
+  }
+  // OpenCode Go's managed-inference API requires a stable per-conversation
+  // id on every request, under this header (mandatory since 2026-09-05 — see
+  // vercel/ai#20271).
+  if (providerId === OPENCODE_GO_PROVIDER_ID) {
+    compat.sessionHeaderName = OPENCODE_GO_SESSION_HEADER;
+  }
+  return Object.keys(compat).length > 0 ? compat : undefined;
 }
 
 /** Build a Lumisca Provider from a models.dev provider (allow-listed),

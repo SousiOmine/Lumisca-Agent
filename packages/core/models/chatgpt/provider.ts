@@ -2,9 +2,9 @@
  * The ChatGPT subscription provider: OAuth login, token refresh, and the
  * model catalog the signed-in account can use.
  *
- * The models speak the Responses API at the Codex backend; the request
- * shape that backend needs (instructions, store:false) is applied by the
- * transport (see ai/stream.ts `chatgptProviderOptions`).
+ * The models speak the Responses API at the Codex backend; the request shape
+ * that backend needs (instructions, store:false) travels on every model's
+ * `compat` entry (see request.ts), which the transport reads.
  */
 
 import type {

@@ -133,6 +133,48 @@ test("catalog preserves reasoning_content replay requirements", () => {
   });
 });
 
+test("catalog declares the gateway limits beside the models", () => {
+  // The OpenCode Go models name the conversation-id header their gateway
+  // requires and state that it cannot carry an image inside a tool result,
+  // so no transport code has to know the provider exists.
+  for (const model of builtinProvider("opencode-go")!.getModels()) {
+    assertEquals(
+      model.compat?.sessionHeaderName,
+      "x-opencode-session",
+      model.id,
+    );
+    assertEquals(model.compat?.toolResultCarriesImages, false, model.id);
+  }
+  // Zen's models keep the image limitation (same gateway) but need no
+  // conversation id.
+  for (const model of builtinProvider("opencode")!.getModels()) {
+    assertEquals(model.compat?.sessionHeaderName, undefined, model.id);
+    assertEquals(model.compat?.toolResultCarriesImages, false, model.id);
+  }
+  // A provider the app does not ship declares neither.
+  const groq = builtinProvider("groq")!.getModels()[0]!;
+  assertEquals(groq.compat?.sessionHeaderName, undefined);
+  assertEquals(groq.compat?.toolResultCarriesImages, undefined);
+});
+
+test("a Responses-API model carries the reasoning override", () => {
+  // The SDK classifies a model as reasoning from its id alone, so a gateway
+  // model served over the Responses API needs the override on its compat
+  // entry or its effort hint is dropped silently (see ai/stream.ts
+  // reasoningForceOption).
+  const models = builtinProvider("opencode-go")!.getModels();
+  const responses = models.filter((m) => m.api === "openai-responses");
+  assert(responses.length > 0, "expected a Responses-API model");
+  for (const model of responses) {
+    assertEquals(model.compat?.forceReasoning, true, model.id);
+  }
+  // A chat-completions model sends reasoning_effort unconditionally and
+  // needs no override.
+  for (const model of models.filter((m) => m.api === "openai-completions")) {
+    assertEquals(model.compat?.forceReasoning, undefined, model.id);
+  }
+});
+
 test("every listed snapshot model declares tool calling", () => {
   for (const id of DEV_PROVIDER_IDS) {
     const source = snapshot.providers[id];
