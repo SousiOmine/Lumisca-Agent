@@ -46,6 +46,7 @@ import type { Model } from "./catalog.ts";
 import { describeFailedCall, failureText } from "./error-detail.ts";
 import { sessionHeadersFor } from "./lang-model.ts";
 import { pendingAssistant } from "./message-factory.ts";
+import { StreamAccumulator } from "./stream-accumulator.ts";
 import {
   isRetryableRateLimitError,
   type RateLimitRetryOptions,
@@ -213,10 +214,8 @@ async function* runStream(
 
   const result = vercelStreamText(request as never);
   yield { type: "start", partial: pendingAssistant(model) };
-  let text = "";
-  let thinking = "";
-  /** Tool name per call id: a delta part carries only the id, and the events
-   * below say which tool they belong to. */
+  /** The turn's text and thinking, accumulated as the deltas arrive. */
+  const body = new StreamAccumulator();
   let streamedUsage: LanguageModelUsage | undefined;
   /** The provider's finish reason of this step ("stop", "length", …). The
    * turn's stopReason follows it, so a response the provider cut at the
@@ -249,15 +248,17 @@ async function* runStream(
         case "text-delta": {
           const delta = typeof p.text === "string" ? p.text : "";
           if (delta.length === 0) break;
-          text += delta;
-          yield { type: "text_delta", delta };
+          const event = { type: "text_delta" as const, delta };
+          body.take(event);
+          yield event;
           break;
         }
         case "reasoning-delta": {
           const delta = typeof p.text === "string" ? p.text : "";
           if (delta.length === 0) break;
-          thinking += delta;
-          yield { type: "thinking_delta", delta };
+          const event = { type: "thinking_delta" as const, delta };
+          body.take(event);
+          yield event;
           break;
         }
         case "tool-call": {
@@ -406,10 +407,9 @@ async function* runStream(
   const lastStep = steps.at(-1);
   // Prefer the streamed text (fullStream already delivered every delta);
   // fall back to the step text when the stream carried none (e.g. a cached
-  // or non-streaming provider path).
-  const finalText = text.length > 0 ? text : (lastStep?.text ?? "");
-  const finalThinking =
-    thinking.length > 0 ? thinking : (lastStep?.reasoningText ?? "");
+  // or non-streaming provider path). See ai/stream-accumulator.ts.
+  const finalText = body.textOf(lastStep?.text);
+  const finalThinking = body.thinkingOf(lastStep?.reasoningText);
   const finalUsage = stepUsage(streamedUsage, lastStep);
   const message = buildAssistantMessage(
     model,
@@ -714,25 +714,19 @@ export async function streamText(
 ): Promise<string> {
   const doAttempt = async (): Promise<string> => {
     const stream = streamFn(model, request, options);
-    let text = "";
+    const body = new StreamAccumulator();
+    let finished: string | undefined;
     for await (const event of stream) {
-      if (event.type === "text_delta") {
-        text += event.delta;
-      } else if (event.type === "done") {
-        if (text.length === 0) text = contentText(event.message.content);
-      } else if (event.type === "error") {
-        const errorEvent = event as {
-          errorMessage?: string;
-          error?: { errorMessage?: string };
-        };
-        throw new Error(
-          errorEvent.errorMessage ??
-            errorEvent.error?.errorMessage ??
-            failureLabel,
-        );
+      if (event.type === "done") {
+        finished = contentText(event.message.content);
+        continue;
       }
+      if (event.type === "error") {
+        throw new Error(event.errorMessage ?? failureLabel);
+      }
+      body.take(event);
     }
-    return text;
+    return body.textOf(finished);
   };
   return await retryOnRateLimitError(doAttempt, isRetryableRateLimitError, {
     signal: options?.signal,

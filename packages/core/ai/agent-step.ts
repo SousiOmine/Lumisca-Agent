@@ -18,6 +18,7 @@ import type { Api } from "../domain/model.ts";
 import type { AgentEvent } from "./agent-types.ts";
 import type { Model } from "./catalog.ts";
 import { failedAssistant } from "./message-factory.ts";
+import { StreamAccumulator } from "./stream-accumulator.ts";
 import type { StreamEvent } from "./transport.ts";
 
 /** What one turn produced. */
@@ -45,8 +46,9 @@ export class TurnStream {
   private final: AssistantMessage | undefined;
   private errorMessage: string | undefined;
   private errorRetryable = false;
-  private text = "";
-  private thinking = "";
+  /** The turn's body, accumulated the one way every stream consumer does
+   * (see ai/stream-accumulator.ts). */
+  private readonly body = new StreamAccumulator();
   private readonly executedIds = new Set<string>();
   // Results the SDK produced during this turn. Buffered while streaming
   // (their events go out immediately) and returned to the caller, which
@@ -66,35 +68,26 @@ export class TurnStream {
     if (event.type === "start") {
       this.candidate = event.partial;
     } else if (event.type === "text_delta") {
-      this.text += event.delta;
+      this.body.take(event);
       this.events.emit({
         type: "message_update",
         assistantMessageEvent: { type: "text_delta", delta: event.delta },
       });
     } else if (event.type === "thinking_delta") {
-      this.thinking += event.delta;
+      this.body.take(event);
       this.events.emit({
         type: "message_update",
         assistantMessageEvent: { type: "thinking_delta", delta: event.delta },
       });
     } else if (event.type === "error") {
-      const ev = event as {
-        errorMessage?: string;
-        errorDetail?: string;
-        errorRetryable?: boolean;
-        error?: { errorMessage?: string };
-      };
-      const base = ev.errorMessage ?? ev.error?.errorMessage;
       // Keep the transport's detail with the message: the transcript (and
       // therefore the DB, the UI banner and the session log) then says
       // *why* the call failed, not just that it did.
       this.errorMessage =
-        base === undefined
-          ? undefined
-          : ev.errorDetail === undefined
-            ? base
-            : `${base} (${ev.errorDetail})`;
-      if (ev.errorRetryable === true) this.errorRetryable = true;
+        event.errorDetail === undefined
+          ? event.errorMessage
+          : `${event.errorMessage} (${event.errorDetail})`;
+      if (event.errorRetryable === true) this.errorRetryable = true;
     } else if (event.type === "toolcall_start") {
       // The SDK is executing this tool call: only the start event is
       // emitted here — the SDK runs the tool and a toolcall_result event
@@ -156,8 +149,8 @@ export class TurnStream {
       final = failedAssistant(model, "The model stream produced no response");
     }
 
-    if (this.text.length > 0 && final.content.length === 0) {
-      final = { ...final, content: [{ type: "text", text: this.text }] };
+    if (this.body.text.length > 0 && final.content.length === 0) {
+      final = { ...final, content: [{ type: "text", text: this.body.text }] };
     }
     // The transport's finished message already carries the turn's thinking
     // (ai/stream.ts buildAssistantMessage), so this only fills it in for a
@@ -166,13 +159,13 @@ export class TurnStream {
     // that requires its reasoning replayed (interleaved `reasoning_content`)
     // then sent both copies back on every later request.
     if (
-      this.thinking.length > 0 &&
+      this.body.thinking.length > 0 &&
       !final.content.some((block) => block.type === "thinking")
     ) {
       final = {
         ...final,
         content: [
-          { type: "thinking", thinking: this.thinking },
+          { type: "thinking", thinking: this.body.thinking },
           ...final.content,
         ],
       };

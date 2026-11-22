@@ -32,19 +32,10 @@ function fakeStreamFn(
     onCall?.(StreamRequest);
     const events = (async function* () {
       if (options.fail) {
-        yield {
-          type: "error",
-          reason: "error",
-          error: fauxAssistantMessage("", { errorMessage: "boom" }),
-        };
+        yield { type: "error", errorMessage: "boom" };
         return;
       }
-      yield {
-        type: "text_delta",
-        contentIndex: 0,
-        delta: text,
-        partial: fauxAssistantMessage(""),
-      };
+      yield { type: "text_delta", delta: text };
     })();
     return events as unknown as AssistantMessageEventStream;
   };
