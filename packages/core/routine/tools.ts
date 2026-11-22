@@ -258,7 +258,7 @@ export interface RoutineToolsOptions {
   /** The agent whose conversation these tools act for. */
   agentId: string;
   /** Whether a watch may call an MCP tool, or why not (see
-   * McpService.watchableToolProblem). Absent → an MCP watch cannot be
+   * McpChecks.watchableToolProblem). Absent → an MCP watch cannot be
    * created here: whether the tool only reads is part of what makes the
    * routine valid, and guessing it would let a write tool run on a timer. */
   watchable?: (server: string, tool: string) => Promise<string | null>;
@@ -317,7 +317,7 @@ function owned(repo: RoutineRepo, agentId: string, id: string): Routine {
 }
 
 /** Refuse an MCP watch whose tool may change things (see
- * McpService.watchableToolProblem). Asked when the routine is written, so the
+ * McpChecks.watchableToolProblem). Asked when the routine is written, so the
  * model learns before anything is saved; the check asks again on every call,
  * because a server's tools can change after the routine was created. */
 async function requireWatchableTool(

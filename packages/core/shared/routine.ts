@@ -100,7 +100,7 @@ export type WatchSource =
        * workspace, and a plugin's servers come and go with the plugin. */
       server: string;
       /** The tool's own name on that server (`GMAIL_FETCH_EMAILS`). Only a
-       * read-only tool may be watched (see mcp/service.ts). */
+       * read-only tool may be watched (see mcp/service-checks.ts). */
       tool: string;
       /** The tool's arguments, fixed for every check: a watch is one question
        * asked again and again, not a search the check is free to change. */

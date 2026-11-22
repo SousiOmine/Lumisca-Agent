@@ -17,8 +17,9 @@ export interface McpServerConfig {
 
 /** One entry of a `mcpServers` object: the config fields that are written,
  * in the order they are written. Serializing a whole list and adding one
- * server to an existing document (the agent's mcp_add, see mcp/service.ts)
- * both go through here, so an entry is written one way only. */
+ * server to an existing document (the agent's mcp_add, see
+ * mcp/service-config.ts) both go through here, so an entry is written one
+ * way only. */
 export function mcpServerEntry(
   server: McpServerConfig,
 ): Record<string, unknown> {

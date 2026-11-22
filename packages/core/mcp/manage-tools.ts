@@ -8,7 +8,7 @@
  * outlives any sub-agent's run (see tools/registries.ts).
  *
  * `mcp_add` runs the same connection test as the settings UI before it
- * enables "add" (see McpService.testServer): a mistyped command must not
+ * enables "add" (see McpChecks.testServer): a mistyped command must not
  * enter the config unnoticed, and the agent learns which tools the server
  * actually offers instead of promising names it guessed.
  */

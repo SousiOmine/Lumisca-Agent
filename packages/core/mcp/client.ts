@@ -10,8 +10,8 @@ export interface McpToolInfo {
   description?: string;
   /** The server's own hints about the tool. `readOnlyHint` is the one a
    * watch needs: a check runs with nobody watching, so it may only call a
-   * tool that changes nothing (see mcp/service.ts). Absent when the server
-   * sends none, which many do. */
+   * tool that changes nothing (see mcp/service-checks.ts). Absent when the
+   * server sends none, which many do. */
   annotations?: { readOnlyHint?: boolean };
   inputSchema?: unknown;
 }

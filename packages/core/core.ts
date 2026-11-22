@@ -496,7 +496,7 @@ export class LumiscaCore {
     // would try to start a run on a pool that is shutting down.
     this.routineScheduler.close();
     // The checks' own MCP connections are not any session's (see
-    // McpService.checkManager), so nothing else closes them.
+    // McpConnections), so nothing else closes them.
     this.mcp.close();
     // Calls into the lending apps still in flight fail now, before the
     // sessions waiting on them are torn down: a client that is shutting down

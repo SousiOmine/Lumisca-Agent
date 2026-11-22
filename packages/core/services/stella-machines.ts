@@ -74,8 +74,8 @@ export class StellaMachineService {
       routineRepo: RoutineRepo;
       routineScheduler: RoutineScheduler;
       /** Whether a routine's MCP watch may call a tool, or why not (see
-       * mcp/service.ts). Asked before a routine is saved, because a tool that
-       * writes would then act on a timer with nobody watching. */
+       * mcp/service-checks.ts). Asked before a routine is saved, because a
+       * tool that writes would then act on a timer with nobody watching. */
       watchableTool(server: string, tool: string): Promise<string | null>;
       /** Per-session hand-over hubs; the core's close path forgets them. */
       handovers: HandoverRegistry;

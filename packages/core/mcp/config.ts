@@ -43,7 +43,7 @@ export const MCP_CONFIG_FILE = ".mcp.json";
 export const APP_MCP_SOURCE = "app settings";
 
 /** Virtual file path used when parsing the single server the settings UI
- * tests before saving it (see McpService.testServer). */
+ * tests before saving it (see McpChecks.testServer). */
 export const MCP_TEST_SOURCE = "MCP test config";
 
 /** Expand `${VAR}` references from the process environment. */
