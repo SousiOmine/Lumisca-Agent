@@ -400,7 +400,7 @@ export async function main(): Promise<void> {
   // Started after the listener so a routine that fires right away has a
   // conversation layer to run in (the core is already open), and before the
   // shutdown hooks below, which close it through core.close().
-  core.startRoutines();
+  core.routines.start();
 
   // The stop contract of a supervised server (shutdown.ts): SIGTERM is
   // systemd's ordinary stop request and exits 0, SIGINT reports 130, the drain

@@ -1874,7 +1874,7 @@ test("routine routes: list, enable, run and remove", async () => {
 
     // A routine created through the repo (the tool path) shows up in the
     // list, and the PATCH that toggles it answers the whole list.
-    const repo = core.getRoutineRepo();
+    const repo = core.routines.getRoutineRepo();
     const routine = repo.create({
       agentId: agent.id,
       name: "daily",

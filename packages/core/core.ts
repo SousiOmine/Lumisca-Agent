@@ -56,18 +56,11 @@ import type {
 import type { PushSubscriptions } from "./notify/subscriptions.ts";
 import type { VapidKeys } from "./notify/vapid.ts";
 import type { PersonalizationService } from "./personalization.ts";
-import { checkRoutine } from "./routine/check.ts";
-import { createRoutineRepo, type RoutineRepo } from "./routine/repo.ts";
-import {
-  createRoutineScheduler,
-  type RoutineRunner,
-  type RoutineScheduler,
-  type RoutineTrigger,
-} from "./routine/scheduler.ts";
 import type { CommandSafety } from "./safety/command-safety.ts";
 import type { SavedPromptsService } from "./saved-prompts.ts";
 import type { ComputerUseService } from "./services/computer.ts";
 import type { ModelService } from "./services/models.ts";
+import { RoutineService } from "./services/routines.ts";
 import type { DefaultModel, SessionService } from "./services/sessions.ts";
 import type { WorkspaceService } from "./services/workspaces.ts";
 import { type AgentRepo, createAgentRepo } from "./session/agents.ts";
@@ -130,7 +123,6 @@ import {
   CONNECTIONS_KEY,
   codeExecutionEnabled,
   DEFAULT_MODEL_KEY,
-  formatLocalDateTime,
   LANGUAGE_KEY,
   type Locale,
   parseCompactionPolicyInput,
@@ -179,7 +171,6 @@ import {
   type FetchLike,
 } from "./websearch/mod.ts";
 import type { WebSearchService } from "./websearch/service.ts";
-import { createWorkspaceRepo } from "./workspace/repo.ts";
 
 /** Module logger (debug-gated). */
 const log = createLogger("core");
@@ -236,8 +227,8 @@ export class LumiscaCore {
   /** Routines (scheduled requests) and the scheduler that fires them. The
    * scheduler is created here so tests can drive it with a short tick; the
    * server starts and stops it (see package.json tasks / server/mod.ts). */
-  private readonly routines: RoutineRepo;
-  private readonly routineScheduler: RoutineScheduler;
+  /** The scheduled requests of stella conversations (see RoutineService). */
+  readonly routines: RoutineService;
   private readonly messages: MessageRepo;
   private readonly requestShapes: RequestShapeRepo;
   /** The scripting tool call's store, shared by every session's programs. */
@@ -325,8 +316,6 @@ export class LumiscaCore {
     this.sessions = graph.sessions;
     this.agents = graph.agents;
     this.stellaAgents = graph.stellaAgents;
-    this.routines = graph.routines;
-    this.routineScheduler = graph.routineScheduler;
     this.messages = graph.messages;
     this.requestShapes = graph.requestShapes;
     this.codeStore = graph.codeStore;
@@ -350,6 +339,21 @@ export class LumiscaCore {
     this.envRequests = graph.envRequests;
     this.shareRequests = graph.shareRequests;
     this.shareHub = graph.shareHub;
+    // Built last: its runner reaches back into the facade for the two
+    // operations that cross services (waking a machine, opening a
+    // conversation), so every collaborator it reads is assigned above.
+    this.routines = new RoutineService({
+      repo: graph.routines,
+      scheduler: graph.routineScheduler,
+      sessions: this.sessions,
+      stellaAgents: this.stellaAgents,
+      pool: this.pool,
+      mcp: this.mcp,
+      ensureStellaReady: (agentId) => this.ensureStellaReady(agentId),
+      ensureStellaSkills: (agentId) => this.ensureStellaSkills(agentId),
+      openSession: (id) => this.openSession(id),
+      stellaRuntimeFor: (session) => this.stellaRuntimeFor(session),
+    });
   }
 
   /** Build the graph, then the facade over it. The host closures read the
@@ -398,7 +402,7 @@ export class LumiscaCore {
       requireWorkspace: (id) => core().requireWorkspace(id),
       resolveDefaultModel: (provider, modelId) =>
         core().resolveDefaultModel(provider, modelId),
-      routineRunner: () => core().routineRunner(),
+      routineRunner: () => core().routines.runner(),
       setSessionName: (id, name) => core().setSessionName(id, name),
       stellaRuntimeFor: (session) => core().stellaRuntimeFor(session),
     };
@@ -494,7 +498,7 @@ export class LumiscaCore {
   async close(): Promise<void> {
     // The timers first: a tick that fires while the sessions are closing
     // would try to start a run on a pool that is shutting down.
-    this.routineScheduler.close();
+    this.routines.close();
     // The checks' own MCP connections are not any session's (see
     // McpConnections), so nothing else closes them.
     this.mcp.close();
@@ -550,163 +554,6 @@ export class LumiscaCore {
     } catch (error) {
       log.warn(`could not request a database rewrite: ${errorMessage(error)}`);
     }
-  }
-
-  // --- routines (scheduled requests) ---------------------------------------
-
-  /** The routine repository (the settings list reads it). */
-  getRoutineRepo(): RoutineRepo {
-    return this.routines;
-  }
-
-  /** Start the routine scheduler. The server calls this once the rest of the
-   * app is up; tests drive `runNow` / a short tick instead. */
-  startRoutines(): void {
-    this.routineScheduler.start();
-  }
-
-  stopRoutines(): void {
-    this.routineScheduler.close();
-  }
-
-  /** Whether a run of this routine is in flight (the settings list's
-   * "running now"). Never persisted: it describes this process. A queued run
-   * counts as in flight — its prompt is going to run — and `isRoutineQueued`
-   * says whether that is what it is doing. */
-  isRoutineRunning(id: string): boolean {
-    return this.routineScheduler.isRunning(id);
-  }
-
-  /** Whether this routine's run is still waiting for its conversation to be
-   * free (the settings list draws it apart from "running"). */
-  isRoutineQueued(id: string): boolean {
-    return this.routineScheduler.isQueued(id);
-  }
-
-  /** Run a routine now, without moving its schedule. Resolves when the run
-   * finished (the HTTP route does not wait — see routes). */
-  runRoutineNow(id: string): Promise<void> {
-    return this.routineScheduler.runNow(id);
-  }
-
-  /** Stop a running routine's run. Only the run this routine started is
-   * interrupted; a user's own run in the same conversation is left alone. */
-  stopRoutine(id: string): void {
-    this.routineScheduler.stop(id);
-  }
-
-  /** The routines of one agent, oldest first (the settings list, the tool
-   * list). */
-  listRoutinesOf(agentId: string): Routine[] {
-    return this.routines.listOf(agentId);
-  }
-
-  /** The scheduler's seam into the sessions: start a routine's run in its
-   * agent's conversation and wait for it, and stop the run it started. */
-  private routineRunner(): RoutineRunner {
-    return {
-      isRunning: (agentId) => {
-        const session = this.sessions.getByPersona(agentId);
-        if (session === undefined) return false;
-        const agent = this.pool.get(session.id);
-        return agent !== undefined && agent.isStreaming;
-      },
-      isAgentEnabled: (agentId) => {
-        const agent = this.stellaAgents.get(agentId);
-        return agent !== undefined && agent.disabledAt === null;
-      },
-      run: async (agentId, prompt, routine, trigger) => {
-        const owner = this.stellaAgents.get(agentId);
-        if (owner === undefined || owner.disabledAt !== null) {
-          // The agent was switched off after this run was queued. Opening
-          // its conversation would undo the release the disable performed
-          // (see openSession), so the run is refused rather than run into a
-          // conversation the user cannot see.
-          throw new CoreError(`Agent ${agentId} is disabled`, "conflict");
-        }
-        const session = this.sessions.getByPersona(agentId);
-        if (session === undefined) {
-          // The agent exists but its conversation was never opened, or it
-          // was deleted while the run was queued: opening it here would
-          // resurrect a deleted agent's row, so this is a real failure.
-          throw new CoreError(
-            `No conversation to run the routine in (agent ${agentId})`,
-            "not_found",
-          );
-        }
-        // A routine runs in a conversation that is already open, so nothing
-        // on this path would otherwise ask whether the machine is up: a
-        // machine that died since (a crash, a stop from outside) answered
-        // every tool with podman's "container state improper" until the user
-        // happened to open the conversation again.
-        if (session.stella === true) {
-          const agentId = session.personaId;
-          if (agentId === undefined) {
-            throw new CoreError(
-              "The stella session has no agent: its machine cannot be woken",
-              "invalid",
-            );
-          }
-          await this.ensureStellaReady(agentId);
-          // Opening a conversation is what primes its skill catalog, and a
-          // routine opens one with the synchronous `openSession`: without
-          // this read the run builds its agent from an empty cache and the
-          // conversation is told it has no skills. Nothing read them again
-          // while the conversation stayed open, so after a server restart
-          // the routine-only conversations kept running without a catalog.
-          // The same read is needed after idle sleep woke the machine: the
-          // catalog is only read while the machine is up (see
-          // StellaMachine.ensureSkills).
-          await this.ensureStellaSkills(agentId);
-        }
-        await this.openSession(session.id);
-        const agent = this.pool.require(session.id);
-        this.sessions.touch(session.id);
-        return await agent.runRoutine(withTrigger(prompt, trigger), {
-          id: routine.id,
-          name: routine.name,
-        });
-      },
-      stop: (agentId, routineId) => {
-        const session = this.sessions.getByPersona(agentId);
-        if (session === undefined) return;
-        const agent = this.pool.get(session.id);
-        if (agent === undefined) return;
-        // Only the run this routine started is stopped: a run the user
-        // started in the same conversation must not be cut by a routine's
-        // stop button.
-        if (agent.runningRoutineId() !== routineId) return;
-        agent.abort();
-      },
-      check: async (routine) => {
-        const session = this.sessions.getByPersona(routine.agentId);
-        if (session === undefined) {
-          return {
-            kind: "unsupported",
-            problem:
-              "This agent has no conversation, so its checks have nowhere to run",
-          };
-        }
-        // The machine-bound sources run inside the machine, in the agent's
-        // own folder (see routine/check.ts); an MCP check goes through the
-        // server's own connection to that server, which is the one the agent
-        // calls through, so it works while the machine is down.
-        const stella = this.stellaRuntimeFor(session);
-        return await checkRoutine(routine, {
-          ...(stella === undefined
-            ? {}
-            : {
-                machine: {
-                  runner: stella.runner,
-                  files: stella.files,
-                  workdir: stella.cwd,
-                },
-              }),
-          callTool: (server, tool, args, signal) =>
-            this.mcp.callToolForCheck(server, tool, args, signal),
-        });
-      },
-    };
   }
 
   // --- browser lab --------------------------------------------------------
@@ -2259,24 +2106,4 @@ export class LumiscaCore {
       ...(session.stella === true ? { stella: true } : {}),
     };
   }
-}
-
-/** The routine's prompt as the run receives it, with one line naming the
- * check that fired it.
- *
- * Routine prompts are not drawn in the transcript (see stella-state.ts), so
- * the line changes nothing the user sees. It saves the run an MCP call whose
- * only purpose would be learning how much happened, and it keeps an item
- * from being missed when the user read the same list between the check and
- * the run.
- *
- * A scheduled run gets the prompt alone: nothing fired it but the clock. */
-function withTrigger(prompt: string, trigger?: RoutineTrigger): string {
-  if (trigger === undefined) return prompt;
-  return (
-    `${trigger.newItems} new item(s) appeared at ${formatLocalDateTime(
-      trigger.at,
-    )}, and the routine's watch check started this run with that observation.\n\n` +
-    prompt
-  );
 }

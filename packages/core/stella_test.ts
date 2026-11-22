@@ -2276,13 +2276,13 @@ test("stella routines: a run brings a stopped machine back", async () => {
     // The machine stops while the conversation stays open.
     state = { state: "stopped", vncPort: null, reason: "" };
     faux.setResponses([fauxAssistantMessage("checked")]);
-    const routine = core.getRoutineRepo().create({
+    const routine = core.routines.getRoutineRepo().create({
       agentId: agent.id,
       name: "Check",
       prompt: "check it",
       schedule: { kind: "every", minutes: 30 },
     });
-    await core.runRoutineNow(routine.id);
+    await core.routines.runNow(routine.id);
     assertEquals(starts, 1);
   } finally {
     await core.close();
@@ -2312,7 +2312,7 @@ test("stella routines: a run after a restart still has its skill catalog", async
     });
     const session = await core.getOrCreateStellaSession(agent.id);
     faux.setResponses([fauxAssistantMessage("checked")]);
-    const routine = core.getRoutineRepo().create({
+    const routine = core.routines.getRoutineRepo().create({
       agentId: agent.id,
       name: "Check",
       prompt: "check it",
@@ -2320,13 +2320,13 @@ test("stella routines: a run after a restart still has its skill catalog", async
     });
     // One run while the process still holds the catalog it read on open:
     // this is the listing the conversation has been given.
-    await core.runRoutineNow(routine.id);
+    await core.routines.runNow(routine.id);
 
     // What a restart looks like from here: the machine is attached again and
     // the cached catalogs are gone, while the conversation stays as it was.
     core.setStellaVm(fakeVmHost(RUNNING));
     faux.setResponses([fauxAssistantMessage("checked again")]);
-    await core.runRoutineNow(routine.id);
+    await core.routines.runNow(routine.id);
 
     const catalogs = core
       .readTranscript(session.id, {})!
