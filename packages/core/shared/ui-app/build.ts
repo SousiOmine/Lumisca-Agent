@@ -443,14 +443,44 @@ function validateBinding(
   scope: Scope,
   path: string,
 ): void {
+  const key = bindingKeyOf(value, path);
+  validateBoundKey(key, value as Record<string, unknown>, prop, scope, path);
+}
+
+/** The one `$bind*` key a binding carries, or a failure naming what it
+ * must be. */
+function bindingKeyOf(
+  value: unknown,
+  path: string,
+): "$bindState" | "$bindItem" {
   if (!isExpression(value)) {
     fail(path, "must be $bindState or $bindItem");
   }
-  const keys = Object.keys(value);
-  if (keys.length !== 1) {
+  if (Object.keys(value).length !== 1) {
     fail(path, "a binding carries exactly one key");
   }
-  if (Object.hasOwn(value, "$bindState")) {
+  if (Object.hasOwn(value, "$bindState")) return "$bindState";
+  if (Object.hasOwn(value, "$bindItem")) return "$bindItem";
+  fail(path, "must be $bindState or $bindItem");
+}
+
+/**
+ * Check one `$bind*` key against the prop it fills and the scope it sits in.
+ *
+ * The parser reaches a binding from two places: a prop the catalog marks
+ * `bind` (`validateBinding`) and an expression written where an expression
+ * is allowed (`validateExpression`). Both must read the key the same way,
+ * or the same card would be accepted through one door and refused through
+ * the other, so the rules live here once.
+ */
+function validateBoundKey(
+  key: "$bindState" | "$bindItem",
+  value: Readonly<Record<string, unknown>>,
+  prop: UiAppProp,
+  scope: Scope,
+  path: string,
+): void {
+  if (key === "$bindState") {
     if (prop.bind === "item") {
       fail(path, "must be $bindItem here");
     }
@@ -463,25 +493,21 @@ function validateBinding(
     checkType(resolved, prop, `${path}.$bindState`);
     return;
   }
-  if (Object.hasOwn(value, "$bindItem")) {
-    if (prop.bind === "state") {
-      fail(path, "must be $bindState here");
-    }
-    if (!scope.bindItem || scope.itemPath === null) {
-      fail(path, "$bindItem needs a Repeat over a state path");
-    }
-    const field = stringOf(
-      value.$bindItem,
-      `${path}.$bindItem`,
-      UI_APP_LIMITS.pathChars,
-    );
-    if (field.length === 0) fail(`${path}.$bindItem`, "must name a field");
-    validateItemField(field, scope, `${path}.$bindItem`);
-    const resolved = itemValueOf(scope, field);
-    checkType(resolved, prop, `${path}.$bindItem`);
-    return;
+  if (prop.bind === "state") {
+    fail(path, "must be $bindState here");
   }
-  fail(path, "must be $bindState or $bindItem");
+  if (!scope.bindItem || scope.itemPath === null) {
+    fail(path, "$bindItem needs a Repeat over a state path");
+  }
+  const field = stringOf(
+    value.$bindItem,
+    `${path}.$bindItem`,
+    UI_APP_LIMITS.pathChars,
+  );
+  if (field.length === 0) fail(`${path}.$bindItem`, "must name a field");
+  validateItemField(field, scope, `${path}.$bindItem`);
+  const resolved = itemValueOf(scope, field);
+  checkType(resolved, prop, `${path}.$bindItem`);
 }
 
 /** Check one expression against the prop it fills. */
@@ -554,35 +580,12 @@ function validateExpression(
       validateValue(value.$else as UiAppValue, prop, scope, `${path}.$else`);
       return;
     }
-    case "$bindState": {
-      if (prop.bind === undefined) {
-        fail(path, "$bindState is only an input value");
-      }
-      const statePath = stringOf(
-        value.$bindState,
-        `${path}.$bindState`,
-        UI_APP_LIMITS.pathChars,
-      );
-      const resolved = stateValueOf(statePath, scope, path);
-      checkType(resolved, prop, `${path}.$bindState`);
-      return;
-    }
+    case "$bindState":
     case "$bindItem": {
       if (prop.bind === undefined) {
-        fail(path, "$bindItem is only an input value");
+        fail(path, `${key} is only an input value`);
       }
-      if (!scope.bindItem || scope.itemPath === null) {
-        fail(path, "$bindItem needs a Repeat over a state path");
-      }
-      const field = stringOf(
-        value.$bindItem,
-        `${path}.$bindItem`,
-        UI_APP_LIMITS.pathChars,
-      );
-      validateItemField(field, scope, `${path}.$bindItem`);
-      const resolved = itemValueOf(scope, field);
-      if (resolved !== undefined)
-        checkType(resolved, prop, `${path}.$bindItem`);
+      validateBoundKey(key, value, prop, scope, path);
       return;
     }
     default:
