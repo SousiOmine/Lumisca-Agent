@@ -35,7 +35,7 @@ import { HostFileBackend } from "./host/files.ts";
  * the mode's shared folder (the Lumisca skills folder — see
  * `appSkillDirs`), then global `~/.agents/skills`, then app-embedded
  * built-in skills — any user skill shadows a same-named built-in one.
- * Shared with the sub-agent tool builders (tools/task-hub.ts) so both agent
+ * Shared with the sub-agent tool builders (tools/subagent-tools.ts) so both agent
  * kinds see the same skill set.
  *
  * `browserAvailable` gates the built-in web-browser skill: it is only

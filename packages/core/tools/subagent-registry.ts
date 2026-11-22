@@ -24,7 +24,7 @@ export interface Subagent {
   status: SubagentStatus;
   agent: Agent | null;
   /** Condenses this sub-agent's history when a request would exceed its
-   * model's window (see compactBeforeStep). Per sub-agent so the
+   * model's window (see subagent-run.ts). Per sub-agent so the
    * measurement anchor tracks its own turns; null for a row restored from
    * the store, which has no run behind it yet. */
   compactor: ContextCompactor | null;

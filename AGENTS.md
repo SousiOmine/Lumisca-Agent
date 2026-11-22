@@ -590,10 +590,10 @@ X サーバ（`:99`）、ウィンドウマネージャ、セッションバス�
 - サブエージェントの履歴も `messages` に書きます（`agent_id` はサブエージェントの行です）。
   セッションの会話は `SessionInfo.mainAgentId` で読み、`messages.session_id` はありません。
   `sessions` を生の SQL で作るときは、同じトランザクションで `agents` の main 行も入れてください（外部キーで落ちます）。
-  実行中に落ちたサブエージェントは、次にセッションを開いたときに `aborted` になります（`TaskHub.restore`）。
+  実行中に落ちたサブエージェントは、次にセッションを開いたときに `aborted` になります（`subagent-restore.ts` の `restoreSubagents`）。
 - サブエージェントのスキル: `skill` ツールが読むカタログはセッションが渡します（`SubagentRuntime.skills`）。
   stella はマシン内のカタログ（`stella.skills()`）から、サブエージェントが持たないツールを教える組み込みを落としたもの、code mode はワークスペースのディスカバリです。
-  開始時に `<available_skills>` 一覧も context メッセージとして 1 件渡します（`packages/core/tools/task-hub.ts` の `spawn`）。
+  開始時に `<available_skills>` 一覧も context メッセージとして 1 件渡します（`packages/core/tools/subagent-spawn.ts` の `spawnSubagent`）。
   VM の画面ツールはサブエージェントに渡しません。
 - スキル一覧のキャッシュはプロセスが持ちます。
   会話を開くときに読み（`primeStellaSkills`）、空なら run の開始時にも読み直します（`StellaMachine.ensureSkills`）。

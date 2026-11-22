@@ -1,170 +1,36 @@
-import { createSubagentAgent } from "../agent/subagent-runner.ts";
-import { TranscriptStore } from "../agent/transcript.ts";
-import type { Agent } from "../ai/agent.ts";
-import type { AgentEvent } from "../ai/agent-types.ts";
-import type { Model } from "../ai/catalog.ts";
-import { contextMessage } from "../ai/context-providers.ts";
-import { isRetryableRateLimit } from "../ai/llm-retry.ts";
-import type { NotificationPayload } from "../ai/notification.ts";
-import { notificationMessage } from "../ai/notification.ts";
-import {
-  MAX_RATE_LIMIT_RETRIES,
-  rateLimitRetryDelayMs,
-  sleepAbortable,
-} from "../ai/rate-limit.ts";
-import {
-  buildInterruptedRetryNotification,
-  buildRetryNotification,
-  hasNoVisibleOutput,
-  isTransientStreamError,
-} from "../ai/retry-policy.ts";
+import { sleepAbortable } from "../ai/rate-limit.ts";
 import type { StreamFn } from "../ai/transport.ts";
 import type { ClientEvent } from "../domain/event.ts";
-import type { AgentMessage, AssistantMessage } from "../domain/message.ts";
-import type { Api } from "../domain/model.ts";
-import { CoreError, errorMessage } from "../errors.ts";
-import { createLogger } from "../log.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";
-import { withOnDemandToolsNote } from "../mcp/context.ts";
-import { addToolsToAgent, registryToolPair } from "../mcp/tools.ts";
 import type { Tool } from "../ports/tool.ts";
 import type { CommandSafety } from "../safety/command-safety.ts";
 import type { AgentRepo } from "../session/agents.ts";
 import type { MessageRepo } from "../session/messages.ts";
-import { createShareProvider, shareSeedMessages } from "../share/context.ts";
 import type { ShareHub } from "../share/hub.ts";
-import type {
-  SubagentStatus,
-  SubagentType,
-  TaskInfo,
-  ThinkingLevel,
-} from "../shared/mod.ts";
+import type { SubagentType, TaskInfo } from "../shared/mod.ts";
 import { DEFAULT_LOCALE, type Locale } from "../shared/mod.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
-import { createSkillCatalogProvider } from "../skills/catalog.ts";
-import type { SkillDef } from "../skills/discover.ts";
-import { createSkillTool } from "../skills/tool.ts";
 import type { SearchProvider } from "../websearch/types.ts";
-import { createBashTool } from "./bash.ts";
-import { createEvalTool } from "./eval.ts";
-import { toAgentTool } from "./pi-adapter.ts";
 import type { ToolRegistry } from "./registry.ts";
-import {
-  formatTaskCompletion,
-  lastAssistantText,
-  subagentSystemPrompt,
-} from "./subagent-format.ts";
-import type { Subagent } from "./subagent-registry.ts";
-import {
-  MAX_FINISHED_SUBAGENTS,
-  type SubagentHub,
-  SubagentRegistry,
-} from "./subagent-registry.ts";
-import {
-  createSendMessageTool,
-  createTaskOutputTool,
-  createTaskTool,
-} from "./task.ts";
-import {
-  fileTools,
-  readOnlyInvestigationTools,
-  type ToolBackends,
-} from "./tool-pieces.ts";
-import { createWebSearchTools } from "./web.ts";
+import type { ParentDelivery } from "./subagent-mesh.ts";
+import { SubagentMesh } from "./subagent-mesh.ts";
+import type { SubagentHub } from "./subagent-registry.ts";
+import { SubagentRegistry } from "./subagent-registry.ts";
+import { restoreSubagents } from "./subagent-restore.ts";
+import { SubagentRunner } from "./subagent-run.ts";
+import type { SubagentRuntime, SubagentSpawnHost } from "./subagent-spawn.ts";
+import { SubagentSession, spawnSubagent } from "./subagent-spawn.ts";
+import { SubagentToolWiring } from "./subagent-tools.ts";
+import { createTaskFamilyTools } from "./task.ts";
 
-/** Concurrent sub-agents per session. Bounds LLM parallelism and memory;
- * the task tool reports the limit so the agent can wait for a slot. */
-export const MAX_SUBAGENTS = 8;
-/** Nesting depth of sub-agents (the parent agent is depth 0). At the limit
- * the task tool is not part of the tool set, so no deeper chains can form. */
-export const MAX_SUBAGENT_DEPTH = 2;
-/** Live-response tail reported while a sub-agent runs. */
-const TASK_TAIL_LIMIT = 8 * 1024;
-/** `to` values of send_message that resolve to the caller's parent agent. */
-const PARENT_ALIASES = ["parent", "main"] as const;
-
-/** Module logger (debug-gated): a failed sub-agent compaction is a
- * best-effort miss, not a session failure. */
-const log = createLogger("task");
-
-/** Read-only investigation tools of the `explore` sub-agent. */
-function exploreTools(
-  backends: ToolBackends,
-  safety: CommandSafety | undefined,
-  skills: () => SkillDef[],
-): Tool[] {
-  return [
-    ...readOnlyInvestigationTools(backends.files, backends.runner, safety),
-    createSkillTool({ skills }),
-  ];
-}
-
-/** Full coding tool set of the `general` sub-agent: the session's tools
- * without ask/todo/async_bash. Sub-agents have no UI round trip (ask), no
- * plan panel of their own (todo), and no background commands that would
- * outlive them (async_bash). `safety` (when present) gates their bash/eval
- * tools like the main agent's; browser-lab tools are not preloaded either
- * — general sub-agents reach them through the session's tool registry via
- * the search/call pair, exactly like the main agent.
- *
- * `eval` is the session's call, not this function's: it runs JavaScript in
- * the SERVER process, so a session that works inside the stella machine
- * (whose whole premise is that nothing outside it is reachable) must not
- * hand it out — not even to a sub-agent. The runtime says which it is (see
- * SubagentRuntime.eval); there is no default, so a caller has to decide. */
-function generalTools(
-  backends: ToolBackends,
-  evalTool: boolean,
-  safety: CommandSafety | undefined,
-  webSearch: SearchProvider | undefined,
-  skills: () => SkillDef[],
-): Tool[] {
-  return [
-    ...fileTools(backends.files),
-    createBashTool({
-      files: backends.files,
-      runner: backends.runner,
-      safety,
-    }),
-    ...(evalTool ? [createEvalTool({ safety })] : []),
-    ...(webSearch === undefined ? [] : createWebSearchTools(webSearch)),
-    createSkillTool({ skills }),
-  ];
-}
-
-/** The runtime a new sub-agent spawns into: the tool backends the session
- * runs on (this machine or the stella VM), the model, its stored thinking
- * level, and the skill catalog its `skill` tool may load.
- *
- * The catalog is the session's, not a discovery of the hub's: a stella
- * conversation's skills live inside the machine, and only the runtime knows
- * how to read them. A getter because the coding set re-discovers on every
- * call (a skill written mid-session is loadable by the next call); a stella
- * session returns the catalog it read when the conversation opened, exactly
- * like the main agent's own skill tool does. */
-export interface SubagentRuntime {
-  backends: ToolBackends;
-  model: Model<Api>;
-  thinkingLevel: ThinkingLevel;
-  /** Whether the sub-agent gets `eval`. False for a session that works
-   * inside the stella machine: the tool runs in the server process, which
-   * is exactly the boundary that mode exists to hold. */
-  eval: boolean;
-  /** The catalog the sub-agent may load: the session's catalog minus the
-   * guides whose tools a sub-agent does not have (see
-   * tool-pieces.subagentSkills). */
-  skills: () => SkillDef[];
-}
-
-/** Where the parent (main) agent receives injected notifications. Set by
- * the session agent while the session is open. The parent's transcript is
- * the only one a client renders, so the delivery site (the session agent,
- * not this hub) stamps the `steered` flag on what it injects — see
- * SessionAgent.injectNotification. */
-export interface ParentDelivery {
-  isActive(): boolean;
-  deliver(payload: NotificationPayload): void;
-}
+/** Concurrent sub-agents per session, and the nesting depth a spawn may
+ * reach (see subagent-spawn.ts, which enforces both). */
+export { MAX_SUBAGENT_DEPTH, MAX_SUBAGENTS } from "./subagent-spawn.ts";
+/** The runtime a new sub-agent spawns into (see subagent-spawn.ts, which
+ * owns what one is). */
+/** Where the parent (main) agent receives injected notifications (see
+ * subagent-mesh.ts, which owns delivery). */
+export type { ParentDelivery, SubagentRuntime };
 
 export interface TaskHubOptions {
   /** The session this hub's agents belong to. It is what the events and the
@@ -214,6 +80,12 @@ export interface TaskHubOptions {
  * The lifecycle is bound to the session (owned by the session pool), not to
  * one agent: sub-agents run independently of the agent run — aborting a run
  * never stops them — and survive agent rebuilds. close() aborts them all.
+ *
+ * The facade over the pieces: the roster (subagent-registry.ts), the runs
+ * (subagent-run.ts), the tool sets (subagent-tools.ts), the spawn
+ * (subagent-spawn.ts), the routing (subagent-mesh.ts) and the restore
+ * (subagent-restore.ts). What stays here is the session's own state and the
+ * seams the pool turns.
  */
 /** The hub the task-family tools are written against (see SubagentHub): a
  * signature that moves on this class and not on the interface fails to
@@ -224,110 +96,73 @@ export type TaskHubImplementsToolsSeam = TaskHub extends SubagentHub
 
 export class TaskHub {
   private readonly subagents: SubagentRegistry;
-  private parentDelivery: ParentDelivery | null = null;
+  private readonly runner: SubagentRunner;
+  private readonly mesh: SubagentMesh;
+  private readonly wiring: SubagentToolWiring;
+  /** The session's own state, as a spawn reads it (see subagent-spawn.ts). */
+  private readonly session: SubagentSession;
+  private readonly spawnHost: SubagentSpawnHost;
   private closed = false;
 
   private readonly sessionId: string;
   /** The session's main agent (see TaskHubOptions.mainAgentId). */
   private readonly mainAgentId: string;
   private readonly agents: AgentRepo;
-  private readonly messages: MessageRepo;
-  private resolveRuntime: () => SubagentRuntime;
-  private readonly streamFn: StreamFn;
-  private readonly safety: CommandSafety | undefined;
-  private readonly emit: (event: ClientEvent) => void;
-  /** The language the sub-agents answer in: the session's own at the time
-   * its agent was built (see the pool's getLanguage dep). */
-  private language: Locale;
-  /** The compaction tuning read from the settings store (see
-   * shared/settings-keys.ts); read on every check, like the main agent. */
-  private readonly compactionPolicy: (() => CompactionPolicyInput) | undefined;
-  /** Sleeps the retry backoff (see backoff()). */
-  private readonly backoffSleep: (
-    ms: number,
-    signal?: AbortSignal,
-  ) => Promise<void>;
-  /** The user's web-search provider (set by the pool on every open). A
-   * `general` sub-agent searches the web exactly like the main agent does;
-   * omitted → no web tools in its set. */
-  private webSearch: SearchProvider | undefined;
-  /** The computers lending folders to this session (set by the pool on every
-   * open). A sub-agent reaches those folders through the session's backends,
-   * so it is told about them at spawn (see shareSeedMessages). */
-  private sharesHub: ShareHub | undefined;
-  /** The session's tool registry (set by the pool on every open): holds
-   * every discoverable tool (MCP tools, browser-lab tools, future
-   * extensions) whose definitions stay out of the LLM context. General
-   * sub-agents get the tool_search / tool_call pair over it. */
-  private registry: ToolRegistry | null = null;
-  /** The attachment whose discovery has been (or will be) applied to the
-   * registry and the running sub-agents. Guards against stale callbacks: a
-   * config change replaces the attachment mid-discovery, and the old
-   * attachment's ready must not overwrite the current registry or attach
-   * its tools. */
-  private handledAttachment: McpAttachment | null = null;
 
   constructor(options: TaskHubOptions) {
     this.sessionId = options.sessionId;
     this.mainAgentId = options.mainAgentId;
     this.agents = options.agents;
-    this.messages = options.messages;
     this.subagents = new SubagentRegistry(options.mainAgentId);
-    this.resolveRuntime = options.resolveRuntime;
-    this.streamFn = options.streamFn;
-    this.safety = options.safety;
-    this.language = options.language ?? DEFAULT_LOCALE;
-    this.compactionPolicy = options.compactionPolicy;
-    this.backoffSleep = options.backoffSleep ?? sleepAbortable;
-    this.emit = options.emit;
-    this.restore();
-  }
-
-  /** Bring the session's settled sub-agents back into the roster.
-   *
-   * A row still marked running belongs to a process that is gone: this hub
-   * is built once per open, and nothing of this session can be running in a
-   * process that is only now building it. Settling those rows here is what
-   * keeps the list honest — a task that can never finish must not offer
-   * itself as running.
-   *
-   * Only the newest MAX_FINISHED_SUBAGENTS are loaded, the same bound the
-   * roster keeps in memory; the store keeps every row for the read that
-   * resumes one. */
-  private restore(): void {
-    this.agents.abortRunning(this.sessionId, Date.now());
-    const records = this.agents.listSubagents(
-      this.sessionId,
-      MAX_FINISHED_SUBAGENTS,
-    );
-    for (const record of records) {
-      this.subagents.add({
-        id: record.id,
-        parentId: record.parentAgentId,
-        type: record.type,
-        depth: record.depth,
-        description: record.description,
-        status: record.status,
-        agent: null,
-        compactor: null,
-        transcript: null,
-        startedAt: record.startedAt,
-        ...(record.finishedAt !== undefined
-          ? { finishedAt: record.finishedAt }
-          : {}),
-        tail: "",
-        resultText: record.resultText,
-        unsubscribe: () => {},
-        waiters: new Set(),
-        abort: new AbortController(),
-      });
-    }
+    this.session = new SubagentSession({
+      resolveRuntime: options.resolveRuntime,
+      language: options.language ?? DEFAULT_LOCALE,
+      compactionPolicy: options.compactionPolicy,
+    });
+    this.mesh = new SubagentMesh({
+      mainAgentId: this.mainAgentId,
+      roster: this.subagents,
+      isClosed: () => this.closed,
+    });
+    this.runner = new SubagentRunner({
+      sessionId: this.sessionId,
+      roster: this.subagents,
+      agents: this.agents,
+      emit: options.emit,
+      notify: (parentId, payload) => this.mesh.notify(parentId, payload),
+      isClosed: () => this.closed,
+      backoffSleep: options.backoffSleep ?? sleepAbortable,
+    });
+    this.wiring = new SubagentToolWiring({
+      runningAgents: () => this.subagents.all(),
+    });
+    this.spawnHost = {
+      hub: this,
+      sessionId: this.sessionId,
+      agents: this.agents,
+      messages: options.messages,
+      roster: this.subagents,
+      runner: this.runner,
+      settings: this.session,
+      safety: options.safety,
+      streamFn: options.streamFn,
+      isClosed: () => this.closed,
+      searchTools: () => this.wiring.searchTools(),
+      compactBeforeStep: (agentId, signal) =>
+        this.runner.compactBeforeStep(agentId, signal),
+      emit: options.emit,
+    };
+    restoreSubagents({
+      agents: this.agents,
+      sessionId: this.sessionId,
+      roster: this.subagents,
+    });
   }
 
   /** Replace the runtime resolver (called on every session open/rebuild so
    * the closure never holds a stale session or model). */
   setRuntimeResolver(resolver: () => SubagentRuntime): void {
-    this.resolveRuntime = resolver;
+    this.session.resolveRuntime = resolver;
   }
 
   /** Set the language sub-agents answer in (called on every session
@@ -335,14 +170,14 @@ export class TaskHub {
    * the sub-agents spawned after it — running ones keep the language they
    * were started with). */
   setLanguage(language: Locale): void {
-    this.language = language;
+    this.session.language = language;
   }
 
   /** Set the user's web-search provider (called on every session
    * open/rebuild, so a provider configured or changed later reaches the
    * sub-agents spawned after it). */
   setWebSearch(provider: SearchProvider | undefined): void {
-    this.webSearch = provider;
+    this.session.webSearch = provider;
   }
 
   /** Set the computers lending folders to this session (called on every
@@ -350,67 +185,18 @@ export class TaskHub {
    * after a sub-agent started does not reach it, exactly like the skill
    * catalog it was seeded with. */
   setShares(hub: ShareHub | undefined): void {
-    this.sharesHub = hub;
+    this.session.sharesHub = hub;
   }
 
   /** Attach the session's shared MCP attachment and tool registry: general
    * sub-agents get the tool_search / tool_call pair over the registry —
    * spawned ones read it at spawn, agents still running while discovery was
-   * in flight receive the pair when it finishes. Only the current
-   * attachment is registered for: an attachment replaced by a config
-   * change must never apply its (stale or empty) tools. */
+   * in flight receive the pair when it finishes (see SubagentToolWiring). */
   setMcp(
     attachment: McpAttachment | null,
     registry: ToolRegistry | null,
   ): void {
-    this.registry = registry;
-    if (attachment !== null && attachment !== this.handledAttachment) {
-      this.handledAttachment = attachment;
-      attachment.whenReady((tools) =>
-        this.attachMcpToRunning(attachment, tools),
-      );
-    }
-  }
-
-  /** Discovery finished for the session's current attachment: merge the
-   * MCP tools into the session's tool registry (which the pool may already
-   * have seeded with browser-lab tools — discovery must never wipe them)
-   * and attach the search/call pair — plus the on-demand-tools note — to
-   * every running general sub-agent that spawned before the registry held
-   * anything. Callbacks of older attachments (a config change replaced the
-   * manager mid-discovery) return here: only the current attachment may
-   * write the registry.
-   *
-   * This is the one place where a prompt is still rewritten while an agent
-   * runs (the session's own prompt never changes — see mcp/context.ts).
-   * It stays because the alternative silently strips a capability: a child
-   * spawned before discovery could never reach the MCP tools, and a child
-   * that just started pays one request's prefix for the pair it needs for
-   * the rest of its work. */
-  private attachMcpToRunning(attachment: McpAttachment, tools: Tool[]): void {
-    if (attachment !== this.handledAttachment) return;
-    if (this.registry === null) return;
-    this.registry.addTools(tools);
-    if (this.registry.isEmpty) return;
-    const pair = this.searchTools();
-    for (const sub of this.subagents.all()) {
-      if (sub.status !== "running" || sub.type !== "general") continue;
-      if (sub.agent === null) continue;
-      addToolsToAgent(sub.agent, pair);
-      sub.agent.state.systemPrompt = withOnDemandToolsNote(
-        sub.agent.state.systemPrompt,
-      );
-    }
-  }
-
-  /** The tool_search / tool_call pair backed by the session's registry
-   * (empty when the session has no discoverable tools). The pair resolves
-   * the registry through a provider, so a config change that swaps the
-   * registry (pool.open with a new MCP attachment) redirects pairs already
-   * attached to running sub-agents without replacing them. */
-  private searchTools(): Tool[] {
-    if (this.registry === null || this.registry.isEmpty) return [];
-    return registryToolPair(() => this.registry!);
+    this.wiring.set(attachment, registry);
   }
 
   /** Hook the parent (main) session agent into the hub: it receives task
@@ -418,30 +204,12 @@ export class TaskHub {
    * session agent registers itself on construction and deregisters on
    * close. */
   setParentDelivery(delivery: ParentDelivery | null): void {
-    this.parentDelivery = delivery;
+    this.mesh.setParentDelivery(delivery);
   }
 
   /** The task-family tools of the parent (main) agent. */
   parentTools(): Tool[] {
-    return this.agentTools(this.mainAgentId, 0, true);
-  }
-
-  /** The task-family tools of one sub-agent. `canDelegate` gates the task
-   * and task_output tools (the depth limit); send_message is always present
-   * — it is how agents communicate. */
-  private agentTools(
-    agentId: string,
-    depth: number,
-    canDelegate: boolean,
-  ): Tool[] {
-    const tools: Tool[] = [createSendMessageTool(this, agentId)];
-    if (canDelegate) {
-      tools.push(
-        createTaskTool(this, agentId, depth),
-        createTaskOutputTool(this, agentId),
-      );
-    }
-    return tools;
+    return createTaskFamilyTools(this, this.mainAgentId, 0, true);
   }
 
   /** Start a sub-agent for `parentId` (the parent agent is the session id)
@@ -455,262 +223,13 @@ export class TaskHub {
     description: string,
     prompt: string,
   ): TaskInfo {
-    if (this.closed) {
-      throw new CoreError("The session is closed", "unavailable");
-    }
-    const running = [...this.subagents.all()].filter(
-      (sub) => sub.status === "running",
-    ).length;
-    if (running >= MAX_SUBAGENTS) {
-      throw new CoreError(
-        `Too many agents running (max ${MAX_SUBAGENTS}); wait for one to ` +
-          `finish or check them with task_output`,
-        "unavailable",
-      );
-    }
-    const id = this.agents.nextSubagentId();
-    const depth = parentDepth + 1;
-    const canDelegate = type === "general" && depth < MAX_SUBAGENT_DEPTH;
-    const runtime = this.resolveRuntime();
-    // General sub-agents share the session's discoverable tools through
-    // the registry (seeded by the pool with browser-lab tools before any
-    // spawn; MCP tools merge in when discovery finishes — sub-agents
-    // spawned before that get the pair via attachMcpToRunning).
-    const searchable = type === "general" ? this.searchTools() : [];
-    const tools = [
-      ...(type === "general"
-        ? generalTools(
-            runtime.backends,
-            runtime.eval,
-            this.safety,
-            this.webSearch,
-            runtime.skills,
-          )
-        : exploreTools(runtime.backends, this.safety, runtime.skills)),
-      ...searchable,
-      ...this.agentTools(id, depth, canDelegate),
-    ];
-    const basePrompt = subagentSystemPrompt(id, parentId, type, this.language);
-    const systemPrompt =
-      searchable.length > 0 ? withOnDemandToolsNote(basePrompt) : basePrompt;
-    // A sub-agent has no context providers and nothing republishes its
-    // context, so the skill catalog is seeded once, at spawn, in the same
-    // shape the main agent publishes. Without it the `skill` tool points at
-    // a listing the sub-agent never received.
-    const catalog = createSkillCatalogProvider({ skills: runtime.skills });
-    const messages = catalog
-      .next()
-      .map((update) => contextMessage(catalog.name, update, Date.now()));
-    // The folders lent to this session, in the same one-shot form: the
-    // sub-agent's backends hold them, and nothing else would ever name them
-    // (see shareSeedMessages).
-    const shares = createShareProvider({
-      grants: () => this.sharesHub?.grantsFor(this.sessionId) ?? [],
-    });
-    messages.push(...shareSeedMessages(shares, Date.now()));
-    // The transcript is written through the same ledger the main agent uses,
-    // over this agent's own id: a checkpoint inserted into the middle of the
-    // view lands at the same position in the store.
-    const transcript = new TranscriptStore(id, this.messages);
-    // The agent is built by the agent layer (agent/subagent-runner.ts): this
-    // hub owns the delegation protocol, not how an agent is assembled.
-    const { agent, compactor } = createSubagentAgent(
-      {
-        id,
-        model: runtime.model,
-        systemPrompt,
-        messages,
-        tools: tools.map(toAgentTool),
-        thinkingLevel: runtime.thinkingLevel,
-        streamFn: this.streamFn,
-      },
-      {
-        beforeStep: (signal) => this.compactBeforeStep(id, signal),
-        insert: (index, message) => transcript.insertAt(index, message),
-        ...(this.compactionPolicy !== undefined
-          ? { compactionPolicy: this.compactionPolicy }
-          : {}),
-      },
-    );
-    // The row lands before the run starts: a process that dies mid-run still
-    // leaves the task behind, and the next open settles it as aborted. The
-    // agent built above has no listener and has been sent nothing, so a
-    // failed write leaves nothing running.
-    const startedAt = Date.now();
-    this.agents.createSubagent({
-      id,
-      sessionId: this.sessionId,
-      parentAgentId: parentId,
-      type,
-      depth,
-      description,
-      startedAt,
-    });
-    const abort = new AbortController();
-    const sub: Subagent = {
-      id,
+    return spawnSubagent(this.spawnHost, {
       parentId,
+      parentDepth,
       type,
-      depth,
       description,
-      status: "running",
-      agent,
-      compactor,
-      transcript,
-      startedAt,
-      tail: "",
-      resultText: "",
-      unsubscribe: agent.subscribe((event) => this.handleEvent(sub, event)),
-      waiters: new Set(),
-      abort,
-    };
-    this.subagents.add(sub);
-    this.emit({
-      type: "task_start",
-      sessionId: this.sessionId,
-      agentId: id,
-      parentAgentId: parentId,
-      subagentType: type,
-      description,
+      prompt,
     });
-    void this.runSubagent(sub, agent, prompt);
-    return this.info(id);
-  }
-
-  /** Pre-step hook of one sub-agent: condense its history before a request
-   * that would exceed its model's window is derived from it (see
-   * ai/context-compaction.ts — the main agent runs the same seam). The
-   * compactor is cached per sub-agent so its measurement anchor survives the
-   * turns. */
-  private async compactBeforeStep(
-    agentId: string,
-    signal: AbortSignal,
-  ): Promise<void> {
-    const sub = this.subagents.get(agentId);
-    if (this.closed || signal.aborted || sub === undefined) return;
-    const agent = sub.agent;
-    const compactor = sub.compactor;
-    if (agent === null || compactor === null) return;
-    try {
-      await compactor.compactIfNeeded(agent.state.messages);
-    } catch (error) {
-      // A failed compaction must not kill the sub-agent: the request goes
-      // out with the history it had.
-      log.debug(`sub-agent compaction failed: ${errorMessage(error)}`);
-    }
-  }
-
-  /** Run a sub-agent to completion, retrying the two recoverable failures
-   * with exponential backoff (bounded by MAX_RATE_LIMIT_RETRIES each):
-   * - a rate-limited (429) turn drops the empty error turn and re-runs the
-   *   same prompt (no duplicate user message),
-   * - a transient transport failure (a stream cut mid-flight) continues the
-   *   conversation: the partial answer stays in the transcript, and the
-   *   retry asks the model to resume — repeating work would waste the
-   *   tokens already spent, and dropping the turn would discard a long
-   *   investigation.
-   *
-   * Any other outcome — success, a permanent error, an abort, or the
-   * exhausted budget — settles the sub-agent once. */
-  private async runSubagent(
-    sub: Subagent,
-    agent: Agent,
-    prompt: string,
-  ): Promise<void> {
-    let first = true;
-    /** Prompt for the next attempt; undefined → re-run the transcript. */
-    let nextPrompt: AgentMessage | undefined;
-    let rateLimitAttempt = 0;
-    let transportAttempt = 0;
-
-    for (;;) {
-      if (sub.agent === null || this.closed) return;
-      try {
-        if (first) {
-          await agent.prompt(prompt);
-          first = false;
-        } else if (nextPrompt !== undefined) {
-          await agent.prompt(nextPrompt);
-        } else {
-          await agent.continue();
-        }
-      } catch (error) {
-        // The agent rejected (a race with another run): settle as failed
-        // with the reason instead of a generic string.
-        this.finalize(
-          sub,
-          "failed",
-          `Sub-agent run failed to start: ${errorMessage(error)}`,
-        );
-        return;
-      }
-      if (sub.agent === null || this.closed) return;
-      const last = sub.agent.state.messages.at(-1) as
-        | AssistantMessage
-        | undefined;
-      if (last === undefined || last.role !== "assistant") break;
-
-      if (isRetryableRateLimit(last)) {
-        if (rateLimitAttempt >= MAX_RATE_LIMIT_RETRIES) break;
-        rateLimitAttempt++;
-        // Drop the failed error turn so the continuation re-uses the prompt.
-        // The store follows it: that turn's row was written when it ended,
-        // and a ledger left ahead of the array would never write the answer
-        // that replaces it.
-        const messages = sub.agent.state.messages;
-        if (messages.length > 0 && messages.at(-1)!.role === "assistant") {
-          const kept = messages.slice(0, -1);
-          sub.agent.state.messages = kept;
-          const transcript = sub.transcript;
-          if (transcript !== null) transcript.forgetFrom(kept, kept.length);
-        }
-        nextPrompt = undefined;
-        if (
-          !(await this.backoff(sub, rateLimitRetryDelayMs(rateLimitAttempt)))
-        ) {
-          this.finalize(sub, "failed", sub.agent.state.errorMessage);
-          return;
-        }
-        continue;
-      }
-
-      if (isTransientStreamError(last)) {
-        if (transportAttempt >= MAX_RATE_LIMIT_RETRIES) break;
-        transportAttempt++;
-        nextPrompt = hasNoVisibleOutput(last)
-          ? buildRetryNotification(transportAttempt)
-          : buildInterruptedRetryNotification(transportAttempt);
-        if (
-          !(await this.backoff(sub, rateLimitRetryDelayMs(transportAttempt)))
-        ) {
-          this.finalize(sub, "failed", sub.agent.state.errorMessage);
-          return;
-        }
-        continue;
-      }
-      break;
-    }
-
-    const last = sub.agent?.state.messages.at(-1) as
-      | AssistantMessage
-      | undefined;
-    this.finalize(
-      sub,
-      // Still running here (finalize settles it), so the agent is live.
-      last?.stopReason === "error" ? "failed" : "finished",
-      sub.agent?.state.errorMessage,
-    );
-  }
-
-  /** Sleep before a retry. False when the wait was aborted (session closed
-   * or the sub-agent killed), so the caller settles instead of retrying. */
-  private async backoff(sub: Subagent, ms: number): Promise<boolean> {
-    try {
-      await this.backoffSleep(ms, sub.abort.signal);
-      return true;
-    } catch {
-      return false;
-    }
   }
 
   /** Snapshot of one sub-agent for task_output and the resync endpoint. */
@@ -746,177 +265,20 @@ export class TaskHub {
     summary: string,
     message: string,
   ): { deliveredTo: string } {
-    if (this.closed) {
-      throw new CoreError("The session is closed", "unavailable");
-    }
-    if ((PARENT_ALIASES as readonly string[]).includes(to)) {
-      const parentId = this.parentOf(from);
-      if (parentId === undefined) {
-        throw new CoreError("The main agent has no parent", "invalid");
-      }
-      this.deliverTo(parentId, from, summary, message);
-      return { deliveredTo: parentId };
-    }
-    this.deliverTo(to, from, summary, message);
-    return { deliveredTo: to };
-  }
-
-  private parentOf(agentId: string): string | undefined {
-    if (agentId === this.mainAgentId) return undefined;
-    return this.subagents.get(agentId)?.parentId;
-  }
-
-  /** Route an explicit message. Throws when the target is unknown or no
-   * longer active, so the calling agent learns immediately instead of
-   * silently losing the message. */
-  private deliverTo(
-    targetId: string,
-    from: string,
-    summary: string,
-    message: string,
-  ): void {
-    const payload: NotificationPayload = {
-      kind: "message",
-      title: `[Message from ${from} (${summary})]`,
-      body: message,
-      status: "neutral",
-    };
-    if (targetId === this.mainAgentId) {
-      if (this.parentDelivery === null || !this.parentDelivery.isActive()) {
-        throw new CoreError("The main agent is not active", "unavailable");
-      }
-      this.parentDelivery.deliver(payload);
-      return;
-    }
-    const sub = this.subagents.require(targetId);
-    if (sub.status !== "running") {
-      throw new CoreError(
-        `Agent is not active: ${targetId} (${sub.status})`,
-        "unavailable",
-      );
-    }
-    // Running agents always have a live Agent (finalize releases it).
-    sub.agent!.steer(notificationMessage(payload));
-  }
-
-  /** Best-effort notification to the agent that spawned a task: the parent
-   * agent gets it through the delivery hook (steer while running, a fresh
-   * run while idle); a finished or aborted sub-agent can no longer act, so
-   * the message is dropped. */
-  private notify(parentId: string, payload: NotificationPayload): void {
-    if (parentId === this.mainAgentId) {
-      if (this.parentDelivery?.isActive()) {
-        this.parentDelivery.deliver(payload);
-      }
-      return;
-    }
-    const sub = this.subagents.get(parentId);
-    if (sub !== undefined && sub.status === "running") {
-      // Running agents always have a live Agent (finalize releases it).
-      sub.agent!.steer(notificationMessage(payload));
-    }
-  }
-
-  /** Write the messages this sub-agent has appended since the last write.
-   *
-   * A failed write is logged, not thrown: the agent's event guard swallows
-   * whatever a listener throws, and the ledger is left where it was, so the
-   * next message_end writes the tail again. */
-  private persistTranscript(sub: Subagent): void {
-    const agent = sub.agent;
-    const transcript = sub.transcript;
-    if (agent === null || transcript === null) return;
-    try {
-      transcript.persist(agent.state.messages);
-    } catch (error) {
-      log.warn(
-        `sub-agent ${sub.id}: persisting its transcript failed: ${errorMessage(
-          error,
-        )}`,
-      );
-    }
-  }
-
-  private handleEvent(sub: Subagent, event: AgentEvent): void {
-    // A finished message is a row. Writing it here (rather than diffing the
-    // transcript later) keeps the store in the order the loop produced it,
-    // even when a compaction splice moved a checkpoint into the middle.
-    if (event.type === "message_end") {
-      this.persistTranscript(sub);
-      return;
-    }
-    if (event.type !== "message_update") return;
-    const inner = event.assistantMessageEvent;
-    if (inner.type !== "text_delta") return;
-    sub.tail = (sub.tail + inner.delta).slice(-TASK_TAIL_LIMIT);
-    this.emit({
-      type: "task_delta",
-      sessionId: this.sessionId,
-      agentId: sub.id,
-      delta: inner.delta,
-    });
-  }
-
-  /** Settle a sub-agent run: capture the result, resolve waiters, emit the
-   * end event, and notify the spawning agent — unless it is waiting on this
-   * task right now (it gets the result through task_output instead).
-   * Idempotent: close() may settle the run first. */
-  private finalize(
-    sub: Subagent,
-    status: SubagentStatus,
-    failure?: string,
-  ): void {
-    if (sub.status !== "running") return;
-    sub.status = status;
-    sub.finishedAt = Date.now();
-    sub.resultText = lastAssistantText(sub.agent!.state.messages);
-    // The tail of the run may hold messages no event announced (a steered
-    // notification the loop appended), so the last write happens here,
-    // before the agent is released.
-    this.persistTranscript(sub);
-    sub.unsubscribe();
-    // The message history is no longer needed: its rows are in the store, so
-    // the memory can go. Only the snapshot fields (kept below) stay
-    // queryable.
-    sub.agent = null;
-    try {
-      this.agents.settle(sub.id, status, sub.finishedAt, sub.resultText);
-    } catch (error) {
-      // finalize also runs from close(), where there is no caller to fail:
-      // log the one row that did not land instead of aborting the teardown.
-      log.warn(
-        `sub-agent ${sub.id}: settling its row failed: ${errorMessage(error)}`,
-      );
-    }
-    const parentWaiting = [...sub.waiters].some(
-      (waiter) => waiter.callerId === sub.parentId,
-    );
-    const snapshot = this.subagents.infoOf(sub);
-    for (const waiter of sub.waiters) waiter.settle(snapshot);
-    sub.waiters.clear();
-    this.emit({
-      type: "task_end",
-      sessionId: this.sessionId,
-      agentId: sub.id,
-      status,
-    });
-    if (!parentWaiting && !this.closed) {
-      this.notify(sub.parentId, formatTaskCompletion(snapshot, failure));
-    }
-    this.subagents.evictFinished();
+    return this.mesh.send(from, to, summary, message);
   }
 
   /** Abort every running sub-agent and drop the parent delivery hook.
    * Called by the session pool when the session closes. */
   close(): void {
     this.closed = true;
-    this.parentDelivery = null;
+    this.mesh.setParentDelivery(null);
     for (const sub of [...this.subagents.all()]) {
       if (sub.status !== "running") continue;
       // Running agents always have a live Agent (finalize releases it).
       sub.abort.abort();
       sub.agent!.abort();
-      this.finalize(sub, "aborted");
+      this.runner.finalize(sub, "aborted");
     }
   }
 }

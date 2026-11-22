@@ -85,6 +85,24 @@ export function createTaskTool(
   };
 }
 
+/** The task-family tools of one agent: send_message always, plus the task and
+ * task_output tools when it may delegate (`canDelegate` is the depth limit;
+ * send_message is how agents communicate at any depth). The parent (main)
+ * agent gets all three. */
+export function createTaskFamilyTools(
+  hub: SubagentHub,
+  agentId: string,
+  depth: number,
+  canDelegate: boolean,
+): Tool[] {
+  const tools: Tool[] = [createSendMessageTool(hub, agentId)];
+  if (canDelegate) {
+    tools.push(createTaskTool(hub, agentId, depth));
+    tools.push(createTaskOutputTool(hub, agentId));
+  }
+  return tools;
+}
+
 const taskOutputSchema = object({
   agent_id: string(
     "The id of the sub-agent (returned by the task tool when it was started)",

@@ -891,7 +891,7 @@ URLはシェルを介さず、プログラムの引数として1つだけ渡し�
 
   サブエージェントの `skill` ツールは、セッションが渡すカタログ（`SubagentRuntime.skills`）を読みます。
   stella ではマシン内のカタログをそのまま渡すのではなく、サブエージェントが持たないツールを教える組み込み（`agent-create`、`identity`、`routines`、`mcp-servers`、`desktop-apps`、`skill-authoring`）を落とします（`tool-pieces.ts` の `subagentSkills`）。
-  サブエージェントは context provider を持たないので、開始時に同じ `<available_skills>` の一覧を context メッセージとして 1 件だけ積みます（`task-hub.ts` の `spawn`）。
+  サブエージェントは context provider を持たないので、開始時に同じ `<available_skills>` の一覧を context メッセージとして 1 件だけ積みます（`subagent-spawn.ts` の `spawnSubagent`）。
   名前を知らせずに `skill` ツールだけを持たせると、カタログを直しても使えません。
 
 - コンポーザのテキスト欄は入力した行数に応じて高さを変え、12 行で頭打ちにして内側でスクロールさせます。
@@ -950,7 +950,7 @@ URLはシェルを介さず、プログラムの引数として1つだけ渡し�
   - サブエージェントのidは `agent_<n>` で、番号は行から読みます（`AgentRepo.nextSubagentId`）。
     メッセージはidだけで相手を名指すので、会話をまたいで一意です。
     セッションを消すと `agents` と `messages` は外部キーの連鎖で消えます。
-  - 実行中に落ちた行は、セッションを開いたときに `aborted` に倒します（`TaskHub.restore`）。
+  - 実行中に落ちた行は、セッションを開いたときに `aborted` に倒します（`subagent-restore.ts` の `restoreSubagents`）。
     新しいプロセスに動いている実行は無いので、`running` のまま残すと終わらないタスクを一覧に出してしまいます。
   - 書き込みはメインと同じ時機です。
     `message_end` と確定時に書き、圧縮のチェックポイントは `TranscriptStore` が元の位置に挿します。

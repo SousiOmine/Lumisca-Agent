@@ -120,7 +120,7 @@ export function createShareProvider(options: {
  * session.
  *
  * A sub-agent's transcript is memory-only and nothing republishes its context
- * (see tools/task-hub.ts), so this one publication is the whole conversation
+ * (see tools/subagent-spawn.ts), so this one publication is the whole conversation
  * it has about the loan. Without it the sub-agent can still reach
  * `/lend/<name>` — its backends are the session's — but nothing tells it the
  * folder exists, and an agent that does not know a folder is there will not

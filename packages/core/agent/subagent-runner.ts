@@ -31,9 +31,10 @@ export interface SubagentAgentInit {
   id: string;
   model: Model<Api>;
   systemPrompt: string;
-  /** Messages the sub-agent starts with. The only producer is the skill
-   * catalog seed (see TaskHub.spawn): a sub-agent has no context providers
-   * of its own, and the `skill` tool's names have to arrive some way. */
+  /** Messages the sub-agent starts with. The producers are the skill catalog
+   * seed and the lent-folder note (see tools/subagent-spawn.ts): a sub-agent
+   * has no context providers of its own, so what it must know about its
+   * session has to arrive here. */
   messages: AgentMessage[];
   /** The sub-agent's tool set, already converted to the runtime's type. */
   tools: AgentTool[];
