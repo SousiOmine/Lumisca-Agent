@@ -13,7 +13,14 @@
  * key code, an X11 keysym), so only the syntax lives here.
  */
 import { CoreError } from "../errors.ts";
-import type { Point } from "./types.ts";
+import { sleep } from "../shared/misc.ts";
+import type {
+  ComputerAction,
+  ComputerActionResult,
+  MouseButton,
+  Point,
+  WindowInfo,
+} from "./types.ts";
 
 /** Duration of a pointer move (a plain move, the approach before a click,
  * the reposition before a wheel). */
@@ -169,4 +176,133 @@ export type NamedKeyId = (typeof NAMED_KEY_IDS)[number];
 export function namedKeyId(key: string): NamedKeyId | undefined {
   const lower = key.toLowerCase();
   return NAMED_KEY_IDS.find((id) => id === lower);
+}
+
+/**
+ * What a platform brings to {@link performAction}: the six things that
+ * actually differ between hosts. The order of the steps, the settle times and
+ * the sign conventions are the same everywhere, so they are written once
+ * (below) and a new platform implements only these.
+ */
+export interface ActionPrimitives {
+  /** Move the pointer along a straight line over `durationMs` and report how
+   * many move events it took. */
+  movePointer(x: number, y: number, durationMs: number): Promise<number>;
+  /** Press or release one mouse button where the pointer is. */
+  button(button: MouseButton, pressed: boolean): Promise<void>;
+  /** One wheel event: `deltaX` rightwards, `deltaY` downwards, both in the
+   * tool layer's units (a platform scales them to its own). */
+  wheel(deltaX: number, deltaY: number): Promise<void>;
+  /** Type one run of text at the focus. */
+  typeText(text: string): Promise<void>;
+  /** Press one key or chord. */
+  key(chord: string): Promise<void>;
+  /** Bring a window forward and report it. */
+  focusWindow(window: string): Promise<WindowInfo>;
+  /** The pointer position, when the platform can report it. */
+  cursor(): Point | undefined;
+  /** The foreground window, when the platform can report it. */
+  foregroundWindow(): WindowInfo | undefined;
+}
+
+/**
+ * Perform one action: the single implementation of the eight actions, shared
+ * by every host.
+ *
+ * The steps are the contract the tool description states — a movement is
+ * interpolated and settled before a press, a drag holds the button across the
+ * whole path, a scroll repositions the pointer first (a wheel event goes to
+ * the window under it) and a key action reports the window it went to — and
+ * they are the same on every platform, so a host that wrote its own copy
+ * would be one that could drift. Durations are measured here rather than in
+ * the primitives, so `durationMs` always describes the same span.
+ *
+ * `focus_window` is absent from the primitives: a platform that cannot
+ * enumerate windows (Wayland) throws from {@link ActionPrimitives.focusWindow}
+ * with its own reason, which is why the case is not optional here.
+ */
+export async function performAction(
+  primitives: ActionPrimitives,
+  action: ComputerAction,
+): Promise<ComputerActionResult> {
+  const started = Date.now();
+  const elapsed = (): number => Date.now() - started;
+  switch (action.kind) {
+    case "move": {
+      const steps = await primitives.movePointer(action.x, action.y, MOVE_MS);
+      return { cursor: primitives.cursor(), steps, durationMs: elapsed() };
+    }
+    case "click": {
+      const steps = await primitives.movePointer(action.x, action.y, MOVE_MS);
+      await sleep(HOVER_SETTLE_MS);
+      for (let i = 0; i < action.count; i++) {
+        await primitives.button(action.button, true);
+        await sleep(CLICK_HOLD_MS);
+        await primitives.button(action.button, false);
+        if (i + 1 < action.count) await sleep(CLICK_HOLD_MS);
+      }
+      return { cursor: primitives.cursor(), steps, durationMs: elapsed() };
+    }
+    case "drag": {
+      const approach = await primitives.movePointer(
+        action.from.x,
+        action.from.y,
+        MOVE_MS,
+      );
+      await sleep(HOVER_SETTLE_MS);
+      await primitives.button(action.button, true);
+      await sleep(DRAG_HOLD_MS);
+      const path = await primitives.movePointer(
+        action.to.x,
+        action.to.y,
+        DRAG_MS,
+      );
+      await sleep(HOVER_SETTLE_MS);
+      await primitives.button(action.button, false);
+      return {
+        cursor: primitives.cursor(),
+        steps: approach + path,
+        durationMs: elapsed(),
+      };
+    }
+    case "scroll": {
+      const steps = await primitives.movePointer(action.x, action.y, MOVE_MS);
+      await sleep(HOVER_SETTLE_MS);
+      if (action.deltaY !== 0 || action.deltaX !== 0) {
+        await primitives.wheel(action.deltaX, action.deltaY);
+      }
+      return { cursor: primitives.cursor(), steps, durationMs: elapsed() };
+    }
+    case "type": {
+      await primitives.typeText(action.text);
+      return {
+        cursor: primitives.cursor(),
+        steps: 0,
+        durationMs: elapsed(),
+        window: primitives.foregroundWindow(),
+      };
+    }
+    case "key": {
+      await primitives.key(action.key);
+      return {
+        cursor: primitives.cursor(),
+        steps: 0,
+        durationMs: elapsed(),
+        window: primitives.foregroundWindow(),
+      };
+    }
+    case "focus_window": {
+      const window = await primitives.focusWindow(action.window);
+      return {
+        cursor: primitives.cursor(),
+        steps: 0,
+        durationMs: elapsed(),
+        window,
+      };
+    }
+    case "wait": {
+      await sleep(action.durationMs);
+      return { cursor: primitives.cursor(), steps: 0, durationMs: elapsed() };
+    }
+  }
 }

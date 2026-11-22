@@ -1,12 +1,14 @@
 import { test } from "bun:test";
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import {
+  type ActionPrimitives,
   DRAG_MS,
   interpolatePoint,
   MOVE_MS,
   NAMED_KEY_IDS,
   namedKeyId,
   parseKeyChord,
+  performAction,
   splitTypeText,
 } from "./motion.ts";
 
@@ -128,4 +130,126 @@ test("NAMED_KEY_IDS is the one list of names a chord may spell", () => {
   assertEquals(namedKeyId("nope"), undefined);
   // The table has no duplicate that would make one name shadow another.
   assertEquals(new Set(NAMED_KEY_IDS).size, NAMED_KEY_IDS.length);
+});
+
+// --- the shared action procedure -------------------------------------------
+
+/** Primitives that record what they were asked, so the ORDER of the steps is
+ * what these tests read. */
+function recorderPrimitives(): ActionPrimitives & { calls: string[] } {
+  const calls: string[] = [];
+  const window = {
+    id: "0x00000001",
+    title: "Editor",
+    bounds: { x: 0, y: 0, width: 10, height: 10 },
+    focused: true,
+    visible: true,
+    minimized: false,
+  };
+  return {
+    calls,
+    movePointer: (x, y) => {
+      calls.push(`move ${x},${y}`);
+      return Promise.resolve(3);
+    },
+    button: (button, pressed) => {
+      calls.push(`${button} ${pressed ? "down" : "up"}`);
+      return Promise.resolve();
+    },
+    wheel: (deltaX, deltaY) => {
+      calls.push(`wheel ${deltaX},${deltaY}`);
+      return Promise.resolve();
+    },
+    typeText: (text) => {
+      calls.push(`type ${text}`);
+      return Promise.resolve();
+    },
+    key: (chord) => {
+      calls.push(`key ${chord}`);
+      return Promise.resolve();
+    },
+    focusWindow: (id) => {
+      calls.push(`focus ${id}`);
+      return Promise.resolve(window);
+    },
+    cursor: () => ({ x: 1, y: 2 }),
+    foregroundWindow: () => window,
+  };
+}
+
+test("performAction holds the button across a drag path", async () => {
+  const primitives = recorderPrimitives();
+  const result = await performAction(primitives, {
+    kind: "drag",
+    from: { x: 1, y: 1 },
+    to: { x: 9, y: 9 },
+    button: "left",
+  });
+  assertEquals(primitives.calls, [
+    "move 1,1",
+    "left down",
+    "move 9,9",
+    "left up",
+  ]);
+  // Both movements count: the approach is part of the path the pointer took.
+  assertEquals(result.steps, 6);
+  assertEquals(result.cursor, { x: 1, y: 2 });
+});
+
+test("performAction clicks as many times as asked, settling in between", async () => {
+  const primitives = recorderPrimitives();
+  await performAction(primitives, {
+    kind: "click",
+    x: 4,
+    y: 5,
+    button: "right",
+    count: 2,
+  });
+  assertEquals(primitives.calls, [
+    "move 4,5",
+    "right down",
+    "right up",
+    "right down",
+    "right up",
+  ]);
+});
+
+test("performAction scrolls only the axes that carry a delta", async () => {
+  const primitives = recorderPrimitives();
+  await performAction(primitives, {
+    kind: "scroll",
+    x: 2,
+    y: 3,
+    deltaX: 0,
+    deltaY: -1,
+  });
+  assertEquals(primitives.calls, ["move 2,3", "wheel 0,-1"]);
+});
+
+test("a keyboard action reports the window it went to", async () => {
+  const primitives = recorderPrimitives();
+  const typed = await performAction(primitives, { kind: "type", text: "hi" });
+  const pressed = await performAction(primitives, {
+    kind: "key",
+    key: "ctrl+s",
+  });
+  assertEquals(primitives.calls, ["type hi", "key ctrl+s"]);
+  assertEquals(typed.window?.title, "Editor");
+  assertEquals(pressed.window?.title, "Editor");
+  assertEquals(typed.steps, 0);
+});
+
+test("focus_window and wait go through the primitives, not around them", async () => {
+  const primitives = recorderPrimitives();
+  const focused = await performAction(primitives, {
+    kind: "focus_window",
+    window: "0x00000001",
+  });
+  const waited = await performAction(primitives, {
+    kind: "wait",
+    durationMs: 1,
+  });
+  assertEquals(primitives.calls, ["focus 0x00000001"]);
+  assertEquals(focused.window?.title, "Editor");
+  assertEquals(waited.steps, 0);
 });

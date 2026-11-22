@@ -40,18 +40,15 @@ import { ARCH } from "../platform.ts";
 import { sleep } from "../shared/misc.ts";
 import { MAX_CAPTURE_DIMENSION } from "./image.ts";
 import {
-  CLICK_HOLD_MS,
-  DRAG_HOLD_MS,
-  DRAG_MS,
+  type ActionPrimitives,
   FOCUS_SETTLE_MS,
-  HOVER_SETTLE_MS,
   interpolatePoint,
-  MOVE_MS,
   MOVE_TICK_MS,
   type ModifierName,
   type NamedKeyId,
   namedKeyId,
   parseKeyChord,
+  performAction,
   splitTypeText,
 } from "./motion.ts";
 import type {
@@ -608,114 +605,7 @@ class WindowsComputerHost implements ComputerHost {
   }
 
   async act(action: ComputerAction): Promise<ComputerActionResult> {
-    const started = Date.now();
-    switch (action.kind) {
-      case "move": {
-        const moved = await this.movePointer(action.x, action.y, MOVE_MS);
-        return {
-          cursor: this.cursor(),
-          steps: moved,
-          durationMs: Date.now() - started,
-        };
-      }
-      case "click": {
-        const steps = await this.movePointer(action.x, action.y, MOVE_MS);
-        await sleep(HOVER_SETTLE_MS);
-        for (let i = 0; i < action.count; i++) {
-          this.sendButton(action.button, true);
-          await sleep(CLICK_HOLD_MS);
-          this.sendButton(action.button, false);
-          if (i + 1 < action.count) await sleep(CLICK_HOLD_MS);
-        }
-        return {
-          cursor: this.cursor(),
-          steps,
-          durationMs: Date.now() - started,
-        };
-      }
-      case "drag": {
-        const approach = await this.movePointer(
-          action.from.x,
-          action.from.y,
-          MOVE_MS,
-        );
-        await sleep(HOVER_SETTLE_MS);
-        this.sendButton(action.button, true);
-        await sleep(DRAG_HOLD_MS);
-        const path = await this.movePointer(action.to.x, action.to.y, DRAG_MS);
-        await sleep(HOVER_SETTLE_MS);
-        this.sendButton(action.button, false);
-        return {
-          cursor: this.cursor(),
-          steps: approach + path,
-          durationMs: Date.now() - started,
-        };
-      }
-      case "scroll": {
-        const steps = await this.movePointer(action.x, action.y, MOVE_MS);
-        await sleep(HOVER_SETTLE_MS);
-        // One INPUT per wheel event: Windows has no horizontal wheel on all
-        // systems, so deltaX rides on the horizontal flag and deltaY on the
-        // vertical one.
-        if (action.deltaY !== 0) {
-          this.sendWheel(MOUSEEVENTF_WHEEL, -action.deltaY * WHEEL_DELTA);
-        }
-        if (action.deltaX !== 0) {
-          this.sendWheel(
-            0x01000 /* MOUSEEVENTF_HWHEEL */,
-            action.deltaX * WHEEL_DELTA,
-          );
-        }
-        return {
-          cursor: this.cursor(),
-          steps,
-          durationMs: Date.now() - started,
-        };
-      }
-      case "type": {
-        this.typeText(action.text);
-        return {
-          cursor: this.cursor(),
-          steps: 0,
-          durationMs: Date.now() - started,
-          window: this.foregroundWindow(),
-        };
-      }
-      case "key": {
-        const chord = resolveKeyChord(action.key, (char) =>
-          this.user32.symbols.VkKeyScanW(char.charCodeAt(0)),
-        );
-        const buffer = buildKeyChordInputs(
-          chord.vk,
-          chord.modifiers,
-          this.pointerSize,
-        );
-        this.sendInput(buffer, buffer.length / inputSize(this.pointerSize));
-        return {
-          cursor: this.cursor(),
-          steps: 0,
-          durationMs: Date.now() - started,
-          window: this.foregroundWindow(),
-        };
-      }
-      case "focus_window": {
-        const window = await this.focusWindow(action.window);
-        return {
-          cursor: this.cursor(),
-          steps: 0,
-          durationMs: Date.now() - started,
-          window,
-        };
-      }
-      case "wait": {
-        await sleep(action.durationMs);
-        return {
-          cursor: this.cursor(),
-          steps: 0,
-          durationMs: Date.now() - started,
-        };
-      }
-    }
+    return await performAction(this.primitives(), action);
   }
 
   windows(): WindowInfo[] {
@@ -758,6 +648,52 @@ class WindowsComputerHost implements ComputerHost {
   }
 
   // --- internals ------------------------------------------------------------
+
+  /** What {@link performAction} drives: the parts of an action that are
+   * Windows' own, and nothing about their order. */
+  private primitives(): ActionPrimitives {
+    return {
+      movePointer: (x, y, durationMs) => this.movePointer(x, y, durationMs),
+      button: (button, pressed) => {
+        this.sendButton(button, pressed);
+        return Promise.resolve();
+      },
+      wheel: (deltaX, deltaY) => {
+        // One INPUT per wheel event: Windows has no horizontal wheel on all
+        // systems, so deltaX rides on the horizontal flag and deltaY on the
+        // vertical one.
+        if (deltaY !== 0) {
+          this.sendWheel(MOUSEEVENTF_WHEEL, -deltaY * WHEEL_DELTA);
+        }
+        if (deltaX !== 0) {
+          this.sendWheel(
+            0x01000 /* MOUSEEVENTF_HWHEEL */,
+            deltaX * WHEEL_DELTA,
+          );
+        }
+        return Promise.resolve();
+      },
+      typeText: (text) => {
+        this.typeText(text);
+        return Promise.resolve();
+      },
+      key: (chord) => {
+        const resolved = resolveKeyChord(chord, (char) =>
+          this.user32.symbols.VkKeyScanW(char.charCodeAt(0)),
+        );
+        const buffer = buildKeyChordInputs(
+          resolved.vk,
+          resolved.modifiers,
+          this.pointerSize,
+        );
+        this.sendInput(buffer, buffer.length / inputSize(this.pointerSize));
+        return Promise.resolve();
+      },
+      focusWindow: (window) => this.focusWindow(window),
+      cursor: () => this.cursor(),
+      foregroundWindow: () => this.foregroundWindow(),
+    };
+  }
 
   /** One interpolated pointer movement from where the pointer is now to
    * (x, y). Returns how many move events it took. */
