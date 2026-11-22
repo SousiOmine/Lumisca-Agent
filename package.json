@@ -2,6 +2,10 @@
   "name": "lumisca-agent",
   "private": true,
   "type": "module",
+  "engines": {
+    "bun": ">=1.4.4"
+  },
+  "packageManager": "bun@1.4.4",
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "5.0.140",
     "@ai-sdk/anthropic": "4.0.103",

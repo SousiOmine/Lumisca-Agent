@@ -44,8 +44,7 @@
         "noTemplateCurlyInString": "off",
         "useIterableCallbackReturn": "off",
         "noControlCharactersInRegex": "off",
-        "noLabelVar": "off",
-        "noExplicitAny": "off"
+        "noLabelVar": "off"
       },
       "complexity": {
         "noCommaOperator": "off",
