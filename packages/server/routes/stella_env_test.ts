@@ -12,7 +12,7 @@ import { sessionInfo } from "@lumisca/core/test-utils";
  * recorded by the route.
  */
 import { assertEquals } from "@std/assert";
-import type { StellaApi } from "./stella.ts";
+import type { StellaApi } from "../contracts/stella.ts";
 import { stellaRoutes } from "./stella.ts";
 import { stellaApiStub } from "./test-stubs.ts";
 import { jsonError } from "./util.ts";

@@ -1,43 +1,25 @@
-import type {
-  AskAnswer,
-  ClientEvent,
-  FolderShare,
-  PromptFileRef,
-  SessionInfo,
-  StellaAgent,
-  StellaAgentSummary,
-  StellaConversationSnapshot,
-  StellaEntry,
-  StellaEnvRequest,
-  StellaHandover,
-  StellaQuestion,
-  StellaShareRequest,
-  WindowQuery,
-} from "@lumisca/core";
-import { base64ToBytes, stellaEventsOf } from "@lumisca/core";
-import type {
-  StellaMachineStatus,
-  StellaStatus,
-  ThinkingLevel,
-} from "@lumisca/core/shared";
-import {
-  AGENT_ICON_FORMATS,
-  agentIconExtensionOfMimeType,
-  MAX_AGENT_ICON_BYTES,
-  rasterExtensionOfMimeType,
-} from "@lumisca/core/shared";
+import type { PromptFileRef } from "@lumisca/core";
+import { stellaEventsOf } from "@lumisca/core";
+import type { StellaMachineStatus, StellaStatus } from "@lumisca/core/shared";
 import { Hono } from "hono";
+import type { StellaApi } from "../contracts/stella.ts";
 import { upgradeWebSocket } from "../websocket.ts";
 import { conversationRoutes } from "./conversation.ts";
 import type { PromptUploadSink } from "./prompt-uploads.ts";
+import { type PromptBody, parsePromptBody } from "./session-requests.ts";
 import {
-  type PromptBody,
-  parsePromptBody,
-  preparePromptImages,
-} from "./session-requests.ts";
+  parseEnabledPatch,
+  parseIconPatch,
+  parseModelPatch,
+  parseThinkingLevelPatch,
+  requireAgent,
+  requireConversation,
+  requireEnabledAgent,
+  savePromptPictures,
+} from "./stella-requests.ts";
+import { readOnlySnapshot, snapshotOf } from "./stella-snapshot.ts";
 import {
   AppError,
-  notFound,
   optionalString,
   optionalToolCallId,
   parseBody,
@@ -45,329 +27,6 @@ import {
   requireNonEmptyString,
 } from "./util.ts";
 import { createEventStream } from "./ws-stream.ts";
-
-/** The slice of the core these routes need (interface segregation). */
-export interface StellaApi {
-  /** The sidebar's rows: the agents with what their conversation last said
-   * (see shared/stella-preview.ts). The list exists for this route only, so
-   * it is the summary shape that is declared here. */
-  listStellaAgentSummaries(): StellaAgentSummary[];
-  /** Create the starter agent a fresh installation talks to, unless one
-   * already exists. Returns the agent a client opens. */
-  ensureStellaAgent(): Promise<StellaAgent>;
-  /** Create an agent: its row, and its working folder with MEMORY.md in it
-   * when the machine is up (see LumiscaCore.createStellaAgent). */
-  createStellaAgent(input: {
-    name: string;
-    role: string;
-  }): Promise<StellaAgent>;
-  /** Change an agent's name, its picture, its model, that model's thinking
-   * strength and/or whether it is switched on, in one call: the sidebar's
-   * edit dialog saves the first four together, and a request that stored one
-   * but refused the other would leave the user with half of what they asked
-   * for. `icon` undefined → unchanged, null → back to the initial,
-   * `{ bytes, extension }` → a new picture; `model` undefined → unchanged,
-   * null → the app's default model, a pair → the model to run on (the core
-   * also moves the agent's existing conversation to it, now or as its
-   * current run ends); `thinkingLevel` undefined → unchanged,
-   * `{ provider, modelId, level }` → stores the level for that model (the
-   * level belongs to the model, so the request names it); `enabled`
-   * undefined → unchanged, false → switch the agent off (closing its
-   * conversation and giving its desktop back), true → switch it on. */
-  updateStellaAgent(
-    id: string,
-    patch: {
-      name?: string;
-      icon?: { bytes: Uint8Array; extension: string } | null;
-      model?: { provider: string; modelId: string } | null;
-      thinkingLevel?: { provider: string; modelId: string; level: string };
-      enabled?: boolean;
-    },
-  ): Promise<StellaAgent>;
-  deleteStellaAgent(id: string): Promise<void>;
-  getStellaStatus(): Promise<StellaStatus>;
-  /** One agent's machine, as the screen pane draws it. */
-  getStellaAgentStatus(agentId: string): Promise<StellaMachineStatus>;
-  /** Wake one agent's machine without a prompt (the pane's wake button). */
-  wakeStellaAgent(agentId: string): Promise<void>;
-  /** Note that the user is driving one agent's screen, which keeps its
-   * machine awake. */
-  touchStellaAgent(agentId: string): void;
-  /** The conversation, created on first use. Opening it prepares the image
-   * but does not start a container: the first prompt wakes the machine. */
-  getOrCreateStellaSession(agentId?: string): Promise<SessionInfo>;
-  /** Start the setup turn of an agent that has not been set up yet, once
-   * (see LumiscaCore.startStellaOnboarding). False when there is nothing to
-   * start — already set up, no open conversation, or a run in flight. */
-  startStellaOnboarding(agentId: string): boolean;
-  /** Make sure one agent's machine is up, starting it when it is not.
-   * Sending is not opening: an already-open conversation never reaches the
-   * endpoint above again, and the machine may have been slept since, so the
-   * first prompt of a wake has to bring it up. */
-  ensureStellaReady(agentId: string): Promise<void>;
-  /** Make one agent's skill catalog current enough to run (see
-   * StellaMachine.ensureSkills). Needed after a wake: a sleeping machine is
-   * not read, so its catalog is empty until this. */
-  ensureStellaSkills(agentId: string): Promise<void>;
-  /** The conversation a stella agent already has, or undefined. The client
-   * addresses the conversation by agent, never by session id. */
-  findStellaSession(agentId: string): SessionInfo | undefined;
-  /** One window of the conversation as the client draws it (the model's own
-   * rows are projected away — see agent/stella-stream.ts). Undefined when the
-   * conversation is not open. */
-  readStellaConversation(
-    sessionId: string,
-    query: WindowQuery,
-  ): { items: StellaEntry[]; older: string | null } | undefined;
-  /** One window of a conversation that is not open, read from the store
-   * alone. A disabled agent's conversation is served this way. */
-  readStellaConversationFromStore(
-    sessionId: string,
-    query: WindowQuery,
-  ): { items: StellaEntry[]; older: string | null };
-  /** The questions the run is waiting on (the ask tool). */
-  getPendingQuestions(sessionId: string): StellaQuestion[];
-  /** The screen hand-over the run is blocked on, or null. */
-  getPendingHandover(sessionId: string): StellaHandover | null;
-  /** The environment variable the run is waiting for the user to fill in,
-   * or null (`vm_env`). */
-  getPendingEnvRequest(sessionId: string): StellaEnvRequest | null;
-  /** The folder request the run is waiting on, or null (`share_request` /
-   * `share_disconnect`). */
-  getPendingShareRequest(sessionId: string): StellaShareRequest | null;
-  /** The user lent a folder: let the blocked run continue. */
-  finishShareLend(sessionId: string, toolCallId?: string): void;
-  /** The user refused to lend one. */
-  declineShareRequest(sessionId: string, toolCallId?: string): void;
-  /** The desktop app withdrew the loan it was asked to. */
-  finishShareDisconnect(sessionId: string, toolCallId: string): void;
-  /** The desktop app could not withdraw it, and said why. */
-  failShareDisconnect(
-    sessionId: string,
-    toolCallId: string,
-    error: string,
-  ): void;
-  /** The folders lent to this conversation from the user's own computer
-   * (see core/share). Empty when none — the usual case. */
-  getShares(sessionId: string): FolderShare[];
-  getSessionLastError(sessionId: string): string | undefined;
-  getSession(sessionId: string): SessionInfo | undefined;
-  /** The thinking level the conversation's model runs at, and the levels it
-   * supports (the model's own settings row, read through the session). The
-   * composer shows its strength rail from this. */
-  getThinkingState(sessionId: string): {
-    thinkingLevel: ThinkingLevel;
-    thinkingLevels: ThinkingLevel[];
-  };
-  getAgent(sessionId: string): { isStreaming: boolean } | undefined;
-  getStellaAgent(id: string): StellaAgent | undefined;
-  openSession(sessionId: string): SessionInfo;
-  /** Send a prompt into the conversation (fire-and-forget; the events carry
-   * the progress). `uploads` are the files and pictures the user sent: they
-   * are already inside the machine, and the message records where. Optional
-   * so a caller (a test double, a routine) that only has words does not have
-   * to spell out "no attachments". */
-  startPrompt(
-    sessionId: string,
-    text: string,
-    images?: never,
-    mode?: never,
-    files?: PromptFileRef[],
-  ): void;
-  /** Put a prompt's attached pictures into the machine. */
-  savePromptImages(
-    sessionId: string,
-    uploads: readonly { name: string; bytes: Uint8Array }[],
-  ): Promise<PromptFileRef[]>;
-  abort(sessionId: string): void;
-  rewind(sessionId: string, timestamp: number): Promise<void>;
-  /** Part of the shared conversation API's type, not of this surface: a
-   * conversation's model is its agent's, so the model route is not mounted
-   * here (see ConversationRoutesOptions.modelRoute). */
-  setSessionModel(sessionId: string, provider: string, modelId: string): void;
-  answerQuestion(
-    sessionId: string,
-    toolCallId: string,
-    answers: AskAnswer[],
-  ): void;
-  finishHandover(sessionId: string, note: string, toolCallId?: string): void;
-  /** Store the value the user typed for the variable `vm_env` asked about
-   * (written into the machine; never recorded anywhere else). */
-  provideStellaEnv(
-    sessionId: string,
-    value: unknown,
-    toolCallId?: string,
-  ): Promise<void>;
-  /** The user refused to enter a value. */
-  declineStellaEnv(sessionId: string, toolCallId?: string): void;
-  /** The text on the machine's clipboard (empty when nothing was copied
-   * there). The chat's screen pane reads and writes it while the user drives
-   * the screen; the VNC connection cannot carry the text (see
-   * vm/clipboard.ts). */
-  readStellaClipboard(sessionId: string): Promise<string>;
-  writeStellaClipboard(sessionId: string, text: string): Promise<void>;
-  /** Subscribe to the core's event stream (the conversation's WS projects
-   * from it; see stellaEventsOf). */
-  subscribe(listener: (event: ClientEvent) => void): () => void;
-  getSessionRevision(sessionId: string): number;
-}
-
-/**
- * The upload body an icon route takes: the base64 bytes and the content type
- * the browser reported. Validated here so the core only ever sees an
- * admissible pair — an empty or oversized payload is refused with its own
- * sentence instead of reaching the store as a broken image.
- */
-function parseIconBody(
-  body: { data?: unknown; mimeType?: unknown } | undefined,
-): { data: string; mimeType: string } {
-  const data = body?.data;
-  const mimeType = body?.mimeType;
-  if (typeof data !== "string" || data.length === 0) {
-    throw new AppError("data (base64 image) is required", 400);
-  }
-  if (typeof mimeType !== "string" || mimeType.length === 0) {
-    throw new AppError("mimeType is required", 400);
-  }
-  // Measured on the encoded text first: a payload far past the limit is
-  // rejected without being decoded, and base64 is 4/3 of the bytes it
-  // carries (plus the data-URL header some clients leave on).
-  if (data.length > Math.ceil((MAX_AGENT_ICON_BYTES * 4) / 3) + 1024) {
-    throw new AppError(
-      `The icon is too large (limit ${MAX_AGENT_ICON_BYTES} bytes)`,
-      400,
-    );
-  }
-  return { data, mimeType };
-}
-
-/** Decode base64, with the data-URL header stripped (a client may send what
- * `FileReader` produced). A malformed payload is a 400 rather than a
- * store-level failure: it describes the request, not the server. */
-function decodeBase64(data: string): Uint8Array {
-  const payload = data.startsWith("data:")
-    ? data.slice(data.indexOf(",") + 1)
-    : data;
-  try {
-    return base64ToBytes(payload);
-  } catch {
-    throw new AppError("data is not valid base64", 400);
-  }
-}
-
-/** One patch's picture: the new bytes to store, `null` for "back to the
- * initial", or undefined for "leave it alone" (the field was not sent).
- *
- * A malformed value is a 400 rather than a silent no-op: a client that sent
- * something shaped like a picture but could not be read has a bug, and
- * treating it as "unchanged" would report success for a picture that was
- * never stored. */
-function parseIconPatch(
-  value: unknown,
-): { bytes: Uint8Array; extension: string } | null | undefined {
-  if (value === undefined) return undefined;
-  if (value === null) return null;
-  const { data, mimeType } = parseIconBody(
-    value as { data?: unknown; mimeType?: unknown },
-  );
-  const extension = agentIconExtensionOfMimeType(mimeType);
-  if (extension === undefined) {
-    throw new AppError(
-      `Icons must be ${AGENT_ICON_FORMATS} (got "${mimeType}")`,
-      400,
-    );
-  }
-  return { bytes: decodeBase64(data), extension };
-}
-
-/**
- * `{provider, modelId}` of a body field, checked as a pair. Shared by the
- * model patch and the thinking-level patch: both name a model, so both must
- * fail the same way when one half is missing or blank.
- */
-function parseModelRef(
-  value: unknown,
-  field: string,
-): { provider: string; modelId: string } {
-  if (typeof value !== "object" || value === null) {
-    throw new AppError(`${field} must be an object`, 400);
-  }
-  const body = value as { provider?: unknown; modelId?: unknown };
-  // Trimmed before the emptiness check: a body of {"provider": "  "}
-  // describes the request, so it is a 400 here rather than an id no catalog
-  // has, which the core would refuse with a confusing 404.
-  const provider = requireNonEmptyString(
-    body.provider,
-    `${field}.provider`,
-  ).trim();
-  const modelId = requireNonEmptyString(
-    body.modelId,
-    `${field}.modelId`,
-  ).trim();
-  if (provider === "" || modelId === "") {
-    throw new AppError(
-      `${field}.provider and ${field}.modelId must not be blank`,
-      400,
-    );
-  }
-  return { provider, modelId };
-}
-
-/**
- * The model patch of an agent edit: `{provider, modelId}` sets the choice,
- * `null` returns the agent to the app's default model, and an absent key
- * means "leave it alone" (the dialog saves only what changed).
- *
- * Only the shape is checked here. Whether the pair names a model this
- * installation can select is the core's question — it is the one that can
- * read the catalog, and it must answer before the row changes.
- */
-function parseModelPatch(
-  value: unknown,
-): { provider: string; modelId: string } | null | undefined {
-  if (value === undefined) return undefined;
-  if (value === null) return null;
-  return parseModelRef(value, "model");
-}
-
-/**
- * The on/off patch of an agent edit: absent means "leave it alone", and
- * anything but a boolean is a 400. A body that says nothing is not the same
- * request as one that says "on", and a typo in the field name must not read
- * as silence.
- */
-function parseEnabledPatch(value: unknown): boolean | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== "boolean") {
-    throw new AppError("enabled (boolean) is required", 400);
-  }
-  return value;
-}
-
-/**
- * The thinking-strength patch of an agent edit: the level, and the model it
- * belongs to.
- *
- * The model is named rather than resolved from the agent because the level is
- * a MODEL setting, and the dialog drew its list of levels from the model in
- * effect at that moment. Naming it keeps the two from disagreeing about which
- * model the user was looking at.
- *
- * Only the shape is checked here: whether the model offers the level (and
- * whether the level exists at all) is the core's question, answered before
- * anything is written.
- */
-function parseThinkingLevelPatch(
-  value: unknown,
-): { provider: string; modelId: string; level: string } | undefined {
-  if (value === undefined) return undefined;
-  const { provider, modelId } = parseModelRef(value, "thinkingLevel");
-  const level = requireNonEmptyString(
-    (value as { level?: unknown }).level,
-    "thinkingLevel.level",
-  );
-  return { provider, modelId, level };
-}
 
 /**
  * The stella machine's API.
@@ -382,19 +41,6 @@ function parseThinkingLevelPatch(
  * host answers with its reason instead of a 404, so the mode-selection screen
  * can explain itself.
  */
-/** The file name a pasted picture is stored under: `image-1.png`,
- * `image-2.jpg`. Its extension comes from the type the browser reported, so
- * the conversation can draw it back without sniffing the bytes (a raster
- * format is what a prompt accepts, and anything else is refused when the
- * upload is saved). */
-function imageName(index: number, mimeType: string): string {
-  const extension = rasterExtensionOfMimeType(mimeType);
-  if (extension === undefined) {
-    throw new AppError(`Unsupported image type: ${mimeType}`, 400);
-  }
-  return `image-${index + 1}${extension}`;
-}
-
 export function stellaRoutes(
   core: StellaApi,
   promptUploads?: PromptUploadSink,
@@ -436,7 +82,7 @@ export function stellaRoutes(
    * at it does not. */
   app.post("/stella/agents/:id/touch", (c) => {
     const agentId = c.req.param("id");
-    requireEnabledAgent(agentId);
+    requireEnabledAgent(core, agentId);
     core.touchStellaAgent(agentId);
     return c.json({ ok: true });
   });
@@ -559,12 +205,12 @@ export function stellaRoutes(
   app.get("/stella/conversations/:agentId", async (c) => {
     const agentId = c.req.param("agentId");
     const query = parseWindowQuery(c.req.url);
-    const agent = requireAgent(agentId);
+    const agent = requireAgent(core, agentId);
     // A disabled agent's conversation is read-only history: nothing is
     // built, the machine is not started and no first turn is claimed. The
     // entries come straight from the store (see readOnlySnapshot).
     if (agent.disabledAt !== null) {
-      return c.json(readOnlySnapshot(agent, query));
+      return c.json(readOnlySnapshot(core, agent, query));
     }
     // A cold machine's failure is a CoreError("unavailable") — 503 through
     // the same mapping as every other route; an unknown agent is a
@@ -577,7 +223,7 @@ export function stellaRoutes(
     // is the setup turn — the only moment the app may speak before the user
     // does. It is claimed once, so a reload or a second client does not greet
     // anyone twice.
-    const snapshot = snapshotOf(session, agentId, query);
+    const snapshot = snapshotOf(core, session, agentId, query);
     core.startStellaOnboarding(agentId);
     return c.json(snapshot);
   });
@@ -589,21 +235,21 @@ export function stellaRoutes(
   app.get("/stella/conversations/:agentId/messages", (c) => {
     const agentId = c.req.param("agentId");
     const query = parseWindowQuery(c.req.url);
-    const agent = requireAgent(agentId);
+    const agent = requireAgent(core, agentId);
     // A disabled conversation is re-read the same way it was opened: from
     // the store, whether or not a session row exists yet.
     if (agent.disabledAt !== null) {
-      return c.json(readOnlySnapshot(agent, query));
+      return c.json(readOnlySnapshot(core, agent, query));
     }
-    const session = requireConversation(agentId);
-    return c.json(snapshotOf(session, agentId, query));
+    const session = requireConversation(core, agentId);
+    return c.json(snapshotOf(core, session, agentId, query));
   });
 
   /** The conversation's revision: how many events the server has emitted
    * for it. Cheap (a counter read), so the client polls it and re-reads the
    * snapshot only when it moved. */
   app.get("/stella/conversations/:agentId/revision", (c) => {
-    const session = requireConversation(c.req.param("agentId"));
+    const session = requireConversation(core, c.req.param("agentId"));
     return c.json({ rev: core.getSessionRevision(session.id) });
   });
 
@@ -622,8 +268,8 @@ export function stellaRoutes(
     // Refused BEFORE anything is written into the machine or started: a
     // disabled agent has no run to send to, and `ensureStellaReady` below
     // would bring the whole machine up for a message nobody can deliver.
-    requireEnabledAgent(agentId);
-    const session = requireConversation(agentId);
+    requireEnabledAgent(core, agentId);
+    const session = requireConversation(core, agentId);
     // However this conversation was opened, its machine may be asleep: the
     // server stops one nobody has used for a while, and every tool runs
     // through `podman exec`, which refuses a stopped container. The wait
@@ -652,17 +298,7 @@ export function stellaRoutes(
       }
       fileRefs = promptUploads.resolve(agentId, uploads);
     }
-    const bounded = await preparePromptImages(images);
-    const imageRefs =
-      bounded === undefined
-        ? undefined
-        : await core.savePromptImages(
-            session.id,
-            bounded.map((image, index) => ({
-              name: imageName(index, image.mimeType),
-              bytes: base64ToBytes(image.data),
-            })),
-          );
+    const imageRefs = await savePromptPictures(core, session.id, images);
     const saved = [...fileRefs, ...(imageRefs ?? [])];
     core.startPrompt(
       session.id,
@@ -683,7 +319,7 @@ export function stellaRoutes(
   // dialog), so there is nothing here to switch.
   conversationRoutes(app, core, {
     base: "/stella/conversations/:agentId",
-    resolve: (c) => requireConversation(c.req.param("agentId")!).id,
+    resolve: (c) => requireConversation(core, c.req.param("agentId")!).id,
     modelRoute: false,
   });
 
@@ -696,7 +332,7 @@ export function stellaRoutes(
     }>(c);
     const note = body?.note === undefined ? "" : String(body.note);
     const toolCallId = optionalToolCallId(body?.toolCallId);
-    const session = requireConversation(c.req.param("agentId"));
+    const session = requireConversation(core, c.req.param("agentId"));
     core.finishHandover(session.id, note, toolCallId);
     return c.json({ ok: true });
   });
@@ -713,7 +349,7 @@ export function stellaRoutes(
       toolCallId?: unknown;
     }>(c);
     const toolCallId = optionalToolCallId(body?.toolCallId);
-    const session = requireConversation(c.req.param("agentId"));
+    const session = requireConversation(core, c.req.param("agentId"));
     await core.provideStellaEnv(session.id, body?.value, toolCallId);
     return c.json({ ok: true });
   });
@@ -723,7 +359,7 @@ export function stellaRoutes(
   app.post("/stella/conversations/:agentId/env/decline", async (c) => {
     const body = await parseBody<{ toolCallId?: unknown }>(c);
     const toolCallId = optionalToolCallId(body?.toolCallId);
-    const session = requireConversation(c.req.param("agentId"));
+    const session = requireConversation(core, c.req.param("agentId"));
     core.declineStellaEnv(session.id, toolCallId);
     return c.json({ ok: true });
   });
@@ -737,7 +373,7 @@ export function stellaRoutes(
   app.post("/stella/conversations/:agentId/share/lend", async (c) => {
     const body = await parseBody<{ toolCallId?: unknown }>(c);
     const toolCallId = optionalToolCallId(body?.toolCallId);
-    const session = requireConversation(c.req.param("agentId"));
+    const session = requireConversation(core, c.req.param("agentId"));
     core.finishShareLend(session.id, toolCallId);
     return c.json({ ok: true });
   });
@@ -747,7 +383,7 @@ export function stellaRoutes(
   app.post("/stella/conversations/:agentId/share/decline", async (c) => {
     const body = await parseBody<{ toolCallId?: unknown }>(c);
     const toolCallId = optionalToolCallId(body?.toolCallId);
-    const session = requireConversation(c.req.param("agentId"));
+    const session = requireConversation(core, c.req.param("agentId"));
     core.declineShareRequest(session.id, toolCallId);
     return c.json({ ok: true });
   });
@@ -770,7 +406,7 @@ export function stellaRoutes(
     if (typeof ok !== "boolean") {
       throw new AppError("ok (boolean) is required", 400);
     }
-    const session = requireConversation(c.req.param("agentId"));
+    const session = requireConversation(core, c.req.param("agentId"));
     if (ok) {
       core.finishShareDisconnect(session.id, toolCallId);
       return c.json({ ok: true });
@@ -797,16 +433,16 @@ export function stellaRoutes(
    */
   app.get("/stella/conversations/:agentId/clipboard", async (c) => {
     const agentId = c.req.param("agentId")!;
-    requireEnabledAgent(agentId);
-    const session = requireConversation(agentId);
+    requireEnabledAgent(core, agentId);
+    const session = requireConversation(core, agentId);
     const text = await core.readStellaClipboard(session.id);
     return c.json({ text });
   });
 
   app.post("/stella/conversations/:agentId/clipboard", async (c) => {
     const agentId = c.req.param("agentId")!;
-    requireEnabledAgent(agentId);
-    const session = requireConversation(agentId);
+    requireEnabledAgent(core, agentId);
+    const session = requireConversation(core, agentId);
     if (core.getPendingHandover(session.id) === null) {
       throw new AppError("The screen is not handed over to the user", 409);
     }
@@ -889,136 +525,6 @@ export function stellaRoutes(
       });
     }),
   );
-
-  /** The agent, or 404. */
-  function requireAgent(agentId: string): StellaAgent {
-    const agent = core.getStellaAgent(agentId);
-    if (agent === undefined) {
-      throw notFound("Agent", agentId);
-    }
-    return agent;
-  }
-
-  /** The agent, or 404 when it is gone, or 409 when it is switched off.
-   *
-   * Only the routes that would make the agent DO something call this: a
-   * prompt, and the clipboard, which is read through the machine. Reading
-   * the conversation does not, because a disabled agent's history is exactly
-   * what the user may still look at. */
-  function requireEnabledAgent(agentId: string): StellaAgent {
-    const agent = requireAgent(agentId);
-    if (agent.disabledAt !== null) {
-      throw new AppError(`Agent ${agentId} is disabled`, 409);
-    }
-    return agent;
-  }
-
-  /** The snapshot of a conversation nobody may open. Read from the store;
-   * every live field is empty by definition, because a disabled agent has no
-   * run, no hand-over and nothing waiting for an answer.
-   *
-   * A conversation that was never opened has no session row, so it is drawn
-   * as an empty history with no assets to address. The row is created when
-   * the agent is switched on and opened, not by a read: creating it here
-   * would need a model for a conversation nobody can send to.
-   */
-  function readOnlySnapshot(
-    agent: StellaAgent,
-    query: WindowQuery,
-  ): StellaConversationSnapshot {
-    const session = core.findStellaSession(agent.id);
-    const page =
-      session === undefined
-        ? { items: [], older: null }
-        : core.readStellaConversationFromStore(session.id, query);
-    return {
-      entries: page.items,
-      older: page.older,
-      running: false,
-      questions: [],
-      handover: null,
-      envRequest: null,
-      shareRequest: null,
-      shares: [],
-      agentName: agent.name,
-      disabled: true,
-      sessionId: session?.id ?? null,
-      model:
-        session === undefined
-          ? null
-          : { provider: session.modelProvider, modelId: session.modelId },
-      ...(session === undefined ? {} : core.getThinkingState(session.id)),
-      rev: session === undefined ? 0 : core.getSessionRevision(session.id),
-    };
-  }
-
-  /** The agent's conversation, or 404. The conversation is created by the
-   * open endpoint; every other call addresses one that exists.
-   *
-   * The agent must exist (a deleted agent's conversation is gone with it),
-   * and it must have been opened at least once. `findStellaSession` is the
-   * only lookup that needs no session id — a client never learns one. */
-  function requireConversation(agentId: string): SessionInfo {
-    const agent = core.getStellaAgent(agentId);
-    if (agent === undefined) {
-      throw notFound("Agent", agentId);
-    }
-    const session = core.findStellaSession(agentId);
-    if (session === undefined) {
-      throw new AppError(
-        `No conversation for agent ${agentId}: open it first`,
-        404,
-      );
-    }
-    return session;
-  }
-
-  /** One conversation snapshot: a window of the entries as the client draws
-   * them plus the live state the event stream cannot restore on its own. */
-  function snapshotOf(
-    session: SessionInfo,
-    agentId: string,
-    query: WindowQuery,
-  ): StellaConversationSnapshot {
-    const page = core.readStellaConversation(session.id, query);
-    if (page === undefined) {
-      // Unreachable: every caller opened the conversation (open, or a route
-      // that requires an existing one), and a conversation is only ever
-      // read while it is open. Do not invent an empty transcript for it.
-      throw new AppError(`Conversation is not open: ${agentId}`, 409);
-    }
-    return {
-      entries: page.items,
-      // The way back through the conversation; null at its beginning.
-      older: page.older,
-      running: core.getAgent(session.id)?.isStreaming === true,
-      questions: core.getPendingQuestions(session.id),
-      handover: core.getPendingHandover(session.id),
-      envRequest: core.getPendingEnvRequest(session.id),
-      shareRequest: core.getPendingShareRequest(session.id),
-      shares: core.getShares(session.id),
-      ...(lastErrorOf(session.id) !== undefined
-        ? { error: lastErrorOf(session.id) }
-        : {}),
-      agentName: core.getStellaAgent(agentId)?.name ?? session.name,
-      disabled: false,
-      sessionId: session.id,
-      // The model the conversation runs on. The client shows it in the
-      // composer's model line, and switches from there; the conversation's
-      // session row is the source of truth, so it travels with the snapshot
-      // rather than being guessed from the app default.
-      model: { provider: session.modelProvider, modelId: session.modelId },
-      // The model's thinking strength, beside the model for the same reason:
-      // the composer shows both from one line, and a stella request that
-      // takes many steps is where the choice matters most.
-      ...core.getThinkingState(session.id),
-      rev: core.getSessionRevision(session.id),
-    };
-  }
-
-  function lastErrorOf(sessionId: string): string | undefined {
-    return core.getSessionLastError(sessionId);
-  }
 
   return app;
 }

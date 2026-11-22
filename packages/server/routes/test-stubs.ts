@@ -1,4 +1,4 @@
-import type { StellaApi } from "./stella.ts";
+import type { StellaApi } from "../contracts/stella.ts";
 
 /**
  * A stand-in for the routes' StellaApi.
