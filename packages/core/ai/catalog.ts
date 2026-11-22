@@ -35,11 +35,39 @@ export interface ModelCost {
 
 // ---- messages ----------------------------------------------------------------
 
+/** Per-model deviations from the default request shape. A field lives here
+ * only once the transport reads it: what a provider needs is data about that
+ * provider's model, so it belongs beside the catalog entry rather than in a
+ * provider-id branch inside `ai/`. */
 export interface ModelCompat {
   /** The provider rejects an assistant turn that carries tool calls without
    * a `reasoning_content` field; the transport sends an empty one (see
-   * ai/stream.ts emptyReasoningContentOption). */
+   * ai/stream-messages.ts emptyReasoningContentOption). */
   requiresReasoningContentOnAssistantMessages?: boolean;
+  /** The model is a reasoning model even when the SDK's id-based
+   * classification says otherwise: the transport passes `forceReasoning` so
+   * a reasoning hint is not dropped silently (see ai/stream.ts
+   * reasoningForceOption). */
+  forceReasoning?: boolean;
+  /** The backend requires a top-level `instructions` value: the transport
+   * sends the system prompt there (removed from `input`) and falls back to
+   * this text when the call carries no system prompt. Setting it also means
+   * the backend keeps no conversation state, so the transport sends
+   * `store: false`. */
+  instructionsFallback?: string;
+  /** The provider keeps an image part inside a tool result (see
+   * ai/stream-messages.ts toCoreMessages). Absent means the transport's
+   * default for the api applies: the native image carriers keep it, and so
+   * does the OpenAI-compatible factory, while the first-party OpenAI chat
+   * model and Mistral serialize the result as JSON, so their images follow
+   * in a user message of their own. */
+  toolResultCarriesImages?: boolean;
+  /** The provider requires a stable per-conversation id on every request,
+   * under this header name. The transport sends `StreamOptions.sessionId`
+   * there and fails fast when a request has none: a gateway that rejects
+   * header-less requests outright would otherwise answer with a remote 400
+   * that says nothing about the cause. */
+  sessionHeaderName?: string;
 }
 
 export interface Model<TApi extends Api = Api> {

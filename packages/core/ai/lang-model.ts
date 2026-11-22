@@ -157,6 +157,10 @@ function compatibleSettings(
  * content with HTTP 400 ("tool message content part 1 is not text"). Its
  * models get the images in a user message too. */
 export function toolResultTakesImages(model: Model<Api>): boolean {
+  // A catalog entry that knows better than the api's default says so
+  // directly (see Model.compat.toolResultCarriesImages).
+  const declared = model.compat?.toolResultCarriesImages;
+  if (declared !== undefined) return declared;
   switch (model.api) {
     case "openai-completions":
       // First-party OpenAI uses the official chat model, which has no
@@ -172,51 +176,44 @@ export function toolResultTakesImages(model: Model<Api>): boolean {
   }
 }
 
-/** OpenCode Go's managed-inference API requires a stable per-conversation id
- * on every request (the x-opencode-session header, mandatory since
- * 2026-09-05 — see vercel/ai#20271). The AI SDK does not manage
- * conversations, so the transport maps the caller's conversation id onto
- * that header. Same id as the catalog's `opencode-go` provider (see
- * models/dev-catalog.ts); duplicated here so the transport layer stays
- * independent of the catalog. */
-const OPENCODE_GO_PROVIDER_ID = "opencode-go";
-
 /** Request headers that carry the caller's conversation id onto the
- * provider (see {@link OPENCODE_GO_PROVIDER_ID}). Undefined for providers
- * without session affinity; applied by the stream transport per request so
- * the Vercel SDK merges them over the provider factory's own headers.
- * Throws when an OpenCode Go request has no conversation id — the gateway
- * rejects header-less requests outright, so fail here with the cause
- * instead of surfacing a remote 400. */
+ * provider. A provider that requires one declares its header name on the
+ * model (see {@link Model.compat.sessionHeaderName}); undefined for the
+ * providers without session affinity. Applied by the stream transport per
+ * request, so the Vercel SDK merges them over the provider factory's own
+ * headers. Throws when such a request has no conversation id: the gateway
+ * rejects header-less requests outright, so fail here with the cause instead
+ * of surfacing a remote 400. */
 export function sessionHeadersFor(
   model: Model<Api>,
   options?: StreamOptions,
 ): Record<string, string> | undefined {
-  if (model.provider !== OPENCODE_GO_PROVIDER_ID) return undefined;
+  const header = model.compat?.sessionHeaderName;
+  if (header === undefined) return undefined;
   const sessionId = options?.sessionId;
   if (sessionId === undefined || sessionId === "") {
     throw new Error(
-      "OpenCode Go requests need a stable conversation id: pass options.sessionId (sent as the x-opencode-session header)",
+      `This provider needs a stable conversation id: pass options.sessionId (sent as the ${header} header)`,
     );
   }
-  return { "x-opencode-session": sessionId };
+  return { [header]: sessionId };
 }
 
-/** True for the first-party OpenAI provider. Its chat-completions requests
- * go through the official @ai-sdk/openai chat model (rather than the
- * compatible factory) because they hit api.openai.com. */
+/** True when a chat-completions request goes to OpenAI itself: the official
+ * @ai-sdk/openai chat model rather than the compatible factory. The endpoint
+ * decides, not a provider id — a model that names no base URL is served by
+ * OpenAI, and so is one pointed at its host. */
 function isFirstPartyOpenAI(model: Model<Api>): boolean {
   return (
-    model.provider === "openai" ||
-    model.baseUrl === undefined ||
-    /api\.openai\.com/i.test(model.baseUrl ?? "")
+    model.baseUrl === undefined || /api\.openai\.com/i.test(model.baseUrl)
   );
 }
 
 /** True for the OpenCode gateway (Zen and Go). The host decides, not the
  * provider id: the limitation in {@link toolResultTakesImages} belongs to
  * the endpoint, so a user-provided compatible provider pointed at it hits
- * the same rejection. */
+ * the same rejection. The catalog's own entries state this on their compat
+ * entry; this rule is what reaches a provider the app does not ship. */
 function isOpenCodeGateway(model: Model<Api>): boolean {
   return /^https?:\/\/opencode\.ai(?:[:/]|$)/i.test(model.baseUrl ?? "");
 }
