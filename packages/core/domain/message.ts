@@ -220,7 +220,7 @@ export interface ModeMessage {
  * agent-to-agent messages (send_message), empty-response retries (the
  * session agent retries a response that produced neither text nor a tool
  * call), and the loop's own advisories (the repeat guard's reminder — see
- * ai/agent.ts). */
+ * ai/repeat-guard.ts). */
 
 export type NotificationKind =
   | "background"
@@ -228,8 +228,8 @@ export type NotificationKind =
   | "message"
   | "retry"
   /** An advisory the loop or the session agent appends to the transcript
-   * itself — the repeat guard's reminder (see ai/agent.ts) — rather than a
-   * completion delivered from outside. */
+   * itself — the repeat guard's reminder (see ai/repeat-guard.ts) — rather
+   * than a completion delivered from outside. */
   | "notice";
 
 /** Outcome of the event a notification reports. The UI shows a check for

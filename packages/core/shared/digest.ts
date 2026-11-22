@@ -4,8 +4,8 @@
  * Two callers need the same two primitives: the instructions provider
  * fingerprints the AGENTS.md files it publishes (memory/instructions.ts),
  * and the agent loop fingerprints the request it is about to send
- * (ai/agent.ts, the request-shape record). Both are pure string math, so
- * they live here with the rest of the frontend-safe helpers.
+ * (ai/request-shape.ts). Both are pure string math, so they live here with
+ * the rest of the frontend-safe helpers.
  */
 
 /** 64-bit FNV-1a of a string, as lowercase hex.
