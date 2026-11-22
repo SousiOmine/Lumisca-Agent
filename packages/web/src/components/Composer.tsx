@@ -1,57 +1,17 @@
-import {
-  formatAttachmentSize,
-  MAX_PROMPT_TEXT_LENGTH,
-} from "@lumisca/core/shared";
-import {
-  IconArrowLeft,
-  IconChevronRight,
-  IconFile,
-  IconFolder,
-  IconPlayerStop,
-  IconX,
-} from "@tabler/icons-preact";
+import { MAX_PROMPT_TEXT_LENGTH } from "@lumisca/core/shared";
 import type {
   ClipboardEvent,
   DragEvent,
   KeyboardEvent,
   ReactNode,
 } from "preact/compat";
-import { useCallback, useEffect, useRef, useState } from "preact/hooks";
-import {
-  ContextUsageCard,
-  type ContextUsageData,
-  ContextUsageTrigger,
-} from "./ContextUsage.tsx";
-
-export type { ContextUsageData };
-
-import { composerMenuItems, insertTrigger } from "../composerMenu.ts";
+import { useEffect, useRef, useState } from "preact/hooks";
+import { composerMenuItems } from "../composerMenu.ts";
 import { useAttachments } from "../hooks/useAttachments.ts";
 import { useAutoGrow } from "../hooks/useAutoGrow.ts";
-import { useCaretPosition } from "../hooks/useCaretPosition.ts";
-import { useClickOutside } from "../hooks/useClickOutside.ts";
-import { useMention } from "../hooks/useMention.ts";
-import { usePopoverPlacement } from "../hooks/usePopoverPlacement.ts";
-import {
-  isSlashCommand,
-  type SlashState,
-  useSlashMenu,
-} from "../hooks/useSlashMenu.ts";
-import {
-  type SlashCommand,
-  type SlashCommandItem,
-  slashCompletion,
-} from "../slashCommands.ts";
-import {
-  type ComposerAttachAction,
-  ComposerAttachMenu,
-} from "./ComposerAttachMenu.tsx";
-import { ComposerModelBar } from "./ComposerModelBar.tsx";
-import { ComposerPopover } from "./ComposerPopover.tsx";
-
-export type { SlashCommand, SlashCommandItem };
-
+import { useComposerPalettes } from "../hooks/useComposerPalettes.ts";
 import { useT } from "../i18n.ts";
+import type { SlashCommand, SlashCommandItem } from "../slashCommands.ts";
 import type {
   ModelInfo,
   PendingFile,
@@ -59,11 +19,17 @@ import type {
   PromptUploader,
   ThinkingLevel,
 } from "../types.ts";
+import {
+  type ComposerAttachAction,
+  ComposerAttachMenu,
+} from "./ComposerAttachMenu.tsx";
+import { ComposerAttachments } from "./ComposerAttachments.tsx";
+import { ComposerFooter } from "./ComposerFooter.tsx";
+import type { ComposerModel } from "./ComposerModelBar.tsx";
+import { ComposerSuggestions } from "./ComposerSuggestions.tsx";
+import type { ContextUsageData } from "./ContextUsage.tsx";
 
-export interface ComposerModel {
-  provider: string;
-  modelId: string;
-}
+export type { ComposerModel, ContextUsageData, SlashCommand, SlashCommandItem };
 
 interface ComposerProps {
   value: string;
@@ -195,14 +161,9 @@ export function Composer({
   sharing = false,
   visible = true,
 }: ComposerProps) {
-  const [showModelPicker, setShowModelPicker] = useState(false);
-  const [showCtx, setShowCtx] = useState(false);
-  const [dragging, setDragging] = useState(false);
-  // Why the last pick or drop was refused, shown above the field. A file that
-  // exceeds the server's limit would otherwise upload in full and come back
-  // as a 400 after the composer had already been emptied.
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pickerRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
   // The field grows with the message up to the twelve lines the stylesheet
   // allows (composer.css); the sheet owns the ceiling, this only fits the
   // text.
@@ -219,150 +180,18 @@ export function Composer({
   }, [autoFocus, visible]);
   /** Message lookup of the app language (the composer's own labels). */
   const t = useT();
-  // Latest images, read inside the async FileReader callback so a burst of
-  // drops/pastes never appends from a stale closure. The ref is kept in an
-  // effect: writing it during render breaks under concurrent rendering.
-  const imagesRef = useRef(images);
-  useEffect(() => {
-    imagesRef.current = images;
-  }, [images]);
-  // The pickers close on outside click and Escape, like every other
-  // dropdown (the refs wrap the trigger button + popover, so toggling the
-  // trigger keeps working). The model popover is portaled to the body — the
-  // chat pane clips its overflowing descendants, and the composer it hangs
-  // over is the last thing inside that pane — so the portal is handed in as a
-  // second "inside": a click on the popover is not a click outside.
-  const modelPickerRef = useRef<HTMLDivElement>(null);
-  const modelPopoverRef = useRef<HTMLDivElement>(null);
-  const modelPlacement = usePopoverPlacement(modelPickerRef, showModelPicker);
-  const ctxRef = useRef<HTMLDivElement>(null);
-  useClickOutside(
-    modelPickerRef,
-    () => setShowModelPicker(false),
-    showModelPicker,
-    { within: modelPopoverRef },
-  );
-  useClickOutside(ctxRef, () => setShowCtx(false), showCtx);
-
-  const slashEnabled = slashCommands !== undefined;
-
-  const {
-    caretPos,
-    setCaretPos,
-    measure: measureCaret,
-  } = useCaretPosition(textareaRef);
-  const clearCaret = useCallback(() => setCaretPos(null), [setCaretPos]);
-  const {
-    mention,
-    setMention,
-    updateMention,
-    selectMention,
-    closeMention,
-    handleKeyDown: handleMentionKeyDown,
-  } = useMention({
+  // The two lists above the caret (an `@` path, a `/` command) and what a pick
+  // does to the text (see hooks/useComposerPalettes).
+  const palettes = useComposerPalettes({
     textareaRef,
-    workspaceId: mentionWorkspaceId,
-    peerId: mentionPeerId,
     value,
     onChange,
-    clearCaret,
+    mentionWorkspaceId,
+    mentionPeerId,
+    slashCommands,
+    onSlashCommand,
+    large,
   });
-  /** Replace the `/command` token the pick was made from with `text`,
-   * keeping the text around it: the palette edits the input in place
-   * instead of replacing the whole message. `trimAfter` drops the
-   * whitespace that followed the token, so completing to `/plan ` does not
-   * double the space it inserts. The caret lands right after the inserted
-   * text (the textarea keeps focus: the popover suppresses its own
-   * mousedown). */
-  const replaceSlashToken = useCallback(
-    (state: SlashState, text: string, trimAfter: boolean) => {
-      const ta = textareaRef.current;
-      const caret = ta?.selectionStart ?? state.end;
-      const before = value.slice(0, state.start);
-      let after = value.slice(Math.max(state.end, caret));
-      if (trimAfter) after = after.replace(/^\s+/, "");
-      onChange(before + text + after);
-      const caretAfter = before.length + text.length;
-      requestAnimationFrame(() => {
-        ta?.focus();
-        ta?.setSelectionRange(caretAfter, caretAfter);
-      });
-    },
-    [value, onChange],
-  );
-
-  /** Apply a slash entry picked by click, Enter or Tab. Text-taking
-   * commands (`/plan`, `/goal`) are completed to `/id ` and the menu
-   * closes: the request is typed after the token like normal input and
-   * wrapped into the mode prompt on submit (see ChatView/NewSessionView) —
-   * picking the command never sends by itself. A command with subcommands
-   * completes to `/id <picked item> ` (the skill palette), so the picked
-   * entry stays an argument of the command line. Saved prompts are inserted
-   * where the command was typed. Mode palettes run through the parent, but
-   * only from the start of the input: their prompt replaces the whole
-   * message, so a command typed mid-text is left alone instead of
-   * discarding the text around it. */
-  const handleSlashSelect = useCallback(
-    (
-      command: SlashCommand,
-      item: SlashCommandItem | undefined,
-      state: SlashState,
-    ) => {
-      if (command.kind === "complete") {
-        replaceSlashToken(state, slashCompletion(command, item), true);
-        return;
-      }
-      // An action command that takes an argument completes to `/id ` like a
-      // text-taking mode: the argument is typed after the token and read
-      // back on submit (see actionCommandFromText). The menu stays a
-      // palette, never a sender.
-      if (command.kind === "action" && command.takesText === true) {
-        replaceSlashToken(state, slashCompletion(command, item), true);
-        return;
-      }
-      if (command.kind === "insert") {
-        const insert = item?.insertText ?? command.insertText;
-        if (insert !== undefined) replaceSlashToken(state, insert, false);
-        return;
-      }
-      // "run" and "action" replace the whole message (a mode prompt, or a
-      // client-side command that sends nothing), so they only apply from
-      // the start of the input.
-      if (value.slice(0, state.start).trim() === "") {
-        onSlashCommand?.(command, item);
-      }
-    },
-    [value, replaceSlashToken, onSlashCommand],
-  );
-
-  const {
-    slash,
-    setSlash,
-    slashEntries,
-    updateSlash,
-    resetSlash,
-    selectSlash,
-    handleKeyDown: handleSlashKeyDown,
-  } = useSlashMenu({
-    enabled: slashEnabled,
-    commands: slashCommands ?? [],
-    onSelect: handleSlashSelect,
-  });
-
-  // Switching sessions (different workspace) must not leak a stale mention
-  // or slash command.
-  useEffect(() => {
-    closeMention();
-    resetSlash();
-  }, [mentionWorkspaceId, mentionPeerId, closeMention, resetSlash]);
-
-  // Same reason as imagesRef: a burst of drops must not append from a stale
-  // closure.
-  const filesRef = useRef(files);
-  useEffect(() => {
-    filesRef.current = files;
-  }, [files]);
-
   // Reading attachments (size limits, FileReader, the failure message) lives
   // in the hook: none of it has anything to do with rendering.
   const attachments = useAttachments({
@@ -414,56 +243,12 @@ export function Composer({
     attachments.addAll(Array.from(e.dataTransfer?.files ?? []));
   };
 
-  /** Re-evaluate the slash command and the mention under the caret after
-   * typing or caret moves. They are mutually exclusive: a matching `/`
-   * takes over the input, so the two popovers never overlap. */
-  const updateSuggestions = (nextValue: string, caret: number) => {
-    if (updateSlash(nextValue, caret)) {
-      closeMention();
-      return;
-    }
-    resetSlash();
-    if (updateMention(nextValue, caret)) {
-      measureCaret();
-    } else if (mention !== null) {
-      clearCaret();
-    }
-  };
-
-  /** Put a palette trigger at the caret and open the menu it starts. The
-   * plus menu runs the same detection as typing the character, so the two
-   * paths cannot drift apart. The detected token is what the popover is
-   * placed against, so the caret is moved before the detection runs: the
-   * frame callback is after the render that writes the field's value. */
-  const openPalette = (trigger: "/" | "@") => {
-    const field = textareaRef.current;
-    const next = insertTrigger(
-      value,
-      {
-        start: field?.selectionStart ?? value.length,
-        end: field?.selectionEnd ?? value.length,
-      },
-      trigger,
-    );
-    // The field refuses a value past the cap; inserting one it would drop
-    // leaves a trigger on screen that does not open anything.
-    if (next.value.length > MAX_PROMPT_TEXT_LENGTH) return;
-    onChange(next.value);
-    requestAnimationFrame(() => {
-      const target = textareaRef.current;
-      if (target === null) return;
-      target.focus();
-      target.setSelectionRange(next.caret, next.caret);
-      updateSuggestions(next.value, next.caret);
-    });
-  };
-
   /** The plus menu's rows: what this composer can put into the message, named
    * for the reader (see composerMenuItems for which rows exist and why). */
   const attachActions: ComposerAttachAction[] = composerMenuItems({
     canSendFiles: onFilesChange !== undefined,
     canMention: mentionWorkspaceId !== undefined,
-    canSlash: slashEnabled,
+    canSlash: slashCommands !== undefined,
     canShareFolder: onShareFolder !== undefined,
   }).map((item) => ({
     id: item.id,
@@ -474,7 +259,7 @@ export function Composer({
         ? () => pickerRef.current?.click()
         : item.id === "share"
           ? () => onShareFolder?.()
-          : () => openPalette(item.id === "command" ? "/" : "@"),
+          : () => palettes.openPalette(item.id === "command" ? "/" : "@"),
   }));
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -493,15 +278,9 @@ export function Composer({
       onSubmit();
       return;
     }
-    if (handleSlashKeyDown(e)) return;
-    if (handleMentionKeyDown(e)) return;
+    if (palettes.handleKeyDown(e)) return;
     onKeyDown?.(e);
   };
-
-  // The popover opens above the caret line. Only in the tall new-session
-  // textarea does the caret sit near the top often enough to flip below
-  // instead of covering the first lines.
-  const showMentionAbove = !(large && caretPos !== null && caretPos.y < 60);
 
   return (
     <div
@@ -512,81 +291,13 @@ export function Composer({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {attachments.error !== null && (
-        <p className="input-attach-error" role="alert">
-          {attachments.error}
-        </p>
-      )}
-      {files.length > 0 && (
-        <div className="input-files">
-          {files.map((file) => {
-            const percent =
-              file.size === 0
-                ? 100
-                : Math.min(100, Math.round((file.uploaded / file.size) * 100));
-            return (
-              <span
-                key={file.id}
-                className={`input-file ${file.status}`}
-                title={
-                  file.error ??
-                  `${file.name} (${formatAttachmentSize(file.size)})`
-                }
-              >
-                <IconFile size={13} stroke={1.5} />
-                <span className="input-file-name">{file.name}</span>
-                <span className="input-file-size">
-                  {file.status === "failed"
-                    ? t("chat.composer.attach.failed")
-                    : file.status === "copying"
-                      ? t("chat.composer.attach.copying")
-                      : file.status === "done"
-                        ? formatAttachmentSize(file.size)
-                        : `${percent}%`}
-                </span>
-                {file.status === "uploading" && (
-                  <span className="input-file-progress" aria-hidden="true">
-                    <span style={{ width: `${percent}%` }} />
-                  </span>
-                )}
-                <button
-                  type="button"
-                  className="input-file-remove"
-                  title={t("chat.composer.image.remove")}
-                  onClick={() => attachments.remove(file)}
-                >
-                  <IconX size={11} />
-                </button>
-              </span>
-            );
-          })}
-        </div>
-      )}
-      {images.length > 0 && (
-        <div className="input-images">
-          {images.map((image, index) => (
-            <div
-              key={`${image.name ?? "image"}-${index}`}
-              className="input-image"
-            >
-              <img
-                src={image.data}
-                alt={image.name ?? t("chat.composer.image.alt")}
-              />
-              <button
-                type="button"
-                className="input-image-remove"
-                title={t("chat.composer.image.remove")}
-                onClick={() =>
-                  onImagesChange?.(images.filter((_, i) => i !== index))
-                }
-              >
-                <IconX size={12} />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+      <ComposerAttachments
+        error={attachments.error}
+        files={files}
+        images={images}
+        onImagesChange={onImagesChange}
+        onRemoveFile={attachments.remove}
+      />
       {value.length > MAX_PROMPT_TEXT_LENGTH * 0.9 && (
         // Only near the cap: a counter that is always on screen is one more
         // number to read on every message.
@@ -640,10 +351,10 @@ export function Composer({
             const next = e.currentTarget.value;
             if (next.length > MAX_PROMPT_TEXT_LENGTH) return;
             onChange(next);
-            updateSuggestions(next, e.currentTarget.selectionStart);
+            palettes.updateSuggestions(next, e.currentTarget.selectionStart);
           }}
           onSelect={(e) => {
-            updateSuggestions(
+            palettes.updateSuggestions(
               e.currentTarget.value,
               e.currentTarget.selectionStart,
             );
@@ -652,176 +363,36 @@ export function Composer({
           onPaste={handlePaste}
           autoFocus={autoFocus}
         />
-        {mention && caretPos && (
-          <ComposerPopover
-            className="mention-popover"
-            {...(showMentionAbove ? {} : { placementClass: "below" })}
-            /* The caret position is handed to the stylesheet as variables
-             * rather than as final offsets: the sheet decides where that
-             * puts the list, so a narrow layout can pin it to the composer
-             * (a caret-anchored list would run off the right edge). */
-            style={{
-              "--caret-x": `${caretPos.x}px`,
-              "--caret-y": `${caretPos.y}px`,
-            }}
-            items={mention.items}
-            active={mention.active}
-            // A mention commits on mousedown: its selection rewrites the
-            // token under the caret, which must still be where it was.
-            commit="mousedown"
-            keyOf={(item) => item.path}
-            onSelect={selectMention}
-            onHover={(index) =>
-              setMention((prev) => (prev ? { ...prev, active: index } : prev))
-            }
-            empty={
-              mention.loading && mention.items.length === 0 ? (
-                <div className="mention-status">{t("common.loading")}</div>
-              ) : mention.failed ? (
-                <div className="mention-status">
-                  {t("chat.composer.mention.failed")}
-                </div>
-              ) : (
-                <div className="mention-status">
-                  {t("chat.composer.mention.noMatch")}
-                </div>
-              )
-            }
-            renderRow={(item) => (
-              <>
-                {item.isDir ? (
-                  <IconFolder size={13} className="mention-icon" />
-                ) : (
-                  <IconFile size={13} className="mention-icon" />
-                )}
-                <span className="mention-item-name">{item.name}</span>
-                <span className="mention-item-path">{item.path}</span>
-              </>
-            )}
-          />
-        )}
-        {slash && (
-          <ComposerPopover
-            className="slash-popover"
-            items={slashEntries}
-            active={slash.active}
-            // A command commits on click: its handler moves the caret itself
-            // (it replaces the token), so it does not need the pre-blur
-            // timing a mention does. The mousedown preventDefault still
-            // keeps the focus in the textarea.
-            commit="click"
-            keyOf={(item) => item.id}
-            onSelect={selectSlash}
-            onHover={(index) =>
-              setSlash((prev) => (prev ? { ...prev, active: index } : prev))
-            }
-            header={
-              slash.submenu ? (
-                <div className="slash-submenu-header">
-                  <button
-                    type="button"
-                    className="slash-back"
-                    title={t("chat.composer.slash.back")}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() =>
-                      setSlash({ ...slash, submenu: null, active: 0 })
-                    }
-                  >
-                    <IconArrowLeft size={13} />
-                    <span>{slash.submenu.label}</span>
-                  </button>
-                </div>
-              ) : undefined
-            }
-            empty={
-              <div className="slash-status">
-                {t("chat.composer.slash.empty")}
-              </div>
-            }
-            renderRow={(item) => (
-              <>
-                {item.icon && <item.icon size={14} className="slash-icon" />}
-                <span className="slash-item-text">
-                  <span className="slash-item-label">{item.label}</span>
-                  {item.description && (
-                    <span className="slash-item-desc">{item.description}</span>
-                  )}
-                </span>
-                {slash.submenu === null &&
-                  isSlashCommand(item) &&
-                  (item.items?.length ?? 0) > 0 && (
-                    <IconChevronRight size={13} className="slash-chevron" />
-                  )}
-              </>
-            )}
-          />
-        )}
-      </div>
-      <div className="input-row">
-        <ComposerModelBar
-          mode={modelBar}
-          model={model}
-          peerId={peerId}
-          thinkingLevel={thinkingLevel}
-          thinkingLevels={thinkingLevels}
-          onModelSelect={onModelSelect}
-          onThinkingLevelChange={onThinkingLevelChange}
-          onOpenSettings={onOpenSettings}
-          open={showModelPicker}
-          onOpenChange={(next) => {
-            setShowModelPicker(next);
-            if (next) setShowCtx(false);
-          }}
-          triggerRef={modelPickerRef}
-          popoverRef={modelPopoverRef}
-          placement={modelPlacement}
+        <ComposerSuggestions
+          caretPos={palettes.caretPos}
+          showMentionAbove={palettes.showMentionAbove}
+          mention={palettes.mention}
+          setMention={palettes.setMention}
+          selectMention={palettes.selectMention}
+          slash={palettes.slash}
+          setSlash={palettes.setSlash}
+          slashEntries={palettes.slashEntries}
+          selectSlash={palettes.selectSlash}
         />
-        <div className="input-actions">
-          {contextUsage !== undefined && (
-            <div className="ctx-wrap" ref={ctxRef}>
-              <ContextUsageTrigger
-                summary={contextUsage.summary}
-                contextWindow={contextUsage.contextWindow}
-                warnRatio={contextWarnRatio}
-                open={showCtx}
-                onToggle={() => {
-                  setShowCtx((o) => !o);
-                  setShowModelPicker(false);
-                }}
-              />
-              {showCtx && (
-                <ContextUsageCard
-                  summary={contextUsage.summary}
-                  contextWindow={contextUsage.contextWindow}
-                  warnRatio={contextWarnRatio}
-                />
-              )}
-            </div>
-          )}
-          {onAbort && (
-            <button
-              type="button"
-              className="btn danger"
-              onClick={onAbort}
-              aria-label={t("chat.composer.stop")}
-              title={t("chat.composer.stop")}
-            >
-              <IconPlayerStop size={14} />
-            </button>
-          )}
-          <button
-            type="button"
-            className={`btn primary${submitIconOnly ? "" : " btn-with-label"}`}
-            onClick={onSubmit}
-            disabled={submitDisabled}
-            aria-label={submitIconOnly ? submitLabel : undefined}
-            title={submitIconOnly ? submitLabel : undefined}
-          >
-            {SubmitIcon && <SubmitIcon size={14} />}
-            {!submitIconOnly && submitLabel}
-          </button>
-        </div>
       </div>
+      <ComposerFooter
+        modelBar={modelBar}
+        model={model}
+        peerId={peerId}
+        thinkingLevel={thinkingLevel}
+        thinkingLevels={thinkingLevels}
+        onModelSelect={onModelSelect}
+        onThinkingLevelChange={onThinkingLevelChange}
+        onOpenSettings={onOpenSettings}
+        contextUsage={contextUsage}
+        contextWarnRatio={contextWarnRatio}
+        onAbort={onAbort}
+        onSubmit={onSubmit}
+        submitLabel={submitLabel}
+        submitIcon={SubmitIcon}
+        submitIconOnly={submitIconOnly}
+        submitDisabled={submitDisabled}
+      />
     </div>
   );
 }

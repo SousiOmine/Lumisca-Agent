@@ -3,8 +3,8 @@
  *
  * What can be decided without a browser lives here: which key combination
  * means paste, and how a browser's line endings are normalized. The exchange
- * itself needs the RFB client and the server, so it stays in the pane
- * (StellaPane).
+ * itself needs the RFB client and the server, so it lives in
+ * hooks/useMachineClipboard.
  *
  * The machine's clipboard is reached through the server, not through the VNC
  * connection: x11vnc's cut text is ISO 8859-1, so Japanese would arrive as

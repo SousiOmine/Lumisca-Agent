@@ -1,37 +1,23 @@
-import {
-  errorMessage,
-  type MessageKey,
-  type MessageParams,
-} from "@lumisca/core/shared";
+import { errorMessage } from "@lumisca/core/shared";
 import {
   IconArrowsMaximize,
   IconArrowsMinimize,
   IconX,
 } from "@tabler/icons-preact";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "preact/hooks";
-import { wsUrl } from "../api-client.ts";
-import { stellaApi } from "../api-stella.ts";
-import { formatClockTime } from "../format.ts";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useMachineClipboard } from "../hooks/useMachineClipboard.ts";
 import { useNarrowViewport, useReducedMotion } from "../hooks/useMediaQuery.ts";
-import { useLocale, useT } from "../i18n.ts";
+import { useT } from "../i18n.ts";
 import { EASE_OUT, EXIT_SECONDS, play } from "../motion.ts";
-import {
-  normalizeClipboardText,
-  type PasteChord,
-  pasteChordOf,
-} from "../stella-clipboard.ts";
+import type { RfbClient } from "../stella-rfb.ts";
 import type {
   FolderShare,
   StellaHandover,
   StellaMachineStatus,
 } from "../types.ts";
 import { ShareList } from "./stella/ShareList.tsx";
+import { StellaHandoverForm } from "./stella/StellaHandoverForm.tsx";
+import { StellaMachineScreen } from "./stella/StellaMachineScreen.tsx";
 
 /**
  * The machine's screen, live.
@@ -46,72 +32,20 @@ import { ShareList } from "./stella/ShareList.tsx";
  * a CAPTCHA, a consent dialog). Two pointers on one screen is a bug, so the
  * two states are exclusive — while the agent works the pane is a window,
  * while it waits the pane is an input device.
+ *
+ * What the pane itself owns is that state and its lifetime: the entrance and
+ * the exit, full screen, whether the pointer is the user's, and the clipboard
+ * that crosses while it is. The picture and its connection are
+ * stella/StellaMachineScreen.tsx, the bar the run waits on is
+ * stella/StellaHandoverForm.tsx, and the clipboard exchange is
+ * hooks/useMachineClipboard.
  */
-
-/** The slice of noVNC's RFB this pane uses. Declared locally because the
- * package ships no types. */
-interface RfbClient {
-  viewOnly: boolean;
-  scaleViewport: boolean;
-  resizeSession: boolean;
-  background: string;
-  disconnect(): void;
-  addEventListener(type: string, listener: (event: Event) => void): void;
-  /** One key event, by X11 keysym and DOM code. A no-op when the client is
-   * not connected, or while it is view-only. */
-  sendKey(keysym: number, code: string, down?: boolean): void;
-}
-
-type RfbConstructor = new (
-  target: Element,
-  url: string,
-  options?: { credentials?: { password?: string }; wsProtocols?: string[] },
-) => RfbClient;
 
 /** How long the pane takes to arrive. Long enough to read as a column being
  * laid down beside the conversation, short enough not to delay the picture
  * the user asked for. Leaving is faster (see motion.ts): the decision is made,
  * so the reply should not dawdle. */
 const ENTER_SECONDS = 0.2;
-
-/** How long a cut-text announcement from the machine waits before its text is
- * read. A selection inside the machine moves PRIMARY and CLIPBOARD more than
- * once, and each move is one announcement; the text only matters after the
- * last of them. */
-const CLIPBOARD_SIGNAL_MS = 300;
-
-/** The keys of the paste chord, as X11 keysyms and DOM codes (noVNC's
- * `KeyTable` is not exported, and these names are the protocol's, not a
- * choice of ours). */
-const XK_CONTROL_L = 0xffe3;
-const XK_SHIFT_L = 0xffe1;
-const XK_V = 0x76;
-
-/** Press the paste chord on the machine, so the application reads the
- * selection the server just filled. Sent after the write answered: a key
- * before it would paste the machine's older clipboard. The modifiers are
- * released in `finally` so a thrown send cannot leave Ctrl held down. */
-function pressPaste(rfb: RfbClient | null, chord: PasteChord): void {
-  if (rfb === null) return;
-  rfb.sendKey(XK_CONTROL_L, "ControlLeft", true);
-  try {
-    if (chord.shift) rfb.sendKey(XK_SHIFT_L, "ShiftLeft", true);
-    rfb.sendKey(XK_V, "KeyV", true);
-    rfb.sendKey(XK_V, "KeyV", false);
-  } finally {
-    if (chord.shift) rfb.sendKey(XK_SHIFT_L, "ShiftLeft", false);
-    rfb.sendKey(XK_CONTROL_L, "ControlLeft", false);
-  }
-}
-
-/** Whether an element takes typed text itself (the hand-over note, the manual
- * paste field). A paste into one of those must stay a browser paste. */
-function isEditableTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  if (target.isContentEditable) return true;
-  const tag = target.tagName;
-  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
-}
 
 interface StellaPaneProps {
   /** The conversation's machine: running, asleep (`stopped`) or being
@@ -149,32 +83,6 @@ interface StellaPaneProps {
   onClose?: () => void;
 }
 
-type ConnectionState = "idle" | "connecting" | "connected" | "disconnected";
-
-/**
- * Wait until the pane has a size before creating the RFB client: noVNC
- * derives its scale from the container, and a zero-size one never recovers.
- */
-function waitForSize(element: HTMLElement, timeoutMs: number): Promise<void> {
-  if (element.clientWidth > 0 && element.clientHeight > 0) {
-    return Promise.resolve();
-  }
-  return new Promise((resolve, reject) => {
-    const observer = new ResizeObserver(() => {
-      if (element.clientWidth > 0 && element.clientHeight > 0) {
-        observer.disconnect();
-        clearTimeout(timer);
-        resolve();
-      }
-    });
-    observer.observe(element);
-    const timer = setTimeout(() => {
-      observer.disconnect();
-      reject(new Error("The pane never got a size"));
-    }, timeoutMs);
-  });
-}
-
 export function StellaPane({
   machine,
   waking,
@@ -190,13 +98,6 @@ export function StellaPane({
   onExitDone,
 }: StellaPaneProps) {
   const t = useT();
-  const locale = useLocale();
-  // A running machine is the only one with a screen to show. `stopped` is the
-  // idle sleep: the picture is gone, and the pane says so instead of leaving a
-  // frozen one.
-  const running = machine?.state === "running";
-  const asleep = machine?.state === "stopped";
-  const hostRef = useRef<HTMLDivElement>(null);
   const paneRef = useRef<HTMLElement>(null);
   const reduceMotion = useReducedMotion();
   // The pane arrives from the right at every width: its toggle draws a right
@@ -204,6 +105,29 @@ export function StellaPane({
   // surface. A phone's pane is the whole screen (stella.css) and travels its
   // own width; a desktop column only needs the hint of a direction.
   const narrow = useNarrowViewport();
+  const clientRef = useRef<RfbClient | null>(null);
+  const interactive = handover !== null;
+  // The hand-over bar's own state lives here rather than in the form: the bar
+  // comes and goes with each hand-over while the pane stays mounted, so a note
+  // left unsent outlives the form that wrote it, as it did when both were one
+  // component.
+  const [note, setNote] = useState("");
+  const [finishing, setFinishing] = useState(false);
+  const [finishError, setFinishError] = useState<string | null>(null);
+
+  /** Send what the user did at the screen. A send already in flight is not
+   * repeated: the two would answer the same hand-over. */
+  const finishHandover = () => {
+    if (handover === null || finishing) return;
+    setFinishing(true);
+    setFinishError(null);
+    onFinishHandover(note.trim(), handover.toolCallId)
+      .then(() => setNote(""))
+      .catch((failure) => {
+        setFinishError(errorMessage(failure));
+      })
+      .finally(() => setFinishing(false));
+  };
 
   // Arrive. Only opacity and transform move: the pane's BOX never changes
   // size, because the noVNC client re-derives its scale from that box on every
@@ -289,8 +213,7 @@ export function StellaPane({
       cancelled = true;
     };
   }, [exiting, reduceMotion, narrow, onExitDone]);
-  const clientRef = useRef<RfbClient | null>(null);
-  const [state, setState] = useState<ConnectionState>("idle");
+
   /** The pane covers the window instead of sitting in its column. */
   const [fullscreen, setFullscreen] = useState(false);
 
@@ -306,320 +229,15 @@ export function StellaPane({
     document.addEventListener("keydown", onKey, true);
     return () => document.removeEventListener("keydown", onKey, true);
   }, [fullscreen]);
-  const [error, setError] = useState<string | null>(null);
-  const [note, setNote] = useState("");
-  const [finishing, setFinishing] = useState(false);
-  const [finishError, setFinishError] = useState<string | null>(null);
-  const interactive = handover !== null;
 
-  // --- the clipboard the user and the machine share ------------------------
-  //
-  // While the user drives the screen they need both directions: a password
-  // copied on this PC has to reach the machine's field, and an error message
-  // copied in the machine has to reach this PC. The text never travels over
-  // the VNC connection — its cut text is ISO 8859-1, so Japanese would arrive
-  // as question marks — and goes through the server instead (see
-  // core/vm/clipboard.ts). noVNC is only the signal (a cut-text announcement
-  // says the machine's selection changed) and the finger that presses the
-  // paste chord in the machine.
-  //
-  // The two directions are two words in the hand-over bar, and Ctrl+V over
-  // the screen is the same paste. Nothing else is drawn: what worked is
-  // visible on its own (the text appears where it was pasted, or on this PC's
-  // clipboard), so only a failure needs a sentence.
-  const clipboardAvailable = interactive && agentId !== null;
-  const [clipboardBusy, setClipboardBusy] = useState(false);
-  const [clipboardNote, setClipboardNote] = useState<{
-    tone: "ok" | "error";
-    key: MessageKey;
-    params?: MessageParams;
-  } | null>(null);
-  /** The text last handed to either side. A write of ours comes back as an
-   * announcement from the machine, and reading it in again would overwrite
-   * whatever this PC's clipboard holds now; this is what stops that. */
-  const lastSynced = useRef<string | null>(null);
-  /** Guards the write path against a second press while the first write is
-   * still crossing: two writes would race for the same selection. */
-  const writing = useRef(false);
-  /** The debounce of a cut-text announcement, and the callback the RFB
-   * listener calls (the listener is installed once, in the connect effect). */
-  const signalTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
-  const signalRef = useRef<() => void>(() => {});
-  useEffect(() => () => clearTimeout(signalTimer.current), []);
-
-  /** Put this PC's clipboard into the machine and press the paste chord there.
-   * The button and Ctrl+V over the screen are the same action. */
-  const pasteIntoMachine = useCallback(
-    async (chord: PasteChord) => {
-      if (agentId === null || writing.current) return;
-      let text: string;
-      try {
-        text = await navigator.clipboard.readText();
-      } catch {
-        // A denied permission, or a page on plain http where the API does not
-        // exist at all: nothing can be read, so the button says why.
-        setClipboardNote({
-          tone: "error",
-          key: "chat.stella.handover.clipboard.pasteReadFailed",
-        });
-        return;
-      }
-      const normalized = normalizeClipboardText(text);
-      if (normalized.length === 0) {
-        setClipboardNote({
-          tone: "error",
-          key: "chat.stella.handover.clipboard.pasteEmpty",
-        });
-        return;
-      }
-      writing.current = true;
-      setClipboardBusy(true);
-      setClipboardNote(null);
-      try {
-        await stellaApi.writeClipboard(agentId, normalized);
-        lastSynced.current = normalized;
-        pressPaste(clientRef.current, chord);
-      } catch (failure) {
-        setClipboardNote({
-          tone: "error",
-          key: "chat.stella.handover.clipboard.pasteFailed",
-          params: { reason: errorMessage(failure) },
-        });
-      } finally {
-        writing.current = false;
-        setClipboardBusy(false);
-      }
-    },
-    [agentId],
-  );
-
-  /** Take the machine's clipboard onto this PC's: the button, and the
-   * machine's own announcement. `announce` says whether the user asked — an
-   * announcement racing the end of a hand-over is not worth a sentence. */
-  const copyFromMachine = useCallback(
-    async (announce: boolean) => {
-      if (agentId === null) return;
-      setClipboardBusy(true);
-      if (announce) setClipboardNote(null);
-      try {
-        const { text } = await stellaApi.readClipboard(agentId);
-        if (text.length === 0) {
-          if (announce) {
-            setClipboardNote({
-              tone: "ok",
-              key: "chat.stella.handover.clipboard.copyNothing",
-            });
-          }
-          return;
-        }
-        // Our own write, announced back by the machine: this PC's clipboard
-        // is not touched.
-        if (text === lastSynced.current) return;
-        lastSynced.current = text;
-        try {
-          await navigator.clipboard.writeText(text);
-          if (announce) {
-            setClipboardNote({
-              tone: "ok",
-              key: "chat.stella.handover.clipboard.copied",
-            });
-          }
-        } catch {
-          // Refused (no user gesture, or a page without the API). The user has
-          // to know: what they paste next would be the older text.
-          setClipboardNote({
-            tone: "error",
-            key: "chat.stella.handover.clipboard.copyFailed",
-          });
-        }
-      } catch (failure) {
-        if (!announce) return;
-        setClipboardNote({
-          tone: "error",
-          key: "chat.stella.handover.clipboard.copyError",
-          params: { reason: errorMessage(failure) },
-        });
-      } finally {
-        setClipboardBusy(false);
-      }
-    },
-    [agentId],
-  );
-
-  // A cut-text announcement from the machine. The event's own text is the
-  // Latin-1 stand-in, so only its arrival is used: the machine's real text is
-  // read through the server. Debounced because one selection moves the
-  // selection more than once.
-  useEffect(() => {
-    signalRef.current = () => {
-      if (!clipboardAvailable) return;
-      clearTimeout(signalTimer.current);
-      signalTimer.current = setTimeout(() => {
-        void copyFromMachine(false);
-      }, CLIPBOARD_SIGNAL_MS);
-    };
-  }, [clipboardAvailable, copyFromMachine]);
-
-  // A hand-over ending forgets what was exchanged: the next one starts from
-  // the machine's clipboard as it is then, not from a value this pane handed
-  // across last time (same text, hours apart, would otherwise be deduped).
-  useEffect(() => {
-    if (interactive) return;
-    lastSynced.current = null;
-    setClipboardNote(null);
-  }, [interactive]);
-
-  // A paste pressed over the screen belongs to the machine, but the machine's
-  // clipboard is not what the user copied there: the text has to cross first.
-  // The listener is in the capture phase on the pane itself, so the event
-  // stops before noVNC's canvas sends a bare Ctrl+V (which would paste the
-  // machine's older clipboard); a field inside the pane keeps its own paste.
-  useEffect(() => {
-    if (!clipboardAvailable) return;
-    const element = paneRef.current;
-    if (element === null) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (isEditableTarget(event.target)) return;
-      const chord = pasteChordOf(event);
-      if (chord === null) return;
-      event.preventDefault();
-      event.stopPropagation();
-      void pasteIntoMachine(chord);
-    };
-    element.addEventListener("keydown", onKeyDown, true);
-    return () => element.removeEventListener("keydown", onKeyDown, true);
-  }, [clipboardAvailable, pasteIntoMachine]);
-
-  useEffect(() => {
-    const host = hostRef.current;
-    if (host === null) return;
-    if (!running) {
-      setState("idle");
-      return;
-    }
-    let disposed = false;
-    let client: RfbClient | undefined;
-    setState("connecting");
-    setError(null);
-
-    const connect = async () => {
-      try {
-        await waitForSize(host, 10_000);
-        if (disposed) return;
-        const { default: RFB } = (await import("@novnc/novnc")) as {
-          default: RfbConstructor;
-        };
-        if (disposed) return;
-        // The relay is on the API origin: the server owns the VNC port and
-        // forwards it. `wsUrl` names the origin and carries the token, which a
-        // browser cannot put in a handshake header.
-        const query = new URLSearchParams();
-        // The pane is one conversation's desktop. Without the agent the
-        // relay has no desktop to show.
-        if (agentId !== null) query.set("agent", agentId);
-        const search = query.toString();
-        const url = wsUrl(
-          `/api/stella/screen${search === "" ? "" : `?${search}`}`,
-        );
-        const rfb = new RFB(host, url);
-        client = rfb;
-        clientRef.current = rfb;
-        // The view-only flag follows the hand-over (see the effect below);
-        // it starts closed because the agent owns the pointer by default.
-        rfb.viewOnly = true;
-        rfb.scaleViewport = true;
-        rfb.resizeSession = false;
-        rfb.background = "transparent";
-        rfb.addEventListener("connect", () => {
-          if (!disposed) setState("connected");
-        });
-        // The machine's selection changed. The event's `detail.text` is not
-        // the text: the VNC cut text is ISO 8859-1, so it is a stand-in for
-        // whatever was copied (Japanese arrives as question marks). Only its
-        // arrival is used; the machine is asked for the real text.
-        rfb.addEventListener("clipboard", () => signalRef.current());
-        rfb.addEventListener("disconnect", (event) => {
-          if (disposed) return;
-          const detail = (event as unknown as { detail?: { clean?: boolean } })
-            .detail;
-          setState("disconnected");
-          // A clean close is the user or the machine stopping; an unclean one
-          // means the relay dropped, which the user must be told about (the
-          // pane would otherwise sit on a frozen picture).
-          if (detail?.clean !== true) {
-            setError(
-              t("chat.stella.machine.screenFailed", {
-                reason: "the connection was closed",
-              }),
-            );
-          }
-        });
-        rfb.addEventListener("securityfailure", () => {
-          if (disposed) return;
-          setState("disconnected");
-          setError(
-            t("chat.stella.machine.screenFailed", {
-              reason: "the machine refused the connection",
-            }),
-          );
-        });
-      } catch (failure) {
-        if (disposed) return;
-        setState("disconnected");
-        setError(
-          t("chat.stella.machine.screenFailed", {
-            reason:
-              failure instanceof Error ? failure.message : String(failure),
-          }),
-        );
-      }
-    };
-    void connect();
-
-    return () => {
-      disposed = true;
-      clientRef.current = null;
-      try {
-        client?.disconnect();
-      } catch {
-        // Already gone (the machine stopped); nothing to do.
-      }
-    };
-  }, [running, agentId, t]);
-
-  // Driving the screen is use: a press, a key, a wheel notch or a touch
-  // reports the agent's machine as used, which keeps its idle clock fresh
-  // (see useAgentMachine). Pointer MOVES are not reported — noVNC also sends
-  // framebuffer requests continuously, so counting traffic would keep a pane
-  // nobody is looking at awake forever.
-  useEffect(() => {
-    const host = hostRef.current;
-    if (host === null || !running) return;
-    const report = () => onActivity();
-    const events = ["pointerdown", "keydown", "wheel", "touchstart"];
-    for (const name of events) host.addEventListener(name, report, true);
-    return () => {
-      for (const name of events) host.removeEventListener(name, report, true);
-    };
-  }, [running, onActivity]);
-
-  // A machine that went to sleep closes the relay, which looks like a failed
-  // connection. The pane says "asleep" instead, so the failure text must not
-  // outlive the running state.
-  useEffect(() => {
-    if (!running) setError(null);
-  }, [running]);
-
-  // The view-only flag follows the hand-over: the agent owns the pointer
-  // while it works, the user owns it while the run waits for them. Applied
-  // to the live client (no reconnect: the picture and the handshake stay).
-  useEffect(() => {
-    const rfb = clientRef.current;
-    if (rfb === null) return;
-    rfb.viewOnly = !interactive;
-  }, [interactive, state]);
+  // The clipboard the user and the machine share. It is drawn in the
+  // hand-over bar (the two words) and driven with Ctrl+V over the screen.
+  const clipboard = useMachineClipboard({
+    paneRef,
+    clientRef,
+    agentId,
+    interactive,
+  });
 
   return (
     <aside
@@ -665,130 +283,36 @@ export function StellaPane({
         )}
       </header>
       {handover !== null && (
-        <form
-          className="stella-handover"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (finishing) return;
-            setFinishing(true);
-            setFinishError(null);
-            onFinishHandover(note.trim(), handover.toolCallId)
-              .then(() => setNote(""))
-              .catch((failure) => {
-                setFinishError(errorMessage(failure));
-              })
-              .finally(() => setFinishing(false));
-          }}
-        >
-          <p className="stella-handover-label">
-            {t("chat.stella.handover.reason")}
-          </p>
-          <p className="stella-handover-reason">{handover.reason}</p>
-          {handover.instructions !== null && (
-            <p className="stella-handover-instructions">
-              {handover.instructions}
-            </p>
-          )}
-          <p className="stella-handover-deadline">
-            {t("chat.stella.handover.deadline", {
-              time: formatClockTime(handover.expiresAt, locale),
-            })}
-          </p>
-          <div className="stella-handover-actions">
-            <input
-              type="text"
-              className="stella-handover-note"
-              placeholder={t("chat.stella.handover.notePlaceholder")}
-              aria-label={t("chat.stella.handover.notePlaceholder")}
-              value={note}
-              onChange={(event) => setNote(event.currentTarget.value)}
-            />
-            <button type="submit" className="btn primary" disabled={finishing}>
-              {finishing
-                ? t("chat.stella.handover.finishing")
-                : t("chat.stella.handover.done")}
-            </button>
-          </div>
-          {clipboardAvailable && (
-            <div className="stella-handover-clipboard">
-              <button
-                type="button"
-                className="btn small"
-                disabled={clipboardBusy}
-                onClick={() => void copyFromMachine(true)}
-                title={t("chat.stella.handover.clipboard.copyHint")}
-                aria-label={t("chat.stella.handover.clipboard.copyHint")}
-              >
-                {t("chat.stella.handover.clipboard.copy")}
-              </button>
-              <button
-                type="button"
-                className="btn small"
-                disabled={clipboardBusy}
-                onClick={() => void pasteIntoMachine({ shift: false })}
-                title={t("chat.stella.handover.clipboard.pasteHint")}
-                aria-label={t("chat.stella.handover.clipboard.pasteHint")}
-              >
-                {t("chat.stella.handover.clipboard.paste")}
-              </button>
-              {clipboardNote !== null && (
-                <span
-                  className="stella-clipboard-note"
-                  data-tone={clipboardNote.tone}
-                  role={clipboardNote.tone === "error" ? "alert" : "status"}
-                >
-                  {t(clipboardNote.key, clipboardNote.params)}
-                </span>
-              )}
-            </div>
-          )}
-          {finishError !== null && (
-            <p className="error-text" role="alert">
-              {finishError}
-            </p>
-          )}
-        </form>
+        <StellaHandoverForm
+          handover={handover}
+          note={note}
+          onNoteChange={setNote}
+          finishing={finishing}
+          finishError={finishError}
+          onSubmit={finishHandover}
+          clipboard={
+            clipboard.available
+              ? {
+                  busy: clipboard.busy,
+                  note: clipboard.note,
+                  onCopy: () => void clipboard.copy(true),
+                  onPaste: () => void clipboard.paste({ shift: false }),
+                }
+              : undefined
+          }
+        />
       )}
-      <h3 className="stella-pane-section stella-pane-screen-title">
-        {t("chat.stella.machine.screen")}
-      </h3>
-      <div className="stella-pane-body">
-        {!running && asleep && (
-          <div className="stella-pane-asleep">
-            <p className="stella-pane-note">
-              {t("chat.stella.machine.asleep")}
-            </p>
-            <button
-              type="button"
-              className="btn"
-              onClick={onWake}
-              disabled={waking}
-            >
-              {waking
-                ? t("chat.stella.machine.waking")
-                : t("chat.stella.machine.wake")}
-            </button>
-            {wakeError !== null && (
-              <p className="error-text" role="alert">
-                {wakeError}
-              </p>
-            )}
-          </div>
-        )}
-        {running && state === "connecting" && (
-          <p className="stella-pane-note">
-            {t("chat.stella.machine.screenConnecting")}
-          </p>
-        )}
-        {error !== null && (
-          <p className="error-text stella-pane-note" role="alert">
-            {error}
-          </p>
-        )}
-        {/* noVNC renders into this element; it must not be replaced while the
-            connection lives (the client holds the node). */}
-        <div ref={hostRef} className="stella-pane-screen" />
-      </div>
+      <StellaMachineScreen
+        machine={machine}
+        waking={waking}
+        wakeError={wakeError}
+        onWake={onWake}
+        agentId={agentId}
+        interactive={interactive}
+        onActivity={onActivity}
+        clientRef={clientRef}
+        onClipboardSignal={clipboard.signal}
+      />
       <ShareList shares={shares} />
     </aside>
   );
