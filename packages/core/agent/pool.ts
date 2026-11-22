@@ -186,8 +186,34 @@ export class SessionPool {
     for (const session of sessions) {
       this.assertNotStreaming(session.id);
     }
+    this.applyAndFollow(sessions, mutate);
+  }
+
+  /** The one loop behind every configuration change: apply the mutation,
+   * then let each open session follow it. A streaming session is handled by
+   * the caller's policy; an idle one is rebuilt. A session that is not open
+   * picks the new value up when it is opened.
+   *
+   * The mutation runs unconditionally here: a caller that must refuse while
+   * a session streams checks that before calling (see applyChange). */
+  private applyAndFollow(
+    sessions: SessionInfo[],
+    mutate: () => void,
+    onStreaming?: (session: SessionInfo, resources: SessionResources) => void,
+    onIdle?: (session: SessionInfo, resources: SessionResources) => void,
+  ): void {
     mutate();
     for (const session of sessions) {
+      const resources = this.sessions.get(session.id);
+      if (resources?.agent === undefined) continue;
+      if (resources.agent.isStreaming && onStreaming !== undefined) {
+        onStreaming(session, resources);
+        continue;
+      }
+      if (onIdle !== undefined) {
+        onIdle(session, resources);
+        continue;
+      }
       this.rebuild(session);
     }
   }
@@ -205,17 +231,9 @@ export class SessionPool {
    * (see AgentFactory.seedDiscoverableTools): the run keeps the tools it
    * started with, and what it can find through tool_search follows. */
   applyCapabilityChange(sessions: SessionInfo[], mutate: () => void): void {
-    mutate();
-    for (const session of sessions) {
-      const resources = this.sessions.get(session.id);
-      // A session that is not open picks the capability up when it is opened.
-      if (resources?.agent === undefined) continue;
-      if (resources.agent.isStreaming) {
-        this.reseedInPlace(session, resources);
-        continue;
-      }
-      this.rebuild(session);
-    }
+    this.applyAndFollow(sessions, mutate, (session, resources) =>
+      this.reseedInPlace(session, resources),
+    );
   }
 
   /** Reseed one streaming session's discoverable tools without touching its
@@ -251,16 +269,7 @@ export class SessionPool {
     mutate: () => void,
     defer: (id: string) => void,
   ): void {
-    mutate();
-    for (const session of sessions) {
-      const resources = this.sessions.get(session.id);
-      if (resources?.agent === undefined) continue;
-      if (resources.agent.isStreaming) {
-        defer(session.id);
-        continue;
-      }
-      this.rebuild(session);
-    }
+    this.applyAndFollow(sessions, mutate, (session) => defer(session.id));
   }
 
   /** Apply an MCP config change to the listed sessions. The mutation runs
@@ -274,17 +283,9 @@ export class SessionPool {
    * place instead — its run keeps the tools it started with, and the tools
    * it can discover follow the new config. */
   applyMcpConfigChange(sessions: SessionInfo[], mutate: () => void): void {
-    mutate();
-    for (const session of sessions) {
-      const resources = this.sessions.get(session.id);
-      // A session that is not open picks the config up when it is opened.
-      if (resources?.agent === undefined) continue;
-      if (resources.agent.isStreaming) {
-        this.refreshMcpInPlace(session, resources);
-        continue;
-      }
-      this.rebuild(session);
-    }
+    this.applyAndFollow(sessions, mutate, (session, resources) =>
+      this.refreshMcpInPlace(session, resources),
+    );
   }
 
   /** Hand one streaming session its current MCP config without touching its
@@ -320,21 +321,23 @@ export class SessionPool {
    * set untouched — so the servers it can discover follow the sign-in
    * without waiting for a rebuild that may never come. */
   refreshMcp(sessions: SessionInfo[]): void {
-    for (const session of sessions) {
-      const resources = this.sessions.get(session.id);
-      if (resources?.agent === undefined) continue;
-      if (resources.agent.isStreaming) {
-        this.refreshMcpInPlace(session, resources, { reloadCredentials: true });
-        continue;
-      }
-      const previous = resources.mcp;
-      // Dropping the attachment makes the factory build a new one (with a
-      // fresh manager); the registries follow it, since a rebuild builds
-      // fresh tools.
-      resources.mcp = undefined;
-      resources.registries = undefined;
-      if (previous !== undefined) void previous.manager.close();
-      this.rebuild(session);
-    }
+    this.applyAndFollow(
+      sessions,
+      () => {},
+      (session, resources) =>
+        this.refreshMcpInPlace(session, resources, {
+          reloadCredentials: true,
+        }),
+      (session, resources) => {
+        const previous = resources.mcp;
+        // Dropping the attachment makes the factory build a new one (with a
+        // fresh manager); the registries follow it, since a rebuild builds
+        // fresh tools.
+        resources.mcp = undefined;
+        resources.registries = undefined;
+        if (previous !== undefined) void previous.manager.close();
+        this.rebuild(session);
+      },
+    );
   }
 }
