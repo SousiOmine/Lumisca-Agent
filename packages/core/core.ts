@@ -1463,12 +1463,6 @@ export class LumiscaCore {
     return effective;
   }
 
-  // --- model enablement ----------------------------------------------------
-
-  // --- user-defined OpenAI-compatible providers ----------------------------
-
-  // --- model catalog (models.dev live sync) -------------------------------
-
   /**
    * The areas this facade is made of, each a class over its own
    * collaborators. A route can be handed the one it needs (see the
