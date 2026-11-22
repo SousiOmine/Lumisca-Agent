@@ -1,17 +1,14 @@
-import { CoreError, errorMessage, type WindowQuery } from "@lumisca/core";
+import { errorMessage, type WindowQuery } from "@lumisca/core";
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { AppError, errorStatus } from "../errors.ts";
 
-/** Error with an explicit HTTP status. Thrown by route handlers when the
- * status matters (e.g. 404); everything else is classified by errorStatus. */
-export class AppError extends Error {
-  constructor(
-    message: string,
-    readonly status: ContentfulStatusCode,
-  ) {
-    super(message);
-  }
-}
+/** The errors themselves live in ../errors.ts: the federation client raises
+ * `PeerError` and needs the same classification without importing the HTTP
+ * layer. The route modules that still import them from here (sessions,
+ * stella, prompt uploads) move with their own change; until then this is the
+ * single name they share. */
+export { AppError, errorStatus };
 
 /** The 404 a route owes when an id names nothing. Kept out of the
  * per-surface resolvers so every route says it the same way. */
@@ -33,23 +30,6 @@ export function optionalToolCallId(value: unknown): string | undefined {
     throw new AppError("toolCallId must be a string", 400);
   }
   return value;
-}
-
-/** Classify an unknown error into an HTTP status. Route handlers throw
- * AppError; the core throws typed CoreError (kind maps to a status), so
- * error messages are never matched by text. Anything unclassified is a
- * server fault and maps to 500, never 400 — the client must be able to
- * distinguish "bad input" from "server is broken". */
-export function errorStatus(error: unknown): ContentfulStatusCode {
-  if (error instanceof AppError) return error.status;
-  if (error instanceof CoreError) {
-    if (error.kind === "not_found") return 404;
-    if (error.kind === "forbidden") return 403;
-    if (error.kind === "conflict") return 409;
-    if (error.kind === "unavailable") return 503;
-    if (error.kind === "invalid") return 400;
-  }
-  return 500;
 }
 
 /** Respond with an error message JSON body. */
