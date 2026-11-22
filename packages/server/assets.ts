@@ -3,7 +3,6 @@ import * as fsp from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { contentEtag } from "./app-file-headers.ts";
-import { bundleClient } from "./bundle.ts";
 import { PWA_ICON_FILES } from "./manifest.ts";
 import {
   webClientEntry,
@@ -98,6 +97,10 @@ async function bundleClientFiles(
   outdir: string,
 ): Promise<Record<string, AssetFile>> {
   await fsp.mkdir(outdir, { recursive: true });
+  // Loaded only when the server is run from source: a packaged server has
+  // `assets.json` and never calls this, and a static import of bundle.ts
+  // pulled esbuild (and esbuild-wasm) into the compiled binary (P1-8).
+  const { bundleClient } = await import("./bundle.ts");
   const bundle = await bundleClient({
     cwd: repoRoot,
     entry: webClientEntry(repoRoot),
