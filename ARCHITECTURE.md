@@ -8,7 +8,7 @@
 
 アプリケーションは 2 つの動作モードを持ちます。
 画面では stella mode を Lumisca、code mode を Lumisca code と呼びます。
-`stella` は内部の名前で、URL、ファイル名、型はそのままです。
+`stella` は内部の名前で、ファイル名と型はそのままです。画面のURLは`/agents`です。
 初回起動はメインの Lumisca で開きます。
 Lumisca code は実験的機能のスイッチ `code_mode_enabled` を有効にしたときだけ現れます。
 既定は無効です。
@@ -57,7 +57,7 @@ Lumisca code は実験的機能のスイッチ `code_mode_enabled` を有効に�
   動かす経路が「会話を開く」1 本だけだと、開いたままの会話とルーチンは `podman exec` の "container state improper" を返し続けます（実際にそれが起きた）。
   コンテナには `--restart=unless-stopped` を付け、自前で死んだマシンは podman に戻させます。
   `unless-stopped` なのは、`podman stop` を手動停止として扱い、スリープとアプリの終了で止めたマシンを復活させないためです。
-  加えて送信（`POST /stella/conversations/:id/prompt`）とルーチンの実行（`RoutineRunner.run`）は `ensureStellaReady(agentId)` を通します。
+  加えて送信（`POST /api/stella/conversations/:id/prompt`）とルーチンの実行（`RoutineRunner.run`）は `ensureStellaReady(agentId)` を通します。
   開いている会話には開き直す往路が無いためです。
 - ホームは 1 つで、マシンは別々です。
   全コンテナが `lumisca-stella-home` を `/home/agent` に載せます。
@@ -224,7 +224,7 @@ stella のサブエージェントにも渡しません（`SubagentRuntime.eval`
 ### 相手（agent）と identity
 
 stella の会話は「どのセッションを開くか」ではなく「誰と話すか」で選びます。
-相手は `stella_agents` の 1 行（名前、役割）で、会話はその行を `agent_id` で指す通常の `sessions` 行です（`stella` フラグ付き）。
+相手は `stella_agents` の 1 行（名前、役割）で、会話はその行を `persona_id` で指す通常の `sessions` 行です（`stella` フラグ付き）。
 
 相手を説明する文は 2 つあり、書き手が違います。
 `role` はユーザーが作成時に書き（変更不可）、システムプロンプトにスナップショットされます。
@@ -379,7 +379,7 @@ API キーやトークンは、エージェントが作業に必要としなが�
   ファイルが無ければ何もしないので、一度も求めていないマシンは今までどおり動きます。
   per-call の `env NAME=…` は後ろに置くので、モデルが明示した値がその 1 回だけ勝ちます。
 - 待ちは人が要るので、実行は止まります。
-  `vm/env-request.ts` の `EnvRequestHub`（セッションごとに 1 つ、同時に 1 件）が `env_request` を出し、`POST /stella/conversations/:agentId/env` で値を書いてから待ちを解きます。
+  `vm/env-request.ts` の `EnvRequestHub`（セッションごとに 1 つ、同時に 1 件）が `env_request` を出し、`POST /api/stella/conversations/:agentId/env` で値を書いてから待ちを解きます。
   書けなかったときは待ちを解きません（ダイアログにエラーが出て、エージェントには「設定済み」と言いません）。
   拒否は `…/env/decline` で、実行は値なしで続きます。
   期限は 15 分（`ENV_REQUEST_TIMEOUT_MS`）で、過ぎると `env_request_end` を出してから「値は無い」を返します。
@@ -520,9 +520,9 @@ UIはどちらの本文にも書けます。
 
 ### デスクトップの接続先
 
-デスクトップシェルは表示するサーバーを `settings.json`（`<app data>` 上、`lumisca.db` の隣）の `lastRemote` に記録します。
-設定画面で選んだサーバーも、起動時に復元したサーバーも同じ値です。
-`null` ならローカルサーバーです。
+デスクトップシェルは表示できるサーバーの一覧を `settings.json`（`<app data>` 上、`lumisca.db` の隣）の `connections` に、表示中の行を `current` に記録します。
+`current` が無ければローカルサーバーです。
+一覧は表示中のサーバーのものではなく、このウインドウのものです。
 
 - 復元: 起動時は記録が無ければローカルサーバーを起動し、あればそのサーバーへ `/api/health` を投げてから遷移します（`connection.rs`）。
   記録先が落ちていても黙ってローカルへ落とさず、起動画面にエラーと「再試行」「ローカルサーバーを使う」を出します。
@@ -709,7 +709,7 @@ URLはシェルを介さず、プログラムの引数として1つだけ渡し�
   切り替えはブリッジの `connect-local` / `connect-remote` で、遷移はシェルが持ちます（トークンをこのページの履歴に載せないため）。
   ブラウザにはシェルがなく、アドレスバーが答えになるため、この操作は出ません。
 
-  表示名はシェルが `settings.json` の `lastRemote` に名前ごと記録して `state` で返します。
+  表示名はシェルが `settings.json` の `connections` の行を `connectionId` で指して `state` で返します。
   リモートのページのレジストリはそのサーバー自身のもので、自分自身の項目を持たないためです。
   ページ URL は出しません（クエリにトークンが載っているためです）。
   設定の「接続先サーバー」の一覧も同じ問いに答える場所なので、こちらは編集用です（`ConnectionList`）。
@@ -1293,8 +1293,8 @@ Web UI では `const t = useT();` で文言を取得します。
   ルート、圧縮、WebSocket、CORS、フェデレーションのプロキシが 1 つのミドルウェア列で動いており、置き換えるとセキュリティの前提（Host ガード、Origin 検証、トークン）を作り直すことになります。
   得られるのは好みの差だけです。
 - `preact/compat` は `preact/hooks` へ移しません。
-  96 ファイルが `preact/compat` を使い、`createPortal`、`useId`、`memo` に依存しています。
-  `preact/hooks` を使っていたのは `PromptAttachments.tsx` の 1 ファイルだけだったので、移す方向はその 1 ファイルを `preact/compat` に揃えることでした（揃えました）。
+  43 ファイルが `preact/compat` を使い、`useSyncExternalStore`、`flushSync`、`memo` と型に依存しています。
+  `createPortal` は `preact` から、`useId` は `preact/hooks` から取ります。
 - `@preact/signals` は入れません。
   共有値は `store.ts` の `createStore` / `createResourceStore` で足ります。
   非同期読み込みの重複排除、楽観更新の巻き戻し、差分通知が 1 か所に収まったので、フレームワークを増やす理由がありません。

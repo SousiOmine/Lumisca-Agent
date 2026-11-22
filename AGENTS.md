@@ -267,7 +267,7 @@ npm outdated                                                   # packages/deskto
   値で持つとスキル一覧が次の open まで古いままになります。
 - 接続先はタイトルバーのドロップダウンだけです（`components/ConnectionPicker.tsx`）。
   新規セッション画面にはサーバー選択を置きません。
-  表示名はシェルが `settings.json` の `lastRemote` に記録して `state` で返します。
+  表示名はシェルが `settings.json` の `connections` の行を `connectionId` で指して `state` で返します。
   設定画面の一覧は編集用で、行は畳んだ状態が既定、名前が空のまま URL を入れたらホスト名を補完します（`packages/web/src/connections.ts`）。
 - 新規セッション画面のモデルは既定モデルに書きます。
   ピッカーの選択は `packages/web/src/defaultModel.ts` の `rememberDefaultModel` で `model_default` に保存します。
