@@ -52,6 +52,39 @@ test("parseJsonc throws SettingsFileError with position and path", () => {
   );
 });
 
+test("file and memory stores return the same text for the same value", async () => {
+  // The bug this pins down: the file backend parsed "1.50" into the number
+  // 1.5 and wrote it back as "1.5", while the memory backend kept "1.50".
+  // A test against the memory store passed, and production read a different
+  // value. Both now write strings and parse only on getJson.
+  const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-settings-"));
+  const file = createFileSettingsRepo(pathJoin(dir, "settings.json"));
+  const memory = createInMemorySettingsRepo();
+  try {
+    for (const store of [file, memory]) {
+      store.set("plain", "1.50");
+      store.setJson("number", 1.5);
+      store.setJson("null", null);
+      store.setJson("code", "007");
+    }
+    for (const store of [file, memory]) {
+      assertEquals(store.get("plain"), "1.50");
+      assertEquals(store.get("number"), "1.5");
+      assertEquals(store.get("null"), "null");
+      assertEquals(store.get("code"), "\"007\"");
+      assertEquals(store.getJson<number>("number"), 1.5);
+      assertEquals(store.getJson<null>("null"), null);
+      assertEquals(store.getJson<string>("code"), "007");
+    }
+    // A reopened file agrees too: the value on disk is a JSON string.
+    const reopened = createFileSettingsRepo(pathJoin(dir, "settings.json"));
+    assertEquals(reopened.get("plain"), "1.50");
+    assertEquals(reopened.getJson<number>("number"), 1.5);
+  } finally {
+    await removeDirRetry(dir);
+  }
+});
+
 // --- createFileSettingsRepo ------------------------------------------------
 
 test("file settings repo: string roundtrip and persistence", async () => {
@@ -81,12 +114,12 @@ test("file settings repo: string roundtrip and persistence", async () => {
   }
 });
 
-test("file settings repo: JSON values are written natively", async () => {
+test("file settings repo: JSON values are stored as strings", async () => {
   const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-settings-"));
   const path = join(dir, "settings.jsonc");
   try {
     const repo = createFileSettingsRepo(path);
-    repo.set("connections", JSON.stringify([{ id: "srv-1", name: "自宅" }]));
+    repo.setJson("connections", [{ id: "srv-1", name: "自宅" }]);
     repo.set("api_key:anthropic", "sk-test");
     repo.set("theme", "dark");
 
@@ -94,7 +127,8 @@ test("file settings repo: JSON values are written natively", async () => {
       string,
       unknown
     >;
-    assertEquals(stored.connections, [{ id: "srv-1", name: "自宅" }]);
+    // Strings on disk, so a value like "1.50" is not read back as 1.5.
+    assertEquals(stored.connections, '[{"id":"srv-1","name":"自宅"}]');
     assertEquals(stored["api_key:anthropic"], "sk-test");
     assertEquals(stored.theme, "dark");
     // Values read back exactly as they were set.

@@ -8,6 +8,12 @@ export { THEME_KEY } from "../shared/mod.ts";
 export interface SettingsRepo {
   get(key: string): string | undefined;
   set(key: string, value: string): void;
+  /** Parse a value written by `setJson`. A value that is absent or not
+   * valid JSON reads as undefined: the store does not invent a shape. */
+  getJson<T>(key: string): T | undefined;
+  /** Store `value` as JSON. The conversion lives here, once, so the file
+   * and memory backends cannot disagree about a number's spelling. */
+  setJson(key: string, value: unknown): void;
   delete(key: string): void;
   list(): Map<string, string>;
   /** Directory containing the settings file. Undefined for in-memory repos
@@ -16,20 +22,21 @@ export interface SettingsRepo {
   dir(): string | undefined;
 }
 
-/** Values that parse as JSON (arrays, objects, numbers) are written natively
- * so the file stays readable by hand; everything is read back as a string,
- * which is what every consumer of SettingsRepo expects. */
-function toNativeValue(value: string): unknown {
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return typeof parsed === "string" ? value : parsed;
-  } catch {
-    return value;
-  }
-}
-
+/** Read a value the file holds natively (an older file, or a hand edit) as
+ * the string the interface promises. New writes are always strings, so the
+ * two backends return the same text for the same setJson input: "1.50"
+ * stays "1.50" instead of becoming the number 1.5 on disk. */
 function toStoredString(value: unknown): string {
   return typeof value === "string" ? value : JSON.stringify(value);
+}
+
+function parseJsonValue<T>(raw: string | undefined): T | undefined {
+  if (raw === undefined) return undefined;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Settings persisted as a single user-editable JSONC file.
@@ -73,8 +80,14 @@ export function createFileSettingsRepo(path: string): SettingsRepo {
     },
     set(key: string, value: string): void {
       refreshIfChanged();
-      data.set(key, toNativeValue(value));
+      data.set(key, value);
       save();
+    },
+    getJson<T>(key: string): T | undefined {
+      return parseJsonValue<T>(this.get(key));
+    },
+    setJson(key: string, value: unknown): void {
+      this.set(key, JSON.stringify(value));
     },
     delete(key: string): void {
       const changed = refreshIfChanged();
@@ -115,6 +128,12 @@ export function createInMemorySettingsRepo(): SettingsRepo {
     },
     set(key: string, value: string): void {
       data.set(key, value);
+    },
+    getJson<T>(key: string): T | undefined {
+      return parseJsonValue<T>(this.get(key));
+    },
+    setJson(key: string, value: unknown): void {
+      this.set(key, JSON.stringify(value));
     },
     delete(key: string): void {
       data.delete(key);

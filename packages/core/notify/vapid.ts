@@ -56,7 +56,7 @@ export async function loadVapidKeys(
   const publicKey = toBase64Url(
     new Uint8Array(await crypto.subtle.exportKey("raw", created.publicKey)),
   );
-  settings.set(PUSH_VAPID_KEY, JSON.stringify({ privateJwk: jwk, publicKey }));
+  settings.setJson(PUSH_VAPID_KEY, { privateJwk: jwk, publicKey });
   return { privateKey: created.privateKey, publicKey, subject: VAPID_SUBJECT };
 }
 

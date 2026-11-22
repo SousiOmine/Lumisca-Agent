@@ -80,7 +80,7 @@ export class McpOAuthStore {
     if (next === undefined) {
       this.settings.delete(key);
     } else {
-      this.settings.set(key, JSON.stringify(next));
+      this.settings.setJson(key, next);
     }
   }
 

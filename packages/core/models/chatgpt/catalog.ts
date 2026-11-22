@@ -86,7 +86,7 @@ export function saveChatGptModels(
   settings: SettingsRepo,
   models: readonly Model<Api>[],
 ): void {
-  settings.set(CHATGPT_MODELS_KEY, JSON.stringify(models));
+  settings.setJson(CHATGPT_MODELS_KEY, models);
 }
 
 /** Map one catalog entry. Entries without an id are dropped (the backend

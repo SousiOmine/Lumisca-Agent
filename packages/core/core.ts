@@ -1185,7 +1185,7 @@ export class LumiscaCore {
   }
 
   setConnections(entries: ConnectionEntry[]): void {
-    this.settings.set(CONNECTIONS_KEY, JSON.stringify(entries));
+    this.settings.setJson(CONNECTIONS_KEY, entries);
   }
 
   /** Non-protected settings only; credentials, MCP config, the federation

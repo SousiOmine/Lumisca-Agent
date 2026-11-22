@@ -303,12 +303,12 @@ export class UserProviderStore {
   upsert(config: UserProviderConfig): void {
     const all = this.list().filter((c) => c.id !== config.id);
     all.push(config);
-    this.settings.set(USER_PROVIDERS_KEY, JSON.stringify(all));
+    this.settings.setJson(USER_PROVIDERS_KEY, all);
   }
 
   remove(id: string): void {
     const all = this.list().filter((c) => c.id !== id);
     if (all.length === 0) this.settings.delete(USER_PROVIDERS_KEY);
-    else this.settings.set(USER_PROVIDERS_KEY, JSON.stringify(all));
+    else this.settings.setJson(USER_PROVIDERS_KEY, all);
   }
 }
