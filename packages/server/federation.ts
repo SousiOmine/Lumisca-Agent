@@ -2,13 +2,9 @@ import type { ClientEvent, ConnectionEntry } from "@lumisca/core";
 import { createLogger } from "@lumisca/core";
 import { isLoopbackHost } from "@lumisca/core/shared";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { PeerError } from "./errors.ts";
 import { isSelf } from "./health-probe.ts";
 import { PeerEventStream, RECONNECT_BASE_MS } from "./peer-stream.ts";
-import { AppError } from "./routes/util.ts";
-
-/** Error thrown when a peer cannot be reached or answers with an error;
- * carries the HTTP status to return to the UI. */
-export class PeerError extends AppError {}
 
 /** Debug-gated logger: reconnect storms are normal (a peer may be down),
  * but diagnosing "why is the peer red" needs the attempt trail. */
