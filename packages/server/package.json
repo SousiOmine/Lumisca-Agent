@@ -1,0 +1,9 @@
+{
+  "name": "@lumisca/server",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./mod.ts",
+    "./startup-env": "./startup-env.ts"
+  }
+}
