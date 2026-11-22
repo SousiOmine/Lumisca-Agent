@@ -4,14 +4,20 @@
  *
  * These are cheap (no build, no network) and run in CI beside `tsc`. A
  * failure prints the offending files so the fix is obvious.
+ *
+ * The scanner reads the TypeScript syntax tree rather than matching import
+ * lines with a regular expression: `import x from`, `import * as x from`,
+ * `export * from` and `import()` are all edges, and a pattern that knows
+ * only the brace form silently certifies a graph it never saw.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { BROWSER_CORE_ENTRIES } from "../packages/core/browser-entries.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
-interface Source {
+export interface Source {
   path: string;
   text: string;
 }
@@ -24,7 +30,13 @@ function walk(dir: string, out: string[] = []): string[] {
       walk(path, out);
       continue;
     }
-    if (/\.(ts|tsx)$/.test(entry) && !entry.includes("_test.")) out.push(path);
+    if (
+      /\.(ts|tsx)$/.test(entry) &&
+      !entry.endsWith(".d.ts") &&
+      !entry.includes("_test.")
+    ) {
+      out.push(path);
+    }
   }
   return out;
 }
@@ -40,6 +52,7 @@ function sources(): Source[] {
 /** Resolve a relative specifier the way the bundler does: exact file, then
  * `.ts`/`.tsx`, then a directory's `mod.ts`. */
 function resolveSpecifier(from: string, specifier: string): string | undefined {
+  if (!specifier.startsWith(".")) return undefined;
   const base = resolve(dirname(from), specifier);
   const candidates = /\.(ts|tsx)$/.test(base)
     ? [base]
@@ -60,39 +73,39 @@ function resolveSpecifier(from: string, specifier: string): string | undefined {
 }
 
 /**
- * The specifiers a module loads at runtime. Type-only imports are erased and
- * cannot form a runtime cycle; after the split of `ai/types.ts` the type
- * modules point at one another by design.
+ * The specifiers a module loads at runtime. Bun's transpiler already drops
+ * type-only imports, which are erased and cannot form a runtime cycle, and
+ * reports `export ... from` and `import()` with the same shape as a plain
+ * import. A regular expression over import lines saw only the brace form.
  */
-function runtimeSpecifiers(text: string): string[] {
-  const out: string[] = [];
-  for (const match of text.matchAll(
-    /import\s+(type\s+)?(\{[^}]*\}|\*\s+as\s+\w+|[\w]+)\s+from\s+"(\.[^"]+)"/g,
-  )) {
-    const names = match[2]!.startsWith("{")
-      ? match[2]!
-          .slice(1, -1)
-          .split(",")
-          .map((name) => name.trim())
-          .filter(Boolean)
-      : [];
-    const typeOnly =
-      match[1] !== undefined ||
-      (names.length > 0 && names.every((name) => name.startsWith("type ")));
-    if (!typeOnly) out.push(match[3]!);
-  }
-  for (const match of text.matchAll(/import\s*\(\s*"(\.[^"]+)"/g)) {
-    out.push(match[1]!);
-  }
-  return out;
+interface TranspilerLike {
+  scan(text: string): {
+    imports: readonly { kind: string; path: string }[];
+  };
+}
+interface BunWithTranspiler {
+  Transpiler: new (options: { loader: "ts" | "tsx" }) => TranspilerLike;
 }
 
-function findCycles(): string[][] {
-  const files = sources();
+export function runtimeSpecifiers(
+  text: string,
+  fileName = "module.ts",
+): string[] {
+  const Transpiler = (Bun as unknown as BunWithTranspiler).Transpiler;
+  const transpiler = new Transpiler({
+    loader: fileName.endsWith(".tsx") ? "tsx" : "ts",
+  });
+  return transpiler
+    .scan(text)
+    .imports.filter((entry) => entry.kind !== "require-call")
+    .map((entry) => entry.path);
+}
+
+export function findCycles(files: readonly Source[]): string[][] {
   const graph = new Map<string, string[]>();
   for (const file of files) {
     const deps: string[] = [];
-    for (const specifier of runtimeSpecifiers(file.text)) {
+    for (const specifier of runtimeSpecifiers(file.text, file.path)) {
       const target = resolveSpecifier(file.path, specifier);
       if (target !== undefined) deps.push(target);
     }
@@ -140,38 +153,41 @@ function findCycles(): string[][] {
 /** `packages/core/browser-entries.ts` is the single list the Vite aliases,
  * the esbuild aliases and the boundary test read. tsc reads tsconfig's
  * `paths` instead, so the two must agree or the type check resolves a
- * different module than the bundle ships. */
-function checkBrowserEntries(): string[] {
+ * different module than the bundle ships. The list is imported, not parsed:
+ * a regex over its source saw one of the three entries and called the rest
+ * absent. */
+export function browserEntryProblems(
+  entries: readonly { specifier: string; path: string }[],
+  paths: Record<string, string[]>,
+): string[] {
   const problems: string[] = [];
-  const entries = readFileSync(
-    join(ROOT, "packages/core/browser-entries.ts"),
-    "utf8",
-  );
-  const declared = [
-    ...entries.matchAll(/specifier:\s*"([^"]+)",\s*\n\s*path:\s*"([^"]+)"/g),
-  ];
+  for (const entry of entries) {
+    const configured = paths[entry.specifier];
+    if (configured === undefined) {
+      problems.push(`${entry.specifier}: missing from tsconfig paths`);
+      continue;
+    }
+    const expected = "./" + entry.path;
+    if (!configured.some((candidate) => candidate === expected)) {
+      problems.push(
+        `${entry.specifier}: tsconfig points at ${configured.join(", ")}, browser-entries at ${expected}`,
+      );
+    }
+  }
+  return problems;
+}
+
+export function checkBrowserEntries(): string[] {
   const tsconfig = JSON.parse(
     readFileSync(join(ROOT, "tsconfig.json"), "utf8").replace(
       /^\s*\/\/.*$/gm,
       "",
     ),
   ) as { compilerOptions?: { paths?: Record<string, string[]> } };
-  const paths = tsconfig.compilerOptions?.paths ?? {};
-  for (const match of declared) {
-    const [, specifier, path] = match;
-    const configured = paths[specifier!];
-    if (configured === undefined) {
-      problems.push(`${specifier}: missing from tsconfig paths`);
-      continue;
-    }
-    const expected = "./" + path;
-    if (!configured.some((entry) => entry === expected)) {
-      problems.push(
-        `${specifier}: tsconfig points at ${configured.join(", ")}, browser-entries at ${expected}`,
-      );
-    }
-  }
-  return problems;
+  return browserEntryProblems(
+    BROWSER_CORE_ENTRIES,
+    tsconfig.compilerOptions?.paths ?? {},
+  );
 }
 
 /**
@@ -182,7 +198,7 @@ function checkBrowserEntries(): string[] {
  *
  * The cycles check cannot see these because both directions are one-way.
  */
-function checkLayers(): string[] {
+export function checkLayers(files: readonly Source[], root = ROOT): string[] {
   const problems: string[] = [];
   const rules: Array<{ dir: string; forbidden: string[] }> = [
     {
@@ -191,25 +207,15 @@ function checkLayers(): string[] {
     },
     { dir: "packages/core/session", forbidden: ["packages/core/tools"] },
   ];
-  for (const file of sources()) {
-    const rel = relative(ROOT, file.path);
+  for (const file of files) {
+    const rel = relative(root, file.path);
     const rule = rules.find((r) => rel.startsWith(r.dir + "/"));
     if (rule === undefined) continue;
-    for (const match of file.text.matchAll(
-      /import\s+(type\s+)?\{([^}]*)\}\s*from\s*"([^"]+)"/g,
-    )) {
-      const target = resolveSpecifier(file.path, match[3]!);
+    for (const specifier of runtimeSpecifiers(file.text, file.path)) {
+      const target = resolveSpecifier(file.path, specifier);
       if (target === undefined) continue;
-      const targetRel = relative(ROOT, target);
+      const targetRel = relative(root, target);
       if (!rule.forbidden.some((f) => targetRel.startsWith(f + "/"))) continue;
-      const declarationIsTypeOnly =
-        match[1] !== undefined ||
-        match[2]!
-          .split(",")
-          .map((n) => n.trim())
-          .filter(Boolean)
-          .every((n) => n.startsWith("type "));
-      if (declarationIsTypeOnly) continue;
       problems.push(
         `${rel} imports ${targetRel} at runtime (${rule.dir.split("/").pop()} may only take its types)`,
       );
@@ -218,32 +224,35 @@ function checkLayers(): string[] {
   return problems;
 }
 
-const cycles = findCycles();
-const aliasProblems = checkBrowserEntries();
-const layerProblems = checkLayers();
-let failed = false;
+if (import.meta.main) {
+  const files = sources();
+  const cycles = findCycles(files);
+  const aliasProblems = checkBrowserEntries();
+  const layerProblems = checkLayers(files);
+  let failed = false;
 
-if (cycles.length > 0) {
-  failed = true;
-  console.error(`import cycles: ${cycles.length}`);
-  for (const cycle of cycles) {
-    console.error(
-      "  " + cycle.map((path) => relative(ROOT, path)).join(" <-> "),
-    );
+  if (cycles.length > 0) {
+    failed = true;
+    console.error(`import cycles: ${cycles.length}`);
+    for (const cycle of cycles) {
+      console.error(
+        "  " + cycle.map((path) => relative(ROOT, path)).join(" <-> "),
+      );
+    }
   }
-}
 
-if (aliasProblems.length > 0) {
-  failed = true;
-  console.error("browser entry points and tsconfig disagree:");
-  for (const problem of aliasProblems) console.error("  " + problem);
-}
+  if (aliasProblems.length > 0) {
+    failed = true;
+    console.error("browser entry points and tsconfig disagree:");
+    for (const problem of aliasProblems) console.error("  " + problem);
+  }
 
-if (layerProblems.length > 0) {
-  failed = true;
-  console.error("layer violations:");
-  for (const problem of layerProblems) console.error("  " + problem);
-}
+  if (layerProblems.length > 0) {
+    failed = true;
+    console.error("layer violations:");
+    for (const problem of layerProblems) console.error("  " + problem);
+  }
 
-if (failed) process.exit(1);
-console.log("architecture: acyclic, browser entries in sync, layers intact");
+  if (failed) process.exit(1);
+  console.log("architecture: acyclic, browser entries in sync, layers intact");
+}

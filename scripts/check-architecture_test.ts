@@ -1,0 +1,125 @@
+import { test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { assertEquals } from "@std/assert";
+import {
+  browserEntryProblems,
+  checkLayers,
+  findCycles,
+  runtimeSpecifiers,
+} from "./check-architecture.ts";
+
+/** A throwaway tree for the graph tests. */
+function fixture(): {
+  root: string;
+  write: (path: string, text: string) => string;
+} {
+  const root = mkdtempSync(join(tmpdir(), "lumisca-arch-"));
+  return {
+    root,
+    write(path, text) {
+      const full = join(root, path);
+      mkdirSync(join(full, ".."), { recursive: true });
+      writeFileSync(full, text);
+      return full;
+    },
+  };
+}
+
+test("runtimeSpecifiers sees every import form", () => {
+  const specs = runtimeSpecifiers(
+    [
+      'import type { A } from "./types";',
+      'import { type B, C } from "./mixed";',
+      'import x from "./default";',
+      'import * as ns from "./namespace";',
+      'export * from "./barrel";',
+      'const late = import("./dynamic");',
+      'import "./side-effect";',
+    ].join("\n"),
+  );
+  assertEquals(
+    [...specs].sort(),
+    [
+      "./mixed",
+      "./default",
+      "./namespace",
+      "./barrel",
+      "./dynamic",
+      "./side-effect",
+    ].sort(),
+  );
+});
+
+test("a cycle made only of export-star is detected", () => {
+  const tree = fixture();
+  try {
+    const a = tree.write("a/mod.ts", 'export * from "../b/mod.ts";\n');
+    const b = tree.write("b/mod.ts", 'export * from "../a/mod.ts";\n');
+    const cycles = findCycles([
+      { path: a, text: 'export * from "../b/mod.ts";\n' },
+      { path: b, text: 'export * from "../a/mod.ts";\n' },
+    ]);
+    assertEquals(cycles.length, 1);
+    assertEquals(cycles[0]!.sort(), [a, b].sort());
+  } finally {
+    rmSync(tree.root, { recursive: true, force: true });
+  }
+});
+
+test("a default-import layer violation is detected, a type-only one is not", () => {
+  const tree = fixture();
+  try {
+    const ai = tree.write(
+      "packages/core/ai/agent.ts",
+      [
+        'import session from "../session/store.ts";',
+        'import type { Row } from "../session/store.ts";',
+        "export const x = session;",
+      ].join("\n"),
+    );
+    const store = tree.write(
+      "packages/core/session/store.ts",
+      "export default {};\nexport type Row = number;\n",
+    );
+    const problems = checkLayers(
+      [
+        {
+          path: ai,
+          text: 'import session from "../session/store.ts";\nimport type { Row } from "../session/store.ts";',
+        },
+        {
+          path: store,
+          text: "export default {};\nexport type Row = number;\n",
+        },
+      ],
+      tree.root,
+    );
+    assertEquals(problems.length, 1);
+    assertEquals(problems[0]!.includes("agent.ts"), true);
+    assertEquals(problems[0]!.includes("store.ts"), true);
+  } finally {
+    rmSync(tree.root, { recursive: true, force: true });
+  }
+});
+
+test("every browser entry is compared, not just the first", () => {
+  const entries = [
+    { specifier: "@lumisca/core/shared", path: "packages/core/shared/mod.ts" },
+    { specifier: "@lumisca/core/modes", path: "packages/core/modes/mod.ts" },
+    {
+      specifier: "@lumisca/core/skills/slash",
+      path: "packages/core/skills/slash.ts",
+    },
+  ];
+  assertEquals(browserEntryProblems(entries, {}).length, 3);
+  const paths = {
+    "@lumisca/core/shared": ["./packages/core/shared/mod.ts"],
+    "@lumisca/core/modes": ["./somewhere/else.ts"],
+    "@lumisca/core/skills/slash": ["./packages/core/skills/slash.ts"],
+  };
+  const wrong = browserEntryProblems(entries, paths);
+  assertEquals(wrong.length, 1);
+  assertEquals(wrong[0]!.startsWith("@lumisca/core/modes:"), true);
+});
