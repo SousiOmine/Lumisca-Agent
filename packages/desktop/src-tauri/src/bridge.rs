@@ -606,6 +606,37 @@ mod tests {
     /// was named `connection_id` on the wire when the connection list moved
     /// to the shell, so the title bar could not name a remote server and sat
     /// on "読み込み中..." instead.
+
+    /// The page, the splash and this match must name the same actions. The
+    /// list is the page's (web/src/shell-actions.ts); a name added there
+    /// without an arm makes this fail, and so does an arm nobody can call.
+    #[test]
+    fn the_page_action_list_and_the_match_agree() {
+        const TS: &str = include_str!("../../../web/src/shell-actions.ts");
+        let list_start = TS.find("SHELL_ACTIONS = [").expect("the list marker");
+        let list_end = TS[list_start..].find("] as const").expect("the list end");
+        let listed: std::collections::BTreeSet<String> = TS[list_start..list_start + list_end]
+            .split('"')
+            .skip(1)
+            .step_by(2)
+            .map(str::to_owned)
+            .collect();
+        let source: &str = include_str!("bridge.rs");
+        let mut arms = std::collections::BTreeSet::new();
+        for line in source.lines() {
+            let line = line.trim();
+            if !line.contains("=>") {
+                continue;
+            }
+            if let Some(rest) = line.strip_prefix('"') {
+                if let Some(end) = rest.find('"') {
+                    arms.insert(rest[..end].to_string());
+                }
+            }
+        }
+        assert_eq!(listed, arms);
+    }
+
     #[test]
     fn connection_state_names_fields_in_camel_case() {
         let state = ConnectionState {

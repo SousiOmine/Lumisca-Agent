@@ -1,5 +1,6 @@
 import { withTimeout } from "@lumisca/core/shared";
 import { request } from "./api-client.ts";
+import type { ShellAction } from "./shell-actions.ts";
 
 /** Bridge to the desktop shell. The settings UI is served by the
  * (possibly remote) server, so it cannot call Tauri commands; instead it
@@ -19,6 +20,14 @@ import { request } from "./api-client.ts";
 export interface ShellState {
   mode: "local" | "remote";
   url: string | null;
+  /** What the shell is doing: "starting" (local server booting),
+   * "connecting", "ready", "error" or "remote-unreachable". The splash
+   * reads it; the title bar only needs the fields below. */
+  status?: string;
+  /** Why the startup failed, when it did. */
+  error?: string | null;
+  /** Whether a remote server is remembered (the splash offers a retry). */
+  saved?: boolean;
   /** The connection row the window is showing (`null`: the local server).
    * The row lives in the shell's own settings, and the page looks it up in
    * the same list the settings screen edits, so the title bar follows a
@@ -125,7 +134,7 @@ export async function openExternal(url: string): Promise<void> {
 }
 
 export async function shellCall<T>(
-  action: string,
+  action: ShellAction,
   params: Record<string, string> = {},
 ): Promise<T> {
   const bridge = bridgeOrigin();
