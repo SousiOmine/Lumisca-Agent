@@ -420,6 +420,7 @@ export function App({ initialData }: AppProps): ReactElement {
   // compares props by value, see TabBar), but so that the bar's comparison
   // stays a real one — an inline arrow would make every event look like a
   // change. A tab is a place: selecting one is a navigation.
+  const newTab = useCallback(() => goToTab(null), [goToTab]);
   const selectTab = useCallback(
     (id: string) => goToTab(id === DRAFT_TAB ? null : id),
     [goToTab],
@@ -657,7 +658,7 @@ export function App({ initialData }: AppProps): ReactElement {
          * screen has to be movable, closable and switchable too. The strip
          * has no tab bar to hold. */}
         <TitleBar
-          onNew={() => goToTab(null)}
+          onNew={newTab}
           onOpenRecent={openRecent}
           onOpenSettings={openSettings}
           onQuit={quit}
@@ -694,7 +695,7 @@ export function App({ initialData }: AppProps): ReactElement {
        * tab bar, the app menu and the window controls (in a plain browser
        * the tab bar renders on its own). */}
       <TitleBar
-        onNew={() => goToTab(null)}
+        onNew={newTab}
         onOpenRecent={openRecent}
         onOpenSettings={openSettings}
         onQuit={quit}
@@ -753,7 +754,7 @@ export function App({ initialData }: AppProps): ReactElement {
             {!desktop && (
               <div className="tabbar-actions">
                 <AppMenu
-                  onNew={() => goToTab(null)}
+                  onNew={newTab}
                   onOpenRecent={openRecent}
                   onOpenSettings={openSettings}
                   onQuit={quit}
@@ -772,7 +773,7 @@ export function App({ initialData }: AppProps): ReactElement {
             onCloseToRight={closeTabsToRight}
             onCloseToLeft={closeTabsToLeft}
             onCloseOthers={closeOtherTabs}
-            onNew={() => goToTab(null)}
+            onNew={newTab}
             onOpenRecent={openRecent}
             onOpenSettings={openSettings}
             isDesktop={desktop}
