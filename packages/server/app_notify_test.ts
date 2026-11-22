@@ -72,7 +72,7 @@ test("a subscription is stored, counted and removable", async () => {
       body: JSON.stringify(input),
     });
     assertEquals(added.status, 200);
-    assertEquals(core.listPushSubscriptions().length, 1);
+    assertEquals(core.services.push.list().length, 1);
 
     // The count is what the settings page draws; the keys never leave.
     const listed = await request(core, "/api/notify/subscriptions");
@@ -83,7 +83,7 @@ test("a subscription is stored, counted and removable", async () => {
       body: JSON.stringify({ endpoint: input.endpoint }),
     });
     assertEquals(await removed.json(), { ok: true, removed: true });
-    assertEquals(core.listPushSubscriptions(), []);
+    assertEquals(core.services.push.list(), []);
 
     // Removing an endpoint that is not there is the state the caller wanted.
     const again = await request(core, "/api/notify/subscriptions", {
@@ -114,7 +114,7 @@ test("a subscription that cannot be sent to is refused with 400", async () => {
       });
       assertEquals(response.status, 400, JSON.stringify(body));
     }
-    assertEquals(core.listPushSubscriptions(), []);
+    assertEquals(core.services.push.list(), []);
   } finally {
     core.close();
   }

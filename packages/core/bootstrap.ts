@@ -81,6 +81,9 @@ export interface CoreServices {
   readonly webSearch: WebSearchService;
   readonly mcp: McpService;
   readonly workspaces: WorkspaceService;
+  readonly personalization: PersonalizationService;
+  readonly savedPrompts: SavedPromptsService;
+  readonly push: PushSubscriptions;
   /** The dialogs a blocked run waits on: hand-over, env and folder loan. */
   readonly interruptions: SessionInterruptions;
 }
@@ -111,6 +114,9 @@ export interface CoreServicesDeps {
   attachments: SessionAttachmentStore;
   models: ModelManager;
   workspaces: WorkspaceService;
+  personalization: PersonalizationService;
+  savedPrompts: SavedPromptsService;
+  push: PushSubscriptions;
   modelService: ModelService;
   webSearch: WebSearchService;
   mcp: McpService;
@@ -223,6 +229,9 @@ export function createCoreServices(deps: CoreServicesDeps): CoreServices {
     webSearch: deps.webSearch,
     mcp: deps.mcp,
     workspaces: deps.workspaces,
+    personalization: deps.personalization,
+    savedPrompts: deps.savedPrompts,
+    push: deps.push,
     interruptions,
   };
 }
@@ -601,6 +610,9 @@ export function createCoreGraph(
     attachments: graph.attachments,
     models: graph.models,
     workspaces: graph.workspaces,
+    personalization: graph.personalization,
+    savedPrompts: graph.savedPrompts,
+    push: graph.push,
     modelService: graph.modelService,
     webSearch: graph.webSearch,
     mcp: graph.mcp,

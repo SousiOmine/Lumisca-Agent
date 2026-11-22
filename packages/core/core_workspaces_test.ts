@@ -433,8 +433,11 @@ test("personalization (machine AGENTS.md) is published with the workspace instru
   // Personalization lives in AGENTS.md next to the settings file.
   const agentFile = join(dir, "AGENTS.md");
   await fsp.writeFile(agentFile, "Answer in Japanese.\n");
-  assertEquals(core.getPersonalization().path, agentFile);
-  assertEquals(core.getPersonalization().content, "Answer in Japanese.\n");
+  assertEquals(core.services.personalization.get().path, agentFile);
+  assertEquals(
+    core.services.personalization.get().content,
+    "Answer in Japanese.\n",
+  );
 
   const session = await core.createSession({
     workspaceId: ws.id,
@@ -491,7 +494,7 @@ test("personalization (machine AGENTS.md) is published with the workspace instru
   );
 
   // setPersonalization writes the file.
-  core.setPersonalization("New instructions.\n");
+  core.services.personalization.set("New instructions.\n");
   assertEquals(fsSync.readFileSync(agentFile, "utf8"), "New instructions.\n");
 
   core.close();

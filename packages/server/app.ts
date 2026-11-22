@@ -145,7 +145,15 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   // released by this app's disposer. The routes below only add and remove
   // subscriptions; what reaches a device is decided in push.ts.
   const push = createPushNotifier({
-    core,
+    core: {
+      subscribe: (listener) => core.subscribe(listener),
+      getSession: (id) => core.getSession(id),
+      getStellaAgent: (id) => core.getStellaAgent(id),
+      listPushSubscriptions: () => core.services.push.list(),
+      pushVapidKeys: () => core.services.push.vapidKeys(),
+      forgetPushSubscriptions: (endpoints) =>
+        core.services.push.removeEndpoints(endpoints),
+    },
     language: () => core.settings.language(),
     ...(options.pushFetch === undefined ? {} : { fetch: options.pushFetch }),
   });
@@ -293,16 +301,18 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
         core.setCodeExecutionEnabled(enabled),
       setAskToolEnabled: (enabled) => core.setAskToolEnabled(enabled),
       setAppUiInSystemPrompt: (enabled) => core.setAppUiInSystemPrompt(enabled),
-      getPersonalization: () => core.getPersonalization(),
-      setPersonalization: (content) => core.setPersonalization(content),
+      getPersonalization: () => core.services.personalization.get(),
+      setPersonalization: (content) =>
+        core.services.personalization.set(content),
       getCommandApprovals: () => core.settings.commandApprovals(),
       deleteCommandApproval: (hash) =>
         core.settings.deleteCommandApproval(hash),
       clearCommandApprovals: () => core.settings.clearCommandApprovals(),
-      getSavedPrompts: () => core.getSavedPrompts(),
-      addSavedPrompt: (input) => core.addSavedPrompt(input),
-      updateSavedPrompt: (id, input) => core.updateSavedPrompt(id, input),
-      deleteSavedPrompt: (id) => core.deleteSavedPrompt(id),
+      getSavedPrompts: () => core.services.savedPrompts.list(),
+      addSavedPrompt: (input) => core.services.savedPrompts.add(input),
+      updateSavedPrompt: (id, input) =>
+        core.services.savedPrompts.update(id, input),
+      deleteSavedPrompt: (id) => core.services.savedPrompts.delete(id),
     }),
   );
   // The first-run setup's state: a file beside the settings file, so this
@@ -317,11 +327,10 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   app.route(
     "/api",
     notifyRoutes({
-      listPushSubscriptions: () => core.listPushSubscriptions(),
-      addPushSubscription: (input) => core.addPushSubscription(input),
-      removePushSubscription: (endpoint) =>
-        core.removePushSubscription(endpoint),
-      pushVapidKeys: () => core.pushVapidKeys(),
+      listPushSubscriptions: () => core.services.push.list(),
+      addPushSubscription: (input) => core.services.push.add(input),
+      removePushSubscription: (endpoint) => core.services.push.remove(endpoint),
+      pushVapidKeys: () => core.services.push.vapidKeys(),
       sendPushTest: () => push.sendTest(),
     }),
   );

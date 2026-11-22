@@ -46,10 +46,7 @@ import type {
   UserProviderInput,
   UserProviderSummary,
 } from "./models/user-providers.ts";
-import type { PushSubscriptions } from "./notify/subscriptions.ts";
 import type { VapidKeys } from "./notify/vapid.ts";
-import type { PersonalizationService } from "./personalization.ts";
-import type { SavedPromptsService } from "./saved-prompts.ts";
 import type { ComputerUseService } from "./services/computer.ts";
 import type { ModelService } from "./services/models.ts";
 import { RoutineService } from "./services/routines.ts";
@@ -180,9 +177,6 @@ export class LumiscaCore {
 
   private readonly credentials: CredentialStore;
   private readonly workspaces: WorkspaceService;
-  private readonly personalization: PersonalizationService;
-  private readonly savedPrompts: SavedPromptsService;
-  private readonly push: PushSubscriptions;
   private readonly sessions: SessionRepo;
   /** The sessions' agents: each session's main row and its sub-agents (see
    * session/agents.ts). */
@@ -272,9 +266,6 @@ export class LumiscaCore {
     this.credentials = graph.credentials;
     this.computer = graph.computer;
     this.models = graph.models;
-    this.personalization = graph.personalization;
-    this.savedPrompts = graph.savedPrompts;
-    this.push = graph.push;
     this.sessions = graph.sessions;
     this.agents = graph.agents;
     this.stellaAgents = graph.stellaAgents;
@@ -688,85 +679,7 @@ export class LumiscaCore {
     await this.models.logout(providerId);
   }
 
-  // --- personalization (machine-level AGENTS.md) --------------------------
-
-  /** The machine-level AGENTS.md (next to the settings file) with the path
-   * it lives at. Absent file → empty content. */
-  getPersonalization(): { path: string; content: string } {
-    return this.personalization.get();
-  }
-
-  /** Replace the machine-level AGENTS.md. Applies to sessions created from
-   * now on; existing sessions keep their snapshot. */
-  setPersonalization(content: string): void {
-    this.personalization.set(content);
-  }
-
-  // --- saved prompts (user-defined prompt snippets) -----------------------
-
-  /** All saved prompts, in insertion order. */
-  getSavedPrompts(): SavedPrompt[] {
-    return this.savedPrompts.list();
-  }
-
-  /** Add a saved prompt. Throws when the id already exists. */
-  addSavedPrompt(input: {
-    id: string;
-    label: string;
-    prompt: string;
-  }): SavedPrompt {
-    return this.savedPrompts.add(input);
-  }
-
-  /** Update a saved prompt's label and/or prompt by id. Throws when the
-   * id does not exist. */
-  updateSavedPrompt(
-    id: string,
-    input: { label?: string; prompt?: string },
-  ): SavedPrompt {
-    return this.savedPrompts.update(id, input);
-  }
-
-  /** Delete a saved prompt by id. Throws when the id does not exist. */
-  deleteSavedPrompt(id: string): void {
-    this.savedPrompts.delete(id);
-  }
-
-  // --- Web Push (PWA notifications) ----------------------------------------
-  // The store is the settings file (see shared/settings-keys.ts): a
-  // subscription belongs to this installation, like the connection registry,
-  // and neither is a transcript row that has to survive a rewind.
-
-  /** The stored push subscriptions, oldest first. */
-  listPushSubscriptions(): PushSubscriptionRecord[] {
-    return this.push.list();
-  }
-
-  /** Store one subscription. Re-subscribing the same endpoint replaces its
-   * keys instead of adding a second row. */
-  addPushSubscription(input: {
-    endpoint: string;
-    keys: PushSubscriptionKeys;
-  }): PushSubscriptionRecord {
-    return this.push.add(input);
-  }
-
-  /** Forget one endpoint; false when it was not stored. */
-  removePushSubscription(endpoint: string): boolean {
-    return this.push.remove(endpoint);
-  }
-
-  /** Forget the endpoints a push service reported gone. */
-  forgetPushSubscriptions(endpoints: readonly string[]): void {
-    this.push.removeEndpoints(endpoints);
-  }
-
-  /** The VAPID pair used to sign push messages, created on first use. */
-  pushVapidKeys(): Promise<VapidKeys> {
-    return this.push.vapidKeys();
-  }
-
-  // --- stella agents (delegated to StellaAgentService) -------------------------
+  // --- stella agents ----------------------------------------------------------
 
   /** The agents in the sidebar, most recently used first. */
   listStellaAgents(): StellaAgent[] {
