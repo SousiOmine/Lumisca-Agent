@@ -73,17 +73,14 @@ export function ensureMcpAttachment(
   if (existing !== undefined) {
     log.debug(`session ${session.id}: MCP config changed, rebuilding`);
   }
-  const attachment = spawnMcpAttachment(deps, workspace, merged.config);
   const registries = new SessionToolRegistries();
-  resources.mcp = attachment;
   resources.registries = registries;
-  if (existing !== undefined) void existing.manager.close();
-  reportMcpProblems(
+  const attachment = adoptMcpAttachment(
     deps,
-    session.id,
+    session,
+    workspace,
     resources,
-    merged.errors,
-    attachment,
+    merged,
     isCurrentAttachment,
   );
   return { attachment, registries };
@@ -102,8 +99,30 @@ export function replaceMcpAttachment(
   merged: MergedMcp,
   isCurrentAttachment: (attachment: McpAttachment) => boolean,
 ): McpAttachment {
+  return adoptMcpAttachment(
+    deps,
+    session,
+    workspace,
+    resources,
+    merged,
+    isCurrentAttachment,
+  );
+}
+
+/** Put a new attachment for `merged` on the session: build it, replace the
+ * one the session held (and tear down its server processes), and report what
+ * went wrong. The one path both the open and the streaming-reload routes take,
+ * so an attachment is always built and announced the same way. */
+function adoptMcpAttachment(
+  deps: SessionPoolDeps,
+  session: SessionInfo,
+  workspace: Workspace,
+  resources: SessionResources,
+  merged: MergedMcp,
+  isCurrentAttachment: (attachment: McpAttachment) => boolean,
+): McpAttachment {
   const previous = resources.mcp;
-  const attachment = spawnMcpAttachment(deps, workspace, merged.config);
+  const attachment = createMcpAttachment(deps, workspace, merged.config);
   resources.mcp = attachment;
   if (previous !== undefined) void previous.manager.close();
   reportMcpProblems(
@@ -121,7 +140,7 @@ export function replaceMcpAttachment(
  * folder. Config errors reach the session through reportMcpProblems, not a
  * throw: the servers initialize asynchronously, and one bad source must not
  * stop the agent from opening. */
-function spawnMcpAttachment(
+export function createMcpAttachment(
   deps: SessionPoolDeps,
   workspace: Workspace,
   config: McpConfig,
