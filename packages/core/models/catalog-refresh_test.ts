@@ -2,6 +2,7 @@ import { test } from "bun:test";
 import * as fsp from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
 import { join as pathJoin } from "node:path";
+import { forTestingCore } from "@lumisca/core";
 import type { ProviderMap } from "@opencode-ai/models";
 import { assert, assertEquals } from "@std/assert";
 import { LumiscaCore } from "../mod.ts";
@@ -50,7 +51,7 @@ function failingFetch() {
 }
 
 test("refreshCatalog applies live additions and removals", async () => {
-  const core = LumiscaCore.forTesting();
+  const core = forTestingCore();
   try {
     assertEquals(
       core.services.models.getModelCatalogStatus().source,
@@ -92,7 +93,7 @@ test("refreshCatalog applies live additions and removals", async () => {
 });
 
 test("refreshCatalog keeps custom and user providers", async () => {
-  const core = LumiscaCore.forTesting();
+  const core = forTestingCore();
   try {
     await core.services.models.addUserProvider({
       id: "my-provider",
@@ -116,13 +117,13 @@ test("refreshCatalog keeps custom and user providers", async () => {
 });
 
 test("refreshCatalog keeps an existing session usable after upstream removal", async () => {
-  const core = LumiscaCore.forTesting();
+  const core = forTestingCore();
   try {
     const doomed = core.services.models.listModels("openai")[0]!;
     const ws = await core.services.workspaces.create("ws", [
       await fsp.mkdtemp(pathJoin(osTmpdir(), "tmp-")),
     ]);
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: "openai",
       modelId: doomed.id,
@@ -142,16 +143,18 @@ test("refreshCatalog keeps an existing session usable after upstream removal", a
     assertEquals(status.source, "live");
     assertEquals(core.services.models.getModel("openai", doomed.id), undefined);
     assertEquals(core.models.isRetiredModel("openai", doomed.id), true);
-    const reopened = core.openSession(session.id);
+    const reopened = core.services.sessions.openSession(session.id);
     assertEquals(reopened.modelProvider, "openai");
     assertEquals(reopened.modelId, doomed.id);
     assertEquals(reopened.model?.id, doomed.id);
     // New sessions cannot select the retired model. Another provider is
     // configured first, so a default model exists at all: the built-in
     // catalog alone does not count (nothing else is configured here).
-    await core.closeSession(session.id);
-    await core.setProviderApiKey("anthropic", "sk-ant-test");
-    const fresh = await core.createSession({ workspaceId: ws.id });
+    await core.services.sessions.closeSession(session.id);
+    await core.services.models.setProviderApiKey("anthropic", "sk-ant-test");
+    const fresh = await core.services.sessions.createSession({
+      workspaceId: ws.id,
+    });
     assertEquals(
       fresh.modelProvider,
       "anthropic",
@@ -163,10 +166,10 @@ test("refreshCatalog keeps an existing session usable after upstream removal", a
 });
 
 test("a retired provider still resolves the credential it served with", async () => {
-  const core = LumiscaCore.forTesting();
+  const core = forTestingCore();
   try {
     // A stored key is what a session created before the removal used.
-    await core.setProviderApiKey("mistral", "sk-mistral-test");
+    await core.services.models.setProviderApiKey("mistral", "sk-mistral-test");
     const pruned = structuredClone(snapshotCatalog().providers);
     delete pruned["mistral"];
     await core.services.models.refreshModelCatalog({
@@ -195,7 +198,7 @@ test("refreshCatalog reports custom-provider failure on the status", async () =>
   // re-reads the custom sources, so the failure lands on the status rather
   // than in the constructor.
   const vars: Record<string, string> = {};
-  const core = LumiscaCore.forTesting([], () => vars);
+  const core = forTestingCore([], () => vars);
   vars.LUMISCA_MODELS_FILE = "C:/nonexistent/models.json";
   try {
     const status = await core.services.models.refreshModelCatalog({
@@ -221,7 +224,7 @@ test("refreshCatalog restores the built-in after a stale override is removed", a
   const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-models-"));
   const path = `${dir}/models.json`;
   const vars: Record<string, string> = {};
-  const core = LumiscaCore.forTesting([], () => vars);
+  const core = forTestingCore([], () => vars);
   try {
     await fsp.writeFile(
       path,
@@ -258,7 +261,7 @@ test("refreshCatalog restores the built-in after a stale override is removed", a
 });
 
 test("refreshCatalog falls back to snapshot when offline", async () => {
-  const core = LumiscaCore.forTesting();
+  const core = forTestingCore();
   try {
     const status = await core.services.models.refreshModelCatalog({
       fetch: failingFetch(),

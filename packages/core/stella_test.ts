@@ -2,6 +2,7 @@ import { test } from "bun:test";
 import * as fsSync from "node:fs";
 import { tmpdir as osTmpdir } from "node:os";
 import { join as pathJoin } from "node:path";
+import { forTestingCore } from "@lumisca/core";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { NO_RESPONSE } from "./agent/silent-reply.ts";
 import {
@@ -14,7 +15,7 @@ import {
 } from "./ai/faux.ts";
 import { PRUNED_MARKER } from "./ai/pruned.ts";
 import type { StreamFn } from "./ai/transport.ts";
-import { LumiscaCore } from "./core.ts";
+import type { LumiscaCore } from "./core.ts";
 import { LumiscaDb } from "./db/mod.ts";
 import type { AgentMessage } from "./domain/message.ts";
 import type { StellaEntry } from "./domain/stella-conversation.ts";
@@ -63,14 +64,10 @@ async function stellaCore(status: VmStatus): Promise<LumiscaCore> {
   // A scripted exec seam: the machine is a stub, so no `podman` is spawned
   // (creating an agent now prepares its folder, which would otherwise be a
   // real process per test).
-  const core = LumiscaCore.forTesting(
-    [faux.provider],
-    () => ({}),
-    recordingRunner(),
-  );
+  const core = forTestingCore([faux.provider], () => ({}), recordingRunner());
   core.models.models.setProvider(faux.provider);
-  await core.setProviderApiKey(faux.provider.id, "faux-key");
-  core.setStellaVm(fakeVmHost(status));
+  await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
+  core.services.stellaMachines.setStellaVm(fakeVmHost(status));
   return core;
 }
 
@@ -114,14 +111,18 @@ function recordingRunner() {
 }
 
 test("stella availability: no machine attached reports its own reason", async () => {
-  const core = LumiscaCore.forTesting([fauxProvider().provider]);
+  const core = forTestingCore([fauxProvider().provider]);
   try {
-    const availability = await core.getStellaAvailability();
+    const availability =
+      await core.services.stellaMachines.getStellaAvailability();
     assertEquals(availability.available, false);
     if (!availability.available) {
       assert(availability.reason.includes("not set up"), availability.reason);
     }
-    await assertRejects(() => core.getOrCreateStellaSession(), CoreError);
+    await assertRejects(
+      () => core.internals.getOrCreateStellaSession(),
+      CoreError,
+    );
   } finally {
     void core.close();
   }
@@ -136,7 +137,9 @@ test("stella availability: a stopped machine is still usable", async () => {
     reason: "",
   });
   try {
-    assertEquals(await core.getStellaAvailability(), { available: true });
+    assertEquals(await core.services.stellaMachines.getStellaAvailability(), {
+      available: true,
+    });
   } finally {
     await core.close();
   }
@@ -145,7 +148,8 @@ test("stella availability: a stopped machine is still usable", async () => {
 test("stella availability: podman missing is not", async () => {
   const core = await stellaCore(NO_PODMAN);
   try {
-    const availability = await core.getStellaAvailability();
+    const availability =
+      await core.services.stellaMachines.getStellaAvailability();
     assertEquals(availability.available, false);
     if (!availability.available) {
       assert(availability.reason.includes("podman"), availability.reason);
@@ -158,16 +162,19 @@ test("stella availability: podman missing is not", async () => {
 test("stella agents: the starter agent exists once and is the default", async () => {
   const core = await stellaCore(RUNNING);
   try {
-    assertEquals(core.listStellaAgents(), []);
-    const starter = await core.ensureStellaAgent();
+    assertEquals(core.services.stellaAgents.listStellaAgents(), []);
+    const starter = await core.services.stellaAgents.ensureStellaAgent();
     // A name and a role: the agent's prompt is built from them, so neither
     // may be blank.
     assert(starter.name.length > 0, starter.name);
     assert(starter.role.length > 0, starter.role);
     // A second call returns the same row (the list is the check).
-    assertEquals((await core.ensureStellaAgent()).id, starter.id);
     assertEquals(
-      core.listStellaAgents().map((a) => a.id),
+      (await core.services.stellaAgents.ensureStellaAgent()).id,
+      starter.id,
+    );
+    assertEquals(
+      core.services.stellaAgents.listStellaAgents().map((a) => a.id),
       [starter.id],
     );
   } finally {
@@ -178,12 +185,15 @@ test("stella agents: the starter agent exists once and is the default", async ()
 test("stella agents: the starter agent starts with the app's icon", async () => {
   const core = await stellaCore(RUNNING);
   try {
-    core.setStarterAgentIcon(async () => MINI_PNG);
-    const starter = await core.ensureStellaAgent();
+    core.services.stellaAgents.setStarterAgentIcon(async () => MINI_PNG);
+    const starter = await core.services.stellaAgents.ensureStellaAgent();
     // The row names a file the store generated; the store is what proves the
     // bytes are an icon, so ask it for the content type the route will serve.
     assert(starter.icon.endsWith(".png"), starter.icon);
-    const icon = await core.resolveStellaAgentIcon(starter.id, starter.icon);
+    const icon = await core.services.stellaAgents.resolveStellaAgentIcon(
+      starter.id,
+      starter.icon,
+    );
     assertEquals(icon?.mimeType, "image/png");
   } finally {
     await core.close();
@@ -193,12 +203,15 @@ test("stella agents: the starter agent starts with the app's icon", async () => 
 test("stella agents: a user's own agent is never replaced by the starter", async () => {
   const core = await stellaCore(RUNNING);
   try {
-    const mine = await core.createStellaAgent({
+    const mine = await core.services.stellaAgents.createStellaAgent({
       name: "Mine",
       role: "My work.",
     });
-    assertEquals((await core.ensureStellaAgent()).id, mine.id);
-    assertEquals(core.listStellaAgents().length, 1);
+    assertEquals(
+      (await core.services.stellaAgents.ensureStellaAgent()).id,
+      mine.id,
+    );
+    assertEquals(core.services.stellaAgents.listStellaAgents().length, 1);
   } finally {
     await core.close();
   }
@@ -209,12 +222,15 @@ test("stella agents: creating one prepares its folder and memory file", async ()
   // its first message: an agent that has never spoken still has one.
   const faux = fauxProvider();
   const runner = recordingRunner();
-  const core = LumiscaCore.forTesting([faux.provider], () => ({}), runner);
+  const core = forTestingCore([faux.provider], () => ({}), runner);
   core.models.models.setProvider(faux.provider);
-  await core.setProviderApiKey(faux.provider.id, "faux-key");
-  core.setStellaVm(fakeVmHost(RUNNING));
+  await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
+  core.services.stellaMachines.setStellaVm(fakeVmHost(RUNNING));
   try {
-    const agent = await core.createStellaAgent({ name: "Keeper", role: "r" });
+    const agent = await core.services.stellaAgents.createStellaAgent({
+      name: "Keeper",
+      role: "r",
+    });
     const memory = runner.calls.filter((command) =>
       command.includes(vmMemoryPath(agent.id)),
     );
@@ -239,12 +255,17 @@ test("stella agents: a stopped machine prepares the folder at the first open", a
   // the folder (and MEMORY.md) later.
   const faux = fauxProvider();
   const runner = recordingRunner();
-  const core = LumiscaCore.forTesting([faux.provider], () => ({}), runner);
+  const core = forTestingCore([faux.provider], () => ({}), runner);
   core.models.models.setProvider(faux.provider);
-  await core.setProviderApiKey(faux.provider.id, "faux-key");
-  core.setStellaVm(fakeVmHost({ state: "stopped", vncPort: null, reason: "" }));
+  await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
+  core.services.stellaMachines.setStellaVm(
+    fakeVmHost({ state: "stopped", vncPort: null, reason: "" }),
+  );
   try {
-    await core.createStellaAgent({ name: "Later", role: "r" });
+    await core.services.stellaAgents.createStellaAgent({
+      name: "Later",
+      role: "r",
+    });
     assertEquals(runner.calls, []);
   } finally {
     await core.close();
@@ -254,16 +275,19 @@ test("stella agents: a stopped machine prepares the folder at the first open", a
 test("stella conversation: created once and kept out of the session lists", async () => {
   const core = await stellaCore(RUNNING);
   try {
-    await core.createStellaAgent({ name: "Aide", role: "Help with the work." });
-    const first = await core.getOrCreateStellaSession();
+    await core.services.stellaAgents.createStellaAgent({
+      name: "Aide",
+      role: "Help with the work.",
+    });
+    const first = await core.internals.getOrCreateStellaSession();
     assertEquals(first.stella, true);
     // A second call returns the same conversation: stella has one.
-    const again = await core.getOrCreateStellaSession();
+    const again = await core.internals.getOrCreateStellaSession();
     assertEquals(again.id, first.id);
     // No session list ever offers it: it is not a session the user opened.
-    assertEquals(core.listSessions(), []);
+    assertEquals(core.services.sessions.listSessions(), []);
     // It is still reachable by id, so the client can drive it.
-    assertEquals(core.getSession(first.id)?.stella, true);
+    assertEquals(core.services.sessions.getSession(first.id)?.stella, true);
   } finally {
     await core.close();
   }
@@ -272,19 +296,28 @@ test("stella conversation: created once and kept out of the session lists", asyn
 test("stella conversation: each agent has its own", async () => {
   const core = await stellaCore(RUNNING);
   try {
-    const first = await core.createStellaAgent({ name: "First", role: "r" });
-    const second = await core.createStellaAgent({ name: "Second", role: "r" });
-    const a = await core.getOrCreateStellaSession(first.id);
-    const b = await core.getOrCreateStellaSession(second.id);
+    const first = await core.services.stellaAgents.createStellaAgent({
+      name: "First",
+      role: "r",
+    });
+    const second = await core.services.stellaAgents.createStellaAgent({
+      name: "Second",
+      role: "r",
+    });
+    const a = await core.internals.getOrCreateStellaSession(first.id);
+    const b = await core.internals.getOrCreateStellaSession(second.id);
     // Two agents, two conversations. A shared row would make them one person
     // with a split personality.
     assert(a.id !== b.id, `${a.id} == ${b.id}`);
     assertEquals(a.personaId, first.id);
     assertEquals(b.personaId, second.id);
     // Re-asking for the same agent returns the same conversation.
-    assertEquals((await core.getOrCreateStellaSession(first.id)).id, a.id);
+    assertEquals(
+      (await core.internals.getOrCreateStellaSession(first.id)).id,
+      a.id,
+    );
     // Neither appears in the session list.
-    assertEquals(core.listSessions(), []);
+    assertEquals(core.services.sessions.listSessions(), []);
   } finally {
     await core.close();
   }
@@ -293,17 +326,22 @@ test("stella conversation: each agent has its own", async () => {
 test("stella conversation: its name is the agent's, after a rename too", async () => {
   const core = await stellaCore(RUNNING);
   try {
-    const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
-    const session = await core.getOrCreateStellaSession(agent.id);
+    const agent = await core.services.stellaAgents.createStellaAgent({
+      name: "Aide",
+      role: "r",
+    });
+    const session = await core.internals.getOrCreateStellaSession(agent.id);
     assertEquals(session.name, "Aide");
     // The conversation has no name of its own: the row holds no second copy
     // that a rename would have to chase. A read after the rename answers with
     // the new name, and so does opening it again (the pool may still hold the
     // conversation from before).
-    await core.updateStellaAgent(agent.id, { name: "Aide 2" });
-    assertEquals(core.getSession(session.id)?.name, "Aide 2");
+    await core.services.stellaAgents.updateStellaAgent(agent.id, {
+      name: "Aide 2",
+    });
+    assertEquals(core.services.sessions.getSession(session.id)?.name, "Aide 2");
     assertEquals(
-      (await core.getOrCreateStellaSession(agent.id)).name,
+      (await core.internals.getOrCreateStellaSession(agent.id)).name,
       "Aide 2",
     );
   } finally {
@@ -317,15 +355,17 @@ test("stella onboarding: starts once and stays out of the conversation", async (
     // A new agent has not been set up: opening it is what starts the turn.
     assertEquals(agent.onboardedAt, null);
     faux.setResponses([fauxAssistantMessage(NO_RESPONSE)]);
-    assertEquals(core.startStellaOnboarding(agent.id), true);
-    await core.getAgent(session.id)!.waitForIdle();
+    assertEquals(core.services.stellaAgents.startOnboarding(agent.id), true);
+    await core.services.sessions.getAgent(session.id)!.waitForIdle();
 
     // The claim is recorded, so a reload or a second client is a no-op.
-    assert(core.getStellaAgent(agent.id)!.onboardedAt !== null);
-    assertEquals(core.startStellaOnboarding(agent.id), false);
+    assert(
+      core.services.stellaAgents.getStellaAgent(agent.id)!.onboardedAt !== null,
+    );
+    assertEquals(core.services.stellaAgents.startOnboarding(agent.id), false);
 
     // The MODEL was given the instruction...
-    const instruction = core
+    const instruction = core.services.sessions
       .getAgent(session.id)!
       .messages.find(
         (message) =>
@@ -335,7 +375,7 @@ test("stella onboarding: starts once and stays out of the conversation", async (
     assert(instruction !== undefined, "the setup instruction was not sent");
     // Persisted, not only in the live agent: a reload resumes the same setup
     // turn (the model still knows what it was asked to do).
-    const stored = core.readTranscript(session.id, {})!.items;
+    const stored = core.services.sessions.readTranscript(session.id, {})!.items;
     assert(
       stored.some(
         (message) =>
@@ -349,7 +389,7 @@ test("stella onboarding: starts once and stays out of the conversation", async (
     // visible text: an empty prompt that attached nothing is not an entry
     // (see agent/stella-stream.ts), so reloading cannot put the app's words
     // in the user's mouth.
-    const page = core.readStellaConversation(session.id, {})!;
+    const page = core.services.sessions.readStellaConversation(session.id, {})!;
     assertEquals(page.items, []);
   } finally {
     await core.close();
@@ -362,9 +402,15 @@ test("stella onboarding: no conversation open means no setup turn", async () => 
   // open still starts it.
   const core = await stellaCore(RUNNING);
   try {
-    const agent = await core.createStellaAgent({ name: "Later", role: "r" });
-    assertEquals(core.startStellaOnboarding(agent.id), false);
-    assertEquals(core.getStellaAgent(agent.id)?.onboardedAt, null);
+    const agent = await core.services.stellaAgents.createStellaAgent({
+      name: "Later",
+      role: "r",
+    });
+    assertEquals(core.services.stellaAgents.startOnboarding(agent.id), false);
+    assertEquals(
+      core.services.stellaAgents.getStellaAgent(agent.id)?.onboardedAt,
+      null,
+    );
   } finally {
     await core.close();
   }
@@ -377,10 +423,10 @@ async function twoModelStellaCore(): Promise<LumiscaCore> {
   const faux = fauxProvider({
     models: [{ id: "faux" }, { id: "other", reasoning: true }],
   });
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   core.models.models.setProvider(faux.provider);
-  await core.setProviderApiKey(faux.provider.id, "faux-key");
-  core.setStellaVm(fakeVmHost(RUNNING));
+  await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
+  core.services.stellaMachines.setStellaVm(fakeVmHost(RUNNING));
   return core;
 }
 
@@ -389,11 +435,14 @@ test("stella conversation: opens on the agent's own model", async () => {
   // exists: a user picking a model must not have to open one first.
   const core = await twoModelStellaCore();
   try {
-    const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
-    await core.updateStellaAgent(agent.id, {
+    const agent = await core.services.stellaAgents.createStellaAgent({
+      name: "Aide",
+      role: "r",
+    });
+    await core.services.stellaAgents.updateStellaAgent(agent.id, {
       model: { provider: "faux", modelId: "other" },
     });
-    const session = await core.getOrCreateStellaSession(agent.id);
+    const session = await core.internals.getOrCreateStellaSession(agent.id);
     assertEquals(session.modelProvider, "faux");
     assertEquals(session.modelId, "other");
   } finally {
@@ -404,15 +453,21 @@ test("stella conversation: opens on the agent's own model", async () => {
 test("stella conversation: an unset model follows the app's default", async () => {
   const core = await twoModelStellaCore();
   try {
-    const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
+    const agent = await core.services.stellaAgents.createStellaAgent({
+      name: "Aide",
+      role: "r",
+    });
     core.settings.set(
       DEFAULT_MODEL_KEY,
       JSON.stringify({ provider: "faux", modelId: "other" }),
     );
-    const session = await core.getOrCreateStellaSession(agent.id);
+    const session = await core.internals.getOrCreateStellaSession(agent.id);
     // Whatever the default resolves to, it is not the agent's to choose.
     assertEquals(session.modelId, "other");
-    assertEquals(core.getStellaAgent(agent.id)?.model, null);
+    assertEquals(
+      core.services.stellaAgents.getStellaAgent(agent.id)?.model,
+      null,
+    );
 
     // The conversation row froze the pair it resolved when it was created,
     // while the dialog kept saying "default". Moving the default has to move
@@ -421,14 +476,17 @@ test("stella conversation: an unset model follows the app's default", async () =
       DEFAULT_MODEL_KEY,
       JSON.stringify({ provider: "faux", modelId: "faux" }),
     );
-    const moved = await core.getOrCreateStellaSession(agent.id);
+    const moved = await core.internals.getOrCreateStellaSession(agent.id);
     assertEquals(moved.id, session.id);
     assertEquals(moved.modelId, "faux");
-    assertEquals(core.getSession(session.id)?.modelId, "faux");
+    assertEquals(
+      core.services.sessions.getSession(session.id)?.modelId,
+      "faux",
+    );
 
     // An explicit choice is not the default, so the default moving past it
     // leaves it alone.
-    await core.updateStellaAgent(agent.id, {
+    await core.services.stellaAgents.updateStellaAgent(agent.id, {
       model: { provider: "faux", modelId: "other" },
     });
     core.settings.set(
@@ -436,7 +494,7 @@ test("stella conversation: an unset model follows the app's default", async () =
       JSON.stringify({ provider: "faux", modelId: "faux" }),
     );
     assertEquals(
-      (await core.getOrCreateStellaSession(agent.id)).modelId,
+      (await core.internals.getOrCreateStellaSession(agent.id)).modelId,
       "other",
     );
   } finally {
@@ -451,24 +509,44 @@ test("stella conversation: the dialog's model choice moves the conversation", as
   // run reads.
   const core = await twoModelStellaCore();
   try {
-    const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
-    const session = await core.getOrCreateStellaSession(agent.id);
+    const agent = await core.services.stellaAgents.createStellaAgent({
+      name: "Aide",
+      role: "r",
+    });
+    const session = await core.internals.getOrCreateStellaSession(agent.id);
     const fallback = session.modelId;
     const chosen = fallback === "faux" ? "other" : "faux";
 
-    await core.updateStellaAgent(agent.id, {
+    await core.services.stellaAgents.updateStellaAgent(agent.id, {
       model: { provider: "faux", modelId: chosen },
     });
-    assertEquals(core.getSession(session.id)?.modelId, chosen);
+    assertEquals(
+      core.services.sessions.getSession(session.id)?.modelId,
+      chosen,
+    );
     // The choice is on the agent too, so the sidebar's row (and the dialog
     // that reads it) shows it without opening the conversation.
-    assertEquals(core.getStellaAgent(agent.id)?.model?.modelId, chosen);
-    assertEquals(core.listStellaAgentSummaries()[0]?.model?.modelId, chosen);
+    assertEquals(
+      core.services.stellaAgents.getStellaAgent(agent.id)?.model?.modelId,
+      chosen,
+    );
+    assertEquals(
+      core.services.stellaAgents.listStellaAgentSummaries()[0]?.model?.modelId,
+      chosen,
+    );
 
     // Clearing it returns the conversation to the app's default model.
-    await core.updateStellaAgent(agent.id, { model: null });
-    assertEquals(core.getSession(session.id)?.modelId, fallback);
-    assertEquals(core.getStellaAgent(agent.id)?.model, null);
+    await core.services.stellaAgents.updateStellaAgent(agent.id, {
+      model: null,
+    });
+    assertEquals(
+      core.services.sessions.getSession(session.id)?.modelId,
+      fallback,
+    );
+    assertEquals(
+      core.services.stellaAgents.getStellaAgent(agent.id)?.model,
+      null,
+    );
   } finally {
     await core.close();
   }
@@ -477,17 +555,23 @@ test("stella conversation: the dialog's model choice moves the conversation", as
 test("stella conversation: a model the catalog does not have is refused", async () => {
   const core = await twoModelStellaCore();
   try {
-    const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
+    const agent = await core.services.stellaAgents.createStellaAgent({
+      name: "Aide",
+      role: "r",
+    });
     await assertRejects(
       () =>
-        core.updateStellaAgent(agent.id, {
+        core.services.stellaAgents.updateStellaAgent(agent.id, {
           model: { provider: "faux", modelId: "retired" },
         }),
       CoreError,
       "Model not found",
     );
     // Nothing was written: a refused save leaves the row as it was.
-    assertEquals(core.getStellaAgent(agent.id)?.model, null);
+    assertEquals(
+      core.services.stellaAgents.getStellaAgent(agent.id)?.model,
+      null,
+    );
   } finally {
     await core.close();
   }
@@ -499,13 +583,22 @@ test("stella agent: the thinking level is stored with the same save", async () =
   // written when it is picked.
   const core = await twoModelStellaCore();
   try {
-    const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
-    const updated = await core.updateStellaAgent(agent.id, {
-      name: "Aide 2",
-      thinkingLevel: { provider: "faux", modelId: "other", level: "high" },
+    const agent = await core.services.stellaAgents.createStellaAgent({
+      name: "Aide",
+      role: "r",
     });
+    const updated = await core.services.stellaAgents.updateStellaAgent(
+      agent.id,
+      {
+        name: "Aide 2",
+        thinkingLevel: { provider: "faux", modelId: "other", level: "high" },
+      },
+    );
     assertEquals(updated.name, "Aide 2");
-    assertEquals(core.getStellaAgent(agent.id)?.name, "Aide 2");
+    assertEquals(
+      core.services.stellaAgents.getStellaAgent(agent.id)?.name,
+      "Aide 2",
+    );
     // The level belongs to the model, so it is read back through the model
     // (the composer and the model settings show the same value).
     assertEquals(
@@ -520,12 +613,15 @@ test("stella agent: the thinking level is stored with the same save", async () =
 test("stella agent: a level the model does not offer is refused", async () => {
   const core = await twoModelStellaCore();
   try {
-    const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
+    const agent = await core.services.stellaAgents.createStellaAgent({
+      name: "Aide",
+      role: "r",
+    });
     // "max" needs an explicit entry in the model's level map, which this one
     // does not publish — the dialog would not have offered it.
     await assertRejects(
       () =>
-        core.updateStellaAgent(agent.id, {
+        core.services.stellaAgents.updateStellaAgent(agent.id, {
           name: "Renamed",
           thinkingLevel: { provider: "faux", modelId: "other", level: "max" },
         }),
@@ -533,7 +629,10 @@ test("stella agent: a level the model does not offer is refused", async () => {
       "does not support",
     );
     // Refused before anything was written: the name did not land either.
-    assertEquals(core.getStellaAgent(agent.id)?.name, "Aide");
+    assertEquals(
+      core.services.stellaAgents.getStellaAgent(agent.id)?.name,
+      "Aide",
+    );
     assertEquals(
       core.services.sessions.getModelThinkingLevel("faux", "other"),
       "off",
@@ -546,11 +645,14 @@ test("stella agent: a level the model does not offer is refused", async () => {
 test("stella conversation: deleting an agent takes its conversation", async () => {
   const core = await stellaCore(RUNNING);
   try {
-    const agent = await core.createStellaAgent({ name: "Gone", role: "r" });
-    const session = await core.getOrCreateStellaSession(agent.id);
-    await core.deleteStellaAgent(agent.id);
-    assertEquals(core.getSession(session.id), undefined);
-    assertEquals(core.listStellaAgents(), []);
+    const agent = await core.services.stellaAgents.createStellaAgent({
+      name: "Gone",
+      role: "r",
+    });
+    const session = await core.internals.getOrCreateStellaSession(agent.id);
+    await core.services.stellaAgents.deleteStellaAgent(agent.id);
+    assertEquals(core.services.sessions.getSession(session.id), undefined);
+    assertEquals(core.services.stellaAgents.listStellaAgents(), []);
   } finally {
     await core.close();
   }
@@ -559,40 +661,68 @@ test("stella conversation: deleting an agent takes its conversation", async () =
 test("stella agents: an icon is stored, replaced and cleared as one file", async () => {
   const core = await stellaCore(RUNNING);
   try {
-    const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
+    const agent = await core.services.stellaAgents.createStellaAgent({
+      name: "Aide",
+      role: "r",
+    });
     assertEquals(agent.icon, "");
 
-    const first = await core.updateStellaAgent(agent.id, {
+    const first = await core.services.stellaAgents.updateStellaAgent(agent.id, {
       icon: { bytes: MINI_PNG, extension: ".png" },
     });
-    assertEquals(first.icon, core.getStellaAgent(agent.id)?.icon);
-    const firstFile = await core.resolveStellaAgentIcon(agent.id, first.icon);
+    assertEquals(
+      first.icon,
+      core.services.stellaAgents.getStellaAgent(agent.id)?.icon,
+    );
+    const firstFile = await core.services.stellaAgents.resolveStellaAgentIcon(
+      agent.id,
+      first.icon,
+    );
     assertEquals(firstFile?.mimeType, "image/png");
 
     // Replacing writes a new file and drops the one it replaced: an icon URL
     // is cacheable forever, so the name has to change with the picture.
-    const second = await core.updateStellaAgent(agent.id, {
-      icon: { bytes: MINI_PNG, extension: ".png" },
-    });
+    const second = await core.services.stellaAgents.updateStellaAgent(
+      agent.id,
+      {
+        icon: { bytes: MINI_PNG, extension: ".png" },
+      },
+    );
     assert(second.icon !== first.icon);
     assert(
-      (await core.resolveStellaAgentIcon(agent.id, second.icon)) !== undefined,
+      (await core.services.stellaAgents.resolveStellaAgentIcon(
+        agent.id,
+        second.icon,
+      )) !== undefined,
     );
     assertEquals(
-      await core.resolveStellaAgentIcon(agent.id, first.icon),
+      await core.services.stellaAgents.resolveStellaAgentIcon(
+        agent.id,
+        first.icon,
+      ),
       undefined,
     );
 
     // Clearing returns the row to its initial and removes the file.
-    const cleared = await core.updateStellaAgent(agent.id, { icon: null });
+    const cleared = await core.services.stellaAgents.updateStellaAgent(
+      agent.id,
+      { icon: null },
+    );
     assertEquals(cleared.icon, "");
     assertEquals(
-      await core.resolveStellaAgentIcon(agent.id, second.icon),
+      await core.services.stellaAgents.resolveStellaAgentIcon(
+        agent.id,
+        second.icon,
+      ),
       undefined,
     );
     // Clearing twice is a no-op, not a failure.
     assertEquals(
-      (await core.updateStellaAgent(agent.id, { icon: null })).icon,
+      (
+        await core.services.stellaAgents.updateStellaAgent(agent.id, {
+          icon: null,
+        })
+      ).icon,
       "",
     );
   } finally {
@@ -603,14 +733,23 @@ test("stella agents: an icon is stored, replaced and cleared as one file", async
 test("stella agents: deleting an agent drops its icon files", async () => {
   const core = await stellaCore(RUNNING);
   try {
-    const agent = await core.createStellaAgent({ name: "Gone", role: "r" });
-    const withIcon = await core.updateStellaAgent(agent.id, {
-      icon: { bytes: MINI_PNG, extension: ".png" },
+    const agent = await core.services.stellaAgents.createStellaAgent({
+      name: "Gone",
+      role: "r",
     });
-    await core.deleteStellaAgent(agent.id);
+    const withIcon = await core.services.stellaAgents.updateStellaAgent(
+      agent.id,
+      {
+        icon: { bytes: MINI_PNG, extension: ".png" },
+      },
+    );
+    await core.services.stellaAgents.deleteStellaAgent(agent.id);
     // The picture belonged to the agent; nothing can name it now.
     assertEquals(
-      await core.resolveStellaAgentIcon(agent.id, withIcon.icon),
+      await core.services.stellaAgents.resolveStellaAgentIcon(
+        agent.id,
+        withIcon.icon,
+      ),
       undefined,
     );
   } finally {
@@ -624,19 +763,21 @@ test("stella agents: a patch for a missing agent is refused", async () => {
     // The user deleted the agent while the picture was being saved.
     await assertRejects(
       () =>
-        core.updateStellaAgent("gone", {
+        core.services.stellaAgents.updateStellaAgent("gone", {
           icon: { bytes: MINI_PNG, extension: ".png" },
         }),
       CoreError,
       "Agent not found",
     );
     await assertRejects(
-      () => core.updateStellaAgent("gone", { icon: null }),
+      () =>
+        core.services.stellaAgents.updateStellaAgent("gone", { icon: null }),
       CoreError,
       "Agent not found",
     );
     await assertRejects(
-      () => core.updateStellaAgent("gone", { name: "New" }),
+      () =>
+        core.services.stellaAgents.updateStellaAgent("gone", { name: "New" }),
       CoreError,
       "Agent not found",
     );
@@ -648,10 +789,13 @@ test("stella agents: a patch for a missing agent is refused", async () => {
 test("stella agents: an icon that is not an image is refused by the core", async () => {
   const core = await stellaCore(RUNNING);
   try {
-    const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
+    const agent = await core.services.stellaAgents.createStellaAgent({
+      name: "Aide",
+      role: "r",
+    });
     const error = await assertRejects(
       () =>
-        core.updateStellaAgent(agent.id, {
+        core.services.stellaAgents.updateStellaAgent(agent.id, {
           icon: {
             bytes: new TextEncoder().encode("<html></html>"),
             extension: ".png",
@@ -661,7 +805,7 @@ test("stella agents: an icon that is not an image is refused by the core", async
     );
     assertEquals(error.kind, "invalid");
     // The row is untouched: a refused picture must not look like a change.
-    assertEquals(core.getStellaAgent(agent.id)?.icon, "");
+    assertEquals(core.services.stellaAgents.getStellaAgent(agent.id)?.icon, "");
   } finally {
     await core.close();
   }
@@ -670,34 +814,54 @@ test("stella agents: an icon that is not an image is refused by the core", async
 test("stella agents: a rename is checked like a creation", async () => {
   const core = await stellaCore(RUNNING);
   try {
-    const first = await core.createStellaAgent({ name: "First", role: "r" });
-    await core.createStellaAgent({ name: "Second", role: "r" });
+    const first = await core.services.stellaAgents.createStellaAgent({
+      name: "First",
+      role: "r",
+    });
+    await core.services.stellaAgents.createStellaAgent({
+      name: "Second",
+      role: "r",
+    });
 
     // The sidebar's rule is the same in both directions: two rows the user
     // cannot tell apart (compared case-insensitively).
     const taken = await assertRejects(
-      () => core.updateStellaAgent(first.id, { name: "second" }),
+      () =>
+        core.services.stellaAgents.updateStellaAgent(first.id, {
+          name: "second",
+        }),
       CoreError,
     );
     assertEquals(taken.kind, "conflict");
-    assertEquals(core.getStellaAgent(first.id)?.name, "First");
+    assertEquals(
+      core.services.stellaAgents.getStellaAgent(first.id)?.name,
+      "First",
+    );
 
     // Keeping one's own name is not a conflict with itself, however it is
     // capitalized: the dialog saves a name on every submit, and a user who
     // only changed the picture must not be refused.
     assertEquals(
-      (await core.updateStellaAgent(first.id, { name: "FIRST" })).name,
+      (
+        await core.services.stellaAgents.updateStellaAgent(first.id, {
+          name: "FIRST",
+        })
+      ).name,
       "FIRST",
     );
 
     // An empty name is refused rather than replaced by the default: clearing
     // the field is not a request to be called "Agent".
     const empty = await assertRejects(
-      () => core.updateStellaAgent(first.id, { name: "   " }),
+      () =>
+        core.services.stellaAgents.updateStellaAgent(first.id, { name: "   " }),
       Error,
     );
     assert(empty.message.includes("must not be empty"), empty.message);
-    assertEquals(core.getStellaAgent(first.id)?.name, "FIRST");
+    assertEquals(
+      core.services.stellaAgents.getStellaAgent(first.id)?.name,
+      "FIRST",
+    );
   } finally {
     await core.close();
   }
@@ -706,28 +870,40 @@ test("stella agents: a rename is checked like a creation", async () => {
 test("stella agents: a name and a picture land together", async () => {
   const core = await stellaCore(RUNNING);
   try {
-    const agent = await core.createStellaAgent({ name: "Old", role: "r" });
-    const updated = await core.updateStellaAgent(agent.id, {
-      name: "New",
-      icon: { bytes: MINI_PNG, extension: ".png" },
+    const agent = await core.services.stellaAgents.createStellaAgent({
+      name: "Old",
+      role: "r",
     });
+    const updated = await core.services.stellaAgents.updateStellaAgent(
+      agent.id,
+      {
+        name: "New",
+        icon: { bytes: MINI_PNG, extension: ".png" },
+      },
+    );
     assertEquals(updated.name, "New");
     assert(updated.icon !== "", "the picture was not recorded");
-    assertEquals(core.getStellaAgent(agent.id)?.name, "New");
+    assertEquals(
+      core.services.stellaAgents.getStellaAgent(agent.id)?.name,
+      "New",
+    );
 
     // A refused name costs nothing: the picture must not be written for a
     // patch that does not happen (the dialog saves both, so half of it would
     // look like the save worked).
     const refused = await assertRejects(
       () =>
-        core.updateStellaAgent(agent.id, {
+        core.services.stellaAgents.updateStellaAgent(agent.id, {
           name: " ",
           icon: { bytes: MINI_PNG, extension: ".png" },
         }),
       Error,
     );
     assert(refused.message.includes("must not be empty"), refused.message);
-    assertEquals(core.getStellaAgent(agent.id)?.icon, updated.icon);
+    assertEquals(
+      core.services.stellaAgents.getStellaAgent(agent.id)?.icon,
+      updated.icon,
+    );
   } finally {
     await core.close();
   }
@@ -736,11 +912,11 @@ test("stella agents: a name and a picture land together", async () => {
 test("stella conversation: its system prompt is the machine's, not the name", async () => {
   const core = await stellaCore(RUNNING);
   try {
-    const agent = await core.createStellaAgent({
+    const agent = await core.services.stellaAgents.createStellaAgent({
       name: "Aide",
       role: "You keep notes and check facts.",
     });
-    const session = await core.getOrCreateStellaSession(agent.id);
+    const session = await core.internals.getOrCreateStellaSession(agent.id);
     const prompt = session.systemPrompt ?? "";
     // The name is a LABEL the user can change at any time, so it is not in
     // the prompt: a snapshot would either freeze the old one (the agent
@@ -788,8 +964,11 @@ test("stella conversation: an agent without a role still gets the opening line",
     // The create form's role is optional, so this is a normal agent: it gets
     // the shared opening line and nothing after it on that line (no dangling
     // space, no empty quotation marks).
-    const agent = await core.createStellaAgent({ name: "Quiet", role: "" });
-    const session = await core.getOrCreateStellaSession(agent.id);
+    const agent = await core.services.stellaAgents.createStellaAgent({
+      name: "Quiet",
+      role: "",
+    });
+    const session = await core.internals.getOrCreateStellaSession(agent.id);
     const prompt = session.systemPrompt ?? "";
     assert(
       prompt.startsWith("You are a helpful assistant.\n"),
@@ -962,22 +1141,21 @@ test("stella tool set: the conversation's tools are preloaded", () => {
  * test gives the model a context window (compaction needs one). */
 async function stellaConversation(name: string, options: FauxOptions = {}) {
   const faux = fauxProvider(options);
-  const core = LumiscaCore.forTesting(
-    [faux.provider],
-    () => ({}),
-    recordingRunner(),
-  );
+  const core = forTestingCore([faux.provider], () => ({}), recordingRunner());
   core.models.models.setProvider(faux.provider);
-  await core.setProviderApiKey(faux.provider.id, "faux-key");
-  core.setStellaVm(fakeVmHost(RUNNING));
-  const agent = await core.createStellaAgent({ name, role: "r" });
-  const session = await core.getOrCreateStellaSession(agent.id);
+  await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
+  core.services.stellaMachines.setStellaVm(fakeVmHost(RUNNING));
+  const agent = await core.services.stellaAgents.createStellaAgent({
+    name,
+    role: "r",
+  });
+  const session = await core.internals.getOrCreateStellaSession(agent.id);
   return { faux, core, agent, session };
 }
 
 /** The text of the last history_search tool result of a session. */
 function lastHistoryResult(core: LumiscaCore, sessionId: string): string {
-  const result = core
+  const result = core.services.sessions
     .getAgent(sessionId)!
     .messages.findLast(
       (message) =>
@@ -1028,7 +1206,7 @@ test("stella conversation: the background-command tools are preloaded", async ()
   // factory, not built by hand, so either missing wire fails this test.
   const { core, session } = await stellaConversation("Builder");
   try {
-    const names = core.getAgent(session.id)!.toolNames;
+    const names = core.services.sessions.getAgent(session.id)!.toolNames;
     for (const expected of [
       "async_bash",
       "async_bash_status",
@@ -1050,7 +1228,7 @@ test("stella conversation: the transfer tools are found with tool_search", async
   // the lent-folder announcement is what tells the agent they exist.
   const { faux, core, session } = await stellaConversation("Courier");
   try {
-    const preloaded = core.getAgent(session.id)!.toolNames;
+    const preloaded = core.services.sessions.getAgent(session.id)!.toolNames;
     for (const name of ["share_upload", "share_download"]) {
       assertEquals(preloaded.includes(name), false, `${name} is preloaded`);
     }
@@ -1067,7 +1245,7 @@ test("stella conversation: the transfer tools are found with tool_search", async
       "Which tools move files to a folder the user lent?",
     );
 
-    const result = core
+    const result = core.services.sessions
       .getAgent(session.id)!
       .messages.find((message) => message.role === "toolResult");
     assert(result !== undefined, "the search produced no result");
@@ -1086,7 +1264,7 @@ test("stella conversation: the folder tools are found with tool_search", async (
   // agent they exist.
   const { faux, core, session } = await stellaConversation("Lender");
   try {
-    const preloaded = core.getAgent(session.id)!.toolNames;
+    const preloaded = core.services.sessions.getAgent(session.id)!.toolNames;
     for (const name of ["share_request", "share_disconnect"]) {
       assertEquals(preloaded.includes(name), false, `${name} is preloaded`);
     }
@@ -1106,7 +1284,7 @@ test("stella conversation: the folder tools are found with tool_search", async (
       "Which tools ask the user for a folder?",
     );
 
-    const result = core
+    const result = core.services.sessions
       .getAgent(session.id)!
       .messages.find((message) => message.role === "toolResult");
     assert(result !== undefined, "the search produced no result");
@@ -1149,10 +1327,12 @@ test("stella conversation: share_request blocks the run until a folder is lent",
       "Read the CSV exports in my Downloads folder",
     );
     // The card's state, as a reconnecting client would read it.
-    let pending = core.getPendingShareRequest(session.id);
+    let pending = core.services.interruptions.getPendingShareRequest(
+      session.id,
+    );
     for (let index = 0; index < 100 && pending === null; index += 1) {
       await new Promise((resolve) => setTimeout(resolve, 10));
-      pending = core.getPendingShareRequest(session.id);
+      pending = core.services.interruptions.getPendingShareRequest(session.id);
     }
     assert(pending !== null, "the request never reached the snapshot");
     assertEquals(pending.kind, "lend");
@@ -1160,13 +1340,16 @@ test("stella conversation: share_request blocks the run until a folder is lent",
       assertEquals(pending.reason, "read the exports");
     }
 
-    core.finishShareLend(session.id, pending.toolCallId);
+    core.services.interruptions.finishShareLend(session.id, pending.toolCallId);
     await running;
     // The card is gone once the run moves on.
-    assertEquals(core.getPendingShareRequest(session.id), null);
+    assertEquals(
+      core.services.interruptions.getPendingShareRequest(session.id),
+      null,
+    );
     // The tool result names no folder (nothing was lent in this test), so a
     // model cannot read a path out of an answer that lent nothing.
-    const results = core
+    const results = core.services.sessions
       .getAgent(session.id)!
       .messages.filter((message) => message.role === "toolResult");
     const text = JSON.stringify(results.at(-1));
@@ -1204,7 +1387,7 @@ test("stella conversation: todo keeps a plan the conversation does not draw", as
     await promptSession(core, session.id, "余白と色を直して");
 
     // The plan belongs to the session, so it is there after the turn...
-    const plan = core.getTodo(session.id);
+    const plan = core.services.sessions.getTodo(session.id);
     assertEquals(
       plan.map((phase) => phase.name),
       ["修正"],
@@ -1219,7 +1402,7 @@ test("stella conversation: todo keeps a plan the conversation does not draw", as
 
     // ...and it stays out of the conversation: no tool row and no plan, only
     // what was said. The projection drops the call and its result.
-    const page = core.readStellaConversation(session.id, {})!;
+    const page = core.services.sessions.readStellaConversation(session.id, {})!;
     assertEquals(
       page.items.map((entry) => [entry.role, entry.text]),
       [
@@ -1241,7 +1424,7 @@ test("stella conversation: a run that says nothing leaves nothing on screen", as
     faux.setResponses([fauxAssistantMessage(NO_RESPONSE)]);
     await promptSession(core, session.id, "定期チェックを実行して");
 
-    const page = core.readStellaConversation(session.id, {})!;
+    const page = core.services.sessions.readStellaConversation(session.id, {})!;
     // The prompt is there; the sentinel is not a message.
     assertEquals(
       page.items.map((entry) => entry.role),
@@ -1252,7 +1435,7 @@ test("stella conversation: a run that says nothing leaves nothing on screen", as
     // It IS in the model's history: the notes are what the model reasons
     // with, and dropping them would make the next turn amnesiac.
     assert(
-      core
+      core.services.sessions
         .getAgent(session.id)!
         .messages.some((message) => message.role === "assistant"),
       "the agent's own turn stays in its history",
@@ -1275,7 +1458,7 @@ test("stella conversation: the agent's reply is what the store serves", async ()
     await promptSession(core, session.id, "お願いします");
 
     // The newest window of the conversation, as a client re-opening it reads.
-    const page = core.readStellaConversation(session.id, {})!;
+    const page = core.services.sessions.readStellaConversation(session.id, {})!;
     assertEquals(
       page.items.map((entry) => [entry.role, entry.text]),
       [
@@ -1286,7 +1469,7 @@ test("stella conversation: the agent's reply is what the store serves", async ()
 
     // The sidebar's second line is the same projection: the newest thing the
     // conversation shows is the reply, not the prompt before it.
-    const row = core
+    const row = core.services.stellaAgents
       .listStellaAgentSummaries()
       .find((item) => item.id === agent.id);
     assertEquals(row?.preview?.kind, "text");
@@ -1331,7 +1514,7 @@ test("stella conversation: what send_chat sends is the conversation", async () =
     ]);
     await promptSession(core, session.id, "直して");
 
-    const page = core.readStellaConversation(session.id, {})!;
+    const page = core.services.sessions.readStellaConversation(session.id, {})!;
     const entries = page.items;
     assertEquals(
       entries.map((entry) => entry.role),
@@ -1348,7 +1531,7 @@ test("stella conversation: what send_chat sends is the conversation", async () =
     // The words also went nowhere near the tool's model-facing result: a
     // message is in the transcript once (as the call's arguments), and the
     // receipt is all the model reads back.
-    const result = core
+    const result = core.services.sessions
       .getAgent(session.id)!
       .messages.find(
         (message) =>
@@ -1392,7 +1575,7 @@ test("stella conversation: a tool-heavy run still shows the conversation", async
     faux.setResponses(responses);
     await promptSession(core, session.id, "詳しく");
 
-    const page = core.readStellaConversation(session.id, {})!;
+    const page = core.services.sessions.readStellaConversation(session.id, {})!;
     // Both exchanges are in the newest window — the page counts entries, so
     // the 25 tool rows between them cannot crowd the conversation out of it.
     assertEquals(
@@ -1440,13 +1623,11 @@ test("stella conversation: a long conversation pages back by entries", async () 
     const collected: string[] = [];
     let older: string | null = null;
     for (let pages = 0; pages < 20; pages++) {
-      const page: WindowPage<StellaEntry> = core.readStellaConversation(
-        session.id,
-        {
+      const page: WindowPage<StellaEntry> =
+        core.services.sessions.readStellaConversation(session.id, {
           limit: 2,
           ...(older === null ? {} : { older }),
-        },
-      )!;
+        })!;
       assert(page.items.length <= 2, `page ${pages} exceeded its size`);
       collected.unshift(...page.items.map((entry) => entry.text));
       older = page.older;
@@ -1512,8 +1693,11 @@ test("stella conversation: history_search reads the message after a prune", asyn
 test("stella conversation: history_search never reads another agent's rows", async () => {
   const { faux, core, session: sessionA } = await stellaConversation("First");
   try {
-    const second = await core.createStellaAgent({ name: "Second", role: "r" });
-    const sessionB = await core.getOrCreateStellaSession(second.id);
+    const second = await core.services.stellaAgents.createStellaAgent({
+      name: "Second",
+      role: "r",
+    });
+    const sessionB = await core.internals.getOrCreateStellaSession(second.id);
 
     // The word is said to the first agent only.
     faux.setResponses([fauxAssistantMessage("Noted.")]);
@@ -1543,7 +1727,8 @@ test("stella conversation: identity is written into the prompt at generation", a
   const { faux, core, agent, session } = await stellaConversation("Scribe");
   try {
     // A session that never wrote an identity opens without one.
-    const opened = core.getAgent(session.id)!.agent.state.systemPrompt;
+    const opened = core.services.sessions.getAgent(session.id)!.agent.state
+      .systemPrompt;
     assertEquals(opened.includes("<identity>"), false);
 
     // The agent writes about itself in one turn, through the same discoverable
@@ -1569,18 +1754,24 @@ test("stella conversation: identity is written into the prompt at generation", a
     ]);
     await promptSession(core, session.id, "Write down what your job is.");
     assertEquals(
-      core.listStellaAgents().find((a) => a.id === agent.id)?.identity,
+      core.services.stellaAgents
+        .listStellaAgents()
+        .find((a) => a.id === agent.id)?.identity,
       "I keep the project's notes and know where things are.",
     );
 
     // The prompt is the request's cached prefix, so the run that wrote the
     // text keeps the prompt it was given; a write never rewrites it.
-    assertEquals(core.getAgent(session.id)!.agent.state.systemPrompt, opened);
+    assertEquals(
+      core.services.sessions.getAgent(session.id)!.agent.state.systemPrompt,
+      opened,
+    );
 
     // Reopening generates the prompt again, which is where the text enters.
-    core.closeSession(session.id);
-    core.openSession(session.id);
-    const reopened = core.getAgent(session.id)!.agent.state.systemPrompt;
+    core.services.sessions.closeSession(session.id);
+    core.services.sessions.openSession(session.id);
+    const reopened = core.services.sessions.getAgent(session.id)!.agent.state
+      .systemPrompt;
     assert(reopened.includes("<identity>"), reopened);
     assert(reopened.includes("I keep the project's notes"), reopened);
   } finally {
@@ -1594,7 +1785,8 @@ test("stella conversation: a compaction regenerates the prompt", async () => {
   });
   try {
     // The prompt was generated before the agent wrote anything.
-    const before = core.getAgent(session.id)!.agent.state.systemPrompt;
+    const before = core.services.sessions.getAgent(session.id)!.agent.state
+      .systemPrompt;
     assertEquals(before.includes("I keep the project's notes"), false);
 
     // The stored row changes while the prompt is fixed.
@@ -1604,22 +1796,26 @@ test("stella conversation: a compaction regenerates the prompt", async () => {
 
     await recordTwoTurns(faux, core, session.id);
     // No compaction yet: the live prompt is still the one it opened with.
-    assertEquals(core.getAgent(session.id)!.agent.state.systemPrompt, before);
+    assertEquals(
+      core.services.sessions.getAgent(session.id)!.agent.state.systemPrompt,
+      before,
+    );
 
     // A compaction replaces the history behind the prompt. The prompt is
     // re-derived then, so the identity arrives at the point the cached
     // prefix is lost anyway.
     faux.setResponses([fauxAssistantMessage("## Now\n- kept the record")]);
     assert(
-      (await core.compactSession(session.id)) !== undefined,
+      (await core.services.sessions.compactSession(session.id)) !== undefined,
       "the history was not condensed",
     );
-    const after = core.getAgent(session.id)!.agent.state.systemPrompt;
+    const after = core.services.sessions.getAgent(session.id)!.agent.state
+      .systemPrompt;
     assert(after.includes("I keep the project's notes"), after);
     assert(
-      (core.getSession(session.id)?.systemPrompt ?? "").includes(
-        "I keep the project's notes",
-      ),
+      (
+        core.services.sessions.getSession(session.id)?.systemPrompt ?? ""
+      ).includes("I keep the project's notes"),
       "the regenerated prompt was not stored",
     );
   } finally {
@@ -1630,8 +1826,11 @@ test("stella conversation: a compaction regenerates the prompt", async () => {
 test("stella conversation: each agent's identity is its own", async () => {
   const { faux, core, session: sessionA } = await stellaConversation("One");
   try {
-    const second = await core.createStellaAgent({ name: "Two", role: "r" });
-    const sessionB = await core.getOrCreateStellaSession(second.id);
+    const second = await core.services.stellaAgents.createStellaAgent({
+      name: "Two",
+      role: "r",
+    });
+    const sessionB = await core.internals.getOrCreateStellaSession(second.id);
 
     faux.setResponses([
       fauxAssistantMessage(
@@ -1655,9 +1854,12 @@ test("stella conversation: each agent's identity is its own", async () => {
     // and a prompt generated for it carries no identity.
     faux.setResponses([fauxAssistantMessage("hello")]);
     await promptSession(core, sessionB.id, "Who are you?");
-    const stored = core.listStellaAgents().find((a) => a.id === second.id);
+    const stored = core.services.stellaAgents
+      .listStellaAgents()
+      .find((a) => a.id === second.id);
     assertEquals(stored?.identity, "");
-    const prompt = core.getAgent(sessionB.id)!.agent.state.systemPrompt;
+    const prompt = core.services.sessions.getAgent(sessionB.id)!.agent.state
+      .systemPrompt;
     assertEquals(prompt.includes("<identity>"), false);
   } finally {
     await core.close();
@@ -1705,7 +1907,7 @@ test("stella conversation: a skill in the machine reaches the published catalog"
   // The machine's own skills: they exist nowhere on this host, so a catalog
   // built from workspace folders could not list them. This is the gap the
   // provider seam closed.
-  const core = LumiscaCore.forTesting(
+  const core = forTestingCore(
     [faux.provider],
     () => ({}),
     vmSkillsRunner([
@@ -1716,17 +1918,17 @@ test("stella conversation: a skill in the machine reaches the published catalog"
     ]),
   );
   core.models.models.setProvider(faux.provider);
-  await core.setProviderApiKey(faux.provider.id, "faux-key");
-  core.setStellaVm(fakeVmHost(RUNNING));
+  await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
+  core.services.stellaMachines.setStellaVm(fakeVmHost(RUNNING));
   try {
-    const agent = await core.createStellaAgent({
+    const agent = await core.services.stellaAgents.createStellaAgent({
       name: "Keeper",
       role: "Keep notes.",
     });
-    const session = await core.getOrCreateStellaSession(agent.id);
+    const session = await core.internals.getOrCreateStellaSession(agent.id);
 
     // The skill tool can load it...
-    const skills = core.listStellaSkills(agent.id);
+    const skills = core.services.sessions.listStellaSkills(agent.id);
     assert(
       skills.some((skill) => skill.name === "vm-notes"),
       JSON.stringify(skills),
@@ -1735,7 +1937,7 @@ test("stella conversation: a skill in the machine reaches the published catalog"
     // ...and the catalog the model reads names it too.
     faux.setResponses([fauxAssistantMessage("Noted.")]);
     await promptSession(core, session.id, "What can you do?");
-    const published = core
+    const published = core.services.sessions
       .getAgent(session.id)!
       .messages.find(
         (message): message is Extract<AgentMessage, { role: "context" }> =>
@@ -1756,7 +1958,7 @@ test("stella conversation: a skill in the machine reaches the published catalog"
 
 test("stella conversation: a sub-agent loads a skill from the machine", async () => {
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting(
+  const core = forTestingCore(
     [faux.provider],
     () => ({}),
     vmSkillsRunner([
@@ -1767,15 +1969,15 @@ test("stella conversation: a sub-agent loads a skill from the machine", async ()
     ]),
   );
   core.models.models.setProvider(faux.provider);
-  await core.setProviderApiKey(faux.provider.id, "faux-key");
-  core.setStellaVm(fakeVmHost(RUNNING));
+  await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
+  core.services.stellaMachines.setStellaVm(fakeVmHost(RUNNING));
   try {
-    const agent = await core.createStellaAgent({
+    const agent = await core.services.stellaAgents.createStellaAgent({
       name: "Keeper",
       role: "Keep notes.",
     });
-    const session = await core.getOrCreateStellaSession(agent.id);
-    const parent = core.getAgent(session.id)!;
+    const session = await core.internals.getOrCreateStellaSession(agent.id);
+    const parent = core.services.sessions.getAgent(session.id)!;
     const taskTool = parent.agent.state.tools.find(
       (tool) => tool.name === "task",
     );
@@ -1820,7 +2022,9 @@ test("stella conversation: a sub-agent loads a skill from the machine", async ()
     );
     const deadline = Date.now() + 15_000;
     while (
-      core.getTasks(session.id).every((task) => task.status !== "finished")
+      core.services.sessions
+        .getTasks(session.id)
+        .every((task) => task.status !== "finished")
     ) {
       if (Date.now() > deadline) {
         throw new Error("timed out waiting for the sub-agent");
@@ -1828,7 +2032,7 @@ test("stella conversation: a sub-agent loads a skill from the machine", async ()
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
     assertEquals(
-      core.getTasks(session.id)[0]?.text,
+      core.services.sessions.getTasks(session.id)[0]?.text,
       "Loaded vm-notes from the machine.",
     );
   } finally {
@@ -1842,7 +2046,7 @@ test("stella conversation: two agents do not share their own skills", async () =
   // machine-wide folder hold different lists, which is what makes a
   // per-agent catalog observable here.
   const byDir = new Map<string, Array<{ name: string; description: string }>>();
-  const core = LumiscaCore.forTesting([faux.provider], () => ({}), {
+  const core = forTestingCore([faux.provider], () => ({}), {
     run: (command: readonly string[]) => {
       const stdout = command.join(" ").includes(".agents/skills")
         ? listingOf(byDir.get(command[command.length - 1] ?? "") ?? [])
@@ -1865,11 +2069,14 @@ test("stella conversation: two agents do not share their own skills", async () =
       }),
   });
   core.models.models.setProvider(faux.provider);
-  await core.setProviderApiKey(faux.provider.id, "faux-key");
-  core.setStellaVm(fakeVmHost(RUNNING));
+  await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
+  core.services.stellaMachines.setStellaVm(fakeVmHost(RUNNING));
   try {
-    const first = await core.createStellaAgent({ name: "First", role: "One." });
-    const second = await core.createStellaAgent({
+    const first = await core.services.stellaAgents.createStellaAgent({
+      name: "First",
+      role: "One.",
+    });
+    const second = await core.services.stellaAgents.createStellaAgent({
       name: "Second",
       role: "Two.",
     });
@@ -1886,11 +2093,15 @@ test("stella conversation: two agents do not share their own skills", async () =
       },
     ]);
 
-    const sessionA = await core.getOrCreateStellaSession(first.id);
-    await core.getOrCreateStellaSession(second.id);
+    const sessionA = await core.internals.getOrCreateStellaSession(first.id);
+    await core.internals.getOrCreateStellaSession(second.id);
 
-    const namesA = core.listStellaSkills(first.id).map((s) => s.name);
-    const namesB = core.listStellaSkills(second.id).map((s) => s.name);
+    const namesA = core.services.sessions
+      .listStellaSkills(first.id)
+      .map((s) => s.name);
+    const namesB = core.services.sessions
+      .listStellaSkills(second.id)
+      .map((s) => s.name);
     // Each agent sees its own skill and the machine-wide one...
     assert(namesA.includes("only-for-first"), JSON.stringify(namesA));
     assert(namesA.includes("for-everyone"), JSON.stringify(namesA));
@@ -1908,7 +2119,7 @@ test("stella conversation: two agents do not share their own skills", async () =
     // The catalog the model reads is the same per-agent list.
     faux.setResponses([fauxAssistantMessage("ok")]);
     await promptSession(core, sessionA.id, "what can you do?");
-    const published = core
+    const published = core.services.sessions
       .getAgent(sessionA.id)!
       .messages.find(
         (message): message is Extract<AgentMessage, { role: "context" }> =>
@@ -1942,21 +2153,38 @@ test("stella agents: an unnamed agent gets a free default name", async () => {
     // The user did not fill the form in. Creating must still work, and the
     // second unnamed agent must not be refused as "that name is taken" for a
     // name the user never wrote.
-    const first = await core.createStellaAgent({ name: "", role: "" });
+    const first = await core.services.stellaAgents.createStellaAgent({
+      name: "",
+      role: "",
+    });
     assertEquals(first.name, DEFAULT_AGENT_NAME);
     assertEquals(first.role, "");
 
-    const second = await core.createStellaAgent({ name: "   ", role: "" });
+    const second = await core.services.stellaAgents.createStellaAgent({
+      name: "   ",
+      role: "",
+    });
     assertEquals(second.name, `${DEFAULT_AGENT_NAME} 2`);
 
     // A name the user DID write keeps the duplicate rule.
-    await core.createStellaAgent({ name: "Notes", role: "" });
+    await core.services.stellaAgents.createStellaAgent({
+      name: "Notes",
+      role: "",
+    });
     await assertRejects(
-      () => core.createStellaAgent({ name: "Notes", role: "" }),
+      () =>
+        core.services.stellaAgents.createStellaAgent({
+          name: "Notes",
+          role: "",
+        }),
       Error,
     );
     await assertRejects(
-      () => core.createStellaAgent({ name: "notes", role: "" }),
+      () =>
+        core.services.stellaAgents.createStellaAgent({
+          name: "notes",
+          role: "",
+        }),
       Error,
     );
   } finally {
@@ -1971,7 +2199,7 @@ test("stella conversation: only stella sessions condense an idle history", async
   // pressure check covers it).
   const { core, session } = await stellaConversation("Idle");
   try {
-    const agent = core.getAgent(session.id)!;
+    const agent = core.services.sessions.getAgent(session.id)!;
     assertEquals(agent.idleCompaction, {
       afterMs: 10 * 60 * 1000,
       minTokens: 50_000,
@@ -1980,8 +2208,13 @@ test("stella conversation: only stella sessions condense an idle history", async
     // Every other session keeps the pressure check alone.
     await withTempDir("lumisca-idle-", async (root) => {
       const workspace = await core.services.workspaces.create("ws", [root]);
-      const plain = await core.createSession({ workspaceId: workspace.id });
-      assertEquals(core.getAgent(plain.id)!.idleCompaction, null);
+      const plain = await core.services.sessions.createSession({
+        workspaceId: workspace.id,
+      });
+      assertEquals(
+        core.services.sessions.getAgent(plain.id)!.idleCompaction,
+        null,
+      );
     });
   } finally {
     await core.close();
@@ -2002,7 +2235,7 @@ test("stella conversation: a compaction keeps the work rows by default", async (
     // replace them (see session/prune.ts).
     faux.setResponses([fauxAssistantMessage("## Now\n- kept the record")]);
     assert(
-      (await core.compactSession(session.id)) !== undefined,
+      (await core.services.sessions.compactSession(session.id)) !== undefined,
       "the history was not condensed",
     );
     assert(toolResultRows(core, session.id) > 0, "no tool row to keep");
@@ -2011,8 +2244,8 @@ test("stella conversation: a compaction keeps the work rows by default", async (
     // Turned off, the next open reduces what the checkpoint already covers.
     // The setting is read on every prune, so no rebuild is needed.
     core.settings.set(STELLA_KEEP_FULL_LOG_KEY, "0");
-    await core.closeSession(session.id);
-    core.openSession(session.id);
+    await core.services.sessions.closeSession(session.id);
+    core.services.sessions.openSession(session.id);
     assert(prunedRows(core, session.id) > 0, "the rows were not reduced");
   } finally {
     await core.close();
@@ -2034,7 +2267,9 @@ test("stella conversation: a code-mode session never drops its rows", async () =
 
     await withTempDir("lumisca-prune-", async (root) => {
       const workspace = await core.services.workspaces.create("ws", [root]);
-      const plain = await core.createSession({ workspaceId: workspace.id });
+      const plain = await core.services.sessions.createSession({
+        workspaceId: workspace.id,
+      });
       assertStellaPrunes(core, plain.id, false);
     });
   } finally {
@@ -2050,7 +2285,7 @@ function assertStellaPrunes(
   sessionId: string,
   expected: boolean,
 ): void {
-  const agent = core.getAgent(sessionId)! as unknown as {
+  const agent = core.services.sessions.getAgent(sessionId)! as unknown as {
     shouldPruneCondensed: () => boolean;
   };
   assertEquals(agent.shouldPruneCondensed(), expected);
@@ -2118,7 +2353,7 @@ test("stella agents: a row says what its conversation last said", async () => {
     ]);
     await promptSession(core, session.id, "直して");
 
-    const rows = core.listStellaAgentSummaries();
+    const rows = core.services.stellaAgents.listStellaAgentSummaries();
     const row = rows.find((item) => item.id === agent.id);
     assert(row !== undefined, "the agent must be in the list");
     // The newest thing the conversation shows: what the agent SENT. The
@@ -2135,8 +2370,11 @@ test("stella agents: a row says what its conversation last said", async () => {
 
     // An agent whose conversation was never opened says nothing: nothing has
     // been said in it, and a row must not invent a line.
-    const quiet = await core.createStellaAgent({ name: "Quiet", role: "r" });
-    const quietRow = core
+    const quiet = await core.services.stellaAgents.createStellaAgent({
+      name: "Quiet",
+      role: "r",
+    });
+    const quietRow = core.services.stellaAgents
       .listStellaAgentSummaries()
       .find((item) => item.id === quiet.id);
     assertEquals(quietRow?.preview, null);
@@ -2163,7 +2401,7 @@ test("stella agents: the preview is the newest entry, not the newest row", async
     ]);
     await promptSession(core, session.id, "やって");
 
-    const row = core
+    const row = core.services.stellaAgents
       .listStellaAgentSummaries()
       .find((item) => item.id === agent.id);
     assertEquals(row?.preview?.kind, "text");
@@ -2182,16 +2420,20 @@ test("stella prompt: a conversation from an older release is re-derived", async 
   // directly, which is what an older build leaves behind.
   const { core, session } = await stellaConversation("Legacy");
   try {
-    const current = core.getAgent(session.id)!.agent.state.systemPrompt;
+    const current = core.services.sessions.getAgent(session.id)!.agent.state
+      .systemPrompt;
     assert(current.includes("Your reply is the message"), current);
 
-    core.closeSession(session.id);
+    core.services.sessions.closeSession(session.id);
     core.db.db
       .prepare("UPDATE sessions SET system_prompt = ? WHERE id = ?")
       .run("You talk with the user through send_chat.", session.id);
 
-    await core.openSession(session.id);
-    assertEquals(core.getAgent(session.id)!.agent.state.systemPrompt, current);
+    await core.services.sessions.openSession(session.id);
+    assertEquals(
+      core.services.sessions.getAgent(session.id)!.agent.state.systemPrompt,
+      current,
+    );
   } finally {
     await core.close();
   }
@@ -2254,16 +2496,12 @@ test("stella routines: a run brings a stopped machine back", async () => {
   // improper" and the routine failed for a reason that had nothing to do with
   // what it was checking.
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting(
-    [faux.provider],
-    () => ({}),
-    recordingRunner(),
-  );
+  const core = forTestingCore([faux.provider], () => ({}), recordingRunner());
   core.models.models.setProvider(faux.provider);
-  await core.setProviderApiKey(faux.provider.id, "faux-key");
+  await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
   let state: VmStatus = RUNNING;
   let starts = 0;
-  core.setStellaVm(
+  core.services.stellaMachines.setStellaVm(
     fakeStellaHost({
       statusFor: () => state,
       start: () => {
@@ -2274,11 +2512,11 @@ test("stella routines: a run brings a stopped machine back", async () => {
     }),
   );
   try {
-    const agent = await core.createStellaAgent({
+    const agent = await core.services.stellaAgents.createStellaAgent({
       name: "Watcher",
       role: "Watches something.",
     });
-    await core.getOrCreateStellaSession(agent.id);
+    await core.internals.getOrCreateStellaSession(agent.id);
     // The machine stops while the conversation stays open.
     state = { state: "stopped", vncPort: null, reason: "" };
     faux.setResponses([fauxAssistantMessage("checked")]);
@@ -2303,20 +2541,16 @@ test("stella routines: a run after a restart still has its skill catalog", async
   // available" — and nothing read them again while the conversation stayed
   // open, so a routine-only conversation stayed without skills for days.
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting(
-    [faux.provider],
-    () => ({}),
-    recordingRunner(),
-  );
+  const core = forTestingCore([faux.provider], () => ({}), recordingRunner());
   core.models.models.setProvider(faux.provider);
-  await core.setProviderApiKey(faux.provider.id, "faux-key");
-  core.setStellaVm(fakeVmHost(RUNNING));
+  await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
+  core.services.stellaMachines.setStellaVm(fakeVmHost(RUNNING));
   try {
-    const agent = await core.createStellaAgent({
+    const agent = await core.services.stellaAgents.createStellaAgent({
       name: "Watcher",
       role: "Watches something.",
     });
-    const session = await core.getOrCreateStellaSession(agent.id);
+    const session = await core.internals.getOrCreateStellaSession(agent.id);
     faux.setResponses([fauxAssistantMessage("checked")]);
     const routine = core.routines.getRoutineRepo().create({
       agentId: agent.id,
@@ -2330,11 +2564,11 @@ test("stella routines: a run after a restart still has its skill catalog", async
 
     // What a restart looks like from here: the machine is attached again and
     // the cached catalogs are gone, while the conversation stays as it was.
-    core.setStellaVm(fakeVmHost(RUNNING));
+    core.services.stellaMachines.setStellaVm(fakeVmHost(RUNNING));
     faux.setResponses([fauxAssistantMessage("checked again")]);
     await core.routines.runNow(routine.id);
 
-    const catalogs = core
+    const catalogs = core.services.sessions
       .readTranscript(session.id, {})!
       .items.filter(
         (message): message is Extract<AgentMessage, { role: "context" }> =>
@@ -2363,51 +2597,66 @@ function recordingVm(stopped: string[]): VmHost {
 test("stella disabled: switching an agent off releases what it held", async () => {
   const stopped: string[] = [];
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting(
-    [faux.provider],
-    () => ({}),
-    recordingRunner(),
-  );
+  const core = forTestingCore([faux.provider], () => ({}), recordingRunner());
   try {
     core.models.models.setProvider(faux.provider);
-    await core.setProviderApiKey(faux.provider.id, "faux-key");
+    await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
     // The machine is the same stub, with the stop recorded: what a disable
     // does to the slot is the fact under test.
-    core.setStellaVm(recordingVm(stopped));
+    core.services.stellaMachines.setStellaVm(recordingVm(stopped));
 
-    const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
-    const session = await core.getOrCreateStellaSession(agent.id);
-    assert(core.getAgent(session.id) !== undefined);
+    const agent = await core.services.stellaAgents.createStellaAgent({
+      name: "Aide",
+      role: "r",
+    });
+    const session = await core.internals.getOrCreateStellaSession(agent.id);
+    assert(core.services.sessions.getAgent(session.id) !== undefined);
     // The screen pane asks for the port; that is what claims a desktop slot.
-    assertEquals(await core.stellaVncPort(agent.id), RUNNING.vncPort);
+    assertEquals(
+      await core.services.stellaMachines.stellaVncPort(agent.id),
+      RUNNING.vncPort,
+    );
 
     // One turn, so the store has something the disabled view must still
     // serve.
     faux.setResponses([fauxAssistantMessage("Noted.")]);
     await promptSession(core, session.id, "The code word is pelican.");
 
-    const updated = await core.updateStellaAgent(agent.id, { enabled: false });
+    const updated = await core.services.stellaAgents.updateStellaAgent(
+      agent.id,
+      { enabled: false },
+    );
     assertEquals(updated.disabledAt !== null, true);
     // The conversation is closed (a run in flight would have been aborted),
     // and its desktop slot went back.
-    assertEquals(core.getAgent(session.id), undefined);
+    assertEquals(core.services.sessions.getAgent(session.id), undefined);
     assertEquals(stopped, [agent.id]);
 
     // Nothing may build it again: not the open endpoint, not a session open
     // (which is how a rewind and a routine reach it), and no setup turn.
     await assertRejects(
-      () => core.getOrCreateStellaSession(agent.id),
+      () => core.internals.getOrCreateStellaSession(agent.id),
       CoreError,
       "disabled",
     );
-    assertThrows(() => core.openSession(session.id), CoreError, "disabled");
-    assertEquals(core.startStellaOnboarding(agent.id), false);
+    assertThrows(
+      () => core.services.sessions.openSession(session.id),
+      CoreError,
+      "disabled",
+    );
+    assertEquals(core.services.stellaAgents.startOnboarding(agent.id), false);
     // Its screen is not offered either: asking would start the desktop this
     // state exists to release.
-    assertEquals(await core.stellaVncPort(agent.id), null);
+    assertEquals(
+      await core.services.stellaMachines.stellaVncPort(agent.id),
+      null,
+    );
 
     // Its history is still there to read, straight from the store.
-    const page = core.readStellaConversationFromStore(session.id, {});
+    const page = core.services.sessions.readStellaConversationFromStore(
+      session.id,
+      {},
+    );
     assert(
       page.items.some((entry) => entry.text.includes("pelican")),
       JSON.stringify(page.items),
@@ -2418,13 +2667,16 @@ test("stella disabled: switching an agent off releases what it held", async () =
     );
 
     // Switching it back on does not open it eagerly; the next open does.
-    const enabled = await core.updateStellaAgent(agent.id, { enabled: true });
+    const enabled = await core.services.stellaAgents.updateStellaAgent(
+      agent.id,
+      { enabled: true },
+    );
     assertEquals(enabled.disabledAt, null);
     assertEquals(
-      (await core.getOrCreateStellaSession(agent.id)).id,
+      (await core.internals.getOrCreateStellaSession(agent.id)).id,
       session.id,
     );
-    assert(core.getAgent(session.id) !== undefined);
+    assert(core.services.sessions.getAgent(session.id) !== undefined);
   } finally {
     await core.close();
   }

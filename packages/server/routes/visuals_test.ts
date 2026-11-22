@@ -5,6 +5,7 @@ import {
   LumiscaCore as Core,
   fauxProvider,
   type LumiscaCore,
+  openCore,
   VISUALS_DIR_NAME,
 } from "@lumisca/core";
 import {
@@ -44,7 +45,7 @@ async function withApp(
   const dir = await makeRealTempDir("lumisca-visuals-route-");
   const workspaceDir = join(dir, "repo");
   await fsp.mkdir(workspaceDir, { recursive: true });
-  const core = Core.open(join(dir, "lumisca.db"), join(dir, "settings.jsonc"));
+  const core = openCore(join(dir, "lumisca.db"), join(dir, "settings.jsonc"));
   try {
     const faux = fauxProvider();
     core.models.models.setProvider(faux.provider);
@@ -53,7 +54,7 @@ async function withApp(
     ]);
     // Explicit model: the default-model resolution would refuse `faux`
     // (nothing is configured in this core's settings).
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: workspace.id,
       modelProvider: faux.provider.id,
       modelId: faux.getModel().id,

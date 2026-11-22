@@ -4,7 +4,8 @@ import {
   createComputerHost,
   createVmHost,
   HttpBrowserBackend,
-  LumiscaCore,
+  type LumiscaCore,
+  openCore,
   refreshCatalogInBackground,
   resolveSettingsPath,
   vacuumOnStartup,
@@ -162,7 +163,7 @@ export async function main(): Promise<void> {
       );
       return;
     }
-    core.setBrowserBackend(new HttpBrowserBackend({ url, token }));
+    core.capabilities.setBrowserBackend(new HttpBrowserBackend({ url, token }));
   }
 
   /**
@@ -201,7 +202,7 @@ export async function main(): Promise<void> {
         }
       },
     );
-    core.setStellaVm(createVmHost({ containerDir }));
+    core.services.stellaMachines.setStellaVm(createVmHost({ containerDir }));
     console.log(`stella mode: コンテナ定義 ${containerDir}`);
   }
 
@@ -217,13 +218,15 @@ export async function main(): Promise<void> {
     // The probe stays available to the core so the settings toggle can ask
     // the machine again: this server may have started before the desktop
     // session did (see recheckComputerHost in core.ts).
-    core.setComputerHostProbe(probe);
+    core.capabilities.setComputerHostProbe(probe);
     const result = await probe();
-    core.setComputerHost(result);
+    core.capabilities.setComputerHost(result);
     if (result.available) {
       console.log(
         `Computer use: available (${result.host.describe()})` +
-          (core.isComputerUseEnabled() ? "" : " — disabled in settings"),
+          (core.capabilities.isComputerUseEnabled()
+            ? ""
+            : " — disabled in settings"),
       );
     } else {
       console.log(`Computer use: 利用不可 (${result.reason})`);
@@ -276,7 +279,7 @@ export async function main(): Promise<void> {
   // cannot afford. A failure is never fatal — start on what we have.
   await vacuumOnStartup(dbPath);
   try {
-    core = LumiscaCore.open(dbPath, settingsPath);
+    core = openCore(dbPath, settingsPath);
   } catch (error) {
     console.error(
       `Lumisca: データベースを開けませんでした (${dbPath}): ${errorMessage(

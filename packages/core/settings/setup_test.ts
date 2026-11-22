@@ -3,6 +3,7 @@ import * as fsSync from "node:fs";
 import * as fsp from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
 import { join, join as pathJoin } from "node:path";
+import { openCore, openInMemoryCore } from "@lumisca/core";
 import { assertEquals } from "@std/assert";
 import { LumiscaCore } from "../core.ts";
 import { removeDirRetry } from "../test-utils.ts";
@@ -80,7 +81,7 @@ test("deleting the marker asks for the setup again", async () => {
 test("a core without a settings file owes no setup", async () => {
   // An in-memory core is a test's or a scratch instance's: there is nowhere
   // for the marker to live, so there is no installation to guide.
-  const core = LumiscaCore.openInMemory();
+  const core = openInMemoryCore();
   try {
     assertEquals(core.settings.setup(), { completed: true });
     assertEquals(core.settings.completeSetup(), { completed: true });
@@ -91,10 +92,7 @@ test("a core without a settings file owes no setup", async () => {
 
 test("core: the marker is read per call, not fixed at startup", async () => {
   const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-setup-"));
-  const core = LumiscaCore.open(
-    join(dir, "lumisca.db"),
-    join(dir, "settings.jsonc"),
-  );
+  const core = openCore(join(dir, "lumisca.db"), join(dir, "settings.jsonc"));
   try {
     const marker = setupMarkerPath(dir);
     assertEquals(core.settings.setup(), { completed: false });

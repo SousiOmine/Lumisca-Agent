@@ -6,6 +6,7 @@ import {
   fauxProvider,
   fauxText,
   fauxToolCall,
+  forTestingCore,
   type StreamRequest,
 } from "@lumisca/core";
 import { assertEquals, assertRejects } from "@std/assert";
@@ -66,7 +67,7 @@ function setupFastTitle() {
       { id: "fast", input: ["text"] },
     ],
   });
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   core.settings.set(
     FAST_MODEL_KEY,
     serializeModelPreference({
@@ -87,7 +88,7 @@ function setupImageAnalysis() {
       { id: "vision", input: ["text", "image"] },
     ],
   });
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   core.settings.set(
     IMAGE_MODEL_KEY,
     serializeModelPreference({
@@ -105,9 +106,9 @@ test("session without model picks the last used model", async () => {
   const { ws } = await makeWorkspace(core);
   // Default-model resolution only considers providers configured inside
   // Lumisca; a stored key is what makes the faux provider one.
-  await core.setProviderApiKey(providerId, "faux-key");
+  await core.services.models.setProviderApiKey(providerId, "faux-key");
 
-  const first = await core.createSession({
+  const first = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -116,7 +117,9 @@ test("session without model picks the last used model", async () => {
   assertEquals(first.modelId, modelId);
 
   // Second session without explicit model: inherits the last used one.
-  const second = await core.createSession({ workspaceId: ws.id });
+  const second = await core.services.sessions.createSession({
+    workspaceId: ws.id,
+  });
   assertEquals(second.modelProvider, providerId);
   assertEquals(second.modelId, modelId);
 
@@ -126,10 +129,10 @@ test("session without model picks the last used model", async () => {
 test("getDefaultModel returns the last used model or a fallback", async () => {
   const { core, faux: _faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
-  await core.setProviderApiKey(providerId, "faux-key");
+  await core.services.models.setProviderApiKey(providerId, "faux-key");
 
   // No sessions yet: the configured provider's first enabled model.
-  const initial = await core.getDefaultModel();
+  const initial = await core.services.sessions.getDefaultModel();
   assertEquals(initial?.provider, providerId);
   assertEquals(initial?.modelId, modelId);
   assertEquals(
@@ -138,12 +141,12 @@ test("getDefaultModel returns the last used model or a fallback", async () => {
   );
 
   // After a session: the last used model wins.
-  await core.createSession({
+  await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
   });
-  const last = await core.getDefaultModel();
+  const last = await core.services.sessions.getDefaultModel();
   assertEquals(last, {
     provider: providerId,
     modelId,
@@ -157,17 +160,19 @@ test("getDefaultModel returns the last used model or a fallback", async () => {
 test("session without model falls back to a configured provider", async () => {
   const { core, faux } = setup();
   const { ws } = await makeWorkspace(core);
-  await core.setProviderApiKey(faux.provider.id, "faux-key");
+  await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
 
   // With no prior sessions, the configured provider's first enabled model
   // is used: the built-in catalog entries registered before the faux
   // provider carry no credentials and are skipped.
-  const session = await core.createSession({ workspaceId: ws.id });
+  const session = await core.services.sessions.createSession({
+    workspaceId: ws.id,
+  });
   assertEquals(session.modelProvider, faux.provider.id);
   assertEquals(session.modelId, faux.getModel().id);
 
   // The faux provider is still usable when selected explicitly.
-  const explicit = await core.createSession({
+  const explicit = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: faux.provider.id,
     modelId: faux.getModel().id,
@@ -185,19 +190,20 @@ test("no configured provider: no default model and no session", async () => {
   // just from the catalog, but none of them is configured: there is
   // nothing to default to, so the draft stays without a model instead of
   // auto-selecting an entry that could not stream.
-  assertEquals(await core.getDefaultModel(), null);
+  assertEquals(await core.services.sessions.getDefaultModel(), null);
 
   // Creating a session without a model fails instead of guessing; the
   // route surfaces it as 503 ("unavailable").
   const error = await assertRejects(
-    async () => await core.createSession({ workspaceId: ws.id }),
+    async () =>
+      await core.services.sessions.createSession({ workspaceId: ws.id }),
     CoreError,
   );
   assertEquals(error.kind, "unavailable");
 
   // An explicit model is still accepted: API callers may create the
   // session first and configure the provider afterwards.
-  const explicit = await core.createSession({
+  const explicit = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: "openai",
     modelId: core.services.models.listModels("openai")[0]!.id,
@@ -234,12 +240,12 @@ test("hasConfiguredAuth ignores ambient env keys of built-in providers", async (
 
     // Storing the key inside Lumisca marks it configured; removing the
     // stored credential un-configures it again.
-    await core.setProviderApiKey("anthropic", "sk-stored");
+    await core.services.models.setProviderApiKey("anthropic", "sk-stored");
     assertEquals(
       await core.services.models.hasConfiguredAuth("anthropic"),
       true,
     );
-    await core.logoutProvider("anthropic");
+    await core.services.models.logoutProvider("anthropic");
     assertEquals(
       await core.services.models.hasConfiguredAuth("anthropic"),
       false,
@@ -251,14 +257,18 @@ test("hasConfiguredAuth ignores ambient env keys of built-in providers", async (
 
 test("thinking level reaches the provider stream options", async () => {
   const faux = fauxProvider({ models: [{ id: "thinky", reasoning: true }] });
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   const { ws } = await makeWorkspace(core);
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: faux.provider.id,
     modelId: faux.getModel().id,
   });
-  core.setModelThinkingLevel(faux.provider.id, faux.getModel().id, "high");
+  core.services.models.setModelThinkingLevel(
+    faux.provider.id,
+    faux.getModel().id,
+    "high",
+  );
 
   let receivedReasoning: unknown;
   faux.setResponses([
@@ -271,7 +281,11 @@ test("thinking level reaches the provider stream options", async () => {
   assertEquals(receivedReasoning, "high");
 
   // A second run picks up a level change without rebuilding the agent.
-  core.setModelThinkingLevel(faux.provider.id, faux.getModel().id, "off");
+  core.services.models.setModelThinkingLevel(
+    faux.provider.id,
+    faux.getModel().id,
+    "off",
+  );
   receivedReasoning = undefined;
   faux.setResponses([
     (_context, options) => {
@@ -289,7 +303,7 @@ test("text-only model: user images are analyzed and passed as text", async () =>
   const { core, faux, providerId } = setupImageAnalysis();
   const { ws } = await makeWorkspace(core);
 
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId: "text-only",
@@ -340,7 +354,7 @@ test("text-only model: user images are analyzed and passed as text", async () =>
     true,
   );
   // The transcript (what the UI shows and the DB stores) keeps the image.
-  const userMessage = core
+  const userMessage = core.services.sessions
     .getAgent(session.id)!
     .messages.find((m) => m.role === "user")!;
   const userContent = (userMessage as { content: Array<{ type: string }> })
@@ -357,7 +371,7 @@ test("text-only model: read tool images are analyzed and passed as text", async 
   const { ws, root } = await makeWorkspace(core);
   await fsp.writeFile(join(root, "pic.png"), MINI_PNG);
 
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId: "text-only",
@@ -419,7 +433,7 @@ test("fast model: first prompt auto-generates the session title", async () => {
   // The provisional name follows the app language, so the test pins it
   // instead of depending on the machine's locale.
   core.settings.set(LANGUAGE_KEY, "ja");
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId: "main",
@@ -456,7 +470,10 @@ test("fast model: first prompt auto-generates the session title", async () => {
   // The main run went to the session model.
   assertEquals(captured[1]!.model, "main");
   // The provisional name was replaced by the generated title.
-  assertEquals(core.getSession(session.id)!.name, "Fix login bug");
+  assertEquals(
+    core.services.sessions.getSession(session.id)!.name,
+    "Fix login bug",
+  );
 
   core.close();
 });
@@ -467,7 +484,7 @@ test("no fast model: session keeps its provisional name", async () => {
 
   // Pinned: the provisional name is the localized "Session <date>".
   core.settings.set(LANGUAGE_KEY, "ja");
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId: faux.getModel().id,
@@ -476,7 +493,10 @@ test("no fast model: session keeps its provisional name", async () => {
   faux.setResponses([fauxAssistantMessage("ok")]);
   await promptSession(core, session.id, "hello");
 
-  assertEquals(core.getSession(session.id)!.name, session.name);
+  assertEquals(
+    core.services.sessions.getSession(session.id)!.name,
+    session.name,
+  );
   assertEquals(session.name.startsWith("セッション"), true);
 
   core.close();
@@ -485,15 +505,18 @@ test("no fast model: session keeps its provisional name", async () => {
 test("getDefaultModel prefers the user's default over the last used model", async () => {
   const { core, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
-  await core.setProviderApiKey(providerId, "faux-key");
+  await core.services.models.setProviderApiKey(providerId, "faux-key");
   // A session on the provider's model, so "last used" has an answer.
-  await core.createSession({
+  await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
   });
   // Without the setting, the last used model wins.
-  assertEquals((await core.getDefaultModel())?.modelId, modelId);
+  assertEquals(
+    (await core.services.sessions.getDefaultModel())?.modelId,
+    modelId,
+  );
 
   // With it, the default wins over the last used model. The fixture has one
   // model, so the two answers agree on its id; what this pins is that the
@@ -503,7 +526,10 @@ test("getDefaultModel prefers the user's default over the last used model", asyn
     DEFAULT_MODEL_KEY,
     JSON.stringify({ provider: providerId, modelId }),
   );
-  assertEquals((await core.getDefaultModel())?.modelId, modelId);
+  assertEquals(
+    (await core.services.sessions.getDefaultModel())?.modelId,
+    modelId,
+  );
   // And with a different model named, that one answers — the fixture cannot
   // supply a second one, so the fallthrough is what is checked instead: a
   // default naming a model this installation does not have is ignored rather
@@ -512,7 +538,10 @@ test("getDefaultModel prefers the user's default over the last used model", asyn
     DEFAULT_MODEL_KEY,
     JSON.stringify({ provider: providerId, modelId: "not-a-model" }),
   );
-  assertEquals((await core.getDefaultModel())?.modelId, modelId);
+  assertEquals(
+    (await core.services.sessions.getDefaultModel())?.modelId,
+    modelId,
+  );
 });
 
 test("getDefaultModel skips a default this installation cannot reach", async () => {
@@ -521,10 +550,13 @@ test("getDefaultModel skips a default this installation cannot reach", async () 
   // what it would have answered without the setting.
   const { core, providerId, modelId } = setup();
   const { ws: _ws } = await makeWorkspace(core);
-  await core.setProviderApiKey(providerId, "faux-key");
+  await core.services.models.setProviderApiKey(providerId, "faux-key");
   core.settings.set(
     DEFAULT_MODEL_KEY,
     JSON.stringify({ provider: "gone", modelId: "gone-model" }),
   );
-  assertEquals((await core.getDefaultModel())?.modelId, modelId);
+  assertEquals(
+    (await core.services.sessions.getDefaultModel())?.modelId,
+    modelId,
+  );
 });

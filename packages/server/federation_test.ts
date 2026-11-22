@@ -1,5 +1,10 @@
 import { test } from "bun:test";
-import { type ConnectionEntry, fauxProvider, LumiscaCore } from "@lumisca/core";
+import {
+  type ConnectionEntry,
+  fauxProvider,
+  forTestingCore,
+  LumiscaCore,
+} from "@lumisca/core";
 import { assert, assertEquals } from "@std/assert";
 import { startServer } from "./app.ts";
 import { FederationClient, proxyTimeoutFor } from "./federation.ts";
@@ -361,7 +366,7 @@ test("the fed proxy keeps the headers only the peer can set", async () => {
     },
   });
   const peerUrl = `http://127.0.0.1:${peerServer.port}`;
-  const core = LumiscaCore.forTesting([fauxProvider().provider]);
+  const core = forTestingCore([fauxProvider().provider]);
   core.settings.setConnections([
     { id: "p1", name: "p1", url: peerUrl, token: "t" },
   ]);

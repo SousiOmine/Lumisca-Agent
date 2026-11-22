@@ -1,3 +1,4 @@
+import { forTestingCore } from "@lumisca/core";
 /**
  * Manual demo server: a Lumisca server whose agent runs on the faux
  * provider, so the web UI can be exercised (markdown rendering, tool
@@ -186,12 +187,12 @@ function respond(context: StreamRequest): AssistantMessage {
 }
 
 const faux = fauxProvider();
-const core = LumiscaCore.forTesting([faux.provider]);
+const core = forTestingCore([faux.provider]);
 // The stella machine is attached so the mode's UI can be exercised too; it
 // is NOT started here (building the image takes minutes). Without a running
 // machine, stella mode reports itself unavailable and the selection screen
 // says so — which is itself worth seeing in the demo.
-core.setStellaVm(
+core.services.stellaMachines.setStellaVm(
   createVmHost({
     containerDir: new URL("../packages/core/vm/container/", import.meta.url)
       .pathname,
@@ -211,15 +212,15 @@ arm();
 
 // A key for the faux provider, so a stella conversation can be created too
 // (creating any session resolves a default model, which requires one).
-await core.setProviderApiKey(faux.provider.id, "faux-key");
+await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
 // A starter agent, so the stella screen has someone to talk to in the demo.
-await core.createStellaAgent({
+await core.services.stellaAgents.createStellaAgent({
   name: "Aide",
   role: "A general helper for this machine.",
 });
 
 const ws = await core.services.workspaces.create("E2E Demo", [repoRoot]);
-core.createSession({
+core.services.sessions.createSession({
   workspaceId: ws.id,
   name: "e2e-session",
   modelProvider: faux.provider.id,

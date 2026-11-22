@@ -3,7 +3,7 @@ import * as fsSync from "node:fs";
 import * as fsp from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
 import { join, join as pathJoin } from "node:path";
-import { LumiscaCore } from "@lumisca/core";
+import { LumiscaCore, openCore } from "@lumisca/core";
 import { removeDirRetry } from "@lumisca/core/test-utils";
 import { assertEquals } from "@std/assert";
 import { startServer } from "./app.ts";
@@ -18,10 +18,7 @@ async function initialDataOf(base: string): Promise<string> {
 
 test("setup API: a new installation owes the setup until it is finished", async () => {
   const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-setup-"));
-  const core = LumiscaCore.open(
-    join(dir, "lumisca.db"),
-    join(dir, "settings.jsonc"),
-  );
+  const core = openCore(join(dir, "lumisca.db"), join(dir, "settings.jsonc"));
   const server = startServer(core, 0);
   const base = `http://127.0.0.1:${server.addr.port}`;
   const marker = join(dir, "setup-complete");
@@ -64,10 +61,7 @@ test("setup API: a new installation owes the setup until it is finished", async 
 
 test("setup API: deleting the marker asks for the setup again, with no restart", async () => {
   const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-setup-"));
-  const core = LumiscaCore.open(
-    join(dir, "lumisca.db"),
-    join(dir, "settings.jsonc"),
-  );
+  const core = openCore(join(dir, "lumisca.db"), join(dir, "settings.jsonc"));
   const server = startServer(core, 0);
   const base = `http://127.0.0.1:${server.addr.port}`;
   const marker = join(dir, "setup-complete");

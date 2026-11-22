@@ -301,7 +301,7 @@ test("an agent's read reaches the folder through the whole chain", async () => {
   try {
     await fsp.writeFile(join(lent, "notes.md"), "lent notes\n");
     const ws = await core.services.workspaces.create("ws", [workspace]);
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: faux.provider.id,
       modelId: faux.getModel().id,
@@ -330,7 +330,7 @@ test("an agent's read reaches the folder through the whole chain", async () => {
     ]);
     await promptSession(core, session.id, "read the notes the user lent");
 
-    const messages = core.getAgent(session.id)!.messages;
+    const messages = core.services.sessions.getAgent(session.id)!.messages;
     const published = messages.find(
       (message) => message.role === "context" && message.provider === "shares",
     );
@@ -357,7 +357,7 @@ test("an agent's read reaches the folder through the whole chain", async () => {
     );
     faux.setResponses([fauxAssistantMessage("Understood.")]);
     await promptSession(core, session.id, "and now?");
-    const ended = core
+    const ended = core.services.sessions
       .getAgent(session.id)!
       .messages.filter(
         (message) =>

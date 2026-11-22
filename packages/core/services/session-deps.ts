@@ -34,6 +34,9 @@ export interface SessionServiceDeps {
     ): { thinkingLevel: ThinkingLevel; thinkingLevels: ThinkingLevel[] };
     getThinkingLevel(provider: string, modelId: string): ThinkingLevel;
   };
+  /** Whether a stella agent is switched off. Opening its conversation
+   * would rebuild what switching it off released, so it is refused. */
+  agentDisabled(agentId: string): boolean;
   /** The agent's model, allowing a retired one (see
    * ModelManager.getModelWithRetired). */
   requireModel(provider: string, modelId: string): Model<Api>;

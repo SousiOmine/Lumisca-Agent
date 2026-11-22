@@ -9,6 +9,8 @@ import {
   fauxProvider,
   fauxText,
   fauxToolCall,
+  forTestingCore,
+  openCore,
 } from "@lumisca/core";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { DATE_PROVIDER } from "./agent/date-context.ts";
@@ -23,7 +25,7 @@ import type {
   RawCapture,
   Rect,
 } from "./mod.ts";
-import { LumiscaCore, LumiscaDb, VISUALS_DIR_NAME } from "./mod.ts";
+import { type LumiscaCore, LumiscaDb, VISUALS_DIR_NAME } from "./mod.ts";
 import { LANGUAGE_KEY, TOOL_SEARCH, TOOL_SKILL } from "./shared/mod.ts";
 import {
   MINI_PNG,
@@ -119,16 +121,13 @@ function visualDir(dbDir: string, sessionId: string): string {
 async function openFileBackedCore(
   dir: string,
 ): Promise<{ core: LumiscaCore; workspaceId: string; sessionId: string }> {
-  const core = LumiscaCore.open(
-    join(dir, "lumisca.db"),
-    join(dir, "settings.jsonc"),
-  );
+  const core = openCore(join(dir, "lumisca.db"), join(dir, "settings.jsonc"));
   const faux = fauxProvider();
   core.models.models.setProvider(faux.provider);
   const workspaceDir = join(dir, "repo");
   await fsp.mkdir(workspaceDir, { recursive: true });
   const ws = await core.services.workspaces.create("ws", [workspaceDir]);
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: faux.provider.id,
     modelId: faux.getModel().id,
@@ -188,7 +187,7 @@ test("session prompt persists messages and restores them", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     name: "test",
     modelProvider: providerId,
@@ -198,7 +197,7 @@ test("session prompt persists messages and restores them", async () => {
   faux.setResponses([fauxAssistantMessage("Hello from faux!")]);
   await promptSession(core, session.id, "Hi");
 
-  const agent = core.getAgent(session.id);
+  const agent = core.services.sessions.getAgent(session.id);
   assertEquals(agent !== undefined, true);
   // The conversation is the exchange; the date and the on-demand-tools
   // note are publications that precede it (see conversationMessages).
@@ -213,10 +212,12 @@ test("session prompt persists messages and restores them", async () => {
   );
 
   // Close and reopen — history must be restored from the database.
-  core.closeSession(session.id);
-  const reopened = await core.openSession(session.id);
+  core.services.sessions.closeSession(session.id);
+  const reopened = await core.services.sessions.openSession(session.id);
   assertEquals(reopened.id, session.id);
-  const restored = conversationMessages(core.getAgent(session.id)!);
+  const restored = conversationMessages(
+    core.services.sessions.getAgent(session.id)!,
+  );
   assertEquals(restored.length, 2);
   assertEquals(restored[1]!.role, "assistant");
 
@@ -230,7 +231,7 @@ test("session revisions count the events a session emitted", async () => {
   // frame.
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelId,
     modelProvider: providerId,
@@ -261,7 +262,7 @@ test("session revisions count the events a session emitted", async () => {
 
     // Closing drops the count with the session's in-memory state: a client
     // still holding the old value sees a difference and re-reads.
-    await core.closeSession(session.id);
+    await core.services.sessions.closeSession(session.id);
     assertEquals(core.getSessionRevision(session.id), 0);
   } finally {
     core.close();
@@ -272,22 +273,22 @@ test("sessions are listed and deleted", async () => {
   const { core, faux: _faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
-  const s1 = await core.createSession({
+  const s1 = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
   });
-  const s2 = await core.createSession({
+  const s2 = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
   });
 
-  assertEquals(core.listSessions(ws.id).length, 2);
-  core.deleteSession(s1.id);
-  assertEquals(core.listSessions(ws.id).length, 1);
-  assertEquals(core.getSession(s2.id) !== undefined, true);
-  assertEquals(core.getSession(s1.id), undefined);
+  assertEquals(core.services.sessions.listSessions(ws.id).length, 2);
+  core.services.sessions.deleteSession(s1.id);
+  assertEquals(core.services.sessions.listSessions(ws.id).length, 1);
+  assertEquals(core.services.sessions.getSession(s2.id) !== undefined, true);
+  assertEquals(core.services.sessions.getSession(s1.id), undefined);
 
   core.close();
 });
@@ -327,7 +328,7 @@ test("startPrompt steers a prompt sent while streaming", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -342,11 +343,11 @@ test("startPrompt steers a prompt sent while streaming", async () => {
     },
     fauxAssistantMessage("follow-up reply"),
   ]);
-  core.startPrompt(session.id, "go");
-  core.startPrompt(session.id, "again");
+  core.services.sessions.startPrompt(session.id, "go");
+  core.services.sessions.startPrompt(session.id, "again");
 
-  await core.getAgent(session.id)!.waitForIdle();
-  const agent = core.getAgent(session.id)!;
+  await core.services.sessions.getAgent(session.id)!.waitForIdle();
+  const agent = core.services.sessions.getAgent(session.id)!;
   assertEquals(agent.isStreaming, false);
 
   const userTexts = agent.messages
@@ -355,9 +356,9 @@ test("startPrompt steers a prompt sent while streaming", async () => {
   assertEquals(userTexts, ["go", "again"]);
 
   // Close and reopen: the steered message is persisted exactly once.
-  core.closeSession(session.id);
-  core.openSession(session.id);
-  const restored = core.getAgent(session.id)!.messages;
+  core.services.sessions.closeSession(session.id);
+  core.services.sessions.openSession(session.id);
+  const restored = core.services.sessions.getAgent(session.id)!.messages;
   const restoredUserTexts = restored
     .filter((m) => m.role === "user")
     .map((m) => (m.content[0] as { text: string }).text);
@@ -370,7 +371,7 @@ test("rewind deletes a user message and everything after it", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -383,14 +384,14 @@ test("rewind deletes a user message and everything after it", async () => {
   await promptSession(core, session.id, "one");
   await promptSession(core, session.id, "two");
 
-  const agent = core.getAgent(session.id)!;
+  const agent = core.services.sessions.getAgent(session.id)!;
   assertEquals(conversationMessages(agent).length, 4);
 
   // Rewind the first user message: later turns are removed too. The
   // context publications that went in before it are not part of a turn,
   // so they stay in the transcript.
   const firstUser = agent.messages.find((m) => m.role === "user")!;
-  await core.rewind(session.id, firstUser.timestamp);
+  await core.services.sessions.rewind(session.id, firstUser.timestamp);
   assertEquals(conversationMessages(agent).length, 0);
   assert(
     agent.messages.every((m) => m.role === "context"),
@@ -400,9 +401,12 @@ test("rewind deletes a user message and everything after it", async () => {
   );
 
   // Close and reopen: the database was truncated as well.
-  core.closeSession(session.id);
-  core.openSession(session.id);
-  assertEquals(conversationMessages(core.getAgent(session.id)!).length, 0);
+  core.services.sessions.closeSession(session.id);
+  core.services.sessions.openSession(session.id);
+  assertEquals(
+    conversationMessages(core.services.sessions.getAgent(session.id)!).length,
+    0,
+  );
 
   core.close();
 });
@@ -411,7 +415,7 @@ test("rewind deletes a mode message (slash-command prompt) and everything after 
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -420,15 +424,20 @@ test("rewind deletes a mode message (slash-command prompt) and everything after 
   faux.setResponses([fauxAssistantMessage("plan reply")]);
   // The web path (startPrompt) with mode metadata: the transcript stores a
   // ModeMessage (role "mode") instead of a plain user message.
-  core.startPrompt(session.id, "あなたは実装プランナーです。...", undefined, {
-    modeId: "plan",
-    optionId: "",
-    modeLabel: "プランモード",
-    shortText: "履歴機能を追加して",
-  });
-  await core.getAgent(session.id)!.waitForIdle();
+  core.services.sessions.startPrompt(
+    session.id,
+    "あなたは実装プランナーです。...",
+    undefined,
+    {
+      modeId: "plan",
+      optionId: "",
+      modeLabel: "プランモード",
+      shortText: "履歴機能を追加して",
+    },
+  );
+  await core.services.sessions.getAgent(session.id)!.waitForIdle();
 
-  const agent = core.getAgent(session.id)!;
+  const agent = core.services.sessions.getAgent(session.id)!;
   const modeMessage = agent.messages.find((m) => m.role === "mode");
   assertEquals(modeMessage !== undefined, true);
   assertEquals(conversationMessages(agent).length, 2);
@@ -436,13 +445,16 @@ test("rewind deletes a mode message (slash-command prompt) and everything after 
   // Rewind the mode message: the whole turn goes away (the UI's rewind
   // action on a mode message targets it like a user message). The context
   // publications that preceded it stay — they belong to no turn.
-  await core.rewind(session.id, modeMessage!.timestamp);
+  await core.services.sessions.rewind(session.id, modeMessage!.timestamp);
   assertEquals(conversationMessages(agent).length, 0);
 
   // Close and reopen: the database was truncated as well.
-  core.closeSession(session.id);
-  core.openSession(session.id);
-  assertEquals(conversationMessages(core.getAgent(session.id)!).length, 0);
+  core.services.sessions.closeSession(session.id);
+  core.services.sessions.openSession(session.id);
+  assertEquals(
+    conversationMessages(core.services.sessions.getAgent(session.id)!).length,
+    0,
+  );
 
   core.close();
 });
@@ -451,7 +463,7 @@ test("rewind mid-history keeps earlier turns and persists without duplicates", a
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -475,9 +487,9 @@ test("rewind mid-history keeps earlier turns and persists without duplicates", a
     }
   });
 
-  const agent = core.getAgent(session.id)!;
+  const agent = core.services.sessions.getAgent(session.id)!;
   const secondUser = agent.messages.filter((m) => m.role === "user")[1]!;
-  await core.rewind(session.id, secondUser.timestamp);
+  await core.services.sessions.rewind(session.id, secondUser.timestamp);
 
   // Only the first turn remains; the truncation event was emitted.
   const texts = textsOf(agent.messages);
@@ -491,9 +503,11 @@ test("rewind mid-history keeps earlier turns and persists without duplicates", a
   // deleted turn coming back.
   faux.setResponses([fauxAssistantMessage("redo reply")]);
   await promptSession(core, session.id, "one (fixed)");
-  core.closeSession(session.id);
-  core.openSession(session.id);
-  const restored = conversationMessages(core.getAgent(session.id)!);
+  core.services.sessions.closeSession(session.id);
+  core.services.sessions.openSession(session.id);
+  const restored = conversationMessages(
+    core.services.sessions.getAgent(session.id)!,
+  );
   assertEquals(restored.length, 4);
   assertEquals(textsOf(restored), [
     "one",
@@ -509,7 +523,7 @@ test("rewind while running aborts the run and truncates cleanly", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -528,17 +542,17 @@ test("rewind while running aborts the run and truncates cleanly", async () => {
       userTimestamps.push(event.message.timestamp);
     }
   });
-  core.startPrompt(session.id, "go");
+  core.services.sessions.startPrompt(session.id, "go");
   assertEquals(userTimestamps.length, 1);
 
   // Wait until the run has actually started streaming (the synthetic
   // announcement is synchronous; the run starts a microtask later).
-  const agent = core.getAgent(session.id)!;
+  const agent = core.services.sessions.getAgent(session.id)!;
   while (!agent.isStreaming) {
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
 
-  await core.rewind(session.id, userTimestamps[0]!);
+  await core.services.sessions.rewind(session.id, userTimestamps[0]!);
   assertEquals(agent.isStreaming, false);
   // The aborted run's failure message is removed with the rewound turn.
   // Only the context publications that preceded it (date, on-demand tools)
@@ -551,9 +565,12 @@ test("rewind while running aborts the run and truncates cleanly", async () => {
       .join(",")}`,
   );
 
-  core.closeSession(session.id);
-  core.openSession(session.id);
-  assertEquals(conversationMessages(core.getAgent(session.id)!).length, 0);
+  core.services.sessions.closeSession(session.id);
+  core.services.sessions.openSession(session.id);
+  assertEquals(
+    conversationMessages(core.services.sessions.getAgent(session.id)!).length,
+    0,
+  );
 
   core.close();
 });
@@ -562,7 +579,7 @@ test("rewind of a queued steer drops it without resurrecting it", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -586,8 +603,8 @@ test("rewind of a queued steer drops it without resurrecting it", async () => {
       truncations.push(event.removed);
     }
   });
-  core.startPrompt(session.id, "go");
-  const agent = core.getAgent(session.id)!;
+  core.services.sessions.startPrompt(session.id, "go");
+  const agent = core.services.sessions.getAgent(session.id)!;
   while (!agent.isStreaming) {
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
@@ -596,10 +613,10 @@ test("rewind of a queued steer drops it without resurrecting it", async () => {
   await new Promise((resolve) => setTimeout(resolve, 10));
   // Sent while streaming: announced to clients, queued in the agent. The
   // last announced user message is the queued steer.
-  core.startPrompt(session.id, "fix");
+  core.services.sessions.startPrompt(session.id, "fix");
   const fixTimestamp = userTimestamps.at(-1)!;
 
-  await core.rewind(session.id, fixTimestamp);
+  await core.services.sessions.rewind(session.id, fixTimestamp);
   // The run was aborted: only the first user message remains (the failure
   // message and the queued steer are gone).
   assertEquals(textsOf(agent.messages), ["go"]);
@@ -616,9 +633,9 @@ test("rewind of a queued steer drops it without resurrecting it", async () => {
   // A later prompt must not resurrect the queued "fix".
   faux.setResponses([fauxAssistantMessage("redo reply")]);
   await promptSession(core, session.id, "fresh");
-  core.closeSession(session.id);
-  core.openSession(session.id);
-  const restored = core.getAgent(session.id)!.messages;
+  core.services.sessions.closeSession(session.id);
+  core.services.sessions.openSession(session.id);
+  const restored = core.services.sessions.getAgent(session.id)!.messages;
   assertEquals(textsOf(restored), ["go", "fresh", "redo reply"]);
 
   core.close();
@@ -628,7 +645,7 @@ test("rewind with an unknown timestamp throws not_found", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -638,7 +655,7 @@ test("rewind with an unknown timestamp throws not_found", async () => {
   await promptSession(core, session.id, "hello");
 
   await assertRejects(
-    () => core.rewind(session.id, 1),
+    () => core.services.sessions.rewind(session.id, 1),
     Error,
     "User message not found",
   );
@@ -649,12 +666,9 @@ test("rewind with an unknown timestamp throws not_found", async () => {
 test("credentials are guarded on every settings surface", async () => {
   // File-backed settings so "nothing was stored" can be verified at rest.
   const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-settings-"));
-  const core = LumiscaCore.open(
-    join(dir, "test.db"),
-    join(dir, "settings.jsonc"),
-  );
+  const core = openCore(join(dir, "test.db"), join(dir, "settings.jsonc"));
   try {
-    await core.setProviderApiKey("anthropic", "sk-test");
+    await core.services.models.setProviderApiKey("anthropic", "sk-test");
 
     // Reading, writing, or deleting credentials through the generic settings
     // surface is refused (they have their own API).
@@ -794,7 +808,7 @@ test("session language: the setting reaches an open session, not a frozen prompt
     // prompt, because it can change while a session lives (see
     // agent/language-context.ts).
     core.settings.set(LANGUAGE_KEY, "en");
-    const english = await core.createSession({
+    const english = await core.services.sessions.createSession({
       modelProvider: providerId,
       modelId,
     });
@@ -811,7 +825,7 @@ test("session language: the setting reaches an open session, not a frozen prompt
     core.settings.set(LANGUAGE_KEY, "ja");
     faux.setResponses([fauxAssistantMessage("ok")]);
     await promptSession(core, english.id, "hello");
-    const contexts = core
+    const contexts = core.services.sessions
       .getAgent(english.id)!
       .messages.filter((message) => message.role === "context")
       .map((message) => message.body);
@@ -829,7 +843,7 @@ test("session_created event carries the decorated session (chat flag)", async ()
   const events: ClientEvent[] = [];
   const unsubscribe = core.subscribe((event) => events.push(event));
   try {
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       modelProvider: providerId,
       modelId,
     });
@@ -850,9 +864,9 @@ test("session_created event carries the decorated session (chat flag)", async ()
 
 test("thinking level change while streaming applies from the next run without error", async () => {
   const faux = fauxProvider({ models: [{ id: "thinky", reasoning: true }] });
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   const { ws } = await makeWorkspace(core);
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: faux.provider.id,
     modelId: faux.getModel().id,
@@ -866,18 +880,28 @@ test("thinking level change while streaming applies from the next run without er
       return fauxAssistantMessage("slow reply");
     },
   ]);
-  core.startPrompt(session.id, "go");
+  core.services.sessions.startPrompt(session.id, "go");
   // Changing while streaming must not throw: the new level is persisted
   // and the open agent picks it up in place, while the in-flight run keeps
   // the level it started with.
   assertEquals(
-    core.setModelThinkingLevel(faux.provider.id, faux.getModel().id, "high"),
+    core.services.models.setModelThinkingLevel(
+      faux.provider.id,
+      faux.getModel().id,
+      "high",
+    ),
     "high",
   );
-  assertEquals(core.getSession(session.id)!.thinkingLevel, "high");
-  assertEquals(core.getAgent(session.id)!.agent.state.thinkingLevel, "high");
+  assertEquals(
+    core.services.sessions.getSession(session.id)!.thinkingLevel,
+    "high",
+  );
+  assertEquals(
+    core.services.sessions.getAgent(session.id)!.agent.state.thinkingLevel,
+    "high",
+  );
 
-  await core.getAgent(session.id)!.waitForIdle();
+  await core.services.sessions.getAgent(session.id)!.waitForIdle();
   // The in-flight run started before the change, so it used the old level.
   assertEquals(firstReasoning, undefined);
 
@@ -912,36 +936,36 @@ test("model change while streaming is stored and applied as the run ends", async
   const faux = fauxProvider({
     models: [{ id: "faux" }, { id: "other" }],
   });
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   const { ws } = await makeWorkspace(core);
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: faux.provider.id,
     modelId: "faux",
   });
-  const running = core.getAgent(session.id)!;
+  const running = core.services.sessions.getAgent(session.id)!;
   faux.setResponses([
     async () => {
       await new Promise((resolve) => setTimeout(resolve, 200));
       return fauxAssistantMessage("slow reply");
     },
   ]);
-  core.startPrompt(session.id, "go");
+  core.services.sessions.startPrompt(session.id, "go");
 
   // No error, and the row already carries the choice...
-  core.setSessionModel(session.id, faux.provider.id, "other");
-  assertEquals(core.getSession(session.id)!.modelId, "other");
+  core.services.sessions.setSessionModel(session.id, faux.provider.id, "other");
+  assertEquals(core.services.sessions.getSession(session.id)!.modelId, "other");
   // ...while the agent the run belongs to is left alone.
-  assertEquals(core.getAgent(session.id), running);
+  assertEquals(core.services.sessions.getAgent(session.id), running);
 
   await running.waitForIdle();
   // The rebuild follows the end of the run (it is emitted from the run's own
   // teardown, so it happens just after).
   await waitUntil(
-    () => core.getAgent(session.id) !== running,
+    () => core.services.sessions.getAgent(session.id) !== running,
     "the agent to be rebuilt with the new model",
   );
-  assertEquals(core.getSession(session.id)!.modelId, "other");
+  assertEquals(core.services.sessions.getSession(session.id)!.modelId, "other");
   core.close();
 });
 
@@ -955,7 +979,7 @@ test("a run's transcript order is also its timestamp order", async () => {
   // message.
   const { core, faux, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -963,7 +987,7 @@ test("a run's transcript order is also its timestamp order", async () => {
 
   faux.setResponses([fauxAssistantMessage("ok")]);
   await promptSession(core, session.id, "first");
-  const agent = core.getAgent(session.id)!;
+  const agent = core.services.sessions.getAgent(session.id)!;
 
   const contexts = agent.messages.filter((m) => m.role === "context");
   assert(contexts.length > 1, "the run must publish several contexts");
@@ -1013,36 +1037,36 @@ test("a run's transcript order is also its timestamp order", async () => {
 test("computer use: enabling without a host reports the machine's reason", async () => {
   const { core, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
   });
-  core.setComputerHost({
+  core.capabilities.setComputerHost({
     available: false,
     reason: "computer use is not supported on this platform yet (test)",
   });
   try {
     await assertRejects(
-      () => core.setComputerUseEnabled(true),
+      () => core.capabilities.setComputerUseEnabled(true),
       Error,
       "not supported on this platform yet",
     );
     assertEquals(
-      core.isComputerUseEnabled(),
+      core.capabilities.isComputerUseEnabled(),
       false,
       "a refused enable stores nothing",
     );
     assertEquals(
-      core
+      core.services.sessions
         .getAgent(session.id)!
         .agent.state.tools.some((t) => t.name === TOOL_SEARCH),
       true,
       "the refusal must not disturb the session",
     );
     // Disabling is always accepted: it is the safe direction.
-    await core.setComputerUseEnabled(false);
-    assertEquals(core.isComputerUseEnabled(), false);
+    await core.capabilities.setComputerUseEnabled(false);
+    assertEquals(core.capabilities.isComputerUseEnabled(), false);
   } finally {
     core.close();
   }
@@ -1050,20 +1074,20 @@ test("computer use: enabling without a host reports the machine's reason", async
 
 test("computer use: a recheck that finds no host keeps the startup verdict", async () => {
   const { core } = setup();
-  core.setComputerHost({
+  core.capabilities.setComputerHost({
     available: false,
     reason: "no display when the server started (test)",
   });
-  core.setComputerHostProbe(() =>
+  core.capabilities.setComputerHostProbe(() =>
     Promise.resolve({ available: false, reason: "still no display (test)" }),
   );
   try {
     await assertRejects(
-      () => core.setComputerUseEnabled(true),
+      () => core.capabilities.setComputerUseEnabled(true),
       Error,
       "still no display",
     );
-    assertEquals(core.isComputerUseEnabled(), false);
+    assertEquals(core.capabilities.isComputerUseEnabled(), false);
   } finally {
     core.close();
   }
@@ -1073,17 +1097,17 @@ test("computer use: without a probe the startup verdict stands", async () => {
   // A core built without the server (tests, an embedding) has no way to ask
   // the machine: the startup verdict must not be silently overridden.
   const { core } = setup();
-  core.setComputerHost({
+  core.capabilities.setComputerHost({
     available: false,
     reason: "computer use is not available on this machine (test)",
   });
   try {
     await assertRejects(
-      () => core.setComputerUseEnabled(true),
+      () => core.capabilities.setComputerUseEnabled(true),
       Error,
       "not available on this machine",
     );
-    assertEquals(core.isComputerUseEnabled(), false);
+    assertEquals(core.capabilities.isComputerUseEnabled(), false);
   } finally {
     core.close();
   }
@@ -1097,14 +1121,14 @@ test("computer use: a recheck never replaces an attached host", async () => {
   const { core } = setup();
   const attached = new FakeComputerHost();
   const spare = new FakeComputerHost();
-  core.setComputerHost({ available: true, host: attached });
-  core.setComputerHostProbe(() =>
+  core.capabilities.setComputerHost({ available: true, host: attached });
+  core.capabilities.setComputerHostProbe(() =>
     Promise.resolve({ available: true, host: spare }),
   );
   try {
-    const verdict = await core.recheckComputerHost();
+    const verdict = await core.capabilities.recheckComputerHost();
     assertEquals(verdict.available, true);
-    assertEquals(core.getComputerHost(), attached);
+    assertEquals(core.capabilities.getComputerHost(), attached);
   } finally {
     core.close();
   }
@@ -1114,14 +1138,14 @@ test("computer use: toggling while a session streams reaches it without a rebuil
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
   const host = new FakeComputerHost();
-  core.setComputerHost({ available: true, host });
+  core.capabilities.setComputerHost({ available: true, host });
   try {
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
     });
-    const agent = core.getAgent(session.id)!;
+    const agent = core.services.sessions.getAgent(session.id)!;
     // A slow answer keeps the session streaming while the toggle is flipped:
     // the case a user hits by turning the feature on during a run.
     faux.setResponses([
@@ -1130,7 +1154,7 @@ test("computer use: toggling while a session streams reaches it without a rebuil
         return fauxAssistantMessage("slow");
       },
     ]);
-    core.startPrompt(session.id, "go");
+    core.services.sessions.startPrompt(session.id, "go");
     while (!agent.isStreaming) {
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
@@ -1138,9 +1162,9 @@ test("computer use: toggling while a session streams reaches it without a rebuil
     // The toggle is stored and the run is left alone: the same agent, still
     // streaming. Refusing it (conflict) would make the setting unusable
     // exactly while it matters.
-    await core.setComputerUseEnabled(true);
-    assertEquals(core.isComputerUseEnabled(), true);
-    assertEquals(core.getAgent(session.id), agent);
+    await core.capabilities.setComputerUseEnabled(true);
+    assertEquals(core.capabilities.isComputerUseEnabled(), true);
+    assertEquals(core.services.sessions.getAgent(session.id), agent);
     assertEquals(agent.isStreaming, true);
     // The tools are seeded into the session's registry, so the run finds
     // them without one being rebuilt.
@@ -1153,7 +1177,9 @@ test("computer use: toggling while a session streams reaches it without a rebuil
     // The skill catalog follows on the next turn (it republishes when it
     // changed): the agent may drive the machine, so the guide is offered.
     assertEquals(
-      core.listSkills(ws.id).some((s) => s.name === "computer-use"),
+      core.services.sessions
+        .listSkills(ws.id)
+        .some((s) => s.name === "computer-use"),
       true,
     );
     // The session's own skill tool reads the gate per call, so the guide is
@@ -1173,13 +1199,13 @@ test("computer use: toggling while a session streams reaches it without a rebuil
         return fauxAssistantMessage("slow again");
       },
     ]);
-    core.startPrompt(session.id, "go again");
+    core.services.sessions.startPrompt(session.id, "go again");
     while (!agent.isStreaming) {
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
-    await core.setComputerUseEnabled(false);
-    assertEquals(core.isComputerUseEnabled(), false);
-    assertEquals(core.getAgent(session.id), agent);
+    await core.capabilities.setComputerUseEnabled(false);
+    assertEquals(core.capabilities.isComputerUseEnabled(), false);
+    assertEquals(core.services.sessions.getAgent(session.id), agent);
     const listing = toolText(
       await agent.agent.state.tools
         .find((t) => t.name === TOOL_SEARCH)!
@@ -1202,12 +1228,12 @@ test("compaction persists the checkpoint and survives a reopen", async () => {
   const { core, faux } = setup();
   registerSmallWindowModel(faux);
   const { ws } = await makeWorkspace(core);
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: faux.provider.id,
     modelId: SMALL_WINDOW_MODEL_ID,
   });
-  core.openSession(session.id);
+  core.services.sessions.openSession(session.id);
 
   await fillHistory(core, faux, session.id, 4);
   // The next prompt needs the compaction's summarization call FIRST (the
@@ -1218,7 +1244,7 @@ test("compaction persists the checkpoint and survives a reopen", async () => {
   ]);
   await promptSession(core, session.id, `turn 4 ${"x".repeat(20_000)}`);
 
-  const agent = core.getAgent(session.id)!;
+  const agent = core.services.sessions.getAgent(session.id)!;
   // The history was condensed before the request went out. (One check may
   // make more than one pass when the retained tail is still over the
   // threshold — see MAX_COMPACTION_ATTEMPTS — so what this asserts is that
@@ -1234,9 +1260,9 @@ test("compaction persists the checkpoint and survives a reopen", async () => {
   // checkpoint is still there (a reader pages it out of the store) but it is
   // not loaded into memory — a conversation that runs for years holds far
   // more than any request can carry.
-  await core.closeSession(session.id);
-  await core.openSession(session.id);
-  const restored = core.getAgent(session.id)!.messages;
+  await core.services.sessions.closeSession(session.id);
+  await core.services.sessions.openSession(session.id);
+  const restored = core.services.sessions.getAgent(session.id)!.messages;
   const checkpointAt = roles.indexOf("checkpoint");
   assertEquals(
     restored.map((m) => m.role),
@@ -1248,7 +1274,7 @@ test("compaction persists the checkpoint and survives a reopen", async () => {
   assertEquals(restored[0]!.role, "checkpoint");
   // Nothing was deleted: the terminal's earlier turns are still rows, and
   // the screen reads them from there.
-  const whole = core
+  const whole = core.services.sessions
     .readTranscript(session.id, { limit: 200 })!
     .items.map((m) => m.role);
   assertEquals(whole.length > restored.length, true);
@@ -1261,15 +1287,17 @@ test("compactSession condenses on demand and reports the count", async () => {
   const { core, faux } = setup();
   registerSmallWindowModel(faux);
   const { ws } = await makeWorkspace(core);
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: faux.provider.id,
     modelId: SMALL_WINDOW_MODEL_ID,
   });
-  core.openSession(session.id);
+  core.services.sessions.openSession(session.id);
 
   await fillHistory(core, faux, session.id, 3);
-  const before = conversationMessages(core.getAgent(session.id)!);
+  const before = conversationMessages(
+    core.services.sessions.getAgent(session.id)!,
+  );
   // The manual call summarizes whatever the retention budget leaves out:
   // the default fifth of a 30K window (6K) is less than this history, so
   // there is something to condense.
@@ -1277,9 +1305,12 @@ test("compactSession condenses on demand and reports the count", async () => {
   faux.setResponses([
     fauxAssistantMessage([fauxText("## Summary\n- condensed")]),
   ]);
-  const compacted = await core.compactSession(session.id, "keep the paths");
+  const compacted = await core.services.sessions.compactSession(
+    session.id,
+    "keep the paths",
+  );
   assertEquals(compacted !== undefined && compacted > 0, true);
-  const agent = core.getAgent(session.id)!;
+  const agent = core.services.sessions.getAgent(session.id)!;
   // Nothing was deleted: the transcript GREW by the checkpoint, which sits
   // at the cut — the summarized messages are still stored. Only the
   // conversation is counted: the head context publications (date,
@@ -1317,7 +1348,7 @@ test("a file-backed core keeps the visuals beside its database", async () => {
     await fsp.mkdir(visualDir(dir, "s1"), { recursive: true });
     await fsp.writeFile(join(visualDir(dir, "s1"), name), MINI_PNG);
 
-    const found = await core.resolveSessionVisual("s1", name);
+    const found = await core.services.sessions.resolveSessionVisual("s1", name);
     assertEquals(found?.mimeType, "image/png");
     assertEquals(
       (await fsp.readFile(found!.path)).byteLength,
@@ -1329,10 +1360,13 @@ test("a file-backed core keeps the visuals beside its database", async () => {
     // Nothing the store would not have named is resolvable, and one
     // session's assets are not another's.
     assertEquals(
-      await core.resolveSessionVisual("s1", "../lumisca.db"),
+      await core.services.sessions.resolveSessionVisual("s1", "../lumisca.db"),
       undefined,
     );
-    assertEquals(await core.resolveSessionVisual("s2", name), undefined);
+    assertEquals(
+      await core.services.sessions.resolveSessionVisual("s2", name),
+      undefined,
+    );
   } finally {
     await core.close();
     await removeDirRetry(dir);
@@ -1348,11 +1382,14 @@ test("deleting a session drops its visuals", async () => {
       join(visualDir(dir, sessionId), "9f3c2a1b4d5e.png"),
       MINI_PNG,
     );
-    await core.deleteSession(sessionId);
+    await core.services.sessions.deleteSession(sessionId);
     // The images belonged to the conversation: nothing can reference them
     // once it is gone.
     assertEquals(
-      await core.resolveSessionVisual(sessionId, "9f3c2a1b4d5e.png"),
+      await core.services.sessions.resolveSessionVisual(
+        sessionId,
+        "9f3c2a1b4d5e.png",
+      ),
       undefined,
     );
   } finally {
@@ -1369,7 +1406,7 @@ test("a coding session gets chat_attach and visual; a chat session neither", asy
     // over as a card, `visual` puts an image inside the reply's markdown.
     // Read from the session's tool list — the prompt no longer names its
     // tools (see tools/system-prompt.ts).
-    const coding = core.getAgent(sessionId)!.toolNames;
+    const coding = core.services.sessions.getAgent(sessionId)!.toolNames;
     assert(coding.includes("chat_attach"), coding.join(", "));
     assert(coding.includes("visual"), coding.join(", "));
 
@@ -1377,11 +1414,11 @@ test("a coding session gets chat_attach and visual; a chat session neither", asy
     // given either tool.
     const faux = fauxProvider();
     core.models.models.setProvider(faux.provider);
-    const chat = await core.createSession({
+    const chat = await core.services.sessions.createSession({
       modelProvider: faux.provider.id,
       modelId: faux.getModel().id,
     });
-    const chatTools = core.getAgent(chat.id)!.toolNames;
+    const chatTools = core.services.sessions.getAgent(chat.id)!.toolNames;
     assertEquals(chatTools.includes("chat_attach"), false);
     assertEquals(chatTools.includes("visual"), false);
   } finally {

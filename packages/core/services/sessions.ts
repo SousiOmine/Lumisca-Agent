@@ -1,9 +1,9 @@
 import type { SessionAgent } from "../agent/session-agent.ts";
 import type { AgentMessage, ImageContent } from "../domain/message.ts";
-
 import type { ModePrompt } from "../domain/mode-message.ts";
 import type { SessionInfo } from "../domain/session.ts";
 import type { StellaEntry } from "../domain/stella-conversation.ts";
+import { CoreError } from "../errors.ts";
 import type { WindowPage, WindowQuery } from "../session/transcript-window.ts";
 import type { ContextUsageSummary } from "../shared/context-usage.ts";
 import type {
@@ -51,9 +51,13 @@ export class SessionService {
   private readonly assets: SessionAssets;
   private readonly skills: SessionSkills;
   private readonly runs: SessionRuns;
+  private readonly models: SessionServiceDeps["models"];
+  private readonly agentDisabled: SessionServiceDeps["agentDisabled"];
 
   constructor(deps: SessionServiceDeps) {
     this.lifecycle = new SessionLifecycle(deps);
+    this.models = deps.models;
+    this.agentDisabled = deps.agentDisabled;
     this.pool = deps.pool;
     this.transcript = new SessionTranscript(deps);
     this.assets = new SessionAssets(deps);
@@ -83,12 +87,53 @@ export class SessionService {
     return this.lifecycle.getSession(id);
   }
 
+  /** The session, or a `not_found` error naming it. */
+  requireSession(id: string): SessionInfo {
+    const session = this.lifecycle.getSession(id);
+    if (session === undefined) {
+      throw new CoreError(`Session not found: ${id}`, "not_found");
+    }
+    return session;
+  }
+
   findStellaSession(agentId: string): SessionInfo | undefined {
     return this.lifecycle.findStellaSession(agentId);
   }
 
+  /** Open a session, unless it is a stella conversation whose agent is
+   * disabled: building its agent would undo the release the disable
+   * performed, and its conversation is served from the store instead. */
   openSession(id: string): SessionInfo {
+    const session = this.lifecycle.getSession(id);
+    if (
+      session?.personaId !== undefined &&
+      this.agentDisabled(session.personaId)
+    ) {
+      throw new CoreError(`Agent ${session.personaId} is disabled`, "conflict");
+    }
     return this.lifecycle.openSession(id);
+  }
+
+  /** The thinking level a session's model runs at, and the levels that model
+   * supports. The level belongs to the model, not to the session, so it is
+   * read through the session's current model every time. */
+  getThinkingState(sessionId: string): {
+    thinkingLevel: ThinkingLevel;
+    thinkingLevels: ThinkingLevel[];
+  } {
+    const session = this.lifecycle.getSession(sessionId);
+    if (session === undefined) {
+      throw new CoreError(`Session not found: ${sessionId}`, "not_found");
+    }
+    const model = this.models.getSessionModel(
+      session.modelProvider,
+      session.modelId,
+    );
+    return this.models.thinkingState(
+      session.modelProvider,
+      session.modelId,
+      model,
+    );
   }
 
   closeSession(id: string): Promise<void> {

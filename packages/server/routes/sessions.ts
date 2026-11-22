@@ -26,68 +26,72 @@ import { AppError, notFound, parseBody, parseWindowQuery } from "./util.ts";
 
 /** The slice of the core these routes need (interface segregation). */
 export interface SessionApi {
-  getSession(id: string): SessionInfo | undefined;
-  getSessionLastError(id: string): string | undefined;
-  listSessions(workspaceId?: string): SessionInfo[];
-  createSession(input: CreateSessionInput): Promise<SessionInfo>;
-  openSession(id: string): SessionInfo;
-  closeSession(id: string): Promise<void>;
-  deleteSession(id: string): Promise<void>;
-  getAgent(id: string): SessionAgent | undefined;
-  /** One window of the session's transcript (see readTranscript): the
-   * snapshot serves the newest one, and a client asks for older ones as the
-   * reader scrolls up. Undefined when the session is not open. */
-  readTranscript(
-    id: string,
-    query: WindowQuery,
-  ): { items: AgentMessage[]; older: string | null } | undefined;
-  /** The model a new session would get, with the thinking control data the
-   * draft tab renders (matches LumiscaCore.getDefaultModel). Null when
-   * none resolves — including "no provider is configured at all", which
-   * the draft renders as an unset model field with the start button
-   * disabled. */
-  getDefaultModel(): Promise<{
-    provider: string;
-    modelId: string;
-    thinkingLevel: ThinkingLevel;
-    thinkingLevels: ThinkingLevel[];
-  } | null>;
-  startPrompt(
-    id: string,
-    text: string,
-    images?: ImageContent[],
-    mode?: ModePrompt,
-    files?: PromptFileRef[],
-  ): void;
-  abort(id: string): void;
-  rewind(id: string, timestamp: number): Promise<void>;
-  /** Condense the session's older history into a checkpoint on demand (the
-   * `/compact [instructions]` command). Resolves with the number of
-   * summarized messages, or undefined when nothing could be condensed. */
-  compactSession(
-    id: string,
-    instructions?: string,
-  ): Promise<number | undefined>;
-  setSessionModel(id: string, provider: string, modelId: string): void;
-  /** Resolve a pending ask (the ask tool) with the user's answers. */
-  answerQuestion(id: string, toolCallId: string, answers: AskAnswer[]): void;
-  /** The session's current todo plan (empty when there is none). */
-  getTodo(id: string): TodoPhase[];
-  /** Snapshots of the session's sub-agent tasks (empty when there are none). */
-  getTasks(id: string): TaskInfo[];
-  /** Snapshots of the session's background commands (empty when there are
-   * none). */
-  getBackground(id: string): BackgroundCommandInfo[];
-  /** The questions the session is still waiting on (the ask tool); empty
-   * when none is pending. */
-  getPendingQuestions(id: string): PendingQuestion[];
+  /** The session service the routes act on; the revision is the app's. */
+  sessions: {
+    getSession(id: string): SessionInfo | undefined;
+    getSessionLastError(id: string): string | undefined;
+    listSessions(workspaceId?: string): SessionInfo[];
+    createSession(input: CreateSessionInput): Promise<SessionInfo>;
+    openSession(id: string): SessionInfo;
+    closeSession(id: string): Promise<void>;
+    deleteSession(id: string): Promise<void>;
+    getAgent(id: string): SessionAgent | undefined;
+    /** One window of the session's transcript (see readTranscript): the
+     * snapshot serves the newest one, and a client asks for older ones as the
+     * reader scrolls up. Undefined when the session is not open. */
+    readTranscript(
+      id: string,
+      query: WindowQuery,
+    ): { items: AgentMessage[]; older: string | null } | undefined;
+    /** The model a new session would get, with the thinking control data the
+     * draft tab renders (matches LumiscaCore.getDefaultModel). Null when
+     * none resolves — including "no provider is configured at all", which
+     * the draft renders as an unset model field with the start button
+     * disabled. */
+    getDefaultModel(): Promise<{
+      provider: string;
+      modelId: string;
+      thinkingLevel: ThinkingLevel;
+      thinkingLevels: ThinkingLevel[];
+    } | null>;
+    startPrompt(
+      id: string,
+      text: string,
+      images?: ImageContent[],
+      mode?: ModePrompt,
+      files?: PromptFileRef[],
+    ): void;
+    abort(id: string): void;
+    rewind(id: string, timestamp: number): Promise<void>;
+    /** Condense the session's older history into a checkpoint on demand (the
+     * `/compact [instructions]` command). Resolves with the number of
+     * summarized messages, or undefined when nothing could be condensed. */
+    compactSession(
+      id: string,
+      instructions?: string,
+    ): Promise<number | undefined>;
+    setSessionModel(id: string, provider: string, modelId: string): void;
+    /** Resolve a pending ask (the ask tool) with the user's answers. */
+    answerQuestion(id: string, toolCallId: string, answers: AskAnswer[]): void;
+    /** The session's current todo plan (empty when there is none). */
+    getTodo(id: string): TodoPhase[];
+    /** Snapshots of the session's sub-agent tasks (empty when there are none). */
+    getTasks(id: string): TaskInfo[];
+    /** Snapshots of the session's background commands (empty when there are
+     * none). */
+    getBackground(id: string): BackgroundCommandInfo[];
+    /** The questions the session is still waiting on (the ask tool); empty
+     * when none is pending. */
+    getPendingQuestions(id: string): PendingQuestion[];
+
+    /** Context usage over the WHOLE transcript (see
+     * LumiscaCore.getSessionUsage): the agent holds only the model's view, so
+     * a client cannot count the older turns itself. */
+    getSessionUsage(id: string): ContextUsageSummary;
+  };
   /** The session's revision: how many events this server has emitted for
    * it (see LumiscaCore.getSessionRevision). */
   getSessionRevision(id: string): number;
-  /** Context usage over the WHOLE transcript (see
-   * LumiscaCore.getSessionUsage): the agent holds only the model's view, so
-   * a client cannot count the older turns itself. */
-  getSessionUsage(id: string): ContextUsageSummary;
 }
 
 /** The body `POST /sessions` reads. */
@@ -128,23 +132,23 @@ export function sessionRoutes(core: SessionApi): Hono {
 
   /** 404 unless a session with this id exists. */
   const requireSession = (id: string) => {
-    const session = core.getSession(id);
+    const session = core.sessions.getSession(id);
     if (!session) throw notFound("Session", id);
     return session;
   };
 
   const sessionJson = (session: SessionInfo) => ({
     ...session,
-    lastError: core.getSessionLastError(session.id),
+    lastError: core.sessions.getSessionLastError(session.id),
   });
 
   app.get("/sessions", (c) => {
     const workspaceId = c.req.query("workspaceId");
-    return c.json(core.listSessions(workspaceId));
+    return c.json(core.sessions.listSessions(workspaceId));
   });
 
   app.get("/sessions/default-model", async (c) => {
-    return c.json(await core.getDefaultModel());
+    return c.json(await core.sessions.getDefaultModel());
   });
 
   app.get("/sessions/:id", (c) => {
@@ -177,20 +181,20 @@ export function sessionRoutes(core: SessionApi): Hono {
   app.get("/sessions/:id/messages", async (c) => {
     const id = c.req.param("id");
     const session = requireSession(id);
-    await core.openSession(id);
-    const agent = core.getAgent(id);
+    await core.sessions.openSession(id);
+    const agent = core.sessions.getAgent(id);
     if (!agent) {
       // Unreachable today (openSession just created the agent), but do not
       // crash with a TypeError if that invariant ever changes.
       throw new AppError(`Session is not open: ${id}`, 404);
     }
-    const page = core.readTranscript(id, parseWindowQuery(c.req.url));
+    const page = core.sessions.readTranscript(id, parseWindowQuery(c.req.url));
     if (page === undefined) {
       throw new AppError(`Session is not open: ${id}`, 404);
     }
     const running = agent.isStreaming;
-    const questions = core.getPendingQuestions(id);
-    const error = core.getSessionLastError(id);
+    const questions = core.sessions.getPendingQuestions(id);
+    const error = core.sessions.getSessionLastError(id);
     // The revision travels with the snapshot: the client seeds its
     // "everything seen up to here" marker from it (see the web's revision
     // probe).
@@ -201,16 +205,16 @@ export function sessionRoutes(core: SessionApi): Hono {
       older: page.older,
       running,
       questions,
-      todos: core.getTodo(id),
-      tasks: core.getTasks(id),
-      backgrounds: core.getBackground(id),
+      todos: core.sessions.getTodo(id),
+      tasks: core.sessions.getTasks(id),
+      backgrounds: core.sessions.getBackground(id),
       error,
       name: session.name,
       // Context usage over the WHOLE transcript, not the page or the model's
       // view: the client has not loaded the older turns, so it cannot count
       // them itself, and the meter must not shrink because the reader
       // scrolled away.
-      usage: core.getSessionUsage(id),
+      usage: core.sessions.getSessionUsage(id),
       rev,
     });
   });
@@ -234,8 +238,8 @@ export function sessionRoutes(core: SessionApi): Hono {
   app.get("/sessions/:id/todo", async (c) => {
     const id = c.req.param("id");
     requireSession(id);
-    await core.openSession(id);
-    return c.json({ todos: core.getTodo(id) });
+    await core.sessions.openSession(id);
+    return c.json({ todos: core.sessions.getTodo(id) });
   });
 
   /** Snapshots of the session's sub-agent tasks (the task tool), for the
@@ -244,8 +248,8 @@ export function sessionRoutes(core: SessionApi): Hono {
   app.get("/sessions/:id/tasks", async (c) => {
     const id = c.req.param("id");
     requireSession(id);
-    await core.openSession(id);
-    return c.json({ tasks: core.getTasks(id) });
+    await core.sessions.openSession(id);
+    return c.json({ tasks: core.sessions.getTasks(id) });
   });
 
   /** Snapshots of the session's background commands (the async_bash tool),
@@ -255,8 +259,8 @@ export function sessionRoutes(core: SessionApi): Hono {
   app.get("/sessions/:id/background", async (c) => {
     const id = c.req.param("id");
     requireSession(id);
-    await core.openSession(id);
-    return c.json({ backgrounds: core.getBackground(id) });
+    await core.sessions.openSession(id);
+    return c.json({ backgrounds: core.sessions.getBackground(id) });
   });
 
   app.post("/sessions", async (c) => {
@@ -277,7 +281,7 @@ export function sessionRoutes(core: SessionApi): Hono {
     // could not stream. Clients show that state up front (the draft leaves
     // the model unset and disables the start button), so this is the
     // defensive layer for direct API callers.
-    const session = await core.createSession({
+    const session = await core.sessions.createSession({
       workspaceId:
         typeof body.workspaceId === "string" ? body.workspaceId : undefined,
       name: typeof body.name === "string" ? body.name : undefined,
@@ -291,20 +295,20 @@ export function sessionRoutes(core: SessionApi): Hono {
   app.post("/sessions/:id/open", async (c) => {
     const id = c.req.param("id");
     requireSession(id);
-    return c.json(sessionJson(await core.openSession(id)));
+    return c.json(sessionJson(await core.sessions.openSession(id)));
   });
 
   app.post("/sessions/:id/close", async (c) => {
     const id = c.req.param("id");
     requireSession(id);
-    await core.closeSession(id);
+    await core.sessions.closeSession(id);
     return c.json({ ok: true });
   });
 
   app.delete("/sessions/:id", async (c) => {
     const id = c.req.param("id");
     requireSession(id);
-    await core.deleteSession(id);
+    await core.sessions.deleteSession(id);
     return c.json({ ok: true });
   });
 
@@ -322,14 +326,14 @@ export function sessionRoutes(core: SessionApi): Hono {
     // The pictures live in the message, so they are bounded before the
     // message is built (see preparePromptImages).
     const bounded = await preparePromptImages(images);
-    core.startPrompt(id, text, bounded, mode);
+    core.sessions.startPrompt(id, text, bounded, mode);
     return c.json({ ok: true });
   });
 
   // Stop, answer, rewind and a model switch are the handlers a conversation
   // shares (routes/conversation.ts): only the path and how an id is resolved
   // differ between a session and a conversation.
-  conversationRoutes(app, core, {
+  conversationRoutes(app, core.sessions, {
     base: "/sessions/:id",
     resolve: (c) => requireSession(c.req.param("id")!).id,
     modelRoute: true,
@@ -345,8 +349,8 @@ export function sessionRoutes(core: SessionApi): Hono {
     const body = await parseBody<{ instructions?: unknown }>(c);
     const id = c.req.param("id");
     requireSession(id);
-    await core.openSession(id);
-    const compacted = await core.compactSession(
+    await core.sessions.openSession(id);
+    const compacted = await core.sessions.compactSession(
       id,
       optionalInstructions(body?.instructions),
     );

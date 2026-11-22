@@ -8,6 +8,7 @@ import {
   fauxProvider,
   fauxText,
   fauxToolCall,
+  forTestingCore,
 } from "@lumisca/core";
 import { assert, assertEquals } from "@std/assert";
 import type { ClientEvent } from "../domain/event.ts";
@@ -687,11 +688,11 @@ async function waitForMessage(
 
 test("background completion is injected into the agent loop", async () => {
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-async-e2e-"));
   try {
     const ws = await core.services.workspaces.create("ws", [root]);
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: faux.provider.id,
       modelId: faux.getModel().id,
@@ -710,7 +711,7 @@ test("background completion is injected into the agent loop", async () => {
     ]);
     await promptSession(core, session.id, "Start a background server");
 
-    const agent = core.getAgent(session.id)!;
+    const agent = core.services.sessions.getAgent(session.id)!;
     await waitForMessage(agent, (text) =>
       text.startsWith("[Background command #1"),
     );
@@ -726,13 +727,13 @@ test("background completion is injected into the agent loop", async () => {
 
 test("background commands survive a session rebuild", async () => {
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   const root = await fsp.mkdtemp(
     pathJoin(osTmpdir(), "lumisca-async-rebuild-"),
   );
   try {
     const ws = await core.services.workspaces.create("ws", [root]);
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: faux.provider.id,
       modelId: faux.getModel().id,
@@ -747,15 +748,19 @@ test("background commands survive a session rebuild", async () => {
       fauxAssistantMessage("Started."),
     ]);
     await promptSession(core, session.id, "Start a long command");
-    const agent = core.getAgent(session.id)!;
+    const agent = core.services.sessions.getAgent(session.id)!;
     await waitForMessage(agent, (text) =>
       text.includes("Started background command #1"),
     );
 
     // Rebuild the session (a model change rebuilds the agent while the
     // session stays open).
-    core.setSessionModel(session.id, faux.provider.id, faux.getModel().id);
-    const rebuilt = core.getAgent(session.id)!;
+    core.services.sessions.setSessionModel(
+      session.id,
+      faux.provider.id,
+      faux.getModel().id,
+    );
+    const rebuilt = core.services.sessions.getAgent(session.id)!;
     assert(rebuilt !== agent, "setSessionModel did not rebuild the agent");
 
     // The command must still be running: ask the rebuilt agent to list it.

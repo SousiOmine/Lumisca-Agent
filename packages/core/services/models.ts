@@ -34,7 +34,16 @@ import type { ThinkingLevel } from "../shared/mod.ts";
  * phone book of every call.
  */
 export class ModelService {
-  constructor(private readonly models: ModelManager) {}
+  constructor(
+    private readonly models: ModelManager,
+    /** Applied to the sessions already running on the model (the pool's
+     * live state, which this service does not own). */
+    private readonly afterThinkingLevel?: (
+      providerId: string,
+      modelId: string,
+      level: ThinkingLevel,
+    ) => void,
+  ) {}
 
   /** Providers with their models; the settings UI uses this to render
    * pickers. */
@@ -220,7 +229,9 @@ export class ModelService {
         "not_found",
       );
     }
-    return this.models.setThinkingLevel(providerId, modelId, level);
+    const effective = this.models.setThinkingLevel(providerId, modelId, level);
+    this.afterThinkingLevel?.(providerId, modelId, effective);
+    return effective;
   }
 
   /** The levels `providerId/modelId` offers. Refuses a model the catalog does

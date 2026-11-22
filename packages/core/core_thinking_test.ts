@@ -1,5 +1,5 @@
 import { test } from "bun:test";
-import { fauxProvider } from "@lumisca/core";
+import { fauxProvider, forTestingCore } from "@lumisca/core";
 import { assertEquals, assertThrows } from "@std/assert";
 import { LumiscaCore } from "./mod.ts";
 import { makeWorkspace, setup } from "./test-utils.ts";
@@ -13,7 +13,7 @@ function setupReasoning() {
   const faux = fauxProvider({
     models: [{ id: "thinky", reasoning: true }],
   });
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   return {
     core,
     faux,
@@ -26,7 +26,7 @@ test("sessions default to thinking off and expose supported levels", async () =>
   const { core, providerId, modelId } = setupReasoning();
   const { ws } = await makeWorkspace(core);
 
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -43,7 +43,7 @@ test("sessions default to thinking off and expose supported levels", async () =>
   // A non-reasoning model only supports "off".
   const plain = setup();
   const { ws: ws2 } = await makeWorkspace(plain.core);
-  const s2 = await plain.core.createSession({
+  const s2 = await plain.core.services.sessions.createSession({
     workspaceId: ws2.id,
     modelProvider: plain.providerId,
     modelId: plain.modelId,
@@ -59,23 +59,36 @@ test("setModelThinkingLevel persists, clamps, and reflects on sessions", async (
   const { core, providerId, modelId } = setupReasoning();
   const { ws } = await makeWorkspace(core);
 
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
   });
 
   // Supported level is stored as-is.
-  assertEquals(core.setModelThinkingLevel(providerId, modelId, "high"), "high");
-  assertEquals(core.getSession(session.id)!.thinkingLevel, "high");
+  assertEquals(
+    core.services.models.setModelThinkingLevel(providerId, modelId, "high"),
+    "high",
+  );
+  assertEquals(
+    core.services.sessions.getSession(session.id)!.thinkingLevel,
+    "high",
+  );
 
   // Unsupported levels clamp to the nearest supported one.
-  assertEquals(core.setModelThinkingLevel(providerId, modelId, "max"), "high");
+  assertEquals(
+    core.services.models.setModelThinkingLevel(providerId, modelId, "max"),
+    "high",
+  );
 
   // Non-reasoning models clamp everything to off.
   const plain = setup();
   assertEquals(
-    plain.core.setModelThinkingLevel(plain.providerId, plain.modelId, "high"),
+    plain.core.services.models.setModelThinkingLevel(
+      plain.providerId,
+      plain.modelId,
+      "high",
+    ),
     "off",
   );
   assertEquals(
@@ -93,12 +106,14 @@ test("setModelThinkingLevel persists, clamps, and reflects on sessions", async (
 test("setModelThinkingLevel rejects unknown levels and models", () => {
   const { core, providerId, modelId } = setupReasoning();
   assertThrows(
-    () => core.setModelThinkingLevel(providerId, modelId, "turbo"),
+    () =>
+      core.services.models.setModelThinkingLevel(providerId, modelId, "turbo"),
     Error,
     "Unknown thinking level",
   );
   assertThrows(
-    () => core.setModelThinkingLevel(providerId, "nope", "high"),
+    () =>
+      core.services.models.setModelThinkingLevel(providerId, "nope", "high"),
     Error,
     "Model not found",
   );
@@ -109,16 +124,22 @@ test("switching model picks up the new model's thinking level", async () => {
   const { core, providerId, modelId } = setupReasoning();
   const { ws } = await makeWorkspace(core);
 
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
   });
-  core.setModelThinkingLevel(providerId, modelId, "medium");
-  assertEquals(core.getSession(session.id)!.thinkingLevel, "medium");
+  core.services.models.setModelThinkingLevel(providerId, modelId, "medium");
+  assertEquals(
+    core.services.sessions.getSession(session.id)!.thinkingLevel,
+    "medium",
+  );
 
-  core.setSessionModel(session.id, providerId, modelId);
-  assertEquals(core.getSession(session.id)!.thinkingLevel, "medium");
+  core.services.sessions.setSessionModel(session.id, providerId, modelId);
+  assertEquals(
+    core.services.sessions.getSession(session.id)!.thinkingLevel,
+    "medium",
+  );
 
   core.close();
 });

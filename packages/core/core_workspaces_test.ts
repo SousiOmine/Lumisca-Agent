@@ -9,10 +9,11 @@ import {
   fauxProvider,
   fauxText,
   fauxToolCall,
+  openCore,
 } from "@lumisca/core";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import type { AgentMessage } from "./mod.ts";
-import { LumiscaCore, VISUALS_DIR_NAME } from "./mod.ts";
+import { type LumiscaCore, VISUALS_DIR_NAME } from "./mod.ts";
 import {
   MINI_PNG,
   makeRealTempDir,
@@ -62,16 +63,13 @@ function visualDir(dbDir: string, sessionId: string): string {
 async function openFileBackedCore(
   dir: string,
 ): Promise<{ core: LumiscaCore; workspaceId: string; sessionId: string }> {
-  const core = LumiscaCore.open(
-    join(dir, "lumisca.db"),
-    join(dir, "settings.jsonc"),
-  );
+  const core = openCore(join(dir, "lumisca.db"), join(dir, "settings.jsonc"));
   const faux = fauxProvider();
   core.models.models.setProvider(faux.provider);
   const workspaceDir = join(dir, "repo");
   await fsp.mkdir(workspaceDir, { recursive: true });
   const ws = await core.services.workspaces.create("ws", [workspaceDir]);
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: faux.provider.id,
     modelId: faux.getModel().id,
@@ -102,7 +100,7 @@ test("tools block file access outside the workspace", async () => {
   const outside = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-outside-"));
   await fsp.writeFile(join(outside, "secret.txt"), "secret");
 
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -118,7 +116,7 @@ test("tools block file access outside the workspace", async () => {
   ]);
   await promptSession(core, session.id, "Read that file");
 
-  const messages = core.getAgent(session.id)!.messages;
+  const messages = core.services.sessions.getAgent(session.id)!.messages;
   const toolResults = messages.filter((m) => m.role === "toolResult");
   assertEquals(toolResults.length, 1);
   const tr = toolResults[0] as {
@@ -138,7 +136,7 @@ test("tools block file access outside the workspace", async () => {
     fauxAssistantMessage("Read it."),
   ]);
   await promptSession(core, session.id, "Read inside.txt");
-  const messages2 = core.getAgent(session.id)!.messages;
+  const messages2 = core.services.sessions.getAgent(session.id)!.messages;
   const tr2 = messages2.filter((m) => m.role === "toolResult").at(-1) as {
     isError: boolean;
     content: Array<{ type: string; text: string }>;
@@ -156,7 +154,7 @@ test("a model switch is stored while streaming; a workspace update waits", async
   const { ws, root } = await makeWorkspace(core);
   const extra = await makeRealTempDir("lumisca-extra-");
 
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -168,12 +166,12 @@ test("a model switch is stored while streaming; a workspace update waits", async
       return fauxAssistantMessage("slow reply");
     },
   ]);
-  core.startPrompt(session.id, "go");
+  core.services.sessions.startPrompt(session.id, "go");
 
   // A model switch is not a reason to say no: the row is written now and the
   // agent is rebuilt as the run ends (SessionService.setSessionModel).
-  core.setSessionModel(session.id, providerId, modelId);
-  assertEquals(core.getSession(session.id)!.modelId, modelId);
+  core.services.sessions.setSessionModel(session.id, providerId, modelId);
+  assertEquals(core.services.sessions.getSession(session.id)!.modelId, modelId);
   // A workspace edit is still refused: it changes the prompt and the tools the
   // running loop is already using.
   await assertRejects(
@@ -182,7 +180,7 @@ test("a model switch is stored while streaming; a workspace update waits", async
     "already running",
   );
 
-  await core.getAgent(session.id)!.waitForIdle();
+  await core.services.sessions.getAgent(session.id)!.waitForIdle();
 
   const updated = await core.services.workspaces.update(ws.id, {
     folders: [root, extra],
@@ -202,29 +200,37 @@ test("renaming a workspace does not touch the prompt; changing folders does", as
   const { ws, root } = await makeWorkspace(core);
   const extra = await makeRealTempDir("lumisca-extra-");
   try {
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
     });
-    const first = core.getAgent(session.id)!.agent.state.systemPrompt;
+    const first = core.services.sessions.getAgent(session.id)!.agent.state
+      .systemPrompt;
     assert(first.includes(root), "the prompt must list the workspace folder");
 
     await core.services.workspaces.update(ws.id, { name: "renamed" });
-    assertEquals(core.getAgent(session.id)!.agent.state.systemPrompt, first);
+    assertEquals(
+      core.services.sessions.getAgent(session.id)!.agent.state.systemPrompt,
+      first,
+    );
 
     // The rebuild a folder edit triggers reaches the prompt, not only the
     // tools: a session opened before the edit must stop naming a folder the
     // workspace no longer has.
     await core.services.workspaces.update(ws.id, { folders: [root, extra] });
-    const updated = core.getAgent(session.id)!.agent.state.systemPrompt;
+    const updated = core.services.sessions.getAgent(session.id)!.agent.state
+      .systemPrompt;
     assert(updated.includes(extra), updated);
     assertEquals(updated.includes(root), true);
 
     // The row kept what the session runs on: reopening is the same prompt.
-    core.closeSession(session.id);
-    await core.openSession(session.id);
-    assertEquals(core.getAgent(session.id)!.agent.state.systemPrompt, updated);
+    core.services.sessions.closeSession(session.id);
+    await core.services.sessions.openSession(session.id);
+    assertEquals(
+      core.services.sessions.getAgent(session.id)!.agent.state.systemPrompt,
+      updated,
+    );
   } finally {
     core.close();
     await removeDirRetry(root);
@@ -241,22 +247,27 @@ test("a prompt stored by an older build is replaced when the session opens", asy
   const { core, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   try {
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
     });
-    const current = core.getAgent(session.id)!.agent.state.systemPrompt;
-    core.closeSession(session.id);
+    const current = core.services.sessions.getAgent(session.id)!.agent.state
+      .systemPrompt;
+    core.services.sessions.closeSession(session.id);
     core.db.db
       .prepare("UPDATE sessions SET system_prompt = ? WHERE id = ?")
       .run("You are an assistant from an older release.", session.id);
 
-    await core.openSession(session.id);
-    const reopened = core.getAgent(session.id)!;
+    await core.services.sessions.openSession(session.id);
+    const reopened = core.services.sessions.getAgent(session.id)!;
     assertEquals(reopened.agent.state.systemPrompt, current);
     assertEquals(
-      (core.getSession(session.id) as { systemPrompt?: string }).systemPrompt,
+      (
+        core.services.sessions.getSession(session.id) as {
+          systemPrompt?: string;
+        }
+      ).systemPrompt,
       current,
       "the repaired prompt must be written back, not only used in memory",
     );
@@ -287,7 +298,7 @@ test("chat session: created without a workspace, chat prompt, no file tools", as
   const { core, faux, providerId, modelId } = setup();
 
   // No workspaceId → a chat session in the folder-less chat workspace.
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     name: "chat",
     modelProvider: providerId,
     modelId,
@@ -306,7 +317,7 @@ test("chat session: created without a workspace, chat prompt, no file tools", as
   assertEquals(chatWs.folders.length, 0);
 
   // A second chat session reuses the same workspace.
-  const second = await core.createSession({
+  const second = await core.services.sessions.createSession({
     modelProvider: providerId,
     modelId,
   });
@@ -314,7 +325,7 @@ test("chat session: created without a workspace, chat prompt, no file tools", as
 
   // The system prompt is the chat variant: no workspace folder list, no
   // "coding agent that works inside a workspace" framing.
-  const agent = core.getAgent(session.id)!;
+  const agent = core.services.sessions.getAgent(session.id)!;
   const prompt = agent.agent.state.systemPrompt;
   assert(
     !prompt.includes(
@@ -365,7 +376,9 @@ test("chat session: created without a workspace, chat prompt, no file tools", as
   // The chat session runs like any other.
   faux.setResponses([fauxAssistantMessage("hello from chat")]);
   await promptSession(core, session.id, "Hi");
-  const messages = conversationMessages(core.getAgent(session.id)!);
+  const messages = conversationMessages(
+    core.services.sessions.getAgent(session.id)!,
+  );
   assertEquals(messages.length, 2);
   assertEquals(
     (messages[1] as { content: Array<{ type: string; text: string }> })
@@ -374,10 +387,10 @@ test("chat session: created without a workspace, chat prompt, no file tools", as
   );
 
   // Close and reopen: history and the chat prompt snapshot are restored.
-  core.closeSession(session.id);
-  const reopened = await core.openSession(session.id);
+  core.services.sessions.closeSession(session.id);
+  const reopened = await core.services.sessions.openSession(session.id);
   assertEquals(reopened.chat, true);
-  const reopenedAgent = core.getAgent(session.id)!;
+  const reopenedAgent = core.services.sessions.getAgent(session.id)!;
   assertEquals(reopenedAgent.agent.state.systemPrompt, prompt);
   assertEquals(conversationMessages(reopenedAgent).length, 2);
 
@@ -386,7 +399,7 @@ test("chat session: created without a workspace, chat prompt, no file tools", as
 
 test("chat workspace cannot be updated or deleted", async () => {
   const { core, faux: _faux, providerId, modelId } = setup();
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     modelProvider: providerId,
     modelId,
   });
@@ -420,10 +433,7 @@ test("chat workspace cannot be updated or deleted", async () => {
 test("personalization (machine AGENTS.md) is published with the workspace instructions", async () => {
   const faux = fauxProvider();
   const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-core-"));
-  const core = LumiscaCore.open(
-    join(dir, "lumisca.db"),
-    join(dir, "settings.jsonc"),
-  );
+  const core = openCore(join(dir, "lumisca.db"), join(dir, "settings.jsonc"));
   core.models.models.setProvider(faux.provider);
 
   const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-ws-"));
@@ -439,12 +449,12 @@ test("personalization (machine AGENTS.md) is published with the workspace instru
     "Answer in Japanese.\n",
   );
 
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: faux.provider.id,
     modelId: faux.getModel().id,
   });
-  const agent = core.getAgent(session.id)!;
+  const agent = core.services.sessions.getAgent(session.id)!;
   const prompt = agent.agent.state.systemPrompt;
   assertEquals(
     prompt.includes("Workspace memory."),
@@ -478,12 +488,12 @@ test("personalization (machine AGENTS.md) is published with the workspace instru
   assert(updated[1]!.body.includes("Answer in English."));
 
   // ...and a new session starts from the current content.
-  const fresh = await core.createSession({
+  const fresh = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: faux.provider.id,
     modelId: faux.getModel().id,
   });
-  const freshAgent = core.getAgent(fresh.id)!;
+  const freshAgent = core.services.sessions.getAgent(fresh.id)!;
   faux.setResponses([fauxAssistantMessage("ok")]);
   await promptSession(core, fresh.id, "hello");
   const freshBaseline = instructionsMessages(freshAgent);
@@ -515,7 +525,10 @@ test("deleting a workspace drops its sessions' visuals", async () => {
     // them (the same core path, not the pool's close).
     await core.services.workspaces.delete(workspaceId);
     assertEquals(
-      await core.resolveSessionVisual(sessionId, "9f3c2a1b4d5e.png"),
+      await core.services.sessions.resolveSessionVisual(
+        sessionId,
+        "9f3c2a1b4d5e.png",
+      ),
       undefined,
     );
   } finally {

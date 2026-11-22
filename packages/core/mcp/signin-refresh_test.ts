@@ -23,6 +23,7 @@
  * tools the conversation can finally discover.
  */
 import { test } from "bun:test";
+import { forTestingCore } from "@lumisca/core";
 import { assert, assertEquals } from "@std/assert";
 import { fauxProvider } from "../ai/faux.ts";
 import { LumiscaCore } from "../core.ts";
@@ -65,16 +66,19 @@ test("E2E: a stella conversation reaches an MCP server after signing in", async 
     authorizationServerUrl: auth.url,
   });
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   core.models.models.setProvider(faux.provider);
-  await core.setProviderApiKey(faux.provider.id, "k");
-  core.setStellaVm(fakeStellaHost({ vncPort: 49153 }));
+  await core.services.models.setProviderApiKey(faux.provider.id, "k");
+  core.services.stellaMachines.setStellaVm(fakeStellaHost({ vncPort: 49153 }));
   try {
-    const agent = await core.createStellaAgent({ name: "Aide", role: "help" });
-    const session = await core.getOrCreateStellaSession(agent.id);
+    const agent = await core.services.stellaAgents.createStellaAgent({
+      name: "Aide",
+      role: "help",
+    });
+    const session = await core.internals.getOrCreateStellaSession(agent.id);
     const body = JSON.stringify({ mcpServers: { probe: { url: mcp.url } } });
     const status = () =>
-      core.getSession(session.id) === undefined
+      core.services.sessions.getSession(session.id) === undefined
         ? null
         : ((
             core as unknown as {
@@ -126,7 +130,7 @@ test("E2E: a stella conversation reaches an MCP server after signing in", async 
     assertEquals(after[0]?.needsAuth, undefined, "the sign-in cleared 401");
     assertEquals(after[0]?.toolCount, 1);
     // The same conversation, never rebuilt under the user.
-    assertEquals(core.getSession(session.id)?.id, session.id);
+    assertEquals(core.services.sessions.getSession(session.id)?.id, session.id);
   } finally {
     await core.close();
     await mcp.close();

@@ -1,3 +1,4 @@
+import { forTestingCore } from "@lumisca/core";
 /**
  * Manual probe: is stella mode usable on this machine, and does one agent's
  * machine behave the way the UI assumes?
@@ -65,17 +66,18 @@ if (status.state === "podman_missing" || status.state === "podman_unusable") {
 log("\nstella mode is available on this machine.");
 
 // 2. The verdict a real client reads before it offers the mode.
-const core = LumiscaCore.forTesting();
+const core = forTestingCore();
 try {
-  core.setStellaVm(host);
-  const availability = await core.getStellaAvailability();
+  core.services.stellaMachines.setStellaVm(host);
+  const availability =
+    await core.services.stellaMachines.getStellaAvailability();
   log(`availability: ${JSON.stringify(availability)}`);
 } finally {
   // Detached first: `close()` stops the machines it holds, and this script
   // shares the application's containers. Stopping is the explicit step at the
   // end (`--start` without `--no-stop`), never a side effect of asking a
   // question about availability.
-  core.setStellaVm(undefined);
+  core.services.stellaMachines.setStellaVm(undefined);
   void core.close();
 }
 

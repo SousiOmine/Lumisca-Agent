@@ -3,7 +3,11 @@
 // OpenAI endpoints stubbed, so nothing here touches the network.
 
 import { test } from "bun:test";
-import { type AuthInteraction, LumiscaCore } from "@lumisca/core";
+import {
+  type AuthInteraction,
+  forTestingCore,
+  LumiscaCore,
+} from "@lumisca/core";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 
 function json(data: unknown): Response {
@@ -23,7 +27,7 @@ function jwt(claims: Record<string, unknown>): string {
 }
 
 test("stored API keys drive the configured-auth check", async () => {
-  const core = LumiscaCore.forTesting();
+  const core = forTestingCore();
   try {
     // A built-in provider with no stored key and a cleaned env is not
     // configured in Lumisca.
@@ -31,7 +35,7 @@ test("stored API keys drive the configured-auth check", async () => {
     assertEquals(await core.services.models.hasProviderAuth("openai"), false);
 
     // Storing a key makes it configured (the key-injection path).
-    await core.setProviderApiKey("openai", "sk-test");
+    await core.services.models.setProviderApiKey("openai", "sk-test");
     assertEquals(await core.services.models.hasConfiguredAuth("openai"), true);
     assertEquals(await core.services.models.hasProviderAuth("openai"), true);
     assertEquals(
@@ -40,7 +44,7 @@ test("stored API keys drive the configured-auth check", async () => {
     );
 
     // Logging out clears the configured state again.
-    await core.logoutProvider("openai");
+    await core.services.models.logoutProvider("openai");
     assertEquals(await core.services.models.hasConfiguredAuth("openai"), false);
   } finally {
     core.close();
@@ -91,7 +95,7 @@ test("ChatGPT device login stores an OAuth credential and its models", async () 
     return Promise.reject(new Error(`unexpected request: ${url}`));
   }) as typeof fetch;
 
-  const core = LumiscaCore.forTesting();
+  const core = forTestingCore();
   try {
     const events: string[] = [];
     const interaction: AuthInteraction = {
@@ -101,7 +105,11 @@ test("ChatGPT device login stores an OAuth credential and its models", async () 
       notify: (event) => events.push(event.type),
     };
 
-    await core.loginProvider("openai-codex", "oauth", interaction);
+    await core.services.models.loginProvider(
+      "openai-codex",
+      "oauth",
+      interaction,
+    );
 
     assertEquals(events, ["device_code"]);
     assertEquals(
@@ -128,7 +136,7 @@ test("ChatGPT device login stores an OAuth credential and its models", async () 
     );
 
     // The credential is a normal stored credential: logout removes it.
-    await core.logoutProvider("openai-codex");
+    await core.services.models.logoutProvider("openai-codex");
     assertEquals(
       await core.services.models.hasConfiguredAuth("openai-codex"),
       false,
@@ -172,7 +180,7 @@ test("a failed model catalog leaves the provider unconfigured", async () => {
     return Promise.reject(new Error(`unexpected request: ${url}`));
   }) as typeof fetch;
 
-  const core = LumiscaCore.forTesting();
+  const core = forTestingCore();
   try {
     const interaction: AuthInteraction = {
       signal: new AbortController().signal,
@@ -181,7 +189,12 @@ test("a failed model catalog leaves the provider unconfigured", async () => {
       notify: () => {},
     };
     await assertRejects(
-      () => core.loginProvider("openai-codex", "oauth", interaction),
+      () =>
+        core.services.models.loginProvider(
+          "openai-codex",
+          "oauth",
+          interaction,
+        ),
       Error,
       "HTTP 503",
     );

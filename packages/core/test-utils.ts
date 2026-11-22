@@ -1,3 +1,4 @@
+import { forTestingCore } from "@lumisca/core";
 /**
  * Shared test helpers: single home for the setup/teardown patterns that
  * used to be copy-pasted across every `*_test.ts`.
@@ -12,7 +13,7 @@ import { tmpdir as osTmpdir } from "node:os";
 import { join as pathJoin } from "node:path";
 import type { Model } from "./ai/catalog.ts";
 import { fauxProvider } from "./ai/faux.ts";
-import { LumiscaCore } from "./core.ts";
+import type { LumiscaCore } from "./core.ts";
 import type { ClientEvent } from "./domain/event.ts";
 import type { AssistantMessage, ImageContent } from "./domain/message.ts";
 import type { Api } from "./domain/model.ts";
@@ -39,7 +40,7 @@ export function setup(env?: () => Record<string, string>): {
   modelId: string;
 } {
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider], env);
+  const core = forTestingCore([faux.provider], env);
   return {
     core,
     faux,
@@ -303,7 +304,7 @@ export async function promptSession(
   text: string,
   images?: ImageContent[],
 ): Promise<void> {
-  const agent = core.getAgent(sessionId);
+  const agent = core.services.sessions.getAgent(sessionId);
   if (agent === undefined) {
     throw new CoreError(`Session is not open: ${sessionId}`, "not_found");
   }

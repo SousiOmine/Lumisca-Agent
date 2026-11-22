@@ -165,6 +165,10 @@ export function createCoreServices(deps: CoreServicesDeps): CoreServices {
         deps.models.getThinkingLevel(provider, modelId),
     },
     requireModel: deps.requireModel,
+    agentDisabled: (agentId) => {
+      const agent = deps.agents.get(agentId);
+      return agent !== undefined && agent.disabledAt !== null;
+    },
     requireWorkspace: deps.requireWorkspace,
     chatWorkspace: deps.chatWorkspace,
     resolveDefaultModel: deps.resolveDefaultModel,
@@ -185,6 +189,9 @@ export function createCoreServices(deps: CoreServicesDeps): CoreServices {
     shareRequests: deps.shareRequests,
   });
   const deleteSession = (id: string) => sessions.deleteSession(id);
+  // Assigned below, before any call can reach it: creating an agent must
+  // prepare its folder in the machine, and the machine needs the agent book.
+  let machines: StellaMachineService;
   const stellaAgents = new StellaAgentService({
     agents: deps.agents,
     icons: deps.icons,
@@ -193,10 +200,27 @@ export function createCoreServices(deps: CoreServicesDeps): CoreServices {
     deleteSession,
     language: deps.language,
     emit: deps.emit,
+    prepareAgentFolder: (agentId) => machines.prepareAgentFolder(agentId),
+    removeAgentMachine: (agentId) => machines.removeAgentMachine(agentId),
+    stopAgentMachine: (agentId) => machines.stopAgentMachine(agentId),
+    modelExists: (provider, modelId) =>
+      deps.models.getModel(provider, modelId) !== undefined,
+    thinkingLevelsOf: (provider, modelId) =>
+      deps.modelService.thinkingLevelsOf(provider, modelId),
+    setModelThinkingLevel: (provider, modelId, level) =>
+      deps.modelService.setModelThinkingLevel(provider, modelId, level),
+    sessionOf: (agentId) => deps.sessions.getByPersona(agentId),
+    setSessionModel: (sessionId, provider, modelId) =>
+      sessions.setSessionModel(sessionId, provider, modelId),
+    resolveDefaultModel: () => deps.resolveDefaultModel(),
+    closeSession: (sessionId) => sessions.closeSession(sessionId),
+    agentRuntime: (sessionId) => sessions.getAgent(sessionId),
+    startOnboarding: (sessionId, instruction) =>
+      sessions.startOnboarding(sessionId, instruction),
   });
-  // The closure is not called during construction: `createStellaAgent` runs
-  // only when a user (or the tool) creates one, long after.
-  const machines: StellaMachineService = new StellaMachineService({
+  // The closures are not called during construction: an agent is created
+  // only when a user (or the tool) asks, long after.
+  machines = new StellaMachineService({
     machine: deps.machine,
     agents: deps.agents,
     sessions: deps.sessions,
@@ -215,11 +239,7 @@ export function createCoreServices(deps: CoreServicesDeps): CoreServices {
     chatWorkspace: deps.chatWorkspace,
     requireWorkspace: deps.requireWorkspace,
     resolveDefaultModel: deps.resolveDefaultModel,
-    createStellaAgent: async (input) => {
-      const agent = await stellaAgents.createStellaAgent(input);
-      await machines.prepareAgentFolder(agent.id);
-      return agent;
-    },
+    createStellaAgent: (input) => stellaAgents.createStellaAgent(input),
   });
   return {
     sessions,
@@ -582,7 +602,16 @@ export function createCoreGraph(
         graph.pool.applyMcpConfigChange(sessions, mutate),
       refreshSessionMcp: (sessions) => graph.pool.refreshMcp(sessions),
     });
-  graph.modelService = new ModelService(graph.models);
+  graph.modelService = new ModelService(
+    graph.models,
+    (provider, model, level) => {
+      for (const session of graph.sessions.list()) {
+        if (session.modelProvider === provider && session.modelId === model) {
+          graph.pool.setThinkingLevel(session.id, level);
+        }
+      }
+    },
+  );
   graph.workspaces =
     overrides.workspaces ??
     new WorkspaceService(createWorkspaceRepo(db), {

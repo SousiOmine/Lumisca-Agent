@@ -52,13 +52,13 @@ test("app-level MCP config API applies to every workspace", async () => {
       body: JSON.stringify({ name: "ws", folders: [root] }),
     });
     const ws = await create.json();
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       name: "app-mcp",
       modelProvider: providerId,
       modelId,
     });
-    const agent = core.getAgent(session.id)!;
+    const agent = core.services.sessions.getAgent(session.id)!;
     const started = Date.now();
     while (
       !agent.agent.state.tools.some((t) => t.name === "tool_search") &&

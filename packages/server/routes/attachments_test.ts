@@ -6,6 +6,7 @@ import {
   LumiscaCore as Core,
   fauxProvider,
   type LumiscaCore,
+  openCore,
 } from "@lumisca/core";
 import {
   MINI_PNG,
@@ -39,7 +40,7 @@ async function withApp(
   const dir = await makeRealTempDir("lumisca-attachments-route-");
   const workspaceDir = join(dir, "repo");
   await fsp.mkdir(workspaceDir, { recursive: true });
-  const core = Core.open(join(dir, "lumisca.db"), join(dir, "settings.jsonc"));
+  const core = openCore(join(dir, "lumisca.db"), join(dir, "settings.jsonc"));
   try {
     const faux = fauxProvider();
     core.models.models.setProvider(faux.provider);
@@ -47,7 +48,7 @@ async function withApp(
       workspaceDir,
     ]);
     // Explicit model: the default-model resolution would refuse `faux`.
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: workspace.id,
       modelProvider: faux.provider.id,
       modelId: faux.getModel().id,

@@ -1,5 +1,5 @@
 import { test } from "bun:test";
-import { fauxProvider, LumiscaCore } from "@lumisca/core";
+import { fauxProvider, forTestingCore, type LumiscaCore } from "@lumisca/core";
 import { toBase64Url } from "@lumisca/core/shared";
 import { assert, assertEquals } from "@std/assert";
 import { createApp } from "./app.ts";
@@ -44,7 +44,7 @@ async function request(
 }
 
 test("the VAPID public key is served and created on first ask", async () => {
-  const core = LumiscaCore.forTesting([fauxProvider().provider]);
+  const core = forTestingCore([fauxProvider().provider]);
   try {
     const response = await request(core, "/api/notify/key");
     assertEquals(response.status, 200);
@@ -64,7 +64,7 @@ test("the VAPID public key is served and created on first ask", async () => {
 });
 
 test("a subscription is stored, counted and removable", async () => {
-  const core = LumiscaCore.forTesting([fauxProvider().provider]);
+  const core = forTestingCore([fauxProvider().provider]);
   try {
     const input = await subscription();
     const added = await request(core, "/api/notify/subscriptions", {
@@ -97,7 +97,7 @@ test("a subscription is stored, counted and removable", async () => {
 });
 
 test("a subscription that cannot be sent to is refused with 400", async () => {
-  const core = LumiscaCore.forTesting([fauxProvider().provider]);
+  const core = forTestingCore([fauxProvider().provider]);
   try {
     const valid = await subscription();
     const bodies: unknown[] = [
@@ -123,7 +123,7 @@ test("a subscription that cannot be sent to is refused with 400", async () => {
 test("the notification surface is behind the token guard", async () => {
   // A subscription endpoint is a capability to wake a device: a page that can
   // write one without the token could add itself to every later send.
-  const core = LumiscaCore.forTesting([fauxProvider().provider]);
+  const core = forTestingCore([fauxProvider().provider]);
   const app = createApp(core, { token: "secret-token" });
   try {
     const response = await app.fetch(
@@ -140,7 +140,7 @@ test("the notification surface is behind the token guard", async () => {
 });
 
 test("a malformed body is a 400, not a 500", async () => {
-  const core = LumiscaCore.forTesting([fauxProvider().provider]);
+  const core = forTestingCore([fauxProvider().provider]);
   try {
     const response = await request(core, "/api/notify/subscriptions", {
       method: "POST",

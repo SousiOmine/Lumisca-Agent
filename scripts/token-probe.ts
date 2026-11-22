@@ -1,3 +1,4 @@
+import { forTestingCore } from "@lumisca/core";
 /**
  * Manual probe for the server's token guard: builds an app with a token
  * and checks that /api/health answers 401 without it and 200 with the
@@ -19,7 +20,7 @@ const HOST = `127.0.0.1:${DEFAULT_PORT}`;
 const URL = `http://${HOST}/api/health`;
 
 const faux = fauxProvider();
-const core = LumiscaCore.forTesting([faux.provider]);
+const core = forTestingCore([faux.provider]);
 try {
   const app = createApp(core, { token: "secret-token" });
   const r = await app.fetch(new Request(URL, { headers: { host: HOST } }));

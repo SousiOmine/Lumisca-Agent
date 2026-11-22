@@ -3,6 +3,7 @@ import * as fsp from "node:fs/promises";
 import { join } from "node:path";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@lumisca/core";
 import { assert, assertEquals, assertThrows } from "@std/assert";
+import type { SessionAgent } from "./agent/session-agent.ts";
 import { MCP_TOOLS_PROVIDER, ON_DEMAND_TOOLS_NOTE } from "./mcp/context.ts";
 import type { AgentMessage, BrowserBackend, LumiscaCore } from "./mod.ts";
 import { TOOL_CALL, TOOL_PDF_READ_PAGES, TOOL_SEARCH } from "./shared/mod.ts";
@@ -58,9 +59,7 @@ class FakeBrowserBackend implements BrowserBackend {
 }
 
 /** Capture every LLM call: model id + messages, in call order. */
-async function waitForSearchTools(
-  agent: NonNullable<ReturnType<LumiscaCore["getAgent"]>>,
-): Promise<void> {
+async function waitForSearchTools(agent: SessionAgent): Promise<void> {
   const started = Date.now();
   while (
     !agent.agent.state.tools.some((t) => t.name === TOOL_SEARCH) &&
@@ -72,10 +71,7 @@ async function waitForSearchTools(
 
 /** What the session's tool_search currently offers — the surface the model
  * itself uses to find MCP tools (empty when the pair is not attached). */
-async function searchListing(
-  agent: NonNullable<ReturnType<LumiscaCore["getAgent"]>>,
-  query = "",
-): Promise<string> {
+async function searchListing(agent: SessionAgent, query = ""): Promise<string> {
   const search = agent.agent.state.tools.find((t) => t.name === TOOL_SEARCH);
   if (search === undefined) return "";
   const result = await search.execute(
@@ -110,7 +106,7 @@ test("sessions attach MCP tools from .mcp.json and call them", async () => {
     }),
   );
   const ws = await core.services.workspaces.create("ws", [root]);
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -120,7 +116,7 @@ test("sessions attach MCP tools from .mcp.json and call them", async () => {
     // MCP discovery is async; wait for the search/call pair. The MCP
     // definitions themselves never enter the agent's tool set — they stay
     // in the registry, discoverable through tool_search.
-    const agent = core.getAgent(session.id)!;
+    const agent = core.services.sessions.getAgent(session.id)!;
     await waitForSearchTools(agent);
     assertEquals(
       agent.agent.state.tools.some((t) => t.name === TOOL_SEARCH) &&
@@ -171,7 +167,7 @@ test("sessions attach MCP tools from .mcp.json and call them", async () => {
       "the note must precede the run's user message",
     );
 
-    const messages = core.getAgent(session.id)!.messages;
+    const messages = core.services.sessions.getAgent(session.id)!.messages;
     const toolResults = messages.filter((m) => m.role === "toolResult");
     assertEquals(toolResults.length, 2);
     const tr = toolResults[1] as {
@@ -223,12 +219,12 @@ test("app-level MCP config persists and applies to sessions", async () => {
 
     // Sessions get the app-level tools (as the search/call pair over the
     // registry, not the MCP definitions themselves).
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
     });
-    const agent = core.getAgent(session.id)!;
+    const agent = core.services.sessions.getAgent(session.id)!;
     await waitForSearchTools(agent);
     assertEquals(
       agent.agent.state.tools.some((t) => t.name === TOOL_SEARCH),
@@ -292,12 +288,12 @@ test("an MCP config saved while a session streams reaches that session", async (
   try {
     // A session with no MCP servers at all: nothing in its registry can
     // explain the discovery checked below.
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
     });
-    const agent = core.getAgent(session.id)!;
+    const agent = core.services.sessions.getAgent(session.id)!;
     await waitForSearchTools(agent);
     assertEquals(
       (await searchListing(agent)).includes("mcp__"),
@@ -314,7 +310,7 @@ test("an MCP config saved while a session streams reaches that session", async (
         return fauxAssistantMessage("slow reply");
       },
     ]);
-    core.startPrompt(session.id, "go");
+    core.services.sessions.startPrompt(session.id, "go");
     while (!agent.isStreaming) {
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
@@ -332,7 +328,7 @@ test("an MCP config saved while a session streams reaches that session", async (
     );
     assertEquals(core.services.mcp.getAppMcpInfo().exists, true);
     // Saving did not disturb the run: the same agent, still streaming.
-    assertEquals(core.getAgent(session.id), agent);
+    assertEquals(core.services.sessions.getAgent(session.id), agent);
     assertEquals(agent.isStreaming, true);
     // The new server is this session's (the status is read from its
     // attachment, which the save swapped in place).
@@ -419,12 +415,12 @@ test("workspace .mcp.json overrides same-named app servers", async () => {
   );
   const ws = await core.services.workspaces.create("ws", [root]);
   try {
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
     });
-    const agent = core.getAgent(session.id)!;
+    const agent = core.services.sessions.getAgent(session.id)!;
     // The workspace override wins: browsing the registry must list the
     // working fake server's tools — they would be missing if the app-level
     // "fake" (a binary that cannot start) had won the merge.
@@ -437,7 +433,7 @@ test("workspace .mcp.json overrides same-named app servers", async () => {
       fauxAssistantMessage("Done."),
     ]);
     await promptSession(core, session.id, "List the available tools");
-    const browse = core
+    const browse = core.services.sessions
       .getAgent(session.id)!
       .messages.filter((m) => m.role === "toolResult")
       .at(-1) as { content: Array<{ type: string; text: string }> };
@@ -485,7 +481,7 @@ test("first prompt waits for MCP tools to attach", async () => {
     // must gate the run on MCP readiness so the FIRST turn already sees
     // the search/call pair (previously the run started before the servers
     // had spawned and the tools were missing from the first request).
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
@@ -506,7 +502,7 @@ test("first prompt waits for MCP tools to attach", async () => {
     ]);
     await promptSession(core, session.id, "Echo first");
 
-    const messages = core.getAgent(session.id)!.messages;
+    const messages = core.services.sessions.getAgent(session.id)!.messages;
     const toolResults = messages.filter((m) => m.role === "toolResult");
     assertEquals(toolResults.length, 2);
     const tr = toolResults[1] as {
@@ -537,14 +533,14 @@ test("first prompt waits for MCP tools to attach", async () => {
 test("detaching the browser backend removes browser tools on rebuild", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
-  core.setBrowserBackend(new FakeBrowserBackend());
+  core.capabilities.setBrowserBackend(new FakeBrowserBackend());
   try {
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
     });
-    const seeded = core.getAgent(session.id)!;
+    const seeded = core.services.sessions.getAgent(session.id)!;
     assertEquals(
       seeded.agent.state.tools.some((t) => t.name === TOOL_SEARCH),
       true,
@@ -557,9 +553,9 @@ test("detaching the browser backend removes browser tools on rebuild", async () 
     // is seeded for every workspace session — so the search/call pair is
     // still attached and the on-demand-tools note is still published;
     // only the browser tools are gone.
-    core.setBrowserBackend(undefined);
-    core.setSessionModel(session.id, providerId, modelId);
-    const detached = core.getAgent(session.id)!;
+    core.capabilities.setBrowserBackend(undefined);
+    core.services.sessions.setSessionModel(session.id, providerId, modelId);
+    const detached = core.services.sessions.getAgent(session.id)!;
     assert(detached !== seeded, "setSessionModel must rebuild the agent");
     assertEquals(
       detached.agent.state.tools.some((t) => t.name === TOOL_SEARCH),
@@ -582,7 +578,7 @@ test("detaching the browser backend removes browser tools on rebuild", async () 
     faux.setResponses([fauxAssistantMessage("ok")]);
     await promptSession(core, session.id, "after detaching");
     const notes = contextMessages(
-      core.getAgent(session.id)!,
+      core.services.sessions.getAgent(session.id)!,
       MCP_TOOLS_PROVIDER,
     );
     assertEquals(notes.length, 1, "the note is published exactly once");
@@ -592,7 +588,7 @@ test("detaching the browser backend removes browser tools on rebuild", async () 
       "the on-demand-tools note stays while the registry holds tools",
     );
     assertEquals(
-      core
+      core.services.sessions
         .getAgent(session.id)!
         .agent.state.systemPrompt.includes("tool_search"),
       false,
@@ -600,9 +596,9 @@ test("detaching the browser backend removes browser tools on rebuild", async () 
     );
 
     // Re-attaching restores the browser tools on the next rebuild.
-    core.setBrowserBackend(new FakeBrowserBackend());
-    core.setSessionModel(session.id, providerId, modelId);
-    const restored = core.getAgent(session.id)!;
+    core.capabilities.setBrowserBackend(new FakeBrowserBackend());
+    core.services.sessions.setSessionModel(session.id, providerId, modelId);
+    const restored = core.services.sessions.getAgent(session.id)!;
     assertEquals(
       restored.agent.state.tools.some((t) => t.name === TOOL_SEARCH),
       true,
@@ -625,12 +621,12 @@ test("the agent adds and removes an MCP server with its own tools", async () => 
   );
   const ws = await core.services.workspaces.create("ws", [root]);
   try {
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
     });
-    const agent = core.getAgent(session.id)!;
+    const agent = core.services.sessions.getAgent(session.id)!;
     await waitForSearchTools(agent);
     const call = agent.agent.state.tools.find((t) => t.name === TOOL_CALL)!;
     const search = agent.agent.state.tools.find((t) => t.name === TOOL_SEARCH)!;
@@ -658,7 +654,7 @@ test("the agent adds and removes an MCP server with its own tools", async () => 
         return fauxAssistantMessage("slow reply");
       },
     ]);
-    core.startPrompt(session.id, "go");
+    core.services.sessions.startPrompt(session.id, "go");
     while (!agent.isStreaming) {
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
@@ -685,7 +681,7 @@ test("the agent adds and removes an MCP server with its own tools", async () => 
       ["fake"],
     );
     assertEquals(
-      core.getAgent(session.id),
+      core.services.sessions.getAgent(session.id),
       agent,
       "the run's agent must survive the config change",
     );
@@ -723,7 +719,9 @@ test("the agent adds and removes an MCP server with its own tools", async () => 
 
     // The guide the flow starts from is in this session's catalog (the
     // composer's palette and the agent's skill tool list the same set).
-    const palette = core.listSkills(ws.id).map((skill) => skill.name);
+    const palette = core.services.sessions
+      .listSkills(ws.id)
+      .map((skill) => skill.name);
     assert(palette.includes("mcp-servers"), palette.join(", "));
     const catalog = agent.messages.find(
       (m) => m.role === "context" && m.provider === "skills",

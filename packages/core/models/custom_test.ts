@@ -2,6 +2,7 @@ import { test } from "bun:test";
 import * as fsp from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
 import { join, join as pathJoin } from "node:path";
+import { forTestingCore, openCore } from "@lumisca/core";
 import { assertEquals, assertThrows } from "@std/assert";
 import { LumiscaCore } from "../mod.ts";
 import { inputBudgetTokens } from "../shared/context-usage.ts";
@@ -121,7 +122,7 @@ test("models.json apiKey ${ENV} resolves from the environment", async () => {
       },
     }),
   );
-  const core = LumiscaCore.forTesting(
+  const core = forTestingCore(
     [],
     envOf({
       LUMISCA_MODELS_FILE: path,
@@ -157,7 +158,7 @@ test("models.json literal apiKey resolves without env vars", async () => {
       },
     }),
   );
-  const core = LumiscaCore.forTesting([], envOf({ LUMISCA_MODELS_FILE: path }));
+  const core = forTestingCore([], envOf({ LUMISCA_MODELS_FILE: path }));
   try {
     const check = await core.services.models.checkAuth("custom");
     assertEquals(check?.source, "models.json");
@@ -208,7 +209,7 @@ test("models.json without apiKey falls back to LUMISCA_API_KEY_<ID>", async () =
       },
     }),
   );
-  const core = LumiscaCore.forTesting(
+  const core = forTestingCore(
     [],
     envOf({
       LUMISCA_MODELS_FILE: path,
@@ -291,7 +292,7 @@ test("env provider wins id collisions with models.json", async () => {
       },
     }),
   );
-  const core = LumiscaCore.forTesting(
+  const core = forTestingCore(
     [],
     envOf({
       LUMISCA_MODELS_FILE: path,
@@ -322,7 +323,7 @@ test("LumiscaCore.open registers the custom provider from env", async () => {
   const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-custom-"));
   const dbPath = join(dir, "test.db");
   const settingsPath = join(dir, "settings.jsonc");
-  const core = LumiscaCore.open(
+  const core = openCore(
     dbPath,
     settingsPath,
     envOf({
@@ -345,7 +346,7 @@ test("LumiscaCore.open registers the custom provider from env", async () => {
 
     // A session can be created with the custom provider.
     const ws = await core.services.workspaces.create("ws", [dir]);
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: CUSTOM_PROVIDER_ID,
       modelId: "deepseek-chat",
@@ -378,7 +379,7 @@ test("a models.json entry may declare the input cap it publishes", async () => {
       },
     }),
   );
-  const core = LumiscaCore.forTesting([], envOf({ LUMISCA_MODELS_FILE: path }));
+  const core = forTestingCore([], envOf({ LUMISCA_MODELS_FILE: path }));
   try {
     const model = core.services.models.getModel("gw", "capped");
     assertEquals(model?.contextWindow, 1_050_000);

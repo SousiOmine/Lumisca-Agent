@@ -1,5 +1,5 @@
 import { test } from "bun:test";
-import { fauxProvider, LumiscaCore } from "@lumisca/core";
+import { fauxProvider, forTestingCore, LumiscaCore } from "@lumisca/core";
 import { LANGUAGE_KEY } from "@lumisca/core/shared";
 import { assert, assertEquals } from "@std/assert";
 import { createApp } from "./app.ts";
@@ -10,7 +10,7 @@ test("server rejects non-loopback Host headers (DNS rebinding guard)", async () 
   // Bun's fetch forbids overriding Host, so exercise the handler directly
   // with requests that target external hostnames.
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   const app = createApp(core);
   try {
     const evil = await app.fetch(
@@ -115,7 +115,7 @@ test("the desktop shell's preflight reaches the token-guarded API", async () => 
 
 test("every websocket path rejects a foreign origin", async () => {
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   const app = createApp(core);
   // The four sockets a page can open. A new socket is covered by the same
   // upgrade wrapper, so this list is a regression check, not the mechanism.
@@ -158,7 +158,7 @@ test("every websocket path rejects a foreign origin", async () => {
 
 test("websocket rejects cross-port origins", async () => {
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   const app = createApp(core);
   try {
     const crossPort = await app.fetch(
@@ -174,7 +174,7 @@ test("websocket rejects cross-port origins", async () => {
 
 test("token auth guards the API, websocket and page", async () => {
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   const app = createApp(core, { token: "secret-token" });
   // `new Request(...)` does not add a Host header; the loopback Host guard
   // needs one, so every probe sets it explicitly.
@@ -292,7 +292,7 @@ test("token auth guards the API, websocket and page", async () => {
 
 test("token auth remembers a presented token in a cookie", async () => {
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   const app = createApp(core, { token: "secret-token" });
   const HOST = { host: "127.0.0.1:8000" };
   try {
@@ -426,7 +426,7 @@ test("token auth remembers a presented token in a cookie", async () => {
 
 test("the MCP OAuth callback is reachable without the token", async () => {
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   const app = createApp(core, { token: "secret-token" });
   const HOST = { host: "127.0.0.1:8000" };
   try {
@@ -456,7 +456,7 @@ test("the MCP OAuth callback is reachable without the token", async () => {
 
 test("host guard rejects non-loopback hosts by default", async () => {
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   const app = createApp(core);
   try {
     const remote = await app.fetch(
@@ -481,7 +481,7 @@ test("host guard rejects non-loopback hosts by default", async () => {
 
 test("host guard accepts LUMISCA_ALLOWED_HOSTS", async () => {
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   const app = createApp(core, {
     allowedHosts: ["myserver.tailnet.ts.net", "192.168.1.20"],
   });
@@ -534,7 +534,7 @@ test("validateHostConfig requires a token for non-loopback binds", () => {
 
 test("websocket rejects cross-origin connections", async () => {
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   const app = createApp(core);
   try {
     // A malicious website's WS handshake must be refused before the upgrade.
@@ -573,7 +573,7 @@ test("websocket accepts a TLS front end's https origin for the same host", async
   // got no events at all, and the UI fell back to its 10-second snapshot
   // poll (remote sessions arrived seconds late, streaming text never flowed).
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   const app = createApp(core, {
     token: "t",
     allowedHosts: ["host.tailnet.ts.net"],

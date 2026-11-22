@@ -3,7 +3,12 @@ import * as fsSync from "node:fs";
 import * as fsp from "node:fs/promises";
 import { tmpdir as osTmpdir } from "node:os";
 import { join, join as pathJoin } from "node:path";
-import { fauxAssistantMessage, fauxToolCall, LumiscaCore } from "@lumisca/core";
+import {
+  fauxAssistantMessage,
+  fauxToolCall,
+  LumiscaCore,
+  openCore,
+} from "@lumisca/core";
 import { fakeStellaHost, removeDirRetry } from "@lumisca/core/test-utils";
 import { assertEquals } from "@std/assert";
 import { startServer } from "./app.ts";
@@ -74,7 +79,7 @@ test("default model API follows the configured providers", async () => {
 
     // Storing a key makes the faux provider the configured one: now the
     // fallback resolves there, and a session without a model starts on it.
-    await core.setProviderApiKey(faux.provider.id, "faux-key");
+    await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
     const fallback = await (
       await fetch(`${base}/api/sessions/default-model`)
     ).json();
@@ -98,7 +103,7 @@ test("default model API follows the configured providers", async () => {
 
     // Removing the credential takes the default away again: a last used
     // model whose provider is no longer configured must not be resurrected.
-    await core.logoutProvider(faux.provider.id);
+    await core.services.models.logoutProvider(faux.provider.id);
     assertEquals(
       await (await fetch(`${base}/api/sessions/default-model`)).json(),
       null,
@@ -174,7 +179,7 @@ test("settings API writes the model preferences the dialog offers", async () => 
   // with setSetting, the service path that has no allow-list).
   const { core, server, faux, base } = await setup();
   try {
-    await core.setProviderApiKey(faux.provider.id, "faux-key");
+    await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
     const pref = { provider: faux.provider.id, modelId: faux.getModel().id };
     const value = JSON.stringify(pref);
 
@@ -217,10 +222,7 @@ test("settings API writes the model preferences the dialog offers", async () => 
 
 test("personalize API reads and writes AGENTS.md next to the settings file", async () => {
   const dir = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-pers-"));
-  const core = LumiscaCore.open(
-    join(dir, "lumisca.db"),
-    join(dir, "settings.jsonc"),
-  );
+  const core = openCore(join(dir, "lumisca.db"), join(dir, "settings.jsonc"));
   const server = startServer(core, 0);
   const base = `http://127.0.0.1:${server.addr.port}`;
   const agentFile = join(dir, "AGENTS.md");
@@ -262,7 +264,10 @@ test("personalize API reads and writes AGENTS.md next to the settings file", asy
 test("settings API never exposes credentials", async () => {
   const { core, server, base } = await setup();
   try {
-    await core.setProviderApiKey("anthropic", "sk-secret-test-123");
+    await core.services.models.setProviderApiKey(
+      "anthropic",
+      "sk-secret-test-123",
+    );
     const res = await fetch(`${base}/api/settings`);
     assertEquals(res.status, 200);
     const settings = (await res.json()) as Record<string, string>;
@@ -289,8 +294,8 @@ test("stella API: the conversation carries the conversation, never the model's c
   // together with what it SENT with `send_chat`.
   const { core, faux, server, base } = await setup();
   try {
-    await core.setProviderApiKey(faux.provider.id, "faux-key");
-    core.setStellaVm(
+    await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
+    core.services.stellaMachines.setStellaVm(
       fakeStellaHost({
         vncPort: null,
         status: { state: "stopped", vncPort: null, reason: "" },

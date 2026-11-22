@@ -1,9 +1,10 @@
 import { test } from "bun:test";
 import * as fsp from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { forTestingCore } from "@lumisca/core";
 import { assert, assertEquals } from "@std/assert";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "./ai/faux.ts";
-import { LumiscaCore } from "./core.ts";
+import type { LumiscaCore } from "./core.ts";
 import type { AgentMessage } from "./domain/message.ts";
 import { runProcess } from "./process.ts";
 import { promptSession } from "./test-utils.ts";
@@ -50,7 +51,7 @@ async function machineReady(): Promise<boolean> {
  * here are the test's — a test that drives them must leave the user's own
  * alone. Detaching first makes `stopAll()` a no-op. */
 async function closeTestCore(core: LumiscaCore): Promise<void> {
-  core.setStellaVm(undefined);
+  core.services.stellaMachines.setStellaVm(undefined);
   await core.close();
 }
 
@@ -59,22 +60,27 @@ test.skipIf(!(await machineReady()))(
   async () => {
     const host = createVmHost({ containerDir });
     const faux = fauxProvider();
-    const core = LumiscaCore.forTesting([faux.provider]);
+    const core = forTestingCore([faux.provider]);
     try {
-      await core.setProviderApiKey(faux.provider.id, "faux-key");
-      core.setStellaVm(host);
-      await core.getStellaAvailability();
+      await core.services.models.setProviderApiKey(
+        faux.provider.id,
+        "faux-key",
+      );
+      core.services.stellaMachines.setStellaVm(host);
+      await core.services.stellaMachines.getStellaAvailability();
 
       // A fresh core has no counterpart yet: stella has no default agent
       // (the first run asks the user to name one), so the test makes its own.
-      const counterpart = await core.createStellaAgent({
+      const counterpart = await core.services.stellaAgents.createStellaAgent({
         name: "Live Check",
         role: "Verifies that tools run inside the machine.",
       });
-      const session = await core.getOrCreateStellaSession(counterpart.id);
+      const session = await core.internals.getOrCreateStellaSession(
+        counterpart.id,
+      );
       // The agent is open; its tool set is the machine's (the VM tools are
       // preloaded and `eval` — the one host-process escape — is not).
-      const agent = core.getAgent(session.id);
+      const agent = core.services.sessions.getAgent(session.id);
       assert(agent !== undefined, "the stella agent must be open");
 
       // A write through the file tool must land inside the machine.
@@ -131,18 +137,26 @@ test.skipIf(!(await machineReady()))(
   async () => {
     const host = createVmHost({ containerDir });
     const faux = fauxProvider();
-    const core = LumiscaCore.forTesting([faux.provider]);
+    const core = forTestingCore([faux.provider]);
     try {
-      await core.setProviderApiKey(faux.provider.id, "faux-key");
-      core.setStellaVm(host);
-      await core.getStellaAvailability();
+      await core.services.models.setProviderApiKey(
+        faux.provider.id,
+        "faux-key",
+      );
+      core.services.stellaMachines.setStellaVm(host);
+      await core.services.stellaMachines.getStellaAvailability();
 
-      const counterpart = await core.createStellaAgent({
+      const counterpart = await core.services.stellaAgents.createStellaAgent({
         name: "History Reader",
         role: "Looks back at earlier turns.",
       });
-      const session = await core.getOrCreateStellaSession(counterpart.id);
-      assert(core.getAgent(session.id) !== undefined, "the agent must be open");
+      const session = await core.internals.getOrCreateStellaSession(
+        counterpart.id,
+      );
+      assert(
+        core.services.sessions.getAgent(session.id) !== undefined,
+        "the agent must be open",
+      );
 
       // The tool is in the agent's preloaded set, without going through
       // tool_search: a condensed conversation has to know it can look back.
@@ -159,7 +173,7 @@ test.skipIf(!(await machineReady()))(
 
       // The result the model received carries the earlier turn, which is the
       // whole point: it came from the rows, not from the visible context.
-      const result = core
+      const result = core.services.sessions
         .getAgent(session.id)
         ?.messages.find(
           (message) =>
@@ -186,19 +200,22 @@ test.skipIf(!(await machineReady()))(
   async () => {
     const host = createVmHost({ containerDir });
     const faux = fauxProvider();
-    const core = LumiscaCore.forTesting([faux.provider]);
+    const core = forTestingCore([faux.provider]);
     let created: string | undefined;
     try {
-      await core.setProviderApiKey(faux.provider.id, "faux-key");
-      core.setStellaVm(host);
-      await core.getStellaAvailability();
-      const agent = await core.createStellaAgent({
+      await core.services.models.setProviderApiKey(
+        faux.provider.id,
+        "faux-key",
+      );
+      core.services.stellaMachines.setStellaVm(host);
+      await core.services.stellaMachines.getStellaAvailability();
+      const agent = await core.services.stellaAgents.createStellaAgent({
         name: "Live Worker",
         role: "Writes files where it is asked to.",
       });
       created = agent.id;
-      const session = await core.getOrCreateStellaSession(agent.id);
-      const open = core.getAgent(session.id);
+      const session = await core.internals.getOrCreateStellaSession(agent.id);
+      const open = core.services.sessions.getAgent(session.id);
       assert(open !== undefined, "the agent must be open");
 
       // A relative path lands in THIS agent's folder (the working folder),
@@ -295,18 +312,21 @@ test.skipIf(!(await machineReady()))(
   async () => {
     const host = createVmHost({ containerDir });
     const faux = fauxProvider();
-    const core = LumiscaCore.forTesting([faux.provider]);
+    const core = forTestingCore([faux.provider]);
     try {
-      await core.setProviderApiKey(faux.provider.id, "faux-key");
-      core.setStellaVm(host);
-      await core.getStellaAvailability();
-      const agent = await core.createStellaAgent({
+      await core.services.models.setProviderApiKey(
+        faux.provider.id,
+        "faux-key",
+      );
+      core.services.stellaMachines.setStellaVm(host);
+      await core.services.stellaMachines.getStellaAvailability();
+      const agent = await core.services.stellaAgents.createStellaAgent({
         name: "Live Memory",
         role: "Keeps notes for later runs.",
       });
       // Opening the conversation wakes the machine (nothing else has), and
       // the open prepares the folder and MEMORY.md with it.
-      const session = await core.getOrCreateStellaSession(agent.id);
+      const session = await core.internals.getOrCreateStellaSession(agent.id);
       const path = `${vmAgentDir(agent.id)}/MEMORY.md`;
       assertEquals(await runInMachine(agent.id, ["cat", path]), "");
 
@@ -331,8 +351,8 @@ test.skipIf(!(await machineReady()))(
 
       // Reopening the conversation prepares the folder again — this is the
       // regression that would cost the notes: `: >` without the guard.
-      core.closeSession(session.id);
-      await core.getOrCreateStellaSession(agent.id);
+      core.services.sessions.closeSession(session.id);
+      await core.internals.getOrCreateStellaSession(agent.id);
       assertEquals(
         await runInMachine(agent.id, ["cat", path]),
         "- the user writes in Japanese\n",

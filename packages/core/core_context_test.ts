@@ -5,6 +5,7 @@ import { join, join as pathJoin } from "node:path";
 import {
   fauxAssistantMessage,
   fauxProvider,
+  forTestingCore,
   type StreamRequest,
 } from "@lumisca/core";
 import { assert, assertEquals } from "@std/assert";
@@ -92,7 +93,7 @@ function setupFastTitle() {
       { id: "fast", input: ["text"] },
     ],
   });
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   core.settings.set(
     FAST_MODEL_KEY,
     serializeModelPreference({
@@ -110,7 +111,7 @@ test("mode prompt keeps the images attached in the composer", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
 
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -135,17 +136,17 @@ test("mode prompt keeps the images attached in the composer", async () => {
     mimeType: "image/png",
   };
   const fullPrompt = "あなたは実装プランナーです。履歴機能を追加して";
-  core.startPrompt(session.id, fullPrompt, [image], {
+  core.services.sessions.startPrompt(session.id, fullPrompt, [image], {
     modeId: "plan",
     optionId: "",
     modeLabel: "プランモード",
     shortText: "履歴機能を追加して",
   });
-  await core.getAgent(session.id)!.waitForIdle();
+  await core.services.sessions.getAgent(session.id)!.waitForIdle();
 
   // The transcript stores the image on the mode message (the UI renders it
   // in the bubble; the rewind action restores it to the composer).
-  const modeMessage = core
+  const modeMessage = core.services.sessions
     .getAgent(session.id)!
     .messages.find(
       (m): m is Extract<AgentMessage, { role: "mode" }> => m.role === "mode",
@@ -172,12 +173,12 @@ test("workspace instructions are context messages, not prompt text, and edits re
   await fsp.writeFile(join(root, "AGENTS.md"), "Use Rust 2.\n");
   const ws = await core.services.workspaces.create("ws", [root]);
 
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
   });
-  const agent = core.getAgent(session.id)!;
+  const agent = core.services.sessions.getAgent(session.id)!;
   const prompt = agent.agent.state.systemPrompt;
   assertEquals(
     prompt.includes("Use Rust 2."),
@@ -222,9 +223,9 @@ test("workspace instructions are context messages, not prompt text, and edits re
 
   // Reopening keeps the stored prompt and does not republish an unchanged
   // instruction file.
-  core.closeSession(session.id);
-  await core.openSession(session.id);
-  const reopened = core.getAgent(session.id)!;
+  core.services.sessions.closeSession(session.id);
+  await core.services.sessions.openSession(session.id);
+  const reopened = core.services.sessions.getAgent(session.id)!;
   assertEquals(reopened.agent.state.systemPrompt, prompt);
   faux.setResponses([fauxAssistantMessage("ok")]);
   await promptSession(core, session.id, "third");
@@ -235,12 +236,12 @@ test("workspace instructions are context messages, not prompt text, and edits re
   );
 
   // A session created after the edit starts from the current content.
-  const fresh = await core.createSession({
+  const fresh = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
   });
-  const freshAgent = core.getAgent(fresh.id)!;
+  const freshAgent = core.services.sessions.getAgent(fresh.id)!;
   faux.setResponses([fauxAssistantMessage("ok")]);
   await promptSession(core, fresh.id, "hello");
   const freshBaseline = instructionsMessages(freshAgent);
@@ -257,12 +258,12 @@ test("workspace instructions are context messages, not prompt text, and edits re
 test("the date is published once as a context message, not rewritten into the prompt", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
   });
-  const agent = core.getAgent(session.id)!;
+  const agent = core.services.sessions.getAgent(session.id)!;
 
   // The prompt is a creation-time snapshot, so a fact that changes while
   // the session lives (the date) must not be baked into it.
@@ -302,9 +303,9 @@ test("the date is published once as a context message, not rewritten into the pr
   // ...and neither does reopening the session: the publication is still in
   // the history the model reads, so the provider has nothing to add — and
   // the prompt snapshot is untouched.
-  core.closeSession(session.id);
-  await core.openSession(session.id);
-  const reopened = core.getAgent(session.id)!;
+  core.services.sessions.closeSession(session.id);
+  await core.services.sessions.openSession(session.id);
+  const reopened = core.services.sessions.getAgent(session.id)!;
   const prompt = agent.agent.state.systemPrompt;
   faux.setResponses([fauxAssistantMessage("ok")]);
   await promptSession(core, session.id, "third");
@@ -321,7 +322,7 @@ test("startPrompt (web path): first prompt auto-generates the session title", as
 
   // Pinned like the test above: the provisional name is localized.
   core.settings.set(LANGUAGE_KEY, "ja");
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId: "main",
@@ -339,8 +340,8 @@ test("startPrompt (web path): first prompt auto-generates the session title", as
 
   // The web/HTTP path is fire-and-forget (startPrompt): the title must
   // still be generated from the first message.
-  core.startPrompt(session.id, "Please fix the login bug");
-  await core.getAgent(session.id)!.waitForIdle();
+  core.services.sessions.startPrompt(session.id, "Please fix the login bug");
+  await core.services.sessions.getAgent(session.id)!.waitForIdle();
 
   assertEquals(captured.length, 2);
   assertEquals(captured[0]!.model, "fast");
@@ -357,7 +358,10 @@ test("startPrompt (web path): first prompt auto-generates the session title", as
   assert(titleRequest.includes("<message>"));
   assertEquals(captured[0]!.systemPrompt, undefined);
   assertEquals(captured[1]!.model, "main");
-  assertEquals(core.getSession(session.id)!.name, "Fix login bug");
+  assertEquals(
+    core.services.sessions.getSession(session.id)!.name,
+    "Fix login bug",
+  );
 
   core.close();
 });
@@ -366,7 +370,7 @@ test("reopened session with history does not regenerate the title", async () => 
   const { core, faux, providerId } = setupFastTitle();
   const { ws } = await makeWorkspace(core);
 
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId: "main",
@@ -382,14 +386,14 @@ test("reopened session with history does not regenerate the title", async () => 
   );
 
   await promptSession(core, session.id, "first message");
-  assertEquals(core.getSession(session.id)!.name, "Title A");
+  assertEquals(core.services.sessions.getSession(session.id)!.name, "Title A");
 
   // Reopen with history and prompt again: no new title generation.
-  core.closeSession(session.id);
-  await core.openSession(session.id);
+  core.services.sessions.closeSession(session.id);
+  await core.services.sessions.openSession(session.id);
   await promptSession(core, session.id, "second message");
 
-  assertEquals(core.getSession(session.id)!.name, "Title A");
+  assertEquals(core.services.sessions.getSession(session.id)!.name, "Title A");
   assertEquals(captured.length, 3); // title + first run + second run only
   assertEquals(captured[2]!.model, "main");
 

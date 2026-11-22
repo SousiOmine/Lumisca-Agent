@@ -118,12 +118,22 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   );
   const promptUploads = new PromptUploads({
     dir: options.uploadDir ?? join(repoRoot, ".lumisca-uploads"),
-    core,
+    core: {
+      getStellaAgent: (id) => core.services.stellaAgents.getStellaAgent(id),
+      ensureStellaReady: (agentId) =>
+        core.services.stellaMachines.ensureStellaReady(agentId),
+      getOrCreateStellaSession: (agentId) =>
+        core.internals.getOrCreateStellaSession(agentId),
+      savePromptFile: (sessionId, file, signal) =>
+        core.services.sessions.savePromptFile(sessionId, file, signal),
+    },
   });
   // The first agent is created with the app's own picture, not an initial.
   // Read through the server's asset manifest, so a packaged server carries
   // the same image the PWA installs with.
-  core.setStarterAgentIcon(() => assets.getPwaIcon("icon-192.png"));
+  core.services.stellaAgents.setStarterAgentIcon(() =>
+    assets.getPwaIcon("icon-192.png"),
+  );
 
   // Federated peers (the server-side connection registry): the hub proxies
   // their workspaces/sessions and relays their events, tagged with the
@@ -147,8 +157,8 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   const push = createPushNotifier({
     core: {
       subscribe: (listener) => core.subscribe(listener),
-      getSession: (id) => core.getSession(id),
-      getStellaAgent: (id) => core.getStellaAgent(id),
+      getSession: (id) => core.services.sessions.getSession(id),
+      getStellaAgent: (id) => core.services.stellaAgents.getStellaAgent(id),
       listPushSubscriptions: () => core.services.push.list(),
       pushVapidKeys: () => core.services.push.vapidKeys(),
       forgetPushSubscriptions: (endpoints) =>
@@ -157,6 +167,8 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
     language: () => core.settings.language(),
     ...(options.pushFetch === undefined ? {} : { fetch: options.pushFetch }),
   });
+
+  const sessions = core.services.sessions;
 
   // Host guard, token, CORS, and the WS Origin check.
   installSecurityMiddleware(app, options, (c) => languageForRequest(core, c));
@@ -245,7 +257,7 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
 
   app.route("/api", fsRoutes());
   app.route("/api", workspaceRoutes(core.services.workspaces));
-  app.route("/api", skillRoutes(core));
+  app.route("/api", skillRoutes(core.services.sessions));
   app.route(
     "/api",
     mcpRoutes(core.services.mcp, (c) => languageForRequest(core, c)),
@@ -253,16 +265,132 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   // Web search: its own surface because the setting holds API keys (the
   // generic /settings surface filters it out).
   app.route("/api", webSearchRoutes(core.services.webSearch));
-  app.route("/api", sessionRoutes(core));
+  app.route(
+    "/api",
+    sessionRoutes({
+      sessions: core.services.sessions,
+      getSessionRevision: (id) => core.getSessionRevision(id),
+    }),
+  );
   // stella mode's own surface. It takes no delta-flush option: a
   // conversation has no streaming text (a message arrives when its turn
   // ends), so there is no batch to time.
-  app.route("/api", stellaRoutes(core, promptUploads));
+  app.route(
+    "/api",
+    stellaRoutes(
+      {
+        listStellaAgentSummaries: () =>
+          core.services.stellaAgents.listStellaAgentSummaries(),
+        ensureStellaAgent: () => core.services.stellaAgents.ensureStellaAgent(),
+        createStellaAgent: (input) =>
+          core.services.stellaAgents.createStellaAgent(input),
+        updateStellaAgent: (id, patch) =>
+          core.services.stellaAgents.updateStellaAgent(id, patch),
+        deleteStellaAgent: (id) =>
+          core.services.stellaAgents.deleteStellaAgent(id),
+        getStellaStatus: () => core.services.stellaMachines.getStellaStatus(),
+        getStellaAgentStatus: (agentId) =>
+          core.services.stellaMachines.stellaAgentStatus(agentId),
+        wakeStellaAgent: (agentId) =>
+          core.services.stellaMachines.wakeStellaAgent(agentId),
+        touchStellaAgent: (agentId) =>
+          core.services.stellaMachines.touchStellaAgent(agentId),
+        getOrCreateStellaSession: (agentId) =>
+          core.internals.getOrCreateStellaSession(agentId),
+        startStellaOnboarding: (agentId) =>
+          core.services.stellaAgents.startOnboarding(agentId),
+        ensureStellaReady: (agentId) =>
+          core.services.stellaMachines.ensureStellaReady(agentId),
+        ensureStellaSkills: (agentId) =>
+          core.services.stellaMachines.ensureStellaSkills(agentId),
+        findStellaSession: (agentId) => sessions.findStellaSession(agentId),
+        readStellaConversation: (sessionId, query) =>
+          sessions.readStellaConversation(sessionId, query),
+        readStellaConversationFromStore: (sessionId, query) =>
+          sessions.readStellaConversationFromStore(sessionId, query),
+        getPendingQuestions: (sessionId) =>
+          sessions.getPendingQuestions(sessionId),
+        getPendingHandover: (sessionId) =>
+          core.services.interruptions.getPendingHandover(sessionId),
+        getPendingEnvRequest: (sessionId) =>
+          core.services.interruptions.getPendingEnvRequest(sessionId),
+        getPendingShareRequest: (sessionId) =>
+          core.services.interruptions.getPendingShareRequest(sessionId),
+        finishShareLend: (sessionId, toolCallId) =>
+          core.services.interruptions.finishShareLend(sessionId, toolCallId),
+        declineShareRequest: (sessionId, toolCallId) =>
+          core.services.interruptions.declineShareRequest(
+            sessionId,
+            toolCallId,
+          ),
+        finishShareDisconnect: (sessionId, toolCallId) =>
+          core.services.interruptions.finishShareDisconnect(
+            sessionId,
+            toolCallId,
+          ),
+        failShareDisconnect: (sessionId, toolCallId, error) =>
+          core.services.interruptions.failShareDisconnect(
+            sessionId,
+            toolCallId,
+            error,
+          ),
+        getShares: (sessionId) => core.shares.sharesFor(sessionId),
+        getSessionLastError: (sessionId) =>
+          sessions.getSessionLastError(sessionId),
+        getSession: (sessionId) => sessions.getSession(sessionId),
+        getThinkingState: (sessionId) => sessions.getThinkingState(sessionId),
+        getAgent: (sessionId) => sessions.getAgent(sessionId),
+        getStellaAgent: (id) => core.services.stellaAgents.getStellaAgent(id),
+        openSession: (sessionId) => sessions.openSession(sessionId),
+        startPrompt: (sessionId, text, images, mode, files) =>
+          sessions.startPrompt(sessionId, text, images, mode, files),
+        savePromptImages: (sessionId, uploads) =>
+          sessions.savePromptImages(sessionId, uploads),
+        abort: (sessionId) => sessions.abort(sessionId),
+        rewind: (sessionId, timestamp) => sessions.rewind(sessionId, timestamp),
+        setSessionModel: (sessionId, provider, modelId) =>
+          sessions.setSessionModel(sessionId, provider, modelId),
+        answerQuestion: (sessionId, toolCallId, answers) =>
+          sessions.answerQuestion(sessionId, toolCallId, answers),
+        finishHandover: (sessionId, note, toolCallId) =>
+          core.services.interruptions.finishHandover(
+            sessionId,
+            note,
+            toolCallId,
+          ),
+        provideStellaEnv: (sessionId, value, toolCallId) =>
+          core.services.stellaMachines.provideEnv(sessionId, value, toolCallId),
+        declineStellaEnv: (sessionId, toolCallId) =>
+          core.services.stellaMachines.declineEnv(sessionId, toolCallId),
+        readStellaClipboard: (sessionId) =>
+          core.services.stellaMachines.readClipboard(
+            sessions.requireSession(sessionId),
+          ),
+        writeStellaClipboard: (sessionId, text) =>
+          core.services.stellaMachines.writeClipboard(
+            sessions.requireSession(sessionId),
+            text,
+          ),
+        subscribe: (listener) => core.subscribe(listener),
+        getSessionRevision: (sessionId) => core.getSessionRevision(sessionId),
+      },
+      promptUploads,
+    ),
+  );
   // The chunks of a file the browser is attaching to a prompt: their own
   // routes because the body is raw bytes, not the API's JSON.
   app.route("/api", promptUploadRoutes(promptUploads));
   // An agent's picture and a prompt's uploaded file: raw bytes, same prefix.
-  app.route("/api", stellaAssetRoutes(core));
+  app.route(
+    "/api",
+    stellaAssetRoutes({
+      getStellaAgent: (id) => core.services.stellaAgents.getStellaAgent(id),
+      resolveStellaAgentIcon: (agentId, name) =>
+        core.services.stellaAgents.resolveStellaAgentIcon(agentId, name),
+      resolvePromptUpload: (agentId, ref) =>
+        core.services.sessions.resolvePromptUpload(agentId, ref),
+    }),
+  );
   // Routines: the scheduled requests of a stella conversation. Addressed by
   // agent, because a routine belongs to one conversation.
   app.route(
@@ -274,17 +402,31 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
       runRoutineNow: (id) => core.routines.runNow(id),
       stopRoutine: (id) => core.routines.stop(id),
       getRoutineRepo: () => core.routines.getRoutineRepo(),
-      listStellaAgents: () => core.listStellaAgents(),
+      listStellaAgents: () => core.services.stellaAgents.listStellaAgents(),
       nextRoutineRun: (schedule, from) => nextRunAt(schedule, from),
     }),
   );
   // The images a session published for its replies. Mounted after the
   // session routes (its path is its own `/sessions/:id/visual/:name`).
-  app.route("/api", visualRoutes(core));
+  app.route(
+    "/api",
+    visualRoutes({
+      getSession: (id) => sessions.getSession(id),
+      resolveSessionVisual: (sessionId, name) =>
+        sessions.resolveSessionVisual(sessionId, name),
+    }),
+  );
   // The files an agent handed to the user (`chat_attach` in code mode,
   // `send_chat`'s attachments in stella). Their own path shape, like the
   // visuals above.
-  app.route("/api", attachmentRoutes(core));
+  app.route(
+    "/api",
+    attachmentRoutes({
+      getSession: (id) => sessions.getSession(id),
+      resolveSessionAttachment: (sessionId, name) =>
+        sessions.resolveSessionAttachment(sessionId, name),
+    }),
+  );
   app.route(
     "/api",
     providerRoutes(core.services.models, (dispose) =>
@@ -296,11 +438,14 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
     settingRoutes({
       listSettings: () => core.settings.list(),
       setUserSetting: (key, value) => core.settings.setUser(key, value),
-      setComputerUseEnabled: (enabled) => core.setComputerUseEnabled(enabled),
+      setComputerUseEnabled: (enabled) =>
+        core.capabilities.setComputerUseEnabled(enabled),
       setCodeExecutionEnabled: (enabled) =>
-        core.setCodeExecutionEnabled(enabled),
-      setAskToolEnabled: (enabled) => core.setAskToolEnabled(enabled),
-      setAppUiInSystemPrompt: (enabled) => core.setAppUiInSystemPrompt(enabled),
+        core.capabilities.setCodeExecutionEnabled(enabled),
+      setAskToolEnabled: (enabled) =>
+        core.capabilities.setAskToolEnabled(enabled),
+      setAppUiInSystemPrompt: (enabled) =>
+        core.capabilities.setAppUiInSystemPrompt(enabled),
       getPersonalization: () => core.services.personalization.get(),
       setPersonalization: (content) =>
         core.services.personalization.set(content),
@@ -416,12 +561,14 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
       // to, and the port follows that agent's slot.
       vncPort: async (agentId) => {
         if (agentId === null) return null;
-        return await core.stellaVncPort(agentId);
+        return await core.services.stellaMachines.stellaVncPort(agentId);
       },
       // The pane is the user looking at the desktop: keep the machine warm
       // while it is open. A close restarts the idle clock from that moment.
-      watch: (agentId) => core.stellaWatchScreen(agentId),
-      unwatch: (agentId) => core.stellaUnwatchScreen(agentId),
+      watch: (agentId) =>
+        core.services.stellaMachines.watchStellaAgent(agentId),
+      unwatch: (agentId) =>
+        core.services.stellaMachines.unwatchStellaAgent(agentId),
     }),
   );
 

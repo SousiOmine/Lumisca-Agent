@@ -6,6 +6,7 @@ import {
   fauxAssistantMessage,
   fauxProvider,
   fauxToolCall,
+  forTestingCore,
   LumiscaCore,
   type TodoPhase,
 } from "@lumisca/core";
@@ -348,7 +349,7 @@ test("revision endpoint tracks the events of a session", async () => {
       method: "POST",
       body: JSON.stringify({ text: "Hi" }),
     });
-    await core.getAgent(session.id)!.waitForIdle();
+    await core.services.sessions.getAgent(session.id)!.waitForIdle();
 
     const afterRun = await revision();
     assert(afterRun > 0, "the run's events advanced the revision");
@@ -429,8 +430,8 @@ test("prompt API steers a prompt sent while the session is streaming", async () 
     });
     assertEquals(second.status, 200);
 
-    await core.getAgent(session.id)!.waitForIdle();
-    const userTexts = core
+    await core.services.sessions.getAgent(session.id)!.waitForIdle();
+    const userTexts = core.services.sessions
       .getAgent(session.id)!
       .messages.filter((m) => m.role === "user")
       .map((m) => (m.content[0] as { text: string }).text);
@@ -445,7 +446,7 @@ test("prompt API steers a prompt sent while the session is streaming", async () 
 test("federation: hub reports its peers and proxies their workspaces and sessions", async () => {
   // Peer first: the hub's federation client connects to it at startup.
   const peerFaux = fauxProvider();
-  const peerCore = LumiscaCore.forTesting([peerFaux.provider]);
+  const peerCore = forTestingCore([peerFaux.provider]);
   const peerServer = startServer(peerCore, 0, { token: "peer-token" });
   const peerBase = `http://127.0.0.1:${peerServer.addr.port}`;
   let peerRoot = "";
@@ -462,7 +463,7 @@ test("federation: hub reports its peers and proxies their workspaces and session
     // Connections must be set BEFORE the server starts: the federation
     // client connects to peers once the listener is bound.
     const hubFaux = fauxProvider();
-    const hubCore = LumiscaCore.forTesting([hubFaux.provider]);
+    const hubCore = forTestingCore([hubFaux.provider]);
     hubCore.settings.setConnections([
       { id: "peer1", name: "自宅", url: peerBase, token: "peer-token" },
       // Registering the hub itself must be ignored (event loop guard).
@@ -641,7 +642,7 @@ test("federation: hub reports its peers and proxies their workspaces and session
     disposeServer(peerServer);
     peerServer.shutdown();
     peerCore.close();
-    const deadHubCore = LumiscaCore.forTesting([hubFaux.provider]);
+    const deadHubCore = forTestingCore([hubFaux.provider]);
     deadHubCore.settings.setConnections([
       { id: "peer1", name: "自宅", url: peerBase, token: "peer-token" },
     ]);
@@ -693,7 +694,7 @@ test("MCP config API: get, put, validate and rebuild sessions", async () => {
     assertEquals(emptyInfo.exists, false);
 
     // A session exists before the config is saved; PUT must rebuild it.
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       name: "mcp",
       modelProvider: providerId,
@@ -724,7 +725,7 @@ test("MCP config API: get, put, validate and rebuild sessions", async () => {
 
     // The rebuilt session attaches the search/call pair asynchronously —
     // the MCP definitions themselves stay out of the agent tool set.
-    const agent = core.getAgent(session.id)!;
+    const agent = core.services.sessions.getAgent(session.id)!;
     const started = Date.now();
     while (
       !agent.agent.state.tools.some((t) => t.name === "tool_search") &&
@@ -842,10 +843,10 @@ test("todo API returns the session's current plan", async () => {
 test("stella API: the conversation is opened by agent and never listed as a session", async () => {
   const { core, faux, server, base } = await setup();
   try {
-    await core.setProviderApiKey(faux.provider.id, "faux-key");
+    await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
     // Attach a machine that reports itself available; the conversation only
     // needs the manager to exist (its tools are exercised elsewhere).
-    core.setStellaVm(
+    core.services.stellaMachines.setStellaVm(
       fakeStellaHost({
         vncPort: null,
         status: { state: "stopped", vncPort: null, reason: "" },

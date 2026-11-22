@@ -147,7 +147,7 @@ test("workspace update rebuilds session tools", async () => {
   const { ws, root } = await makeWorkspace(core);
   const extra = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-extra-"));
 
-  await core.createSession({
+  await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -173,14 +173,14 @@ test("browser tools are discoverable via tool_search, never preloaded", async ()
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
   const backend = new FakeBrowserBackend();
-  core.setBrowserBackend(backend);
+  core.capabilities.setBrowserBackend(backend);
   try {
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
     });
-    const agent = core.getAgent(session.id)!;
+    const agent = core.services.sessions.getAgent(session.id)!;
     // The browser definitions stay in the session's registry (seeded by
     // the pool at open): the agent's tool set must not contain them —
     // finding them requires tool_search, exactly like MCP tools.
@@ -227,7 +227,7 @@ test("browser tools are discoverable via tool_search, never preloaded", async ()
 
     // The on-demand-tools note is published by that run as a context
     // message, before its user message — never appended to the prompt.
-    const running = core.getAgent(session.id)!;
+    const running = core.services.sessions.getAgent(session.id)!;
     const notes = contextMessages(running, MCP_TOOLS_PROVIDER);
     assertEquals(notes.length, 1, "the note is published exactly once");
     assertEquals(notes[0]!.body, ON_DEMAND_TOOLS_NOTE);
@@ -244,7 +244,7 @@ test("browser tools are discoverable via tool_search, never preloaded", async ()
 
     // The skill catalog went in before the user message and lists the
     // built-in browser skill.
-    const catalog = core
+    const catalog = core.services.sessions
       .getAgent(session.id)!
       .messages.find((m) => m.role === "context" && m.provider === "skills");
     assert(
@@ -258,7 +258,7 @@ test("browser tools are discoverable via tool_search, never preloaded", async ()
 
     assertEquals(backend.opens.length, 1);
     assertEquals(backend.opens[0]!.url, "http://127.0.0.1:5173/");
-    const messages = core.getAgent(session.id)!.messages;
+    const messages = core.services.sessions.getAgent(session.id)!.messages;
     const toolResults = messages.filter((m) => m.role === "toolResult");
     assertEquals(toolResults.length, 2);
     const tr = toolResults[1] as {
@@ -281,12 +281,12 @@ test("pdf tool is seeded into the session registry via tool_search", async () =>
   try {
     // No browser backend, no MCP servers: the PDF page-as-image tool is
     // still seeded by the pool at open.
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
     });
-    const agent = core.getAgent(session.id)!;
+    const agent = core.services.sessions.getAgent(session.id)!;
     assertEquals(
       agent.agent.state.tools.some((t) => t.name === TOOL_PDF_READ_PAGES),
       false,
@@ -309,7 +309,7 @@ test("pdf tool is seeded into the session registry via tool_search", async () =>
     ]);
     await promptSession(core, session.id, "What PDF tools exist?");
 
-    const messages = core.getAgent(session.id)!.messages;
+    const messages = core.services.sessions.getAgent(session.id)!.messages;
     const toolResults = messages.filter((m) => m.role === "toolResult");
     assertEquals(toolResults.length, 1);
     const tr = toolResults[0] as {
@@ -328,33 +328,35 @@ test("computer use: the tools are seeded via tool_search only when enabled", asy
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
   const host = new FakeComputerHost();
-  core.setComputerHost({ available: true, host });
+  core.capabilities.setComputerHost({ available: true, host });
   try {
     // Disabled by default: nothing seeded, no skill advertised.
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
     });
-    const disabled = core.getAgent(session.id)!;
+    const disabled = core.services.sessions.getAgent(session.id)!;
     assertEquals(
       disabled.agent.state.tools.some((t) => t.name.startsWith("computer_")),
       false,
       "definitions must never be preloaded",
     );
     assertEquals(
-      core.listSkills(ws.id).some((s) => s.name === "computer-use"),
+      core.services.sessions
+        .listSkills(ws.id)
+        .some((s) => s.name === "computer-use"),
       false,
       "the skill must not be advertised while the feature is off",
     );
-    assertEquals(core.isComputerUseEnabled(), false);
+    assertEquals(core.capabilities.isComputerUseEnabled(), false);
 
     // Enabling applies to the open session immediately (the pool rebuilds
     // it) and its registry now holds the family.
-    await core.setComputerUseEnabled(true);
-    const enabled = core.getAgent(session.id)!;
+    await core.capabilities.setComputerUseEnabled(true);
+    const enabled = core.services.sessions.getAgent(session.id)!;
     assert(enabled !== disabled, "enabling must rebuild the open agent");
-    assertEquals(core.isComputerUseEnabled(), true);
+    assertEquals(core.capabilities.isComputerUseEnabled(), true);
     assertEquals(
       enabled.agent.state.tools.some((t) => t.name.startsWith("computer_")),
       false,
@@ -367,7 +369,9 @@ test("computer use: the tools are seeded via tool_search only when enabled", asy
       "the search/call pair must be attached for the computer tools",
     );
     assertEquals(
-      core.listSkills(ws.id).some((s) => s.name === "computer-use"),
+      core.services.sessions
+        .listSkills(ws.id)
+        .some((s) => s.name === "computer-use"),
       true,
       "the built-in skill must be advertised once the feature is on",
     );
@@ -393,13 +397,13 @@ test("computer use: the tools are seeded via tool_search only when enabled", asy
     // The run published the on-demand-tools note as a context message,
     // ahead of its user message — the prompt stays free of it.
     const notes = contextMessages(
-      core.getAgent(session.id)!,
+      core.services.sessions.getAgent(session.id)!,
       MCP_TOOLS_PROVIDER,
     );
     assertEquals(notes.length, 1, "the note is published exactly once");
     assertEquals(notes[0]!.body, ON_DEMAND_TOOLS_NOTE);
     assertEquals(
-      core
+      core.services.sessions
         .getAgent(session.id)!
         .agent.state.systemPrompt.includes("tool_search"),
       false,
@@ -407,7 +411,7 @@ test("computer use: the tools are seeded via tool_search only when enabled", asy
     );
 
     assertEquals(host.captures, [{ x: 0, y: 0, width: 256, height: 144 }]);
-    const toolResults = core
+    const toolResults = core.services.sessions
       .getAgent(session.id)!
       .messages.filter((m) => m.role === "toolResult");
     assertEquals(toolResults.length, 2);
@@ -421,7 +425,7 @@ test("computer use: the tools are seeded via tool_search only when enabled", asy
       `unexpected screenshot result: ${tr.content[0]!.text}`,
     );
     // The skill catalog published before the run lists the built-in skill.
-    const catalog = core
+    const catalog = core.services.sessions
       .getAgent(session.id)!
       .messages.find((m) => m.role === "context" && m.provider === "skills");
     assert(
@@ -433,16 +437,18 @@ test("computer use: the tools are seeded via tool_search only when enabled", asy
 
     // Disabling removes the family from the registry again (the rebuild),
     // while the PDF tool keeps the search/call pair attached.
-    await core.setComputerUseEnabled(false);
-    const off = core.getAgent(session.id)!;
-    assertEquals(core.isComputerUseEnabled(), false);
+    await core.capabilities.setComputerUseEnabled(false);
+    const off = core.services.sessions.getAgent(session.id)!;
+    assertEquals(core.capabilities.isComputerUseEnabled(), false);
     assertEquals(
       off.agent.state.tools.some((t) => t.name === TOOL_SEARCH),
       true,
       "the PDF tool keeps the search/call pair attached",
     );
     assertEquals(
-      core.listSkills(ws.id).some((s) => s.name === "computer-use"),
+      core.services.sessions
+        .listSkills(ws.id)
+        .some((s) => s.name === "computer-use"),
       false,
       "the skill disappears with the capability",
     );
@@ -458,20 +464,24 @@ test("computer use: enabling asks the machine again, so a late desktop is usable
   // again instead of repeating a verdict made minutes ago at boot.
   const { core } = setup();
   const host = new FakeComputerHost();
-  core.setComputerHost({
+  core.capabilities.setComputerHost({
     available: false,
     reason: "the desktop was not up when the server started (test)",
   });
   let probes = 0;
-  core.setComputerHostProbe(() => {
+  core.capabilities.setComputerHostProbe(() => {
     probes++;
     return Promise.resolve({ available: true, host });
   });
   try {
-    await core.setComputerUseEnabled(true);
+    await core.capabilities.setComputerUseEnabled(true);
     assertEquals(probes, 1, "enabling must ask the machine");
-    assertEquals(core.isComputerUseEnabled(), true);
-    assertEquals(core.getComputerHost(), host, "the new host is attached");
+    assertEquals(core.capabilities.isComputerUseEnabled(), true);
+    assertEquals(
+      core.capabilities.getComputerHost(),
+      host,
+      "the new host is attached",
+    );
   } finally {
     core.close();
   }
@@ -480,7 +490,7 @@ test("computer use: enabling asks the machine again, so a late desktop is usable
 test("ask tool blocks the run until the user answers, then continues", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -508,13 +518,15 @@ test("ask tool blocks the run until the user answers, then continues", async () 
   const run = promptSession(core, session.id, "Which language should I use?");
   const question = await waitForQuestion(core, session.id);
   assertEquals(question.toolCallId.length > 0, true);
-  core.answerQuestion(question.sessionId, question.toolCallId, [
-    { id: "lang", values: ["Rust"] },
-  ]);
+  core.services.sessions.answerQuestion(
+    question.sessionId,
+    question.toolCallId,
+    [{ id: "lang", values: ["Rust"] }],
+  );
   await run;
 
   // The tool result carried the answer and the run continued normally.
-  const messages = core.getAgent(session.id)!.messages;
+  const messages = core.services.sessions.getAgent(session.id)!.messages;
   const toolResults = messages.filter((m) => m.role === "toolResult");
   assertEquals(toolResults.length, 1);
   const resultText = (toolResults[0] as { content: Array<{ text: string }> })
@@ -535,22 +547,24 @@ test("ask tool: the toggle removes it from an open session", async () => {
   const { core, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   try {
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
     });
     const names = () =>
-      core.getAgent(session.id)!.agent.state.tools.map((tool) => tool.name);
+      core.services.sessions
+        .getAgent(session.id)!
+        .agent.state.tools.map((tool) => tool.name);
 
-    assertEquals(core.isAskToolEnabled(), true);
+    assertEquals(core.capabilities.isAskToolEnabled(), true);
     assert(names().includes(TOOL_ASK), names().join(","));
 
-    core.setAskToolEnabled(false);
-    assertEquals(core.isAskToolEnabled(), false);
+    core.capabilities.setAskToolEnabled(false);
+    assertEquals(core.capabilities.isAskToolEnabled(), false);
     assertEquals(names().includes(TOOL_ASK), false);
 
-    core.setAskToolEnabled(true);
+    core.capabilities.setAskToolEnabled(true);
     assert(names().includes(TOOL_ASK), names().join(","));
   } finally {
     await core.close();
@@ -562,29 +576,30 @@ test("app UI guide: the switch moves it from the skill into the prompt", async (
   const { core, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   try {
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
     });
-    const prompt = () => core.getAgent(session.id)!.agent.state.systemPrompt;
+    const prompt = () =>
+      core.services.sessions.getAgent(session.id)!.agent.state.systemPrompt;
 
     // Off by default: the guide stays on demand, and the prompt only points
     // at the skill.
-    assertEquals(core.isAppUiInSystemPrompt(), false);
+    assertEquals(core.capabilities.isAppUiInSystemPrompt(), false);
     assertEquals(prompt().includes("## Components"), false);
     assert(prompt().includes("load the `app-ui` skill"));
 
     // The open, idle session is rebuilt, and the whole guide is now part of
     // what the model is sent.
-    core.setAppUiInSystemPrompt(true);
-    assertEquals(core.isAppUiInSystemPrompt(), true);
+    core.capabilities.setAppUiInSystemPrompt(true);
+    assertEquals(core.capabilities.isAppUiInSystemPrompt(), true);
     assert(prompt().includes("## Components"), prompt().slice(-1000));
     assert(prompt().includes("Use an app card when the reader must DO"));
     assertEquals(prompt().includes("load the `app-ui` skill"), false);
 
-    core.setAppUiInSystemPrompt(false);
-    assertEquals(core.isAppUiInSystemPrompt(), false);
+    core.capabilities.setAppUiInSystemPrompt(false);
+    assertEquals(core.capabilities.isAppUiInSystemPrompt(), false);
     assertEquals(prompt().includes("## Components"), false);
     assert(prompt().includes("load the `app-ui` skill"));
   } finally {
@@ -596,7 +611,7 @@ test("app UI guide: the switch moves it from the skill into the prompt", async (
 test("todo tool records the whole plan and replaces it on the next call", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -662,7 +677,7 @@ test("todo tool records the whole plan and replaces it on the next call", async 
   ]);
 
   // The results report the counts back to the agent.
-  const messages = core.getAgent(session.id)!.messages;
+  const messages = core.services.sessions.getAgent(session.id)!.messages;
   const toolResults = messages.filter((m) => m.role === "toolResult");
   assertEquals(toolResults.length, 2);
   const firstResult = (toolResults[0] as { content: Array<{ text: string }> })
@@ -678,7 +693,7 @@ test("todo tool records the whole plan and replaces it on the next call", async 
 test("rewind while a question is pending aborts the run cleanly", async () => {
   const { core, faux, providerId, modelId } = setup();
   const { ws } = await makeWorkspace(core);
-  const session = await core.createSession({
+  const session = await core.services.sessions.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
     modelId,
@@ -704,14 +719,14 @@ test("rewind while a question is pending aborts the run cleanly", async () => {
 
   // Rewind must not hang on the blocked run: the pending ask is rejected
   // first, letting the loop unwind.
-  const messages = core.getAgent(session.id)!.messages;
+  const messages = core.services.sessions.getAgent(session.id)!.messages;
   const userMessage = messages.find((m) => m.role === "user")!;
-  await core.rewind(session.id, userMessage.timestamp);
+  await core.services.sessions.rewind(session.id, userMessage.timestamp);
 
   // The ask is gone: a late answer is refused.
   assertThrows(
     () =>
-      core.answerQuestion(session.id, question.toolCallId, [
+      core.services.sessions.answerQuestion(session.id, question.toolCallId, [
         { id: "lang", values: ["Rust"] },
       ]),
     Error,

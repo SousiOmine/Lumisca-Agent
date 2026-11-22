@@ -1,7 +1,8 @@
 import { test } from "bun:test";
+import { forTestingCore } from "@lumisca/core";
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import { fauxProvider } from "./ai/faux.ts";
-import { LumiscaCore } from "./core.ts";
+import type { LumiscaCore } from "./core.ts";
 import { CoreError } from "./errors.ts";
 import { WEB_SEARCH_KEY } from "./shared/settings-keys.ts";
 
@@ -14,7 +15,7 @@ import { WEB_SEARCH_KEY } from "./shared/settings-keys.ts";
  */
 
 test("core: the web-search view never carries a key", async () => {
-  const core = LumiscaCore.forTesting();
+  const core = forTestingCore();
   try {
     const empty = core.services.webSearch.view();
     assertEquals(empty.defaultId, null);
@@ -40,7 +41,7 @@ test("core: the web-search view never carries a key", async () => {
 });
 
 test("core: removing the default hands it to the remaining provider", async () => {
-  const core = LumiscaCore.forTesting();
+  const core = forTestingCore();
   try {
     core.services.webSearch.add({ id: "exa", apiKey: "k" });
     core.services.webSearch.add({ id: "tavily", apiKey: "k" });
@@ -61,7 +62,7 @@ test("core: removing the default hands it to the remaining provider", async () =
 });
 
 test("core: unknown provider ids are refused", async () => {
-  const core = LumiscaCore.forTesting();
+  const core = forTestingCore();
   try {
     assertThrows(
       () => core.services.webSearch.add({ id: "nope", apiKey: "k" }),
@@ -89,16 +90,16 @@ test("core: unknown provider ids are refused", async () => {
  * the preloaded tools themselves are the observable proof that the pair was
  * attached — and that it was absent when no provider was configured. */
 function sessionHasWebTools(core: LumiscaCore, sessionId: string): boolean {
-  const names = core.getAgent(sessionId)?.toolNames ?? [];
+  const names = core.services.sessions.getAgent(sessionId)?.toolNames ?? [];
   return names.includes("web_search") && names.includes("web_fetch");
 }
 
 test("core: a search provider becomes the session's web tools", async () => {
   // The faux provider lets the session be opened without a network or a key.
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   // A new session needs a provider with a key to resolve a default model.
-  await core.setProviderApiKey(faux.provider.id, "faux-key");
+  await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
   try {
     const workspace = await core.services.workspaces.create("web", [
       process.cwd(),
@@ -106,11 +107,15 @@ test("core: a search provider becomes the session's web tools", async () => {
 
     // No provider configured: a new session is not given the web tools, and
     // its prompt does not point at them.
-    const plain = await core.createSession({ workspaceId: workspace.id });
+    const plain = await core.services.sessions.createSession({
+      workspaceId: workspace.id,
+    });
     assertEquals(sessionHasWebTools(core, plain.id), false);
 
     core.services.webSearch.add({ id: "brave", apiKey: "k" });
-    const configured = await core.createSession({ workspaceId: workspace.id });
+    const configured = await core.services.sessions.createSession({
+      workspaceId: workspace.id,
+    });
     // The tool set is built per session, so one created after the provider
     // was added carries the pair.
     assert(sessionHasWebTools(core, configured.id));
@@ -118,7 +123,9 @@ test("core: a search provider becomes the session's web tools", async () => {
     // Clearing the default keeps the configuration but stops search: the
     // next session gets no web tools again.
     core.services.webSearch.setDefault(null);
-    const off = await core.createSession({ workspaceId: workspace.id });
+    const off = await core.services.sessions.createSession({
+      workspaceId: workspace.id,
+    });
     assertEquals(sessionHasWebTools(core, off.id), false);
   } finally {
     await core.close();

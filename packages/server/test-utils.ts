@@ -7,7 +7,7 @@
  * exempts `*_test.ts` files from the core-barrel rule, so keeping this file
  * out of any non-test import path is the caller's job.
  */
-import { fauxProvider, LumiscaCore } from "@lumisca/core";
+import { fauxProvider, forTestingCore, type LumiscaCore } from "@lumisca/core";
 import { MINI_PNG } from "@lumisca/core/test-utils";
 import { type AppOptions, startServer } from "./app.ts";
 
@@ -36,7 +36,7 @@ export function setup(
   options?: AppOptions,
 ): AppHarness {
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider], env);
+  const core = forTestingCore([faux.provider], env);
   const server = startServer(core, 0, options);
   const base = `http://127.0.0.1:${server.addr.port}`;
   return { core, server, faux, base };

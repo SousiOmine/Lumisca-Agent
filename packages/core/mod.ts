@@ -49,6 +49,11 @@ export type {
   Rect,
 } from "./computer/types.ts";
 export { type CreateSessionInput, LumiscaCore } from "./core.ts";
+export {
+  forTestingCore,
+  openCore,
+  openInMemoryCore,
+} from "./core-open.ts";
 export { LumiscaDb } from "./db/mod.ts";
 export { vacuumOnStartup } from "./db/vacuum.ts";
 export type { ClientEvent } from "./domain/event.ts";

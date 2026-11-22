@@ -135,13 +135,17 @@ test("skills API lists the workspace catalog and the chat subset", async () => {
       join(skillDir, "SKILL.md"),
       "---\nname: demo\ndescription: Demo skill.\n---\n\nDo the demo thing.\n",
     );
-    const appGuide = core.listSkills().find((s) => s.name === "app-ui");
+    const appGuide = core.services.sessions
+      .listSkills()
+      .find((s) => s.name === "app-ui");
     assert(appGuide !== undefined, "the app UI guide must be listed");
-    const mcpGuide = core.listSkills().find((s) => s.name === "mcp-servers");
+    const mcpGuide = core.services.sessions
+      .listSkills()
+      .find((s) => s.name === "mcp-servers");
     assert(mcpGuide !== undefined, "the MCP guide must be listed");
     // A workspace session has file tools, so its palette also offers the
     // guide that teaches writing a skill.
-    const skillGuide = core
+    const skillGuide = core.services.sessions
       .listSkills(ws.id)
       .find((s) => s.name === "skill-authoring");
     assert(skillGuide !== undefined, "the skill guide must be listed");
@@ -149,7 +153,9 @@ test("skills API lists the workspace catalog and the chat subset", async () => {
     // The coding-agents guide belongs to a stella conversation; a workspace
     // session starts sub-agents too, but its catalog does not load it.
     assertEquals(
-      core.listSkills(ws.id).some((s) => s.name === "coding-agents"),
+      core.services.sessions
+        .listSkills(ws.id)
+        .some((s) => s.name === "coding-agents"),
       false,
       "the coding guide must not be listed in code mode",
     );
@@ -267,7 +273,7 @@ test("messages snapshot serves a window and the way back", async () => {
         method: "POST",
         body: JSON.stringify({ text }),
       });
-      await core.getAgent(session.id)!.waitForIdle();
+      await core.services.sessions.getAgent(session.id)!.waitForIdle();
     }
 
     type Snapshot = {
@@ -305,7 +311,10 @@ test("messages snapshot serves a window and the way back", async () => {
       older = page.older;
     }
     assertEquals(older, null, "the walk ends at the transcript's beginning");
-    assertEquals(seen, core.getAgent(session.id)!.messages.length);
+    assertEquals(
+      seen,
+      core.services.sessions.getAgent(session.id)!.messages.length,
+    );
 
     // A cursor the transcript no longer has is a conflict, not a guess.
     const stale = await json(
@@ -394,7 +403,7 @@ test("messages snapshot reports a run that is still going", async () => {
     assertEquals(live[0]!.role, "user");
 
     release();
-    await core.getAgent(session.id)!.waitForIdle();
+    await core.services.sessions.getAgent(session.id)!.waitForIdle();
     snapshot = await (
       await json(base, `/api/sessions/${session.id}/messages`)
     ).json();
@@ -480,7 +489,7 @@ test("messages snapshot carries a pending ask for a reconnecting client", async 
         answers: [{ id: "q1", values: ["Rust"] }],
       }),
     });
-    await core.getAgent(session.id)!.waitForIdle();
+    await core.services.sessions.getAgent(session.id)!.waitForIdle();
     snapshot = await (
       await json(base, `/api/sessions/${session.id}/messages`)
     ).json();
@@ -645,7 +654,7 @@ test("providers API includes auth state", async () => {
   try {
     // The faux provider always resolves auth, but only an explicit
     // credential makes it "configured".
-    await core.setProviderApiKey(faux.provider.id, "test-key");
+    await core.services.models.setProviderApiKey(faux.provider.id, "test-key");
     const res = await fetch(`${base}/api/providers`);
     assertEquals(res.status, 200);
     const providers = (await res.json()) as Array<{
@@ -707,7 +716,7 @@ test("computer use toggle goes through the capability path", async () => {
       body: JSON.stringify({ value: "" }),
     });
     assertEquals(disable.status, 200);
-    assertEquals(core.isComputerUseEnabled(), false);
+    assertEquals(core.capabilities.isComputerUseEnabled(), false);
   } finally {
     server.shutdown();
     core.close();
@@ -725,7 +734,7 @@ test("the scripting tool call toggle goes through the tool-set path", async () =
       body: JSON.stringify({ value: "1" }),
     });
     assertEquals(enable.status, 200);
-    assertEquals(core.isCodeExecutionEnabled(), true);
+    assertEquals(core.capabilities.isCodeExecutionEnabled(), true);
 
     const settings = (await (
       await fetch(`${base}/api/settings`)
@@ -737,7 +746,7 @@ test("the scripting tool call toggle goes through the tool-set path", async () =
       body: JSON.stringify({ value: "" }),
     });
     assertEquals(disable.status, 200);
-    assertEquals(core.isCodeExecutionEnabled(), false);
+    assertEquals(core.capabilities.isCodeExecutionEnabled(), false);
   } finally {
     server.shutdown();
     core.close();
@@ -765,7 +774,9 @@ test("the ask tool toggle goes through the tool-set path", async () => {
       })
     ).json();
     const names = () =>
-      core.getAgent(session.id)!.agent.state.tools.map((tool) => tool.name);
+      core.services.sessions
+        .getAgent(session.id)!
+        .agent.state.tools.map((tool) => tool.name);
 
     // A plain settings write would store the flag and leave every open
     // conversation on its old tool set; the open session's tools are what
@@ -777,7 +788,7 @@ test("the ask tool toggle goes through the tool-set path", async () => {
       body: JSON.stringify({ value: "0" }),
     });
     assertEquals(disable.status, 200);
-    assertEquals(core.isAskToolEnabled(), false);
+    assertEquals(core.capabilities.isAskToolEnabled(), false);
     assertEquals(names().includes(TOOL_ASK), false);
 
     const enable = await json(base, "/api/settings/ask_tool_enabled", {
@@ -785,7 +796,7 @@ test("the ask tool toggle goes through the tool-set path", async () => {
       body: JSON.stringify({ value: "1" }),
     });
     assertEquals(enable.status, 200);
-    assertEquals(core.isAskToolEnabled(), true);
+    assertEquals(core.capabilities.isAskToolEnabled(), true);
     assert(names().includes(TOOL_ASK), names().join(","));
 
     const settings = (await (
@@ -819,7 +830,8 @@ test("the app UI prompt toggle goes through the prompt path", async () => {
         }),
       })
     ).json();
-    const prompt = () => core.getAgent(session.id)!.agent.state.systemPrompt;
+    const prompt = () =>
+      core.services.sessions.getAgent(session.id)!.agent.state.systemPrompt;
     assertEquals(prompt().includes("## Components"), false);
 
     // A plain settings write would store the flag and leave every open
@@ -834,7 +846,7 @@ test("the app UI prompt toggle goes through the prompt path", async () => {
       },
     );
     assertEquals(enable.status, 200);
-    assertEquals(core.isAppUiInSystemPrompt(), true);
+    assertEquals(core.capabilities.isAppUiInSystemPrompt(), true);
     assert(prompt().includes("## Components"), prompt().slice(-1000));
 
     const disable = await json(
@@ -846,7 +858,7 @@ test("the app UI prompt toggle goes through the prompt path", async () => {
       },
     );
     assertEquals(disable.status, 200);
-    assertEquals(core.isAppUiInSystemPrompt(), false);
+    assertEquals(core.capabilities.isAppUiInSystemPrompt(), false);
     assertEquals(prompt().includes("## Components"), false);
 
     const settings = (await (
@@ -1159,7 +1171,7 @@ test("stella API: the first agent list creates the starter agent", async () => {
 
     // Deleting it is allowed, and the next read brings the mode back into a
     // usable state.
-    await core.deleteStellaAgent(body.agents[0]!.id);
+    await core.services.stellaAgents.deleteStellaAgent(body.agents[0]!.id);
     const restored = await json(base, "/api/stella/agents");
     const after = (await restored.json()) as {
       agents: Array<{ id: string }>;
@@ -1232,8 +1244,8 @@ test("stella API: the conversation's stream carries only the conversation", asyn
   // to one conversation).
   const { core, faux, server, base } = await setup();
   try {
-    await core.setProviderApiKey(faux.provider.id, "faux-key");
-    core.setStellaVm(fakeStellaHost({ vncPort: null }));
+    await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
+    core.services.stellaMachines.setStellaVm(fakeStellaHost({ vncPort: null }));
     const agentRes = await json(base, "/api/stella/agents", {
       method: "POST",
       body: JSON.stringify({ name: "Aide", role: "Help with the work." }),
@@ -1329,8 +1341,8 @@ test("stella API: a rewind reaches the conversation as its own event", async () 
   const { core, faux, server, base } = await setup();
   let socket: WebSocket | undefined;
   try {
-    await core.setProviderApiKey(faux.provider.id, "faux-key");
-    core.setStellaVm(fakeStellaHost({ vncPort: null }));
+    await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
+    core.services.stellaMachines.setStellaVm(fakeStellaHost({ vncPort: null }));
     const agentRes = await json(base, "/api/stella/agents", {
       method: "POST",
       body: JSON.stringify({ name: "Aide", role: "Help with the work." }),
@@ -1421,8 +1433,8 @@ test("stella API: a rewind reaches the conversation as its own event", async () 
 test("stella API: a row carries what its conversation last said", async () => {
   const { core, faux, server, base } = await setup();
   try {
-    await core.setProviderApiKey(faux.provider.id, "faux-key");
-    core.setStellaVm(fakeStellaHost({ vncPort: 1 }));
+    await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
+    core.services.stellaMachines.setStellaVm(fakeStellaHost({ vncPort: 1 }));
 
     // A conversation that has not been opened says nothing: the row is one
     // line, and the client has no time to show.
@@ -1437,7 +1449,7 @@ test("stella API: a row carries what its conversation last said", async () => {
     // second turn has nothing to add and writes the silence sentinel, so the
     // message above it stays the newest entry.
     const agentId = initial.agents[0]!.id;
-    const session = await core.getOrCreateStellaSession(agentId);
+    const session = await core.internals.getOrCreateStellaSession(agentId);
     faux.setResponses([
       fauxAssistantMessage(
         [fauxToolCall("send_chat", { text: "直しました。" }, "call-1")],
@@ -1470,8 +1482,8 @@ test("stella API: a row carries what its conversation last said", async () => {
 test("stella API: agents are listed, renamed and deleted with their conversation", async () => {
   const { core, faux, server, base } = await setup();
   try {
-    await core.setProviderApiKey(faux.provider.id, "faux-key");
-    core.setStellaVm(fakeStellaHost({ vncPort: 1 }));
+    await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
+    core.services.stellaMachines.setStellaVm(fakeStellaHost({ vncPort: 1 }));
 
     // The first read creates the starter agent (a fresh stella mode must
     // have someone to talk to), so the list is never empty.
@@ -1511,12 +1523,12 @@ test("stella API: agents are listed, renamed and deleted with their conversation
 
     // Delete takes the conversation with it: an orphaned session would be
     // invisible in every list while still holding its messages.
-    const session = await core.getOrCreateStellaSession(agent.id);
+    const session = await core.internals.getOrCreateStellaSession(agent.id);
     const deleted = await json(base, `/api/stella/agents/${agent.id}`, {
       method: "DELETE",
     });
     assertEquals(deleted.status, 200);
-    assertEquals(core.getSession(session.id), undefined);
+    assertEquals(core.services.sessions.getSession(session.id), undefined);
     const after = await json(base, "/api/stella/agents");
     const remaining = (await after.json()) as { agents: Array<{ id: string }> };
     assertEquals(
@@ -1533,8 +1545,8 @@ test("stella API: agents are listed, renamed and deleted with their conversation
 test("stella API: an agent's name and icon are saved together and served", async () => {
   const { core, faux, server, base } = await setup();
   try {
-    await core.setProviderApiKey(faux.provider.id, "faux-key");
-    core.setStellaVm(fakeStellaHost({ vncPort: 1 }));
+    await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
+    core.services.stellaMachines.setStellaVm(fakeStellaHost({ vncPort: 1 }));
 
     const created = await json(base, "/api/stella/agents", {
       method: "POST",
@@ -1649,8 +1661,8 @@ test("stella API: an agent's name and icon are saved together and served", async
 test("stella API: a refused name or picture changes nothing", async () => {
   const { core, faux, server, base } = await setup();
   try {
-    await core.setProviderApiKey(faux.provider.id, "faux-key");
-    core.setStellaVm(fakeStellaHost({ vncPort: 1 }));
+    await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
+    core.services.stellaMachines.setStellaVm(fakeStellaHost({ vncPort: 1 }));
     const created = await json(base, "/api/stella/agents", {
       method: "POST",
       body: JSON.stringify({ name: "Aide", role: "Help." }),
@@ -1721,8 +1733,8 @@ test("stella API: a refused name or picture changes nothing", async () => {
 test("stella API: an icon patch is refused with the reason it failed", async () => {
   const { core, faux, server, base } = await setup();
   try {
-    await core.setProviderApiKey(faux.provider.id, "faux-key");
-    core.setStellaVm(fakeStellaHost({ vncPort: 1 }));
+    await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
+    core.services.stellaMachines.setStellaVm(fakeStellaHost({ vncPort: 1 }));
     const created = await json(base, "/api/stella/agents", {
       method: "POST",
       body: JSON.stringify({ name: "Aide", role: "Help." }),
@@ -1795,8 +1807,8 @@ test("stella API: an icon patch is refused with the reason it failed", async () 
 test("stella API: an icon URL answers only for a name that agent has", async () => {
   const { core, faux, server, base } = await setup();
   try {
-    await core.setProviderApiKey(faux.provider.id, "faux-key");
-    core.setStellaVm(fakeStellaHost({ vncPort: 1 }));
+    await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
+    core.services.stellaMachines.setStellaVm(fakeStellaHost({ vncPort: 1 }));
     const first = (await (
       await json(base, "/api/stella/agents", {
         method: "POST",
@@ -1864,7 +1876,7 @@ test("routine routes: list, enable, run and remove", async () => {
   const { core, server, base } = await setup();
   try {
     // Routines belong to a stella agent, so one has to exist first.
-    const agent = await core.createStellaAgent({
+    const agent = await core.services.stellaAgents.createStellaAgent({
       name: "Runner",
       role: "test",
     });

@@ -1,12 +1,23 @@
 import type { ClientEvent } from "../domain/event.ts";
+import type { SessionInfo } from "../domain/session.ts";
 import { CoreError } from "../errors.ts";
+import { isThinkingLevel } from "../models/thinking.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import type { SessionRepo } from "../session/repo.ts";
-import type { Locale, StellaAgentSummary } from "../shared/mod.ts";
+import type {
+  Locale,
+  StellaAgentSummary,
+  ThinkingLevel,
+} from "../shared/mod.ts";
 import { translate } from "../shared/mod.ts";
 import type { StellaAgent, StellaAgentRepo } from "../stella/agents.ts";
-import { DEFAULT_AGENT_NAME, normalizeAgentName } from "../stella/agents.ts";
+import {
+  DEFAULT_AGENT_NAME,
+  normalizeAgentModel,
+  normalizeAgentName,
+} from "../stella/agents.ts";
 import type { AgentIconStore } from "../stella/icons.ts";
+import { STELLA_ONBOARDING_PROMPT } from "../stella/onboarding.ts";
 import { latestPreview } from "../stella/previews.ts";
 
 /**
@@ -36,6 +47,30 @@ export class StellaAgentService {
       language(): Locale;
       /** Publish an event to every frontend listener. */
       emit(event: ClientEvent): void;
+      /** Prepare the agent's folder and MEMORY.md in the machine, when it
+       * is running. */
+      prepareAgentFolder(agentId: string): Promise<void>;
+      /** Give back the machine a deleted agent held. */
+      removeAgentMachine(agentId: string): Promise<void>;
+      /** Stop the machine of an agent that was switched off. */
+      stopAgentMachine(agentId: string): Promise<void>;
+      modelExists(provider: string, modelId: string): boolean;
+      thinkingLevelsOf(provider: string, modelId: string): ThinkingLevel[];
+      setModelThinkingLevel(
+        provider: string,
+        modelId: string,
+        level: string,
+      ): void;
+      sessionOf(agentId: string): SessionInfo | undefined;
+      setSessionModel(
+        sessionId: string,
+        provider: string,
+        modelId: string,
+      ): void;
+      resolveDefaultModel(): Promise<{ provider: string; modelId: string }>;
+      closeSession(sessionId: string): Promise<void>;
+      agentRuntime(sessionId: string): { isStreaming: boolean } | undefined;
+      startOnboarding(sessionId: string, instruction: string): void;
     },
   ) {}
 
@@ -87,16 +122,18 @@ export class StellaAgentService {
    * prevent). The check is the list itself, so nothing has to be remembered
    * separately.
    */
-  async ensureStellaAgent(
-    loadIcon?: () => Promise<Uint8Array | undefined>,
-  ): Promise<StellaAgent> {
+  async ensureStellaAgent(): Promise<StellaAgent> {
+    const loadIcon = this.starterIcon;
     const existing = this.deps.agents.latest();
     if (existing !== undefined) return existing;
     const starter = this.deps.agents.create({
       name: translate(this.deps.language(), "chat.stella.agents.starterName"),
       role: translate(this.deps.language(), "chat.stella.agents.starterRole"),
     });
-    if (loadIcon === undefined) return starter;
+    if (loadIcon === undefined) {
+      await this.deps.prepareAgentFolder(starter.id);
+      return starter;
+    }
     try {
       const bytes = await loadIcon();
       if (bytes === undefined) return starter;
@@ -105,11 +142,30 @@ export class StellaAgentService {
       // keeps its initial and the build's missing icon is reported once.
       const name = await this.deps.icons.put(starter.id, bytes, ".png");
       this.deps.agents.update(starter.id, { icon: name });
-      return this.deps.agents.get(starter.id) ?? starter;
+      const stored = this.deps.agents.get(starter.id) ?? starter;
+      await this.deps.prepareAgentFolder(stored.id);
+      return stored;
     } catch (error) {
       console.warn("starter agent icon could not be stored:", error);
+      await this.deps.prepareAgentFolder(starter.id);
       return starter;
     }
+  }
+
+  /** The picture a first-run agent starts with. The server passes its own
+   * PWA icon, so the starter agent looks like the app that created it
+   * instead of an initial. */
+  setStarterAgentIcon(
+    source: (() => Promise<Uint8Array | undefined>) | undefined,
+  ): void {
+    this.starterIcon = source;
+  }
+
+  private starterIcon: (() => Promise<Uint8Array | undefined>) | undefined;
+
+  /** The most recently used agent, or undefined when there is none. */
+  latestAgent(): StellaAgent | undefined {
+    return this.deps.agents.latest();
   }
 
   /** One agent by id, or undefined when it does not exist. */
@@ -136,16 +192,23 @@ export class StellaAgentService {
    * comparison. Someone who leaves the field empty gets the default label
    * with a number after it ("Agent 2"), never a "that name is taken" for a
    * name they never wrote. */
-  createStellaAgent(input: { name: string; role: string }): StellaAgent {
+  async createStellaAgent(input: {
+    name: string;
+    role: string;
+  }): Promise<StellaAgent> {
     const name = input.name.trim();
+    let agent: StellaAgent;
     if (name.length === 0) {
-      return this.deps.agents.create({
+      agent = this.deps.agents.create({
         ...input,
         name: this.unusedAgentName(DEFAULT_AGENT_NAME),
       });
+    } else {
+      this.requireUnusedAgentName(name);
+      agent = this.deps.agents.create(input);
     }
-    this.requireUnusedAgentName(name);
-    return this.deps.agents.create(input);
+    await this.deps.prepareAgentFolder(agent.id);
+    return agent;
   }
 
   /** Refuse a name another agent already has. `exceptId` is the agent being
@@ -168,6 +231,37 @@ export class StellaAgentService {
         "conflict",
       );
     }
+  }
+
+  /**
+   * Start a new agent's setup turn, once.
+   *
+   * Opening its conversation is the first moment the machine is up, the
+   * session exists, and the app can speak before the user does. The turn is
+   * a prompt only the model reads: the conversation shows the agent's
+   * greeting and questions, never the instruction to ask them.
+   *
+   * Returns whether this call started it. False also covers "a run is
+   * already going": the claim is left empty there, so the next open tries
+   * again instead of steering setup text into someone's work.
+   */
+  startOnboarding(agentId: string): boolean {
+    const agent = this.deps.agents.get(agentId);
+    if (agent === undefined || agent.disabledAt !== null) return false;
+    if (agent.onboardedAt !== null) return false;
+    const session = this.deps.sessionOf(agentId);
+    if (session === undefined) return false;
+    const open = this.deps.agentRuntime(session.id);
+    if (open === undefined || open.isStreaming) return false;
+    if (!this.markOnboarded(agentId)) return false;
+    try {
+      this.deps.startOnboarding(session.id, STELLA_ONBOARDING_PROMPT);
+    } catch (error) {
+      this.clearOnboarded(agentId);
+      console.warn("stella setup turn did not start:", error);
+      return false;
+    }
+    return true;
   }
 
   /** `base` ("Agent"), or the first free "Agent N" after it. Used only for a
@@ -228,6 +322,7 @@ export class StellaAgentService {
       name?: string;
       icon?: { bytes: Uint8Array; extension: string } | null;
       model?: { provider: string; modelId: string } | null;
+      thinkingLevel?: { provider: string; modelId: string; level: string };
       enabled?: boolean;
     },
   ): Promise<StellaAgent> {
@@ -238,7 +333,37 @@ export class StellaAgentService {
     const name =
       patch.name === undefined ? undefined : normalizeAgentName(patch.name);
     if (name !== undefined) this.requireUnusedAgentName(name, id);
-    const model = patch.model;
+    const model =
+      patch.model === undefined ? undefined : normalizeAgentModel(patch.model);
+    if (
+      model !== undefined &&
+      model !== null &&
+      !this.deps.modelExists(model.provider, model.modelId)
+    ) {
+      throw new CoreError(
+        `Model not found: ${model.provider}/${model.modelId}`,
+        "not_found",
+      );
+    }
+    const thinking = patch.thinkingLevel;
+    if (thinking !== undefined) {
+      if (!isThinkingLevel(thinking.level)) {
+        throw new CoreError(
+          `Unknown thinking level: ${thinking.level}`,
+          "invalid",
+        );
+      }
+      const offered = this.deps.thinkingLevelsOf(
+        thinking.provider,
+        thinking.modelId,
+      );
+      if (!offered.includes(thinking.level)) {
+        throw new CoreError(
+          `${thinking.provider}/${thinking.modelId} does not support the thinking level "${thinking.level}"`,
+          "invalid",
+        );
+      }
+    }
     const fields = {
       ...(name === undefined ? {} : { name }),
       ...(model === undefined ? {} : { model }),
@@ -288,11 +413,55 @@ export class StellaAgentService {
       }
     }
 
+    if (patch.enabled === false) await this.release(id);
+    if (model !== undefined) await this.applyModel(id, model);
+    if (thinking !== undefined) {
+      this.deps.setModelThinkingLevel(
+        thinking.provider,
+        thinking.modelId,
+        thinking.level,
+      );
+    }
+
     const updated = this.deps.agents.get(id);
     if (updated === undefined) {
       throw new CoreError(`Agent not found: ${id}`, "not_found");
     }
     return updated;
+  }
+
+  /** Give back everything a disabled agent was holding. */
+  private async release(agentId: string): Promise<void> {
+    const session = this.deps.sessionOf(agentId);
+    try {
+      if (session !== undefined) await this.deps.closeSession(session.id);
+    } finally {
+      await this.deps.stopAgentMachine(agentId);
+    }
+  }
+
+  /** Point an agent's conversation at `model` (null = the app's default). */
+  private async applyModel(
+    agentId: string,
+    model: { provider: string; modelId: string } | null,
+  ): Promise<void> {
+    const session = this.deps.sessionOf(agentId);
+    if (session === undefined) return;
+    let wanted = model;
+    if (wanted === null) {
+      try {
+        wanted = await this.deps.resolveDefaultModel();
+      } catch {
+        return;
+      }
+    }
+    if (
+      session.modelProvider === wanted.provider &&
+      session.modelId === wanted.modelId
+    ) {
+      return;
+    }
+    this.deps.setSessionModel(session.id, wanted.provider, wanted.modelId);
   }
 
   /** The icon file an agent's picture names, with the content type to serve
@@ -322,6 +491,7 @@ export class StellaAgentService {
     // The picture belongs to the agent: once the row is gone nothing can
     // name it, and the store's directory would outlive every reference.
     await this.deps.icons.deleteAgent(id);
+    await this.deps.removeAgentMachine(id);
   }
 
   /**

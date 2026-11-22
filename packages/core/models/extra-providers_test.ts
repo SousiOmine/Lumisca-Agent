@@ -1,4 +1,5 @@
 import { test } from "bun:test";
+import { forTestingCore } from "@lumisca/core";
 import { assert, assertEquals } from "@std/assert";
 import { LumiscaCore } from "../mod.ts";
 import { inputBudgetTokens } from "../shared/context-usage.ts";
@@ -322,7 +323,7 @@ test("other providers derive per-model levels from reasoning_options", () => {
 });
 
 test("extra providers register in LumiscaCore and need a stored key", async () => {
-  const core = LumiscaCore.forTesting([], NO_ENV);
+  const core = forTestingCore([], NO_ENV);
   try {
     const deepinfra = core.services.models
       .listProviders()
@@ -370,9 +371,18 @@ test("extra providers register in LumiscaCore and need a stored key", async () =
     );
 
     // A stored key is the "configured" signal.
-    await core.setProviderApiKey(DEEPINFRA_PROVIDER_ID, "di-key");
-    await core.setProviderApiKey(CLINEPASS_PROVIDER_ID, "cp-key");
-    await core.setProviderApiKey(COMMANDCODE_PROVIDER_ID, "cc-key");
+    await core.services.models.setProviderApiKey(
+      DEEPINFRA_PROVIDER_ID,
+      "di-key",
+    );
+    await core.services.models.setProviderApiKey(
+      CLINEPASS_PROVIDER_ID,
+      "cp-key",
+    );
+    await core.services.models.setProviderApiKey(
+      COMMANDCODE_PROVIDER_ID,
+      "cc-key",
+    );
     assertEquals(
       await core.services.models.hasConfiguredAuth(DEEPINFRA_PROVIDER_ID),
       true,
@@ -403,7 +413,7 @@ test("extra providers register in LumiscaCore and need a stored key", async () =
 });
 
 test("extra providers resolve their env API keys", async () => {
-  const core = LumiscaCore.forTesting(
+  const core = forTestingCore(
     [],
     envOf({
       DEEPINFRA_API_KEY: "di-env-key",

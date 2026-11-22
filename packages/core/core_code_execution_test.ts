@@ -19,7 +19,7 @@ import {
 
 /** Every text block of the session's tool results, in order. */
 function toolResultTexts(core: LumiscaCore, sessionId: string): string[] {
-  return core
+  return core.services.sessions
     .getAgent(sessionId)!
     .messages.filter(
       (message): message is Extract<AgentMessage, { role: "toolResult" }> =>
@@ -32,13 +32,13 @@ test("scripting tool call is off by default", async () => {
   const { core, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   try {
-    assertEquals(core.isCodeExecutionEnabled(), false);
-    const session = await core.createSession({
+    assertEquals(core.capabilities.isCodeExecutionEnabled(), false);
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
     });
-    const names = core
+    const names = core.services.sessions
       .getAgent(session.id)!
       .agent.state.tools.map((tool) => tool.name);
     assert(names.includes(TOOL_READ), names.join(","));
@@ -53,13 +53,13 @@ test("scripting tool call: the model is given execute and nothing else", async (
   const { core, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   try {
-    core.setCodeExecutionEnabled(true);
-    const session = await core.createSession({
+    core.capabilities.setCodeExecutionEnabled(true);
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
     });
-    const names = core
+    const names = core.services.sessions
       .getAgent(session.id)!
       .agent.state.tools.map((tool) => tool.name);
     assertEquals(names, [TOOL_EXECUTE]);
@@ -77,8 +77,8 @@ test("scripting tool call: a program runs the session's real tools", async () =>
   const { ws, root } = await makeWorkspace(core);
   try {
     await fsp.writeFile(`${root}/hello.txt`, "scripting tool call works");
-    core.setCodeExecutionEnabled(true);
-    const session = await core.createSession({
+    core.capabilities.setCodeExecutionEnabled(true);
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
@@ -116,13 +116,14 @@ test("scripting tool call: the system prompt declares the initial tools", async 
   const { core, faux, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   try {
-    core.setCodeExecutionEnabled(true);
-    const session = await core.createSession({
+    core.capabilities.setCodeExecutionEnabled(true);
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
     });
-    const prompt = core.getAgent(session.id)!.agent.state.systemPrompt;
+    const prompt = core.services.sessions.getAgent(session.id)!.agent.state
+      .systemPrompt;
     assert(prompt.includes("## Scripting tool call"), prompt);
     assert(prompt.includes("declare const tools"), prompt);
     assert(prompt.includes("read(args:"), prompt);
@@ -157,29 +158,31 @@ test("scripting tool call: the toggle rebuilds an open session", async () => {
   const { core, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   try {
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
     });
-    const before = core
+    const before = core.services.sessions
       .getAgent(session.id)!
       .agent.state.tools.map((tool) => tool.name);
     assert(before.includes(TOOL_BASH), before.join(","));
 
-    core.setCodeExecutionEnabled(true);
+    core.capabilities.setCodeExecutionEnabled(true);
     assertEquals(
-      core.getAgent(session.id)!.agent.state.tools.map((tool) => tool.name),
+      core.services.sessions
+        .getAgent(session.id)!
+        .agent.state.tools.map((tool) => tool.name),
       [TOOL_EXECUTE],
     );
 
-    core.setCodeExecutionEnabled(false);
-    const after = core
+    core.capabilities.setCodeExecutionEnabled(false);
+    const after = core.services.sessions
       .getAgent(session.id)!
       .agent.state.tools.map((tool) => tool.name);
     assert(after.includes(TOOL_BASH), after.join(","));
     assertEquals(after.includes(TOOL_EXECUTE), false);
-    assertEquals(core.isCodeExecutionEnabled(), false);
+    assertEquals(core.capabilities.isCodeExecutionEnabled(), false);
   } finally {
     await core.close();
     await removeDirRetry(root);
@@ -189,8 +192,8 @@ test("scripting tool call: the store survives closing and reopening the session"
   const { core, faux, providerId, modelId } = setup();
   const { ws, root } = await makeWorkspace(core);
   try {
-    core.setCodeExecutionEnabled(true);
-    const session = await core.createSession({
+    core.capabilities.setCodeExecutionEnabled(true);
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: providerId,
       modelId,
@@ -206,8 +209,8 @@ test("scripting tool call: the store survives closing and reopening the session"
     ]);
     await promptSession(core, session.id, "save the cursor");
 
-    await core.closeSession(session.id);
-    core.openSession(session.id);
+    await core.services.sessions.closeSession(session.id);
+    core.services.sessions.openSession(session.id);
 
     faux.setResponses([
       fauxAssistantMessage([

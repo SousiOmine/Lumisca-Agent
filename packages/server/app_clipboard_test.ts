@@ -1,5 +1,10 @@
 import { test } from "bun:test";
-import { fauxAssistantMessage, fauxProvider, LumiscaCore } from "@lumisca/core";
+import {
+  fauxAssistantMessage,
+  fauxProvider,
+  forTestingCore,
+  LumiscaCore,
+} from "@lumisca/core";
 import { fakeStellaHost } from "@lumisca/core/test-utils";
 import { assertEquals } from "@std/assert";
 import { startServer } from "./app.ts";
@@ -56,12 +61,12 @@ function clipboardMachine() {
 test("stella clipboard: the machine's text crosses the server, in UTF-8", async () => {
   const machine = clipboardMachine();
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider], () => ({}), machine);
+  const core = forTestingCore([faux.provider], () => ({}), machine);
   const server = startServer(core, 0);
   const base = `http://127.0.0.1:${server.addr.port}`;
   try {
-    await core.setProviderApiKey(faux.provider.id, "faux-key");
-    core.setStellaVm(fakeStellaHost({ vncPort: null }));
+    await core.services.models.setProviderApiKey(faux.provider.id, "faux-key");
+    core.services.stellaMachines.setStellaVm(fakeStellaHost({ vncPort: null }));
     const created = await json(base, "/api/stella/agents", {
       method: "POST",
       body: JSON.stringify({ name: "Aide", role: "Help with the work." }),
@@ -94,7 +99,10 @@ test("stella clipboard: the machine's text crosses the server, in UTF-8", async 
 
     // What the pane does once the user is at the screen. The text keeps its
     // Japanese and loses the browser's Windows line endings on the way in.
-    await core.writeStellaClipboard(session.sessionId, "日本語\r\n二行目");
+    await core.services.stellaMachines.writeClipboard(
+      core.services.sessions.requireSession(session.sessionId),
+      "日本語\r\n二行目",
+    );
     assertEquals(machine.text(), "日本語\n二行目");
     const read = await json(
       base,

@@ -1,5 +1,5 @@
 import { afterAll, test } from "bun:test";
-import { fauxProvider, LumiscaCore } from "@lumisca/core";
+import { fauxProvider, forTestingCore, type LumiscaCore } from "@lumisca/core";
 import {
   CODE_MODE_ENABLED_KEY,
   LANGUAGE_KEY,
@@ -23,7 +23,7 @@ let shared: { base: string; core: LumiscaCore } | undefined;
 function readOnlyServer(): { base: string; core: LumiscaCore } {
   if (shared === undefined) {
     const faux = fauxProvider();
-    const core = LumiscaCore.forTesting([faux.provider]);
+    const core = forTestingCore([faux.provider]);
     core.settings.set(LANGUAGE_KEY, "ja");
     const server = startServer(core, 0, { repoRoot: process.cwd() });
     shared = { base: `http://127.0.0.1:${server.addr.port}`, core };
@@ -188,7 +188,7 @@ test("server serves the app shell", async () => {
 
 test("token-required page renders in the request's language", async () => {
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   const app = createApp(core, { token: "secret-token" });
   const host = { host: "127.0.0.1:8000" };
   try {
@@ -226,7 +226,7 @@ test("token-required page renders in the request's language", async () => {
 
 test("server resolves the app language once and stores it", async () => {
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   const server = startServer(core, 0, { repoRoot: process.cwd() });
   try {
     const base = `http://127.0.0.1:${server.addr.port}`;

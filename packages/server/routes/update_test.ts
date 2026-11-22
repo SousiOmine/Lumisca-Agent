@@ -1,5 +1,5 @@
 import { test } from "bun:test";
-import { fauxProvider, LumiscaCore } from "@lumisca/core";
+import { fauxProvider, forTestingCore, LumiscaCore } from "@lumisca/core";
 import { assertEquals } from "@std/assert";
 import { createApp } from "../app.ts";
 import type { UpdateStatus } from "../update/service.ts";
@@ -73,7 +73,7 @@ function hostHeaders(): HeadersInit {
 }
 
 test("update endpoints drive the updater and answer with its status", async () => {
-  const core = LumiscaCore.forTesting([fauxProvider().provider]);
+  const core = forTestingCore([fauxProvider().provider]);
   const { api, calls } = fakeApi();
   const app = createApp(core, { update: api });
   const post = (path: string, body?: unknown) =>
@@ -144,7 +144,7 @@ test("update endpoints drive the updater and answer with its status", async () =
 });
 
 test("update endpoints reject malformed bodies with 400", async () => {
-  const core = LumiscaCore.forTesting([fauxProvider().provider]);
+  const core = forTestingCore([fauxProvider().provider]);
   const { api, calls } = fakeApi();
   const app = createApp(core, { update: api });
   try {
@@ -165,7 +165,7 @@ test("update endpoints reject malformed bodies with 400", async () => {
 });
 
 test("without an updater the endpoints are absent, not empty", async () => {
-  const core = LumiscaCore.forTesting([fauxProvider().provider]);
+  const core = forTestingCore([fauxProvider().provider]);
   const app = createApp(core);
   try {
     // Development runs have no updater: the UI must be able to tell that

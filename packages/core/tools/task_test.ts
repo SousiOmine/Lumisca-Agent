@@ -10,6 +10,7 @@ import {
   fauxProvider,
   fauxText,
   fauxToolCall,
+  forTestingCore,
 } from "@lumisca/core";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import type { NotificationPayload } from "../ai/notification.ts";
@@ -20,7 +21,7 @@ import type { Workspace } from "../domain/workspace.ts";
 import { McpAttachment } from "../mcp/attachment.ts";
 import { parseMcpConfig } from "../mcp/config.ts";
 import { McpManager } from "../mcp/manager.ts";
-import { CoreError, LumiscaCore } from "../mod.ts";
+import { CoreError, type LumiscaCore } from "../mod.ts";
 import { object, type Tool } from "../ports/tool.ts";
 import { createAgentRepo } from "../session/agents.ts";
 import { createMessageRepo } from "../session/messages.ts";
@@ -74,7 +75,7 @@ function makeHub(
   backoffSleep?: (ms: number, signal?: AbortSignal) => Promise<void>,
 ): HubFixture {
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   const model = core.models.getModel(faux.provider.id, faux.getModel().id)!;
   const events: ClientEvent[] = [];
   const root = fsSync.mkdtempSync(pathJoin(osTmpdir(), "lumisca-task-"));
@@ -118,7 +119,7 @@ function makeScriptedHub(
   options: { eval?: boolean; skills?: () => SkillDef[] } = {},
 ) {
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   const model = core.models.getModel(faux.provider.id, faux.getModel().id)!;
   const streamFn = core.models.models.streamFn();
   const events: ClientEvent[] = [];
@@ -766,13 +767,13 @@ function assertThrowsCoreError(
 
 test("a task runs in the background and its completion reaches the parent", async () => {
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   const events: ClientEvent[] = [];
   const unsubscribe = core.subscribe((event) => events.push(event));
   const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-task-e2e-"));
   try {
     const ws = await core.services.workspaces.create("ws", [root]);
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: faux.provider.id,
       modelId: faux.getModel().id,
@@ -797,7 +798,7 @@ test("a task runs in the background and its completion reaches the parent", asyn
     ]);
     await promptSession(core, session.id, "Do the research in the background");
 
-    const agent = core.getAgent(session.id)!;
+    const agent = core.services.sessions.getAgent(session.id)!;
     await waitFor(
       () => agent.messages.some((m) => messageText(m) === "The task finished."),
       "the parent's reaction to the completion",
@@ -840,11 +841,11 @@ test("a waiting task_output receives the result and suppresses the notification"
   // the parent registers its blocking task_output wait before the sub-agent
   // finishes; the completion notification must then be suppressed.
   const faux = fauxProvider({ tokensPerSecond: 50 });
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-task-wait-"));
   try {
     const ws = await core.services.workspaces.create("ws", [root]);
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: faux.provider.id,
       modelId: faux.getModel().id,
@@ -871,7 +872,7 @@ test("a waiting task_output receives the result and suppresses the notification"
     ]);
     await promptSession(core, session.id, "Do the research and wait for it");
 
-    const agent = core.getAgent(session.id)!;
+    const agent = core.services.sessions.getAgent(session.id)!;
     await waitFor(
       () => agent.messages.some((m) => messageText(m) === "Got the result."),
       "the parent's reaction to the result",
@@ -895,11 +896,11 @@ test("a waiting task_output receives the result and suppresses the notification"
 
 test("sub-agents survive a session rebuild and remain listed", async () => {
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-task-rebuild-"));
   try {
     const ws = await core.services.workspaces.create("ws", [root]);
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: faux.provider.id,
       modelId: faux.getModel().id,
@@ -918,14 +919,21 @@ test("sub-agents survive a session rebuild and remain listed", async () => {
     ]);
     await promptSession(core, session.id, "Start research in the background");
     await waitFor(
-      () => core.getTasks(session.id).some((t) => t.status === "finished"),
+      () =>
+        core.services.sessions
+          .getTasks(session.id)
+          .some((t) => t.status === "finished"),
       "the task to finish",
     );
 
     // A model change rebuilds the agent; the task hub is session-owned and
     // keeps its tasks.
-    core.setSessionModel(session.id, faux.provider.id, faux.getModel().id);
-    const tasks = core.getTasks(session.id);
+    core.services.sessions.setSessionModel(
+      session.id,
+      faux.provider.id,
+      faux.getModel().id,
+    );
+    const tasks = core.services.sessions.getTasks(session.id);
     assertEquals(tasks.length, 1);
     assertEquals(tasks[0]!.agentId, "agent_1");
     assertEquals(tasks[0]!.status, "finished");
@@ -937,11 +945,11 @@ test("sub-agents survive a session rebuild and remain listed", async () => {
 
 test("a task survives closing and reopening the session", async () => {
   const faux = fauxProvider();
-  const core = LumiscaCore.forTesting([faux.provider]);
+  const core = forTestingCore([faux.provider]);
   const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-task-reopen-"));
   try {
     const ws = await core.services.workspaces.create("ws", [root]);
-    const session = await core.createSession({
+    const session = await core.services.sessions.createSession({
       workspaceId: ws.id,
       modelProvider: faux.provider.id,
       modelId: faux.getModel().id,
@@ -960,15 +968,18 @@ test("a task survives closing and reopening the session", async () => {
     ]);
     await promptSession(core, session.id, "Start research in the background");
     await waitFor(
-      () => core.getTasks(session.id).some((t) => t.status === "finished"),
+      () =>
+        core.services.sessions
+          .getTasks(session.id)
+          .some((t) => t.status === "finished"),
       "the task to finish",
     );
 
     // Closing drops the hub; reopening builds a new one over the store. The
     // task must still be there, with the report it produced.
-    await core.closeSession(session.id);
-    await core.openSession(session.id);
-    const tasks = core.getTasks(session.id);
+    await core.services.sessions.closeSession(session.id);
+    await core.services.sessions.openSession(session.id);
+    const tasks = core.services.sessions.getTasks(session.id);
     assertEquals(tasks.length, 1);
     assertEquals(tasks[0]!.agentId, "agent_1");
     assertEquals(tasks[0]!.status, "finished");
