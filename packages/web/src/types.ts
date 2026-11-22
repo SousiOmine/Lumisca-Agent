@@ -9,6 +9,7 @@
  */
 import type * as core from "@lumisca/core";
 import type { Message, ToolCall } from "@lumisca/core";
+import type { PendingQuestionLike } from "@lumisca/core/shared";
 
 /** Shared domain types; single source of truth in packages/core. */
 export type {
@@ -179,10 +180,9 @@ export type {
 
 /** One pending ask (the `ask` tool): questions awaiting the user's answers,
  * tied to the tool call that asked them. */
-export interface PendingQuestion {
-  toolCallId: string;
-  questions: core.AskQuestion[];
-}
+/** One blocked `ask` call. The shape is the wire's; this name is the alias
+ * the session view uses. */
+export type PendingQuestion = PendingQuestionLike;
 
 /** One sub-agent task (the `task` tool) as shown in the tasks panel. The
  * live response text is accumulated from `task_delta` events while the

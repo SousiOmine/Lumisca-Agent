@@ -1,3 +1,4 @@
+import type { DefaultModel } from "@lumisca/core";
 import type {
   CommandApproval,
   SavedPrompt,
@@ -260,12 +261,7 @@ export const api = {
       : peerRoutes.getSkills("", workspaceId),
 
   getDefaultModel: () =>
-    request<{
-      provider: string;
-      modelId: string;
-      thinkingLevel: ThinkingLevel;
-      thinkingLevels: ThinkingLevel[];
-    } | null>("/api/sessions/default-model"),
+    request<DefaultModel | null>("/api/sessions/default-model"),
   createSession: (input: {
     workspaceId?: string;
     name?: string;

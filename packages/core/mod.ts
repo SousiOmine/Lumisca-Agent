@@ -98,6 +98,7 @@ export type {
 } from "./models/user-providers.ts";
 export type { VapidKeys } from "./notify/vapid.ts";
 export { type PushMessage, sendPush } from "./notify/web-push.ts";
+export type { DefaultModel } from "./services/sessions.ts";
 export { ATTACHMENTS_DIR_NAME } from "./session/attachments.ts";
 export type { WindowQuery } from "./session/transcript-window.ts";
 export { VISUALS_DIR_NAME } from "./session/visuals.ts";
