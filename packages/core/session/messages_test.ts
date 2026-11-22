@@ -6,6 +6,7 @@ import type {
   ModeMessage,
 } from "@lumisca/core";
 import { assert, assertEquals } from "@std/assert";
+import { stellaEntriesOf } from "../agent/stella-stream.ts";
 import { LumiscaDb } from "../db/mod.ts";
 import { createMessageRepo } from "./messages.ts";
 
@@ -932,6 +933,99 @@ test("messages: a pruned pair of empty thinking blocks decodes as one", () => {
       { type: "thinking", thinking: "" },
       { type: "text", text: "answer" },
     ]);
+  } finally {
+    db.close();
+  }
+});
+
+/**
+ * The SQL scope and the projection must agree in one direction: every row
+ * the projection draws as an entry has to be a row the conversation query
+ * returns. The SQL is deliberately a superset (the silence sentinel passes
+ * it), so the reverse is not required — but a new speaking path that only
+ * one side learns about disappears on the next snapshot, which is the bug
+ * this table pins down.
+ */
+test("messages: every projected entry is selected by the conversation SQL", () => {
+  const db = LumiscaDb.openInMemory();
+  try {
+    createSession(db, "s1");
+    const repo = createMessageRepo(db);
+    const messages: AgentMessage[] = [
+      {
+        role: "user",
+        content: [{ type: "text", text: "直して" }],
+        timestamp: 100,
+      },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "まず調べます。" }],
+        api: "openai-completions",
+        provider: "faux",
+        model: "faux-1",
+        usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        stopReason: "toolUse",
+        timestamp: 101,
+      },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "直りました。" }],
+        api: "openai-completions",
+        provider: "faux",
+        model: "faux-1",
+        usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        stopReason: "stop",
+        timestamp: 102,
+      },
+      {
+        role: "toolResult",
+        toolCallId: "t1",
+        toolName: "send_chat",
+        content: [],
+        details: { text: "送信しました", attachments: [] },
+        isError: false,
+        timestamp: 103,
+      },
+      {
+        role: "toolResult",
+        toolCallId: "t2",
+        toolName: "send_chat",
+        content: [],
+        details: { text: "失敗しました", attachments: [] },
+        isError: true,
+        timestamp: 104,
+      },
+      {
+        role: "toolResult",
+        toolCallId: "t3",
+        toolName: "execute",
+        content: [],
+        details: {
+          sent: [{ text: "プログラムからの返事", attachments: [] }],
+        },
+        isError: false,
+        timestamp: 105,
+      },
+      {
+        role: "context",
+        provider: "skills",
+        title: "skills",
+        body: "<available_skills></available_skills>",
+        timestamp: 106,
+      },
+    ];
+    const stored = messages.map((message) => repo.append("s1", message));
+    const selected = new Set(
+      repo.newestConversationRows("s1", 100).map((row) => row.id),
+    );
+    for (const [index, message] of messages.entries()) {
+      const draws = stellaEntriesOf(message).length > 0;
+      assertEquals(
+        selected.has(stored[index]!.id),
+        draws,
+        `row ${index} (${message.role}): projection draws=${draws}`,
+      );
+    }
   } finally {
     db.close();
   }
