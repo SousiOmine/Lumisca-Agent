@@ -16,6 +16,7 @@ import { vmAgentDir } from "../vm/contract.ts";
 import type { StellaRuntime } from "../vm/runtime.ts";
 import type { Capabilities } from "./capabilities.ts";
 import type { ModelService } from "./models.ts";
+import { sessionModelView } from "./session-model-view.ts";
 import type { SettingsService } from "./settings.ts";
 import type { WorkspaceService } from "./workspaces.ts";
 
@@ -172,15 +173,13 @@ export class CoreInternals {
   }
 
   decorateSession(session: SessionInfo): SessionInfo {
-    const models = this.#deps.models;
-    const model = models.getSessionModel(
-      session.modelProvider,
-      session.modelId,
-    );
     return {
       ...session,
-      ...models.thinkingState(session.modelProvider, session.modelId, model),
-      model: model !== undefined ? models.describeModel(model) : undefined,
+      ...sessionModelView(
+        this.#deps.models,
+        session.modelProvider,
+        session.modelId,
+      ),
       chat:
         this.#deps.services.workspaces.get(session.workspaceId)?.chat ?? false,
       ...(session.stella === true ? { stella: true } : {}),

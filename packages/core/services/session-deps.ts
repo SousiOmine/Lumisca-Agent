@@ -9,6 +9,7 @@ import type { MessageRepo } from "../session/messages.ts";
 import type { SessionRepo } from "../session/repo.ts";
 import type { SessionVisualStore } from "../session/visuals.ts";
 import type { Locale, ThinkingLevel } from "../shared/mod.ts";
+import type { ModelInfo } from "../shared/providers.ts";
 import type { SkillDef } from "../skills/discover.ts";
 import type { StellaMachine } from "../vm/machine.ts";
 
@@ -32,6 +33,9 @@ export interface SessionServiceDeps {
       modelId: string,
       model: Model<Api> | undefined,
     ): { thinkingLevel: ThinkingLevel; thinkingLevels: ThinkingLevel[] };
+    /** The catalog metadata of one model (see
+     * services/session-model-view.ts). */
+    describeModel(model: Model<Api>): ModelInfo;
     getThinkingLevel(provider: string, modelId: string): ThinkingLevel;
   };
   /** Whether a stella agent is switched off. Opening its conversation

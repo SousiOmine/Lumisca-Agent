@@ -19,6 +19,7 @@ import type {
   UserProviderSummary,
 } from "../models/user-providers.ts";
 import type { ThinkingLevel } from "../shared/mod.ts";
+import { sessionThinking } from "./session-model-view.ts";
 
 /**
  * The model catalog as the routes read it: which providers exist, their
@@ -123,7 +124,7 @@ export class ModelService {
     return this.models.getModels(providerId).map((m) => ({
       ...this.models.describeModel(m),
       enabled: this.isModelEnabled(providerId, m.id),
-      ...this.models.thinkingState(providerId, m.id, m),
+      ...sessionThinking(this.models, providerId, m.id),
     }));
   }
 

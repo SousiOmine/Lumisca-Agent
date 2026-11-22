@@ -4,6 +4,7 @@ import { CoreError } from "../errors.ts";
 import { modelViewOf } from "../session/model-view.ts";
 import { formatSessionName, type ThinkingLevel } from "../shared/mod.ts";
 import type { SessionServiceDeps } from "./session-deps.ts";
+import { sessionThinking } from "./session-model-view.ts";
 
 /** The default model a new session gets, with the thinking control data the
  * draft tab renders. Null when none resolves (including "no provider is
@@ -79,11 +80,7 @@ export class SessionLifecycle {
       const model = await this.deps.resolveDefaultModel();
       return {
         ...model,
-        ...this.deps.models.thinkingState(
-          model.provider,
-          model.modelId,
-          this.deps.models.getModel(model.provider, model.modelId),
-        ),
+        ...sessionThinking(this.deps.models, model.provider, model.modelId),
       };
     } catch {
       return null;
