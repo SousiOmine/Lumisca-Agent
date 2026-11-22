@@ -202,18 +202,13 @@ function createSession(
     commit(): void {
       if (changed.size === 0) return;
       const now = Date.now();
-      db.db.exec("BEGIN IMMEDIATE");
-      try {
+      db.transaction(() => {
         for (const key of changed) {
           const entry = entries.get(key);
           if (entry === undefined) statements.remove.run(sessionId, key);
           else statements.upsert.run(sessionId, key, entry.text, now);
         }
-        db.db.exec("COMMIT");
-      } catch (error) {
-        db.db.exec("ROLLBACK");
-        throw error;
-      }
+      });
       changed.clear();
     },
   };

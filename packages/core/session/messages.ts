@@ -713,14 +713,6 @@ export function createMessageRepo(db: LumiscaDb): MessageRepo {
       }
       return stored;
     };
-    db.db.exec("BEGIN IMMEDIATE");
-    try {
-      const stored = write();
-      db.db.exec("COMMIT");
-      return stored;
-    } catch (error) {
-      db.db.exec("ROLLBACK");
-      throw error;
-    }
+    return db.transaction(write);
   }
 }

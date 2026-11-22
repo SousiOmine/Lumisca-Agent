@@ -73,10 +73,12 @@ export function createWorkspaceRepo(db: LumiscaDb): WorkspaceRepo {
       const chat = options.chat ?? false;
       const createdAt = options.createdAt ?? Date.now();
       const id = crypto.randomUUID();
-      insertStmt.run(id, name, chat ? 1 : 0, createdAt);
-      for (const folder of folders) {
-        insertFolderStmt.run(id, folder);
-      }
+      db.transaction(() => {
+        insertStmt.run(id, name, chat ? 1 : 0, createdAt);
+        for (const folder of folders) {
+          insertFolderStmt.run(id, folder);
+        }
+      });
       return toWorkspace(
         { id, name, created_at: createdAt, chat: chat ? 1 : 0 },
         folders,
@@ -117,11 +119,15 @@ export function createWorkspaceRepo(db: LumiscaDb): WorkspaceRepo {
     },
 
     update(id: string, name: string, folders: string[]): void {
-      renameStmt.run(name, id);
-      deleteFoldersStmt.run(id);
-      for (const folder of folders) {
-        insertFolderStmt.run(id, folder);
-      }
+      // Delete-then-insert must not leave a workspace with no folders when
+      // an insert fails halfway.
+      db.transaction(() => {
+        renameStmt.run(name, id);
+        deleteFoldersStmt.run(id);
+        for (const folder of folders) {
+          insertFolderStmt.run(id, folder);
+        }
+      });
     },
 
     delete(id: string): void {

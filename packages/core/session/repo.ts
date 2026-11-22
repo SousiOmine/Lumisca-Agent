@@ -158,8 +158,7 @@ export function createSessionRepo(db: LumiscaDb): SessionRepo {
       // could never write a message (the messages foreign key needs it), so
       // the two rows are written together or not at all.
       const mainAgentId = newMainAgentId();
-      db.db.exec("BEGIN IMMEDIATE");
-      try {
+      db.transaction(() => {
         insertStmt.run(
           id,
           input.workspaceId,
@@ -172,11 +171,7 @@ export function createSessionRepo(db: LumiscaDb): SessionRepo {
           input.personaId ?? null,
         );
         insertMainAgentStmt.run(mainAgentId, id, createdAt);
-        db.db.exec("COMMIT");
-      } catch (error) {
-        db.db.exec("ROLLBACK");
-        throw error;
-      }
+      });
       // Read the row back instead of assembling the record here: a stella
       // conversation's name comes from its persona (see toSession), and a
       // second hand-written mapping would be a second answer to "what is

@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import { closeDatabase } from "./close.ts";
 import { migrate } from "./schema.ts";
+import { inTransaction } from "./transaction.ts";
 
 /** Central SQLite access point. All repositories share one instance. */
 export class LumiscaDb {
@@ -25,6 +26,11 @@ export class LumiscaDb {
     lumisca.db.exec("PRAGMA foreign_keys = ON;");
     migrate(db);
     return lumisca;
+  }
+
+  /** Run `fn` as one transaction (nested calls use SAVEPOINT). */
+  transaction<T>(fn: () => T): T {
+    return inTransaction(this.db, fn);
   }
 
   close(): void {
