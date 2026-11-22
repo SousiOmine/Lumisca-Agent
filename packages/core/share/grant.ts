@@ -25,6 +25,15 @@ export interface FolderGrant extends FolderShare {
   sessionId: string;
 }
 
+/** Whether the loan ended at `now`. The one expiry rule: the server's view of
+ * what a session may reach, the client's copy of that list, and the file
+ * backend's own refusal all ask this, so a loan cannot be live in one place
+ * and gone in another. A grant whose deadline is exactly now is over: the
+ * lending app promises the folder until that instant, not through it. */
+export function isExpired(grant: FolderGrant, now: number): boolean {
+  return grant.expiresAt <= now;
+}
+
 /** The namespace path a name resolves to. */
 export function shareRootOf(name: string): string {
   return `${SHARE_ROOT}/${name}`;
