@@ -36,7 +36,7 @@ function harness() {
     getSession: (id: string) => sessions[id] as never,
     getStellaAgent: (id: string) =>
       id === "a1" ? ({ name: "朝の番人" } as never) : undefined,
-    getLanguage: () => language,
+    language: () => language,
     listPushSubscriptions: () => store.list(),
     pushVapidKeys: () => store.vapidKeys(),
     forgetPushSubscriptions: (endpoints: readonly string[]) =>
@@ -90,6 +90,7 @@ test("a finished run notifies every subscription", async () => {
   const sent: string[] = [];
   const notifier = createPushNotifier({
     core,
+    language: core.language,
     fetch: (_input, init) => {
       const headers = (init?.headers ?? {}) as Record<string, string>;
       sent.push(String(headers["urgency"]));
@@ -113,6 +114,7 @@ test("a silent routine's end is not notified", async () => {
   const sent: string[] = [];
   const notifier = createPushNotifier({
     core,
+    language: core.language,
     fetch: () => {
       sent.push("sent");
       return Promise.resolve(new Response(null, { status: 201 }));
@@ -303,6 +305,7 @@ test("a gone endpoint is forgotten after one failure", async () => {
   await store.add(dead);
   const notifier = createPushNotifier({
     core,
+    language: core.language,
     fetch: (input) =>
       Promise.resolve(
         new Response(null, {
@@ -329,6 +332,7 @@ test("a transient failure keeps the subscription for the next try", async () => 
   let attempts = 0;
   const notifier = createPushNotifier({
     core,
+    language: core.language,
     fetch: () => {
       attempts++;
       return Promise.resolve(new Response("busy", { status: 429 }));
@@ -349,6 +353,7 @@ test("events nobody is notified about send nothing", async () => {
   let attempts = 0;
   const notifier = createPushNotifier({
     core,
+    language: core.language,
     fetch: () => {
       attempts++;
       return Promise.resolve(new Response(null, { status: 201 }));
@@ -379,6 +384,7 @@ test("a disposed notifier stops sending", async () => {
   let attempts = 0;
   const notifier = createPushNotifier({
     core,
+    language: core.language,
     fetch: () => {
       attempts++;
       return Promise.resolve(new Response(null, { status: 201 }));
@@ -396,6 +402,7 @@ test("the test button reports how many were accepted", async () => {
   await store.add(await subscriber("https://push.example/b"));
   const notifier = createPushNotifier({
     core,
+    language: core.language,
     fetch: (input) =>
       Promise.resolve(
         new Response(null, {

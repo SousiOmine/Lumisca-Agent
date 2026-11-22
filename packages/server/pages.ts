@@ -27,7 +27,7 @@ import { safePageHost } from "./security.ts";
  * The client resolves "system" via prefers-color-scheme; the shell falls back
  * to dark for the first paint. */
 function themeOf(core: LumiscaCore): ThemeSetting {
-  const stored = core.getSetting(THEME_KEY);
+  const stored = core.settings.get(THEME_KEY);
   return stored === "light" ? "light" : stored === "system" ? "system" : "dark";
 }
 
@@ -40,7 +40,7 @@ function resolvedThemeOf(core: LumiscaCore): "light" | "dark" {
  * one, else the browser's preference (Accept-Language), else the machine's
  * locale. Shared with the MCP routes (their OAuth page renders the same way). */
 export function languageForRequest(core: LumiscaCore, c: Context): Locale {
-  return resolveLocale(core.getSetting(LANGUAGE_KEY), [
+  return resolveLocale(core.settings.get(LANGUAGE_KEY), [
     ...parseAcceptLanguage(c.req.header("accept-language")),
     ...systemLanguageTags(),
   ]);
@@ -68,10 +68,10 @@ export async function initialDataFor(
     // Read now rather than kept from startup: deleting the marker file asks
     // every client for the first-run setup at its next page load (see
     // core/settings/setup.ts).
-    setup: core.getSetup(),
+    setup: core.settings.setup(),
     // Read per request like the rest: the switch in settings must reach the
     // next page load, and the client needs it before its first render.
-    codeModeEnabled: codeModeEnabled((key) => core.getSetting(key)),
+    codeModeEnabled: codeModeEnabled((key) => core.settings.get(key)),
   };
 }
 
@@ -92,8 +92,8 @@ export function registerPages(
     // for. Idempotent and deliberate about happening on a GET: the value has
     // to exist before the first session is created. From here on the settings
     // dialog is the only writer.
-    if (parseLocale(core.getSetting(LANGUAGE_KEY)) === undefined) {
-      core.setSetting(LANGUAGE_KEY, language);
+    if (parseLocale(core.settings.get(LANGUAGE_KEY)) === undefined) {
+      core.settings.set(LANGUAGE_KEY, language);
     }
     // Through the context (`c.newResponse`) rather than a raw Response: only
     // then do headers a middleware set — the token cookie included — reach

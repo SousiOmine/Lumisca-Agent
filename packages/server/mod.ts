@@ -209,9 +209,9 @@ export async function main(): Promise<void> {
     const probe = () =>
       createComputerHost({
         store: {
-          load: () => core.getSetting(COMPUTER_USE_SESSION_TOKEN_KEY),
+          load: () => core.settings.get(COMPUTER_USE_SESSION_TOKEN_KEY),
           save: (token) =>
-            core.setSetting(COMPUTER_USE_SESSION_TOKEN_KEY, token),
+            core.settings.set(COMPUTER_USE_SESSION_TOKEN_KEY, token),
         },
       });
     // The probe stays available to the core so the settings toggle can ask
@@ -311,7 +311,10 @@ export async function main(): Promise<void> {
           installDir: dirname(process.execPath),
           execPath: process.execPath,
         },
-        settings: core,
+        settings: {
+          getSetting: (key) => core.settings.get(key),
+          setSetting: (key, value) => core.settings.set(key, value),
+        },
         // The successor must start exactly like this process did, so the launch
         // configuration captured at startup is replayed for it.
         startupEnv,

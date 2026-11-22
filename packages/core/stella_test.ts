@@ -405,7 +405,7 @@ test("stella conversation: an unset model follows the app's default", async () =
   const core = await twoModelStellaCore();
   try {
     const agent = await core.createStellaAgent({ name: "Aide", role: "r" });
-    core.setSetting(
+    core.settings.set(
       DEFAULT_MODEL_KEY,
       JSON.stringify({ provider: "faux", modelId: "other" }),
     );
@@ -417,7 +417,7 @@ test("stella conversation: an unset model follows the app's default", async () =
     // The conversation row froze the pair it resolved when it was created,
     // while the dialog kept saying "default". Moving the default has to move
     // the row as well: the row is what a run reads.
-    core.setSetting(
+    core.settings.set(
       DEFAULT_MODEL_KEY,
       JSON.stringify({ provider: "faux", modelId: "faux" }),
     );
@@ -431,7 +431,7 @@ test("stella conversation: an unset model follows the app's default", async () =
     await core.updateStellaAgent(agent.id, {
       model: { provider: "faux", modelId: "other" },
     });
-    core.setSetting(
+    core.settings.set(
       DEFAULT_MODEL_KEY,
       JSON.stringify({ provider: "faux", modelId: "faux" }),
     );
@@ -2004,7 +2004,7 @@ test("stella conversation: a compaction keeps the work rows by default", async (
 
     // Turned off, the next open reduces what the checkpoint already covers.
     // The setting is read on every prune, so no rebuild is needed.
-    core.setSetting(STELLA_KEEP_FULL_LOG_KEY, "0");
+    core.settings.set(STELLA_KEEP_FULL_LOG_KEY, "0");
     await core.closeSession(session.id);
     core.openSession(session.id);
     assert(prunedRows(core, session.id) > 0, "the rows were not reduced");
@@ -2023,7 +2023,7 @@ test("stella conversation: a code-mode session never drops its rows", async () =
     assertStellaPrunes(core, session.id, false);
     // The predicate is a getter, so turning the setting off reaches the open
     // conversation without reopening it.
-    core.setSetting(STELLA_KEEP_FULL_LOG_KEY, "0");
+    core.settings.set(STELLA_KEEP_FULL_LOG_KEY, "0");
     assertStellaPrunes(core, session.id, true);
 
     await withTempDir("lumisca-prune-", async (root) => {

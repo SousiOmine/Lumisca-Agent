@@ -463,14 +463,14 @@ test("federation: hub reports its peers and proxies their workspaces and session
     // client connects to peers once the listener is bound.
     const hubFaux = fauxProvider();
     const hubCore = LumiscaCore.forTesting([hubFaux.provider]);
-    hubCore.setConnections([
+    hubCore.settings.setConnections([
       { id: "peer1", name: "自宅", url: peerBase, token: "peer-token" },
       // Registering the hub itself must be ignored (event loop guard).
       // The hub's own URL is filled in below once its port is known.
     ]);
     const hubServer = startServer(hubCore, 0, { token: "hub-token" });
     const hubBase = `http://127.0.0.1:${hubServer.addr.port}`;
-    hubCore.setConnections([
+    hubCore.settings.setConnections([
       { id: "peer1", name: "自宅", url: peerBase, token: "peer-token" },
       { id: "self", name: "self", url: hubBase, token: "hub-token" },
     ]);
@@ -642,7 +642,7 @@ test("federation: hub reports its peers and proxies their workspaces and session
     peerServer.shutdown();
     peerCore.close();
     const deadHubCore = LumiscaCore.forTesting([hubFaux.provider]);
-    deadHubCore.setConnections([
+    deadHubCore.settings.setConnections([
       { id: "peer1", name: "自宅", url: peerBase, token: "peer-token" },
     ]);
     const deadHub = startServer(deadHubCore, 0, { token: "hub-token" });

@@ -362,7 +362,9 @@ test("the fed proxy keeps the headers only the peer can set", async () => {
   });
   const peerUrl = `http://127.0.0.1:${peerServer.port}`;
   const core = LumiscaCore.forTesting([fauxProvider().provider]);
-  core.setConnections([{ id: "p1", name: "p1", url: peerUrl, token: "t" }]);
+  core.settings.setConnections([
+    { id: "p1", name: "p1", url: peerUrl, token: "t" },
+  ]);
   const server = startServer(core, 0, {});
   try {
     const base = `http://127.0.0.1:${server.addr.port}`;

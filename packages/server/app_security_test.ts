@@ -372,7 +372,7 @@ test("token auth remembers a presented token in a cookie", async () => {
     // straight from the catalogue. Pin the language first: the page loads
     // above already resolved it for real, and every later request follows
     // the stored value (a 401 never writes one).
-    core.setSetting(LANGUAGE_KEY, "ja");
+    core.settings.set(LANGUAGE_KEY, "ja");
     const stale = await app.fetch(
       new Request("http://127.0.0.1:8000/", {
         headers: {

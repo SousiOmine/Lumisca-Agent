@@ -82,8 +82,8 @@ test("a core without a settings file owes no setup", async () => {
   // for the marker to live, so there is no installation to guide.
   const core = LumiscaCore.openInMemory();
   try {
-    assertEquals(core.getSetup(), { completed: true });
-    assertEquals(core.completeSetup(), { completed: true });
+    assertEquals(core.settings.setup(), { completed: true });
+    assertEquals(core.settings.completeSetup(), { completed: true });
   } finally {
     await core.close();
   }
@@ -97,16 +97,16 @@ test("core: the marker is read per call, not fixed at startup", async () => {
   );
   try {
     const marker = setupMarkerPath(dir);
-    assertEquals(core.getSetup(), { completed: false });
+    assertEquals(core.settings.setup(), { completed: false });
 
-    assertEquals(core.completeSetup(), { completed: true });
+    assertEquals(core.settings.completeSetup(), { completed: true });
     assertEquals(markerExists(marker), true);
-    assertEquals(core.getSetup(), { completed: true });
+    assertEquals(core.settings.setup(), { completed: true });
 
     // The documented way to ask for the wizard again: delete the file. The
     // same process must see it, without a restart.
     fsSync.rmSync(marker);
-    assertEquals(core.getSetup(), { completed: false });
+    assertEquals(core.settings.setup(), { completed: false });
   } finally {
     await core.close();
     await removeDirRetry(dir);

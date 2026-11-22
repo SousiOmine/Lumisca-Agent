@@ -652,12 +652,12 @@ test("credentials are guarded on every settings surface", async () => {
     const refused = (fn: () => void) => {
       assertThrows(fn, Error, "credentials cannot be accessed");
     };
-    refused(() => core.getSetting("api_key:anthropic"));
-    refused(() => core.setSetting("api_key:anthropic", "x"));
-    refused(() => core.deleteSetting("api_key:anthropic"));
+    refused(() => core.settings.get("api_key:anthropic"));
+    refused(() => core.settings.set("api_key:anthropic", "x"));
+    refused(() => core.settings.remove("api_key:anthropic"));
 
     // listSettings never exposes them.
-    assertEquals(core.listSettings().has("api_key:anthropic"), false);
+    assertEquals(core.settings.list().has("api_key:anthropic"), false);
 
     // The credential survives (the refused operations were no-ops).
     const stored = JSON.parse(
@@ -784,7 +784,7 @@ test("session language: the setting reaches an open session, not a frozen prompt
     // this). It is published as a context message, not baked into the
     // prompt, because it can change while a session lives (see
     // agent/language-context.ts).
-    core.setSetting(LANGUAGE_KEY, "en");
+    core.settings.set(LANGUAGE_KEY, "en");
     const english = await core.createSession({
       modelProvider: providerId,
       modelId,
@@ -799,7 +799,7 @@ test("session language: the setting reaches an open session, not a frozen prompt
     // Switching the setting now reaches the session that is already open —
     // the reason the rule moved out of the prompt snapshot. The publication
     // happens before a run (like the date), so one is started.
-    core.setSetting(LANGUAGE_KEY, "ja");
+    core.settings.set(LANGUAGE_KEY, "ja");
     faux.setResponses([fauxAssistantMessage("ok")]);
     await promptSession(core, english.id, "hello");
     const contexts = core

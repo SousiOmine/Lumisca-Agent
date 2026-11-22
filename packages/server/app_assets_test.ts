@@ -24,7 +24,7 @@ function readOnlyServer(): { base: string; core: LumiscaCore } {
   if (shared === undefined) {
     const faux = fauxProvider();
     const core = LumiscaCore.forTesting([faux.provider]);
-    core.setSetting(LANGUAGE_KEY, "ja");
+    core.settings.set(LANGUAGE_KEY, "ja");
     const server = startServer(core, 0, { repoRoot: process.cwd() });
     shared = { base: `http://127.0.0.1:${server.addr.port}`, core };
     shutdown = () => {
@@ -87,12 +87,12 @@ test("initial data carries the code mode switch", async () => {
   // settings read. The switch is off by default and reaches the next request
   // when it moves.
   const { base, core } = readOnlyServer();
-  core.setSetting(CODE_MODE_ENABLED_KEY, "1");
+  core.settings.set(CODE_MODE_ENABLED_KEY, "1");
   try {
     const text = await (await fetch(`${base}/assets/initial-data.js`)).text();
     assertEquals(text.includes('"codeModeEnabled":true'), true);
   } finally {
-    core.setSetting(CODE_MODE_ENABLED_KEY, "");
+    core.settings.set(CODE_MODE_ENABLED_KEY, "");
   }
 });
 
@@ -218,7 +218,7 @@ test("token-required page renders in the request's language", async () => {
     // A 401 is not a page load of the app: it resolved a language for its
     // own response but stored nothing, so the first real page load still
     // decides (and no later request inherits a guess from a rejected one).
-    assertEquals(core.getSetting(LANGUAGE_KEY), undefined);
+    assertEquals(core.settings.get(LANGUAGE_KEY), undefined);
   } finally {
     core.close();
   }

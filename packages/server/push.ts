@@ -234,7 +234,6 @@ export interface PushNotifierCore {
   /** A stella agent, for the name a conversation is notified under: the
    * user names the agent, and the conversation is that agent talking. */
   getStellaAgent(id: string): { name: string } | undefined;
-  getLanguage(): Locale;
   listPushSubscriptions(): PushSubscriptionRecord[];
   pushVapidKeys(): Promise<VapidKeys>;
   forgetPushSubscriptions(endpoints: readonly string[]): void;
@@ -264,12 +263,15 @@ export interface PushNotifier {
 
 export interface PushNotifierOptions {
   core: PushNotifierCore;
+  /** The app language at send time (a change applies to the next send). */
+  language: () => Locale;
   /** Transport, so a test can answer without a push service. */
   fetch?: typeof fetch;
 }
 
 export function createPushNotifier({
   core,
+  language,
   fetch: fetchImpl = fetch,
 }: PushNotifierOptions): PushNotifier {
   let disposed = false;
@@ -283,7 +285,7 @@ export function createPushNotifier({
       session?.personaId === undefined
         ? undefined
         : core.getStellaAgent(session.personaId);
-    return notificationName(session, agent, core.getLanguage());
+    return notificationName(session, agent, language());
   };
 
   const deliver = async (
@@ -333,7 +335,7 @@ export function createPushNotifier({
     const built = buildPushNotification(
       event,
       nameOf(event.sessionId),
-      core.getLanguage(),
+      language(),
     );
     // Fire and forget: a notification must never delay the event the UI is
     // already applying, and its failure is not the run's failure.
@@ -347,7 +349,7 @@ export function createPushNotifier({
       await deliver(
         {
           title: "Lumisca",
-          body: translate(core.getLanguage(), "settings.general.pushTestSent"),
+          body: translate(language(), "settings.general.pushTestSent"),
           tag: "test",
         },
         "normal",

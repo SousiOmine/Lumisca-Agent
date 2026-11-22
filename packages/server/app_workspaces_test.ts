@@ -674,7 +674,7 @@ test("settings API refuses a preference it does not declare", async () => {
       body: JSON.stringify({ value: "x" }),
     });
     assertEquals(res.status, 400);
-    const stored = core.getSetting("some_invented_key");
+    const stored = core.settings.get("some_invented_key");
     assertEquals(stored, undefined);
   } finally {
     server.shutdown();
@@ -865,7 +865,7 @@ test("command safety approvals API lists, deletes and clears", async () => {
   try {
     // The approvals record is a structured setting (hash + redacted display,
     // never the plaintext command); seed it like the check would write it.
-    core.setSetting(
+    core.settings.set(
       COMMAND_SAFETY_APPROVALS_KEY,
       JSON.stringify([
         { hash: "h-npm-test", kind: "bash", cwd: "/ws/a", command: "npm test" },

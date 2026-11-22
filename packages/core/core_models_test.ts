@@ -67,7 +67,7 @@ function setupFastTitle() {
     ],
   });
   const core = LumiscaCore.forTesting([faux.provider]);
-  core.setSetting(
+  core.settings.set(
     FAST_MODEL_KEY,
     serializeModelPreference({
       provider: faux.provider.id,
@@ -88,7 +88,7 @@ function setupImageAnalysis() {
     ],
   });
   const core = LumiscaCore.forTesting([faux.provider]);
-  core.setSetting(
+  core.settings.set(
     IMAGE_MODEL_KEY,
     serializeModelPreference({
       provider: faux.provider.id,
@@ -400,7 +400,7 @@ test("fast model: first prompt auto-generates the session title", async () => {
 
   // The provisional name follows the app language, so the test pins it
   // instead of depending on the machine's locale.
-  core.setSetting(LANGUAGE_KEY, "ja");
+  core.settings.set(LANGUAGE_KEY, "ja");
   const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
@@ -448,7 +448,7 @@ test("no fast model: session keeps its provisional name", async () => {
   const { ws } = await makeWorkspace(core);
 
   // Pinned: the provisional name is the localized "Session <date>".
-  core.setSetting(LANGUAGE_KEY, "ja");
+  core.settings.set(LANGUAGE_KEY, "ja");
   const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
@@ -481,7 +481,7 @@ test("getDefaultModel prefers the user's default over the last used model", asyn
   // model, so the two answers agree on its id; what this pins is that the
   // resolver reads the setting FIRST, which the "skips an unreachable
   // default" test below shows by making the default unusable.
-  core.setSetting(
+  core.settings.set(
     DEFAULT_MODEL_KEY,
     JSON.stringify({ provider: providerId, modelId }),
   );
@@ -490,7 +490,7 @@ test("getDefaultModel prefers the user's default over the last used model", asyn
   // supply a second one, so the fallthrough is what is checked instead: a
   // default naming a model this installation does not have is ignored rather
   // than obeyed.
-  core.setSetting(
+  core.settings.set(
     DEFAULT_MODEL_KEY,
     JSON.stringify({ provider: providerId, modelId: "not-a-model" }),
   );
@@ -504,7 +504,7 @@ test("getDefaultModel skips a default this installation cannot reach", async () 
   const { core, providerId, modelId } = setup();
   const { ws: _ws } = await makeWorkspace(core);
   await core.setProviderApiKey(providerId, "faux-key");
-  core.setSetting(
+  core.settings.set(
     DEFAULT_MODEL_KEY,
     JSON.stringify({ provider: "gone", modelId: "gone-model" }),
   );

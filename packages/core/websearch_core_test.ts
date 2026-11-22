@@ -29,11 +29,11 @@ test("core: the web-search view never carries a key", async () => {
     assert(!JSON.stringify(added).includes("s3cret"));
     // The generic settings surface refuses the entry that holds it.
     assertThrows(
-      () => core.setSetting(WEB_SEARCH_KEY, "{}"),
+      () => core.settings.set(WEB_SEARCH_KEY, "{}"),
       CoreError,
       "cannot be accessed",
     );
-    assertEquals(core.listSettings().has(WEB_SEARCH_KEY), false);
+    assertEquals(core.settings.list().has(WEB_SEARCH_KEY), false);
   } finally {
     await core.close();
   }

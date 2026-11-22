@@ -1,5 +1,4 @@
 import * as fsp from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { SessionPool } from "./agent/pool.ts";
 import type { SessionAgent } from "./agent/session-agent.ts";
@@ -11,7 +10,6 @@ import type {
   Model,
   Provider,
 } from "./ai/catalog.ts";
-import { withProviderRetryDefaults } from "./ai/llm-retry.ts";
 import {
   type CoreGraph,
   type CoreHost,
@@ -19,13 +17,9 @@ import {
   type CoreServices,
   type CoreState,
   createCoreGraph,
-  createCoreServices,
 } from "./bootstrap.ts";
 import type { BrowserBackend } from "./browser/types.ts";
-import {
-  type CodeStoreRepo,
-  createCodeStoreRepo,
-} from "./code-execution/store.ts";
+import type { CodeStoreRepo } from "./code-execution/store.ts";
 import type { ComputerHost, ComputerHostResult } from "./computer/types.ts";
 import { LumiscaDb } from "./db/mod.ts";
 import { MIN_VACUUM_BYTES, vacuumMarkerPath } from "./db/vacuum.ts";
@@ -39,7 +33,6 @@ import type { StellaEntry } from "./domain/stella-conversation.ts";
 import type { Workspace } from "./domain/workspace.ts";
 import { CoreError, errorMessage } from "./errors.ts";
 import type { EventHub } from "./events/hub.ts";
-import { systemLanguageTags } from "./locale.ts";
 import { createLogger } from "./log.ts";
 import type { McpInfo } from "./mcp/config.ts";
 import type { McpOAuthStore } from "./mcp/oauth.ts";
@@ -56,43 +49,30 @@ import type {
 import type { PushSubscriptions } from "./notify/subscriptions.ts";
 import type { VapidKeys } from "./notify/vapid.ts";
 import type { PersonalizationService } from "./personalization.ts";
-import type { CommandSafety } from "./safety/command-safety.ts";
 import type { SavedPromptsService } from "./saved-prompts.ts";
 import type { ComputerUseService } from "./services/computer.ts";
 import type { ModelService } from "./services/models.ts";
 import { RoutineService } from "./services/routines.ts";
 import type { DefaultModel, SessionService } from "./services/sessions.ts";
+import { SettingsService } from "./services/settings.ts";
 import type { WorkspaceService } from "./services/workspaces.ts";
-import { type AgentRepo, createAgentRepo } from "./session/agents.ts";
+import type { AgentRepo } from "./session/agents.ts";
 import {
   ATTACHMENTS_DIR_NAME,
   SessionAttachmentStore,
 } from "./session/attachments.ts";
-import { createMessageRepo, type MessageRepo } from "./session/messages.ts";
-import { createSessionRepo, type SessionRepo } from "./session/repo.ts";
-import {
-  createRequestShapeRepo,
-  type RequestShapeRepo,
-} from "./session/request-shapes.ts";
+import type { MessageRepo } from "./session/messages.ts";
+import type { SessionRepo } from "./session/repo.ts";
+import type { RequestShapeRepo } from "./session/request-shapes.ts";
 import type { WindowPage, WindowQuery } from "./session/transcript-window.ts";
 import { SessionVisualStore, VISUALS_DIR_NAME } from "./session/visuals.ts";
-import {
-  type ConnectionEntry,
-  parseConnections,
-} from "./settings/connections.ts";
-import { createDbCredentialStore, setApiKey } from "./settings/credentials.ts";
-import {
-  assertMutableKey,
-  assertNotProtected,
-  filterExposedSettings,
-} from "./settings/guard.ts";
-import { appSkillDirs, resolveSettingsPath } from "./settings/path.ts";
+import { setApiKey } from "./settings/credentials.ts";
+import { resolveSettingsPath } from "./settings/path.ts";
 import {
   createFileSettingsRepo,
   createInMemorySettingsRepo,
   type SettingsRepo,
 } from "./settings/repo.ts";
-import { markSetupComplete, readSetupState } from "./settings/setup.ts";
 import type { ShareHub } from "./share/hub.ts";
 import type {
   PendingShareRequest,
@@ -101,12 +81,8 @@ import type {
 import type { ContextUsageSummary } from "./shared/context-usage.ts";
 import type {
   AskAnswer,
-  CommandApproval,
-  CompactionPolicyInput,
   PromptFileRef,
   ProviderAuthType,
-  Routine,
-  SetupState,
   StellaAgentSummary,
   TaskInfo,
   ThinkingLevel,
@@ -120,16 +96,10 @@ import {
   appUiInSystemPrompt,
   askToolEnabled,
   CODE_EXECUTION_ENABLED_KEY,
-  CONNECTIONS_KEY,
   codeExecutionEnabled,
   DEFAULT_MODEL_KEY,
-  LANGUAGE_KEY,
-  type Locale,
-  parseCompactionPolicyInput,
   parseModelPreference,
-  resolveLocale,
   type SavedPrompt,
-  stellaKeepsFullLog,
 } from "./shared/mod.ts";
 import type {
   PushSubscriptionKeys,
@@ -138,7 +108,6 @@ import type {
 import type { StellaMachineStatus, StellaStatus } from "./shared/wire.ts";
 import type { SkillInfo } from "./skills/discover.ts";
 import {
-  createStellaAgentRepo,
   normalizeAgentModel,
   type StellaAgent,
   type StellaAgentRepo,
@@ -166,10 +135,6 @@ import type { HandoverRegistry } from "./vm/handover-registry.ts";
 import type { StellaMachine } from "./vm/machine.ts";
 import type { StellaRuntime } from "./vm/runtime.ts";
 import type { HostPromptFile, PromptImageFile } from "./vm/uploads.ts";
-import {
-  createWebSearchSettingsStore,
-  type FetchLike,
-} from "./websearch/mod.ts";
 import type { WebSearchService } from "./websearch/service.ts";
 
 /** Module logger (debug-gated). */
@@ -213,7 +178,6 @@ export class LumiscaCore {
   readonly db: LumiscaDb;
   readonly models: ModelManager;
 
-  private readonly settings: SettingsRepo;
   private readonly credentials: CredentialStore;
   private readonly workspaces: WorkspaceService;
   private readonly personalization: PersonalizationService;
@@ -224,10 +188,12 @@ export class LumiscaCore {
    * session/agents.ts). */
   private readonly agents: AgentRepo;
   private readonly stellaAgents: StellaAgentRepo;
-  /** Routines (scheduled requests) and the scheduler that fires them. The
-   * scheduler is created here so tests can drive it with a short tick; the
-   * server starts and stops it (see package.json tasks / server/mod.ts). */
-  /** The scheduled requests of stella conversations (see RoutineService). */
+  /** The installation's settings, setup marker and approvals (see
+   * SettingsService). */
+  readonly settings: SettingsService;
+  /** The scheduled requests of stella conversations (see RoutineService).
+   * The scheduler is created in the graph so tests can drive it with a short
+   * tick; the server starts and stops it (see server/mod.ts). */
   readonly routines: RoutineService;
   private readonly messages: MessageRepo;
   private readonly requestShapes: RequestShapeRepo;
@@ -259,10 +225,8 @@ export class LumiscaCore {
   /** The directory the settings file lives in, when this core has a settings
    * file at all. The first-run setup marker is read and written there (see
    * settings/setup.ts); an in-memory core has no such directory. */
-  private readonly settingsDir: string | undefined;
   /** MCP OAuth grants (see mcp/oauth.ts), shared with the session pool. */
   private readonly mcpOAuth: McpOAuthStore;
-  private readonly commandSafety: CommandSafety;
   /** The web-search setting and the provider built over it. */
   private readonly webSearch: WebSearchService;
   /** Browser-lab backend (Desktop WebView host), or
@@ -305,8 +269,6 @@ export class LumiscaCore {
   private constructor(graph: CoreGraph) {
     this.state = graph.state;
     this.db = graph.db;
-    this.settings = graph.settings;
-    this.settingsDir = graph.settingsDir;
     this.credentials = graph.credentials;
     this.computer = graph.computer;
     this.models = graph.models;
@@ -319,7 +281,6 @@ export class LumiscaCore {
     this.messages = graph.messages;
     this.requestShapes = graph.requestShapes;
     this.codeStore = graph.codeStore;
-    this.commandSafety = graph.commandSafety;
     this.webSearch = graph.webSearch;
     this.mcpOAuth = graph.mcpOAuth;
     this.visuals = graph.visuals;
@@ -339,6 +300,11 @@ export class LumiscaCore {
     this.envRequests = graph.envRequests;
     this.shareRequests = graph.shareRequests;
     this.shareHub = graph.shareHub;
+    this.settings = new SettingsService({
+      repo: graph.settings,
+      settingsDir: graph.settingsDir,
+      commandSafety: graph.commandSafety,
+    });
     // Built last: its runner reaches back into the facade for the two
     // operations that cross services (waking a machine, opening a
     // conversation), so every collaborator it reads is assigned above.
@@ -391,10 +357,10 @@ export class LumiscaCore {
       deleteSession: (id) => core().deleteSession(id),
       emit: (event) => core().emit(event),
       forgetSession: (sessionId) => core().forgetSession(sessionId),
-      getCompactionPolicy: () => core().getCompactionPolicy(),
-      getLanguage: () => core().getLanguage(),
+      getCompactionPolicy: () => core().settings.compactionPolicy(),
+      getLanguage: () => core().settings.language(),
       getOrCreateChatWorkspace: () => core().getOrCreateChatWorkspace(),
-      getStellaKeepFullLog: () => core().getStellaKeepFullLog(),
+      getStellaKeepFullLog: () => core().settings.stellaKeepsFullLog(),
       isAskToolEnabled: () => core().isAskToolEnabled(),
       isCodeExecutionEnabled: () => core().isCodeExecutionEnabled(),
       requireModel: (provider, modelId) =>
@@ -699,127 +665,7 @@ export class LumiscaCore {
     this.shareRequests.forget(sessionId);
   }
 
-  // --- settings -----------------------------------------------------------
-
-  /** Read a setting. Protected keys (credentials, MCP config) are refused —
-   * they have their own APIs and must never be readable through the generic
-   * settings surface. */
-  getSetting(key: string): string | undefined {
-    assertNotProtected(key);
-    return this.settings.get(key);
-  }
-
-  /** Write a setting. Protected keys are refused (they have dedicated
-   * APIs). This is the surface the server and the core's own services use,
-   * so it accepts every unprotected key — a service writing its own record
-   * (the approvals table, the resolved language) must not have to be on a
-   * preference allow-list. Client-supplied writes go through
-   * {@link setUserSetting} instead. */
-  setSetting(key: string, value: string): void {
-    assertNotProtected(key);
-    this.settings.set(key, value);
-  }
-
-  /** Write a preference on behalf of a client (the generic settings route).
-   * In addition to the protection check, only the keys declared in
-   * settings/guard.ts are accepted: the settings file is shared by many
-   * owners, so a key a client invented must not become a permanent dead
-   * entry. The protection check runs FIRST, so a credential key is refused
-   * as forbidden (403) rather than as an unknown preference (400). */
-  setUserSetting(key: string, value: string): void {
-    assertNotProtected(key);
-    assertMutableKey(key);
-    this.settings.set(key, value);
-  }
-
-  deleteSetting(key: string): void {
-    assertNotProtected(key);
-    this.settings.delete(key);
-  }
-
-  // --- first-run setup ------------------------------------------------------
-
-  /** Whether this installation's first-run setup is done (see
-   * settings/setup.ts: a marker file beside the settings file).
-   *
-   * Read on every call instead of once at startup on purpose: the marker is
-   * how a reader asks for the wizard again, and an answer cached for the life
-   * of the process would make them restart the server to see it. */
-  getSetup(): SetupState {
-    return readSetupState(this.settingsDir);
-  }
-
-  /** Record that the first-run setup finished, by writing its marker. */
-  completeSetup(): SetupState {
-    return markSetupComplete(this.settingsDir);
-  }
-
-  /** The app language: the stored setting when one was chosen, else the
-   * machine's own locale (see shared/i18n and locale.ts). The server
-   * resolves the same value per request — its first page load stores the
-   * browser's language — so both agree on what "the app language" is.
-   *
-   * It is read when a session is created (the prompt and the provisional
-   * name) and when a session agent is built (the language of the text the
-   * core generates into the transcript). */
-  getLanguage(): Locale {
-    return resolveLocale(this.settings.get(LANGUAGE_KEY), systemLanguageTags());
-  }
-
-  /** The compaction tuning stored in the settings table (see
-   * shared/settings-keys.ts). Read by the session agents on every
-   * compaction check, so a change applies to running sessions without a
-   * rebuild; omitted fields keep the compactor's defaults (pi's). */
-  getCompactionPolicy(): CompactionPolicyInput {
-    return parseCompactionPolicyInput((key) => this.settings.get(key));
-  }
-
-  /** Whether stella conversations keep their whole transcript (see
-   * STELLA_KEEP_FULL_LOG_KEY). Read by the session agents on every prune,
-   * so the settings toggle reaches a running conversation. */
-  getStellaKeepFullLog(): boolean {
-    return stellaKeepsFullLog((key) => this.settings.get(key));
-  }
-
-  // --- command safety (fast-model judgement of bash/eval) -------------------
-  // The enable toggle itself is a plain setting (`command_safety_enabled`);
-  // only the approvals record needs dedicated accessors.
-
-  /** The recorded approvals of the safety check, in insertion order. Each
-   * entry carries a redacted command for display (never the raw command),
-   * so it is safe to surface to the UI. */
-  getCommandApprovals(): CommandApproval[] {
-    return this.commandSafety.approvals();
-  }
-
-  /** Forget one approval by its hash (it is judged again next time). */
-  deleteCommandApproval(hash: string): void {
-    this.commandSafety.deleteApproval(hash);
-  }
-
-  /** Forget every approved command. */
-  clearCommandApprovals(): void {
-    this.commandSafety.clearApprovals();
-  }
-
-  // --- federation peers ---------------------------------------------------
-  // Read by FederationClient. The desktop app's own server list lives in the
-  // shell, not here; no client route exposes this one.
-
-  getConnections(): ConnectionEntry[] {
-    return parseConnections(this.settings.get(CONNECTIONS_KEY));
-  }
-
-  setConnections(entries: ConnectionEntry[]): void {
-    this.settings.setJson(CONNECTIONS_KEY, entries);
-  }
-
-  /** Non-protected settings only; credentials, MCP config, the federation
-   * peer registry and the command-safety approvals record are never exposed
-   * through the generic settings surface. */
-  listSettings(): Map<string, string> {
-    return filterExposedSettings(this.settings.list());
-  }
+  // --- provider credentials ------------------------------------------------
 
   async setProviderApiKey(providerId: string, key: string): Promise<void> {
     await setApiKey(this.credentials, providerId, key);

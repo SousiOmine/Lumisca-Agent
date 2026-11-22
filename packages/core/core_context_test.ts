@@ -93,7 +93,7 @@ function setupFastTitle() {
     ],
   });
   const core = LumiscaCore.forTesting([faux.provider]);
-  core.setSetting(
+  core.settings.set(
     FAST_MODEL_KEY,
     serializeModelPreference({
       provider: faux.provider.id,
@@ -320,7 +320,7 @@ test("startPrompt (web path): first prompt auto-generates the session title", as
   const { ws } = await makeWorkspace(core);
 
   // Pinned like the test above: the provisional name is localized.
-  core.setSetting(LANGUAGE_KEY, "ja");
+  core.settings.set(LANGUAGE_KEY, "ja");
   const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,

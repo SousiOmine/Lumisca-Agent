@@ -134,7 +134,7 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   const fed =
     options.fed ??
     new FederationClient(
-      () => core.getConnections(),
+      () => core.settings.connections(),
       () => options.selfOrigin?.current ?? "",
       { selfId: () => instanceId },
     );
@@ -146,6 +146,7 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   // subscriptions; what reaches a device is decided in push.ts.
   const push = createPushNotifier({
     core,
+    language: () => core.settings.language(),
     ...(options.pushFetch === undefined ? {} : { fetch: options.pushFetch }),
   });
 
@@ -280,10 +281,37 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
     "/api",
     providerRoutes(core, (dispose) => routeDisposers.push(dispose)),
   );
-  app.route("/api", settingRoutes(core));
+  app.route(
+    "/api",
+    settingRoutes({
+      listSettings: () => core.settings.list(),
+      setUserSetting: (key, value) => core.settings.setUser(key, value),
+      setComputerUseEnabled: (enabled) => core.setComputerUseEnabled(enabled),
+      setCodeExecutionEnabled: (enabled) =>
+        core.setCodeExecutionEnabled(enabled),
+      setAskToolEnabled: (enabled) => core.setAskToolEnabled(enabled),
+      setAppUiInSystemPrompt: (enabled) => core.setAppUiInSystemPrompt(enabled),
+      getPersonalization: () => core.getPersonalization(),
+      setPersonalization: (content) => core.setPersonalization(content),
+      getCommandApprovals: () => core.settings.commandApprovals(),
+      deleteCommandApproval: (hash) =>
+        core.settings.deleteCommandApproval(hash),
+      clearCommandApprovals: () => core.settings.clearCommandApprovals(),
+      getSavedPrompts: () => core.getSavedPrompts(),
+      addSavedPrompt: (input) => core.addSavedPrompt(input),
+      updateSavedPrompt: (id, input) => core.updateSavedPrompt(id, input),
+      deleteSavedPrompt: (id) => core.deleteSavedPrompt(id),
+    }),
+  );
   // The first-run setup's state: a file beside the settings file, so this
   // server answers for one installation (and every client of it).
-  app.route("/api", setupRoutes(core));
+  app.route(
+    "/api",
+    setupRoutes({
+      getSetup: () => core.settings.setup(),
+      completeSetup: () => core.settings.completeSetup(),
+    }),
+  );
   app.route(
     "/api",
     notifyRoutes({
@@ -421,7 +449,7 @@ export function startServer(
   const selfOrigin: { current: string } = { current: "" };
   const instanceId = crypto.randomUUID();
   const fed = new FederationClient(
-    () => core.getConnections(),
+    () => core.settings.connections(),
     () => selfOrigin.current,
     { selfId: () => instanceId },
   );

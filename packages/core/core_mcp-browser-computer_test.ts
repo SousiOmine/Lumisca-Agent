@@ -260,11 +260,11 @@ test("app-level MCP config persists and applies to sessions", async () => {
     // The generic settings surface refuses the MCP key (secrets may live
     // in env/headers).
     assertThrows(
-      () => core.getSetting("mcp_servers"),
+      () => core.settings.get("mcp_servers"),
       Error,
       "MCP configuration cannot be accessed",
     );
-    assertEquals(core.listSettings().has("mcp_servers"), false);
+    assertEquals(core.settings.list().has("mcp_servers"), false);
   } finally {
     core.close();
     for (let i = 0; i < 20; i++) {
