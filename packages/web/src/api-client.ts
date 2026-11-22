@@ -1,4 +1,4 @@
-import { stripDataUrlHeader } from "@lumisca/core/shared";
+import { apiPath, enc, paths, stripDataUrlHeader } from "@lumisca/core/shared";
 import type { ModePrompt, PendingFile, PendingImage } from "./types.ts";
 
 declare global {
@@ -249,10 +249,14 @@ export function fedRequest<T>(
   return request<T>(`/api/fed/${encodeURIComponent(peerId)}${path}`, init);
 }
 
-/** `/sessions/:id/...` path builder (single home for the segment every
- * federated session call repeats). */
-export function sessionPath(sessionId: string, suffix = ""): string {
-  return `/sessions/${encodeURIComponent(sessionId)}${suffix}`;
+/** One API path from a template in core/shared/api-paths.ts, with the ids
+ * encoded as path segments. The server registers the same template (see
+ * `routePath`), so the two cannot spell a path differently. */
+export function apiPathOf(
+  template: string,
+  params: Record<string, string> = {},
+): string {
+  return apiPath(template, params);
 }
 
 /** URL base of a session's visual assets (`visual:` image references in its
@@ -261,7 +265,7 @@ export function sessionPath(sessionId: string, suffix = ""): string {
  * federation proxy: the peer's route under the `/api/fed/<peerId>` prefix —
  * the same shape as every other federated call. */
 export function sessionVisualBase(peerId: string, sessionId: string): string {
-  const path = `${sessionPath(sessionId, "/visual/")}`;
+  const path = apiPathOf(paths.sessionVisualBase, { id: enc(sessionId) });
   return apiUrl(
     peerId === ""
       ? `/api${path}`
@@ -276,7 +280,9 @@ export function sessionAttachmentBase(
   peerId: string,
   sessionId: string,
 ): string {
-  const path = `${sessionPath(sessionId, "/attachment/")}`;
+  const path = apiPathOf(paths.sessionAttachmentBase, {
+    id: enc(sessionId),
+  });
   return apiUrl(
     peerId === ""
       ? `/api${path}`
@@ -291,9 +297,10 @@ export function sessionAttachmentBase(
 export function stellaAgentIconUrl(agentId: string, name: string): string {
   return withToken(
     apiUrl(
-      `/api/stella/agents/${encodeURIComponent(agentId)}/icon/${encodeURIComponent(
-        name,
-      )}`,
+      `/api${apiPathOf(paths.stellaAgentIcon, {
+        agentId: enc(agentId),
+        name: enc(name),
+      })}`,
     ),
   );
 }
@@ -303,7 +310,7 @@ export function stellaAgentIconUrl(agentId: string, name: string): string {
  * caller as a query parameter (see PromptAttachments). */
 export function stellaUploadBase(agentId: string): string {
   return apiUrl(
-    `/api/stella/conversations/${encodeURIComponent(agentId)}/upload`,
+    `/api${apiPathOf(paths.conversationUpload, { agentId: enc(agentId) })}`,
   );
 }
 

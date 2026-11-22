@@ -21,6 +21,7 @@
  * user's own folders and a conversation's go into its machine, so the two
  * differ in where they put the bytes, not in their wire shape.
  */
+import { conversationVerbs, routePath } from "@lumisca/core/shared";
 import type { Context, Hono } from "hono";
 import { type AskAnswer, parseAnswerBody } from "./session-requests.ts";
 import {
@@ -48,7 +49,9 @@ export interface ConversationApi {
 }
 
 export interface ConversationRoutesOptions {
-  /** The path prefix, including the id parameter (`/sessions/:id`). */
+  /** The path prefix as a template (`paths.session`, `paths.conversation`):
+   * written once in core/shared/api-paths.ts, so the id parameter's name is
+   * the server's and the client's at the same time. */
   base: string;
   /** The session id a request names, or a thrown AppError when it names
    * nothing. */
@@ -68,11 +71,12 @@ export function conversationRoutes(
   core: ConversationApi,
   options: ConversationRoutesOptions,
 ): void {
-  const path = (suffix: string) => `${options.base}${suffix}`;
+  const base = routePath(options.base);
+  const path = (suffix: string) => `${base}${suffix}`;
 
   /** Stop the run. A no-op that still answers `ok` when nothing is running:
    * the button is also how a client recovers from a stream it lost. */
-  app.post(path("/abort"), (c) => {
+  app.post(path(conversationVerbs.abort), (c) => {
     core.abort(options.resolve(c));
     return c.json({ ok: true });
   });
@@ -80,7 +84,7 @@ export function conversationRoutes(
   /** Answer a pending ask (the ask tool): resolves the blocked run with the
    * user's answers. Throws 404 when the ask is gone (already answered, or
    * the run was aborted/rewound), 400 for malformed or mismatched answers. */
-  app.post(path("/answer"), async (c) => {
+  app.post(path(conversationVerbs.answer), async (c) => {
     const body = await parseBody<unknown>(c);
     const { toolCallId, answers } = parseAnswerBody(body);
     core.answerQuestion(options.resolve(c), toolCallId, answers);
@@ -91,7 +95,7 @@ export function conversationRoutes(
    * and everything after it; an active run is aborted first). The request
    * resolves once the truncation is complete, so the client can restore the
    * rewound text to the composer. */
-  app.post(path("/rewind"), async (c) => {
+  app.post(path(conversationVerbs.rewind), async (c) => {
     const body = await parseBody<{ timestamp?: unknown }>(c);
     const timestamp = requireNumber(body?.timestamp, "timestamp (number)");
     const id = options.resolve(c);
@@ -106,7 +110,7 @@ export function conversationRoutes(
    * the answer is the session record with the new model — what the next run
    * will use. */
   if (options.modelRoute) {
-    app.post(path("/model"), async (c) => {
+    app.post(path(conversationVerbs.model), async (c) => {
       const body = requireBody(
         await parseBody<{ provider?: unknown; modelId?: unknown }>(c),
       );

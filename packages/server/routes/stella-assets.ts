@@ -11,6 +11,7 @@
 
 import * as fsp from "node:fs/promises";
 import type { StellaAgent } from "@lumisca/core";
+import { paths, routePath } from "@lumisca/core/shared";
 import { Hono } from "hono";
 import { renderPreview } from "../../core/media/preview.ts";
 import { assetResponse } from "./asset-response.ts";
@@ -45,7 +46,7 @@ export function stellaAssetRoutes(core: StellaAssetApi): Hono {
    * keep showing the old face), while a fresh upload gets a fresh name. The
    * agent must exist — a name alone must not tell a caller whether one ever
    * did — and the store answers only names it generated. */
-  app.get("/stella/agents/:id/icon/:name", async (c) => {
+  app.get(routePath(paths.stellaAgentIcon), async (c) => {
     const agentId = c.req.param("id");
     if (core.getStellaAgent(agentId) === undefined) {
       throw notFound("Agent", agentId);
@@ -75,7 +76,7 @@ export function stellaAssetRoutes(core: StellaAssetApi): Hono {
    * `ref` is the address the transcript carries (`uploads/<batch>/<name>`),
    * validated before it becomes a path, so a caller cannot reach anything
    * outside the agent's uploads folder. */
-  app.get("/stella/conversations/:agentId/upload", async (c) => {
+  app.get(routePath(paths.conversationUpload), async (c) => {
     const agentId = c.req.param("agentId");
     const ref = c.req.query("ref") ?? "";
     if (core.getStellaAgent(agentId) === undefined) {

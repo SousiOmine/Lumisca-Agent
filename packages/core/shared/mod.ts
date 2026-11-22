@@ -40,6 +40,13 @@
  */
 
 export * from "./agent-avatar.ts";
+export {
+  apiPath,
+  conversationVerbs,
+  enc,
+  paths,
+  routePath,
+} from "./api-paths.ts";
 export * from "./app-mode.ts";
 export * from "./attachments.ts";
 export * from "./bytes-format.ts";

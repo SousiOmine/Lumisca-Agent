@@ -1,5 +1,6 @@
 import * as fsp from "node:fs/promises";
 import type { SessionInfo } from "@lumisca/core";
+import { paths, routePath } from "@lumisca/core/shared";
 import { Hono } from "hono";
 import {
   ensurePreview,
@@ -37,7 +38,7 @@ export interface AttachmentApi {
 export function attachmentRoutes(core: AttachmentApi): Hono {
   const app = new Hono();
 
-  app.get("/sessions/:id/attachment/:name", async (c) => {
+  app.get(routePath(paths.sessionAttachment), async (c) => {
     const sessionId = c.req.param("id");
     const name = c.req.param("name");
     if (core.getSession(sessionId) === undefined) {
