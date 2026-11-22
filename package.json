@@ -29,7 +29,8 @@
     "preact": "11.2.0",
     "preact-render-to-string": "6.8.3",
     "sucrase": "3.35.1",
-    "unpdf": "2.1.0"
+    "unpdf": "2.1.0",
+    "zod": "4.6.7"
   },
   "scripts": {
     "build:server": "bun run scripts/build-server.ts",
