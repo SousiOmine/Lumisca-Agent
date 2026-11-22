@@ -11,7 +11,9 @@ import {
   resolveCondition,
   resolveProps,
   resolveValue,
+  UI_APP_COMPONENTS,
   type UiAppContext,
+  type UiAppProp,
 } from "./ui-app/index.ts";
 
 /** A spec that uses every shape the parser has to accept. */
@@ -334,6 +336,26 @@ test("ui-app: limits stop a card that became a page", () => {
   const result = parseAppSpec(source);
   assertEquals(result.ok, false);
   if (!result.ok) assert(result.problem.includes("48000"));
+});
+
+test("ui-app: every text prop declares its own limit", () => {
+  for (const component of UI_APP_COMPONENTS) {
+    for (const [name, prop] of Object.entries(component.props)) {
+      if (prop.kind !== "string" && prop.kind !== "text") continue;
+      assert(
+        typeof prop.maxChars === "number" && prop.maxChars > 0,
+        `${component.name}.${name} declares no maxChars`,
+      );
+    }
+  }
+});
+
+test("ui-app: a text prop without a limit does not compile", () => {
+  // The catalog's UiAppProp requires maxChars on string and text kinds, so a
+  // new text prop cannot reach the parser without a limit.
+  // @ts-expect-error a string prop must declare maxChars
+  const noLimit: UiAppProp = { kind: "string", description: "no limit" };
+  assertEquals(noLimit.kind, "string");
 });
 
 test("ui-app: reserved keys never reach a prototype", () => {

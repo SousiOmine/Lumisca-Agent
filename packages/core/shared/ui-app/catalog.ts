@@ -11,6 +11,7 @@
  * a prop marked `bind` is an input's value and must be `$bindState` or
  * `$bindItem`. Everything else is a literal of its kind.
  */
+import { UI_APP_LIMITS } from "./limits.ts";
 
 /** The literal kind of one prop. */
 export type UiAppPropKind =
@@ -32,9 +33,8 @@ export type UiAppItemKind =
   | "flow-edge"
   | "any";
 
-/** One prop of one component. */
-export type UiAppProp = {
-  readonly kind: UiAppPropKind;
+/** The fields every prop has, whatever its kind. */
+type UiAppPropFields = {
   readonly required?: boolean;
   /** The accepted strings of an enum. */
   readonly values?: readonly string[];
@@ -50,6 +50,23 @@ export type UiAppProp = {
   readonly items?: UiAppItemKind;
   readonly description: string;
 };
+
+/**
+ * One prop of one component.
+ *
+ * A string or text prop declares its own `maxChars`, so the limit is the
+ * prop's and not a second list keyed by prop name. Adding a text prop
+ * without a limit does not compile.
+ */
+export type UiAppProp =
+  | (UiAppPropFields & {
+      readonly kind: "string" | "text";
+      readonly maxChars: number;
+    })
+  | (UiAppPropFields & {
+      readonly kind: "number" | "boolean" | "enum" | "array" | "object" | "any";
+      readonly maxChars?: never;
+    });
 
 /** One component of the catalog. */
 export type UiAppComponent = {
@@ -138,11 +155,13 @@ export const UI_APP_COMPONENTS: readonly UiAppComponent[] = [
     props: {
       title: {
         kind: "string",
+        maxChars: UI_APP_LIMITS.titleChars,
         expression: true,
         description: "The group's title.",
       },
       description: {
         kind: "string",
+        maxChars: UI_APP_LIMITS.descriptionChars,
         expression: true,
         description: "A line under the title.",
       },
@@ -155,6 +174,7 @@ export const UI_APP_COMPONENTS: readonly UiAppComponent[] = [
     props: {
       text: {
         kind: "string",
+        maxChars: UI_APP_LIMITS.labelChars,
         required: true,
         expression: true,
         description: "The heading's text.",
@@ -173,6 +193,7 @@ export const UI_APP_COMPONENTS: readonly UiAppComponent[] = [
     props: {
       text: {
         kind: "string",
+        maxChars: UI_APP_LIMITS.textChars,
         required: true,
         expression: true,
         description: "The paragraph's text.",
@@ -190,6 +211,7 @@ export const UI_APP_COMPONENTS: readonly UiAppComponent[] = [
     props: {
       text: {
         kind: "string",
+        maxChars: UI_APP_LIMITS.labelChars,
         required: true,
         expression: true,
         description: "The badge's text.",
@@ -212,6 +234,7 @@ export const UI_APP_COMPONENTS: readonly UiAppComponent[] = [
     props: {
       label: {
         kind: "string",
+        maxChars: UI_APP_LIMITS.labelChars,
         required: true,
         expression: true,
         description: "The button's label.",
@@ -237,11 +260,13 @@ export const UI_APP_COMPONENTS: readonly UiAppComponent[] = [
     props: {
       label: {
         kind: "string",
+        maxChars: UI_APP_LIMITS.labelChars,
         expression: true,
         description: "The field's label.",
       },
       placeholder: {
         kind: "string",
+        maxChars: UI_APP_LIMITS.labelChars,
         expression: true,
         description: "The hint shown while the field is empty.",
       },
@@ -252,6 +277,7 @@ export const UI_APP_COMPONENTS: readonly UiAppComponent[] = [
       },
       value: {
         kind: "string",
+        maxChars: UI_APP_LIMITS.textChars,
         required: true,
         expression: true,
         bind: "both",
@@ -268,11 +294,13 @@ export const UI_APP_COMPONENTS: readonly UiAppComponent[] = [
     props: {
       label: {
         kind: "string",
+        maxChars: UI_APP_LIMITS.labelChars,
         expression: true,
         description: "The field's label.",
       },
       placeholder: {
         kind: "string",
+        maxChars: UI_APP_LIMITS.labelChars,
         expression: true,
         description: "The hint shown while the field is empty.",
       },
@@ -284,6 +312,7 @@ export const UI_APP_COMPONENTS: readonly UiAppComponent[] = [
       },
       value: {
         kind: "string",
+        maxChars: UI_APP_LIMITS.textChars,
         required: true,
         expression: true,
         bind: "both",
@@ -300,6 +329,7 @@ export const UI_APP_COMPONENTS: readonly UiAppComponent[] = [
     props: {
       label: {
         kind: "string",
+        maxChars: UI_APP_LIMITS.labelChars,
         required: true,
         expression: true,
         description: "The field's label.",
@@ -313,6 +343,7 @@ export const UI_APP_COMPONENTS: readonly UiAppComponent[] = [
       },
       value: {
         kind: "string",
+        maxChars: UI_APP_LIMITS.textChars,
         required: true,
         expression: true,
         bind: "both",
@@ -328,6 +359,7 @@ export const UI_APP_COMPONENTS: readonly UiAppComponent[] = [
     props: {
       label: {
         kind: "string",
+        maxChars: UI_APP_LIMITS.labelChars,
         required: true,
         expression: true,
         description: "The checkbox's label.",
@@ -349,6 +381,7 @@ export const UI_APP_COMPONENTS: readonly UiAppComponent[] = [
     props: {
       label: {
         kind: "string",
+        maxChars: UI_APP_LIMITS.labelChars,
         required: true,
         expression: true,
         description: "The switch's label.",
@@ -369,6 +402,7 @@ export const UI_APP_COMPONENTS: readonly UiAppComponent[] = [
     props: {
       label: {
         kind: "string",
+        maxChars: UI_APP_LIMITS.labelChars,
         expression: true,
         description: "A label above the bar.",
       },
@@ -431,23 +465,27 @@ export const UI_APP_COMPONENTS: readonly UiAppComponent[] = [
     props: {
       label: {
         kind: "string",
+        maxChars: UI_APP_LIMITS.labelChars,
         required: true,
         expression: true,
         description: "The metric's label.",
       },
       value: {
         kind: "text",
+        maxChars: UI_APP_LIMITS.labelChars,
         required: true,
         expression: true,
         description: "The value as the reader should see it.",
       },
       unit: {
         kind: "string",
+        maxChars: UI_APP_LIMITS.labelChars,
         expression: true,
         description: "The unit, for example `%` or `ms`.",
       },
       hint: {
         kind: "string",
+        maxChars: UI_APP_LIMITS.labelChars,
         expression: true,
         description: "A line under the value.",
       },
@@ -461,6 +499,7 @@ export const UI_APP_COMPONENTS: readonly UiAppComponent[] = [
     props: {
       value: {
         kind: "string",
+        maxChars: UI_APP_LIMITS.textChars,
         required: true,
         expression: true,
         bind: "state",
@@ -475,6 +514,7 @@ export const UI_APP_COMPONENTS: readonly UiAppComponent[] = [
     props: {
       label: {
         kind: "string",
+        maxChars: UI_APP_LIMITS.labelChars,
         required: true,
         description: "The tab's label, matched by `Tabs.value`.",
       },
