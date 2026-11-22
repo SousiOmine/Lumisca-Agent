@@ -52,33 +52,40 @@ function failingFetch() {
 test("refreshCatalog applies live additions and removals", async () => {
   const core = LumiscaCore.forTesting();
   try {
-    assertEquals(core.getModelCatalogStatus().source, "snapshot");
-    const before = core.listModels("openai").map((m) => m.id);
+    assertEquals(
+      core.services.models.getModelCatalogStatus().source,
+      "snapshot",
+    );
+    const before = core.services.models.listModels("openai").map((m) => m.id);
     assert(!before.includes("brand-new-test-model"));
 
-    const status = await core.refreshModelCatalog({
+    const status = await core.services.models.refreshModelCatalog({
       fetch: stubFetch(liveProviders()),
     });
     assertEquals(status.source, "live");
     assertEquals(status.error, undefined);
 
     assert(
-      core.listModels("openai").some((m) => m.id === "brand-new-test-model"),
+      core.services.models
+        .listModels("openai")
+        .some((m) => m.id === "brand-new-test-model"),
       "live-added model must appear",
     );
     assertEquals(
-      core.listProviders().some((p) => p.id === "mistral"),
+      core.services.models.listProviders().some((p) => p.id === "mistral"),
       false,
       "live-removed provider must disappear",
     );
     assertEquals(
-      core.listProviders().some((p) => p.id === "some-new-provider"),
+      core.services.models
+        .listProviders()
+        .some((p) => p.id === "some-new-provider"),
       false,
       "allow-list outsiders must never leak in",
     );
     // Untouched allow-list providers survive the refresh.
-    assert(core.listProviders().some((p) => p.id === "openai"));
-    assertEquals(core.getModelCatalogStatus().source, "live");
+    assert(core.services.models.listProviders().some((p) => p.id === "openai"));
+    assertEquals(core.services.models.getModelCatalogStatus().source, "live");
   } finally {
     await core.close();
   }
@@ -87,20 +94,22 @@ test("refreshCatalog applies live additions and removals", async () => {
 test("refreshCatalog keeps custom and user providers", async () => {
   const core = LumiscaCore.forTesting();
   try {
-    await core.addUserProvider({
+    await core.services.models.addUserProvider({
       id: "my-provider",
       name: "My Provider",
       baseUrl: "https://example.test/v1",
       api: "openai-completions",
       models: [{ id: "my-model" }],
     });
-    await core.refreshModelCatalog({ fetch: stubFetch(liveProviders()) });
+    await core.services.models.refreshModelCatalog({
+      fetch: stubFetch(liveProviders()),
+    });
     assertEquals(
-      core.listProviders().some((p) => p.id === "my-provider"),
+      core.services.models.listProviders().some((p) => p.id === "my-provider"),
       true,
       "user providers must survive a catalog refresh",
     );
-    assertEquals(core.isUserProvider("my-provider"), true);
+    assertEquals(core.services.models.isUserProvider("my-provider"), true);
   } finally {
     await core.close();
   }
@@ -109,8 +118,8 @@ test("refreshCatalog keeps custom and user providers", async () => {
 test("refreshCatalog keeps an existing session usable after upstream removal", async () => {
   const core = LumiscaCore.forTesting();
   try {
-    const doomed = core.listModels("openai")[0]!;
-    const ws = await core.createWorkspace("ws", [
+    const doomed = core.services.models.listModels("openai")[0]!;
+    const ws = await core.services.workspaces.create("ws", [
       await fsp.mkdtemp(pathJoin(osTmpdir(), "tmp-")),
     ]);
     const session = await core.createSession({
@@ -118,17 +127,20 @@ test("refreshCatalog keeps an existing session usable after upstream removal", a
       modelProvider: "openai",
       modelId: doomed.id,
     });
-    assertEquals(core.getModel("openai", doomed.id)?.id, doomed.id);
+    assertEquals(
+      core.services.models.getModel("openai", doomed.id)?.id,
+      doomed.id,
+    );
 
     // Drop the whole provider upstream: the listing loses it, but the
     // existing session still opens and keeps its model metadata.
     const pruned = structuredClone(snapshotCatalog().providers);
     delete pruned["openai"];
-    const status = await core.refreshModelCatalog({
+    const status = await core.services.models.refreshModelCatalog({
       fetch: stubFetch(pruned),
     });
     assertEquals(status.source, "live");
-    assertEquals(core.getModel("openai", doomed.id), undefined);
+    assertEquals(core.services.models.getModel("openai", doomed.id), undefined);
     assertEquals(core.models.isRetiredModel("openai", doomed.id), true);
     const reopened = core.openSession(session.id);
     assertEquals(reopened.modelProvider, "openai");
@@ -157,8 +169,10 @@ test("a retired provider still resolves the credential it served with", async ()
     await core.setProviderApiKey("mistral", "sk-mistral-test");
     const pruned = structuredClone(snapshotCatalog().providers);
     delete pruned["mistral"];
-    await core.refreshModelCatalog({ fetch: stubFetch(pruned) });
-    assertEquals(core.getModel("mistral", "any"), undefined);
+    await core.services.models.refreshModelCatalog({
+      fetch: stubFetch(pruned),
+    });
+    assertEquals(core.services.models.getModel("mistral", "any"), undefined);
 
     // The retired entry IS the provider that served those sessions, so its
     // auth definition survives: without it every retired session would fail
@@ -184,7 +198,7 @@ test("refreshCatalog reports custom-provider failure on the status", async () =>
   const core = LumiscaCore.forTesting([], () => vars);
   vars.LUMISCA_MODELS_FILE = "C:/nonexistent/models.json";
   try {
-    const status = await core.refreshModelCatalog({
+    const status = await core.services.models.refreshModelCatalog({
       fetch: stubFetch(liveProviders()),
     });
     assert(
@@ -194,7 +208,9 @@ test("refreshCatalog reports custom-provider failure on the status", async () =>
     );
     // The built-in catalog still applied; only the custom layer failed.
     assert(
-      core.listModels("openai").some((m) => m.id === "brand-new-test-model"),
+      core.services.models
+        .listModels("openai")
+        .some((m) => m.id === "brand-new-test-model"),
     );
   } finally {
     await core.close();
@@ -219,13 +235,19 @@ test("refreshCatalog restores the built-in after a stale override is removed", a
       }),
     );
     vars.LUMISCA_MODELS_FILE = path;
-    await core.refreshModelCatalog({ fetch: stubFetch(liveProviders()) });
-    assert(core.listProviders().some((p) => p.id === "my-corp"));
+    await core.services.models.refreshModelCatalog({
+      fetch: stubFetch(liveProviders()),
+    });
+    assert(
+      core.services.models.listProviders().some((p) => p.id === "my-corp"),
+    );
     // Remove the custom entry: the stale provider must disappear.
     await fsp.writeFile(path, JSON.stringify({ providers: {} }));
-    await core.refreshModelCatalog({ fetch: stubFetch(liveProviders()) });
+    await core.services.models.refreshModelCatalog({
+      fetch: stubFetch(liveProviders()),
+    });
     assertEquals(
-      core.listProviders().some((p) => p.id === "my-corp"),
+      core.services.models.listProviders().some((p) => p.id === "my-corp"),
       false,
       "stale custom providers must not linger",
     );
@@ -238,7 +260,7 @@ test("refreshCatalog restores the built-in after a stale override is removed", a
 test("refreshCatalog falls back to snapshot when offline", async () => {
   const core = LumiscaCore.forTesting();
   try {
-    const status = await core.refreshModelCatalog({
+    const status = await core.services.models.refreshModelCatalog({
       fetch: failingFetch(),
     });
     assertEquals(status.source, "snapshot");
@@ -247,7 +269,7 @@ test("refreshCatalog falls back to snapshot when offline", async () => {
     for (const id of DEV_PROVIDER_IDS) {
       if (core.models.isCustomProvider(id)) continue;
       assert(
-        core.listProviders().some((p) => p.id === id),
+        core.services.models.listProviders().some((p) => p.id === id),
         `snapshot provider missing after failed refresh: ${id}`,
       );
     }

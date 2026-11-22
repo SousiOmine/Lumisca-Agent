@@ -17,6 +17,7 @@ import type { ClientEvent } from "./domain/event.ts";
 import type { AssistantMessage, ImageContent } from "./domain/message.ts";
 import type { Api } from "./domain/model.ts";
 import type { SessionInfo } from "./domain/session.ts";
+import type { Workspace } from "./domain/workspace.ts";
 import { CoreError, isAddrInUseError } from "./errors.ts";
 import type { StoredMessage } from "./session/messages.ts";
 import type { StellaAgentSummary } from "./shared/stella-preview.ts";
@@ -151,11 +152,11 @@ export async function makeWorkspace(
   core: LumiscaCore,
   name = "ws",
 ): Promise<{
-  ws: Awaited<ReturnType<LumiscaCore["createWorkspace"]>>;
+  ws: Workspace;
   root: string;
 }> {
   const root = await makeRealTempDir("lumisca-core-");
-  const ws = await core.createWorkspace(name, [root]);
+  const ws = await core.services.workspaces.create(name, [root]);
   return { ws, root };
 }
 

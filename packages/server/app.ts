@@ -236,15 +236,15 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   // through to notFound, which answers JSON like every other error) --------
 
   app.route("/api", fsRoutes());
-  app.route("/api", workspaceRoutes(core));
+  app.route("/api", workspaceRoutes(core.services.workspaces));
   app.route("/api", skillRoutes(core));
   app.route(
     "/api",
-    mcpRoutes(core, (c) => languageForRequest(core, c)),
+    mcpRoutes(core.services.mcp, (c) => languageForRequest(core, c)),
   );
   // Web search: its own surface because the setting holds API keys (the
   // generic /settings surface filters it out).
-  app.route("/api", webSearchRoutes(core));
+  app.route("/api", webSearchRoutes(core.services.webSearch));
   app.route("/api", sessionRoutes(core));
   // stella mode's own surface. It takes no delta-flush option: a
   // conversation has no streaming text (a message arrives when its turn
@@ -279,7 +279,9 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   app.route("/api", attachmentRoutes(core));
   app.route(
     "/api",
-    providerRoutes(core, (dispose) => routeDisposers.push(dispose)),
+    providerRoutes(core.services.models, (dispose) =>
+      routeDisposers.push(dispose),
+    ),
   );
   app.route(
     "/api",

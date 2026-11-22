@@ -127,7 +127,7 @@ async function openFileBackedCore(
   core.models.models.setProvider(faux.provider);
   const workspaceDir = join(dir, "repo");
   await fsp.mkdir(workspaceDir, { recursive: true });
-  const ws = await core.createWorkspace("ws", [workspaceDir]);
+  const ws = await core.services.workspaces.create("ws", [workspaceDir]);
   const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: faux.provider.id,
@@ -294,22 +294,31 @@ test("sessions are listed and deleted", async () => {
 
 test("model enablement is persisted", () => {
   const { core, providerId } = setup();
-  const models = core.listModelsDetailed(providerId);
+  const models = core.services.models.listModelsDetailed(providerId);
   assertEquals(models.length > 0, true);
   const target = models[0]!;
 
   // Default: enabled.
-  assertEquals(core.isModelEnabled(providerId, target.id), true);
+  assertEquals(
+    core.services.models.isModelEnabled(providerId, target.id),
+    true,
+  );
 
   // Disable: persisted.
-  core.setModelEnabled(providerId, target.id, false);
-  assertEquals(core.isModelEnabled(providerId, target.id), false);
-  const after = core.listModelsDetailed(providerId);
+  core.services.models.setModelEnabled(providerId, target.id, false);
+  assertEquals(
+    core.services.models.isModelEnabled(providerId, target.id),
+    false,
+  );
+  const after = core.services.models.listModelsDetailed(providerId);
   assertEquals(after.find((m) => m.id === target.id)?.enabled, false);
 
   // Re-enable: back to default.
-  core.setModelEnabled(providerId, target.id, true);
-  assertEquals(core.isModelEnabled(providerId, target.id), true);
+  core.services.models.setModelEnabled(providerId, target.id, true);
+  assertEquals(
+    core.services.models.isModelEnabled(providerId, target.id),
+    true,
+  );
 
   core.close();
 });

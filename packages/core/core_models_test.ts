@@ -132,7 +132,10 @@ test("getDefaultModel returns the last used model or a fallback", async () => {
   const initial = await core.getDefaultModel();
   assertEquals(initial?.provider, providerId);
   assertEquals(initial?.modelId, modelId);
-  assertEquals(core.isModelEnabled(initial!.provider, initial!.modelId), true);
+  assertEquals(
+    core.services.models.isModelEnabled(initial!.provider, initial!.modelId),
+    true,
+  );
 
   // After a session: the last used model wins.
   await core.createSession({
@@ -197,7 +200,7 @@ test("no configured provider: no default model and no session", async () => {
   const explicit = await core.createSession({
     workspaceId: ws.id,
     modelProvider: "openai",
-    modelId: core.listModels("openai")[0]!.id,
+    modelId: core.services.models.listModels("openai")[0]!.id,
   });
   assertEquals(explicit.modelProvider, "openai");
 
@@ -211,21 +214,36 @@ test("hasConfiguredAuth ignores ambient env keys of built-in providers", async (
   const ambient: Record<string, string> = {};
   const { core } = setup(() => ambient);
   try {
-    assertEquals(await core.hasProviderAuth("anthropic"), false);
-    assertEquals(await core.hasConfiguredAuth("anthropic"), false);
+    assertEquals(
+      await core.services.models.hasProviderAuth("anthropic"),
+      false,
+    );
+    assertEquals(
+      await core.services.models.hasConfiguredAuth("anthropic"),
+      false,
+    );
 
     // An env key set for other tools resolves for actual requests ...
     ambient.ANTHROPIC_API_KEY = "sk-env-only";
-    assertEquals(await core.hasProviderAuth("anthropic"), true);
+    assertEquals(await core.services.models.hasProviderAuth("anthropic"), true);
     // ... but must not make the provider appear as configured in Lumisca.
-    assertEquals(await core.hasConfiguredAuth("anthropic"), false);
+    assertEquals(
+      await core.services.models.hasConfiguredAuth("anthropic"),
+      false,
+    );
 
     // Storing the key inside Lumisca marks it configured; removing the
     // stored credential un-configures it again.
     await core.setProviderApiKey("anthropic", "sk-stored");
-    assertEquals(await core.hasConfiguredAuth("anthropic"), true);
+    assertEquals(
+      await core.services.models.hasConfiguredAuth("anthropic"),
+      true,
+    );
     await core.logoutProvider("anthropic");
-    assertEquals(await core.hasConfiguredAuth("anthropic"), false);
+    assertEquals(
+      await core.services.models.hasConfiguredAuth("anthropic"),
+      false,
+    );
   } finally {
     core.close();
   }

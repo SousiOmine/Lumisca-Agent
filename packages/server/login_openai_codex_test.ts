@@ -27,18 +27,21 @@ test("stored API keys drive the configured-auth check", async () => {
   try {
     // A built-in provider with no stored key and a cleaned env is not
     // configured in Lumisca.
-    assertEquals(await core.hasConfiguredAuth("openai"), false);
-    assertEquals(await core.hasProviderAuth("openai"), false);
+    assertEquals(await core.services.models.hasConfiguredAuth("openai"), false);
+    assertEquals(await core.services.models.hasProviderAuth("openai"), false);
 
     // Storing a key makes it configured (the key-injection path).
     await core.setProviderApiKey("openai", "sk-test");
-    assertEquals(await core.hasConfiguredAuth("openai"), true);
-    assertEquals(await core.hasProviderAuth("openai"), true);
-    assertEquals((await core.checkAuth("openai"))?.type, "api_key");
+    assertEquals(await core.services.models.hasConfiguredAuth("openai"), true);
+    assertEquals(await core.services.models.hasProviderAuth("openai"), true);
+    assertEquals(
+      (await core.services.models.checkAuth("openai"))?.type,
+      "api_key",
+    );
 
     // Logging out clears the configured state again.
     await core.logoutProvider("openai");
-    assertEquals(await core.hasConfiguredAuth("openai"), false);
+    assertEquals(await core.services.models.hasConfiguredAuth("openai"), false);
   } finally {
     core.close();
   }
@@ -101,11 +104,22 @@ test("ChatGPT device login stores an OAuth credential and its models", async () 
     await core.loginProvider("openai-codex", "oauth", interaction);
 
     assertEquals(events, ["device_code"]);
-    assertEquals(await core.getProviderAuthType("openai-codex"), "oauth");
-    assertEquals((await core.checkAuth("openai-codex"))?.type, "oauth");
-    assertEquals(await core.hasConfiguredAuth("openai-codex"), true);
     assertEquals(
-      core.listModelsDetailed("openai-codex").map((model) => model.id),
+      await core.services.models.getProviderAuthType("openai-codex"),
+      "oauth",
+    );
+    assertEquals(
+      (await core.services.models.checkAuth("openai-codex"))?.type,
+      "oauth",
+    );
+    assertEquals(
+      await core.services.models.hasConfiguredAuth("openai-codex"),
+      true,
+    );
+    assertEquals(
+      core.services.models
+        .listModelsDetailed("openai-codex")
+        .map((model) => model.id),
       ["gpt-5.3-codex"],
     );
     assert(
@@ -115,7 +129,10 @@ test("ChatGPT device login stores an OAuth credential and its models", async () 
 
     // The credential is a normal stored credential: logout removes it.
     await core.logoutProvider("openai-codex");
-    assertEquals(await core.hasConfiguredAuth("openai-codex"), false);
+    assertEquals(
+      await core.services.models.hasConfiguredAuth("openai-codex"),
+      false,
+    );
   } finally {
     globalThis.fetch = originalFetch;
     core.close();
@@ -169,7 +186,10 @@ test("a failed model catalog leaves the provider unconfigured", async () => {
       "HTTP 503",
     );
     // The credential is persisted only after the catalog succeeds.
-    assertEquals(await core.hasConfiguredAuth("openai-codex"), false);
+    assertEquals(
+      await core.services.models.hasConfiguredAuth("openai-codex"),
+      false,
+    );
   } finally {
     globalThis.fetch = originalFetch;
     core.close();

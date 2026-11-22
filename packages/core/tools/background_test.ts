@@ -690,7 +690,7 @@ test("background completion is injected into the agent loop", async () => {
   const core = LumiscaCore.forTesting([faux.provider]);
   const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-async-e2e-"));
   try {
-    const ws = await core.createWorkspace("ws", [root]);
+    const ws = await core.services.workspaces.create("ws", [root]);
     const session = await core.createSession({
       workspaceId: ws.id,
       modelProvider: faux.provider.id,
@@ -731,7 +731,7 @@ test("background commands survive a session rebuild", async () => {
     pathJoin(osTmpdir(), "lumisca-async-rebuild-"),
   );
   try {
-    const ws = await core.createWorkspace("ws", [root]);
+    const ws = await core.services.workspaces.create("ws", [root]);
     const session = await core.createSession({
       workspaceId: ws.id,
       modelProvider: faux.provider.id,

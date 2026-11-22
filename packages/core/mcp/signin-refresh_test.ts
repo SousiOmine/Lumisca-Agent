@@ -101,12 +101,15 @@ test("E2E: a stella conversation reaches an MCP server after signing in", async 
     assert(before[0]?.needsAuth === true);
 
     // 2. The sign-in the user walks through in Settings.
-    const started = await core.startMcpAuth(
+    const started = await core.services.mcp.startAuth(
       body,
       "http://127.0.0.1:8000/api/mcp/oauth/callback",
     );
     const state = new URL(started.authorizationUrl!).searchParams.get("state")!;
-    const done = await core.completeMcpAuth({ state, code: "test-code" });
+    const done = await core.services.mcp.completeAuth({
+      state,
+      code: "test-code",
+    });
     assertEquals(done?.status, "done");
 
     // 3. The conversation's own attachment is reconnected, and the server it

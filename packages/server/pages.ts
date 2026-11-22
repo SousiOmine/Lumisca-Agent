@@ -58,7 +58,7 @@ export async function initialDataFor(
   c: Context,
 ): Promise<InitialData> {
   return {
-    workspaces: core.listWorkspaces(),
+    workspaces: core.services.workspaces.list(),
     theme: themeOf(core),
     language: languageForRequest(core, c),
     // The build this page was served with: `/api/build` reports the one the

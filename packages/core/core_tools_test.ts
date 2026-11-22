@@ -152,14 +152,14 @@ test("workspace update rebuilds session tools", async () => {
     modelProvider: providerId,
     modelId,
   });
-  const updated = await core.updateWorkspace(ws.id, {
+  const updated = await core.services.workspaces.update(ws.id, {
     name: "renamed",
     folders: [root, extra],
   });
   assertEquals(updated.name, "renamed");
   assertEquals(updated.folders.length, 2);
 
-  const fetched = core.getWorkspace(ws.id);
+  const fetched = core.services.workspaces.get(ws.id);
   assertEquals(fetched !== undefined, true);
   assertEquals(fetched!.name, "renamed");
   assertEquals(fetched!.folders.length, 2);

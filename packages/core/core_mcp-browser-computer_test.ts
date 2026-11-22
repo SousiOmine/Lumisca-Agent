@@ -109,7 +109,7 @@ test("sessions attach MCP tools from .mcp.json and call them", async () => {
       },
     }),
   );
-  const ws = await core.createWorkspace("ws", [root]);
+  const ws = await core.services.workspaces.create("ws", [root]);
   const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: providerId,
@@ -202,15 +202,15 @@ test("app-level MCP config persists and applies to sessions", async () => {
     "scripts",
     "fake-mcp-server.ts",
   );
-  const ws = await core.createWorkspace("ws", [root]);
+  const ws = await core.services.workspaces.create("ws", [root]);
   try {
     // No app config yet.
-    const empty = core.getAppMcpInfo();
+    const empty = core.services.mcp.getAppMcpInfo();
     assertEquals(empty.servers.length, 0);
     assertEquals(empty.exists, false);
 
     // Save an app-level server (no workspace .mcp.json involved).
-    const info = await core.setAppMcpConfig(
+    const info = await core.services.mcp.setAppMcpConfig(
       JSON.stringify({
         mcpServers: {
           fake: { command: process.execPath, args: ["run", fakeServer] },
@@ -219,7 +219,7 @@ test("app-level MCP config persists and applies to sessions", async () => {
     );
     assertEquals(info.servers.length, 1);
     assertEquals(info.exists, true);
-    assertEquals(core.getAppMcpInfo().servers[0]!.name, "fake");
+    assertEquals(core.services.mcp.getAppMcpInfo().servers[0]!.name, "fake");
 
     // Sessions get the app-level tools (as the search/call pair over the
     // registry, not the MCP definitions themselves).
@@ -288,7 +288,7 @@ test("an MCP config saved while a session streams reaches that session", async (
     "scripts",
     "fake-mcp-server.ts",
   );
-  const ws = await core.createWorkspace("ws", [root]);
+  const ws = await core.services.workspaces.create("ws", [root]);
   try {
     // A session with no MCP servers at all: nothing in its registry can
     // explain the discovery checked below.
@@ -319,7 +319,7 @@ test("an MCP config saved while a session streams reaches that session", async (
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
 
-    const info = await core.setAppMcpConfig(
+    const info = await core.services.mcp.setAppMcpConfig(
       JSON.stringify({
         mcpServers: {
           fake: { command: process.execPath, args: ["run", fakeServer] },
@@ -330,7 +330,7 @@ test("an MCP config saved while a session streams reaches that session", async (
       info.servers.map((s) => s.name),
       ["fake"],
     );
-    assertEquals(core.getAppMcpInfo().exists, true);
+    assertEquals(core.services.mcp.getAppMcpInfo().exists, true);
     // Saving did not disturb the run: the same agent, still streaming.
     assertEquals(core.getAgent(session.id), agent);
     assertEquals(agent.isStreaming, true);
@@ -400,7 +400,7 @@ test("workspace .mcp.json overrides same-named app servers", async () => {
     "fake-mcp-server.ts",
   );
   // The app-level "fake" points at a binary that cannot start...
-  await core.setAppMcpConfig(
+  await core.services.mcp.setAppMcpConfig(
     JSON.stringify({
       mcpServers: {
         fake: { command: "definitely-not-a-real-binary", args: [] },
@@ -417,7 +417,7 @@ test("workspace .mcp.json overrides same-named app servers", async () => {
       },
     }),
   );
-  const ws = await core.createWorkspace("ws", [root]);
+  const ws = await core.services.workspaces.create("ws", [root]);
   try {
     const session = await core.createSession({
       workspaceId: ws.id,
@@ -479,7 +479,7 @@ test("first prompt waits for MCP tools to attach", async () => {
       },
     }),
   );
-  const ws = await core.createWorkspace("ws", [root]);
+  const ws = await core.services.workspaces.create("ws", [root]);
   try {
     // Prompt immediately — no waiting for the async attach: the session
     // must gate the run on MCP readiness so the FIRST turn already sees
@@ -623,7 +623,7 @@ test("the agent adds and removes an MCP server with its own tools", async () => 
     "scripts",
     "fake-mcp-server.ts",
   );
-  const ws = await core.createWorkspace("ws", [root]);
+  const ws = await core.services.workspaces.create("ws", [root]);
   try {
     const session = await core.createSession({
       workspaceId: ws.id,
@@ -681,7 +681,7 @@ test("the agent adds and removes an MCP server with its own tools", async () => 
     // server is in the app-level config.
     assert(added.includes("echo"), added);
     assertEquals(
-      core.getAppMcpInfo().servers.map((s) => s.name),
+      core.services.mcp.getAppMcpInfo().servers.map((s) => s.name),
       ["fake"],
     );
     assertEquals(
@@ -711,7 +711,7 @@ test("the agent adds and removes an MCP server with its own tools", async () => 
       ),
     );
     assert(removed.includes('"fake"'), removed);
-    assertEquals(core.getAppMcpInfo().servers, []);
+    assertEquals(core.services.mcp.getAppMcpInfo().servers, []);
     assertEquals(
       (await searchListing(agent)).includes("mcp__fake__echo"),
       false,

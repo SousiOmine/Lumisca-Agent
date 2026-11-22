@@ -79,7 +79,10 @@ test("setModelThinkingLevel persists, clamps, and reflects on sessions", async (
     "off",
   );
   assertEquals(
-    plain.core.getModelThinkingLevel(plain.providerId, plain.modelId),
+    plain.core.services.sessions.getModelThinkingLevel(
+      plain.providerId,
+      plain.modelId,
+    ),
     "off",
   );
 

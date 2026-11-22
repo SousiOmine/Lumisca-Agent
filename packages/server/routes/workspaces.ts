@@ -17,14 +17,14 @@ interface WorkspaceBody {
 
 /** The slice of the core these routes need (interface segregation). */
 export interface WorkspaceApi {
-  listWorkspaces(): Workspace[];
-  getWorkspace(id: string): Workspace | undefined;
-  createWorkspace(name: string, folders: string[]): Promise<Workspace>;
-  updateWorkspace(
+  list(): Workspace[];
+  get(id: string): Workspace | undefined;
+  create(name: string, folders: string[]): Promise<Workspace>;
+  update(
     id: string,
     input: { name?: string; folders?: string[] },
   ): Promise<Workspace>;
-  deleteWorkspace(id: string): Promise<void>;
+  delete(id: string): Promise<void>;
 }
 
 /** File listings are cached per workspace for a short TTL: the walk is the
@@ -41,14 +41,14 @@ export function workspaceRoutes(core: WorkspaceApi): Hono {
     FILE_CACHE_MAX,
   );
 
-  app.get("/workspaces", (c) => c.json(core.listWorkspaces()));
+  app.get("/workspaces", (c) => c.json(core.list()));
 
   app.post("/workspaces", async (c) => {
     const body = await parseBody<WorkspaceBody>(c);
     if (!body) {
       throw new AppError("name (non-empty string) is required", 400);
     }
-    const ws = await core.createWorkspace(
+    const ws = await core.create(
       requireNonEmptyString(body.name, "name (non-empty string)"),
       requireStringArray(body.folders, "folders (non-empty string[])"),
     );
@@ -56,7 +56,7 @@ export function workspaceRoutes(core: WorkspaceApi): Hono {
   });
 
   app.get("/workspaces/:id", (c) => {
-    const ws = core.getWorkspace(c.req.param("id"));
+    const ws = core.get(c.req.param("id"));
     if (!ws) {
       throw notFound("Workspace", c.req.param("id"));
     }
@@ -75,7 +75,7 @@ export function workspaceRoutes(core: WorkspaceApi): Hono {
         400,
       );
     }
-    const ws = await core.updateWorkspace(c.req.param("id"), {
+    const ws = await core.update(c.req.param("id"), {
       ...(typeof body.name === "string" ? { name: body.name } : {}),
       ...(body.folders !== undefined
         ? {
@@ -90,7 +90,7 @@ export function workspaceRoutes(core: WorkspaceApi): Hono {
   });
 
   app.delete("/workspaces/:id", async (c) => {
-    await core.deleteWorkspace(c.req.param("id"));
+    await core.delete(c.req.param("id"));
     return c.json({ ok: true });
   });
 
@@ -98,7 +98,7 @@ export function workspaceRoutes(core: WorkspaceApi): Hono {
    * paths, e.g. `Aaa/README.md`) filtered by `query`, cached briefly. */
   app.get("/workspaces/:id/files", async (c) => {
     const id = c.req.param("id");
-    const ws = core.getWorkspace(id);
+    const ws = core.get(id);
     if (!ws) {
       throw notFound("Workspace", id);
     }

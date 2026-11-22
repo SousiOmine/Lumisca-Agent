@@ -218,7 +218,7 @@ await core.createStellaAgent({
   role: "A general helper for this machine.",
 });
 
-const ws = await core.createWorkspace("E2E Demo", [repoRoot]);
+const ws = await core.services.workspaces.create("E2E Demo", [repoRoot]);
 core.createSession({
   workspaceId: ws.id,
   name: "e2e-session",

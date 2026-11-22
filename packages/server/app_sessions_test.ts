@@ -174,7 +174,7 @@ test("chat session API: no workspaceId creates a chat session", async () => {
       workspaces.some((ws: { chat: boolean }) => ws.chat),
       false,
     );
-    const chatWs = core.getWorkspace(session.workspaceId)!;
+    const chatWs = core.services.workspaces.get(session.workspaceId)!;
     assertEquals(chatWs.chat, true);
 
     // The chat session prompts and answers like any other.

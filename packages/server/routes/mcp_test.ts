@@ -62,11 +62,11 @@ class FakeMcpApi implements McpApi {
     this.workspaceTexts.set(workspaceId, text);
     return this.getMcpInfo(workspaceId);
   }
-  testMcpServer(text: string): Promise<McpTestResult> {
+  testServer(text: string): Promise<McpTestResult> {
     this.tested = text;
     return Promise.resolve(this.testResult);
   }
-  startMcpAuth(text: string, redirectUri: string): Promise<McpAuthSnapshot> {
+  startAuth(text: string, redirectUri: string): Promise<McpAuthSnapshot> {
     this.authStarted = { text, redirectUri };
     const snapshot: McpAuthSnapshot = {
       sessionId: "s1",
@@ -77,16 +77,16 @@ class FakeMcpApi implements McpApi {
     this.authSessions.set(snapshot.sessionId, snapshot);
     return Promise.resolve(snapshot);
   }
-  getMcpAuth(sessionId: string): McpAuthSnapshot | undefined {
+  getAuth(sessionId: string): McpAuthSnapshot | undefined {
     return this.authSessions.get(sessionId);
   }
-  cancelMcpAuth(sessionId: string): boolean {
+  cancelAuth(sessionId: string): boolean {
     const snapshot = this.authSessions.get(sessionId);
     if (snapshot === undefined) return false;
     snapshot.status = "cancelled";
     return true;
   }
-  completeMcpAuth(input: {
+  completeAuth(input: {
     state: string;
     code?: string;
     error?: string;

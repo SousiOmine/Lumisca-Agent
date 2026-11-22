@@ -300,7 +300,7 @@ test("an agent's read reaches the folder through the whole chain", async () => {
   const lender = createShareHost({ retryMs: 10 });
   try {
     await fsp.writeFile(join(lent, "notes.md"), "lent notes\n");
-    const ws = await core.createWorkspace("ws", [workspace]);
+    const ws = await core.services.workspaces.create("ws", [workspace]);
     const session = await core.createSession({
       workspaceId: ws.id,
       modelProvider: faux.provider.id,

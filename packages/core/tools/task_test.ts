@@ -771,7 +771,7 @@ test("a task runs in the background and its completion reaches the parent", asyn
   const unsubscribe = core.subscribe((event) => events.push(event));
   const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-task-e2e-"));
   try {
-    const ws = await core.createWorkspace("ws", [root]);
+    const ws = await core.services.workspaces.create("ws", [root]);
     const session = await core.createSession({
       workspaceId: ws.id,
       modelProvider: faux.provider.id,
@@ -843,7 +843,7 @@ test("a waiting task_output receives the result and suppresses the notification"
   const core = LumiscaCore.forTesting([faux.provider]);
   const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-task-wait-"));
   try {
-    const ws = await core.createWorkspace("ws", [root]);
+    const ws = await core.services.workspaces.create("ws", [root]);
     const session = await core.createSession({
       workspaceId: ws.id,
       modelProvider: faux.provider.id,
@@ -898,7 +898,7 @@ test("sub-agents survive a session rebuild and remain listed", async () => {
   const core = LumiscaCore.forTesting([faux.provider]);
   const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-task-rebuild-"));
   try {
-    const ws = await core.createWorkspace("ws", [root]);
+    const ws = await core.services.workspaces.create("ws", [root]);
     const session = await core.createSession({
       workspaceId: ws.id,
       modelProvider: faux.provider.id,
@@ -940,7 +940,7 @@ test("a task survives closing and reopening the session", async () => {
   const core = LumiscaCore.forTesting([faux.provider]);
   const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-task-reopen-"));
   try {
-    const ws = await core.createWorkspace("ws", [root]);
+    const ws = await core.services.workspaces.create("ws", [root]);
     const session = await core.createSession({
       workspaceId: ws.id,
       modelProvider: faux.provider.id,

@@ -1527,10 +1527,6 @@ export class LumiscaCore {
     this.services.sessions.setSessionName(id, name);
   }
 
-  getModelThinkingLevel(providerId: string, modelId: string): ThinkingLevel {
-    return this.services.sessions.getModelThinkingLevel(providerId, modelId);
-  }
-
   /** Set the thinking level of a model (persisted, per model). Open
    * sessions using the model pick the change up in place from their next
    * run onward. */
@@ -1577,187 +1573,6 @@ export class LumiscaCore {
   // One line per area: the implementation lives in services/, and these
   // methods keep the signatures callers already use. A new area should not
   // add another block of them — reach it through `services` instead.
-
-  // workspaces
-  async createWorkspace(name: string, folders: string[]): Promise<Workspace> {
-    return await this.workspaces.create(name, folders);
-  }
-
-  listWorkspaces(): Workspace[] {
-    return this.workspaces.list();
-  }
-
-  getWorkspace(id: string): Workspace | undefined {
-    return this.workspaces.get(id);
-  }
-
-  async updateWorkspace(
-    id: string,
-    input: { name?: string; folders?: string[] },
-  ): Promise<Workspace> {
-    return await this.workspaces.update(id, input);
-  }
-
-  deleteWorkspace(id: string): Promise<void> {
-    return this.workspaces.delete(id);
-  }
-
-  // web search
-  getWebSearchSettings(): WebSearchSettingsView {
-    return this.webSearch.view();
-  }
-
-  addWebSearchProvider(input: {
-    id: string;
-    apiKey: string;
-  }): WebSearchSettingsView {
-    return this.webSearch.add(input);
-  }
-
-  updateWebSearchProvider(
-    id: string,
-    input: { apiKey: string },
-  ): WebSearchSettingsView {
-    return this.webSearch.update(id, input);
-  }
-
-  removeWebSearchProvider(id: string): WebSearchSettingsView {
-    return this.webSearch.remove(id);
-  }
-
-  setDefaultWebSearchProvider(id: string | null): WebSearchSettingsView {
-    return this.webSearch.setDefault(id);
-  }
-
-  testWebSearchProvider(input: {
-    id: string;
-    apiKey: string | null;
-  }): Promise<WebSearchTestView> {
-    return this.webSearch.test(input);
-  }
-
-  // MCP configuration
-  getAppMcpInfo(): McpInfo {
-    return this.mcp.getAppMcpInfo();
-  }
-
-  setAppMcpConfig(text: string): McpInfo {
-    return this.mcp.setAppMcpConfig(text);
-  }
-
-  getMcpInfo(workspaceId: string): McpInfo {
-    return this.mcp.getMcpInfo(workspaceId);
-  }
-
-  setMcpConfig(workspaceId: string, text: string): McpInfo {
-    return this.mcp.setMcpConfig(workspaceId, text);
-  }
-
-  testMcpServer(text: string): Promise<McpTestResult> {
-    return this.mcp.testServer(text);
-  }
-
-  startMcpAuth(text: string, redirectUri: string): Promise<McpAuthSnapshot> {
-    return this.mcp.startAuth(text, redirectUri);
-  }
-
-  getMcpAuth(sessionId: string): McpAuthSnapshot | undefined {
-    return this.mcp.getAuth(sessionId);
-  }
-
-  cancelMcpAuth(sessionId: string): boolean {
-    return this.mcp.cancelAuth(sessionId);
-  }
-
-  completeMcpAuth(input: {
-    state: string;
-    code?: string;
-    error?: string;
-  }): Promise<McpAuthSnapshot | undefined> {
-    return this.mcp.completeAuth(input);
-  }
-
-  // models
-  listProviders(): readonly Provider[] {
-    return this.services.models.listProviders();
-  }
-
-  listModels(providerId?: string): readonly Model<Api>[] {
-    return this.services.models.listModels(providerId);
-  }
-
-  getModel(providerId: string, modelId: string): Model<Api> | undefined {
-    return this.services.models.getModel(providerId, modelId);
-  }
-
-  checkAuth(providerId: string): Promise<AuthCheck | undefined> {
-    return this.services.models.checkAuth(providerId);
-  }
-
-  getProviderAuthType(providerId: string): ProviderAuthType | undefined {
-    return this.services.models.getProviderAuthType(providerId);
-  }
-
-  hasProviderAuth(providerId: string): Promise<boolean> {
-    return this.services.models.hasProviderAuth(providerId);
-  }
-
-  hasConfiguredAuth(providerId: string): Promise<boolean> {
-    return this.services.models.hasConfiguredAuth(providerId);
-  }
-
-  setModelEnabled(providerId: string, modelId: string, enabled: boolean): void {
-    this.services.models.setModelEnabled(providerId, modelId, enabled);
-  }
-
-  isModelEnabled(providerId: string, modelId: string): boolean {
-    return this.services.models.isModelEnabled(providerId, modelId);
-  }
-
-  listModelsDetailed(providerId: string): ModelInfoDetailed[] {
-    return this.services.models.listModelsDetailed(providerId);
-  }
-
-  listUserProviders(): Promise<UserProviderSummary[]> {
-    return this.services.models.listUserProviders();
-  }
-
-  getUserProvider(id: string): UserProviderConfig | undefined {
-    return this.services.models.getUserProvider(id);
-  }
-
-  addUserProvider(input: UserProviderInput): Promise<UserProviderSummary> {
-    return this.services.models.addUserProvider(input);
-  }
-
-  updateUserProvider(
-    id: string,
-    input: UserProviderInput,
-  ): Promise<UserProviderSummary> {
-    return this.services.models.updateUserProvider(id, input);
-  }
-
-  removeUserProvider(id: string): Promise<void> {
-    return this.services.models.removeUserProvider(id);
-  }
-
-  isUserProvider(id: string): boolean {
-    return this.services.models.isUserProvider(id);
-  }
-
-  getModelCatalogStatus(): CatalogStatus {
-    return this.services.models.getModelCatalogStatus();
-  }
-
-  refreshModelCatalog(
-    options: {
-      fetch?: typeof globalThis.fetch;
-      timeoutMs?: number;
-      baseUrl?: string;
-    } = {},
-  ): Promise<CatalogStatus> {
-    return this.services.models.refreshModelCatalog(options);
-  }
 
   // --- internals ----------------------------------------------------------
 
@@ -1948,7 +1763,7 @@ export class LumiscaCore {
       // the session's own model is authoritative even when the catalog
       // changes afterwards.
       model: model !== undefined ? this.models.describeModel(model) : undefined,
-      chat: this.getWorkspace(session.workspaceId)?.chat ?? false,
+      chat: this.services.workspaces.get(session.workspaceId)?.chat ?? false,
       ...(session.stella === true ? { stella: true } : {}),
     };
   }

@@ -48,7 +48,9 @@ async function withApp(
   try {
     const faux = fauxProvider();
     core.models.models.setProvider(faux.provider);
-    const workspace = await core.createWorkspace("ws", [workspaceDir]);
+    const workspace = await core.services.workspaces.create("ws", [
+      workspaceDir,
+    ]);
     // Explicit model: the default-model resolution would refuse `faux`
     // (nothing is configured in this core's settings).
     const session = await core.createSession({

@@ -16,12 +16,12 @@ import { WEB_SEARCH_KEY } from "./shared/settings-keys.ts";
 test("core: the web-search view never carries a key", async () => {
   const core = LumiscaCore.forTesting();
   try {
-    const empty = core.getWebSearchSettings();
+    const empty = core.services.webSearch.view();
     assertEquals(empty.defaultId, null);
     assertEquals(empty.providers, []);
     assertEquals(empty.available.length, 5);
 
-    const added = core.addWebSearchProvider({ id: "exa", apiKey: "s3cret" });
+    const added = core.services.webSearch.add({ id: "exa", apiKey: "s3cret" });
     assertEquals(added.defaultId, "exa");
     assertEquals(added.providers.length, 1);
     // Whether a key is stored is all a client may learn.
@@ -42,9 +42,9 @@ test("core: the web-search view never carries a key", async () => {
 test("core: removing the default hands it to the remaining provider", async () => {
   const core = LumiscaCore.forTesting();
   try {
-    core.addWebSearchProvider({ id: "exa", apiKey: "k" });
-    core.addWebSearchProvider({ id: "tavily", apiKey: "k" });
-    const removed = core.removeWebSearchProvider("exa");
+    core.services.webSearch.add({ id: "exa", apiKey: "k" });
+    core.services.webSearch.add({ id: "tavily", apiKey: "k" });
+    const removed = core.services.webSearch.remove("exa");
     assertEquals(removed.defaultId, "tavily");
     assertEquals(
       removed.providers.map((p) => p.id),
@@ -52,7 +52,7 @@ test("core: removing the default hands it to the remaining provider", async () =
     );
 
     // Removing the last provider leaves nothing to search with.
-    const empty = core.removeWebSearchProvider("tavily");
+    const empty = core.services.webSearch.remove("tavily");
     assertEquals(empty.defaultId, null);
     assertEquals(empty.providers, []);
   } finally {
@@ -64,18 +64,18 @@ test("core: unknown provider ids are refused", async () => {
   const core = LumiscaCore.forTesting();
   try {
     assertThrows(
-      () => core.addWebSearchProvider({ id: "nope", apiKey: "k" }),
+      () => core.services.webSearch.add({ id: "nope", apiKey: "k" }),
       CoreError,
       "Unknown web search provider",
     );
     assertThrows(
-      () => core.setDefaultWebSearchProvider("nope"),
+      () => core.services.webSearch.setDefault("nope"),
       CoreError,
       "Unknown web search provider",
     );
-    assertThrows(() => core.removeWebSearchProvider("nope"), CoreError);
+    assertThrows(() => core.services.webSearch.remove("nope"), CoreError);
     assertThrows(
-      () => core.updateWebSearchProvider("exa", { apiKey: "k" }),
+      () => core.services.webSearch.update("exa", { apiKey: "k" }),
       CoreError,
       "not found",
     );
@@ -100,14 +100,16 @@ test("core: a search provider becomes the session's web tools", async () => {
   // A new session needs a provider with a key to resolve a default model.
   await core.setProviderApiKey(faux.provider.id, "faux-key");
   try {
-    const workspace = await core.createWorkspace("web", [process.cwd()]);
+    const workspace = await core.services.workspaces.create("web", [
+      process.cwd(),
+    ]);
 
     // No provider configured: a new session is not given the web tools, and
     // its prompt does not point at them.
     const plain = await core.createSession({ workspaceId: workspace.id });
     assertEquals(sessionHasWebTools(core, plain.id), false);
 
-    core.addWebSearchProvider({ id: "brave", apiKey: "k" });
+    core.services.webSearch.add({ id: "brave", apiKey: "k" });
     const configured = await core.createSession({ workspaceId: workspace.id });
     // The tool set is built per session, so one created after the provider
     // was added carries the pair.
@@ -115,7 +117,7 @@ test("core: a search provider becomes the session's web tools", async () => {
 
     // Clearing the default keeps the configuration but stops search: the
     // next session gets no web tools again.
-    core.setDefaultWebSearchProvider(null);
+    core.services.webSearch.setDefault(null);
     const off = await core.createSession({ workspaceId: workspace.id });
     assertEquals(sessionHasWebTools(core, off.id), false);
   } finally {

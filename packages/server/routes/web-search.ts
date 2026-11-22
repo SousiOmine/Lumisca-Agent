@@ -24,21 +24,15 @@ import {
 
 /** The slice of the core these routes need. */
 export interface WebSearchApi {
-  getWebSearchSettings(): WebSearchSettingsView;
-  addWebSearchProvider(input: {
-    id: string;
-    apiKey: string;
-  }): WebSearchSettingsView;
-  updateWebSearchProvider(
-    id: string,
-    input: { apiKey: string },
-  ): WebSearchSettingsView;
-  removeWebSearchProvider(id: string): WebSearchSettingsView;
-  setDefaultWebSearchProvider(id: string | null): WebSearchSettingsView;
+  view(): WebSearchSettingsView;
+  add(input: { id: string; apiKey: string }): WebSearchSettingsView;
+  update(id: string, input: { apiKey: string }): WebSearchSettingsView;
+  remove(id: string): WebSearchSettingsView;
+  setDefault(id: string | null): WebSearchSettingsView;
   /** Search once with a key that is not saved yet. A failure to search is
    * the answer (`ok: false`), not an HTTP error: a wrong key is a result the
    * user acts on, not a broken request. */
-  testWebSearchProvider(input: {
+  test(input: {
     id: string;
     apiKey: string | null;
   }): Promise<WebSearchTestView>;
@@ -48,7 +42,7 @@ export function webSearchRoutes(core: WebSearchApi): Hono {
   const app = new Hono();
 
   app.get("/web-search", (c) => {
-    return c.json(core.getWebSearchSettings());
+    return c.json(core.view());
   });
 
   app.post("/web-search/providers", async (c) => {
@@ -56,7 +50,7 @@ export function webSearchRoutes(core: WebSearchApi): Hono {
       await parseBody<{ id?: unknown; apiKey?: unknown }>(c),
     );
     return c.json(
-      core.addWebSearchProvider({
+      core.add({
         id: requireNonEmptyString(body.id, "id (string)"),
         apiKey: requireNonEmptyString(body.apiKey, "apiKey (string)"),
       }),
@@ -73,14 +67,14 @@ export function webSearchRoutes(core: WebSearchApi): Hono {
     // An omitted (or empty) key keeps the stored one: the screen edits a
     // provider without ever holding the secret.
     return c.json(
-      core.updateWebSearchProvider(c.req.param("id"), {
+      core.update(c.req.param("id"), {
         apiKey: apiKey ?? "",
       }),
     );
   });
 
   app.delete("/web-search/providers/:id", (c) => {
-    return c.json(core.removeWebSearchProvider(c.req.param("id")));
+    return c.json(core.remove(c.req.param("id")));
   });
 
   app.put("/web-search/default", async (c) => {
@@ -91,9 +85,7 @@ export function webSearchRoutes(core: WebSearchApi): Hono {
     }
     // null turns search off. An absent field is treated as null as well: the
     // request says which provider to use, and saying none is how it does it.
-    return c.json(
-      core.setDefaultWebSearchProvider(typeof id === "string" ? id : null),
-    );
+    return c.json(core.setDefault(typeof id === "string" ? id : null));
   });
 
   app.post("/web-search/test", async (c) => {
@@ -105,7 +97,7 @@ export function webSearchRoutes(core: WebSearchApi): Hono {
       throw new AppError("apiKey must be a string or null", 400);
     }
     return c.json(
-      await core.testWebSearchProvider({
+      await core.test({
         id: requireNonEmptyString(body.id, "id (string)"),
         apiKey: typeof apiKey === "string" ? apiKey : null,
       }),

@@ -70,7 +70,7 @@ async function openFileBackedCore(
   core.models.models.setProvider(faux.provider);
   const workspaceDir = join(dir, "repo");
   await fsp.mkdir(workspaceDir, { recursive: true });
-  const ws = await core.createWorkspace("ws", [workspaceDir]);
+  const ws = await core.services.workspaces.create("ws", [workspaceDir]);
   const session = await core.createSession({
     workspaceId: ws.id,
     modelProvider: faux.provider.id,
@@ -82,13 +82,13 @@ async function openFileBackedCore(
 test("workspace creation resolves folders and rejects missing ones", async () => {
   const { core } = setup();
   const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-core-"));
-  const ws = await core.createWorkspace("ws1", [root]);
+  const ws = await core.services.workspaces.create("ws1", [root]);
   assertEquals(ws.folders.length, 1);
   assertEquals(ws.folders[0], realpathSync.native(root));
 
   await assertRejects(
     async () => {
-      await core.createWorkspace("ws2", [join(root, "missing")]);
+      await core.services.workspaces.create("ws2", [join(root, "missing")]);
     },
     Error,
     "does not exist",
@@ -177,14 +177,16 @@ test("a model switch is stored while streaming; a workspace update waits", async
   // A workspace edit is still refused: it changes the prompt and the tools the
   // running loop is already using.
   await assertRejects(
-    () => core.updateWorkspace(ws.id, { folders: [root, extra] }),
+    () => core.services.workspaces.update(ws.id, { folders: [root, extra] }),
     Error,
     "already running",
   );
 
   await core.getAgent(session.id)!.waitForIdle();
 
-  const updated = await core.updateWorkspace(ws.id, { folders: [root, extra] });
+  const updated = await core.services.workspaces.update(ws.id, {
+    folders: [root, extra],
+  });
   assertEquals(updated.folders.length, 2);
 
   core.close();
@@ -208,13 +210,13 @@ test("renaming a workspace does not touch the prompt; changing folders does", as
     const first = core.getAgent(session.id)!.agent.state.systemPrompt;
     assert(first.includes(root), "the prompt must list the workspace folder");
 
-    await core.updateWorkspace(ws.id, { name: "renamed" });
+    await core.services.workspaces.update(ws.id, { name: "renamed" });
     assertEquals(core.getAgent(session.id)!.agent.state.systemPrompt, first);
 
     // The rebuild a folder edit triggers reaches the prompt, not only the
     // tools: a session opened before the edit must stop naming a folder the
     // workspace no longer has.
-    await core.updateWorkspace(ws.id, { folders: [root, extra] });
+    await core.services.workspaces.update(ws.id, { folders: [root, extra] });
     const updated = core.getAgent(session.id)!.agent.state.systemPrompt;
     assert(updated.includes(extra), updated);
     assertEquals(updated.includes(root), true);
@@ -267,14 +269,14 @@ test("a prompt stored by an older build is replaced when the session opens", asy
 test("workspaces require at least one folder", async () => {
   const { core } = setup();
   await assertRejects(
-    () => core.createWorkspace("empty", []),
+    () => core.services.workspaces.create("empty", []),
     Error,
     "at least one folder",
   );
 
   const { ws } = await makeWorkspace(core);
   await assertRejects(
-    () => core.updateWorkspace(ws.id, { folders: [] }),
+    () => core.services.workspaces.update(ws.id, { folders: [] }),
     Error,
     "at least one folder",
   );
@@ -295,11 +297,11 @@ test("chat session: created without a workspace, chat prompt, no file tools", as
   // The chat workspace is a singleton, created on first use and flagged,
   // but hidden from the user-facing workspace list.
   assertEquals(
-    core.listWorkspaces().some((w) => w.chat),
+    core.services.workspaces.list().some((w) => w.chat),
     false,
     "the chat workspace must not appear in the public list",
   );
-  const chatWs = core.getWorkspace(session.workspaceId)!;
+  const chatWs = core.services.workspaces.get(session.workspaceId)!;
   assertEquals(chatWs.chat, true);
   assertEquals(chatWs.folders.length, 0);
 
@@ -388,23 +390,26 @@ test("chat workspace cannot be updated or deleted", async () => {
     modelProvider: providerId,
     modelId,
   });
-  const chatWorkspace = core.getWorkspace(session.workspaceId)!;
+  const chatWorkspace = core.services.workspaces.get(session.workspaceId)!;
   assertEquals(chatWorkspace.chat, true);
 
   await assertRejects(
-    () => core.deleteWorkspace(chatWorkspace.id),
+    () => core.services.workspaces.delete(chatWorkspace.id),
     Error,
     "cannot be deleted",
   );
   await assertRejects(
-    () => core.updateWorkspace(chatWorkspace.id, { name: "renamed" }),
+    () =>
+      core.services.workspaces.update(chatWorkspace.id, { name: "renamed" }),
     Error,
     "cannot be edited",
   );
 
   // Normal workspaces are unaffected.
   const { ws } = await makeWorkspace(core);
-  const updated = await core.updateWorkspace(ws.id, { name: "renamed" });
+  const updated = await core.services.workspaces.update(ws.id, {
+    name: "renamed",
+  });
   assertEquals(updated.name, "renamed");
 
   core.close();
@@ -423,7 +428,7 @@ test("personalization (machine AGENTS.md) is published with the workspace instru
 
   const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-ws-"));
   await fsp.writeFile(join(root, "AGENTS.md"), "Workspace memory.\n");
-  const ws = await core.createWorkspace("ws", [root]);
+  const ws = await core.services.workspaces.create("ws", [root]);
 
   // Personalization lives in AGENTS.md next to the settings file.
   const agentFile = join(dir, "AGENTS.md");
@@ -505,7 +510,7 @@ test("deleting a workspace drops its sessions' visuals", async () => {
     );
     // A workspace deletion removes its sessions; their assets must go with
     // them (the same core path, not the pool's close).
-    await core.deleteWorkspace(workspaceId);
+    await core.services.workspaces.delete(workspaceId);
     assertEquals(
       await core.resolveSessionVisual(sessionId, "9f3c2a1b4d5e.png"),
       undefined,

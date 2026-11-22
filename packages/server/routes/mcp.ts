@@ -24,15 +24,15 @@ export interface McpApi {
    * tools, disconnect. Runs here because the server owns the child
    * processes a stdio server needs. Reaching the server is reported as a
    * result (`ok:false`), an invalid body still throws. */
-  testMcpServer(text: string): Promise<McpTestResult>;
+  testServer(text: string): Promise<McpTestResult>;
   /** Start an interactive OAuth sign-in for one HTTP server. Resolves once
    * the flow waits for the browser (the snapshot carries the authorization
    * URL) or has failed to start. */
-  startMcpAuth(text: string, redirectUri: string): Promise<McpAuthSnapshot>;
-  getMcpAuth(sessionId: string): McpAuthSnapshot | undefined;
-  cancelMcpAuth(sessionId: string): boolean;
+  startAuth(text: string, redirectUri: string): Promise<McpAuthSnapshot>;
+  getAuth(sessionId: string): McpAuthSnapshot | undefined;
+  cancelAuth(sessionId: string): boolean;
   /** Finish the sign-in the browser came back to. */
-  completeMcpAuth(input: {
+  completeAuth(input: {
     state: string;
     code?: string;
     error?: string;
@@ -113,7 +113,7 @@ export function mcpRoutes(
   app.post("/mcp/test", async (c) => {
     const text = await c.req.text();
     requireNonEmptyString(text.trim(), "JSON body");
-    return c.json(await core.testMcpServer(text));
+    return c.json(await core.testServer(text));
   });
 
   // OAuth sign-in of one HTTP server: same single-server JSON body. The
@@ -122,11 +122,11 @@ export function mcpRoutes(
   app.post("/mcp/auth", async (c) => {
     const text = await c.req.text();
     requireNonEmptyString(text.trim(), "JSON body");
-    return c.json(await core.startMcpAuth(text, mcpRedirectUri(c)));
+    return c.json(await core.startAuth(text, mcpRedirectUri(c)));
   });
 
   app.get("/mcp/auth/:id", (c) => {
-    const snapshot = core.getMcpAuth(c.req.param("id"));
+    const snapshot = core.getAuth(c.req.param("id"));
     if (snapshot === undefined) {
       throw missing("MCP sign-in session");
     }
@@ -134,7 +134,7 @@ export function mcpRoutes(
   });
 
   app.post("/mcp/auth/:id/cancel", (c) => {
-    if (!core.cancelMcpAuth(c.req.param("id"))) {
+    if (!core.cancelAuth(c.req.param("id"))) {
       throw missing("MCP sign-in session");
     }
     return c.json({ ok: true });
@@ -153,7 +153,7 @@ export function mcpRoutes(
     const snapshot =
       state === undefined
         ? undefined
-        : await core.completeMcpAuth({
+        : await core.completeAuth({
             state,
             ...(code !== undefined ? { code } : {}),
             ...(hasError ? { error: authorizationFailure(c) } : {}),

@@ -508,7 +508,10 @@ test("stella agent: the thinking level is stored with the same save", async () =
     assertEquals(core.getStellaAgent(agent.id)?.name, "Aide 2");
     // The level belongs to the model, so it is read back through the model
     // (the composer and the model settings show the same value).
-    assertEquals(core.getModelThinkingLevel("faux", "other"), "high");
+    assertEquals(
+      core.services.sessions.getModelThinkingLevel("faux", "other"),
+      "high",
+    );
   } finally {
     await core.close();
   }
@@ -531,7 +534,10 @@ test("stella agent: a level the model does not offer is refused", async () => {
     );
     // Refused before anything was written: the name did not land either.
     assertEquals(core.getStellaAgent(agent.id)?.name, "Aide");
-    assertEquals(core.getModelThinkingLevel("faux", "other"), "off");
+    assertEquals(
+      core.services.sessions.getModelThinkingLevel("faux", "other"),
+      "off",
+    );
   } finally {
     await core.close();
   }
@@ -1973,7 +1979,7 @@ test("stella conversation: only stella sessions condense an idle history", async
 
     // Every other session keeps the pressure check alone.
     await withTempDir("lumisca-idle-", async (root) => {
-      const workspace = await core.createWorkspace("ws", [root]);
+      const workspace = await core.services.workspaces.create("ws", [root]);
       const plain = await core.createSession({ workspaceId: workspace.id });
       assertEquals(core.getAgent(plain.id)!.idleCompaction, null);
     });
@@ -2027,7 +2033,7 @@ test("stella conversation: a code-mode session never drops its rows", async () =
     assertStellaPrunes(core, session.id, true);
 
     await withTempDir("lumisca-prune-", async (root) => {
-      const workspace = await core.createWorkspace("ws", [root]);
+      const workspace = await core.services.workspaces.create("ws", [root]);
       const plain = await core.createSession({ workspaceId: workspace.id });
       assertStellaPrunes(core, plain.id, false);
     });

@@ -11,33 +11,33 @@ import { webSearchRoutes } from "./web-search.ts";
  * answers with a fixed view. */
 class FakeWebSearchApi {
   calls: { method: string; args: unknown[] }[] = [];
-  view: WebSearchSettingsView = {
+  current: WebSearchSettingsView = {
     defaultId: null,
     providers: [],
     available: [{ id: "exa", name: "Exa", supportsFetch: true }],
   };
   testResult: WebSearchTestView = { ok: true, detail: null, results: 1 };
 
-  getWebSearchSettings(): WebSearchSettingsView {
-    return this.view;
+  view(): WebSearchSettingsView {
+    return this.current;
   }
-  addWebSearchProvider(input: { id: string; apiKey: string }) {
+  add(input: { id: string; apiKey: string }) {
     this.calls.push({ method: "add", args: [input] });
-    return this.view;
+    return this.current;
   }
-  updateWebSearchProvider(id: string, input: { apiKey: string }) {
+  update(id: string, input: { apiKey: string }) {
     this.calls.push({ method: "update", args: [id, input] });
-    return this.view;
+    return this.current;
   }
-  removeWebSearchProvider(id: string) {
+  remove(id: string) {
     this.calls.push({ method: "remove", args: [id] });
-    return this.view;
+    return this.current;
   }
-  setDefaultWebSearchProvider(id: string | null) {
+  setDefault(id: string | null) {
     this.calls.push({ method: "setDefault", args: [id] });
-    return this.view;
+    return this.current;
   }
-  testWebSearchProvider(input: { id: string; apiKey: string | null }) {
+  test(input: { id: string; apiKey: string | null }) {
     this.calls.push({ method: "test", args: [input] });
     return Promise.resolve(this.testResult);
   }

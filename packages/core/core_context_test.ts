@@ -170,7 +170,7 @@ test("workspace instructions are context messages, not prompt text, and edits re
   const { core, faux, providerId, modelId } = setup();
   const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "lumisca-core-"));
   await fsp.writeFile(join(root, "AGENTS.md"), "Use Rust 2.\n");
-  const ws = await core.createWorkspace("ws", [root]);
+  const ws = await core.services.workspaces.create("ws", [root]);
 
   const session = await core.createSession({
     workspaceId: ws.id,

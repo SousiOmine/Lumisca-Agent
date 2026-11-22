@@ -291,7 +291,7 @@ export async function main(): Promise<void> {
   // The model catalog starts as the bundled snapshot; refresh it in the
   // background so new models.dev entries appear without blocking startup
   // (or failing it when offline — the snapshot simply stays active).
-  refreshCatalogInBackground(core);
+  refreshCatalogInBackground(core.services.models);
 
   // The updater of this installation. `server` is filled in below (the
   // restart path needs to release the listener before its successor starts,

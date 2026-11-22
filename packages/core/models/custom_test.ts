@@ -129,13 +129,15 @@ test("models.json apiKey ${ENV} resolves from the environment", async () => {
     }),
   );
   try {
-    const provider = core.listProviders().find((p) => p.id === "custom");
+    const provider = core.services.models
+      .listProviders()
+      .find((p) => p.id === "custom");
     assertEquals(provider !== undefined, true);
-    assertEquals(await core.hasProviderAuth("custom"), true);
+    assertEquals(await core.services.models.hasProviderAuth("custom"), true);
     // models.json providers are Lumisca's own config: they count as
     // configured even though the key comes from an env var.
-    assertEquals(await core.hasConfiguredAuth("custom"), true);
-    const check = await core.checkAuth("custom");
+    assertEquals(await core.services.models.hasConfiguredAuth("custom"), true);
+    const check = await core.services.models.checkAuth("custom");
     assertEquals(check?.source, "LUMISCA_TEST_PROXY_KEY");
   } finally {
     core.close();
@@ -157,7 +159,7 @@ test("models.json literal apiKey resolves without env vars", async () => {
   );
   const core = LumiscaCore.forTesting([], envOf({ LUMISCA_MODELS_FILE: path }));
   try {
-    const check = await core.checkAuth("custom");
+    const check = await core.services.models.checkAuth("custom");
     assertEquals(check?.source, "models.json");
   } finally {
     core.close();
@@ -214,7 +216,7 @@ test("models.json without apiKey falls back to LUMISCA_API_KEY_<ID>", async () =
     }),
   );
   try {
-    const check = await core.checkAuth("custom");
+    const check = await core.services.models.checkAuth("custom");
     assertEquals(check?.source, "LUMISCA_API_KEY_CUSTOM");
   } finally {
     core.close();
@@ -300,13 +302,15 @@ test("env provider wins id collisions with models.json", async () => {
   try {
     // The env provider is registered last: it replaces the models.json
     // entry with the same id.
-    const custom = core
+    const custom = core.services.models
       .listProviders()
       .find((p) => p.id === CUSTOM_PROVIDER_ID)!;
     assertEquals(custom.baseUrl, "http://env:2/v1");
     assertEquals(custom.getModels()[0]!.id, "from-env");
     // The other models.json provider survives untouched.
-    const other = core.listProviders().find((p) => p.id === "other")!;
+    const other = core.services.models
+      .listProviders()
+      .find((p) => p.id === "other")!;
     assertEquals(other.getModels()[0]!.baseUrl, "http://other:1/v1");
   } finally {
     core.close();
@@ -328,13 +332,19 @@ test("LumiscaCore.open registers the custom provider from env", async () => {
     }),
   );
   try {
-    const model = core.getModel(CUSTOM_PROVIDER_ID, "deepseek-chat");
+    const model = core.services.models.getModel(
+      CUSTOM_PROVIDER_ID,
+      "deepseek-chat",
+    );
     assertEquals(model !== undefined, true);
     assertEquals(model!.baseUrl, "http://localhost:5002/v1");
-    assertEquals(await core.hasProviderAuth(CUSTOM_PROVIDER_ID), true);
+    assertEquals(
+      await core.services.models.hasProviderAuth(CUSTOM_PROVIDER_ID),
+      true,
+    );
 
     // A session can be created with the custom provider.
-    const ws = await core.createWorkspace("ws", [dir]);
+    const ws = await core.services.workspaces.create("ws", [dir]);
     const session = await core.createSession({
       workspaceId: ws.id,
       modelProvider: CUSTOM_PROVIDER_ID,
@@ -370,7 +380,7 @@ test("a models.json entry may declare the input cap it publishes", async () => {
   );
   const core = LumiscaCore.forTesting([], envOf({ LUMISCA_MODELS_FILE: path }));
   try {
-    const model = core.getModel("gw", "capped");
+    const model = core.services.models.getModel("gw", "capped");
     assertEquals(model?.contextWindow, 1_050_000);
     assertEquals(model?.maxInputTokens, 922_000);
     assertEquals(inputBudgetTokens(model!), 922_000);

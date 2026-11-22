@@ -324,13 +324,13 @@ test("other providers derive per-model levels from reasoning_options", () => {
 test("extra providers register in LumiscaCore and need a stored key", async () => {
   const core = LumiscaCore.forTesting([], NO_ENV);
   try {
-    const deepinfra = core
+    const deepinfra = core.services.models
       .listProviders()
       .find((p) => p.id === DEEPINFRA_PROVIDER_ID)!;
-    const clinepass = core
+    const clinepass = core.services.models
       .listProviders()
       .find((p) => p.id === CLINEPASS_PROVIDER_ID)!;
-    const commandcode = core
+    const commandcode = core.services.models
       .listProviders()
       .find((p) => p.id === COMMANDCODE_PROVIDER_ID)!;
     assertEquals(deepinfra.getModels().length > 0, true);
@@ -338,26 +338,65 @@ test("extra providers register in LumiscaCore and need a stored key", async () =
     assertEquals(commandcode.getModels().length > 0, true);
 
     // Ambient auth must not make them look configured in Lumisca...
-    assertEquals(await core.hasConfiguredAuth(DEEPINFRA_PROVIDER_ID), false);
-    assertEquals(await core.hasConfiguredAuth(CLINEPASS_PROVIDER_ID), false);
-    assertEquals(await core.hasConfiguredAuth(COMMANDCODE_PROVIDER_ID), false);
+    assertEquals(
+      await core.services.models.hasConfiguredAuth(DEEPINFRA_PROVIDER_ID),
+      false,
+    );
+    assertEquals(
+      await core.services.models.hasConfiguredAuth(CLINEPASS_PROVIDER_ID),
+      false,
+    );
+    assertEquals(
+      await core.services.models.hasConfiguredAuth(COMMANDCODE_PROVIDER_ID),
+      false,
+    );
 
     // ...but the settings UI offers API-key entry for all of them.
-    assertEquals(core.getProviderAuthType(DEEPINFRA_PROVIDER_ID), "api_key");
-    assertEquals(core.getProviderAuthType(CLINEPASS_PROVIDER_ID), "api_key");
-    assertEquals(core.getProviderAuthType(OPENCODE_GO_PROVIDER_ID), "api_key");
-    assertEquals(core.getProviderAuthType(COMMANDCODE_PROVIDER_ID), "api_key");
+    assertEquals(
+      core.services.models.getProviderAuthType(DEEPINFRA_PROVIDER_ID),
+      "api_key",
+    );
+    assertEquals(
+      core.services.models.getProviderAuthType(CLINEPASS_PROVIDER_ID),
+      "api_key",
+    );
+    assertEquals(
+      core.services.models.getProviderAuthType(OPENCODE_GO_PROVIDER_ID),
+      "api_key",
+    );
+    assertEquals(
+      core.services.models.getProviderAuthType(COMMANDCODE_PROVIDER_ID),
+      "api_key",
+    );
 
     // A stored key is the "configured" signal.
     await core.setProviderApiKey(DEEPINFRA_PROVIDER_ID, "di-key");
     await core.setProviderApiKey(CLINEPASS_PROVIDER_ID, "cp-key");
     await core.setProviderApiKey(COMMANDCODE_PROVIDER_ID, "cc-key");
-    assertEquals(await core.hasConfiguredAuth(DEEPINFRA_PROVIDER_ID), true);
-    assertEquals(await core.hasConfiguredAuth(CLINEPASS_PROVIDER_ID), true);
-    assertEquals(await core.hasConfiguredAuth(COMMANDCODE_PROVIDER_ID), true);
-    assertEquals(await core.hasProviderAuth(DEEPINFRA_PROVIDER_ID), true);
-    assertEquals(await core.hasProviderAuth(CLINEPASS_PROVIDER_ID), true);
-    assertEquals(await core.hasProviderAuth(COMMANDCODE_PROVIDER_ID), true);
+    assertEquals(
+      await core.services.models.hasConfiguredAuth(DEEPINFRA_PROVIDER_ID),
+      true,
+    );
+    assertEquals(
+      await core.services.models.hasConfiguredAuth(CLINEPASS_PROVIDER_ID),
+      true,
+    );
+    assertEquals(
+      await core.services.models.hasConfiguredAuth(COMMANDCODE_PROVIDER_ID),
+      true,
+    );
+    assertEquals(
+      await core.services.models.hasProviderAuth(DEEPINFRA_PROVIDER_ID),
+      true,
+    );
+    assertEquals(
+      await core.services.models.hasProviderAuth(CLINEPASS_PROVIDER_ID),
+      true,
+    );
+    assertEquals(
+      await core.services.models.hasProviderAuth(COMMANDCODE_PROVIDER_ID),
+      true,
+    );
   } finally {
     core.close();
   }
@@ -373,16 +412,25 @@ test("extra providers resolve their env API keys", async () => {
     }),
   );
   try {
-    assertEquals(await core.hasProviderAuth(DEEPINFRA_PROVIDER_ID), true);
-    assertEquals(await core.hasProviderAuth(CLINEPASS_PROVIDER_ID), true);
-    const di = await core.checkAuth(DEEPINFRA_PROVIDER_ID);
+    assertEquals(
+      await core.services.models.hasProviderAuth(DEEPINFRA_PROVIDER_ID),
+      true,
+    );
+    assertEquals(
+      await core.services.models.hasProviderAuth(CLINEPASS_PROVIDER_ID),
+      true,
+    );
+    const di = await core.services.models.checkAuth(DEEPINFRA_PROVIDER_ID);
     assertEquals(di?.source, "DEEPINFRA_API_KEY");
-    const cp = await core.checkAuth(CLINEPASS_PROVIDER_ID);
+    const cp = await core.services.models.checkAuth(CLINEPASS_PROVIDER_ID);
     assertEquals(cp?.source, "CLINE_API_KEY");
     // CommandCode names its key CMD_API_KEY (the CLI and the Provider API
     // share one key, whatever the plan).
-    assertEquals(await core.hasProviderAuth(COMMANDCODE_PROVIDER_ID), true);
-    const cc = await core.checkAuth(COMMANDCODE_PROVIDER_ID);
+    assertEquals(
+      await core.services.models.hasProviderAuth(COMMANDCODE_PROVIDER_ID),
+      true,
+    );
+    const cc = await core.services.models.checkAuth(COMMANDCODE_PROVIDER_ID);
     assertEquals(cc?.source, COMMANDCODE_ENV_VAR);
   } finally {
     core.close();
