@@ -1,7 +1,8 @@
 //! The shell bridge's actions.
 //!
-//! The settings UI is served by the (possibly remote) server, so it cannot
-//! call Tauri commands. It drives the shell through the loopback listener in
+//! The main window shows the bundled UI (`tauri://localhost` or
+//! `http://tauri.localhost`), which calls the API of the server it displays.
+//! The UI drives the shell through the loopback listener in
 //! [`crate::bridge_server`], which forwards to [`handle_shell_action`]: one
 //! action per request, named in the path (`/shell/<action>`), parameters in
 //! the query string. The bridge manages the window: its server list, which
@@ -10,8 +11,9 @@
 //! (see `/api/connections`) and are not reachable from here.
 //!
 //! Every request must carry `key` = the auth token of the CURRENTLY
-//! DISPLAYED server — a value only the page served by that server knows, so
-//! arbitrary pages cannot drive the bridge.
+//! DISPLAYED server, and the listener accepts only the bundled UI's origins
+//! (see `bridge_server::origin_allowed`). The key is a second lock: while no
+//! server is displayed only the startup actions run.
 
 use tauri::http::StatusCode;
 use tauri::{AppHandle, Manager};
@@ -55,6 +57,32 @@ struct ConnectionState {
     maximized: bool,
 }
 
+/// A connection as the list endpoint returns it: the token is not part of
+/// the answer. Ranking and switching need only the identity and address;
+/// a page that edits a row fetches the secret with `connections/get`, which
+/// is a separate, key-gated request.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConnectionSummary {
+    id: String,
+    url: String,
+    name: String,
+    /// Whether a token is stored, so the editor can say one exists without
+    /// receiving it.
+    has_token: bool,
+}
+
+impl From<&SavedConnection> for ConnectionSummary {
+    fn from(conn: &SavedConnection) -> Self {
+        Self {
+            id: conn.id.clone(),
+            url: conn.url.clone(),
+            name: conn.name.clone(),
+            has_token: !conn.token.is_empty(),
+        }
+    }
+}
+
 /// Current display's auth token (the bridge key).
 ///
 /// Empty is no token: a server started without `LUMISCA_TOKEN` injects no
@@ -65,6 +93,14 @@ struct ConnectionState {
 /// answer — leave a remote window with no minimise, maximise, close or drag
 /// at all. The server normalises the same way (`startupEnv.LUMISCA_TOKEN ||
 /// undefined`); the shell has to agree with it.
+/// Whether a server (local or remote) is currently displayed. The splash
+/// runs before either exists; a tokenless server still counts as displayed,
+/// so its settings page keeps working.
+fn display_ready(app: &AppHandle) -> bool {
+    let state = app.state::<AppState>();
+    state.displayed.lock_recover().is_some() || state.local.lock_recover().is_some()
+}
+
 fn current_connection_token(app: &AppHandle) -> Option<String> {
     let state = app.state::<AppState>();
     let remote = state
@@ -101,25 +137,51 @@ fn bridge_error(status: StatusCode, message: &str) -> BridgeReply {
     bridge_json(status, serde_json::json!({ "error": message }))
 }
 
+/// Actions the splash page may drive before any server is displayed. It is
+/// an allowlist, not a denylist: a new action is closed to the startup
+/// window until somebody decides it is safe there.
+fn startup_action(action: &str) -> bool {
+    matches!(
+        action,
+        "state" | "connect-local" | "connect-saved" | "open-url"
+    ) || action.starts_with("window/")
+        || action.starts_with("update/")
+}
+
 /// Whether this request may drive the shell.
 ///
 /// `current` is the displayed server's token, already normalised so that an
-/// empty one reads as "none" (see [`current_connection_token`]). A server
-/// without a token leaves the gate open — it has nothing to check against,
-/// and its own API is equally open. With one, the request must present it.
+/// empty one reads as "none" (see [`current_connection_token`]). `displayed`
+/// says whether there is a server at all: during startup and in the splash
+/// there is none, and only [`startup_action`] may run. Once a server is
+/// displayed, a tokenless one leaves the gate open — it has nothing to
+/// check against, and its own API is equally open. With a token, every
+/// action must present it.
 ///
 /// Split out from [`handle_shell_action`] so the rule can be stated as a
 /// test without an `AppHandle`: the failure it prevents (a tokenless remote
 /// window losing its whole title bar) is exactly the kind a test has to be
 /// able to pin down.
-fn key_gate(current: Option<&str>, supplied: Option<&str>) -> Result<(), BridgeReply> {
-    let Some(current) = current else {
-        return Ok(());
-    };
-    if supplied == Some(current) {
-        return Ok(());
+fn key_gate(
+    current: Option<&str>,
+    supplied: Option<&str>,
+    displayed: bool,
+    action: &str,
+) -> Result<(), BridgeReply> {
+    if let Some(current) = current {
+        return if supplied == Some(current) {
+            Ok(())
+        } else {
+            Err(bridge_error(StatusCode::UNAUTHORIZED, "invalid key"))
+        };
     }
-    Err(bridge_error(StatusCode::UNAUTHORIZED, "invalid key"))
+    if !displayed && !startup_action(action) {
+        return Err(bridge_error(
+            StatusCode::UNAUTHORIZED,
+            "no server displayed",
+        ));
+    }
+    Ok(())
 }
 
 /// Turn the loopback bridge's HTTP answer into the IPC command's result:
@@ -179,14 +241,15 @@ pub(crate) fn handle_shell_action(
         .collect();
 
     // Key gate: only the page of the currently displayed server may drive
-    // the bridge, window controls included. Tokenless servers leave it
-    // open (matching their own auth posture), and while no server is
-    // displayed yet — the splash page, or a failed startup — there is no
-    // token either, so the gate is open and the splash can drive the
-    // window controls. Once a token exists, every action requires it.
+    // the bridge, window controls included. Before a server is displayed —
+    // the splash page, or a failed startup — only the startup actions run.
+    // A displayed tokenless server leaves the gate open, matching its own
+    // API; once a token exists, every action requires it.
     if let Err(reply) = key_gate(
         current_connection_token(app).as_deref(),
         params.get("key").copied(),
+        display_ready(app),
+        action,
     ) {
         return reply;
     }
@@ -231,10 +294,33 @@ pub(crate) fn handle_shell_action(
         // The list belongs to the shell, not to the displayed server. A page
         // served by a remote server must not know, or change, which other
         // servers this computer connects to.
-        "connections/list" => bridge_json(
-            StatusCode::OK,
-            serde_json::json!({ "connections": connection::list_connections(app) }),
-        ),
+        "connections/list" => {
+            let summaries: Vec<ConnectionSummary> = connection::list_connections(app)
+                .iter()
+                .map(ConnectionSummary::from)
+                .collect();
+            bridge_json(
+                StatusCode::OK,
+                serde_json::json!({ "connections": summaries }),
+            )
+        }
+        // One row with its token, for the editor. Separate from the list so
+        // a page that only shows names never receives every stored secret.
+        "connections/get" => {
+            let Some(id) = get("id") else {
+                return bridge_error(StatusCode::BAD_REQUEST, "id required");
+            };
+            match connection::list_connections(app)
+                .into_iter()
+                .find(|conn| conn.id == id)
+            {
+                Some(conn) => bridge_json(
+                    StatusCode::OK,
+                    serde_json::to_value(conn).unwrap_or_default(),
+                ),
+                None => bridge_error(StatusCode::NOT_FOUND, "connection not found"),
+            }
+        }
         "connections/save" => {
             let (Some(id), Some(url)) = (get("id"), get("url")) else {
                 return bridge_error(StatusCode::BAD_REQUEST, "id and url required");
@@ -573,9 +659,39 @@ mod tests {
         // compares against must be None, not Some("").
         let key = bridge_key(Some(String::new()), Some("local-token".into()));
         assert_eq!(key, None);
-        assert!(key_gate(key.as_deref(), None).is_ok());
+        assert!(key_gate(key.as_deref(), None, true, "connections/list").is_ok());
         // A page that happens to send an empty key is the same case.
-        assert!(key_gate(None, Some("")).is_ok());
+        assert!(key_gate(None, Some(""), true, "state").is_ok());
+    }
+
+    #[test]
+    fn before_a_server_is_displayed_only_startup_actions_run() {
+        // The splash drives the window and the two connect actions; nothing
+        // else may run while no token can exist yet.
+        for action in ["state", "connect-local", "connect-saved", "window/close"] {
+            assert!(key_gate(None, None, false, action).is_ok(), "{action}");
+        }
+        for action in ["connections/list", "connections/get", "test", "quit"] {
+            assert_eq!(
+                key_gate(None, None, false, action).unwrap_err().0,
+                StatusCode::UNAUTHORIZED,
+                "{action}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_list_summary_carries_no_token() {
+        let conn = SavedConnection {
+            id: "home".into(),
+            url: "https://home.example".into(),
+            token: "secret".into(),
+            name: "Home".into(),
+        };
+        let json = serde_json::to_value(ConnectionSummary::from(&conn)).unwrap();
+        assert_eq!(json["id"], "home");
+        assert_eq!(json["hasToken"], true);
+        assert!(json.get("token").is_none());
     }
 
     #[test]
@@ -593,13 +709,15 @@ mod tests {
     fn a_tokened_server_requires_its_own_key() {
         // The gate still does its job: only the displayed server's page may
         // drive the window.
-        assert!(key_gate(Some("secret"), Some("secret")).is_ok());
+        assert!(key_gate(Some("secret"), Some("secret"), true, "state").is_ok());
         assert_eq!(
-            key_gate(Some("secret"), None).unwrap_err().0,
+            key_gate(Some("secret"), None, true, "state").unwrap_err().0,
             StatusCode::UNAUTHORIZED
         );
         assert_eq!(
-            key_gate(Some("secret"), Some("other")).unwrap_err().0,
+            key_gate(Some("secret"), Some("other"), true, "state")
+                .unwrap_err()
+                .0,
             StatusCode::UNAUTHORIZED
         );
     }

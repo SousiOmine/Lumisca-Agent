@@ -1,9 +1,11 @@
 //! The shell bridge, served over loopback HTTP.
 //!
-//! The settings UI is served by the (possibly remote) server, so it cannot
-//! call Tauri commands. It drives the shell through this listener instead:
+//! The bundled UI cannot call Tauri commands over the loopback listener, so
+//! it drives the shell through this listener instead:
 //! `GET http://127.0.0.1:<port>/shell/<action>?...`, with the current
-//! server's token as `key` (see `bridge::handle_shell_action`).
+//! server's token as `key` (see `bridge::handle_shell_action`). Only the
+//! bundled UI's origins may call it; a page served by any other origin is
+//! refused before its action is read.
 //!
 //! Why a listener and not a custom URI scheme: WKWebView (macOS) refuses to
 //! fetch a non-http scheme from an http(s) page — the request is a
@@ -32,6 +34,21 @@ use tauri::AppHandle;
 /// How long one connection may take to send its request line (a browser
 /// preconnect, a port scanner, an abandoned fetch).
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Origins the bundled UI is served from: `tauri://localhost` on macOS and
+/// Linux, `http://tauri.localhost` on Windows. Any other page that reaches
+/// this port — a website open in the same browser, a document served by a
+/// remote server — is refused before its action is looked at. A request
+/// without an Origin is a non-browser client; the action handler's key gate
+/// is what authenticates those.
+const ALLOWED_ORIGINS: [&str; 2] = ["tauri://localhost", "http://tauri.localhost"];
+
+fn origin_allowed(origin: Option<&str>) -> bool {
+    match origin {
+        None => true,
+        Some(origin) => ALLOWED_ORIGINS.contains(&origin),
+    }
+}
 
 /// The listener plus the stop flag its thread polls.
 pub(crate) struct BridgeServer {
@@ -111,10 +128,49 @@ impl Drop for BridgeServer {
     }
 }
 
-/// Read one request line and answer it. The body of the request is ignored:
-/// every action is a GET whose parameters are in the query string, which
-/// keeps the bridge out of preflight (simple request) and out of any request
-/// body handling.
+/// One request's first line and the headers this listener reads.
+struct RequestHead {
+    method: String,
+    target: String,
+    origin: Option<String>,
+}
+
+/// Read the request line and headers up to the blank line. The body is
+/// ignored: every action is a GET whose parameters are in the query string.
+fn read_request_head(reader: &mut BufReader<TcpStream>) -> Option<RequestHead> {
+    let mut request_line = String::new();
+    if reader.read_line(&mut request_line).is_err() {
+        return None;
+    }
+    let mut parts = request_line.split_whitespace();
+    let method = parts.next().unwrap_or_default().to_string();
+    let target = parts.next().unwrap_or("/").to_string();
+    let mut origin: Option<String> = None;
+    let mut total = request_line.len();
+    loop {
+        let mut line = String::new();
+        match reader.read_line(&mut line) {
+            Ok(0) | Err(_) => break,
+            Ok(_) => {}
+        }
+        total += line.len();
+        if total > 16 * 1024 || line == "\r\n" || line == "\n" {
+            break;
+        }
+        if let Some((name, value)) = line.split_once(':') {
+            if name.eq_ignore_ascii_case("origin") {
+                origin = Some(value.trim().to_string());
+            }
+        }
+    }
+    Some(RequestHead {
+        method,
+        target,
+        origin,
+    })
+}
+
+/// Read one request and answer it.
 fn serve_connection(app: &AppHandle, mut stream: TcpStream) {
     let _ = stream.set_read_timeout(Some(REQUEST_TIMEOUT));
     let _ = stream.set_write_timeout(Some(REQUEST_TIMEOUT));
@@ -122,26 +178,32 @@ fn serve_connection(app: &AppHandle, mut stream: TcpStream) {
         return;
     };
     let mut reader = BufReader::new(reader_stream);
-    let mut request_line = String::new();
-    if reader.read_line(&mut request_line).is_err() {
+    let Some(head) = read_request_head(&mut reader) else {
+        return;
+    };
+    let origin = head.origin.as_deref();
+    // Refuse a foreign page before looking at the action: the bundled UI is
+    // the only document this listener serves a purpose for.
+    if !origin_allowed(origin) {
+        write_response(&mut stream, 403, "Forbidden", b"{}", origin);
         return;
     }
-    // `GET /shell/state?key=... HTTP/1.1`
-    let mut parts = request_line.split_whitespace();
-    let method = parts.next().unwrap_or_default();
-    let target = parts.next().unwrap_or("/");
-    if method != "GET" {
-        write_response(&mut stream, 405, "Method Not Allowed", b"{}");
+    if head.method == "OPTIONS" {
+        write_response(&mut stream, 204, "No Content", b"", origin);
+        return;
+    }
+    if head.method != "GET" {
+        write_response(&mut stream, 405, "Method Not Allowed", b"{}", origin);
         return;
     }
 
     // Absolute form so the parser yields path + query without a Host header.
-    let Some((action, params)) = parse_target(target) else {
-        write_response(&mut stream, 400, "Bad Request", b"{}");
+    let Some((action, params)) = parse_target(&head.target) else {
+        write_response(&mut stream, 400, "Bad Request", b"{}", origin);
         return;
     };
     let (status, body) = crate::bridge::handle_shell_action(app, &action, &params);
-    write_response(&mut stream, status.as_u16(), status.as_str(), &body);
+    write_response(&mut stream, status.as_u16(), status.as_str(), &body, origin);
 }
 
 /// Split `/shell/<action>?a=b` into the action and its parameters. Returns
@@ -157,13 +219,23 @@ fn parse_target(target: &str) -> Option<(String, Vec<(String, String)>)> {
     Some((path.to_string(), url.query_pairs().into_owned().collect()))
 }
 
-fn write_response(stream: &mut TcpStream, status: u16, reason: &str, body: &[u8]) {
+fn write_response(
+    stream: &mut TcpStream,
+    status: u16,
+    reason: &str,
+    body: &[u8],
+    origin: Option<&str>,
+) {
     let mut head = format!("HTTP/1.1 {status} {reason}\r\n");
     head.push_str("Content-Type: application/json\r\n");
-    // Any page the shell displays may call the bridge, including one served
-    // by a remote machine; the action handler's key gate is what
-    // authenticates the caller.
-    head.push_str("Access-Control-Allow-Origin: *\r\n");
+    // Echo only an origin this listener accepts. The old `*` let any page
+    // read answers, and `connections/list` used to carry every token.
+    if let Some(origin) = origin {
+        head.push_str(&format!("Access-Control-Allow-Origin: {origin}\r\n"));
+        head.push_str("Access-Control-Allow-Methods: GET, OPTIONS\r\n");
+        head.push_str("Access-Control-Allow-Headers: content-type\r\n");
+    }
+    head.push_str("Vary: Origin\r\n");
     head.push_str("Cache-Control: no-store\r\n");
     head.push_str(&format!("Content-Length: {}\r\n", body.len()));
     head.push_str("Connection: close\r\n\r\n");
@@ -208,6 +280,15 @@ pub(crate) fn platform_name() -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_bundled_ui_origins_are_accepted() {
+        assert!(origin_allowed(None));
+        assert!(origin_allowed(Some("tauri://localhost")));
+        assert!(origin_allowed(Some("http://tauri.localhost")));
+        assert!(!origin_allowed(Some("https://evil.example.com")));
+        assert!(!origin_allowed(Some("http://127.0.0.1:8000")));
+    }
 
     /// The script carries both facts the page reads before it renders: the
     /// bridge's origin and the OS. The window controls are drawn from the

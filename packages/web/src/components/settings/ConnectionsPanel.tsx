@@ -13,7 +13,7 @@ import {
 import { useConnectionSwitch } from "../../hooks/useConnectionSwitch.ts";
 import { useT } from "../../i18n.ts";
 import { shellCall } from "../../shell.ts";
-import type { ConnectionEntry } from "../../types.ts";
+import type { ConnectionEntry, ConnectionSummary } from "../../types.ts";
 import { Field } from "../Field.tsx";
 
 /** Settings → 接続先サーバー, on the device's side.
@@ -38,7 +38,11 @@ export function ConnectionsPanel() {
   // not appear in the picker. Save writes the row through the bridge, so
   // both surfaces see the result at once.
   const [draft, setDraft] = useState<readonly ConnectionEntry[] | null>(null);
-  const servers = draft ?? stored;
+  // The list carries no tokens; a row's secret is fetched when its fields
+  // open. Until then the field is empty and Save would keep it so, unless
+  // the row had none to begin with.
+  const servers: readonly ConnectionEntry[] =
+    draft ?? stored.map((entry) => ({ ...entry, token: "" }));
   /** Ids whose fields are open. Everything else shows its summary row. */
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -46,7 +50,7 @@ export function ConnectionsPanel() {
 
   const setServers = (
     update: (current: readonly ConnectionEntry[]) => readonly ConnectionEntry[],
-  ) => setDraft(update(draft ?? stored));
+  ) => setDraft(update(draft ?? servers));
 
   const run = async (fn: () => Promise<void>): Promise<void> => {
     setError(null);
@@ -67,6 +71,29 @@ export function ConnectionsPanel() {
       else next.delete(id);
       return next;
     });
+
+  /** Open a row's fields, fetching its token first when the list says one
+   * exists. The edit form must not show an empty token for a saved row: a
+   * blind Save would erase the credential. */
+  const toggleRow = (summary: ConnectionSummary) => {
+    const open = !expanded.has(summary.id);
+    setExpandedId(summary.id, open);
+    if (!open || !summary.hasToken) return;
+    const current = servers.find((row) => row.id === summary.id);
+    if (current !== undefined && current.token !== "") return;
+    void run(async () => {
+      const full = await shellCall<ConnectionEntry>("connections/get", {
+        id: summary.id,
+      });
+      setServers((prev) =>
+        prev.map((row) =>
+          row.id === summary.id && row.token === ""
+            ? { ...row, token: full.token }
+            : row,
+        ),
+      );
+    });
+  };
 
   const connectLocal = () =>
     run(async () => {
@@ -178,7 +205,11 @@ export function ConnectionsPanel() {
           busy={busy || connection.busy !== null}
           current={connection.currentId === server.id}
           expanded={expanded.has(server.id)}
-          onToggle={() => setExpandedId(server.id, !expanded.has(server.id))}
+          onToggle={() => {
+            const summary = stored.find((row) => row.id === server.id);
+            if (summary !== undefined) toggleRow(summary);
+            else setExpandedId(server.id, !expanded.has(server.id));
+          }}
           onProbe={probe}
           onChange={(patch) => update(server.id, patch)}
           onConnect={() => connect(server)}

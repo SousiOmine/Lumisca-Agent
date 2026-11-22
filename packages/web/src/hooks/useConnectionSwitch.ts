@@ -8,7 +8,7 @@ import {
   shellCall,
   shellState,
 } from "../shell.ts";
-import type { ConnectionEntry } from "../types.ts";
+import type { ConnectionSummary } from "../types.ts";
 
 /** Which server this window shows, and how to show another one. */
 export interface ConnectionSwitch {
@@ -18,7 +18,7 @@ export interface ConnectionSwitch {
   state: ShellState | null;
   /** The rows the picker offers. Empty in a plain browser: the list belongs
    * to the shell, and a page served by a remote server does not have one. */
-  entries: ConnectionEntry[];
+  entries: ConnectionSummary[];
   /** The row being switched to ("" for the local server), or null. */
   busy: string | null;
   error: string | null;
@@ -30,7 +30,7 @@ export interface ConnectionSwitch {
   /** Switch the window. The shell owns the navigation, so a successful call
    * replaces this page with the chosen server. The answer says whether the
    * switch happened, so a surface can keep its list open on a failure. */
-  connect: (target: ConnectionEntry | "local") => Promise<boolean>;
+  connect: (target: { id: string } | "local") => Promise<boolean>;
 }
 
 /**
@@ -83,7 +83,7 @@ export function useConnectionSwitch(): ConnectionSwitch {
   }, [desktop, state, entries, currentId, t]);
 
   const connect = useCallback(
-    async (target: ConnectionEntry | "local"): Promise<boolean> => {
+    async (target: { id: string } | "local"): Promise<boolean> => {
       setBusy(target === "local" ? "" : target.id);
       setError(null);
       try {

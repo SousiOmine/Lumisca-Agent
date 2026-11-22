@@ -101,7 +101,10 @@ export { type PushMessage, sendPush } from "./notify/web-push.ts";
 export { ATTACHMENTS_DIR_NAME } from "./session/attachments.ts";
 export type { WindowQuery } from "./session/transcript-window.ts";
 export { VISUALS_DIR_NAME } from "./session/visuals.ts";
-export type { ConnectionEntry } from "./settings/connections.ts";
+export type {
+  ConnectionEntry,
+  ConnectionSummary,
+} from "./settings/connections.ts";
 export { resolveSettingsPath, SETTINGS_DIR_NAME } from "./settings/path.ts";
 export { THEME_KEY } from "./settings/repo.ts";
 export type { FolderGrant } from "./share/grant.ts";

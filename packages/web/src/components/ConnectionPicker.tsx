@@ -4,7 +4,7 @@ import { connectionLabel } from "../connections.ts";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { useConnectionSwitch } from "../hooks/useConnectionSwitch.ts";
 import { useT } from "../i18n.ts";
-import type { ConnectionEntry } from "../types.ts";
+import type { ConnectionSummary } from "../types.ts";
 
 interface ConnectionPickerProps {
   /** Open settings → 接続先サーバー (the place servers are added and edited). */
@@ -39,7 +39,7 @@ export function ConnectionPicker({ onManage }: ConnectionPickerProps) {
   const connection = useConnectionSwitch();
   const current = connection.currentLabel();
 
-  const connect = (target: ConnectionEntry | "local") => {
+  const connect = (target: { id: string } | "local") => {
     // A failed switch keeps the list open with its error: closing it would
     // look like the window had moved while the page stayed.
     void connection.connect(target).then((switched) => {

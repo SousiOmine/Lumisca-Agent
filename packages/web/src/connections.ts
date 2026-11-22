@@ -1,6 +1,6 @@
 import { inDesktopShell, shellCall } from "./shell.ts";
 import { createResourceStore, useStore } from "./store.ts";
-import type { ConnectionEntry } from "./types.ts";
+import type { ConnectionEntry, ConnectionSummary } from "./types.ts";
 
 /**
  * The servers this window can display, as one shared store.
@@ -14,8 +14,9 @@ import type { ConnectionEntry } from "./types.ts";
  */
 
 interface ConnectionsValue {
-  /** The shell's rows, in the order the settings page wrote them. */
-  entries: ConnectionEntry[];
+  /** The shell's rows, in the order the settings page wrote them. A row has
+   * no token here; the editor asks for one row's secret separately. */
+  entries: ConnectionSummary[];
 }
 
 const store = createResourceStore<ConnectionsValue, string>({
@@ -23,7 +24,7 @@ const store = createResourceStore<ConnectionsValue, string>({
   load: async () => ({
     entries: inDesktopShell()
       ? (
-          await shellCall<{ connections: ConnectionEntry[] }>(
+          await shellCall<{ connections: ConnectionSummary[] }>(
             "connections/list",
           )
         ).connections
@@ -35,8 +36,8 @@ const store = createResourceStore<ConnectionsValue, string>({
 /** Two lists are the same when every row matches field by field: a read
  * that returns the stored list unchanged must not re-render. */
 function sameEntries(
-  a: readonly ConnectionEntry[],
-  b: readonly ConnectionEntry[],
+  a: readonly ConnectionSummary[],
+  b: readonly ConnectionSummary[],
 ): boolean {
   if (a === b) return true;
   if (a.length !== b.length) return false;
@@ -47,7 +48,7 @@ function sameEntries(
       entry.id === other.id &&
       entry.name === other.name &&
       entry.url === other.url &&
-      entry.token === other.token
+      entry.hasToken === other.hasToken
     );
   });
 }
@@ -61,12 +62,18 @@ export async function saveConnection(entry: ConnectionEntry): Promise<void> {
     url: entry.url.trim(),
     token: entry.token,
   });
+  const summary: ConnectionSummary = {
+    id: entry.id,
+    name: entry.name,
+    url: entry.url,
+    hasToken: entry.token !== "",
+  };
   const entries = store.get().entries;
   const next = entries.some((existing) => existing.id === entry.id)
     ? entries.map((existing) =>
-        existing.id === entry.id ? { ...entry } : existing,
+        existing.id === entry.id ? summary : existing,
       )
-    : [...entries, { ...entry }];
+    : [...entries, summary];
   store.commit({ entries: next });
 }
 
@@ -79,7 +86,7 @@ export async function deleteConnection(id: string): Promise<void> {
 
 /** The list for a component (re-renders when it changes). */
 export function useConnections(): {
-  entries: ConnectionEntry[];
+  entries: ConnectionSummary[];
   loaded: boolean;
   error: string | null;
   reload: () => void;
@@ -115,7 +122,9 @@ export function isSupportedUrl(url: string): boolean {
 /** What to call a row: the name the user typed, the host they recognise,
  * then the id. An entry with no name and no parsable URL still has to be
  * selectable as *something*. */
-export function connectionLabel(entry: ConnectionEntry): string {
+export function connectionLabel(
+  entry: Pick<ConnectionEntry, "id" | "name" | "url">,
+): string {
   const name = entry.name.trim();
   if (name !== "") return name;
   return hostLabel(entry.url) || entry.id;
@@ -138,7 +147,7 @@ export function hostLabel(url: string | null | undefined): string {
  * shell's `connectionId`, then the URL's host when the row was removed
  * while it was still displayed. */
 export function displayedLabel(
-  entries: readonly ConnectionEntry[],
+  entries: readonly Pick<ConnectionSummary, "id" | "name" | "url">[],
   connectionId: string | null,
   url: string | null,
 ): string {
