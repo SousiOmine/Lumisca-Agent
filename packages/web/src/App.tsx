@@ -1,53 +1,34 @@
-import type { AppMode } from "@lumisca/core/shared";
-import { errorMessage } from "@lumisca/core/shared";
-import { IconPlus } from "@tabler/icons-preact";
 import type { ReactElement } from "preact/compat";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "preact/hooks";
-import { useCodeModeEnabled } from "./codeMode.ts";
+import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
 import { AppDialogs } from "./components/AppDialogs.tsx";
-import { AppMenu } from "./components/AppMenu.tsx";
+import { AppTitleBar, type TitleBarStrip } from "./components/AppTitleBar.tsx";
 import { MacosTitleBarDrag } from "./components/MacosTitleBarDrag.tsx";
 import { ServerDownBanner } from "./components/ServerDownBanner.tsx";
 import { DraftPane, SessionPane } from "./components/SessionPane.tsx";
-import type { SettingsCategory } from "./components/SettingsModal.tsx";
 import { StellaModeScreen } from "./components/StellaModeScreen.tsx";
 import { SetupScreen } from "./components/setup/SetupScreen.tsx";
-import { StellaTitleBarHeader } from "./components/stella/StellaTitleBarHeader.tsx";
-import { TabBar, type TabSummary } from "./components/TabBar.tsx";
-import { TitleBar } from "./components/TitleBar.tsx";
+import type { TabSummary } from "./components/TabBar.tsx";
 import { UpdateBanner } from "./components/UpdateBanner.tsx";
 import { useAppHeight } from "./hooks/useAppHeight.ts";
-import { rememberMode, startMode, useAppMode } from "./hooks/useAppMode.ts";
+import { codeUrl, useAppNavigation } from "./hooks/useAppNavigation.ts";
 import { useBackspaceGuard } from "./hooks/useBackspaceGuard.ts";
 import { useBuildWatch } from "./hooks/useBuildWatch.ts";
 import { EMPTY_DRAFT, useDrafts } from "./hooks/useDrafts.ts";
-import { useLanguage } from "./hooks/useLanguage.ts";
 import { useCompactViewport } from "./hooks/useMediaQuery.ts";
-import { usePush } from "./hooks/usePush.ts";
-import { useRoute } from "./hooks/useRoute.ts";
 import { useServerHealth } from "./hooks/useServerHealth.ts";
 import {
   type SessionActions,
   useSessionActions,
 } from "./hooks/useSessionActions.ts";
 import { useSessionEvents } from "./hooks/useSessionEvents.ts";
+import { useSettingsDialog } from "./hooks/useSettingsDialog.ts";
 import { useSetup } from "./hooks/useSetup.ts";
 import { useStella } from "./hooks/useStella.ts";
 import { useTabClose } from "./hooks/useTabClose.ts";
 import { useTabs } from "./hooks/useTabs.ts";
-import { useTheme } from "./hooks/useTheme.ts";
-import { useUpdateStatus } from "./hooks/useUpdateStatus.ts";
 import { useWorkspaces } from "./hooks/useWorkspaces.ts";
 import { useT } from "./i18n.ts";
-import { isNotifyEnabled, setNotifyEnabled } from "./notify.ts";
-import { availableRoute, type UrlState } from "./route.ts";
-import { inDesktopShell, quit, shellPlatform } from "./shell.ts";
+import { inDesktopShell, shellPlatform } from "./shell.ts";
 import { closeTargets, DRAFT_TAB } from "./tabs.ts";
 import type { InitialData } from "./types.ts";
 import { isViewRunning } from "./types.ts";
@@ -57,24 +38,17 @@ export interface AppProps {
   initialData?: InitialData;
 }
 
-/** The address of a mode's top screen. */
-function modeTop(mode: AppMode): UrlState {
-  return {
-    route:
-      mode === "code"
-        ? { kind: "code", tabKey: null }
-        : { kind: "stella", agentId: null },
-    settings: null,
-  };
-}
-
-/** The address of one code-mode tab (`null` = the new-session screen). The
- * settings dialog is never open on a tab move: it covers the screen it was
- * opened from, and moving to another one closes it. */
-function codeUrl(tabKey: string | null): UrlState {
-  return { route: { kind: "code", tabKey }, settings: null };
-}
-
+/**
+ * The app: the composition point of the two modes' bodies, the window's
+ * chrome and the dialogs.
+ *
+ * What it does NOT own is as much of the design as what it does. Where the
+ * app is — the address, the mode it shows, the settings dialog's page on the
+ * screen underneath — is hooks/useAppNavigation; the settings dialog's values
+ * are hooks/useSettingsDialog; the strip is components/AppTitleBar. What is
+ * left here is the wiring of the session and conversation state into those
+ * three, which is the wiring that decides what a reader sees on each screen.
+ */
 export function App({ initialData }: AppProps): ReactElement {
   const t = useT();
   // Follow the visual viewport: the software keyboard on a phone shrinks it,
@@ -84,78 +58,25 @@ export function App({ initialData }: AppProps): ReactElement {
   // WebKit), reloading the app and discarding whatever is open — a settings
   // dialog with a half-typed server, for one.
   useBackspaceGuard();
-  // The address the app is showing. Every screen below is read from it, and
-  // every move writes it back: the URL is the one answer to "where am I", so
-  // a reload, a bookmark and the back button all agree. A bare `/` is the one
-  // address that has no screen of its own — see the resolution below.
-  const router = useRoute();
-  const url = router.state;
-  const { push: pushUrl, replace: replaceUrl } = router;
-  // Code mode is an experimental switch (settings → 実験的機能). While it is
-  // off, a `/code` address is not a screen: the route the app DRAWS is
-  // stella's top, so the session the address names is never opened on the
-  // way to the redirect below.
-  const codeMode = useCodeModeEnabled();
-  const route = availableRoute(url.route, codeMode);
-  const {
-    theme,
-    setTheme,
-    error: themeError,
-  } = useTheme(initialData?.theme ?? "dark");
-  // The language store was seeded from InitialData before the first render
-  // (client.tsx); this hook owns the settings-dialog state and the persist
-  // (a failed save rolls the UI back).
-  const { language, setLanguage, error: languageError } = useLanguage();
   // The installation's first-run setup. The page is seeded with the answer
   // (InitialData.setup, read by the server from the marker file beside the
   // settings file), so `/` can be sent to the wizard before anything else is
   // drawn; `complete` is the one action that ends it.
   const setup = useSetup(initialData?.setup);
-
-  // Which mode this page shows. The address names it, except at `/`: that is
-  // the address the desktop shell and an installed PWA open, and it resolves
-  // to the mode this client showed last, or to the main mode (Lumisca) when
-  // it has never chosen. No address shows a chooser: the mode is switched
-  // from the app menu in one press.
-  //
-  // Memoized on the route kind: the store is a `localStorage` read, and the
-  // App re-renders on every streamed event of a conversation.
-  const resolved = useMemo(() => startMode(codeMode), [route.kind, codeMode]);
-  // The setup screen shows no mode; it resolves `/` the same way the start
-  // address does, so the hooks below keep one shape (and the wizard's own
-  // "start" lands on the mode the reader would have opened).
-  const mode: AppMode =
-    route.kind === "start" || route.kind === "setup" ? resolved : route.kind;
-  // The resolution is a REPLACE: `/` is not a place to come back to, and a
-  // back from a mode's top must leave the app rather than bounce off the
-  // address it never meant to show. While the setup is unfinished, `/` is
-  // the wizard instead (the only address that is redirected there: a
-  // bookmark of a session or a mode still opens, see AGENTS.md).
-  useEffect(() => {
-    if (url.route.kind !== "start") return;
-    replaceUrl(
-      setup.pending
-        ? { route: { kind: "setup" }, settings: null }
-        : modeTop(mode),
-    );
-  }, [url.route.kind, mode, replaceUrl, setup.pending]);
-  // A finished setup has nowhere to stay: `/setup` (a bookmark, the address a
-  // reload kept) belongs to `/`, which resolves the mode the reader would
-  // have started in.
-  useEffect(() => {
-    if (url.route.kind !== "setup" || setup.pending) return;
-    replaceUrl(modeTop(mode));
-  }, [url.route.kind, mode, replaceUrl, setup.pending]);
-  // Code mode is off: an address that names it is replaced by stella's top.
-  // The settings dialog stays open — the reader may be looking at the very
-  // switch that turned it off — so only the screen underneath changes.
-  useEffect(() => {
-    if (url.route.kind !== "code" || codeMode) return;
-    replaceUrl({
-      route: { kind: "stella", agentId: null },
-      settings: url.settings,
-    });
-  }, [codeMode, url.route.kind, url.settings, replaceUrl]);
+  // The address, the mode it shows, and every move to another screen. The
+  // setup's answer decides where `/` goes, so it is read first.
+  const nav = useAppNavigation({ setupPending: setup.pending });
+  const { route, mode } = nav;
+  // The settings dialog's values (this device's theme and language, the
+  // installation's update and push state) and the props they make. The
+  // wizard edits the same two preferences, hence the theme and language out.
+  const settingsUi = useSettingsDialog({
+    settings: nav.settings,
+    initialTheme: initialData?.theme ?? "dark",
+    onOpenCategory: nav.openSettingsAt,
+    onBackToList: nav.backToSettingsList,
+    onClose: nav.closeSettings,
+  });
 
   // macOS overlays the native title bar on the page, so the page's chrome
   // has to start below it (see `.app.macos` in styles/chrome.css). The
@@ -170,50 +91,17 @@ export function App({ initialData }: AppProps): ReactElement {
   // The class says a title bar is part of the page: surfaces that can cover
   // the window keep its drag strip clear (see .stella-pane.fullscreen).
   const appClass = `${macos ? "app macos" : "app"}${desktop ? " desktop" : ""}`;
-  // What this server can do for stella mode, and how its machine is doing.
-  const appMode = useAppMode(mode);
-  const machineStatus = appMode.status;
-  /** Why Lumisca did not open: the server refused it, either for an address
-   * that names it or for the app menu's switch, which has no chooser left to
-   * keep the reason in. */
-  const [refusedStella, setRefusedStella] = useState<string | null>(null);
-  // A mode whose whole premise is a virtual machine has no honest degraded
-  // form: an address that names stella on a server that cannot run it lands
-  // on code mode's top, with the reason on screen. A switch made from the
-  // menu never gets there — `choose` refuses before the address changes —
-  // so the reason it leaves on screen is cleared here once the machine can
-  // run. With code mode switched off there is nowhere to fall back to: the
-  // reason stays on stella's screen, where the settings dialog is still one
-  // press away.
+  // Whether the server has moved on from the client bundle this page loaded.
+  // Fast enough to notice the successor answering once this page asked for a
+  // restart — that answer is the moment this page reloads.
+  const build = useBuildWatch(initialData?.buildId, {
+    restartPending: settingsUi.update.restartRequested,
+  });
   useEffect(() => {
-    if (machineStatus === null) return;
-    if (machineStatus.availability.available) {
-      // The machine came up (or another server answered): the sentence
-      // describes a state that no longer holds.
-      setRefusedStella(null);
-      return;
-    }
-    if (mode !== "stella") return;
-    setRefusedStella(machineStatus.availability.reason);
-    if (codeMode) {
-      // The settings dialog stays open if it was: the reader may be on the
-      // page that offers the switch this fallback depends on.
-      replaceUrl({
-        route: { kind: "code", tabKey: null },
-        settings: url.settings,
-      });
-    }
-  }, [codeMode, mode, machineStatus, replaceUrl, url.settings]);
-  // Showing a mode is what this client remembers for the next bare `/` —
-  // whether it was chosen here or arrived at through an address. The mode is
-  // remembered only once the server has accepted it: a refused stella would
-  // otherwise be the answer every launch, and the reader would meet the same
-  // refusal instead of starting where they can work.
-  useEffect(() => {
-    if (mode === "stella" && machineStatus === null) return;
-    if (mode === "stella" && !machineStatus?.availability.available) return;
-    rememberMode(mode);
-  }, [mode, machineStatus]);
+    // The restart this page asked for has finished: the new server serves a
+    // new client, and this page would keep describing the previous release.
+    if (build.stale && settingsUi.update.restartRequested) location.reload();
+  }, [build.stale, settingsUi.update.restartRequested]);
   const {
     workspaces,
     loadError,
@@ -242,10 +130,7 @@ export function App({ initialData }: AppProps): ReactElement {
   // --- code mode: the tab the address names --------------------------------
   /** The session the address names, or null for the new-session screen. */
   const activeTab: string | null = route.kind === "code" ? route.tabKey : null;
-  const goToTab = useCallback(
-    (key: string | null) => pushUrl(codeUrl(key)),
-    [pushUrl],
-  );
+  const { goToTab } = nav;
   // A session the address names but this page cannot open (it was deleted,
   // or the peer that owns it stopped answering) is not a screen: the reader
   // lands where they came from — the new-session screen — rather than on an
@@ -256,7 +141,7 @@ export function App({ initialData }: AppProps): ReactElement {
     resyncPanels,
     forgetRevisions,
     activeTab,
-    useCallback(() => replaceUrl(codeUrl(null)), [replaceUrl]),
+    useCallback(() => nav.replace(codeUrl(null)), [nav.replace]),
   );
   const { open: openSessions, strip: tabs, adopt } = tabsControl;
   // Closing a tab closes its session, which stops the run (and the
@@ -276,11 +161,11 @@ export function App({ initialData }: AppProps): ReactElement {
         const remaining = tabs.filter(
           (id) => id !== DRAFT_TAB && id !== shown && !ids.includes(id),
         );
-        replaceUrl(codeUrl(remaining.at(-1) ?? null));
+        nav.replace(codeUrl(remaining.at(-1) ?? null));
       }
       tabsControl.closeTabs(ids, keepRunning);
     },
-    [activeTab, tabs, tabsControl, replaceUrl],
+    [activeTab, tabs, tabsControl, nav.replace],
   );
   const tabClose = useTabClose({ views, closeTabs: closeAndLeave });
   const pendingClose = tabClose.pending;
@@ -289,39 +174,7 @@ export function App({ initialData }: AppProps): ReactElement {
   // but the draft still lives here — closing a tab discards what was typed in
   // it, and the App is what owns "which tabs are open" (see useDrafts).
   const { drafts, updateDraft, clearDraft } = useDrafts(openSessions);
-  // Background agent-event notifications (desktop only): the event hook
-  // reads the persisted value directly, so this state only drives the
-  // settings toggle.
-  const [notifyEnabled, setNotifyEnabledState] = useState(isNotifyEnabled);
-  // The settings dialog is part of the address (`…/settings/<category>`), so
-  // "what is open" and "what closing returns to" are both read from the URL.
-  // PWA notifications of this device (Web Push) are read only while it is
-  // open: the page has no other use for the state, and asking the browser
-  // for it on every start would be a permission-adjacent read nobody asked
-  // for.
-  const settingsRoute = url.settings;
-  const settingsOpen = settingsRoute !== null;
-  const push = usePush(settingsOpen);
   const [showRecent, setShowRecent] = useState(false);
-  const handleNotifyEnabledChange = (enabled: boolean) => {
-    setNotifyEnabled(enabled);
-    setNotifyEnabledState(enabled);
-  };
-  // Auto-update state (the desktop shell's updater, or the standalone
-  // server's when this page runs outside the shell); polled here and shared
-  // with the settings panel and the update banner below.
-  const update = useUpdateStatus(true);
-  // Whether the server has moved on from the client bundle this page loaded.
-  // Fast enough to notice the successor answering once this page asked for a
-  // restart — that answer is the moment this page reloads.
-  const build = useBuildWatch(initialData?.buildId, {
-    restartPending: update.restartRequested,
-  });
-  useEffect(() => {
-    // The restart this page asked for has finished: the new server serves a
-    // new client, and this page would keep describing the previous release.
-    if (build.stale && update.restartRequested) location.reload();
-  }, [build.stale, update.restartRequested]);
   /** A session was created and its first prompt was sent: the tab appears and
    * the address moves to it. Stable, so every action built on it is stable
    * too (the panes are memoized, see SessionPane). */
@@ -443,129 +296,6 @@ export function App({ initialData }: AppProps): ReactElement {
   );
   const openRecent = useCallback(() => setShowRecent(true), []);
   const closeRecent = useCallback(() => setShowRecent(false), []);
-  // Settings are part of the address (see route.ts), so opening one is a
-  // history entry: closing it returns to the screen it covered — the
-  // session, the conversation, the draft — without the app remembering it.
-  // The app menu's way in names no category: the dialog then picks its first
-  // screen for the layout it gets.
-  //
-  // The current address is read from a ref, so the openers stay stable: the
-  // tab bar and the app menu compare their props by value, and an opener
-  // rebuilt per navigation would make the memoized bar re-render. The ref is
-  // written in an effect, not during render (concurrent rendering).
-  const urlRef = useRef(url);
-  useEffect(() => {
-    urlRef.current = url;
-  }, [url]);
-  const openSettingsAt = useCallback(
-    (category: SettingsCategory | null) => {
-      pushUrl({ ...urlRef.current, settings: { category } });
-    },
-    [pushUrl],
-  );
-  // Every opener is a stable callback with a fixed argument: the tab bar and
-  // the app menu compare their props by value.
-  const openSettings = useCallback(
-    () => openSettingsAt(null),
-    [openSettingsAt],
-  );
-  const openProviders = useCallback(
-    () => openSettingsAt("providers"),
-    [openSettingsAt],
-  );
-  const openServers = useCallback(
-    () => openSettingsAt("connections"),
-    [openSettingsAt],
-  );
-  /** Close the dialog. Modal calls this once, after its exit has run, so the
-   * move is the last thing the reader sees. */
-  const closeSettings = useCallback(() => {
-    router.dismiss({ ...urlRef.current, settings: null });
-  }, [router]);
-  /** Back from a category page to the category list (the dialog's own back
-   * button on a narrow window). A pop for the same reason as stella's: the
-   * list is the screen the reader came from, so the button and the browser's
-   * back are one move — and the transition draws the direction from it. The
-   * dialog itself stays open: the address keeps `settings`, only its category
-   * goes. */
-  const backToSettingsList = useCallback(() => {
-    router.dismiss({ ...urlRef.current, settings: { category: null } });
-  }, [router]);
-  /** The settings dialog's props, or null while it is closed. Built once: the
-   * dialog covers whichever screen it was opened from, so the setup screen
-   * (whose title bar menu opens it) passes the same object as the app does. */
-  const settingsDialog =
-    settingsOpen && settingsRoute !== null
-      ? {
-          theme,
-          themeError,
-          onThemeChange: setTheme,
-          language,
-          languageError,
-          onLanguageChange: setLanguage,
-          update,
-          notifyEnabled,
-          onNotifyEnabledChange: handleNotifyEnabledChange,
-          push,
-          category: settingsRoute.category,
-          onOpenCategory: openSettingsAt,
-          onBackToList: backToSettingsList,
-          onClose: closeSettings,
-        }
-      : null;
-  // Bumped when the settings dialog closes: the draft re-reads the default
-  // model there, since registering (or removing) a provider changes what a
-  // new session would run on. A dialog without a provider change only costs
-  // one cheap request.
-  const [settingsVersion, setSettingsVersion] = useState(0);
-  const settingsWasOpen = useRef(settingsOpen);
-  useEffect(() => {
-    if (settingsWasOpen.current && !settingsOpen) {
-      setSettingsVersion((version) => version + 1);
-    }
-    settingsWasOpen.current = settingsOpen;
-  }, [settingsOpen]);
-  /** Switch modes in one press from the app menu: the server's verdict first
-   * (stella may be refused), then the address.
-   *
-   * It REPLACES rather than pushes: the menu is not a place to come back to,
-   * and `/` resolves to the very mode just chosen, so a back would bounce
-   * through the old address instead of leaving it.
-   *
-   * A refusal leaves the reader where they are and puts the reason on the
-   * screen they are on: the menu names the destination, so there is no
-   * chooser left open to hold that sentence.
-   *
-   * Depends on `choose` alone rather than the whole hook result, which is a
-   * fresh object each render: the identity of this callback has to hold or
-   * the memoized tab bar would re-render on every streamed event. */
-  const switchMode = useCallback(
-    async (next: AppMode) => {
-      if (next === mode) return;
-      try {
-        await appMode.choose(next);
-        setRefusedStella(null);
-        replaceUrl(modeTop(next));
-      } catch (failure) {
-        setRefusedStella(errorMessage(failure));
-      }
-    },
-    [appMode.choose, mode, replaceUrl],
-  );
-  // Ctrl+T (the shortcut the app menu advertises): open the draft tab. Only
-  // code mode has tabs; stella's conversation is the whole surface. The
-  // handler is on the window because the shortcut must work from the
-  // composer as well as from a transcript.
-  useEffect(() => {
-    if (mode !== "code") return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.key !== "t") return;
-      event.preventDefault();
-      goToTab(null);
-    };
-    globalThis.addEventListener("keydown", onKeyDown);
-    return () => globalThis.removeEventListener("keydown", onKeyDown);
-  }, [mode, goToTab]);
 
   // --- stella mode --------------------------------------------------------
   // The hook runs unconditionally (hooks cannot be conditional), but it only
@@ -576,23 +306,6 @@ export function App({ initialData }: AppProps): ReactElement {
   /** The conversation the address names, or null for the agent list. */
   const stellaAgentId = route.kind === "stella" ? route.agentId : null;
   const stella = useStella(stellaActive, stellaAgentId);
-  // Back to the list. A pop, not a push: the list is the screen the reader
-  // came from, so the back button and the browser's back are the same move —
-  // and the same one the transition draws (screen-transition.ts). A list
-  // reached any other way (a link into a conversation) has nothing behind it,
-  // and dismiss then replaces the entry instead.
-  const goToStellaList = useCallback(() => {
-    router.dismiss({
-      route: { kind: "stella", agentId: null },
-      settings: null,
-    });
-  }, [router]);
-  const goToStellaAgent = useCallback(
-    (id: string) => {
-      pushUrl({ route: { kind: "stella", agentId: id }, settings: null });
-    },
-    [pushUrl],
-  );
   // An address naming a conversation that does not exist (deleted here or in
   // another window) is the list: an empty conversation screen would say the
   // agent is there and silent. The list is awaited first — before it lands,
@@ -604,13 +317,13 @@ export function App({ initialData }: AppProps): ReactElement {
       return;
     }
     if (stella.agents.some((agent) => agent.id === stellaAgentId)) return;
-    replaceUrl({ route: { kind: "stella", agentId: null }, settings: null });
+    nav.replace({ route: { kind: "stella", agentId: null }, settings: null });
   }, [
     stellaActive,
     stellaAgentId,
     stella.agentsLoading,
     stella.agents,
-    replaceUrl,
+    nav.replace,
   ]);
   // stella's two surfaces are two columns on a desktop and two screens at the
   // compact width and below: a tablet held upright is 800-834px wide, where
@@ -621,68 +334,110 @@ export function App({ initialData }: AppProps): ReactElement {
   // column) and, in hooks/useRoute, whether the move is a page transition.
   const stellaSingleScreen = useCompactViewport();
   const stellaAgent = stella.agents.find((a) => a.id === stellaAgentId);
-  // The screen pane's switch and the edit dialog are opened from the title
-  // bar, which this App draws (see StellaTitleBarHeader): their state is
-  // here, above both the bar and the conversation it names.
+  // The screen pane's switch and the agent dialogs are opened from the title
+  // bar, which this App draws (see AppTitleBar): their state is here, above
+  // both the bar and the conversation it names. The create dialog is opened
+  // from two places — the sidebar's button at wide widths and the bar's at
+  // phone widths, where the list and the conversation are one screen each —
+  // so it cannot belong to either.
   const [stellaScreenOpen, setStellaScreenOpen] = useState(false);
   const [editingStellaAgent, setEditingStellaAgent] = useState(false);
-  /** The create dialog. It is the App's because two places open it: the
-   * sidebar's button at wide widths, and the title bar's at phone widths,
-   * where the list and the conversation are one screen each. */
   const [creatingStellaAgent, setCreatingStellaAgent] = useState(false);
   const stellaHandedOver =
     stella.conversation?.handover !== null &&
     stella.conversation?.handover !== undefined;
+
+  /** The app-level actions both menus offer: the tab bar's in code mode, the
+   * strip's own in stella mode, and the desktop title bar's in both. */
+  const titleBarActions = {
+    onNew: newTab,
+    onOpenRecent: openRecent,
+    onOpenSettings: nav.openSettings,
+    onSwitchMode: nav.switchMode,
+    onManageConnections: nav.openServers,
+  };
+  /** What fills the strip beside the app menu: the tab bar, the conversation's
+   * header, or nothing at all (the wizard has neither to name). */
+  const titleBarStrip: TitleBarStrip = stellaActive
+    ? {
+        kind: "stella",
+        agent: stellaAgent ?? null,
+        agentId: stellaAgentId,
+        singleScreen: stellaSingleScreen,
+        onBack: nav.goToStellaList,
+        onEditAgent: () => setEditingStellaAgent(true),
+        // A disabled agent has no screen to show: its desktop was given back
+        // when it was switched off, and asking for it would start the one
+        // this state releases.
+        onToggleScreen:
+          !stellaHandedOver &&
+          stellaAgentId !== null &&
+          stellaAgent !== undefined &&
+          stellaAgent.disabledAt === null
+            ? () => setStellaScreenOpen((open) => !open)
+            : undefined,
+        screenOpen: stellaScreenOpen,
+        onCreateAgent: () => setCreatingStellaAgent(true),
+      }
+    : {
+        kind: "tabs",
+        tabs: tabSummaries,
+        onSelect: selectTab,
+        onClose: closeTab,
+        onCloseToRight: closeTabsToRight,
+        onCloseToLeft: closeTabsToLeft,
+        onCloseOthers: closeOtherTabs,
+      };
   /** The setup screen's dialogs: the settings dialog only. Its title bar menu
    * opens that one, and nothing else has anything to name while the
    * installation has no conversation yet (a session list, a close prompt and
    * the agent editors are the app's, not the wizard's). */
   const setupDialogs = {
-    settings: settingsDialog,
+    settings: settingsUi.settingsDialog,
     recent: null,
     close: null,
     agentCreate: null,
     agentEdit: null,
   };
+
   // The first-run setup, as a screen of its own (`/setup`): while it shows,
   // there is nothing behind it to draw — the visitor arriving here has no
   // conversations yet — and a layer over a session would claim that session
   // is somewhere to be. The address says which screen this is, so a reload
-  // keeps it (until the setup is finished, when the effect above sends the
+  // keeps it (until the setup is finished, when useAppNavigation sends the
   // reader on).
-  if (url.route.kind === "setup") {
+  if (route.kind === "setup") {
     return (
       <div className={appClass}>
         {macos && <MacosTitleBarDrag />}
         {/* The same chrome as the app: the window is undecorated, so this
          * screen has to be movable, closable and switchable too. The strip
          * has no tab bar to hold. */}
-        <TitleBar
-          onNew={newTab}
-          onOpenRecent={openRecent}
-          onOpenSettings={openSettings}
-          onQuit={quit}
-          onSwitchMode={switchMode}
-          onManageConnections={openServers}
+        <AppTitleBar
           mode={mode}
-        >
-          <div className="titlebar-blank" />
-        </TitleBar>
+          desktop={desktop}
+          actions={titleBarActions}
+          strip={{ kind: "blank" }}
+        />
         <div className="app-body">
           {setup.pending && (
             <SetupScreen
               desktop={desktop}
-              theme={theme}
-              themeError={themeError}
-              onThemeChange={setTheme}
-              language={language}
-              languageError={languageError}
-              onLanguageChange={setLanguage}
+              theme={settingsUi.theme}
+              themeError={settingsUi.themeError}
+              onThemeChange={settingsUi.setTheme}
+              language={settingsUi.language}
+              languageError={settingsUi.languageError}
+              onLanguageChange={settingsUi.setLanguage}
               busy={setup.busy}
               error={setup.error}
               onComplete={setup.complete}
             />
           )}
+          {/* The settings dialog only: its title bar menu opens that one, and
+           * nothing else has anything to name while the installation has no
+           * conversation yet (a session list, a close prompt and the agent
+           * editors are the app's, not the wizard's). */}
           <AppDialogs {...setupDialogs} />
         </div>
       </div>
@@ -694,97 +449,15 @@ export function App({ initialData }: AppProps): ReactElement {
       {/* The desktop window is undecorated; the title bar strip holds the
        * tab bar, the app menu and the window controls (in a plain browser
        * the tab bar renders on its own). */}
-      <TitleBar
-        onNew={newTab}
-        onOpenRecent={openRecent}
-        onOpenSettings={openSettings}
-        onQuit={quit}
-        onSwitchMode={switchMode}
-        onManageConnections={openServers}
+      <AppTitleBar
         mode={mode}
-      >
-        {stellaActive ? (
-          // stella mode has no tab strip: one conversation is the whole
-          // surface, so the strip names that conversation instead of listing
-          // sessions. See StellaTitleBarHeader: the agent's face and name are
-          // here because they were a second strip inside the sheet, saying
-          // the same thing one line lower.
-          <div className="stella-titlebar-strip">
-            <StellaTitleBarHeader
-              agent={stellaAgent ?? null}
-              onBack={
-                stellaSingleScreen && stellaAgentId !== null
-                  ? goToStellaList
-                  : undefined
-              }
-              onEditAgent={() => setEditingStellaAgent(true)}
-              // A disabled agent has no screen to show: its desktop was
-              // given back when it was switched off, and asking for it would
-              // start the one this state releases.
-              onToggleScreen={
-                !stellaHandedOver &&
-                stellaAgentId !== null &&
-                stellaAgent !== undefined &&
-                stellaAgent.disabledAt === null
-                  ? () => setStellaScreenOpen((open) => !open)
-                  : undefined
-              }
-              screenOpen={stellaScreenOpen}
-            />
-            {/* The list's create button, in the one row above the list at
-             * phone widths: the sidebar's own copy sits under this row and
-             * left a gap of its own height between the menu and the list.
-             * Only the list screen has it — a conversation has nothing to
-             * create from. */}
-            {stellaSingleScreen && stellaAgentId === null && (
-              <button
-                type="button"
-                className="icon-btn stella-new-agent"
-                onClick={() => setCreatingStellaAgent(true)}
-                title={t("chat.stella.agents.new")}
-                aria-label={t("chat.stella.agents.new")}
-              >
-                <IconPlus size={15} />
-              </button>
-            )}
-            {/* On desktop the app menu lives in the title bar's controls; in
-             * a plain browser this strip is the only chrome stella mode
-             * has, so the menu (settings, mode switch, session history)
-             * has to stay reachable from here. */}
-            {!desktop && (
-              <div className="tabbar-actions">
-                <AppMenu
-                  onNew={newTab}
-                  onOpenRecent={openRecent}
-                  onOpenSettings={openSettings}
-                  onQuit={quit}
-                  onSwitchMode={switchMode}
-                  isDesktop={false}
-                  mode={mode}
-                />
-              </div>
-            )}
-          </div>
-        ) : (
-          <TabBar
-            tabs={tabSummaries}
-            onSelect={selectTab}
-            onClose={closeTab}
-            onCloseToRight={closeTabsToRight}
-            onCloseToLeft={closeTabsToLeft}
-            onCloseOthers={closeOtherTabs}
-            onNew={newTab}
-            onOpenRecent={openRecent}
-            onOpenSettings={openSettings}
-            isDesktop={desktop}
-            onQuit={quit}
-            onSwitchMode={switchMode}
-          />
-        )}
-      </TitleBar>
+        desktop={desktop}
+        actions={titleBarActions}
+        strip={titleBarStrip}
+      />
       {/* Everything below the title bar. */}
       <div className="app-body">
-        <UpdateBanner update={update} stale={build.stale} />
+        <UpdateBanner update={settingsUi.update} stale={build.stale} />
         <ServerDownBanner health={serverHealth} />
         {loadError && (
           <div className="msg">
@@ -793,16 +466,16 @@ export function App({ initialData }: AppProps): ReactElement {
             </div>
           </div>
         )}
-        {refusedStella !== null && (
+        {nav.refusedStella !== null && (
           <div className="msg">
             <div className="msg-body">
               <p className="error-text" role="alert">
-                {t("chat.stella.refused", { reason: refusedStella })}
+                {t("chat.stella.refused", { reason: nav.refusedStella })}
               </p>
               <button
                 type="button"
                 className="btn"
-                onClick={() => setRefusedStella(null)}
+                onClick={nav.dismissRefusedStella}
               >
                 {t("common.close")}
               </button>
@@ -817,7 +490,7 @@ export function App({ initialData }: AppProps): ReactElement {
           <StellaModeScreen
             stella={stella}
             agent={stellaAgent ?? null}
-            status={machineStatus}
+            status={nav.machineStatus}
             input={draft.input}
             onInputChange={(input) => updateDraft(draftKey, { input })}
             images={draft.images}
@@ -826,8 +499,8 @@ export function App({ initialData }: AppProps): ReactElement {
             onFilesChange={(files) => updateDraft(draftKey, { files })}
             onAgentChanged={stella.applyAgent}
             onNewAgent={() => setCreatingStellaAgent(true)}
-            onSelectAgent={goToStellaAgent}
-            onOpenSettings={openProviders}
+            onSelectAgent={nav.goToStellaAgent}
+            onOpenSettings={nav.openProviders}
             screenOpen={stellaScreenOpen}
             onScreenOpenChange={setStellaScreenOpen}
           />
@@ -853,7 +526,7 @@ export function App({ initialData }: AppProps): ReactElement {
                   actions={sessionActions}
                   loadOlder={loadOlder}
                   updateDraft={updateDraft}
-                  onOpenSettings={openProviders}
+                  onOpenSettings={nav.openProviders}
                 />
               );
             })}
@@ -863,14 +536,14 @@ export function App({ initialData }: AppProps): ReactElement {
                 draft={drafts.get(DRAFT_TAB) ?? EMPTY_DRAFT}
                 workspaces={workspaces}
                 workspacesLoaded={workspacesLoaded}
-                settingsVersion={settingsVersion}
+                settingsVersion={settingsUi.settingsVersion}
                 updateDraft={updateDraft}
                 clearDraft={clearDraft}
                 startSession={startSession}
                 onWorkspaceChanged={handleWorkspaceChanged}
                 onDeleteWorkspace={deleteWorkspace}
                 onReopenSession={goToTab}
-                onOpenSettings={openProviders}
+                onOpenSettings={nav.openProviders}
               />
             )}
             {activeTab !== null && !activePane && (
@@ -888,7 +561,7 @@ export function App({ initialData }: AppProps): ReactElement {
         )}
       </div>
       <AppDialogs
-        settings={settingsDialog}
+        settings={settingsUi.settingsDialog}
         recent={
           showRecent
             ? {
@@ -922,7 +595,7 @@ export function App({ initialData }: AppProps): ReactElement {
                   // (see AgentCreateDialog).
                   stella.applyAgent(agent);
                   setCreatingStellaAgent(false);
-                  goToStellaAgent(agent.id);
+                  nav.goToStellaAgent(agent.id);
                 },
                 onClose: () => setCreatingStellaAgent(false),
               }

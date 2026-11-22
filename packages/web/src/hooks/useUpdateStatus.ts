@@ -83,8 +83,8 @@ export interface UpdateControls {
 /** Auto-update state. Prefers the desktop shell bridge (that updater owns
  * the app the user launched) and falls back to the server's own updater
  * (`/api/update/*`), which is what a packaged server opened in a browser
- * has. Single instance in App.tsx, passed down to the settings panel and the
- * update banner so neither is polled twice. */
+ * has. Single instance in hooks/useSettingsDialog, passed down to the
+ * settings panel and the update banner so neither is polled twice. */
 export function useUpdateStatus(active: boolean): UpdateControls {
   const [status, setStatus] = useState<UpdateStatus | null>(null);
   const [source, setSource] = useState<UpdateSource | null>(null);
