@@ -960,7 +960,7 @@ URLはシェルを介さず、プログラムの引数として1つだけ渡し�
   `createCoreServices` がリポジトリ、ストア、イベントハブからサービスを葉の順に組み立てます。
   `LumiscaCore` は結果を保持して委譲するだけです。
   セッションは `services/sessions.ts` の `SessionService` が入口です。
-  実装はライフサイクル（`session-lifecycle.ts`）、状態（`session-state.ts`）、履歴（`session-transcript.ts`）、ファイル（`session-assets.ts`）、スキル（`session-skills.ts`）、実行（`session-runs.ts`）に分かれます。
+  実装はライフサイクル（`session-lifecycle.ts`）、履歴（`session-transcript.ts`）、ファイル（`session-assets.ts`）、スキル（`session-skills.ts`）、実行（`session-runs.ts`）に分かれます。実行中の状態の読み取りは`SessionService`が`pool`から直接返します。
   ファサードに状態を戻すと、初期化順の循環が型キャストで隠れます。
 
 - Scripting tool call（`execute`）: 設定 → 実験的機能のトグルが `1` のとき、モデルへ渡すツールは `execute` 1 つだけになります。

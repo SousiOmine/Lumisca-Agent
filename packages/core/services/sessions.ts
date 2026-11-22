@@ -26,7 +26,6 @@ import {
 } from "./session-lifecycle.ts";
 import { SessionRuns } from "./session-runs.ts";
 import { SessionSkills } from "./session-skills.ts";
-import { SessionState } from "./session-state.ts";
 import { SessionTranscript } from "./session-transcript.ts";
 
 export type { SessionServiceDeps } from "./session-deps.ts";
@@ -44,7 +43,10 @@ export type { CreateSessionInput, DefaultModel } from "./session-lifecycle.ts";
  */
 export class SessionService {
   private readonly lifecycle: SessionLifecycle;
-  private readonly state: SessionState;
+  /** The live state reads: what a session is doing right now (see the
+   * "live state" section). The pool owns it; the persisted rows cover only
+   * what a reopen can restore. */
+  private readonly pool: SessionServiceDeps["pool"];
   private readonly transcript: SessionTranscript;
   private readonly assets: SessionAssets;
   private readonly skills: SessionSkills;
@@ -52,7 +54,7 @@ export class SessionService {
 
   constructor(deps: SessionServiceDeps) {
     this.lifecycle = new SessionLifecycle(deps);
-    this.state = new SessionState(deps);
+    this.pool = deps.pool;
     this.transcript = new SessionTranscript(deps);
     this.assets = new SessionAssets(deps);
     this.skills = new SessionSkills(deps);
@@ -120,27 +122,27 @@ export class SessionService {
   // --- live state ---------------------------------------------------------
 
   getAgent(id: string): SessionAgent | undefined {
-    return this.state.getAgent(id);
+    return this.pool.get(id);
   }
 
   getTodo(id: string): TodoPhase[] {
-    return this.state.getTodo(id);
+    return this.pool.getTodo(id);
   }
 
   getTasks(id: string): TaskInfo[] {
-    return this.state.getTasks(id);
+    return this.pool.getTasks(id);
   }
 
   getBackground(id: string): BackgroundCommandInfo[] {
-    return this.state.getBackground(id);
+    return this.pool.getBackground(id);
   }
 
   getPendingQuestions(id: string): PendingQuestion[] {
-    return this.state.getPendingQuestions(id);
+    return this.pool.getPendingQuestions(id);
   }
 
   getSessionLastError(id: string): string | undefined {
-    return this.state.getSessionLastError(id);
+    return this.pool.lastError(id);
   }
 
   // --- history ------------------------------------------------------------
