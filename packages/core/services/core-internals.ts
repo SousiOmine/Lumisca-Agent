@@ -6,11 +6,7 @@ import type { Workspace } from "../domain/workspace.ts";
 import { CoreError } from "../errors.ts";
 import type { ModelManager } from "../models/mod.ts";
 import type { SessionRepo } from "../session/repo.ts";
-import {
-  DEFAULT_MODEL_KEY,
-  parseModelPreference,
-  type ThinkingLevel,
-} from "../shared/mod.ts";
+import { DEFAULT_MODEL_KEY, parseModelPreference } from "../shared/mod.ts";
 import {
   buildChatSystemPrompt,
   buildStellaSystemPrompt,
