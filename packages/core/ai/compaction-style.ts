@@ -11,6 +11,7 @@
  * instruction and the checkpoint's preamble differ.
  */
 
+import type { AgentMessage } from "../domain/message.ts";
 import type { CompactionBudgets } from "./compaction-policy.ts";
 import {
   CHECKPOINT_PREAMBLE,
@@ -19,7 +20,6 @@ import {
   UPDATE_SUMMARIZATION_PROMPT,
 } from "./compaction-prompts.ts";
 import { serializeHead } from "./compaction-span.ts";
-import type { AgentMessage } from "./message.ts";
 
 export interface CompactionStyle {
   /** System prompt of the summarization call. */

@@ -1,6 +1,6 @@
 import { Agent } from "../ai/agent.ts";
 import type { AgentEvent, RequestShape } from "../ai/agent-types.ts";
-import type { Api, Model } from "../ai/catalog.ts";
+import type { Model } from "../ai/catalog.ts";
 import type { CompactionStyle } from "../ai/compaction-style.ts";
 import {
   type CompactionResult,
@@ -8,6 +8,10 @@ import {
 } from "../ai/context-compaction.ts";
 import type { ContextProvider } from "../ai/context-providers.ts";
 import { toLlmMessages } from "../ai/llm-view.ts";
+import type { NotificationPayload } from "../ai/notification.ts";
+import { notificationMessage } from "../ai/notification.ts";
+import type { StreamFn } from "../ai/transport.ts";
+import type { ClientEvent } from "../domain/event.ts";
 import type {
   AgentMessage,
   AssistantMessage,
@@ -15,13 +19,10 @@ import type {
   ImageContent,
   Message,
   TextContent,
-} from "../ai/message.ts";
-import type { NotificationPayload } from "../ai/notification.ts";
-import { notificationMessage } from "../ai/notification.ts";
-import type { StreamFn } from "../ai/transport.ts";
-import type { ClientEvent } from "../domain/event.ts";
+} from "../domain/message.ts";
 import type { ModePrompt } from "../domain/mode-message.ts";
 import { buildModeMessage } from "../domain/mode-message.ts";
+import type { Api } from "../domain/model.ts";
 import { errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";

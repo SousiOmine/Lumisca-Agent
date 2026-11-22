@@ -1,11 +1,10 @@
-import type { AgentMessage, CheckpointMessage } from "../ai/message.ts";
-
 import type {
   AskQuestion,
   SubagentStatus,
   SubagentType,
   TodoPhase,
 } from "../shared/mod.ts";
+import type { AgentMessage, CheckpointMessage } from "./message.ts";
 import type { SessionInfo } from "./session.ts";
 import type { FolderShare } from "./share.ts";
 

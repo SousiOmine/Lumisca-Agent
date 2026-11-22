@@ -9,7 +9,7 @@
 
 import type { PromptFileRef } from "../shared/attachments.ts";
 
-import type { Api } from "./catalog.ts";
+import type { Api } from "./model.ts";
 
 export interface TextContent {
   type: "text";

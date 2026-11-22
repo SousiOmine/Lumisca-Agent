@@ -19,11 +19,12 @@
 import { test } from "bun:test";
 import { assert } from "@std/assert";
 import { toLlmMessages } from "../ai/llm-view.ts";
+import type { AssistantMessage } from "../domain/message.ts";
+import type { Api } from "../domain/model.ts";
 import { Agent } from "./agent.ts";
 import type { AgentTool } from "./agent-types.ts";
-import type { Api, Model } from "./catalog.ts";
+import type { Model } from "./catalog.ts";
 import { languageModelFor } from "./lang-model.ts";
-import type { AssistantMessage } from "./message.ts";
 import { createStreamFn } from "./stream.ts";
 import type { StreamFn } from "./transport.ts";
 

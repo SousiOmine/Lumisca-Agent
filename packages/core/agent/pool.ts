@@ -1,4 +1,4 @@
-import type { AgentMessage } from "../ai/message.ts";
+import type { AgentMessage } from "../domain/message.ts";
 
 import type { SessionInfo } from "../domain/session.ts";
 import type { Workspace } from "../domain/workspace.ts";

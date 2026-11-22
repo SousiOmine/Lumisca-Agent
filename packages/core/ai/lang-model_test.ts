@@ -1,7 +1,8 @@
 import { test } from "bun:test";
 import { assertEquals, assertThrows } from "@std/assert";
+import type { Api } from "../domain/model.ts";
 import { opencodeGoProvider } from "../models/dev-catalog.ts";
-import type { Api, Model } from "./catalog.ts";
+import type { Model } from "./catalog.ts";
 import {
   languageModelFor,
   sessionHeadersFor,

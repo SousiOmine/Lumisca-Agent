@@ -1,8 +1,6 @@
-import type { Api, Model } from "../ai/catalog.ts";
+import type { Model } from "../ai/catalog.ts";
 import { WORK_COMPACTION_STYLE } from "../ai/compaction-style.ts";
 import type { ContextProvider } from "../ai/context-providers.ts";
-import type { AgentMessage } from "../ai/message.ts";
-
 import {
   BROWSER_TOOL_NAMES,
   createBrowserToolsFrom,
@@ -11,6 +9,8 @@ import { createHostCodeRuntime } from "../code-execution/host.ts";
 import { createVmCodeRuntime } from "../code-execution/vm.ts";
 import { COMPUTER_TOOL_NAMES, createComputerTools } from "../computer/tools.ts";
 import type { ClientEvent } from "../domain/event.ts";
+import type { AgentMessage } from "../domain/message.ts";
+import type { Api } from "../domain/model.ts";
 import type { SessionInfo } from "../domain/session.ts";
 import type { Workspace } from "../domain/workspace.ts";
 import { CoreError } from "../errors.ts";

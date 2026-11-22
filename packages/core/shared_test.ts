@@ -1,7 +1,7 @@
 import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "./ai/faux.ts";
-import type { AgentMessage, ImageContent } from "./ai/message.ts";
+import type { AgentMessage, ImageContent } from "./domain/message.ts";
 
 import {
   compactionUsageRatio,

@@ -15,7 +15,7 @@
  * it adds is the `send_chat` result, which in stella IS the reply — an agent
  * that answered through the tool said nothing in its assistant text.
  */
-import type { AgentMessage } from "../ai/message.ts";
+import type { AgentMessage } from "../domain/message.ts";
 
 import { stellaEntriesOf } from "./stella-stream.ts";
 

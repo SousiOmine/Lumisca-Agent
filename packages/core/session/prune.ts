@@ -1,12 +1,12 @@
 import { stellaEntriesOf } from "../agent/stella-stream.ts";
+import { isPruned } from "../ai/pruned.ts";
 import type {
   AgentMessage,
   AssistantMessage,
   ContextMessage,
   NotificationMessage,
   ToolResultMessage,
-} from "../ai/message.ts";
-import { isPruned } from "../ai/pruned.ts";
+} from "../domain/message.ts";
 
 /**
  * Dropping what a condensed conversation no longer needs — when the user

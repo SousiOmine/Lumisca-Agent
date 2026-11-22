@@ -9,14 +9,6 @@
  * Vercel-backed (ai/stream.ts), tests inject a faux (ai/faux.ts).
  */
 
-import { canonicalJson, fnv1a } from "../shared/digest.ts";
-import type {
-  AgentEvent,
-  AgentState,
-  AgentTool,
-  RequestShape,
-} from "./agent-types.ts";
-import type { Api, Model, ModelThinkingLevel } from "./catalog.ts";
 import type {
   AgentMessage,
   AssistantMessage,
@@ -25,7 +17,16 @@ import type {
   StopReason,
   ToolCall,
   ToolResultMessage,
-} from "./message.ts";
+} from "../domain/message.ts";
+import type { Api } from "../domain/model.ts";
+import { canonicalJson, fnv1a } from "../shared/digest.ts";
+import type {
+  AgentEvent,
+  AgentState,
+  AgentTool,
+  RequestShape,
+} from "./agent-types.ts";
+import type { Model, ModelThinkingLevel } from "./catalog.ts";
 import type { StreamFn } from "./transport.ts";
 
 export interface AgentDefaults {

@@ -1,11 +1,12 @@
 import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
-import type { Api, Model } from "../ai/catalog.ts";
+import type { Model } from "../ai/catalog.ts";
 import { ContextCompactor } from "../ai/context-compaction.ts";
 import { createAssistantMessageEventStream } from "../ai/event-stream.ts";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "../ai/faux.ts";
-import type { AgentMessage, ToolResultMessage } from "../ai/message.ts";
 import type { StreamFn } from "../ai/transport.ts";
+import type { AgentMessage, ToolResultMessage } from "../domain/message.ts";
+import type { Api } from "../domain/model.ts";
 
 import {
   STELLA_CHECKPOINT_PREAMBLE,

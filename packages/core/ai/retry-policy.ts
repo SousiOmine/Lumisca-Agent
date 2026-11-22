@@ -1,5 +1,8 @@
+import type {
+  AssistantMessage,
+  NotificationMessage,
+} from "../domain/message.ts";
 import { isContextOverflowText } from "./context-overflow.ts";
-import type { AssistantMessage, NotificationMessage } from "./message.ts";
 import { notificationMessage } from "./notification.ts";
 
 /** Maximum consecutive vacant responses (no text, no tool call) to retry

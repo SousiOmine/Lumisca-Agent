@@ -4,19 +4,20 @@ import { join } from "node:path";
 import { assertEquals } from "@std/assert";
 import { Agent } from "../ai/agent.ts";
 import type { AgentEvent, AgentTool } from "../ai/agent-types.ts";
-import type { Api, Model } from "../ai/catalog.ts";
+import type { Model } from "../ai/catalog.ts";
 import { createAssistantMessageEventStream } from "../ai/event-stream.ts";
 import { fauxAssistantMessage, fauxToolCall } from "../ai/faux.ts";
 import { languageModelFor } from "../ai/lang-model.ts";
+import { createStreamFn, type StreamTransport } from "../ai/stream.ts";
+import type { StreamFn } from "../ai/transport.ts";
+import { bytesToBase64 } from "../base64.ts";
 import type {
   AgentMessage,
   AssistantMessage,
   ToolCall,
   ToolResultMessage,
-} from "../ai/message.ts";
-import { createStreamFn, type StreamTransport } from "../ai/stream.ts";
-import type { StreamFn } from "../ai/transport.ts";
-import { bytesToBase64 } from "../base64.ts";
+} from "../domain/message.ts";
+import type { Api } from "../domain/model.ts";
 import { contentText } from "../shared/mod.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import { fakeModel, MINI_PNG, withTempDir } from "../test-utils.ts";

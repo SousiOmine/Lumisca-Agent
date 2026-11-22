@@ -7,6 +7,7 @@
  * same policy when a provider rejects a request anyway.
  */
 
+import type { Api } from "../domain/model.ts";
 import { inputBudgetTokens } from "../shared/context-usage.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import {
@@ -14,7 +15,7 @@ import {
   estimateTextTokens,
   estimateToolTokens,
 } from "../shared/token-estimate.ts";
-import type { Api, Model } from "./catalog.ts";
+import type { Model } from "./catalog.ts";
 import { reservedCompletionTokens } from "./compaction-policy.ts";
 import type { StreamOptions, StreamRequest } from "./transport.ts";
 

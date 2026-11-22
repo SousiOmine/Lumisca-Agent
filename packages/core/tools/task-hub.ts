@@ -2,11 +2,9 @@ import { createSubagentAgent } from "../agent/subagent-runner.ts";
 import { TranscriptStore } from "../agent/transcript.ts";
 import type { Agent } from "../ai/agent.ts";
 import type { AgentEvent } from "../ai/agent-types.ts";
-
-import type { Api, Model } from "../ai/catalog.ts";
+import type { Model } from "../ai/catalog.ts";
 import { contextMessage } from "../ai/context-providers.ts";
 import { isRetryableRateLimit } from "../ai/llm-retry.ts";
-import type { AgentMessage, AssistantMessage } from "../ai/message.ts";
 import type { NotificationPayload } from "../ai/notification.ts";
 import { notificationMessage } from "../ai/notification.ts";
 import {
@@ -21,8 +19,9 @@ import {
   isTransientStreamError,
 } from "../ai/retry-policy.ts";
 import type { StreamFn } from "../ai/transport.ts";
-
 import type { ClientEvent } from "../domain/event.ts";
+import type { AgentMessage, AssistantMessage } from "../domain/message.ts";
+import type { Api } from "../domain/model.ts";
 import { CoreError, errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";

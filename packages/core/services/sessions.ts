@@ -1,5 +1,5 @@
 import type { SessionAgent } from "../agent/session-agent.ts";
-import type { AgentMessage, ImageContent } from "../ai/message.ts";
+import type { AgentMessage, ImageContent } from "../domain/message.ts";
 
 import type { ModePrompt } from "../domain/mode-message.ts";
 import type { SessionInfo } from "../domain/session.ts";

@@ -12,7 +12,7 @@
  * Frontend-safe (no Bun APIs, no `node:`): the web bundle imports this through
  * `@lumisca/core/shared`.
  */
-import type { AgentMessage } from "../ai/message.ts";
+import type { AgentMessage } from "../domain/message.ts";
 
 import type { ContextUsageSummary } from "./context-usage.ts";
 import type { AskQuestion } from "./interaction.ts";

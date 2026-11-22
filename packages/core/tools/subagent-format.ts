@@ -1,5 +1,5 @@
-import type { AgentMessage } from "../ai/message.ts";
 import type { NotificationPayload } from "../ai/notification.ts";
+import type { AgentMessage } from "../domain/message.ts";
 
 import type { SubagentType, TaskInfo } from "../shared/mod.ts";
 import { contentText, DEFAULT_LOCALE, type Locale } from "../shared/mod.ts";

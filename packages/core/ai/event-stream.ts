@@ -8,7 +8,7 @@
  * {@link AssistantMessageEventStream} in types.ts): this is what a producer
  * drives.
  */
-import type { AssistantMessage } from "./message.ts";
+import type { AssistantMessage } from "../domain/message.ts";
 import type { AssistantMessageEventStream, StreamEvent } from "./transport.ts";
 
 export type PushableAssistantMessageEventStream =

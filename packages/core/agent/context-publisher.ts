@@ -15,7 +15,7 @@
 import { contextStart } from "../ai/context-compaction.ts";
 import type { ContextProvider } from "../ai/context-providers.ts";
 import { contextMessage } from "../ai/context-providers.ts";
-import type { AgentMessage, ContextMessage } from "../ai/message.ts";
+import type { AgentMessage, ContextMessage } from "../domain/message.ts";
 
 /** What publishing needs from the session that owns it. */
 export interface ContextSink {

@@ -6,12 +6,12 @@ import type {
 } from "@opencode-ai/models";
 import snapshot from "@opencode-ai/models/snapshot";
 import type {
-  Api,
   Model,
   ModelThinkingLevel,
   Provider,
   ThinkingLevelMap,
 } from "../ai/catalog.ts";
+import type { Api } from "../domain/model.ts";
 
 import { THINKING_LEVEL_ORDER } from "../shared/providers.ts";
 import { buildProvider, envApiKeyAuth } from "./custom.ts";

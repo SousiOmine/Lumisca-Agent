@@ -1,7 +1,7 @@
 import type { SessionPool } from "./agent/pool.ts";
-import type { Api, Model } from "./ai/catalog.ts";
-
+import type { Model } from "./ai/catalog.ts";
 import type { ClientEvent } from "./domain/event.ts";
+import type { Api } from "./domain/model.ts";
 import type { SessionInfo } from "./domain/session.ts";
 import type { Workspace } from "./domain/workspace.ts";
 import type { McpService } from "./mcp/service.ts";

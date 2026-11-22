@@ -663,10 +663,10 @@ test("credentials are guarded on every settings surface", async () => {
     const stored = JSON.parse(
       fsSync.readFileSync(join(dir, "settings.jsonc"), "utf8"),
     ) as Record<string, unknown>;
-    assertEquals(stored["api_key:anthropic"], {
-      key: "sk-test",
-      type: "api_key",
-    });
+    assertEquals(
+      stored["api_key:anthropic"],
+      '{"type":"api_key","key":"sk-test"}',
+    );
   } finally {
     core.close();
     await removeDirRetry(dir);

@@ -31,6 +31,13 @@
  *   transcript untouched and the run continues with the history it had.
  */
 
+import type {
+  AgentMessage,
+  AssistantMessage,
+  CheckpointMessage,
+  LlmMessage,
+} from "../domain/message.ts";
+import type { Api } from "../domain/model.ts";
 import { errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";
 import { contextTokensOf } from "../shared/context-usage.ts";
@@ -42,20 +49,13 @@ import {
   estimateToolTokens,
 } from "../shared/token-estimate.ts";
 import type { AgentTool } from "./agent-types.ts";
-
-import type { Api, Model } from "./catalog.ts";
+import type { Model } from "./catalog.ts";
 import {
   buildSummarizationPrompt,
   contextStart,
   estimateMessagesTokensFrom,
   selectCompactionSpan,
 } from "./compaction-span.ts";
-import type {
-  AgentMessage,
-  AssistantMessage,
-  CheckpointMessage,
-  LlmMessage,
-} from "./message.ts";
 import { streamText } from "./stream.ts";
 import type { StreamFn } from "./transport.ts";
 

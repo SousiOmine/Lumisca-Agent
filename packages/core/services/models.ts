@@ -1,11 +1,11 @@
 import type {
-  Api,
   AuthCheck,
   AuthInteraction,
   AuthType,
   Model,
   Provider,
 } from "../ai/catalog.ts";
+import type { Api } from "../domain/model.ts";
 
 import { CoreError } from "../errors.ts";
 import type { CatalogStatus, ModelManager } from "../models/mod.ts";

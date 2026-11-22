@@ -3,20 +3,10 @@
  * how it authenticates, and what its limits are.
  */
 
+import type { Api } from "../domain/model.ts";
 import type { ProviderLoginMethod } from "../shared/providers.ts";
 
 import type { StreamFn } from "./transport.ts";
-
-export type Api =
-  | "openai-completions"
-  | "openai-responses"
-  | "anthropic-messages"
-  | "google-generative-ai"
-  | "google-vertex"
-  | "mistral-conversations"
-  | "azure-openai-responses"
-  | "bedrock-converse-stream"
-  | string;
 
 // ---- thinking levels -------------------------------------------------------
 

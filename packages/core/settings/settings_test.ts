@@ -71,7 +71,7 @@ test("file and memory stores return the same text for the same value", async () 
       assertEquals(store.get("plain"), "1.50");
       assertEquals(store.get("number"), "1.5");
       assertEquals(store.get("null"), "null");
-      assertEquals(store.get("code"), "\"007\"");
+      assertEquals(store.get("code"), '"007"');
       assertEquals(store.getJson<number>("number"), 1.5);
       assertEquals(store.getJson<null>("null"), null);
       assertEquals(store.getJson<string>("code"), "007");

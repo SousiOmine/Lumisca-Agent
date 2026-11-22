@@ -1,7 +1,7 @@
 import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { fauxAssistantMessage } from "../ai/faux.ts";
-import type { AgentMessage } from "../ai/message.ts";
+import type { AgentMessage } from "../domain/message.ts";
 
 import { MAX_REPLY_CHARS, RunReply } from "./run-reply.ts";
 import { NO_RESPONSE } from "./silent-reply.ts";

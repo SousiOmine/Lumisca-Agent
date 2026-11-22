@@ -1,6 +1,5 @@
-import type { AgentMessage } from "../ai/message.ts";
-
 import type { MessageIdentity } from "../domain/event.ts";
+import type { AgentMessage } from "../domain/message.ts";
 import type { MessageRepo } from "../session/messages.ts";
 import { modelViewOf } from "../session/model-view.ts";
 import { messageIdentityOf } from "../session/transcript-window.ts";

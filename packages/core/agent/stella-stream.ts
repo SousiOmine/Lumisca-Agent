@@ -34,9 +34,9 @@
  * replayed out of order, or a reload that starts mid-conversation, would put
  * the message in the wrong place).
  */
-import type { AgentMessage, ToolResultMessage } from "../ai/message.ts";
 
 import type { ClientEvent, MessageIdentity } from "../domain/event.ts";
+import type { AgentMessage, ToolResultMessage } from "../domain/message.ts";
 import type {
   StellaEntry,
   StellaEntryIdentity,

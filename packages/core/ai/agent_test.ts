@@ -1,16 +1,16 @@
 import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
+import type {
+  AgentMessage,
+  ThinkingContent,
+  ToolResultMessage,
+} from "../domain/message.ts";
 import { contentText } from "../shared/mod.ts";
 import { fakeModel } from "../test-utils.ts";
 import { Agent } from "./agent.ts";
 import type { AgentEvent, AgentTool } from "./agent-types.ts";
 import { createAssistantMessageEventStream } from "./event-stream.ts";
 import { fauxAssistantMessage, fauxToolCall } from "./faux.ts";
-import type {
-  AgentMessage,
-  ThinkingContent,
-  ToolResultMessage,
-} from "./message.ts";
 import type { StreamFn } from "./transport.ts";
 
 /** One scheduler turn: lets the run reach the stream function. */

@@ -6,8 +6,8 @@
  * shape that backend needs (instructions, store:false) is applied by the
  * transport (see ai/stream.ts `chatgptProviderOptions`).
  */
+
 import type {
-  Api,
   AuthInteraction,
   Credential,
   CredentialStore,
@@ -15,6 +15,7 @@ import type {
   OAuthCredential,
   Provider,
 } from "../../ai/catalog.ts";
+import type { Api } from "../../domain/model.ts";
 
 import type { SettingsRepo } from "../../settings/repo.ts";
 import {

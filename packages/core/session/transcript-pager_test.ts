@@ -1,8 +1,7 @@
 import { test } from "bun:test";
 import { assert, assertEquals, assertThrows } from "@std/assert";
-import type { AgentMessage } from "../ai/message.ts";
-
 import { LumiscaDb } from "../db/mod.ts";
+import type { AgentMessage } from "../domain/message.ts";
 import { CoreError } from "../errors.ts";
 import {
   createMessageRepo,

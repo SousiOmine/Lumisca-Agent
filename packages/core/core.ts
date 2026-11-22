@@ -4,7 +4,6 @@ import { dirname, join } from "node:path";
 import { SessionPool } from "./agent/pool.ts";
 import type { SessionAgent } from "./agent/session-agent.ts";
 import type {
-  Api,
   AuthCheck,
   AuthInteraction,
   AuthType,
@@ -13,7 +12,6 @@ import type {
   Provider,
 } from "./ai/catalog.ts";
 import { withProviderRetryDefaults } from "./ai/llm-retry.ts";
-import type { AgentMessage, ImageContent } from "./ai/message.ts";
 import { type CoreServices, createCoreServices } from "./bootstrap.ts";
 import type { BrowserBackend } from "./browser/types.ts";
 import {
@@ -24,7 +22,9 @@ import type { ComputerHost, ComputerHostResult } from "./computer/types.ts";
 import { LumiscaDb } from "./db/mod.ts";
 import { MIN_VACUUM_BYTES, vacuumMarkerPath } from "./db/vacuum.ts";
 import type { ClientEvent } from "./domain/event.ts";
+import type { AgentMessage, ImageContent } from "./domain/message.ts";
 import type { ModePrompt } from "./domain/mode-message.ts";
+import type { Api } from "./domain/model.ts";
 import type { SessionInfo } from "./domain/session.ts";
 import type { FolderShare } from "./domain/share.ts";
 import type { StellaEntry } from "./domain/stella-conversation.ts";

@@ -3,12 +3,13 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { assertEquals } from "@std/assert";
 import { bytesToBase64 } from "../base64.ts";
+import type { LlmMessage } from "../domain/message.ts";
+import type { Api } from "../domain/model.ts";
 import { summarizeContextUsage } from "../shared/mod.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import { estimateLlmMessagesTokens } from "../shared/token-estimate.ts";
 import { MINI_PNG } from "../test-utils.ts";
 import type { AgentTool } from "./agent-types.ts";
-
 import {
   CONTEXT_SAFETY_RATIO,
   CONTEXT_SAFETY_TOKENS,
@@ -16,8 +17,7 @@ import {
   contextSafetyTokens,
   MIN_MAX_TOKENS,
 } from "./budget.ts";
-import type { Api, Model } from "./catalog.ts";
-import type { LlmMessage } from "./message.ts";
+import type { Model } from "./catalog.ts";
 import { OVERFLOW_SAFETY_TOKENS } from "./output-cap-recovery.ts";
 import { createStreamFn, type StreamTransport } from "./stream.ts";
 import type { StreamOptions, StreamRequest } from "./transport.ts";

@@ -12,11 +12,11 @@ import {
   fauxText,
   fauxToolCall,
 } from "./ai/faux.ts";
-import type { AgentMessage } from "./ai/message.ts";
 import { PRUNED_MARKER } from "./ai/pruned.ts";
 import type { StreamFn } from "./ai/transport.ts";
 import { LumiscaCore } from "./core.ts";
 import { LumiscaDb } from "./db/mod.ts";
+import type { AgentMessage } from "./domain/message.ts";
 import type { StellaEntry } from "./domain/stella-conversation.ts";
 import { CoreError } from "./errors.ts";
 import { createAgentRepo } from "./session/agents.ts";

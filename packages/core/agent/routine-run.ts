@@ -1,6 +1,5 @@
-import type { AgentMessage } from "../ai/message.ts";
-
 import type { MessageIdentity } from "../domain/event.ts";
+import type { AgentMessage } from "../domain/message.ts";
 import { contentText } from "../shared/content.ts";
 import { assistantTextVerdict } from "./silent-reply.ts";
 import { stellaEntriesOf } from "./stella-stream.ts";

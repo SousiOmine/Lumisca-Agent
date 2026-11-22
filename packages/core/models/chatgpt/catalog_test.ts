@@ -1,6 +1,7 @@
 import { test } from "bun:test";
 import { assert, assertEquals, assertRejects } from "@std/assert";
-import type { Api, Model } from "../../ai/catalog.ts";
+import type { Model } from "../../ai/catalog.ts";
+import type { Api } from "../../domain/model.ts";
 
 import { createInMemorySettingsRepo } from "../../settings/repo.ts";
 import {

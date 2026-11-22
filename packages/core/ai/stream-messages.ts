@@ -10,11 +10,12 @@
 
 import type { AssistantContent, ModelMessage, ToolSet, UserContent } from "ai";
 import { jsonSchema, tool } from "ai";
-import type { AgentTool } from "./agent-types.ts";
+import type { LlmMessage } from "../domain/message.ts";
 
-import type { Api, Model } from "./catalog.ts";
+import type { Api } from "../domain/model.ts";
+import type { AgentTool } from "./agent-types.ts";
+import type { Model } from "./catalog.ts";
 import { toolResultTakesImages } from "./lang-model.ts";
-import type { LlmMessage } from "./message.ts";
 import {
   imageFilePart,
   readToolOutput,

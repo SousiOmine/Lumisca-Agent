@@ -14,13 +14,13 @@
  */
 import { Agent } from "./../ai/agent.ts";
 import type { AgentEvent, AgentTool } from "../ai/agent-types.ts";
-
-import type { Api, Model } from "../ai/catalog.ts";
+import type { Model } from "../ai/catalog.ts";
 import { WORK_COMPACTION_STYLE } from "../ai/compaction-style.ts";
 import { ContextCompactor } from "../ai/context-compaction.ts";
 import { toLlmMessages } from "../ai/llm-view.ts";
-import type { AgentMessage } from "../ai/message.ts";
 import type { StreamFn } from "../ai/transport.ts";
+import type { AgentMessage } from "../domain/message.ts";
+import type { Api } from "../domain/model.ts";
 
 import type { ThinkingLevel } from "../shared/mod.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";

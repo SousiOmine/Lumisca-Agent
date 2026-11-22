@@ -1,11 +1,6 @@
 import * as fsSync from "node:fs";
-import type {
-  Api,
-  ApiKeyAuth,
-  Credential,
-  Model,
-  Provider,
-} from "../ai/catalog.ts";
+import type { ApiKeyAuth, Credential, Model, Provider } from "../ai/catalog.ts";
+import type { Api } from "../domain/model.ts";
 import { errorMessage } from "../errors.ts";
 import { isRecord } from "../fs.ts";
 import { inheritedEnv } from "../process.ts";

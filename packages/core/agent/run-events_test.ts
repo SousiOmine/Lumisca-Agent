@@ -1,7 +1,7 @@
 import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
 import { fauxAssistantMessage } from "../ai/faux.ts";
-import type { AgentMessage } from "../ai/message.ts";
+import type { AgentMessage } from "../domain/message.ts";
 
 import { TextUi, translateRunEvent } from "./run-events.ts";
 

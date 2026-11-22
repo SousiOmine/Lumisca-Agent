@@ -6,8 +6,8 @@ import {
   fauxToolCall,
 } from "@lumisca/core";
 import { assertEquals } from "@std/assert";
+import type { AssistantMessage } from "../domain/message.ts";
 import { isRetryableRateLimit } from "./llm-retry.ts";
-import type { AssistantMessage } from "./message.ts";
 import {
   buildInterruptedRetryNotification,
   buildRetryNotification,

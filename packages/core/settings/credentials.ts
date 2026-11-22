@@ -52,10 +52,7 @@ export function createDbCredentialStore(
       if (next === undefined) {
         settings.delete(`${CREDENTIAL_KEY_PREFIX}${providerId}`);
       } else {
-        settings.set(
-          `${CREDENTIAL_KEY_PREFIX}${providerId}`,
-          JSON.stringify(next),
-        );
+        settings.setJson(`${CREDENTIAL_KEY_PREFIX}${providerId}`, next);
       }
       return next;
     },

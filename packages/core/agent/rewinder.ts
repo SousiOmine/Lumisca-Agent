@@ -1,7 +1,6 @@
 import type { Agent } from "../ai/agent.ts";
-import type { AgentMessage } from "../ai/message.ts";
-
 import type { MessageIdentity } from "../domain/event.ts";
+import type { AgentMessage } from "../domain/message.ts";
 import { CoreError } from "../errors.ts";
 import { messageIdentityOf } from "../session/transcript-window.ts";
 import type { RetryManager } from "./retry-manager.ts";

@@ -7,13 +7,15 @@
  * its own: it is the part a user's settings move, while the class next door
  * is the mechanism that runs once a decision is made.
  */
+
+import type { Api } from "../domain/model.ts";
 import { inputBudgetTokens } from "../shared/context-usage.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import {
   COMPACTION_DEFAULT_KEEP_RECENT_PERCENT,
   COMPACTION_DEFAULT_RESERVE_PERCENT,
 } from "../shared/settings-keys.ts";
-import type { Api, Model } from "./catalog.ts";
+import type { Model } from "./catalog.ts";
 
 /** Output floor of the summarization request. Below this a summary could
  * not say anything, so the conversation is trimmed instead of failing. */

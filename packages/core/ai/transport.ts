@@ -4,10 +4,11 @@
  * this interface (see stream.ts).
  */
 
-import type { AgentTool } from "./agent-types.ts";
+import type { AssistantMessage, LlmMessage } from "../domain/message.ts";
 
-import type { Api, Model, ModelThinkingLevel } from "./catalog.ts";
-import type { AssistantMessage, LlmMessage } from "./message.ts";
+import type { Api } from "../domain/model.ts";
+import type { AgentTool } from "./agent-types.ts";
+import type { Model, ModelThinkingLevel } from "./catalog.ts";
 
 export type StreamEvent =
   | { type: "start"; partial?: AssistantMessage; [k: string]: unknown }

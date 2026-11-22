@@ -9,7 +9,7 @@
  * difference between the agent's row count and the window's length is the
  * only correct answer.
  */
-import type { AgentMessage } from "../ai/message.ts";
+import type { AgentMessage } from "../domain/message.ts";
 
 /** The store operations this view needs. `MessageRepo` satisfies it. */
 export interface ModelViewRepo {

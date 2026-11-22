@@ -1,4 +1,4 @@
-import type { ContextMessage } from "./message.ts";
+import type { ContextMessage } from "../domain/message.ts";
 
 /**
  * Dynamic context providers.

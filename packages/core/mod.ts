@@ -15,7 +15,6 @@
 export { SessionAgent } from "./agent/session-agent.ts";
 export { stellaEventsOf } from "./agent/stella-stream.ts";
 export type {
-  Api,
   AuthCheck,
   AuthInteraction,
   AuthNotice,
@@ -32,19 +31,6 @@ export {
   fauxThinking,
   fauxToolCall,
 } from "./ai/faux.ts";
-export type {
-  AgentMessage,
-  AssistantMessage,
-  CheckpointMessage,
-  ImageContent,
-  Message,
-  ModeMessage,
-  NotificationKind,
-  NotificationMessage,
-  NotificationStatus,
-  TextContent,
-  ToolCall,
-} from "./ai/message.ts";
 export type {
   AssistantMessageEventStream,
   StreamFn,
@@ -66,7 +52,21 @@ export { type CreateSessionInput, LumiscaCore } from "./core.ts";
 export { LumiscaDb } from "./db/mod.ts";
 export { vacuumOnStartup } from "./db/vacuum.ts";
 export type { ClientEvent } from "./domain/event.ts";
+export type {
+  AgentMessage,
+  AssistantMessage,
+  CheckpointMessage,
+  ImageContent,
+  Message,
+  ModeMessage,
+  NotificationKind,
+  NotificationMessage,
+  NotificationStatus,
+  TextContent,
+  ToolCall,
+} from "./domain/message.ts";
 export type { ModePrompt } from "./domain/mode-message.ts";
+export type { Api } from "./domain/model.ts";
 export type { SessionInfo } from "./domain/session.ts";
 export type { FolderShare, ShareHostInfo } from "./domain/share.ts";
 export type {

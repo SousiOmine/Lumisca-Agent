@@ -39,11 +39,12 @@ export {
   type ToolOutput,
 } from "./tool-envelope.ts";
 
+import type { AssistantMessage, StopReason, Usage } from "../domain/message.ts";
+import type { Api } from "../domain/model.ts";
 import { contentText } from "../shared/mod.ts";
-import type { Api, Model } from "./catalog.ts";
+import type { Model } from "./catalog.ts";
 import { describeFailedCall, failureText } from "./error-detail.ts";
 import { sessionHeadersFor } from "./lang-model.ts";
-import type { AssistantMessage, StopReason, Usage } from "./message.ts";
 import {
   isRetryableRateLimitError,
   type RateLimitRetryOptions,

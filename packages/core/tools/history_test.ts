@@ -1,9 +1,8 @@
 import { test } from "bun:test";
 import { assert, assertEquals, assertThrows } from "@std/assert";
 import { stellaEntriesOf } from "../agent/stella-stream.ts";
-import type { AgentMessage } from "../ai/message.ts";
-
 import { LumiscaDb } from "../db/mod.ts";
+import type { AgentMessage } from "../domain/message.ts";
 import type { StellaEntry } from "../domain/stella-conversation.ts";
 import { CoreError } from "../errors.ts";
 import { createMessageRepo } from "../session/messages.ts";

@@ -7,7 +7,9 @@
  * A failed fetch fails the login — a provider with no models cannot be
  * used, and a guessed list would offer models the plan may not have.
  */
-import type { Api, Model, ThinkingLevelMap } from "../../ai/catalog.ts";
+
+import type { Model, ThinkingLevelMap } from "../../ai/catalog.ts";
+import type { Api } from "../../domain/model.ts";
 
 import { isRecord } from "../../fs.ts";
 import type { SettingsRepo } from "../../settings/repo.ts";

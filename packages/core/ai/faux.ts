@@ -9,15 +9,6 @@
  * capture the reasoning option).
  */
 
-import { errorMessage } from "../errors.ts";
-import type {
-  Api,
-  Model,
-  ModelThinkingLevel,
-  Provider,
-  ThinkingLevelMap,
-} from "./catalog.ts";
-import { createAssistantMessageEventStream } from "./event-stream.ts";
 import type {
   AssistantMessage,
   AssistantMessageContent,
@@ -26,7 +17,16 @@ import type {
   ThinkingContent,
   ToolCall,
   Usage,
-} from "./message.ts";
+} from "../domain/message.ts";
+import type { Api } from "../domain/model.ts";
+import { errorMessage } from "../errors.ts";
+import type {
+  Model,
+  ModelThinkingLevel,
+  Provider,
+  ThinkingLevelMap,
+} from "./catalog.ts";
+import { createAssistantMessageEventStream } from "./event-stream.ts";
 import type { StreamFn, StreamOptions, StreamRequest } from "./transport.ts";
 
 export function fauxText(text: string): TextContent {

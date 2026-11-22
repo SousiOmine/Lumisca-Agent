@@ -8,8 +8,9 @@
  * it wrote so it can rewrite the card. The budget is small because the same
  * mistake repeated is unlikely to repair itself.
  */
-import type { NotificationMessage } from "../ai/message.ts";
+
 import { notificationMessage } from "../ai/notification.ts";
+import type { NotificationMessage } from "../domain/message.ts";
 import type { AppCardProblem } from "../shared/ui-app/check.ts";
 
 /** How many times one failed card may be rewritten before the run reports

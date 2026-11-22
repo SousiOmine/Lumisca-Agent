@@ -1,4 +1,4 @@
-import type { AssistantMessage } from "./message.ts";
+import type { AssistantMessage } from "../domain/message.ts";
 import { isRetryableRateLimitMessage } from "./rate-limit.ts";
 import type { StreamFn } from "./transport.ts";
 

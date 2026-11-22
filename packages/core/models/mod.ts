@@ -1,5 +1,4 @@
 import type {
-  Api,
   AuthCheck,
   AuthInteraction,
   AuthType,
@@ -9,6 +8,7 @@ import type {
   Provider,
 } from "../ai/catalog.ts";
 import { LumiscaModels } from "../ai/models.ts";
+import type { Api } from "../domain/model.ts";
 
 import { CoreError, errorMessage } from "../errors.ts";
 import { createLogger } from "../log.ts";

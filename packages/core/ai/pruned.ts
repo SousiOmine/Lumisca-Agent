@@ -6,7 +6,7 @@
  * pruning policy: the LLM view has to skip those rows, and a policy module
  * importing the view's dependencies would point the dependency the wrong way.
  */
-import type { AgentMessage } from "./message.ts";
+import type { AgentMessage } from "../domain/message.ts";
 
 /** How a marker is recognised without a schema column: every one starts
  * with this token. */

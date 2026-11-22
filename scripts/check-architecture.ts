@@ -202,6 +202,16 @@ export function checkLayers(files: readonly Source[], root = ROOT): string[] {
   const problems: string[] = [];
   const rules: Array<{ dir: string; forbidden: string[] }> = [
     {
+      dir: "packages/core/domain",
+      forbidden: [
+        "packages/core/ai",
+        "packages/core/tools",
+        "packages/core/session",
+        "packages/core/vm",
+        "packages/core/web",
+      ],
+    },
+    {
       dir: "packages/core/ai",
       forbidden: ["packages/core/domain", "packages/core/session"],
     },

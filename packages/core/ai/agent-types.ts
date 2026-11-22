@@ -3,13 +3,14 @@
  * the request fingerprint it reports for prompt-cache diagnosis.
  */
 
-import type { Api, Model, ModelThinkingLevel } from "./catalog.ts";
 import type {
   AgentMessage,
   AssistantMessage,
   ImageContent,
   TextContent,
-} from "./message.ts";
+} from "../domain/message.ts";
+import type { Api } from "../domain/model.ts";
+import type { Model, ModelThinkingLevel } from "./catalog.ts";
 
 export interface AgentTool<P = unknown> {
   name: string;

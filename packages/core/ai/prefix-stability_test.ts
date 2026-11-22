@@ -17,12 +17,12 @@
 import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
 import { toLlmMessages } from "../ai/llm-view.ts";
+import type { AgentMessage, AssistantMessage } from "../domain/message.ts";
 import { fakeModel } from "../test-utils.ts";
 import { Agent } from "./agent.ts";
 import type { AgentTool, RequestShape } from "./agent-types.ts";
 import { createAssistantMessageEventStream } from "./event-stream.ts";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "./faux.ts";
-import type { AgentMessage, AssistantMessage } from "./message.ts";
 import type { StreamFn, StreamRequest } from "./transport.ts";
 
 /** One request exactly as the transport receives it. */

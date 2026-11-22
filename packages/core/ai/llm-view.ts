@@ -23,7 +23,7 @@ import type {
   Message,
   ModeMessage,
   NotificationMessage,
-} from "./message.ts";
+} from "../domain/message.ts";
 import { isPruned } from "./pruned.ts";
 
 /** The agent-visible text of a notification: the title (its "[...]" head)

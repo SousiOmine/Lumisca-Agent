@@ -1,10 +1,10 @@
-import type { Api, Model } from "../ai/catalog.ts";
+import type { Model } from "../ai/catalog.ts";
 import type { StreamFn } from "../ai/transport.ts";
-
 import type { BrowserBackend } from "../browser/types.ts";
 import type { CodeStoreRepo } from "../code-execution/store.ts";
 import type { ComputerHost } from "../computer/types.ts";
 import type { ClientEvent } from "../domain/event.ts";
+import type { Api } from "../domain/model.ts";
 import type { SessionInfo } from "../domain/session.ts";
 import type { Workspace } from "../domain/workspace.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";

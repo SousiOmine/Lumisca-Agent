@@ -1,6 +1,6 @@
 import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
-import type { AgentMessage } from "../ai/message.ts";
+import type { AgentMessage } from "../domain/message.ts";
 
 import {
   identityCursor,

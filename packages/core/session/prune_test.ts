@@ -1,13 +1,13 @@
 import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
+import { isPruned } from "../ai/pruned.ts";
 import type {
   AgentMessage,
   AssistantMessage,
   ContextMessage,
   NotificationMessage,
   ToolResultMessage,
-} from "../ai/message.ts";
-import { isPruned } from "../ai/pruned.ts";
+} from "../domain/message.ts";
 
 import {
   PRUNED_CONTEXT,
