@@ -177,17 +177,23 @@ export function browserEntryProblems(
   return problems;
 }
 
-export function checkBrowserEntries(): string[] {
+function tsconfigPaths(): Record<string, string[]> {
   const tsconfig = JSON.parse(
     readFileSync(join(ROOT, "tsconfig.json"), "utf8").replace(
       /^\s*\/\/.*$/gm,
       "",
     ),
   ) as { compilerOptions?: { paths?: Record<string, string[]> } };
-  return browserEntryProblems(
-    BROWSER_CORE_ENTRIES,
-    tsconfig.compilerOptions?.paths ?? {},
-  );
+  return tsconfig.compilerOptions?.paths ?? {};
+}
+
+export function checkBrowserEntries(): string[] {
+  return browserEntryProblems(BROWSER_CORE_ENTRIES, tsconfigPaths());
+}
+
+/** The `paths` list has to be the checked list, not a superset of it. */
+export function checkCorePaths(): string[] {
+  return corePathProblems(tsconfigPaths());
 }
 
 /**
@@ -247,10 +253,10 @@ export function checkLayers(files: readonly Source[], root = ROOT): string[] {
   return problems;
 }
 
-/** The only `@lumisca/core/*` specifiers a module may write. The tsconfig
+/** The only `@lumisca/core` specifiers a module may write. The tsconfig
  * wildcard used to resolve any internal path, so an import that esbuild and
  * Vite could not resolve still passed tsc. */
-const CORE_SPECIFIERS = new Set([
+export const CORE_SPECIFIERS: readonly string[] = [
   "@lumisca/core",
   "@lumisca/core/bytes",
   "@lumisca/core/shared",
@@ -258,18 +264,61 @@ const CORE_SPECIFIERS = new Set([
   "@lumisca/core/skills/slash",
   "@lumisca/core/browser-entries",
   "@lumisca/core/test-utils",
-]);
+];
+
+const CORE_SPECIFIER_SET = new Set(CORE_SPECIFIERS);
+
+/**
+ * Every module specifier in `text` that names the core, in either quote
+ * style and including the bare `@lumisca/core`. A pattern that required a
+ * closing quote immediately after a `/` subpath saw neither the root
+ * entry point nor a single-quoted import, and a type-only import is still a
+ * boundary claim even though the bundler erases it (the barrel is not the
+ * place to reach into `packages/core/session` for a type either).
+ */
+export function coreSpecifiersIn(text: string): string[] {
+  return [...text.matchAll(/["'](@lumisca\/core[^"'\n]*)["']/g)].map(
+    (match) => match[1]!,
+  );
+}
 
 export function checkCoreSpecifiers(files: readonly Source[]): string[] {
   const problems: string[] = [];
   for (const file of files) {
-    for (const match of file.text.matchAll(/"(@lumisca\/core\/[^"]+)"/g)) {
-      const specifier = match[1]!;
-      if (!CORE_SPECIFIERS.has(specifier)) {
+    for (const specifier of coreSpecifiersIn(file.text)) {
+      if (!CORE_SPECIFIER_SET.has(specifier)) {
         problems.push(
           `${relative(ROOT, file.path)} imports ${specifier} (not a public entry point)`,
         );
       }
+    }
+  }
+  return problems;
+}
+
+/**
+ * tsconfig's `paths` must list exactly those specifiers. The compiler's list
+ * and the checked list are the same list only while they agree: a wildcard
+ * entry (`@lumisca/core/*`) resolves any internal path again and a rename
+ * here without a rename there fails the type check for the whole repository,
+ * later and further from the cause. Keys with no mapping are what makes
+ * this a list rather than a convention.
+ */
+export function corePathProblems(paths: Record<string, string[]>): string[] {
+  const configured = Object.keys(paths).filter(
+    (key) => key === "@lumisca/core" || key.startsWith("@lumisca/core/"),
+  );
+  const problems: string[] = [];
+  for (const key of configured) {
+    if (!CORE_SPECIFIER_SET.has(key)) {
+      problems.push(
+        `tsconfig paths maps ${key} (not a public entry point; add it to CORE_SPECIFIERS or drop it)`,
+      );
+    }
+  }
+  for (const specifier of CORE_SPECIFIERS) {
+    if (!configured.includes(specifier)) {
+      problems.push(`tsconfig paths is missing ${specifier}`);
     }
   }
   return problems;
@@ -281,6 +330,7 @@ if (import.meta.main) {
   const aliasProblems = checkBrowserEntries();
   const layerProblems = checkLayers(files);
   const specifierProblems = checkCoreSpecifiers(files);
+  const pathProblems = checkCorePaths();
   let failed = false;
 
   if (cycles.length > 0) {
@@ -311,6 +361,14 @@ if (import.meta.main) {
     for (const problem of specifierProblems) console.error("  " + problem);
   }
 
+  if (pathProblems.length > 0) {
+    failed = true;
+    console.error("tsconfig paths and the core entry points disagree:");
+    for (const problem of pathProblems) console.error("  " + problem);
+  }
+
   if (failed) process.exit(1);
-  console.log("architecture: acyclic, browser entries in sync, layers intact");
+  console.log(
+    "architecture: acyclic, browser entries in sync, layers intact, core specifiers public",
+  );
 }

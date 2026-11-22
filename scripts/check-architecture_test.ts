@@ -7,6 +7,7 @@ import {
   browserEntryProblems,
   checkCoreSpecifiers,
   checkLayers,
+  corePathProblems,
   findCycles,
   runtimeSpecifiers,
 } from "./check-architecture.ts";
@@ -135,4 +136,72 @@ test("only public core specifiers pass", () => {
   ]);
   assertEquals(problems.length, 1);
   assertEquals(problems[0]!.includes("@lumisca/core/sessions"), true);
+});
+
+test("an internal subpath is rejected however it is written", () => {
+  const problems = checkCoreSpecifiers([
+    // Every public entry point, in the form a module writes it.
+    {
+      path: "/repo/packages/core/ok.ts",
+      text: [
+        'import { a } from "@lumisca/core";',
+        'import { b } from "@lumisca/core/shared";',
+        'import { c } from "@lumisca/core/modes";',
+        'import { d } from "@lumisca/core/skills/slash";',
+        'import { e } from "@lumisca/core/browser-entries";',
+        'import { f } from "@lumisca/core/test-utils";',
+        'import { g } from "@lumisca/core/bytes";',
+      ].join("\n"),
+    },
+    // A type-only import still names a boundary the barrel does not offer.
+    {
+      path: "/repo/packages/core/type.ts",
+      text: 'import type { Row } from "@lumisca/core/session/store";',
+    },
+    // Single quotes, and a subpath of a public entry point.
+    {
+      path: "/repo/packages/core/quoted.ts",
+      text: "import { x } from '@lumisca/core/shared/ui-app/mod.ts';",
+    },
+    // A specifier without a trailing slash: the old regex only saw those.
+    {
+      path: "/repo/packages/core/bare.ts",
+      text: 'export * from "@lumisca/core/session";',
+    },
+  ]);
+  assertEquals(
+    problems.map((problem) => problem.split(" imports ")[1]!.split(" ")[0]),
+    [
+      "@lumisca/core/session/store",
+      "@lumisca/core/shared/ui-app/mod.ts",
+      "@lumisca/core/session",
+    ],
+  );
+});
+
+test("tsconfig paths must be exactly the public core specifiers", () => {
+  const exact = {
+    "@lumisca/core": ["./packages/core/mod.ts"],
+    "@lumisca/core/bytes": ["./packages/core/bytes.ts"],
+    "@lumisca/core/shared": ["./packages/core/shared/mod.ts"],
+    "@lumisca/core/modes": ["./packages/core/modes/mod.ts"],
+    "@lumisca/core/skills/slash": ["./packages/core/skills/slash.ts"],
+    "@lumisca/core/browser-entries": ["./packages/core/browser-entries.ts"],
+    "@lumisca/core/test-utils": ["./packages/core/test-utils.ts"],
+    "@lumisca/server": ["./packages/server/mod.ts"],
+  };
+  // A paths table for something else is not this rule's business.
+  assertEquals(corePathProblems(exact), []);
+
+  const wildcard = corePathProblems({
+    ...exact,
+    "@lumisca/core/*": ["./packages/core/*"],
+  });
+  assertEquals(wildcard.length, 1);
+  assertEquals(wildcard[0]!.includes("@lumisca/core/*"), true);
+
+  const { "@lumisca/core/bytes": _dropped, ...missing } = exact;
+  const problems = corePathProblems(missing);
+  assertEquals(problems.length, 1);
+  assertEquals(problems[0]!.includes("@lumisca/core/bytes"), true);
 });
