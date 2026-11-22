@@ -91,8 +91,77 @@ jobs:
       - name: Version consistency
         run: bun run check:versions
 
-      - name: Test
-        run: bun run test
+  # The two test suites are separate jobs. Their failures stay separate
+  # results, and they run side by side instead of one after the other, so
+  # the wall time is the slower suite rather than the sum.
+  test-unit:
+    # Pure functions and in-memory collaborators only: no temporary files,
+    # no ports, no podman (`scripts/test-suites.ts` holds the split). It is
+    # the suite that must stay under a minute, so it does not share a job
+    # with anything that can starve it of a core.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.x
+
+      - name: Cache Bun's package cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Two workers, not the script's default of 4: the runner has 4 vCPUs
+      # and the integration job is running beside this one.
+      - name: Test (unit)
+        run: bun run test:unit
+        env:
+          LUMISCA_TEST_CONCURRENCY: "2"
+
+  test-integration:
+    # Tests that use the real machine: temporary directories, HTTP servers on
+    # a port, WebSockets, SQLite, spawned processes and podman. They are
+    # slower and load-sensitive, so they get their own job rather than
+    # competing with the unit suite for the same cores.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.x
+
+      - name: Cache Bun's package cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # podman is absent on the runners, so the container tests skip
+      # themselves. Installing it would add minutes to every job for tests
+      # that already have their own probe.
+      - name: Test (integration)
+        run: bun run test:integration
+        env:
+          LUMISCA_TEST_CONCURRENCY: "2"
 
   browser-rust:
     # The browser-rpc crate carries a real test suite (auth, 413, error
