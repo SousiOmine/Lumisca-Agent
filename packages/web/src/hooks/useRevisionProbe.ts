@@ -9,8 +9,9 @@
  * The rule is the same for a code-mode session and a stella conversation:
  * read the revision counter, and when it no longer matches what this view has
  * seen, re-read the state. The two used to carry their own copy of the
- * constant and the loop (useSessionEvents.ts and useStella.ts), which is how
- * one of them silently keeps the old interval the next time it changes.
+ * constant and the loop (useSessionEvents.ts and useStellaConversation.ts),
+ * which is how one of them silently keeps the old interval the next time it
+ * changes.
  */
 
 /** How often an open view verifies that it has seen every event. */

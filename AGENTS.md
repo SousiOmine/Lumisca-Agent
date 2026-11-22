@@ -686,7 +686,7 @@ X サーバ（`:99`）、ウィンドウマネージャ、セッションバス�
   どちらも初期ロードせず `tool_search` で見つかり、main のみ、stella のみ（`agent/factory.ts` の `SHARE_REQUEST_TOOL_NAMES`）。
   組み込みスキル `folder-share` が存在を教えます。
   `share_request` は `shareRequest` の待ちで run を止め、`components/stella/ShareRequestCard.tsx` のカードのボタンが既存の `ShareFolderDialog` を開きます（答えは `POST …/share/lend|decline`）。
-  `share_disconnect` はカードを出さず、ページ（`hooks/useStella.ts`）が `share/revoke` を呼んで `POST …/share/disconnect` で結果を返します。
+  `share_disconnect` はカードを出さず、ページ（`hooks/useStellaConversation.ts`）が `share/revoke` を呼んで `POST …/share/disconnect` で結果を返します。
   どちらも告知（`ShareHub`）でも片付くので、＋メニューから貸した場合や、シェルが答えないまま grant が消えた場合も run は進みます。
   結果は `grantsFor` から作り、届いていない貸出のパスを名乗らないこと。
 - 確認: `bun test packages/core/share packages/server/app_share_test.ts packages/server/share-host_test.ts`。
