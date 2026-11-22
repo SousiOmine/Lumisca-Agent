@@ -156,105 +156,118 @@ ${create}fi
   fs.chmodSync(join(bin, "apt-get"), 0o755);
 }
 
-test("install-server: --help names the options and the root rule", () => {
-  if (!linux) return;
-  const result = run(["--help"]);
-  assertEquals(result.status, 0);
-  assertStringIncludes(result.stdout, "--no-service");
-  assertStringIncludes(result.stdout, "podman");
-  assertStringIncludes(result.stdout, "root では実行しないでください");
-});
+test.skipIf(!linux)(
+  "install-server: --help names the options and the root rule",
+  () => {
+    const result = run(["--help"]);
+    assertEquals(result.status, 0);
+    assertStringIncludes(result.stdout, "--no-service");
+    assertStringIncludes(result.stdout, "podman");
+    assertStringIncludes(result.stdout, "root では実行しないでください");
+  },
+);
 
-test("install-server: a bad port is refused before anything is read", () => {
-  if (!linux) return;
-  const result = run(["--port", "99999", "--no-service"]);
-  assertEquals(result.status, 1);
-  assertStringIncludes(result.stderr, "1 から 65535");
-});
+test.skipIf(!linux)(
+  "install-server: a bad port is refused before anything is read",
+  () => {
+    const result = run(["--port", "99999", "--no-service"]);
+    assertEquals(result.status, 1);
+    assertStringIncludes(result.stderr, "1 から 65535");
+  },
+);
 
-test("install-server: --no-service downloads, checks and places the package", () => {
-  if (!linux) return;
-  const root = fs.mkdtempSync(join(tmpdir(), "lumisca-install-test-"));
-  try {
-    const fixture = makeFixture(root);
-    const bin = join(root, "bin");
-    fs.mkdirSync(bin);
-    writeFakeCurl(bin);
+test.skipIf(!linux)(
+  "install-server: --no-service downloads, checks and places the package",
+  () => {
+    const root = fs.mkdtempSync(join(tmpdir(), "lumisca-install-test-"));
+    try {
+      const fixture = makeFixture(root);
+      const bin = join(root, "bin");
+      fs.mkdirSync(bin);
+      writeFakeCurl(bin);
 
-    const dir = join(root, "server");
-    const result = run(["--version", "9.9.9", "--dir", dir, "--no-service"], {
-      PATH: [bin, PODMAN_SHIM, process.env.PATH ?? ""].join(":"),
-      FIXTURE: fixture,
-    });
-    assertEquals(result.status, 0, result.stderr);
-    assertStringIncludes(result.stdout, "Lumisca v9.9.9");
-    const installed = join(dir, "lumisca-server");
-    assertEquals(fs.existsSync(installed), true);
-    assertEquals((fs.statSync(installed).mode & 0o111) !== 0, true);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
+      const dir = join(root, "server");
+      const result = run(["--version", "9.9.9", "--dir", dir, "--no-service"], {
+        PATH: [bin, PODMAN_SHIM, process.env.PATH ?? ""].join(":"),
+        FIXTURE: fixture,
+      });
+      assertEquals(result.status, 0, result.stderr);
+      assertStringIncludes(result.stdout, "Lumisca v9.9.9");
+      const installed = join(dir, "lumisca-server");
+      assertEquals(fs.existsSync(installed), true);
+      assertEquals((fs.statSync(installed).mode & 0o111) !== 0, true);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
 
-test("install-server: a missing podman is installed before the download", () => {
-  if (!linux) return;
-  const root = fs.mkdtempSync(join(tmpdir(), "lumisca-install-test-"));
-  try {
-    const fixture = makeFixture(root);
-    const bin = join(root, "bin");
-    fs.mkdirSync(bin);
-    writeFakeCurl(bin);
-    writeFakeSudo(bin);
-    writeFakeApt(bin, true);
-    const tools = toolDir(root);
-    const aptLog = join(root, "apt.log");
-    const sudoLog = join(root, "sudo.log");
+test.skipIf(!linux)(
+  "install-server: a missing podman is installed before the download",
+  () => {
+    const root = fs.mkdtempSync(join(tmpdir(), "lumisca-install-test-"));
+    try {
+      const fixture = makeFixture(root);
+      const bin = join(root, "bin");
+      fs.mkdirSync(bin);
+      writeFakeCurl(bin);
+      writeFakeSudo(bin);
+      writeFakeApt(bin, true);
+      const tools = toolDir(root);
+      const aptLog = join(root, "apt.log");
+      const sudoLog = join(root, "sudo.log");
 
-    const dir = join(root, "server");
-    const result = run(["--version", "9.9.9", "--dir", dir, "--no-service"], {
-      PATH: [bin, tools].join(":"),
-      FIXTURE: fixture,
-      SHIM: bin,
-      APT_LOG: aptLog,
-      SUDO_LOG: sudoLog,
-    });
-    assertEquals(result.status, 0, result.stderr);
-    assertStringIncludes(result.stdout, "podman が見つかりません");
-    assertStringIncludes(fs.readFileSync(aptLog, "utf8"), "update");
-    assertStringIncludes(fs.readFileSync(aptLog, "utf8"), "install -y podman");
-    assertStringIncludes(fs.readFileSync(sudoLog, "utf8"), "apt-get");
-    assertEquals(fs.existsSync(join(bin, "podman")), true);
-    assertEquals(fs.existsSync(join(dir, "lumisca-server")), true);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("install-server: a package manager that leaves podman missing stops the install", () => {
-  if (!linux) return;
-  const root = fs.mkdtempSync(join(tmpdir(), "lumisca-install-test-"));
-  try {
-    const fixture = makeFixture(root);
-    const bin = join(root, "bin");
-    fs.mkdirSync(bin);
-    writeFakeCurl(bin);
-    writeFakeSudo(bin);
-    writeFakeApt(bin, false);
-    const tools = toolDir(root);
-
-    const result = run(
-      ["--version", "9.9.9", "--dir", join(root, "server"), "--no-service"],
-      {
+      const dir = join(root, "server");
+      const result = run(["--version", "9.9.9", "--dir", dir, "--no-service"], {
         PATH: [bin, tools].join(":"),
         FIXTURE: fixture,
         SHIM: bin,
-        APT_LOG: join(root, "apt.log"),
-        SUDO_LOG: join(root, "sudo.log"),
-      },
-    );
-    assertEquals(result.status, 1);
-    assertStringIncludes(result.stderr, "PATH から見つかりません");
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
+        APT_LOG: aptLog,
+        SUDO_LOG: sudoLog,
+      });
+      assertEquals(result.status, 0, result.stderr);
+      assertStringIncludes(result.stdout, "podman が見つかりません");
+      assertStringIncludes(fs.readFileSync(aptLog, "utf8"), "update");
+      assertStringIncludes(
+        fs.readFileSync(aptLog, "utf8"),
+        "install -y podman",
+      );
+      assertStringIncludes(fs.readFileSync(sudoLog, "utf8"), "apt-get");
+      assertEquals(fs.existsSync(join(bin, "podman")), true);
+      assertEquals(fs.existsSync(join(dir, "lumisca-server")), true);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
+
+test.skipIf(!linux)(
+  "install-server: a package manager that leaves podman missing stops the install",
+  () => {
+    const root = fs.mkdtempSync(join(tmpdir(), "lumisca-install-test-"));
+    try {
+      const fixture = makeFixture(root);
+      const bin = join(root, "bin");
+      fs.mkdirSync(bin);
+      writeFakeCurl(bin);
+      writeFakeSudo(bin);
+      writeFakeApt(bin, false);
+      const tools = toolDir(root);
+
+      const result = run(
+        ["--version", "9.9.9", "--dir", join(root, "server"), "--no-service"],
+        {
+          PATH: [bin, tools].join(":"),
+          FIXTURE: fixture,
+          SHIM: bin,
+          APT_LOG: join(root, "apt.log"),
+          SUDO_LOG: join(root, "sudo.log"),
+        },
+      );
+      assertEquals(result.status, 1);
+      assertStringIncludes(result.stderr, "PATH から見つかりません");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
