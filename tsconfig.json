@@ -17,7 +17,6 @@
       "@lumisca/core/skills/slash": ["./packages/core/skills/slash.ts"],
       "@lumisca/core/browser-entries": ["./packages/core/browser-entries.ts"],
       "@lumisca/core/test-utils": ["./packages/core/test-utils.ts"],
-      "@lumisca/core/*": ["./packages/core/*"],
       "@lumisca/server": ["./packages/server/mod.ts"]
     },
     "types": ["node"],

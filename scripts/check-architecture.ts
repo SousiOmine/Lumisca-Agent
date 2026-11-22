@@ -247,11 +247,40 @@ export function checkLayers(files: readonly Source[], root = ROOT): string[] {
   return problems;
 }
 
+/** The only `@lumisca/core/*` specifiers a module may write. The tsconfig
+ * wildcard used to resolve any internal path, so an import that esbuild and
+ * Vite could not resolve still passed tsc. */
+const CORE_SPECIFIERS = new Set([
+  "@lumisca/core",
+  "@lumisca/core/bytes",
+  "@lumisca/core/shared",
+  "@lumisca/core/modes",
+  "@lumisca/core/skills/slash",
+  "@lumisca/core/browser-entries",
+  "@lumisca/core/test-utils",
+]);
+
+export function checkCoreSpecifiers(files: readonly Source[]): string[] {
+  const problems: string[] = [];
+  for (const file of files) {
+    for (const match of file.text.matchAll(/"(@lumisca\/core\/[^"]+)"/g)) {
+      const specifier = match[1]!;
+      if (!CORE_SPECIFIERS.has(specifier)) {
+        problems.push(
+          `${relative(ROOT, file.path)} imports ${specifier} (not a public entry point)`,
+        );
+      }
+    }
+  }
+  return problems;
+}
+
 if (import.meta.main) {
   const files = sources();
   const cycles = findCycles(files);
   const aliasProblems = checkBrowserEntries();
   const layerProblems = checkLayers(files);
+  const specifierProblems = checkCoreSpecifiers(files);
   let failed = false;
 
   if (cycles.length > 0) {
@@ -274,6 +303,12 @@ if (import.meta.main) {
     failed = true;
     console.error("layer violations:");
     for (const problem of layerProblems) console.error("  " + problem);
+  }
+
+  if (specifierProblems.length > 0) {
+    failed = true;
+    console.error("non-public core specifiers:");
+    for (const problem of specifierProblems) console.error("  " + problem);
   }
 
   if (failed) process.exit(1);

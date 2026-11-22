@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { assertEquals } from "@std/assert";
 import {
   browserEntryProblems,
+  checkCoreSpecifiers,
   checkLayers,
   findCycles,
   runtimeSpecifiers,
@@ -122,4 +123,16 @@ test("every browser entry is compared, not just the first", () => {
   const wrong = browserEntryProblems(entries, paths);
   assertEquals(wrong.length, 1);
   assertEquals(wrong[0]!.startsWith("@lumisca/core/modes:"), true);
+});
+
+test("only public core specifiers pass", () => {
+  const problems = checkCoreSpecifiers([
+    { path: "/repo/packages/core/a.ts", text: 'import "@lumisca/core";' },
+    {
+      path: "/repo/packages/core/b.ts",
+      text: 'import "@lumisca/core/sessions/repo.ts";',
+    },
+  ]);
+  assertEquals(problems.length, 1);
+  assertEquals(problems[0]!.includes("@lumisca/core/sessions"), true);
 });
