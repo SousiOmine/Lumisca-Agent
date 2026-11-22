@@ -1,11 +1,12 @@
 import { test } from "bun:test";
 import { summarizeContextUsage } from "@lumisca/core/shared";
+import { sessionInfo } from "@lumisca/core/test-utils";
 import { assert, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
 import { EMPTY_DRAFT } from "../hooks/useDrafts.ts";
 import type { SessionActions } from "../hooks/useSessionActions.ts";
-import { emptyView, type SessionInfo } from "../types.ts";
+import { emptyView } from "../types.ts";
 import { DraftPane, SessionPane } from "./SessionPane.tsx";
 
 /**
@@ -16,7 +17,7 @@ import { DraftPane, SessionPane } from "./SessionPane.tsx";
  * are asserted here rather than a timing.
  */
 
-const INFO: SessionInfo = {
+const INFO = sessionInfo({
   id: "s1",
   mainAgentId: "a1",
   workspaceId: "w1",
@@ -25,7 +26,7 @@ const INFO: SessionInfo = {
   modelId: "m",
   createdAt: 1,
   updatedAt: 1,
-};
+});
 
 /** The actions a pane calls. Each takes the tab key it belongs to; none of
  * them is reached by a render. */

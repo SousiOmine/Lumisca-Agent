@@ -1,6 +1,7 @@
 import { test } from "bun:test";
 import * as fsp from "node:fs/promises";
-import type { SessionInfo, StellaAgent } from "@lumisca/core";
+import type { StellaAgent } from "@lumisca/core";
+import { sessionInfo } from "@lumisca/core/test-utils";
 /**
  * The shared session builder's mounted paths.
  *
@@ -40,18 +41,12 @@ const AGENT: StellaAgent = {
   updatedAt: 0,
 };
 
-const SESSION = {
+const SESSION = sessionInfo({
   id: "s1",
   mainAgentId: "a1",
   workspaceId: "ws",
   name: "Aide",
-  modelProvider: "faux",
-  modelId: "small",
-  createdAt: 0,
-  updatedAt: 0,
-  stella: true,
-  personaId: "a1",
-} as SessionInfo;
+});
 
 /** A core that answers only for the fixture agent, recording the calls. */
 function fakeCore(seen: string[]): StellaApi {

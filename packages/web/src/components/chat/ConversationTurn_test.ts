@@ -1,6 +1,7 @@
 import { test } from "bun:test";
 import { fauxAssistantMessage, fauxToolCall } from "@lumisca/core";
 import { summarizeContextUsage } from "@lumisca/core/shared";
+import { sessionInfo } from "@lumisca/core/test-utils";
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
@@ -15,7 +16,7 @@ import { buildTurns, ConversationTurn } from "./ConversationTurn.tsx";
 
 /** A session with no history: the runs in these tests are what the view
  * draws. */
-const INFO = {
+const INFO = sessionInfo({
   id: "s1",
   mainAgentId: "a1",
   workspaceId: "w1",
@@ -24,7 +25,7 @@ const INFO = {
   modelId: "m",
   createdAt: 1,
   updatedAt: 1,
-};
+});
 
 const NO_HISTORY = {
   messages: [] as AgentMessage[],
@@ -564,7 +565,7 @@ test("a view restored mid-run keeps its turn running", () => {
   // so the transcript snapshot's `running` flag is the only thing that
   // keeps the turn expanded under 作業中; without it the same transcript
   // renders as the reported collapse (work log folded up under 作業完了).
-  const info = {
+  const info = sessionInfo({
     id: "s1",
     mainAgentId: "a1",
     workspaceId: "w1",
@@ -573,7 +574,7 @@ test("a view restored mid-run keeps its turn running", () => {
     modelId: "m",
     createdAt: 1,
     updatedAt: 1,
-  };
+  });
   const messages: AgentMessage[] = [
     user(1),
     fauxAssistantMessage([fauxToolCall("bash", { command: "sleep 10" })], {

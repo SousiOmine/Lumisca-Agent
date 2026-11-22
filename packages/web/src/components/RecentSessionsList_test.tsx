@@ -1,10 +1,10 @@
 import { test } from "bun:test";
+import { sessionInfo } from "@lumisca/core/test-utils";
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { createElement } from "preact";
 import { renderToString } from "preact-render-to-string";
 import type { RecentSessionItem } from "../hooks/useRecentSessions.ts";
 import { initLocale } from "../i18n.ts";
-import type { SessionInfo } from "../types.ts";
 import { RecentSessionsList } from "./RecentSessionsList.tsx";
 
 /**
@@ -23,7 +23,7 @@ function row(
 ): RecentSessionItem {
   return {
     key: options.peerId === undefined ? id : `${options.peerId}:${id}`,
-    info: {
+    info: sessionInfo({
       id,
       mainAgentId: `agent-${id}`,
       workspaceId: "ws",
@@ -32,7 +32,7 @@ function row(
       modelId: "small",
       createdAt: NOW,
       updatedAt: NOW,
-    } satisfies SessionInfo,
+    }),
     peerId: options.peerId ?? "",
     peerName: options.peerName ?? "",
   };

@@ -1,6 +1,7 @@
 import { test } from "bun:test";
-import type { SessionInfo, StellaAgent } from "@lumisca/core";
+import type { StellaAgent } from "@lumisca/core";
 import { CoreError } from "@lumisca/core";
+import { sessionInfo } from "@lumisca/core/test-utils";
 /**
  * The two answers to the `vm_env` dialog: the value, and a refusal.
  *
@@ -29,18 +30,12 @@ const AGENT: StellaAgent = {
   updatedAt: 0,
 };
 
-const SESSION = {
+const SESSION = sessionInfo({
   id: "s1",
   mainAgentId: "a1",
-  workspaceId: "w1",
+  workspaceId: "ws",
   name: "Aide",
-  modelProvider: "faux",
-  modelId: "faux-1",
-  stella: true,
-  personaId: "a1",
-  createdAt: 0,
-  updatedAt: 0,
-} as SessionInfo;
+});
 
 /** What the routes asked the core to do. */
 interface Received {

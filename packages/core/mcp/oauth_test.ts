@@ -1,9 +1,9 @@
 import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
-import type { SessionInfo } from "../domain/session.ts";
 import type { Workspace } from "../domain/workspace.ts";
 import { createInMemorySettingsRepo } from "../settings/repo.ts";
 import { APP_MCP_SETTINGS_KEY } from "../shared/settings-keys.ts";
+import { sessionInfo } from "../test-utils.ts";
 import { parseMcpConfig } from "./config.ts";
 import { startFakeAuthServer, startFakeMcpServer } from "./fake-http.ts";
 import { McpManager } from "./manager.ts";
@@ -126,15 +126,11 @@ test("OAuth: finishing a sign-in reconnects the sessions using it", async () => 
     createdAt: 0,
     chat: false,
   };
-  const session = {
+  const session = sessionInfo({
     id: "s1",
     workspaceId: "w",
     name: "s1",
-    modelProvider: "faux",
-    modelId: "m",
-    createdAt: 0,
-    updatedAt: 0,
-  } as SessionInfo;
+  });
   const refreshed: string[][] = [];
   const service = new McpService({
     settings,

@@ -1,9 +1,6 @@
 import { test } from "bun:test";
-import type {
-  SessionInfo,
-  StellaAgent,
-  StellaShareRequest,
-} from "@lumisca/core";
+import type { StellaAgent, StellaShareRequest } from "@lumisca/core";
+import { sessionInfo } from "@lumisca/core/test-utils";
 import { assertEquals } from "@std/assert";
 import type { StellaApi } from "./stella.ts";
 import { stellaRoutes } from "./stella.ts";
@@ -32,18 +29,12 @@ const AGENT: StellaAgent = {
   updatedAt: 0,
 };
 
-const SESSION = {
+const SESSION = sessionInfo({
   id: "s1",
   mainAgentId: "a1",
   workspaceId: "ws",
   name: "Aide",
-  modelProvider: "faux",
-  modelId: "small",
-  createdAt: 0,
-  updatedAt: 0,
-  stella: true,
-  personaId: "a1",
-} as SessionInfo;
+});
 
 const PENDING: StellaShareRequest = {
   kind: "lend",

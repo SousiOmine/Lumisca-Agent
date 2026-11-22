@@ -3,8 +3,9 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { PromptFileRef, SessionInfo } from "@lumisca/core";
+import type { PromptFileRef } from "@lumisca/core";
 import { MAX_PROMPT_FILE_BYTES } from "@lumisca/core/shared";
+import { sessionInfo } from "@lumisca/core/test-utils";
 import { assertEquals, assertThrows } from "@std/assert";
 import {
   type PromptUploadApi,
@@ -24,8 +25,7 @@ function fakeCore(copied: Copied[]): PromptUploadApi {
   return {
     getStellaAgent: () => ({ disabledAt: null }),
     ensureStellaReady: () => Promise.resolve(),
-    getOrCreateStellaSession: () =>
-      Promise.resolve({ id: "s1" } as SessionInfo),
+    getOrCreateStellaSession: () => Promise.resolve(sessionInfo({ id: "s1" })),
     savePromptFile: (sessionId, file) => {
       copied.push({ sessionId, ...file });
       const saved: PromptFileRef = {

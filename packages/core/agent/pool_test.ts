@@ -5,6 +5,7 @@ import type { Model } from "../ai/catalog.ts";
 import type { SessionInfo } from "../domain/session.ts";
 import type { Workspace } from "../domain/workspace.ts";
 import { CoreError } from "../errors.ts";
+import { sessionInfo as fixtureSession } from "../test-utils.ts";
 import type { AgentFactory } from "./factory.ts";
 import {
   SessionPool,
@@ -49,8 +50,8 @@ const WORKSPACE: Workspace = {
   chat: false,
 };
 
-function sessionInfo(id: string): SessionInfo {
-  return {
+function sessionInfo(id: string) {
+  return fixtureSession({
     id,
     mainAgentId: `agent-${id}`,
     workspaceId: WORKSPACE.id,
@@ -59,7 +60,7 @@ function sessionInfo(id: string): SessionInfo {
     modelId: "m",
     createdAt: 0,
     updatedAt: 0,
-  };
+  });
 }
 
 /** The slice of SessionAgent the pool touches. */
