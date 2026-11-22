@@ -31,12 +31,11 @@ import {
   type VmCommandRunner,
 } from "./command.ts";
 import { createContainerLifecycle } from "./container-lifecycle.ts";
-import { VM_WORKDIR } from "./contract.ts";
 import { createContractChecker } from "./contract-check.ts";
 import { createHostStatusProbe } from "./host-status.ts";
 import { createImageManager } from "./image.ts";
 import { createMachineManager } from "./machine-manager.ts";
-import { podman } from "./podman.ts";
+import { execArgv } from "./podman.ts";
 import type { VmHost, VmHostOptions, VmManager, VmProgress } from "./types.ts";
 
 export { containerFilesDigest } from "./image.ts";
@@ -155,27 +154,6 @@ export type VmExecResult = VmCommandResult;
 
 export type { VmCommandBytesResult };
 
-/** The `podman exec` argv for one call. Both seams build the same command;
- * only how its output comes back (text or bytes) differs. */
-function execArgv(
-  container: string,
-  command: readonly string[],
-  exec: VmExecOptions,
-): string[] {
-  return podman([
-    "exec",
-    ...(exec.stdin === undefined ? [] : ["--interactive"]),
-    ...Object.entries(exec.env ?? {}).flatMap(([name, value]) => [
-      "--env",
-      `${name}=${value}`,
-    ]),
-    "--workdir",
-    exec.workdir ?? VM_WORKDIR,
-    container,
-    ...command,
-  ]);
-}
-
 /** The per-call options both seams pass through. */
 function execOptions(exec: VmExecOptions): VmCommandOptions {
   return {
@@ -196,7 +174,12 @@ export function createVmExec(options: {
 }): VmExec {
   return (command, exec) =>
     options.run(
-      execArgv(options.containerName, command, exec),
+      execArgv(options.containerName, command, {
+        workdir: exec.workdir,
+        // A byte seam that carries stdin needs the program to read it.
+        ...(exec.stdin === undefined ? {} : { interactive: true }),
+        ...(exec.env === undefined ? {} : { env: exec.env }),
+      }),
       execOptions(exec),
     );
 }
@@ -209,7 +192,11 @@ export function createVmExecBytes(options: {
 }): VmExecBytes {
   return (command, exec) =>
     options.runBytes(
-      execArgv(options.containerName, command, exec),
+      execArgv(options.containerName, command, {
+        workdir: exec.workdir,
+        ...(exec.stdin === undefined ? {} : { interactive: true }),
+        ...(exec.env === undefined ? {} : { env: exec.env }),
+      }),
       execOptions(exec),
     );
 }
@@ -227,27 +214,6 @@ export type VmChannelOpener = (
   options: VmChannelExecOptions,
 ) => Promise<VmChannel>;
 
-/** The argv of one interactive exec: always `--interactive`, because the
- * channel writes to the program's stdin. */
-function channelArgv(
-  container: string,
-  command: readonly string[],
-  options: VmChannelExecOptions,
-): string[] {
-  return podman([
-    "exec",
-    "--interactive",
-    ...Object.entries(options.env ?? {}).flatMap(([name, value]) => [
-      "--env",
-      `${name}=${value}`,
-    ]),
-    "--workdir",
-    options.workdir ?? VM_WORKDIR,
-    container,
-    ...command,
-  ]);
-}
-
 /** Open an interactive exec, with the container's name and workdir already
  * applied. The scripting tool call's seam: the only caller that needs the
  * exchange to stay live (see vm/channel.ts). */
@@ -256,11 +222,20 @@ export function createVmChannel(options: {
   containerName: string;
 }): VmChannelOpener {
   return (command, exec) =>
-    options.open(channelArgv(options.containerName, command, exec), {
-      timeoutMs: exec.timeoutMs,
-      ...(exec.signal !== undefined ? { signal: exec.signal } : {}),
-      ...(exec.maxStderrChars !== undefined
-        ? { maxStderrChars: exec.maxStderrChars }
-        : {}),
-    });
+    options.open(
+      execArgv(options.containerName, command, {
+        workdir: exec.workdir,
+        // The channel writes to the program's stdin, so it is always
+        // interactive.
+        interactive: true,
+        ...(exec.env === undefined ? {} : { env: exec.env }),
+      }),
+      {
+        timeoutMs: exec.timeoutMs,
+        ...(exec.signal !== undefined ? { signal: exec.signal } : {}),
+        ...(exec.maxStderrChars !== undefined
+          ? { maxStderrChars: exec.maxStderrChars }
+          : {}),
+      },
+    );
 }

@@ -25,7 +25,7 @@ import {
 import type { ContractChecker } from "./contract-check.ts";
 import type { HostStatusProbe } from "./host-status.ts";
 import type { ImageManager } from "./image.ts";
-import { detail, podmanExec } from "./podman.ts";
+import { detail, execArgv } from "./podman.ts";
 import type { VmManager, VmProgress, VmStatus } from "./types.ts";
 
 /** Starting a desktop is a cold start of a window manager and a browser, not a
@@ -212,7 +212,7 @@ export function createMachineManager(
 
     async startDesktop() {
       const result = await run(
-        podmanExec(name, [VM_DESKTOP_SCRIPT, "start", agentId], {
+        execArgv(name, [VM_DESKTOP_SCRIPT, "start", agentId], {
           workdir: VM_WORKDIR,
         }),
         { timeoutMs: VM_DESKTOP_TIMEOUT_MS, maxOutput: VM_TEXT_OUTPUT_LIMIT },
@@ -229,7 +229,7 @@ export function createMachineManager(
       // A desktop that is already down is not an error: stopping is
       // idempotent, and the caller stops what it may no longer remember.
       await run(
-        podmanExec(name, [VM_DESKTOP_SCRIPT, "stop"], {
+        execArgv(name, [VM_DESKTOP_SCRIPT, "stop"], {
           workdir: VM_WORKDIR,
         }),
         { timeoutMs: VM_STOP_TIMEOUT_MS, maxOutput: VM_TEXT_OUTPUT_LIMIT },
