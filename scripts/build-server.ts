@@ -278,6 +278,17 @@ await fsp.mkdir(options.outDir, { recursive: true });
 //    binary, this one file, and the ICU/container data — nothing else to
 //    stage, and no directory whose contents could go stale.
 const { manifest, clientBytes } = await buildAssetsManifest(repoRoot);
+// The document inlines this stylesheet, so its bytes travel on every page
+// load. Minify it here, at build time only: the runtime serves the manifest
+// as-is, and a development server keeps the readable source.
+const cssBytes = Buffer.byteLength(manifest["styles.css"]);
+const { transform } = await import("esbuild");
+manifest["styles.css"] = (
+  await transform(manifest["styles.css"], { loader: "css", minify: true })
+).code;
+console.log(
+  `Styles: ${cssBytes} -> ${Buffer.byteLength(manifest["styles.css"])} bytes`,
+);
 const assetsFile = join(options.outDir, ASSETS_FILE_NAME);
 await fsp.writeFile(assetsFile, JSON.stringify(manifest));
 console.log(
