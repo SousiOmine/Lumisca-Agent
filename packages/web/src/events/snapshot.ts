@@ -112,16 +112,19 @@ export function applySnapshot(
   // A snapshot counts whole history: the meter must not blink when the
   // summary moved (a run priced another turn) while the messages did not.
   const usageChanged = usage !== view.usage;
-  const todo = parts.todos;
+  // The new snapshot carries the panels; the separate fetches remain for a
+  // tab opened on a running session (resyncPanels) and for an older peer
+  // that does not send them yet.
+  const todo = parts.todos ?? snapshot?.todos;
   const todoChanged = todo !== undefined && !sameTodoPlan(todo, view.todos);
-  const fetchedTasks = parts.tasks;
+  const fetchedTasks = parts.tasks ?? snapshot?.tasks;
   const tasks =
     fetchedTasks === undefined
       ? view.tasks
       : mergeTasks(view.tasks, fetchedTasks);
   const tasksChanged =
     fetchedTasks !== undefined && !sameTasks(tasks, view.tasks);
-  const fetchedBackgrounds = parts.backgrounds;
+  const fetchedBackgrounds = parts.backgrounds ?? snapshot?.backgrounds;
   const backgrounds =
     fetchedBackgrounds === undefined
       ? view.backgrounds

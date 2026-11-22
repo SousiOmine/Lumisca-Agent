@@ -201,6 +201,9 @@ export function sessionRoutes(core: SessionApi): Hono {
       older: page.older,
       running,
       questions,
+      todos: core.getTodo(id),
+      tasks: core.getTasks(id),
+      backgrounds: core.getBackground(id),
       error,
       name: session.name,
       // Context usage over the WHOLE transcript, not the page or the model's

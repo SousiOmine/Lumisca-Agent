@@ -158,8 +158,6 @@ export function useSessionEvents(
         });
       }
       const snapshots = new Map<string, SessionSnapshot>();
-      const todos = new Map<string, TodoPhase[]>();
-      const panels = new Map<string, SnapshotParts>();
       await Promise.all(
         ids.map(async (id) => {
           // Fetch independently: one failing (e.g. the session was deleted)
@@ -169,14 +167,8 @@ export function useSessionEvents(
           } catch {
             // Server not reachable yet; keep the current transcript.
           }
-          try {
-            const { todos: plan } = await sessionApi(id).getTodo();
-            todos.set(id, plan);
-          } catch {
-            // Server not reachable yet; keep the current plan.
-          }
-          const entry = await fetchPanels(id);
-          if (entry !== undefined) panels.set(id, entry);
+          // The snapshot carries the panels too (todos, tasks, backgrounds):
+          // one request per tab, not four.
         }),
       );
       // Seed the revision marker of every session whose snapshot arrived: a
@@ -185,9 +177,7 @@ export function useSessionEvents(
       for (const [id, snapshot] of snapshots) {
         seedRevision(id, snapshot.rev);
       }
-      if (snapshots.size === 0 && todos.size === 0 && panels.size === 0) {
-        return;
-      }
+      if (snapshots.size === 0) return;
       setViews((prev) => {
         // Nothing changed keeps the map's identity (so App does not re-render
         // on a sync that learned nothing new).
@@ -200,11 +190,7 @@ export function useSessionEvents(
           if (v === undefined) continue;
           const nextView = applySnapshot(
             v,
-            {
-              ...panels.get(id),
-              snapshot: snapshots.get(id),
-              todos: todos.get(id),
-            },
+            { snapshot: snapshots.get(id) },
             stateBefore.get(id),
           );
           if (nextView === v) continue;

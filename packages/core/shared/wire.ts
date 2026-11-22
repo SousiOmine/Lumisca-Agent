@@ -14,8 +14,9 @@
  */
 import type { AgentMessage } from "../domain/message.ts";
 
+import type { BackgroundCommandInfo } from "../tools/background.ts";
 import type { ContextUsageSummary } from "./context-usage.ts";
-import type { AskQuestion } from "./interaction.ts";
+import type { AskQuestion, TaskInfo, TodoPhase } from "./interaction.ts";
 
 // --- the folder picker (server/routes/fs.ts ↔ web/components/FolderBrowser) --
 
@@ -150,6 +151,11 @@ export interface SessionSnapshot {
   /** Questions the agent is waiting on (the ask tool); empty when none is
    * pending. The run stays blocked until they are answered. */
   questions: PendingQuestionLike[];
+  /** The session's panel snapshots, read in the same handler: a resync then
+   * needs one request per tab instead of four. */
+  todos: TodoPhase[];
+  tasks: TaskInfo[];
+  backgrounds: BackgroundCommandInfo[];
   /** The last run failure, if any (cleared when a new run starts). Absent
    * when the session has not failed. */
   error?: string;
