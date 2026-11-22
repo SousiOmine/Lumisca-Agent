@@ -113,6 +113,14 @@ export const chat = {
     ja: "「{name}」を読み取れませんでした",
     en: 'Could not read "{name}"',
   },
+  "chat.composer.attach.tooManyImages": {
+    ja: "画像は{count}枚まで添付できます",
+    en: "You can attach up to {count} pictures",
+  },
+  "chat.composer.attach.tooManyFiles": {
+    ja: "ファイルは{count}件まで添付できます",
+    en: "You can attach up to {count} files",
+  },
   /** A file that is not a picture, dropped in a mode with no machine to put
    * it in (code mode): the tools work on the user's own folders, so there is
    * nowhere for the bytes to go. */

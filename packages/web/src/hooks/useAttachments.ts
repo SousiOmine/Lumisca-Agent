@@ -43,6 +43,15 @@ export function canAttach(
   return canSendFiles || file.type.startsWith("image/");
 }
 
+/** Whether one more picture fits in the message: the committed images plus
+ * the reads still in flight, which the committed list does not see yet. */
+export function imageSlotAvailable(
+  committed: number,
+  inFlight: number,
+): boolean {
+  return committed + inFlight < MAX_PROMPT_FILES;
+}
+
 export interface UseAttachmentsOptions {
   images: PendingImage[];
   files: PendingFile[];
@@ -67,6 +76,9 @@ export interface Attachments {
    * batch replaces it: the previous reason no longer describes what the
    * reader just did. */
   error: string | null;
+  /** More pictures are attached than one prompt may carry. The composer
+   * disables send until one is removed; the error says why. */
+  overflow: boolean;
   /** Read a batch of files (a drop, a multi-file pick): an image goes to the
    * image list, anything else to the file list. The single entry point for
    * the picker, the paste and the drop. */
@@ -86,6 +98,10 @@ export function useAttachments(options: UseAttachmentsOptions): Attachments {
     t,
   } = options;
   const [error, setError] = useState<string | null>(null);
+  /** Pictures whose bytes are still being read. They are not in the images
+   * list yet, so a burst of drops would otherwise pass the limit check
+   * together. */
+  const reservedImagesRef = useRef(0);
 
   // Bursts (a drop of ten files) must not each append from the closure's
   // copy of the list: the ref follows the latest props within the same tick.
@@ -238,23 +254,33 @@ export function useAttachments(options: UseAttachmentsOptions): Attachments {
 
   /** Read `file` and hand the result to `accept`, or explain why not. Only
    * pictures take this path now: their bytes ride in the prompt body. */
-  const read = (file: File, accept: (dataUrl: string) => void): void => {
+  const read = (
+    file: File,
+    accept: (dataUrl: string) => void,
+    onSettled: () => void,
+  ): void => {
     if (Math.ceil(file.size / 3) * 4 > MAX_PROMPT_IMAGE_BASE64_LENGTH) {
+      onSettled();
       setError(t("chat.composer.attach.tooLarge", { name: file.name }));
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
-      if (typeof reader.result !== "string") return;
+      if (typeof reader.result !== "string") {
+        onSettled();
+        return;
+      }
       // The failure message belongs to the batch, not to this read: clearing
       // it here would erase a refusal from a file beside this one (a drop of
       // a picture and a log), because the read finishes after the refusal
       // was made.
       accept(reader.result);
+      onSettled();
     };
     // A read can fail (a folder, a file that moved, a revoked permission).
     // Staying silent left the reader with a button that did nothing.
     reader.onerror = () => {
+      onSettled();
       setError(t("chat.composer.attach.readFailed", { name: file.name }));
     };
     reader.readAsDataURL(file);
@@ -263,7 +289,12 @@ export function useAttachments(options: UseAttachmentsOptions): Attachments {
   /** Add a file that is not an image: the browser keeps the handle and the
    * transfer reads it one chunk at a time. */
   const addFile = (file: File): void => {
-    if (filesRef.current.length >= MAX_PROMPT_FILES) return;
+    if (filesRef.current.length >= MAX_PROMPT_FILES) {
+      setError(
+        t("chat.composer.attach.tooManyFiles", { count: MAX_PROMPT_FILES }),
+      );
+      return;
+    }
     if (file.size > MAX_PROMPT_FILE_BYTES) {
       setError(t("chat.composer.attach.tooLarge", { name: file.name }));
       return;
@@ -286,14 +317,32 @@ export function useAttachments(options: UseAttachmentsOptions): Attachments {
 
   /** Add a pasted/dropped image to the attachments (inline in the chat). */
   const addImage = (file: File): void => {
-    if (imagesRef.current.length >= MAX_PROMPT_FILES) return;
-    read(file, (dataUrl) => {
-      imagesRef.current = [
-        ...imagesRef.current,
-        { data: dataUrl, mimeType: file.type || "image/png", name: file.name },
-      ];
-      onImagesChange?.(imagesRef.current);
-    });
+    if (
+      !imageSlotAvailable(imagesRef.current.length, reservedImagesRef.current)
+    ) {
+      setError(
+        t("chat.composer.attach.tooManyImages", { count: MAX_PROMPT_FILES }),
+      );
+      return;
+    }
+    reservedImagesRef.current += 1;
+    read(
+      file,
+      (dataUrl) => {
+        imagesRef.current = [
+          ...imagesRef.current,
+          {
+            data: dataUrl,
+            mimeType: file.type || "image/png",
+            name: file.name,
+          },
+        ];
+        onImagesChange?.(imagesRef.current);
+      },
+      () => {
+        reservedImagesRef.current = Math.max(0, reservedImagesRef.current - 1);
+      },
+    );
   };
 
   /** Read one file into the list it belongs to, or explain why not. */
@@ -308,8 +357,26 @@ export function useAttachments(options: UseAttachmentsOptions): Attachments {
     else addFile(file);
   };
 
+  const overflow = images.length > MAX_PROMPT_FILES;
+  const wasOverflow = useRef(false);
+  // A draft can carry more pictures than one prompt may send (it was built
+  // before this check existed, or a read raced a removal). Say so as soon as
+  // it is on screen, not after the server refuses the send. Removing one
+  // clears the reason again.
+  useEffect(() => {
+    if (overflow) {
+      setError(
+        t("chat.composer.attach.tooManyImages", { count: MAX_PROMPT_FILES }),
+      );
+    } else if (wasOverflow.current) {
+      setError(null);
+    }
+    wasOverflow.current = overflow;
+  }, [overflow, t]);
+
   return {
     error,
+    overflow,
     addAll(files: Iterable<File>): void {
       setError(null);
       for (const file of files) addOne(file);

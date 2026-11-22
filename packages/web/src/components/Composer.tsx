@@ -391,7 +391,7 @@ export function Composer({
         submitLabel={submitLabel}
         submitIcon={SubmitIcon}
         submitIconOnly={submitIconOnly}
-        submitDisabled={submitDisabled}
+        submitDisabled={submitDisabled || attachments.overflow}
       />
     </div>
   );
