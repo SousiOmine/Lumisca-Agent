@@ -502,7 +502,7 @@ UIはどちらの本文にも書けます。
 | `web/` | フロントエンド SPA（Preact）：UI、状態管理、API クライアント | `core/shared`, `core/modes` のみ |
 | `desktop/` | デスクトップシェル（Tauri v2）：ネイティブ機能連携 | `server` を子プロセスとして起動 |
 | `browser-rpc/` | ブラウザ連携用 RPC（Rust）：プローブ抽出、URL 制御、ローカル HTTP サーバー | なし |
-| `core/vm/` | stella mode の仮想マシン：podman コンテナの管理（`machine.ts` が状態と exec の縫い目を保持）、ファイル／シェル／画面の VM 実装、スキル読取 | `core` の他モジュール |
+| `core/vm/` | stella mode の仮想マシン：podman コンテナの管理（`machine.ts` が入口、状態は `machine-agents.ts`、画面は `machine-screen.ts`、exec の縫い目は `machine-seams.ts`、スキル読取は `machine-skills.ts`）、ファイル／シェル／画面の VM 実装 | `core` の他モジュール |
 
 ### ホストと VM の対称な配置
 
