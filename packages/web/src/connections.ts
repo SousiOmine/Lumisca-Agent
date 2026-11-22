@@ -70,9 +70,7 @@ export async function saveConnection(entry: ConnectionEntry): Promise<void> {
   };
   const entries = store.get().entries;
   const next = entries.some((existing) => existing.id === entry.id)
-    ? entries.map((existing) =>
-        existing.id === entry.id ? summary : existing,
-      )
+    ? entries.map((existing) => (existing.id === entry.id ? summary : existing))
     : [...entries, summary];
   store.commit({ entries: next });
 }

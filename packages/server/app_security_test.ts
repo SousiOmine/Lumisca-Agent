@@ -146,7 +146,10 @@ test("every websocket path rejects a foreign origin", async () => {
           headers: { host: "127.0.0.1:8000", upgrade: "websocket" },
         }),
       );
-      assert(native.status !== 403, `${path} must allow a client without Origin`);
+      assert(
+        native.status !== 403,
+        `${path} must allow a client without Origin`,
+      );
     }
   } finally {
     core.close();

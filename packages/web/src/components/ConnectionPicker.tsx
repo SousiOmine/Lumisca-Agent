@@ -4,7 +4,6 @@ import { connectionLabel } from "../connections.ts";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import { useConnectionSwitch } from "../hooks/useConnectionSwitch.ts";
 import { useT } from "../i18n.ts";
-import type { ConnectionSummary } from "../types.ts";
 
 interface ConnectionPickerProps {
   /** Open settings → 接続先サーバー (the place servers are added and edited). */
