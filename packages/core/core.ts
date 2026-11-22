@@ -1,7 +1,7 @@
 import * as fsp from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { SessionPool } from "./agent/pool.ts";
+import type { SessionPool } from "./agent/pool.ts";
 import type { SessionAgent } from "./agent/session-agent.ts";
 import type {
   AuthCheck,
@@ -12,7 +12,15 @@ import type {
   Provider,
 } from "./ai/catalog.ts";
 import { withProviderRetryDefaults } from "./ai/llm-retry.ts";
-import { type CoreServices, createCoreServices } from "./bootstrap.ts";
+import {
+  type CoreGraph,
+  type CoreHost,
+  type CoreOverrides,
+  type CoreServices,
+  type CoreState,
+  createCoreGraph,
+  createCoreServices,
+} from "./bootstrap.ts";
 import type { BrowserBackend } from "./browser/types.ts";
 import {
   type CodeStoreRepo,
@@ -30,26 +38,24 @@ import type { FolderShare } from "./domain/share.ts";
 import type { StellaEntry } from "./domain/stella-conversation.ts";
 import type { Workspace } from "./domain/workspace.ts";
 import { CoreError, errorMessage } from "./errors.ts";
-import { EventHub } from "./events/hub.ts";
+import type { EventHub } from "./events/hub.ts";
 import { systemLanguageTags } from "./locale.ts";
 import { createLogger } from "./log.ts";
 import type { McpInfo } from "./mcp/config.ts";
-import { McpOAuthStore } from "./mcp/oauth.ts";
+import type { McpOAuthStore } from "./mcp/oauth.ts";
 import type { McpAuthSnapshot } from "./mcp/oauth-session.ts";
-import type { McpTestResult } from "./mcp/service.ts";
-import { McpService } from "./mcp/service.ts";
+import type { McpService, McpTestResult } from "./mcp/service.ts";
 import type { EnvReader } from "./models/custom.ts";
-import type { CatalogStatus } from "./models/mod.ts";
-import { ModelManager } from "./models/mod.ts";
+import type { CatalogStatus, ModelManager } from "./models/mod.ts";
 import { isThinkingLevel } from "./models/thinking.ts";
 import type {
   UserProviderConfig,
   UserProviderInput,
   UserProviderSummary,
 } from "./models/user-providers.ts";
-import { PushSubscriptions } from "./notify/subscriptions.ts";
+import type { PushSubscriptions } from "./notify/subscriptions.ts";
 import type { VapidKeys } from "./notify/vapid.ts";
-import { PersonalizationService } from "./personalization.ts";
+import type { PersonalizationService } from "./personalization.ts";
 import { checkRoutine } from "./routine/check.ts";
 import { createRoutineRepo, type RoutineRepo } from "./routine/repo.ts";
 import {
@@ -58,12 +64,12 @@ import {
   type RoutineScheduler,
   type RoutineTrigger,
 } from "./routine/scheduler.ts";
-import { CommandSafety } from "./safety/command-safety.ts";
-import { SavedPromptsService } from "./saved-prompts.ts";
-import { ComputerUseService } from "./services/computer.ts";
-import { ModelService } from "./services/models.ts";
+import type { CommandSafety } from "./safety/command-safety.ts";
+import type { SavedPromptsService } from "./saved-prompts.ts";
+import type { ComputerUseService } from "./services/computer.ts";
+import type { ModelService } from "./services/models.ts";
 import type { DefaultModel, SessionService } from "./services/sessions.ts";
-import { WorkspaceService } from "./services/workspaces.ts";
+import type { WorkspaceService } from "./services/workspaces.ts";
 import { type AgentRepo, createAgentRepo } from "./session/agents.ts";
 import {
   ATTACHMENTS_DIR_NAME,
@@ -94,9 +100,9 @@ import {
   type SettingsRepo,
 } from "./settings/repo.ts";
 import { markSetupComplete, readSetupState } from "./settings/setup.ts";
-import { ShareHub } from "./share/hub.ts";
-import {
-  type PendingShareRequest,
+import type { ShareHub } from "./share/hub.ts";
+import type {
+  PendingShareRequest,
   ShareRequestRegistry,
 } from "./share/request.ts";
 import type { ContextUsageSummary } from "./shared/context-usage.ts";
@@ -159,18 +165,20 @@ import type { VmChannelRunner } from "./vm/channel.ts";
 import type { VmCommandBytesRunner, VmCommandRunner } from "./vm/command.ts";
 import type { VmHost } from "./vm/container.ts";
 import { vmAgentDir } from "./vm/contract.ts";
-import type { PendingEnvRequest } from "./vm/env-request.ts";
-import { EnvRequestRegistry } from "./vm/env-request.ts";
+import type {
+  EnvRequestRegistry,
+  PendingEnvRequest,
+} from "./vm/env-request.ts";
 import type { PendingHandover } from "./vm/handover.ts";
-import { HandoverRegistry } from "./vm/handover-registry.ts";
-import { StellaMachine } from "./vm/machine.ts";
+import type { HandoverRegistry } from "./vm/handover-registry.ts";
+import type { StellaMachine } from "./vm/machine.ts";
 import type { StellaRuntime } from "./vm/runtime.ts";
 import type { HostPromptFile, PromptImageFile } from "./vm/uploads.ts";
 import {
   createWebSearchSettingsStore,
   type FetchLike,
 } from "./websearch/mod.ts";
-import { WebSearchService } from "./websearch/service.ts";
+import type { WebSearchService } from "./websearch/service.ts";
 import { createWorkspaceRepo } from "./workspace/repo.ts";
 
 /** Module logger (debug-gated). */
@@ -284,343 +292,116 @@ export class LumiscaCore {
    * machine has no config home, and for a test (which passes []). */
   private readonly appSkillDirs: string[];
   /** Event fan-out and per-session revision counters (see events/hub.ts). */
-  private readonly events = new EventHub();
+  private readonly state: CoreState;
+  private readonly events: EventHub;
   /** The virtual machine of stella mode: the manager, its exec seams, the
    * availability verdict and the skill catalog. Attached by the server once
    * it knows where the container files live. */
   private readonly stella: StellaMachine;
   /** Hand-over hubs per session. Dropped with the session. */
-  private readonly handovers = new HandoverRegistry((event) =>
-    this.events.emit(event),
-  );
+  private readonly handovers: HandoverRegistry;
   /** Environment-variable request hubs per session (`vm_env`). Dropped with
    * the session, like the hand-over hubs. */
-  private readonly envRequests = new EnvRequestRegistry((event) =>
-    this.events.emit(event),
-  );
+  private readonly envRequests: EnvRequestRegistry;
   /** Folder request hubs per session (`share_request` / `share_disconnect`).
    * Dropped with the session, like the other waits. */
-  private readonly shareRequests = new ShareRequestRegistry((event) =>
-    this.events.emit(event),
-  );
+  private readonly shareRequests: ShareRequestRegistry;
   /** The computers lending folders to conversations (see share/hub.ts), and
    * the calls the tools make into them. In memory only: a loan belongs to the
    * app that lent it, so a restart lends nothing until that app reconnects. */
-  private readonly shareHub = new ShareHub();
+  private readonly shareHub: ShareHub;
 
-  private constructor(
+  private constructor(graph: CoreGraph) {
+    this.state = graph.state;
+    this.db = graph.db;
+    this.settings = graph.settings;
+    this.settingsDir = graph.settingsDir;
+    this.credentials = graph.credentials;
+    this.computer = graph.computer;
+    this.models = graph.models;
+    this.personalization = graph.personalization;
+    this.savedPrompts = graph.savedPrompts;
+    this.push = graph.push;
+    this.sessions = graph.sessions;
+    this.agents = graph.agents;
+    this.stellaAgents = graph.stellaAgents;
+    this.routines = graph.routines;
+    this.routineScheduler = graph.routineScheduler;
+    this.messages = graph.messages;
+    this.requestShapes = graph.requestShapes;
+    this.codeStore = graph.codeStore;
+    this.commandSafety = graph.commandSafety;
+    this.webSearch = graph.webSearch;
+    this.mcpOAuth = graph.mcpOAuth;
+    this.visuals = graph.visuals;
+    this.attachments = graph.attachments;
+    this.agentIcons = graph.agentIcons;
+    this.dbPath = graph.dbPath;
+    this.pool = graph.pool;
+    this.mcp = graph.mcp;
+    this.modelService = graph.modelService;
+    this.workspaces = graph.workspaces;
+    this.services = graph.services;
+    this.stella = graph.stella;
+    this.globalSkillDirs = graph.globalSkillDirs;
+    this.appSkillDirs = graph.appSkillDirs;
+    this.events = graph.events;
+    this.handovers = graph.handovers;
+    this.envRequests = graph.envRequests;
+    this.shareRequests = graph.shareRequests;
+    this.shareHub = graph.shareHub;
+  }
+
+  /** Build the graph, then the facade over it. The host closures read the
+   * core only after this constructor returns; nothing in the graph builder
+   * calls them during wiring. */
+  private static create(
     db: LumiscaDb,
     settings: SettingsRepo,
-    overrides: {
-      models?: ModelManager;
-      personalization?: PersonalizationService;
-      savedPrompts?: SavedPromptsService;
-      sessions?: SessionRepo;
-      /** The sessions' agents (default: the SQLite table). */
-      agents?: AgentRepo;
-      stellaAgents?: StellaAgentRepo;
-      routines?: RoutineRepo;
-      /** Tick of the routine scheduler (tests shorten it so a scheduled run
-       * fires without waiting half a minute). */
-      routineTickMs?: number;
-      /** Delay before the scheduler's first tick (tests shorten it too). */
-      routineCatchUpDelayMs?: number;
-      messages?: MessageRepo;
-      requestShapes?: RequestShapeRepo;
-      codeStore?: CodeStoreRepo;
-      commandSafety?: CommandSafety;
-      pool?: SessionPool;
-      mcp?: McpService;
-      workspaces?: WorkspaceService;
-      visuals?: SessionVisualStore;
-      attachments?: SessionAttachmentStore;
-      agentIcons?: AgentIconStore;
-      /** The database file, when this core has one: a prune that frees
-       * enough bytes marks it for a rewrite at the next start (see
-       * db/vacuum.ts). Omitted by an in-memory core. */
-      dbPath?: string;
-      globalSkillDirs?: string[];
-      /** The mode's shared skills folders; default resolved from `env` (the
-       * Lumisca skills folder). Tests pass [] so they never read the
-       * machine's own folder. */
-      appSkillDirs?: string[];
-      /** Environment the model layer reads (custom providers, ambient API
-       * keys). Defaults to the real process environment; tests pass their
-       * own so they never mutate the process-global one. */
-      env?: EnvReader;
-      /** Transport of the web-search providers. Tests pass a stub so a key
-       * check never reaches the network. */
-      webSearchFetch?: FetchLike;
-      /** How the stella machine's commands are run (`podman`, in
-       * production). Tests pass a stub so the file/skill/screen seams work
-       * without a container; production leaves it unset. */
-      stellaRun?: {
-        run: VmCommandRunner;
-        runBytes: VmCommandBytesRunner;
-        /** Interactive exec (the scripting tool call's channel). Omitted →
-         * the real one; a test that runs code in a stella session supplies
-         * it. */
-        openChannel?: VmChannelRunner;
-      };
-    } = {},
-  ) {
-    this.globalSkillDirs = overrides.globalSkillDirs;
-    const sharedSkillDirs =
-      overrides.appSkillDirs ?? appSkillDirs(overrides.env);
-    this.appSkillDirs = sharedSkillDirs;
-    this.stella = new StellaMachine(
-      overrides.globalSkillDirs,
-      overrides.stellaRun,
+    overrides: CoreOverrides = {},
+  ): LumiscaCore {
+    let core: LumiscaCore | undefined;
+    const graph = createCoreGraph(
+      db,
+      settings,
+      overrides,
+      LumiscaCore.hostFor(() => {
+        if (core === undefined) {
+          throw new Error("core host called before construction finished");
+        }
+        return core;
+      }),
     );
-    this.db = db;
-    this.settings = settings;
-    this.settingsDir = settings.dir();
-    this.credentials = createDbCredentialStore(this.settings);
-    this.computer = new ComputerUseService({
-      getSetting: (key) => this.settings.get(key),
-      setSetting: (key, value) => this.settings.set(key, value),
-      applyCapabilityChange: (mutate) =>
-        this.pool.applyCapabilityChange(this.sessions.list(), mutate),
-    });
-    this.models =
-      overrides.models ??
-      new ModelManager(this.credentials, this.settings, overrides.env);
-    this.personalization =
-      overrides.personalization ?? new PersonalizationService(this.settings);
-    this.savedPrompts =
-      overrides.savedPrompts ?? new SavedPromptsService(this.settings);
-    this.push = new PushSubscriptions(this.settings);
-    this.sessions = overrides.sessions ?? createSessionRepo(db);
-    this.agents = overrides.agents ?? createAgentRepo(db);
-    this.stellaAgents = overrides.stellaAgents ?? createStellaAgentRepo(db);
-    this.routines = overrides.routines ?? createRoutineRepo(db);
-    this.routineScheduler = createRoutineScheduler({
-      repo: this.routines,
-      runner: this.routineRunner(),
-      ...(overrides.routineTickMs !== undefined
-        ? { tickMs: overrides.routineTickMs }
-        : {}),
-      ...(overrides.routineCatchUpDelayMs !== undefined
-        ? { catchUpDelayMs: overrides.routineCatchUpDelayMs }
-        : {}),
-    });
-    this.messages = overrides.messages ?? createMessageRepo(db);
-    this.requestShapes = overrides.requestShapes ?? createRequestShapeRepo(db);
-    this.codeStore = overrides.codeStore ?? createCodeStoreRepo(db);
-    const streamFn = withProviderRetryDefaults(
-      this.models.models.streamFn((providerId) =>
-        this.models.getProviderWithRetired(providerId),
-      ),
-    );
-    this.commandSafety =
-      overrides.commandSafety ??
-      new CommandSafety({
-        getSetting: (key) => this.settings.get(key),
-        setSetting: (key, value) => this.settings.set(key, value),
-        getFastModel: () => this.models.getFastModel(),
-        streamFn,
-      });
-    // The web-search configuration lives in the settings file (one JSON
-    // entry, see websearch/settings.ts) and the manager turns it into the
-    // provider the tools use. Read through the getter on every session open
-    // and on every key check, so a change needs no rebuild request.
-    this.webSearch = new WebSearchService({
-      settings: createWebSearchSettingsStore(this.settings),
-      locale: () => this.getLanguage(),
-      ...(overrides.webSearchFetch === undefined
-        ? {}
-        : { fetch: overrides.webSearchFetch }),
-    });
-    // One store of MCP OAuth grants, shared by the sign-in flow (settings)
-    // and the session connections (pool), so a sign-in is immediately what
-    // the next connection uses.
-    this.mcpOAuth = new McpOAuthStore(this.settings);
-    // Visual assets live beside the database (open() passes that root), so a
-    // database and the images its sessions showed travel together. An
-    // in-memory core has no such directory: it gets a path under the temp
-    // directory, which nothing creates until a session actually publishes
-    // (SessionVisualStore.put), so a core that never shows an image leaves
-    // nothing behind.
-    this.visuals =
-      overrides.visuals ??
-      new SessionVisualStore(
-        join(tmpdir(), `lumisca-visuals-${crypto.randomUUID()}`),
-      );
-    // Attachments follow the same rule: beside the database when there is
-    // one, a temp directory for an in-memory core, and nothing on disk until
-    // a session actually sends a file.
-    this.attachments =
-      overrides.attachments ??
-      new SessionAttachmentStore(
-        join(tmpdir(), `lumisca-attachments-${crypto.randomUUID()}`),
-      );
-    // Icons follow the two stores above: beside the database when there is
-    // one, a temp directory for an in-memory core, and nothing on disk until
-    // an agent actually gets a picture.
-    this.agentIcons =
-      overrides.agentIcons ??
-      new AgentIconStore(
-        join(tmpdir(), `lumisca-agent-icons-${crypto.randomUUID()}`),
-      );
-    this.dbPath = overrides.dbPath;
-    this.pool =
-      overrides.pool ??
-      new SessionPool({
-        mcpOAuth: this.mcpOAuth,
-        requireModel: (provider, modelId) =>
-          this.requireModel(provider, modelId),
-        getImageAnalysisModel: () => this.models.getImageAnalysisModel(),
-        getFastModel: () => this.models.getFastModel(),
-        getFastModelInfo: () => this.models.getFastModelInfo(),
-        renameSession: (id, name) => this.setSessionName(id, name),
-        getThinkingLevel: (provider, modelId) =>
-          this.models.getThinkingLevel(provider, modelId),
-        getLanguage: () => this.getLanguage(),
-        getCompactionPolicy: () => this.getCompactionPolicy(),
-        getStellaKeepFullLog: () => this.getStellaKeepFullLog(),
-        isCodeExecutionEnabled: () => this.isCodeExecutionEnabled(),
-        isAskToolEnabled: () => this.isAskToolEnabled(),
-        recordFreedBytes: (bytes) => {
-          this.freedBytes += bytes;
-        },
-        buildGeneratedPrompt: (workspace, stella) =>
-          this.buildGeneratedPrompt(
-            workspace,
-            stella === undefined
-              ? false
-              : { role: stella.role, identity: stella.identity, id: stella.id },
-          ),
-        personalInstructions: () => {
-          const personal = this.personalization.get();
-          return personal.path === "" ? undefined : personal;
-        },
-        updateSystemPrompt: (id, systemPrompt) =>
-          this.sessions.updateSystemPrompt(id, systemPrompt),
-        streamFn,
-        messageRepo: this.messages,
-        agents: this.agents,
-        requestShapeRepo: this.requestShapes,
-        codeStore: this.codeStore,
-        commandSafety: this.commandSafety,
-        visuals: this.visuals,
-        attachments: this.attachments,
-        // Resolved lazily (open) so the circular wiring stays one-way:
-        // the pool references the service, the service references the pool
-        // via the injected applyMcpConfigChange / agentMcpStatus below.
-        loadMergedMcp: (workspace) => this.mcp.loadMergedConfig(workspace),
-        // The agent's own MCP administration (mcp_add / mcp_remove /
-        // mcp_list) goes through the same service the settings routes use, so
-        // a change made from a conversation is applied exactly like one made
-        // in Settings → MCP servers.
-        mcpAdmin: () => this.mcp,
-        requireWorkspace: (id) => this.requireWorkspace(id),
-        emit: (event) => this.emit(event),
-        browser: () => this.browserBackend,
-        computer: () => this.computerHostForSession(),
-        webSearch: () => this.webSearch.provider() ?? undefined,
-        stellaRuntime: (session) => this.stellaRuntimeFor(session),
-        shares: () => this.shareHub,
-        shareRequests: this.shareRequests,
-        stellaAgentPersona: (session) => {
-          const agentId = session.personaId;
-          if (agentId === undefined) return undefined;
-          const agent = this.stellaAgents.get(agentId);
-          return agent === undefined
-            ? undefined
-            : { role: agent.role, identity: agent.identity, id: agentId };
-        },
-        globalSkillDirs: this.globalSkillDirs,
-        appSkillDirs: this.appSkillDirs,
-      });
-    this.mcp =
-      overrides.mcp ??
-      new McpService({
-        settings: this.settings,
-        oauth: this.mcpOAuth,
-        // Every session, stella's conversation included: a sign-in must
-        // reconnect the conversation the user is talking to, and stella has one
-        // row that `list()` hides because it is not a session in the UI.
-        listSessions: (workspaceId) => this.sessions.listEvery(workspaceId),
-        agentMcpStatus: (sessionId) =>
-          this.pool.get(sessionId)?.getMcpStatus() ?? null,
-        requireWorkspace: (id) => this.requireWorkspace(id),
-        applyMcpConfigChange: (sessions, mutate) =>
-          this.pool.applyMcpConfigChange(sessions, mutate),
-        refreshSessionMcp: (sessions) => this.pool.refreshMcp(sessions),
-      });
-    this.modelService = new ModelService(this.models);
-    this.workspaces =
-      overrides.workspaces ??
-      new WorkspaceService(createWorkspaceRepo(db), {
-        listSessions: (workspaceId) => this.sessions.list(workspaceId),
-        applyChange: (sessions, mutate) =>
-          this.pool.applyChange(sessions, mutate),
-        // The core's own delete: deleting a workspace drops its sessions'
-        // rows AND their visual assets, exactly like deleting a session
-        // directly (the pool alone would leave the assets behind).
-        deleteSession: (id) => this.deleteSession(id),
-      });
-    this.services = createCoreServices({
-      machine: this.stella,
-      agents: this.stellaAgents,
-      sessions: this.sessions,
-      messages: this.messages,
-      pool: this.pool,
-      routines: this.routines,
-      routineScheduler: this.routineScheduler,
-      handovers: this.handovers,
-      envRequests: this.envRequests,
-      icons: this.agentIcons,
-      visuals: this.visuals,
-      attachments: this.attachments,
-      models: this.models,
-      workspaces: this.workspaces,
-      modelService: this.modelService,
-      webSearch: this.webSearch,
-      mcp: this.mcp,
-      decorateSession: (session) => this.decorateSession(session),
-      emit: (event) => this.emit(event),
-      language: () => this.getLanguage(),
-      chatWorkspace: () => this.getOrCreateChatWorkspace(),
-      requireWorkspace: (id) => this.requireWorkspace(id),
+    core = new LumiscaCore(graph);
+    return core;
+  }
+
+  /** The facade's own methods, as the graph builder sees them. */
+  private static hostFor(core: () => LumiscaCore): CoreHost {
+    return {
+      buildGeneratedPrompt: (workspace, stella) =>
+        core().buildGeneratedPrompt(workspace, stella),
+      browserBackend: () => core().browserBackend,
+      computerHostForSession: () => core().computerHostForSession(),
+      decorateSession: (session) => core().decorateSession(session),
+      deleteSession: (id) => core().deleteSession(id),
+      emit: (event) => core().emit(event),
+      forgetSession: (sessionId) => core().forgetSession(sessionId),
+      getCompactionPolicy: () => core().getCompactionPolicy(),
+      getLanguage: () => core().getLanguage(),
+      getOrCreateChatWorkspace: () => core().getOrCreateChatWorkspace(),
+      getStellaKeepFullLog: () => core().getStellaKeepFullLog(),
+      isAskToolEnabled: () => core().isAskToolEnabled(),
+      isCodeExecutionEnabled: () => core().isCodeExecutionEnabled(),
+      requireModel: (provider, modelId) =>
+        core().requireModel(provider, modelId),
+      requireWorkspace: (id) => core().requireWorkspace(id),
       resolveDefaultModel: (provider, modelId) =>
-        this.resolveDefaultModel(provider, modelId),
-      requireModel: (provider, modelId) => this.requireModel(provider, modelId),
-      forget: (id) => this.forgetSession(id),
-      browserAvailable: () => this.browserBackend !== undefined,
-      computerAvailable: () => this.computer.hostForSession() !== undefined,
-      globalSkillDirs: this.globalSkillDirs,
-      appSkillDirs: this.appSkillDirs,
-    });
-    // A model change made while a run was in flight is applied once that run
-    // has ended: the clients have been told the run is over, and the next run
-    // is the first that can use the model. The rebuild is deferred, so its
-    // position in the fan-out does not matter.
-    this.events.subscribe((event) => {
-      if (event.type === "agent_end") {
-        this.services.sessions.releasePendingRebuild(event.sessionId);
-      }
-    });
-    // A loan change reaches the client as the whole list for the session it
-    // belongs to: a lent folder is a security fact the user must always be
-    // able to see, and a delta would leave a client that missed one frame
-    // showing a folder nobody is serving.
-    this.shareHub.onSharesChange((sessions) => {
-      for (const sessionId of sessions) {
-        // The announcement is also the answer to a pending request: a folder
-        // the user lent from the composer's menu settles the card just as
-        // their answer to it would, and a withdrawn one settles a
-        // `share_disconnect` even when the desktop app never answered.
-        this.shareRequests
-          .get(sessionId)
-          ?.settleFromGrants(this.shareHub.grantsFor(sessionId));
-        this.emit({
-          type: "shares",
-          sessionId,
-          shares: this.shareHub.sharesFor(sessionId),
-        });
-      }
-    });
+        core().resolveDefaultModel(provider, modelId),
+      routineRunner: () => core().routineRunner(),
+      setSessionName: (id, name) => core().setSessionName(id, name),
+      stellaRuntimeFor: (session) => core().stellaRuntimeFor(session),
+    };
   }
 
   /** Settings live in ~/.config/lumisca-agent/settings.jsonc by default
@@ -632,7 +413,7 @@ export class LumiscaCore {
     settingsPath: string = resolveSettingsPath(),
     env?: EnvReader,
   ): LumiscaCore {
-    return new LumiscaCore(
+    return LumiscaCore.create(
       LumiscaDb.open(dbPath),
       createFileSettingsRepo(settingsPath),
       {
@@ -655,7 +436,7 @@ export class LumiscaCore {
   }
 
   static openInMemory(): LumiscaCore {
-    return new LumiscaCore(
+    return LumiscaCore.create(
       LumiscaDb.openInMemory(),
       createInMemorySettingsRepo(),
     );
@@ -686,7 +467,7 @@ export class LumiscaCore {
       openChannel?: VmChannelRunner;
     },
   ): LumiscaCore {
-    const core = new LumiscaCore(
+    const core = LumiscaCore.create(
       LumiscaDb.openInMemory(),
       createInMemorySettingsRepo(),
       {
@@ -750,8 +531,6 @@ export class LumiscaCore {
   }
 
   /** Bytes a prune freed in the store since this core started. */
-  private freedBytes = 0;
-
   /** Note that the database file should be rewritten at the next start.
    *
    * A marker rather than a rewrite here: the copy of a large database takes
@@ -759,13 +538,13 @@ export class LumiscaCore {
    * first request is served. Below the threshold nothing is written — a
    * conversation that only grew a little is not worth a restart's delay. */
   private async requestVacuumIfWorthwhile(): Promise<void> {
-    if (this.freedBytes < MIN_VACUUM_BYTES || this.dbPath === undefined) {
+    if (this.state.freedBytes < MIN_VACUUM_BYTES || this.dbPath === undefined) {
       return;
     }
     try {
       await fsp.writeFile(
         vacuumMarkerPath(this.dbPath),
-        String(this.freedBytes),
+        String(this.state.freedBytes),
         { mode: 0o600 },
       );
     } catch (error) {
