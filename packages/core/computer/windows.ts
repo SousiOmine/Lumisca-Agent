@@ -49,6 +49,8 @@ import {
   MOVE_MS,
   MOVE_TICK_MS,
   type ModifierName,
+  type NamedKeyId,
+  namedKeyId,
   parseKeyChord,
   splitTypeText,
 } from "./motion.ts";
@@ -319,8 +321,9 @@ export function buildKeyChordInputs(
   return concatBytes(parts);
 }
 
-/** Named keys accepted in a key chord (lower case). */
-const KEY_NAMES: Record<string, number> = {
+/** The Win32 virtual key of each named key. The names themselves are in
+ * motion.ts (NAMED_KEY_IDS): this is only the platform's value for each. */
+const NAMED_KEYS: Partial<Record<NamedKeyId, number>> = {
   enter: 0x0d,
   return: 0x0d,
   tab: 0x09,
@@ -380,8 +383,8 @@ export function resolveKeyChord(
 ): KeyChord {
   const parsed = parseKeyChord(chord);
   const modifiers = parsed.modifiers.map((name) => MODIFIER_VKS[name]);
-  const lower = parsed.key.toLowerCase();
-  const named = KEY_NAMES[lower];
+  const id = namedKeyId(parsed.key);
+  const named = id === undefined ? undefined : NAMED_KEYS[id];
   if (named !== undefined) {
     return { vk: named, modifiers };
   }

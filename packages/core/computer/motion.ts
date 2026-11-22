@@ -122,3 +122,51 @@ export function parseKeyChord(chord: string): ParsedKeyChord {
   }
   return { modifiers, key };
 }
+
+/**
+ * The named keys a chord may spell, in one table shared by every platform.
+ *
+ * A chord is written the same way everywhere ("enter", "ctrl+shift+s", "f5"),
+ * and the SET of names is part of that syntax: a name Windows accepts and
+ * X11 refused would be a difference the agent cannot see. What differs is
+ * only what a name maps to (a virtual key code, an X11 keysym), so each host
+ * carries a table from an id to its own value and nothing else.
+ */
+export const NAMED_KEY_IDS = [
+  "enter",
+  "return",
+  "tab",
+  "escape",
+  "esc",
+  "space",
+  "backspace",
+  "delete",
+  "del",
+  "insert",
+  "home",
+  "end",
+  "pageup",
+  "pgup",
+  "pagedown",
+  "pgdn",
+  "up",
+  "down",
+  "left",
+  "right",
+  "capslock",
+  "numlock",
+  "scrolllock",
+  "printscreen",
+  "pause",
+  ...Array.from({ length: 24 }, (_, i) => `f${i + 1}`),
+] as const;
+
+/** One named key, as a host's table is keyed by it. */
+export type NamedKeyId = (typeof NAMED_KEY_IDS)[number];
+
+/** The id of a chord's key part when it names a key, or undefined when it
+ * is something else (a single character, or a name no host knows). */
+export function namedKeyId(key: string): NamedKeyId | undefined {
+  const lower = key.toLowerCase();
+  return NAMED_KEY_IDS.find((id) => id === lower);
+}

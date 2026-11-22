@@ -4,6 +4,8 @@ import {
   DRAG_MS,
   interpolatePoint,
   MOVE_MS,
+  NAMED_KEY_IDS,
+  namedKeyId,
   parseKeyChord,
   splitTypeText,
 } from "./motion.ts";
@@ -110,4 +112,20 @@ test("the movement timings stay human-scale and ordered", () => {
   assertEquals(MOVE_MS, 100);
   assertEquals(DRAG_MS, 300);
   assert(DRAG_MS > MOVE_MS);
+});
+
+// --- named keys -------------------------------------------------------------
+
+test("NAMED_KEY_IDS is the one list of names a chord may spell", () => {
+  // The set is the syntax, not a platform's convenience: both hosts read it,
+  // and each only owns the value a name maps to.
+  assertEquals(namedKeyId("Enter"), "enter");
+  assertEquals(namedKeyId("PGUP"), "pgup");
+  assertEquals(namedKeyId("f24"), "f24");
+  // A name outside the table is left to the host (a single character, or a
+  // name neither platform knows).
+  assertEquals(namedKeyId("a"), undefined);
+  assertEquals(namedKeyId("nope"), undefined);
+  // The table has no duplicate that would make one name shadow another.
+  assertEquals(new Set(NAMED_KEY_IDS).size, NAMED_KEY_IDS.length);
 });
