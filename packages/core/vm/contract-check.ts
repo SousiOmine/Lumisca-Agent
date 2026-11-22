@@ -34,7 +34,7 @@ import {
   vmCacheHomeOf,
   vmContainerName,
 } from "./contract.ts";
-import { podmanExec } from "./podman.ts";
+import { execArgv } from "./podman.ts";
 
 /**
  * The contract probes, in one shell.
@@ -150,7 +150,7 @@ export function createContractChecker(options: {
   async function verifyContract(agentId: string): Promise<string | null> {
     const name = vmContainerName(agentId);
     const result = await run(
-      podmanExec(name, [
+      execArgv(name, [
         "sh",
         "-c",
         CONTRACT_PROBE_SCRIPT,

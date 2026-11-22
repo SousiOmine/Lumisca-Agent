@@ -37,7 +37,7 @@ import {
   vmContainerName,
 } from "./contract.ts";
 import type { ImageManager } from "./image.ts";
-import { detail, podman, podmanExec } from "./podman.ts";
+import { detail, execArgv, podman } from "./podman.ts";
 import type { VmProgress } from "./types.ts";
 
 export interface ContainerLifecycle {
@@ -199,7 +199,7 @@ export function createContainerLifecycle(options: {
     const deadline = Date.now() + 30_000;
     for (;;) {
       const probe = await run(
-        podmanExec(name, ["xdotool", "getdisplaygeometry"]),
+        execArgv(name, ["xdotool", "getdisplaygeometry"]),
         { timeoutMs: 15_000, maxOutput: 4096 },
       );
       if (probe.exitCode === 0) return;

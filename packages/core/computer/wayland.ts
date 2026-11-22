@@ -33,14 +33,11 @@ import {
   MODIFIER_KEYSYMS,
 } from "./keysyms.ts";
 import {
-  CLICK_HOLD_MS,
-  DRAG_HOLD_MS,
-  DRAG_MS,
-  HOVER_SETTLE_MS,
+  type ActionPrimitives,
   interpolatePoint,
-  MOVE_MS,
   MOVE_TICK_MS,
   parseKeyChord,
+  performAction,
   splitTypeText,
 } from "./motion.ts";
 import { type PortalProbeOptions, probePortal } from "./portal/client.ts";
@@ -194,74 +191,7 @@ export class WaylandComputerHost implements ComputerHost {
   }
 
   async act(action: ComputerAction): Promise<ComputerActionResult> {
-    const started = Date.now();
-    switch (action.kind) {
-      case "move": {
-        const steps = await this.movePointer(action.x, action.y, MOVE_MS);
-        return { steps, durationMs: Date.now() - started };
-      }
-      case "click": {
-        const steps = await this.movePointer(action.x, action.y, MOVE_MS);
-        await sleep(HOVER_SETTLE_MS);
-        for (let i = 0; i < action.count; i++) {
-          await this.pointerButton(action.button, true);
-          await sleep(CLICK_HOLD_MS);
-          await this.pointerButton(action.button, false);
-          if (i + 1 < action.count) await sleep(CLICK_HOLD_MS);
-        }
-        return { steps, durationMs: Date.now() - started };
-      }
-      case "drag": {
-        const approach = await this.movePointer(
-          action.from.x,
-          action.from.y,
-          MOVE_MS,
-        );
-        await sleep(HOVER_SETTLE_MS);
-        await this.pointerButton(action.button, true);
-        await sleep(DRAG_HOLD_MS);
-        const path = await this.movePointer(action.to.x, action.to.y, DRAG_MS);
-        await sleep(HOVER_SETTLE_MS);
-        await this.pointerButton(action.button, false);
-        return { steps: approach + path, durationMs: Date.now() - started };
-      }
-      case "scroll": {
-        const steps = await this.movePointer(action.x, action.y, MOVE_MS);
-        await sleep(HOVER_SETTLE_MS);
-        if (action.deltaY !== 0) {
-          await this.withSession((session) =>
-            session.pointerAxisDiscrete("vertical", action.deltaY),
-          );
-        }
-        if (action.deltaX !== 0) {
-          await this.withSession((session) =>
-            session.pointerAxisDiscrete("horizontal", action.deltaX),
-          );
-        }
-        return { steps, durationMs: Date.now() - started };
-      }
-      case "type": {
-        await this.typeText(action.text);
-        return { steps: 0, durationMs: Date.now() - started };
-      }
-      case "key": {
-        await this.pressKey(action.key);
-        return { steps: 0, durationMs: Date.now() - started };
-      }
-      case "focus_window": {
-        throw new CoreError(
-          "focusing a window by its id is not possible on Wayland: the " +
-            "desktop does not tell the agent which windows exist. Press " +
-            '"alt+tab" (computer_act action "key") to switch windows, or ' +
-            "click the one you mean from a screenshot.",
-          "unavailable",
-        );
-      }
-      case "wait": {
-        await sleep(action.durationMs);
-        return { steps: 0, durationMs: Date.now() - started };
-      }
-    }
+    return await performAction(this.primitives(), action);
   }
 
   close(): void {
@@ -276,6 +206,42 @@ export class WaylandComputerHost implements ComputerHost {
   }
 
   // --- internals ------------------------------------------------------------
+
+  /** What {@link performAction} drives: the parts of an action this platform
+   * owns. The pointer cannot be read and windows cannot be enumerated, so
+   * those two report nothing and `focus_window` refuses with the reason. */
+  private primitives(): ActionPrimitives {
+    return {
+      movePointer: (x, y, durationMs) => this.movePointer(x, y, durationMs),
+      button: (button, pressed) => this.pointerButton(button, pressed),
+      wheel: async (deltaX, deltaY) => {
+        if (deltaY !== 0) {
+          await this.withSession((session) =>
+            session.pointerAxisDiscrete("vertical", deltaY),
+          );
+        }
+        if (deltaX !== 0) {
+          await this.withSession((session) =>
+            session.pointerAxisDiscrete("horizontal", deltaX),
+          );
+        }
+      },
+      typeText: (text) => this.typeText(text),
+      key: (chord) => this.pressKey(chord),
+      focusWindow: () =>
+        Promise.reject(
+          new CoreError(
+            "focusing a window by its id is not possible on Wayland: the " +
+              "desktop does not tell the agent which windows exist. Press " +
+              '"alt+tab" (computer_act action "key") to switch windows, or ' +
+              "click the one you mean from a screenshot.",
+            "unavailable",
+          ),
+        ),
+      cursor: () => undefined,
+      foregroundWindow: () => undefined,
+    };
+  }
 
   /** Re-read the layout so a monitor plugged in after startup is picked up.
    * A failure keeps the cached layout: it was correct when the host was

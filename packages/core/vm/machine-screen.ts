@@ -1,6 +1,6 @@
 /**
- * The screen side of the machine's per-agent state: whose desktop this process
- * started, the desktop start in flight, and the host port a pane connects to.
+ * The screen side of one agent's machine: whose desktop this process started,
+ * the desktop start in flight, and the host port a pane connects to.
  *
  * A desktop is started at most once per container and only when somebody is
  * already at the screen: the pane asks for the port before the agent runs
@@ -12,9 +12,13 @@
  * The port is read fresh at every ask rather than remembered: it is assigned
  * when the container is created, so a container replaced by an image rebuild
  * has another one.
+ *
+ * What this process knows lives in the agent's one state record (see
+ * machine-state.ts): `desktop` and `desktopStarting`.
  */
 
 import type { VmHost } from "./container.ts";
+import type { MachineStates } from "./machine-state.ts";
 
 /** What asking for a port does to the machine before the port is read: the
  * caller counts as use and is woken, because a pane opened on a sleeping
@@ -25,14 +29,10 @@ export interface ScreenCaller {
 }
 
 export class AgentScreens {
-  /** The agents whose desktop this server started since their container came
-   * up. */
-  #desktops = new Set<string>();
-  /** The desktop start in flight per agent. */
-  #starts = new Map<string, Promise<void>>();
-
   constructor(
     private readonly options: {
+      /** The per-agent state, created and dropped in one place. */
+      states: MachineStates;
       /** The host every machine shares, when one is attached. */
       currentHost: () => VmHost | undefined;
       /** The host, or the error saying there is none. */
@@ -45,15 +45,10 @@ export class AgentScreens {
   /** Drop the record of one agent's desktop: its container is on its way out or
    * was just started, so whatever was up is gone. */
   forget(agentId: string): void {
-    this.#desktops.delete(agentId);
-    this.#starts.delete(agentId);
-  }
-
-  /** Drop every record (a different host was attached, or every machine was
-   * stopped). */
-  clear(): void {
-    this.#desktops.clear();
-    this.#starts.clear();
+    const state = this.options.states.known(agentId);
+    if (state === undefined) return;
+    state.desktop = false;
+    state.desktopStarting = undefined;
   }
 
   /** The host port of an agent's screen, waking the machine and starting its
@@ -72,8 +67,9 @@ export class AgentScreens {
    * waits for the start in flight rather than asking for a second window
    * manager. */
   async ensureDesktop(agentId: string): Promise<void> {
-    if (this.#desktops.has(agentId)) return;
-    const pending = this.#starts.get(agentId);
+    const state = this.options.states.of(agentId);
+    if (state.desktop) return;
+    const pending = state.desktopStarting;
     if (pending !== undefined) {
       await pending;
       return;
@@ -83,12 +79,12 @@ export class AgentScreens {
       .machine(agentId)
       .startDesktop()
       .then(() => {
-        this.#desktops.add(agentId);
+        state.desktop = true;
       })
       .finally(() => {
-        this.#starts.delete(agentId);
+        state.desktopStarting = undefined;
       });
-    this.#starts.set(agentId, start);
+    state.desktopStarting = start;
     await start;
   }
 }

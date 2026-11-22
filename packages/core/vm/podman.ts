@@ -23,25 +23,41 @@ export function detail(result: VmCommandResult): string {
   return text === "" ? `exit code ${result.exitCode}` : firstLine(text);
 }
 
-/** The `podman exec` argv for a command inside one machine. */
-export function podmanExec(
+/** What one `podman exec` call carries, whatever shape its output comes back
+ * in: the working folder, whether the program reads stdin, and the
+ * per-call environment. */
+export interface ExecArgvOptions {
+  /** The folder the command starts in (defaults to VM_WORKDIR). */
+  workdir?: string;
+  /** Whether the program's stdin stays open (`--interactive`). Required by
+   * anything that writes to the program, and only by that. */
+  interactive?: boolean;
+  /** Environment variables for this call only (`--env`). */
+  env?: Record<string, string>;
+}
+
+/**
+ * The `podman exec` argv for a command inside one machine.
+ *
+ * The single place the exec argument shape is written: the text and byte
+ * seams, the interactive channel the scripting tool keeps open, the desktop
+ * helper, the contract probe and the screen probe all call this, so no
+ * caller can invent a flag order or forget the workdir.
+ */
+export function execArgv(
   name: string,
   command: readonly string[],
-  exec: {
-    workdir?: string;
-    interactive?: boolean;
-    env?: Record<string, string>;
-  } = {},
+  options: ExecArgvOptions = {},
 ): string[] {
   return podman([
     "exec",
-    ...(exec.interactive === true ? ["--interactive"] : []),
-    ...Object.entries(exec.env ?? {}).flatMap(([name, value]) => [
+    ...(options.interactive === true ? ["--interactive"] : []),
+    ...Object.entries(options.env ?? {}).flatMap(([name, value]) => [
       "--env",
       `${name}=${value}`,
     ]),
     "--workdir",
-    exec.workdir ?? VM_WORKDIR,
+    options.workdir ?? VM_WORKDIR,
     name,
     ...command,
   ]);

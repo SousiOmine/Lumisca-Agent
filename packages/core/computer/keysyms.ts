@@ -12,10 +12,11 @@
  * everything else is the Unicode keysym range (0x01000000 + codepoint).
  */
 import { CoreError } from "../errors.ts";
-import type { ModifierName } from "./motion.ts";
+import { type ModifierName, type NamedKeyId, namedKeyId } from "./motion.ts";
 
-/** Named keys a chord may spell; lower case. */
-const NAMED_KEYSYMS: Record<string, number> = {
+/** The X11 keysym of each named key. The names themselves are in
+ * motion.ts (NAMED_KEY_IDS): this is only the platform's value for each. */
+const NAMED_KEYSYMS: Partial<Record<NamedKeyId, number>> = {
   enter: 0xff0d,
   return: 0xff0d,
   tab: 0xff09,
@@ -58,7 +59,7 @@ export const MODIFIER_KEYSYMS: Record<ModifierName, number> = {
 
 /** The keysym of a newline, i.e. the Enter key: a `type` action turns each
  * newline into one of these (see motion.ts's splitTypeText). */
-export const KEYSYM_RETURN = NAMED_KEYSYMS["enter"]!;
+export const KEYSYM_RETURN = NAMED_KEYSYMS.enter!;
 
 /** The keysym of one character (one code point, so a surrogate pair is a
  * single call). */
@@ -73,8 +74,11 @@ export function charKeysym(character: string): number {
 /** The keysym of a chord's key part: a named key, or a single character
  * (which is kept as written — "A" is the upper-case keysym). */
 export function keyKeysym(key: string): number {
-  const named = NAMED_KEYSYMS[key.toLowerCase()];
-  if (named !== undefined) return named;
+  const id = namedKeyId(key);
+  if (id !== undefined) {
+    const named = NAMED_KEYSYMS[id];
+    if (named !== undefined) return named;
+  }
   const characters = [...key];
   if (characters.length !== 1) {
     throw new CoreError(`unknown key "${key}"`, "invalid");

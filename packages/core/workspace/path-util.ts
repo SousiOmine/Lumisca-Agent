@@ -55,6 +55,15 @@ export function isWithin(root: string, candidate: string): boolean {
   return isWithinWith(root, candidate, { caseInsensitive: OS === "windows" });
 }
 
+/** True when `candidate` is `root` itself or sits below it, compared as a
+ * POSIX path: a path inside a container, a lent folder's namespace, or a
+ * skill directory is POSIX whatever the host's disk does. Named so a call
+ * site says WHICH boundary it is checking; the rule itself is
+ * {@link isWithinWith}. */
+export function isWithinPosix(root: string, candidate: string): boolean {
+  return isWithinWith(root, candidate, { posix: true });
+}
+
 /** Filesystem-resolved containment: when both paths resolve, the real path
  * must stay inside the real root (symlink/junction escape guard). Builds on
  * {@link isWithin} so the comparison rules cannot drift between the lexical

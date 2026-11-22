@@ -15,7 +15,6 @@ import type { SkillDef } from "../skills/discover.ts";
 import type { StellaAgentRepo } from "../stella/agents.ts";
 import type { IdentityTarget } from "../stella/identity.ts";
 import { createIdentityTool } from "../stella/identity.ts";
-import { StellaSkillCache } from "../stella/skill-cache.ts";
 import { createAgentCreateTool } from "../stella/tools.ts";
 import { createHistorySearchTool } from "../tools/history.ts";
 import { createVmAskUserTool } from "../vm/ask-user.ts";
@@ -55,8 +54,6 @@ import type { NewSession } from "./session-lifecycle.ts";
  * the machine side.
  */
 export class StellaMachineService {
-  /** The catalog of each agent, as last read (see StellaSkillCache). */
-  private readonly skills = new StellaSkillCache();
   /** The machines' variable store, kept across sessions so its write queue
    * serializes two dialogs answered at once (see VmEnvStore). One store for
    * every agent: they share the home volume, so `env.json` is one file and
@@ -205,7 +202,7 @@ export class StellaMachineService {
     // catalog after it wakes (see ensureStellaSkills).
     if (await this.deps.machine.isRunning(agent.id)) {
       await Promise.all([
-        this.primeStellaSkills(agent.id),
+        this.ensureStellaSkills(agent.id),
         this.deps.machine.ensureAgentFolder(agent.id),
       ]);
     }
@@ -651,39 +648,26 @@ export class StellaMachineService {
     hub.decline(toolCallId);
   }
 
-  /** Re-read one stella agent's skill catalog. Awaited before its session
-   * opens, so the agent's skill tool starts with a current list. */
+  /**
+   * Re-read one stella agent's skill catalog now.
+   *
+   * The catalog lives inside the machine, so a read costs a `podman exec`
+   * (and, on a self-hosted server reached over a phone, whatever the link
+   * costs on top). Only the calls that know the list changed ask for this;
+   * everything else asks {@link ensureStellaSkills}, which reuses a read that
+   * is still fresh. Both go to the machine, which owns the catalog and its
+   * timing: there is no second cache beside it to disagree with.
+   */
   refreshStellaSkills(agentId: string): Promise<void> {
-    return this.skills.refresh(agentId, this.deps.machine.get(), () =>
-      this.deps.machine.refreshSkills(agentId),
-    );
+    return this.deps.machine.refreshSkills(agentId);
   }
 
-  /** Read one stella agent's skill catalog when this server has not read it
-   * yet. A run that starts without opening the conversation (a routine)
-   * asks this before its agent is built; opening a conversation instead
-   * primes the catalog with `primeStellaSkills`. */
+  /** Make one stella agent's skill catalog current enough to use: the read
+   * made for a conversation that is still open, or the first read this
+   * process makes. A run that starts without opening the conversation (a
+   * routine) asks this before its agent is built, and so does an open, so a
+   * conversation and the run inside it share one `podman exec`. */
   ensureStellaSkills(agentId: string): Promise<void> {
     return this.deps.machine.ensureSkills(agentId);
-  }
-
-  /**
-   * Make one agent's skill catalog current enough to open its conversation.
-   *
-   * The catalog lives inside the machine, so reading it costs a `podman
-   * exec` (and, on a self-hosted server reached over a phone, whatever the
-   * link costs on top). A catalog read moments ago — or one this call
-   * started — is reused: a skill the agent wrote during a conversation is
-   * picked up by the next open after the window, not by the open that is
-   * already five calls deep into a cold start.
-   *
-   * Concurrent opens of the same agent share one read, so two clients cannot
-   * queue two `podman exec`s for the same list. Another agent has another
-   * folder, hence another entry.
-   */
-  private primeStellaSkills(agentId: string): Promise<void> {
-    return this.skills.prime(agentId, this.deps.machine.get(), () =>
-      this.deps.machine.refreshSkills(agentId),
-    );
   }
 }
