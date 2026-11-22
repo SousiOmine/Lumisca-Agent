@@ -14,18 +14,14 @@ import type { Agent } from "../ai/agent.ts";
 import type { NotificationPayload } from "../ai/notification.ts";
 import { notificationMessage } from "../ai/notification.ts";
 import type { ClientEvent } from "../domain/event.ts";
-import type {
-  AgentMessage,
-  ImageContent,
-  TextContent,
-} from "../domain/message.ts";
+import type { AgentMessage, ImageContent } from "../domain/message.ts";
 import type { ModePrompt } from "../domain/mode-message.ts";
-import { buildModeMessage } from "../domain/mode-message.ts";
 import { errorMessage } from "../errors.ts";
-import { type PromptFileRef, textWithFileNotice } from "../shared/mod.ts";
+import type { PromptFileRef } from "../shared/mod.ts";
 import type { BackgroundCommandDone } from "../tools/background.ts";
 import { formatBackgroundNotification } from "../tools/background.ts";
 import type { McpAttachmentHost } from "./mcp-host.ts";
+import { buildPromptEnvelope } from "./prompt-envelope.ts";
 import type { RetryManager } from "./retry-manager.ts";
 import type { Rewinder } from "./rewinder.ts";
 import { ROUTINE_SILENCE_GUIDANCE } from "./routine-guidance.ts";
@@ -33,19 +29,6 @@ import { type RoutineDropHost, RoutineRun } from "./routine-run.ts";
 import type { SessionTurn } from "./session-turn.ts";
 import type { TitleScheduler } from "./title-scheduler.ts";
 import type { TranscriptStore } from "./transcript.ts";
-
-/** `text` with `part` after it, separated by a blank line; undefined when
- * there is nothing to append (so a message without a model-only part keeps
- * `modelContent` unset and its content is its identity). */
-function withTrailingPart(
-  text: string,
-  part: string | undefined,
-): string | undefined {
-  if (part === undefined || part.length === 0) {
-    return text.length === 0 ? undefined : text;
-  }
-  return text.length === 0 ? part : `${text}\n\n${part}`;
-}
 
 /** What starting a run needs from the session that owns it. Function-based
  * rather than a reference to the session agent: the runs read the live agent,
@@ -188,15 +171,18 @@ export class SessionRuns {
     const steered = this.joinsActiveRun();
     // Same order as runPrompt: the preamble, then the prompt it introduces.
     host.publishContexts();
-    const message = mode
-      ? buildModeMessage(
-          mode,
-          text,
-          images ?? [],
-          host.agent.nextTimestamp(),
-          steered,
-        )
-      : this.buildUserMessage(text, images, steered, routine, files, modelOnly);
+    const message = buildPromptEnvelope(
+      {
+        text,
+        ...(images !== undefined ? { images } : {}),
+        steered,
+        ...(mode !== undefined ? { mode } : {}),
+        ...(routine !== undefined ? { routine } : {}),
+        ...(files !== undefined ? { files } : {}),
+        ...(modelOnly !== undefined ? { modelOnly } : {}),
+      },
+      host.agent.nextTimestamp(),
+    );
     host.announce(message);
     void this.deliverPrompt(message, mode);
   }
@@ -270,7 +256,7 @@ export class SessionRuns {
       /** Files the user attached to this prompt (already in the machine). */
       files?: PromptFileRef[];
       /** Text only the MODEL reads, after the prompt (see
-       * `buildUserMessage`'s `modelOnly`). */
+       * `buildPromptEnvelope`'s `modelOnly`). */
       modelOnly?: string;
     } = {},
   ): Promise<{ failure: string | null }> {
@@ -294,22 +280,22 @@ export class SessionRuns {
     host.publishContexts();
     const message =
       options.announced ??
-      (options.mode !== undefined
-        ? buildModeMessage(
-            options.mode,
-            text,
-            images ?? [],
-            host.agent.nextTimestamp(),
-            steered,
-          )
-        : this.buildUserMessage(
-            text,
-            images,
-            steered,
-            options.routine?.name,
-            options.files,
-            options.modelOnly,
-          ));
+      buildPromptEnvelope(
+        {
+          text,
+          ...(images !== undefined ? { images } : {}),
+          steered,
+          ...(options.mode !== undefined ? { mode: options.mode } : {}),
+          ...(options.routine !== undefined
+            ? { routine: options.routine.name }
+            : {}),
+          ...(options.files !== undefined ? { files: options.files } : {}),
+          ...(options.modelOnly !== undefined
+            ? { modelOnly: options.modelOnly }
+            : {}),
+        },
+        host.agent.nextTimestamp(),
+      );
     if (options.announced === undefined) host.announce(message);
     host.turn.resetRetryState();
     // Where the routine's own prompt will sit: the view's length now, since
@@ -409,47 +395,6 @@ export class SessionRuns {
         message: errorMessage(error),
       });
     }
-  }
-
-  /** Build a user message from text + optional images (single home for the
-   * content assembly every prompt path shares). `steered` marks a prompt
-   * delivered into the run that was already active (see
-   * UserMessage.steered). */
-  private buildUserMessage(
-    text: string,
-    images?: ImageContent[],
-    steered?: boolean,
-    routine?: string,
-    files?: PromptFileRef[],
-    /** Text only the MODEL reads, appended after the visible text (and after
-     * the file notice). Undefined → nothing is added. See
-     * `UserMessage.modelContent`. */
-    modelOnly?: string,
-  ): AgentMessage {
-    const content: Array<TextContent | ImageContent> = [{ type: "text", text }];
-    if (images !== undefined && images.length > 0) content.push(...images);
-    // The files already sit in the machine; this record is what the
-    // conversation draws under the bubble. Their paths are addressed to the
-    // MODEL, so they travel as `modelContent` and never reach the screen: the
-    // user wrote a sentence, and the sentence is what they should see.
-    //
-    // A routine's silence guidance belongs there for the same reason: it is
-    // addressed to the model, and a bubble that told the user "if there is
-    // nothing to report, stay silent" is prose about the run rather than the
-    // run's instruction.
-    const modelContent = withTrailingPart(
-      textWithFileNotice(text, files ?? []),
-      modelOnly,
-    );
-    return {
-      role: "user",
-      content,
-      ...(modelContent !== undefined ? { modelContent } : {}),
-      ...(steered === true ? { steered } : {}),
-      ...(routine !== undefined && routine !== "" ? { routine } : {}),
-      ...(files !== undefined && files.length > 0 ? { files } : {}),
-      timestamp: this.host.agent.nextTimestamp(),
-    };
   }
 
   /** Inject a notification message into the agent loop (background
