@@ -20,6 +20,7 @@ import type {
 import type { ResolvedPath } from "../workspace/sandbox.ts";
 import type { FolderGrant } from "./grant.ts";
 import {
+  isExpired,
   isWithinShare,
   relativeSegments,
   SHARE_ROOT,
@@ -82,7 +83,7 @@ export class RemoteFolderBackend implements FileBackend {
         reason: `Path is outside ${this.#root}: ${requested}`,
       });
     }
-    if (Date.now() >= this.#grant.expiresAt) {
+    if (isExpired(this.#grant, Date.now())) {
       return Promise.resolve({
         ok: false,
         reason: `${this.#root} is no longer lent: the user's loan ended`,
