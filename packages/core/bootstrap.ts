@@ -161,6 +161,7 @@ export function createCoreServices(deps: CoreServicesDeps): CoreServices {
         deps.models.getSessionModel(provider, modelId),
       thinkingState: (provider, modelId, model) =>
         deps.models.thinkingState(provider, modelId, model),
+      describeModel: (model) => deps.models.describeModel(model),
       getThinkingLevel: (provider, modelId) =>
         deps.models.getThinkingLevel(provider, modelId),
     },

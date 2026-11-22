@@ -25,6 +25,7 @@ import {
   type NewSession,
   SessionLifecycle,
 } from "./session-lifecycle.ts";
+import { type SessionThinking, sessionThinking } from "./session-model-view.ts";
 import { SessionRuns } from "./session-runs.ts";
 import { SessionSkills } from "./session-skills.ts";
 import { SessionTranscript } from "./session-transcript.ts";
@@ -128,23 +129,12 @@ export class SessionService {
   /** The thinking level a session's model runs at, and the levels that model
    * supports. The level belongs to the model, not to the session, so it is
    * read through the session's current model every time. */
-  getThinkingState(sessionId: string): {
-    thinkingLevel: ThinkingLevel;
-    thinkingLevels: ThinkingLevel[];
-  } {
+  getThinkingState(sessionId: string): SessionThinking {
     const session = this.lifecycle.getSession(sessionId);
     if (session === undefined) {
       throw new CoreError(`Session not found: ${sessionId}`, "not_found");
     }
-    const model = this.models.getSessionModel(
-      session.modelProvider,
-      session.modelId,
-    );
-    return this.models.thinkingState(
-      session.modelProvider,
-      session.modelId,
-      model,
-    );
+    return sessionThinking(this.models, session.modelProvider, session.modelId);
   }
 
   closeSession(id: string): Promise<void> {
