@@ -601,12 +601,12 @@ function validateLiteral(
 ): void {
   switch (prop.kind) {
     case "string": {
-      stringOf(value, path, stringLimit(component.name, name));
+      stringOf(value, path, prop.maxChars);
       return;
     }
     case "text": {
       if (typeof value === "number") return;
-      stringOf(value, path, stringLimit(component.name, name));
+      stringOf(value, path, prop.maxChars);
       return;
     }
     case "number": {
@@ -1283,20 +1283,6 @@ function checkType(value: unknown, prop: UiAppProp, path: string): void {
     case "any":
       return;
   }
-}
-
-/** The length limit of one string prop. */
-function stringLimit(component: string, prop: string): number {
-  if (prop === "title") return UI_APP_LIMITS.titleChars;
-  if (prop === "description") return UI_APP_LIMITS.descriptionChars;
-  if (prop === "text" && component === "Text") return UI_APP_LIMITS.textChars;
-  if (prop === "text") return UI_APP_LIMITS.labelChars;
-  if (prop === "value" && component === "Metric")
-    return UI_APP_LIMITS.labelChars;
-  if (prop === "hint" || prop === "unit") return UI_APP_LIMITS.labelChars;
-  if (prop === "label" || prop === "placeholder")
-    return UI_APP_LIMITS.labelChars;
-  return UI_APP_LIMITS.textChars;
 }
 
 /** Check one state object and its size. */
