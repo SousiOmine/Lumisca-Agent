@@ -1,11 +1,6 @@
-import * as fsp from "node:fs/promises";
 import type { SessionInfo } from "@lumisca/core";
 import { Hono } from "hono";
-import {
-  ensurePreview,
-  previewPathOf,
-} from "../../core/media/preview-cache.ts";
-import { assetResponse } from "./asset-response.ts";
+import { serveAsset } from "./asset-response.ts";
 import { notFound } from "./util.ts";
 
 /** The slice of the core these routes need (interface segregation). */
@@ -40,39 +35,20 @@ export function attachmentRoutes(core: AttachmentApi): Hono {
   app.get("/sessions/:id/attachment/:name", async (c) => {
     const sessionId = c.req.param("id");
     const name = c.req.param("name");
-    if (core.getSession(sessionId) === undefined) {
-      throw notFound("Session", sessionId);
-    }
-    const attachment = await core.resolveSessionAttachment(sessionId, name);
-    if (attachment === undefined) {
-      throw notFound("Attachment", name);
-    }
-    // The download carries the name the user knows, not the store's random
-    // one (see asset-headers.ts for the rest of the rules).
-    // A picture is drawn small, so the conversation gets a downscaled copy
-    // (`preview=0` asks for the original, which is what a click opens). The
-    // preview is stored beside its source under a name derived from it (see
-    // media/preview-cache.ts), so this costs one read after the first draw.
-    const wantsPreview = c.req.query("preview") !== "0";
-    const preview = wantsPreview
-      ? await ensurePreview(
-          attachment.path,
-          previewPathOf(attachment.path, name),
-          attachment.mimeType,
-        )
-      : undefined;
-    if (preview !== undefined) {
-      return assetResponse(c, {
-        bytes: preview.buffer as ArrayBuffer,
-        mimeType: attachment.mimeType,
-        downloadName: attachment.downloadName,
-      });
-    }
-    const bytes = await fsp.readFile(attachment.path);
-    return assetResponse(c, {
-      bytes: bytes.buffer as ArrayBuffer,
-      mimeType: attachment.mimeType,
-      downloadName: attachment.downloadName,
+    return await serveAsset(c, {
+      preview: "stored",
+      resolvePath: async () => {
+        if (core.getSession(sessionId) === undefined) {
+          throw notFound("Session", sessionId);
+        }
+        const attachment = await core.resolveSessionAttachment(sessionId, name);
+        if (attachment === undefined) {
+          throw notFound("Attachment", name);
+        }
+        // The download carries the name the user knows, not the store's
+        // random one (see asset-headers.ts for the rest of the rules).
+        return attachment;
+      },
     });
   });
 
