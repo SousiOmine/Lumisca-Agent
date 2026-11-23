@@ -93,10 +93,18 @@ function pageIsLocal(c: Context): boolean {
   }
 }
 
-export function providerRoutes(
-  core: ProviderApi,
-  onDispose?: (dispose: () => void) => void,
-): Hono {
+/** The provider routes and the one resource they own: the OAuth login
+ * sessions, whose polls hold timers and can still write a credential after
+ * the server said it stopped. Returned together so a caller cannot take the
+ * app without its teardown (the same rule `ServerApp` states for the whole
+ * server). */
+export interface ProviderRoutes {
+  readonly app: Hono;
+  /** Stop every running login flow. Runs once. */
+  dispose(): void;
+}
+
+export function providerRoutes(core: ProviderApi): ProviderRoutes {
   const app = new Hono();
 
   const authCache = ttlCache<
@@ -222,7 +230,6 @@ export function providerRoutes(
   // methods are not interchangeable (only a page on this machine can finish
   // the browser flow).
   const loginSessions = new LoginSessions();
-  onDispose?.(() => loginSessions.dispose());
 
   app.post("/providers/:id/login", async (c) => {
     const id = c.req.param("id");
@@ -345,5 +352,13 @@ export function providerRoutes(
     return c.json({ ok: true });
   });
 
-  return app;
+  let disposed = false;
+  return {
+    app,
+    dispose: () => {
+      if (disposed) return;
+      disposed = true;
+      loginSessions.dispose();
+    },
+  };
 }

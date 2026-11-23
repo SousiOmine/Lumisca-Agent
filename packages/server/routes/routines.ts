@@ -12,16 +12,19 @@
  */
 
 import type { Routine, StellaAgent } from "@lumisca/core";
-import type { RoutineView } from "@lumisca/core/shared";
+import { nextRunAt, type RoutineView } from "@lumisca/core/shared";
 import { Hono } from "hono";
 import { AppError, notFound, parseBody, requireBoolean } from "./util.ts";
 
-export interface RoutineApi {
-  listRoutinesOf(agentId: string): Routine[];
-  isRoutineRunning(id: string): boolean;
-  isRoutineQueued(id: string): boolean;
-  runRoutineNow(id: string): Promise<void>;
-  stopRoutine(id: string): void;
+/** The scheduler's surface (`core.routines`), declared by its method names
+ * rather than restated: the route is handed the service itself, so a rename
+ * there fails the type check here instead of drifting inside a closure. */
+export interface RoutineSource {
+  listOf(agentId: string): Routine[];
+  isRunning(id: string): boolean;
+  isQueued(id: string): boolean;
+  runNow(id: string): Promise<void>;
+  stop(id: string): void;
   getRoutineRepo(): {
     get(id: string): Routine | undefined;
     update(
@@ -30,10 +33,11 @@ export interface RoutineApi {
     ): Routine;
     delete(id: string): boolean;
   };
+}
+
+/** The agents a routine belongs to: `core.services.stellaAgents`. */
+export interface RoutineAgents {
   listStellaAgents(): StellaAgent[];
-  /** The next-run rule (shared with the core so the client's toggle and the
-   * scheduler agree about when a routine fires). */
-  nextRoutineRun(schedule: Routine["schedule"], from: number): number;
 }
 
 /**
@@ -44,23 +48,26 @@ export interface RoutineApi {
  * a field in the body — an operation cannot then address a routine of a
  * conversation the user is not looking at.
  */
-export function routineRoutes(core: RoutineApi): Hono {
+export function routineRoutes(
+  routines: RoutineSource,
+  agents: RoutineAgents,
+): Hono {
   const app = new Hono();
 
   /** The list of one agent's routines, newest last (creation order), with
    * the scheduling flags from the scheduler: `running` (the prompt reached
    * the agent) and `queued` (it is waiting for the conversation). */
   const listOf = (agentId: string): { routines: RoutineView[] } => {
-    const agent = core.listStellaAgents().find((item) => item.id === agentId);
+    const agent = agents.listStellaAgents().find((item) => item.id === agentId);
     if (agent === undefined) {
       throw notFound("Agent", agentId);
     }
     return {
-      routines: core.listRoutinesOf(agentId).map((routine) => ({
+      routines: routines.listOf(agentId).map((routine) => ({
         ...routine,
         agentName: agent.name,
-        running: core.isRoutineRunning(routine.id),
-        queued: core.isRoutineQueued(routine.id),
+        running: routines.isRunning(routine.id),
+        queued: routines.isQueued(routine.id),
       })),
     };
   };
@@ -68,7 +75,7 @@ export function routineRoutes(core: RoutineApi): Hono {
   /** The routine's agent, so a route addressed by routine id can answer
    * with the right list. */
   const agentOf = (routineId: string): string => {
-    const routine = core.getRoutineRepo().get(routineId);
+    const routine = routines.getRoutineRepo().get(routineId);
     if (routine === undefined) {
       throw notFound("Routine", routineId);
     }
@@ -86,16 +93,14 @@ export function routineRoutes(core: RoutineApi): Hono {
     const body = await parseBody<{ enabled?: unknown }>(c);
     const enabled = requireBoolean(body?.enabled, "enabled");
     const id = c.req.param("id");
-    const repo = core.getRoutineRepo();
+    const repo = routines.getRoutineRepo();
     const routine = repo.get(id);
     if (routine === undefined) {
       throw notFound("Routine", id);
     }
     repo.update(id, {
       enabled,
-      nextRunAt: enabled
-        ? core.nextRoutineRun(routine.schedule, Date.now())
-        : null,
+      nextRunAt: enabled ? nextRunAt(routine.schedule, Date.now()) : null,
     });
     return c.json(listOf(routine.agentId));
   });
@@ -103,7 +108,7 @@ export function routineRoutes(core: RoutineApi): Hono {
   app.delete("/routines/:id", (c) => {
     const id = c.req.param("id");
     const agentId = agentOf(id);
-    core.getRoutineRepo().delete(id);
+    routines.getRoutineRepo().delete(id);
     return c.json(listOf(agentId));
   });
 
@@ -117,11 +122,11 @@ export function routineRoutes(core: RoutineApi): Hono {
   app.post("/routines/:id/run", (c) => {
     const id = c.req.param("id");
     const agentId = agentOf(id);
-    const agent = core.listStellaAgents().find((item) => item.id === agentId);
+    const agent = agents.listStellaAgents().find((item) => item.id === agentId);
     if (agent !== undefined && agent.disabledAt !== null) {
       throw new AppError(`Agent ${agentId} is disabled`, 409);
     }
-    void core.runRoutineNow(id).catch(() => {
+    void routines.runNow(id).catch(() => {
       // The failure is recorded on the routine's row and shown by the list.
     });
     return c.json(listOf(agentId));
@@ -132,7 +137,7 @@ export function routineRoutes(core: RoutineApi): Hono {
   app.post("/routines/:id/stop", (c) => {
     const id = c.req.param("id");
     const agentId = agentOf(id);
-    core.stopRoutine(id);
+    routines.stop(id);
     return c.json(listOf(agentId));
   });
 
