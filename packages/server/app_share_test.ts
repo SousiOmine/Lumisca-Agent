@@ -1,6 +1,5 @@
 import { test } from "bun:test";
 import { assert, assertEquals } from "@std/assert";
-import { disposeServer } from "./app.ts";
 import { setup } from "./test-utils.ts";
 
 /** A session id the hub keys loans by. Nothing validates it: a loan belongs to
@@ -110,7 +109,6 @@ test("a lending app's folders reach the session it lent them to", async () => {
     events.close();
   } finally {
     socket.close();
-    disposeServer(server);
     server.shutdown();
     await core.close();
   }
@@ -139,7 +137,6 @@ test("a frame the server cannot read is ignored, not fatal", async () => {
     assert(core.shares.connections()[0]?.clientId === "app-1");
   } finally {
     socket.close();
-    disposeServer(server);
     server.shutdown();
     await core.close();
   }
@@ -168,7 +165,6 @@ test("closing the socket ends every loan it carried", async () => {
     );
   } finally {
     socket.close();
-    disposeServer(server);
     server.shutdown();
     await core.close();
   }

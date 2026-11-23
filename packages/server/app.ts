@@ -93,22 +93,30 @@ export interface AppOptions {
   uploadDir?: string;
 }
 
-/** A started server: the address it bound and the way to stop it. */
+/** The HTTP + WebSocket application and the one way to release what it
+ * owns (the federation client, the push notifier, the upload store, and the
+ * routes' own hooks). The two are one value so a caller cannot hold the app
+ * without also holding its teardown. */
+export interface ServerApp {
+  readonly app: Hono;
+  /** Release everything the app started. Runs its hooks once. */
+  dispose(): void;
+}
+
+/** A started server: the address it bound and the way to stop it. It owns the
+ * ServerApp it serves, so a stop releases the app's resources (and then the
+ * listener) — there is no separate teardown to remember. */
 export interface LumiscaServer {
   readonly addr: { readonly hostname: string; readonly port: number };
+  /** Release the app's resources, then stop the listener. */
   shutdown(): void;
 }
 
-/** Cleanup hooks per app instance, reached via disposeServer. */
-const appDisposers = new WeakMap<Hono, () => void>();
-const serverDisposers = new WeakMap<LumiscaServer, () => void>();
-
-function disposeApp(app: Hono): void {
-  appDisposers.get(app)?.();
-}
-
 /** Create the HTTP + WebSocket application. */
-export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
+export function createApp(
+  core: LumiscaCore,
+  options: AppOptions = {},
+): ServerApp {
   const app = new Hono();
   const repoRoot = options.repoRoot ?? process.cwd();
   const assets = new Assets(
@@ -197,12 +205,18 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
   });
 
   const routeDisposers: Array<() => void> = [];
-  appDisposers.set(app, () => {
+  // A shutdown may be reached from two places (the updater's restart and a
+  // signal); releasing twice would close the peer streams and the upload
+  // store twice over, so the first call owns the teardown.
+  let disposed = false;
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
     fed.close();
     push.dispose();
     promptUploads.dispose();
-    for (const dispose of routeDisposers) dispose();
-  });
+    for (const hook of routeDisposers) hook();
+  };
 
   // `now` proves the event loop itself is alive (not just the listener
   // accepting connections): the desktop UI uses it to tell a hung server
@@ -591,7 +605,7 @@ export function createApp(core: LumiscaCore, options: AppOptions = {}): Hono {
     return pages.renderPage(c);
   });
 
-  return app;
+  return { app, dispose };
 }
 
 /** Start the server, bound to `options.hostname` (loopback by default). */
@@ -615,7 +629,7 @@ export function startServer(
   const binding = Bun.serve({
     hostname,
     port,
-    fetch: (request, server) => app.fetch(request, server),
+    fetch: (request, server) => app.app.fetch(request, server),
     websocket,
   });
   // `hostForUrl` brackets IPv6 literals and maps a wildcard bind to
@@ -625,16 +639,11 @@ export function startServer(
   const addr = { hostname: binding.hostname, port: binding.port };
   selfOrigin.current = `http://${hostForUrl(addr.hostname)}:${addr.port}`;
   fed.start();
-  const server: LumiscaServer = {
+  return {
     addr,
-    shutdown: () => binding.stop(true),
+    shutdown: () => {
+      app.dispose();
+      binding.stop(true);
+    },
   };
-  serverDisposers.set(server, () => disposeApp(app));
-  return server;
-}
-
-/** Release resources tied to a running server (e.g. the dev watcher).
- * Call before server.shutdown() when shutting down gracefully. */
-export function disposeServer(server: LumiscaServer): void {
-  serverDisposers.get(server)?.();
 }

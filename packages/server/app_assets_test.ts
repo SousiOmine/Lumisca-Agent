@@ -189,7 +189,7 @@ test("server serves the app shell", async () => {
 test("token-required page renders in the request's language", async () => {
   const faux = fauxProvider();
   const core = forTestingCore([faux.provider]);
-  const app = createApp(core, { token: "secret-token" });
+  const { app } = createApp(core, { token: "secret-token" });
   const host = { host: "127.0.0.1:8000" };
   try {
     // Nothing is stored yet and no app page has been loaded, so the

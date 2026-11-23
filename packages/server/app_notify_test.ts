@@ -30,7 +30,7 @@ async function request(
   path: string,
   init?: RequestInit,
 ): Promise<Response> {
-  const app = createApp(core);
+  const { app } = createApp(core);
   return await app.fetch(
     new Request(`http://127.0.0.1:8000${path}`, {
       ...init,
@@ -124,7 +124,7 @@ test("the notification surface is behind the token guard", async () => {
   // A subscription endpoint is a capability to wake a device: a page that can
   // write one without the token could add itself to every later send.
   const core = forTestingCore([fauxProvider().provider]);
-  const app = createApp(core, { token: "secret-token" });
+  const { app } = createApp(core, { token: "secret-token" });
   try {
     const response = await app.fetch(
       new Request("http://127.0.0.1:8000/api/notify/key", { headers: HOST }),

@@ -16,7 +16,7 @@ import {
 } from "@lumisca/core/shared";
 import { commandArgs, IS_STANDALONE } from "../core/platform.ts";
 import { exit } from "../core/process.ts";
-import { disposeServer, type LumiscaServer, startServer } from "./app.ts";
+import { type LumiscaServer, startServer } from "./app.ts";
 import { DEFAULT_PORT } from "./default-port.ts";
 import { stellaContainerDir } from "./paths.ts";
 import { validateHostConfig } from "./security.ts";
@@ -328,8 +328,8 @@ export async function main(): Promise<void> {
           if (server !== undefined) {
             // Stop accepting first (the successor binds the same port), then let
             // the core close its children and its database before the successor
-            // opens the same database file.
-            disposeServer(server);
+            // opens the same database file. shutdown releases the app's
+            // resources as well as the listener.
             server.shutdown();
           }
           await core.close();
@@ -415,7 +415,6 @@ export async function main(): Promise<void> {
     dispose: async () => {
       console.log("\nShutting down...");
       update?.dispose();
-      disposeServer(server);
       server.shutdown();
       await core.close();
     },

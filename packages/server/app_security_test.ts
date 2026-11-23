@@ -11,7 +11,7 @@ test("server rejects non-loopback Host headers (DNS rebinding guard)", async () 
   // with requests that target external hostnames.
   const faux = fauxProvider();
   const core = forTestingCore([faux.provider]);
-  const app = createApp(core);
+  const { app } = createApp(core);
   try {
     const evil = await app.fetch(
       new Request("http://evil.example.com/api/health"),
@@ -116,7 +116,7 @@ test("the desktop shell's preflight reaches the token-guarded API", async () => 
 test("every websocket path rejects a foreign origin", async () => {
   const faux = fauxProvider();
   const core = forTestingCore([faux.provider]);
-  const app = createApp(core);
+  const { app } = createApp(core);
   // The four sockets a page can open. A new socket is covered by the same
   // upgrade wrapper, so this list is a regression check, not the mechanism.
   const paths = [
@@ -159,7 +159,7 @@ test("every websocket path rejects a foreign origin", async () => {
 test("websocket rejects cross-port origins", async () => {
   const faux = fauxProvider();
   const core = forTestingCore([faux.provider]);
-  const app = createApp(core);
+  const { app } = createApp(core);
   try {
     const crossPort = await app.fetch(
       new Request("http://127.0.0.1:8000/ws", {
@@ -175,7 +175,7 @@ test("websocket rejects cross-port origins", async () => {
 test("token auth guards the API, websocket and page", async () => {
   const faux = fauxProvider();
   const core = forTestingCore([faux.provider]);
-  const app = createApp(core, { token: "secret-token" });
+  const { app } = createApp(core, { token: "secret-token" });
   // `new Request(...)` does not add a Host header; the loopback Host guard
   // needs one, so every probe sets it explicitly.
   const HOST = { host: "127.0.0.1:8000" };
@@ -293,7 +293,7 @@ test("token auth guards the API, websocket and page", async () => {
 test("token auth remembers a presented token in a cookie", async () => {
   const faux = fauxProvider();
   const core = forTestingCore([faux.provider]);
-  const app = createApp(core, { token: "secret-token" });
+  const { app } = createApp(core, { token: "secret-token" });
   const HOST = { host: "127.0.0.1:8000" };
   try {
     // The first visit carries the token in the URL (that is what the
@@ -427,7 +427,7 @@ test("token auth remembers a presented token in a cookie", async () => {
 test("the MCP OAuth callback is reachable without the token", async () => {
   const faux = fauxProvider();
   const core = forTestingCore([faux.provider]);
-  const app = createApp(core, { token: "secret-token" });
+  const { app } = createApp(core, { token: "secret-token" });
   const HOST = { host: "127.0.0.1:8000" };
   try {
     // The browser that comes back from the authorization server may not be
@@ -457,7 +457,7 @@ test("the MCP OAuth callback is reachable without the token", async () => {
 test("host guard rejects non-loopback hosts by default", async () => {
   const faux = fauxProvider();
   const core = forTestingCore([faux.provider]);
-  const app = createApp(core);
+  const { app } = createApp(core);
   try {
     const remote = await app.fetch(
       new Request("http://127.0.0.1:8000/api/health", {
@@ -482,7 +482,7 @@ test("host guard rejects non-loopback hosts by default", async () => {
 test("host guard accepts LUMISCA_ALLOWED_HOSTS", async () => {
   const faux = fauxProvider();
   const core = forTestingCore([faux.provider]);
-  const app = createApp(core, {
+  const { app } = createApp(core, {
     allowedHosts: ["myserver.tailnet.ts.net", "192.168.1.20"],
   });
   try {
@@ -535,7 +535,7 @@ test("validateHostConfig requires a token for non-loopback binds", () => {
 test("websocket rejects cross-origin connections", async () => {
   const faux = fauxProvider();
   const core = forTestingCore([faux.provider]);
-  const app = createApp(core);
+  const { app } = createApp(core);
   try {
     // A malicious website's WS handshake must be refused before the upgrade.
     const evil = await app.fetch(
@@ -574,7 +574,7 @@ test("websocket accepts a TLS front end's https origin for the same host", async
   // poll (remote sessions arrived seconds late, streaming text never flowed).
   const faux = fauxProvider();
   const core = forTestingCore([faux.provider]);
-  const app = createApp(core, {
+  const { app } = createApp(core, {
     token: "t",
     allowedHosts: ["host.tailnet.ts.net"],
   });

@@ -29,7 +29,7 @@ export interface AppHarness {
  * so a suite reads the same in its happy path and its failure path.
  *
  *   const { core, server, base } = setup();
- *   try { … } finally { disposeServer(server); server.shutdown(); await core.close(); }
+ *   try { … } finally { server.shutdown(); await core.close(); }
  */
 export function setup(
   env?: () => Record<string, string>,

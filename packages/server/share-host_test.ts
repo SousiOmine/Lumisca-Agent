@@ -8,7 +8,6 @@ import { fauxAssistantMessage, fauxText, fauxToolCall } from "@lumisca/core";
 import { TOOL_READ } from "@lumisca/core/shared";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { promptSession, removeDirRetry } from "../core/test-utils.ts";
-import { disposeServer } from "./app.ts";
 import {
   createShareHost,
   type LocalGrant,
@@ -107,7 +106,6 @@ test("the lending process serves a folder over the socket", async () => {
     assert(exec.stdout.includes("lent-shell"), exec.stdout);
   } finally {
     lender.close();
-    disposeServer(server);
     server.shutdown();
     await core.close();
     await removeDirRetry(root);
@@ -154,7 +152,6 @@ test("a read-only loan refuses to write, in the process that holds the disk", as
     assert(exec.stdout.includes("ok"), exec.stdout);
   } finally {
     lender.close();
-    disposeServer(server);
     server.shutdown();
     await core.close();
     await removeDirRetry(root);
@@ -222,7 +219,6 @@ test("a withdrawn loan stops answering", async () => {
     );
   } finally {
     lender.close();
-    disposeServer(server);
     server.shutdown();
     await core.close();
     await removeDirRetry(root);
@@ -275,7 +271,6 @@ test("a loan ends after 30 idle minutes, and an access restarts the clock", asyn
     assertEquals(expired, [["g1"]]);
   } finally {
     lender.close();
-    disposeServer(server);
     server.shutdown();
     await core.close();
     await removeDirRetry(root);
@@ -370,7 +365,6 @@ test("an agent's read reaches the folder through the whole chain", async () => {
     }
   } finally {
     lender.close();
-    disposeServer(server);
     server.shutdown();
     await core.close();
     await removeDirRetry(workspace);
