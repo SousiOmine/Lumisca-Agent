@@ -7,12 +7,9 @@ import type { Workspace } from "../domain/workspace.ts";
 import { CoreError } from "../errors.ts";
 import { sessionInfo as fixtureSession } from "../test-utils.ts";
 import type { AgentFactory } from "./factory.ts";
-import {
-  SessionPool,
-  type SessionPoolDeps,
-  type SessionResources,
-} from "./pool.ts";
+import { SessionPool, type SessionPoolDeps } from "./pool.ts";
 import type { SessionAgent } from "./session-agent.ts";
+import { SessionRuntime } from "./session-runtime.ts";
 
 /** Records what the pool asked of one session's resources. */
 interface TeardownLog {
@@ -74,9 +71,9 @@ function fakeAgent(streaming: boolean): SessionAgent {
 }
 
 /**
- * A pool over a fake factory. The factory fills the session's resources
- * (background / tasks / MCP) so the teardown order can be observed without
- * spawning anything.
+ * A pool over a fake factory. The factory owns the runtimes (as the real one
+ * does) and fills each with background / tasks / MCP, so the teardown order
+ * can be observed without spawning anything.
  */
 function makePool(options: { streaming?: boolean } = {}): {
   pool: SessionPool;
@@ -88,13 +85,20 @@ function makePool(options: { streaming?: boolean } = {}): {
       ({ id: modelId, provider }) as unknown as Model<"openai-completions">,
     requireWorkspace: () => WORKSPACE,
   } as unknown as SessionPoolDeps;
+  const runtimes = new Map<string, SessionRuntime>();
+  const runtimeOf = (id: string) => {
+    const runtime = runtimes.get(id);
+    if (runtime === undefined) throw new Error(`not open: ${id}`);
+    return runtime;
+  };
   const factory = {
     open(
-      _session: SessionInfo,
+      session: SessionInfo,
       _workspace: Workspace,
       _messages: unknown[],
-      resources: SessionResources,
     ): SessionAgent {
+      const resources = runtimes.get(session.id) ?? new SessionRuntime();
+      runtimes.set(session.id, resources);
       const agent = fakeAgent(options.streaming === true);
       resources.agent = {
         ...agent,
@@ -107,12 +111,12 @@ function makePool(options: { streaming?: boolean } = {}): {
           teardown.backgroundKilled++;
           return Promise.resolve();
         },
-      } as unknown as SessionResources["background"];
+      } as unknown as SessionRuntime["background"];
       resources.tasks = {
         close: () => {
           teardown.tasksClosed++;
         },
-      } as unknown as SessionResources["tasks"];
+      } as unknown as SessionRuntime["tasks"];
       resources.mcp = {
         manager: {
           close: () => {
@@ -120,14 +124,36 @@ function makePool(options: { streaming?: boolean } = {}): {
             return Promise.resolve();
           },
         },
-      } as unknown as SessionResources["mcp"];
+      } as unknown as SessionRuntime["mcp"];
       return resources.agent;
+    },
+    withRuntime<T>(
+      id: string,
+      read: (runtime: SessionRuntime) => T,
+    ): T | undefined {
+      const runtime = runtimes.get(id);
+      return runtime === undefined ? undefined : read(runtime);
+    },
+    rebuild(session: SessionInfo, rebuild: { dropMcp?: boolean } = {}): void {
+      const runtime = runtimeOf(session.id);
+      runtime.agent?.close();
+      runtime.agent = fakeAgent(options.streaming === true);
+      if (rebuild.dropMcp === true) runtime.dropMcp();
+    },
+    async close(id: string): Promise<void> {
+      const runtime = runtimes.get(id);
+      if (runtime === undefined) return;
+      runtimes.delete(id);
+      await runtime.close();
+    },
+    async closeAll(): Promise<void> {
+      const all = [...runtimes.values()];
+      runtimes.clear();
+      await Promise.all(all.map((runtime) => runtime.close()));
     },
     refreshMcp(
       _session: SessionInfo,
       _workspace: Workspace,
-      _resources: SessionResources,
-      _isCurrentAttachment: unknown,
       options: { reloadCredentials?: boolean } = {},
     ): void {
       teardown.mcpRefreshed++;

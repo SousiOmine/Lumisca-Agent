@@ -7,7 +7,6 @@ import type { ClientEvent } from "../domain/event.ts";
 import type { Api } from "../domain/model.ts";
 import type { SessionInfo } from "../domain/session.ts";
 import type { Workspace } from "../domain/workspace.ts";
-import type { McpAttachment } from "../mcp/attachment.ts";
 import type { McpConfig } from "../mcp/config.ts";
 import type { McpAdmin } from "../mcp/manage-tools.ts";
 import type { McpOAuthStore } from "../mcp/oauth.ts";
@@ -21,13 +20,8 @@ import type { ShareHub } from "../share/hub.ts";
 import type { ShareRequestRegistry } from "../share/request.ts";
 import type { Locale, ThinkingLevel } from "../shared/mod.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
-import type { BackgroundProcessManager } from "../tools/background.ts";
-import type { SessionToolRegistries } from "../tools/registries.ts";
-import type { TaskHub } from "../tools/task-hub.ts";
-import type { TodoHub } from "../tools/todo.ts";
 import type { StellaRuntime } from "../vm/runtime.ts";
 import type { SearchProvider } from "../websearch/types.ts";
-import type { SessionAgent } from "./session-agent.ts";
 /** Model resolution the agent factory needs (catalog + stored levels). */
 export interface ModelResolver {
   /** Resolve a model or throw `not_found` (the pool's model guard shares
@@ -206,34 +200,3 @@ export interface AgentRuntime {
  * ModelResolver / SessionPersistence / AgentRuntime so consumers depend
  * only on the slice they use. */
 export type SessionPoolDeps = ModelResolver & SessionPersistence & AgentRuntime;
-
-/** Everything one open session owns, keyed by session id. Consolidating the
- * per-session runtime state into one struct means a future resource is one
- * field here (and one clear in close/closeAll) instead of another parallel
- * map that must be kept in lockstep. */
-export interface SessionResources {
-  /** The live agent (replaced on rebuild; absent when closed). */
-  agent?: SessionAgent;
-  /** Background-command manager. Owned by the pool (not the agent) so
-   * background commands survive agent rebuilds — model and workspace
-   * changes rebuild the agent while the session stays open, and the
-   * commands must keep running. Stopped when the session closes. */
-  background?: BackgroundProcessManager;
-  /** Todo hub, with the same rebuild-survival reason as `background`. */
-  todos?: TodoHub;
-  /** Task hub, with the same rebuild-survival reason as `background`
-   * (sub-agents run independently of the agent run). Aborted on close. */
-  tasks?: TaskHub;
-  /** Shared MCP attachment: its server processes serve every agent of the
-   * session — the main agent and the sub-agents — and survive agent
-   * rebuilds while the merged config is unchanged. Closed on close. */
-  mcp?: McpAttachment;
-  /** The two tool registries of the session (the main agent's and its
-   * sub-agents'), rebuilt together with the attachment when the config
-   * changes. See tools/registries.ts for why they are separate. */
-  registries?: SessionToolRegistries;
-  /** The last failure of the session, if any (cleared when a new run
-   * starts). Lets non-WebSocket clients learn about failures of
-   * fire-and-forget prompts. */
-  lastError?: string;
-}
