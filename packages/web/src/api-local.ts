@@ -9,14 +9,13 @@ import {
 } from "@lumisca/core/shared";
 import {
   apiPathOf,
-  promptBody,
   request,
   type SessionRoute,
   sessionCalls,
   sessionRequest,
 } from "./api-client.ts";
+import { conversationCalls, sessionFamily } from "./api-conversation.ts";
 import type {
-  AskAnswer,
   BackgroundCommandInfo,
   CatalogStatus,
   FsBrowse,
@@ -25,8 +24,6 @@ import type {
   McpInfo,
   McpTestResult,
   ModelInfo,
-  ModePrompt,
-  PendingImage,
   ProviderAuthType,
   ProviderInfo,
   ProviderLoginMethod,
@@ -58,10 +55,15 @@ export type SessionInfoDto = SessionInfo & { lastError?: string };
  * that owns the session ("" = this server, see sessionRequest), the session
  * id, then the call's own args. `api` (this server), `fed` (a peer) and
  * `sessionApi` (the peer a tab routes to) are all built from it, so an
- * endpoint's path, method and body are written once. Paths are the
- * `sessionPath` form: whether they are reached as `/api/...` or through the
- * fed proxy is the transport's business, not the route's. */
+ * endpoint's path, method and body are written once. Paths are the templates
+ * of core/shared/api-paths.ts filled in: whether they are reached as
+ * `/api/...` or through the fed proxy is the transport's business, not the
+ * route's. */
 export const sessionRoutes = {
+  // Revision, prompt, abort, rewind and answer are the calls a conversation
+  // shares (routes/conversation.ts); api-conversation.ts states them once for
+  // both surfaces.
+  ...conversationCalls(sessionFamily, sessionRequest),
   getSession: (peerId: string, sessionId: string) =>
     sessionRequest<SessionInfoDto>(
       peerId,
@@ -86,15 +88,6 @@ export const sessionRoutes = {
       `${apiPathOf(paths.sessionMessages, { id: enc(sessionId) })}${search}`,
     );
   },
-  /** The session's revision: how many events the owning server has emitted
-   * for it. Cheap (a counter read, no session open), so the client polls it
-   * on a low interval and re-reads the snapshot only when it moved — a
-   * missed frame is then noticed without re-reading anything. */
-  getRevision: (peerId: string, sessionId: string) =>
-    sessionRequest<{ rev: number }>(
-      peerId,
-      apiPathOf(paths.sessionRevision, { id: enc(sessionId) }),
-    ),
   /** The session's current todo plan (the todo tool); re-fetched after a
    * WS drop or page reload to restore the progress panel (todo events are
    * snapshots, but only mutations emit them, so they are not replayed). */
@@ -125,33 +118,6 @@ export const sessionRoutes = {
       apiPathOf(paths.sessionClose, { id: enc(sessionId) }),
       { method: "POST" },
     ),
-  prompt: (
-    peerId: string,
-    sessionId: string,
-    text: string,
-    images?: PendingImage[],
-    mode?: ModePrompt,
-  ) =>
-    sessionRequest<{ ok: boolean }>(
-      peerId,
-      apiPathOf(paths.sessionPrompt, { id: enc(sessionId) }),
-      {
-        method: "POST",
-        body: JSON.stringify(promptBody(text, images, mode)),
-      },
-    ),
-  abort: (peerId: string, sessionId: string) =>
-    sessionRequest<{ ok: boolean }>(
-      peerId,
-      apiPathOf(paths.sessionAbort, { id: enc(sessionId) }),
-      { method: "POST" },
-    ),
-  rewind: (peerId: string, sessionId: string, timestamp: number) =>
-    sessionRequest<{ ok: boolean }>(
-      peerId,
-      apiPathOf(paths.sessionRewind, { id: enc(sessionId) }),
-      { method: "POST", body: JSON.stringify({ timestamp }) },
-    ),
   /** Condense older history into a checkpoint on demand (the `/compact`
    * command). `instructions` is the user's extra focus for the summary.
    * `compacted` is the number of summarized messages; absent when nothing
@@ -166,18 +132,6 @@ export const sessionRoutes = {
           ? { body: JSON.stringify({ instructions }) }
           : {}),
       },
-    ),
-  /** Answer a pending ask (the ask tool) with the user's selections. */
-  answer: (
-    peerId: string,
-    sessionId: string,
-    toolCallId: string,
-    answers: AskAnswer[],
-  ) =>
-    sessionRequest<{ ok: boolean }>(
-      peerId,
-      apiPathOf(paths.sessionAnswer, { id: enc(sessionId) }),
-      { method: "POST", body: JSON.stringify({ toolCallId, answers }) },
     ),
   /** Switch the session's model; the route answers the plain session record
    * (unlike getSession, it carries no last run error). A switch made while a

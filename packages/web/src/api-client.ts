@@ -124,6 +124,40 @@ function networkError(error: unknown): ApiError {
   return new ApiError(message, "network", { cause: error });
 }
 
+/** Classify an answer that refused the call: the status decides whether
+ * retrying could help, and the body's `{ error }` (when it sent one) is what
+ * the reader is shown. `body` is the answer's text, not a parsed object: an
+ * error body is often not JSON at all (a proxy's HTML page, a half-dead
+ * server), and the status alone still names the failure.
+ *
+ * The upload's XHR cannot use `request` (it needs `upload.onprogress`), so it
+ * reads its own answer — through this function, so both transports sort the
+ * same failure the same way. */
+export function httpError(status: number, body: string): ApiError {
+  let detail: string | null = null;
+  try {
+    const parsed = JSON.parse(body) as { error?: unknown } | null;
+    if (parsed && typeof parsed.error === "string") detail = parsed.error;
+  } catch {
+    // Not the server's sentence: the status is all there is to say.
+  }
+  const message = detail ?? `Request failed: ${status}`;
+  return new ApiError(message, status < 500 ? "http-4xx" : "http-5xx", {
+    status,
+    detail,
+  });
+}
+
+/** Classify a 2xx whose body was not the JSON the call was promised (a
+ * captive portal's login page, a proxy that answered for the server): the
+ * call produced no value, and saying "unexpected token <" would blame the
+ * reader's input. `error` is the parser's own rejection, whose message the
+ * logs keep. */
+export function parseError(error: unknown, status: number): ApiError {
+  const message = error instanceof Error ? error.message : String(error);
+  return new ApiError(message, "parse", { status });
+}
+
 /**
  * How long a request may stay unanswered before it is treated as an outage.
  *
@@ -196,22 +230,13 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     // Errors are answered as `{ error }`; a proxy or a half-dead server
     // answers HTML instead, and the status alone still names the failure.
-    const body = await res.json().catch(() => null);
-    const detail = body && typeof body.error === "string" ? body.error : null;
-    const message = detail ?? `Request failed: ${res.status}`;
-    throw new ApiError(message, res.status < 500 ? "http-4xx" : "http-5xx", {
-      status: res.status,
-      detail,
-    });
+    throw httpError(res.status, await res.text());
   }
   try {
     return (await res.json()) as T;
   } catch (error) {
-    // A 2xx whose body is not JSON (a captive portal's login page, a proxy
-    // that answered for the server): the call did not produce a value, and
-    // saying "unexpected token <" would blame the reader's input.
-    const message = error instanceof Error ? error.message : String(error);
-    throw new ApiError(message, "parse", { status: res.status });
+    // A 2xx whose body is not JSON: the call produced no value.
+    throw parseError(error, res.status);
   }
 }
 

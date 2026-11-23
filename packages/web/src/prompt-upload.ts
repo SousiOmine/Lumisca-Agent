@@ -12,7 +12,9 @@ import {
   ApiError,
   apiPathOf,
   apiUrl,
+  httpError,
   pageToken,
+  parseError,
   request,
 } from "./api-client.ts";
 
@@ -113,33 +115,12 @@ export function putPromptUploadChunk(
           try {
             resolve(JSON.parse(xhr.responseText) as { offset: number });
           } catch (error) {
-            reject(
-              new ApiError(
-                error instanceof Error ? error.message : String(error),
-                "parse",
-                { status: xhr.status },
-              ),
-            );
+            reject(parseError(error, xhr.status));
           }
         });
         return;
       }
-      let detail: string | null = null;
-      try {
-        const body = JSON.parse(xhr.responseText) as { error?: unknown };
-        if (typeof body.error === "string") detail = body.error;
-      } catch {
-        // A proxy's HTML page is not the server's sentence.
-      }
-      settle(() =>
-        reject(
-          new ApiError(
-            detail ?? `Request failed: ${xhr.status}`,
-            xhr.status < 500 ? "http-4xx" : "http-5xx",
-            { status: xhr.status, detail },
-          ),
-        ),
-      );
+      settle(() => reject(httpError(xhr.status, xhr.responseText)));
     };
     xhr.send(bytes as unknown as XMLHttpRequestBodyInit);
   });

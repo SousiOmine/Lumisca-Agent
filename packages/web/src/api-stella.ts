@@ -1,13 +1,13 @@
 import { paths } from "@lumisca/core/shared";
-import { apiPathOf, promptBody, request } from "./api-client.ts";
+import {
+  apiPathOf,
+  request,
+  sessionCalls,
+  sessionRequest,
+} from "./api-client.ts";
+import { conversationCalls, stellaFamily } from "./api-conversation.ts";
 import { openEventStream } from "./event-stream.ts";
-import type {
-  AskAnswer,
-  PendingFile,
-  PendingImage,
-  StellaConversationSnapshot,
-  StellaEvent,
-} from "./types.ts";
+import type { StellaConversationSnapshot, StellaEvent } from "./types.ts";
 
 /**
  * The stella conversation API: one surface of its own, bound to an agent.
@@ -35,6 +35,12 @@ function conversationPath(
 }
 
 export const stellaApi = {
+  /** Revision, prompt, abort, rewind and answer are the calls a conversation
+   * shares with a code-mode session (routes/conversation.ts): api-conversation.ts
+   * states them once. The machine is fixed to this one ("" — see sessionCalls):
+   * stella is a mode of this server, so a conversation is never a peer's. */
+  ...sessionCalls(conversationCalls(stellaFamily, sessionRequest), ""),
+
   /** Open the conversation (created on first use; this starts the machine)
    * and read its snapshot. */
   open: (agentId: string) =>
@@ -57,42 +63,6 @@ export const stellaApi = {
       { method: "GET" },
     );
   },
-
-  /** The conversation's revision: a cheap counter to poll so the snapshot is
-   * re-read only when something was missed. */
-  getRevision: (agentId: string) =>
-    request<{ rev: number }>(
-      conversationPath(paths.conversationRevision, agentId),
-      {
-        method: "GET",
-      },
-    ),
-
-  /** Send a prompt into the conversation. The body is the same one code
-   * mode's session prompt takes (`promptBody`): text plus the images the
-   * user attached, so a drag-and-drop or a paste means the same thing in
-   * both modes. */
-  prompt: (
-    agentId: string,
-    text: string,
-    images?: PendingImage[],
-    files?: PendingFile[],
-  ) =>
-    request<{ ok: true }>(conversationPath(paths.conversationPrompt, agentId), {
-      method: "POST",
-      body: JSON.stringify(promptBody(text, images, undefined, files)),
-    }),
-
-  abort: (agentId: string) =>
-    request<{ ok: true }>(conversationPath(paths.conversationAbort, agentId), {
-      method: "POST",
-    }),
-
-  answer: (agentId: string, toolCallId: string, answers: AskAnswer[]) =>
-    request<{ ok: true }>(conversationPath(paths.conversationAnswer, agentId), {
-      method: "POST",
-      body: JSON.stringify({ toolCallId, answers }),
-    }),
 
   /** The user finished at the screen (`vm_ask_user`). */
   finishHandover: (agentId: string, note: string, toolCallId: string) =>
@@ -187,13 +157,6 @@ export const stellaApi = {
         body: JSON.stringify({ text }),
       },
     ),
-
-  /** Rewind from a message onward (named by its timestamp). */
-  rewind: (agentId: string, timestamp: number) =>
-    request<{ ok: true }>(conversationPath(paths.conversationRewind, agentId), {
-      method: "POST",
-      body: JSON.stringify({ timestamp }),
-    }),
 };
 
 /** Connect to one conversation's event stream. Returns a close function.
