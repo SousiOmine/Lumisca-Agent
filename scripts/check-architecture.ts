@@ -152,7 +152,7 @@ export function findCycles(files: readonly Source[]): string[][] {
   return cycles;
 }
 
-/** `packages/core/browser-entries.ts` is the single list the Vite aliases,
+/** `packages/core/browser-entries.ts` is the single list the web aliases,
  * the esbuild aliases and the boundary test read. tsc reads tsconfig's
  * `paths` instead, so the two must agree or the type check resolves a
  * different module than the bundle ships. The list is imported, not parsed:
@@ -257,7 +257,7 @@ export function checkLayers(files: readonly Source[], root = ROOT): string[] {
 
 /** The only `@lumisca/core` specifiers a module may write. The tsconfig
  * wildcard used to resolve any internal path, so an import that esbuild and
- * Vite could not resolve still passed tsc. Must name exactly the keys of
+ * esbuild could not resolve still passed tsc. Must name exactly the keys of
  * `packages/core/package.json`'s `exports` and of tsconfig's `paths`;
  * `checkCoreEntryPoints` reads all three and reports a disagreement. */
 export const CORE_SPECIFIERS: readonly string[] = [

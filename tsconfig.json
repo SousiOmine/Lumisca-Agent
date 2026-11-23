@@ -41,8 +41,7 @@
   "files": [
     "packages/core/mod.ts",
     "packages/server/mod.ts",
-    "packages/web/src/client.tsx",
-    "packages/web/vite.config.ts"
+    "packages/web/src/client.tsx"
   ],
   "include": ["types/**/*.d.ts", "scripts/*.ts"]
 }

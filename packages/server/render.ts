@@ -74,6 +74,9 @@ export interface HtmlDocumentOptions {
    * the page has to keep working when the address bar is reloaded without
    * `?token=` (the client strips it after the first load). */
   token?: string;
+  /** Development only: load the script that reloads this page when the
+   * server's client build changes. */
+  devReload?: boolean;
   /** The page's own host (Host header), used by the CSP to name the
    * WebSocket endpoint when the page is served remotely. */
   pageHost?: string;
@@ -86,6 +89,26 @@ export interface HtmlDocumentOptions {
 
 /** Assemble the full HTML document: the empty #root (client-rendered app),
  * themed first paint, and the two module scripts. */
+/** The development-only reload loop. It asks for the build id the server
+ * serves and reloads when it changes; a failed poll (server restarting) is
+ * ignored. Kept out of the document so the page's CSP stays script-src
+ * 'self'. */
+export const DEV_RELOAD_SCRIPT = `let current = null;
+async function poll() {
+  try {
+    const response = await fetch("/api/build", { cache: "no-store" });
+    const body = await response.json();
+    if (body.buildId === undefined) return;
+    if (current !== null && body.buildId !== current) location.reload();
+    current = body.buildId;
+  } catch {
+    // The server is restarting; the next poll tries again.
+  }
+}
+void poll();
+setInterval(() => void poll(), 1000);
+`;
+
 export function renderHtmlDocument(
   css: string,
   theme: "light" | "dark",
@@ -108,6 +131,7 @@ ${shellHeadTags({
         : `?token=${encodeURIComponent(options.token)}`
     }"></script>
     <script type="module" src="/assets/app.js"></script>
+    ${options.devReload === true ? '<script type="module" src="/assets/dev-reload.js"></script>' : ""}
   </body>
 </html>`;
 }

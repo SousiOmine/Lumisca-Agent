@@ -8,6 +8,7 @@ import { Assets } from "./assets.ts";
 import { FederationClient } from "./federation.ts";
 import { initialDataFor, languageForRequest, registerPages } from "./pages.ts";
 import { createPushNotifier } from "./push.ts";
+import { DEV_RELOAD_SCRIPT } from "./render.ts";
 import { attachmentRoutes } from "./routes/attachments.ts";
 import { federationRoutes } from "./routes/federation.ts";
 import { fsRoutes } from "./routes/fs.ts";
@@ -91,6 +92,9 @@ export interface AppOptions {
   /** Directory for files the browser is still uploading (defaults to
    * `.lumisca-uploads` under the repository root). */
   uploadDir?: string;
+  /** Development only: serve the reload script and accept rebuild requests
+   * from scripts/dev.ts. */
+  devReload?: boolean;
 }
 
 /** The HTTP + WebSocket application and the one way to release what it
@@ -261,8 +265,21 @@ export function createApp(
 
   // --- page and static assets ----------------------------------------------
 
+  if (options.devReload === true) {
+    app.get("/assets/dev-reload.js", (c) =>
+      c.body(DEV_RELOAD_SCRIPT, 200, {
+        "content-type": "text/javascript; charset=utf-8",
+        "cache-control": "no-store",
+      }),
+    );
+    app.post("/api/dev/rebuild", (c) => {
+      assets.invalidate();
+      return c.json({ ok: true });
+    });
+  }
   const pages = registerPages(app, core, assets, {
     token: options.token,
+    ...(options.devReload === true ? { devReload: true } : {}),
   });
 
   // --- API routes (before the SPA fallback; unmatched /api paths fall

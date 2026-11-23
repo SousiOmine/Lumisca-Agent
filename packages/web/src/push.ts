@@ -13,7 +13,7 @@
  *
  * Subscribing needs a secure origin and a registered worker, which is exactly
  * `shouldRegisterServiceWorker`: the desktop shell (a loopback http origin)
- * and the Vite dev server are excluded by the same rule, and in both the
+ * and the development server are excluded by the same rule, and in both the
  * desktop's own OS notifications are what the user has.
  */
 import { fromBase64Url } from "@lumisca/core/shared";

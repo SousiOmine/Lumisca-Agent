@@ -174,7 +174,6 @@ const TEST_FILE = /(^|[._-])(test|spec)\.(ts|tsx|js|jsx|mjs|cjs|mts|cts)$/;
 const SKIP_DIRS = new Set([
   ".git",
   ".lumisca-cache",
-  ".vite",
   ".tmpwork",
   "__pycache__",
   "coverage",

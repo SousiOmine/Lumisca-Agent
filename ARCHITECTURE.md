@@ -527,7 +527,7 @@ UIはどちらの本文にも書けます。
   独立したバージョン管理も公開も要らないので、workspace 化はしません。
 - `web` が `core` から直接取り込むモジュールは純粋関数に限ります（`shared/`、`modes/`、`skills/slash`）。
   バレルモジュール（`@lumisca/core`）の参照は型定義のみとし、実行時バンドルには含めません。
-  許可するエントリは `packages/core/browser-entries.ts` の 1 箇所で宣言し、境界テスト（`packages/web/src/boundaries_test.ts`）、Vite のエイリアス、サーバーの esbuild エイリアスが同じリストを読みます。
+  許可するエントリは `packages/core/browser-entries.ts` の 1 箇所で宣言し、境界テスト（`packages/web/src/boundaries_test.ts`）、サーバーの esbuild エイリアスが同じリストを読みます。
 
 ### デスクトップの接続先
 
@@ -1266,7 +1266,7 @@ URLはシェルを介さず、プログラムの引数として1つだけ渡し�
   ページの操作と待機はクロスプラットフォームで共通化し、画面キャプチャだけ各 OS のネイティブ API を呼びます。
 - Rust の排他制御: スレッド間のロックは、すべて `lib.rs` の `LockRecover::lock_recover()` を経由します。
   Poison 状態からの復旧を一元化し、パニックによる無応答を防ぎます。
-- ビルド構成の分離: 本番のバンドル生成は esbuild（`packages/server/bundle.ts`）、開発の HMR とプロキシは Vite（`packages/web/vite.config.ts`）です。
+- クライアントのビルドは本番も開発も esbuild（`packages/server/bundle.ts`）です。開発は `scripts/dev.ts` が変更を検知し、サーバーのキャッシュを捨てて再ビルドさせます。
 - モデルへのメッセージ変換: モデルに送るロールは `user`、`assistant`、`toolResult` の 3 種類だけです。
   通知やコンテキストなどの内部ロールは、送信時に `user` へ変換されます。
 

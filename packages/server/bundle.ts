@@ -57,7 +57,7 @@ export async function bundleClient(
     // workspace's tsconfig paths, so resolve them from the list the core
     // declares
     // (packages/core/browser-entries.ts) — the same list the web boundary
-    // test and Vite's dev aliases read.
+    // test and the web aliases read.
     alias: Object.fromEntries(
       BROWSER_CORE_ENTRIES.map((entry) => [
         entry.specifier,

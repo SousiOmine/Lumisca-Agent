@@ -49,7 +49,7 @@ export interface AssetsManifest {
 /** Resolve the styles entry (`styles.css`) into a single stylesheet.
  * The entry is a manifest of relative `@import "./styles/<part>.css";`
  * lines (see `packages/web/src/styles/README.md`); the imports are inlined
- * in order so the cascade matches what Vite serves in dev. A plain
+ * in order so the cascade matches what the dev bundle serves. A plain
  * stylesheet without imports is returned as-is (backwards compatible). */
 export async function bundleStylesCss(entryPath: string): Promise<string> {
   const entry = await fsp.readFile(entryPath, "utf8");
@@ -197,6 +197,15 @@ export class Assets {
     private readonly cacheDir: string,
     private readonly assetsFile?: string,
   ) {}
+
+  /** Forget the built client and stylesheet: the next request rebuilds
+   * both from the repository sources. Development only (the reload loop in
+   * scripts/dev.ts calls it when a web source changes). */
+  invalidate(): void {
+    this.clientPromise = null;
+    this.buildIdCache = null;
+    this.cssCache = null;
+  }
 
   /** Packaged builds (a compiled binary, no repository layout) serve the
    * prebuilt assets from the manifest staged beside the binary

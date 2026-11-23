@@ -354,6 +354,7 @@ export async function main(): Promise<void> {
         hostname: host,
         allowedHosts,
         update,
+        devReload: process.env.LUMISCA_DEV_RELOAD === "1",
       });
       break;
     } catch (error) {

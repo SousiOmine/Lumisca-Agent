@@ -7,7 +7,7 @@
  *
  * Browser-safe by contract (no disk / node builtins): the web bundle imports
  * this module through `@lumisca/core/skills/slash` — one of the entry points
- * declared in browser-entries.ts, the list the web boundary test, the Vite
+ * declared in browser-entries.ts, the list the web boundary test and the
  * dev aliases and the server's esbuild aliases all read. Keep it that way —
  * a runtime import of discover.ts would drag `node:path` into the client.
  */

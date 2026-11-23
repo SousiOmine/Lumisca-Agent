@@ -213,6 +213,6 @@ stella の一覧が、会話を開いたときに中央から左端へ移る動�
 
 ## ビルド時の留意事項
 
-- 開発環境（Vite）では、Vite が `@import` を解決します。
+- 開発環境でも `packages/server/assets.ts` の `bundleStylesCss` が `@import` を解決します。
 - 本番とパッケージ版では、サーバー（`packages/server/assets.ts`）が `styles.css` の `@import` を同一順序でインライン展開して配信します。
   そのため、`styles/` ディレクトリ外への `@import` や URL 形式の参照は使用しないでください。

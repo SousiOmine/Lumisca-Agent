@@ -16,7 +16,7 @@
  *     `http://127.0.0.1`, which IS a secure context, so the protocol is what
  *     excludes it. A worker there would outlive the app's own update with a
  *     cached client bundle.
- *   - the Vite dev server (`http://localhost`), where a cached bundle would
+ *   - the development server (`http://localhost`), where a cached bundle would
  *     outlive the edit that changed it.
  */
 import { inDesktopShell } from "./shell.ts";

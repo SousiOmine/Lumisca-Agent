@@ -197,7 +197,7 @@ export function defaultAssetsFile(
 /** Human-readable startup failure for a listen error. An occupied port
  * (the common case: another `bun run dev:server` still runs) names the
  * likely cause and the fix; anything else reports the raw detail. The web
- * dev server proxies a fixed port (see packages/web/vite.config.ts), so
+ * dev server binds a fixed port (see packages/server/default-port.ts), so
  * silently falling over to another port would only break `bun run dev`
  * in a confusing way — fail loudly instead. */
 export function describeListenError(

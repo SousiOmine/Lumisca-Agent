@@ -111,3 +111,16 @@ test("the token page can take the token without an address bar", () => {
     assertEquals(html.includes('name="token"'), true);
   }
 });
+
+test("development reload is opt-in and served as an external script", () => {
+  // The page's CSP allows scripts only from its own origin, so the reload
+  // loop cannot be inline. It is also absent unless development asks for it.
+  const off = renderHtmlDocument("", "dark", { language: "ja" });
+  assertEquals(off.includes("dev-reload.js"), false);
+  const on = renderHtmlDocument("", "dark", {
+    language: "ja",
+    devReload: true,
+  });
+  assertEquals(on.includes('src="/assets/dev-reload.js"'), true);
+  assertEquals(on.includes("<script>"), false);
+});

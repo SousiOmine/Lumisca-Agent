@@ -9,7 +9,7 @@
  *
  * The function returns the tags from `charset` through the icon links. The
  * caller adds what is its own: the production page inlines the stylesheet
- * and the scripts, the dev page leaves them to Vite.
+ * and the scripts, the dev page leaves them to the bundle.
  */
 
 /** The viewport is the same everywhere: `interactive-widget` keeps the
@@ -23,7 +23,7 @@ export interface ShellHeadOptions {
   /** The page's own canvas colour: the browser paints its chrome with it,
    * and `useTheme` keeps it in step. */
   themeColor: string;
-  /** The document's CSP. The dev page has none: Vite needs inline scripts
+  /** The document's CSP. The dev page has none: the reload loop needs inline scripts
    * for HMR, and the dev server is not this app's server. */
   csp?: string;
 }

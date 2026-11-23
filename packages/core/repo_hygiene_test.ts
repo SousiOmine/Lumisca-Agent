@@ -20,7 +20,6 @@ const SKIP_DIRS = new Set([
   ".git",
   ".lumisca-cache",
   ".playwright-mcp",
-  ".vite",
   ".vscode",
   ".zcode",
   "coverage",
@@ -551,8 +550,6 @@ test("production modules do not import devDependencies", () => {
       if (!/\.(ts|tsx)$/.test(entry.name)) continue;
       if (entry.name.includes("_test.")) continue;
       if (entry.name === "api-test-utils.ts") continue;
-      // Build configuration is not part of the shipped server.
-      if (entry.name === "vite.config.ts") continue;
       const text = fsSync.readFileSync(child, "utf8");
       for (const match of text.matchAll(
         /(?:from\s+|import\s*\(\s*)"([^"]+)"/g,

@@ -82,7 +82,7 @@ export function registerPages(
   app: Hono,
   core: LumiscaCore,
   assets: Assets,
-  options: { token?: string },
+  options: { token?: string; devReload?: boolean },
 ): { renderPage: (c: Context) => Promise<Response> } {
   /** Render the app shell for one request (also the SPA fallback). */
   const renderPage = async (c: Context): Promise<Response> => {
@@ -102,6 +102,7 @@ export function registerPages(
       renderHtmlDocument(css, resolvedThemeOf(core), {
         pageHost: safePageHost(c.req.header("host")),
         token: options.token,
+        ...(options.devReload === true ? { devReload: true } : {}),
         language,
       }),
       200,

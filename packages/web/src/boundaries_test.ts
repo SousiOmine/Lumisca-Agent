@@ -17,7 +17,7 @@ import { assert, assertEquals } from "@std/assert";
  */
 
 /** Core entry points the bundle may use at runtime, from the list the core
- * declares (packages/core/browser-entries.ts). Vite's dev aliases and the
+ * declares (packages/core/browser-entries.ts). The web boundary test and the
  * server's esbuild aliases read that same list, so this test cannot drift
  * away from what the bundlers actually resolve. */
 const RUNTIME_ALLOWED = BROWSER_CORE_ENTRIES.map((entry) => entry.specifier);

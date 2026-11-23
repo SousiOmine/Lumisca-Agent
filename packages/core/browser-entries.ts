@@ -5,7 +5,7 @@
  *
  * The list lives here — beside the modules it names — because three
  * consumers have to agree on it and none of them reads an exports map: the
- * web package's boundary test, Vite's dev-server aliases, and the server's
+ * web package's boundary test and the server's
  * esbuild aliases. `path` is relative to the
  * repository root; each consumer resolves it against its own root.
  *
