@@ -396,6 +396,24 @@ test("the machine's screen canvas is left to noVNC to size", () => {
   }
 });
 
+test("the asleep pane's wake button is not covered by its note", async () => {
+  // Regression: `.stella-pane-note` fills the body, because while the screen
+  // connects it is what covers the black box. The asleep state reuses that
+  // class and puts the wake button beside the note, so the note lay over the
+  // button and the one control that wakes the machine could not be pressed.
+  const css = await fsp.readFile(
+    new URL("./styles/stella.css", import.meta.url),
+    "utf8",
+  );
+  const rule = /\.stella-pane-asleep \.stella-pane-note \{([^}]*)\}/.exec(css);
+  assertEquals(rule !== null, true, "the asleep note must give its overlay back");
+  assertEquals(
+    /position: static/.test(rule![1]!),
+    true,
+    "the asleep note must sit in the group's flow, above the wake button",
+  );
+});
+
 /** The elements a rule animates, as the last compound of each selector: the
  * part that names the ELEMENT (`[data-enter] .msg.user` animates `.msg.user`,
  * the thing that moves; the gate in front of it is not an element of its

@@ -1187,6 +1187,30 @@
   background: var(--surface);
 }
 
+/* The asleep state is a group, not a picture over the box: the note says why
+ * the screen is black and the button under it wakes the machine. The note's
+ * own rule fills the body, which here would put it on top of that button —
+ * so the group lays its children out and the note gives the overlay back. */
+.stella-pane-asleep {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--surface);
+  text-align: center;
+}
+
+.stella-pane-asleep .stella-pane-note {
+  position: static;
+  inset: auto;
+  padding: 0;
+  background: none;
+}
+
 /* noVNC renders a canvas into this node; it must fill the pane and never
  * collapse to zero height (the client derives its scale from the box). */
 .stella-pane-screen {
