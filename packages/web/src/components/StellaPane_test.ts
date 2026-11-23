@@ -29,4 +29,9 @@ test("StellaPane: the pane's margin carries the conversation's width", () => {
   // The compact width puts the pane under the conversation or over the whole
   // screen; a negative margin there would move it sideways.
   assertStringIncludes(source, "const offset = compact ? 0");
+  // Closing and reopening before the exit ends keeps the pane mounted, so the
+  // exit animation must be cancelled or its end state would stick: an open
+  // pane invisible, shifted and short of the row's width.
+  assertStringIncludes(source, "element.getAnimations()");
+  assertStringIncludes(source, 'element.style.marginLeft = ""');
 });
