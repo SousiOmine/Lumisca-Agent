@@ -981,15 +981,13 @@ test("a square phone can scroll the machine's pane", async () => {
   );
 });
 
-test("the columns trade width in one movement", async () => {
-  // The pane widening and the conversation beside it narrowing are one
-  // change; without the transition the transcript jumped a hundred pixels in
-  // a single frame while the eye was on the pane.
-  //
-  // What makes this safe for the picture inside: noVNC answers a resize with
-  // one requestAnimationFrame that writes the canvas's CSS width
-  // (`Display._rescale`) — it does not repaint the pixels, so following the
-  // box costs nothing per frame.
+test("the pane's width follows its box, never the conversation", async () => {
+  // The pane's width transition smooths a viewport resize. Its arrival and
+  // departure are a margin animation in StellaPane: the pane's box keeps the
+  // one width noVNC derives the picture's scale from, while the conversation's
+  // right edge moves. A transition on the conversation's flex-basis cannot do
+  // that — the property is `auto` in both states, and a browser cannot
+  // interpolate auto.
   const css = await fsp.readFile(
     new URL("./styles/stella.css", import.meta.url),
     "utf8",
@@ -1004,9 +1002,9 @@ test("the columns trade width in one movement", async () => {
   const main = /\.stella-main \{([^}]*)\}/.exec(css);
   assertEquals(main !== null, true, ".stella-main must exist");
   assertEquals(
-    /transition: flex-basis var\(--lum-dur-mid\)/.test(main![1]!),
-    true,
-    "the conversation must follow in the same duration",
+    /transition:/.test(main![1]!),
+    false,
+    "the conversation must follow the pane's margin, not a transition of its own",
   );
 });
 

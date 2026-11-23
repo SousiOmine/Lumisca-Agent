@@ -136,6 +136,7 @@ export const INTEGRATION_SUITE: readonly string[] = [
   "packages/server/update/stage_test.ts",
   "packages/server/update/verify_test.ts",
   "packages/web/src/boundaries_test.ts",
+  "packages/web/src/components/StellaPane_test.ts",
   "packages/web/src/components/StellaSidebar_test.tsx",
   "packages/web/src/components/chat/AttachmentCard_test.tsx",
   "packages/web/src/confirm_test.ts",

@@ -6,7 +6,11 @@ import {
 } from "@tabler/icons-preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { useMachineClipboard } from "../hooks/useMachineClipboard.ts";
-import { useNarrowViewport, useReducedMotion } from "../hooks/useMediaQuery.ts";
+import {
+  useCompactViewport,
+  useNarrowViewport,
+  useReducedMotion,
+} from "../hooks/useMediaQuery.ts";
 import { useT } from "../i18n.ts";
 import { EASE_OUT, EXIT_SECONDS, play } from "../motion.ts";
 import type { RfbClient } from "../stella-rfb.ts";
@@ -46,6 +50,29 @@ import { StellaMachineScreen } from "./stella/StellaMachineScreen.tsx";
  * the user asked for. Leaving is faster (see motion.ts): the decision is made,
  * so the reply should not dawdle. */
 const ENTER_SECONDS = 0.2;
+
+/** How far the pane must start to the left of its column for the conversation
+ * beside it to keep the width it had before the pane arrived: the pane's own
+ * box plus the gap between the two columns.
+ *
+ * The pane's width is never animated — noVNC derives the picture's scale from
+ * that box (see the entrance below) — so the pane instead starts with this
+ * negative left margin and the animation walks the margin back to zero. The
+ * margin box then takes no room in its first frame and the full room in its
+ * last, while the pane's own box stays at its final width and position: what
+ * moves is the conversation's right edge, which is the surface the reader is
+ * looking at. */
+export function paneEntranceOffset(width: number, gap: number): number {
+  return width + (Number.isFinite(gap) ? gap : 0);
+}
+
+/** The space the pane borrows when it arrives, measured from the live row. */
+function paneOffsetOf(element: HTMLElement): number {
+  const parent = element.parentElement;
+  const gap =
+    parent === null ? 0 : Number.parseFloat(getComputedStyle(parent).columnGap);
+  return paneEntranceOffset(element.getBoundingClientRect().width, gap);
+}
 
 interface StellaPaneProps {
   /** The conversation's machine: running, asleep (`stopped`) or being
@@ -105,8 +132,16 @@ export function StellaPane({
   // surface. A phone's pane is the whole screen (stella.css) and travels its
   // own width; a desktop column only needs the hint of a direction.
   const narrow = useNarrowViewport();
+  // The pane sits beside the conversation only above the compact width. At
+  // and below it the pane is a strip under the conversation (a tablet) or the
+  // whole screen (a phone), so there is no column for it to trade width with.
+  const compact = useCompactViewport();
   const clientRef = useRef<RfbClient | null>(null);
   const interactive = handover !== null;
+  /** The pane covers the window instead of sitting in its column. Declared
+   * before the entrance and exit effects because the exit must not trade width
+   * with a conversation it no longer shares a row with. */
+  const [fullscreen, setFullscreen] = useState(false);
   // The hand-over bar's own state lives here rather than in the form: the bar
   // comes and goes with each hand-over while the pane stays mounted, so a note
   // left unsent outlives the form that wrote it, as it did when both were one
@@ -129,21 +164,30 @@ export function StellaPane({
       .finally(() => setFinishing(false));
   };
 
-  // Arrive. Only opacity and transform move: the pane's BOX never changes
-  // size, because the noVNC client re-derives its scale from that box on every
-  // resize and animating the width would re-scale the picture on every frame.
-  // The conversation's own width therefore snaps when the column appears —
-  // reflowing a transcript for 200ms would be worse than the snap, and the
-  // incoming sheet is where the eye is.
+  // Arrive. The pane's BOX never changes size, because the noVNC client
+  // re-derives its scale from that box on every resize and animating the width
+  // would re-scale the picture on every frame. What moves instead is the
+  // conversation's right edge: the pane starts pulled left by its own width
+  // plus the gap (paneEntranceOffset), so its first frame leaves the
+  // conversation at its old width, and the margin walks back to zero as the
+  // pane slides in. The transcript then reflows with the column rather than
+  // snapping to its new width once the pane has already arrived.
   useLayoutEffect(() => {
     const element = paneRef.current;
     if (element === null || reduceMotion) return;
     const start = narrow ? "translateX(100%)" : "translateX(16px)";
-    // Hide it before the first paint: `play` reaches the library through an
-    // import, so the animation cannot start in this tick, and without this the
-    // pane would paint at its final place and then jump back to the start.
+    // The pane and the conversation share a row only above the compact width;
+    // below it the pane is under the conversation or the whole screen, and a
+    // negative left margin would move it sideways instead of narrowing a
+    // column.
+    const offset = compact ? 0 : paneOffsetOf(element);
+    // Hide it and take its width out of the row before the first paint:
+    // `play` reaches the library through an import, so the animation cannot
+    // start in this tick, and without this the pane would paint at its final
+    // place and the conversation would snap narrower before jumping back.
     element.style.opacity = "0";
     element.style.transform = start;
+    if (offset > 0) element.style.marginLeft = `-${offset}px`;
     let cancelled = false;
     void play(
       element,
@@ -152,6 +196,7 @@ export function StellaPane({
         transform: narrow
           ? ["translateX(100%)", "translateX(0%)"]
           : ["translateX(16px)", "translateX(0px)"],
+        ...(offset > 0 ? { marginLeft: [`-${offset}px`, "0px"] } : {}),
       },
       {
         duration: ENTER_SECONDS,
@@ -159,11 +204,21 @@ export function StellaPane({
         prefersReducedMotion: reduceMotion,
       },
     ).then((playing) => {
+      if (cancelled) return;
       // Nothing to play (the library could not be loaded): show the pane as
-      // it is instead of leaving it invisible.
-      if (cancelled || playing !== null) return;
-      element.style.opacity = "";
-      element.style.transform = "";
+      // it is instead of leaving it invisible or the conversation narrow.
+      if (playing === null) {
+        element.style.opacity = "";
+        element.style.transform = "";
+        element.style.marginLeft = "";
+        return;
+      }
+      // The inline margin exists only to hold the first paint. Once the
+      // animation owns the property, drop the inline value so the end state
+      // is the animation's zero and a later full screen is not shifted left.
+      void playing.finished.then(() => {
+        if (!cancelled) element.style.marginLeft = "";
+      });
     });
     return () => {
       cancelled = true;
@@ -174,7 +229,11 @@ export function StellaPane({
 
   // Leave. The element stays mounted until the exit is over (the caller keeps
   // it up through usePresence), so the pane does not vanish from under the
-  // pointer it was following.
+  // pointer it was following. The conversation takes its width back in the
+  // same movement: the pane's margin walks out to minus its own width plus the
+  // gap while the sheet slides away, and the transcript reflows as the column
+  // grows. A full-screen pane is not in the row, so it has no width to hand
+  // back.
   useEffect(() => {
     if (!exiting) return;
     const element = paneRef.current;
@@ -183,6 +242,7 @@ export function StellaPane({
       finish();
       return;
     }
+    const offset = compact || fullscreen ? 0 : paneOffsetOf(element);
     let cancelled = false;
     void play(
       element,
@@ -191,6 +251,7 @@ export function StellaPane({
         transform: narrow
           ? ["translateX(0%)", "translateX(100%)"]
           : ["translateX(0px)", "translateX(16px)"],
+        ...(offset > 0 ? { marginLeft: ["0px", `-${offset}px`] } : {}),
       },
       {
         duration: EXIT_SECONDS,
@@ -211,11 +272,17 @@ export function StellaPane({
     });
     return () => {
       cancelled = true;
+      // A reopen during the exit keeps the element mounted (usePresence
+      // cancels the departure). Without this the animation would finish under
+      // the open pane and leave it faded out, shifted and short of the row's
+      // width. Cancel rather than stop: stop commits the halfway styles, while
+      // cancel returns the pane to its own stylesheet values.
+      for (const animation of element.getAnimations()) animation.cancel();
+      element.style.opacity = "";
+      element.style.transform = "";
+      element.style.marginLeft = "";
     };
-  }, [exiting, reduceMotion, narrow, onExitDone]);
-
-  /** The pane covers the window instead of sitting in its column. */
-  const [fullscreen, setFullscreen] = useState(false);
+  }, [exiting, reduceMotion, narrow, compact, fullscreen, onExitDone]);
 
   /** Escape leaves full screen, the way every other expanded surface in the
    * app answers Escape. The listener lives only while the mode does: the pane

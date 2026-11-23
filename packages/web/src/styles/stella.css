@@ -545,10 +545,10 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  /* The other half of the pane's width transition: the two columns trade
-   * space in one movement instead of the conversation snapping to its new
-   * width after the pane has already arrived. */
-  transition: flex-basis var(--lum-dur-mid) var(--lum-ease-out);
+  /* The conversation follows the pane's arrival through the pane's own
+   * left-margin animation (StellaPane, paneEntranceOffset), not through a
+   * transition here: flex-basis is `auto`, and auto to auto is not a value a
+   * browser can interpolate. */
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
@@ -1092,13 +1092,15 @@
    * motion.ts, because the pane has to stay mounted through the exit (see
    * StellaView and hooks/usePresence).
    *
-   * The WIDTH does transition, and the conversation beside it follows: the
-   * column widening is the change the eye is watching, and snapping it left
-   * the transcript jumping a hundred pixels in one frame. The picture inside
-   * does not suffer for it — noVNC answers a resize with one `requestAnimation
-   * Frame` that writes the canvas's CSS width (`_updateScale` →
-   * `Display._rescale`); it does not repaint the pixels, so the scale moves
-   * with the box and the stream keeps playing. */
+   * The WIDTH does transition when the window resizes, and the conversation
+   * beside it follows: the column widening is the change the eye is watching,
+   * and snapping it left the transcript jumping a hundred pixels in one
+   * frame. The pane's own arrival is a margin animation instead (StellaPane):
+   * the box keeps this width, so the picture is not resized on every frame of
+   * the entrance. When the box does resize, noVNC answers with one
+   * `requestAnimationFrame` that writes the canvas's CSS width
+   * (`_updateScale` → `Display._rescale`); it does not repaint the pixels,
+   * so the scale moves with the box and the stream keeps playing. */
   transition: width var(--lum-dur-mid) var(--lum-ease-out);
 }
 
