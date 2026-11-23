@@ -10,7 +10,11 @@
 import { test } from "bun:test";
 import type { Routine, StellaAgent } from "@lumisca/core";
 import { assertEquals } from "@std/assert";
-import { type RoutineApi, routineRoutes } from "./routines.ts";
+import {
+  type RoutineAgents,
+  type RoutineSource,
+  routineRoutes,
+} from "./routines.ts";
 import { jsonError } from "./util.ts";
 
 function routine(): Routine {
@@ -45,28 +49,30 @@ function agent(disabledAt: number | null): StellaAgent {
   };
 }
 
-function core(disabledAt: number | null, runs: string[]): RoutineApi {
+function routines(runs: string[]): RoutineSource {
   return {
-    listRoutinesOf: () => [routine()],
-    isRoutineRunning: () => false,
-    isRoutineQueued: () => false,
-    runRoutineNow: (id) => {
+    listOf: () => [routine()],
+    isRunning: () => false,
+    isQueued: () => false,
+    runNow: (id) => {
       runs.push(id);
       return Promise.resolve();
     },
-    stopRoutine: () => {},
+    stop: () => {},
     getRoutineRepo: () => ({
       get: (id) => (id === "r1" ? routine() : undefined),
       update: () => routine(),
       delete: () => false,
     }),
-    listStellaAgents: () => [agent(disabledAt)],
-    nextRoutineRun: () => 0,
   };
 }
 
+function agents(disabledAt: number | null): RoutineAgents {
+  return { listStellaAgents: () => [agent(disabledAt)] };
+}
+
 function run(disabledAt: number | null, runs: string[]) {
-  const app = routineRoutes(core(disabledAt, runs));
+  const app = routineRoutes(routines(runs), agents(disabledAt));
   app.onError((error, c) => jsonError(c, error));
   return app.request("/routines/r1/run", { method: "POST" });
 }

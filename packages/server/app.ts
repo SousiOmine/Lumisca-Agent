@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { type LumiscaCore, nextRunAt } from "@lumisca/core";
+import type { LumiscaCore } from "@lumisca/core";
 import { hostForUrl } from "@lumisca/core/shared";
 import { Hono } from "hono";
 import { websocket } from "hono/bun";
@@ -95,8 +95,8 @@ export interface AppOptions {
 
 /** The HTTP + WebSocket application and the one way to release what it
  * owns (the federation client, the push notifier, the upload store, and the
- * routes' own hooks). The two are one value so a caller cannot hold the app
- * without also holding its teardown. */
+ * login sessions the provider routes own). The two are one value so a caller
+ * cannot hold the app without also holding its teardown. */
 export interface ServerApp {
   readonly app: Hono;
   /** Release everything the app started. Runs its hooks once. */
@@ -204,7 +204,6 @@ export function createApp(
     return c.text("Not found", 404);
   });
 
-  const routeDisposers: Array<() => void> = [];
   // A shutdown may be reached from two places (the updater's restart and a
   // signal); releasing twice would close the peer streams and the upload
   // store twice over, so the first call owns the teardown.
@@ -215,7 +214,7 @@ export function createApp(
     fed.close();
     push.dispose();
     promptUploads.dispose();
-    for (const hook of routeDisposers) hook();
+    providers.dispose();
   };
 
   // `now` proves the event loop itself is alive (not just the listener
@@ -407,19 +406,7 @@ export function createApp(
   );
   // Routines: the scheduled requests of a stella conversation. Addressed by
   // agent, because a routine belongs to one conversation.
-  app.route(
-    "/api",
-    routineRoutes({
-      listRoutinesOf: (agentId) => core.routines.listOf(agentId),
-      isRoutineRunning: (id) => core.routines.isRunning(id),
-      isRoutineQueued: (id) => core.routines.isQueued(id),
-      runRoutineNow: (id) => core.routines.runNow(id),
-      stopRoutine: (id) => core.routines.stop(id),
-      getRoutineRepo: () => core.routines.getRoutineRepo(),
-      listStellaAgents: () => core.services.stellaAgents.listStellaAgents(),
-      nextRoutineRun: (schedule, from) => nextRunAt(schedule, from),
-    }),
-  );
+  app.route("/api", routineRoutes(core.routines, core.services.stellaAgents));
   // The images a session published for its replies. Mounted after the
   // session routes (its path is its own `/sessions/:id/visual/:name`).
   app.route(
@@ -441,12 +428,8 @@ export function createApp(
         sessions.resolveSessionAttachment(sessionId, name),
     }),
   );
-  app.route(
-    "/api",
-    providerRoutes(core.services.models, (dispose) =>
-      routeDisposers.push(dispose),
-    ),
-  );
+  const providers = providerRoutes(core.services.models);
+  app.route("/api", providers.app);
   app.route(
     "/api",
     settingRoutes({
@@ -485,13 +468,7 @@ export function createApp(
   );
   app.route(
     "/api",
-    notifyRoutes({
-      listPushSubscriptions: () => core.services.push.list(),
-      addPushSubscription: (input) => core.services.push.add(input),
-      removePushSubscription: (endpoint) => core.services.push.remove(endpoint),
-      pushVapidKeys: () => core.services.push.vapidKeys(),
-      sendPushTest: () => push.sendTest(),
-    }),
+    notifyRoutes(core.services.push, () => push.sendTest()),
   );
   app.route("/api", federationRoutes(fed));
   // Auto-update of the standalone server (absent in development, where the

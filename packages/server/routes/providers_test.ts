@@ -129,7 +129,7 @@ class FakeProviderApi implements ProviderApi {
 }
 
 function makeApp(fake: FakeProviderApi) {
-  const app = providerRoutes(fake);
+  const { app } = providerRoutes(fake);
   app.onError((error, c) => jsonError(c, error));
   return app;
 }
@@ -137,7 +137,7 @@ function makeApp(fake: FakeProviderApi) {
 /** Start a ChatGPT login with an explicit method (the route refuses to pick
  * one). Extra headers let a test describe where the page is opened. */
 function startLogin(
-  app: ReturnType<typeof providerRoutes>,
+  app: ReturnType<typeof makeApp>,
   method: "browser" | "device_code" = "device_code",
   headers: Record<string, string> = {},
 ) {
@@ -149,7 +149,7 @@ function startLogin(
 }
 
 async function snapshot(
-  app: ReturnType<typeof providerRoutes>,
+  app: ReturnType<typeof makeApp>,
   sessionId: string,
 ): Promise<ProviderLoginSnapshot> {
   const res = await app.request(`/providers/openai-codex/login/${sessionId}`);
@@ -158,7 +158,7 @@ async function snapshot(
 }
 
 async function pollUntil(
-  app: ReturnType<typeof providerRoutes>,
+  app: ReturnType<typeof makeApp>,
   sessionId: string,
   status: string,
   timeoutMs = 2000,

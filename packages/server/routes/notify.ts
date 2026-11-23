@@ -5,19 +5,17 @@ import type {
 import { Hono } from "hono";
 import { AppError, parseBody, requireNonEmptyString } from "./util.ts";
 
-/** The slice of the core (and the notifier) these routes need. */
+/** The stored subscriptions (`core.services.push`). Declared by the method
+ * names the routes call rather than restated in the app: the route is handed
+ * the service itself. */
 export interface PushApi {
-  listPushSubscriptions(): PushSubscriptionRecord[];
-  addPushSubscription(input: {
+  list(): PushSubscriptionRecord[];
+  add(input: {
     endpoint: string;
     keys: PushSubscriptionKeys;
   }): PushSubscriptionRecord;
-  removePushSubscription(endpoint: string): boolean;
-  pushVapidKeys(): Promise<{ publicKey: string }>;
-  /** Sends a notification to the stored subscriptions right now (the
-   * settings page's "send a test"): a user who enabled notifications needs a
-   * way to find out whether the channel works without waiting for a run. */
-  sendPushTest(): Promise<number>;
+  remove(endpoint: string): boolean;
+  vapidKeys(): Promise<{ publicKey: string }>;
 }
 
 /** One subscription as a client posts it. The endpoint and both keys are
@@ -53,13 +51,18 @@ function subscriptionInput(value: unknown): {
  * the one value here that is safe to hand out — it is sent to the browser in
  * every subscription anyway — while the private half never leaves the server.
  */
-export function notifyRoutes(api: PushApi): Hono {
+export function notifyRoutes(
+  push: PushApi,
+  /** The notifier's test send (see push.ts): the one route that delivers
+   * without waiting for a run. */
+  sendTest: () => Promise<number>,
+): Hono {
   const app = new Hono();
 
   app.get("/notify/key", async (c) => {
     // Created on the first ask (see core/notify/vapid.ts): a server whose user
     // never enables notifications stores no secret.
-    const keys = await api.pushVapidKeys();
+    const keys = await push.vapidKeys();
     return c.json({ publicKey: keys.publicKey });
   });
 
@@ -67,13 +70,13 @@ export function notifyRoutes(api: PushApi): Hono {
     // Only the endpoints, never the keys: the settings page counts the
     // devices it notifies, and a key is not something a page needs to draw.
     return c.json({
-      count: api.listPushSubscriptions().length,
+      count: push.list().length,
     });
   });
 
   app.post("/notify/subscriptions", async (c) => {
     const body = await parseBody<unknown>(c);
-    const record = api.addPushSubscription(subscriptionInput(body));
+    const record = push.add(subscriptionInput(body));
     return c.json({ ok: true, endpoint: record.endpoint });
   });
 
@@ -83,11 +86,11 @@ export function notifyRoutes(api: PushApi): Hono {
     // A browser that unsubscribes on its own, or an entry a previous install
     // left behind, must not make this fail: the desired state is "not
     // subscribed", and it already holds.
-    return c.json({ ok: true, removed: api.removePushSubscription(endpoint) });
+    return c.json({ ok: true, removed: push.remove(endpoint) });
   });
 
   app.post("/notify/test", async (c) => {
-    const delivered = await api.sendPushTest();
+    const delivered = await sendTest();
     return c.json({ ok: true, delivered });
   });
 
