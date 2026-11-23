@@ -22,7 +22,8 @@ import type { McpConfig } from "../mcp/config.ts";
 import { McpManager } from "../mcp/manager.ts";
 import { canonicalJson } from "../shared/digest.ts";
 import { SessionToolRegistries } from "../tools/registries.ts";
-import type { SessionPoolDeps, SessionResources } from "./deps.ts";
+import type { SessionPoolDeps } from "./deps.ts";
+import type { SessionRuntime } from "./session-runtime.ts";
 
 /** A workspace's merged MCP config and the errors collected while merging it
  * (see SessionPoolDeps.loadMergedMcp). */
@@ -59,7 +60,7 @@ export function ensureMcpAttachment(
   deps: SessionPoolDeps,
   session: SessionInfo,
   workspace: Workspace,
-  resources: SessionResources,
+  resources: SessionRuntime,
   isCurrentAttachment: (attachment: McpAttachment) => boolean,
 ): SessionMcp {
   const merged: MergedMcp = deps.loadMergedMcp(workspace);
@@ -95,7 +96,7 @@ export function replaceMcpAttachment(
   deps: SessionPoolDeps,
   session: SessionInfo,
   workspace: Workspace,
-  resources: SessionResources,
+  resources: SessionRuntime,
   merged: MergedMcp,
   isCurrentAttachment: (attachment: McpAttachment) => boolean,
 ): McpAttachment {
@@ -117,7 +118,7 @@ function adoptMcpAttachment(
   deps: SessionPoolDeps,
   session: SessionInfo,
   workspace: Workspace,
-  resources: SessionResources,
+  resources: SessionRuntime,
   merged: MergedMcp,
   isCurrentAttachment: (attachment: McpAttachment) => boolean,
 ): McpAttachment {
@@ -163,7 +164,7 @@ export function createMcpAttachment(
 function reportMcpProblems(
   deps: SessionPoolDeps,
   sessionId: string,
-  resources: SessionResources,
+  resources: SessionRuntime,
   errors: readonly string[],
   attachment: McpAttachment,
   isCurrentAttachment: (attachment: McpAttachment) => boolean,

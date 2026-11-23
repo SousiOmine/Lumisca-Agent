@@ -3,8 +3,8 @@ import type { AgentMessage } from "../domain/message.ts";
 import type { SessionInfo } from "../domain/session.ts";
 import type { Workspace } from "../domain/workspace.ts";
 import { createLogger } from "../log.ts";
-import type { McpAttachment } from "../mcp/attachment.ts";
-import type { SessionPoolDeps, SessionResources } from "./deps.ts";
+import { errorMessage } from "../shared/misc.ts";
+import type { SessionPoolDeps } from "./deps.ts";
 import type { SessionAgent } from "./session-agent.ts";
 import { SessionAgent as SessionAgentImpl } from "./session-agent.ts";
 import { buildSessionHubs } from "./session-hubs.ts";
@@ -15,6 +15,7 @@ import {
   sameMcpConfig,
 } from "./session-mcp.ts";
 import { buildContextProviders, ensureSystemPrompt } from "./session-prompt.ts";
+import { SessionRuntime } from "./session-runtime.ts";
 import {
   applyCodeExecution,
   buildSessionTools,
@@ -48,23 +49,37 @@ const STELLA_IDLE_COMPACTION = {
 } as const;
 
 /** Builds the live agent of a session with every runtime it needs
- * (MCP attachment, tool registry, hubs, tools). Extracted from
- * SessionPool.open so the pool stays a lifecycle manager: the factory owns
- * the wiring, the pool owns the map. */
+ * (MCP attachment, tool registry, hubs, tools), and owns the runtime of every
+ * open session. The pool asks this class what a session holds; it never sees
+ * a runtime's fields. */
 export class AgentFactory {
+  private readonly runtimes = new Map<string, SessionRuntime>();
+
   constructor(private readonly deps: SessionPoolDeps) {}
 
-  /** Build the agent of a session, recording its runtime in `resources`. */
+  /** Run `read` against an open session's runtime, or answer undefined when
+   * the session is not open. The one way the pool reads session state. */
+  withRuntime<T>(
+    id: string,
+    read: (runtime: SessionRuntime) => T,
+  ): T | undefined {
+    const runtime = this.runtimes.get(id);
+    return runtime === undefined ? undefined : read(runtime);
+  }
+
+  /** Build the agent of a session (replacing any existing one). MCP tools
+   * attach asynchronously — they spawn server processes — and errors are
+   * reported via session_error events, never thrown here. */
   open(
     session: SessionInfo,
     workspace: Workspace,
     messages: AgentMessage[],
-    resources: SessionResources,
-    isCurrentAttachment: (attachment: McpAttachment) => boolean,
     /** The whole-transcript position `messages[0]` sits at (see
      * TranscriptStore). */
     baseIndex = 0,
   ): SessionAgent {
+    const runtime = this.runtimes.get(session.id) ?? new SessionRuntime();
+    this.runtimes.set(session.id, runtime);
     // The wiring, phase by phase. Each phase owns one question and is
     // called in the order the next one depends on: where the session works
     // (and with which model), what it may discover, which hubs back its
@@ -79,8 +94,8 @@ export class AgentFactory {
       this.deps,
       session,
       workspace,
-      resources,
-      isCurrentAttachment,
+      runtime,
+      (attachment) => runtime.mcp === attachment,
     );
     const where = resolveSessionWhere(this.deps, session, workspace);
     seedDiscoverableTools(this.deps, where, registries, session.id);
@@ -88,7 +103,7 @@ export class AgentFactory {
       this.deps,
       session,
       where,
-      resources,
+      runtime,
       mcp,
       registries,
     );
@@ -208,16 +223,50 @@ export class AgentFactory {
         // Remember failures for clients that do not see the WS stream;
         // a new run clears the stale error.
         if (event.type === "session_error") {
-          resources.lastError = event.message;
+          runtime.lastError = event.message;
         } else if (event.type === "agent_start") {
-          resources.lastError = undefined;
+          runtime.lastError = undefined;
         }
         this.deps.emit(event);
       },
     });
     agent.attachMcp(mcp);
-    resources.agent = agent;
+    runtime.agent = agent;
     return agent;
+  }
+
+  /** Rebuild an open session's agent in place, keeping the hubs and the
+   * attachment. A session that is not open is left alone: its next open reads
+   * the stored value. `dropMcp` is for a sign-in: the config did not change,
+   * so the attachment the session holds may be the one whose connection
+   * already failed, and the rebuild must not reuse it. */
+  rebuild(session: SessionInfo, options: { dropMcp?: boolean } = {}): void {
+    const runtime = this.runtimes.get(session.id);
+    const current = runtime?.agent;
+    if (runtime === undefined || current === undefined) return;
+    const workspace = this.deps.requireWorkspace(session.workspaceId);
+    const messages = current.messages;
+    const baseIndex = current.baseIndex;
+    // Closes the old agent, which also releases its view of the MCP servers.
+    current.close();
+    if (options.dropMcp === true) runtime.dropMcp();
+    this.open(session, workspace, messages, baseIndex);
+  }
+
+  /** Tear an open session's resources down and forget it. Resolves once every
+   * background kill has taken effect and every MCP child process is dead. */
+  async close(id: string): Promise<void> {
+    const runtime = this.runtimes.get(id);
+    if (runtime === undefined) return;
+    this.runtimes.delete(id);
+    await runtime.close();
+  }
+
+  /** Close every open session (core shutdown). */
+  async closeAll(): Promise<void> {
+    const runtimes = [...this.runtimes.values()];
+    this.runtimes.clear();
+    await Promise.all(runtimes.map((runtime) => runtime.close()));
   }
 
   /**
@@ -231,16 +280,23 @@ export class AgentFactory {
    * and `open` cannot disagree: both answer "which tools does where this
    * session works imply" with the same function.
    */
-  reseedDiscoverable(
-    session: SessionInfo,
-    workspace: Workspace,
-    resources: SessionResources,
-  ): void {
-    const registries = resources.registries;
-    if (registries === undefined) return;
-    const where = resolveSessionWhere(this.deps, session, workspace);
-    seedDiscoverableTools(this.deps, where, registries, session.id);
-    resources.agent?.ensureSearchTools();
+  reseedDiscoverable(session: SessionInfo, workspace: Workspace): void {
+    const runtime = this.runtimes.get(session.id);
+    const registries = runtime?.registries;
+    if (runtime === undefined || registries === undefined) return;
+    try {
+      const where = resolveSessionWhere(this.deps, session, workspace);
+      seedDiscoverableTools(this.deps, where, registries, session.id);
+      runtime.agent?.ensureSearchTools();
+    } catch (error) {
+      // The setting is already stored; failing the caller's whole change
+      // would report a failure that did happen. The session hears about it.
+      const message = `Could not apply the change to this session: ${errorMessage(
+        error,
+      )}`;
+      runtime.lastError = message;
+      this.deps.emit({ type: "session_error", sessionId: session.id, message });
+    }
   }
 
   /** Move a session to its current MCP config without rebuilding its agent
@@ -254,19 +310,18 @@ export class AgentFactory {
   refreshMcp(
     session: SessionInfo,
     workspace: Workspace,
-    resources: SessionResources,
-    isCurrentAttachment: (attachment: McpAttachment) => boolean,
     options: { reloadCredentials?: boolean } = {},
   ): void {
-    const agent = resources.agent;
-    if (agent === undefined) return;
+    const runtime = this.runtimes.get(session.id);
+    const agent = runtime?.agent;
+    if (runtime === undefined || agent === undefined) return;
     // An unchanged config is no reason to respawn every server process —
     // unless what changed is the credentials. A sign-in leaves the config
     // byte-for-byte the same, and the connection that already got its 401
     // (and was dropped) is the whole reason to reload: skipping it would
     // keep the session on a manager that never sees the new grant.
     const merged = this.deps.loadMergedMcp(workspace);
-    const previous = resources.mcp;
+    const previous = runtime.mcp;
     if (
       options.reloadCredentials !== true &&
       previous !== undefined &&
@@ -278,16 +333,16 @@ export class AgentFactory {
       this.deps,
       session,
       workspace,
-      resources,
+      runtime,
       merged,
-      isCurrentAttachment,
+      (candidate) => runtime.mcp === candidate,
     );
     agent.replaceMcpAttachment(attachment);
     // The sub-agents share the session's attachment, so the running ones are
     // re-pointed at the new tools too (see TaskHub.setMcp).
-    const registries = resources.registries;
+    const registries = runtime.registries;
     if (registries !== undefined) {
-      resources.tasks?.setMcp(attachment, registries.subagent);
+      runtime.tasks?.setMcp(attachment, registries.subagent);
     }
   }
 }

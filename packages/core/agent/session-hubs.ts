@@ -17,12 +17,13 @@ import type { SessionToolRegistries } from "../tools/registries.ts";
 import { TaskHub } from "../tools/task-hub.ts";
 import { TodoHub } from "../tools/todo.ts";
 import { subagentSkills } from "../tools/toolsets.ts";
-import type { SessionPoolDeps, SessionResources } from "./deps.ts";
+import type { SessionPoolDeps } from "./deps.ts";
 import type { SessionWhere } from "./session-location.ts";
+import type { SessionRuntime } from "./session-runtime.ts";
 import { catalogSkills } from "./skill-catalog.ts";
 
 /** The per-session hubs one open agent is wired to. All but the ask hub
- * survive an agent rebuild (they live in SessionResources). */
+ * survive an agent rebuild (they live in SessionRuntime). */
 export interface SessionHubs {
   background: BackgroundProcessManager | undefined;
   ask: AskHub;
@@ -40,7 +41,7 @@ export function buildSessionHubs(
   deps: SessionPoolDeps,
   session: SessionInfo,
   where: SessionWhere,
-  resources: SessionResources,
+  resources: SessionRuntime,
   mcp: McpAttachment,
   registries: SessionToolRegistries,
 ): SessionHubs {

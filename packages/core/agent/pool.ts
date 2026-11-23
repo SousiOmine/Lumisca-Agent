@@ -3,15 +3,15 @@ import type { AgentMessage } from "../domain/message.ts";
 import type { SessionInfo } from "../domain/session.ts";
 import type { Workspace } from "../domain/workspace.ts";
 import { CoreError } from "../errors.ts";
-import { errorMessage } from "../shared/misc.ts";
 import type { TaskInfo, ThinkingLevel, TodoPhase } from "../shared/mod.ts";
 import type { PendingQuestion } from "../tools/ask.ts";
 import type { BackgroundCommandInfo } from "../tools/background.ts";
-import type { SessionPoolDeps, SessionResources } from "./deps.ts";
+import type { SessionPoolDeps } from "./deps.ts";
 import { AgentFactory } from "./factory.ts";
 import type { SessionAgent } from "./session-agent.ts";
+import type { SessionRuntime } from "./session-runtime.ts";
 
-export type { SessionPoolDeps, SessionResources } from "./deps.ts";
+export type { SessionPoolDeps } from "./deps.ts";
 
 /** What the open sessions do with a configuration change (see
  * SessionPool.applyChange). */
@@ -30,6 +30,16 @@ export type InPlaceChange =
    * sign-in). */
   | "mcp-credentials";
 
+/** What a change finds of an open session: an idle agent it may replace, one
+ * in flight it may not, or nothing at all. */
+export type SessionState = "closed" | "idle" | "streaming";
+
+/** {@link SessionState} of a runtime, as the pool asks for it. */
+function stateOfRuntime(runtime: SessionRuntime): SessionState {
+  if (runtime.agent === undefined) return "closed";
+  return runtime.streaming ? "streaming" : "idle";
+}
+
 /** The hooks a change needs beyond its mutation and policy. */
 export interface ChangeOptions {
   /** Where the caller's deferred rebuild happens (policy `defer`). */
@@ -39,13 +49,13 @@ export interface ChangeOptions {
 }
 
 /**
- * Owns the live session agents: lifecycle (open / close / delete) and the
- * streaming guards behind configuration changes. Agent construction lives
- * in AgentFactory; the pool only keeps the map. Kept out of LumiscaCore so
- * the core stays a thin facade over the repositories.
+ * Answers what the live sessions are doing, and applies configuration changes
+ * to them. Agent construction and the runtime each open session owns live in
+ * AgentFactory; the pool reads a session's state through
+ * AgentFactory.withRuntime and never learns what a runtime holds. Kept out of
+ * LumiscaCore so the core stays a thin facade over the repositories.
  */
 export class SessionPool {
-  private readonly sessions = new Map<string, SessionResources>();
   private readonly factory: AgentFactory;
 
   constructor(
@@ -58,11 +68,11 @@ export class SessionPool {
   }
 
   get(id: string): SessionAgent | undefined {
-    return this.sessions.get(id)?.agent;
+    return this.factory.withRuntime(id, (runtime) => runtime.agent);
   }
 
   require(id: string): SessionAgent {
-    const agent = this.sessions.get(id)?.agent;
+    const agent = this.get(id);
     if (!agent) {
       throw new CoreError(`Session is not open: ${id}`, "not_found");
     }
@@ -73,7 +83,7 @@ export class SessionPool {
    * Lets non-WebSocket clients (curl, the desktop shell) learn about
    * failures of fire-and-forget prompts instead of losing them. */
   lastError(id: string): string | undefined {
-    return this.sessions.get(id)?.lastError;
+    return this.factory.withRuntime(id, (runtime) => runtime.lastError);
   }
 
   /** The session's current todo plan (the todo tool); empty when the
@@ -81,14 +91,18 @@ export class SessionPool {
    * progress panel after a WS drop or page reload — todo events are
    * snapshots, but only mutations emit them, so they are not replayed. */
   getTodo(id: string): TodoPhase[] {
-    return this.sessions.get(id)?.todos?.getPlan() ?? [];
+    return (
+      this.factory.withRuntime(id, (runtime) => runtime.todos?.getPlan()) ?? []
+    );
   }
 
   /** Snapshots of the session's sub-agent tasks (the task tool); empty
    * when the session is not open or has no tasks yet. Restores the tasks
    * panel after a WS drop or page reload (task events are not replayed). */
   getTasks(id: string): TaskInfo[] {
-    return this.sessions.get(id)?.tasks?.list() ?? [];
+    return (
+      this.factory.withRuntime(id, (runtime) => runtime.tasks?.list()) ?? []
+    );
   }
 
   /** Snapshots of the session's background commands (the async_bash tool);
@@ -96,7 +110,10 @@ export class SessionPool {
    * the background panel after a WS drop or page reload (background events
    * are not replayed). */
   getBackground(id: string): BackgroundCommandInfo[] {
-    return this.sessions.get(id)?.background?.list() ?? [];
+    return (
+      this.factory.withRuntime(id, (runtime) => runtime.background?.list()) ??
+      []
+    );
   }
 
   /** The questions the session is still waiting on (the ask tool); empty
@@ -104,7 +121,11 @@ export class SessionPool {
    * question panel after a WS drop or page reload: `question` events are
    * never replayed, and the blocked run cannot continue without an answer. */
   getPendingQuestions(id: string): PendingQuestion[] {
-    return this.sessions.get(id)?.agent?.getPendingQuestions() ?? [];
+    return (
+      this.factory.withRuntime(id, (runtime) =>
+        runtime.agent?.getPendingQuestions(),
+      ) ?? []
+    );
   }
 
   /** Build the agent of a session (replacing any existing one) and keep it
@@ -120,17 +141,7 @@ export class SessionPool {
      * conversation that was never compacted. */
     baseIndex = 0,
   ): SessionAgent {
-    const resources: SessionResources = this.sessions.get(session.id) ?? {};
-    const agent = this.factory.open(
-      session,
-      workspace,
-      messages,
-      resources,
-      (attachment) => this.sessions.get(session.id)?.mcp === attachment,
-      baseIndex,
-    );
-    this.sessions.set(session.id, resources);
-    return agent;
+    return this.factory.open(session, workspace, messages, baseIndex);
   }
 
   /** Close a session's agent (unsubscribing from background completions),
@@ -141,13 +152,7 @@ export class SessionPool {
    * workspace folder afterwards): the background kills and the MCP child
    * processes are only guaranteed dead once it resolves. */
   async close(id: string): Promise<void> {
-    const resources = this.sessions.get(id);
-    if (!resources) return;
-    resources.agent?.close();
-    resources.tasks?.close();
-    this.sessions.delete(id);
-    await resources.background?.killAll();
-    await resources.mcp?.manager.close();
+    await this.factory.close(id);
   }
 
   /** Close and forget a session entirely (persisted rows are deleted by
@@ -161,14 +166,7 @@ export class SessionPool {
    * Resolves once every background kill has taken effect and every MCP
    * child process is dead. */
   async closeAll(): Promise<void> {
-    const all = [...this.sessions.values()];
-    this.sessions.clear();
-    for (const resources of all) {
-      resources.agent?.close();
-      resources.tasks?.close();
-    }
-    await Promise.all(all.map((resources) => resources.background?.killAll()));
-    await Promise.all(all.map((resources) => resources.mcp?.manager.close()));
+    await this.factory.closeAll();
   }
 
   /** Update the thinking level of an open session in place, without
@@ -177,13 +175,19 @@ export class SessionPool {
    * throws while streaming and never interrupts the running loop. Closed
    * sessions are ignored: their next `open()` reads the stored level. */
   setThinkingLevel(id: string, level: ThinkingLevel): void {
-    this.sessions.get(id)?.agent?.setThinkingLevel(level);
+    this.get(id)?.setThinkingLevel(level);
+  }
+
+  /** What an open session can take right now. A session that is not open
+   * needs nothing from a change: its next `open` reads the stored value. */
+  private stateOf(id: string): SessionState {
+    return this.factory.withRuntime(id, stateOfRuntime) ?? "closed";
   }
 
   /** The shared "session is streaming" guard behind every configuration
    * change that rebuilds agents. */
   private assertNotStreaming(id: string): void {
-    if (this.sessions.get(id)?.agent?.isStreaming) {
+    if (this.stateOf(id) === "streaming") {
       throw new CoreError(`Session is already running: ${id}`, "conflict");
     }
   }
@@ -192,15 +196,9 @@ export class SessionPool {
    * while streaming: the running loop would keep executing against the
    * same message array and duplicate DB rows. */
   rebuild(session: SessionInfo): void {
-    const resources = this.sessions.get(session.id);
-    if (resources?.agent === undefined) return;
+    if (this.get(session.id) === undefined) return;
     this.assertNotStreaming(session.id);
-    const current = resources.agent;
-    const workspace = this.deps.requireWorkspace(session.workspaceId);
-    const messages = current.messages;
-    const baseIndex = current.baseIndex;
-    current.close(); // also releases the old agent's MCP servers
-    this.open(session, workspace, messages, baseIndex);
+    this.factory.rebuild(session);
   }
 
   /** Apply one configuration change to the listed sessions.
@@ -237,10 +235,10 @@ export class SessionPool {
     }
     mutate();
     for (const session of sessions) {
-      const resources = this.sessions.get(session.id);
-      if (resources?.agent === undefined) continue;
-      if (!resources.agent.isStreaming) {
-        this.followIdle(session, resources, options);
+      const state = this.stateOf(session.id);
+      if (state === "closed") continue;
+      if (state === "idle") {
+        this.followIdle(session, options);
         continue;
       }
       // A streaming session is never rebuilt (see rebuild). `reject` refused
@@ -254,7 +252,7 @@ export class SessionPool {
         options.defer?.(session.id);
         continue;
       }
-      this.applyInPlace(session, resources, options.inPlace);
+      this.applyInPlace(session, options.inPlace);
     }
   }
 
@@ -262,20 +260,10 @@ export class SessionPool {
    * run is built from the stored value. A sign-in changes no config, so the
    * attachment it holds may be the one whose connection already failed; it is
    * dropped here instead of reused by the rebuild. */
-  private followIdle(
-    session: SessionInfo,
-    resources: SessionResources,
-    options: ChangeOptions,
-  ): void {
-    if (options.inPlace !== "mcp-credentials") {
-      this.rebuild(session);
-      return;
-    }
-    const previous = resources.mcp;
-    resources.mcp = undefined;
-    resources.registries = undefined;
-    if (previous !== undefined) void previous.manager.close();
-    this.rebuild(session);
+  private followIdle(session: SessionInfo, options: ChangeOptions): void {
+    this.factory.rebuild(session, {
+      dropMcp: options.inPlace === "mcp-credentials",
+    });
   }
 
   /** What a streaming session does with a change it may not be rebuilt for:
@@ -283,18 +271,27 @@ export class SessionPool {
    * run it is executing) alone. */
   private applyInPlace(
     session: SessionInfo,
-    resources: SessionResources,
     inPlace: InPlaceChange | undefined,
   ): void {
     switch (inPlace) {
       case "tools":
-        this.reseedInPlace(session, resources);
+        this.factory.reseedDiscoverable(
+          session,
+          this.deps.requireWorkspace(session.workspaceId),
+        );
         return;
       case "mcp":
-        this.refreshMcpInPlace(session, resources);
+        this.factory.refreshMcp(
+          session,
+          this.deps.requireWorkspace(session.workspaceId),
+        );
         return;
       case "mcp-credentials":
-        this.refreshMcpInPlace(session, resources, { reloadCredentials: true });
+        this.factory.refreshMcp(
+          session,
+          this.deps.requireWorkspace(session.workspaceId),
+          { reloadCredentials: true },
+        );
         return;
       case undefined:
         throw new CoreError(
@@ -302,45 +299,5 @@ export class SessionPool {
           "invalid",
         );
     }
-  }
-
-  /** Reseed one streaming session's discoverable tools without touching its
-   * agent. A failure is reported on the session rather than thrown at the
-   * caller: the setting is already stored, and failing the whole call would
-   * show the user a failed change that did happen. */
-  private reseedInPlace(
-    session: SessionInfo,
-    resources: SessionResources,
-  ): void {
-    try {
-      this.factory.reseedDiscoverable(
-        session,
-        this.deps.requireWorkspace(session.workspaceId),
-        resources,
-      );
-    } catch (error) {
-      const message = `Could not apply the change to this session: ${errorMessage(
-        error,
-      )}`;
-      resources.lastError = message;
-      this.deps.emit({ type: "session_error", sessionId: session.id, message });
-    }
-  }
-
-  /** Hand one streaming session its current MCP config without touching its
-   * agent (see AgentFactory.refreshMcp). `reloadCredentials` is for a
-   * sign-in: the config did not change, only the tokens did. */
-  private refreshMcpInPlace(
-    session: SessionInfo,
-    resources: SessionResources,
-    options: { reloadCredentials?: boolean } = {},
-  ): void {
-    this.factory.refreshMcp(
-      session,
-      this.deps.requireWorkspace(session.workspaceId),
-      resources,
-      (attachment) => this.sessions.get(session.id)?.mcp === attachment,
-      options,
-    );
   }
 }
