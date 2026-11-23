@@ -420,7 +420,9 @@ UIはどちらの本文にも書けます。
 - 仕様は平坦な要素マップです。
   `version`、`state`、`root`、`elements`を持ち、要素は`type`、`props`、`children`、`visible`、`on`を持ちます。
   `type`は`shared/ui-app/catalog.ts`の部品名だけです。
-  `shared/ui-app/build.ts`の`parseAppSpec`が、未知の部品、未知のprops、存在しない参照、循環、複数親、到達不能、上限違反を拒否します。
+  `shared/ui-app/build.ts`の`parseAppSpec`が入口で、検査は`shared/ui-app/validate/`に分かれます。
+  `graph.ts`が要素の木（循環、複数親、到達不能、深さ、要素数、Repeatの展開後）、`props.ts`がカタログのprops、`expression.ts`が式・リテラル・条件、`action.ts`が`on`の操作、`values.ts`がスコープとJSONの基本検査、`errors.ts`が拒否の文言を持ちます。
+  未知の部品、未知のprops、存在しない参照、上限違反はここで拒否します。
 - 状態はカードのインスタンスが持ちます。
   `shared/ui-app/state.ts`の`createUiAppState`が初期状態を複製し、`$state`、`$item`、`$index`、`$template`、`$cond`、`$bindState`、`$bindItem`で読みます。
   操作は`setState`、`resetState`、`sendMessage`の3つです。
