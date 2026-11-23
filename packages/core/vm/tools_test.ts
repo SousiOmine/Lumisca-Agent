@@ -1,6 +1,6 @@
 import { test } from "bun:test";
 import { loadImage } from "@napi-rs/canvas";
-import { assert, assertEquals } from "@std/assert";
+import { assert, assertEquals, assertRejects } from "@std/assert";
 import { base64ToBytes } from "../base64.ts";
 import { noisyPng } from "../test-utils.ts";
 import type { VmCommandBytesResult, VmCommandResult } from "./command.ts";
@@ -129,13 +129,15 @@ const enclosing = (
   } = {},
 ) => {
   const scripted = overrides.exec ?? exec([]);
+  const byteCalls: string[][] = [];
   const screen = createVmScreen({
     exec: scripted.run,
     execBytes: ((
-      _command: readonly string[],
+      command: readonly string[],
       _options: VmExecOptions,
-    ): Promise<VmCommandBytesResult> =>
-      Promise.resolve({
+    ): Promise<VmCommandBytesResult> => {
+      byteCalls.push([...command]);
+      return Promise.resolve({
         exitCode: 0,
         stdout:
           overrides.bytes === undefined
@@ -146,9 +148,15 @@ const enclosing = (
         stderr: "",
         truncated: false,
         timedOut: false,
-      })) satisfies VmExecBytes,
+      });
+    }) satisfies VmExecBytes,
   });
-  return { tools: createVmTools({ screen }), screen, calls: scripted.calls };
+  return {
+    tools: createVmTools({ screen }),
+    screen,
+    calls: scripted.calls,
+    byteCalls,
+  };
 };
 
 test("vm tools: the screenshot reports the 1:1 coordinate contract", async () => {
@@ -230,21 +238,189 @@ test("vm tools: a shrunk copy states the screen-to-image factor", async () => {
   );
 });
 
-test("vm tools: a position outside the screen fails instead of clamping", async () => {
+function textOf(result: {
+  content: Array<{ type: string; text?: string }>;
+}): string {
+  return result.content
+    .filter((block) => block.type === "text")
+    .map((block) => block.text ?? "")
+    .join("\n");
+}
+
+test("vm tools: a region screenshot names its origin and 1:1 mapping", async () => {
+  const { tools, byteCalls } = enclosing({ bytes: "\x89PNG" });
+  const screenshot = tools[0];
+  assert(screenshot !== undefined);
+  const result = await screenshot.execute(
+    "1",
+    { region: { x: 100, y: 50, width: 80, height: 40 } },
+    undefined,
+  );
+  const text = textOf(result);
+  assert(text.includes("screen region 80x40 at (100, 50)"), text);
+  assert(text.includes("after adding (100, 50)"), text);
+  assertEquals(result.details["region"], {
+    x: 100,
+    y: 50,
+    width: 80,
+    height: 40,
+  });
+  const call = byteCalls[0]?.join(" ") ?? "";
+  assert(call.includes("-a 100,50,80,40"), call);
+});
+
+test("vm tools: a region outside the screen is refused", async () => {
+  const { tools } = enclosing({ bytes: "\x89PNG" });
+  const screenshot = tools[0];
+  assert(screenshot !== undefined);
+  await assertRejects(
+    () =>
+      screenshot.execute(
+        "1",
+        { region: { x: 1200, y: 0, width: 200, height: 10 } },
+        undefined,
+      ),
+    Error,
+    "outside the screen",
+  );
+});
+
+test("vm tools: a batch runs in order and returns one observed screenshot", async () => {
+  const { tools, calls } = enclosing({ bytes: "\x89PNG" });
+  const act = tools[1];
+  assert(act !== undefined);
+  const result = await act.execute(
+    "1",
+    {
+      actions: [
+        { action: "move", x: 10, y: 20 },
+        { action: "key", key: "Return" },
+        { action: "type", text: "hi there" },
+      ],
+    },
+    undefined,
+  );
+  const text = textOf(result);
+  assert(text.includes("1. moved to (10, 20)."), text);
+  assert(text.includes("2. pressed Return."), text);
+  assert(text.includes("3. typed 8 character(s)."), text);
+  assert(text.includes("The screen is 1280x800 pixels"), text);
+  assertEquals(
+    result.content.filter((block) => block.type === "image").length,
+    1,
+  );
+  assertEquals(result.details["completed"], 3);
+  assertEquals((result.details["actions"] as unknown[]).length, 3);
+  const joined = calls.map((call) => call.join(" "));
+  assert(
+    joined.some((call) => call.includes("mousemove 10 20")),
+    joined.join("\n"),
+  );
+  assert(
+    joined.some((call) => call.includes("key --clearmodifiers -- Return")),
+    joined.join("\n"),
+  );
+  assert(
+    joined.some((call) => call.includes("type --clearmodifiers")),
+    joined.join("\n"),
+  );
+});
+
+test("vm tools: observe false omits the screenshot", async () => {
+  const { tools } = enclosing({ bytes: "\x89PNG" });
+  const act = tools[1];
+  assert(act !== undefined);
+  const result = await act.execute(
+    "1",
+    { actions: [{ action: "key", key: "Tab" }], observe: false },
+    undefined,
+  );
+  assertEquals(
+    result.content.filter((block) => block.type === "image").length,
+    0,
+  );
+  assertEquals(result.details["observe"], false);
+  assert(textOf(result).includes("pressed Tab."), textOf(result));
+});
+
+test("vm tools: the batch stops at the first failure and still observes", async () => {
+  const { tools, calls } = enclosing({ bytes: "\x89PNG" });
+  const act = tools[1];
+  assert(act !== undefined);
+  const result = await act.execute(
+    "1",
+    {
+      actions: [
+        { action: "move", x: 10, y: 20 },
+        { action: "click", x: VM_SCREEN_WIDTH + 5, y: 10 },
+        { action: "type", text: "must not run" },
+      ],
+    },
+    undefined,
+  );
+  const text = textOf(result);
+  assert(text.includes("2. failed:"), text);
+  assert(text.includes("outside the screen"), text);
+  assert(text.includes("Stopped after 1 of 3 action(s)."), text);
+  assertEquals(result.details["failed"], true);
+  assertEquals(result.details["completed"], 1);
+  assertEquals(
+    result.content.filter((block) => block.type === "image").length,
+    1,
+  );
+  assert(
+    !calls.some((call) => call.join(" ").includes("must not run")),
+    calls.map((call) => call.join(" ")).join("\n"),
+  );
+});
+
+test("vm tools: the observation keeps the last screenshot's region", async () => {
+  const { tools, byteCalls } = enclosing({ bytes: "\x89PNG" });
+  const screenshot = tools[0];
+  const act = tools[1];
+  assert(screenshot !== undefined);
+  assert(act !== undefined);
+  await screenshot.execute(
+    "1",
+    { region: { x: 200, y: 100, width: 320, height: 200 } },
+    undefined,
+  );
+  await act.execute(
+    "1",
+    { actions: [{ action: "key", key: "Return" }] },
+    undefined,
+  );
+  assertEquals(byteCalls.length, 2);
+  const second = byteCalls[1]?.join(" ") ?? "";
+  assert(second.includes("-a 200,100,320,200"), second);
+});
+
+test("vm tools: an empty action array is refused", async () => {
   const { tools } = enclosing();
   const act = tools[1];
   assert(act !== undefined);
-  let message = "";
-  try {
-    await act.execute(
-      "1",
-      { action: "click", x: VM_SCREEN_WIDTH + 5, y: 10 },
-      undefined,
-    );
-  } catch (error) {
-    message = error instanceof Error ? error.message : String(error);
-  }
-  assert(message.includes("outside the screen"), message);
+  await assertRejects(
+    () => act.execute("1", { actions: [] }, undefined),
+    Error,
+    "at least one",
+  );
+});
+
+test("vm tools: too many actions are refused before any input", async () => {
+  const { tools, calls } = enclosing();
+  const act = tools[1];
+  assert(act !== undefined);
+  const actions = Array.from({ length: 21 }, () => ({
+    action: "move",
+    x: 1,
+    y: 1,
+  }));
+  await assertRejects(
+    () => act.execute("1", { actions }, undefined),
+    Error,
+    "too many actions",
+  );
+  assertEquals(calls.length, 0);
 });
 
 test("vm tools: act builds the xdotool call for each action", async () => {
@@ -252,9 +428,21 @@ test("vm tools: act builds the xdotool call for each action", async () => {
   const act = tools[1];
   assert(act !== undefined);
 
-  await act.execute("1", { action: "move", x: 10, y: 20 }, undefined);
-  await act.execute("1", { action: "key", key: "Return" }, undefined);
-  await act.execute("1", { action: "type", text: "hi there" }, undefined);
+  await act.execute(
+    "1",
+    { actions: [{ action: "move", x: 10, y: 20 }], observe: false },
+    undefined,
+  );
+  await act.execute(
+    "1",
+    { actions: [{ action: "key", key: "Return" }], observe: false },
+    undefined,
+  );
+  await act.execute(
+    "1",
+    { actions: [{ action: "type", text: "hi there" }], observe: false },
+    undefined,
+  );
 
   const joined = calls.map((call) => call.join(" "));
   assert(
@@ -275,44 +463,41 @@ test("vm tools: scroll needs an amount", async () => {
   const { tools } = enclosing();
   const act = tools[1];
   assert(act !== undefined);
-  let message = "";
-  try {
-    await act.execute("1", { action: "scroll", x: 1, y: 1 }, undefined);
-  } catch (error) {
-    message = error instanceof Error ? error.message : String(error);
-  }
-  assert(message.includes("vertical or horizontal"), message);
+  const result = await act.execute(
+    "1",
+    { actions: [{ action: "scroll", x: 1, y: 1 }], observe: false },
+    undefined,
+  );
+  assert(textOf(result).includes("vertical or horizontal"), textOf(result));
+  assertEquals(result.details["failed"], true);
 });
 
 test("vm tools: an unknown action names the valid ones", async () => {
   const { tools } = enclosing();
   const act = tools[1];
   assert(act !== undefined);
-  let message = "";
-  try {
-    await act.execute("1", { action: "teleport" }, undefined);
-  } catch (error) {
-    message = error instanceof Error ? error.message : String(error);
-  }
-  assert(message.includes("move, click, drag"), message);
+  const result = await act.execute(
+    "1",
+    { actions: [{ action: "teleport" }], observe: false },
+    undefined,
+  );
+  assert(textOf(result).includes("move, click, drag"), textOf(result));
+  assertEquals(result.details["failed"], true);
 });
 
 test("vm tools: click carries the button NUMBER and count", async () => {
-  // xdotool takes a button number, not a name: "left" is parsed as 0 and the
-  // X server rejects the event with BadValue, so the click never lands. The
-  // tool speaks names; the command must speak numbers (left 1, middle 2,
-  // right 3).
   const { tools, calls } = enclosing();
   const act = tools[1];
   assert(act !== undefined);
   await act.execute(
     "1",
-    { action: "click", x: 5, y: 6, button: "right", count: 2 },
-    undefined,
-  );
-  await act.execute(
-    "1",
-    { action: "click", x: 7, y: 8, button: "left", count: 1 },
+    {
+      actions: [
+        { action: "click", x: 5, y: 6, button: "right", count: 2 },
+        { action: "click", x: 7, y: 8, button: "left", count: 1 },
+      ],
+      observe: false,
+    },
     undefined,
   );
   const sent = calls.map((call) => call.join(" "));
@@ -327,13 +512,17 @@ test("vm tools: click carries the button NUMBER and count", async () => {
 });
 
 test("vm tools: drag presses and releases a button NUMBER", async () => {
-  // Same xdotool contract as click: mousedown/mouseup take the number.
   const { tools, calls } = enclosing();
   const act = tools[1];
   assert(act !== undefined);
   await act.execute(
     "1",
-    { action: "drag", x: 10, y: 20, to_x: 30, to_y: 40, button: "middle" },
+    {
+      actions: [
+        { action: "drag", x: 10, y: 20, to_x: 30, to_y: 40, button: "middle" },
+      ],
+      observe: false,
+    },
     undefined,
   );
   const sent = calls.map((call) => call.join(" ")).at(-1);
@@ -345,32 +534,34 @@ test("vm tools: drag presses and releases a button NUMBER", async () => {
 });
 
 test("vm tools: a positive scroll amount scrolls DOWN", async () => {
-  // X11's wheel buttons name the direction the wheel rolls: 4 is up, 5 is
-  // down. The tool's schema says "positive scrolls down", so a positive
-  // amount must send button 5 — the opposite of the number, which is exactly
-  // the mistake this test exists to catch.
   const { tools, calls } = enclosing();
   const act = tools[1];
   assert(act !== undefined);
   await act.execute(
     "1",
-    { action: "scroll", x: 1, y: 1, vertical: 100 },
+    {
+      actions: [{ action: "scroll", x: 1, y: 1, vertical: 100 }],
+      observe: false,
+    },
     undefined,
   );
   await act.execute(
     "1",
-    { action: "scroll", x: 1, y: 1, vertical: -100 },
+    {
+      actions: [{ action: "scroll", x: 1, y: 1, vertical: -100 }],
+      observe: false,
+    },
     undefined,
   );
 
   const joined = calls.map((call) => call.join(" "));
   const down = joined.find((call) => call.includes("click --repeat"));
   assert(down !== undefined, joined.join("\n"));
-  assert(down.endsWith(" 5"), `positive vertical sent: ${down}`);
+  assert(down.endsWith(" 5"), "positive vertical sent: " + down);
   const up = joined.filter((call) => call.includes("click --repeat")).at(-1);
   assert(
     up !== undefined && up.endsWith(" 4"),
-    `negative vertical sent: ${up}`,
+    "negative vertical sent: " + up,
   );
 });
 
@@ -380,24 +571,28 @@ test("vm tools: a positive horizontal amount scrolls RIGHT", async () => {
   assert(act !== undefined);
   await act.execute(
     "1",
-    { action: "scroll", x: 1, y: 1, horizontal: 100 },
+    {
+      actions: [{ action: "scroll", x: 1, y: 1, horizontal: 100 }],
+      observe: false,
+    },
     undefined,
   );
   await act.execute(
     "1",
-    { action: "scroll", x: 1, y: 1, horizontal: -100 },
+    {
+      actions: [{ action: "scroll", x: 1, y: 1, horizontal: -100 }],
+      observe: false,
+    },
     undefined,
   );
   const joined = calls.map((call) => call.join(" "));
   const right = joined.find((call) => call.includes("click --repeat"));
-  assert(right !== undefined && right.endsWith(" 7"), `right sent: ${right}`);
+  assert(right !== undefined && right.endsWith(" 7"), "right sent: " + right);
   const left = joined.filter((call) => call.includes("click --repeat")).at(-1);
-  assert(left !== undefined && left.endsWith(" 6"), `left sent: ${left}`);
+  assert(left !== undefined && left.endsWith(" 6"), "left sent: " + left);
 });
 
 test("vm tools: one scroll amount is one notch, capped at 20", async () => {
-  // The unit is documented (VM_SCROLL_NOTCH per notch) and the cap keeps a
-  // stray large amount from spinning a list for minutes.
   assertEquals(scrollNotches({ vertical: 100, horizontal: 0 }), 1);
   assertEquals(scrollNotches({ vertical: 250, horizontal: 0 }), 3);
   assertEquals(scrollNotches({ vertical: -100, horizontal: 0 }), 1);
@@ -409,7 +604,10 @@ test("vm tools: one scroll amount is one notch, capped at 20", async () => {
   assert(act !== undefined);
   await act.execute(
     "1",
-    { action: "scroll", x: 1, y: 1, vertical: 250 },
+    {
+      actions: [{ action: "scroll", x: 1, y: 1, vertical: 250 }],
+      observe: false,
+    },
     undefined,
   );
   const joined = calls.map((call) => call.join(" ")).join("\n");

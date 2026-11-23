@@ -38,10 +38,22 @@ function xdotoolButton(button: "left" | "middle" | "right"): string {
   return XDOTOOL_BUTTON[button];
 }
 
+export interface VmScreenRegion {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface VmScreen {
-  /** Capture the whole screen as PNG bytes. The pointer is included: the
-   * agent needs to see where it is and what it is hovering. */
-  screenshot(signal?: AbortSignal): Promise<Uint8Array>;
+  /** Capture the whole screen, or one region of it, as PNG bytes. The
+   * pointer is included: the agent needs to see where it is and what it is
+   * hovering. A region is returned 1:1, so a small area can be read without
+   * the rest of the desktop. */
+  screenshot(
+    region: VmScreenRegion | undefined,
+    signal?: AbortSignal,
+  ): Promise<Uint8Array>;
   /** Move the pointer without clicking. */
   move(x: number, y: number, signal?: AbortSignal): Promise<void>;
   /** Drag with `button` held from one position to another. */
@@ -106,6 +118,34 @@ async function xdotool(
   }
 }
 
+/** Reject a region that is not an integer rectangle inside the screen. A
+ * silently clipped capture would hide the part the agent asked to see. */
+function requireRegionOnScreen(region: VmScreenRegion): void {
+  for (const [name, value] of [
+    ["region.x", region.x],
+    ["region.y", region.y],
+    ["region.width", region.width],
+    ["region.height", region.height],
+  ] as const) {
+    if (!Number.isInteger(value)) {
+      throw new Error(`${name} must be an integer (got ${value})`);
+    }
+  }
+  if (
+    region.width < 1 ||
+    region.height < 1 ||
+    region.x < 0 ||
+    region.y < 0 ||
+    region.x + region.width > VM_SCREEN_WIDTH ||
+    region.y + region.height > VM_SCREEN_HEIGHT
+  ) {
+    throw new Error(
+      `The region (${region.x}, ${region.y}) ${region.width}x${region.height} ` +
+        `is outside the screen (${VM_SCREEN_WIDTH}x${VM_SCREEN_HEIGHT})`,
+    );
+  }
+}
+
 /** Reject a coordinate outside the screen instead of clicking at a clamped
  * position: a silently moved click is a wrong action, not a corrected one. */
 function requireOnScreen(x: number, y: number): void {
@@ -129,17 +169,27 @@ export function createVmScreen(options: VmScreenOptions): VmScreen {
   const { exec } = options;
 
   return {
-    async screenshot(signal) {
+    async screenshot(region, signal) {
+      if (region !== undefined) requireRegionOnScreen(region);
       // scrot draws the pointer into the image (X does not include it in a
       // plain capture), and `--overwrite` is what lets it write to stdout.
-      const result = await options.execBytes(
-        ["scrot", "--pointer", "--overwrite", "--silent", "/dev/stdout"],
-        {
-          timeoutMs: SCREENSHOT_TIMEOUT_MS,
-          maxOutput: SCREENSHOT_MAX_BYTES,
-          ...(signal !== undefined ? { signal } : {}),
-        },
-      );
+      // `--area` crops to a screen rectangle; the tool turns the origin into
+      // the screen-pixel offset the model needs.
+      const args = ["scrot", "--pointer", "--overwrite", "--silent"];
+      if (region !== undefined) {
+        // `-a` is the short spelling every scrot version accepts; the
+        // container's build need not know the long option.
+        args.push(
+          "-a",
+          `${region.x},${region.y},${region.width},${region.height}`,
+        );
+      }
+      args.push("/dev/stdout");
+      const result = await options.execBytes(args, {
+        timeoutMs: SCREENSHOT_TIMEOUT_MS,
+        maxOutput: SCREENSHOT_MAX_BYTES,
+        ...(signal !== undefined ? { signal } : {}),
+      });
       if (result.timedOut) {
         throw new Error(
           `Taking a screenshot took more than ${

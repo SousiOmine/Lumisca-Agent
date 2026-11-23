@@ -38,6 +38,7 @@ read back, so "the click did nothing" is visible instead of assumed.
 | Press a button, fill a field, tick a box | vm_find, then vm_do |
 | Read a table, a list, or what a form says | vm_find with actionable "no" |
 | See the layout, or something with no widgets | vm_screenshot |
+| Read a small label or a dense control | vm_screenshot with region |
 | Drag across an image, drive a canvas, press somewhere by eye | vm_act |
 | Wait for a page or a dialog | vm_wait with a condition |
 
@@ -45,6 +46,23 @@ Prefer the semantic path. Take a screenshot when the question is about
 appearance or when there is no element to name; do not mix the two on the
 same target (a coordinate click and a semantic click do the same thing, and
 one of them is aimed at a rectangle).
+
+## Acting in one step
+
+\`vm_act\` takes an array of actions and runs them in order. A click, Tab,
+text and Return for one form can travel in one call. A failed action stops the batch, and the result names the
+action that failed.
+
+Unless \`observe: false\`, the result includes a screenshot after the last
+action. It covers the same region as the last \`vm_screenshot\`, or the whole
+screen when there was none. Read that image instead of taking a second
+\`vm_screenshot\` for the same view. Set \`observe: false\` only when the next
+step does not depend on what the screen shows; the next coordinate action
+then needs a fresh screenshot.
+
+A region screenshot is 1:1 with the screen. Read its origin and any scale
+from the result before passing a coordinate to \`vm_act\`; the crop's origin
+is part of the conversion.
 
 ## The loop
 
