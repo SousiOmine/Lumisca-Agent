@@ -406,7 +406,11 @@ test("the asleep pane's wake button is not covered by its note", async () => {
     "utf8",
   );
   const rule = /\.stella-pane-asleep \.stella-pane-note \{([^}]*)\}/.exec(css);
-  assertEquals(rule !== null, true, "the asleep note must give its overlay back");
+  assertEquals(
+    rule !== null,
+    true,
+    "the asleep note must give its overlay back",
+  );
   assertEquals(
     /position: static/.test(rule![1]!),
     true,
