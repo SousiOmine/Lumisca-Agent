@@ -1094,7 +1094,7 @@ URLはシェルを介さず、プログラムの引数として1つだけ渡し�
   本文もツール呼び出しも無い応答が上限回数に達したら、`RetryManager.classify` が `exhausted` を返し、`SessionAgent` が `session_error` として理由を出します。
   何も出さずにターンが終わると「プロンプトを無視された」と読めるためです。
 
-- レート制限、リトライ、MCP 呼び出しの上限: HTTP 429 の検知、指数バックオフ、再試行は `ai/rate-limit.ts` が一元管理します。
+- レート制限、リトライ、MCP 呼び出しの上限: HTTP 429 の検知、指数バックオフ、再試行は `ai/retry-policy.ts` が一元管理します。
   上限に達した場合も `exhausted` として理由を通知します。
   MCP の 1 回の呼び出しには `MCP_TOOL_CALL_TIMEOUT_MS`（120 秒）の上限があり、無応答は `McpCallTimeoutError` になります（`mcp/client.ts`、`mcp/manager.ts`）。
   再接続して再送するのはトランスポートが壊れた場合だけです。
