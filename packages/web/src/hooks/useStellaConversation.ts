@@ -19,6 +19,10 @@ import {
 } from "../prompt-upload.ts";
 import { inDesktopShell, shellCall } from "../shell.ts";
 import {
+  ConversationCache,
+  shownConversationOf,
+} from "../stella-conversation-cache.ts";
+import {
   applyStellaEvent,
   prependOlderEntries,
   type StellaConversationState,
@@ -42,9 +46,12 @@ import { createStreamController } from "./useStreamController.ts";
  * back).
  *
  * WHICH conversation is open is not this hook's to decide: the address names
- * the agent (`/agents/<id>`), and the caller passes that id in and drops the
- * state when it moves on. Nothing here reaches the code-mode tab views — a
- * conversation has its own endpoints and its own stream (api-stella.ts).
+ * the agent (`/agents/<id>`), and the caller passes that id in. The state of
+ * the conversation on screen is dropped when the address moves on; a copy of
+ * it stays in the page's cache so returning has something to draw before the
+ * new read lands (stella-conversation-cache.ts). Nothing here reaches the
+ * code-mode tab views — a conversation has its own endpoints and its own
+ * stream (api-stella.ts).
  *
  * The machine is not part of this hook's API because it is not part of the
  * user's: the server starts it when the conversation is requested, and the one
@@ -57,6 +64,11 @@ export type StellaConversationHook = {
    * the frame in which the address has moved on but the state has not been
    * dropped yet (see useStella's row preview). */
   conversationAgentId: string | null;
+  /** Whether `conversation` is the server's read for the agent the address
+   * names. False while a cached copy answers the first frames of a
+   * selection: that copy is the agent's, but its preview must not rewrite
+   * the sidebar row before the read says what is newest. */
+  settled: boolean;
   sessionId: string | null;
   prompt: (
     text: string,
@@ -116,6 +128,17 @@ export function useStellaConversation(
     conversationRef.current = conversation;
   }, [conversation]);
   const [loadingOlder, setLoadingOlder] = useState(false);
+
+  /** The conversations this page has read, kept across selections (see
+   * stella-conversation-cache.ts). A selection shows its agent's entry in
+   * the same render that changes the address, so a conversation the reader
+   * already had does not start as a blank screen while the read that
+   * confirms it is in flight. */
+  const cache = useRef(new ConversationCache());
+  useEffect(() => {
+    if (conversation === null || conversationAgentId === null) return;
+    cache.current.remember(conversationAgentId, conversation, sessionId);
+  }, [conversation, conversationAgentId, sessionId]);
 
   // Open the active agent's conversation. The server starts the machine on
   // this call, so a first run waits here (minutes) — `loading` is what the
@@ -414,18 +437,23 @@ export function useStellaConversation(
       try {
         await stellaApi.prompt(agentId, text, images, files);
       } catch (failure) {
-        setConversation((current) =>
-          current === null
-            ? current
-            : {
-                ...current,
-                error: describeError(failure, t),
-              },
-        );
+        // The state in hand may still be the previous agent's: a cached copy
+        // is on screen, and the read that replaces it is in flight. The
+        // failure is rethrown either way, so the composer restores the text.
+        if (conversationAgentId === agentId) {
+          setConversation((current) =>
+            current === null
+              ? current
+              : {
+                  ...current,
+                  error: describeError(failure, t),
+                },
+          );
+        }
         throw failure;
       }
     },
-    [requireAgent, t],
+    [requireAgent, conversationAgentId, t],
   );
 
   const uploadFile = useCallback<PromptUploader>(
@@ -555,7 +583,12 @@ export function useStellaConversation(
 
   const rewind = useCallback(
     async (timestamp: number) => {
-      await stellaApi.rewind(requireAgent(), timestamp);
+      const agentId = requireAgent();
+      await stellaApi.rewind(agentId, timestamp);
+      // A cached copy can be on screen before this agent's state is: the
+      // request is still this agent's, but the state in hand is the previous
+      // one and must not be cut.
+      if (conversationAgentId !== agentId) return;
       // The truncation also arrives as the conversation's own `truncated`
       // event. Applying the answer here as well makes the view right the
       // moment the request settles — even while the socket is between
@@ -568,7 +601,7 @@ export function useStellaConversation(
           : (truncateFrom(current, { role: "user", timestamp }) ?? current),
       );
     },
-    [requireAgent],
+    [requireAgent, conversationAgentId],
   );
 
   const finishHandover = useCallback(
@@ -611,7 +644,16 @@ export function useStellaConversation(
   const loadOlder = useCallback((): boolean => {
     const agentId = activeAgentId;
     const older = conversation?.older ?? null;
-    if (agentId === null || older === null || olderInFlight.current) {
+    // Only the live state has the cursor this read needs. A cached copy on
+    // screen belongs to the agent the address names, but the cursor in hand
+    // is the previous agent's until the open lands; the reader reaching the
+    // top in that frame waits for the read that is already coming.
+    if (
+      agentId === null ||
+      conversationAgentId !== agentId ||
+      older === null ||
+      olderInFlight.current
+    ) {
       return false;
     }
     olderInFlight.current = true;
@@ -642,12 +684,27 @@ export function useStellaConversation(
       }
     })();
     return true;
-  }, [activeAgentId, conversation?.older]);
+  }, [activeAgentId, conversationAgentId, conversation?.older]);
+
+  // What the transcript draws for the address this render names. The live
+  // state is returned only while it belongs to that agent; the page's cached
+  // copy answers the frames before the read lands; otherwise the answer is
+  // nothing, never the conversation the reader just left (see
+  // shownConversationOf). The requests below keep using the live state —
+  // they address the server by agent id, not by what is on screen.
+  const shown = shownConversationOf(
+    activeAgentId,
+    conversationAgentId,
+    conversation,
+    sessionId,
+    cache.current,
+  );
 
   return {
-    conversation,
-    conversationAgentId,
-    sessionId,
+    conversation: shown.conversation,
+    conversationAgentId: shown.agentId,
+    settled: shown.settled,
+    sessionId: shown.sessionId,
     prompt,
     uploadFile,
     abort,
@@ -660,6 +717,9 @@ export function useStellaConversation(
     declineShare,
     loadOlder,
     loadingOlder,
-    loading,
+    // The effect that starts the read runs after this render, so without
+    // this the first frame of a selection has neither state nor a wait to
+    // show. A cached copy is state: it is drawn instead, with no spinner.
+    loading: loading || (activeAgentId !== null && shown.conversation === null),
   };
 }

@@ -140,6 +140,7 @@ export function useStella(
   const {
     conversation,
     conversationAgentId,
+    settled,
     sessionId,
     prompt,
     uploadFile,
@@ -179,6 +180,11 @@ export function useStella(
     if (!enabled || conversation === null || conversationAgentId === null) {
       return;
     }
+    // The frames before the selection's read lands show this page's cached
+    // copy. It is the agent's, but the list may have heard of a newer message
+    // while the reader was away; the read that follows is what may move the
+    // row (the next run of this effect).
+    if (!settled) return;
     // The frame in which the address has moved on but the effect that drops
     // the state has not run yet still holds the previous conversation. Its
     // messages are not this agent's last words.
@@ -191,6 +197,7 @@ export function useStella(
     activeAgentId,
     conversationAgentId,
     conversation,
+    settled,
     applyAgentPreview,
   ]);
 
