@@ -79,7 +79,7 @@ function hostHeaders(): HeadersInit {
 test("update endpoints drive the updater and answer with its status", async () => {
   const core = forTestingCore([fauxProvider().provider]);
   const { api, calls } = fakeApi();
-  const app = createApp(core, { update: api });
+  const { app } = createApp(core, { update: api });
   const post = (path: string, body?: unknown) =>
     app.fetch(
       new Request(`http://127.0.0.1:8000${path}`, {
@@ -150,7 +150,7 @@ test("update endpoints drive the updater and answer with its status", async () =
 test("update endpoints reject malformed bodies with 400", async () => {
   const core = forTestingCore([fauxProvider().provider]);
   const { api, calls } = fakeApi();
-  const app = createApp(core, { update: api });
+  const { app } = createApp(core, { update: api });
   try {
     for (const body of ["{}", `{"enabled":"yes"}`, "not json"]) {
       const res = await app.fetch(
@@ -170,7 +170,7 @@ test("update endpoints reject malformed bodies with 400", async () => {
 
 test("without an updater the endpoints are absent, not empty", async () => {
   const core = forTestingCore([fauxProvider().provider]);
-  const app = createApp(core);
+  const { app } = createApp(core);
   try {
     // Development runs have no updater: the UI must be able to tell that
     // apart from "no update available".

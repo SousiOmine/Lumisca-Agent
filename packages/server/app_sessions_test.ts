@@ -17,7 +17,7 @@ import {
 } from "@lumisca/core/test-utils";
 import { assert, assertEquals } from "@std/assert";
 import { bytesToBase64 } from "../core/base64.ts";
-import { disposeServer, startServer } from "./app.ts";
+import { startServer } from "./app.ts";
 import { conversationOf, json, setup } from "./test-utils.ts";
 
 test("session prompt roundtrip via API", async () => {
@@ -634,12 +634,10 @@ test("federation: hub reports its peers and proxies their workspaces and session
       hubWs.close();
       await removeDirRetry(hubRoot);
     } finally {
-      disposeServer(hubServer);
       hubServer.shutdown();
       hubCore.close();
     }
     // The peer is gone: a fresh hub must answer 502 for it.
-    disposeServer(peerServer);
     peerServer.shutdown();
     peerCore.close();
     const deadHubCore = forTestingCore([hubFaux.provider]);
@@ -655,7 +653,6 @@ test("federation: hub reports its peers and proxies their workspaces and session
       );
       assertEquals(res.status, 502);
     } finally {
-      disposeServer(deadHub);
       deadHub.shutdown();
       deadHubCore.close();
     }

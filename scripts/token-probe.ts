@@ -22,7 +22,7 @@ const URL = `http://${HOST}/api/health`;
 const faux = fauxProvider();
 const core = forTestingCore([faux.provider]);
 try {
-  const app = createApp(core, { token: "secret-token" });
+  const { app } = createApp(core, { token: "secret-token" });
   const r = await app.fetch(new Request(URL, { headers: { host: HOST } }));
   console.log("no token:", r.status, await r.text());
   const r2 = await app.fetch(

@@ -63,7 +63,7 @@ async function withApp(
       join(storeDir, `${TXT_NAME}.json`),
       JSON.stringify({ displayName: "summary of the run.txt" }),
     );
-    const app = createApp(core, { repoRoot: process.cwd() });
+    const { app } = createApp(core, { repoRoot: process.cwd() });
     const get = async (path: string) =>
       await app.request(`${BASE}${path}`, { headers: { host: HOST } });
     await fn({ core, sessionId: session.id, storeDir, get });

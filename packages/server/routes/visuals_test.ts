@@ -68,7 +68,7 @@ async function withApp(
       join(storeDir, SVG_NAME),
       new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" />'),
     );
-    const app = createApp(core, { repoRoot: process.cwd() });
+    const { app } = createApp(core, { repoRoot: process.cwd() });
     const get = async (path: string) =>
       await app.request(`${BASE}${path}`, { headers: { host: HOST } });
     await fn({ core, sessionId: session.id, storeDir, get });
@@ -143,7 +143,7 @@ test("the asset route serves only the session's own assets", async () => {
 test("a cookie is enough: an <img> can send nothing else", async () => {
   await withApp(async ({ core, sessionId }) => {
     const token = "s3cret-token";
-    const app = createApp(core, { repoRoot: process.cwd(), token });
+    const { app } = createApp(core, { repoRoot: process.cwd(), token });
     const path = `/api/sessions/${sessionId}/visual/${PNG_NAME}`;
     const request = async (headers: Record<string, string>) =>
       await app.request(`${BASE}${path}`, {
