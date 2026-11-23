@@ -10,13 +10,13 @@ import {
   LumiscaCore,
   type TodoPhase,
 } from "@lumisca/core";
+import { bytesToBase64 } from "@lumisca/core/base64";
 import {
   fakeStellaHost,
   noisyPng,
   removeDirRetry,
 } from "@lumisca/core/test-utils";
 import { assert, assertEquals } from "@std/assert";
-import { bytesToBase64 } from "../core/base64.ts";
 import { disposeServer, startServer } from "./app.ts";
 import { conversationOf, json, setup } from "./test-utils.ts";
 

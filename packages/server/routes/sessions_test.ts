@@ -1,7 +1,7 @@
 import { test } from "bun:test";
+import { base64ToBytes, bytesToBase64 } from "@lumisca/core/base64";
 import { MINI_PNG, noisyPng } from "@lumisca/core/test-utils";
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
-import { base64ToBytes, bytesToBase64 } from "../../core/base64.ts";
 import { parsePromptBody, preparePromptImages } from "./session-requests.ts";
 import { AppError } from "./util.ts";
 

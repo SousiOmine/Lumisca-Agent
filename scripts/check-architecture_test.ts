@@ -1,12 +1,20 @@
 import { test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertEquals } from "@std/assert";
 import {
   browserEntryProblems,
+  checkCoreEntryPoints,
   checkCoreSpecifiers,
   checkLayers,
+  checkServerCoreImports,
   findCycles,
   runtimeSpecifiers,
 } from "./check-architecture.ts";
@@ -135,4 +143,59 @@ test("only public core specifiers pass", () => {
   ]);
   assertEquals(problems.length, 1);
   assertEquals(problems[0]!.includes("@lumisca/core/sessions"), true);
+});
+
+test("a server module reaching the core by path is a violation", () => {
+  const tree = fixture();
+  try {
+    const mod = tree.write(
+      "packages/server/mod.ts",
+      'import { OS } from "../core/platform.ts";\nexport const x = OS;',
+    );
+    const fsRoute = tree.write(
+      "packages/server/routes/fs.ts",
+      'import { OS } from "@lumisca/core/platform";\nexport const x = OS;',
+    );
+    const test = tree.write(
+      "packages/server/a_test.ts",
+      'import { OS } from "../../core/platform.ts";\nexport const x = OS;',
+    );
+    tree.write("packages/core/platform.ts", "export const OS = 1;\n");
+    const sources = [
+      { path: mod, text: readFileSync(mod, "utf8") },
+      { path: fsRoute, text: readFileSync(fsRoute, "utf8") },
+      { path: test, text: readFileSync(test, "utf8") },
+    ];
+    const problems = checkServerCoreImports(sources, tree.root);
+    assertEquals(problems.length, 1);
+    assertEquals(problems[0]!.includes("packages/server/mod.ts"), true);
+  } finally {
+    rmSync(tree.root, { recursive: true, force: true });
+  }
+});
+
+test("an entry point exported but not in the lists is a disagreement", () => {
+  const entries = new Map([
+    ["@lumisca/core", "./mod.ts"],
+    ["@lumisca/core/platform", "./platform.ts"],
+  ]);
+  const paths = {
+    "@lumisca/core": ["./packages/core/mod.ts"],
+    "@lumisca/core/platform": ["./packages/core/elsewhere.ts"],
+  };
+  const problems = checkCoreEntryPoints(entries, paths);
+  // `platform` points somewhere else, and every other CORE_SPECIFIERS
+  // entry is missing from the map.
+  assertEquals(
+    problems.some((p) => p.startsWith("@lumisca/core/platform:")),
+    true,
+  );
+  assertEquals(
+    problems.some((p) => p.startsWith("@lumisca/core/bytes:")),
+    true,
+  );
+  assertEquals(
+    problems.some((p) => p.startsWith("@lumisca/core:")),
+    false,
+  );
 });

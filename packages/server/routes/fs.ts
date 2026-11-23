@@ -1,6 +1,7 @@
 import * as fsp from "node:fs/promises";
 import { join, parse, relative, sep } from "node:path";
 import { isDirectory } from "@lumisca/core";
+import { OS } from "@lumisca/core/platform";
 import type {
   FsBreadcrumb,
   FsEntry,
@@ -8,7 +9,6 @@ import type {
   FsPlaceKind,
 } from "@lumisca/core/shared";
 import { Hono } from "hono";
-import { OS } from "../../core/platform.ts";
 import { AppError, requireNonEmptyString } from "./util.ts";
 
 /** The picker's wire shapes (FsPlace, FsEntry, FsBreadcrumb, FsBrowse) and

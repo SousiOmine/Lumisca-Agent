@@ -11,8 +11,8 @@
 
 import * as fsp from "node:fs/promises";
 import type { StellaAgent } from "@lumisca/core";
+import { renderPreview } from "@lumisca/core/media/preview";
 import { Hono } from "hono";
-import { renderPreview } from "../../core/media/preview.ts";
 import { assetResponse } from "./asset-response.ts";
 import { AppError, notFound } from "./util.ts";
 

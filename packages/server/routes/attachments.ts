@@ -1,10 +1,10 @@
 import * as fsp from "node:fs/promises";
 import type { SessionInfo } from "@lumisca/core";
-import { Hono } from "hono";
 import {
   ensurePreview,
   previewPathOf,
-} from "../../core/media/preview-cache.ts";
+} from "@lumisca/core/media/preview-cache";
+import { Hono } from "hono";
 import { assetResponse } from "./asset-response.ts";
 import { notFound } from "./util.ts";
 

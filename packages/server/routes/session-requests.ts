@@ -10,14 +10,14 @@
 
 import type { AskAnswer, ImageContent, ModePrompt } from "@lumisca/core";
 import { base64ToBytes } from "@lumisca/core";
+import { bytesToBase64 } from "@lumisca/core/base64";
+import { prepareStoredImage } from "@lumisca/core/media/stored-image";
 import {
   MAX_PROMPT_FILES,
   MAX_PROMPT_IMAGE_BASE64_LENGTH,
   MAX_PROMPT_TEXT_LENGTH,
   stripDataUrlHeader,
 } from "@lumisca/core/shared";
-import { bytesToBase64 } from "../../core/base64.ts";
-import { prepareStoredImage } from "../../core/media/stored-image.ts";
 
 export type { AskAnswer, ModePrompt };
 
