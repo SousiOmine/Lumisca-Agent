@@ -59,47 +59,129 @@ export function bindingOf(
   return null;
 }
 
+/** What a value is resolved against. Both readings use it: a draw knows the
+ * repeat's index and item, the static reading knows only what the spec
+ * already writes. */
+type ResolveContext = {
+  readonly state: Readonly<Record<string, unknown>>;
+  readonly item: unknown;
+  readonly index: number;
+};
+
+/** What a value can be read from before the card runs: the spec's initial
+ * state, and the items of the nearest Repeat when its array is written
+ * there. */
+export type UiAppStaticScope = {
+  readonly state: Readonly<Record<string, unknown>>;
+  /** The items of the nearest enclosing Repeat, or null when the array
+   * cannot be known before the card runs. */
+  readonly items: readonly unknown[] | null;
+};
+
 /** One written value with every expression resolved. */
 export function resolveValue(
   value: UiAppValue,
   ctx: UiAppContext,
 ): UiAppResolvedValue {
+  const resolved = resolveWith(value, ctx, false);
+  if (resolved === undefined) {
+    throw new Error("a card being drawn resolves every expression");
+  }
+  return resolved;
+}
+
+/**
+ * One written value resolved against what the spec already says, or
+ * undefined when a draw is needed: `$index` is the repeat's, `$template`
+ * reads every item, `$cond` compares live state, and `$item` of a repeat
+ * whose array is not written has no item to read.
+ *
+ * The parser uses this to compare a prop with the initial state. It shares
+ * {@link resolveValue}'s rules rather than restating them: the two readings
+ * must agree, or a card the parser accepts would draw a different value.
+ */
+export function resolveStaticValue(
+  value: UiAppValue,
+  scope: UiAppStaticScope,
+): UiAppResolvedValue | undefined {
+  return resolveWith(
+    value,
+    { state: scope.state, item: scope.items?.[0], index: 0 },
+    true,
+  );
+}
+
+/** Resolve one value, or report undefined when `onlyStatic` is set and the
+ * value needs a draw. */
+function resolveWith(
+  value: UiAppValue,
+  ctx: ResolveContext,
+  onlyStatic: boolean,
+): UiAppResolvedValue | undefined {
   if (value === null || typeof value !== "object") return value;
   if (Array.isArray(value)) {
-    return value.map((child) => resolveValue(child as UiAppValue, ctx));
+    const items: UiAppResolvedValue[] = [];
+    for (const child of value) {
+      const resolved = resolveWith(child as UiAppValue, ctx, onlyStatic);
+      if (resolved === undefined) return undefined;
+      items.push(resolved);
+    }
+    return items;
   }
   if (isExpression(value)) {
-    const expression = value as Record<string, unknown>;
-    if (typeof expression.$state === "string") {
-      return asResolved(valueAtPath(ctx.state, expression.$state));
-    }
-    if (typeof expression.$item === "string") {
-      return asResolved(itemValue(ctx.item, expression.$item));
-    }
-    if (expression.$index === true) return ctx.index;
-    if (typeof expression.$template === "string") {
-      return renderTemplate(expression.$template, ctx);
-    }
-    if (isCondition(expression.$cond)) {
-      return resolveValue(
-        resolveCondition(expression.$cond, ctx)
-          ? (expression.$then as UiAppValue)
-          : (expression.$else as UiAppValue),
-        ctx,
-      );
-    }
-    if (typeof expression.$bindState === "string") {
-      return asResolved(valueAtPath(ctx.state, expression.$bindState));
-    }
-    if (typeof expression.$bindItem === "string") {
-      return asResolved(itemValue(ctx.item, expression.$bindItem));
-    }
+    return resolveExpression(value as Record<string, unknown>, ctx, onlyStatic);
   }
   const resolved: Record<string, UiAppResolvedValue> = {};
   for (const [key, child] of Object.entries(value)) {
-    resolved[key] = resolveValue(child as UiAppValue, ctx);
+    const entry = resolveWith(child as UiAppValue, ctx, onlyStatic);
+    if (entry === undefined) return undefined;
+    resolved[key] = entry;
   }
   return resolved;
+}
+
+/** One expression resolved. */
+function resolveExpression(
+  expression: Readonly<Record<string, unknown>>,
+  ctx: ResolveContext,
+  onlyStatic: boolean,
+): UiAppResolvedValue | undefined {
+  const stateValue = (path: string): UiAppResolvedValue | undefined => {
+    const value = valueAtPath(ctx.state, path);
+    if (onlyStatic && value === undefined) return undefined;
+    return asResolved(value);
+  };
+  const itemField = (field: string): UiAppResolvedValue | undefined =>
+    onlyStatic && ctx.item === undefined
+      ? undefined
+      : asResolved(itemValue(ctx.item, field));
+  if (typeof expression.$state === "string") {
+    return stateValue(expression.$state);
+  }
+  if (typeof expression.$item === "string") {
+    return itemField(expression.$item);
+  }
+  if (typeof expression.$bindState === "string") {
+    return stateValue(expression.$bindState);
+  }
+  if (typeof expression.$bindItem === "string") {
+    return itemField(expression.$bindItem);
+  }
+  if (onlyStatic) return undefined;
+  if (expression.$index === true) return ctx.index;
+  if (typeof expression.$template === "string") {
+    return renderTemplate(expression.$template, ctx);
+  }
+  if (isCondition(expression.$cond)) {
+    return resolveWith(
+      resolveCondition(expression.$cond, ctx)
+        ? (expression.$then as UiAppValue)
+        : (expression.$else as UiAppValue),
+      ctx,
+      false,
+    );
+  }
+  throw new Error("Expression names no key");
 }
 
 /** One element's props, plus the state paths its inputs write. */
@@ -120,7 +202,7 @@ export function resolveProps(
 /** Whether a condition holds in this draw. */
 export function resolveCondition(
   condition: UiAppCondition,
-  ctx: UiAppContext,
+  ctx: ResolveContext,
 ): boolean {
   if (typeof condition === "boolean") return condition;
   const record = condition as Record<string, unknown>;
@@ -148,9 +230,15 @@ export function resolveCondition(
   }
   let result: boolean;
   if (Object.hasOwn(record, "eq")) {
-    result = jsonEqual(subject, resolveValue(record.eq as UiAppValue, ctx));
+    result = jsonEqual(
+      subject,
+      resolveWith(record.eq as UiAppValue, ctx, false),
+    );
   } else if (Object.hasOwn(record, "neq")) {
-    result = !jsonEqual(subject, resolveValue(record.neq as UiAppValue, ctx));
+    result = !jsonEqual(
+      subject,
+      resolveWith(record.neq as UiAppValue, ctx, false),
+    );
   } else if (typeof record.gt === "number") {
     result = typeof subject === "number" && subject > record.gt;
   } else if (typeof record.gte === "number") {
@@ -330,7 +418,7 @@ function asResolved(value: unknown): UiAppResolvedValue {
 
 /** One template, with state, item and index references replaced. A `$${`
  * writes a literal `${`; the parser sees the same escape. */
-function renderTemplate(template: string, ctx: UiAppContext): string {
+function renderTemplate(template: string, ctx: ResolveContext): string {
   const protectedText = template.replace(/\$\$\{/g, "\u0000{");
   const rendered = protectedText.replace(
     /\$\{([^}]*)\}/g,

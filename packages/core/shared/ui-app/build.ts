@@ -17,6 +17,7 @@ import {
 import { UI_APP_LIMITS } from "./limits.ts";
 import {
   isExpression,
+  resolveStaticValue,
   templateReferences,
   UI_APP_EXPRESSION_KEYS,
 } from "./resolve.ts";
@@ -1205,43 +1206,10 @@ function itemValueOf(scope: Scope, field: string): unknown {
 
 /** A value when every expression in it can be resolved before the card runs;
  * undefined when one cannot. Used for checks that compare a prop with the
- * initial state. */
+ * initial state. The resolution rules are `resolveValue`'s: this is the
+ * static reading of the same expressions, not a second set of them. */
 function literalValue(value: UiAppValue, scope: Scope): unknown {
-  if (isExpression(value)) {
-    const expression = value as Record<string, unknown>;
-    if (typeof expression.$state === "string") {
-      return valueAtPath(scope.state, expression.$state);
-    }
-    if (typeof expression.$item === "string") {
-      return itemValueOf(scope, expression.$item);
-    }
-    if (typeof expression.$bindState === "string") {
-      return valueAtPath(scope.state, expression.$bindState);
-    }
-    if (typeof expression.$bindItem === "string") {
-      return itemValueOf(scope, expression.$bindItem);
-    }
-    return undefined;
-  }
-  if (Array.isArray(value)) {
-    const items: unknown[] = [];
-    for (const child of value) {
-      const resolved = literalValue(child as UiAppValue, scope);
-      if (resolved === undefined) return undefined;
-      items.push(resolved);
-    }
-    return items;
-  }
-  if (value !== null && typeof value === "object") {
-    const resolved: Record<string, unknown> = {};
-    for (const [key, child] of Object.entries(value)) {
-      const item = literalValue(child as UiAppValue, scope);
-      if (item === undefined) return undefined;
-      resolved[key] = item;
-    }
-    return resolved;
-  }
-  return value;
+  return resolveStaticValue(value, scope);
 }
 
 /** The state path a Repeat's `over` names, or null when it is not a state
