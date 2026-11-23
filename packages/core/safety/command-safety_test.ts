@@ -2,7 +2,6 @@ import { test } from "bun:test";
 import type { StreamFn } from "@lumisca/core";
 import {
   type Api,
-  type AssistantMessage,
   createAssistantMessageEventStream,
   type Model,
 } from "@lumisca/core";
@@ -19,11 +18,6 @@ import {
   redactSecrets,
   sha256Hex,
 } from "./command-safety.ts";
-
-const PARTIAL = {
-  role: "assistant",
-  content: [],
-} as unknown as AssistantMessage;
 
 /** Working directory used by the tests that refute context-scoping. */
 const CWD_A = "/workspace/A";

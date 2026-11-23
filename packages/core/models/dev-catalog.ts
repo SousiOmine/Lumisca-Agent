@@ -269,7 +269,10 @@ function compatOf(
   // over gRPC, which carries text parts only: a multi-part tool content is
   // rejected with a 400. Its models take their images in a user message
   // instead (see ai/lang-model.ts toolResultTakesImages).
-  if (providerId === OPENCODE_GATEWAY_PROVIDER_ID || providerId === OPENCODE_GO_PROVIDER_ID) {
+  if (
+    providerId === OPENCODE_GATEWAY_PROVIDER_ID ||
+    providerId === OPENCODE_GO_PROVIDER_ID
+  ) {
     compat.toolResultCarriesImages = false;
   }
   // OpenCode Go's managed-inference API requires a stable per-conversation

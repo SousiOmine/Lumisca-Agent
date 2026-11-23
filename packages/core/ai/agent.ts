@@ -26,10 +26,7 @@ import type {
 } from "../domain/message.ts";
 import type { Api } from "../domain/model.ts";
 import { AgentEvents } from "./agent-events.ts";
-import {
-  nextTranscriptTimestamp,
-  normalizeInput,
-} from "./agent-messages.ts";
+import { nextTranscriptTimestamp, normalizeInput } from "./agent-messages.ts";
 import type { Turn } from "./agent-step.ts";
 import { TurnStream, toolCallsOf } from "./agent-step.ts";
 import type { ToolRunHost } from "./agent-tool-run.ts";

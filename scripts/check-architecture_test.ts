@@ -14,8 +14,8 @@ import {
   checkCoreEntryPoints,
   checkCoreSpecifiers,
   checkLayers,
-  corePathProblems,
   checkServerCoreImports,
+  corePathProblems,
   findCycles,
   runtimeSpecifiers,
 } from "./check-architecture.ts";

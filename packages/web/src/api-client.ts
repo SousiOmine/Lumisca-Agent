@@ -323,7 +323,7 @@ export function stellaAgentIconUrl(agentId: string, name: string): string {
   return withToken(
     apiUrl(
       `/api${apiPathOf(paths.stellaAgentIcon, {
-        agentId: enc(agentId),
+        id: enc(agentId),
         name: enc(name),
       })}`,
     ),

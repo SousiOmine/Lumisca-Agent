@@ -56,6 +56,13 @@ export {
   agentInitial,
   MAX_AGENT_ICON_BYTES,
 } from "./agent-avatar.ts";
+export {
+  apiPath,
+  conversationVerbs,
+  enc,
+  paths,
+  routePath,
+} from "./api-paths.ts";
 export type { AppMode } from "./app-mode.ts";
 export {
   APP_MODES,
@@ -506,10 +513,3 @@ export {
   WS_DELTA_FLUSH_MS,
   WS_DELTA_MAX_CHARS,
 } from "./ws-batch.ts";
-export {
-  apiPath,
-  conversationVerbs,
-  enc,
-  paths,
-  routePath,
-} from "./api-paths.ts";

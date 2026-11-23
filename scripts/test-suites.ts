@@ -120,6 +120,7 @@ export const INTEGRATION_SUITE: readonly string[] = [
   "packages/server/bundle_test.ts",
   "packages/server/federation_test.ts",
   "packages/server/health-probe_test.ts",
+  "packages/server/routes/api_paths_test.ts",
   "packages/server/routes/attachments_test.ts",
   "packages/server/routes/fs_test.ts",
   "packages/server/routes/prompt-uploads_test.ts",

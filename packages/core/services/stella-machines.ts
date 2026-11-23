@@ -2,7 +2,7 @@ import type { SessionPool } from "../agent/pool.ts";
 import { conversationEntriesOf } from "../agent/stella-stream.ts";
 import type { SessionInfo } from "../domain/session.ts";
 import type { Workspace } from "../domain/workspace.ts";
-import { CoreError, errorMessage } from "../errors.ts";
+import { CoreError } from "../errors.ts";
 import type { RoutineRepo } from "../routine/repo.ts";
 import type { RoutineScheduler } from "../routine/scheduler.ts";
 import { createRoutineTools } from "../routine/tools.ts";

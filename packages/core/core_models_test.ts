@@ -11,7 +11,7 @@ import {
 } from "@lumisca/core";
 import { assertEquals, assertRejects } from "@std/assert";
 import { bytesToBase64 } from "./base64.ts";
-import { CoreError, LumiscaCore } from "./mod.ts";
+import { CoreError } from "./mod.ts";
 import {
   DEFAULT_MODEL_KEY,
   FAST_MODEL_KEY,

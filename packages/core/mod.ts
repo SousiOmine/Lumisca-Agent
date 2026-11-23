@@ -179,7 +179,6 @@ export type {
 export {
   contentText,
   LANGUAGE_KEY,
-  nextRunAt,
   parseAcceptLanguage,
   parseLocale,
   resolveLocale,

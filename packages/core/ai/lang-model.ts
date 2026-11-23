@@ -204,9 +204,7 @@ export function sessionHeadersFor(
  * decides, not a provider id — a model that names no base URL is served by
  * OpenAI, and so is one pointed at its host. */
 function isFirstPartyOpenAI(model: Model<Api>): boolean {
-  return (
-    model.baseUrl === undefined || /api\.openai\.com/i.test(model.baseUrl)
-  );
+  return model.baseUrl === undefined || /api\.openai\.com/i.test(model.baseUrl);
 }
 
 /** True for the OpenCode gateway (Zen and Go). The host decides, not the
