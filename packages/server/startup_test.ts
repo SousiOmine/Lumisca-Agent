@@ -1,7 +1,7 @@
 import { test } from "bun:test";
 import * as fsSync from "node:fs";
+import { runProcess } from "@lumisca/core/process";
 import { assert, assertEquals, assertThrows } from "@std/assert";
-import { runProcess } from "../core/process.ts";
 import { DEFAULT_PORT } from "./default-port.ts";
 import {
   consumeServerStartupEnvironment,

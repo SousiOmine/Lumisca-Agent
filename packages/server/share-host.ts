@@ -34,7 +34,7 @@ import {
   type ShareServerFrame,
   shareNameFrom,
 } from "@lumisca/core";
-import { OS } from "../core/platform.ts";
+import { OS } from "@lumisca/core/platform";
 
 /** Largest file one read may return. Mirrors the server's ceiling (the two
  * are checked independently: the notebook is the one that would spend memory).

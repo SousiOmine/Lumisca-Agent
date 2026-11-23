@@ -10,12 +10,12 @@ import {
   resolveSettingsPath,
   vacuumOnStartup,
 } from "@lumisca/core";
+import { commandArgs, IS_STANDALONE } from "@lumisca/core/platform";
+import { exit } from "@lumisca/core/process";
 import {
   COMPUTER_USE_SESSION_TOKEN_KEY,
   errorMessage,
 } from "@lumisca/core/shared";
-import { commandArgs, IS_STANDALONE } from "../core/platform.ts";
-import { exit } from "../core/process.ts";
 import { type LumiscaServer, startServer } from "./app.ts";
 import { DEFAULT_PORT } from "./default-port.ts";
 import { stellaContainerDir } from "./paths.ts";

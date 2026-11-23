@@ -1,6 +1,8 @@
 /**
- * Structural checks the type checker cannot make: import cycles, and the
- * one list of browser-safe entry points agreeing with tsconfig.
+ * Structural checks the type checker cannot make: import cycles, the one
+ * list of browser-safe entry points agreeing with tsconfig, and the three
+ * places `@lumisca/core`'s public entry points are written down agreeing
+ * with each other.
  *
  * These are cheap (no build, no network) and run in CI beside `tsc`. A
  * failure prints the offending files so the fix is obvious.
@@ -255,14 +257,25 @@ export function checkLayers(files: readonly Source[], root = ROOT): string[] {
 
 /** The only `@lumisca/core` specifiers a module may write. The tsconfig
  * wildcard used to resolve any internal path, so an import that esbuild and
- * Vite could not resolve still passed tsc. */
+ * Vite could not resolve still passed tsc. Must name exactly the keys of
+ * `packages/core/package.json`'s `exports` and of tsconfig's `paths`;
+ * `checkCoreEntryPoints` reads all three and reports a disagreement. */
 export const CORE_SPECIFIERS: readonly string[] = [
   "@lumisca/core",
-  "@lumisca/core/bytes",
-  "@lumisca/core/shared",
-  "@lumisca/core/modes",
-  "@lumisca/core/skills/slash",
+  "@lumisca/core/base64",
   "@lumisca/core/browser-entries",
+  "@lumisca/core/bytes",
+  "@lumisca/core/errors",
+  "@lumisca/core/media/preview",
+  "@lumisca/core/media/preview-cache",
+  "@lumisca/core/media/stored-image",
+  "@lumisca/core/modes",
+  "@lumisca/core/notify/subscriptions",
+  "@lumisca/core/platform",
+  "@lumisca/core/process",
+  "@lumisca/core/settings/repo",
+  "@lumisca/core/shared",
+  "@lumisca/core/skills/slash",
   "@lumisca/core/test-utils",
 ];
 
@@ -324,6 +337,101 @@ export function corePathProblems(paths: Record<string, string[]>): string[] {
   return problems;
 }
 
+/**
+ * `packages/server` may reach the core only through `@lumisca/core`'s public
+ * entry points. A relative import (`../../core/process.ts`) skips the
+ * exports map: it keeps working after a module is made private or moved, so
+ * the published surface and the imports that actually run drift apart with
+ * nothing to notice.
+ */
+export function checkServerCoreImports(
+  files: readonly Source[],
+  root = ROOT,
+): string[] {
+  const problems: string[] = [];
+  for (const file of files) {
+    const rel = relative(root, file.path).replaceAll("\\", "/");
+    if (!rel.startsWith("packages/server/")) continue;
+    for (const specifier of runtimeSpecifiers(file.text, file.path)) {
+      if (!specifier.startsWith(".")) continue;
+      const target = resolveSpecifier(file.path, specifier);
+      if (target === undefined) continue;
+      const targetRel = relative(root, target).replaceAll("\\", "/");
+      if (!targetRel.startsWith("packages/core/")) continue;
+      problems.push(
+        `${rel} imports ${specifier} (use @lumisca/core's public entry points)`,
+      );
+    }
+  }
+  return problems;
+}
+
+/** The exports map, tsconfig's paths and {@link CORE_SPECIFIERS} must name
+ * the same specifiers and point each at the same file: tsc resolves paths,
+ * Bun (the tests and `bun build --compile`) resolves exports, and the check
+ * itself reads the list. Any of the three disagreeing means one consumer
+ * loads a module the others cannot see. */
+export function checkCoreEntryPoints(
+  entries: ReadonlyMap<string, string>,
+  paths: Record<string, string[]>,
+): string[] {
+  const problems: string[] = [];
+  for (const [specifier, path] of entries) {
+    if (!CORE_SPECIFIER_SET.has(specifier)) {
+      problems.push(`${specifier}: exported but missing from CORE_SPECIFIERS`);
+    }
+    const configured = paths[specifier];
+    if (configured === undefined) {
+      problems.push(`${specifier}: exported but missing from tsconfig paths`);
+      continue;
+    }
+    const expected = "./" + join("packages/core", path).replaceAll("\\", "/");
+    if (!configured.includes(expected)) {
+      problems.push(
+        `${specifier}: tsconfig points at ${configured.join(", ")}, exports at ${expected}`,
+      );
+    }
+  }
+  for (const specifier of CORE_SPECIFIERS) {
+    if (!entries.has(specifier)) {
+      problems.push(`${specifier}: in CORE_SPECIFIERS but not exported`);
+    }
+  }
+  for (const specifier of Object.keys(paths)) {
+    if (!specifier.startsWith("@lumisca/core")) continue;
+    if (!CORE_SPECIFIER_SET.has(specifier)) {
+      problems.push(
+        `${specifier}: in tsconfig paths but not in CORE_SPECIFIERS`,
+      );
+    }
+  }
+  return problems;
+}
+
+function readTsconfigPaths(): Record<string, string[]> {
+  const tsconfig = JSON.parse(
+    readFileSync(join(ROOT, "tsconfig.json"), "utf8").replace(
+      /^\s*\/\/.*$/gm,
+      "",
+    ),
+  ) as { compilerOptions?: { paths?: Record<string, string[]> } };
+  return tsconfig.compilerOptions?.paths ?? {};
+}
+
+function readCoreExports(): Map<string, string> {
+  const pkg = JSON.parse(
+    readFileSync(join(ROOT, "packages/core/package.json"), "utf8"),
+  ) as { exports?: Record<string, string> };
+  // Exports keys are package-relative ("./bytes"); the list and tsconfig
+  // paths use the full specifier ("@lumisca/core/bytes").
+  return new Map(
+    Object.entries(pkg.exports ?? {}).map(([key, path]) => [
+      key === "." ? "@lumisca/core" : `@lumisca/core/${key.slice(2)}`,
+      path,
+    ]),
+  );
+}
+
 if (import.meta.main) {
   const files = sources();
   const cycles = findCycles(files);
@@ -331,6 +439,11 @@ if (import.meta.main) {
   const layerProblems = checkLayers(files);
   const specifierProblems = checkCoreSpecifiers(files);
   const pathProblems = checkCorePaths();
+  const relativeCoreProblems = checkServerCoreImports(files);
+  const entryPointProblems = checkCoreEntryPoints(
+    readCoreExports(),
+    readTsconfigPaths(),
+  );
   let failed = false;
 
   if (cycles.length > 0) {
@@ -367,8 +480,20 @@ if (import.meta.main) {
     for (const problem of pathProblems) console.error("  " + problem);
   }
 
+  if (relativeCoreProblems.length > 0) {
+    failed = true;
+    console.error("packages/server reaches into packages/core by path:");
+    for (const problem of relativeCoreProblems) console.error("  " + problem);
+  }
+
+  if (entryPointProblems.length > 0) {
+    failed = true;
+    console.error("core entry points disagree:");
+    for (const problem of entryPointProblems) console.error("  " + problem);
+  }
+
   if (failed) process.exit(1);
   console.log(
-    "architecture: acyclic, browser entries in sync, layers intact, core specifiers public",
+    "architecture: acyclic, browser entries in sync, layers intact, core specifiers public, core entry points in sync",
   );
 }

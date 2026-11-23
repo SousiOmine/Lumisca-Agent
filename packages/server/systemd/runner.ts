@@ -11,7 +11,7 @@
  */
 
 import { errorMessage } from "@lumisca/core";
-import { runProcess } from "../../core/process.ts";
+import { runProcess } from "@lumisca/core/process";
 
 /** Result of one external command, decoded and trimmed. */
 export interface CommandResult {

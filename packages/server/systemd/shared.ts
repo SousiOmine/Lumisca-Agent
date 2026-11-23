@@ -13,8 +13,8 @@
  */
 
 import * as fsp from "node:fs/promises";
+import { isNotFoundError } from "@lumisca/core/errors";
 import { hostForUrl } from "@lumisca/core/shared";
-import { isNotFoundError } from "../../core/errors.ts";
 import { DEFAULT_PORT } from "../default-port.ts";
 import { DEFAULT_HOST, DESKTOP_ENV_KEY } from "../startup.ts";
 import { resolveValues, type ServicePaths } from "./compose.ts";

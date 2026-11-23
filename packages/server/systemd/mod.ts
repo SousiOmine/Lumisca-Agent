@@ -31,7 +31,7 @@
  */
 
 import { errorMessage } from "@lumisca/core";
-import { processEnvironment } from "../../core/process.ts";
+import { processEnvironment } from "@lumisca/core/process";
 import type { EnvironmentSource } from "../startup.ts";
 import { runConfig } from "./config.ts";
 import { defaultServiceDeps, type ServiceDeps } from "./deps.ts";

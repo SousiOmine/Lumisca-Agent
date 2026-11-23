@@ -18,8 +18,6 @@
  */
 export const PORT_WAIT_ENV_KEY = "LUMISCA_PORT_WAIT_MS";
 
-import { processEnvironment } from "../core/process.ts";
-
 /** Environment key the desktop shell sets on the server child it spawns:
  * the shell's own updater owns that binary (it lives in the app bundle), so
  * the server must not replace it. */
@@ -68,6 +66,16 @@ export interface EnvironmentSource {
 export type ServerStartupEnvironment = Readonly<
   Record<ServerEnvKey, string | undefined>
 >;
+
+/** `process.env` as an {@link EnvironmentSource}. Written here rather than
+ * imported from the core: this module must stay free of bare specifiers (see
+ * above), and the core's copy is these two lines. */
+const processEnvironment: EnvironmentSource = {
+  get: (key) => process.env[key],
+  delete: (key) => {
+    delete process.env[key];
+  },
+};
 
 /**
  * Capture and remove every server-only environment variable synchronously in

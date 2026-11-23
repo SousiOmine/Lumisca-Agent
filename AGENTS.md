@@ -59,6 +59,7 @@ push の前にも `git fetch` して `git log --oneline HEAD..origin/master` を
   デスクトップはルートから `bun run dev:desktop` で動かします。
   このディレクトリから import するサーバー側のモジュールは、ルートの `tsconfig.json` の `@lumisca/*` が効かないため bare specifier を持てません。
   環境の取り出しは `packages/server/startup-env.ts` のように依存の無いモジュールへ分け、`startup.ts` から再輸出します。
+  判断の理由は `ARCHITECTURE.md` の「依存関係の原則」にあります。
 - サーバーのビルド経路: `scripts/build-server.ts` に集約しています。
   確認は `bun run smoke:server` です。
 

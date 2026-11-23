@@ -10,11 +10,11 @@
 import * as fsp from "node:fs/promises";
 import { basename } from "node:path";
 import type { Context } from "hono";
-import { renderPreview } from "../../core/media/preview.ts";
+import { renderPreview } from "@lumisca/core/media/preview";
 import {
   ensurePreview,
   previewPathOf,
-} from "../../core/media/preview-cache.ts";
+} from "@lumisca/core/media/preview-cache";
 import { assetHeaders } from "./asset-headers.ts";
 
 export interface AssetResponse {

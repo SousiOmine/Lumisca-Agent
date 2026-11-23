@@ -1,8 +1,8 @@
 import { test } from "bun:test";
+import { PushSubscriptions } from "@lumisca/core/notify/subscriptions";
+import { createInMemorySettingsRepo } from "@lumisca/core/settings/repo";
 import { toBase64Url } from "@lumisca/core/shared";
 import { assert, assertEquals } from "@std/assert";
-import { PushSubscriptions } from "../core/notify/subscriptions.ts";
-import { createInMemorySettingsRepo } from "../core/settings/repo.ts";
 import {
   buildPushNotification,
   createPushNotifier,

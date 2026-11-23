@@ -6,8 +6,8 @@ import { tmpdir as osTmpdir } from "node:os";
 import { join, join as pathJoin } from "node:path";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@lumisca/core";
 import { TOOL_READ } from "@lumisca/core/shared";
+import { promptSession, removeDirRetry } from "@lumisca/core/test-utils";
 import { assert, assertEquals, assertRejects } from "@std/assert";
-import { promptSession, removeDirRetry } from "../core/test-utils.ts";
 import {
   createShareHost,
   type LocalGrant,

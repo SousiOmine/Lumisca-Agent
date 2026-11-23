@@ -10,6 +10,7 @@
  */
 
 import type { StellaAgent } from "@lumisca/core";
+import { renderPreview } from "@lumisca/core/media/preview";
 import { Hono } from "hono";
 import { serveAsset } from "./asset-response.ts";
 import { AppError, notFound } from "./util.ts";

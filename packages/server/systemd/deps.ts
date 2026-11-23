@@ -16,8 +16,8 @@
  * its event loop into a silent exit 0.
  */
 import { type NetworkInterfaceInfo, networkInterfaces } from "node:os";
-import { IS_STANDALONE, OS } from "../../core/platform.ts";
-import { processEnvironment } from "../../core/process.ts";
+import { IS_STANDALONE, OS } from "@lumisca/core/platform";
+import { processEnvironment } from "@lumisca/core/process";
 import { probeHealth as probeHealthShared } from "../health-probe.ts";
 import {
   DESKTOP_ENV_KEY,

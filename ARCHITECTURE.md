@@ -514,6 +514,15 @@ UIはどちらの本文にも書けます。
 ### 依存関係の原則
 
 - `core` は他の内部パッケージに依存しません。
+- `server` が `core` を参照するのは `@lumisca/core` の公開エントリーポイントだけです。
+  相対パス（`../../core/process.ts`）は exports を迂回するので、`scripts/check-architecture.ts` が失敗させます。
+  エントリは `packages/core/package.json` の `exports`、ルート `tsconfig.json` の `paths`、`check-architecture.ts` の `CORE_SPECIFIERS` の 3 箇所に同じ組で並べ、ずれたら検査が落ちます。
+  実行時は Bun が `exports` を、型検査は `paths` を読むため、片方だけ足すと動くのに型が通らない（またはその逆の）状態になります。
+- `packages/desktop` はワークスペースに入れません。
+  ルートの `package.json` に `workspaces` を置かず、`bun install` に `src-tauri/target` を巻き込ませないためです（`target` がサーバーバイナリの入力に入ると巨大になります）。
+  その代わりデスクトップから辿るモジュールは `@lumisca/*` を解決できないので、bare specifier を持てません。
+  `packages/server/startup-env.ts` が `startup.ts` から分かれているのはこの制約によるもので、`packages/desktop/scripts/dev.ts` はそこだけを読みます。
+  独立したバージョン管理も公開も要らないので、workspace 化はしません。
 - `web` が `core` から直接取り込むモジュールは純粋関数に限ります（`shared/`、`modes/`、`skills/slash`）。
   バレルモジュール（`@lumisca/core`）の参照は型定義のみとし、実行時バンドルには含めません。
   許可するエントリは `packages/core/browser-entries.ts` の 1 箇所で宣言し、境界テスト（`packages/web/src/boundaries_test.ts`）、Vite のエイリアス、サーバーの esbuild エイリアスが同じリストを読みます。

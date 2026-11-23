@@ -16,8 +16,8 @@
  */
 
 import { errorMessage } from "@lumisca/core";
+import { TARGET } from "@lumisca/core/platform";
 import { UPDATE_AUTO_KEY, UPDATE_AUTO_RESTART_KEY } from "@lumisca/core/shared";
-import { TARGET } from "../../core/platform.ts";
 import type { UpdateRestartMode } from "../startup.ts";
 import { SERVER_VERSION } from "../version.ts";
 import {
