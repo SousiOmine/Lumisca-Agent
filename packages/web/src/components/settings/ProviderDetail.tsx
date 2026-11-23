@@ -22,6 +22,7 @@ import { useAsyncEffect } from "../../hooks/useAsync.ts";
 import { useSavedNotice } from "../../hooks/useSave.ts";
 import { useT } from "../../i18n.ts";
 import { useProviderModels, useUserProviders } from "../../providers.ts";
+import { openExternal } from "../../shell.ts";
 import type {
   ProviderAuthType,
   ProviderLoginEvent,
@@ -64,6 +65,7 @@ export function ProviderDetail({
     configured: boolean;
     source?: string;
     authType?: ProviderAuthType;
+    account?: string;
   }>({ configured: false });
   const [key, setKey] = useState("");
   const [savingKey, setSavingKey] = useState(false);
@@ -98,7 +100,8 @@ export function ProviderDetail({
   /** The browser flow finishes at a callback on the server machine, so it
    * is offered only to a page opened there. Remote pages get the device
    * code (which works from anywhere). */
-  const localPage = isLoopbackHost(globalThis.location.hostname);
+  const pageHost = globalThis.location.hostname;
+  const localPage = isLoopbackHost(pageHost) || pageHost === "tauri.localhost";
 
   /** Poll the running flow until it settles; on completion reload the
    * provider auth state (the server freshly resolved it). */
@@ -216,8 +219,9 @@ export function ProviderDetail({
     setLoginBusy(true);
     setError(undefined);
     try {
-      await api.providerLogout(providerId);
+      const result = await api.providerLogout(providerId);
       setNotice(t("settings.provider.logoutDone"));
+      if (result.warning !== undefined) setError(result.warning);
       await load();
       reloadProviders();
     } catch (e) {
@@ -261,7 +265,7 @@ export function ProviderDetail({
   };
 
   const open = (url: string) => {
-    globalThis.open(url, "_blank", "noopener");
+    openExternal(url).catch((e) => setError(errorMessage(e)));
   };
 
   const renderEvent = (event: ProviderLoginEvent, index: number) => {
@@ -418,6 +422,14 @@ export function ProviderDetail({
               {t("settings.provider.oauthDescription")}
             </p>
 
+            {auth.configured && auth.account !== undefined && (
+              <p className="settings-note">
+                {t("settings.provider.signedInAs", {
+                  account: auth.account,
+                })}
+              </p>
+            )}
+
             {auth.configured && (
               <button
                 type="button"
@@ -426,6 +438,17 @@ export function ProviderDetail({
                 disabled={loginBusy}
               >
                 <IconLogout size={14} /> {t("settings.provider.logout")}
+              </button>
+            )}
+
+            {providerId === "openai-codex" && auth.configured && (
+              <button
+                type="button"
+                className="btn small"
+                onClick={() => open("https://chatgpt.com/settings/usage")}
+              >
+                <IconExternalLink size={14} />{" "}
+                {t("settings.provider.manageChatGptUsage")}
               </button>
             )}
 

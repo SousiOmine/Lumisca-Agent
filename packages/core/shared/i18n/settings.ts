@@ -315,6 +315,14 @@ export const settings = {
   },
   "settings.provider.logout": { ja: "ログアウト", en: "Logout" },
   "settings.provider.login": { ja: "ログイン", en: "Login" },
+  "settings.provider.signedInAs": {
+    ja: "ログイン中{account}",
+    en: "Signed in as {account}",
+  },
+  "settings.provider.manageChatGptUsage": {
+    ja: "ChatGPTの利用状況を開く",
+    en: "Open ChatGPT usage",
+  },
   "settings.provider.loginWithBrowser": {
     ja: "ブラウザでログイン",
     en: "Sign in with browser",

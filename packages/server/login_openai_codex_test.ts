@@ -1,40 +1,92 @@
 // Credential-store tests: the API-key path, and the ChatGPT subscription
-// login end to end (device code, token exchange, model catalog) with the
-// OpenAI endpoints stubbed, so nothing here touches the network.
+// login end to end (dynamic registration, ID-token validation, model
+// catalog, revocation) with the OpenAI endpoints stubbed and a real
+// loopback callback, so nothing here touches the network.
 
 import { test } from "bun:test";
-import {
-  type AuthInteraction,
-  forTestingCore,
-  LumiscaCore,
-} from "@lumisca/core";
+import { type AuthInteraction, forTestingCore } from "@lumisca/core";
 import { assert, assertEquals, assertRejects } from "@std/assert";
+import { exportJWK, generateKeyPair, SignJWT } from "jose";
 
-function json(data: unknown): Response {
+const AUTH_BASE = "https://auth.openai.com";
+const OIDC_URL = AUTH_BASE + "/.well-known/openid-configuration";
+const JWKS_URL = AUTH_BASE + "/jwks";
+const TOKEN_URL = AUTH_BASE + "/api/accounts/oauth/token";
+const REVOKE_URL = AUTH_BASE + "/api/accounts/oauth/revoke";
+const MODELS_URL = "https://api.openai.com/v1/models";
+const SCOPES =
+  "openid profile email offline_access resource.invoke chatgpt.tokens.use.direct";
+
+function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
-    status: 200,
+    status,
     headers: { "content-type": "application/json" },
   });
 }
 
-function jwt(claims: Record<string, unknown>): string {
-  const b64 = (value: unknown) =>
-    btoa(JSON.stringify(value))
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
-      .replace(/=+$/, "");
-  return `${b64({ alg: "none" })}.${b64(claims)}.signature`;
+async function keyMaterial(): Promise<{
+  privateKey: CryptoKey;
+  publicJwk: Record<string, unknown>;
+}> {
+  const { privateKey, publicKey } = await generateKeyPair("RS256", {
+    extractable: true,
+  });
+  const jwk = await exportJWK(publicKey);
+  return {
+    privateKey,
+    publicJwk: { ...jwk, kid: "test-key", alg: "RS256", use: "sig" },
+  };
+}
+
+async function signIdToken(
+  privateKey: CryptoKey,
+  clientId: string,
+  nonce: string,
+): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  return await new SignJWT({ nonce, email: "user@example.com" })
+    .setProtectedHeader({ alg: "RS256", kid: "test-key" })
+    .setIssuer(AUTH_BASE)
+    .setAudience(clientId)
+    .setSubject("subject-1")
+    .setIssuedAt(now)
+    .setExpirationTime(now + 3600)
+    .sign(privateKey);
+}
+
+/** Start a login and answer its loopback callback once the authorize URL
+ * arrives. */
+function browserInteraction(onUrl: (url: URL) => void): AuthInteraction {
+  return {
+    signal: new AbortController().signal,
+    method: "browser",
+    prompt: () => Promise.reject(new Error("unexpected prompt")),
+    notify: (notice) => {
+      if (notice.type !== "auth_url" || typeof notice.url !== "string") return;
+      const url = new URL(notice.url);
+      onUrl(url);
+      const redirect = url.searchParams.get("redirect_uri") ?? "";
+      setTimeout(() => {
+        const callback = new URL(redirect);
+        callback.searchParams.set("code", "code-1");
+        callback.searchParams.set("state", url.searchParams.get("state") ?? "");
+        callback.searchParams.set("client_id", "oaiapp_test");
+        callback.searchParams.set("scope", SCOPES);
+        void globalThis
+          .fetch(callback)
+          .then((response) => response.text())
+          .catch(() => {});
+      }, 0);
+    },
+  };
 }
 
 test("stored API keys drive the configured-auth check", async () => {
   const core = forTestingCore();
   try {
-    // A built-in provider with no stored key and a cleaned env is not
-    // configured in Lumisca.
     assertEquals(await core.services.models.hasConfiguredAuth("openai"), false);
     assertEquals(await core.services.models.hasProviderAuth("openai"), false);
 
-    // Storing a key makes it configured (the key-injection path).
     await core.services.models.setProviderApiKey("openai", "sk-test");
     assertEquals(await core.services.models.hasConfiguredAuth("openai"), true);
     assertEquals(await core.services.models.hasProviderAuth("openai"), true);
@@ -43,7 +95,6 @@ test("stored API keys drive the configured-auth check", async () => {
       "api_key",
     );
 
-    // Logging out clears the configured state again.
     await core.services.models.logoutProvider("openai");
     assertEquals(await core.services.models.hasConfiguredAuth("openai"), false);
   } finally {
@@ -51,75 +102,90 @@ test("stored API keys drive the configured-auth check", async () => {
   }
 });
 
-test("ChatGPT device login stores an OAuth credential and its models", async () => {
+test("ChatGPT login stores the registration and its models", async () => {
   const originalFetch = globalThis.fetch;
+  const { privateKey, publicJwk } = await keyMaterial();
+  let nonce = "";
+  const modelsStatus = 200;
   const requested: string[] = [];
-  globalThis.fetch = ((input: string | URL | Request) => {
+
+  globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
     requested.push(url);
-    if (url === "https://auth.openai.com/api/accounts/deviceauth/usercode") {
-      return json({
-        device_auth_id: "dev_1",
-        user_code: "ABCD-EFGH",
-        interval: 0.001,
-      });
+    if (url.startsWith("http://127.0.0.1:")) {
+      return originalFetch(input, init);
     }
-    if (url === "https://auth.openai.com/api/accounts/deviceauth/token") {
-      return json({
-        authorization_code: "code_1",
-        code_verifier: "verifier_1",
-      });
-    }
-    if (url === "https://auth.openai.com/oauth/token") {
-      return json({
-        access_token: jwt({
-          "https://api.openai.com/auth": { chatgpt_account_id: "acct_1" },
-          exp: Math.floor(Date.now() / 1000) + 3600,
+    if (url === OIDC_URL) {
+      return Promise.resolve(
+        json({
+          issuer: AUTH_BASE,
+          jwks_uri: JWKS_URL,
+          revocation_endpoint: REVOKE_URL,
         }),
-        refresh_token: "refresh_1",
-        expires_in: 3600,
-      });
+      );
     }
-    if (url.startsWith("https://chatgpt.com/backend-api/codex/models")) {
-      return json({
-        models: [
-          {
-            slug: "gpt-5.3-codex",
-            display_name: "GPT-5.3 Codex",
-            context_window: 400_000,
-            supported_reasoning_levels: [{ effort: "low" }, { effort: "high" }],
-          },
-        ],
-      });
+    if (url === JWKS_URL) {
+      return Promise.resolve(json({ keys: [publicJwk] }));
     }
-    return Promise.reject(new Error(`unexpected request: ${url}`));
+    if (url === TOKEN_URL) {
+      return signIdToken(privateKey, "oaiapp_test", nonce).then((idToken) =>
+        json({
+          access_token: "access-1",
+          refresh_token: "refresh-1",
+          id_token: idToken,
+          expires_in: 3600,
+          scope: SCOPES,
+        }),
+      );
+    }
+    if (url === MODELS_URL) {
+      if (modelsStatus !== 200) {
+        return Promise.resolve(
+          new Response("upstream down", {
+            status: modelsStatus,
+          }),
+        );
+      }
+      return Promise.resolve(
+        json({
+          models: [
+            {
+              slug: "gpt-6.1-sol",
+              display_name: "GPT-6.1 Sol",
+              visibility: "list",
+              context_window: 400_000,
+              supported_reasoning_levels: [
+                { effort: "low" },
+                { effort: "high" },
+              ],
+            },
+          ],
+        }),
+      );
+    }
+    if (url === REVOKE_URL) {
+      return Promise.resolve(new Response("", { status: 200 }));
+    }
+    return Promise.reject(new Error("unexpected request: " + url));
   }) as typeof fetch;
 
   const core = forTestingCore();
   try {
-    const events: string[] = [];
-    const interaction: AuthInteraction = {
-      signal: new AbortController().signal,
-      method: "device_code",
-      prompt: () => Promise.reject(new Error("unexpected prompt")),
-      notify: (event) => events.push(event.type),
-    };
-
     await core.services.models.loginProvider(
       "openai-codex",
       "oauth",
-      interaction,
+      browserInteraction((url) => {
+        nonce = url.searchParams.get("nonce") ?? "";
+      }),
     );
 
-    assertEquals(events, ["device_code"]);
     assertEquals(
       await core.services.models.getProviderAuthType("openai-codex"),
       "oauth",
     );
-    assertEquals(
-      (await core.services.models.checkAuth("openai-codex"))?.type,
-      "oauth",
-    );
+    const check = await core.services.models.checkAuth("openai-codex");
+    assertEquals(check?.type, "oauth");
+    assertEquals(check?.account, "user@example.com");
     assertEquals(
       await core.services.models.hasConfiguredAuth("openai-codex"),
       true,
@@ -128,15 +194,16 @@ test("ChatGPT device login stores an OAuth credential and its models", async () 
       core.services.models
         .listModelsDetailed("openai-codex")
         .map((model) => model.id),
-      ["gpt-5.3-codex"],
+      ["gpt-6.1-sol"],
     );
-    assert(
-      requested.some((url) => url.includes("/codex/models?client_version=")),
-      "the model catalog must be fetched during the login",
-    );
+    assert(requested.includes(MODELS_URL));
 
-    // The credential is a normal stored credential: logout removes it.
-    await core.services.models.logoutProvider("openai-codex");
+    // The credential is a normal stored credential: logout revokes it and
+    // removes the local record.
+    assertEquals(
+      await core.services.models.logoutProvider("openai-codex"),
+      undefined,
+    );
     assertEquals(
       await core.services.models.hasConfiguredAuth("openai-codex"),
       false,
@@ -149,51 +216,53 @@ test("ChatGPT device login stores an OAuth credential and its models", async () 
 
 test("a failed model catalog leaves the provider unconfigured", async () => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = ((input: string | URL | Request) => {
+  const { privateKey, publicJwk } = await keyMaterial();
+  let nonce = "";
+
+  globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
-    if (url === "https://auth.openai.com/api/accounts/deviceauth/usercode") {
-      return json({
-        device_auth_id: "dev_1",
-        user_code: "ABCD-EFGH",
-        interval: 0.001,
-      });
+    if (url.startsWith("http://127.0.0.1:")) {
+      return originalFetch(input, init);
     }
-    if (url === "https://auth.openai.com/api/accounts/deviceauth/token") {
-      return json({
-        authorization_code: "code_1",
-        code_verifier: "verifier_1",
-      });
-    }
-    if (url === "https://auth.openai.com/oauth/token") {
-      return json({
-        access_token: jwt({
-          "https://api.openai.com/auth": { chatgpt_account_id: "acct_1" },
-          exp: Math.floor(Date.now() / 1000) + 3600,
+    if (url === OIDC_URL) {
+      return Promise.resolve(
+        json({
+          issuer: AUTH_BASE,
+          jwks_uri: JWKS_URL,
+          revocation_endpoint: REVOKE_URL,
         }),
-        refresh_token: "refresh_1",
-        expires_in: 3600,
-      });
+      );
     }
-    if (url.startsWith("https://chatgpt.com/backend-api/codex/models")) {
-      return new Response("upstream down", { status: 503 });
+    if (url === JWKS_URL) {
+      return Promise.resolve(json({ keys: [publicJwk] }));
     }
-    return Promise.reject(new Error(`unexpected request: ${url}`));
+    if (url === TOKEN_URL) {
+      return signIdToken(privateKey, "oaiapp_test", nonce).then((idToken) =>
+        json({
+          access_token: "access-1",
+          refresh_token: "refresh-1",
+          id_token: idToken,
+          expires_in: 3600,
+          scope: SCOPES,
+        }),
+      );
+    }
+    if (url === MODELS_URL) {
+      return Promise.resolve(new Response("upstream down", { status: 503 }));
+    }
+    return Promise.reject(new Error("unexpected request: " + url));
   }) as typeof fetch;
 
   const core = forTestingCore();
   try {
-    const interaction: AuthInteraction = {
-      signal: new AbortController().signal,
-      method: "device_code",
-      prompt: () => Promise.reject(new Error("unexpected prompt")),
-      notify: () => {},
-    };
     await assertRejects(
       () =>
         core.services.models.loginProvider(
           "openai-codex",
           "oauth",
-          interaction,
+          browserInteraction((url) => {
+            nonce = url.searchParams.get("nonce") ?? "";
+          }),
         ),
       Error,
       "HTTP 503",

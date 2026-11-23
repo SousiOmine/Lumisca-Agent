@@ -1,64 +1,76 @@
 /**
- * OAuth for the ChatGPT (Codex) backend: the device-code flow and the
- * browser flow with a loopback callback.
+ * Sign in with ChatGPT (SIWC) for the ChatGPT subscription provider.
  *
- * Both flows end at the same token endpoint and yield the same
- * {@link ChatGptTokens}; which one runs is the client's choice (a remote
- * page cannot receive a callback on the server machine, so it asks for the
- * device code). Nothing here picks a method on its own.
+ * The flow is the open-source token-sharing one: the first sign-in registers
+ * a user-defined agent with `client_id=dynamic_agent_client`, the callback
+ * returns the issued client ID, and every later sign-in reuses it. The host
+ * identifier (`ext_agent_host_id`) is generated once per installation and
+ * sent on every authorization. Tokens are exchanged at the public OpenAI
+ * token endpoint and validated against OpenAI's published JWKS; inference
+ * then goes to the public Responses API with the OAuth access token.
  *
- * The backend is not a public API. The constants below mirror what the
- * Codex CLI sends; see ARCHITECTURE.md's ChatGPT section for the sources of
- * the shape (instructions required, store:false, ChatGPT-Account-Id).
+ * The protocol shape lives here so a change on OpenAI's side has one place
+ * to repair. Nothing in this module picks a login method: the caller does,
+ * and only the browser flow (a loopback callback on 127.0.0.1) is offered.
  */
 
+import { createLocalJWKSet, jwtVerify } from "jose";
 import type { AuthInteraction } from "../../ai/catalog.ts";
-
-import { isAddrInUseError } from "../../errors.ts";
+import { errorMessage, isAddrInUseError } from "../../errors.ts";
 import { isRecord } from "../../fs.ts";
-import {
-  CHATGPT_REQUEST_TIMEOUT_MS,
-  type FetchLike,
-  requestSignal,
-  truncateBody,
-} from "./http.ts";
+import type { SettingsRepo } from "../../settings/repo.ts";
+import { CHATGPT_HOST_ID_KEY } from "../../shared/settings-keys.ts";
+import { type FetchLike, requestSignal, truncateBody } from "./http.ts";
 
 /** Where the OAuth endpoints live. */
 export const CHATGPT_AUTH_BASE = "https://auth.openai.com";
 
-/** The ChatGPT backend (Responses API and the model catalog). */
-export const CHATGPT_API_BASE = "https://chatgpt.com/backend-api/codex";
+/** The public Responses API used for ChatGPT plan usage. */
+export const CHATGPT_API_BASE = "https://api.openai.com/v1";
 
-/** Codex CLI's public OAuth client. The backend ties the token scopes and
- * the allowed redirect URIs to it. */
-export const CHATGPT_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
+/** First-time registration entrypoint. It is not a client ID to save. */
+export const CHATGPT_DYNAMIC_CLIENT_ID = "dynamic_agent_client";
 
-/** Identifies Lumisca to the backend (`originator` header and authorize
- * parameter). The CLI's own value is refused for third-party clients. */
-export const CHATGPT_ORIGINATOR = "lumisca";
+/** The name shown to the user while they approve the agent registration. */
+export const CHATGPT_AGENT_NAME = "Lumisca";
 
-/** Where the device flow asks the user to enter the code. */
-export const CHATGPT_DEVICE_VERIFICATION_URI =
-  "https://auth.openai.com/codex/device";
+/** Audience every request and token in this flow is bound to. */
+export const CHATGPT_RESOURCE = CHATGPT_API_BASE;
 
-/** Lifetime the backend gives a device code, in seconds. */
-export const CHATGPT_DEVICE_CODE_LIFETIME_SECONDS = 15 * 60;
+/** The scope that permits inference on the user's ChatGPT plan. */
+export const CHATGPT_PLAN_SCOPE = "chatgpt.tokens.use.direct";
 
-/** The callback path Codex's client registration allows. */
-const CALLBACK_PATH = "/auth/callback";
-
-/** Ports Codex's client registration allows for the loopback callback, in
- * the order they are tried (the CLI uses the same pair). */
-const BROWSER_PORTS: readonly number[] = [1455, 1457];
+/** Identity plus plan usage, in the order the authorization page expects. */
+export const CHATGPT_SCOPES: readonly string[] = [
+  "openid",
+  "profile",
+  "email",
+  "offline_access",
+  "resource.invoke",
+  CHATGPT_PLAN_SCOPE,
+];
 
 /** How long a flow waits for the human. Kept below the bridge's 15-minute
- * idle sweep (`server/login.ts`) so the flow reports its own timeout
- * instead of being disposed mid-wait. */
+ * idle sweep (server/login.ts) so the flow reports its own timeout instead
+ * of being disposed mid-wait. */
 export const CHATGPT_FLOW_TIMEOUT_MS = 10 * 60_000;
 
 /** Refresh this long before the access token expires, so a request that
  * starts just under the wire does not fail mid-flight. */
 export const CHATGPT_REFRESH_MARGIN_MS = 60_000;
+
+const AUTHORIZE_URL = `${CHATGPT_AUTH_BASE}/api/accounts/authorize`;
+const TOKEN_URL = `${CHATGPT_AUTH_BASE}/api/accounts/oauth/token`;
+const OIDC_CONFIG_URL = `${CHATGPT_AUTH_BASE}/.well-known/openid-configuration`;
+const CALLBACK_PATH = "/auth/callback";
+
+/** Host IDs the spec accepts. A stored value outside these shapes is
+ * replaced rather than trusted. */
+const HOST_ID_PREFIXES = [
+  "urn:uuid:",
+  "urn:ietf:params:oauth:jwk-thumbprint:",
+  "did:key:",
+];
 
 /** The token response, in the flow's own terms. */
 export interface ChatGptTokens {
@@ -67,111 +79,297 @@ export interface ChatGptTokens {
   idToken?: string;
   /** Lifetime the server reported, in seconds. */
   expiresIn?: number;
+  /** Space-separated granted scopes, when the server repeats them. */
+  scope?: string;
 }
 
-/** Run the device-code flow: the user opens the verification page on any
- * device and enters the code; this waits for the approval. */
-export async function loginWithDeviceCode(
-  interaction: AuthInteraction,
-  fetchImpl: FetchLike,
-): Promise<ChatGptTokens> {
-  const { deviceAuthId, userCode, interval } = await requestUserCode(
-    fetchImpl,
-    interaction.signal,
-  );
-
-  interaction.notify({
-    type: "device_code",
-    userCode,
-    verificationUri: CHATGPT_DEVICE_VERIFICATION_URI,
-    intervalSeconds: interval,
-    expiresInSeconds: CHATGPT_DEVICE_CODE_LIFETIME_SECONDS,
-  });
-  const { code, verifier } = await pollForApproval(
-    fetchImpl,
-    deviceAuthId,
-    userCode,
-    interval,
-    interaction.signal,
-  );
-  return await exchangeCode(
-    fetchImpl,
-    code,
-    verifier,
-    `${CHATGPT_AUTH_BASE}/deviceauth/callback`,
-    interaction.signal,
-  );
+/** The identity a validated ID token establishes. */
+export interface ChatGptIdentity {
+  /** Opaque subject identifier (`sub`); the account's stable key. */
+  subject: string;
+  /** The account's email, when the token carries one. */
+  email?: string;
 }
 
-/** Run the browser flow: a loopback listener receives the callback. */
+/** One completed sign-in, before it is stored as a credential. */
+export interface ChatGptLoginResult {
+  tokens: ChatGptTokens;
+  /** The issued client ID of this registration. */
+  clientId: string;
+  /** The host identifier the registration is bound to. */
+  hostId: string;
+  /** Scopes the token endpoint granted. */
+  scopes: readonly string[];
+  identity: ChatGptIdentity;
+  idToken: string;
+  /** True when this run registered a new agent. */
+  newRegistration: boolean;
+}
+
+/** An account already registered on this host, reused for reauthorization. */
+export interface ChatGptExistingRegistration {
+  clientId: string;
+  /** Retained ID token, sent as `id_token_hint` to skip account selection. */
+  idToken?: string;
+  /** Saved email, sent as `login_hint`. */
+  email?: string;
+}
+
+/** What the browser flow needs from its host. */
+export interface ChatGptLoginOptions {
+  fetch: FetchLike;
+  hostId: string;
+  /** Present when the user is reauthorizing an existing registration. */
+  existing?: ChatGptExistingRegistration;
+}
+
+/** What a refresh needs: the issued client ID and the rotating refresh
+ * token are both part of the grant. */
+export interface ChatGptRefreshOptions {
+  clientId: string;
+  refreshToken: string;
+  signal?: AbortSignal;
+}
+
+/** What a revocation needs. */
+export interface ChatGptRevokeOptions {
+  clientId: string;
+  refreshToken: string;
+  signal?: AbortSignal;
+}
+
+/** Read the installation's host ID, generating one before the first
+ * sign-in. Restarting the app or signing in again reuses it. */
+export function getOrCreateHostId(settings: SettingsRepo): string {
+  const current = settings.get(CHATGPT_HOST_ID_KEY);
+  if (current !== undefined && isHostId(current)) return current;
+  const id = `urn:uuid:${crypto.randomUUID()}`;
+  settings.set(CHATGPT_HOST_ID_KEY, id);
+  return id;
+}
+
+/** Run the browser flow: a loopback listener on 127.0.0.1 receives the
+ * callback, and the code is exchanged with the issued client ID. */
 export async function loginWithBrowser(
   interaction: AuthInteraction,
-  fetchImpl: FetchLike,
-): Promise<ChatGptTokens> {
+  options: ChatGptLoginOptions,
+): Promise<ChatGptLoginResult> {
+  if (interaction.method !== undefined && interaction.method !== "browser") {
+    throw new Error(`unsupported ChatGPT login method: ${interaction.method}`);
+  }
   const state = randomToken();
+  const nonce = randomToken();
   const pkce = await createPkce();
   const callback = startCallbackServer(state);
   try {
+    const clientId = options.existing?.clientId ?? CHATGPT_DYNAMIC_CLIENT_ID;
     interaction.notify({
       type: "auth_url",
       url: buildAuthorizeUrl({
         state,
+        nonce,
         challenge: pkce.challenge,
         redirectUri: callback.redirectUri,
+        clientId,
+        hostId: options.hostId,
+        ...(options.existing?.idToken !== undefined
+          ? { idTokenHint: options.existing.idToken }
+          : {}),
+        ...(options.existing?.email !== undefined
+          ? { loginHint: options.existing.email }
+          : {}),
       }),
+      instructions:
+        "ブラウザでChatGPTにログインし、Lumiscaへのアクセスを許可してください。",
     });
-    const code = await callback.waitForCode(interaction.signal);
-    return await exchangeCode(
-      fetchImpl,
-      code,
-      pkce.verifier,
-      callback.redirectUri,
-      interaction.signal,
-    );
+    const received = await callback.waitForCallback(interaction.signal);
+    const issuedClientId = options.existing?.clientId ?? received.clientId;
+    if (
+      issuedClientId === undefined ||
+      issuedClientId === CHATGPT_DYNAMIC_CLIENT_ID
+    ) {
+      throw new Error(
+        "ChatGPTの認可応答に発行済みのclient_idがありません。初回登録が完了していません。",
+      );
+    }
+    if (
+      options.existing !== undefined &&
+      received.clientId !== undefined &&
+      received.clientId !== options.existing.clientId
+    ) {
+      throw new Error(
+        "ChatGPTの認可応答のclient_idが、保存済みの登録と一致しません。",
+      );
+    }
+    const tokens = await exchangeAuthorizationCode(options.fetch, {
+      clientId: issuedClientId,
+      code: received.code,
+      verifier: pkce.verifier,
+      redirectUri: callback.redirectUri,
+      signal: interaction.signal,
+    });
+    const idToken = tokens.idToken;
+    if (idToken === undefined) {
+      throw new Error("ChatGPTのトークン応答にIDトークンがありません。");
+    }
+    const identity = await validateIdToken({
+      idToken,
+      clientId: issuedClientId,
+      nonce,
+      fetch: options.fetch,
+      signal: interaction.signal,
+    });
+    return {
+      tokens,
+      clientId: issuedClientId,
+      hostId: options.hostId,
+      scopes: splitScopes(tokens.scope ?? received.scope),
+      identity,
+      idToken,
+      newRegistration: options.existing === undefined,
+    };
   } finally {
     await callback.close();
   }
 }
 
-/** The authorize URL the browser flow opens. */
+/** The authorization URL the browser opens. `agent_name_hint` is only sent
+ * on first registration; every request carries the host ID, the resource
+ * and the full scope set. */
 export function buildAuthorizeUrl(input: {
   state: string;
+  nonce: string;
   challenge: string;
   redirectUri: string;
+  clientId: string;
+  hostId: string;
+  agentName?: string;
+  idTokenHint?: string;
+  loginHint?: string;
 }): string {
-  const url = new URL(`${CHATGPT_AUTH_BASE}/oauth/authorize`);
+  const url = new URL(AUTHORIZE_URL);
+  url.searchParams.set("client_id", input.clientId);
+  if (input.clientId === CHATGPT_DYNAMIC_CLIENT_ID) {
+    url.searchParams.set(
+      "agent_name_hint",
+      input.agentName ?? CHATGPT_AGENT_NAME,
+    );
+  }
+  url.searchParams.set("ext_agent_host_id", input.hostId);
+  if (input.idTokenHint !== undefined) {
+    url.searchParams.set("id_token_hint", input.idTokenHint);
+  }
+  if (input.loginHint !== undefined) {
+    url.searchParams.set("login_hint", input.loginHint);
+  }
   url.searchParams.set("response_type", "code");
-  url.searchParams.set("client_id", CHATGPT_CLIENT_ID);
   url.searchParams.set("redirect_uri", input.redirectUri);
-  url.searchParams.set("scope", "openid profile email offline_access");
+  url.searchParams.set("scope", CHATGPT_SCOPES.join(" "));
+  url.searchParams.set("resource", CHATGPT_RESOURCE);
+  url.searchParams.set("state", input.state);
+  url.searchParams.set("nonce", input.nonce);
   url.searchParams.set("code_challenge", input.challenge);
   url.searchParams.set("code_challenge_method", "S256");
-  url.searchParams.set("id_token_add_organizations", "true");
-  url.searchParams.set("codex_cli_simplified_flow", "true");
-  url.searchParams.set("state", input.state);
-  url.searchParams.set("originator", CHATGPT_ORIGINATOR);
   return url.toString();
 }
 
-/** Exchange a refresh token for a new access token. A refresh response may
- * omit the refresh token; the caller keeps the previous one then. */
+/** Exchange a refresh token for a new access token. The response carries a
+ * replacement refresh token; the caller stores it. */
 export async function refreshChatGptToken(
   fetchImpl: FetchLike,
-  refreshToken: string,
-  signal?: AbortSignal,
+  options: ChatGptRefreshOptions,
 ): Promise<ChatGptTokens> {
   const form = new URLSearchParams({
     grant_type: "refresh_token",
-    refresh_token: refreshToken,
-    client_id: CHATGPT_CLIENT_ID,
+    client_id: options.clientId,
+    refresh_token: options.refreshToken,
+    resource: CHATGPT_RESOURCE,
   });
-  const response = await fetchImpl(`${CHATGPT_AUTH_BASE}/oauth/token`, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: form,
-    signal: signal ?? AbortSignal.timeout(CHATGPT_REQUEST_TIMEOUT_MS),
+  return await postToken(fetchImpl, form, options.signal);
+}
+
+/** Revoke the renewable session. A 200 is success, including for a token
+ * that was already invalid; network errors and 5xx are retried with
+ * backoff. */
+export async function revokeChatGptToken(
+  fetchImpl: FetchLike,
+  options: ChatGptRevokeOptions,
+): Promise<void> {
+  const config = await fetchOidcConfig(fetchImpl, options.signal);
+  if (config.revocationEndpoint === undefined) {
+    throw new Error("ChatGPTのOpenID設定にrevocation_endpointがありません。");
+  }
+  const form = new URLSearchParams({
+    token: options.refreshToken,
+    token_type_hint: "refresh_token",
+    client_id: options.clientId,
   });
-  return await readTokenResponse(response);
+  let lastError: Error | undefined;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    let response: Response;
+    try {
+      response = await fetchImpl(config.revocationEndpoint, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: form,
+        signal: requestSignal(options.signal),
+      });
+    } catch (error) {
+      lastError = new Error(
+        `ChatGPTのセッション失効に失敗しました: ${errorMessage(error)}`,
+      );
+      if (attempt === 3) throw lastError;
+      await sleep(backoffMs(attempt), options.signal);
+      continue;
+    }
+    const text = await response.text();
+    if (response.ok) return;
+    lastError = new Error(
+      `ChatGPTのセッション失効に失敗しました: HTTP ${response.status}: ${truncateBody(text)}`,
+    );
+    if (response.status < 500 || attempt === 3) throw lastError;
+    await sleep(backoffMs(attempt), options.signal);
+  }
+  throw lastError ?? new Error("ChatGPTのセッション失効に失敗しました。");
+}
+
+/** Validate an ID token against OpenAI's JWKS and return its identity.
+ * Signature, issuer, audience, expiry and the per-attempt nonce are all
+ * checked; a valid token alone does not prove plan usage, which is the
+ * granted scope's job. */
+export async function validateIdToken(input: {
+  idToken: string;
+  clientId: string;
+  nonce: string;
+  fetch: FetchLike;
+  signal?: AbortSignal;
+}): Promise<ChatGptIdentity> {
+  const config = await fetchOidcConfig(input.fetch, input.signal);
+  const jwks = await fetchJwks(input.fetch, config.jwksUri, input.signal);
+  let payload: Record<string, unknown>;
+  try {
+    const verified = await jwtVerify(input.idToken, jwks, {
+      issuer: config.issuer,
+      audience: input.clientId,
+      algorithms: ["RS256"],
+      requiredClaims: ["exp", "iat", "sub", "aud", "iss"],
+      clockTolerance: 60,
+    });
+    payload = verified.payload;
+  } catch (error) {
+    throw new Error(
+      `ChatGPTのIDトークンを検証できませんでした: ${errorMessage(error)}`,
+    );
+  }
+  if (payload.nonce !== input.nonce) {
+    throw new Error("ChatGPTのIDトークンのnonceが一致しません。");
+  }
+  const subject = payload.sub;
+  if (typeof subject !== "string" || subject.length === 0) {
+    throw new Error("ChatGPTのIDトークンにsubがありません。");
+  }
+  const email = typeof payload.email === "string" ? payload.email : undefined;
+  return { subject, ...(email !== undefined ? { email } : {}) };
 }
 
 /** When the tokens stop being valid (epoch ms). The server's `expires_in`
@@ -189,131 +387,33 @@ export function expiresAtFor(
   );
 }
 
-/** The ChatGPT account id a token names, if any. It lives under
- * `https://api.openai.com/auth` (the Codex CLI's location) or at the top
- * level; an id token and an access token both carry it. */
-export function chatGptAccountId(token: string): string | undefined {
-  const claims = jwtClaims(token);
-  if (claims === undefined) return undefined;
-  const auth = claims["https://api.openai.com/auth"];
-  if (isRecord(auth) && typeof auth.chatgpt_account_id === "string") {
-    return auth.chatgpt_account_id;
-  }
-  return typeof claims.chatgpt_account_id === "string"
-    ? claims.chatgpt_account_id
-    : undefined;
+/** Split a space-separated scope value; absent or blank means no scopes. */
+export function splitScopes(value: string | undefined): readonly string[] {
+  if (value === undefined) return [];
+  return value.split(/\s+/).filter((scope) => scope.length > 0);
 }
 
-// --- device code -------------------------------------------------------------
+// --- callback ----------------------------------------------------------------
 
-async function requestUserCode(
-  fetchImpl: FetchLike,
-  signal: AbortSignal,
-): Promise<{ deviceAuthId: string; userCode: string; interval: number }> {
-  const response = await fetchImpl(
-    `${CHATGPT_AUTH_BASE}/api/accounts/deviceauth/usercode`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ client_id: CHATGPT_CLIENT_ID }),
-      signal: requestSignal(signal),
-    },
-  );
-  const text = await response.text();
-  if (response.status === 404) {
-    throw new Error(
-      "device code login is not enabled for this ChatGPT account; enable " +
-        "it in ChatGPT's security settings, or use the browser method",
-    );
-  }
-  if (!response.ok) {
-    throw new Error(
-      `device code request failed: HTTP ${response.status}: ${truncateBody(
-        text,
-      )}`,
-    );
-  }
-  const data = parseJsonObject(text, "device code response");
-  return {
-    deviceAuthId: stringField(data, "device_auth_id"),
-    userCode: stringField(data, "user_code"),
-    interval: positiveNumber(data.interval, "device code interval"),
-  };
+interface CallbackResult {
+  code: string;
+  clientId?: string;
+  scope?: string;
 }
-
-async function pollForApproval(
-  fetchImpl: FetchLike,
-  deviceAuthId: string,
-  userCode: string,
-  intervalSeconds: number,
-  signal: AbortSignal,
-): Promise<{ code: string; verifier: string }> {
-  const deadline = Date.now() + CHATGPT_FLOW_TIMEOUT_MS;
-  for (;;) {
-    const response = await fetchImpl(
-      `${CHATGPT_AUTH_BASE}/api/accounts/deviceauth/token`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          device_auth_id: deviceAuthId,
-          user_code: userCode,
-        }),
-        signal: requestSignal(signal),
-      },
-    );
-    if (response.ok) {
-      const data = parseJsonObject(
-        await response.text(),
-        "device token response",
-      );
-      return {
-        code: stringField(data, "authorization_code"),
-        verifier: stringField(data, "code_verifier"),
-      };
-    }
-    // 403/404 are the current "not approved yet" answers; older builds
-    // answered 409. All three mean the same thing here.
-    if (
-      response.status === 403 ||
-      response.status === 404 ||
-      response.status === 409
-    ) {
-      await response.body?.cancel();
-      const remaining = deadline - Date.now();
-      if (remaining <= 0) {
-        throw new Error("device authorization timed out");
-      }
-      await sleep(Math.min(intervalSeconds * 1000, remaining), signal);
-      continue;
-    }
-    const text = await response.text();
-    throw new Error(
-      `device authorization failed: HTTP ${response.status}: ${truncateBody(
-        text,
-      )}`,
-    );
-  }
-}
-
-// --- browser flow ------------------------------------------------------------
 
 interface CallbackServer {
   redirectUri: string;
-  /** Resolves with the authorization code once the browser lands back. */
-  waitForCode(signal: AbortSignal): Promise<string>;
+  waitForCallback(signal: AbortSignal): Promise<CallbackResult>;
   close(): Promise<void>;
 }
 
-type CallbackOutcome = { code?: string; error?: Error };
+type CallbackOutcome = { result?: CallbackResult; error?: Error };
 
-/** Start a loopback listener for the callback. Both ports in the client
- * registration are tried; a machine where both are taken must use the
- * device code. The listener is bound to 127.0.0.1: the browser's callback
- * never leaves the machine. */
+/** Start a loopback listener on 127.0.0.1. The port is chosen by the OS:
+ * the spec allows any loopback port, and the same URI is sent to the
+ * authorization endpoint and the token exchange. */
 function startCallbackServer(state: string): CallbackServer {
   let server: BunServer | undefined;
-  let port: number | undefined;
   let settle: (outcome: CallbackOutcome) => void = () => {};
   const received = new Promise<CallbackOutcome>((resolve) => {
     settle = resolve;
@@ -324,8 +424,6 @@ function startCallbackServer(state: string): CallbackServer {
     if (request.method !== "GET" || url.pathname !== CALLBACK_PATH) {
       return page(404, "見つかりません", "Not found");
     }
-    // A stray request (a probe, a prefetch) must not end the flow: it gets
-    // the error page and the listener keeps waiting.
     if (url.searchParams.get("state") !== state) {
       return page(
         400,
@@ -338,8 +436,8 @@ function startCallbackServer(state: string): CallbackServer {
       const description = url.searchParams.get("error_description") ?? "";
       settle({
         error: new Error(
-          `browser sign-in failed: ${error}${
-            description === "" ? "" : ` (${description})`
+          `ChatGPTの認可が拒否されました: ${error}${
+            description === "" ? "" : `: ${description}`
           }`,
         ),
       });
@@ -350,10 +448,18 @@ function startCallbackServer(state: string): CallbackServer {
       return page(
         400,
         "認証コードがありません",
-        "The authentication code is missing.",
+        "The authorization code is missing.",
       );
     }
-    settle({ code });
+    const clientId = url.searchParams.get("client_id") ?? undefined;
+    const scope = url.searchParams.get("scope") ?? undefined;
+    settle({
+      result: {
+        code,
+        ...(clientId !== undefined ? { clientId } : {}),
+        ...(scope !== undefined ? { scope } : {}),
+      },
+    });
     return page(
       200,
       "ログインが完了しました",
@@ -361,31 +467,29 @@ function startCallbackServer(state: string): CallbackServer {
     );
   };
 
-  for (const candidate of BROWSER_PORTS) {
-    try {
-      server = Bun.serve({
-        hostname: "127.0.0.1",
-        port: candidate,
-        fetch: handler,
-      });
-      port = candidate;
-      break;
-    } catch (error) {
-      if (!isAddrInUseError(error)) throw error;
+  try {
+    server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: handler,
+    });
+  } catch (error) {
+    if (isAddrInUseError(error)) {
+      throw new Error("127.0.0.1の空きポートを確保できませんでした。");
     }
+    throw error;
   }
-  if (server === undefined || port === undefined) {
+  const port = server.port;
+  if (port === undefined || port === 0) {
     throw new Error(
-      `cannot listen for the browser callback on 127.0.0.1:${BROWSER_PORTS.join(
-        " or ",
-      )}; use the device code method`,
+      "ブラウザのコールバックを受け取るポートを取得できませんでした。",
     );
   }
 
   let closed = false;
   return {
-    redirectUri: `http://localhost:${port}${CALLBACK_PATH}`,
-    waitForCode: (signal: AbortSignal) => waitForOutcome(received, signal),
+    redirectUri: `http://127.0.0.1:${port}${CALLBACK_PATH}`,
+    waitForCallback: (signal: AbortSignal) => waitForOutcome(received, signal),
     close: async () => {
       if (closed) return;
       closed = true;
@@ -397,8 +501,8 @@ function startCallbackServer(state: string): CallbackServer {
 function waitForOutcome(
   received: Promise<CallbackOutcome>,
   signal: AbortSignal,
-): Promise<string> {
-  return new Promise<string>((resolve, reject) => {
+): Promise<CallbackResult> {
+  return new Promise<CallbackResult>((resolve, reject) => {
     let done = false;
     const finish = (): boolean => {
       if (done) return true;
@@ -421,41 +525,49 @@ function waitForOutcome(
     received.then((outcome) => {
       if (finish()) return;
       if (outcome.error !== undefined) reject(outcome.error);
-      else resolve(outcome.code!);
+      else resolve(outcome.result!);
     });
   });
 }
 
 // --- token exchange ----------------------------------------------------------
 
-async function exchangeCode(
+async function exchangeAuthorizationCode(
   fetchImpl: FetchLike,
-  code: string,
-  verifier: string,
-  redirectUri: string,
-  signal: AbortSignal,
+  input: {
+    clientId: string;
+    code: string;
+    verifier: string;
+    redirectUri: string;
+    signal: AbortSignal;
+  },
 ): Promise<ChatGptTokens> {
   const form = new URLSearchParams({
     grant_type: "authorization_code",
-    client_id: CHATGPT_CLIENT_ID,
-    code,
-    code_verifier: verifier,
-    redirect_uri: redirectUri,
+    client_id: input.clientId,
+    code: input.code,
+    code_verifier: input.verifier,
+    redirect_uri: input.redirectUri,
+    resource: CHATGPT_RESOURCE,
   });
-  const response = await fetchImpl(`${CHATGPT_AUTH_BASE}/oauth/token`, {
+  return await postToken(fetchImpl, form, input.signal);
+}
+
+async function postToken(
+  fetchImpl: FetchLike,
+  form: URLSearchParams,
+  signal?: AbortSignal,
+): Promise<ChatGptTokens> {
+  const response = await fetchImpl(TOKEN_URL, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: form,
     signal: requestSignal(signal),
   });
-  return await readTokenResponse(response);
-}
-
-async function readTokenResponse(response: Response): Promise<ChatGptTokens> {
   const text = await response.text();
   if (!response.ok) {
     throw new Error(
-      `token request failed: HTTP ${response.status}: ${truncateBody(text)}`,
+      `ChatGPTのトークン要求に失敗しました: ${tokenErrorMessage(text, response.status)}`,
     );
   }
   const data = parseJsonObject(text, "token response");
@@ -464,12 +576,91 @@ async function readTokenResponse(response: Response): Promise<ChatGptTokens> {
     typeof data.refresh_token === "string" ? data.refresh_token : undefined;
   const idToken = typeof data.id_token === "string" ? data.id_token : undefined;
   const expiresIn = numberOrUndefined(data.expires_in);
+  const scope = typeof data.scope === "string" ? data.scope : undefined;
   return {
     accessToken,
     ...(refreshToken !== undefined ? { refreshToken } : {}),
     ...(idToken !== undefined ? { idToken } : {}),
     ...(expiresIn !== undefined ? { expiresIn } : {}),
+    ...(scope !== undefined ? { scope } : {}),
   };
+}
+
+// --- OpenID discovery and JWKS ----------------------------------------------
+
+interface OidcConfig {
+  issuer: string;
+  jwksUri: string;
+  revocationEndpoint?: string;
+}
+
+async function fetchOidcConfig(
+  fetchImpl: FetchLike,
+  signal?: AbortSignal,
+): Promise<OidcConfig> {
+  const data = await fetchJson(
+    fetchImpl,
+    OIDC_CONFIG_URL,
+    signal,
+    "OpenID設定",
+  );
+  const issuer = stringField(data, "issuer");
+  const jwksUri = stringField(data, "jwks_uri");
+  if (issuer !== CHATGPT_AUTH_BASE) {
+    throw new Error(`ChatGPTのOpenID設定のissuerが想定と違います: ${issuer}`);
+  }
+  requireHttps(jwksUri, "jwks_uri");
+  const revocationEndpoint =
+    typeof data.revocation_endpoint === "string"
+      ? data.revocation_endpoint
+      : undefined;
+  if (revocationEndpoint !== undefined) {
+    requireHttps(revocationEndpoint, "revocation_endpoint");
+  }
+  return {
+    issuer,
+    jwksUri,
+    ...(revocationEndpoint !== undefined ? { revocationEndpoint } : {}),
+  };
+}
+
+async function fetchJwks(
+  fetchImpl: FetchLike,
+  url: string,
+  signal?: AbortSignal,
+): Promise<ReturnType<typeof createLocalJWKSet>> {
+  const data = await fetchJson(fetchImpl, url, signal, "JWKS");
+  if (!isRecord(data) || !Array.isArray(data.keys)) {
+    throw new Error("ChatGPTのJWKSにkeysがありません。");
+  }
+  try {
+    return createLocalJWKSet(
+      data as unknown as Parameters<typeof createLocalJWKSet>[0],
+    );
+  } catch (error) {
+    throw new Error(
+      `ChatGPTのJWKSを読み取れませんでした: ${errorMessage(error)}`,
+    );
+  }
+}
+
+async function fetchJson(
+  fetchImpl: FetchLike,
+  url: string,
+  signal: AbortSignal | undefined,
+  what: string,
+): Promise<Record<string, unknown>> {
+  const response = await fetchImpl(url, {
+    headers: { accept: "application/json" },
+    signal: requestSignal(signal),
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(
+      `${what}の取得に失敗しました: HTTP ${response.status}: ${truncateBody(text)}`,
+    );
+  }
+  return parseJsonObject(text, what);
 }
 
 // --- helpers ----------------------------------------------------------------
@@ -498,6 +689,10 @@ function base64Url(bytes: Uint8Array): string {
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
+}
+
+function isHostId(value: string): boolean {
+  return HOST_ID_PREFIXES.some((prefix) => value.startsWith(prefix));
 }
 
 function jwtClaims(token: string): Record<string, unknown> | undefined {
@@ -530,7 +725,9 @@ function parseJsonObject(text: string, what: string): Record<string, unknown> {
   } catch {
     throw new Error(`${what} is not JSON: ${truncateBody(text)}`);
   }
-  if (!isRecord(parsed)) throw new Error(`${what} is not a JSON object`);
+  if (!isRecord(parsed)) {
+    throw new Error(`${what} is not a JSON object`);
+  }
   return parsed;
 }
 
@@ -540,14 +737,6 @@ function stringField(data: Record<string, unknown>, key: string): string {
     throw new Error(`the response is missing "${key}"`);
   }
   return value;
-}
-
-function positiveNumber(value: unknown, what: string): number {
-  const n = numberOrUndefined(value);
-  if (n === undefined || n <= 0) {
-    throw new Error(`${what} is not a positive number`);
-  }
-  return n;
 }
 
 function numberOrUndefined(value: unknown): number | undefined {
@@ -560,26 +749,60 @@ function numberOrUndefined(value: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
-function sleep(ms: number, signal: AbortSignal): Promise<void> {
+function tokenErrorMessage(text: string, status: number): string {
+  try {
+    const data: unknown = JSON.parse(text);
+    if (isRecord(data) && typeof data.error === "string") {
+      const description =
+        typeof data.error_description === "string"
+          ? `: ${data.error_description}`
+          : "";
+      return `${data.error}${description}`;
+    }
+  } catch {
+    // fall through to the raw body
+  }
+  return `HTTP ${status}: ${truncateBody(text)}`;
+}
+
+function requireHttps(value: string, field: string): void {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(
+      `ChatGPTのOpenID設定の${field}がURLではありません: ${value}`,
+    );
+  }
+  if (url.protocol !== "https:") {
+    throw new Error(
+      `ChatGPTのOpenID設定の${field}がhttpsではありません: ${value}`,
+    );
+  }
+}
+
+function backoffMs(attempt: number): number {
+  return 250 * 2 ** (attempt - 1);
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (signal.aborted) {
-      reject(signal.reason ?? new Error("sign-in cancelled"));
+    if (signal?.aborted === true) {
+      reject(signal.reason ?? new Error("aborted"));
       return;
     }
-    const onAbort = () => {
-      clearTimeout(timer);
-      reject(signal.reason ?? new Error("sign-in cancelled"));
-    };
     const timer = setTimeout(() => {
-      signal.removeEventListener("abort", onAbort);
+      signal?.removeEventListener("abort", onAbort);
       resolve();
     }, ms);
-    signal.addEventListener("abort", onAbort, { once: true });
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason ?? new Error("aborted"));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
   });
 }
 
-/** A small standalone page for the callback. No scripts, no external
- * resources, nothing that could be mistaken for the app. */
 function page(status: number, title: string, body: string): Response {
   const html = `<!doctype html>
 <html lang="ja">

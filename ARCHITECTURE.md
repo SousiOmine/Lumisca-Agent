@@ -1014,33 +1014,40 @@ URLはシェルを介さず、プログラムの引数として1つだけ渡し�
 
 - プロバイダーの OAuth ログイン（ChatGPT サブスクリプション / `models/chatgpt/`）: ChatGPT Plus/Pro などのサブスクリプションで OpenAI のモデルを使えるようにします。
   プロバイダー id は `openai-codex`、表示名は `ChatGPT` です。
-  認証結果は通常の credential store に `OAuthCredential`（access / refresh / `expiresAt` / `accountId`）として保存します。
+  認証は Sign in with ChatGPT のオープンソース向けトークン共有フローです。
+  初回は `client_id=dynamic_agent_client` と `agent_name_hint=Lumisca` で user-defined agent を登録し、コールバックが返す発行済みの `client_id` を保存します。
+  二回目以降はその `client_id` と保存した ID トークンを `id_token_hint` に使い、同じホスト ID を送ります。
+  `ext_agent_host_id` はインストールごとに一度だけ `urn:uuid:` で作り、設定（`chatgpt_host_id`）に保存します。
+
+  認可は `https://auth.openai.com/api/accounts/authorize` をブラウザで開きます。
+  スコープは `openid profile email offline_access resource.invoke chatgpt.tokens.use.direct`、`resource` は `https://api.openai.com/v1` です。
+  コールバックは `http://127.0.0.1:<空きポート>/auth/callback` で受けます。
+  同じ URI をトークン交換にも使います。
+  認可コードは `https://auth.openai.com/api/accounts/oauth/token` で、発行済み `client_id`、PKCE、`resource` と一緒に交換します。
+  ID トークンは OpenID 設定の JWKS で署名、issuer、audience、期限、nonce を検証します。
+
+  検証済みの `sub` とメール、`client_id`、ID トークン、アクセストークン、更新トークン、期限、許可スコープを `OAuthCredential` に保存します。
+  `chatgpt.tokens.use.direct` が許可されていないログインは失敗させます。
+  更新は期限の 60 秒前に、保存した `client_id` と `resource` を付けて行います。
+  同一プロセス内の同時要求は 1 回の更新を共有します。
+  更新トークンはローテーションされるため、2 回交換すると片方が無効になります。
+  ログアウト時は OpenID 設定の `revocation_endpoint` で更新トークンを失効させます。
+  失効を確認できなくてもローカルの資格情報は削除し、その旨を警告として返します。
+
   モデル一覧はアカウントごとに異なるため models.dev にはありません。
-  ログイン時に認証付きで `GET /backend-api/codex/models` を取得し、設定（`chatgpt_models`）に保存します。
+  ログイン時に `GET https://api.openai.com/v1/models` を取得し、`visibility` が `list` のモデルだけを設定（`chatgpt_models`）に保存します。
   取得に失敗したらログイン自体を失敗させます。
   モデルの無いプロバイダーは使えず、推測した一覧はプランに無いモデルを並べるためです。
 
-  認証フローは 2 つあります。
-  どちらを使うかは、クライアントが `POST /providers/:id/login` の `method` で明示します。
-  サーバーは既定を選びません。
+  推論は `POST https://api.openai.com/v1/responses` に OAuth のアクセストークンを Bearer で送ります。
+  このフローは `store: false` と `stream: true` が必須で、`max_output_tokens` などの一部のフィールドを受け付けません。
+  そこで transport は `instructions` と `store: false` を providerOptions で渡し、モデルの `compat.omitMaxOutputTokens` があるときは完了上限を送りません（`ai/stream.ts`）。
 
-  - デバイスコード: `auth.openai.com/codex/device` を開いて確認コードを入力する方式です。
-    ブラウザとサーバーが別マシンでも動きます。
-    ChatGPT のセキュリティ設定でデバイスコードログインを有効にする必要があります。
-    無効なら、404 をその旨のエラーに変えます。
-  - ブラウザ: サーバー機の `127.0.0.1:1455`（使用中なら 1457）に一時的なコールバックを受ける方式です。
-    Codex CLI の公開クライアントが許可するリダイレクト先がこの 2 ポートだけなので、ブラウザとサーバーが同じマシンのときしか成立しません。
-    ルートも Origin と Host が loopback のときだけ受け付けます。
-    UI はそれ以外でブラウザのボタンを出しません。
+  ブラウザのコールバックはサーバー機の loopback に届く必要があるため、ログインはサーバーと同じマシンで開いたページに限ります。
+  リモートサーバーでは使えないので、UI はそれ以外でブラウザのボタンを出しません。
+  複数の ChatGPT アカウントを同時に保持せず、切り替えるときはログアウトしてから入り直します。
+  ツールの名前空間や未対応フィールドの扱いは、実機のアカウントで確かめていません。
 
-  推論リクエストは Responses API を `https://chatgpt.com/backend-api/codex` に向けます。
-  このバックエンドは公式 API ではなく、トップレベルの `instructions` が無い要求を拒否し、会話状態を保存しません。
-  そこで transport は `systemMessageMode: "remove"` と `instructions`（システムプロンプト）と `store: false` を providerOptions で渡します（`ai/stream.ts` の `chatgptProviderOptions`）。
-  `ChatGPT-Account-Id` は credential から導出し、モデルの静的ヘッダーに重ねます（`resolveCredential` の `headers`）。
-  アクセストークンは期限の 60 秒前に更新し、同一プロセス内の同時要求は 1 回の更新を共有します（更新トークンはローテーションされるため、2 回交換すると片方が無効になります）。
-
-  この API は非公開で、仕様変更や利用制限の対象になりえます。
-  壊れたときに直す場所が `models/chatgpt/` と `chatgptProviderOptions` で済むよう、プロトコルの知識をそこに閉じ込めています。
 
 - コンテキスト圧縮（`ai/context-compaction.ts`）: モデルのコンテキスト上限を超えないよう、履歴を自動で圧縮します。
   予算はモデルのコンテキスト長を公開された入力上限（models.dev の `limit.input`）まで狭めた値です。

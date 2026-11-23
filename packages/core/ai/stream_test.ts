@@ -1030,6 +1030,24 @@ test("the transport clamps the output cap to the room the prompt leaves", async 
   assertEquals((calls[0]!.maxOutputTokens as number) < 8_000, true);
 });
 
+test("a model that rejects max_output_tokens gets no completion cap", async () => {
+  const { model, calls } = recordingLanguageModel(v2Parts(USAGE));
+  const streamFn = createStreamFn(transportFor(model), NO_RESERVATION);
+  const noCap: Model<Api> = {
+    ...windowedModel(100_000, 8_000),
+    compat: { omitMaxOutputTokens: true },
+  };
+  for await (const _ of streamFn(
+    noCap,
+    { messages: [{ role: "user", content: "hi" }] },
+    undefined,
+  )) {
+    // drain
+  }
+  assertEquals(calls.length, 1);
+  assertEquals(calls[0]!.maxOutputTokens, undefined);
+});
+
 test("the transport clamps a caller's override the same way", async () => {
   const { model, calls } = recordingLanguageModel(v2Parts(USAGE));
   const streamFn = createStreamFn(transportFor(model), NO_RESERVATION);

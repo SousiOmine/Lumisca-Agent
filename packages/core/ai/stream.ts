@@ -168,7 +168,9 @@ async function* runStream(
     // failure; sending the cap lets the model finish its turn instead. A
     // caller may override it for one call (the compaction summarizer caps
     // its own completion so the auxiliary request fits the window).
-    ...(outputCap !== undefined ? { maxOutputTokens: outputCap } : {}),
+    ...(outputCap !== undefined && model.compat?.omitMaxOutputTokens !== true
+      ? { maxOutputTokens: outputCap }
+      : {}),
     // Exactly one LLM turn per StreamFn call: the SDK executes this turn's
     // tool calls (via the execute functions above); the Agent's outer loop
     // decides whether another turn follows.

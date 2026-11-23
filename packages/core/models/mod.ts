@@ -216,8 +216,9 @@ export class ModelManager {
     return this.credentials.login(providerId, type, interaction);
   }
 
-  /** Remove the stored credential for a provider. */
-  logout(providerId: string): Promise<void> {
+  /** Remove the stored credential for a provider. Resolves to a warning
+   * when the provider-side session could not be revoked. */
+  logout(providerId: string): Promise<string | undefined> {
     return this.credentials.logout(providerId);
   }
 

@@ -1,14 +1,16 @@
 /**
- * The request shape the ChatGPT (Codex) backend requires, declared as model
+ * The request shape the ChatGPT plan flow requires, declared as model
  * compat so the transport stays provider-agnostic.
  *
- * Its Responses endpoint is not the public one: it rejects a request whose
- * top-level `instructions` is missing, and it never stores conversation
- * state. The transport reads {@link CHATGPT_COMPAT.instructionsFallback} as
- * "this backend takes the system prompt out of `input` and into a required
- * `instructions` value, and keeps no server-side state", and
- * {@link CHATGPT_COMPAT.forceReasoning} as "these models are reasoning
- * models whatever their ids look like to the SDK".
+ * The public Responses API takes the system prompt in `instructions` and
+ * requires `store:false`; it also rejects `max_output_tokens`, so the
+ * transport must leave the completion cap out. The transport reads
+ * {@link CHATGPT_COMPAT.instructionsFallback} as "this backend takes the
+ * system prompt out of `input` and into a required `instructions` value, and
+ * keeps no server-side state", {@link CHATGPT_COMPAT.forceReasoning} as
+ * "these models are reasoning models whatever their ids look like to the
+ * SDK", and {@link CHATGPT_COMPAT.omitMaxOutputTokens} as "do not send the
+ * completion cap".
  */
 
 import type { ModelCompat } from "../../ai/catalog.ts";
@@ -22,4 +24,5 @@ export const CHATGPT_FALLBACK_INSTRUCTIONS = "You are a helpful assistant.";
 export const CHATGPT_COMPAT: ModelCompat = {
   forceReasoning: true,
   instructionsFallback: CHATGPT_FALLBACK_INSTRUCTIONS,
+  omitMaxOutputTokens: true,
 };

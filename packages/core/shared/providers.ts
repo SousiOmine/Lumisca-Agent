@@ -43,6 +43,8 @@ export interface ProviderInfo {
   /** The credential method the provider accepts. "oauth" providers get a
    * login flow in the settings UI instead of an API-key field. */
   authType?: ProviderAuthType;
+  /** The account the credential names, when the provider reports one. */
+  account?: string;
   /** Sign-in methods the OAuth flow supports, in the order the UI offers
    * them. Present exactly when `authType` is "oauth". */
   loginMethods?: readonly ProviderLoginMethod[];

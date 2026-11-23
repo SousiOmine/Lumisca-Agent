@@ -279,6 +279,11 @@ export const MODEL_THINKING_PREFIX = "model_thinking:";
  * fetched at login and read back on every start. */
 export const CHATGPT_MODELS_KEY = "chatgpt_models";
 
+/** Stable `ext_agent_host_id` of this installation for Sign in with
+ * ChatGPT. Generated once (a `urn:uuid:` value) before the first sign-in and
+ * reused for every registration on this host. */
+export const CHATGPT_HOST_ID_KEY = "chatgpt_host_id";
+
 /** A saved prompt registered by the user: `id` is the short identifier for
  * the slash command lookup (e.g. "translate"), `label` is the display name
  * shown in the menu, and `prompt` is the text inserted into the composer. */

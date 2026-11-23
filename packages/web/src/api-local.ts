@@ -376,6 +376,7 @@ export const api = {
       configured: boolean;
       source?: string;
       authType?: ProviderAuthType;
+      account?: string;
     }>(`/api/providers/${providerId}/auth`),
   setApiKey: (providerId: string, key: string) =>
     request<{ ok: boolean }>(`/api/providers/${providerId}/api-key`, {
@@ -411,9 +412,10 @@ export const api = {
       { method: "POST" },
     ),
   providerLogout: (providerId: string) =>
-    request<{ ok: boolean }>(`/api/providers/${providerId}/logout`, {
-      method: "POST",
-    }),
+    request<{ ok: boolean; warning?: string }>(
+      `/api/providers/${providerId}/logout`,
+      { method: "POST" },
+    ),
 
   /** User-defined OpenAI-compatible providers (settings UI). The API key is
    * never returned — `hasApiKey` reports whether one is set. */

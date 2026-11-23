@@ -68,6 +68,9 @@ export interface ModelCompat {
    * header-less requests outright would otherwise answer with a remote 400
    * that says nothing about the cause. */
   sessionHeaderName?: string;
+  /** The provider rejects `max_output_tokens`. The transport then leaves the
+   * completion cap out of the request and lets the provider bound it. */
+  omitMaxOutputTokens?: boolean;
 }
 
 export interface Model<TApi extends Api = Api> {
@@ -150,6 +153,10 @@ export interface OAuthAuth {
    * A provider with more than one has to be told which one to run. */
   methods: readonly ProviderLoginMethod[];
   login(interaction: AuthInteraction): Promise<Credential>;
+  /** End the provider-side session before the local credential is deleted.
+   * Resolves to a warning when the remote revocation could not be
+   * confirmed; the local credential is removed either way. */
+  logout?(credential: OAuthCredential | undefined): Promise<string | undefined>;
 }
 
 // ---- credentials -------------------------------------------------------------
@@ -167,10 +174,26 @@ export interface OAuthCredential {
   /** When the token expires (epoch ms). */
   expiresAt?: number;
   /** The account the token belongs to, when the provider identifies one.
-   * The ChatGPT backend requires it as the `ChatGPT-Account-Id` header; it
-   * is read from the token's claims at login and carried across refreshes
-   * (a refresh response need not repeat it). */
+   * A provider that names an account can expose it in settings; it is read
+   * from the token's claims at login and carried across refreshes (a
+   * refresh response need not repeat it). */
   accountId?: string;
+  /** The OAuth client registration the token was issued to. ChatGPT's
+   * Sign in with ChatGPT flow issues one per account and requires it on
+   * refresh and revocation; a credential without it predates that flow
+   * and cannot be refreshed. */
+  clientId?: string;
+  /** The stable host identifier the registration was authorized for. */
+  hostId?: string;
+  /** The verified OpenID Connect ID token, retained for reauthorization
+   * hints (`id_token_hint`). */
+  idToken?: string;
+  /** The identity from the ID token: `sub` is the account, `email` is a
+   * label for people. */
+  subject?: string;
+  email?: string;
+  /** Scopes the token exchange granted, as the server returned them. */
+  scopes?: readonly string[];
 }
 
 export type Credential = ApiKeyCredential | OAuthCredential;
@@ -197,6 +220,9 @@ export type AuthType = "oauth" | "api_key";
 export interface AuthCheck {
   source: string;
   type: Credential["type"];
+  /** The account the credential names, when the provider identifies one
+   * (the ChatGPT email, for example). */
+  account?: string;
 }
 
 export interface AuthPromptOption {

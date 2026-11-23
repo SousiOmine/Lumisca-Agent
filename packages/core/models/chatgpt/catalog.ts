@@ -1,11 +1,12 @@
 /**
  * The ChatGPT subscription provider's model catalog.
  *
- * The list is per account: the backend publishes what the signed-in plan
- * can use, so it cannot come from the shared models.dev catalog. It is
- * fetched once at login and stored in settings; every start reads it back.
- * A failed fetch fails the login — a provider with no models cannot be
- * used, and a guessed list would offer models the plan may not have.
+ * The list is per account: the public Responses API publishes what the
+ * signed-in ChatGPT plan can use, so it cannot come from the shared
+ * models.dev catalog. It is fetched once at login and stored in settings;
+ * every start reads it back. A failed fetch fails the login — a provider
+ * with no models cannot be used, and a guessed list would offer models the
+ * plan may not have.
  */
 
 import type { Model, ThinkingLevelMap } from "../../ai/catalog.ts";
@@ -17,30 +18,28 @@ import { safeJsonParse } from "../../shared/mod.ts";
 import { THINKING_LEVEL_ORDER } from "../../shared/providers.ts";
 import { CHATGPT_MODELS_KEY } from "../../shared/settings-keys.ts";
 import { type FetchLike, requestSignal, truncateBody } from "./http.ts";
-import { CHATGPT_API_BASE, CHATGPT_ORIGINATOR } from "./oauth.ts";
+import { CHATGPT_API_BASE } from "./oauth.ts";
 import { CHATGPT_COMPAT } from "./request.ts";
 
 /** Provider id of the ChatGPT subscription provider. */
 export const CHATGPT_PROVIDER_ID = "openai-codex";
 
-/** The backend's `client_version` query parameter. The endpoint records the
- * client that asked rather than validating the value (community clients
- * send their own), so Lumisca sends a fixed one. */
-const CHATGPT_CLIENT_VERSION = "1.0.0";
+/** The stored catalog's format. A record from another version is ignored:
+ * the models of the old Codex backend carry a different base URL and a
+ * request shape the public API rejects. */
+const CHATGPT_CATALOG_VERSION = 2;
 
-/** Request the catalog of the signed-in account. */
+/** Request the catalog of the signed-in account. The public endpoint takes
+ * the OAuth access token and returns `models` entries with `slug` and
+ * `display_name`; entries marked for other surfaces are skipped. */
 export async function fetchChatGptModels(
   fetchImpl: FetchLike,
-  auth: { token: string; accountId: string },
+  auth: { token: string },
   signal?: AbortSignal,
 ): Promise<Model<Api>[]> {
-  const url = new URL(`${CHATGPT_API_BASE}/models`);
-  url.searchParams.set("client_version", CHATGPT_CLIENT_VERSION);
-  const response = await fetchImpl(url, {
+  const response = await fetchImpl(`${CHATGPT_API_BASE}/models`, {
     headers: {
       authorization: `Bearer ${auth.token}`,
-      "chatgpt-account-id": auth.accountId,
-      originator: CHATGPT_ORIGINATOR,
       accept: "application/json",
     },
     signal: requestSignal(signal),
@@ -80,8 +79,14 @@ export function readChatGptModels(
   settings: SettingsRepo,
 ): readonly Model<Api>[] {
   const parsed = safeJsonParse<unknown>(settings.get(CHATGPT_MODELS_KEY));
-  if (!Array.isArray(parsed)) return [];
-  return parsed.filter(isStoredModel);
+  if (
+    !isRecord(parsed) ||
+    parsed.version !== CHATGPT_CATALOG_VERSION ||
+    !Array.isArray(parsed.models)
+  ) {
+    return [];
+  }
+  return parsed.models.filter(isStoredModel);
 }
 
 /** Persist the catalog fetched at login. */
@@ -89,13 +94,19 @@ export function saveChatGptModels(
   settings: SettingsRepo,
   models: readonly Model<Api>[],
 ): void {
-  settings.setJson(CHATGPT_MODELS_KEY, models);
+  settings.setJson(CHATGPT_MODELS_KEY, {
+    version: CHATGPT_CATALOG_VERSION,
+    models,
+  });
 }
 
-/** Map one catalog entry. Entries without an id are dropped (the backend
- * occasionally publishes rows for features Lumisca cannot address). */
+/** Map one catalog entry. Entries without a slug are dropped, and entries
+ * the server marks as not for the model picker are skipped. */
 function toModel(entry: unknown): Model<Api> | undefined {
   if (!isRecord(entry)) return undefined;
+  if (typeof entry.visibility === "string" && entry.visibility !== "list") {
+    return undefined;
+  }
   const id =
     typeof entry.slug === "string" && entry.slug.length > 0
       ? entry.slug
@@ -117,10 +128,10 @@ function toModel(entry: unknown): Model<Api> | undefined {
     provider: CHATGPT_PROVIDER_ID,
     baseUrl: CHATGPT_API_BASE,
     reasoning: efforts.length > 0,
-    // The Codex models accept images; the catalog does not publish a
+    // The ChatGPT plan models accept images; the catalog does not publish a
     // modality list, so this is the one property Lumisca asserts for them.
     input: ["text", "image"],
-    // The backend's required request shape travels with the models, so the
+    // The flow's required request shape travels with the models, so the
     // transport never has to know this provider exists (see request.ts).
     compat: CHATGPT_COMPAT,
     ...(contextWindow !== undefined ? { contextWindow } : {}),

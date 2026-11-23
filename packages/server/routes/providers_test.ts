@@ -89,10 +89,10 @@ class FakeProviderApi implements ProviderApi {
     await this.loginScript(interaction);
     this.loggedIn.add(providerId);
   }
-  logoutProvider(providerId: string): Promise<void> {
+  logoutProvider(providerId: string): Promise<string | undefined> {
     this.logoutCalls.push(providerId);
     this.loggedIn.delete(providerId);
-    return Promise.resolve();
+    return Promise.resolve(undefined);
   }
   isUserProvider(): boolean {
     return false;

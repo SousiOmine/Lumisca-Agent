@@ -5,6 +5,7 @@
  * {@link buildStreamFn}.
  */
 
+import { errorMessage } from "../errors.ts";
 import type { CompactionPolicyInput } from "../shared/settings-keys.ts";
 import type {
   AuthCheck,
@@ -90,7 +91,13 @@ export class LumiscaModels {
     const result = await this.resolveKey(providerId);
     if (result === undefined) return undefined;
     const stored = await this.credentials?.read(providerId);
-    return { source: result.source, type: stored?.type ?? "api_key" };
+    return {
+      source: result.source,
+      type: stored?.type ?? "api_key",
+      ...(stored?.type === "oauth" && stored.email !== undefined
+        ? { account: stored.email }
+        : {}),
+    };
   }
 
   /** Run a provider login flow (api_key or oauth) and persist the credential. */
@@ -118,9 +125,26 @@ export class LumiscaModels {
     return credential;
   }
 
-  /** Remove the stored credential of a provider. */
-  async logout(providerId: string): Promise<void> {
+  /** Remove the stored credential of a provider. The provider's own
+   * OAuth logout runs first, so a renewable session is revoked before the
+   * local record disappears; a failed revocation is returned as a warning
+   * while the local credential is removed anyway. */
+  async logout(providerId: string): Promise<string | undefined> {
+    const credential = await this.credentials?.read(providerId);
+    const provider = this.providers.get(providerId);
+    let warning: string | undefined;
+    const hook = provider?.auth.oauth?.logout;
+    if (hook !== undefined) {
+      try {
+        warning = await hook(
+          credential?.type === "oauth" ? credential : undefined,
+        );
+      } catch (error) {
+        warning = `OAuthのログアウトに失敗しました: ${errorMessage(error)}`;
+      }
+    }
     await this.credentials?.delete(providerId);
+    return warning;
   }
 
   /** The StreamFn over this registry (cached). Requests for a provider with

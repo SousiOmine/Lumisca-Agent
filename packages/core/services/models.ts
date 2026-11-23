@@ -208,9 +208,10 @@ export class ModelService {
     await this.models.login(providerId, type, interaction);
   }
 
-  /** Remove the stored credential for a provider. */
-  async logoutProvider(providerId: string): Promise<void> {
-    await this.models.logout(providerId);
+  /** Remove the stored credential for a provider. Resolves to a warning
+   * when the provider-side session could not be revoked. */
+  async logoutProvider(providerId: string): Promise<string | undefined> {
+    return await this.models.logout(providerId);
   }
 
   /** The thinking level a model stores, clamped to what it supports.

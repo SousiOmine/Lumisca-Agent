@@ -55,7 +55,7 @@ export interface ProviderApi {
     type: AuthType,
     interaction: AuthInteraction,
   ): Promise<void>;
-  logoutProvider(providerId: string): Promise<void>;
+  logoutProvider(providerId: string): Promise<string | undefined>;
   /** Whether the provider was added by the user (OpenAI-compatible custom
    * provider) rather than built in or from env/models.json config. */
   isUserProvider(providerId: string): boolean;
@@ -87,7 +87,10 @@ function pageIsLocal(c: Context): boolean {
   const origin = c.req.header("origin");
   if (origin === undefined) return false;
   try {
-    return isLoopbackHost(new URL(origin).hostname);
+    const host = new URL(origin).hostname;
+    // The bundled UI's Windows origin is not loopback by name, but it runs
+    // on this machine just like the macOS/Linux one.
+    return isLoopbackHost(host) || host === "tauri.localhost";
   } catch {
     return false;
   }
@@ -109,7 +112,12 @@ export function providerRoutes(core: ProviderApi): ProviderRoutes {
 
   const authCache = ttlCache<
     string,
-    { configured: boolean; source?: string; authType?: ProviderAuthType }
+    {
+      configured: boolean;
+      source?: string;
+      authType?: ProviderAuthType;
+      account?: string;
+    }
   >(AUTH_CACHE_TTL);
   const cachedAuth = async (providerId: string) => {
     const cached = authCache.get(providerId);
@@ -137,6 +145,7 @@ export function providerRoutes(core: ProviderApi): ProviderRoutes {
       // check.type (e.g. a stored OAuth credential) wins over the static
       // capability so the settings UI picks the right control either way.
       authType: check?.type ?? authType,
+      ...(check?.account !== undefined ? { account: check.account } : {}),
     };
     authCache.set(providerId, entry);
     return entry;
@@ -313,9 +322,9 @@ export function providerRoutes(core: ProviderApi): ProviderRoutes {
 
   app.post("/providers/:id/logout", async (c) => {
     const id = c.req.param("id");
-    await core.logoutProvider(id);
+    const warning = await core.logoutProvider(id);
     invalidateAuth(id);
-    return c.json({ ok: true });
+    return c.json(warning === undefined ? { ok: true } : { ok: true, warning });
   });
 
   // --- user-defined OpenAI-compatible providers ----------------------------

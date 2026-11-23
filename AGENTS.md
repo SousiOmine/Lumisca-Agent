@@ -1011,26 +1011,32 @@ https（`tailscale serve` など）で開いた端末から、ページを PWA �
 
 ## 13. プロバイダーの OAuth ログイン（ChatGPT）
 
-設定 → プロバイダー → ChatGPT から、ChatGPT のサブスクリプションで OpenAI のモデル（Codex 系）を使えます。
+設定 → プロバイダー → ChatGPT から、ChatGPT のプランを使って OpenAI のモデルを呼べます。
 実装は `packages/core/models/chatgpt/` です。
+認証は Sign in with ChatGPT のオープンソース向けトークン共有フローです。
 
-- 方式はクライアントが決めます。
-  `POST /api/providers/:id/login` の body に `{"method":"browser"|"device_code"}` が必須です。
+- 方式はブラウザだけです。
+  `POST /api/providers/:id/login` の body に `{"method":"browser"}` が必須です。
   サーバーに既定はありません。
-  ブラウザ方式は Origin と Host が loopback のときだけ受け付けます（コールバックはサーバー機の `127.0.0.1:1455/1457` にしか来ないためです）。
-- モデル一覧はログイン時に取ります。
-  `GET /backend-api/codex/models` を認証付きで取得し、`chatgpt_models` に保存します。
+  コールバックはサーバー機の `127.0.0.1:<空きポート>/auth/callback` に来るため、ログインはサーバーと同じマシンで開いたページに限ります。
+- 初回は `client_id=dynamic_agent_client` と `agent_name_hint=Lumisca` で user-defined agent を登録し、コールバックが返す発行済み `client_id` を保存します。
+  二回目以降はその `client_id` と `id_token_hint` を使います。
+  `ext_agent_host_id` は `chatgpt_host_id` に一度だけ保存します。
+- スコープは `openid profile email offline_access resource.invoke chatgpt.tokens.use.direct`、`resource` は `https://api.openai.com/v1` です。
+  `chatgpt.tokens.use.direct` がないログインは失敗させます。
+- モデル一覧はログイン時に `GET https://api.openai.com/v1/models` から取得し、`visibility` が `list` のものだけを `chatgpt_models` に保存します。
   取得に失敗するとログインごと失敗し、credential は保存されません。
-  静的な一覧への fallback はありません。
-- 期限切れの更新: `resolveCredential` が期限の 60 秒前に更新し、同時要求は 1 回の更新を共有します。
+- 推論は `POST https://api.openai.com/v1/responses` です。
+  `store:false` と `stream:true` が必須で、`max_output_tokens` は送れません。
+  `ai/stream.ts` が `instructions` と `store:false` を渡し、`compat.omitMaxOutputTokens` があるモデルでは完了上限を送りません。
+- 期限切れの更新: `resolveCredential` が期限の 60 秒前に、保存した `client_id` と `resource` を付けて更新します。
+  同時要求は 1 回の更新を共有します。
   更新トークンはローテーションされるため、2 回交換すると片方が無効になります。
-- 要求の形: Codex バックエンドは `instructions` 必須、`store:false` です。
-  `ai/stream.ts` の `chatgptProviderOptions` がシステムプロンプトを `instructions` に移し、`input` から外します。
-  ここを外すと全リクエストが 400 になります。
-- 設定のキー: `AuthInteraction.method`（クライアントの選択）、`OAuthAuth.methods`（プロバイダーが受理する方式）、`ProviderInfo.loginMethods`（UI が読む一覧）です。
-  `methods` を増やすときは 3 つとも合わせてください。
+- ログアウト時は `revocation_endpoint` で更新トークンを失効させます。
+  失効を確認できなくてもローカルは削除し、警告を返します。
 - 確認: `bun test packages/core/models/chatgpt packages/server/login_openai_codex_test.ts packages/server/routes/providers_test.ts`。
-  実機の確認には ChatGPT アカウントが必要で、デバイスコード方式は ChatGPT のセキュリティ設定で有効化しておきます。
+  実機の確認には ChatGPT アカウントが必要です。
+  この環境では OpenAI の認可画面までしか進めず、ログイン完了と推論は未確認です。
 
 ## 14. Scripting tool call（`execute`）
 
