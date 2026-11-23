@@ -1,11 +1,6 @@
-import * as fsp from "node:fs/promises";
 import type { SessionInfo } from "@lumisca/core";
 import { Hono } from "hono";
-import {
-  ensurePreview,
-  previewPathOf,
-} from "../../core/media/preview-cache.ts";
-import { assetResponse } from "./asset-response.ts";
+import { serveAsset } from "./asset-response.ts";
 import { notFound } from "./util.ts";
 
 /** The slice of the core these routes need (interface segregation). */
@@ -36,40 +31,20 @@ export function visualRoutes(core: VisualApi): Hono {
   app.get("/sessions/:id/visual/:name", async (c) => {
     const sessionId = c.req.param("id");
     const name = c.req.param("name");
-    // The session must exist: an asset outlives nothing, and a name alone
-    // must not tell a caller whether a session ever existed.
-    if (core.getSession(sessionId) === undefined) {
-      throw notFound("Session", sessionId);
-    }
-    const visual = await core.resolveSessionVisual(sessionId, name);
-    if (visual === undefined) {
-      throw notFound("Visual", name);
-    }
-    // A picture is drawn small: the conversation gets a downscaled copy, and
-    // `preview=0` asks for the original (what a click opens, and what the
-    // model reads). The preview is stored beside its source under a name
-    // derived from it (see media/preview-cache.ts), so this costs one read
-    // after the first draw and can never go stale.
-    const wantsPreview = c.req.query("preview") !== "0";
-    const preview = wantsPreview
-      ? await ensurePreview(
-          visual.path,
-          previewPathOf(visual.path, name),
-          visual.mimeType,
-        )
-      : undefined;
-    if (preview !== undefined) {
-      return assetResponse(c, {
-        bytes: preview.buffer as ArrayBuffer,
-        mimeType: visual.mimeType,
-      });
-    }
-    const bytes = await fsp.readFile(visual.path);
-    // The asset is bounded by the store's limit (4 MiB), so buffering it
-    // needs no stream handling; the buffer is an ArrayBuffer of its own.
-    return assetResponse(c, {
-      bytes: bytes.buffer as ArrayBuffer,
-      mimeType: visual.mimeType,
+    return await serveAsset(c, {
+      preview: "stored",
+      resolvePath: async () => {
+        // The session must exist: an asset outlives nothing, and a name alone
+        // must not tell a caller whether a session ever existed.
+        if (core.getSession(sessionId) === undefined) {
+          throw notFound("Session", sessionId);
+        }
+        const visual = await core.resolveSessionVisual(sessionId, name);
+        if (visual === undefined) {
+          throw notFound("Visual", name);
+        }
+        return visual;
+      },
     });
   });
 
