@@ -297,7 +297,11 @@ test("vm tools: an unknown action names the valid ones", async () => {
   assert(message.includes("move, click, drag"), message);
 });
 
-test("vm tools: click carries the button and count", async () => {
+test("vm tools: click carries the button NUMBER and count", async () => {
+  // xdotool takes a button number, not a name: "left" is parsed as 0 and the
+  // X server rejects the event with BadValue, so the click never lands. The
+  // tool speaks names; the command must speak numbers (left 1, middle 2,
+  // right 3).
   const { tools, calls } = enclosing();
   const act = tools[1];
   assert(act !== undefined);
@@ -306,8 +310,38 @@ test("vm tools: click carries the button and count", async () => {
     { action: "click", x: 5, y: 6, button: "right", count: 2 },
     undefined,
   );
-  const joined = calls.map((call) => call.join(" ")).join("\n");
-  assert(joined.includes("click --repeat 2 right"), joined);
+  await act.execute(
+    "1",
+    { action: "click", x: 7, y: 8, button: "left", count: 1 },
+    undefined,
+  );
+  const sent = calls.map((call) => call.join(" "));
+  assert(
+    sent.some((call) => call === "xdotool mousemove 5 6 click --repeat 2 3"),
+    sent.join("\n"),
+  );
+  assert(
+    sent.some((call) => call === "xdotool mousemove 7 8 click --repeat 1 1"),
+    sent.join("\n"),
+  );
+});
+
+test("vm tools: drag presses and releases a button NUMBER", async () => {
+  // Same xdotool contract as click: mousedown/mouseup take the number.
+  const { tools, calls } = enclosing();
+  const act = tools[1];
+  assert(act !== undefined);
+  await act.execute(
+    "1",
+    { action: "drag", x: 10, y: 20, to_x: 30, to_y: 40, button: "middle" },
+    undefined,
+  );
+  const sent = calls.map((call) => call.join(" ")).at(-1);
+  assert(
+    sent ===
+      "xdotool mousemove 10 20 mousedown 2 mousemove --sync 30 40 mouseup 2",
+    sent,
+  );
 });
 
 test("vm tools: a positive scroll amount scrolls DOWN", async () => {

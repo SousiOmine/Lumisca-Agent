@@ -24,6 +24,20 @@ const SCREENSHOT_MAX_BYTES = 16 * 1024 * 1024;
 /** Input actions are quick; a hung X server must not stall the run. */
 const ACTION_TIMEOUT_MS = 20_000;
 
+/** xdotool's button numbers. Its `click` and `mousedown` commands take a
+ * NUMBER, not a name: `xdotool click left` reads "left" as 0 and the X server
+ * rejects the event with BadValue, so a click never lands. The tool layer
+ * speaks names; this is where they become the numbers X expects. */
+const XDOTOOL_BUTTON: Record<"left" | "middle" | "right", string> = {
+  left: "1",
+  middle: "2",
+  right: "3",
+};
+
+function xdotoolButton(button: "left" | "middle" | "right"): string {
+  return XDOTOOL_BUTTON[button];
+}
+
 export interface VmScreen {
   /** Capture the whole screen as PNG bytes. The pointer is included: the
    * agent needs to see where it is and what it is hovering. */
@@ -169,13 +183,13 @@ export function createVmScreen(options: VmScreenOptions): VmScreen {
           String(fromX),
           String(fromY),
           "mousedown",
-          button,
+          xdotoolButton(button),
           "mousemove",
           "--sync",
           String(toX),
           String(toY),
           "mouseup",
-          button,
+          xdotoolButton(button),
         ],
         signal,
       );
@@ -192,7 +206,7 @@ export function createVmScreen(options: VmScreenOptions): VmScreen {
           "click",
           "--repeat",
           String(clickOptions.count),
-          clickOptions.button,
+          xdotoolButton(clickOptions.button),
         ],
         signal,
       );
