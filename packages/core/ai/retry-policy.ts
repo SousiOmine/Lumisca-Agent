@@ -2,8 +2,10 @@ import type {
   AssistantMessage,
   NotificationMessage,
 } from "../domain/message.ts";
+import { sleepAbortable as sleepAbortableShared } from "../shared/misc.ts";
 import { isContextOverflowText } from "./context-overflow.ts";
 import { notificationMessage } from "./notification.ts";
+import type { StreamFn } from "./transport.ts";
 
 /** Maximum consecutive vacant responses (no text, no tool call) to retry
  * before giving up and ending the run normally. Shared by both retry
@@ -156,4 +158,233 @@ export function buildContextOverflowRetryNotification(
       "current state: respond with text or call a tool.",
     status: "neutral",
   });
+}
+
+// ---- 予算表 ---------------------------------------------------------------
+
+/** 429（レート制限）で1回の呼び出しをやり直す回数。 */
+export const MAX_RATE_LIMIT_RETRIES = 5;
+/** レート制限の初回バックオフ（以降は倍々）。 */
+export const RATE_LIMIT_BASE_DELAY_MS = 2000;
+/** バックオフの上限。 */
+export const RATE_LIMIT_MAX_DELAY_MS = 60_000;
+
+/** AI SDK自身が初回リクエストに対して行う試行回数（`StreamOptions.maxRetries`）。 */
+export const PROVIDER_DEFAULT_MAX_RETRIES = 5;
+
+/** コンテキスト超過から復帰する回数。1回で足りる（強制圧縮が履歴を縮める）。
+ * 2回目の拒否は圧縮で足りなかったということなので、プロバイダーのエラーを表に出す。 */
+export const MAX_OVERFLOW_RETRIES = 1;
+
+/** 出力上限で切られた回答を続けさせる回数。 */
+export const MAX_OUTPUT_CAP_RETRIES = 2;
+
+// ---- 判定関数 -------------------------------------------------------------
+
+/** アカウント/購読の上限。一時的な絞りではないので即座に失敗させる。 */
+const NON_RETRYABLE_PATTERN = buildPattern([
+  "insufficient_quota",
+  "out of budget",
+  "quota exceeded",
+  "billing",
+  "GoUsageLimitError",
+  "FreeUsageLimitError",
+  "Monthly usage limit reached",
+  "available balance",
+]);
+
+/** やり直せるレート制限の署名: 429 の文言とゲートウェイの言い回し。 */
+const RETRYABLE_PATTERN = buildPattern([
+  "rate.?limit",
+  "rate_limit_exceeded",
+  "too many requests",
+  "\\b429\\b",
+]);
+
+function buildPattern(patterns: string[]): RegExp {
+  return new RegExp(patterns.join("|"), "i");
+}
+
+/** 生のエラーメッセージを分類する。Error 版と assistant メッセージ版が
+ * 同じ判定を通るので、両者が食い違うことはない。 */
+export function isRetryableRateLimitMessage(message: string): boolean {
+  if (NON_RETRYABLE_PATTERN.test(message)) return false;
+  return RETRYABLE_PATTERN.test(message);
+}
+
+export function isRetryableRateLimitError(error: unknown): boolean {
+  if (!(error instanceof Error) || !error.message) return false;
+  return isRetryableRateLimitMessage(error.message);
+}
+
+/** エラー停止したターンがやり直せるレート制限か。 */
+export function isRetryableRateLimit(message: AssistantMessage): boolean {
+  if (message.stopReason !== "error" || !message.errorMessage) return false;
+  return isRetryableRateLimitMessage(message.errorMessage);
+}
+
+/** 試行回数 n のバックオフ（-25%までの揺らぎ付き、上限あり）。 */
+export function rateLimitRetryDelayMs(attempt: number): number {
+  return Math.round(
+    Math.min(
+      RATE_LIMIT_BASE_DELAY_MS * 2 ** (attempt - 1),
+      RATE_LIMIT_MAX_DELAY_MS,
+    ) *
+      (1 - Math.random() * 0.25),
+  );
+}
+
+/** バックオフの待機が中断されたときに投げるエラー。呼び出し側はこれを自分の
+ * 終了状態（中断・断念）へ読み替える。 */
+export class RetryAbortError extends Error {
+  constructor() {
+    super("Aborted during rate-limit retry backoff");
+    this.name = "RetryAbortError";
+  }
+}
+
+/** `signal` が発火したら RetryAbortError で拒否する待機。 */
+export function sleepAbortable(
+  ms: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  return sleepAbortableShared(ms, signal, () => new RetryAbortError());
+}
+
+/** すべてのLLM呼び出しにプロバイダーの試行回数を載せる。 */
+export function withProviderRetryDefaults(base: StreamFn): StreamFn {
+  return (model, context, options) =>
+    base(model, context, applyProviderRetryDefaults(options));
+}
+
+/** 呼び出し側が指定していないときだけプロバイダーの既定値を埋める。 */
+export function applyProviderRetryDefaults(
+  options: Parameters<StreamFn>[2],
+): Parameters<StreamFn>[2] {
+  if (options === undefined) {
+    return { maxRetries: PROVIDER_DEFAULT_MAX_RETRIES };
+  }
+  if (options.maxRetries === undefined) {
+    return { ...options, maxRetries: PROVIDER_DEFAULT_MAX_RETRIES };
+  }
+  return options;
+}
+
+/** 次の試行の作り方。何を次に送り、どれだけ待つか、なぜやり直すのか。
+ * `RetryManager` はこれを返すだけで、ループは `driveRetries` が回す。 */
+export interface RetryAttempt {
+  notification: NotificationMessage;
+  /** この試行の前に待つミリ秒（0 ならすぐ次を試す）。 */
+  delayMs: number;
+  /** 何をやり直すのか: 呼び出し側の後始末（空ターンの除去、履歴の圧縮）が
+   * これで決まる。 */
+  reason: "vacant" | "interrupted" | "output-cap" | "rate-limit" | "overflow";
+}
+
+/** 1回の試行の結果。失敗も値として返す: ループと待機はドライバが持ち、
+ * 何をやり直すかはポリシーが決める。 */
+export type RetryOutcome<T> = { value: T } | { error: unknown };
+
+/** リトライのドライバが呼ぶ3つの関数。何を次に試すかは `plan`、1回試すのは
+ * `perform`、待機は `delayMs`。 */
+export interface RetryDriver<A> {
+  /** 次に試すこと。null で終わり（成功・打ち切り・予算切れ）。 */
+  plan(): A | null;
+  /** 1回試す。false を返すと打ち切る（中断・競合）。 */
+  perform(attempt: A): Promise<boolean>;
+  /** 試行の前に待つミリ秒。 */
+  delayMs(attempt: A): number;
+}
+
+export interface RetryLoopOptions {
+  /** バックオフの待機（テストで差し替える）。既定は sleepAbortable。 */
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  /** 中断シグナル。待機の前に発火していたら待たずに降りる。 */
+  signal?: AbortSignal;
+}
+
+/** すべてのリトライ経路が通る唯一のループ。`plan` → 待機 → `perform` を
+ * `plan` が null を返すまで繰り返す。戻り値は最後まで走れたか（false は
+ * 中断か競合で降りたことを意味する）。
+ *
+ * 補助呼び出しの全体再試行（streamText）、セッションの再開（RetryManager）、
+ * サブエージェントの再実行（SubagentRunner）が同じループを通るので、待機と
+ * 中断の扱いが1箇所に収まる。 */
+export async function driveRetries<A>(
+  driver: RetryDriver<A>,
+  opts: RetryLoopOptions = {},
+): Promise<boolean> {
+  const sleepFn = opts.sleep ?? sleepAbortable;
+  for (;;) {
+    const attempt = driver.plan();
+    if (attempt === null) return true;
+    const delayMs = driver.delayMs(attempt);
+    if (delayMs > 0) {
+      if (opts.signal?.aborted === true) return false;
+      try {
+        await sleepFn(delayMs, opts.signal);
+      } catch {
+        // 待機中の中断: やり直さずに降りる（元の失敗が表に出る）。
+        return false;
+      }
+    }
+    if (!(await driver.perform(attempt))) return false;
+  }
+}
+
+/** 1回の試行の実行結果を覚えておく枠。`plan` はここを見て次を決める。 */
+interface AttemptState<T> {
+  outcome: RetryOutcome<T> | null;
+}
+
+/** レート制限の再試行ポリシー: ドライバに渡す予算。 */
+export interface RateLimitRetryOptions extends RetryLoopOptions {
+  maxRetries?: number;
+}
+
+/** 429（レート制限）で失敗した呼び出しを共有のドライバでやり直す。
+ * `isRetryable` は経路ごとに違う（Error か assistant メッセージか）ので注入する。 */
+export async function retryOnRateLimitError<T>(
+  attempt: () => Promise<T>,
+  isRetryable: (error: unknown) => boolean,
+  opts: RateLimitRetryOptions = {},
+): Promise<T> {
+  const maxRetries = opts.maxRetries ?? MAX_RATE_LIMIT_RETRIES;
+  const state: AttemptState<T> = { outcome: null };
+  let calls = 0;
+  let abortedBeforeRetry = false;
+  await driveRetries<{ delayMs: number }>(
+    {
+      plan: () => {
+        if (state.outcome === null) return { delayMs: 0 };
+        if ("value" in state.outcome) return null;
+        if (opts.signal?.aborted === true) {
+          abortedBeforeRetry = true;
+          return null;
+        }
+        if (calls > maxRetries || !isRetryable(state.outcome.error)) {
+          return null;
+        }
+        return { delayMs: rateLimitRetryDelayMs(calls) };
+      },
+      perform: async () => {
+        calls++;
+        try {
+          state.outcome = { value: await attempt() };
+        } catch (error) {
+          state.outcome = { error };
+        }
+        return true;
+      },
+      delayMs: (plan) => plan.delayMs,
+    },
+    opts,
+  );
+  const outcome = state.outcome as RetryOutcome<T> | null;
+  if (abortedBeforeRetry) throw new RetryAbortError();
+  if (outcome === null) throw new Error("retryOnRateLimitError ran no attempt");
+  // 待機中の中断は最後の失敗をそのまま返す: 呼び出し側には「やり直せなかった
+  // 理由」だけが要る。
+  if ("error" in outcome) throw outcome.error;
+  return outcome.value;
 }

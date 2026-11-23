@@ -6,7 +6,10 @@ import {
   type StreamRequest,
 } from "@lumisca/core";
 import { assert, assertEquals, assertRejects } from "@std/assert";
-import { RATE_LIMIT_BASE_DELAY_MS, RetryAbortError } from "../ai/rate-limit.ts";
+import {
+  RATE_LIMIT_BASE_DELAY_MS,
+  RetryAbortError,
+} from "../ai/retry-policy.ts";
 import { streamText } from "../ai/stream.ts";
 import { fakeModel } from "../test-utils.ts";
 

@@ -9,17 +9,16 @@
  */
 import type { Agent } from "../ai/agent.ts";
 import type { AgentEvent } from "../ai/agent-types.ts";
-import { isRetryableRateLimit } from "../ai/llm-retry.ts";
 import type { NotificationPayload } from "../ai/notification.ts";
-import {
-  MAX_RATE_LIMIT_RETRIES,
-  rateLimitRetryDelayMs,
-} from "../ai/rate-limit.ts";
 import {
   buildInterruptedRetryNotification,
   buildRetryNotification,
+  driveRetries,
   hasNoVisibleOutput,
+  isRetryableRateLimit,
   isTransientStreamError,
+  MAX_RATE_LIMIT_RETRIES,
+  rateLimitRetryDelayMs,
 } from "../ai/retry-policy.ts";
 import type { ClientEvent } from "../domain/event.ts";
 import type { AgentMessage, AssistantMessage } from "../domain/message.ts";
@@ -185,83 +184,79 @@ export class SubagentRunner {
     agent: Agent,
     prompt: string,
   ): Promise<void> {
-    let first = true;
-    /** Prompt for the next attempt; undefined → re-run the transcript. */
-    let nextPrompt: AgentMessage | undefined;
+    /** The next attempt: the message to prompt, or null to continue the
+     * transcript as it stands. */
+    type Attempt = { next: string | AgentMessage | null; delayMs: number };
+    let pending: string | AgentMessage | null = prompt;
     let rateLimitAttempt = 0;
     let transportAttempt = 0;
+    /** Why the last attempt could not start (a race with a live run). */
+    let startFailure: unknown;
+    let attempts = 0;
 
-    for (;;) {
-      if (sub.agent === null || this.session.isClosed()) return;
-      try {
-        if (first) {
-          await agent.prompt(prompt);
-          first = false;
-        } else if (nextPrompt !== undefined) {
-          await agent.prompt(nextPrompt);
-        } else {
-          await agent.continue();
-        }
-      } catch (error) {
-        // The agent rejected (a race with another run): settle as failed
-        // with the reason instead of a generic string.
-        this.finalize(
-          sub,
-          "failed",
-          `Sub-agent run failed to start: ${errorMessage(error)}`,
-        );
-        return;
-      }
-      if (sub.agent === null || this.session.isClosed()) return;
-      const last = sub.agent.state.messages.at(-1) as
-        | AssistantMessage
-        | undefined;
-      if (last === undefined || last.role !== "assistant") break;
-
-      if (isRetryableRateLimit(last)) {
-        if (rateLimitAttempt >= MAX_RATE_LIMIT_RETRIES) break;
-        rateLimitAttempt++;
-        // Drop the failed error turn so the continuation re-uses the prompt.
-        // The store follows it: that turn's row was written when it ended,
-        // and a ledger left ahead of the array would never write the answer
-        // that replaces it.
-        const messages = sub.agent.state.messages;
-        if (messages.length > 0 && messages.at(-1)!.role === "assistant") {
-          const kept = messages.slice(0, -1);
-          sub.agent.state.messages = kept;
-          const transcript = sub.transcript;
-          if (transcript !== null) transcript.forgetFrom(kept, kept.length);
-        }
-        nextPrompt = undefined;
-        if (
-          !(await this.backoff(sub, rateLimitRetryDelayMs(rateLimitAttempt)))
-        ) {
-          this.finalize(sub, "failed", sub.agent.state.errorMessage);
-          return;
-        }
-        continue;
-      }
-
-      if (isTransientStreamError(last)) {
-        if (transportAttempt >= MAX_RATE_LIMIT_RETRIES) break;
-        transportAttempt++;
-        nextPrompt = hasNoVisibleOutput(last)
-          ? buildRetryNotification(transportAttempt)
-          : buildInterruptedRetryNotification(transportAttempt);
-        if (
-          !(await this.backoff(sub, rateLimitRetryDelayMs(transportAttempt)))
-        ) {
-          this.finalize(sub, "failed", sub.agent.state.errorMessage);
-          return;
-        }
-        continue;
-      }
-      break;
+    // The retry policy is the same one the session agent uses: the driver
+    // owns the loop and the backoff, this policy says what the next attempt
+    // is (a fresh prompt, a continuation, or the end of the budget).
+    const outcome = await driveRetries<Attempt>(
+      {
+        plan: () => {
+          // The first attempt is the prompt the caller gave.
+          if (attempts++ === 0) return { next: pending, delayMs: 0 };
+          const last = this.lastAssistant(sub);
+          if (last === undefined) return null;
+          if (isRetryableRateLimit(last)) {
+            if (rateLimitAttempt >= MAX_RATE_LIMIT_RETRIES) return null;
+            rateLimitAttempt++;
+            // Drop the failed error turn so the continuation re-uses the prompt.
+            // The store follows it: that turn's row was written when it ended,
+            // and a ledger left ahead of the array would never write the answer
+            // that replaces it.
+            this.dropErrorTurn(sub);
+            pending = null;
+            return {
+              next: null,
+              delayMs: rateLimitRetryDelayMs(rateLimitAttempt),
+            };
+          }
+          if (!isTransientStreamError(last)) return null;
+          if (transportAttempt >= MAX_RATE_LIMIT_RETRIES) return null;
+          transportAttempt++;
+          pending = hasNoVisibleOutput(last)
+            ? buildRetryNotification(transportAttempt)
+            : buildInterruptedRetryNotification(transportAttempt);
+          return {
+            next: pending,
+            delayMs: rateLimitRetryDelayMs(transportAttempt),
+          };
+        },
+        perform: async (attempt) => {
+          try {
+            if (attempt.next === null) await agent.continue();
+            else await agent.prompt(attempt.next);
+            return true;
+          } catch (error) {
+            // The agent rejected (a race with another run): settle as failed
+            // with the reason instead of a generic string.
+            startFailure = error;
+            return false;
+          }
+        },
+        delayMs: (attempt) => attempt.delayMs,
+      },
+      { signal: sub.abort.signal, sleep: this.session.backoffSleep },
+    );
+    if (!outcome) {
+      this.finalize(
+        sub,
+        "failed",
+        startFailure === undefined
+          ? sub.agent?.state.errorMessage
+          : `Sub-agent run failed to start: ${errorMessage(startFailure)}`,
+      );
+      return;
     }
 
-    const last = sub.agent?.state.messages.at(-1) as
-      | AssistantMessage
-      | undefined;
+    const last = this.lastAssistant(sub);
     this.finalize(
       sub,
       // Still running here (finalize settles it), so the agent is live.
@@ -270,15 +265,26 @@ export class SubagentRunner {
     );
   }
 
-  /** Sleep before a retry. False when the wait was aborted (session closed
-   * or the sub-agent killed), so the caller settles instead of retrying. */
-  private async backoff(sub: Subagent, ms: number): Promise<boolean> {
-    try {
-      await this.session.backoffSleep(ms, sub.abort.signal);
-      return true;
-    } catch {
-      return false;
-    }
+  /** The last message of the run, when it is an assistant turn. */
+  private lastAssistant(sub: Subagent): AssistantMessage | undefined {
+    if (sub.agent === null || this.session.isClosed()) return undefined;
+    const last = sub.agent.state.messages.at(-1);
+    if (last === undefined || last.role !== "assistant") return undefined;
+    return last as AssistantMessage;
+  }
+
+  /** Drop the empty error turn a rate-limit retry replaces, so the
+   * continuation re-uses the prompt. The transcript ledger follows it: a
+   * ledger left ahead of the array would never write the answer that
+   * replaces the row. */
+  private dropErrorTurn(sub: Subagent): void {
+    const live = sub.agent;
+    if (live === null) return;
+    const messages = live.state.messages;
+    if (messages.length === 0 || messages.at(-1)!.role !== "assistant") return;
+    const kept = messages.slice(0, -1);
+    live.state.messages = kept;
+    sub.transcript?.forgetFrom(kept, kept.length);
   }
 
   /** Write the messages this sub-agent has appended since the last write.

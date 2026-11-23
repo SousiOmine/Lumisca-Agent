@@ -73,7 +73,7 @@ export interface StreamOptions {
   /** Retries the AI SDK performs for the initial provider request, with its
    * own backoff (the provider's Retry-After is honoured); 0 disables the
    * loop. The agent seeds it for every LLM call — see
-   * ai/llm-retry.ts. */
+   * ai/retry-policy.ts. */
   maxRetries?: number;
   /** Override the model's own output cap for this call (the transport sends
    * `model.maxTokens` otherwise). The compaction summarizer uses it: its

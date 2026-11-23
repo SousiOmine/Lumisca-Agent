@@ -1,22 +1,24 @@
 import type { Agent } from "../ai/agent.ts";
-import { isRetryableRateLimit } from "../ai/llm-retry.ts";
-import {
-  MAX_RATE_LIMIT_RETRIES,
-  rateLimitRetryDelayMs,
-  sleepAbortable,
-} from "../ai/rate-limit.ts";
 import {
   buildContextOverflowRetryNotification,
   buildInterruptedRetryNotification,
   buildOutputCapRetryNotification,
   buildRateLimitRetryNotification,
   buildRetryNotification,
+  driveRetries,
   hasNoVisibleOutput,
   isContextOverflowError,
   isOutputCapStop,
+  isRetryableRateLimit,
   isSilentErrorResponse,
   isTransientStreamError,
   MAX_EMPTY_RESPONSE_RETRIES,
+  MAX_OUTPUT_CAP_RETRIES,
+  MAX_OVERFLOW_RETRIES,
+  MAX_RATE_LIMIT_RETRIES,
+  type RetryAttempt,
+  rateLimitRetryDelayMs,
+  sleepAbortable,
 } from "../ai/retry-policy.ts";
 import type {
   AgentMessage,
@@ -24,34 +26,23 @@ import type {
   NotificationMessage,
 } from "../domain/message.ts";
 
-/** Outcome of classifying one assistant turn for retry. */
+/** Outcome of classifying one assistant turn for retry.
+ *
+ * Both ways to retry share one shape: an `in-run` attempt is handed to the
+ * live loop (Agent.followUp), a `restart` attempt is parked and consumed
+ * once the dead run settled (resumeOnce). The budgets, the notification and
+ * the backoff live on the attempt, so the caller only picks the delivery. */
 export type RetryDecision =
   | { action: "none" }
   /** The response was vacant and this was the LAST retry the budget
    * allowed: the run ends empty, and the user has to be told why (the
    * session agent reports it; `count` is how many retries were spent). */
   | { action: "exhausted"; count: number; message?: string }
-  | { action: "followUp"; notification: NotificationMessage }
   | {
-      action: "park";
-      notification: NotificationMessage;
-      rateLimit: boolean;
-      /** True when the parked restart follows a context overflow: the history
-       * must be condensed before the run restarts (see SessionAgent). */
-      overflow?: boolean;
+      action: "retry";
+      attempt: RetryAttempt;
+      delivery: "in-run" | "restart";
     };
-
-/** Maximum consecutive context-overflow recoveries per exchange. One is
- * enough when the forced compaction reduces the history; a second rejection
- * means compaction could not free enough (one indivisible unit still
- * exceeds the window), so the provider's own error must surface instead of
- * looping. Mirrors DSH's `maxOverflowRetries` default. */
-export const MAX_OVERFLOW_RETRIES = 1;
-
-/** How many times one exchange may continue an answer the output cap cut
- * short. One is nearly always enough (the model finishes in the next turn);
- * the bound exists so a model stuck at the cap cannot loop. */
-export const MAX_OUTPUT_CAP_RETRIES = 2;
 
 /** Owns the vacant-response / rate-limit retry state of one session agent.
  * Extracted from SessionAgent so the retry budgets, the parked restart
@@ -85,15 +76,11 @@ export class RetryManager {
    * Bounded: the first one condenses the history and restarts, a second
    * rejection surfaces (compaction could not free enough). */
   private overflowRetries = 0;
-  /** True while a parked restart follows a context overflow: the agent
-   * condenses the history before consuming it. */
-  private pendingOverflow = false;
-  /** The retry notification parked to restart a run after a silent-error
-   * turn killed it. Consumed by resumeOnce the dead run has settled. */
-  private pendingErrorRetry: NotificationMessage | null = null;
-  /** The retry notification parked to restart a run after a rate-limited
-   * turn. Consumed by resumeOnce (which backs off before re-prompting). */
-  private pendingRateLimitRetry: NotificationMessage | null = null;
+  /** The attempts parked to restart a run that a retryable failure killed,
+   * oldest first. Consumed by resumeOnce once the dead run has settled, so
+   * an abort that lands between two restarts leaves the later ones parked
+   * (and stood down by the epoch check). */
+  private pending: RetryAttempt[] = [];
   /** Interrupts the backoff sleep of a rate-limit restart when the run is
    * aborted or the session closes. Independent of the agent's own abort
    * signal (which is cleared between runs), and REPLACED by every abort():
@@ -111,6 +98,8 @@ export class RetryManager {
    * compares epochs so a stop pressed between two attempts stands the
    * restart down instead of firing one more request. */
   private abortEpoch = 0;
+  /** The epoch the currently parked attempts were handed out under. */
+  private parkedEpoch = 0;
 
   constructor(
     rateLimitRetrySleep: (
@@ -131,9 +120,7 @@ export class RetryManager {
     this.interruptedRetries = 0;
     this.outputCapRetries = 0;
     this.overflowRetries = 0;
-    this.pendingOverflow = false;
-    this.pendingErrorRetry = null;
-    this.pendingRateLimitRetry = null;
+    this.pending = [];
   }
 
   /** Abort in-flight backoff and invalidate parked restarts. */
@@ -142,20 +129,17 @@ export class RetryManager {
     // The signal is spent: a later backoff must be interruptible again.
     this.retryAbort = new AbortController();
     this.abortEpoch++;
-    this.pendingOverflow = false;
   }
 
-  /** True when a silent-error or rate-limit restart is parked. */
+  /** True when a restart is parked. */
   get hasPendingRestart(): boolean {
-    return (
-      this.pendingErrorRetry !== null || this.pendingRateLimitRetry !== null
-    );
+    return this.pending.length > 0;
   }
 
-  /** True when a parked restart follows a context overflow: the caller
+  /** True when the parked restart follows a context overflow: the caller
    * must condense the history before it re-prompts (see resumeOnce). */
   get hasPendingOverflow(): boolean {
-    return this.pendingOverflow;
+    return this.pending.length > 0 && this.pending[0]!.reason === "overflow";
   }
 
   /** Drop a parked restart. Used by the overflow path when the forced
@@ -164,9 +148,7 @@ export class RetryManager {
    * burning another request (DSH authorizes the overflow retry only when the
    * surface replacement actually advanced). */
   clearPendingRestart(): void {
-    this.pendingErrorRetry = null;
-    this.pendingRateLimitRetry = null;
-    this.pendingOverflow = false;
+    this.pending = [];
   }
 
   /** Classify one assistant turn: progress resets, vacant normal stops
@@ -180,35 +162,29 @@ export class RetryManager {
     // it has visible text: continue it instead of treating it as finished.
     // Checked first because the visible text would otherwise reset the
     // budgets below and the model would never be asked to go on.
-    if (
-      !closed &&
-      isOutputCapStop(assistant) &&
-      this.outputCapRetries < MAX_OUTPUT_CAP_RETRIES
-    ) {
-      this.outputCapRetries++;
-      const notification = buildOutputCapRetryNotification(
+    if (isOutputCapStop(assistant)) {
+      const attempt = this.continuation(
+        !closed,
         this.outputCapRetries,
+        MAX_OUTPUT_CAP_RETRIES,
+        "output-cap",
+        buildOutputCapRetryNotification,
       );
-      this.pendingErrorRetry = notification;
-      return { action: "park", notification, rateLimit: false };
+      if (attempt !== null) return this.park(attempt);
     }
     if (!hasNoVisibleOutput(assistant)) {
       // The response produced output. A transport cut after partial text is
       // still worth continuing from where it stopped — the partial answer
       // stays in the transcript, so the restart resumes instead of
       // repeating. Anything else is real progress and resets the budgets.
-      if (
-        !closed &&
-        isTransientStreamError(assistant) &&
-        this.interruptedRetries < MAX_EMPTY_RESPONSE_RETRIES
-      ) {
-        this.interruptedRetries++;
-        const notification = buildInterruptedRetryNotification(
-          this.interruptedRetries,
-        );
-        this.pendingErrorRetry = notification;
-        return { action: "park", notification, rateLimit: false };
-      }
+      const attempt = this.continuation(
+        !closed && isTransientStreamError(assistant),
+        this.interruptedRetries,
+        MAX_EMPTY_RESPONSE_RETRIES,
+        "interrupted",
+        buildInterruptedRetryNotification,
+      );
+      if (attempt !== null) return this.park(attempt);
       this.emptyResponseRetries = 0;
       this.rateLimitRetries = 0;
       this.interruptedRetries = 0;
@@ -224,29 +200,22 @@ export class RetryManager {
     // error-stopped turn like they do — its wording is what distinguishes
     // it. A second rejection within the same exchange means compaction could
     // not free enough, so the provider's own error surfaces.
-    if (
-      !closed &&
-      isContextOverflowError(assistant) &&
-      this.overflowRetries < MAX_OVERFLOW_RETRIES
-    ) {
-      this.overflowRetries++;
-      this.pendingOverflow = true;
-      const notification = buildContextOverflowRetryNotification(
+    if (isContextOverflowError(assistant)) {
+      const attempt = this.continuation(
+        !closed,
         this.overflowRetries,
+        MAX_OVERFLOW_RETRIES,
+        "overflow",
+        buildContextOverflowRetryNotification,
       );
-      this.pendingErrorRetry = notification;
-      return {
-        action: "park",
-        notification,
-        rateLimit: false,
-        overflow: true,
-      };
+      if (attempt !== null) return this.park(attempt);
     }
     if (!rateLimit && !transientStreamError) {
       // Outputless but not retryable: a vacant normal stop retries in-run
       // (followUp); a permanent error surfaces.
-      if (assistant.stopReason === "error") return { action: "none" };
-      if (closed) return { action: "none" };
+      if (assistant.stopReason === "error" || closed) {
+        return { action: "none" };
+      }
       if (this.emptyResponseRetries >= MAX_EMPTY_RESPONSE_RETRIES) {
         // The budget is spent: the turn ends with nothing to show and
         // nothing left to try. Say so — a run that stops without text, a
@@ -255,8 +224,13 @@ export class RetryManager {
       }
       this.emptyResponseRetries++;
       return {
-        action: "followUp",
-        notification: buildRetryNotification(this.emptyResponseRetries),
+        action: "retry",
+        delivery: "in-run",
+        attempt: {
+          notification: buildRetryNotification(this.emptyResponseRetries),
+          delayMs: 0,
+          reason: "vacant",
+        },
       };
     }
     // Retryable outputless failure: rate-limit or transient stream error.
@@ -272,11 +246,11 @@ export class RetryManager {
         };
       }
       this.rateLimitRetries++;
-      const notification = buildRateLimitRetryNotification(
-        this.rateLimitRetries,
-      );
-      this.pendingRateLimitRetry = notification;
-      return { action: "park", notification, rateLimit: true };
+      return this.park({
+        notification: buildRateLimitRetryNotification(this.rateLimitRetries),
+        delayMs: rateLimitRetryDelayMs(this.rateLimitRetries),
+        reason: "rate-limit",
+      });
     }
     // Transient stream error with no output.
     if (this.emptyResponseRetries >= MAX_EMPTY_RESPONSE_RETRIES) {
@@ -289,9 +263,68 @@ export class RetryManager {
       };
     }
     this.emptyResponseRetries++;
-    const notification = buildRetryNotification(this.emptyResponseRetries);
-    this.pendingErrorRetry = notification;
-    return { action: "park", notification, rateLimit: false };
+    return this.park({
+      notification: buildRetryNotification(this.emptyResponseRetries),
+      delayMs: 0,
+      reason: "vacant",
+    });
+  }
+
+  /** One continuation attempt, or null when the session is closed or the
+   * budget is spent. The counter and the notification are built here so
+   * every "continue the answer" case is one shape. */
+  private continuation(
+    applies: boolean,
+    spent: number,
+    budget: number,
+    reason: RetryAttempt["reason"],
+    build: (attempt: number) => NotificationMessage,
+  ): RetryAttempt | null {
+    if (!applies || spent >= budget) return null;
+    this.countRetry(reason);
+    return { notification: build(spent + 1), delayMs: 0, reason };
+  }
+
+  /** Count one spent retry against its budget. */
+  private countRetry(reason: RetryAttempt["reason"]): void {
+    switch (reason) {
+      case "vacant":
+        this.emptyResponseRetries++;
+        return;
+      case "interrupted":
+        this.interruptedRetries++;
+        return;
+      case "output-cap":
+        this.outputCapRetries++;
+        return;
+      case "overflow":
+        this.overflowRetries++;
+        return;
+      case "rate-limit":
+        this.rateLimitRetries++;
+        return;
+    }
+  }
+
+  /** Park a restart: the run is dead, so the attempt is consumed by
+   * resumeOnce once it settled. */
+  private park(attempt: RetryAttempt): RetryDecision {
+    this.pending.push(attempt);
+    return { action: "retry", delivery: "restart", attempt };
+  }
+
+  /** The next attempt the parked restart asks for, or null when nothing is
+   * parked (or the exchange was aborted since it was parked). Pure: it reads
+   * the parked state and the budget, and leaves both to `takeAttempt`. */
+  nextAttempt(): RetryAttempt | null {
+    if (this.abortEpoch !== this.parkedEpoch) return null;
+    return this.pending[0] ?? null;
+  }
+
+  /** Consume the parked attempt `nextAttempt` returned: the restart it
+   * describes will run, so it must not fire twice. */
+  takeAttempt(): void {
+    this.pending.shift();
   }
 
   /** Restart a run that a silent-error turn killed: the parked retry
@@ -303,39 +336,32 @@ export class RetryManager {
     agent: Pick<Agent, "prompt">,
     closed: boolean,
   ): Promise<boolean> {
-    const epoch = this.abortEpoch;
-    while (
-      !closed &&
-      this.abortEpoch === epoch &&
-      (this.pendingErrorRetry !== null || this.pendingRateLimitRetry !== null)
-    ) {
-      const isRateLimit = this.pendingRateLimitRetry !== null;
-      const message = isRateLimit
-        ? this.pendingRateLimitRetry!
-        : this.pendingErrorRetry!;
-      if (isRateLimit) {
-        this.pendingRateLimitRetry = null;
-      } else {
-        this.pendingErrorRetry = null;
-      }
-      this.pendingOverflow = false;
-      if (isRateLimit) {
-        const delayMs = rateLimitRetryDelayMs(this.rateLimitRetries);
-        try {
-          await this.rateLimitRetrySleep(delayMs, this.retryAbort.signal);
-        } catch {
-          // Aborted during backoff: stand down, leave the error surfaced.
-          return false;
-        }
-      }
-      try {
-        await agent.prompt(message);
-      } catch {
-        // The restart lost a race with another run: drop the retry rather
-        // than fight the live run.
-        return false;
-      }
-    }
-    return true;
+    if (closed) return true;
+    // The attempts parked when the loop started are the ones this call
+    // consumes: an abort() during a backoff stands the rest down (see
+    // nextAttempt's epoch check).
+    this.parkedEpoch = this.abortEpoch;
+    return await driveRetries<RetryAttempt>(
+      {
+        plan: () => this.nextAttempt(),
+        perform: async (attempt) => {
+          this.takeAttempt();
+          try {
+            await agent.prompt(attempt.notification);
+            return true;
+          } catch {
+            // The restart lost a race with another run: drop the retry
+            // rather than fight the live run.
+            return false;
+          }
+        },
+        delayMs: (attempt) => attempt.delayMs,
+      },
+      {
+        // Only a sleep that is running right now is interrupted here; a
+        // restart parked before the abort is stood down by the epoch check.
+        sleep: (ms) => this.rateLimitRetrySleep(ms, this.retryAbort.signal),
+      },
+    );
   }
 }
