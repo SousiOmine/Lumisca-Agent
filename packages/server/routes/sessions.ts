@@ -15,6 +15,7 @@ import type {
   WindowQuery,
 } from "@lumisca/core";
 import type { ContextUsageSummary } from "@lumisca/core/shared";
+import { paths, routePath } from "@lumisca/core/shared";
 import { Hono } from "hono";
 import { conversationRoutes } from "./conversation.ts";
 import {
@@ -142,16 +143,16 @@ export function sessionRoutes(core: SessionApi): Hono {
     lastError: core.sessions.getSessionLastError(session.id),
   });
 
-  app.get("/sessions", (c) => {
+  app.get(routePath(paths.sessions), (c) => {
     const workspaceId = c.req.query("workspaceId");
     return c.json(core.sessions.listSessions(workspaceId));
   });
 
-  app.get("/sessions/default-model", async (c) => {
+  app.get(routePath(paths.sessionDefaultModel), async (c) => {
     return c.json(await core.sessions.getDefaultModel());
   });
 
-  app.get("/sessions/:id", (c) => {
+  app.get(routePath(paths.session), (c) => {
     return c.json(sessionJson(requireSession(c.req.param("id"))));
   });
 
@@ -178,7 +179,7 @@ export function sessionRoutes(core: SessionApi): Hono {
    * - `name`: a title generated while the socket was down would stay stale.
    * Everything is read in this one handler, with no await between the
    * reads, so the pieces describe the same instant. */
-  app.get("/sessions/:id/messages", async (c) => {
+  app.get(routePath(paths.sessionMessages), async (c) => {
     const id = c.req.param("id");
     const session = requireSession(id);
     await core.sessions.openSession(id);
@@ -225,7 +226,7 @@ export function sessionRoutes(core: SessionApi): Hono {
    * to notice events that were emitted but never delivered (a socket that
    * died without a close event, a peer's relay gap). Deliberately does not
    * open the session: the count lives outside the agent. */
-  app.get("/sessions/:id/revision", (c) => {
+  app.get(routePath(paths.sessionRevision), (c) => {
     const id = c.req.param("id");
     requireSession(id);
     return c.json({ rev: core.getSessionRevision(id) });
@@ -235,7 +236,7 @@ export function sessionRoutes(core: SessionApi): Hono {
    * snapshots, but only mutations emit them, so clients re-fetch this
    * after a WS drop or page reload to restore the progress panel. Opens
    * the session like the messages endpoint (the plan lives in memory). */
-  app.get("/sessions/:id/todo", async (c) => {
+  app.get(routePath(paths.sessionTodo), async (c) => {
     const id = c.req.param("id");
     requireSession(id);
     await core.sessions.openSession(id);
@@ -245,7 +246,7 @@ export function sessionRoutes(core: SessionApi): Hono {
   /** Snapshots of the session's sub-agent tasks (the task tool), for the
    * same resync as /todo: task events are not replayed, so clients
    * re-fetch after a WS drop or page reload to restore the tasks panel. */
-  app.get("/sessions/:id/tasks", async (c) => {
+  app.get(routePath(paths.sessionTasks), async (c) => {
     const id = c.req.param("id");
     requireSession(id);
     await core.sessions.openSession(id);
@@ -256,14 +257,14 @@ export function sessionRoutes(core: SessionApi): Hono {
    * for the same resync as /todo: background events are not replayed, so
    * clients re-fetch after a WS drop or page reload to restore the
    * background panel. */
-  app.get("/sessions/:id/background", async (c) => {
+  app.get(routePath(paths.sessionBackground), async (c) => {
     const id = c.req.param("id");
     requireSession(id);
     await core.sessions.openSession(id);
     return c.json({ backgrounds: core.sessions.getBackground(id) });
   });
 
-  app.post("/sessions", async (c) => {
+  app.post(routePath(paths.sessions), async (c) => {
     const body = await parseBody<SessionBody>(c);
     if (
       !body ||
@@ -292,27 +293,27 @@ export function sessionRoutes(core: SessionApi): Hono {
     return c.json(session, 201);
   });
 
-  app.post("/sessions/:id/open", async (c) => {
+  app.post(routePath(paths.sessionOpen), async (c) => {
     const id = c.req.param("id");
     requireSession(id);
     return c.json(sessionJson(await core.sessions.openSession(id)));
   });
 
-  app.post("/sessions/:id/close", async (c) => {
+  app.post(routePath(paths.sessionClose), async (c) => {
     const id = c.req.param("id");
     requireSession(id);
     await core.sessions.closeSession(id);
     return c.json({ ok: true });
   });
 
-  app.delete("/sessions/:id", async (c) => {
+  app.delete(routePath(paths.session), async (c) => {
     const id = c.req.param("id");
     requireSession(id);
     await core.sessions.deleteSession(id);
     return c.json({ ok: true });
   });
 
-  app.post("/sessions/:id/prompt", async (c) => {
+  app.post(routePath(paths.sessionPrompt), async (c) => {
     const body = await parseBody<PromptBody>(c);
     const { text, images, uploads, mode } = parsePromptBody(body ?? {});
     const id = c.req.param("id");
@@ -334,7 +335,7 @@ export function sessionRoutes(core: SessionApi): Hono {
   // shares (routes/conversation.ts): only the path and how an id is resolved
   // differ between a session and a conversation.
   conversationRoutes(app, core.sessions, {
-    base: "/sessions/:id",
+    base: paths.session,
     resolve: (c) => requireSession(c.req.param("id")!).id,
     modelRoute: true,
   });
@@ -345,7 +346,7 @@ export function sessionRoutes(core: SessionApi): Hono {
    * span, or the summarization failed; the transcript is unchanged in both
    * cases). The request resolves once the insertion is durable, so the
    * client can report the outcome. */
-  app.post("/sessions/:id/compact", async (c) => {
+  app.post(routePath(paths.sessionCompact), async (c) => {
     const body = await parseBody<{ instructions?: unknown }>(c);
     const id = c.req.param("id");
     requireSession(id);

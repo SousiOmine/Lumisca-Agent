@@ -1,4 +1,5 @@
 import type { SessionInfo } from "@lumisca/core";
+import { paths, routePath } from "@lumisca/core/shared";
 import { Hono } from "hono";
 import { serveAsset } from "./asset-response.ts";
 import { notFound } from "./util.ts";
@@ -32,7 +33,7 @@ export interface AttachmentApi {
 export function attachmentRoutes(core: AttachmentApi): Hono {
   const app = new Hono();
 
-  app.get("/sessions/:id/attachment/:name", async (c) => {
+  app.get(routePath(paths.sessionAttachment), async (c) => {
     const sessionId = c.req.param("id");
     const name = c.req.param("name");
     return await serveAsset(c, {

@@ -7,8 +7,16 @@
  * runs in: how much of the body has left the machine (upload.onprogress).
  */
 
-import type { PromptFileRef } from "@lumisca/core/shared";
-import { ApiError, apiUrl, pageToken, request } from "./api-client.ts";
+import { enc, type PromptFileRef, paths } from "@lumisca/core/shared";
+import {
+  ApiError,
+  apiPathOf,
+  apiUrl,
+  httpError,
+  pageToken,
+  parseError,
+  request,
+} from "./api-client.ts";
 
 export type PromptUploadStatus =
   | "uploading"
@@ -24,11 +32,15 @@ export interface PromptUploadState {
   error?: string;
 }
 
+/** One transfer's path, from the shared templates (core/shared/api-paths.ts):
+ * the server registers the same ones (routes/prompt-uploads.ts). */
 function uploadPath(agentId: string, uploadId?: string): string {
-  const base = `/api/stella/conversations/${encodeURIComponent(agentId)}/uploads`;
-  return uploadId === undefined
-    ? base
-    : `${base}/${encodeURIComponent(uploadId)}`;
+  const template =
+    uploadId === undefined ? paths.conversationUploads : paths.upload;
+  return `/api${apiPathOf(template, {
+    agentId: enc(agentId),
+    ...(uploadId === undefined ? {} : { uploadId: enc(uploadId) }),
+  })}`;
 }
 
 /** The lowercase hex SHA-256 of one chunk. Web Crypto digests the 8 MiB
@@ -103,33 +115,12 @@ export function putPromptUploadChunk(
           try {
             resolve(JSON.parse(xhr.responseText) as { offset: number });
           } catch (error) {
-            reject(
-              new ApiError(
-                error instanceof Error ? error.message : String(error),
-                "parse",
-                { status: xhr.status },
-              ),
-            );
+            reject(parseError(error, xhr.status));
           }
         });
         return;
       }
-      let detail: string | null = null;
-      try {
-        const body = JSON.parse(xhr.responseText) as { error?: unknown };
-        if (typeof body.error === "string") detail = body.error;
-      } catch {
-        // A proxy's HTML page is not the server's sentence.
-      }
-      settle(() =>
-        reject(
-          new ApiError(
-            detail ?? `Request failed: ${xhr.status}`,
-            xhr.status < 500 ? "http-4xx" : "http-5xx",
-            { status: xhr.status, detail },
-          ),
-        ),
-      );
+      settle(() => reject(httpError(xhr.status, xhr.responseText)));
     };
     xhr.send(bytes as unknown as XMLHttpRequestBodyInit);
   });
@@ -142,7 +133,10 @@ export function completePromptUpload(
   signal?: AbortSignal,
 ): Promise<{ status: PromptUploadStatus }> {
   return request<{ status: PromptUploadStatus }>(
-    `${uploadPath(agentId, uploadId)}/complete`,
+    `/api${apiPathOf(paths.uploadComplete, {
+      agentId: enc(agentId),
+      uploadId: enc(uploadId),
+    })}`,
     { method: "POST", ...(signal === undefined ? {} : { signal }) },
   );
 }

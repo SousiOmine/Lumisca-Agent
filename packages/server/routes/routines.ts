@@ -12,7 +12,12 @@
  */
 
 import type { Routine, StellaAgent } from "@lumisca/core";
-import { nextRunAt, type RoutineView } from "@lumisca/core/shared";
+import {
+  nextRunAt,
+  paths,
+  type RoutineView,
+  routePath,
+} from "@lumisca/core/shared";
 import { Hono } from "hono";
 import { AppError, notFound, parseBody, requireBoolean } from "./util.ts";
 
@@ -82,14 +87,14 @@ export function routineRoutes(
     return routine.agentId;
   };
 
-  app.get("/stella/agents/:agentId/routines", (c) => {
+  app.get(routePath(paths.stellaAgentRoutines), (c) => {
     return c.json(listOf(c.req.param("agentId")));
   });
 
   /** Turn a routine on or off. Enabling schedules the next run from now;
    * disabling clears it (a disabled routine must not fire because of a
    * stale next-run value). */
-  app.patch("/routines/:id", async (c) => {
+  app.patch(routePath(paths.routine), async (c) => {
     const body = await parseBody<{ enabled?: unknown }>(c);
     const enabled = requireBoolean(body?.enabled, "enabled");
     const id = c.req.param("id");
@@ -105,7 +110,7 @@ export function routineRoutes(
     return c.json(listOf(routine.agentId));
   });
 
-  app.delete("/routines/:id", (c) => {
+  app.delete(routePath(paths.routine), (c) => {
     const id = c.req.param("id");
     const agentId = agentOf(id);
     routines.getRoutineRepo().delete(id);
@@ -119,7 +124,7 @@ export function routineRoutes(
    * conversation to run in, and the scheduler would record a skip the user
    * did not ask for. This is an answer to the button, so it is a 409 rather
    * than a row note. */
-  app.post("/routines/:id/run", (c) => {
+  app.post(routePath(paths.routineRun), (c) => {
     const id = c.req.param("id");
     const agentId = agentOf(id);
     const agent = agents.listStellaAgents().find((item) => item.id === agentId);
@@ -134,7 +139,7 @@ export function routineRoutes(
 
   /** Stop the run this routine started. A run the user started in the same
    * conversation is left alone (the core checks the run's origin). */
-  app.post("/routines/:id/stop", (c) => {
+  app.post(routePath(paths.routineStop), (c) => {
     const id = c.req.param("id");
     const agentId = agentOf(id);
     routines.stop(id);

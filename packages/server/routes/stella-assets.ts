@@ -10,7 +10,7 @@
  */
 
 import type { StellaAgent } from "@lumisca/core";
-import { renderPreview } from "@lumisca/core/media/preview";
+import { paths, routePath } from "@lumisca/core/shared";
 import { Hono } from "hono";
 import { serveAsset } from "./asset-response.ts";
 import { AppError, notFound } from "./util.ts";
@@ -44,7 +44,7 @@ export function stellaAssetRoutes(core: StellaAssetApi): Hono {
    * keep showing the old face), while a fresh upload gets a fresh name. The
    * agent must exist — a name alone must not tell a caller whether one ever
    * did — and the store answers only names it generated. */
-  app.get("/stella/agents/:id/icon/:name", async (c) => {
+  app.get(routePath(paths.stellaAgentIcon), async (c) => {
     const agentId = c.req.param("id");
     const name = c.req.param("name");
     return await serveAsset(c, {
@@ -70,8 +70,12 @@ export function stellaAssetRoutes(core: StellaAssetApi): Hono {
    * as "this file is no longer in the machine" — the ordinary end of a
    * message-app attachment, and the same for a picture and a document. The
    * bytes are never copied into the store, so nothing can show a stale copy
-   * of something the machine no longer has. */
-  app.get("/stella/conversations/:agentId/upload", async (c) => {
+   * of something the machine no longer has.
+   *
+   * `ref` is the address the transcript carries (`uploads/<batch>/<name>`),
+   * validated before it becomes a path, so a caller cannot reach anything
+   * outside the agent's uploads folder. */
+  app.get(routePath(paths.conversationUpload), async (c) => {
     const agentId = c.req.param("agentId");
     const ref = c.req.query("ref") ?? "";
     return await serveAsset(c, {

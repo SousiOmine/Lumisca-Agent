@@ -1,4 +1,5 @@
 import type { SessionInfo } from "@lumisca/core";
+import { paths, routePath } from "@lumisca/core/shared";
 import { Hono } from "hono";
 import { serveAsset } from "./asset-response.ts";
 import { notFound } from "./util.ts";
@@ -28,7 +29,7 @@ export interface VisualApi {
 export function visualRoutes(core: VisualApi): Hono {
   const app = new Hono();
 
-  app.get("/sessions/:id/visual/:name", async (c) => {
+  app.get(routePath(paths.sessionVisual), async (c) => {
     const sessionId = c.req.param("id");
     const name = c.req.param("name");
     return await serveAsset(c, {

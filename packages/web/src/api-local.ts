@@ -1,20 +1,21 @@
 import type { DefaultModel } from "@lumisca/core";
-import type {
-  CommandApproval,
-  SavedPrompt,
-  SessionSnapshot,
-  SetupState,
+import {
+  type CommandApproval,
+  enc,
+  paths,
+  type SavedPrompt,
+  type SessionSnapshot,
+  type SetupState,
 } from "@lumisca/core/shared";
 import {
-  promptBody,
+  apiPathOf,
   request,
   type SessionRoute,
   sessionCalls,
-  sessionPath,
   sessionRequest,
 } from "./api-client.ts";
+import { conversationCalls, sessionFamily } from "./api-conversation.ts";
 import type {
-  AskAnswer,
   BackgroundCommandInfo,
   CatalogStatus,
   FsBrowse,
@@ -23,8 +24,6 @@ import type {
   McpInfo,
   McpTestResult,
   ModelInfo,
-  ModePrompt,
-  PendingImage,
   ProviderAuthType,
   ProviderInfo,
   ProviderLoginMethod,
@@ -56,12 +55,20 @@ export type SessionInfoDto = SessionInfo & { lastError?: string };
  * that owns the session ("" = this server, see sessionRequest), the session
  * id, then the call's own args. `api` (this server), `fed` (a peer) and
  * `sessionApi` (the peer a tab routes to) are all built from it, so an
- * endpoint's path, method and body are written once. Paths are the
- * `sessionPath` form: whether they are reached as `/api/...` or through the
- * fed proxy is the transport's business, not the route's. */
+ * endpoint's path, method and body are written once. Paths are the templates
+ * of core/shared/api-paths.ts filled in: whether they are reached as
+ * `/api/...` or through the fed proxy is the transport's business, not the
+ * route's. */
 export const sessionRoutes = {
+  // Revision, prompt, abort, rewind and answer are the calls a conversation
+  // shares (routes/conversation.ts); api-conversation.ts states them once for
+  // both surfaces.
+  ...conversationCalls(sessionFamily, sessionRequest),
   getSession: (peerId: string, sessionId: string) =>
-    sessionRequest<SessionInfoDto>(peerId, sessionPath(sessionId)),
+    sessionRequest<SessionInfoDto>(
+      peerId,
+      apiPathOf(paths.session, { id: enc(sessionId) }),
+    ),
   /** One window of the session's live-state snapshot (the transcript window
    * plus the run state, pending questions, last error, title and revision
    * that event replay cannot restore); re-fetched after a WS drop or page
@@ -75,28 +82,19 @@ export const sessionRoutes = {
     const query = new URLSearchParams();
     if (window.older !== undefined) query.set("older", window.older);
     if (window.limit !== undefined) query.set("limit", String(window.limit));
-    const suffix = query.size === 0 ? "/messages" : `/messages?${query}`;
+    const search = query.size === 0 ? "" : `?${query}`;
     return sessionRequest<SessionSnapshot>(
       peerId,
-      sessionPath(sessionId, suffix),
+      `${apiPathOf(paths.sessionMessages, { id: enc(sessionId) })}${search}`,
     );
   },
-  /** The session's revision: how many events the owning server has emitted
-   * for it. Cheap (a counter read, no session open), so the client polls it
-   * on a low interval and re-reads the snapshot only when it moved — a
-   * missed frame is then noticed without re-reading anything. */
-  getRevision: (peerId: string, sessionId: string) =>
-    sessionRequest<{ rev: number }>(
-      peerId,
-      sessionPath(sessionId, "/revision"),
-    ),
   /** The session's current todo plan (the todo tool); re-fetched after a
    * WS drop or page reload to restore the progress panel (todo events are
    * snapshots, but only mutations emit them, so they are not replayed). */
   getTodo: (peerId: string, sessionId: string) =>
     sessionRequest<{ todos: TodoPhase[] }>(
       peerId,
-      sessionPath(sessionId, "/todo"),
+      apiPathOf(paths.sessionTodo, { id: enc(sessionId) }),
     ),
   /** Snapshots of the session's sub-agent tasks (the task tool); re-fetched
    * after a WS drop or page reload to restore the tasks panel (task events
@@ -104,7 +102,7 @@ export const sessionRoutes = {
   getTasks: (peerId: string, sessionId: string) =>
     sessionRequest<{ tasks: TaskInfo[] }>(
       peerId,
-      sessionPath(sessionId, "/tasks"),
+      apiPathOf(paths.sessionTasks, { id: enc(sessionId) }),
     ),
   /** Snapshots of the session's background commands (the async_bash tool);
    * re-fetched after a WS drop or page reload to restore the background
@@ -112,32 +110,14 @@ export const sessionRoutes = {
   getBackground: (peerId: string, sessionId: string) =>
     sessionRequest<{ backgrounds: BackgroundCommandInfo[] }>(
       peerId,
-      sessionPath(sessionId, "/background"),
+      apiPathOf(paths.sessionBackground, { id: enc(sessionId) }),
     ),
   closeSession: (peerId: string, sessionId: string) =>
-    sessionRequest<{ ok: boolean }>(peerId, sessionPath(sessionId, "/close"), {
-      method: "POST",
-    }),
-  prompt: (
-    peerId: string,
-    sessionId: string,
-    text: string,
-    images?: PendingImage[],
-    mode?: ModePrompt,
-  ) =>
-    sessionRequest<{ ok: boolean }>(peerId, sessionPath(sessionId, "/prompt"), {
-      method: "POST",
-      body: JSON.stringify(promptBody(text, images, mode)),
-    }),
-  abort: (peerId: string, sessionId: string) =>
-    sessionRequest<{ ok: boolean }>(peerId, sessionPath(sessionId, "/abort"), {
-      method: "POST",
-    }),
-  rewind: (peerId: string, sessionId: string, timestamp: number) =>
-    sessionRequest<{ ok: boolean }>(peerId, sessionPath(sessionId, "/rewind"), {
-      method: "POST",
-      body: JSON.stringify({ timestamp }),
-    }),
+    sessionRequest<{ ok: boolean }>(
+      peerId,
+      apiPathOf(paths.sessionClose, { id: enc(sessionId) }),
+      { method: "POST" },
+    ),
   /** Condense older history into a checkpoint on demand (the `/compact`
    * command). `instructions` is the user's extra focus for the summary.
    * `compacted` is the number of summarized messages; absent when nothing
@@ -145,7 +125,7 @@ export const sessionRoutes = {
   compact: (peerId: string, sessionId: string, instructions?: string) =>
     sessionRequest<{ ok: boolean; compacted?: number }>(
       peerId,
-      sessionPath(sessionId, "/compact"),
+      apiPathOf(paths.sessionCompact, { id: enc(sessionId) }),
       {
         method: "POST",
         ...(instructions !== undefined && instructions.length > 0
@@ -153,17 +133,6 @@ export const sessionRoutes = {
           : {}),
       },
     ),
-  /** Answer a pending ask (the ask tool) with the user's selections. */
-  answer: (
-    peerId: string,
-    sessionId: string,
-    toolCallId: string,
-    answers: AskAnswer[],
-  ) =>
-    sessionRequest<{ ok: boolean }>(peerId, sessionPath(sessionId, "/answer"), {
-      method: "POST",
-      body: JSON.stringify({ toolCallId, answers }),
-    }),
   /** Switch the session's model; the route answers the plain session record
    * (unlike getSession, it carries no last run error). A switch made while a
    * run is in flight is stored at once and takes effect from the next run. */
@@ -173,10 +142,11 @@ export const sessionRoutes = {
     provider: string,
     modelId: string,
   ) =>
-    sessionRequest<SessionInfo>(peerId, sessionPath(sessionId, "/model"), {
-      method: "POST",
-      body: JSON.stringify({ provider, modelId }),
-    }),
+    sessionRequest<SessionInfo>(
+      peerId,
+      apiPathOf(paths.sessionModel, { id: enc(sessionId) }),
+      { method: "POST", body: JSON.stringify({ provider, modelId }) },
+    ),
 } satisfies Record<string, SessionRoute>;
 
 /** Every endpoint that exists on both this server and a peer, in one table:
@@ -226,7 +196,7 @@ export const peerRoutes = {
         : `/skills?workspaceId=${encodeURIComponent(workspaceId)}`,
     ),
   listSessions: (peerId: string) =>
-    sessionRequest<SessionInfo[]>(peerId, "/sessions"),
+    sessionRequest<SessionInfo[]>(peerId, paths.sessions),
 } satisfies Record<
   string,
   (peerId: string, ...args: never[]) => Promise<unknown>
@@ -261,14 +231,14 @@ export const api = {
       : peerRoutes.getSkills("", workspaceId),
 
   getDefaultModel: () =>
-    request<DefaultModel | null>("/api/sessions/default-model"),
+    request<DefaultModel | null>(`/api${paths.sessionDefaultModel}`),
   createSession: (input: {
     workspaceId?: string;
     name?: string;
     modelProvider?: string;
     modelId?: string;
   }) =>
-    request<SessionInfo>("/api/sessions", {
+    request<SessionInfo>(`/api${paths.sessions}`, {
       method: "POST",
       body: JSON.stringify(input),
     }),
@@ -281,23 +251,23 @@ export const api = {
 
   /** What this server can do for stella mode. The chosen mode is the
    * client's own (hooks/useAppMode.ts), so it is not read here. */
-  getStellaStatus: () => request<StellaStatus>("/api/stella/status"),
+  getStellaStatus: () => request<StellaStatus>(`/api${paths.stellaStatus}`),
   /** One agent's machine: running, asleep, or being started. */
   getStellaAgentStatus: (agentId: string) =>
     request<StellaMachineStatus>(
-      `/api/stella/agents/${encodeURIComponent(agentId)}/machine`,
+      `/api${apiPathOf(paths.stellaAgentMachine, { agentId: enc(agentId) })}`,
     ),
   /** Wake one agent's machine without sending a prompt. */
   wakeStellaAgent: (agentId: string) =>
     request<{ ok: true }>(
-      `/api/stella/agents/${encodeURIComponent(agentId)}/wake`,
+      `/api${apiPathOf(paths.stellaAgentWake, { agentId: enc(agentId) })}`,
       { method: "POST" },
     ),
   /** The user did something on the machine's screen: its machine may stay
    * awake (see VM_IDLE_SLEEP_MS). */
   touchStellaAgent: (agentId: string) =>
     request<{ ok: true }>(
-      `/api/stella/agents/${encodeURIComponent(agentId)}/touch`,
+      `/api${apiPathOf(paths.stellaAgentTouch, { agentId: enc(agentId) })}`,
       { method: "POST" },
     ),
   /** The sidebar's rows of stella mode — each agent with what its
@@ -308,9 +278,9 @@ export const api = {
   getStellaAgents: () =>
     request<{
       agents: StellaAgentSummary[];
-    }>("/api/stella/agents"),
+    }>(`/api${paths.stellaAgents}`),
   createStellaAgent: (name: string, role: string) =>
-    request<StellaAgent>("/api/stella/agents", {
+    request<StellaAgent>(`/api${paths.stellaAgents}`, {
       method: "POST",
       body: JSON.stringify({ name, role }),
     }),
@@ -339,42 +309,46 @@ export const api = {
       enabled?: boolean;
     },
   ) =>
-    request<StellaAgent>(`/api/stella/agents/${encodeURIComponent(id)}`, {
-      method: "PATCH",
-      body: JSON.stringify(patch),
-    }),
+    request<StellaAgent>(
+      `/api${apiPathOf(paths.stellaAgent, { agentId: enc(id) })}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      },
+    ),
   deleteStellaAgent: (id: string) =>
-    request<{ ok: boolean }>(`/api/stella/agents/${encodeURIComponent(id)}`, {
-      method: "DELETE",
-    }),
+    request<{ ok: boolean }>(
+      `/api${apiPathOf(paths.stellaAgent, { agentId: enc(id) })}`,
+      { method: "DELETE" },
+    ),
   // --- routines (scheduled requests of a stella conversation) --------------
 
   /** One agent's routines, with the "running now" flag. */
   listRoutines: (agentId: string) =>
     request<{ routines: RoutineView[] }>(
-      `/api/stella/agents/${encodeURIComponent(agentId)}/routines`,
+      `/api${apiPathOf(paths.stellaAgentRoutines, { agentId: enc(agentId) })}`,
     ),
   /** Turn a routine on or off (the server recomputes its next run). */
   setRoutineEnabled: (id: string, enabled: boolean) =>
     request<{ routines: RoutineView[] }>(
-      `/api/routines/${encodeURIComponent(id)}`,
+      `/api${apiPathOf(paths.routine, { id: enc(id) })}`,
       { method: "PATCH", body: JSON.stringify({ enabled }) },
     ),
   deleteRoutine: (id: string) =>
     request<{ routines: RoutineView[] }>(
-      `/api/routines/${encodeURIComponent(id)}`,
+      `/api${apiPathOf(paths.routine, { id: enc(id) })}`,
       { method: "DELETE" },
     ),
   /** Start a run now (the server does not wait for it to finish). */
   runRoutine: (id: string) =>
     request<{ routines: RoutineView[] }>(
-      `/api/routines/${encodeURIComponent(id)}/run`,
+      `/api${apiPathOf(paths.routineRun, { id: enc(id) })}`,
       { method: "POST" },
     ),
   /** Stop the run this routine started. */
   stopRoutine: (id: string) =>
     request<{ routines: RoutineView[] }>(
-      `/api/routines/${encodeURIComponent(id)}/stop`,
+      `/api${apiPathOf(paths.routineStop, { id: enc(id) })}`,
       { method: "POST" },
     ),
   listProviders: () => peerRoutes.listProviders(""),

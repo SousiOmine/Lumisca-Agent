@@ -190,7 +190,7 @@ test("api-routing: a disconnected peer fails loudly instead of falling back", as
 
 test("api-routing: a colon in the session id survives the whole path", async () => {
   // splitTabKey cuts at the *first* colon, so everything after the peer
-  // prefix belongs to the session id, and sessionPath percent-encodes it
+  // prefix belongs to the session id, and the path builder percent-encodes it
   // instead of letting it split a path segment.
   const session = sessionApi("peer-1:sess:2");
   assertEquals(session.peerId, "peer-1");

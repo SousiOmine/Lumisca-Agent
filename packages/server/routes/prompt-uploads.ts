@@ -26,6 +26,8 @@ import {
   MAX_PROMPT_FILES,
   MAX_PROMPT_FILES_TOTAL_BYTES,
   PROMPT_UPLOAD_CHUNK_BYTES,
+  paths,
+  routePath,
 } from "@lumisca/core/shared";
 import { Hono } from "hono";
 import { AppError, parseBody } from "./util.ts";
@@ -418,14 +420,14 @@ export class PromptUploads implements PromptUploadSink {
 export function promptUploadRoutes(uploads: PromptUploads): Hono {
   const app = new Hono();
 
-  app.post("/stella/conversations/:agentId/uploads", async (c) => {
+  app.post(routePath(paths.conversationUploads), async (c) => {
     const agentId = c.req.param("agentId");
     const body = await parseBody<{ name?: unknown; size?: unknown }>(c);
     const created = await uploads.create(agentId, body?.name, body?.size);
     return c.json(created);
   });
 
-  app.put("/stella/conversations/:agentId/uploads/:uploadId", async (c) => {
+  app.put(routePath(paths.upload), async (c) => {
     const agentId = c.req.param("agentId");
     const uploadId = c.req.param("uploadId");
     const length = Number(c.req.header("content-length"));
@@ -446,15 +448,15 @@ export function promptUploadRoutes(uploads: PromptUploads): Hono {
     return c.json(result);
   });
 
-  app.get("/stella/conversations/:agentId/uploads/:uploadId", (c) =>
+  app.get(routePath(paths.upload), (c) =>
     c.json(uploads.status(c.req.param("agentId"), c.req.param("uploadId"))),
   );
 
-  app.post("/stella/conversations/:agentId/uploads/:uploadId/complete", (c) =>
+  app.post(routePath(paths.uploadComplete), (c) =>
     c.json(uploads.complete(c.req.param("agentId"), c.req.param("uploadId"))),
   );
 
-  app.delete("/stella/conversations/:agentId/uploads/:uploadId", async (c) => {
+  app.delete(routePath(paths.upload), async (c) => {
     await uploads.cancel(c.req.param("agentId"), c.req.param("uploadId"));
     return c.json({ ok: true });
   });

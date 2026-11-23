@@ -1,6 +1,8 @@
 /** API surface barrel (split for single responsibility):
  * - `./api-client.ts` — request/fedRequest/sessionRequest/peerRouted/
- *   promptBody/token plus the session-route binders,
+ *   promptBody/token, the failure classifiers and the route-table binders,
+ * - `./api-conversation.ts` — the calls a session and a conversation answer
+ *   the same way (revision, prompt, abort, rewind, answer), stated once,
  * - `./api-local.ts` — the two route tables (sessionRoutes, peerRoutes) and
  *   `api` (this server),
  * - `./api-federation.ts` — `fed` (peer servers via the fed proxy),

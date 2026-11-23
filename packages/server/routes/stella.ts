@@ -1,6 +1,7 @@
 import type { PromptFileRef } from "@lumisca/core";
 import { stellaEventsOf } from "@lumisca/core";
 import type { StellaMachineStatus, StellaStatus } from "@lumisca/core/shared";
+import { paths, routePath } from "@lumisca/core/shared";
 import { Hono } from "hono";
 import type { StellaApi } from "../contracts/stella.ts";
 import { upgradeWebSocket } from "../websocket.ts";
@@ -54,7 +55,7 @@ export function stellaRoutes(
    * The chosen mode is deliberately NOT here: it belongs to each client (see
    * shared/app-mode.ts), so two clients showing one server never drag each
    * other between modes. */
-  app.get("/stella/status", async (c) => {
+  app.get(routePath(paths.stellaStatus), async (c) => {
     const status: StellaStatus = await core.getStellaStatus();
     return c.json(status);
   });
@@ -63,7 +64,7 @@ export function stellaRoutes(
    * The client polls this for the conversation it has open, so the screen
    * pane can say "asleep" instead of failing to connect, and offer to wake
    * it. */
-  app.get("/stella/agents/:id/machine", async (c) => {
+  app.get(routePath(paths.stellaAgentMachine), async (c) => {
     const status: StellaMachineStatus = await core.getStellaAgentStatus(
       c.req.param("id"),
     );
@@ -72,7 +73,7 @@ export function stellaRoutes(
 
   /** Wake one agent's machine without sending a prompt (the pane's "wake"
    * button). */
-  app.post("/stella/agents/:id/wake", async (c) => {
+  app.post(routePath(paths.stellaAgentWake), async (c) => {
     await core.wakeStellaAgent(c.req.param("id"));
     return c.json({ ok: true });
   });
@@ -80,7 +81,7 @@ export function stellaRoutes(
   /** The user did something on the machine's screen. The idle clock starts
    * here, so driving the screen keeps it awake; a pane left open with nobody
    * at it does not. */
-  app.post("/stella/agents/:id/touch", (c) => {
+  app.post(routePath(paths.stellaAgentTouch), (c) => {
     const agentId = c.req.param("id");
     requireEnabledAgent(core, agentId);
     core.touchStellaAgent(agentId);
@@ -107,7 +108,7 @@ export function stellaRoutes(
    * one agent: a first run would otherwise open stella mode onto an empty
    * sidebar and a disabled composer, which is a wall in front of the one
    * thing the mode exists for (see ensureStellaAgent). */
-  app.get("/stella/agents", async (c) => {
+  app.get(routePath(paths.stellaAgents), async (c) => {
     await core.ensureStellaAgent();
     return c.json({ agents: core.listStellaAgentSummaries() });
   });
@@ -117,7 +118,7 @@ export function stellaRoutes(
    * wall. An empty name becomes the default label and an empty role leaves
    * the agent on the app's own instructions (see normalizeAgentInput); the
    * value the server actually stored is what comes back. */
-  app.post("/stella/agents", async (c) => {
+  app.post(routePath(paths.stellaAgents), async (c) => {
     const body = await parseBody<{ name?: unknown; role?: unknown }>(c);
     // A duplicate name is a CoreError("conflict"), which app.ts's onError
     // maps to 409 — the client shows it as "that name is taken" rather than
@@ -155,7 +156,7 @@ export function stellaRoutes(
    * about what a valid choice is. A conversation with a run in flight is not
    * refused: the model is stored and applied when that run ends, and
    * switching the agent off aborts that run as it closes the conversation. */
-  app.patch("/stella/agents/:id", async (c) => {
+  app.patch(routePath(paths.stellaAgent), async (c) => {
     const body = await parseBody<{
       name?: unknown;
       icon?: unknown;
@@ -184,7 +185,7 @@ export function stellaRoutes(
 
   /** Delete an agent and its conversation. The client confirms first: the
    * transcript goes with it. */
-  app.delete("/stella/agents/:id", async (c) => {
+  app.delete(routePath(paths.stellaAgent), async (c) => {
     await core.deleteStellaAgent(c.req.param("id"));
     return c.json({ ok: true });
   });
@@ -202,7 +203,7 @@ export function stellaRoutes(
    * piece of machine state. `getOrCreateStellaSession` does that start
    * itself (a routine opens a conversation without passing through here), so
    * calling it again would only re-ask podman for an answer already known. */
-  app.get("/stella/conversations/:agentId", async (c) => {
+  app.get(routePath(paths.conversation), async (c) => {
     const agentId = c.req.param("agentId");
     const query = parseWindowQuery(c.req.url);
     const agent = requireAgent(core, agentId);
@@ -232,7 +233,7 @@ export function stellaRoutes(
    * the entries, the run state and what the run is waiting on, read in one
    * handler so they describe the same instant. `older` reads further back
    * (see snapshotOf). */
-  app.get("/stella/conversations/:agentId/messages", (c) => {
+  app.get(routePath(paths.conversationMessages), (c) => {
     const agentId = c.req.param("agentId");
     const query = parseWindowQuery(c.req.url);
     const agent = requireAgent(core, agentId);
@@ -248,7 +249,7 @@ export function stellaRoutes(
   /** The conversation's revision: how many events the server has emitted
    * for it. Cheap (a counter read), so the client polls it and re-reads the
    * snapshot only when it moved. */
-  app.get("/stella/conversations/:agentId/revision", (c) => {
+  app.get(routePath(paths.conversationRevision), (c) => {
     const session = requireConversation(core, c.req.param("agentId"));
     return c.json({ rev: core.getSessionRevision(session.id) });
   });
@@ -261,7 +262,7 @@ export function stellaRoutes(
    * the same "text may be empty when an image or an uploaded file is attached"
    * rule. One parser for the two prompt surfaces means an attachment cannot be
    * accepted on one and silently dropped on the other. */
-  app.post("/stella/conversations/:agentId/prompt", async (c) => {
+  app.post(routePath(paths.conversationPrompt), async (c) => {
     const body = await parseBody<PromptBody>(c);
     const { text, images, uploads } = parsePromptBody(body ?? {});
     const agentId = c.req.param("agentId");
@@ -318,14 +319,14 @@ export function stellaRoutes(
   // among them: a conversation's model is its agent's (see the agent edit
   // dialog), so there is nothing here to switch.
   conversationRoutes(app, core, {
-    base: "/stella/conversations/:agentId",
+    base: paths.conversation,
     resolve: (c) => requireConversation(core, c.req.param("agentId")!).id,
     modelRoute: false,
   });
 
   /** The user finished at the screen (`vm_ask_user`): the blocked run
    * continues. */
-  app.post("/stella/conversations/:agentId/handover", async (c) => {
+  app.post(routePath(paths.conversationHandover), async (c) => {
     const body = await parseBody<{
       note?: unknown;
       toolCallId?: unknown;
@@ -343,7 +344,7 @@ export function stellaRoutes(
    * The name is the one the agent asked for — taken from the pending
    * request, never from this body — so a dialog can only fill the question
    * it was opened for. Nothing about the value is echoed back or logged. */
-  app.post("/stella/conversations/:agentId/env", async (c) => {
+  app.post(routePath(paths.conversationEnv), async (c) => {
     const body = await parseBody<{
       value?: unknown;
       toolCallId?: unknown;
@@ -356,7 +357,7 @@ export function stellaRoutes(
 
   /** The user refused to enter a value (or closed the dialog). Not an
    * error: the run continues without the variable. */
-  app.post("/stella/conversations/:agentId/env/decline", async (c) => {
+  app.post(routePath(paths.conversationEnvDecline), async (c) => {
     const body = await parseBody<{ toolCallId?: unknown }>(c);
     const toolCallId = optionalToolCallId(body?.toolCallId);
     const session = requireConversation(core, c.req.param("agentId"));
@@ -370,7 +371,7 @@ export function stellaRoutes(
    * answer a different request; the folder itself is never named here — the
    * server's list of loans is what the tool reads, so a client cannot tell
    * the model that a folder exists when it does not. */
-  app.post("/stella/conversations/:agentId/share/lend", async (c) => {
+  app.post(routePath(paths.conversationShareLend), async (c) => {
     const body = await parseBody<{ toolCallId?: unknown }>(c);
     const toolCallId = optionalToolCallId(body?.toolCallId);
     const session = requireConversation(core, c.req.param("agentId"));
@@ -380,7 +381,7 @@ export function stellaRoutes(
 
   /** The user refused to lend a folder. Not an error: the run continues
    * without one. */
-  app.post("/stella/conversations/:agentId/share/decline", async (c) => {
+  app.post(routePath(paths.conversationShareDecline), async (c) => {
     const body = await parseBody<{ toolCallId?: unknown }>(c);
     const toolCallId = optionalToolCallId(body?.toolCallId);
     const session = requireConversation(core, c.req.param("agentId"));
@@ -392,7 +393,7 @@ export function stellaRoutes(
    * (`ok: true`), or it could not and said why. The reason is handed to the
    * blocked tool as it was given — the shell's own words are what the model
    * can act on. */
-  app.post("/stella/conversations/:agentId/share/disconnect", async (c) => {
+  app.post(routePath(paths.conversationShareDisconnect), async (c) => {
     const body = await parseBody<{
       toolCallId?: unknown;
       ok?: unknown;
@@ -431,7 +432,7 @@ export function stellaRoutes(
    * Reading does not: it returns what is already on the screen, and refusing
    * it while a hand-over is ending would fail a request that changed nothing.
    */
-  app.get("/stella/conversations/:agentId/clipboard", async (c) => {
+  app.get(routePath(paths.conversationClipboard), async (c) => {
     const agentId = c.req.param("agentId")!;
     requireEnabledAgent(core, agentId);
     const session = requireConversation(core, agentId);
@@ -439,7 +440,7 @@ export function stellaRoutes(
     return c.json({ text });
   });
 
-  app.post("/stella/conversations/:agentId/clipboard", async (c) => {
+  app.post(routePath(paths.conversationClipboard), async (c) => {
     const agentId = c.req.param("agentId")!;
     requireEnabledAgent(core, agentId);
     const session = requireConversation(core, agentId);
@@ -467,7 +468,7 @@ export function stellaRoutes(
    * the WebSocket handshake is an ordinary HTTP GET on the same middleware
    * chain. Heartbeats are transport-level, as on `/ws`. */
   app.get(
-    "/stella/conversations/:agentId/events",
+    routePath(paths.conversationEvents),
     upgradeWebSocket((c) => {
       const agentId = c.req.param("agentId");
       // A disabled agent has no run and no event: a socket would sit silent

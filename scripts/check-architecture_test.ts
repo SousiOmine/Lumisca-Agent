@@ -196,6 +196,21 @@ test("tsconfig paths must be exactly the public core specifiers", () => {
     "@lumisca/core/skills/slash": ["./packages/core/skills/slash.ts"],
     "@lumisca/core/browser-entries": ["./packages/core/browser-entries.ts"],
     "@lumisca/core/test-utils": ["./packages/core/test-utils.ts"],
+    "@lumisca/core/base64": ["./packages/core/base64.ts"],
+    "@lumisca/core/errors": ["./packages/core/errors.ts"],
+    "@lumisca/core/media/preview": ["./packages/core/media/preview.ts"],
+    "@lumisca/core/media/preview-cache": [
+      "./packages/core/media/preview-cache.ts",
+    ],
+    "@lumisca/core/media/stored-image": [
+      "./packages/core/media/stored-image.ts",
+    ],
+    "@lumisca/core/notify/subscriptions": [
+      "./packages/core/notify/subscriptions.ts",
+    ],
+    "@lumisca/core/platform": ["./packages/core/platform.ts"],
+    "@lumisca/core/process": ["./packages/core/process.ts"],
+    "@lumisca/core/settings/repo": ["./packages/core/settings/repo.ts"],
     "@lumisca/server": ["./packages/server/mod.ts"],
   };
   // A paths table for something else is not this rule's business.
