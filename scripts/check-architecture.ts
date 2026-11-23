@@ -1,6 +1,8 @@
 /**
- * Structural checks the type checker cannot make: import cycles, and the
- * one list of browser-safe entry points agreeing with tsconfig.
+ * Structural checks the type checker cannot make: import cycles, the one
+ * list of browser-safe entry points agreeing with tsconfig, and the three
+ * places `@lumisca/core`'s public entry points are written down agreeing
+ * with each other.
  *
  * These are cheap (no build, no network) and run in CI beside `tsc`. A
  * failure prints the offending files so the fix is obvious.
