@@ -277,12 +277,24 @@ export function fedRequest<T>(
 /** One API path from a template in core/shared/api-paths.ts, with the ids
  * encoded as path segments. The server registers the same template (see
  * `routePath`), so the two cannot spell a path differently. */
-export function apiPathOf(
-  template: string,
-  params: Record<string, string> = {},
+export function apiPathOf<T extends string>(
+  template: T,
+  params: TemplateParams<T>,
 ): string {
-  return apiPath(template, params);
+  return apiPath(template, params as Record<string, string>);
 }
+
+/** The holes a template names, as the object that fills them.
+ *
+ * The runtime throws when a hole is left unfilled (see `apiPath`), and the
+ * caller that asked it to is far from the mistake: the throw lands in a
+ * `catch` that keeps the last state, so a wrong parameter name looks like
+ * "nothing ever loaded". Deriving the parameter from the template makes that
+ * call site a type error instead. */
+type TemplateParams<T extends string> =
+  T extends `${string}{${infer Hole}}${infer Rest}`
+    ? { readonly [K in Hole]: string } & TemplateParams<Rest>
+    : unknown;
 
 /** URL base of a session's visual assets (`visual:` image references in its
  * messages resolve against it, always ending with "/"). The machine running

@@ -255,19 +255,19 @@ export const api = {
   /** One agent's machine: running, asleep, or being started. */
   getStellaAgentStatus: (agentId: string) =>
     request<StellaMachineStatus>(
-      `/api${apiPathOf(paths.stellaAgentMachine, { agentId: enc(agentId) })}`,
+      `/api${apiPathOf(paths.stellaAgentMachine, { id: enc(agentId) })}`,
     ),
   /** Wake one agent's machine without sending a prompt. */
   wakeStellaAgent: (agentId: string) =>
     request<{ ok: true }>(
-      `/api${apiPathOf(paths.stellaAgentWake, { agentId: enc(agentId) })}`,
+      `/api${apiPathOf(paths.stellaAgentWake, { id: enc(agentId) })}`,
       { method: "POST" },
     ),
   /** The user did something on the machine's screen: its machine may stay
    * awake (see VM_IDLE_SLEEP_MS). */
   touchStellaAgent: (agentId: string) =>
     request<{ ok: true }>(
-      `/api${apiPathOf(paths.stellaAgentTouch, { agentId: enc(agentId) })}`,
+      `/api${apiPathOf(paths.stellaAgentTouch, { id: enc(agentId) })}`,
       { method: "POST" },
     ),
   /** The sidebar's rows of stella mode — each agent with what its
@@ -310,7 +310,7 @@ export const api = {
     },
   ) =>
     request<StellaAgent>(
-      `/api${apiPathOf(paths.stellaAgent, { agentId: enc(id) })}`,
+      `/api${apiPathOf(paths.stellaAgent, { id: enc(id) })}`,
       {
         method: "PATCH",
         body: JSON.stringify(patch),
@@ -318,7 +318,7 @@ export const api = {
     ),
   deleteStellaAgent: (id: string) =>
     request<{ ok: boolean }>(
-      `/api${apiPathOf(paths.stellaAgent, { agentId: enc(id) })}`,
+      `/api${apiPathOf(paths.stellaAgent, { id: enc(id) })}`,
       { method: "DELETE" },
     ),
   // --- routines (scheduled requests of a stella conversation) --------------

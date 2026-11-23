@@ -511,10 +511,51 @@ const SETTINGS_CASES: Case[] = [
   },
 ];
 
+/** The stella agent routes are named by `{id}` in api-paths.ts, while the
+ * routines route beside them is named by `{agentId}`. The two spellings sat
+ * in one file and the agent calls were written with the other one, so every
+ * one of them threw before sending and the screen pane never learned its
+ * machine's state. These are pinned verbatim for that reason. */
+const STELLA_CASES: Case[] = [
+  {
+    name: "getStellaAgentStatus",
+    method: "GET",
+    path: "/api/stella/agents/a%201/machine",
+    call: () => api.getStellaAgentStatus("a 1"),
+  },
+  {
+    name: "wakeStellaAgent",
+    method: "POST",
+    path: "/api/stella/agents/a%201/wake",
+    call: () => api.wakeStellaAgent("a 1"),
+  },
+  {
+    name: "touchStellaAgent",
+    method: "POST",
+    path: "/api/stella/agents/a%201/touch",
+    call: () => api.touchStellaAgent("a 1"),
+  },
+  {
+    name: "updateStellaAgent",
+    method: "PATCH",
+    path: "/api/stella/agents/a%201",
+    call: () => api.updateStellaAgent("a 1", { name: "Renamed" }),
+    body: '{"name":"Renamed"}',
+  },
+  {
+    name: "deleteStellaAgent",
+    method: "DELETE",
+    path: "/api/stella/agents/a%201",
+    call: () => api.deleteStellaAgent("a 1"),
+  },
+];
+
 test("api-local: workspace, skill and filesystem calls", () =>
   assertCases(WORKSPACE_CASES));
 
 test("api-local: session calls", () => assertCases(SESSION_CASES));
+
+test("api-local: stella agent calls", () => assertCases(STELLA_CASES));
 
 test("api-local: provider and model calls", () => assertCases(PROVIDER_CASES));
 
