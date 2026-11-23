@@ -1,14 +1,15 @@
 import { test } from "bun:test";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@lumisca/core";
 import { assertEquals } from "@std/assert";
-import { MAX_RATE_LIMIT_RETRIES } from "../ai/rate-limit.ts";
 import {
   isContextOverflowError,
   MAX_EMPTY_RESPONSE_RETRIES,
+  MAX_OUTPUT_CAP_RETRIES,
+  MAX_RATE_LIMIT_RETRIES,
 } from "../ai/retry-policy.ts";
 import type { AgentMessage } from "../domain/message.ts";
 
-import { MAX_OUTPUT_CAP_RETRIES, RetryManager } from "./retry-manager.ts";
+import { RetryManager } from "./retry-manager.ts";
 
 /** An error-stopped, outputless assistant turn with the given message. */
 function errored(errorMessage: string): AgentMessage {
@@ -32,14 +33,14 @@ test("classify: progress resets both retry budgets", () => {
   assertEquals(retries.classify(withText("done"), false), { action: "none" });
   // The budgets are back: a fresh vacant response retries at attempt 1.
   const decision = retries.classify(fauxAssistantMessage(""), false);
-  assertEquals(decision.action, "followUp");
+  assertEquals(decision.action, "retry");
 });
 
 test("classify: a vacant normal stop retries in-run up to the cap", () => {
   const retries = new RetryManager(instantSleep);
   for (let attempt = 1; attempt <= MAX_EMPTY_RESPONSE_RETRIES; attempt++) {
     const decision = retries.classify(fauxAssistantMessage(""), false);
-    assertEquals(decision.action, "followUp");
+    assertEquals(decision.action, "retry");
   }
   // The budget is spent: the turn ends normally instead of looping, and the
   // decision says so — a run that stops with nothing to show has to be
@@ -57,7 +58,7 @@ test("classify: a tool call counts as progress", () => {
   assertEquals(retries.classify(withToolCall(), false), { action: "none" });
   assertEquals(
     retries.classify(fauxAssistantMessage(""), false).action,
-    "followUp",
+    "retry",
   );
 });
 
@@ -68,8 +69,11 @@ test("classify: a rate-limited turn parks a restart with its own budget", () => 
       errored("429 rate_limit_exceeded"),
       false,
     );
-    assertEquals(decision.action, "park");
-    assertEquals(decision.action === "park" ? decision.rateLimit : false, true);
+    assertEquals(decision.action, "retry");
+    assertEquals(
+      decision.action === "retry" ? decision.attempt.reason : "none",
+      "rate-limit",
+    );
     assertEquals(retries.hasPendingRestart, true);
   }
   // The rate-limit budget is spent; the notification stops being parked and
@@ -90,7 +94,7 @@ test("classify: rate-limit and vacant budgets are independent", () => {
   // ...a rate-limited turn still gets its own retries.
   assertEquals(
     retries.classify(errored("429 too many requests"), false).action,
-    "park",
+    "retry",
   );
 });
 
@@ -147,7 +151,7 @@ function recordingAgent(): {
 test("resumeOnce re-prompts with the parked notification", async () => {
   const retries = new RetryManager(instantSleep);
   const decision = retries.classify(errored("429 rate_limit_exceeded"), false);
-  assertEquals(decision.action, "park");
+  assertEquals(decision.action, "retry");
   const agent = recordingAgent();
 
   const resumed = await retries.resumeOnce(agent, false);
@@ -242,12 +246,12 @@ test("classify: a cut-off response parks a continuation", () => {
   }) as AgentMessage;
 
   const decision = retries.classify(interrupted, false);
-  assertEquals(decision.action, "park");
+  assertEquals(decision.action, "retry");
   assertEquals(retries.hasPendingRestart, true);
   // The continuation must tell the model to resume, not to repeat.
   assertEquals(
-    decision.action === "park"
-      ? decision.notification.title.includes("cut off")
+    decision.action === "retry"
+      ? decision.attempt.notification.title.includes("cut off")
       : false,
     true,
   );
@@ -276,7 +280,7 @@ test("classify: the interruption budget is bounded", () => {
       errorMessage: "Failed to process successful response",
     }) as AgentMessage;
   for (let attempt = 1; attempt <= MAX_EMPTY_RESPONSE_RETRIES; attempt++) {
-    assertEquals(retries.classify(interrupted(), false).action, "park");
+    assertEquals(retries.classify(interrupted(), false).action, "retry");
   }
   // A provider that keeps dropping long streams must not loop forever.
   assertEquals(retries.classify(interrupted(), false), { action: "none" });
@@ -317,7 +321,7 @@ test("reset clears the budgets and the parked restarts", () => {
   // (a spent budget would answer "none").
   assertEquals(
     retries.classify(fauxAssistantMessage(""), false).action,
-    "followUp",
+    "retry",
   );
 });
 
@@ -396,11 +400,14 @@ test("classify: a context overflow parks a restart that condenses first", () => 
     }),
     false,
   );
-  assertEquals(decision.action, "park");
-  if (decision.action !== "park") throw new Error("expected park");
-  assertEquals(decision.overflow, true);
+  assertEquals(decision.action, "retry");
+  if (decision.action !== "retry") throw new Error("expected a retry");
+  assertEquals(decision.attempt.reason, "overflow");
   assertEquals(retries.hasPendingOverflow, true);
-  assertEquals(decision.notification.title.includes("Context window"), true);
+  assertEquals(
+    decision.attempt.notification.title.includes("Context window"),
+    true,
+  );
 });
 
 test("classify: a second overflow surfaces instead of retrying", () => {
@@ -437,7 +444,7 @@ test("abort and reset clear a parked overflow", () => {
       }),
       false,
     ).action,
-    "park",
+    "retry",
   );
 });
 
@@ -447,7 +454,7 @@ test("classify: an answer cut at the output cap parks a continuation", () => {
     stopReason: "length",
   });
   // The visible text must not reset the budget: the model was still talking.
-  assertEquals(retries.classify(cut, false).action, "park");
+  assertEquals(retries.classify(cut, false).action, "retry");
   assertEquals(retries.hasPendingRestart, true);
 
   // Consume the parked restart, then keep hitting the cap: the budget runs
@@ -456,6 +463,6 @@ test("classify: an answer cut at the output cap parks a continuation", () => {
   for (let i = 1; i <= MAX_OUTPUT_CAP_RETRIES; i++) {
     retries.clearPendingRestart();
     const action = retries.classify(cut, false).action;
-    assertEquals(action, i < MAX_OUTPUT_CAP_RETRIES ? "park" : "none");
+    assertEquals(action, i < MAX_OUTPUT_CAP_RETRIES ? "retry" : "none");
   }
 });

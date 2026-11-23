@@ -1,4 +1,4 @@
-import { sleepAbortable } from "../ai/rate-limit.ts";
+import { sleepAbortable } from "../ai/retry-policy.ts";
 import type { StreamFn } from "../ai/transport.ts";
 import type { ClientEvent } from "../domain/event.ts";
 import type { McpAttachment } from "../mcp/attachment.ts";

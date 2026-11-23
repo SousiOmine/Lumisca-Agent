@@ -151,8 +151,10 @@ export class SessionTurn {
   turnEnded(message: AgentMessage): void {
     const host = this.host;
     const decision = host.retry.classify(message, host.isClosed());
-    if (decision.action === "followUp") {
-      host.agent.followUp(decision.notification);
+    // In-run attempts continue the live loop; parked ones are consumed by
+    // resumeAfterErrorRun once the dead run settled.
+    if (decision.action === "retry" && decision.delivery === "in-run") {
+      host.agent.followUp(decision.attempt.notification);
     }
     if (decision.action === "exhausted") {
       host.emit({
@@ -182,7 +184,7 @@ export class SessionTurn {
       const text =
         (message as AssistantMessage).errorMessage ?? "unknown error";
       const line = `session ${host.sessionId}: model call failed: ${text}`;
-      if (decision.action === "park") log.debug(`${line} (retrying)`);
+      if (decision.action === "retry") log.debug(`${line} (retrying)`);
       else log.warn(line);
     }
   }

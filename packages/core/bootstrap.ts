@@ -2,7 +2,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionPool } from "./agent/pool.ts";
 import type { CredentialStore, Model } from "./ai/catalog.ts";
-import { withProviderRetryDefaults } from "./ai/llm-retry.ts";
+import { withProviderRetryDefaults } from "./ai/retry-policy.ts";
 import type { BrowserBackend } from "./browser/types.ts";
 import {
   type CodeStoreRepo,

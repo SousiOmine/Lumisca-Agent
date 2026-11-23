@@ -46,12 +46,12 @@ import type { Model } from "./catalog.ts";
 import { describeFailedCall, failureText } from "./error-detail.ts";
 import { sessionHeadersFor } from "./lang-model.ts";
 import { pendingAssistant } from "./message-factory.ts";
-import { StreamAccumulator } from "./stream-accumulator.ts";
 import {
   isRetryableRateLimitError,
   type RateLimitRetryOptions,
   retryOnRateLimitError,
-} from "./rate-limit.ts";
+} from "./retry-policy.ts";
+import { StreamAccumulator } from "./stream-accumulator.ts";
 import type {
   StreamEvent,
   StreamFn,
@@ -175,7 +175,7 @@ async function* runStream(
     stopWhen: isStepCount(1),
     // The SDK's own retry loop for the initial provider request (exponential
     // backoff; the provider's Retry-After is honoured). The agent seeds it
-    // for every LLM call (ai/llm-retry.ts), so a transient 429/5xx does
+    // for every LLM call (ai/retry-policy.ts), so a transient 429/5xx does
     // not fail the turn on its first attempt. Left unset, the SDK's default
     // (2) applies.
     ...(options?.maxRetries !== undefined
