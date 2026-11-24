@@ -26,6 +26,7 @@ import {
   MAX_PROMPT_FILES,
   MAX_PROMPT_FILES_TOTAL_BYTES,
   PROMPT_UPLOAD_CHUNK_BYTES,
+  PROMPT_UPLOAD_CHUNK_HEADER,
   paths,
   routePath,
 } from "@lumisca/core/shared";
@@ -237,7 +238,10 @@ export class PromptUploads implements PromptUploadSink {
       throw new AppError("chunk exceeds the declared file size", 413);
     }
     if (chunkHash === undefined || !/^[0-9a-f]{64}$/.test(chunkHash)) {
-      throw new AppError("x-chunk-sha256 must be a lowercase hex digest", 400);
+      throw new AppError(
+        `${PROMPT_UPLOAD_CHUNK_HEADER} must be a lowercase hex digest`,
+        400,
+      );
     }
     const actual = createHash("sha256").update(bytes).digest("hex");
     if (actual !== chunkHash) {
@@ -443,7 +447,7 @@ export function promptUploadRoutes(uploads: PromptUploads): Hono {
       uploadId,
       Number(c.req.query("offset")),
       bytes,
-      c.req.header("x-chunk-sha256"),
+      c.req.header(PROMPT_UPLOAD_CHUNK_HEADER),
     );
     return c.json(result);
   });

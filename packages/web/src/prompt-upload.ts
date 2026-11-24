@@ -7,7 +7,12 @@
  * runs in: how much of the body has left the machine (upload.onprogress).
  */
 
-import { enc, type PromptFileRef, paths } from "@lumisca/core/shared";
+import {
+  enc,
+  PROMPT_UPLOAD_CHUNK_HEADER,
+  type PromptFileRef,
+  paths,
+} from "@lumisca/core/shared";
 import {
   ApiError,
   apiPathOf,
@@ -91,7 +96,7 @@ export function putPromptUploadChunk(
     if (token !== undefined && token !== "") {
       xhr.setRequestHeader("x-lumisca-token", token);
     }
-    xhr.setRequestHeader("x-chunk-sha256", chunkHash);
+    xhr.setRequestHeader(PROMPT_UPLOAD_CHUNK_HEADER, chunkHash);
     xhr.responseType = "text";
 
     const abort = () => xhr.abort();

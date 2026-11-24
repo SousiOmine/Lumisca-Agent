@@ -36,6 +36,11 @@ export const MAX_PROMPT_FILES_TOTAL_BYTES = 4 * 1024 * 1024 * 1024;
  * a time, so this is the client's peak memory for a file of any size. */
 export const PROMPT_UPLOAD_CHUNK_BYTES = 8 * 1024 * 1024;
 
+/** Header carrying one chunk's lowercase hex SHA-256. The browser sends it,
+ * the server checks it, and the server's CORS preflight must name it: a
+ * missing entry makes the browser refuse the PUT before it leaves. */
+export const PROMPT_UPLOAD_CHUNK_HEADER = "x-chunk-sha256";
+
 /** Most characters one prompt's text may carry. A bound, not a budget: it is
  * far above any prompt a person writes, and only stops a paste that would
  * fill the model's context in one turn (a log, a whole file). Enforced by the

@@ -111,6 +111,7 @@ export {
   MAX_PROMPT_IMAGE_BASE64_LENGTH,
   MAX_PROMPT_TEXT_LENGTH,
   PROMPT_UPLOAD_CHUNK_BYTES,
+  PROMPT_UPLOAD_CHUNK_HEADER,
   stripDataUrlHeader,
   toDataUrl,
 } from "./content.ts";

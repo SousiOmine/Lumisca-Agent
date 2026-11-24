@@ -28,6 +28,33 @@ test("server rejects non-loopback Host headers (DNS rebinding guard)", async () 
   }
 });
 
+test("the upload preflight allows the chunk hash header", async () => {
+  const { core, server, base } = await setup(undefined, { token: "secret" });
+  try {
+    // The bundled desktop UI sends one PUT per 8 MiB chunk with this header.
+    // A preflight that omits it makes the browser refuse the request before
+    // any bytes leave, which the client can only report as a network error.
+    const preflight = await fetch(`${base}/api/initial-data`, {
+      method: "OPTIONS",
+      headers: {
+        Origin: "tauri://localhost",
+        "Access-Control-Request-Method": "PUT",
+        "Access-Control-Request-Headers":
+          "content-type,x-lumisca-token,x-chunk-sha256",
+      },
+    });
+    assertEquals(preflight.status, 204);
+    const allowed = preflight.headers.get("access-control-allow-headers");
+    assert(
+      allowed?.includes("x-chunk-sha256") === true,
+      "the upload preflight must allow the chunk hash header",
+    );
+  } finally {
+    server.shutdown();
+    core.close();
+  }
+});
+
 test("cors only allows same-origin and the tauri webview origin", async () => {
   const { core, server, base } = await setup();
   try {

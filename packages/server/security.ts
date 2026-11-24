@@ -1,5 +1,9 @@
 import { MCP_OAUTH_CALLBACK_PATH } from "@lumisca/core";
-import { isLoopbackHost, type Locale } from "@lumisca/core/shared";
+import {
+  isLoopbackHost,
+  type Locale,
+  PROMPT_UPLOAD_CHUNK_HEADER,
+} from "@lumisca/core/shared";
 import type { Context, Hono } from "hono";
 import { getCookie, setCookie } from "hono/cookie";
 import { cors } from "hono/cors";
@@ -248,7 +252,7 @@ export function installSecurityMiddleware(
   const corsHandler = cors({
     origin: (origin, c) =>
       isAllowedOrigin(origin, c.req.header("host")) ? origin : undefined,
-    allowHeaders: ["content-type", TOKEN_HEADER],
+    allowHeaders: ["content-type", TOKEN_HEADER, PROMPT_UPLOAD_CHUNK_HEADER],
   });
   app.use("/api/*", corsHandler);
   app.use("/ws", corsHandler);
