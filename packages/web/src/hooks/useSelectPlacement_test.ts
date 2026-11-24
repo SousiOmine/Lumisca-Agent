@@ -1,6 +1,10 @@
 import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
-import { chooseSelectSide, SELECT_GAP } from "./useSelectPlacement.ts";
+import {
+  chooseSelectAlign,
+  chooseSelectSide,
+  SELECT_GAP,
+} from "./useSelectPlacement.ts";
 
 /**
  * Where a `Select` list opens is arithmetic over three numbers, which is why
@@ -84,4 +88,40 @@ test("chooseSelectSide: the room is the clip's, not the window's", () => {
     "below",
   );
   assertEquals(placement.side, "above");
+});
+
+/** A 640px-wide settings dialog between x=80 and x=720. */
+const frame = { left: 80, right: 720 };
+
+test("chooseSelectAlign: a list with room to the right stays left-aligned", () => {
+  // The control sits mid-row: its 320px list ends 200px before the dialog.
+  const placement = chooseSelectAlign({ left: 200, right: 360 }, frame, 320);
+  assertEquals(placement, { align: "start", maxWidth: null });
+});
+
+test("chooseSelectAlign: a row's trailing control flips the list to the left", () => {
+  // The reported case: a select at the right edge of the settings row. A
+  // left-aligned 320px list would end 240px past the dialog and make the
+  // whole pane scroll sideways.
+  const placement = chooseSelectAlign({ left: 560, right: 700 }, frame, 320);
+  assertEquals(placement, { align: "end", maxWidth: null });
+});
+
+test("chooseSelectAlign: neither side fits caps the width", () => {
+  // A narrow clip: the list keeps the larger side and scrolls inside itself.
+  const placement = chooseSelectAlign(
+    { left: 100, right: 300 },
+    { left: 80, right: 360 },
+    320,
+  );
+  assertEquals(placement, { align: "start", maxWidth: 260 });
+});
+
+test("chooseSelectAlign: the end side gets the cap when it has more room", () => {
+  const placement = chooseSelectAlign(
+    { left: 200, right: 340 },
+    { left: 80, right: 360 },
+    320,
+  );
+  assertEquals(placement, { align: "end", maxWidth: 260 });
 });

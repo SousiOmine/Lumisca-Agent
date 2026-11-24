@@ -1302,6 +1302,14 @@ button.provider-row-body:hover .provider-row-chevron {
   bottom: calc(100% + 4px);
 }
 
+/* A trigger at the right edge of a dialog or a row lines the list's right
+ * edge up with its own, so the list grows to the left. Left-aligned here, a
+ * 320px list made the dialog's scroll area wider than the dialog. */
+.select-popover[data-align="end"] {
+  left: auto;
+  right: 0;
+}
+
 .select-option {
   display: flex;
   align-items: center;

@@ -3,9 +3,26 @@ import type { ComponentChildren } from "preact";
 import { useRef, useState } from "preact/hooks";
 import { useClickOutside } from "../hooks/useClickOutside.ts";
 import {
+  type SelectPlacement,
   type SelectSide,
   useSelectPlacement,
 } from "../hooks/useSelectPlacement.ts";
+
+/** The inline caps the placement measured. Both are null when the
+ * stylesheet's own cap already fits, so the common case writes no style and
+ * the popover keeps its CSS size. */
+function popoverStyle(
+  placement: SelectPlacement,
+): Record<string, string> | undefined {
+  const style: Record<string, string> = {};
+  if (placement.maxHeight !== null) {
+    style.maxHeight = `${placement.maxHeight}px`;
+  }
+  if (placement.maxWidth !== null) {
+    style.maxWidth = `${placement.maxWidth}px`;
+  }
+  return Object.keys(style).length === 0 ? undefined : style;
+}
 
 /** One choice of a [`Select`]. */
 export interface SelectOption<T extends string> {
@@ -62,7 +79,9 @@ interface SelectProps<T extends string> {
  * with `--surface-3`, the current row marked with a check. It is anchored to
  * the trigger on the side the room allows (`preferredSide`, then a
  * measurement: hooks/useSelectPlacement), so neither a dialog's bottom edge
- * nor the window's cuts it.
+ * nor the window's cuts it. A list opened from a row's trailing control
+ * lines up with the trigger's right edge and is capped to the room it has,
+ * so it cannot widen the dialog's scroll area.
  */
 export function Select<T extends string>({
   label,
@@ -121,11 +140,8 @@ export function Select<T extends string>({
           ref={list}
           className="select-popover"
           data-placement={placement.side}
-          style={
-            placement.maxHeight === null
-              ? undefined
-              : { maxHeight: `${placement.maxHeight}px` }
-          }
+          data-align={placement.align}
+          style={popoverStyle(placement)}
           role="listbox"
           aria-label={label}
         >
