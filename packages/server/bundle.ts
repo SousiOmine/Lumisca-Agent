@@ -103,6 +103,9 @@ export async function bundleClient(
   return {
     entry: `${ENTRY_CHUNK}.js`,
     themeEntry: `${THEME_CHUNK}.js`,
-    files: [...names(result.metafile!.outputs), ...names(theme.metafile!.outputs)],
+    files: [
+      ...names(result.metafile!.outputs),
+      ...names(theme.metafile!.outputs),
+    ],
   };
 }

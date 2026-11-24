@@ -82,9 +82,7 @@ test("the shell links the manifest and paints the default theme colour", () => {
   // Before the first paint the document carries the default canvas; the
   // theme script replaces both values from this client's stored choice.
   assertEquals(
-    html.includes(
-      `<meta name="theme-color" content="${THEME_COLORS.dark}" />`,
-    ),
+    html.includes(`<meta name="theme-color" content="${THEME_COLORS.dark}" />`),
     true,
   );
   assertEquals(html.includes('data-theme="dark"'), true);
