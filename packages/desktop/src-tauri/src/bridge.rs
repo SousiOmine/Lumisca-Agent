@@ -31,6 +31,7 @@ mod display;
 mod gate;
 mod links;
 mod main_window;
+mod save_file;
 mod sharing;
 mod updates;
 mod wire;
@@ -126,6 +127,8 @@ pub(crate) fn handle_shell_action(
         "window/state" => alerts::window_state(app),
         "window/focus" => alerts::focus(app),
         "pick-folder" => main_window::pick_folder(app),
+        // One of the displayed server's files, saved where the user picks.
+        "save-file" => save_file::save(app, &params),
         "notify" => alerts::notify(app, &params),
         "quit" => main_window::close(app),
         _ => bridge_error(StatusCode::NOT_FOUND, "unknown action"),

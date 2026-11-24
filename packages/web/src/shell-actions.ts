@@ -45,6 +45,8 @@ export const SHELL_ACTIONS = [
   "window/focus",
   // The OS folder picker (a local workspace folder).
   "pick-folder",
+  // One file the displayed server serves, saved where the user picks.
+  "save-file",
   // Background agent-event notification.
   "notify",
   "quit",

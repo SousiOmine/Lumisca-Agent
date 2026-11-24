@@ -2,6 +2,7 @@ import { formatAttachmentSize } from "@lumisca/core/shared";
 import { IconDownload } from "@tabler/icons-preact";
 import { useState } from "preact/hooks";
 import { useT } from "../../i18n.ts";
+import { saveFile, saveFileSupported } from "../../shell.ts";
 import { Lightbox } from "../Lightbox.tsx";
 import { attachmentIcon } from "./attachment-icon.ts";
 
@@ -166,6 +167,10 @@ function AttachmentFileCard({
   );
   const Icon = attachmentIcon(item.name);
   const downloadName = item.downloadName ?? item.name;
+  // The desktop window has no browser download settings: it asks the shell
+  // for a destination and writes the file there. A plain browser keeps its
+  // own download flow.
+  const desktop = saveFileSupported();
   // A modified click is the browser's: a new tab or window is a deliberate
   // choice, and the download attribute would ignore it.
   const download = (event: {
@@ -190,6 +195,19 @@ function AttachmentFileCard({
     setStatus("checking");
     void (async () => {
       try {
+        if (desktop) {
+          const result = await saveFile(item.href, downloadName);
+          // A cancelled dialog leaves the card as it was: the reader chose
+          // not to save, which is not an error.
+          setStatus(
+            result.status === "gone"
+              ? "gone"
+              : result.status === "failed"
+                ? "failed"
+                : "idle",
+          );
+          return;
+        }
         // A machine that is starting can take a moment; a request that
         // never settles must not leave the card disabled for the rest of
         // the conversation.
@@ -251,7 +269,11 @@ function AttachmentFileCard({
         download={downloadName}
         title={item.name}
         aria-busy={status === "checking" ? true : undefined}
-        onClick={item.check === true ? (event) => download(event) : undefined}
+        onClick={
+          desktop || item.check === true
+            ? (event) => download(event)
+            : undefined
+        }
       >
         <span className="msg-attachment-file-icon" aria-hidden="true">
           <Icon size={20} stroke={1.5} />

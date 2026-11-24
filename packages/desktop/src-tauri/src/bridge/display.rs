@@ -113,6 +113,22 @@ pub(super) fn bridge_key(remote: Option<String>, local: Option<String>) -> Optio
     token.filter(|token| !token.is_empty())
 }
 
+/// The base URL of the server this window shows (`scheme://host[:port]`),
+/// without the page's `/?token=`. The shell uses it to check that a file URL
+/// the page asks it to save belongs to the server whose page is displayed.
+pub(super) fn current_base(app: &AppHandle) -> Option<String> {
+    let state = app.state::<AppState>();
+    if let Some(conn) = state.displayed.lock_recover().as_ref() {
+        return Some(conn.url.trim_end_matches('/').to_string());
+    }
+    let base = state
+        .local
+        .lock_recover()
+        .as_ref()
+        .map(|local| crate::server::Endpoint::loopback(local.port, &local.token).base);
+    base
+}
+
 /// The `state` answer: what is displayed, and what the window looks like.
 pub(super) fn state(app: &AppHandle) -> BridgeReply {
     let state = app.state::<AppState>();

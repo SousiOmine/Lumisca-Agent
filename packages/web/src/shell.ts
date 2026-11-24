@@ -212,6 +212,35 @@ export async function pickFolder(): Promise<string | null> {
   return res.path;
 }
 
+/** What the shell did with a file it was asked to save. */
+export interface SaveFileResult {
+  /** "gone": the server answered 404 (the machine no longer has the file).
+   * "failed": the request or the write failed. "cancelled": the reader
+   * closed the dialog. */
+  status: "saved" | "cancelled" | "gone" | "failed";
+  /** Where it was written, for "saved". */
+  path?: string;
+  /** The shell's own explanation of a failure, for the console. */
+  detail?: string;
+}
+
+/** Whether this page is the desktop shell's main window, the only one that
+ * can save a file where the user picks. The browser lab is a Tauri webview
+ * too, so it has IPC, but it is not the window the bridge belongs to and its
+ * calls would fail the key gate. */
+export function saveFileSupported(): boolean {
+  return bridgeOrigin() !== undefined;
+}
+
+/** Save one of the displayed server's files where the user picks. The URL
+ * must be on that server; the shell refuses anything else. */
+export async function saveFile(
+  url: string,
+  name: string,
+): Promise<SaveFileResult> {
+  return await shellCall<SaveFileResult>("save-file", { url, name });
+}
+
 /** Auto-update state of the app the page belongs to. Two producers share
  * this shape: the desktop shell bridge (`update/status`) and the standalone
  * server's own updater (`/api/update/status`). The fields only one of them

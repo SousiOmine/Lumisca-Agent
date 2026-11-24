@@ -1,6 +1,6 @@
 import { test } from "bun:test";
 import { assertEquals } from "@std/assert";
-import { serverUpdateApi } from "./shell.ts";
+import { saveFile, serverUpdateApi } from "./shell.ts";
 
 /** Base URL the client's relative API paths are resolved against (the page
  * and the API share an origin, see api-client.ts). */
@@ -88,5 +88,41 @@ test("serverUpdateApi: status is a GET, every action is a POST", async () => {
     );
     assertEquals(request.path, `/api/update/${action}`);
     assertEquals(request.body, body, `the body of ${action}`);
+  }
+});
+
+test("saveFile names the displayed server's file and the suggested name", async () => {
+  const bridge = "http://127.0.0.1:1/shell";
+  const originalBridge = globalThis.__LUMISCA_BRIDGE__;
+  const originalFetch = globalThis.fetch;
+  let requested: URL | undefined;
+  globalThis.__LUMISCA_BRIDGE__ = bridge;
+  globalThis.fetch = (input: string | URL | Request) => {
+    requested = new URL(input instanceof Request ? input.url : String(input));
+    return Promise.resolve(
+      new Response(JSON.stringify({ status: "saved", path: "/tmp/a.txt" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+  };
+  try {
+    const result = await saveFile(
+      "https://host.example/api/sessions/s/attachment/a?token=t",
+      "report 1.txt",
+    );
+    assertEquals(result.status, "saved");
+    assertEquals(result.path, "/tmp/a.txt");
+    assertEquals(requested?.pathname, "/shell/save-file");
+    // A URL with its own query is one parameter, not part of the shell's.
+    assertEquals(
+      requested?.searchParams.get("url"),
+      "https://host.example/api/sessions/s/attachment/a?token=t",
+    );
+    assertEquals(requested?.searchParams.get("name"), "report 1.txt");
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalBridge === undefined) delete globalThis.__LUMISCA_BRIDGE__;
+    else globalThis.__LUMISCA_BRIDGE__ = originalBridge;
   }
 });
