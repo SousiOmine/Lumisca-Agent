@@ -1,6 +1,7 @@
 import { IconX } from "@tabler/icons-preact";
 import type { ReactNode } from "preact/compat";
 import { useEffect, useState } from "preact/hooks";
+import { useCodeModeEnabled } from "../codeMode.ts";
 import { useConnectionSwitch } from "../hooks/useConnectionSwitch.ts";
 import { COMPACT_QUERY, useMediaQuery } from "../hooks/useMediaQuery.ts";
 import type { PushControls } from "../hooks/usePush.ts";
@@ -31,6 +32,7 @@ import { OverviewPanel } from "./settings/OverviewPanel.tsx";
 import { PersonalizePanel } from "./settings/PersonalizePanel.tsx";
 import { ProviderDetail } from "./settings/ProviderDetail.tsx";
 import { ProviderList } from "./settings/ProviderList.tsx";
+import { SavedPromptsPanel } from "./settings/SavedPromptsPanel.tsx";
 import { ServerHeading } from "./settings/ServerHeading.tsx";
 import { SettingsPage } from "./settings/SettingsPage.tsx";
 import { WebSearchPanel } from "./settings/WebSearchPanel.tsx";
@@ -103,9 +105,10 @@ type ProvidersView =
  * lists, so adding a category meant editing three places and a forgotten one
  * was not a type error. One table cannot drift from itself.
  *
- * A page that only one mode uses says so where the feature sits rather than
- * hiding: saved prompts are code mode's (only its composers carry the slash
- * menu), so they are drawn inside 実験的機能 under the code-mode switch.
+ * One page is code mode's alone: saved prompts feed the slash menu, which
+ * exists only in code mode's composer. It is a page of its own rather than a
+ * section of 実験的機能 (a list of snippets under a row of switches), and it
+ * is drawn only while code mode is offered (see visibleCategories).
  *
  * Nothing here belongs to one agent. Routines schedule requests on one
  * agent's conversation, so they are not a category at all: the agent's own
@@ -313,9 +316,17 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     owner: "server",
     labelKey: "settings.nav.experimental",
     // The scripting tool call reaches both modes' sessions, so the page is
-    // shared rather than one mode's. It sits last: nothing a reader relies on
-    // is below it.
+    // shared rather than one mode's.
     render: () => <ExperimentalPanel />,
+  },
+  {
+    id: "prompts",
+    owner: "server",
+    codeModeOnly: true,
+    labelKey: "settings.nav.prompts",
+    // After 実験的機能 because that page is where code mode is switched on:
+    // this page appears once it is, directly below the switch that made it.
+    render: () => <SavedPromptsPanel />,
   },
 ];
 
@@ -352,8 +363,9 @@ export function SettingsModal({
   const t = useT();
   const stepped = useMediaQuery(COMPACT_QUERY);
   const desktop = inDesktopShell();
+  const codeMode = useCodeModeEnabled();
   const connection = useConnectionSwitch();
-  const entries = visibleCategories(CATEGORIES, desktop);
+  const entries = visibleCategories(CATEGORIES, desktop, codeMode);
   const groups = ownerGroups(entries);
   /** The page being shown. Without one in the address this is the dialog's
    * own: 概要 beside the navigation, the first screen of the list. The

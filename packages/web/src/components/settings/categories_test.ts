@@ -70,6 +70,7 @@ test("every category is named once, in the table's order", () => {
       "personalize",
       "security",
       "experimental",
+      "prompts",
     ],
   );
 });
@@ -86,12 +87,30 @@ test("visibleCategories drops a page only the desktop shell serves", () => {
   ];
 
   assertEquals(
-    visibleCategories(entries, true).map((item) => item.id),
+    visibleCategories(entries, true, true).map((item) => item.id),
     ["notifications", "connections", "overview"],
   );
   assertEquals(
-    visibleCategories(entries, false).map((item) => item.id),
+    visibleCategories(entries, false, true).map((item) => item.id),
     ["notifications", "overview"],
+  );
+});
+
+test("visibleCategories drops a page code mode alone uses", () => {
+  // Saved prompts feed code mode's slash menu: with the mode switched off,
+  // the page would list snippets nothing can recall.
+  const entries = [
+    entry("experimental", "server"),
+    entry("prompts", "server", { codeModeOnly: true }),
+  ];
+
+  assertEquals(
+    visibleCategories(entries, true, true).map((item) => item.id),
+    ["experimental", "prompts"],
+  );
+  assertEquals(
+    visibleCategories(entries, true, false).map((item) => item.id),
+    ["experimental"],
   );
 });
 

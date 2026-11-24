@@ -11,8 +11,10 @@ import type { MessageKey } from "@lumisca/core/shared";
  * language, and an updater that changed hands with the way the app was
  * launched.
  *
- * Both modes draw every page: a page that only acts on code mode's sessions
- * says so beside the feature instead of hiding behind a heading.
+ * Both modes draw the same pages, with one exception: a page whose values
+ * only code mode uses exists only while code mode is offered
+ * (`codeModeOnly`). Hidden with the feature it belongs to, it cannot be read
+ * as a setting that does nothing.
  *
  * Nothing here belongs to one agent. Routines, names, pictures and models
  * open from the agent's own row in the stella list; a dialog that also
@@ -35,6 +37,7 @@ export const SETTINGS_CATEGORIES = [
   "personalize",
   "security",
   "experimental",
+  "prompts",
 ] as const;
 
 export type SettingsCategory = (typeof SETTINGS_CATEGORIES)[number];
@@ -60,6 +63,8 @@ export interface SettingsNavEntry {
   owner: SettingsOwner;
   /** The page exists only when the desktop shell serves it. */
   deviceOnly?: boolean;
+  /** The page exists only while code mode is offered (see 実験的機能). */
+  codeModeOnly?: boolean;
   /** The navigation label. */
   labelKey: MessageKey;
 }
@@ -76,9 +81,8 @@ export interface SettingsNavGroup<
  * The navigation's groups, in reading order: this device, then the server.
  *
  * A group with no entry is dropped, so a missing owner costs no heading.
- * There is no mode parameter: both modes draw every page (see the module
- * comment). The order inside a group is the caller's; sorting would put 概要
- * somewhere in the middle of the server's pages.
+ * The order inside a group is the caller's; sorting would put 概要 somewhere
+ * in the middle of the server's pages.
  */
 export function ownerGroups<T extends SettingsNavEntry>(
   entries: readonly T[],
@@ -101,14 +105,21 @@ export function ownerLabelKey(owner: SettingsOwner): MessageKey {
 /**
  * The entries a client can show.
  *
- * Only the desktop shell has an app to update and a bridge that can update
- * it, so the device's app page is absent in a plain browser. Hiding a page
- * for a missing capability is not the same as hiding one mode's pages: the
- * reader can do nothing with a switch whose object does not exist here.
+ * Two pages are conditional, for two different reasons. The connections page
+ * needs the desktop shell: only it can switch this client to another server,
+ * and a browser would be offered a control it cannot carry out. A page marked
+ * `codeModeOnly` needs code mode to be offered at all: its values act on a
+ * mode the app does not have while the switch is off, so the page would be a
+ * list of settings nothing reads.
  */
 export function visibleCategories<T extends SettingsNavEntry>(
   entries: readonly T[],
   desktop: boolean,
+  codeMode: boolean,
 ): readonly T[] {
-  return entries.filter((entry) => desktop || entry.deviceOnly !== true);
+  return entries.filter(
+    (entry) =>
+      (desktop || entry.deviceOnly !== true) &&
+      (codeMode || entry.codeModeOnly !== true),
+  );
 }

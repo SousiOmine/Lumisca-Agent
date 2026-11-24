@@ -12,7 +12,6 @@ import { useSaveAction } from "../../hooks/useSave.ts";
 import { useT } from "../../i18n.ts";
 import { settingsStore, useSettings } from "../../settingsStore.ts";
 import { SettingRow, Toggle } from "../SettingRow.tsx";
-import { SavedPromptsPanel } from "./SavedPromptsPanel.tsx";
 import { SettingsSection } from "./SettingsSection.tsx";
 
 /** Settings → 実験的機能: features under test, each one a switch.
@@ -35,9 +34,8 @@ import { SettingsSection } from "./SettingsSection.tsx";
  * so no session is rebuilt and the client applies it at once
  * (packages/web/src/codeMode.ts).
  *
- * The saved-prompt list is drawn at the end of this page, under the switch it
- * belongs to: the `/prompt` menu exists only in code mode's composer, so the
- * list had no business in the server's group beside pages both modes obey. */
+ * The saved-prompt list is not here: it is a page of its own, drawn only while
+ * code mode is offered (see SettingsModal). */
 export function ExperimentalPanel() {
   const t = useT();
   const settings = useSettings();
@@ -181,14 +179,6 @@ export function ExperimentalPanel() {
           </div>
         )}
       </SettingsSection>
-      {/* The list of snippets the code-mode composer offers. It sits under the
-       * switch it depends on: enabling code mode is what makes the `/prompt`
-       * menu exist, so a reader who turns the feature on finds next to it the
-       * prompts the menu will show. */}
-      <SavedPromptsPanel
-        title={t("settings.prompts.title")}
-        description={t("settings.scope.codeOnly")}
-      />
     </>
   );
 }

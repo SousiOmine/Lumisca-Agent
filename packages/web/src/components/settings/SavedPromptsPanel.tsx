@@ -18,25 +18,17 @@ import { SettingsSection } from "./SettingsSection.tsx";
 /**
  * 保存済みプロンプト: the snippets the composer's `/prompt` menu offers.
  *
- * It is drawn inside 実験的機能, under the code-mode switch, because that is
- * the switch it depends on: the slash menu lives in code mode's composer, and
- * stella's conversation has one plain box with no commands. It had a category
- * of its own (in the server's group, whose other pages work in both modes), so
- * the page that only worked in one mode was read as an installation-wide
- * setting.
+ * Its own page, and code mode's alone: the slash menu lives in code mode's
+ * composer, and stella's conversation has one plain box with no commands. The
+ * page is drawn only while code mode is offered (SettingsModal's
+ * `codeModeOnly`), so the reader does not meet a list of snippets nothing
+ * can recall.
  *
  * A row is what the composer will insert: the ID (how `/prompt`'s menu lists
  * it), the display name, and the text itself. Adding and editing open the same
  * form at the top of the list.
  */
-export function SavedPromptsPanel({
-  title,
-  description,
-}: {
-  /** The section heading; omitted when the page's title already names it. */
-  title?: string;
-  description?: string;
-} = {}) {
+export function SavedPromptsPanel() {
   const t = useT();
   const { prompts, error: loadError, reload } = useSavedPrompts();
   /** undefined = list, null = adding, a prompt = editing it. */
@@ -89,8 +81,6 @@ export function SavedPromptsPanel({
 
   return (
     <SettingsSection
-      title={title}
-      description={description}
       action={
         <button
           type="button"
