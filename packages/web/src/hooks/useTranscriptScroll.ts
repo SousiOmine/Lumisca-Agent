@@ -82,6 +82,12 @@ export function useTranscriptScroll(
   /** A read is in flight for the held position: the follow-to-bottom must not
    * undo it, and a second reach for the top must not start another. */
   const holding = useRef(false);
+  /** The offset this hook last scrolled to, with the content height at that
+   * moment. A scroll event fires one frame after the write, and a message can
+   * land in between: the event then reports the offset written for the old
+   * height, and the distance to the bottom is the height the content gained,
+   * not a move by the reader. Comparing both remembers whose scroll it was. */
+  const ownWrite = useRef<{ top: number; height: number } | null>(null);
 
   // The latest callbacks and keys, so the listeners are installed once and can
   // never call a stale closure (a page may be in flight while the reader keeps
@@ -109,6 +115,11 @@ export function useTranscriptScroll(
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
+    /** Scroll to `top` and remember the write (see ownWrite). */
+    const write = (top: number) => {
+      el.scrollTop = top;
+      ownWrite.current = { top: el.scrollTop, height: el.scrollHeight };
+    };
     /** The frame a coalesced pin is scheduled on (see pin below). */
     let pinFrame: number | undefined;
     const pinNow = () => {
@@ -118,13 +129,19 @@ export function useTranscriptScroll(
       if (!activeRef.current) return;
       if (pendingSubmit.current) {
         pendingSubmit.current = false;
-        el.scrollTop = el.scrollHeight;
+        // The reader asked for the newest content by sending: whatever they
+        // were reading before, the follow is on again. Without this, the
+        // echo of the jump below (seen after a long message grew the
+        // transcript) marked them as scrolled up and the follow stopped for
+        // the rest of the conversation.
+        userScrolledUp.current = false;
+        write(el.scrollHeight);
         return;
       }
       // A held position belongs to a page that is landing: the content it
       // adds must not push the reader to the bottom.
       if (holding.current) return;
-      if (!userScrolledUp.current) el.scrollTop = el.scrollHeight;
+      if (!userScrolledUp.current) write(el.scrollHeight);
     };
     // A ResizeObserver fires once per layout change, and a streaming reply
     // changes the layout many times within one frame. Writing scrollTop per
@@ -136,6 +153,20 @@ export function useTranscriptScroll(
     };
     const onScroll = () => {
       shownTop.current = el.scrollTop;
+      // The echo of this hook's own write, seen after the content changed
+      // height: its distance is the growth, not the reader moving. Reading it
+      // as a move is what stopped the follow after a long message was sent —
+      // the transcript grew by more than STICK_DISTANCE between the jump and
+      // the event that reported it.
+      const echo = ownWrite.current;
+      ownWrite.current = null;
+      if (
+        echo !== null &&
+        el.scrollTop === echo.top &&
+        el.scrollHeight !== echo.height
+      ) {
+        return;
+      }
       userScrolledUp.current =
         el.scrollHeight - el.scrollTop - el.clientHeight >= STICK_DISTANCE;
       // Not at the top: nothing to read before, and the position the reader
@@ -220,7 +251,12 @@ export function useTranscriptScroll(
     holding.current = false;
     anchor.current = null;
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    // Remember this write like the pin's (see ownWrite): a long message lands
+    // between it and its scroll event, and that event must not be read as the
+    // reader scrolling away.
+    ownWrite.current = { top: el.scrollTop, height: el.scrollHeight };
   }, []);
 
   // The parent's submit: pin once per token value. Tracked in a ref so the
