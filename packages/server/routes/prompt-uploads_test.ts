@@ -56,6 +56,26 @@ async function makeStore(
   return { dir, store, app, copied };
 }
 
+/** Polls an upload the way the browser does, until the copy settles. */
+async function waitForSaved(
+  app: { request(path: string): Response | Promise<Response> },
+  id: string,
+): Promise<PromptFileRef | undefined> {
+  // The suite runs files in parallel, so a fixed number of polls expires when
+  // the machine is busy. Wait on a deadline instead.
+  const deadline = Date.now() + 10_000;
+  for (;;) {
+    const state = await app.request(`/stella/conversations/a1/uploads/${id}`);
+    const body = (await state.json()) as {
+      status: string;
+      saved?: PromptFileRef;
+    };
+    if (body.status === "completed") return body.saved;
+    if (body.status === "failed" || Date.now() > deadline) return undefined;
+    await Bun.sleep(5);
+  }
+}
+
 function chunkHash(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
@@ -93,20 +113,7 @@ test("prompt uploads: a file is chunked, copied once, and readable by its ref", 
     { method: "POST" },
   );
   assertEquals(complete.status, 200);
-  // The copy is a background job: poll the status the way the browser does.
-  let saved: PromptFileRef | undefined;
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    const state = await app.request(`/stella/conversations/a1/uploads/${id}`);
-    const body = (await state.json()) as {
-      status: string;
-      saved?: PromptFileRef;
-    };
-    if (body.status === "completed") {
-      saved = body.saved;
-      break;
-    }
-    await Bun.sleep(5);
-  }
+  const saved = await waitForSaved(app, id);
   assertEquals(saved?.ref, "uploads/1-ab/01-run.log");
   assertEquals(copied.length, 1);
   assertEquals(copied[0]!.size, 10);
