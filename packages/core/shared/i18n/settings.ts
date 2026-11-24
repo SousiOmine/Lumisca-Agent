@@ -17,13 +17,11 @@ export const settings = {
   "settings.nav.notifications": { ja: "通知", en: "Notifications" },
   "settings.nav.app": { ja: "アプリ", en: "App" },
   "settings.nav.overview": { ja: "概要", en: "Overview" },
-  "settings.nav.appearance": { ja: "外観", en: "Appearance" },
   "settings.nav.personalize": { ja: "カスタマイズ", en: "Personalization" },
   "settings.nav.connections": { ja: "接続先サーバー", en: "Servers" },
   "settings.nav.providers": { ja: "プロバイダー", en: "Providers" },
   "settings.nav.models": { ja: "モデル設定", en: "Models" },
   "settings.nav.mcp": { ja: "MCPサーバー", en: "MCP servers" },
-  "settings.nav.prompts": { ja: "保存済みプロンプト", en: "Saved prompts" },
   "settings.nav.security": { ja: "セキュリティ", en: "Security" },
   "settings.nav.experimental": { ja: "実験的機能", en: "Experimental" },
   /** The one line under a page title whose values only code mode's sessions
@@ -230,6 +228,9 @@ export const settings = {
   },
 
   // --- saved prompts (their own category) -----------------------------------
+  /** The heading of the saved-prompt list, drawn inside 実験的機能 under the
+   * code-mode switch (see components/settings/SavedPromptsPanel.tsx). */
+  "settings.prompts.title": { ja: "保存済みプロンプト", en: "Saved prompts" },
   "settings.prompts.loadFailed": {
     ja: "プロンプトを読み込めませんでした: {error}",
     en: "Could not load prompts: {error}",

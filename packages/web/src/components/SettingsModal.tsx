@@ -12,7 +12,6 @@ import type { Locale, ThemeSetting } from "../types.ts";
 import { Modal } from "./Modal.tsx";
 import { AddProviderFlow } from "./settings/AddProviderFlow.tsx";
 import { AddUserProviderForm } from "./settings/AddUserProviderForm.tsx";
-import { AppearancePanel } from "./settings/AppearancePanel.tsx";
 import { AppPanel } from "./settings/AppPanel.tsx";
 import { CommandSafetyPanel } from "./settings/CommandSafetyPanel.tsx";
 import { ComputerUsePanel } from "./settings/ComputerUsePanel.tsx";
@@ -32,7 +31,6 @@ import { OverviewPanel } from "./settings/OverviewPanel.tsx";
 import { PersonalizePanel } from "./settings/PersonalizePanel.tsx";
 import { ProviderDetail } from "./settings/ProviderDetail.tsx";
 import { ProviderList } from "./settings/ProviderList.tsx";
-import { SavedPromptsPanel } from "./settings/SavedPromptsPanel.tsx";
 import { ServerHeading } from "./settings/ServerHeading.tsx";
 import { SettingsPage } from "./settings/SettingsPage.tsx";
 import { WebSearchPanel } from "./settings/WebSearchPanel.tsx";
@@ -105,15 +103,9 @@ type ProvidersView =
  * lists, so adding a category meant editing three places and a forgotten one
  * was not a type error. One table cannot drift from itself.
  *
- * Two entries act on code mode's machinery and carry `modeOnly`. They are
- * shown in both modes anyway, because hiding a page hid what it does rather
- * than the page:
- *
- * - `/prompt` is code mode's: only code mode's composers carry the slash menu
- *   (stella's conversation has one box and no commands), so the prompt list
- *   there is a list nothing recalls.
- * - Computer use drives the server's screen; a stella session is given the
- *   virtual machine's own screen tools instead (agent/factory.ts).
+ * A page that only one mode uses says so where the feature sits rather than
+ * hiding: saved prompts are code mode's (only its composers carry the slash
+ * menu), so they are drawn inside 実験的機能 under the code-mode switch.
  *
  * Nothing here belongs to one agent. Routines schedule requests on one
  * agent's conversation, so they are not a category at all: the agent's own
@@ -121,25 +113,13 @@ type ProvidersView =
  */
 const CATEGORIES: readonly SettingsCategoryEntry[] = [
   {
-    id: "notifications",
-    owner: "device",
-    labelKey: "settings.nav.notifications",
-    render: ({ props }) => (
-      <NotificationsPanel
-        source={props.update.source}
-        notifyEnabled={props.notifyEnabled}
-        onNotifyEnabledChange={props.onNotifyEnabledChange}
-        push={props.push}
-      />
-    ),
-  },
-  {
     id: "app",
     owner: "device",
-    deviceOnly: true,
     labelKey: "settings.nav.app",
     render: ({ props }) => (
       <AppPanel
+        theme={props.theme}
+        onThemeChange={props.onThemeChange}
         status={props.update.status}
         source={props.update.source}
         bridgeError={props.update.error}
@@ -150,6 +130,19 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
         onDownload={props.update.download}
         onInstall={props.update.install}
         onRestart={props.update.restart}
+      />
+    ),
+  },
+  {
+    id: "notifications",
+    owner: "device",
+    labelKey: "settings.nav.notifications",
+    render: ({ props }) => (
+      <NotificationsPanel
+        source={props.update.source}
+        notifyEnabled={props.notifyEnabled}
+        onNotifyEnabledChange={props.onNotifyEnabledChange}
+        push={props.push}
       />
     ),
   },
@@ -179,17 +172,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
         onDownload={props.update.download}
         onInstall={props.update.install}
         onRestart={props.update.restart}
-      />
-    ),
-  },
-  {
-    id: "appearance",
-    owner: "device",
-    labelKey: "settings.nav.appearance",
-    render: ({ props }) => (
-      <AppearancePanel
-        theme={props.theme}
-        onThemeChange={props.onThemeChange}
       />
     ),
   },
@@ -311,13 +293,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
     owner: "server",
     labelKey: "settings.nav.personalize",
     render: () => <PersonalizePanel />,
-  },
-  {
-    id: "prompts",
-    owner: "server",
-    modeOnly: true,
-    labelKey: "settings.nav.prompts",
-    render: () => <SavedPromptsPanel />,
   },
   {
     id: "security",
@@ -499,7 +474,6 @@ export function SettingsModal({
             <div className="settings-content">
               <SettingsPage
                 title={t(entry.labelKey)}
-                modeOnly={entry.modeOnly === true}
                 onBack={stepped ? onBackToList : undefined}
               >
                 {entry.render(panels)}

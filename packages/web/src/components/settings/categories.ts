@@ -11,9 +11,8 @@ import type { MessageKey } from "@lumisca/core/shared";
  * language, and an updater that changed hands with the way the app was
  * launched.
  *
- * The mode is a property of a page (`modeOnly`), not a group. A reader in
- * either mode can find every page, and a page that only acts on code mode's
- * sessions says so with a badge instead of hiding behind a heading.
+ * Both modes draw every page: a page that only acts on code mode's sessions
+ * says so beside the feature instead of hiding behind a heading.
  *
  * Nothing here belongs to one agent. Routines, names, pictures and models
  * open from the agent's own row in the stella list; a dialog that also
@@ -26,16 +25,14 @@ import type { MessageKey } from "@lumisca/core/shared";
  * back asks whether it names a category, and deriving the union from the
  * array keeps the two from drifting. */
 export const SETTINGS_CATEGORIES = [
-  "notifications",
   "app",
+  "notifications",
   "connections",
   "overview",
-  "appearance",
   "providers",
   "models",
   "mcp",
   "personalize",
-  "prompts",
   "security",
   "experimental",
 ] as const;
@@ -61,8 +58,6 @@ export type SettingsOwner = "device" | "server";
 export interface SettingsNavEntry {
   id: SettingsCategory;
   owner: SettingsOwner;
-  /** Only code mode's sessions use the values on this page. */
-  modeOnly?: boolean;
   /** The page exists only when the desktop shell serves it. */
   deviceOnly?: boolean;
   /** The navigation label. */

@@ -19,11 +19,13 @@ export const THEME_OPTIONS: { value: ThemeSetting; label: MessageKey }[] = [
   { value: "system", label: "settings.appearance.theme.system" },
 ];
 
-/** Settings → 外観. Theme is applied to <html data-theme> immediately and
- * stored in this client's own storage, so it survives reloads and does not
- * follow the reader to another device. The app language has its own panel
- * (LanguagePanel): it additionally decides what new sessions answer in, so
- * the server has to hold it. */
+/** The theme row of Settings → アプリ. Theme is applied to <html data-theme>
+ * immediately and stored in this client's own storage, so it survives reloads
+ * and does not follow the reader to another device. It shares the app page
+ * because both answer for the client in front of the reader; it had a page of
+ * its own while a category per preference looked like a system. The app
+ * language has its own panel (LanguagePanel) on the server's side: it
+ * additionally decides what new sessions answer in, so the server holds it. */
 export function AppearancePanel({
   theme,
   onThemeChange,

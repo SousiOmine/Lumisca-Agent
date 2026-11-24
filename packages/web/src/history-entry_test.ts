@@ -29,7 +29,7 @@ function code(settings: UrlState["settings"]): UrlState {
 const closed = code(null);
 const list = code({ category: null });
 const general = code({ category: "overview" });
-const appearance = code({ category: "appearance" });
+const personalization = code({ category: "personalize" });
 
 test("history entry: a push is the app's and records how deep the dialog is", () => {
   // Opened over a screen with no dialog: the dialog's first entry.
@@ -41,7 +41,7 @@ test("history entry: a push is the app's and records how deep the dialog is", ()
   // A category picked from it sits one entry higher, and so on.
   const page = pushedState(opened, general);
   assertEquals(dialogDepth(page), 2);
-  assertEquals(dialogDepth(pushedState(page, appearance)), 3);
+  assertEquals(dialogDepth(pushedState(page, personalization)), 3);
 
   // A screen with no dialog over it starts the count again, whatever the
   // entry it was pushed from named.

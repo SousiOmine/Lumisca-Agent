@@ -75,7 +75,7 @@ test("screen transition: settings' list and a category", () => {
   const page = (kind: UrlState["route"]["kind"]) =>
     kind === "stella"
       ? at({ kind: "stella", agentId: null }, { category: "overview" })
-      : at({ kind: "code", tabKey: null }, { category: "appearance" });
+      : at({ kind: "code", tabKey: null }, { category: "personalize" });
 
   for (const kind of ["code", "stella"] as const) {
     assertEquals(move(root(kind), page(kind)), "push");
@@ -85,7 +85,7 @@ test("screen transition: settings' list and a category", () => {
   assertEquals(
     move(
       at({ kind: "code", tabKey: null }, { category: "overview" }),
-      at({ kind: "code", tabKey: null }, { category: "appearance" }),
+      at({ kind: "code", tabKey: null }, { category: "personalize" }),
     ),
     null,
   );

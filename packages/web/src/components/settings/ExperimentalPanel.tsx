@@ -12,6 +12,7 @@ import { useSaveAction } from "../../hooks/useSave.ts";
 import { useT } from "../../i18n.ts";
 import { settingsStore, useSettings } from "../../settingsStore.ts";
 import { SettingRow, Toggle } from "../SettingRow.tsx";
+import { SavedPromptsPanel } from "./SavedPromptsPanel.tsx";
 import { SettingsSection } from "./SettingsSection.tsx";
 
 /** Settings → 実験的機能: features under test, each one a switch.
@@ -32,7 +33,11 @@ import { SettingsSection } from "./SettingsSection.tsx";
  * The code mode switch is the exception: it changes what the app OFFERS (the
  * menu's switch, the addresses that are screens), not how an agent is built,
  * so no session is rebuilt and the client applies it at once
- * (packages/web/src/codeMode.ts). */
+ * (packages/web/src/codeMode.ts).
+ *
+ * The saved-prompt list is drawn at the end of this page, under the switch it
+ * belongs to: the `/prompt` menu exists only in code mode's composer, so the
+ * list had no business in the server's group beside pages both modes obey. */
 export function ExperimentalPanel() {
   const t = useT();
   const settings = useSettings();
@@ -93,87 +98,97 @@ export function ExperimentalPanel() {
   };
 
   return (
-    <SettingsSection>
-      <SettingRow
-        label={t("settings.experimental.codeMode.title")}
-        description={t("settings.experimental.codeMode.description")}
-      >
-        <Toggle
-          checked={codeMode}
-          disabled={codeModeSave.saving || !loaded}
-          onChange={setCodeModeValue}
+    <>
+      <SettingsSection>
+        <SettingRow
           label={t("settings.experimental.codeMode.title")}
-        />
-      </SettingRow>
+          description={t("settings.experimental.codeMode.description")}
+        >
+          <Toggle
+            checked={codeMode}
+            disabled={codeModeSave.saving || !loaded}
+            onChange={setCodeModeValue}
+            label={t("settings.experimental.codeMode.title")}
+          />
+        </SettingRow>
 
-      {codeModeSave.error && (
-        <div className="error-text">
-          {t("settings.experimental.codeMode.operationFailed", {
-            error: codeModeSave.error,
-          })}
-        </div>
-      )}
+        {codeModeSave.error && (
+          <div className="error-text">
+            {t("settings.experimental.codeMode.operationFailed", {
+              error: codeModeSave.error,
+            })}
+          </div>
+        )}
 
-      <SettingRow
-        label={t("settings.experimental.codeExecution.title")}
-        description={
-          loaded
-            ? t("settings.experimental.codeExecution.description")
-            : t("common.loading")
-        }
-      >
-        <Toggle
-          checked={codeExecution}
-          disabled={codeSave.saving || !loaded}
-          onChange={setCodeExecutionValue}
+        <SettingRow
           label={t("settings.experimental.codeExecution.title")}
-        />
-      </SettingRow>
+          description={
+            loaded
+              ? t("settings.experimental.codeExecution.description")
+              : t("common.loading")
+          }
+        >
+          <Toggle
+            checked={codeExecution}
+            disabled={codeSave.saving || !loaded}
+            onChange={setCodeExecutionValue}
+            label={t("settings.experimental.codeExecution.title")}
+          />
+        </SettingRow>
 
-      {codeSave.error && (
-        <div className="error-text">
-          {t("settings.experimental.codeExecution.operationFailed", {
-            error: codeSave.error,
-          })}
-        </div>
-      )}
+        {codeSave.error && (
+          <div className="error-text">
+            {t("settings.experimental.codeExecution.operationFailed", {
+              error: codeSave.error,
+            })}
+          </div>
+        )}
 
-      <SettingRow label={t("settings.experimental.askTool.title")}>
-        <Toggle
-          checked={askDisabled}
-          disabled={askSave.saving || !loaded}
-          onChange={setAskDisabledValue}
-          label={t("settings.experimental.askTool.title")}
-        />
-      </SettingRow>
+        <SettingRow label={t("settings.experimental.askTool.title")}>
+          <Toggle
+            checked={askDisabled}
+            disabled={askSave.saving || !loaded}
+            onChange={setAskDisabledValue}
+            label={t("settings.experimental.askTool.title")}
+          />
+        </SettingRow>
 
-      {askSave.error && (
-        <div className="error-text">
-          {t("settings.experimental.askTool.operationFailed", {
-            error: askSave.error,
-          })}
-        </div>
-      )}
+        {askSave.error && (
+          <div className="error-text">
+            {t("settings.experimental.askTool.operationFailed", {
+              error: askSave.error,
+            })}
+          </div>
+        )}
 
-      <SettingRow
-        label={t("settings.experimental.appUiPrompt.title")}
-        description={t("settings.experimental.appUiPrompt.description")}
-      >
-        <Toggle
-          checked={appUiInPrompt}
-          disabled={appUiSave.saving || !loaded}
-          onChange={setAppUiInPromptValue}
+        <SettingRow
           label={t("settings.experimental.appUiPrompt.title")}
-        />
-      </SettingRow>
+          description={t("settings.experimental.appUiPrompt.description")}
+        >
+          <Toggle
+            checked={appUiInPrompt}
+            disabled={appUiSave.saving || !loaded}
+            onChange={setAppUiInPromptValue}
+            label={t("settings.experimental.appUiPrompt.title")}
+          />
+        </SettingRow>
 
-      {appUiSave.error && (
-        <div className="error-text">
-          {t("settings.experimental.appUiPrompt.operationFailed", {
-            error: appUiSave.error,
-          })}
-        </div>
-      )}
-    </SettingsSection>
+        {appUiSave.error && (
+          <div className="error-text">
+            {t("settings.experimental.appUiPrompt.operationFailed", {
+              error: appUiSave.error,
+            })}
+          </div>
+        )}
+      </SettingsSection>
+      {/* The list of snippets the code-mode composer offers. It sits under the
+       * switch it depends on: enabling code mode is what makes the `/prompt`
+       * menu exist, so a reader who turns the feature on finds next to it the
+       * prompts the menu will show. */}
+      <SavedPromptsPanel
+        title={t("settings.prompts.title")}
+        description={t("settings.scope.codeOnly")}
+      />
+    </>
   );
 }

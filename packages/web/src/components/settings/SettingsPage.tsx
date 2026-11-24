@@ -7,22 +7,19 @@ import { useT } from "../../i18n.ts";
  * scrolls.
  *
  * The navigation already names the server or device the page belongs to, so
- * the title does not repeat the owner. A page whose values only code mode's
- * sessions use says so in one line under the title; the rest of the pages
- * carry no scope sentence, because the group above them answers the question.
+ * the title does not repeat the owner. A section whose values only one mode's
+ * sessions use says so under its own heading (see 実験的機能's saved prompts),
+ * because the page itself is read in both modes.
  *
  * `onBack` is passed by the stepped layout only, where the navigation is a
  * list of its own rather than a column beside the page.
  */
 export function SettingsPage({
   title,
-  modeOnly = false,
   onBack,
   children,
 }: {
   title: ReactNode;
-  /** The page's values only code mode's sessions use. */
-  modeOnly?: boolean;
   /** Return to the category list (stepped layout only). */
   onBack?: () => void;
   children: ReactNode;
@@ -44,9 +41,6 @@ export function SettingsPage({
         )}
         <div className="settings-page-headtext">
           <h2>{title}</h2>
-          {modeOnly && (
-            <p className="settings-page-note">{t("settings.scope.codeOnly")}</p>
-          )}
         </div>
       </header>
       <div className="settings-page-body">{children}</div>

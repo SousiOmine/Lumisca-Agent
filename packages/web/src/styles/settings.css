@@ -1479,8 +1479,3 @@ button.provider-row-body:hover .provider-row-chevron {
   gap: 4px;
 }
 
-.settings-page-note {
-  margin: 0;
-  font-size: var(--type-12-5);
-  color: var(--text-dim);
-}

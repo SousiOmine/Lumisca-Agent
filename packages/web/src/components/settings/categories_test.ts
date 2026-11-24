@@ -60,34 +60,34 @@ test("every category is named once, in the table's order", () => {
   assertEquals(
     [...SETTINGS_CATEGORIES],
     [
-      "notifications",
       "app",
+      "notifications",
       "connections",
       "overview",
-      "appearance",
       "providers",
       "models",
       "mcp",
       "personalize",
-      "prompts",
       "security",
       "experimental",
     ],
   );
 });
 
-test("visibleCategories drops the desktop app's page in a browser", () => {
-  // The app page names an updater this client does not have. The rest are
-  // shown whatever the client: a missing page hid the page, never its effect.
+test("visibleCategories drops a page only the desktop shell serves", () => {
+  // The connections page switches this client to another server, which only
+  // the shell can do. The rest are shown whatever the client: a missing page
+  // hid the page, never its effect. The app page is not one of them any more
+  // — it holds the theme, which a browser has too.
   const entries = [
     entry("notifications", "device"),
-    entry("app", "device", { deviceOnly: true }),
+    entry("connections", "device", { deviceOnly: true }),
     entry("overview", "server"),
   ];
 
   assertEquals(
     visibleCategories(entries, true).map((item) => item.id),
-    ["notifications", "app", "overview"],
+    ["notifications", "connections", "overview"],
   );
   assertEquals(
     visibleCategories(entries, false).map((item) => item.id),
