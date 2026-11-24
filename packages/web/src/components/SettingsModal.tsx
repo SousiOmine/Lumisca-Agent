@@ -41,8 +41,6 @@ export type { SettingsCategory } from "./settings/categories.ts";
 
 interface SettingsModalProps {
   theme: ThemeSetting;
-  /** Persist failure of the theme setting (shown in the appearance panel). */
-  themeError: string | null;
   onThemeChange: (theme: ThemeSetting) => void;
   /** The app language and the persist failure of the last change (shown in
    * the server overview). */
@@ -186,12 +184,11 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
   },
   {
     id: "appearance",
-    owner: "server",
+    owner: "device",
     labelKey: "settings.nav.appearance",
     render: ({ props }) => (
       <AppearancePanel
         theme={props.theme}
-        error={props.themeError}
         onThemeChange={props.onThemeChange}
       />
     ),
@@ -352,10 +349,10 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
  * the right.
  *
  * The first level is the owner, because that is the question a flat list
- * could not answer: theme, language and the updater lived on the same pages
- * while belonging to different machines (see categories.ts). The server's
- * group is headed by its name and address, so "whose settings are these" is
- * read before the first row.
+ * could not answer: notifications, theme and the updater lived on the same
+ * pages while belonging to different machines (see categories.ts). The
+ * server's group is headed by its name and address, so "whose settings are
+ * these" is read before the first row.
  *
  * A category is a page: its title stays at the top while the body scrolls
  * (SettingsPage). A page that only code mode's sessions use says so in one
@@ -364,7 +361,6 @@ const CATEGORIES: readonly SettingsCategoryEntry[] = [
  */
 export function SettingsModal({
   theme,
-  themeError,
   onThemeChange,
   language,
   languageError,
@@ -427,7 +423,6 @@ export function SettingsModal({
     // read what they need from it.
     props: {
       theme,
-      themeError,
       onThemeChange,
       language,
       languageError,

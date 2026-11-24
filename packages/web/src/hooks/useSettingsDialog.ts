@@ -15,8 +15,6 @@ import { type UpdateControls, useUpdateStatus } from "./useUpdateStatus.ts";
 /** The settings dialog's values, and the props they make. */
 export interface AppSettings {
   theme: ThemeSetting;
-  /** Persist failure of the theme setting (shown in the appearance panel). */
-  themeError: string | null;
   setTheme: (next: ThemeSetting) => void;
   language: Locale;
   /** Persist failure of the language setting (shown in the server
@@ -43,15 +41,13 @@ export interface AppSettings {
  * because the first-run wizard edits the same two preferences before there
  * is a dialog to open.
  *
- * The two preferences are hooks of their own (useTheme / useLanguage): each
- * applies its value outside React and persists it through the settings
- * store, rolling back to the stored value when the write fails.
+ * The two preferences are hooks of their own: the theme is this client's own
+ * (localStorage), while the language is stored on the server because the
+ * system prompt of a new session is generated there.
  */
 export function useSettingsDialog(options: {
   /** The settings dialog's position in the address (null = closed). */
   settings: SettingsRoute | null;
-  /** The theme this page starts in (InitialData.theme). */
-  initialTheme: ThemeSetting;
   /** Move to another category (a navigation: the address names the page). */
   onOpenCategory: (category: SettingsCategory | null) => void;
   /** Back from a category page to the category list. */
@@ -60,7 +56,7 @@ export function useSettingsDialog(options: {
   onClose: () => void;
 }): AppSettings {
   const { settings, onOpenCategory, onBackToList, onClose } = options;
-  const { theme, setTheme, error: themeError } = useTheme(options.initialTheme);
+  const { theme, setTheme } = useTheme();
   // The language store was seeded from InitialData before the first render
   // (client.tsx); this hook owns the settings-dialog state and the persist
   // (a failed save rolls the UI back).
@@ -100,7 +96,6 @@ export function useSettingsDialog(options: {
       ? null
       : {
           theme,
-          themeError,
           onThemeChange: setTheme,
           language,
           languageError,
@@ -117,7 +112,6 @@ export function useSettingsDialog(options: {
 
   return {
     theme,
-    themeError,
     setTheme,
     language,
     languageError,

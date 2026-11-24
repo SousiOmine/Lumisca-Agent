@@ -15,6 +15,11 @@ export function webClientEntry(repoRoot: string): string {
   return join(webSrcDir(repoRoot), "client.tsx");
 }
 
+/** The script that applies the stored theme before the first paint. */
+export function webThemeBootEntry(repoRoot: string): string {
+  return join(webSrcDir(repoRoot), "theme-boot.ts");
+}
+
 export function webStylesPath(repoRoot: string): string {
   return join(webSrcDir(repoRoot), "styles.css");
 }

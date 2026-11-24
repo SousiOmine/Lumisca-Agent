@@ -21,6 +21,13 @@ export const BROWSER_CORE_ENTRIES: readonly {
   path: string;
 }[] = [
   { specifier: "@lumisca/core/shared", path: "packages/core/shared/mod.ts" },
+  {
+    // The canvas colours alone, for the theme script that runs before the
+    // app bundle: the whole shared barrel would make a 114 KB synchronous
+    // script out of two hex strings.
+    specifier: "@lumisca/core/shared/theme-colors",
+    path: "packages/core/shared/theme-colors.ts",
+  },
   { specifier: "@lumisca/core/modes", path: "packages/core/modes/mod.ts" },
   {
     specifier: "@lumisca/core/skills/slash",

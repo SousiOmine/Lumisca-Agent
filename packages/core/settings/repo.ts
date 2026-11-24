@@ -3,8 +3,6 @@ import { dirname } from "node:path";
 import { atomicWriteTextFileSync, readIfExists } from "../fs.ts";
 import { parseJsonc, SettingsFileError } from "./jsonc.ts";
 
-export { THEME_KEY } from "../shared/mod.ts";
-
 export interface SettingsRepo {
   get(key: string): string | undefined;
   set(key: string, value: string): void;

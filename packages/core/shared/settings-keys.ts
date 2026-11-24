@@ -6,9 +6,6 @@
  * writes it and the module that reads or guards it.
  */
 
-/** Settings-table key for the UI theme. */
-export const THEME_KEY = "theme";
-
 /** Settings-table key for the app language ("ja" | "en"; see
  * shared/i18n). It is the single source of the language for BOTH the UI and
  * the session's system prompt, so the server must hold it: the prompt is

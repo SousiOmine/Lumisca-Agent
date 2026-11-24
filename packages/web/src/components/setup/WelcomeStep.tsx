@@ -8,9 +8,6 @@ import { LANGUAGE_OPTION_KEYS } from "../settings/language-options.ts";
 
 export interface WelcomeStepProps {
   theme: ThemeSetting;
-  /** Persist failure of the last theme choice (the control already rolled
-   * back, so this only explains why). */
-  themeError: string | null;
   onThemeChange: (theme: ThemeSetting) => void;
   language: Locale;
   languageError: string | null;
@@ -28,7 +25,6 @@ export interface WelcomeStepProps {
  */
 export function WelcomeStep({
   theme,
-  themeError,
   onThemeChange,
   language,
   languageError,
@@ -65,11 +61,6 @@ export function WelcomeStep({
       {languageError && (
         <p className="error-text" role="alert">
           {t("settings.language.saveFailed", { error: languageError })}
-        </p>
-      )}
-      {themeError && (
-        <p className="error-text" role="alert">
-          {t("settings.appearance.saveFailed", { error: themeError })}
         </p>
       )}
     </>

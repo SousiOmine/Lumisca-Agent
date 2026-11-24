@@ -7,8 +7,6 @@ import {
   parseLocale,
   resolveLocale,
   systemLanguageTags,
-  THEME_KEY,
-  type ThemeSetting,
 } from "@lumisca/core";
 import { codeModeEnabled, type InitialData } from "@lumisca/core/shared";
 import type { Context, Hono } from "hono";
@@ -22,19 +20,6 @@ import type { AssetFile, Assets } from "./assets.ts";
 import { renderManifest } from "./manifest.ts";
 import { renderHtmlDocument } from "./render.ts";
 import { safePageHost } from "./security.ts";
-
-/** Theme preference from the core settings ("system" when unset/unknown).
- * The client resolves "system" via prefers-color-scheme; the shell falls back
- * to dark for the first paint. */
-function themeOf(core: LumiscaCore): ThemeSetting {
-  const stored = core.settings.get(THEME_KEY);
-  return stored === "light" ? "light" : stored === "system" ? "system" : "dark";
-}
-
-/** Resolved theme for the shell's first paint (no client-side flash). */
-function resolvedThemeOf(core: LumiscaCore): "light" | "dark" {
-  return themeOf(core) === "light" ? "light" : "dark";
-}
 
 /** The app language of one request: the stored setting when the user chose
  * one, else the browser's preference (Accept-Language), else the machine's
@@ -59,7 +44,6 @@ export async function initialDataFor(
 ): Promise<InitialData> {
   return {
     workspaces: core.services.workspaces.list(),
-    theme: themeOf(core),
     language: languageForRequest(core, c),
     // The build this page was served with: `/api/build` reports the one the
     // server serves now, and the difference is how an installed PWA (no
@@ -99,7 +83,7 @@ export function registerPages(
     // then do headers a middleware set — the token cookie included — reach
     // the final response.
     return c.newResponse(
-      renderHtmlDocument(css, resolvedThemeOf(core), {
+      renderHtmlDocument(css, {
         pageHost: safePageHost(c.req.header("host")),
         token: options.token,
         ...(options.devReload === true ? { devReload: true } : {}),
@@ -213,15 +197,14 @@ export function registerPages(
   });
 
   /** The web app manifest: what makes this page installable. Built per
-   * request so the install screen matches the theme the page starts in and
-   * the language this browser asked for (see manifest.ts).
+   * request so the install screen matches the language this browser asked
+   * for (see manifest.ts).
    *
    * The PWA surface below — this, its icons and the service worker — is on
    * security.ts's token-free list: a browser's install pipeline fetches them
    * by itself, and none of them carries a secret. */
   app.get("/manifest.webmanifest", (c) => {
     const body = renderManifest({
-      theme: resolvedThemeOf(core),
       language: languageForRequest(core, c),
     });
     return serveRevalidatable(

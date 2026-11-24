@@ -48,10 +48,6 @@ export const settings = {
     ja: "システム設定に連動",
     en: "Match system",
   },
-  "settings.appearance.saveFailed": {
-    ja: "テーマ設定を保存できませんでした: {error}",
-    en: "Could not save the theme: {error}",
-  },
 
   // `settings.language.*` keys below are read by the general panel (the
   // language is a general preference, not a settings category of its own).

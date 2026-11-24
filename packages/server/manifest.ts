@@ -1,11 +1,11 @@
 /**
  * The Web App Manifest: the document that makes this page installable.
  *
- * It is generated per request rather than kept as a file, because the values
- * it shares with the page come from this server's own state: the canvas
- * colour of the theme the page starts in (`theme_color` paints the splash
- * screen and the installed app's bars) and the app language (`lang`, and the
- * description under the app's name in the install dialog).
+ * It is generated per request rather than kept as a file, because the app
+ * language is resolved per request (`lang`, and the description under the
+ * app's name in the install dialog). The theme is this client's own choice,
+ * so the manifest carries the app's dark canvas: a manifest cannot vary by
+ * client, and the page corrects its own `theme-color` after the first paint.
  *
  * `start_url` names no token. The manifest is one of the files the token
  * guard lets through (security.ts's `unguardedPath`): its contents are
@@ -41,15 +41,12 @@ const MANIFEST_ICONS = [
 ];
 
 export interface ManifestOptions {
-  /** The theme the page paints its first frame in (the same value the shell
-   * writes to `<html data-theme>` and to its `theme-color`). */
-  theme: "light" | "dark";
   language: Locale;
 }
 
 /** The manifest document, as the JSON text its route answers with. */
-export function renderManifest({ theme, language }: ManifestOptions): string {
-  const color = THEME_COLORS[theme];
+export function renderManifest({ language }: ManifestOptions): string {
+  const color = THEME_COLORS.dark;
   return JSON.stringify({
     // A stable identity: without it the browser derives one from start_url,
     // and moving the app to another path would install it a second time.

@@ -98,17 +98,10 @@ export function adoptDesktopLaunch(): void {
 }
 
 /** Paint the document from the server's initial data before the first
- * render: the language decides font fallback and hyphenation, and the theme
- * decides the colour behind the app. */
+ * render: the language decides font fallback and hyphenation. The theme is
+ * this client's own and theme-boot.ts has already applied it. */
 export function applyInitialData(data: InitialData): void {
   document.documentElement.lang = data.language;
-  const prefersLight =
-    typeof matchMedia === "function" &&
-    matchMedia("(prefers-color-scheme: light)").matches;
-  const resolved =
-    data.theme === "system" ? (prefersLight ? "light" : "dark") : data.theme;
-  document.documentElement.dataset.theme =
-    resolved === "light" ? "light" : "dark";
 }
 
 /** The initial data for this client: the page's own bootstrap script when

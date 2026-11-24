@@ -50,9 +50,9 @@ export function isSettingsCategory(value: string): value is SettingsCategory {
 
 /** Where a page's values are stored, and who decides them.
  *
- * "device" is the window in front of the reader: its notifications and, in
- * the desktop shell, its app. "server" is the machine that runs the agents:
- * the same values for every conversation it serves.
+ * "device" is the window in front of the reader: its notifications, its
+ * theme and, in the desktop shell, its app. "server" is the machine that runs
+ * the agents: the same values for every conversation it serves.
  */
 export type SettingsOwner = "device" | "server";
 

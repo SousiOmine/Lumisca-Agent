@@ -13,6 +13,9 @@
       "@lumisca/core": ["./packages/core/mod.ts"],
       "@lumisca/core/bytes": ["./packages/core/bytes.ts"],
       "@lumisca/core/shared": ["./packages/core/shared/mod.ts"],
+      "@lumisca/core/shared/theme-colors": [
+        "./packages/core/shared/theme-colors.ts"
+      ],
       "@lumisca/core/modes": ["./packages/core/modes/mod.ts"],
       "@lumisca/core/skills/slash": ["./packages/core/skills/slash.ts"],
       "@lumisca/core/browser-entries": ["./packages/core/browser-entries.ts"],

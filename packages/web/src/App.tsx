@@ -72,7 +72,6 @@ export function App({ initialData }: AppProps): ReactElement {
   // wizard edits the same two preferences, hence the theme and language out.
   const settingsUi = useSettingsDialog({
     settings: nav.settings,
-    initialTheme: initialData?.theme ?? "dark",
     onOpenCategory: nav.openSettingsAt,
     onBackToList: nav.backToSettingsList,
     onClose: nav.closeSettings,
@@ -424,7 +423,6 @@ export function App({ initialData }: AppProps): ReactElement {
             <SetupScreen
               desktop={desktop}
               theme={settingsUi.theme}
-              themeError={settingsUi.themeError}
               onThemeChange={settingsUi.setTheme}
               language={settingsUi.language}
               languageError={settingsUi.languageError}

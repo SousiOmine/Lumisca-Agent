@@ -22,7 +22,6 @@ export interface SetupScreenProps {
    * connection gate exists only where switching is possible. */
   desktop: boolean;
   theme: ThemeSetting;
-  themeError: string | null;
   onThemeChange: (theme: ThemeSetting) => void;
   language: Locale;
   languageError: string | null;
@@ -54,7 +53,6 @@ export interface SetupScreenProps {
 export function SetupScreen({
   desktop,
   theme,
-  themeError,
   onThemeChange,
   language,
   languageError,
@@ -100,7 +98,6 @@ export function SetupScreen({
           {step === "welcome" && (
             <WelcomeStep
               theme={theme}
-              themeError={themeError}
               onThemeChange={onThemeChange}
               language={language}
               languageError={languageError}

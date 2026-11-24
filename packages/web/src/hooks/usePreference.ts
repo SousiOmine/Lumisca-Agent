@@ -5,11 +5,9 @@ import { settingsStore } from "../settingsStore.ts";
 /**
  * A preference that lives on the server, edited optimistically.
  *
- * `useTheme` and `useLanguage` were the same hook twice: keep the chosen
- * value in state, apply it everywhere immediately, write it through the
- * settings store, and — if the write fails — roll back to what the server
- * still holds. The rollback rule is the subtle part and both copies stated it
- * identically:
+ * Keep the chosen value in state, apply it everywhere immediately, write it
+ * through the settings store, and — if the write fails — roll back to what
+ * the server still holds. The rollback rule is the subtle part:
  *
  *   a failed request must not revert a choice the user made while it was in
  *   flight.

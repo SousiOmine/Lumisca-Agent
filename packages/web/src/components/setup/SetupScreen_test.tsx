@@ -11,7 +11,6 @@ function render(desktop: boolean): string {
     createElement(SetupScreen, {
       desktop,
       theme: "dark",
-      themeError: null,
       onThemeChange: () => {},
       language: "ja",
       languageError: null,

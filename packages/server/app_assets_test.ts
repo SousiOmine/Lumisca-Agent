@@ -382,8 +382,8 @@ test("the app's files are compressed and revalidated", async () => {
 
 test("the PWA surface is installable and never secret", async () => {
   const { base } = readOnlyServer();
-  // The manifest is generated per request: it reports the theme colour
-  // this page starts in (dark is the default) and is valid JSON.
+  // The manifest is generated per request for the language; its theme
+  // colours stay on the app's dark canvas.
   const manifestRes = await fetch(`${base}/manifest.webmanifest`);
   assertEquals(manifestRes.status, 200);
   assertEquals(

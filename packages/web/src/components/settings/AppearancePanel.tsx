@@ -6,9 +6,6 @@ import { SettingRow } from "../SettingRow.tsx";
 
 interface AppearancePanelProps {
   theme: ThemeSetting;
-  /** Persist failure of the theme setting; the select already rolled back
-   * to the stored value, so this only explains why. */
-  error: string | null;
   onThemeChange: (theme: ThemeSetting) => void;
 }
 
@@ -23,12 +20,12 @@ export const THEME_OPTIONS: { value: ThemeSetting; label: MessageKey }[] = [
 ];
 
 /** Settings → 外観. Theme is applied to <html data-theme> immediately and
- * persisted to the server settings, so it survives reloads. The app
- * language has its own panel (LanguagePanel): it is a separate concern and
- * additionally decides what new sessions answer in. */
+ * stored in this client's own storage, so it survives reloads and does not
+ * follow the reader to another device. The app language has its own panel
+ * (LanguagePanel): it additionally decides what new sessions answer in, so
+ * the server has to hold it. */
 export function AppearancePanel({
   theme,
-  error,
   onThemeChange,
 }: AppearancePanelProps) {
   const t = useT();
@@ -45,11 +42,6 @@ export function AppearancePanel({
           onChange={onThemeChange}
         />
       </SettingRow>
-      {error && (
-        <p className="error-text" role="alert">
-          {t("settings.appearance.saveFailed", { error })}
-        </p>
-      )}
     </div>
   );
 }

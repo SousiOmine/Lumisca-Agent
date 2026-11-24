@@ -275,6 +275,7 @@ export const CORE_SPECIFIERS: readonly string[] = [
   "@lumisca/core/process",
   "@lumisca/core/settings/repo",
   "@lumisca/core/shared",
+  "@lumisca/core/shared/theme-colors",
   "@lumisca/core/skills/slash",
   "@lumisca/core/test-utils",
 ];

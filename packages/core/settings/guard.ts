@@ -20,7 +20,6 @@ import {
   PUSH_VAPID_KEY,
   SAVED_PROMPTS_KEY,
   STELLA_KEEP_FULL_LOG_KEY,
-  THEME_KEY,
   UPDATE_AUTO_KEY,
   UPDATE_AUTO_RESTART_KEY,
   USER_PROVIDERS_KEY,
@@ -108,7 +107,6 @@ export function filterExposedSettings(
  * layer through /providers/:id/models/:modelId, which knows the provider/model
  * pair. */
 const MUTABLE_KEYS: ReadonlySet<string> = new Set([
-  THEME_KEY,
   LANGUAGE_KEY,
   // The model section of the settings dialog: one row per key.
   DEFAULT_MODEL_KEY,

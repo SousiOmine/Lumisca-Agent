@@ -321,7 +321,6 @@ export {
   serializeModelPreference,
   serializeSavedPrompts,
   stellaKeepsFullLog,
-  THEME_KEY,
   UPDATE_AUTO_KEY,
   UPDATE_AUTO_RESTART_KEY,
   USER_PROVIDERS_KEY,

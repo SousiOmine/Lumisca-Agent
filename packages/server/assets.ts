@@ -10,6 +10,7 @@ import {
   webPwaIconDir,
   webServiceWorkerPath,
   webStylesPath,
+  webThemeBootEntry,
 } from "./paths.ts";
 
 /**
@@ -104,6 +105,7 @@ async function bundleClientFiles(
   const bundle = await bundleClient({
     cwd: repoRoot,
     entry: webClientEntry(repoRoot),
+    themeEntry: webThemeBootEntry(repoRoot),
     outdir,
   });
   const files: Record<string, AssetFile> = {};

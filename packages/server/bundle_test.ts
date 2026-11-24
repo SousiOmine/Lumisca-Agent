@@ -26,17 +26,30 @@ async function writeFixture(root: string): Promise<string> {
   return entry;
 }
 
+/** The theme script the page loads before its stylesheet. Kept trivial in
+ * this test: the contract is that it is a second, standalone entry. */
+async function writeThemeFixture(root: string): Promise<string> {
+  const entry = join(root, "theme.ts");
+  await fsp.writeFile(entry, `console.log("theme");\n`);
+  return entry;
+}
+
 test("bundleClient splits a dynamic import out of the entry chunk", async () => {
   const root = await fsp.mkdtemp(pathJoin(osTmpdir(), "tmp-"));
   try {
     const entry = await writeFixture(root);
+    const themeEntry = await writeThemeFixture(root);
     const outdir = join(root, "out");
-    const result = await bundleClient({ cwd: root, entry, outdir });
+    const result = await bundleClient({ cwd: root, entry, themeEntry, outdir });
 
     // The page loads the entry by this name (render.ts's script tag), so it
     // must not depend on a hash the build happens to pick.
     assertEquals(result.entry, "app.js");
     assert(result.files.includes("app.js"), result.files.join(", "));
+    // The theme script is a file of its own, with a stable name the head can
+    // load as a classic script.
+    assertEquals(result.themeEntry, "theme.js");
+    assert(result.files.includes("theme.js"), result.files.join(", "));
     // The dynamic import is its own file: a lazy chunk. If esbuild inlined it
     // (no `splitting`), the entry would be the only output and its size would
     // carry the lazy code — the regression this guards.
@@ -62,10 +75,11 @@ test("bundleClient names the entry chunk app.js whatever the entry is", async ()
   try {
     const entry = join(root, "main.ts");
     await fsp.writeFile(entry, `console.log("hi");\n`);
+    const themeEntry = await writeThemeFixture(root);
     const outdir = join(root, "out");
-    const result = await bundleClient({ cwd: root, entry, outdir });
+    const result = await bundleClient({ cwd: root, entry, themeEntry, outdir });
     assertEquals(result.entry, "app.js");
-    assertEquals(result.files, ["app.js"]);
+    assertEquals(result.files, ["app.js", "theme.js"]);
     assert((await fsp.readFile(join(outdir, "app.js"), "utf8")).includes("hi"));
   } finally {
     await removeDirRetry(root);

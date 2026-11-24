@@ -112,7 +112,6 @@ export type {
   ConnectionSummary,
 } from "./settings/connections.ts";
 export { resolveSettingsPath, SETTINGS_DIR_NAME } from "./settings/path.ts";
-export { THEME_KEY } from "./settings/repo.ts";
 export type { FolderGrant } from "./share/grant.ts";
 export { parseGrant, shareNameFrom } from "./share/grant.ts";
 export type { ShareSink } from "./share/hub.ts";

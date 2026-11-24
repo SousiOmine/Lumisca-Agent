@@ -7,7 +7,6 @@ import {
   localeTag,
   translate,
 } from "./i18n/mod.ts";
-import type { ThemeSetting } from "./settings-keys.ts";
 
 // ---- errors ---------------------------------------------------------------
 
@@ -178,7 +177,6 @@ export interface SetupState {
  * a peer that is down must never delay the first paint. */
 export interface InitialData {
   workspaces: Workspace[];
-  theme: ThemeSetting;
   /** The app language: the stored setting when one was chosen, else the
    * language resolved from the browser (Accept-Language) at the first page
    * load (see server/app.ts and shared/i18n). The page renders in it from

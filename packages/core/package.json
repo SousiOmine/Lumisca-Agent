@@ -17,6 +17,7 @@
     "./process": "./process.ts",
     "./settings/repo": "./settings/repo.ts",
     "./shared": "./shared/mod.ts",
+    "./shared/theme-colors": "./shared/theme-colors.ts",
     "./skills/slash": "./skills/slash.ts",
     "./test-utils": "./test-utils.ts"
   }

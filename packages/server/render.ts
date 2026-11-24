@@ -1,11 +1,12 @@
 /**
  * The HTML documents served by the app. `renderHtmlDocument` is the app
  * itself: a static shell. The Preact app is rendered entirely client-side,
- * so the shell only carries the language and the theme (the first paint is
- * already in both — no flash), the inlined styles, the install surface of
- * the PWA (the manifest link, the theme colour and the iOS icon), and two
- * scripts: the externalized initial data + auth token (inline scripts are
- * banned by the page CSP), and the bundled client app.
+ * so the shell only carries the language, the default theme and the theme
+ * script that replaces it from this client's storage before the first paint,
+ * the inlined styles, the install surface of the PWA (the manifest link, the
+ * theme colour and the iOS icon), and two module scripts: the externalized
+ * initial data + auth token (inline scripts are banned by the page CSP), and
+ * the bundled client app.
  * `renderTokenRequiredPage` is what an unauthenticated browser lands on
  * instead (the token guard's 401).
  */
@@ -88,7 +89,7 @@ export interface HtmlDocumentOptions {
 }
 
 /** Assemble the full HTML document: the empty #root (client-rendered app),
- * themed first paint, and the two module scripts. */
+ * the theme script's first paint, and the two module scripts. */
 /** The development-only reload loop. It asks for the build id the server
  * serves and reloads when it changes; a failed poll (server restarting) is
  * ignored. Kept out of the document so the page's CSP stays script-src
@@ -111,16 +112,16 @@ setInterval(() => void poll(), 1000);
 
 export function renderHtmlDocument(
   css: string,
-  theme: "light" | "dark",
   options: HtmlDocumentOptions,
 ): string {
   return `<!doctype html>
-<html lang="${options.language}" data-theme="${theme}">
+<html lang="${options.language}" data-theme="dark">
   <head>
 ${shellHeadTags({
   csp: pageCsp(options.pageHost),
-  themeColor: THEME_COLORS[theme],
+  themeColor: THEME_COLORS.dark,
 })}
+    <script src="/assets/theme.js"></script>
     <style>${css}</style>
   </head>
   <body>
@@ -141,8 +142,7 @@ ${shellHeadTags({
  * Tauri serves it from the app's own origin, so there is no manifest or PWA
  * icon here: those are the server-installed app's surface. The client bundle
  * asks the server named in the launch URL for its initial data, and the
- * theme is applied before the first render (packages/web/src/desktop.ts);
- * the static value below is the dark theme the window paints before that.
+ * theme script applies this client's stored value before the stylesheet.
  */
 export function renderDesktopDocument(): string {
   return `<!doctype html>
@@ -153,6 +153,7 @@ export function renderDesktopDocument(): string {
     <meta name="color-scheme" content="dark light" />
     <meta name="theme-color" content="${THEME_COLORS.dark}" />
     <title>Lumisca</title>
+    <script src="/assets/theme.js"></script>
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
   <body>

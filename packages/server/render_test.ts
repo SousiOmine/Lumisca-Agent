@@ -66,39 +66,40 @@ test("pageCsp names the PWA surface", () => {
   assertEquals(csp.includes("worker-src 'self'"), true);
 });
 
-test("the shell links the manifest and paints its own theme colour", () => {
-  for (const theme of ["dark", "light"] as const) {
-    const html = renderHtmlDocument("body { color: red; }", theme, {
-      language: "ja",
-    });
-    assertEquals(
-      html.includes('<link rel="manifest" href="/manifest.webmanifest" />'),
-      true,
-    );
-    // iOS reads the home-screen icon from this link, not from the manifest.
-    assertEquals(
-      html.includes(
-        '<link rel="apple-touch-icon" href="/pwa/apple-touch-icon.png" />',
-      ),
-      true,
-    );
-    // The browser's chrome takes the colour the page starts in (a browser
-    // tab's address bar, an installed app's status bar).
-    assertEquals(
-      html.includes(
-        `<meta name="theme-color" content="${THEME_COLORS[theme]}" />`,
-      ),
-      true,
-    );
-    assertEquals(html.includes(`data-theme="${theme}"`), true);
-  }
+test("the shell links the manifest and paints the default theme colour", () => {
+  const html = renderHtmlDocument("body { color: red; }", { language: "ja" });
+  assertEquals(
+    html.includes('<link rel="manifest" href="/manifest.webmanifest" />'),
+    true,
+  );
+  // iOS reads the home-screen icon from this link, not from the manifest.
+  assertEquals(
+    html.includes(
+      '<link rel="apple-touch-icon" href="/pwa/apple-touch-icon.png" />',
+    ),
+    true,
+  );
+  // Before the first paint the document carries the default canvas; the
+  // theme script replaces both values from this client's stored choice.
+  assertEquals(
+    html.includes(
+      `<meta name="theme-color" content="${THEME_COLORS.dark}" />`,
+    ),
+    true,
+  );
+  assertEquals(html.includes('data-theme="dark"'), true);
+  // The script must come before the stylesheet: a deferred or later script
+  // would paint the default for a moment before the stored theme applies.
+  const script = html.indexOf('<script src="/assets/theme.js"></script>');
+  const styles = html.indexOf("<style>");
+  assertEquals(script !== -1 && script < styles, true);
 });
 
 test("the shell asks for the safe area", () => {
   // `viewport-fit=cover` is what makes `env(safe-area-inset-*)` non-zero in
   // layout.css: without it an installed app is letterboxed away from the
   // notch, and the insets the stylesheet reads are all zero.
-  const html = renderHtmlDocument("", "dark", { language: "ja" });
+  const html = renderHtmlDocument("", { language: "ja" });
   assertEquals(html.includes("viewport-fit=cover"), true);
 });
 
@@ -115,9 +116,9 @@ test("the token page can take the token without an address bar", () => {
 test("development reload is opt-in and served as an external script", () => {
   // The page's CSP allows scripts only from its own origin, so the reload
   // loop cannot be inline. It is also absent unless development asks for it.
-  const off = renderHtmlDocument("", "dark", { language: "ja" });
+  const off = renderHtmlDocument("", { language: "ja" });
   assertEquals(off.includes("dev-reload.js"), false);
-  const on = renderHtmlDocument("", "dark", {
+  const on = renderHtmlDocument("", {
     language: "ja",
     devReload: true,
   });

@@ -20,15 +20,12 @@ interface ParsedManifest {
   prefer_related_applications?: boolean;
 }
 
-function parse(
-  theme: "light" | "dark",
-  language: "ja" | "en" = "ja",
-): ParsedManifest {
-  return JSON.parse(renderManifest({ theme, language })) as ParsedManifest;
+function parse(language: "ja" | "en" = "ja"): ParsedManifest {
+  return JSON.parse(renderManifest({ language })) as ParsedManifest;
 }
 
 test("the manifest carries what Chromium requires to install", () => {
-  const manifest = parse("dark");
+  const manifest = parse();
   assertEquals(manifest.id, "/");
   assertEquals(manifest.name, "Lumisca Agent");
   assertEquals(manifest.short_name, "Lumisca");
@@ -51,7 +48,7 @@ test("the manifest carries what Chromium requires to install", () => {
 });
 
 test("every manifest icon is a file the build ships", () => {
-  const names = (parse("dark").icons ?? []).map((icon) =>
+  const names = (parse().icons ?? []).map((icon) =>
     icon.src.replace("/pwa/", ""),
   );
   for (const name of names) {
@@ -62,22 +59,23 @@ test("every manifest icon is a file the build ships", () => {
   assertEquals(PWA_ICON_FILES.includes("apple-touch-icon.png"), true);
 });
 
-test("theme_color is the canvas colour of the theme being served", () => {
-  for (const theme of ["dark", "light"] as const) {
-    const manifest = parse(theme);
-    assertEquals(manifest.theme_color, THEME_COLORS[theme], theme);
-    // The splash screen starts at the same colour: anything else flashes a
-    // rectangle the app never shows before its first paint.
-    assertEquals(manifest.background_color, THEME_COLORS[theme], theme);
-  }
+test("theme_color is the app's dark canvas", () => {
+  // The theme is this client's choice and a manifest cannot vary by client,
+  // so both colours stay on the canvas the app is designed around. The page
+  // corrects its own theme-color meta after the first paint.
+  const manifest = parse();
+  assertEquals(manifest.theme_color, THEME_COLORS.dark);
+  // The splash screen starts at the same colour: anything else flashes a
+  // rectangle the app never shows before its first paint.
+  assertEquals(manifest.background_color, THEME_COLORS.dark);
 });
 
 test("the manifest speaks the app language", () => {
-  assertEquals(parse("dark", "ja").lang, "ja");
-  assertEquals(parse("dark", "en").lang, "en");
+  assertEquals(parse("ja").lang, "ja");
+  assertEquals(parse("en").lang, "en");
   // The description is user-facing text, so it comes from the catalogue.
-  const ja = parse("dark", "ja").description;
-  const en = parse("dark", "en").description;
+  const ja = parse("ja").description;
+  const en = parse("en").description;
   assertEquals(typeof ja, "string");
   assertEquals(typeof en, "string");
   assertEquals(ja === en, false);
