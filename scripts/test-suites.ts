@@ -76,6 +76,7 @@ export const INTEGRATION_SUITE: readonly string[] = [
   "packages/core/sandbox_test.ts",
   "packages/core/session/attachments_test.ts",
   "packages/core/session/visuals_test.ts",
+  "packages/core/settings/secrets_test.ts",
   "packages/core/settings/settings_test.ts",
   "packages/core/settings/setup_test.ts",
   "packages/core/skills/builtin_test.ts",

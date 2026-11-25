@@ -279,10 +279,12 @@ export async function main(): Promise<void> {
   // cannot afford. A failure is never fatal — start on what we have.
   await vacuumOnStartup(dbPath);
   try {
-    core = openCore(dbPath, settingsPath);
+    core = openCore(dbPath, settingsPath, undefined, {
+      secretKey: startupEnv.LUMISCA_SECRET_KEY,
+    });
   } catch (error) {
     console.error(
-      `Lumisca: データベースを開けませんでした (${dbPath}): ${errorMessage(
+      `Lumisca: 起動できませんでした (db ${dbPath}, settings ${settingsPath}): ${errorMessage(
         error,
       )}`,
     );

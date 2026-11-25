@@ -307,6 +307,15 @@ fn server_db_path(app: &AppHandle) -> PathBuf {
     dir.join("lumisca.db")
 }
 
+/// Hand the server the key that opens its encrypted settings entries. The
+/// keychain is optional: when it cannot provide one, the server creates or
+/// reads its own key file (see secrets.rs).
+fn apply_secret_key(command: &mut Command) {
+    if let Some(key) = crate::secrets::master_key() {
+        command.env("LUMISCA_SECRET_KEY", key);
+    }
+}
+
 /// Pick a free port by binding to port 0, unless one was requested.
 fn resolve_port() -> u16 {
     if let Some(p) = std::env::var(SERVER_PORT_ENV)
@@ -363,6 +372,7 @@ fn start_server(app: &AppHandle, port: u16, token: &str) -> Result<Child, String
                 .env("LUMISCA_TOKEN", token)
                 .env(SERVER_DESKTOP_ENV, "1")
                 .env("LUMISCA_ASSETS_FILE", assets_file);
+            apply_secret_key(&mut command);
             if let Some((url, browser_token)) = browser_lab_env(app) {
                 command
                     .env("LUMISCA_BROWSER_IPC_URL", url)
@@ -392,6 +402,7 @@ fn start_server(app: &AppHandle, port: u16, token: &str) -> Result<Child, String
                 .env("LUMISCA_REPO_ROOT", repo_root)
                 .env("LUMISCA_TOKEN", token)
                 .env(SERVER_DESKTOP_ENV, "1");
+            apply_secret_key(&mut command);
             if let Some((url, browser_token)) = browser_lab_env(app) {
                 command
                     .env("LUMISCA_BROWSER_IPC_URL", url)

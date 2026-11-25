@@ -135,7 +135,28 @@ fn load_from(path: &Path) -> DesktopSettings {
 
 fn save_to(path: &Path, settings: &DesktopSettings) -> Result<(), String> {
     let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
-    std::fs::write(path, json).map_err(|e| format!("設定を保存できません: {e}"))
+    write_private(path, &json).map_err(|e| format!("設定を保存できません: {e}"))
+}
+
+/// Write the file readable by its owner only. It holds the saved servers'
+/// tokens; the default mode would let another local account read them.
+fn write_private(path: &Path, text: &str) -> std::io::Result<()> {
+    use std::io::Write as _;
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        options.mode(0o600);
+    }
+    let mut file = options.open(path)?;
+    file.write_all(text.as_bytes())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -189,6 +210,16 @@ mod tests {
         assert!(DesktopSettings::default().auto_update);
         assert!(DesktopSettings::default().connections.is_empty());
         assert!(DesktopSettings::default().current.is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn saved_settings_are_readable_by_the_owner_only() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let file = TempFile::new("private");
+        save_to(&file.0, &DesktopSettings::default()).unwrap();
+        let mode = std::fs::metadata(&file.0).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
     }
 
     /// The default `derive` spelling is what the shell itself writes, so

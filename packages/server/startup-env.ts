@@ -44,6 +44,10 @@ export const SERVER_STARTUP_ENV_KEYS = [
   "LUMISCA_HOST",
   "LUMISCA_PORT",
   "LUMISCA_ASSETS_FILE",
+  // The master key for encrypted settings entries (core/settings/secrets.ts).
+  // Consumed here so it is not inherited by every bash, MCP or machine child;
+  // the launcher hands it to openCore explicitly.
+  "LUMISCA_SECRET_KEY",
   DESKTOP_ENV_KEY,
   UPDATE_MANIFEST_ENV_KEY,
   UPDATE_RESTART_ENV_KEY,

@@ -7,7 +7,8 @@ import {
 } from "./bootstrap.ts";
 import { LumiscaCore } from "./core.ts";
 import { LumiscaDb } from "./db/mod.ts";
-import type { EnvReader } from "./models/custom.ts";
+import { createLogger } from "./log.ts";
+import { type EnvReader, processEnv } from "./models/custom.ts";
 import {
   ATTACHMENTS_DIR_NAME,
   SessionAttachmentStore,
@@ -19,9 +20,18 @@ import {
   createInMemorySettingsRepo,
   type SettingsRepo,
 } from "./settings/repo.ts";
+import {
+  createEncryptedSettingsRepo,
+  createEphemeralSecretBox,
+  createSecretBox,
+  migratePlaintextSecrets,
+  resolveMasterKey,
+} from "./settings/secrets.ts";
 import { AGENT_ICONS_DIR_NAME, AgentIconStore } from "./stella/icons.ts";
 import type { VmChannelRunner } from "./vm/channel.ts";
 import type { VmCommandBytesRunner, VmCommandRunner } from "./vm/command.ts";
+
+const log = createLogger("settings");
 
 /** The facade's own methods, as the graph builder sees them. */
 function hostFor(core: () => LumiscaCore): CoreHost {
@@ -73,6 +83,13 @@ function createCore(
   return core;
 }
 
+export interface OpenCoreOptions {
+  /** The master key for encrypted settings entries, as base64 text, when the
+   * caller captured LUMISCA_SECRET_KEY and removed it from the environment
+   * before this call (see packages/server/startup-env.ts). */
+  secretKey?: string;
+}
+
 /** Settings live in ~/.config/lumisca-agent/settings.jsonc by default
  * (see resolveSettingsPath); an explicit settingsPath overrides that.
  * `env` replaces the process environment the model layer reads; production
@@ -81,26 +98,42 @@ export function openCore(
   dbPath: string,
   settingsPath: string = resolveSettingsPath(),
   env?: EnvReader,
+  options: OpenCoreOptions = {},
 ): LumiscaCore {
-  return createCore(
-    LumiscaDb.open(dbPath),
-    createFileSettingsRepo(settingsPath),
-    {
-      env,
-      visuals: new SessionVisualStore(join(dirname(dbPath), VISUALS_DIR_NAME)),
-      attachments: new SessionAttachmentStore(
-        join(dirname(dbPath), ATTACHMENTS_DIR_NAME),
-      ),
-      agentIcons: new AgentIconStore(
-        join(dirname(dbPath), AGENT_ICONS_DIR_NAME),
-      ),
-      dbPath,
-    },
+  const secret = resolveMasterKey(
+    dirname(settingsPath),
+    env ?? processEnv,
+    options.secretKey,
+  );
+  const box = createSecretBox(secret.key);
+  const store = createFileSettingsRepo(settingsPath);
+  const migrated = migratePlaintextSecrets(store, box);
+  if (migrated > 0) {
+    log.info(`encrypted ${migrated} stored secret(s) at rest`);
+  }
+  const settings = createEncryptedSettingsRepo(store, box);
+  return createCore(LumiscaDb.open(dbPath), settings, {
+    env,
+    visuals: new SessionVisualStore(join(dirname(dbPath), VISUALS_DIR_NAME)),
+    attachments: new SessionAttachmentStore(
+      join(dirname(dbPath), ATTACHMENTS_DIR_NAME),
+    ),
+    agentIcons: new AgentIconStore(join(dirname(dbPath), AGENT_ICONS_DIR_NAME)),
+    dbPath,
+  });
+}
+
+/** Settings for an in-memory core: the same encryption, with a key that
+ * exists only for the life of the process. */
+function inMemorySettings(): SettingsRepo {
+  return createEncryptedSettingsRepo(
+    createInMemorySettingsRepo(),
+    createEphemeralSecretBox(),
   );
 }
 
 export function openInMemoryCore(): LumiscaCore {
-  return createCore(LumiscaDb.openInMemory(), createInMemorySettingsRepo());
+  return createCore(LumiscaDb.openInMemory(), inMemorySettings());
 }
 
 /** Test-only: in-memory core with extra providers (e.g. the faux provider).
@@ -118,16 +151,12 @@ export function forTestingCore(
     openChannel?: VmChannelRunner;
   },
 ): LumiscaCore {
-  const core = createCore(
-    LumiscaDb.openInMemory(),
-    createInMemorySettingsRepo(),
-    {
-      globalSkillDirs: [],
-      appSkillDirs: [],
-      env,
-      ...(stellaRun !== undefined ? { stellaRun } : {}),
-    },
-  );
+  const core = createCore(LumiscaDb.openInMemory(), inMemorySettings(), {
+    globalSkillDirs: [],
+    appSkillDirs: [],
+    env,
+    ...(stellaRun !== undefined ? { stellaRun } : {}),
+  });
   for (const provider of extraProviders) {
     core.models.models.setProvider(provider);
   }

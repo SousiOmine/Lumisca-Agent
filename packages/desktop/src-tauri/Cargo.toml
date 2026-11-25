@@ -87,6 +87,12 @@ tauri-winrt-notification = "0.8"
 # comes from wry's `with_webview`, so another copy of the crate is another
 # type.
 webview2-com = "0.39"
+# Credential Manager: the master key for encrypted settings entries
+# (secrets.rs). The entry is per user and per machine, so copying the config
+# directory no longer carries the key that opens it.
+keyring = { version = "3", default-features = false, features = [
+  "windows-native",
+] }
 
 # macOS screenshot: `WKWebView.takeSnapshot`. `with_webview` hands over the
 # raw WKWebView pointer, so these crates must resolve to the same versions
@@ -121,6 +127,10 @@ objc2-web-kit = { version = "0.3", default-features = false, features = [
 ] }
 # The completion handler passed to takeSnapshot is a block.
 block2 = "0.6"
+# Keychain: the master key for encrypted settings entries (secrets.rs).
+keyring = { version = "3", default-features = false, features = [
+  "apple-native",
+] }
 
 # Linux screenshot: WebKitGTK's `webkit_web_view_get_snapshot`, called on
 # the webkit2gtk::WebView `with_webview` hands over. Same crate and version
@@ -134,6 +144,14 @@ webkit2gtk = { version = "2", features = ["v2_40"] }
 # requested on the same 0.18 line; a feature set is unified per crate
 # version, so this entry enables it for the whole Linux build.
 cairo-rs = { version = "0.18", features = ["png"] }
+# Secret Service: the master key for encrypted settings entries (secrets.rs).
+# crypto-rust keeps the session encryption in pure Rust, and vendored builds
+# libdbus from source so the CI runners need no libdbus-1-dev package.
+keyring = { version = "3", default-features = false, features = [
+  "sync-secret-service",
+  "crypto-rust",
+  "vendored",
+] }
 
 [target.'cfg(unix)'.dependencies]
 # kill(2) for process-group teardown of the local server (server.rs).

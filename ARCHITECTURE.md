@@ -598,6 +598,14 @@ URLはシェルを介さず、プログラムの引数として1つだけ渡し�
   設定の内容から既存／新規を推測すると、その推測が外れたときに、使っている人の前へ全画面のウィザードが出ます。
   一度の案内を全員が払うほうが、外し方として安全です。
 
+- 資格情報は設定ファイルに平文で書きません（`packages/core/settings/secrets.ts`）。
+  `api_key:*`、`mcp_oauth:*`、`mcp_servers`、`web_search`、`connections`、`user_providers`、`computer_use_session_token`、`push_vapid`、`push_subscriptions` は AES-256-GCM で暗号化し、`enc.v1.<base64url>` として保存します。
+  追加認証データは設定キー名なので、別の項目へコピーした暗号文は復号に失敗します。
+  マスターキーは `LUMISCA_SECRET_KEY`、`$CREDENTIALS_DIRECTORY/lumisca-secret`、`LUMISCA_SECRET_KEY_FILE`、`<設定ディレクトリ>/secret.key` の順に探します。
+  最後のものは初回にモード 0600 で作ります。
+  デスクトップ版は OS のキーチェーンからキーを取り出し、起動するサーバーへ `LUMISCA_SECRET_KEY` で渡します。
+  暗号化が守るのはバックアップや同期へコピーされた設定ファイルで、同じ利用者として動くプロセスは守れません。
+
   デスクトップのウィザードは接続先の画面から始まります。
   このアプリはサーバーのクライアントで、このPCのサーバーは表示できるサーバーの 1 つでしかないためです。
   接続先が答えたら、接続先一覧に保存し、このサーバーの完了を記録してから、シェルに切り替えを頼みます。

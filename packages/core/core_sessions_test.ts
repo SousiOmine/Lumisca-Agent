@@ -682,14 +682,16 @@ test("credentials are guarded on every settings surface", async () => {
     // listSettings never exposes them.
     assertEquals(core.settings.list().has("api_key:anthropic"), false);
 
-    // The credential survives (the refused operations were no-ops).
-    const stored = JSON.parse(
-      fsSync.readFileSync(join(dir, "settings.jsonc"), "utf8"),
-    ) as Record<string, unknown>;
+    // The credential survives (the refused operations were no-ops), and the
+    // file holds ciphertext rather than the key itself.
+    const text = fsSync.readFileSync(join(dir, "settings.jsonc"), "utf8");
+    const stored = JSON.parse(text) as Record<string, unknown>;
     assertEquals(
-      stored["api_key:anthropic"],
-      '{"type":"api_key","key":"sk-test"}',
+      typeof stored["api_key:anthropic"] === "string" &&
+        (stored["api_key:anthropic"] as string).startsWith("enc.v1."),
+      true,
     );
+    assertEquals(text.includes("sk-test"), false);
   } finally {
     core.close();
     await removeDirRetry(dir);

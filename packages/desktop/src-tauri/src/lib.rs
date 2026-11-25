@@ -16,6 +16,7 @@ pub mod browser_lab;
 pub mod connection;
 pub mod health;
 pub mod notify;
+pub mod secrets;
 pub mod server;
 pub mod server_log;
 pub mod settings;
