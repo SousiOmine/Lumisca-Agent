@@ -109,12 +109,13 @@ test("StellaTranscript: a message never streams", () => {
 test("StellaTranscript: a run with nothing to show yet is typing dots", () => {
   const html = render({ running: true });
   // The wait is drawn where the reply will go: the agent's face in the
-  // avatar column, then three dots. The word itself stays for a screen
-  // reader (the dots say nothing to one).
+  // avatar column, then three dots and a quiet high-level phase label.
   assertStringIncludes(html, "stella-running");
   assertStringIncludes(html, "stella-typing-dot");
+  assertStringIncludes(html, "stella-activity-label");
   assertStringIncludes(html, "作業中");
-  assertStringIncludes(html, "visually-hidden");
+  const browsing = render({ running: true, activity: "browsing" });
+  assertStringIncludes(browsing, "画面を確認中");
 });
 
 test("StellaTranscript: a blocked run asks in a card, not in dots", () => {
